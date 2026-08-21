@@ -82,8 +82,44 @@ async function createExpertForScan(page: Page, name: string): Promise<string> {
   return page.url().split("/").pop()!;
 }
 
+/**
+ * Block until nothing on the page is still ANIMATING, so axe samples a settled
+ * state rather than a frame of a transition.
+ *
+ * Why this belongs in every scan and is a root fix, not a mask. The DS controls
+ * carry `transition-all`, and a filled `Button` fades through `disabled:opacity-40`
+ * (`primitives/button.tsx` — RAISED_MOTION) whenever it flips `disabled → enabled`;
+ * the Radix `Dialog` likewise fades its content in. axe EXEMPTS a disabled control
+ * from `color-contrast`, so the first frames in which the rule applies at all are
+ * the mid-fade ones — where a 40%-alpha `bg-primary-action` under white copy
+ * genuinely misses AA. Every state this file scans right after an interaction
+ * (the picker the moment a selection enables the submit, the impact dialog the
+ * moment its loaded preview enables the confirm) lands inside exactly that window,
+ * which is why the violation appeared only in full-suite ordering and never in
+ * isolation. The settled controls are the certified `bg-primary-action` /
+ * `text-primary-foreground` pair the showcase gate already holds at AA. CSS
+ * transitions surface as `Animation` objects, so this waits on the real end
+ * condition instead of a fixed sleep; an intentionally looping animation is
+ * treated as settled, since it never ends.
+ */
+async function settle(page: Page) {
+  await page.waitForFunction(
+    () =>
+      document
+        .getAnimations()
+        .every(
+          (a) =>
+            a.playState !== "running" ||
+            a.effect?.getTiming().iterations === Infinity,
+        ),
+    undefined,
+    { timeout: 5000 },
+  );
+}
+
 async function scan(page: Page, theme: (typeof THEMES)[number]) {
   await page.locator("main, form, body").first().waitFor({ state: "visible" });
+  await settle(page);
   // Light is the only reachable admin theme (see THEMES) — ensure no stray `.dark`.
   void theme;
   await page.evaluate(() => document.documentElement.classList.remove("dark"));
@@ -332,6 +368,113 @@ test.describe("007 EARS-11 axe-core a11y scan of the admin event surface", () =>
       .locator('[data-testid^="event-expert-"][data-testid$="-retire"]')
       .click();
     await page.getByRole("alertdialog").waitFor({ state: "visible" });
+    for (const theme of THEMES) await scan(page, theme);
+  });
+
+  // 012 EARS-6 (#1288) — the event↔project relationship editor. It introduces one
+  // element class no other admin surface renders: the §3.1 preview→confirm
+  // `Dialog`, whose body is a LIST of affected rows, each carrying two `Badge`s
+  // (kind + status) — a naming/contrast surface the recordings `AlertDialog`
+  // (a sentence and an action pair, no list) certifies nothing about. Its resting
+  // picker (search `Input` + `TokenSelect` + the «no options» hint), its danger
+  // command `Alert` and the read-only project-side view are enumerated for the
+  // same reason the partner (#1286) scan enumerates its own states.
+  test("the event-project relationship editor and its impact dialog pass WCAG 2 A/AA (light)", async ({
+    page,
+  }) => {
+    await loginAsAdmin(page);
+
+    const stamp = Date.now();
+    const projects: { title: string; url: string }[] = [];
+    for (const suffix of ["A", "B"]) {
+      await page.goto("/projects/create");
+      await page.getByTestId("project-form").waitFor({ state: "visible" });
+      await page.locator("#title").fill(`Axe-скан связи ${suffix} ${stamp}`);
+      await page.locator("#description").fill("Описание для скана связей.");
+      await page.getByTestId("submit-project").click();
+      await page.waitForURL(/\/projects\/[0-9a-f-]{36}$/);
+      projects.push({ title: `Axe-скан связи ${suffix} ${stamp}`, url: page.url() });
+    }
+    const eventId = await createEventForScan(page);
+
+    // The RESTING tab: the empty list, the picker and the no-delete note.
+    await page.goto(`/events/${eventId}`);
+    await page.getByTestId("tab-projects").click();
+    await page.getByTestId("event-projects-panel").waitFor({ state: "visible" });
+    for (const theme of THEMES) await scan(page, theme);
+
+    // The picker NARROWED to one match and holding a selection — the state whose
+    // accessible naming (label → `TokenSelect`) a resting empty select cannot show.
+    await page.getByTestId("event-project-link-search").fill(projects[0].title);
+    await page
+      .getByTestId("event-project-link-select")
+      .selectOption({ label: projects[0].title });
+    for (const theme of THEMES) await scan(page, theme);
+
+    // A real linked row: the title/slug pair plus the status `Badge` and the
+    // transition trigger, on the success-`Alert` surface.
+    await page.getByTestId("event-project-link-submit").click();
+    await page.getByTestId("event-projects-notice").waitFor({ state: "visible" });
+    for (const theme of THEMES) await scan(page, theme);
+
+    // The OPEN impact dialog, on its LOADED preview — the point of this test. The
+    // scan waits for the affected list rather than the dialog shell, so it never
+    // certifies the loading placeholder in place of the rows.
+    await page.locator('[data-testid^="event-project-retire-"]').first().click();
+    await page
+      .locator('[data-testid$="-impact"]')
+      .first()
+      .waitFor({ state: "visible" });
+    for (const theme of THEMES) await scan(page, theme);
+    await page.keyboard.press("Escape");
+
+    // The REFUSED command — a danger `Alert` above the picker. The 409 is stubbed
+    // at the transport because reaching it for real needs a second operator racing
+    // this tab (`taxonomy-event-projects.spec.ts` drives that arc end-to-end); what
+    // is under scan here is the rendered refusal's colour and naming, and the
+    // stubbed envelope is byte-identical to the API's.
+    await page.route("**/v1/admin/event-projects", async (route) => {
+      if (route.request().method() !== "POST") {
+        await route.fallback();
+        return;
+      }
+      await route.fulfill({
+        status: 409,
+        contentType: "application/problem+json",
+        body: JSON.stringify({
+          type: "about:blank",
+          title: "Conflict",
+          status: 409,
+          errorCode: "RELATIONSHIP_CONFLICT",
+          traceId: "axe-scan",
+        }),
+      });
+    });
+    await page.getByTestId("event-project-link-search").fill(projects[1].title);
+    await page
+      .getByTestId("event-project-link-select")
+      .selectOption({ label: projects[1].title });
+    await page.getByTestId("event-project-link-submit").click();
+    await page
+      .getByTestId("event-projects-command-error")
+      .waitFor({ state: "visible" });
+    for (const theme of THEMES) await scan(page, theme);
+    await page.unroute("**/v1/admin/event-projects");
+
+    // The retired section revealed by the `Switch` — its own resting state.
+    // The DS `Switch` input is `sr-only` behind its painted track: a user clicks
+    // the wrapping label, and `.check()` on the input is intercepted by the track.
+    await page
+      .getByTestId("event-projects-show-retired")
+      .locator("xpath=ancestor::label[1]")
+      .click();
+    await page.getByTestId("event-projects-retired").waitFor({ state: "visible" });
+    for (const theme of THEMES) await scan(page, theme);
+
+    // The project side: the same list without the authoring form (§5.1).
+    await page.goto(projects[0].url);
+    await page.getByTestId("tab-events").click();
+    await page.getByTestId("event-projects-panel").waitFor({ state: "visible" });
     for (const theme of THEMES) await scan(page, theme);
   });
 });

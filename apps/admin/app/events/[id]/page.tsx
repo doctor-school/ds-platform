@@ -23,6 +23,7 @@ import { EventForm } from "@/components/event-form";
 import { StreamConfigForm } from "@/components/stream-config-form";
 import { LifecycleActions } from "@/components/lifecycle-actions";
 import { RecordingsPanel } from "@/components/recordings-panel";
+import { EventProjectsPanel } from "@/components/event-projects-panel";
 import { StateBadge } from "@/components/state-badge";
 import { formatMskDateTime } from "@/lib/msk";
 import type { UpdateEventVars } from "@/providers/data-provider";
@@ -92,6 +93,9 @@ export default function EventEditPage() {
                     composition the owner picked (#1282, option B). */}
                 <TabsTrigger value="experts" data-testid="tab-experts">
                   {t("events.tabs.experts")}
+                </TabsTrigger>
+                <TabsTrigger value="projects" data-testid="tab-projects">
+                  {t("events.tabs.projects")}
                 </TabsTrigger>
               </TabsList>
 
@@ -207,6 +211,22 @@ export default function EventEditPage() {
                   </CardHeader>
                   <CardContent>
                     <EventExpertsPanel eventId={id} />
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              {/* «Проекты» (012 EARS-6, 012-design §7) — the relationship editor
+                  is embedded in the existing 007 event form rather than living on
+                  a page of its own: a link is authored while looking at the event
+                  it belongs to, and a separate screen would make the operator
+                  hold both ends in their head. */}
+              <TabsContent value="projects">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>{t("eventProjects.title")}</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <EventProjectsPanel mode="event" entityId={id} />
                   </CardContent>
                 </Card>
               </TabsContent>

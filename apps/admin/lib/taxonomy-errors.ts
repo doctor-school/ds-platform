@@ -73,6 +73,32 @@ export function taxonomyErrorKey(error: unknown, fallbackKey: string): string {
     }
   }
 
+  // ── 012 EARS-6 relationship codes (012-design §3.1/§5.3) ─────────────────
+  // Scoped to the relationship namespace for the same reason the recordings
+  // block is: the four entity CRUD surfaces have no lifecycle-impact gate and
+  // no logical-pair uniqueness, so pointing their namespace at an
+  // `impactStale` key that does not exist would trade a wrong sentence for a
+  // crashed render.
+  if (ns === "eventProjects") {
+    switch (code) {
+      case "RELATIONSHIP_CONFLICT":
+        return "eventProjects.errors.duplicatePair";
+      case "INVALID_TRANSITION":
+        return "eventProjects.errors.invalidTransition";
+      // The one undifferentiated refusal of §3.1: the preview the operator
+      // read no longer describes what would happen. The dialog RELOADS the
+      // preview on this code — it never retries the confirmation.
+      case "LIFECYCLE_IMPACT_STALE":
+        return "eventProjects.errors.impactStale";
+      case "LIFECYCLE_IMPACT_REQUIRED":
+        return "eventProjects.errors.impactRequired";
+      case "RESOURCE_NOT_FOUND":
+        return "eventProjects.errors.notFound";
+      default:
+        break;
+    }
+  }
+
   switch (code) {
     case "SLUG_CONFLICT":
       return `${ns}.errors.slugConflict`;

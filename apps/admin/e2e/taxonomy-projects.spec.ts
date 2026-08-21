@@ -94,9 +94,12 @@ test.describe("012 EARS-1 — project authoring in the live admin", () => {
     const detailUrl = page.url();
     await expect(page.getByTestId("project-heading")).toHaveText(title);
     await expect(page.getByTestId("project-status")).toHaveText("Черновик");
-    // Only «Основное» ships in this slice — no empty placeholder tabs.
+    // «Основное» plus the «События» read direction EARS-6 added (#1288). Still no
+    // empty placeholder tab: «Публикация» (#1287/#1295/#1296) arrives with the
+    // transitions that give it something to show.
     await expect(page.getByTestId("tab-main")).toBeVisible();
-    await expect(page.getByRole("tab")).toHaveCount(1);
+    await expect(page.getByTestId("tab-events")).toBeVisible();
+    await expect(page.getByRole("tab")).toHaveCount(2);
 
     // ── The shared list shell finds it by search ───────────────────────────
     await page.getByTestId("back-to-list").click();

@@ -6,6 +6,9 @@
 | GET /v1/admin/auth/state                                        | public        | —                            | none       | —            | false   | none       | low-stakes  | EARS-6                            |
 | GET /v1/admin/event-experts                                     | authenticated | platform_admin               | fast-path  | —            | false   | none       | none        | EARS-7, EARS-15, EARS-16          |
 | GET /v1/admin/event-experts/:id                                 | authenticated | platform_admin               | fast-path  | —            | false   | none       | none        | EARS-7, EARS-16                   |
+| GET /v1/admin/event-projects                                    | authenticated | platform_admin               | fast-path  | —            | false   | none       | none        | EARS-6, EARS-15, EARS-16          |
+| GET /v1/admin/event-projects/:id                                | authenticated | platform_admin               | fast-path  | —            | false   | none       | none        | EARS-6, EARS-16                   |
+| GET /v1/admin/event-projects/:id/lifecycle-impact               | authenticated | platform_admin               | fast-path  | —            | false   | none       | none        | EARS-6, EARS-16                   |
 | GET /v1/admin/events                                            | authenticated | platform_admin               | fast-path  | —            | false   | none       | none        | EARS-8                            |
 | GET /v1/admin/events/:eventId/recordings                        | authenticated | platform_admin               | fast-path  | —            | false   | none       | none        | EARS-1, EARS-17                   |
 | GET /v1/admin/events/:id                                        | authenticated | platform_admin               | fast-path  | —            | false   | none       | none        | EARS-8                            |
@@ -26,7 +29,9 @@
 | GET /v1/me/profile                                              | authenticated | doctor_guest                 | fast-path  | —            | false   | none       | none        | EARS-27                           |
 | GET /v1/public/events                                           | public        | —                            | none       | —            | false   | none       | none        | EARS-7, EARS-10, EARS-15          |
 | GET /v1/public/events/:idOrSlug                                 | public        | —                            | none       | —            | false   | none       | none        | EARS-1, EARS-5, EARS-10           |
+| GET /v1/public/events/:idOrSlug/projects                        | public        | —                            | none       | —            | false   | none       | none        | EARS-6, EARS-16                   |
 | GET /v1/public/events/month-counts                              | public        | —                            | none       | —            | false   | none       | none        | EARS-16, EARS-10                  |
+| GET /v1/public/projects/:idOrSlug/events                        | public        | —                            | none       | —            | false   | none       | none        | EARS-6, EARS-16                   |
 | GET /v1/ready                                                   | public        | —                            | none       | —            | false   | none       | none        | EARS-1, EARS-2                    |
 | PATCH /v1/admin/event-experts/:id                               | authenticated | platform_admin               | fast-path  | —            | false   | live       | low-stakes  | EARS-7, EARS-16, EARS-17          |
 | PATCH /v1/admin/events/:eventId/recordings/:recordingId         | authenticated | platform_admin               | fast-path  | —            | false   | live       | low-stakes  | EARS-1, EARS-17                   |
@@ -43,6 +48,9 @@
 | POST /v1/admin/event-experts                                    | authenticated | platform_admin               | fast-path  | —            | false   | live       | low-stakes  | EARS-7, EARS-16, EARS-17          |
 | POST /v1/admin/event-experts/:id/restore                        | authenticated | platform_admin               | fast-path  | —            | false   | live       | low-stakes  | EARS-7, EARS-14, EARS-16, EARS-17 |
 | POST /v1/admin/event-experts/:id/retire                         | authenticated | platform_admin               | fast-path  | —            | false   | live       | low-stakes  | EARS-7, EARS-14, EARS-16, EARS-17 |
+| POST /v1/admin/event-projects                                   | authenticated | platform_admin               | fast-path  | —            | false   | live       | low-stakes  | EARS-6, EARS-16, EARS-17          |
+| POST /v1/admin/event-projects/:id/restore                       | authenticated | platform_admin               | fast-path  | —            | false   | live       | low-stakes  | EARS-6, EARS-16, EARS-17          |
+| POST /v1/admin/event-projects/:id/retire                        | authenticated | platform_admin               | fast-path  | —            | false   | live       | low-stakes  | EARS-6, EARS-16, EARS-17          |
 | POST /v1/admin/events                                           | authenticated | platform_admin               | fast-path  | —            | false   | none       | low-stakes  | EARS-1, EARS-8                    |
 | POST /v1/admin/events/:eventId/recordings                       | authenticated | platform_admin               | fast-path  | —            | false   | live       | low-stakes  | EARS-1, EARS-17                   |
 | POST /v1/admin/events/:eventId/recordings/:recordingId/:command | authenticated | platform_admin               | fast-path  | —            | false   | live       | low-stakes  | EARS-2, EARS-17                   |

@@ -24,6 +24,14 @@ import {
   UpdateExpertRequestSchema,
   UpdateTopicRequestSchema,
   UpdateProjectRequestSchema,
+  CreateEventProjectRequestSchema,
+  EventProjectAdminDetailSchema,
+  LifecycleImpactRowSchema,
+  LifecycleImpactSchema,
+  PublicCursorQuerySchema,
+  PublicEventSummarySchema,
+  PublicProjectSummarySchema,
+  PUBLIC_PAGE_SIZE_MAX,
 } from "./index.js";
 
 // 012 EARS-1 (#1283) — the wire-contract half. These are the bounds the Refine
@@ -485,5 +493,207 @@ describe("012 taxonomy — partner authoring contract (SSOT)", () => {
     expect(PartnerAdminListItemSchema.parse(detail)).not.toHaveProperty(
       "logoUrl",
     );
+  });
+});
+
+// 012 EARS-6 (#1288) — the wire-contract half of the event↔project relationship.
+// The public summaries are a DISCLOSURE boundary (012-design §5.2): a field added
+// to an admin projection must be unable to reach them by being spread into a
+// response, which is what `.strict()` is asserted for here.
+
+const PUBLIC_PROJECT_SUMMARY_KEYS = [
+  "id",
+  "slug",
+  "kind",
+  "title",
+  "description",
+  "coverUrl",
+  "primaryPartner",
+] as const;
+
+const PUBLIC_EVENT_SUMMARY_KEYS = [
+  "id",
+  "slug",
+  "title",
+  "school",
+  "startsAt",
+  "state",
+] as const;
+
+const publicProjectSummary = {
+  id: "22222222-2222-4222-8222-222222222222",
+  slug: "kardio-school",
+  kind: "school" as const,
+  title: "Кардиошкола",
+  description: null,
+  coverUrl: null,
+  primaryPartner: null,
+};
+
+const publicEventSummary = {
+  id: "33333333-3333-4333-8333-333333333333",
+  slug: "vebinar-2026",
+  title: "Вебинар 2026",
+  school: "Кардиошкола",
+  startsAt: new Date().toISOString(),
+  state: "published",
+};
+
+describe("012 EARS-6 — event↔project relationship contract (SSOT)", () => {
+  it("012 EARS-6: when a public project summary is projected, it shall carry exactly the §5.2 key set and refuse any admin or storage field", () => {
+    const parsed = PublicProjectSummarySchema.parse(publicProjectSummary);
+    expect(Object.keys(parsed).sort()).toEqual(
+      [...PUBLIC_PROJECT_SUMMARY_KEYS].sort(),
+    );
+    for (const leak of [
+      { coverRef: "taxonomy/projects/covers/a.webp" },
+      { status: "draft" },
+      { version: 1 },
+      { deletedAt: null },
+      { relationshipId: "44444444-4444-4444-8444-444444444444" },
+    ]) {
+      expect(
+        PublicProjectSummarySchema.safeParse({ ...publicProjectSummary, ...leak })
+          .success,
+        `public project summary must refuse ${JSON.stringify(leak)}`,
+      ).toBe(false);
+    }
+  });
+
+  it("012 EARS-6: when a public event summary is projected, it shall carry exactly the §5.2 key set and refuse any admin or storage field", () => {
+    const parsed = PublicEventSummarySchema.parse(publicEventSummary);
+    expect(Object.keys(parsed).sort()).toEqual(
+      [...PUBLIC_EVENT_SUMMARY_KEYS].sort(),
+    );
+    for (const leak of [
+      { coverRef: "events/covers/a.webp" },
+      { coverUrl: "https://cdn.example.org/a.webp" },
+      { version: 2 },
+      { deletedAt: null },
+    ]) {
+      expect(
+        PublicEventSummarySchema.safeParse({ ...publicEventSummary, ...leak })
+          .success,
+        `public event summary must refuse ${JSON.stringify(leak)}`,
+      ).toBe(false);
+    }
+  });
+
+  it("012 EARS-6: when a public traversal is paged, the schema shall bound the limit and keep the cursor opaque", () => {
+    expect(PublicCursorQuerySchema.parse({}).limit).toBe(20);
+    expect(PublicCursorQuerySchema.parse({ limit: "5" }).limit).toBe(5);
+    expect(
+      PublicCursorQuerySchema.safeParse({ limit: PUBLIC_PAGE_SIZE_MAX + 1 })
+        .success,
+    ).toBe(false);
+    expect(PublicCursorQuerySchema.safeParse({ limit: 0 }).success).toBe(false);
+    expect(PublicCursorQuerySchema.safeParse({ cursor: "" }).success).toBe(
+      false,
+    );
+    // An unknown query key is a caller mistake, not a silently ignored field.
+    expect(
+      PublicCursorQuerySchema.safeParse({ offset: 10 }).success,
+    ).toBe(false);
+  });
+
+  it("012 EARS-6: when an affected row is previewed, the schema shall require an operator-readable title and refuse a draft status", () => {
+    const row = {
+      kind: "event↔project" as const,
+      id: "44444444-4444-4444-8444-444444444444",
+      title: "Вебинар 2026 — Кардиошкола",
+      slug: null,
+      status: "active" as const,
+    };
+    expect(LifecycleImpactRowSchema.parse(row)).toEqual(row);
+    expect(
+      LifecycleImpactRowSchema.safeParse({ ...row, title: null }).success,
+    ).toBe(false);
+    expect(
+      LifecycleImpactRowSchema.safeParse({ ...row, title: "" }).success,
+    ).toBe(false);
+    // `draft` never appears — the affected list is scoped to public projections.
+    expect(
+      LifecycleImpactRowSchema.safeParse({ ...row, status: "draft" }).success,
+    ).toBe(false);
+    expect(
+      LifecycleImpactRowSchema.safeParse({ ...row, kind: "event↔partner" })
+        .success,
+    ).toBe(false);
+
+    const impact = {
+      transition: "retire" as const,
+      version: 1,
+      affected: [row],
+      impactToken: "signed.envelope.value",
+    };
+    expect(LifecycleImpactSchema.parse(impact)).toEqual(impact);
+    // A transition with no visible consequence is an EMPTY list, never absent.
+    expect(
+      LifecycleImpactSchema.parse({ ...impact, affected: [] }).affected,
+    ).toEqual([]);
+    expect(
+      LifecycleImpactSchema.safeParse({ ...impact, impactToken: "" }).success,
+    ).toBe(false);
+    expect(
+      LifecycleImpactSchema.safeParse({ ...impact, version: 0 }).success,
+    ).toBe(false);
+    expect(
+      LifecycleImpactSchema.safeParse({ ...impact, transition: "delete" })
+        .success,
+    ).toBe(false);
+  });
+
+  it("012 EARS-6: when a relate request is made, the schema shall demand two endpoint ids and refuse a client-supplied lifecycle field", () => {
+    const body = {
+      eventId: "33333333-3333-4333-8333-333333333333",
+      projectId: "22222222-2222-4222-8222-222222222222",
+    };
+    expect(CreateEventProjectRequestSchema.parse(body)).toEqual(body);
+    expect(
+      CreateEventProjectRequestSchema.safeParse({ eventId: body.eventId })
+        .success,
+    ).toBe(false);
+    for (const bad of ["", "not-a-uuid", "33333333-3333-4333-8333"]) {
+      expect(
+        CreateEventProjectRequestSchema.safeParse({ ...body, projectId: bad })
+          .success,
+        `projectId ${JSON.stringify(bad)} must be refused`,
+      ).toBe(false);
+    }
+    // Lifecycle moves via retire/restore behind the §3.1 impact gate only.
+    for (const leak of [
+      { status: "active" },
+      { version: 1 },
+      { deletedAt: null },
+    ]) {
+      expect(
+        CreateEventProjectRequestSchema.safeParse({ ...body, ...leak }).success,
+        `create body must refuse ${JSON.stringify(leak)}`,
+      ).toBe(false);
+    }
+  });
+
+  it("012 EARS-6: when a relationship is projected for the admin, it shall round-trip both endpoints' display forms", () => {
+    const detail = {
+      id: "44444444-4444-4444-8444-444444444444",
+      eventId: "33333333-3333-4333-8333-333333333333",
+      eventTitle: "Вебинар 2026",
+      eventSlug: "vebinar-2026",
+      projectId: "22222222-2222-4222-8222-222222222222",
+      projectTitle: "Кардиошкола",
+      projectSlug: "kardio-school",
+      status: "active" as const,
+      version: 1,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    expect(EventProjectAdminDetailSchema.parse(detail)).toEqual(detail);
+    expect(
+      EventProjectAdminDetailSchema.safeParse({ ...detail, version: 0 }).success,
+    ).toBe(false);
+    expect(
+      EventProjectAdminDetailSchema.safeParse({ ...detail, status: "draft" })
+        .success,
+    ).toBe(false);
   });
 });

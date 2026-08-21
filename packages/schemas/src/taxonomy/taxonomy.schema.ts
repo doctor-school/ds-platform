@@ -711,10 +711,316 @@ export const PublicEventExpertItemSchema = PublicExpertSummarySchema.extend({
 });
 export type PublicEventExpertItem = z.infer<typeof PublicEventExpertItemSchema>;
 
-// ── Admin list query (012-design §5.1; the shell #1297 later sweeps) ─────────
+// ── Admin list paging bounds (012-design §5.1; the shell #1297 later sweeps) ─
+//
+// Declared ahead of both list-query schemas below: they are evaluated at module
+// load, so a `const` declared after them would be in its temporal dead zone.
 
 export const ADMIN_LIST_PAGE_SIZE_DEFAULT = 20;
 export const ADMIN_LIST_PAGE_SIZE_MAX = 100;
+
+// ── Public summary DTOs (012-design §5.2) ────────────────────────────────────
+
+/**
+ * The exact §5.2 relationship summary of a partner. Declared here by the first
+ * join vertical because `PublicProjectSummary` embeds it; `project_partners`
+ * (#1291) is what will ever make it non-null.
+ */
+export const PublicPartnerSummarySchema = z
+  .object({
+    id: z.string(),
+    slug: z.string(),
+    title: z.string(),
+    logoUrl: z.string().nullable(),
+    websiteUrl: z.string().nullable(),
+  })
+  .strict();
+export type PublicPartnerSummary = z.infer<typeof PublicPartnerSummarySchema>;
+
+/**
+ * The exact §5.2 `PublicProjectSummary` — the item DTO of
+ * `GET /v1/public/events/:key/projects`.
+ *
+ * `.strict()` is the disclosure boundary, not tidiness: §5.2 states «no status,
+ * storage key, retained-row id or admin field is present», so a field added to
+ * the admin projection can never leak here by being spread into the response.
+ * Optional URLs are PRESENT and nullable — a caller never has to distinguish
+ * «absent» from «none».
+ */
+export const PublicProjectSummarySchema = z
+  .object({
+    id: z.string(),
+    slug: z.string(),
+    kind: ProjectKindSchema,
+    title: z.string(),
+    description: z.string().nullable(),
+    coverUrl: z.string().nullable(),
+    primaryPartner: PublicPartnerSummarySchema.nullable(),
+  })
+  .strict();
+export type PublicProjectSummary = z.infer<typeof PublicProjectSummarySchema>;
+
+/**
+ * The exact §5.2 `PublicEventSummary` — the item DTO of
+ * `GET /v1/public/projects/:key/events`. `state` is the event's publish-visible
+ * lifecycle state, which the 004 public event surface already discloses.
+ */
+export const PublicEventSummarySchema = z
+  .object({
+    id: z.string(),
+    slug: z.string(),
+    title: z.string(),
+    school: z.string(),
+    startsAt: z.string(),
+    state: z.string(),
+  })
+  .strict();
+export type PublicEventSummary = z.infer<typeof PublicEventSummarySchema>;
+
+/** ADR-0002's exact cursor-page envelope (012-design §5.2). */
+export function publicCursorPageSchema<T extends z.ZodTypeAny>(item: T) {
+  return z.object({
+    data: z.array(item),
+    pagination: z.object({
+      nextCursor: z.string().nullable(),
+      hasMore: z.boolean(),
+    }),
+  });
+}
+
+export const PublicProjectSummaryPageSchema = publicCursorPageSchema(
+  PublicProjectSummarySchema,
+);
+export type PublicProjectSummaryPage = z.infer<
+  typeof PublicProjectSummaryPageSchema
+>;
+export const PublicEventSummaryPageSchema = publicCursorPageSchema(
+  PublicEventSummarySchema,
+);
+export type PublicEventSummaryPage = z.infer<
+  typeof PublicEventSummaryPageSchema
+>;
+
+/** Bounded page size of every §5.2 growing public read. */
+export const PUBLIC_PAGE_SIZE_DEFAULT = 20;
+export const PUBLIC_PAGE_SIZE_MAX = 50;
+
+/**
+ * The `limit` + opaque `cursor` query of every §5.2 traversal. The cursor is
+ * opaque BY CONTRACT — it encodes the stable order tuple the server chose, and a
+ * client that decodes and edits it is holding a value the server refuses with
+ * 400 `CURSOR_INVALID` rather than one it silently trusts.
+ */
+export const PublicCursorQuerySchema = z
+  .object({
+    limit: z.coerce
+      .number()
+      .int()
+      .positive()
+      .max(PUBLIC_PAGE_SIZE_MAX)
+      .default(PUBLIC_PAGE_SIZE_DEFAULT),
+    cursor: z.string().min(1).max(512).optional(),
+  })
+  .strict();
+export type PublicCursorQuery = z.infer<typeof PublicCursorQuerySchema>;
+
+// ── Lifecycle-impact preview (012-design §3.1; EARS-6, #1288) ────────────────
+
+/** The two transitions a preview may be issued for. A token binds exactly one. */
+export const TAXONOMY_LIFECYCLE_TRANSITIONS = ["retire", "restore"] as const;
+export const TaxonomyLifecycleTransitionSchema = z.enum(TAXONOMY_LIFECYCLE_TRANSITIONS);
+export type TaxonomyLifecycleTransition = z.infer<typeof TaxonomyLifecycleTransitionSchema>;
+
+/**
+ * The confirmation header carrying the signed envelope back (§3.1). Absent is
+ * 428 `LIFECYCLE_IMPACT_REQUIRED`; tampered/expired/wrong-transition/
+ * wrong-target/stale-fingerprint is 412 `LIFECYCLE_IMPACT_STALE`.
+ */
+export const LIFECYCLE_IMPACT_TOKEN_HEADER = "lifecycle-impact-token";
+/** The §3.1 validity window of an issued envelope. */
+export const LIFECYCLE_IMPACT_TOKEN_TTL_MS = 15 * 60 * 1000;
+
+/**
+ * The `kind` of one affected row (§3.1). An ENTITY kind is the singular noun; a
+ * JOIN kind is its two endpoints in the order the kind names, joined by `↔`.
+ * One closed union rather than two: the confirmation dialog renders a single
+ * list, and a row's kind is what tells the operator whether «удалить» would
+ * touch a record or merely a link.
+ */
+export const LIFECYCLE_IMPACT_ROW_KINDS = [
+  "event",
+  "project",
+  "expert",
+  "topic",
+  "partner",
+  "event↔project",
+  "event↔expert",
+  "event↔topic",
+  "project↔expert",
+  "project↔partner",
+] as const;
+export const LifecycleImpactRowKindSchema = z.enum(LIFECYCLE_IMPACT_ROW_KINDS);
+export type LifecycleImpactRowKind = z.infer<
+  typeof LifecycleImpactRowKindSchema
+>;
+
+/**
+ * Exactly `{ kind, id, title, slug, status }` (§3.1) — every affected row is
+ * operator-readable ON ITS OWN, so the dialog renders the complete list from one
+ * preview response with no follow-up read per affected id.
+ *
+ * `title` is ALWAYS present and never null: for an entity it is the row's title
+ * (an expert's name); for a JOIN it is the operator-readable pairing
+ * `«<left> — <right>»` of its two endpoints' display forms — the preview has
+ * already loaded both endpoints to compute eligibility, so building it costs no
+ * extra read. `slug` is null exactly for a join row and for any entity kind with
+ * none. `status` is the row's OWN state: `published | retired` for an entity,
+ * `active | retired` for a join. `draft` never appears — the affected list is
+ * scoped to currently-public projections.
+ *
+ * These display fields widen no disclosure boundary: each is one the
+ * corresponding public summary DTO already exposes, and `status` is read from
+ * the affected row itself and disclosed only because this is an admin-only route
+ * behind the `platform_admin` guard.
+ */
+export const LIFECYCLE_IMPACT_ROW_STATUSES = [
+  "published",
+  "retired",
+  "active",
+] as const;
+export const LifecycleImpactRowStatusSchema = z.enum(
+  LIFECYCLE_IMPACT_ROW_STATUSES,
+);
+export type LifecycleImpactRowStatus = z.infer<
+  typeof LifecycleImpactRowStatusSchema
+>;
+
+export const LifecycleImpactRowSchema = z
+  .object({
+    kind: LifecycleImpactRowKindSchema,
+    id: z.string(),
+    title: z.string().min(1),
+    slug: z.string().nullable(),
+    status: LifecycleImpactRowStatusSchema,
+  })
+  .strict();
+export type LifecycleImpactRow = z.infer<typeof LifecycleImpactRowSchema>;
+
+/**
+ * The §3.1 preview body. `version` is the target's version the envelope binds,
+ * so a client that reads a preview and then confirms is asserting the SAME row
+ * state twice — once via `If-Match`, once inside the opaque token.
+ *
+ * `impactToken` is a server-signed envelope binding transition, target kind/id/
+ * version, issued-at and a 15-minute expiry to a canonical FINGERPRINT of every
+ * retained incident relation and every opposite-endpoint eligibility input. The
+ * fingerprint covers inactive relations and non-public endpoints that could
+ * become visible WITHOUT returning their hidden content to the client — rows the
+ * caller may not see are counted by the fingerprint, never listed in `affected`.
+ */
+export const LifecycleImpactSchema = z
+  .object({
+    transition: TaxonomyLifecycleTransitionSchema,
+    version: z.number().int().positive(),
+    affected: z.array(LifecycleImpactRowSchema),
+    impactToken: z.string().min(1),
+  })
+  .strict();
+export type LifecycleImpact = z.infer<typeof LifecycleImpactSchema>;
+
+/** `GET .../:id/lifecycle-impact?transition=retire|restore`. */
+export const LifecycleImpactQuerySchema = z
+  .object({ transition: TaxonomyLifecycleTransitionSchema })
+  .strict();
+export type LifecycleImpactQuery = z.infer<typeof LifecycleImpactQuerySchema>;
+
+// ── event_projects authoring DTOs (012-design §5.1; EARS-6, #1288) ───────────
+
+/**
+ * `POST /v1/admin/event-projects` — relate one project to one event.
+ *
+ * The body is the two endpoint ids and nothing else. `.strict()` is
+ * load-bearing: a client must not be able to supply `status`, `version` or
+ * `deletedAt` — lifecycle is moved by the retire/restore commands behind the
+ * §3.1 impact gate, never by a create body, so an attempt is 400
+ * `VALIDATION_FAILED` rather than a silently ignored field.
+ *
+ * There is no `PATCH` counterpart: unlike `project_experts` (`role`) or
+ * `project_partners` (`is_primary`), an event↔project relationship carries NO
+ * attribute (§2 ER envelope) — its endpoints are its identity and its lifecycle
+ * is the two commands. A PATCH route here could only ever accept an empty body
+ * and bump a version, which is a surface that asserts nothing.
+ */
+export const CreateEventProjectRequestSchema = z
+  .object({
+    eventId: TaxonomyIdSchema,
+    projectId: TaxonomyIdSchema,
+  })
+  .strict();
+export type CreateEventProjectRequest = z.infer<
+  typeof CreateEventProjectRequestSchema
+>;
+
+/**
+ * The admin projection of one relationship. It carries both endpoints' display
+ * forms (`eventTitle` / `projectTitle`) because the admin relationship editor
+ * renders a list of LINKS, and a table of two opaque UUIDs would force one
+ * follow-up read per row — the same argument §3.1 makes for its `title`.
+ */
+export const EventProjectAdminDetailSchema = z.object({
+  id: z.string(),
+  eventId: z.string(),
+  eventTitle: z.string(),
+  eventSlug: z.string(),
+  projectId: z.string(),
+  projectTitle: z.string(),
+  projectSlug: z.string(),
+  status: RelationshipStatusSchema,
+  version: z.number().int().positive(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type EventProjectAdminDetail = z.infer<
+  typeof EventProjectAdminDetailSchema
+>;
+
+/** Offset/page admin list envelope (ADR-0002 — admin pagination is offset-based). */
+export const EventProjectAdminListSchema = z.object({
+  data: z.array(EventProjectAdminDetailSchema),
+  total: z.number().int().nonnegative(),
+  page: z.number().int().positive(),
+  pageSize: z.number().int().positive(),
+});
+export type EventProjectAdminList = z.infer<typeof EventProjectAdminListSchema>;
+
+/**
+ * The filtered join list of §5.1. Either endpoint may scope the list — that is
+ * how the admin renders «проекты этого эфира» and «эфиры этого проекта» from one
+ * route — and retired rows are excluded unless explicitly asked for.
+ */
+export const EventProjectAdminListQuerySchema = z
+  .object({
+    page: z.coerce.number().int().positive().default(1),
+    pageSize: z.coerce
+      .number()
+      .int()
+      .positive()
+      .max(ADMIN_LIST_PAGE_SIZE_MAX)
+      .default(ADMIN_LIST_PAGE_SIZE_DEFAULT),
+    eventId: TaxonomyIdSchema.optional(),
+    projectId: TaxonomyIdSchema.optional(),
+    status: RelationshipStatusSchema.optional(),
+    includeRetired: z
+      .union([z.boolean(), z.enum(["true", "false"])])
+      .transform((v) => v === true || v === "true")
+      .default(false),
+  })
+  .strict();
+export type EventProjectAdminListQuery = z.infer<
+  typeof EventProjectAdminListQuerySchema
+>;
+
+// ── Admin list query (012-design §5.1; the shell #1297 later sweeps) ─────────
 
 /**
  * The shared admin list query of every taxonomy resource. `includeRetired`

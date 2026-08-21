@@ -13,16 +13,14 @@ import { AppModule } from "../../src/app.module.js";
 import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
 import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
 import { FakeIdpClient } from "../../src/auth/idp/idp.fake.js";
-import {
-  OBJECT_STORAGE,
-  type ObjectStorage,
-} from "../../src/storage/index.js";
+import { OBJECT_STORAGE, type ObjectStorage } from "../../src/storage/index.js";
 import { SESSION_COOKIE_NAME } from "../../src/auth/session/session.cookie.js";
 import { adminHeaders, establishAdminSession } from "../setup/admin-session.js";
 import {
   RATE_LIMIT_THRESHOLDS,
   RELAXED_RATE_LIMIT,
 } from "../setup/rate-limit.js";
+import { deleteUserFixture } from "../setup/fixture-cleanup.js";
 
 // 012 EARS-1 (#1283) — the project authoring vertical over the REAL stack:
 // Fastify + the 011 admin session + Postgres + object storage. Every assertion
@@ -40,7 +38,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     let storage: ObjectStorage;
     const fake = new FakeIdpClient();
     const password = "Aa1!ufficiently-long-pw";
-    const device = { "user-agent": "AdminTest/1.0", "accept-language": "en-US" };
+    const device = {
+      "user-agent": "AdminTest/1.0",
+      "accept-language": "en-US",
+    };
     const consent = [{ purpose: "tos", version: "2026-01" }];
     const createdEmails: string[] = [];
     const createdProjectIds: string[] = [];
@@ -217,9 +218,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     afterEach(async () => {
       for (const id of createdProjectIds.splice(0)) {
-        await pool.query("DELETE FROM media_cleanup_jobs WHERE entity_id = $1", [
-          id,
-        ]);
+        await pool.query(
+          "DELETE FROM media_cleanup_jobs WHERE entity_id = $1",
+          [id],
+        );
         await pool.query("DELETE FROM projects WHERE id = $1", [id]);
       }
       for (const k of usedKeys.splice(0)) {
@@ -229,7 +231,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     afterAll(async () => {
       for (const email of createdEmails.splice(0)) {
-        await pool.query("DELETE FROM users WHERE email = $1", [email]);
+        await deleteUserFixture(pool, "email", email);
       }
       await app.close();
     });
@@ -345,9 +347,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         version: 2,
       });
       expect(res.headers.etag).toBe('W/"2"');
-      const { rows } = await pool.query("SELECT count(*) FROM projects WHERE id = $1", [
-        body.id,
-      ]);
+      const { rows } = await pool.query(
+        "SELECT count(*) FROM projects WHERE id = $1",
+        [body.id],
+      );
       expect(Number(rows[0]!.count)).toBe(1);
     });
 
@@ -475,9 +478,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         headers: { ...device, ...adminHeaders(adminSid) },
       });
       expect(
-        (JSON.parse(withRetired.payload) as { data: { id: string }[] }).data.map(
-          (r) => r.id,
-        ),
+        (
+          JSON.parse(withRetired.payload) as { data: { id: string }[] }
+        ).data.map((r) => r.id),
       ).toContain(body.id);
 
       // The detail route addresses a retired row directly (restore path input).
@@ -528,7 +531,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(missing.statusCode).toBe(428);
       expect(problem(missing).errorCode).toBe("IDEMPOTENCY_KEY_REQUIRED");
       expect(problem(missing).traceId).toBeTypeOf("string");
-      expect(missing.headers["content-type"]).toContain("application/problem+json");
+      expect(missing.headers["content-type"]).toContain(
+        "application/problem+json",
+      );
 
       const upper = await createJson({
         payload: validPayload(),
@@ -1002,7 +1007,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       );
       let present = 0;
       for (const row of rows) {
-        if (row.cover_ref && (await storage.exists(row.cover_ref))) present += 1;
+        if (row.cover_ref && (await storage.exists(row.cover_ref)))
+          present += 1;
       }
       return present;
     }

@@ -15,6 +15,7 @@ import {
 } from "../setup/rate-limit.js";
 import { FakeIdpClient } from "../../src/auth/idp/idp.fake.js";
 import { SESSION_COOKIE_NAME } from "../../src/auth/session/session.cookie.js";
+import { deleteUserFixture } from "../setup/fixture-cleanup.js";
 
 // Refresh rotation + logout over HTTP (EARS-9, EARS-10) — the controller wiring
 // on top of the session-layer logic unit-tested in
@@ -81,7 +82,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Refresh + logout (e2e)", () => {
 
   afterEach(async () => {
     for (const email of createdEmails.splice(0))
-      await pool.query("DELETE FROM users WHERE email = $1", [email]);
+      await deleteUserFixture(pool, "email", email);
   });
 
   afterAll(async () => {

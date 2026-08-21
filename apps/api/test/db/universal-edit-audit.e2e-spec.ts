@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import pg from "pg";
 
 import { AUDIT_PD_COLUMNS } from "@ds/db";
+import { deleteEventFixture } from "../setup/fixture-cleanup.js";
 
 // 010 — Universal edit audit (spec `specs/features/010-universal-edit-audit/`,
 // Issue #1087): one generic PL/pgSQL row-level AFTER trigger
@@ -204,7 +205,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
 
     it("010 EARS-2: a DELETE captures the full old row as {field:{old}} — the deleted record stays reconstructible", async () => {
       const id = await insertEvent();
-      await pool.query(`DELETE FROM events WHERE id = $1`, [id]);
+      await deleteEventFixture(pool, id);
       const trail = await trailRows("events", "delete", "id", id);
       expect(trail).toHaveLength(1);
       const diff = trail[0]!.metadata.diff;
@@ -253,20 +254,47 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(row.event_id).toMatch(/^[0-9a-f-]{36}$/);
     });
 
-    it("010 EARS-6: a composite-pk table records every pk column in metadata.pk", async () => {
+    // The capture trigger reads each table's real primary key rather than
+    // assuming a column called `id`. `stream_config` is the standing proof: its
+    // PK is `event_id`. (Until #1278 this case used `event_speakers`, then the
+    // only audited table with a composite PK; #1278 moved its identity onto a
+    // surrogate `id` so a speaker can be retired and its position reused, and no
+    // audited table carries a composite PK any more.)
+    it("010 EARS-6: metadata.pk is read from the table's real primary key, not a hardcoded id column", async () => {
       const eventId = await insertEvent();
       await pool.query(
-        `INSERT INTO event_speakers (event_id, position, name) VALUES ($1, 1, 'Dr. Audit')`,
+        `INSERT INTO stream_config (event_id, provider, embed_ref) VALUES ($1, 'rutube', 'audit-pk-probe')`,
         [eventId],
       );
       const trail = await trailRows(
-        "event_speakers",
+        "stream_config",
         "insert",
         "event_id",
         eventId,
       );
       expect(trail).toHaveLength(1);
-      expect(trail[0]!.metadata.pk).toEqual({ event_id: eventId, position: 1 });
+      expect(trail[0]!.metadata.pk).toEqual({ event_id: eventId });
+    });
+
+    it("010 EARS-6: the pk extractor returns EVERY column of a multi-column primary key", async () => {
+      // No audited table carries a composite PK any more (#1278 moved
+      // `event_speakers` onto a surrogate `id`), so the multi-column arm is
+      // proven against the extractor itself rather than through a trigger:
+      // `audit_ledger` is composite-keyed on `(id, created_at)` and is the one
+      // table deliberately NOT audited (it cannot audit itself), which makes it
+      // a subject with no trigger side effects.
+      const eventId = await insertEvent();
+      const [row] = (await trailRows("events", "insert", "id", eventId)).map(
+        (r) => r.id,
+      );
+      const { rows } = await pool.query<{ pk: Record<string, string> }>(
+        `SELECT audit_extract_pk('audit_ledger'::regclass, to_jsonb(l)) AS pk
+           FROM audit_ledger l WHERE l.id = $1`,
+        [row],
+      );
+      expect(rows).toHaveLength(1);
+      expect(Object.keys(rows[0]!.pk).sort()).toEqual(["created_at", "id"]);
+      expect(rows[0]!.pk.id).toBe(row);
     });
 
     it("010 EARS-6: all trail rows of one transaction share metadata.txid", async () => {
@@ -382,7 +410,12 @@ describe.skipIf(!process.env.DATABASE_URL)(
          VALUES ($1, 'audit-e2e-purpose', 'v1') RETURNING id`,
         [userId],
       );
-      const trail = await trailRows("consent_records", "insert", "id", rows[0]!.id);
+      const trail = await trailRows(
+        "consent_records",
+        "insert",
+        "id",
+        rows[0]!.id,
+      );
       expect(trail).toHaveLength(1);
       const diff = trail[0]!.metadata.diff;
       expect(diff["user_id"]).toEqual({ masked: true });

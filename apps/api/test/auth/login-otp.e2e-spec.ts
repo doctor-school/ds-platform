@@ -21,6 +21,7 @@ import {
   SMS_BUDGET_THRESHOLDS,
 } from "../../src/auth/sms-budget/sms-budget.types.js";
 import { SESSION_COOKIE_NAME } from "../../src/auth/session/session.cookie.js";
+import { deleteUserFixture } from "../setup/fixture-cleanup.js";
 
 // Passwordless login (EARS-6 email-OTP / EARS-7 SMS-OTP) and the SMS toll-fraud
 // budget (EARS-14). Both OTP variants are native Zitadel (`otp_email` / `otp_sms`)
@@ -106,9 +107,9 @@ describe.skipIf(!process.env.DATABASE_URL)(
 
     afterEach(async () => {
       for (const email of createdEmails.splice(0))
-        await pool.query("DELETE FROM users WHERE email = $1", [email]);
+        await deleteUserFixture(pool, "email", email);
       for (const phone of createdPhones.splice(0))
-        await pool.query("DELETE FROM users WHERE phone = $1", [phone]);
+        await deleteUserFixture(pool, "phone", phone);
     });
 
     afterAll(async () => {
@@ -335,7 +336,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
 
     afterEach(async () => {
       for (const email of createdEmails.splice(0))
-        await pool.query("DELETE FROM users WHERE email = $1", [email]);
+        await deleteUserFixture(pool, "email", email);
       mailer.verificationCodeEmails.length = 0;
       mailer.passwordResetCodeEmails.length = 0;
       mailer.accountExistsNotices.length = 0;
@@ -370,7 +371,9 @@ describe.skipIf(!process.env.DATABASE_URL)(
       });
       expect(verifyRes.statusCode).toBe(401);
       const raw = verifyRes.headers["set-cookie"];
-      const cookie = Array.isArray(raw) ? raw.join("\n") : ((raw as string) ?? "");
+      const cookie = Array.isArray(raw)
+        ? raw.join("\n")
+        : ((raw as string) ?? "");
       expect(cookie).not.toContain(SESSION_COOKIE_NAME);
     });
 
@@ -425,7 +428,8 @@ describe.skipIf(!process.env.DATABASE_URL)(
         Math.max(none.ms, unver.ms, ver.ms) -
         Math.min(none.ms, unver.ms, ver.ms);
       expect(spread).toBeLessThanOrEqual(50);
-      for (const r of [none, unver, ver]) expect(r.ms).toBeGreaterThanOrEqual(30);
+      for (const r of [none, unver, ver])
+        expect(r.ms).toBeGreaterThanOrEqual(30);
     });
   },
 );

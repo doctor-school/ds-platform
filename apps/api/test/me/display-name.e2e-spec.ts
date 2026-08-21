@@ -22,6 +22,10 @@ import {
   RATE_LIMIT_THRESHOLDS,
   RELAXED_RATE_LIMIT,
 } from "../setup/rate-limit.js";
+import {
+  deleteEventFixture,
+  deleteUserFixture,
+} from "../setup/fixture-cleanup.js";
 
 // 006 EARS-14 + EARS-16 + EARS-17 — the self-scoped display-name write/read and
 // the name's one participant-visible surface: live-chat authorship.
@@ -52,9 +56,9 @@ function roomChannel(eventId: string): string {
 }
 
 /** Read a channel's publication history over the Centrifugo HTTP API. */
-async function centrifugoHistory(channel: string): Promise<
-  Array<{ data: Record<string, unknown> }>
-> {
+async function centrifugoHistory(
+  channel: string,
+): Promise<Array<{ data: Record<string, unknown> }>> {
   const res = await fetch(`${CENTRIFUGO_URL}/api/history`, {
     method: "POST",
     headers: {
@@ -216,11 +220,13 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     afterEach(async () => {
       for (const id of createdEventIds.splice(0)) {
-        await pool.query("DELETE FROM presence_beats WHERE event_id = $1", [id]);
-        await pool.query("DELETE FROM events WHERE id = $1", [id]);
+        await pool.query("DELETE FROM presence_beats WHERE event_id = $1", [
+          id,
+        ]);
+        await deleteEventFixture(pool, id);
       }
       for (const email of createdEmails.splice(0))
-        await pool.query("DELETE FROM users WHERE email = $1", [email]);
+        await deleteUserFixture(pool, "email", email);
     });
 
     afterAll(async () => {

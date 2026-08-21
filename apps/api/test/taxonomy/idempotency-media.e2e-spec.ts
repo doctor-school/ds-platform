@@ -6,7 +6,15 @@ import {
 } from "@nestjs/platform-fastify";
 import { VersioningType } from "@nestjs/common";
 import multipart from "@fastify/multipart";
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import sharp from "sharp";
 import type pg from "pg";
 import { AppModule } from "../../src/app.module.js";
@@ -30,6 +38,7 @@ import {
   RATE_LIMIT_THRESHOLDS,
   RELAXED_RATE_LIMIT,
 } from "../setup/rate-limit.js";
+import { deleteUserFixture } from "../setup/fixture-cleanup.js";
 
 // 012 EARS-17 / §5.1 §6 (#1283) — the protocol properties that only show up
 // against a real database and a real (fake-but-contract-parity) object store:
@@ -66,7 +75,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     const refusing = new RefusingStorage();
     const fake = new FakeIdpClient();
     const password = "Aa1!ufficiently-long-pw";
-    const device = { "user-agent": "AdminTest/1.0", "accept-language": "en-US" };
+    const device = {
+      "user-agent": "AdminTest/1.0",
+      "accept-language": "en-US",
+    };
     const consent = [{ purpose: "tos", version: "2026-01" }];
     const createdEmails: string[] = [];
     const createdProjectIds: string[] = [];
@@ -79,8 +91,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     beforeAll(async () => {
       const backing = new FakeObjectStorage();
       const routed: ObjectStorage = {
-        put: (input) =>
-          refusePuts ? refusing.put(input) : backing.put(input),
+        put: (input) => (refusePuts ? refusing.put(input) : backing.put(input)),
         urlFor: (k) => backing.urlFor(k),
         exists: (k) => backing.exists(k),
         getBytes: (k) => backing.getBytes(k),
@@ -124,7 +135,11 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       );
       await fake.grantProjectRole(rows[0]!.zitadel_sub, "platform_admin");
       adminSid = (
-        await establishAdminSession(app, { identifier: email, password, device })
+        await establishAdminSession(app, {
+          identifier: email,
+          password,
+          device,
+        })
       ).sid;
     });
 
@@ -147,7 +162,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     afterAll(async () => {
       for (const email of createdEmails.splice(0)) {
-        await pool.query("DELETE FROM users WHERE email = $1", [email]);
+        await deleteUserFixture(pool, "email", email);
       }
       await app.close();
     });
@@ -225,7 +240,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         "MEDIA_STORAGE_UNAVAILABLE",
       );
       expect(
-        Number((await pool.query("SELECT count(*) FROM projects")).rows[0]!.count),
+        Number(
+          (await pool.query("SELECT count(*) FROM projects")).rows[0]!.count,
+        ),
       ).toBe(before);
       expect(
         Number(
@@ -248,12 +265,16 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
            FROM idempotency_keys WHERE key = $1`,
         [k],
       );
-      expect(rows[0]!.cleanup_object_key).toMatch(/^taxonomy\/projects\/covers\//);
+      expect(rows[0]!.cleanup_object_key).toMatch(
+        /^taxonomy\/projects\/covers\//,
+      );
       // §5.1: the PUT failure "completes that idempotency outcome for replay" —
       // a fenced TERMINAL 503, not a takeover-eligible half-record.
       expect(rows[0]!.execution_state).toBe("completed");
       expect(rows[0]!.response_status).toBe(503);
-      expect(rows[0]!.response_body?.errorCode).toBe("MEDIA_STORAGE_UNAVAILABLE");
+      expect(rows[0]!.response_body?.errorCode).toBe(
+        "MEDIA_STORAGE_UNAVAILABLE",
+      );
 
       // An exact retry replays the stored refusal — even after storage recovers,
       // because the outcome of THAT request is terminal (§6 bullet 3). Anything
@@ -275,7 +296,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         (JSON.parse(retry.payload) as { errorCode: string }).errorCode,
       ).toBe("MEDIA_STORAGE_UNAVAILABLE");
       expect(
-        Number((await pool.query("SELECT count(*) FROM projects")).rows[0]!.count),
+        Number(
+          (await pool.query("SELECT count(*) FROM projects")).rows[0]!.count,
+        ),
       ).toBe(before);
     });
 
@@ -408,7 +431,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const replayed = await send();
       expect(original.statusCode).toBe(409);
       expect(replayed.statusCode).toBe(409);
-      expect(JSON.parse(replayed.payload)).toEqual(JSON.parse(original.payload));
+      expect(JSON.parse(replayed.payload)).toEqual(
+        JSON.parse(original.payload),
+      );
     });
 
     it("012 EARS-1: when the cleanup worker runs, it shall fence on a newer epoch, delete the released object and reach the cleared terminal shape", async () => {
@@ -428,9 +453,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       createdJobIds.push(jobId);
       const epochBefore = Number(
         (
-          await pool.query("SELECT lease_epoch FROM media_cleanup_jobs WHERE id = $1", [
-            jobId,
-          ])
+          await pool.query(
+            "SELECT lease_epoch FROM media_cleanup_jobs WHERE id = $1",
+            [jobId],
+          )
         ).rows[0]!.lease_epoch,
       );
 

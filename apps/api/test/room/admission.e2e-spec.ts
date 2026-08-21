@@ -18,6 +18,10 @@ import {
   RATE_LIMIT_THRESHOLDS,
   RELAXED_RATE_LIMIT,
 } from "../setup/rate-limit.js";
+import {
+  deleteEventFixture,
+  deleteUserFixture,
+} from "../setup/fixture-cleanup.js";
 
 // 006 EARS-1 — the server-side room admission gate (RoomAccess grant).
 //
@@ -165,9 +169,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     afterEach(async () => {
       for (const id of createdEventIds.splice(0))
-        await pool.query("DELETE FROM events WHERE id = $1", [id]);
+        await deleteEventFixture(pool, id);
       for (const email of createdEmails.splice(0))
-        await pool.query("DELETE FROM users WHERE email = $1", [email]);
+        await deleteUserFixture(pool, "email", email);
     });
 
     afterAll(async () => {
@@ -187,6 +191,46 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const config = RoomConfigSchema.parse(res.json());
       expect(config.eventId).toBe(id);
       expect(config.heartbeatIntervalSeconds).toBeGreaterThan(0);
+    });
+
+    it("EARS-2: a RETIRED stream config is not served — the room reads as unconfigured, never from the tombstone (#1278)", async () => {
+      // De-configuring a stream retires its row instead of deleting it
+      // (ADR-0003 design §3.6), so an event that ever had a config keeps one
+      // forever. The room read must carry the active predicate, or it would
+      // instantiate a player from the tombstone instead of rendering the
+      // truthful "stream unavailable" state.
+      const { id, slug } = await seedEvent("published");
+      const cookie = await doctorSession(uniqueEmail("doc-retired-stream"));
+      await register(slug, cookie);
+      await setState(id, "live");
+
+      await pool.query(
+        `INSERT INTO stream_config (event_id, provider, embed_ref) VALUES ($1, 'rutube', 'retired-stream-probe')`,
+        [id],
+      );
+      const configured = RoomConfigSchema.parse(
+        (await getRoom(slug, cookieHeader(cookie))).json(),
+      );
+      expect(configured.stream).toEqual({
+        provider: "rutube",
+        embedRef: "retired-stream-probe",
+      });
+
+      await pool.query(
+        `UPDATE stream_config SET record_status = 'retired', deleted_at = now() WHERE event_id = $1`,
+        [id],
+      );
+      const retired = RoomConfigSchema.parse(
+        (await getRoom(slug, cookieHeader(cookie))).json(),
+      );
+      expect(retired.stream).toBeNull();
+
+      // The row is retained, not removed — the tombstone is still there.
+      const { rows } = await pool.query(
+        `SELECT record_status FROM stream_config WHERE event_id = $1`,
+        [id],
+      );
+      expect(rows).toEqual([{ record_status: "retired" }]);
     });
 
     it("EARS-1.2: when a guest (no authenticated session) requests room content, the system shall refuse it server-side (401) — no room grant", async () => {

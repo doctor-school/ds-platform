@@ -17,6 +17,10 @@ import {
   RATE_LIMIT_THRESHOLDS,
   RELAXED_RATE_LIMIT,
 } from "../setup/rate-limit.js";
+import {
+  deleteEventFixture,
+  deleteUserFixture,
+} from "../setup/fixture-cleanup.js";
 
 // 005 EARS-9 — registration lifecycle gating. The `RegisterForEvent` command is
 // OFFERED/accepted while the event is `published` (upcoming) or `live`
@@ -151,9 +155,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     afterEach(async () => {
       // registrations cascade on the event/user delete (FK ON DELETE CASCADE).
       for (const id of createdEventIds.splice(0))
-        await pool.query("DELETE FROM events WHERE id = $1", [id]);
+        await deleteEventFixture(pool, id);
       for (const email of createdEmails.splice(0))
-        await pool.query("DELETE FROM users WHERE email = $1", [email]);
+        await deleteUserFixture(pool, "email", email);
     });
 
     afterAll(async () => {
@@ -273,7 +277,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const columns = rows.map((r) => r.column_name.toLowerCase());
       expect(columns).toContain("state");
       for (const forbidden of columns) {
-        expect(forbidden).not.toMatch(/cutoff|deadline|registration_close|closes_at/);
+        expect(forbidden).not.toMatch(
+          /cutoff|deadline|registration_close|closes_at/,
+        );
       }
     });
   },

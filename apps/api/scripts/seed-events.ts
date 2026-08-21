@@ -50,8 +50,9 @@
  * a caller / E2E env wiring can pick the slug for each state + room scenario.
  * Exits non-zero on failure.
  */
-import { createDrizzle, events, eventSpeakers, streamConfig } from "@ds/db";
-import { eq } from "drizzle-orm";
+import { createDrizzle, events, streamConfig } from "@ds/db";
+import { and, eq } from "drizzle-orm";
+import { reconcileEventSpeakers } from "../src/events/event-speakers.reconcile.js";
 
 const MINUTE = 60_000;
 const DAY = 24 * 60 * MINUTE;
@@ -149,7 +150,10 @@ function specs(now: number): SeedSpec[] {
       // is a verified PUBLICLY playable video (#717): its detail API returns 200
       // with `is_hidden:false` (an author-hidden id returns 403 and the player
       // renders «Автор скрыл это видео» instead of content).
-      stream: { provider: "rutube", embedRef: "cef3a41b70985eedeefe504452a69adc" },
+      stream: {
+        provider: "rutube",
+        embedRef: "cef3a41b70985eedeefe504452a69adc",
+      },
     },
     // ── 006 room-integration live fixtures (#584) ──────────────────────────────
     // The EARS-2 provider-variant live rooms `apps/portal/e2e/room.spec.ts` drives:
@@ -182,7 +186,10 @@ function specs(now: number): SeedSpec[] {
       specialties: ["Пульмонология"],
       partnerRef: "Партнёр Фарма",
       speakers: [{ name: "Доц. А. Петров", regalia: "к.м.н., пульмонолог" }],
-      stream: { provider: "rutube", embedRef: "b9e7d1a4c2f5e8039a6b1c4d7e0f3a25" },
+      stream: {
+        provider: "rutube",
+        embedRef: "b9e7d1a4c2f5e8039a6b1c4d7e0f3a25",
+      },
     },
     {
       slug: "seed-006-room-unavailable",
@@ -279,12 +286,14 @@ async function main(): Promise<void> {
         })
         .returning({ id: events.id });
 
-      // Replace this event's speakers wholesale (composite PK (event_id, position)
-      // makes a plain re-insert conflict), keeping the ordered list deterministic.
-      await db.delete(eventSpeakers).where(eq(eventSpeakers.eventId, row.id));
-      await db.insert(eventSpeakers).values(
+      // #1278 — reconcile this event's speaker list instead of replacing it
+      // wholesale: the seed is re-run constantly, and a delete-then-insert would
+      // physically destroy retained rows on every run (ADR-0003 design §3.6
+      // rule 1). Re-running with an unchanged spec is a no-op on the stored rows.
+      await reconcileEventSpeakers(
+        db,
+        row.id,
         spec.speakers.map((s, position) => ({
-          eventId: row.id,
           position,
           name: s.name,
           regalia: s.regalia,
@@ -292,8 +301,11 @@ async function main(): Promise<void> {
       );
 
       // 006 (#584): upsert the stream config by its `event_id` PK. A spec without
-      // `stream` (e.g. the "unavailable" fixture) removes any prior row so the
-      // room stays truthfully unconfigured. Only ever touches THIS event's row.
+      // `stream` (e.g. the "unavailable" fixture) RETIRES any prior row so the
+      // room stays truthfully unconfigured — #1278 §3.6: the retained row keeps
+      // the fact that this event once had a stream, and a later spec that brings
+      // the stream back restores that same row in place (§3.6 rule 2). Only ever
+      // touches THIS event's row.
       if (spec.stream) {
         await db
           .insert(streamConfig)
@@ -307,12 +319,20 @@ async function main(): Promise<void> {
             set: {
               provider: spec.stream.provider,
               embedRef: spec.stream.embedRef,
+              recordStatus: "active",
+              deletedAt: null,
             },
           });
       } else {
         await db
-          .delete(streamConfig)
-          .where(eq(streamConfig.eventId, row.id));
+          .update(streamConfig)
+          .set({ recordStatus: "retired", deletedAt: new Date() })
+          .where(
+            and(
+              eq(streamConfig.eventId, row.id),
+              eq(streamConfig.recordStatus, "active"),
+            ),
+          );
       }
 
       result[spec.slug] = spec.state;

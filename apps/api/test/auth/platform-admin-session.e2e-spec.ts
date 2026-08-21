@@ -15,6 +15,7 @@ import {
 } from "../setup/rate-limit.js";
 import { FakeIdpClient } from "../../src/auth/idp/idp.fake.js";
 import { SESSION_COOKIE_NAME } from "../../src/auth/session/session.cookie.js";
+import { deleteUserFixture } from "../setup/fixture-cleanup.js";
 
 // #1038 regression: the auth session-self surface (GET /v1/auth/session,
 // POST /v1/auth/refresh, POST /v1/auth/logout) classifies "any authenticated
@@ -102,7 +103,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
 
     afterEach(async () => {
       for (const email of createdEmails.splice(0))
-        await pool.query("DELETE FROM users WHERE email = $1", [email]);
+        await deleteUserFixture(pool, "email", email);
     });
 
     afterAll(async () => {

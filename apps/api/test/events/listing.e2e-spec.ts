@@ -13,6 +13,7 @@ import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
 import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
 import { FakeIdpClient } from "../../src/auth/idp/idp.fake.js";
 import { SESSION_COOKIE_NAME } from "../../src/auth/session/session.cookie.js";
+import { deleteEventFixture } from "../setup/fixture-cleanup.js";
 
 // 004 EARS-7 + EARS-10 + EARS-11 — the public upcoming-broadcasts listing
 // endpoint (GET /v1/public/events?upcoming → UpcomingBroadcastCard[]). The
@@ -59,7 +60,9 @@ describe.skipIf(!process.env.DATABASE_URL)(
     ): Promise<{ id: string; slug: string; startsAt: string }> {
       const id = randomUUID();
       const slug = `list-${opts.state}-${id.slice(0, 8)}`;
-      const startsAt = new Date(Date.now() + opts.startsAtOffsetMs).toISOString();
+      const startsAt = new Date(
+        Date.now() + opts.startsAtOffsetMs,
+      ).toISOString();
       await pool.query(
         `INSERT INTO events
            (id, slug, title, school, starts_at, duration_min, description,
@@ -74,7 +77,9 @@ describe.skipIf(!process.env.DATABASE_URL)(
           90,
           "Разбор клинических случаев.",
           ["traumatology", "orthopedics"],
-          opts.partnerRef === undefined ? "sponsor:acme-pharma" : opts.partnerRef,
+          opts.partnerRef === undefined
+            ? "sponsor:acme-pharma"
+            : opts.partnerRef,
           opts.withPdf ? "events/programs/seed/program.pdf" : null,
           opts.state,
         ],
@@ -117,7 +122,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
 
     afterEach(async () => {
       for (const id of createdEventIds.splice(0))
-        await pool.query("DELETE FROM events WHERE id = $1", [id]);
+        await deleteEventFixture(pool, id);
     });
 
     afterAll(async () => {
@@ -159,7 +164,11 @@ describe.skipIf(!process.env.DATABASE_URL)(
       });
 
       expect(res.statusCode).toBe(200);
-      const body = res.json() as { id: string; state: string; startsAt: string }[];
+      const body = res.json() as {
+        id: string;
+        state: string;
+        startsAt: string;
+      }[];
       const seededIds = new Set([soon.id, later.id, airingNow.id]);
       const returned = body.filter((c) => seededIds.has(c.id));
 
@@ -263,7 +272,9 @@ describe.skipIf(!process.env.DATABASE_URL)(
       // None of THIS test's seeds are upcoming; parallel tests clean up after
       // themselves, so assert the seeded set contributes nothing rather than a
       // hard `[]` (which a concurrent seed could break).
-      expect(body.every((c) => ["published", "live"].includes(c.state))).toBe(true);
+      expect(body.every((c) => ["published", "live"].includes(c.state))).toBe(
+        true,
+      );
     });
   },
 );

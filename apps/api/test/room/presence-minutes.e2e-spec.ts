@@ -19,6 +19,10 @@ import {
   RATE_LIMIT_THRESHOLDS,
   RELAXED_RATE_LIMIT,
 } from "../setup/rate-limit.js";
+import {
+  deleteEventFixture,
+  deleteUserFixture,
+} from "../setup/fixture-cleanup.js";
 
 // 006 EARS-5 — per-doctor presence-minute derivation (parameterized over N,
 // tab-coalesced).
@@ -223,11 +227,13 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     afterEach(async () => {
       for (const id of createdEventIds.splice(0)) {
-        await pool.query("DELETE FROM presence_beats WHERE event_id = $1", [id]);
-        await pool.query("DELETE FROM events WHERE id = $1", [id]);
+        await pool.query("DELETE FROM presence_beats WHERE event_id = $1", [
+          id,
+        ]);
+        await deleteEventFixture(pool, id);
       }
       for (const email of createdEmails.splice(0))
-        await pool.query("DELETE FROM users WHERE email = $1", [email]);
+        await deleteUserFixture(pool, "email", email);
     });
 
     afterAll(async () => {
@@ -260,7 +266,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     it("EARS-5: concurrent tabs for the same doctor do not inflate minutes — parallel-session beats coalesce into one presence timeline", async () => {
       const { eventId, slug, cookie } = await liveRoomWithDoctor("doc-single");
-      const singleUserId = await userIdForEmail(createdEmails[createdEmails.length - 1]);
+      const singleUserId = await userIdForEmail(
+        createdEmails[createdEmails.length - 1],
+      );
       // One-tab doctor: three beats at 0 s / 60 s / 120 s.
       await seedBeat(singleUserId, eventId, at(0));
       await seedBeat(singleUserId, eventId, at(60));
@@ -361,7 +369,11 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const serialized = JSON.stringify(presence);
       expect(serialized).not.toContain("@ds.test");
       for (const doc of presence.doctors) {
-        expect(Object.keys(doc).sort()).toEqual(["eventId", "minutes", "userId"]);
+        expect(Object.keys(doc).sort()).toEqual([
+          "eventId",
+          "minutes",
+          "userId",
+        ]);
       }
     });
   },

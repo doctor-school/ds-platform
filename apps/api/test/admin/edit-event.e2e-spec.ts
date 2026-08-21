@@ -18,6 +18,10 @@ import {
   RATE_LIMIT_THRESHOLDS,
   RELAXED_RATE_LIMIT,
 } from "../setup/rate-limit.js";
+import {
+  deleteEventFixture,
+  deleteUserFixture,
+} from "../setup/fixture-cleanup.js";
 
 // 007 EARS-2 — UpdateEvent (PATCH /v1/admin/events/:id) + replaceable program
 // PDF. A platform_admin edits an event's fields at any pre-archive state and the
@@ -223,9 +227,9 @@ describe.skipIf(
 
   afterEach(async () => {
     for (const id of createdEventIds.splice(0))
-      await pool.query("DELETE FROM events WHERE id = $1", [id]);
+      await deleteEventFixture(pool, id);
     for (const email of createdEmails.splice(0))
-      await pool.query("DELETE FROM users WHERE email = $1", [email]);
+      await deleteUserFixture(pool, "email", email);
   });
 
   afterAll(async () => {
@@ -283,6 +287,194 @@ describe.skipIf(
     const page = pub.json() as Record<string, unknown>;
     expect(page.title).toBe("Актуальная терапия ХСН — обновлено");
     expect(page.startsAt).toBe("2026-07-17T17:30:00.000Z");
+  });
+
+  /** The event's speaker rows as stored — retired ones included, order stable. */
+  async function speakerRows(id: string): Promise<
+    {
+      id: string;
+      name: string;
+      position: number;
+      record_status: string;
+      deleted_at: Date | null;
+    }[]
+  > {
+    const { rows } = await pool.query<{
+      id: string;
+      name: string;
+      position: number;
+      record_status: string;
+      deleted_at: Date | null;
+    }>(
+      `SELECT id, name, position, record_status, deleted_at
+         FROM event_speakers WHERE event_id = $1
+        ORDER BY record_status, position`,
+      [id],
+    );
+    return rows;
+  }
+
+  it("EARS-2: dropping a speaker RETIRES the row (never deletes it) and re-adding that speaker RESTORES the same row — #1278 §3.6", async () => {
+    const cookie = await session(uniqueEmail("admin"), "platform_admin");
+    const created = await createEvent(cookie);
+    const id = created.id as string;
+
+    const before = await speakerRows(id);
+    expect(before).toHaveLength(2);
+    const retiredId = before.find((r) => r.name === "Петрова А.С.")!.id;
+
+    // Drop the second speaker.
+    const drop = multipartBody({
+      payload: JSON.stringify({ speakers: [validPayload.speakers[0]] }),
+    });
+    const dropped = await app.inject({
+      method: "PATCH",
+      url: `/v1/admin/events/${id}`,
+      headers: admHeaders(cookie, drop.contentType),
+      payload: drop.body,
+    });
+    expect(dropped.statusCode).toBe(200);
+    // The API answers with the ACTIVE list only…
+    expect((dropped.json() as Record<string, unknown>).speakers).toEqual([
+      validPayload.speakers[0],
+    ]);
+    // …while the departed speaker's row is still there, retired, with the same id.
+    const after = await speakerRows(id);
+    expect(after).toHaveLength(2);
+    const retired = after.find((r) => r.id === retiredId)!;
+    expect(retired.record_status).toBe("retired");
+    expect(retired.deleted_at).not.toBeNull();
+    expect(retired.name).toBe("Петрова А.С.");
+
+    // Re-adding the same person restores THAT row (§3.6 rule 2), with the new
+    // regalia — never a second row for the same speaker.
+    const readd = multipartBody({
+      payload: JSON.stringify({
+        speakers: [
+          validPayload.speakers[0],
+          { name: "Петрова А.С.", regalia: "д.м.н." },
+        ],
+      }),
+    });
+    const restored = await app.inject({
+      method: "PATCH",
+      url: `/v1/admin/events/${id}`,
+      headers: admHeaders(cookie, readd.contentType),
+      payload: readd.body,
+    });
+    expect(restored.statusCode).toBe(200);
+    expect((restored.json() as Record<string, unknown>).speakers).toEqual([
+      validPayload.speakers[0],
+      { name: "Петрова А.С.", regalia: "д.м.н." },
+    ]);
+    const final = await speakerRows(id);
+    expect(final).toHaveLength(2);
+    const back = final.find((r) => r.id === retiredId)!;
+    expect(back.record_status).toBe("active");
+    expect(back.deleted_at).toBeNull();
+    expect(back.position).toBe(1);
+  });
+
+  it("EARS-2: a lifecycle transition returns the same ACTIVE speaker projection as every other read — a retired speaker is never republished — #1278 §3.6", async () => {
+    // `updateStateWithAudit` (publish / open room / archive) answers with the
+    // event aggregate too. If it read the raw speaker list, the SAME event would
+    // yield two different speaker lists depending on which command produced the
+    // response, and a dropped speaker would reappear on the next transition.
+    const cookie = await session(uniqueEmail("admin"), "platform_admin");
+    const created = await createEvent(cookie);
+    const id = created.id as string;
+
+    const drop = multipartBody({
+      payload: JSON.stringify({ speakers: [validPayload.speakers[0]] }),
+    });
+    const dropped = await app.inject({
+      method: "PATCH",
+      url: `/v1/admin/events/${id}`,
+      headers: admHeaders(cookie, drop.contentType),
+      payload: drop.body,
+    });
+    expect(dropped.statusCode).toBe(200);
+    const rowsAfterDrop = await speakerRows(id);
+    expect(rowsAfterDrop).toHaveLength(2);
+    expect(
+      rowsAfterDrop.filter((r) => r.record_status === "retired"),
+    ).toHaveLength(1);
+
+    const published = await app.inject({
+      method: "POST",
+      url: `/v1/admin/events/${id}/transition`,
+      headers: admHeaders(cookie, "application/json"),
+      payload: { to: "published" },
+    });
+    expect(published.statusCode).toBe(200);
+    expect((published.json() as Record<string, unknown>).speakers).toEqual([
+      validPayload.speakers[0],
+    ]);
+  });
+
+  it("EARS-2: a NEW speaker may take the slot a retired one held, and re-ordering the same people keeps their rows — #1278 §3.6", async () => {
+    const cookie = await session(uniqueEmail("admin"), "platform_admin");
+    const created = await createEvent(cookie);
+    const id = created.id as string;
+    const original = await speakerRows(id);
+    const ivanovId = original.find((r) => r.name === "Иванов И.И.")!.id;
+
+    // Иванов leaves slot 0 and a different person takes it: the partial unique
+    // index lets the retained (retired) row and the new active one coexist.
+    const replace = multipartBody({
+      payload: JSON.stringify({
+        speakers: [
+          { name: "Сидоров П.П.", regalia: "д.м.н." },
+          validPayload.speakers[1],
+        ],
+      }),
+    });
+    const res = await app.inject({
+      method: "PATCH",
+      url: `/v1/admin/events/${id}`,
+      headers: admHeaders(cookie, replace.contentType),
+      payload: replace.body,
+    });
+    expect(res.statusCode).toBe(200);
+    const rows = await speakerRows(id);
+    expect(rows).toHaveLength(3);
+    expect(rows.filter((r) => r.record_status === "active")).toHaveLength(2);
+    const retiredIvanov = rows.find((r) => r.id === ivanovId)!;
+    expect(retiredIvanov.record_status).toBe("retired");
+    expect(retiredIvanov.position).toBe(0);
+    expect(
+      rows.find(
+        (r) => r.name === "Сидоров П.П." && r.record_status === "active",
+      )?.position,
+    ).toBe(0);
+
+    // A pure re-ordering of the CURRENT list moves positions on the same rows —
+    // no row is created, none is retired (the transient unique collision the
+    // partial index would raise is sequenced by the reconcile, not by luck).
+    const activeIds = new Map(
+      rows
+        .filter((r) => r.record_status === "active")
+        .map((r) => [r.name, r.id] as const),
+    );
+    const reorder = multipartBody({
+      payload: JSON.stringify({
+        speakers: [validPayload.speakers[1], { name: "Сидоров П.П." }],
+      }),
+    });
+    const reordered = await app.inject({
+      method: "PATCH",
+      url: `/v1/admin/events/${id}`,
+      headers: admHeaders(cookie, reorder.contentType),
+      payload: reorder.body,
+    });
+    expect(reordered.statusCode).toBe(200);
+    const afterReorder = await speakerRows(id);
+    expect(afterReorder).toHaveLength(3);
+    const active = afterReorder.filter((r) => r.record_status === "active");
+    expect(active).toHaveLength(2);
+    for (const row of active) expect(row.id).toBe(activeIds.get(row.name));
+    expect(active.find((r) => r.name === "Петрова А.С.")?.position).toBe(0);
+    expect(active.find((r) => r.name === "Сидоров П.П.")?.position).toBe(1);
   });
 
   it("EARS-2: replacing the program PDF supersedes the stored reference — the 004 page serves the current file, the superseded file is no longer served", async () => {

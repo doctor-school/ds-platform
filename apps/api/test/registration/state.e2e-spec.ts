@@ -17,6 +17,10 @@ import {
   RATE_LIMIT_THRESHOLDS,
   RELAXED_RATE_LIMIT,
 } from "../setup/rate-limit.js";
+import {
+  deleteEventFixture,
+  deleteUserFixture,
+} from "../setup/fixture-cleanup.js";
 
 // 005 EARS-4 — the per-user EventRegistrationState read composed onto the 004
 // event page (GET /v1/events/:idOrSlug/registration), WITHOUT contaminating
@@ -130,9 +134,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     afterEach(async () => {
       for (const id of createdEventIds.splice(0))
-        await pool.query("DELETE FROM events WHERE id = $1", [id]);
+        await deleteEventFixture(pool, id);
       for (const email of createdEmails.splice(0))
-        await pool.query("DELETE FROM users WHERE email = $1", [email]);
+        await deleteUserFixture(pool, "email", email);
     });
 
     afterAll(async () => {
@@ -166,7 +170,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         headers,
       });
       expect(after.statusCode).toBe(200);
-      const body = after.json() as { registered: boolean; registeredAt?: string };
+      const body = after.json() as {
+        registered: boolean;
+        registeredAt?: string;
+      };
       expect(body.registered).toBe(true);
       expect(typeof body.registeredAt).toBe("string");
       expect(Number.isNaN(Date.parse(body.registeredAt!))).toBe(false);

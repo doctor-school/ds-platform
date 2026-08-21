@@ -11,13 +11,17 @@ import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
 import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
 import { FakeIdpClient } from "../../src/auth/idp/idp.fake.js";
 import { totpCode } from "../../src/auth/idp/totp.js";
-import { RATE_LIMIT_THRESHOLDS, RELAXED_RATE_LIMIT } from "../setup/rate-limit.js";
+import {
+  RATE_LIMIT_THRESHOLDS,
+  RELAXED_RATE_LIMIT,
+} from "../setup/rate-limit.js";
 import {
   ADMIN_CSRF_COOKIE_NAME,
   ADMIN_PENDING_COOKIE_NAME,
   ADMIN_SESSION_COOKIE_NAME,
 } from "../../src/auth/admin-session/admin-session.cookie.js";
 import { ADMIN_DEVICE } from "../setup/admin-session.js";
+import { deleteUserFixture } from "../setup/fixture-cleanup.js";
 
 const START_URL = "/v1/admin/auth/mfa/enroll/start";
 const VERIFY_URL = "/v1/admin/auth/mfa/enroll/verify";
@@ -172,7 +176,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
 
     afterEach(async () => {
       for (const email of createdEmails.splice(0))
-        await pool.query("DELETE FROM users WHERE email = $1", [email]);
+        await deleteUserFixture(pool, "email", email);
     });
 
     afterAll(async () => {
@@ -298,11 +302,14 @@ describe.skipIf(!process.env.DATABASE_URL)(
       const session = verify.cookies.find(
         (c) => c.name === ADMIN_SESSION_COOKIE_NAME,
       );
-      expect(session, "enrollment verify must issue the admin session").toBeDefined();
+      expect(
+        session,
+        "enrollment verify must issue the admin session",
+      ).toBeDefined();
       expect(session!.value).toBeTruthy();
-      expect(verify.cookies.some((c) => c.name === ADMIN_CSRF_COOKIE_NAME)).toBe(
-        true,
-      );
+      expect(
+        verify.cookies.some((c) => c.name === ADMIN_CSRF_COOKIE_NAME),
+      ).toBe(true);
       // The pending reference is consumed — it never coexists with the session.
       const cleared = verify.cookies.find(
         (c) => c.name === ADMIN_PENDING_COOKIE_NAME,

@@ -25,6 +25,7 @@ import {
 } from "../../src/auth/admin-session/admin-session.cookie.js";
 import { AdminSessionService } from "../../src/auth/admin-session/admin-session.service.js";
 import { ADMIN_DEVICE } from "../setup/admin-session.js";
+import { deleteUserFixture } from "../setup/fixture-cleanup.js";
 
 /**
  * 011 Verification row 1 — EARS-1: the dedicated `__Host-ds_admin_session`.
@@ -89,7 +90,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
 
     afterEach(async () => {
       for (const email of createdEmails.splice(0))
-        await pool.query("DELETE FROM users WHERE email = $1", [email]);
+        await deleteUserFixture(pool, "email", email);
     });
 
     afterAll(async () => {

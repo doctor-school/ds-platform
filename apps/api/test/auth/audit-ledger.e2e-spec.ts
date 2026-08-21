@@ -19,6 +19,7 @@ import {
   FAKE_VALID_CODE,
 } from "../../src/auth/idp/idp.fake.js";
 import { SESSION_COOKIE_NAME } from "../../src/auth/session/session.cookie.js";
+import { deleteUserFixture } from "../setup/fixture-cleanup.js";
 
 // EARS-18 (audit_ledger writer) + EARS-15 (native-lockout observation), over
 // HTTP into the real durable ledger. Every state-changing auth command must
@@ -91,7 +92,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Auth audit ledger (e2e)", () => {
 
   afterEach(async () => {
     for (const email of createdEmails.splice(0))
-      await pool.query("DELETE FROM users WHERE email = $1", [email]);
+      await deleteUserFixture(pool, "email", email);
   });
 
   afterAll(async () => {

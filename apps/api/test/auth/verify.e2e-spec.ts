@@ -15,6 +15,7 @@ import {
   RELAXED_RATE_LIMIT,
 } from "../setup/rate-limit.js";
 import { FakeIdpClient, FAKE_VALID_CODE } from "../../src/auth/idp/idp.fake.js";
+import { deleteUserFixture } from "../setup/fixture-cleanup.js";
 
 // Verification (EARS-3, email-only per #202): a correct email OTP code flips
 // `email_verified` via Zitadel; an invalid/expired code returns a generic failure
@@ -78,7 +79,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Verify (e2e)", () => {
 
   afterEach(async () => {
     for (const email of createdEmails.splice(0))
-      await pool.query("DELETE FROM users WHERE email = $1", [email]);
+      await deleteUserFixture(pool, "email", email);
   });
 
   afterAll(async () => {

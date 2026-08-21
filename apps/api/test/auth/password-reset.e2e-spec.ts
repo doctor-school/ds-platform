@@ -17,6 +17,7 @@ import { FakeIdpClient, FAKE_VALID_CODE } from "../../src/auth/idp/idp.fake.js";
 import { FakeMailer } from "../../src/mailer/mailer.fake.js";
 import { MAILER } from "../../src/mailer/mailer.types.js";
 import { SESSION_COOKIE_NAME } from "../../src/auth/session/session.cookie.js";
+import { deleteUserFixture } from "../setup/fixture-cleanup.js";
 
 // Password reset over HTTP (EARS-11 initiate, EARS-12 complete) — the controller
 // wiring on top of the IdP-port + session-layer logic. EARS-11's contract is an
@@ -94,7 +95,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Password reset (e2e)", () => {
 
   afterEach(async () => {
     for (const email of createdEmails.splice(0))
-      await pool.query("DELETE FROM users WHERE email = $1", [email]);
+      await deleteUserFixture(pool, "email", email);
   });
 
   afterAll(async () => {
@@ -249,7 +250,10 @@ describe.skipIf(!process.env.DATABASE_URL)(
       return rows[0]!.t;
     }
 
-    async function resetAndComplete(email: string, code: string): Promise<number> {
+    async function resetAndComplete(
+      email: string,
+      code: string,
+    ): Promise<number> {
       await app.inject({
         method: "POST",
         url: "/v1/auth/password/reset",
@@ -309,7 +313,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
       // auth.account.verified assertion below is therefore scoped by `created_at`
       // to this test's own window; here we only clean the mutable users rows.
       for (const email of createdEmails.splice(0))
-        await pool.query("DELETE FROM users WHERE email = $1", [email]);
+        await deleteUserFixture(pool, "email", email);
     });
 
     afterAll(async () => {

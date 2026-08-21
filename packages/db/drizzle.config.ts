@@ -12,6 +12,10 @@ export default defineConfig({
   // not resolve back to the `.ts` source under that loader. Append new table
   // files here as they land.
   schema: [
+    // No table of its own — the shared `record_status` lifecycle enum (#1278).
+    // Listed explicitly so the enum is emitted even if every consuming table
+    // file is later removed from this list.
+    "../../packages/db/src/schema/lifecycle.ts",
     "../../packages/db/src/schema/idempotency-keys.ts",
     "../../packages/db/src/schema/users.ts",
     "../../packages/db/src/schema/consent-records.ts",

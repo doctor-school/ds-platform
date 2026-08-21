@@ -16,6 +16,7 @@ import {
   RATE_LIMIT_THRESHOLDS,
   RELAXED_RATE_LIMIT,
 } from "../setup/rate-limit.js";
+import { deleteUserFixture } from "../setup/fixture-cleanup.js";
 
 // 003 EARS-26 — read-path mirror self-heal (GH #709). A valid IdP session whose
 // `zitadel_sub` has NO `users` mirror row (webhook miss/lag, or a lost mirror
@@ -103,7 +104,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       // Cleanup by email — fake subs (`fake-sub-N`) collide across suites on
       // `zitadel_sub`, emails are unique per run.
       for (const email of createdEmails.splice(0))
-        await pool.query("DELETE FROM users WHERE email = $1", [email]);
+        await deleteUserFixture(pool, "email", email);
     });
 
     afterAll(async () => {
@@ -125,7 +126,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
       // Orphan the session: the mirror row vanishes while the IdP session (and
       // its cookie) stays alive — the webhook-miss / lost-row production state.
-      await pool.query("DELETE FROM users WHERE zitadel_sub = $1", [sub]);
+      await deleteUserFixture(pool, "zitadel_sub", sub);
 
       // The authed read self-heals the mirror and proceeds — this was the 401
       // that fed the silent /login → /account carousel.
@@ -157,14 +158,18 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     });
 
     it("EARS-26: a genuinely unauthenticated read stays the generic 401 and heals nothing (EARS-16 unchanged)", async () => {
-      const countBefore = await pool.query("SELECT count(*)::int AS n FROM users");
+      const countBefore = await pool.query(
+        "SELECT count(*)::int AS n FROM users",
+      );
       const res = await app.inject({
         method: "GET",
         url: "/v1/me/events",
         headers: device,
       });
       expect(res.statusCode).toBe(401);
-      const countAfter = await pool.query("SELECT count(*)::int AS n FROM users");
+      const countAfter = await pool.query(
+        "SELECT count(*)::int AS n FROM users",
+      );
       expect(countAfter.rows[0].n).toBe(countBefore.rows[0].n);
     });
   },

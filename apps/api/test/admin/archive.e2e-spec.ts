@@ -27,6 +27,10 @@ import {
   RELAXED_RATE_LIMIT,
 } from "../setup/rate-limit.js";
 import { futureMskStart } from "../setup/wall-clock.js";
+import {
+  deleteEventFixture,
+  deleteUserFixture,
+} from "../setup/fixture-cleanup.js";
 
 // 007 EARS-6 — ArchiveEvent (POST /v1/admin/events/:id/archive). The operator's
 // post-broadcast action that transitions an `ended` event `ended → archived`,
@@ -299,9 +303,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       // so its rows are intentionally left behind; they are keyed by a unique
       // per-test aggregate id, so leftover rows never affect a later count.
       for (const id of createdEventIds.splice(0))
-        await pool.query("DELETE FROM events WHERE id = $1", [id]);
+        await deleteEventFixture(pool, id);
       for (const email of createdEmails.splice(0))
-        await pool.query("DELETE FROM users WHERE email = $1", [email]);
+        await deleteUserFixture(pool, "email", email);
     });
 
     afterAll(async () => {

@@ -24,6 +24,7 @@ import {
   ADMIN_SESSION_COOKIE_NAME,
 } from "../../src/auth/admin-session/admin-session.cookie.js";
 import { ADMIN_DEVICE } from "../setup/admin-session.js";
+import { deleteUserFixture } from "../setup/fixture-cleanup.js";
 
 const LOGIN_URL = "/v1/admin/auth/login";
 const ENROLL_START_URL = "/v1/admin/auth/mfa/enroll/start";
@@ -257,7 +258,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
     afterEach(async () => {
       fake.outage = false;
       for (const email of createdEmails.splice(0))
-        await pool.query("DELETE FROM users WHERE email = $1", [email]);
+        await deleteUserFixture(pool, "email", email);
     });
 
     afterAll(async () => {

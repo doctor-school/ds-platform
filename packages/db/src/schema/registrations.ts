@@ -1,5 +1,14 @@
-import { pgTable, timestamp, unique, uuid } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import {
+  check,
+  index,
+  pgTable,
+  timestamp,
+  unique,
+  uuid,
+} from "drizzle-orm/pg-core";
 import { events } from "./events.js";
+import { recordStatus } from "./lifecycle.js";
 import { users } from "./users.js";
 
 // 005 — the durable webinar-registration record (design §2; ADR-0003 Data
@@ -10,6 +19,17 @@ import { users } from "./users.js";
 // adding cancellation later is an additive migration, not a shape 005
 // pre-builds. The record carries no denormalized PII — the roster joins to the
 // `users` mirror (003) at read time.
+//
+// #1278 — a registration is a RETAINED row (ADR-0003 design §3.6): both FKs are
+// `RESTRICT`, so removing a doctor or an event can never silently erase the
+// evidence that the doctor signed up, and the `record_status`/`deleted_at` pair
+// below is where a future cancellation lands. The `UNIQUE (user_id, event_id)`
+// constraint stays TOTAL rather than partial on purpose: one registration RECORD
+// per (doctor, event) for all time, so a cancellation retires that row and a
+// later re-registration is the explicit restore of §3.6 rule 2 (`record_status`
+// back to `active`, `deleted_at` cleared) — never a second row. That also keeps
+// the repository's `ON CONFLICT (user_id, event_id)` upsert keyed on a
+// predicate-free constraint.
 //
 // EARS-1 landed the record + the one-action write + the immediate
 // `EventRegistrationState` flip. EARS-3 layers the one-registration invariant on
@@ -26,15 +46,24 @@ export const registrations = pgTable(
     /** FK users.id (003 UserMirror) — the registering doctor_guest. */
     userId: uuid("user_id")
       .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
+      .references(() => users.id, { onDelete: "restrict" }),
     /** FK events.id (004/007 read model) — the event registered for. */
     eventId: uuid("event_id")
       .notNull()
-      .references(() => events.id, { onDelete: "cascade" }),
+      .references(() => events.id, { onDelete: "restrict" }),
     /** Canonical UTC instant the registration was recorded. */
     registeredAt: timestamp("registered_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
+    /**
+     * #1278 retained-row lifecycle (§3.6). `active` is a live registration;
+     * `retired` + `deleted_at` is the shape a cancellation would write. No
+     * writer sets `retired` today — wave 1 has no cancel command (owner
+     * decision) — so every row is `active`; the columns exist so cancellation is
+     * an ordinary transition when it lands, not a reshape.
+     */
+    recordStatus: recordStatus("record_status").notNull().default("active"),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
   },
   (table) => [
     // The one-registration invariant (EARS-3, ADR-0003 §5): at most one
@@ -44,6 +73,19 @@ export const registrations = pgTable(
       table.userId,
       table.eventId,
     ),
+    check(
+      "registrations_retired_iff_deleted",
+      sql`(${table.recordStatus} = 'retired') = (${table.deletedAt} IS NOT NULL)`,
+    ),
+    // §3.6 rule 3: the roster and the `EventRegistrationState` flip both read
+    // only live registrations, so the active-row path gets its own partial
+    // index — predicated on `record_status = 'active'`, the exact expression a
+    // reader must use for the planner to pick the index up (a `deleted_at IS
+    // NULL` predicate is equivalent only through the CHECK, which the planner
+    // does not consult).
+    index("registrations_active_event_idx")
+      .on(table.eventId)
+      .where(sql`${table.recordStatus} = 'active'`),
   ],
 );
 

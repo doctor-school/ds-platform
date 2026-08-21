@@ -1,37 +1,5 @@
 {
   "$schema-note": "Baseline for tools/lint/retained-data-lint.ts (#1404, slice C of #1278). SHRINK-ONLY: `count` is authoritative and is compared exactly — removing a baselined occurrence must lower the count (or drop the entry) in the SAME PR, and a higher actual count is a NEW regression. `sites` and `reason` are documentation only; line numbers drift with unrelated edits and are never compared. The #1278 schema slices drain this file as they land.",
-  "cascade": {
-    "packages/db/src/schema/registrations.ts": {
-      "count": 2,
-      "sites": [29, 33],
-      "reason": "Pre-#1278 FKs (user_id, event_id). Registrations are retained rows — the #1278 schema slice replaces the cascade with an explicit lifecycle transition."
-    },
-    "packages/db/src/schema/presence-beats.ts": {
-      "count": 2,
-      "sites": [34, 38],
-      "reason": "Pre-#1278 FKs (user_id, event_id). Presence beats back attendance analytics and are retained."
-    },
-    "packages/db/src/schema/events.ts": {
-      "count": 2,
-      "sites": [83, 121],
-      "reason": "Pre-#1278 child-table FKs to events.id (speakers, stream config)."
-    },
-    "packages/db/src/schema/consent-records.ts": {
-      "count": 1,
-      "sites": [13],
-      "reason": "Pre-#1278 FK to users.id. Consent records are legally retained — the strongest case for removing the cascade."
-    }
-  },
-  "physicalDelete": {
-    "apps/api/src/events/events.repository.ts": {
-      "count": 1,
-      "sites": [115],
-      "reason": "Wholesale replace of an event's speaker list inside a transaction (composite PK makes a plain re-insert conflict). Pre-#1278; the schema slice moves it to a diff-based upsert."
-    },
-    "apps/api/scripts/seed-events.ts": {
-      "count": 2,
-      "sites": [284, 314],
-      "reason": "Seed script replacing an event's speakers and stream config wholesale. Pre-#1278; dev/seed path, not a production request path."
-    }
-  }
+  "cascade": {},
+  "physicalDelete": {}
 }

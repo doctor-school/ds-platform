@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import {
   check,
   foreignKey,
+  index,
   integer,
   pgEnum,
   pgTable,
@@ -10,6 +11,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import { events } from "./events.js";
 
 import { events, eventSpeakers } from "./events.js";
 
@@ -548,3 +550,63 @@ export const eventExperts = pgTable(
 
 export type EventExpert = typeof eventExperts.$inferSelect;
 export type NewEventExpert = typeof eventExperts.$inferInsert;
+
+/**
+ * `event_projects` — the retained event↔project relationship (012 EARS-6,
+ * #1288), and the first join table of the feature.
+ *
+ * Several projects may relate to one event and several events to one project;
+ * the row is the relationship itself, never a copy of either endpoint's
+ * editorial values. Creating, retiring or restoring it has NO lifecycle side
+ * effect on the event or the project (012-design §3): public traversal simply
+ * filters an ineligible endpoint out.
+ *
+ * The logical pair is unique across ACTIVE AND RETAINED rows
+ * (`event_projects_pair_key` is deliberately NOT partial): a retired relation is
+ * RESTORED — same row, same id, `version + 1` — never re-inserted as a second
+ * row. That is what makes «этот проект уже был привязан к эфиру» answerable, and
+ * what stops a duplicate audit lineage for one relationship.
+ *
+ * Both FKs are `RESTRICT`: nothing in 012 is physically deleted, so a cascade
+ * would have no legitimate trigger and its presence in generated SQL is itself a
+ * 012-design §2.1 violation (`retained-data` CI guard).
+ */
+export const eventProjects = pgTable(
+  "event_projects",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    eventId: uuid("event_id")
+      .notNull()
+      .references(() => events.id, { onDelete: "restrict" }),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "restrict" }),
+    status: relationshipStatus("status").notNull().default("active"),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    /** Optimistic-concurrency counter behind the join ETag; starts at 1, `++` per successful write. */
+    version: integer("version").notNull().default(1),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    // Spans active AND retained rows (012-design §2.1) — the restore-never-
+    // reinsert rule expressed as a constraint rather than as service etiquette.
+    uniqueIndex("event_projects_pair_key").on(t.eventId, t.projectId),
+    check(
+      "event_projects_retired_iff_deleted",
+      sql`(${t.status} = 'retired') = (${t.deletedAt} IS NOT NULL)`,
+    ),
+    check("event_projects_version_positive", sql`${t.version} >= 1`),
+    // Both traversal directions of §5.2 are indexed reads, not scans: the pair
+    // index already serves `event_id`-leading lookups, so only the reverse
+    // direction needs its own.
+    index("event_projects_project_id_idx").on(t.projectId),
+  ],
+);
+
+export type EventProject = typeof eventProjects.$inferSelect;
+export type NewEventProject = typeof eventProjects.$inferInsert;

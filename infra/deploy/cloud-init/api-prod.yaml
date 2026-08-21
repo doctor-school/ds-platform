@@ -28,10 +28,43 @@ write_files:
   - path: /etc/ds-platform/.keep
     content: ""
     permissions: "0700"
+  # Standing build-cache GC (#1419). `pnpm deploy:prod` builds the api/portal
+  # images ON THIS BOX, and BuildKit keeps every layer it ever produced: the
+  # cache grew unbounded to 54.6 GB / 77% disk before the 2026-08-21 cleanup.
+  # `builder.gc` makes the daemon itself hold the cache under the cap, so the box
+  # is safe even if a deploy never runs the post-deploy prune step. Written here
+  # BEFORE the `get.docker.com` install in runcmd, so dockerd reads it on its
+  # very first start.
+  #
+  # `defaultReservedSpace` is the modern spelling (docker 28+), matching the
+  # `--reserved-space` CLI flag the deploy-script prune uses; the legacy
+  # `defaultKeepStorage` still validates on 29.6.1 but is the older name.
+  #
+  # The value MUST equal `BUILD_CACHE_RESERVED_SPACE` in `tools/deploy/prod.mjs`
+  # (step "#1419"), which is the belt to this braces — YAML cannot import the JS
+  # constant, so the two are kept in sync by hand and by that constant's comment.
+  - path: /etc/docker/daemon.json
+    content: |
+      {
+        "builder": {
+          "gc": {
+            "enabled": true,
+            "defaultReservedSpace": "10GB"
+          }
+        }
+      }
+    permissions: "0644"
 
 runcmd:
   # Docker CE + compose plugin (official convenience script).
   - curl -fsSL https://get.docker.com | sh
+  # #1419: prove the daemon.json written above parses on THIS docker version.
+  # `--validate` only parses the config — it never touches the running service —
+  # so this is safe post-install and cannot break first boot. Deliberately
+  # non-blocking (`|| echo`): a bad config would already have surfaced when
+  # dockerd started, and halting cloud-init here would leave a half-provisioned
+  # box. The failure is loud in /var/log/cloud-init-output.log instead.
+  - dockerd --validate --config-file /etc/docker/daemon.json || echo "WARNING (#1419) /etc/docker/daemon.json failed dockerd --validate — build-cache GC policy is NOT in effect; fix the file and restart docker"
   # Host-level firewall (defence-in-depth alongside twc_firewall): SSH + web only.
   - ufw default deny incoming
   - ufw default allow outgoing

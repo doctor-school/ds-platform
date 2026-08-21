@@ -1,5 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { and, asc, count, eq, isNull, ne, sql } from "drizzle-orm";
+import { and, asc, count, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import type { DrizzleHandle, EventExpert } from "@ds/db";
 import { eventExperts, events, eventSpeakers, experts } from "@ds/db";
 import type { AdminEventExpertListQuery } from "@ds/schemas";
@@ -73,6 +73,12 @@ export class EventExpertsRepository {
    * stable id. `ids` is de-duplicated and sorted here rather than by the caller
    * so no call site can accidentally establish a second order — a PATCH that
    * re-points nothing still passes exactly one id, and the sort is a no-op.
+   *
+   * The predicate uses `inArray` rather than a hand-written `= ANY(...)`
+   * fragment: inside a `sql` template drizzle binds a JS array as one scalar
+   * parameter per element, so Postgres receives a bare uuid where it expects an
+   * array literal (22P02). `inArray` expands the list itself; `ORDER BY id ASC`
+   * still sorts under the LockRows node, so the ascending lock order holds.
    */
   async lockExperts(tx: Tx, ids: string[]): Promise<ExpertLifecycle[]> {
     const ordered = [...new Set(ids)].sort();
@@ -85,7 +91,7 @@ export class EventExpertsRepository {
         contentRemovedAt: experts.contentRemovedAt,
       })
       .from(experts)
-      .where(sql`${experts.id} = ANY(${ordered})`)
+      .where(inArray(experts.id, ordered))
       .orderBy(asc(experts.id))
       .for("update");
     return rows;
@@ -143,7 +149,7 @@ export class EventExpertsRepository {
         contentRemovedAt: experts.contentRemovedAt,
       })
       .from(experts)
-      .where(sql`${experts.id} = ANY(${unique})`);
+      .where(inArray(experts.id, unique));
   }
 
   async insert(tx: Tx, values: EventExpertInsert): Promise<EventExpert> {

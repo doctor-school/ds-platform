@@ -35,11 +35,15 @@ describe.skipIf(!process.env.DATABASE_URL)(
       // be removed while a link still points at it.
       for (const id of createdEventIds) {
         await pool.query("DELETE FROM event_experts WHERE event_id = $1", [id]);
-        await pool.query("DELETE FROM event_speakers WHERE event_id = $1", [id]);
+        await pool.query("DELETE FROM event_speakers WHERE event_id = $1", [
+          id,
+        ]);
         await pool.query("DELETE FROM events WHERE id = $1", [id]);
       }
       for (const id of createdExpertIds) {
-        await pool.query("DELETE FROM event_experts WHERE expert_id = $1", [id]);
+        await pool.query("DELETE FROM event_experts WHERE expert_id = $1", [
+          id,
+        ]);
         await pool.query("DELETE FROM experts WHERE id = $1", [id]);
       }
       await pool.end();

@@ -5,6 +5,7 @@ import {
   type NestFastifyApplication,
 } from "@nestjs/platform-fastify";
 import { VersioningType } from "@nestjs/common";
+import multipart from "@fastify/multipart";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import type pg from "pg";
 import { AppModule } from "../../src/app.module.js";
@@ -271,6 +272,13 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       app = moduleRef.createNestApplication<NestFastifyApplication>(
         new FastifyAdapter(),
       );
+      // Registered exactly as production does, so a multipart create is refused
+      // by THIS controller with an RFC 7807 body instead of by Fastify's own
+      // bare 415 — the sibling `topics.e2e-spec.ts` registers it for the same
+      // reason.
+      await app.register(multipart, {
+        limits: { fileSize: 25 * 1024 * 1024 },
+      });
       app.enableVersioning({ type: VersioningType.URI, defaultVersion: "1" });
       await app.init();
       await app.getHttpAdapter().getInstance().ready();
@@ -282,11 +290,15 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       // Children first — every FK is RESTRICT by design.
       for (const id of createdEventIds.splice(0)) {
         await pool.query("DELETE FROM event_experts WHERE event_id = $1", [id]);
-        await pool.query("DELETE FROM event_speakers WHERE event_id = $1", [id]);
+        await pool.query("DELETE FROM event_speakers WHERE event_id = $1", [
+          id,
+        ]);
         await pool.query("DELETE FROM events WHERE id = $1", [id]);
       }
       for (const id of createdExpertIds.splice(0)) {
-        await pool.query("DELETE FROM event_experts WHERE expert_id = $1", [id]);
+        await pool.query("DELETE FROM event_experts WHERE expert_id = $1", [
+          id,
+        ]);
         await pool.query("DELETE FROM experts WHERE id = $1", [id]);
       }
       for (const k of usedKeys.splice(0)) {
@@ -325,10 +337,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(detail.id).toMatch(
         /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
       );
-      expect(res.headers.etag).toBe('"1"');
-      expect(res.headers.location).toBe(
-        `/v1/admin/event-experts/${detail.id}`,
-      );
+      expect(res.headers.etag).toBe('W/"1"');
+      expect(res.headers.location).toBe(`/v1/admin/event-experts/${detail.id}`);
       expect(detail.createdAt).toBe(detail.updatedAt);
     });
 
@@ -363,7 +373,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         status: "retired",
         version: 2,
       });
-      expect(retired.headers.etag).toBe('"2"');
+      expect(retired.headers.etag).toBe('W/"2"');
 
       const restored = await transitionLink(detail.id, "restore", {
         ifMatch: '"2"',
@@ -395,7 +405,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const read = await readLink(detail.id);
       expect(read.statusCode).toBe(200);
       expect(body(read)).toEqual(back);
-      expect(read.headers.etag).toBe('"3"');
+      expect(read.headers.etag).toBe('W/"3"');
     });
 
     it("012 EARS-7: when the same link is retired twice, the system shall refuse the second as an invalid transition", async () => {
@@ -724,7 +734,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         payload: { eventId, expertId, role: "", position: -1 },
         idempotencyKey: "",
       });
-      expect(res.statusCode).toBe(400);
+      // 428 is the platform contract for a missing precondition header
+      // (`taxonomy.errors.ts` maps IDEMPOTENCY_KEY_REQUIRED to 428), same as a
+      // missing If-Match.
+      expect(res.statusCode).toBe(428);
       expect(problem(res).errorCode).toBe("IDEMPOTENCY_KEY_REQUIRED");
     });
 

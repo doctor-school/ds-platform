@@ -1,4 +1,7 @@
 import { Module } from "@nestjs/common";
+import { EventExpertsAdminController } from "./event-experts.admin.controller.js";
+import { EventExpertsRepository } from "./event-experts.repository.js";
+import { EventExpertsService } from "./event-experts.service.js";
 import { ExpertsAdminController } from "./experts.admin.controller.js";
 import { ExpertsRepository } from "./experts.repository.js";
 import { ExpertsService } from "./experts.service.js";
@@ -42,6 +45,11 @@ import { TopicsService } from "./topics.service.js";
     ExpertsAdminController,
     TopicsAdminController,
     PartnersAdminController,
+    // #1289 EARS-7 — the expert↔event JOIN surface. It lives in this module
+    // rather than in `events` because its whole contract (retained lifecycle,
+    // idempotency record, RFC 7807 filter) is the taxonomy one; the event side
+    // contributes only the parent row it locks.
+    EventExpertsAdminController,
   ],
   providers: [
     IdempotencyService,
@@ -56,6 +64,8 @@ import { TopicsService } from "./topics.service.js";
     TopicsService,
     PartnersRepository,
     PartnersService,
+    EventExpertsRepository,
+    EventExpertsService,
     // Registered as a provider (not just referenced by class in `@UseFilters`)
     // so Nest resolves its IdempotencyService dependency: the filter is what
     // fenced-stores a deterministic refusal for replay (§6 bullet 3).

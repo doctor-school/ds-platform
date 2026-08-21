@@ -34,7 +34,8 @@ export function useLocalizedResolver<TFieldValues extends FieldValues, Out>(
     | "experts.validation"
     | "partners.validation"
     | "topics.validation"
-    | "recordings.validation" = "events.validation",
+    | "recordings.validation"
+    | "eventExperts.validation" = "events.validation",
 ): Resolver<TFieldValues, unknown, Out> {
   const t = useTranslations(namespace);
 
@@ -136,6 +137,17 @@ export function translateIssue(issue: ZodIssueLike, t: Translator): string {
   // fix, «type ГГГГ-ММ-ДД», so it is one sentence rather than three near-identical
   // ones. It arrives as a `custom` issue (the form schema folds the SSOT day check
   // into one refinement), which the generic tail below would send to `fallback`.
+  // 012 EARS-7 event↔expert link (#1289). The expert box is a SELECTOR, so its
+  // only refusal is «nothing chosen» — and «обязательное поле» under a dropdown
+  // does not say what to do, while «выберите эксперта из списка» does. The place
+  // box is a TEXT box holding an integer slot: empty / non-numeric / negative all
+  // share one fix (type a whole number in range), while an over-cap value is its
+  // own sentence. The role box falls through to required/maxLength below.
+  if (has("expertId")) return t("expert");
+  if (has("positionText")) {
+    return issue.code === "too_big" ? t("positionMax") : t("position");
+  }
+
   if (has("expectedBy")) return t("expectedBy");
   if (has("posterRef")) return t("maxLength");
   if (has("durationSecText")) {

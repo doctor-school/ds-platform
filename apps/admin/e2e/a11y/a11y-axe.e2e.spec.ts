@@ -73,6 +73,15 @@ async function createEventForScan(page: Page): Promise<string> {
   return page.url().split("/").pop()!;
 }
 
+/** A draft expert — a name is the only value the create form demands (012 §2.2). */
+async function createExpertForScan(page: Page, name: string): Promise<string> {
+  await page.goto("/experts/create");
+  await page.getByTestId("expert-name").fill(name);
+  await page.getByTestId("submit-expert").click();
+  await page.waitForURL(/\/experts\/[0-9a-f-]{36}$/);
+  return page.url().split("/").pop()!;
+}
+
 async function scan(page: Page, theme: (typeof THEMES)[number]) {
   await page.locator("main, form, body").first().waitFor({ state: "visible" });
   // Light is the only reachable admin theme (see THEMES) — ensure no stray `.dark`.
@@ -262,6 +271,66 @@ test.describe("007 EARS-11 axe-core a11y scan of the admin event surface", () =>
     for (const theme of THEMES) await scan(page, theme);
 
     await page.getByTestId("recording-edited-retire").click();
+    await page.getByRole("alertdialog").waitFor({ state: "visible" });
+    for (const theme of THEMES) await scan(page, theme);
+  });
+
+  // 012 EARS-7 (#1289) — the «Эксперты» tab of the event detail. It reuses the
+  // recordings tab's modal classes but adds three states no scanned surface holds:
+  // a SELECTOR composed of a search box narrowing a `NativeSelect` (two controls
+  // that must each carry their own accessible name, not one shared label), a link
+  // row whose two `Badge`s carry status and legacy-match state as colour-plus-text,
+  // and a form REJECTED inside an open modal — an invalid control and its message
+  // living under a focus trap, which the closed-dialog scans certify nothing about.
+  test("the event↔expert link tab, its dialog and its confirmations pass WCAG 2 A/AA (light)", async ({
+    page,
+  }) => {
+    await loginAsAdmin(page);
+    const eventId = await createEventForScan(page);
+    const expertName = `Axe-скан эксперт ${Date.now()}`;
+    await createExpertForScan(page, expertName);
+
+    // The EMPTY tab first — «пока не привязан ни один эксперт» plus the retired
+    // toggle is a resting state a populated panel would hide.
+    await page.goto(`/events/${eventId}`);
+    await page.getByTestId("tab-experts").click();
+    await page.getByTestId("event-experts-panel").waitFor({ state: "visible" });
+    for (const theme of THEMES) await scan(page, theme);
+
+    // The add `Dialog` — the selector pair, two text boxes and their hints.
+    await page.getByTestId("event-expert-add").click();
+    await page
+      .getByTestId("event-expert-add-form")
+      .waitFor({ state: "visible" });
+    for (const theme of THEMES) await scan(page, theme);
+
+    // The REJECTED form, still inside the modal.
+    await page.getByTestId("event-expert-add-position").fill("не число");
+    await page.getByTestId("event-expert-add-submit").click();
+    await expect(page.getByTestId("event-expert-add-form")).toBeVisible();
+    for (const theme of THEMES) await scan(page, theme);
+
+    // A real link, so the row's badges and its action pair are scanned as state,
+    // not as an empty-list placeholder.
+    await page.getByTestId("event-expert-search").fill(expertName);
+    await expect(
+      page.getByTestId("event-expert-select").locator("option", {
+        hasText: expertName,
+      }),
+    ).toHaveCount(1);
+    await page
+      .getByTestId("event-expert-select")
+      .selectOption({ label: expertName });
+    await page.getByTestId("event-expert-add-role").fill("Модератор");
+    await page.getByTestId("event-expert-add-position").fill("1");
+    await page.getByTestId("event-expert-add-submit").click();
+    await page.getByTestId("event-experts-active").waitFor({ state: "visible" });
+    for (const theme of THEMES) await scan(page, theme);
+
+    // The retire `AlertDialog` — the must-be-answered variant on this surface.
+    await page
+      .locator('[data-testid^="event-expert-"][data-testid$="-retire"]')
+      .click();
     await page.getByRole("alertdialog").waitFor({ state: "visible" });
     for (const theme of THEMES) await scan(page, theme);
   });

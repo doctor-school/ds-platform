@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   ConfigureStreamRequestSchema,
+  CreateEventExpertRequestSchema,
   CreateEventRequestSchema,
   CreateExpertRequestSchema,
   CreatePartnerRequestSchema,
@@ -8,6 +9,7 @@ import {
   CreateTopicRequestSchema,
   DurationSecSchema,
   EmbedRefSchema,
+  EVENT_EXPERT_POSITION_MAX,
   EXPERT_AFFILIATION_MAX,
   EXPERT_BIO_MAX,
   EXPERT_CREDENTIALS_MAX,
@@ -410,4 +412,56 @@ export const RecordingExpectedByFormSchema = z.object({
 
 export interface RecordingExpectedByFields {
   expectedBy: string;
+}
+
+/**
+ * 012 EARS-7 (#1289) — the event↔expert link form. Create and edit share one
+ * shape: both author the same triple (which expert, what role, which slot), and
+ * the edit simply cannot move the expert (re-pointing a link at another expert
+ * would rewrite a row the audit ledger already attributes — that is a retire
+ * plus a new link, 012-design §5.1), so the edit renders the expert box
+ * disabled rather than a second schema.
+ *
+ * DERIVED from the `@ds/schemas` SSOT rather than re-typed: the role trim/length
+ * bounds and the 0–32767 slot range come from the same validators the API
+ * enforces, so a refusal reads the same in the browser and on the wire.
+ *
+ * `position` is a TEXT box here, not a `number`. An operator types into a box,
+ * and `<input type="number">` hands React an empty string for «12abc» — folding
+ * the SSOT number check over the typed text is what lets «» and «abc» and «-1»
+ * all resolve to the ONE actionable sentence («whole number 0…32767») while an
+ * over-cap value keeps its own.
+ */
+export const EventExpertFormSchema = z
+  .object({
+    expertId: z.uuid(),
+    role: CreateEventExpertRequestSchema.shape.role,
+    positionText: z.string(),
+  })
+  .superRefine((values, ctx) => {
+    const text = values.positionText.trim();
+    // Parsed by hand rather than with `Number()`: `Number(" ")` is 0 and
+    // `Number("1e3")` is 1000, so a blank box and an exponent would both slip
+    // past as a legal slot the operator never typed.
+    const parsed = CreateEventExpertRequestSchema.shape.position.safeParse(
+      /^\d+$/.test(text) ? Number(text) : Number.NaN,
+    );
+    if (parsed.success) return;
+    ctx.addIssue(
+      parsed.error.issues.some((issue) => issue.code === "too_big")
+        ? {
+            code: "too_big",
+            origin: "number",
+            maximum: EVENT_EXPERT_POSITION_MAX,
+            inclusive: true,
+            path: ["positionText"],
+          }
+        : { code: "custom", path: ["positionText"] },
+    );
+  });
+
+export interface EventExpertFormFields {
+  expertId: string;
+  role: string;
+  positionText: string;
 }

@@ -148,6 +148,13 @@
       "when": 1787300500000,
       "tag": "0020_align_retained_row_lifecycle",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1787304527484,
+      "tag": "0021_event_experts",
+      "breakpoints": true
     }
   ]
 }

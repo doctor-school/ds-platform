@@ -179,6 +179,78 @@ export function markReplayable<E>(error: E, lease: ReplayLeaseRef): E {
   return error;
 }
 
+/**
+ * Slot-uniqueness indexes whose violation is a §4 REFUSAL, not a bug.
+ *
+ * The service pre-checks the slot rule under the §2.3 lock set, so in practice
+ * these never fire — but an application check can always be beaten by an
+ * interleaving the locks do not serialize, and an unmapped `23505` reaches the
+ * caller as an opaque 500 for what is a perfectly ordinary 409. This table is the
+ * defense-in-depth backstop: the index and the wire contract agree on the answer.
+ */
+const SLOT_UNIQUE_CONSTRAINTS: ReadonlyMap<string, TaxonomyErrorCode> = new Map([
+  ["event_experts_event_position_active_uniq", "SPEAKER_POSITION_OCCUPIED"],
+  ["event_speakers_event_position_active_uniq", "SPEAKER_POSITION_OCCUPIED"],
+] as const);
+
+/**
+ * Classify a driver failure as a slot conflict, or `null` if it is anything else.
+ *
+ * Drizzle wraps the driver error, so the `code`/`constraint` pair is looked for
+ * along the whole `cause` chain rather than on the thrown object alone; the
+ * message is a last-resort source for the index name, because the wrapper's
+ * message carries the failed statement and the driver detail while some driver
+ * versions omit the structured `constraint` field.
+ */
+export function asSlotConflict(error: unknown): TaxonomyError | null {
+  for (let node: unknown = error, depth = 0; node && depth < 5; depth += 1) {
+    const candidate = node as {
+      code?: unknown;
+      constraint?: unknown;
+      constraint_name?: unknown;
+      message?: unknown;
+      cause?: unknown;
+    };
+    if (candidate.code === "23505") {
+      const named = [candidate.constraint, candidate.constraint_name].find(
+        (value): value is string => typeof value === "string",
+      );
+      const matched =
+        (named && SLOT_UNIQUE_CONSTRAINTS.get(named)) ??
+        (typeof candidate.message === "string"
+          ? [...SLOT_UNIQUE_CONSTRAINTS].find(([index]) =>
+              (candidate.message as string).includes(index),
+            )?.[1]
+          : undefined);
+      if (matched) {
+        return new TaxonomyError(
+          matched,
+          "another visible speaker already holds this position on the event",
+        );
+      }
+      return null;
+    }
+    node = candidate.cause;
+  }
+  return null;
+}
+
+/**
+ * Run a write and re-throw a slot-index violation as its 409. Everything else
+ * propagates untouched — an unexpected constraint failure must stay loud.
+ */
+export async function withSlotConflictMapping<T>(
+  run: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await run();
+  } catch (error) {
+    const conflict = asSlotConflict(error);
+    if (conflict) throw conflict;
+    throw error;
+  }
+}
+
 /** Build the wire body for a taxonomy failure. */
 export function toProblemDetails(
   errorCode: TaxonomyErrorCode,

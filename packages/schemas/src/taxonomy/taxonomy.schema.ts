@@ -566,6 +566,151 @@ export const PartnerAdminListSchema = z.object({
 });
 export type PartnerAdminList = z.infer<typeof PartnerAdminListSchema>;
 
+// ── Event↔expert link (012 EARS-7, #1289) ───────────────────────────────────
+
+/** The retained two-state JOIN lifecycle (012-design §2.1, §3 `JoinLifecycle`). */
+export const RELATIONSHIP_STATUSES = ["active", "retired"] as const;
+export const RelationshipStatusSchema = z.enum(RELATIONSHIP_STATUSES);
+export type RelationshipStatus = z.infer<typeof RelationshipStatusSchema>;
+
+export const EVENT_EXPERT_ROLE_MIN = 1;
+export const EVENT_EXPERT_ROLE_MAX = 80;
+export const EVENT_EXPERT_POSITION_MIN = 0;
+export const EVENT_EXPERT_POSITION_MAX = 32767;
+
+/**
+ * The event-specific role — trimmed 1–80 (012-design §2.2). Trim happens BEFORE
+ * the length check, so a whitespace-only role is a length failure rather than a
+ * stored blank; the DB CHECK mirrors the same bounds.
+ */
+const EventExpertRoleSchema = z
+  .string()
+  .trim()
+  .min(EVENT_EXPERT_ROLE_MIN)
+  .max(EVENT_EXPERT_ROLE_MAX);
+
+/**
+ * `position` is an integer step 1 from 0 through 32767 (012-design §2.2) — the
+ * slot in the event's merged visible speaker projection. Not coerced: a string
+ * position is a client bug, and silently parsing it would let `"1abc"` become 1.
+ */
+const EventExpertPositionSchema = z
+  .number()
+  .int()
+  .min(EVENT_EXPERT_POSITION_MIN)
+  .max(EVENT_EXPERT_POSITION_MAX);
+
+/**
+ * `POST /v1/admin/event-experts` — link one expert to one event (EARS-7).
+ *
+ * `legacySpeakerId` is the EXPLICIT match and the only way a link ever acquires
+ * one: there is no name field here, because the command never infers a match
+ * from a name. Omitting it creates an unpaired link, which is a different
+ * outcome, not a degraded one.
+ */
+export const CreateEventExpertRequestSchema = z
+  .object({
+    eventId: TaxonomyIdSchema,
+    expertId: TaxonomyIdSchema,
+    role: EventExpertRoleSchema,
+    position: EventExpertPositionSchema,
+    legacySpeakerId: TaxonomyIdSchema.nullish(),
+  })
+  .strict();
+export type CreateEventExpertRequest = z.infer<
+  typeof CreateEventExpertRequestSchema
+>;
+
+/**
+ * `PATCH /v1/admin/event-experts/:id` — edit the SAME row. Omission means
+ * unchanged; an explicit `null` on `legacySpeakerId` UNMATCHES the link, which
+ * is a deliberate editorial act (the suppressed legacy row becomes visible
+ * again) and therefore distinguishable from omission.
+ *
+ * Neither endpoint is patchable: re-pointing a link at another event or another
+ * expert would silently rewrite history on a row the audit ledger already
+ * attributes. That is a retire plus a new link.
+ */
+export const UpdateEventExpertRequestSchema = z
+  .object({
+    role: EventExpertRoleSchema.optional(),
+    position: EventExpertPositionSchema.optional(),
+    legacySpeakerId: TaxonomyIdSchema.nullable().optional(),
+  })
+  .strict();
+export type UpdateEventExpertRequest = z.infer<
+  typeof UpdateEventExpertRequestSchema
+>;
+
+/** The admin projection of one link (012-design §5.1). */
+export const EventExpertAdminDetailSchema = z.object({
+  id: TaxonomyIdSchema,
+  eventId: TaxonomyIdSchema,
+  expertId: TaxonomyIdSchema,
+  /** Null only after §2.4's editorial removal cleared it (#1306). */
+  role: z.string().nullable(),
+  position: z.number().int(),
+  legacySpeakerId: TaxonomyIdSchema.nullable(),
+  status: RelationshipStatusSchema,
+  version: z.number().int().positive(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type EventExpertAdminDetail = z.infer<
+  typeof EventExpertAdminDetailSchema
+>;
+
+export const EventExpertAdminListItemSchema = EventExpertAdminDetailSchema.pick({
+  id: true,
+  eventId: true,
+  expertId: true,
+  role: true,
+  position: true,
+  legacySpeakerId: true,
+  status: true,
+  version: true,
+  updatedAt: true,
+});
+export type EventExpertAdminListItem = z.infer<
+  typeof EventExpertAdminListItemSchema
+>;
+
+/** Offset/page admin list envelope (ADR-0002 — admin pagination is offset-based). */
+export const EventExpertAdminListSchema = z.object({
+  data: z.array(EventExpertAdminListItemSchema),
+  total: z.number().int().nonnegative(),
+  page: z.number().int().positive(),
+  pageSize: z.number().int().positive(),
+});
+export type EventExpertAdminList = z.infer<typeof EventExpertAdminListSchema>;
+
+/**
+ * §5.2 public relationship summary of an expert. Fixed rather than inferred from
+ * the full entity: no status, storage key, retained-row id or admin field is
+ * present, and `photoUrl` is PRESENT and nullable rather than optional.
+ */
+export const PublicExpertSummarySchema = z.object({
+  id: TaxonomyIdSchema,
+  slug: SlugSchema,
+  name: z.string(),
+  professionalRole: z.string(),
+  credentials: z.string(),
+  affiliation: z.string(),
+  photoUrl: z.string().nullable(),
+});
+export type PublicExpertSummary = z.infer<typeof PublicExpertSummarySchema>;
+
+/**
+ * `/events/:key/experts` → `PublicExpertSummary + { role, position }`
+ * (012-design §5.2). The resolver behind it is EARS-8's (#1290); this is the
+ * item shape it must produce.
+ */
+export const PublicEventExpertItemSchema = PublicExpertSummarySchema.extend({
+  role: z.string(),
+  position: z.number().int(),
+});
+export type PublicEventExpertItem = z.infer<typeof PublicEventExpertItemSchema>;
+
 // ── Admin list query (012-design §5.1; the shell #1297 later sweeps) ─────────
 
 export const ADMIN_LIST_PAGE_SIZE_DEFAULT = 20;
@@ -597,6 +742,33 @@ export const AdminTaxonomyListQuerySchema = z
   .strict();
 export type AdminTaxonomyListQuery = z.infer<
   typeof AdminTaxonomyListQuerySchema
+>;
+
+/**
+ * The join admin list query (012-design §5.1 "filtered list"). It is the shared
+ * entity query minus `q` — a relationship has no title to search — plus the two
+ * endpoint filters the Refine relation tables actually use.
+ */
+export const AdminEventExpertListQuerySchema = z
+  .object({
+    page: z.coerce.number().int().positive().default(1),
+    pageSize: z.coerce
+      .number()
+      .int()
+      .positive()
+      .max(ADMIN_LIST_PAGE_SIZE_MAX)
+      .default(ADMIN_LIST_PAGE_SIZE_DEFAULT),
+    eventId: TaxonomyIdSchema.optional(),
+    expertId: TaxonomyIdSchema.optional(),
+    status: RelationshipStatusSchema.optional(),
+    includeRetired: z
+      .union([z.boolean(), z.enum(["true", "false"])])
+      .transform((v) => v === true || v === "true")
+      .default(false),
+  })
+  .strict();
+export type AdminEventExpertListQuery = z.infer<
+  typeof AdminEventExpertListQuerySchema
 >;
 
 // ── Errors (012-design §5.3) ─────────────────────────────────────────────────

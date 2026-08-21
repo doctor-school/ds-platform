@@ -161,6 +161,16 @@ export const eventSpeakers = pgTable(
     regalia: text("regalia").notNull().default(""),
     recordStatus: recordStatus("record_status").notNull().default("active"),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    /**
+     * Editorial removal marker (012-design §2.1 / §2.4). Non-null means the
+     * person asked to be taken off the site: `RemoveLegacySpeakerContent`
+     * (#1306) clears `name`/`regalia`, retires the row and stamps this column,
+     * and every restore/repopulation afterwards is refused with 409
+     * `CONTENT_REMOVED`. Additive and never backfilled — an ordinary retire
+     * leaves it null, which is what distinguishes "dropped from the list" from
+     * "removed on request".
+     */
+    contentRemovedAt: timestamp("content_removed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

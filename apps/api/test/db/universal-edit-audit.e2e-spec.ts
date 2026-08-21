@@ -29,6 +29,10 @@ const AUDITED_TABLES = [
   "registrations",
   // 012 EARS-1 (#1283) — the first taxonomy entity table.
   "projects",
+  // 012 EARS-7 (#1289) — the first taxonomy JOIN table: the expert↔event link
+  // decides which person the public speaker projection shows, so it is domain
+  // truth and carries the capture trigger like any authored row.
+  "event_experts",
 ] as const;
 
 /** Design §5 allowlist — tables that must NOT carry the capture trigger. */

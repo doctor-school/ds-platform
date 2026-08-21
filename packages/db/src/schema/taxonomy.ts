@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   check,
+  foreignKey,
   integer,
   pgEnum,
   pgTable,
@@ -9,6 +10,8 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+
+import { events, eventSpeakers } from "./events.js";
 
 // 012 — Content taxonomy: the retained entity write model (012-design §2, §2.1;
 // ADR-0003 §4 retained-row lifecycle). EARS-1 (#1283) lands the FIRST entity of
@@ -427,3 +430,121 @@ export const partners = pgTable(
 
 export type Partner = typeof partners.$inferSelect;
 export type NewPartner = typeof partners.$inferInsert;
+
+/**
+ * The shared two-state JOIN lifecycle (012-design §2.1, §3 `JoinLifecycle`).
+ * A relationship is `active` or `retired`; retiring one affects only that
+ * relationship, and a restore reuses the SAME row and id — a retired relation is
+ * restored, never reinserted.
+ */
+export const relationshipStatus = pgEnum("relationship_status", [
+  "active",
+  "retired",
+]);
+
+export const EVENT_EXPERT_ROLE_MIN = 1;
+export const EVENT_EXPERT_ROLE_MAX = 80;
+/** `position` is a signed 2-byte range (012-design §2.2): integer step 1, 0–32767. */
+export const EVENT_EXPERT_POSITION_MIN = 0;
+export const EVENT_EXPERT_POSITION_MAX = 32767;
+
+/**
+ * `event_experts` — the explicit expert↔event link (012 EARS-7, #1289).
+ *
+ * This is the ONLY seam between the first-class `experts` roster and the legacy
+ * free-text `event_speakers` list of feature 007. The match is EXPLICIT: an
+ * operator supplies `legacy_speaker_id`, and the composite foreign key
+ * `(event_id, legacy_speaker_id) → event_speakers(event_id, id)` proves in the
+ * database that the referenced speaker belongs to THIS event. A plain
+ * `event_speakers.id` reference would be satisfied by a speaker of any other
+ * event and is explicitly not treated as sufficient (012-design §2.1). Names are
+ * never compared — no name-similarity inference exists anywhere in this feature
+ * (§4 LD-2).
+ *
+ * Creating a match never touches the matched row: its `name`, `regalia`,
+ * `record_status` and `deleted_at` are left exactly as they are (§2.3). The
+ * legacy row is merely SUPPRESSED from the merged public projection while an
+ * eligible published expert supersedes it (EARS-8, #1290); retiring this link
+ * makes the fallback visible again.
+ *
+ * `ON DELETE RESTRICT` on both endpoints plus the retained lifecycle envelope
+ * means nothing here is ever physically deleted — there is no DELETE route
+ * (§5.1).
+ */
+export const eventExperts = pgTable(
+  "event_experts",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    eventId: uuid("event_id")
+      .notNull()
+      .references(() => events.id, { onDelete: "restrict" }),
+    expertId: uuid("expert_id")
+      .notNull()
+      .references(() => experts.id, { onDelete: "restrict" }),
+    /**
+     * The event-specific role of this expert — ordinary trimmed editorial text,
+     * required on every link (EARS-7). `RemoveExpertContent` (#1306) clears it
+     * to null when the person is taken off the site, which is why the column is
+     * nullable at rest while the API contract requires it on write.
+     */
+    role: text("role"),
+    /** Presentation order within the event's merged visible speaker projection. */
+    position: integer("position").notNull(),
+    /**
+     * The explicitly matched legacy speaker of the SAME event, or null for an
+     * unpaired expert. Unique across retained links: one legacy row can be
+     * superseded by at most one expert.
+     */
+    legacySpeakerId: uuid("legacy_speaker_id"),
+    status: relationshipStatus("status").notNull().default("active"),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    /** Optimistic-concurrency counter behind the join ETag; starts at 1, `++` per successful write. */
+    version: integer("version").notNull().default(1),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    // The composite reference of 012-design §2.1: the pair must belong together.
+    foreignKey({
+      name: "event_experts_event_legacy_speaker_fk",
+      columns: [t.eventId, t.legacySpeakerId],
+      foreignColumns: [eventSpeakers.eventId, eventSpeakers.id],
+    }).onDelete("restrict"),
+    // The logical endpoint pair spans EVERY retained row (§2.1): a retired link
+    // is RESTORED, never re-created, so the same expert cannot accumulate two
+    // rows on one event.
+    uniqueIndex("event_experts_event_expert_key").on(t.eventId, t.expertId),
+    // One legacy speaker is superseded by at most one expert link, retained rows
+    // included. Postgres treats NULLs as distinct, so unpaired links are
+    // unconstrained here — exactly the intent.
+    uniqueIndex("event_experts_legacy_speaker_key").on(t.legacySpeakerId),
+    // The within-table backstop for the §4 visible-slot rule. Partial on
+    // `active`, mirroring `event_speakers_event_position_active_uniq`: a retired
+    // link must not squat on a slot the live projection needs. The CROSS-table
+    // collision with an unsuppressed legacy row is not expressible as an index
+    // and is refused by the service with 409 `SPEAKER_POSITION_OCCUPIED`.
+    uniqueIndex("event_experts_event_position_active_uniq")
+      .on(t.eventId, t.position)
+      .where(sql`${t.status} = 'active'`),
+    check(
+      "event_experts_retired_iff_deleted",
+      sql`(${t.status} = 'retired') = (${t.deletedAt} IS NOT NULL)`,
+    ),
+    check(
+      "event_experts_role_bounds",
+      sql`${t.role} IS NULL OR char_length(${t.role}) BETWEEN ${sql.raw(String(EVENT_EXPERT_ROLE_MIN))} AND ${sql.raw(String(EVENT_EXPERT_ROLE_MAX))}`,
+    ),
+    check(
+      "event_experts_position_bounds",
+      sql`${t.position} BETWEEN ${sql.raw(String(EVENT_EXPERT_POSITION_MIN))} AND ${sql.raw(String(EVENT_EXPERT_POSITION_MAX))}`,
+    ),
+    check("event_experts_version_positive", sql`${t.version} >= 1`),
+  ],
+);
+
+export type EventExpert = typeof eventExperts.$inferSelect;
+export type NewEventExpert = typeof eventExperts.$inferInsert;

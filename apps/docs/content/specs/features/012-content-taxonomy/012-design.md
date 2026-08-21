@@ -211,7 +211,7 @@ sequenceDiagram
   O->>A: choose Retire or Restore
   A->>API: GET .../:id/lifecycle-impact?transition=retire|restore
   API->>DB: read target + all incident relations and opposite-endpoint eligibility inputs
-  API-->>A: LifecycleImpact(transition, version, affected ids, signed impactToken)
+  API-->>A: LifecycleImpact(transition, version, affected rows {kind,id,title,slug,status}, signed impactToken)
   A-->>O: confirmation dialog (no Delete wording)
   O->>A: confirm
   A->>API: POST .../:id/{retire|restore} + If-Match + Lifecycle-Impact-Token + Idempotency-Key
@@ -219,6 +219,8 @@ sequenceDiagram
   DB-->>API: row + feature-010 audit record
   API-->>A: updated detail + ETag
 ```
+
+Every affected-entity row in the response is operator-readable on its own: `{ kind, id, title, slug, status }` — `kind` the affected entity or join kind (`event | project | expert | topic | partner` plus the join kinds), `id` its stable identifier, `title` its human title or, for an expert, the person's name, `slug` its public slug (`null` for join rows and any kind that has none) and `status` its current lifecycle state (`draft | published | retired` for entities, `active | retired` for joins). The confirmation dialog therefore renders the complete affected list from one preview response, with no follow-up read per affected id. The projection stays inside the disclosure boundary the preview already applies: each display field is one the corresponding public summary DTO already exposes, so the response still returns no hidden record content, and rows the caller may not see are counted by the fingerprint below without being listed here.
 
 `impactToken` is an opaque server-signed envelope binding transition, target kind/id/version, issued-at and a 15-minute expiry to a canonical fingerprint of every retained incident relation and every opposite endpoint input that determines current public eligibility. The fingerprint is over sorted tuples of table/kind, stable id, monotonic version where present, lifecycle state and the exact event-public-eligibility inputs; it therefore covers inactive relations and non-public endpoints that could become visible, without returning their hidden content to the client.
 

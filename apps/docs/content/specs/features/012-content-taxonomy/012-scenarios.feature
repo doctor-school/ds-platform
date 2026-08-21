@@ -553,7 +553,7 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
   Scenario: Retirement is previewed and changes no related lifecycle state
     Given a published expert linked to current public events and projects only as a member rather than their sole curator
     When the operator requests lifecycle impact for transition retire
-    Then the admin shows affected public identifiers, the current version and a signed opaque impactToken
+    Then the admin shows every affected public row with its kind id title slug and current lifecycle status, the current version and a signed opaque impactToken
     When the operator confirms retire with that If-Match, Lifecycle-Impact-Token and a new Idempotency-Key
     Then the expert becomes retired with deleted_at set and version incremented
     And every expert row, join and foreign key remains stored
@@ -563,7 +563,7 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
   Scenario: A retained entity and relation restore under the same stable identities
     Given a retired entity and retired relationship are visible through includeRetired and direct admin detail
     When the operator previews transition restore for each target
-    Then each preview shows the surfaces that restore would add and its signed impactToken
+    Then each preview shows the surfaces that restore would add as rows with kind id title slug and current lifecycle status, and its signed impactToken
     When the operator restores each with its current If-Match, matching Lifecycle-Impact-Token and a new Idempotency-Key
     Then the entity is draft with deleted_at null
     And the relationship is active with deleted_at null

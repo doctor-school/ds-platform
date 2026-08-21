@@ -188,10 +188,12 @@ export function markReplayable<E>(error: E, lease: ReplayLeaseRef): E {
  * caller as an opaque 500 for what is a perfectly ordinary 409. This table is the
  * defense-in-depth backstop: the index and the wire contract agree on the answer.
  */
-const SLOT_UNIQUE_CONSTRAINTS: ReadonlyMap<string, TaxonomyErrorCode> = new Map([
-  ["event_experts_event_position_active_uniq", "SPEAKER_POSITION_OCCUPIED"],
-  ["event_speakers_event_position_active_uniq", "SPEAKER_POSITION_OCCUPIED"],
-] as const);
+const SLOT_UNIQUE_CONSTRAINTS: ReadonlyMap<string, TaxonomyErrorCode> = new Map(
+  [
+    ["event_experts_event_position_active_uniq", "SPEAKER_POSITION_OCCUPIED"],
+    ["event_speakers_event_position_active_uniq", "SPEAKER_POSITION_OCCUPIED"],
+  ] as const,
+);
 
 /**
  * Classify a driver failure as a slot conflict, or `null` if it is anything else.
@@ -247,6 +249,49 @@ export async function withSlotConflictMapping<T>(
   } catch (error) {
     const conflict = asSlotConflict(error);
     if (conflict) throw conflict;
+    throw error;
+  }
+}
+
+/**
+ * Classify a driver failure as a SERIALIZABLE abort (SQLSTATE `40001`), or
+ * `null` if it is anything else. Same cause-chain walk as `asSlotConflict`,
+ * for the same reason: drizzle wraps the driver error.
+ */
+export function asSerializationAbort(error: unknown): boolean {
+  for (let node: unknown = error, depth = 0; node && depth < 5; depth += 1) {
+    const candidate = node as { code?: unknown; cause?: unknown };
+    if (candidate.code === "40001") return true;
+    node = candidate.cause;
+  }
+  return false;
+}
+
+/**
+ * Run a §3.1 confirmation and re-throw a serialization abort as its contracted
+ * 412 `LIFECYCLE_IMPACT_STALE` (012-design §3.1/§5.3/§6).
+ *
+ * A `40001` abort means PostgreSQL could not order this transaction against a
+ * concurrent one — the very "someone else moved the ground under your preview"
+ * condition the impact gate exists to report, and the rollback guarantees the
+ * contracted "zero domain/media/audit mutation". It collapses into the SAME
+ * undifferentiated 412 as every other stale mode, so it leaks no oracle about
+ * the competing transaction, and the service NEVER auto-retries: the operator
+ * re-reads the preview and re-confirms, which is what makes the second answer
+ * an informed one. Anything else propagates untouched.
+ */
+export async function withSerializationAbortMapping<T>(
+  run: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await run();
+  } catch (error) {
+    if (asSerializationAbort(error)) {
+      throw new TaxonomyError(
+        "LIFECYCLE_IMPACT_STALE",
+        "another change landed while this was being confirmed; reload the impact preview and confirm again",
+      );
+    }
     throw error;
   }
 }

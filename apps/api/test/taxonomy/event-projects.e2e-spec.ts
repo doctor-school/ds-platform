@@ -19,7 +19,10 @@ import {
   RATE_LIMIT_THRESHOLDS,
   RELAXED_RATE_LIMIT,
 } from "../setup/rate-limit.js";
-import { deleteEventFixture, deleteUserFixture } from "../setup/fixture-cleanup.js";
+import {
+  deleteEventFixture,
+  deleteUserFixture,
+} from "../setup/fixture-cleanup.js";
 
 // 012 EARS-6 (#1288) — the event↔project relationship vertical over the REAL
 // stack: Fastify + the 011 admin session + Postgres.
@@ -245,7 +248,13 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     interface Preview {
       transition: string;
       version: number;
-      affected: { kind: string; id: string; title: string; slug: string | null; status: string }[];
+      affected: {
+        kind: string;
+        id: string;
+        title: string;
+        slug: string | null;
+        status: string;
+      }[];
       impactToken: string;
     }
 
@@ -613,10 +622,11 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       // answered with a different title, type or errorCode would be an existence
       // oracle for unpublished content.
       const shape = (raw: unknown): Record<string, unknown> => {
-        const { instance: _i, traceId: _t, ...rest } = raw as Record<
-          string,
-          unknown
-        >;
+        const {
+          instance: _i,
+          traceId: _t,
+          ...rest
+        } = raw as Record<string, unknown>;
         return rest;
       };
       expect(shape(draftSource.json())).toEqual(shape(unknownSource.json()));
@@ -831,7 +841,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
       const res = await preview(rel.id, "restore");
       expect(res.statusCode).toBe(409);
-      expect((res.json() as { errorCode?: string }).errorCode).toBe("INVALID_TRANSITION");
+      expect((res.json() as { errorCode?: string }).errorCode).toBe(
+        "INVALID_TRANSITION",
+      );
     });
 
     it("012 EARS-6: when a relationship is created without an Idempotency-Key, the system shall refuse before persisting anything", async () => {
@@ -919,7 +931,58 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         url: `/v1/public/events/${event.id}/projects?cursor=not-a-cursor`,
       });
       expect(res.statusCode).toBe(400);
-      expect((res.json() as { errorCode?: string }).errorCode).toBe("CURSOR_INVALID");
+      expect((res.json() as { errorCode?: string }).errorCode).toBe(
+        "CURSOR_INVALID",
+      );
+    });
+
+    it("012 EARS-6: when a public traversal quotes a DECODABLE cursor carrying values this API never issues, the system shall still refuse it as CURSOR_INVALID rather than fail on the query", async () => {
+      const event = await makeEvent(true);
+      const project = await makeProject(true);
+      await relation(event.id, project.id);
+
+      // A hand-edited cursor decodes fine; its VALUES are what reach SQL. A
+      // non-UUID id would hit a `uuid` column as pg `22P02`, and a bogus
+      // instant would blow up the driver's `toISOString()` — both 500s on a
+      // ZERO-AUTH route unless the tuple is parsed before any query runs.
+      const forge = (value: Record<string, string>): string =>
+        Buffer.from(JSON.stringify(value), "utf8").toString("base64url");
+
+      const cases: { url: string; cursor: string }[] = [
+        {
+          url: `/v1/public/events/${event.id}/projects`,
+          cursor: forge({ title: "anything", id: "not-a-uuid" }),
+        },
+        {
+          url: `/v1/public/events/${event.id}/projects`,
+          cursor: forge({
+            startsAt: "nope",
+            id: "0f4c1b6e-9d2a-4a3b-8c11-2f5e7a9b0c31",
+          }),
+        },
+        {
+          url: `/v1/public/projects/${project.id}/events`,
+          cursor: forge({ startsAt: "2026-01-01T00:00:00.000Z", id: "x" }),
+        },
+        {
+          url: `/v1/public/projects/${project.id}/events`,
+          cursor: forge({
+            startsAt: "nope",
+            id: "0f4c1b6e-9d2a-4a3b-8c11-2f5e7a9b0c31",
+          }),
+        },
+      ];
+
+      for (const { url, cursor } of cases) {
+        const res = await app.inject({
+          method: "GET",
+          url: `${url}?cursor=${encodeURIComponent(cursor)}`,
+        });
+        expect(res.statusCode).toBe(400);
+        expect((res.json() as { errorCode?: string }).errorCode).toBe(
+          "CURSOR_INVALID",
+        );
+      }
     });
   },
 );

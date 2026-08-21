@@ -1,4 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
+import { z } from "zod";
 import type { Event, Project } from "@ds/db";
 import {
   type CreateEventProjectRequest,
@@ -30,7 +31,11 @@ import {
   LifecycleImpactService,
   type LifecycleImpactTuple,
 } from "./lifecycle-impact.service.js";
-import { markReplayable, TaxonomyError } from "./taxonomy.errors.js";
+import {
+  markReplayable,
+  TaxonomyError,
+  withSerializationAbortMapping,
+} from "./taxonomy.errors.js";
 
 // 012 EARS-6 (#1288) — the event↔project relationship commands and both §5.2
 // traversals. The §5.1 failure ORDER the entity verticals established is
@@ -211,59 +216,63 @@ export class EventProjectsService {
     const preflight = await this.repo.detailById(input.id);
     if (!preflight) throw new TaxonomyError("RESOURCE_NOT_FOUND");
 
-    const row = await this.repo.serializableTransaction(async (tx) => {
-      const locked = await this.repo.lockForTransition(tx, input.id);
-      if (!locked) throw new TaxonomyError("RESOURCE_NOT_FOUND");
+    // §3.1: a SERIALIZABLE abort is a stale confirmation, not a server fault —
+    // mapped to the same 412 as every other stale mode, never auto-retried.
+    const row = await withSerializationAbortMapping(() =>
+      this.repo.serializableTransaction(async (tx) => {
+        const locked = await this.repo.lockForTransition(tx, input.id);
+        if (!locked) throw new TaxonomyError("RESOURCE_NOT_FOUND");
 
-      if (locked.relation.version !== input.expectedVersion) {
-        throw new TaxonomyError(
-          "PRECONDITION_FAILED",
-          "the relationship changed since it was read; reload and retry",
+        if (locked.relation.version !== input.expectedVersion) {
+          throw new TaxonomyError(
+            "PRECONDITION_FAILED",
+            "the relationship changed since it was read; reload and retry",
+          );
+        }
+        this.assertTransitionApplies(locked, input.transition);
+
+        // Recompute the fingerprint under the lock and verify the envelope
+        // against it: a relation inserted, restored or retired since the preview,
+        // or an endpoint whose public eligibility moved, changes the digest and
+        // makes the confirmation stale (§3.1). Verification happens BEFORE any
+        // write, so a stale token leaves zero domain and zero audit mutation.
+        const incident = await this.repo.discoverIncident(
+          tx,
+          locked.event.id,
+          locked.project.id,
         );
-      }
-      this.assertTransitionApplies(locked, input.transition);
+        const expected: LifecycleImpactBinding = {
+          transition: input.transition,
+          targetKind: RELATION_KIND,
+          targetId: locked.relation.id,
+          targetVersion: locked.relation.version,
+          fingerprint: this.impact.fingerprint(fingerprintTuples(incident)),
+        };
+        this.impact.verify(input.impactToken, expected);
 
-      // Recompute the fingerprint under the lock and verify the envelope
-      // against it: a relation inserted, restored or retired since the preview,
-      // or an endpoint whose public eligibility moved, changes the digest and
-      // makes the confirmation stale (§3.1). Verification happens BEFORE any
-      // write, so a stale token leaves zero domain and zero audit mutation.
-      const incident = await this.repo.discoverIncident(
-        tx,
-        locked.event.id,
-        locked.project.id,
-      );
-      const expected: LifecycleImpactBinding = {
-        transition: input.transition,
-        targetKind: RELATION_KIND,
-        targetId: locked.relation.id,
-        targetVersion: locked.relation.version,
-        fingerprint: this.impact.fingerprint(fingerprintTuples(incident)),
-      };
-      this.impact.verify(input.impactToken, expected);
-
-      const moved = await this.repo.transitionVersioned(
-        tx,
-        input.id,
-        input.expectedVersion,
-        input.transition === "retire"
-          ? { status: "retired", deletedAt: new Date() }
-          : { status: "active", deletedAt: null },
-      );
-      if (!moved) {
-        throw new TaxonomyError(
-          "PRECONDITION_FAILED",
-          "the relationship changed since it was read; reload and retry",
+        const moved = await this.repo.transitionVersioned(
+          tx,
+          input.id,
+          input.expectedVersion,
+          input.transition === "retire"
+            ? { status: "retired", deletedAt: new Date() }
+            : { status: "active", deletedAt: null },
         );
-      }
-      const hydrated = await this.repo.hydrate(tx, moved);
-      await this.idempotency.complete(tx, input.lease, {
-        status: 200,
-        body: toDetail(hydrated),
-        etag: taxonomyETag(moved.version),
-      });
-      return hydrated;
-    });
+        if (!moved) {
+          throw new TaxonomyError(
+            "PRECONDITION_FAILED",
+            "the relationship changed since it was read; reload and retry",
+          );
+        }
+        const hydrated = await this.repo.hydrate(tx, moved);
+        await this.idempotency.complete(tx, input.lease, {
+          status: 200,
+          body: toDetail(hydrated),
+          etag: taxonomyETag(moved.version),
+        });
+        return hydrated;
+      }),
+    );
 
     return { detail: toDetail(row), etag: taxonomyETag(row.relation.version) };
   }
@@ -302,7 +311,7 @@ export class EventProjectsService {
     if (!event || !isPublicEvent(event)) {
       throw new TaxonomyError("RESOURCE_NOT_FOUND");
     }
-    const after = decodeCursor<{ title: string; id: string }>(query.cursor);
+    const after = decodeCursor(query.cursor, PROJECT_CURSOR_SHAPE);
     // One row beyond the page decides `hasMore` without a second COUNT.
     const rows = await this.repo.listProjectsForEvent(
       event.id,
@@ -333,7 +342,7 @@ export class EventProjectsService {
     if (!project || project.status !== "published") {
       throw new TaxonomyError("RESOURCE_NOT_FOUND");
     }
-    const after = decodeCursor<{ startsAt: string; id: string }>(query.cursor);
+    const after = decodeCursor(query.cursor, EVENT_CURSOR_SHAPE);
     const rows = await this.repo.listEventsForProject(
       project.id,
       query.limit + 1,
@@ -517,16 +526,37 @@ function encodeCursor(value: Record<string, string>): string {
   return Buffer.from(JSON.stringify(value), "utf8").toString("base64url");
 }
 
-function decodeCursor<T>(cursor: string | undefined): T | null {
+/**
+ * The two §5.2 order tuples, as shapes rather than casts.
+ *
+ * A cursor is caller-supplied bytes on a ZERO-AUTH route, so "decodes to an
+ * object" is not enough: the decoded VALUES become SQL operands. An `id` that is
+ * not a UUID reaches a `uuid` column as Postgres `22P02`, and a `startsAt` that
+ * is not a real instant reaches the driver's `toISOString()` as a `RangeError` —
+ * both 500s for what EARS-12/EARS-16 contract as 400 `CURSOR_INVALID`. Parsing
+ * the tuple here refuses it before any query runs.
+ */
+const PROJECT_CURSOR_SHAPE = z
+  .object({ title: z.string(), id: z.uuid() })
+  .strict();
+const EVENT_CURSOR_SHAPE = z
+  .object({
+    startsAt: z
+      .string()
+      .refine((value) => !Number.isNaN(Date.parse(value)), "not an instant"),
+    id: z.uuid(),
+  })
+  .strict();
+
+function decodeCursor<T>(
+  cursor: string | undefined,
+  shape: z.ZodType<T>,
+): T | null {
   if (cursor === undefined) return null;
   try {
-    const parsed = JSON.parse(
-      Buffer.from(cursor, "base64url").toString("utf8"),
-    ) as T;
-    if (parsed === null || typeof parsed !== "object") {
-      throw new Error("cursor is not an order tuple");
-    }
-    return parsed;
+    return shape.parse(
+      JSON.parse(Buffer.from(cursor, "base64url").toString("utf8")),
+    );
   } catch {
     throw new TaxonomyError(
       "CURSOR_INVALID",

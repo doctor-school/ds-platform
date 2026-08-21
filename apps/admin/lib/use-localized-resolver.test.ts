@@ -5,6 +5,7 @@ import {
   EventFormSchema,
   ExpertFormSchema,
   LoginFormSchema,
+  PartnerFormSchema,
   ProjectFormSchema,
   RecordingExpectedByFormSchema,
   StreamConfigFormSchema,
@@ -298,6 +299,62 @@ describe("translateIssue — admin form RU error mapping (#665)", () => {
     expect(
       keysFor(TopicFormSchema, {
         title: "Кардиология",
+        slug: "00000000-0000-4000-8000-000000000000",
+      }),
+    ).toEqual(["slugReserved"]);
+  });
+
+  it("EARS-4: every partner-form failing rule maps to a specific key, never fallback", () => {
+    // Empty submit — the title is the partner's only required value; the website
+    // and slug boxes may both be empty (no site / server-generated address) and
+    // must NOT report an error here.
+    expect(
+      keysFor(PartnerFormSchema, { title: "", websiteUrl: "", slug: "" }),
+    ).toEqual(["required"]);
+
+    // The 160-character title bound maps to the length key, not the fallback.
+    expect(
+      keysFor(PartnerFormSchema, {
+        title: "х".repeat(161),
+        websiteUrl: "",
+        slug: "",
+      }),
+    ).toEqual(["maxLength"]);
+
+    // The website box: a bare domain, an http:// address and a value carrying
+    // whitespace are all the SAME fix — «начните с https://» — and none of them
+    // may degrade to the generic sentence.
+    for (const bad of ["example.ru", "http://example.ru", "https:// example.ru"]) {
+      expect(
+        keysFor(PartnerFormSchema, {
+          title: "Фарма-Лаб",
+          websiteUrl: bad,
+          slug: "",
+        }),
+      ).toEqual(["pattern"]);
+    }
+    // Over the 2048-character cap is its own key, not the pattern sentence.
+    expect(
+      keysFor(PartnerFormSchema, {
+        title: "Фарма-Лаб",
+        websiteUrl: `https://example.ru/${"a".repeat(2100)}`,
+        slug: "",
+      }),
+    ).toEqual(["maxLength"]);
+
+    // The slug box distinguishes its two refusals exactly as its siblings do:
+    // wrong grammar vs the forbidden canonical-UUID id namespace.
+    expect(
+      keysFor(PartnerFormSchema, {
+        title: "Фарма-Лаб",
+        websiteUrl: "",
+        slug: "Not valid",
+      }),
+    ).toEqual(["slugPattern"]);
+    expect(
+      keysFor(PartnerFormSchema, {
+        title: "Фарма-Лаб",
+        websiteUrl: "",
         slug: "00000000-0000-4000-8000-000000000000",
       }),
     ).toEqual(["slugReserved"]);

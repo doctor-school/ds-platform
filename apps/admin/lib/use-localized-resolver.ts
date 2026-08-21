@@ -32,6 +32,7 @@ export function useLocalizedResolver<TFieldValues extends FieldValues, Out>(
     | "login.validation"
     | "projects.validation"
     | "experts.validation"
+    | "partners.validation"
     | "topics.validation"
     | "recordings.validation" = "events.validation",
 ): Resolver<TFieldValues, unknown, Out> {
@@ -109,6 +110,16 @@ export function translateIssue(issue: ZodIssueLike, t: Translator): string {
     return t("required");
   }
   if (has("kind")) return t("kind");
+
+  // 012 partner authoring (#1286, EARS-4). The website box is an ABSOLUTE https
+  // address (the SSOT regex — the exact twin of the DB CHECK), so a malformed
+  // value arrives as `invalid_format` and would otherwise reach `fallback`
+  // («проверьте значение») — a sentence that does not tell the operator the one
+  // thing they need to know, that the address must start with https://.
+  if (has("websiteUrl")) {
+    if (issue.code === "too_big") return t("maxLength");
+    return t("pattern");
+  }
 
   // 012 expert authoring (#1284): name / professional role / credentials /
   // affiliation / bio all fail on exactly two shapes — empty (`too_small` on the

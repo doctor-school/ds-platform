@@ -3,6 +3,7 @@ import {
   ConfigureStreamRequestSchema,
   CreateEventRequestSchema,
   CreateExpertRequestSchema,
+  CreatePartnerRequestSchema,
   CreateProjectRequestSchema,
   CreateTopicRequestSchema,
   DurationSecSchema,
@@ -11,6 +12,8 @@ import {
   EXPERT_BIO_MAX,
   EXPERT_CREDENTIALS_MAX,
   EXPERT_PROFESSIONAL_ROLE_MAX,
+  PARTNER_WEBSITE_URL_MAX,
+  PartnerWebsiteUrlSchema,
   POSTER_REF_MAX,
   PosterRefSchema,
   type ProjectKind,
@@ -260,6 +263,63 @@ export const TopicFormSchema = z.object({
 
 export interface TopicFormFields {
   title: string;
+  slug: string;
+}
+
+/**
+ * The 012 partner create/edit form (#1286, EARS-4). Same derivation rule as the
+ * sibling taxonomy forms: `title` reuses the SSOT create-schema validator
+ * verbatim, and the website box folds the SSOT `PartnerWebsiteUrlSchema` back in
+ * rather than re-typing the https rule — that regex is the exact twin of the DB
+ * CHECK `partners_website_url_https`, so the sentence the operator reads before
+ * submit is the rule the column enforces.
+ *
+ * A partner is a descriptive card: a required display title, an optional site
+ * link and an optional logo. `websiteUrl` is therefore OPTIONAL in the form (the
+ * API takes a draft partner carrying nothing but a title) and a non-empty value
+ * is the only thing checked — an empty box means «сайта нет», not «invalid».
+ */
+const partnerCreate = CreatePartnerRequestSchema.shape;
+
+export const PartnerFormSchema = z.object({
+  title: partnerCreate.title,
+  websiteUrl: z.string().superRefine((value, ctx) => {
+    if (value.trim().length === 0) return; // empty ⇒ the partner has no site
+    const result = PartnerWebsiteUrlSchema.safeParse(value.trim());
+    if (result.success) return;
+    for (const issue of result.error.issues) {
+      // Keep the DISTINCTION the SSOT makes: over the length cap is its own
+      // sentence, everything else is the "absolute https:// address" rule. No
+      // baked message — an explicit one would outrank the localized error map.
+      ctx.addIssue(
+        issue.code === "too_big"
+          ? {
+              code: "too_big",
+              origin: "string",
+              maximum: PARTNER_WEBSITE_URL_MAX,
+              inclusive: true,
+            }
+          : { code: "invalid_format", format: "regex" },
+      );
+    }
+  }),
+  slug: z.string().superRefine((value, ctx) => {
+    if (value.trim().length === 0) return; // empty ⇒ server generates it
+    const result = SlugSchema.safeParse(value.trim());
+    if (result.success) return;
+    for (const issue of result.error.issues) {
+      ctx.addIssue(
+        issue.code === "custom"
+          ? { code: "custom" }
+          : { code: "invalid_format", format: "regex" },
+      );
+    }
+  }),
+});
+
+export interface PartnerFormFields {
+  title: string;
+  websiteUrl: string;
   slug: string;
 }
 

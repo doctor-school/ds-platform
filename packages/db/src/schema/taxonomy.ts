@@ -330,3 +330,100 @@ export const topics = pgTable(
 
 export type Topic = typeof topics.$inferSelect;
 export type NewTopic = typeof topics.$inferInsert;
+
+export const PARTNER_TITLE_MAX = 160;
+export const PARTNER_WEBSITE_URL_MAX = 2048;
+
+/**
+ * The absolute-HTTPS shape a partner website must have (012-design §2.2 — "an
+ * optional absolute HTTPS website up to 2048"). Enforced in the DATABASE, not
+ * only in Zod: `website_url` becomes an outbound link on the public partner
+ * projection (§5.2 `PublicPartner`), so a relative path, a `javascript:` token
+ * or a plaintext `http://` origin must be unrepresentable in the column — a row
+ * written by a migration, a fixture or a future service must satisfy the same
+ * rule the wire contract states.
+ */
+export const HTTPS_URL_PATTERN = "^https://[^\\s/?#]+[^\\s]*$";
+
+/**
+ * `partners` — the descriptive sponsor record (012 EARS-4, #1286).
+ *
+ * A partner is a first-class retained editorial row, never a per-event sponsor
+ * string: `events.partner_ref` is the pre-012 free-text field this entity
+ * replaces, and one `partners` row feeds the admin list, the admin detail, the
+ * public projection (#1294) and the `project_partners` join (#1291) — including
+ * its at-most-one-active-primary rule. There is no inline creation path.
+ *
+ * Shape-wise it is the `projects` lifecycle plus ONE media slot and ONE URL:
+ * `title` is NOT NULL (like a topic's — a partner with no title would be an
+ * unlabelled row with nothing else to identify it), while `logo_ref` and
+ * `website_url` are nullable because §5.2 declares both optional and nullable on
+ * `PublicPartner`. Neither is therefore publish-required: a published partner
+ * with no logo and no site is a complete projection, so no
+ * `PUBLISH_REQUIREMENTS_NOT_MET` branch exists for this entity.
+ *
+ * It carries NO `content_removed_at`: §2.4's editorial removal is about a
+ * PERSON's regalia (`experts`); a sponsoring organization has no personal data
+ * to remove, and retire/restore already expresses "off the site".
+ */
+export const partners = pgTable(
+  "partners",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    /** The permanent public identity. Editable only while `first_published_at IS NULL`. */
+    slug: text("slug").notNull(),
+    title: text("title").notNull(),
+    /** Server-generated object-storage key of the normalized WebP logo; never a client value. */
+    logoRef: text("logo_ref"),
+    /** Optional absolute HTTPS site — the only outbound link a partner carries. */
+    websiteUrl: text("website_url"),
+    /** Set once by the first publish transaction; trigger-pinned thereafter. */
+    firstPublishedAt: timestamp("first_published_at", { withTimezone: true }),
+    status: taxonomyStatus("status").notNull().default("draft"),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    /** Optimistic-concurrency counter behind the admin ETag; starts at 1, `++` per successful write. */
+    version: integer("version").notNull().default(1),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    // Spans EVERY retained row (012-design §2.1): a retired partner keeps
+    // holding its slug, so a bookmarked partner URL can never later resolve to a
+    // different organization. Deliberately NOT a partial index.
+    uniqueIndex("partners_slug_key").on(t.slug),
+    check(
+      "partners_retired_iff_deleted",
+      sql`(${t.status} = 'retired') = (${t.deletedAt} IS NOT NULL)`,
+    ),
+    check("partners_slug_pattern", sql`${t.slug} ~ ${sql.raw(`'${SLUG_PATTERN}'`)}`),
+    check(
+      "partners_slug_not_uuid",
+      sql`${t.slug} !~ ${sql.raw(`'${UUID_TEXT_PATTERN}'`)}`,
+    ),
+    check(
+      "partners_title_bounds",
+      sql`char_length(${t.title}) BETWEEN 1 AND ${sql.raw(String(PARTNER_TITLE_MAX))}`,
+    ),
+    check(
+      "partners_website_url_bounds",
+      sql`${t.websiteUrl} IS NULL OR char_length(${t.websiteUrl}) BETWEEN 1 AND ${sql.raw(String(PARTNER_WEBSITE_URL_MAX))}`,
+    ),
+    // Absolute HTTPS or nothing — see `HTTPS_URL_PATTERN`.
+    check(
+      "partners_website_url_https",
+      sql`${t.websiteUrl} IS NULL OR ${t.websiteUrl} ~ ${sql.raw(`'${HTTPS_URL_PATTERN}'`)}`,
+    ),
+    check("partners_version_positive", sql`${t.version} >= 1`),
+    check(
+      "partners_published_has_first_published_at",
+      sql`${t.status} <> 'published' OR ${t.firstPublishedAt} IS NOT NULL`,
+    ),
+  ],
+);
+
+export type Partner = typeof partners.$inferSelect;
+export type NewPartner = typeof partners.$inferInsert;

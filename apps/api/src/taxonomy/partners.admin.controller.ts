@@ -1,0 +1,389 @@
+import {
+  Controller,
+  Get,
+  Inject,
+  HttpCode,
+  Param,
+  Patch,
+  Post,
+  Query,
+  Req,
+  Res,
+  UseFilters,
+} from "@nestjs/common";
+import type { FastifyReply, FastifyRequest } from "fastify";
+import {
+  AdminTaxonomyListQuerySchema,
+  CANONICAL_UUID_REGEX,
+  CreatePartnerRequestSchema,
+  IDEMPOTENCY_KEY_HEADER,
+  IF_MATCH_HEADER,
+  MAX_IMAGE_BYTES,
+  type PartnerAdminList,
+  parseIfMatchVersion,
+  UpdatePartnerRequestSchema,
+} from "@ds/schemas";
+import { Authz } from "../authz/index.js";
+import {
+  type IdempotencyOutcome,
+  IdempotencyService,
+} from "./idempotency.service.js";
+import { sha256, type UploadedImage } from "./media/still-image-normalizer.js";
+import { PartnersService } from "./partners.service.js";
+import { TaxonomyError } from "./taxonomy.errors.js";
+import { TaxonomyProblemFilter } from "./taxonomy.problem-filter.js";
+
+// 012 EARS-4 (#1286) — the partner admin surface (012-design §5.1). The contract
+// is the one the project and expert verticals established, unchanged:
+// authorization is feature 011's dedicated MFA-verified admin session plus CSRF
+// double-submit, and the route guard requires `platform_admin` BEFORE
+// validation, idempotency, upload or handler (EARS-16). There is no per-mutation
+// live IdP revalidation beyond #1304's and no step-up in 012 (§5.3).
+//
+// The request-shape rules are exact (§5.1): JSON is the canonical no-file shape;
+// a binary rides `multipart/form-data` with exactly one `payload` JSON part plus
+// at most one `logo` file part. Multipart WITHOUT a file is 415 — it is not a
+// synonym for JSON, it is a malformed upload. A file together with
+// `mediaAction: "clear"`, several files, or a wrong-named file part is 400
+// `MEDIA_INPUT_CONFLICT` *before* any upload, because a request that asks for
+// two contradictory things must never be guessed at.
+
+/** The only file part name a partner accepts — `cover`/`photo` belong elsewhere. */
+const LOGO_PART = "logo";
+
+@Controller({ path: "admin/partners", version: "1" })
+@UseFilters(TaxonomyProblemFilter)
+export class PartnersAdminController {
+  // Explicit @Inject tokens — see the note in `partners.service.ts`: the
+  // root-level authz gate boots this graph under `tsx`, which emits no
+  // `design:paramtypes`, so type-inferred injection resolves to `undefined`.
+  constructor(
+    @Inject(PartnersService) private readonly partners: PartnersService,
+    @Inject(IdempotencyService)
+    private readonly idempotency: IdempotencyService,
+  ) {}
+
+  /**
+   * EARS-15 / §5.1 — the shared admin list: page/pageSize offset pagination,
+   * case-insensitive `q` (LD-6 trigram-indexed over title and slug), explicit
+   * `status`, and retired rows excluded by default.
+   */
+  @Get()
+  @Authz({
+    access: "authenticated",
+    roles: ["platform_admin"],
+    check: "fast-path",
+    audit: "none",
+    tests: ["EARS-4", "EARS-15", "EARS-16"],
+  })
+  list(@Query() rawQuery: Record<string, string>): Promise<PartnerAdminList> {
+    const parsed = AdminTaxonomyListQuerySchema.safeParse(rawQuery);
+    if (!parsed.success) {
+      throw new TaxonomyError(
+        "VALIDATION_FAILED",
+        "invalid list query",
+        parsed.error.issues.map((i) => ({
+          path: i.path.join("."),
+          message: i.message,
+        })),
+      );
+    }
+    return this.partners.list(parsed.data);
+  }
+
+  /**
+   * EARS-4 — `POST /v1/admin/partners`. Requires a canonical UUID
+   * `Idempotency-Key`, no `If-Match` (there is no prior version to assert).
+   * Answers 201 with the detail body, the row's `ETag` and a `Location`.
+   */
+  @Post()
+  @HttpCode(201)
+  @Authz({
+    access: "authenticated",
+    roles: ["platform_admin"],
+    check: "fast-path",
+    // #1304 (ADR-0001 §10): a state-changing admin command is high-stakes, so
+    // the role is re-established against the LIVE IdP before anything happens —
+    // the guard refuses ahead of validation, the idempotency reservation and any
+    // logo upload, so a revoked grant cannot leave a half-written partner
+    // behind. Reads keep it absent, by the same cost argument.
+    revalidate: "live",
+    // The domain audit row is written by feature 010's capture trigger inside
+    // the command transaction (012-design §6), not by an authz-tier emission —
+    // so this is the same `low-stakes` AUTH-audit tier as 007's authoring writes.
+    audit: "low-stakes",
+    tests: ["EARS-4", "EARS-16", "EARS-17"],
+  })
+  async create(
+    @Req() req: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<unknown> {
+    // 1. Key shape — before a single file byte is read (§5.1 failure order).
+    const key = this.idempotency.requireKey(req.headers[IDEMPOTENCY_KEY_HEADER]);
+    // 2. Request shape + payload; the file is buffered but nothing is stored yet.
+    const { payload, file } = await this.readAuthoringRequest(req, false);
+    const parsed = CreatePartnerRequestSchema.safeParse(payload);
+    if (!parsed.success) {
+      throw new TaxonomyError(
+        "VALIDATION_FAILED",
+        "invalid partner payload",
+        parsed.error.issues.map((i) => ({
+          path: i.path.join("."),
+          message: i.message,
+        })),
+      );
+    }
+    // 3. Fingerprint binding — before normalization or upload.
+    const outcome = await this.idempotency.begin({
+      key,
+      scope: "taxonomy.partners",
+      actorId: actorSub(req),
+      method: "POST",
+      route: "/v1/admin/partners",
+      fingerprint: this.idempotency.fingerprint({
+        method: "POST",
+        path: "/v1/admin/partners",
+        payload: parsed.data,
+        fileSha256: file ? sha256(file.body) : null,
+        fileBytes: file?.body.length ?? null,
+      }),
+    });
+    if (replayed(outcome, reply)) return outcome.replay.body;
+
+    const { detail, etag } = await this.partners.create({
+      payload: parsed.data,
+      logo: file,
+      lease: outcome.lease,
+    });
+    void reply.header("etag", etag);
+    void reply.header("location", `/v1/admin/partners/${detail.id}`);
+    return detail;
+  }
+
+  /** EARS-4 — detail by stable id, retired rows included (§5.1). */
+  @Get(":id")
+  @Authz({
+    access: "authenticated",
+    roles: ["platform_admin"],
+    check: "fast-path",
+    audit: "none",
+    tests: ["EARS-4", "EARS-16"],
+  })
+  async detail(
+    @Param("id") id: string,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<unknown> {
+    // A non-UUID token cannot address an admin row: the admin surface is
+    // id-only, slugs belong to the public surface (§5.2).
+    if (!CANONICAL_UUID_REGEX.test(id)) {
+      throw new TaxonomyError("RESOURCE_NOT_FOUND");
+    }
+    const { detail, etag } = await this.partners.detail(id);
+    void reply.header("etag", etag);
+    return detail;
+  }
+
+  /**
+   * EARS-4 — `PATCH /v1/admin/partners/:id`. Requires the target `If-Match`
+   * (absent is 428 `PRECONDITION_REQUIRED`, stale is 412 `PRECONDITION_FAILED`)
+   * plus a canonical UUID `Idempotency-Key`.
+   */
+  @Patch(":id")
+  @HttpCode(200)
+  @Authz({
+    access: "authenticated",
+    roles: ["platform_admin"],
+    check: "fast-path",
+    // #1304 — same high-stakes posture as the create route above.
+    revalidate: "live",
+    audit: "low-stakes",
+    tests: ["EARS-4", "EARS-16", "EARS-17"],
+  })
+  async update(
+    @Param("id") id: string,
+    @Req() req: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<unknown> {
+    if (!CANONICAL_UUID_REGEX.test(id)) {
+      throw new TaxonomyError("RESOURCE_NOT_FOUND");
+    }
+    const key = this.idempotency.requireKey(req.headers[IDEMPOTENCY_KEY_HEADER]);
+    const rawIfMatch = req.headers[IF_MATCH_HEADER] as string | undefined;
+    if (!rawIfMatch || rawIfMatch.trim().length === 0) {
+      throw new TaxonomyError(
+        "PRECONDITION_REQUIRED",
+        "an edit must carry the If-Match of the version it was read at",
+      );
+    }
+    const expectedVersion = parseIfMatchVersion(rawIfMatch);
+    if (expectedVersion === null) {
+      // A syntactically unusable validator asserts nothing, so it cannot pass:
+      // treat it as the failed precondition it is, never as "no precondition".
+      throw new TaxonomyError(
+        "PRECONDITION_FAILED",
+        "the If-Match validator is not one this API issued",
+      );
+    }
+
+    const { payload, file } = await this.readAuthoringRequest(req, true);
+    const parsed = UpdatePartnerRequestSchema.safeParse(payload ?? {});
+    if (!parsed.success) {
+      throw new TaxonomyError(
+        "VALIDATION_FAILED",
+        "invalid partner payload",
+        parsed.error.issues.map((i) => ({
+          path: i.path.join("."),
+          message: i.message,
+        })),
+      );
+    }
+    // A file together with an explicit clear is contradictory — refuse before
+    // upload rather than silently preferring one of the two.
+    if (file && parsed.data.mediaAction === "clear") {
+      throw new TaxonomyError(
+        "MEDIA_INPUT_CONFLICT",
+        'a logo file and mediaAction: "clear" cannot be combined',
+      );
+    }
+
+    const route = "/v1/admin/partners/:id";
+    const outcome = await this.idempotency.begin({
+      key,
+      scope: "taxonomy.partners",
+      actorId: actorSub(req),
+      method: "PATCH",
+      route,
+      fingerprint: this.idempotency.fingerprint({
+        method: "PATCH",
+        path: `/v1/admin/partners/${id}`,
+        payload: parsed.data,
+        ifMatch: rawIfMatch,
+        fileSha256: file ? sha256(file.body) : null,
+        fileBytes: file?.body.length ?? null,
+      }),
+    });
+    if (replayed(outcome, reply)) return outcome.replay.body;
+
+    const { detail, etag } = await this.partners.update({
+      id,
+      payload: parsed.data,
+      logo: file,
+      expectedVersion,
+      lease: outcome.lease,
+    });
+    void reply.header("etag", etag);
+    return detail;
+  }
+
+  /**
+   * Read the exact §5.1 request shape.
+   *
+   * JSON → the parsed body, no file. Multipart → exactly one `payload` JSON part
+   * plus at most one `logo` file; multipart with NO file is 415, and a second
+   * file / a wrong part name is 400 `MEDIA_INPUT_CONFLICT`. Every file part is
+   * drained even when refused, so a rejected upload cannot leave the connection
+   * half-read.
+   */
+  private async readAuthoringRequest(
+    req: FastifyRequest,
+    payloadOptional: boolean,
+  ): Promise<{ payload: unknown; file?: UploadedImage | undefined }> {
+    const isMultipart =
+      typeof req.isMultipart === "function" && req.isMultipart();
+    if (!isMultipart) {
+      const contentType = String(req.headers["content-type"] ?? "");
+      if (contentType && !contentType.includes("application/json")) {
+        throw new TaxonomyError(
+          "UNSUPPORTED_MEDIA_TYPE",
+          "use application/json, or multipart/form-data with one payload part and one logo file",
+        );
+      }
+      return { payload: req.body ?? (payloadOptional ? {} : undefined) };
+    }
+
+    let payloadRaw: string | undefined;
+    let file: UploadedImage | undefined;
+    let conflict: string | undefined;
+    let oversize: string | undefined;
+    for await (const part of req.parts()) {
+      if (part.type === "file") {
+        const body = await part.toBuffer(); // always drained
+        if (part.fieldname !== LOGO_PART) {
+          conflict ??= `unexpected file part "${part.fieldname}"; a partner accepts only "${LOGO_PART}"`;
+          continue;
+        }
+        if (file) {
+          conflict ??= "more than one logo file part";
+          continue;
+        }
+        if (body.length > MAX_IMAGE_BYTES) {
+          // Bounded here as well as in the normalizer: the size refusal must not
+          // depend on reaching the decoder. Recorded rather than thrown — throwing
+          // mid-`req.parts()` would abandon the remaining parts unread, which the
+          // "every file part is drained" contract of this method forbids.
+          oversize ??= `the logo exceeds the ${MAX_IMAGE_BYTES}-byte limit`;
+          continue;
+        }
+        file = {
+          fieldname: part.fieldname,
+          filename: part.filename,
+          contentType: part.mimetype,
+          body,
+        };
+      } else if (part.fieldname === "payload") {
+        payloadRaw = String(part.value);
+      }
+    }
+    // Refusal order after the stream is fully drained: an ambiguous SHAPE outranks
+    // a bad payload, because a request asking for two contradictory things has no
+    // single interpretation to validate.
+    if (conflict) throw new TaxonomyError("MEDIA_INPUT_CONFLICT", conflict);
+    if (oversize) throw new TaxonomyError("MEDIA_INVALID", oversize);
+    if (!file) {
+      throw new TaxonomyError(
+        "UNSUPPORTED_MEDIA_TYPE",
+        "multipart/form-data without a file part is not a request shape this API accepts; use application/json",
+      );
+    }
+    if (payloadRaw === undefined) {
+      if (!payloadOptional) {
+        throw new TaxonomyError(
+          "VALIDATION_FAILED",
+          "the multipart request is missing its payload part",
+          [{ path: "payload", message: "required" }],
+        );
+      }
+      return { payload: {}, file };
+    }
+    try {
+      return { payload: JSON.parse(payloadRaw), file };
+    } catch {
+      throw new TaxonomyError("VALIDATION_FAILED", "payload is not valid JSON", [
+        { path: "payload", message: "must be valid JSON" },
+      ]);
+    }
+  }
+}
+
+/**
+ * Replay a completed record's stored outcome verbatim (§6): the exact status,
+ * body and allow-listed `ETag`/`Location`. Returns `true` when the caller must
+ * return the stored body instead of running the command again.
+ */
+function replayed(
+  outcome: IdempotencyOutcome,
+  reply: FastifyReply,
+): outcome is Extract<IdempotencyOutcome, { kind: "replay" }> {
+  if (outcome.kind !== "replay") return false;
+  void reply.status(outcome.replay.status);
+  if (outcome.replay.etag) void reply.header("etag", outcome.replay.etag);
+  if (outcome.replay.location) {
+    void reply.header("location", outcome.replay.location);
+  }
+  return true;
+}
+
+/** The acting admin's subject — the actor half of the record's identity binding. */
+function actorSub(req: FastifyRequest): string | null {
+  return (req as { user?: { sub?: string } }).user?.sub ?? null;
+}

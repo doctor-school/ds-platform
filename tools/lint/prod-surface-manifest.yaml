@@ -163,3 +163,22 @@ routes:
     route: /topics/[id]
     file: apps/admin/app/topics/[id]/page.tsx
     status: product-ready
+  # 012 EARS-4 (#1286): the descriptive-partner authoring vertical — the same
+  # shared list shell and tabbed detail, with a logo slot and an https-only
+  # website address. Real product deliverables, driven live in
+  # `apps/admin/e2e/taxonomy-partners.spec.ts` and scanned by the partner block of
+  # `apps/admin/e2e/a11y/a11y-axe.e2e.spec.ts`. Same one-tab rule: no empty
+  # «Публикация» placeholder ships ahead of the slice that fills it, and no
+  # retire/restore control ships ahead of the route that would back it (#1287).
+  - app: admin
+    route: /partners
+    file: apps/admin/app/partners/page.tsx
+    status: product-ready
+  - app: admin
+    route: /partners/create
+    file: apps/admin/app/partners/create/page.tsx
+    status: product-ready
+  - app: admin
+    route: /partners/[id]
+    file: apps/admin/app/partners/[id]/page.tsx
+    status: product-ready

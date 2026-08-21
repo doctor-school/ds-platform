@@ -185,6 +185,43 @@ test.describe("007 EARS-11 axe-core a11y scan of the admin event surface", () =>
     for (const theme of THEMES) await scan(page, theme);
   });
 
+  // 012 EARS-4 (#1286) — the partner vertical. It introduces no new element CLASS
+  // (no initials avatar, no character counter), but it does introduce two resting
+  // states no other admin surface renders: a media dropzone with NO fallback
+  // affordance behind it (an empty logo slot stays empty, §5.2), and a URL field
+  // whose reject state is a `pattern` message rather than a length one. Both are
+  // colour/naming states an existing green certifies nothing about, so the partner
+  // surfaces are enumerated the way the project (#1283) and expert (#1284) scans
+  // are rather than inheriting theirs.
+  test("the partner list + create + detail surfaces pass WCAG 2 A/AA (light)", async ({
+    page,
+  }) => {
+    await loginAsAdmin(page);
+    await page.goto("/partners");
+    await page.getByTestId("partners-filters").waitFor({ state: "visible" });
+    for (const theme of THEMES) await scan(page, theme);
+
+    await page.goto("/partners/create");
+    await page.getByTestId("partner-form").waitFor({ state: "visible" });
+    for (const theme of THEMES) await scan(page, theme);
+
+    // The REJECTED website field — a destructive inline message plus the field's
+    // invalid border, its own colour state and its own accessible-name wiring.
+    await page.getByTestId("partner-website-url").fill("example.com");
+    await page.getByTestId("submit-partner").click();
+    await expect(page.getByTestId("partner-form")).toBeVisible();
+    for (const theme of THEMES) await scan(page, theme);
+
+    // A real created row, so the detail scan covers the tab bar and the dropzone's
+    // EMPTY slot — the state that has no avatar behind it.
+    await page.getByTestId("partner-website-url").fill("https://example.com");
+    await page.getByTestId("partner-title").fill(`Axe-скан партнёр ${Date.now()}`);
+    await page.getByTestId("submit-partner").click();
+    await page.waitForURL(/\/partners\/[0-9a-f-]{36}$/);
+    await page.getByTestId("partner-form").waitFor({ state: "visible" });
+    for (const theme of THEMES) await scan(page, theme);
+  });
+
   // 014 EARS-1/EARS-2 (#1339) — the «Записи» tab and the modal element class it
   // introduces. The OPEN modal is scanned explicitly, not just the tab behind it:
   // a dialog is a different a11y surface from the page (its own name, its own

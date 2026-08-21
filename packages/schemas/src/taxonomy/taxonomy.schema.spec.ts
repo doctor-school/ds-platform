@@ -8,6 +8,12 @@ import {
   ExpertAdminDetailSchema,
   ExpertAdminListItemSchema,
   CreateTopicRequestSchema,
+  CreatePartnerRequestSchema,
+  PartnerAdminDetailSchema,
+  PartnerAdminListItemSchema,
+  PARTNER_TITLE_MAX,
+  PARTNER_WEBSITE_URL_MAX,
+  UpdatePartnerRequestSchema,
   isCanonicalIdempotencyKey,
   parseIfMatchVersion,
   slugifyTaxonomyTitle,
@@ -363,6 +369,121 @@ describe("012 taxonomy — expert authoring contract (SSOT)", () => {
     expect(parsed).not.toHaveProperty("coverUrl");
     expect(TopicAdminListItemSchema.parse(detail)).not.toHaveProperty(
       "firstPublishedAt",
+    );
+  });
+});
+
+// 012 EARS-4 (#1286) — the partner wire contract. The partner-specific half of
+// the matrix is the optional absolute-HTTPS website: everything else is the
+// shared §2.2 vocabulary the sibling entities already prove.
+describe("012 taxonomy — partner authoring contract (SSOT)", () => {
+  it("012 EARS-4: when a partner create carries a title, the system shall accept it with an optional website and slug", () => {
+    expect(
+      CreatePartnerRequestSchema.parse({ title: "  Фармкомпания  " }),
+    ).toEqual({ title: "Фармкомпания" });
+    expect(
+      CreatePartnerRequestSchema.parse({
+        title: "Фармкомпания",
+        websiteUrl: "https://example.org/ru/about?x=1#top",
+        slug: "farmkompaniya",
+      }).websiteUrl,
+      // Stored VERBATIM — path, query and fragment survive, because a sponsor's
+      // URL is their identity and a "tidied" one may point elsewhere.
+    ).toBe("https://example.org/ru/about?x=1#top");
+  });
+
+  it("012 EARS-4: when the website is not an absolute https URL, the system shall reject it", () => {
+    for (const bad of [
+      "doctor.school",
+      "/about",
+      "http://example.org",
+      "ftp://example.org",
+      "javascript:alert(1)",
+      "data:text/html,x",
+      "https:///nohost",
+      "",
+    ]) {
+      expect(
+        CreatePartnerRequestSchema.safeParse({ title: "Партнёр", websiteUrl: bad })
+          .success,
+        `websiteUrl ${JSON.stringify(bad)} must be refused`,
+      ).toBe(false);
+    }
+    expect(
+      CreatePartnerRequestSchema.safeParse({
+        title: "Партнёр",
+        websiteUrl: `https://example.org/${"x".repeat(PARTNER_WEBSITE_URL_MAX)}`,
+      }).success,
+    ).toBe(false);
+  });
+
+  it("012 EARS-4: when the title is empty or over the matrix bound, the system shall reject it", () => {
+    expect(CreatePartnerRequestSchema.safeParse({ title: "   " }).success).toBe(
+      false,
+    );
+    expect(
+      CreatePartnerRequestSchema.safeParse({
+        title: "x".repeat(PARTNER_TITLE_MAX + 1),
+      }).success,
+    ).toBe(false);
+  });
+
+  it("012 EARS-16: when client JSON supplies a storage reference or mediaAction on create, the system shall reject the request", () => {
+    expect(
+      CreatePartnerRequestSchema.safeParse({
+        title: "Партнёр",
+        logoRef: "taxonomy/partners/logos/x.webp",
+      }).success,
+    ).toBe(false);
+    expect(
+      CreatePartnerRequestSchema.safeParse({
+        title: "Партнёр",
+        logoUrl: "https://cdn.example.org/x.webp",
+      }).success,
+    ).toBe(false);
+    // `mediaAction` is a PATCH-only verb — there is nothing to clear on create.
+    expect(
+      CreatePartnerRequestSchema.safeParse({
+        title: "Партнёр",
+        mediaAction: "clear",
+      }).success,
+    ).toBe(false);
+  });
+
+  it("012 EARS-4: when a partner PATCH clears the website, the system shall accept null there but never for the title", () => {
+    expect(UpdatePartnerRequestSchema.parse({ websiteUrl: null })).toEqual({
+      websiteUrl: null,
+    });
+    expect(UpdatePartnerRequestSchema.parse({})).toEqual({});
+    expect(
+      UpdatePartnerRequestSchema.parse({ mediaAction: "clear" }).mediaAction,
+    ).toBe("clear");
+    expect(UpdatePartnerRequestSchema.safeParse({ title: null }).success).toBe(
+      false,
+    );
+    expect(
+      UpdatePartnerRequestSchema.safeParse({ mediaAction: "replace" }).success,
+    ).toBe(false);
+  });
+
+  it("012 EARS-4: when an admin partner detail is projected, it shall carry the logo URL and never the storage key", () => {
+    const detail = {
+      id: "11111111-1111-4111-8111-111111111111",
+      slug: "farmkompaniya",
+      title: "Фармкомпания",
+      logoUrl: "https://cdn.example.org/taxonomy/partners/logos/a.webp",
+      websiteUrl: null,
+      status: "draft" as const,
+      firstPublishedAt: null,
+      slugEditable: true,
+      version: 1,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    const parsed = PartnerAdminDetailSchema.parse(detail);
+    expect(parsed).not.toHaveProperty("logoRef");
+    expect(PartnerAdminListItemSchema.parse(detail)).not.toHaveProperty(
+      "logoUrl",
     );
   });
 });

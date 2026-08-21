@@ -7,11 +7,14 @@ import type {
   ConfigureStreamRequest,
   CreateEventRequest,
   CreateExpertRequest,
+  CreatePartnerRequest,
   CreateProjectRequest,
   EventAdminDetail,
   EventAdminListItem,
   ExpertAdminDetail,
   ExpertAdminListItem,
+  PartnerAdminDetail,
+  PartnerAdminListItem,
   ProjectAdminDetail,
   ProjectAdminListItem,
   CreateTopicRequest,
@@ -21,6 +24,7 @@ import type {
   TopicAdminListItem,
   UpdateEventRequest,
   UpdateExpertRequest,
+  UpdatePartnerRequest,
   UpdateProjectRequest,
   UpdateRecordingRequest,
   UpdateTopicRequest,
@@ -55,6 +59,9 @@ import type {
  *   experts  (012)  the same four calls against /v1/admin/experts, with `photo`
  *                   as the file part instead of `cover` (#1284, EARS-2).
  *
+ *   partners (012)  the same four calls against /v1/admin/partners, with `logo`
+ *                   as the file part (#1286, EARS-4).
+ *
  *   topics   (012)  the same four calls against /v1/admin/topics, with NO file
  *                   part at all — a topic is a title plus its address, so every
  *                   write is JSON (#1285, EARS-3).
@@ -81,6 +88,9 @@ export type UpdateEventVars = UpdateEventRequest & { programPdf?: File | null };
 const TAXONOMY_MEDIA_PART = {
   projects: "cover",
   experts: "photo",
+  // A partner's image is its LOGO, and the part name is kind-specific by design
+  // (012-design §5.1): sending it as `cover`/`photo` is a 400, not a synonym.
+  partners: "logo",
   // A topic carries no image anywhere in the entity (012-design §2.2 / §5.1): it
   // is a title plus its permanent address. `null` registers the resource on this
   // map — so list/detail/create/update all dispatch for it — WITHOUT inventing a
@@ -118,17 +128,35 @@ export type UpdateExpertVars = UpdateExpertRequest & {
   version: number;
 };
 
+/** Partner create variables: the authored fields plus an optional logo file (#1286). */
+export type CreatePartnerVars = CreatePartnerRequest & { logo?: File | null };
+/**
+ * Partner edit variables. `logo` sets/replaces the stored logo; `mediaAction:
+ * "clear"` removes it; supplying both is refused by the API with
+ * `MEDIA_INPUT_CONFLICT`, so the form never offers both at once. `version`
+ * becomes the `If-Match` precondition.
+ */
+export type UpdatePartnerVars = UpdatePartnerRequest & {
+  logo?: File | null;
+  version: number;
+};
+
 /** Topic create variables: the authored fields, and nothing else — no media part (#1285). */
 export type CreateTopicVars = CreateTopicRequest;
 /** Topic edit variables. `version` becomes the `If-Match` precondition. */
 export type UpdateTopicVars = UpdateTopicRequest & { version: number };
 
 /** The taxonomy detail projections this provider can return. */
-type TaxonomyDetail = ProjectAdminDetail | ExpertAdminDetail | TopicAdminDetail;
+type TaxonomyDetail =
+  | ProjectAdminDetail
+  | ExpertAdminDetail
+  | PartnerAdminDetail
+  | TopicAdminDetail;
 /** The taxonomy list rows this provider can return. */
 type TaxonomyListItem =
   | ProjectAdminListItem
   | ExpertAdminListItem
+  | PartnerAdminListItem
   | TopicAdminListItem;
 
 /**
@@ -138,7 +166,7 @@ type TaxonomyListItem =
  */
 function taxonomyFile(
   resource: TaxonomyResource,
-  files: { cover?: File | null; photo?: File | null },
+  files: { cover?: File | null; photo?: File | null; logo?: File | null },
 ): File | null | undefined {
   const part = TAXONOMY_MEDIA_PART[resource];
   return part ? files[part] : null;
@@ -306,13 +334,14 @@ export const dataProvider: DataProvider = {
 
   create: async ({ resource, variables }) => {
     if (isTaxonomyResource(resource)) {
-      const { cover, photo, ...payload } = variables as CreateProjectVars &
+      const { cover, photo, logo, ...payload } = variables as CreateProjectVars &
         CreateExpertVars &
+        CreatePartnerVars &
         CreateTopicVars;
       const { body, headers } = taxonomyBody(
         resource,
         payload as Record<string, unknown>,
-        taxonomyFile(resource, { cover, photo }),
+        taxonomyFile(resource, { cover, photo, logo }),
       );
       const res = await fetch(`${ADMIN_BASE}/${resource}`, {
         method: "POST",
@@ -346,13 +375,17 @@ export const dataProvider: DataProvider = {
       const {
         cover,
         photo,
+        logo,
         version,
         ...payload
-      } = variables as UpdateProjectVars & UpdateExpertVars & UpdateTopicVars;
+      } = variables as UpdateProjectVars &
+        UpdateExpertVars &
+        UpdatePartnerVars &
+        UpdateTopicVars;
       const { body, headers } = taxonomyBody(
         resource,
         payload as Record<string, unknown>,
-        taxonomyFile(resource, { cover, photo }),
+        taxonomyFile(resource, { cover, photo, logo }),
       );
       const res = await fetch(`${ADMIN_BASE}/${resource}/${id}`, {
         method: "PATCH",

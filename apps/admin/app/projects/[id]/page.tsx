@@ -9,6 +9,7 @@ import type { ProjectAdminDetail, TaxonomyStatus } from "@ds/schemas";
 import { AppShell } from "@/components/app-shell";
 import { BackToList } from "@/components/back-to-list";
 import { ProjectForm } from "@/components/project-form";
+import { EventProjectsPanel } from "@/components/event-projects-panel";
 import { taxonomyErrorKey } from "@/lib/taxonomy-errors";
 import type { UpdateProjectVars } from "@/providers/data-provider";
 
@@ -83,6 +84,9 @@ export default function ProjectDetailPage() {
                 <TabsTrigger value="main" data-testid="tab-main">
                   {t("projects.tabs.main")}
                 </TabsTrigger>
+                <TabsTrigger value="events" data-testid="tab-events">
+                  {t("projects.tabs.events")}
+                </TabsTrigger>
               </TabsList>
               <TabsContent value="main">
                 <ProjectForm
@@ -127,6 +131,15 @@ export default function ProjectDetailPage() {
                     );
                   }}
                 />
+              </TabsContent>
+
+              {/* «События» (012 EARS-6, 012-design §5.1) — the READ direction of
+                  the same relationship. Authoring stays on the event detail, so
+                  one fact has exactly one authoring home; here the operator sees
+                  which эфиры this project holds and can still move a link
+                  through its §3.1 gate without leaving the project. */}
+              <TabsContent value="events">
+                <EventProjectsPanel mode="project" entityId={detail.id} />
               </TabsContent>
             </Tabs>
           </>

@@ -2,7 +2,12 @@
 
 import type { DataProvider, HttpError } from "@refinedev/core";
 import { adminCsrfHeaders } from "@/lib/admin-auth";
+import {
+  ADMIN_LIST_PAGE_SIZE_MAX,
+  LIFECYCLE_IMPACT_TOKEN_HEADER,
+} from "@ds/schemas";
 import type {
+  TaxonomyLifecycleTransition,
   AttachRecordingRequest,
   ConfigureStreamRequest,
   CreateEventExpertRequest,
@@ -445,7 +450,8 @@ export const dataProvider: DataProvider = {
   custom: async ({ url, method, payload, meta }) => {
     const hasBody = payload !== undefined && method !== "get";
     const mutating = method !== "get";
-    const version = (meta as { version?: number } | undefined)?.version;
+    const { version, impactToken } =
+      (meta as { version?: number; impactToken?: string } | undefined) ?? {};
     const res = await fetch(url, {
       method: (method ?? "post").toUpperCase(),
       credentials: "include",
@@ -458,6 +464,14 @@ export const dataProvider: DataProvider = {
         ...(mutating ? { "idempotency-key": idempotencyKey() } : {}),
         ...(mutating && typeof version === "number"
           ? { "if-match": `W/"${version}"` }
+          : {}),
+        // The §3.1 confirmation envelope. It is NOT generated here (unlike the
+        // idempotency key): it is the signed answer to a preview the operator
+        // has just READ, so only the dialog that showed the affected rows can
+        // supply it. Absent → 428, stale → 412; both are refusals the caller
+        // must render, never something this seam papers over.
+        ...(mutating && typeof impactToken === "string"
+          ? { [LIFECYCLE_IMPACT_TOKEN_HEADER]: impactToken }
           : {}),
         ...(method === "get" ? {} : adminCsrfHeaders()),
       },
@@ -524,4 +538,31 @@ export const eventExpertsUrl = {
   row: (linkId: string) => `${ADMIN_BASE}/event-experts/${linkId}`,
   command: (linkId: string, command: "retire" | "restore") =>
     `${ADMIN_BASE}/event-experts/${linkId}/${command}`,
+};
+
+/**
+ * The `event_projects` relationship endpoints (012-design §5.1, EARS-6 / #1288).
+ *
+ * One flat collection filtered by EITHER endpoint — that is how the same route
+ * serves «проекты этого эфира» on the event detail and «эфиры этого проекта» on
+ * the project detail. There is no `PATCH` and no `DELETE` anywhere in the map: an
+ * event↔project link is attribute-less, and its lifecycle is the two named
+ * commands behind the §3.1 impact gate.
+ */
+export const eventProjectsUrl = {
+  collection: () => `${ADMIN_BASE}/event-projects`,
+  list: (query: { eventId?: string; projectId?: string; includeRetired?: boolean; pageSize?: number }) => {
+    const params = new URLSearchParams();
+    if (query.eventId) params.set("eventId", query.eventId);
+    if (query.projectId) params.set("projectId", query.projectId);
+    if (query.includeRetired) params.set("includeRetired", "true");
+    params.set("pageSize", String(query.pageSize ?? ADMIN_LIST_PAGE_SIZE_MAX));
+    return `${ADMIN_BASE}/event-projects?${params.toString()}`;
+  },
+  row: (id: string) => `${ADMIN_BASE}/event-projects/${id}`,
+  /** The §3.1 preview. Transition-specific: a token binds exactly one of them. */
+  impact: (id: string, transition: TaxonomyLifecycleTransition) =>
+    `${ADMIN_BASE}/event-projects/${id}/lifecycle-impact?transition=${transition}`,
+  transition: (id: string, transition: TaxonomyLifecycleTransition) =>
+    `${ADMIN_BASE}/event-projects/${id}/${transition}`,
 };

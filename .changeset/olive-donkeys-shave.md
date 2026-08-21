@@ -26,6 +26,7 @@ event already carries, so an event's line-up stops being two disconnected lists.
   answers 409 `SPEAKER_POSITION_OCCUPIED` on both the application pre-check and
   the constraint edge, never an unclassified 500.
 - `@ds/admin`: the «Эксперты» tab on the event card — link an expert with a role
-  and a running-order position, point the link at a legacy speaker, and see
-  matched/unmatched at a glance; retire hides a link from the line-up without
-  deleting it, restore brings it back.
+  and a running-order position, see matched/unmatched against the legacy
+  speakers at a glance, and clear a stale match (unmatch); retire hides a link
+  from the line-up without deleting it, restore brings it back. Picking a legacy
+  speaker to CREATE a match ships with #1426 (it needs the #1306 speakers read).

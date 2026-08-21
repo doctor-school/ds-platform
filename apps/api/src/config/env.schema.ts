@@ -219,6 +219,18 @@ export const ApiEnvSchema = z.looseObject({
   // VITEST so the e2e suite runs without provisioning one).
   AUDIT_IDENTIFIER_PEPPER: z.string().optional(),
 
+  // 012-design §3.1 — the HMAC-SHA256 signing secret of the `Lifecycle-Impact-
+  // Token` envelope. The token is what lets a confirmation assert that the
+  // affected set the operator SAW is still the set the command would change; an
+  // unsigned (or client-forgeable) envelope would turn that safeguard into
+  // decoration, so the signature key is real server config, never derived at
+  // boot. Optional at the schema level only so the dev-stand / test runtime boot
+  // without a provisioned secret, exactly like AUDIT_IDENTIFIER_PEPPER above:
+  // the issuer/verifier fails closed when it is unset in a non-test runtime, and
+  // a deterministic test secret is used under VITEST so the e2e suite runs
+  // without provisioning one. A prod/stand deploy MUST set it.
+  LIFECYCLE_IMPACT_TOKEN_SECRET: z.string().optional(),
+
   // 006 webinar-room heartbeat cadence N (seconds) — the server-side config the
   // `RoomConfig` grant carries to the client (design §5: "cadence N is server
   // config, default 60 s"). The presence-minute derivation is parameterized over

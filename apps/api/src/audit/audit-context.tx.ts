@@ -1,4 +1,8 @@
-import { withAuditContext, type DrizzleHandle } from "@ds/db";
+import {
+  type AuditTransactionConfig,
+  withAuditContext,
+  type DrizzleHandle,
+} from "@ds/db";
 import { getAuditContext } from "./audit-context.js";
 
 // 010 — Universal edit audit, EARS-3/EARS-5 (Issue #1088): the repo-layer
@@ -22,8 +26,9 @@ type Transaction = Parameters<Parameters<Db["transaction"]>[0]>[0];
 export async function withRequestAuditContext<T>(
   db: Db,
   fn: (tx: Transaction) => Promise<T>,
+  config?: AuditTransactionConfig,
 ): Promise<T> {
   const ctx = getAuditContext();
-  if (ctx) return withAuditContext(db, ctx, fn);
-  return db.transaction(fn);
+  if (ctx) return withAuditContext(db, ctx, fn, config);
+  return db.transaction(fn, config);
 }

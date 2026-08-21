@@ -47,10 +47,21 @@ type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
  * never fabricates an actor); the concrete `source` is always set, so an
  * authenticated write can never surface as `db-direct` (EARS-5).
  */
+/**
+ * Transaction characteristics the caller may pin. `isolationLevel` has to be
+ * declared HERE rather than issued inside `fn`, because the GUC statements
+ * below are ordinary queries and PostgreSQL refuses `SET TRANSACTION ISOLATION
+ * LEVEL` after the transaction's first query — a command that needs
+ * `serializable` (012-design §3.1's lifecycle confirmation) must therefore ask
+ * for it as it opens the transaction, not once inside.
+ */
+export type AuditTransactionConfig = Parameters<Database["transaction"]>[1];
+
 export async function withAuditContext<T>(
   db: Database,
   ctx: AuditContext,
   fn: (tx: Transaction) => Promise<T>,
+  config?: AuditTransactionConfig,
 ): Promise<T> {
   return db.transaction(async (tx) => {
     await tx.execute(sql`select set_config('app.source', ${ctx.source}, true)`);
@@ -60,5 +71,5 @@ export async function withAuditContext<T>(
       );
     }
     return fn(tx);
-  });
+  }, config);
 }

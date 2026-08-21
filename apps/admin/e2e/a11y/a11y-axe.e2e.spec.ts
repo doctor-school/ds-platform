@@ -426,7 +426,12 @@ test.describe("007 EARS-11 axe-core a11y scan of the admin event surface", () =>
     await page.unroute("**/v1/admin/event-projects");
 
     // The retired section revealed by the `Switch` — its own resting state.
-    await page.getByTestId("event-projects-show-retired").check();
+    // The DS `Switch` input is `sr-only` behind its painted track: a user clicks
+    // the wrapping label, and `.check()` on the input is intercepted by the track.
+    await page
+      .getByTestId("event-projects-show-retired")
+      .locator("xpath=ancestor::label[1]")
+      .click();
     await page.getByTestId("event-projects-retired").waitFor({ state: "visible" });
     for (const theme of THEMES) await scan(page, theme);
 

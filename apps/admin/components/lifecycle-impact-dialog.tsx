@@ -67,14 +67,18 @@ export function LifecycleImpactDialog({
   // The preview is read ON OPEN and not before: it is a point-in-time answer with
   // a 15-minute envelope, so fetching it while the dialog is closed would hand
   // the operator a token that is already older than the question they are asked.
-  const { result, query } = useCustom<LifecycleImpact>({
+  const { query } = useCustom<LifecycleImpact>({
     url: impactUrl,
     method: "get",
     queryOptions: { enabled: open },
   });
   const { mutate, mutation } = useCustomMutation();
 
-  const impact = result?.data;
+  // Read the PREVIEW off the query, not off `result`: Refine's `result.data`
+  // falls back to a frozen `{}` when the query has no answer yet, so a
+  // presence check against it is always true and `impact.affected` blows up on
+  // the very first render (the dialog body is built eagerly, closed or not).
+  const impact = query.data?.data;
 
   return (
     <Dialog

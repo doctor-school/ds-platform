@@ -107,7 +107,7 @@ test.describe("012 EARS-6 — event↔project relationships in the live admin", 
       .getByTestId("event-project-link-select")
       .selectOption({ label: projectA.title });
     await page.getByTestId("event-project-link-submit").click();
-    await expect(page.getByTestId("event-projects-notice")).toHaveText(
+    await expect(page.getByTestId("event-projects-notice")).toContainText(
       "Связь добавлена.",
     );
     await expect(page.getByTestId("event-projects-panel")).toContainText(
@@ -146,6 +146,15 @@ test.describe("012 EARS-6 — event↔project relationships in the live admin", 
 
     // ── Retire: the preview is READ, its rows are RENDERED, then it confirms ─
     await openProjectsTab(page, eventUrl);
+    // BOTH projects are linked by now (the duplicate arc above linked B from the
+    // other tab), so the retired one is named from the row itself rather than
+    // assumed — the list order is the API's to decide, not this spec's.
+    const retiredTitle = (
+      await page
+        .locator('[data-testid^="event-project-title-"]')
+        .first()
+        .innerText()
+    ).trim();
     const retireTrigger = page
       .locator('[data-testid^="event-project-retire-"]')
       .first();
@@ -199,15 +208,25 @@ test.describe("012 EARS-6 — event↔project relationships in the live admin", 
 
     // ── The honest confirmation applies it ─────────────────────────────────
     await page.getByRole("dialog").locator('[data-testid$="-submit"]').click();
-    await expect(page.getByTestId("event-projects-notice")).toHaveText(
+    await expect(page.getByTestId("event-projects-notice")).toContainText(
       "Связь снята.",
     );
 
     // ── The retired link is hidden by default and listed behind the toggle ──
-    await expect(page.getByTestId("event-projects-empty")).toBeVisible();
-    await page.getByTestId("event-projects-show-retired").check();
+    // The retired link left the ACTIVE list (the other link is still there) and
+    // is only readable once the operator asks for retired rows.
+    await expect(
+      page.getByTestId("event-projects-panel").getByText(retiredTitle),
+    ).toHaveCount(0);
+    // The DS `Switch` is a real checkbox rendered `sr-only` behind its painted
+    // track, so a user (and this spec) clicks the wrapping label, not the input —
+    // `.check()` on the input is intercepted by the track, as a mouse would be.
+    await page
+      .getByTestId("event-projects-show-retired")
+      .locator("xpath=ancestor::label[1]")
+      .click();
     await expect(page.getByTestId("event-projects-retired")).toContainText(
-      projectA.title,
+      retiredTitle,
     );
 
     // ── Restore moves the SAME row back ────────────────────────────────────
@@ -225,7 +244,7 @@ test.describe("012 EARS-6 — event↔project relationships in the live admin", 
       "Вернуть связь с проектом?",
     );
     await page.getByRole("dialog").locator('[data-testid$="-submit"]').click();
-    await expect(page.getByTestId("event-projects-notice")).toHaveText(
+    await expect(page.getByTestId("event-projects-notice")).toContainText(
       "Связь возвращена.",
     );
     // Same row id ⇒ restored, not reinserted (the §2.1 retained-join contract).

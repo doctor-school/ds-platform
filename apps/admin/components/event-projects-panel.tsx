@@ -50,7 +50,7 @@ export function EventProjectsPanel({
     ...(mode === "event" ? { eventId: entityId } : { projectId: entityId }),
     includeRetired: true,
   });
-  const { result, query } = useCustom<EventProjectAdminList>({
+  const { query } = useCustom<EventProjectAdminList>({
     url: listUrl,
     method: "get",
   });
@@ -70,7 +70,10 @@ export function EventProjectsPanel({
     return <p className="text-sm text-muted-foreground">{t("common.loading")}</p>;
   }
 
-  const list = result?.data;
+  // The QUERY is the source of presence, not `result`: Refine's `result.data`
+  // substitutes a frozen `{}` when the query has no answer, so a check against it
+  // reads "loaded" for a failed read and then trips over `list.data`.
+  const list = query.data?.data;
   if (!list) {
     return (
       <Alert variant="danger" data-testid="event-projects-error">
@@ -255,12 +258,12 @@ function LinkForm({
 
   const query = new URLSearchParams({ page: "1", pageSize: "50" });
   if (search.trim().length > 0) query.set("q", search.trim());
-  const { result } = useCustom<ProjectAdminList>({
+  const { query: projectsQuery } = useCustom<ProjectAdminList>({
     url: `/v1/admin/projects?${query.toString()}`,
     method: "get",
   });
 
-  const options = (result?.data.data ?? []).filter(
+  const options = (projectsQuery.data?.data.data ?? []).filter(
     (project) => !linkedProjectIds.includes(project.id),
   );
 

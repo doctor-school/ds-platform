@@ -3,11 +3,14 @@ import {
   boolean,
   check,
   customType,
+  index,
   pgTable,
   text,
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
+
+import { recordStatus } from "./lifecycle.js";
 
 // `citext` (case-insensitive text) is a Postgres extension type, not a native
 // drizzle column. The migration prepends `CREATE EXTENSION IF NOT EXISTS citext`
@@ -48,6 +51,28 @@ export const users = pgTable(
     // Zitadel-deactivated user already cannot obtain tokens). Reactivation
     // clears it back to null when the user reappears active in Zitadel.
     deactivatedAt: timestamp("deactivated_at", { withTimezone: true }),
+    /**
+     * #1278 retained-row lifecycle (ADR-0003 design §3.6) — a SEPARATE axis from
+     * `deactivated_at`, not a rename of it:
+     *
+     *   * `deactivated_at` is the IdP MIRROR flag (EARS-19, #753) — Zitadel, the
+     *     identity SoT, reported this user removed or inactive. It says nothing
+     *     about the platform's own record and is cleared again when the user
+     *     reappears active upstream.
+     *   * `record_status` / `deleted_at` is the PLATFORM record lifecycle: is
+     *     this row part of the live domain at all. Retiring is
+     *     `record_status = 'retired'` + `deleted_at = now()` in one transaction.
+     *
+     * A user row is never physically deleted — `audit_ledger`,
+     * `consent_records`, `registrations` and `presence_beats` all reference it
+     * with `RESTRICT` FKs (§3.6 rule 4), and the `users_email_or_phone` CHECK
+     * requires the identifiers to persist. Erasing the PERSON's data is ADR-0009
+     * value erasure on the retained row, orthogonal to this lifecycle (§3.6 rule
+     * 6): a readable email behind a set `deleted_at` does not satisfy an erasure
+     * request.
+     */
+    recordStatus: recordStatus("record_status").notNull().default("active"),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -60,6 +85,15 @@ export const users = pgTable(
       "users_email_or_phone",
       sql`${t.email} IS NOT NULL OR ${t.phone} IS NOT NULL`,
     ),
+    check(
+      "users_retired_iff_deleted",
+      sql`(${t.recordStatus} = 'retired') = (${t.deletedAt} IS NOT NULL)`,
+    ),
+    // §3.6 rule 3: every product read path resolves a LIVE mirror row by
+    // `zitadel_sub`; the partial index serves exactly that lookup.
+    index("users_active_zitadel_sub_idx")
+      .on(t.zitadelSub)
+      .where(sql`${t.deletedAt} IS NULL`),
   ],
 );
 

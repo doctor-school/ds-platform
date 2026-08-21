@@ -40,6 +40,10 @@ function baseEvent(programPdfRef: string | null): Event {
     liveAt: null,
     // 014 (#1339) — the operator's recording-readiness date; unset here.
     recordingExpectedBy: null,
+    // #1278 — the ADR-0003 §3.6 retained-row lifecycle. A fixture event is a
+    // live record, so it is `active` with no `deleted_at`.
+    recordStatus: "active",
+    deletedAt: null,
     createdAt: new Date("2026-07-01T00:00:00.000Z"),
     updatedAt: new Date("2026-07-01T00:00:00.000Z"),
   };

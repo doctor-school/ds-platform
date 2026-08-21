@@ -18,6 +18,7 @@ import {
   RELAXED_RATE_LIMIT,
 } from "../setup/rate-limit.js";
 import { deleteUserFixture } from "../setup/fixture-cleanup.js";
+import { asSlotConflict } from "../../src/taxonomy/taxonomy.errors.js";
 
 // 012 EARS-7 (#1289) — the explicit expert↔legacy-speaker match over the REAL
 // stack: Fastify + the 011 admin session + Postgres.
@@ -610,6 +611,112 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       });
       expect(publishFirst.statusCode).toBe(409);
       expect(problem(publishFirst).errorCode).toBe("SPEAKER_POSITION_OCCUPIED");
+    });
+
+    it("012 EARS-7: when a second link lands on a position an ACTIVE link already holds, the system shall refuse it as an occupied slot even while both experts are still invisible", async () => {
+      // The browser path, and the defect it exposed. An expert authored in the
+      // admin starts DRAFT, so it is not eligible and the VISIBLE projection
+      // shows neither link — but `event_experts_event_position_active_uniq` is
+      // eligibility-blind and both rows are ACTIVE, so the second insert used to
+      // die on the index and surface as an unclassified 500. The same-table rule
+      // is now checked where the cross-table one is, under the §2.3 locks.
+      const eventId = await insertEvent();
+      const first = await createLink({
+        payload: {
+          eventId,
+          expertId: await insertDraftExpert(),
+          role: "Докладчик",
+          position: 1,
+        },
+      });
+      expect(first.statusCode).toBe(201);
+
+      const second = await createLink({
+        payload: {
+          eventId,
+          expertId: await insertDraftExpert(),
+          role: "Докладчик",
+          position: 1,
+        },
+      });
+      expect(second.statusCode).toBe(409);
+      expect(problem(second).errorCode).toBe("SPEAKER_POSITION_OCCUPIED");
+
+      // A free slot is still free, and MOVING onto the taken one is refused by
+      // the same rule — an edit reaches the index exactly as a create does.
+      const moved = await createLink({
+        payload: {
+          eventId,
+          expertId: await insertDraftExpert(),
+          role: "Докладчик",
+          position: 2,
+        },
+      });
+      expect(moved.statusCode).toBe(201);
+      const collide = await patchLink(body(moved).id, {
+        payload: { position: 1 },
+        ifMatch: moved.headers.etag as string,
+      });
+      expect(collide.statusCode).toBe(409);
+      expect(problem(collide).errorCode).toBe("SPEAKER_POSITION_OCCUPIED");
+
+      // A RETIRED link frees its slot, mirroring the index's `WHERE status =
+      // 'active'` — otherwise a retired row would squat forever.
+      const retired = await transitionLink(body(first).id, "retire", {
+        ifMatch: first.headers.etag as string,
+      });
+      expect(retired.statusCode).toBe(200);
+      const reused = await patchLink(body(moved).id, {
+        payload: { position: 1 },
+        ifMatch: moved.headers.etag as string,
+      });
+      expect(reused.statusCode).toBe(200);
+    });
+
+    it("012 EARS-7: a slot-index violation that beats the in-transaction check shall still answer 409, never an opaque 500", async () => {
+      // Defense in depth. The pre-check above runs under the §2.3 locks, but no
+      // application check can be proven to beat every interleaving, and an
+      // unmapped `23505` reaches the caller as a 500 for what is an ordinary
+      // refusal. This drives the REAL constraint — so a rename of the index is a
+      // failing test here rather than a silent 500 in production — and asserts
+      // the classifier the repository writes are wrapped in.
+      const eventId = await insertEvent();
+      const expertId = await insertDraftExpert();
+      const other = await insertDraftExpert();
+      await pool.query(
+        `INSERT INTO event_experts (event_id, expert_id, role, position)
+           VALUES ($1, $2, 'Докладчик', 7)`,
+        [eventId, expertId],
+      );
+      const raw = await pool
+        .query(
+          `INSERT INTO event_experts (event_id, expert_id, role, position)
+             VALUES ($1, $2, 'Докладчик', 7)`,
+          [eventId, other],
+        )
+        .then(
+          () => null,
+          (err: unknown) => err,
+        );
+      expect(raw).not.toBeNull();
+      const classified = asSlotConflict(raw);
+      expect(classified).not.toBeNull();
+      expect(classified!.errorCode).toBe("SPEAKER_POSITION_OCCUPIED");
+      expect(classified!.getStatus()).toBe(409);
+
+      // Anything that is NOT a slot index stays loud: the pair index is a
+      // different refusal and must not be laundered into a position message.
+      const pairViolation = await pool
+        .query(
+          `INSERT INTO event_experts (event_id, expert_id, role, position)
+             VALUES ($1, $2, 'Докладчик', 8)`,
+          [eventId, expertId],
+        )
+        .then(
+          () => null,
+          (err: unknown) => err,
+        );
+      expect(asSlotConflict(pairViolation)).toBeNull();
     });
 
     it("012 EARS-7: when the same expert is already linked to the event, the system shall refuse a second link and point at the restore instead", async () => {

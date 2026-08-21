@@ -5,6 +5,7 @@ import { eventExperts, events, eventSpeakers, experts } from "@ds/db";
 import type { AdminEventExpertListQuery } from "@ds/schemas";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
 import { withRequestAuditContext } from "../audit/audit-context.tx.js";
+import { withSlotConflictMapping } from "./taxonomy.errors.js";
 
 // 012 EARS-7 (#1289) — Drizzle data access for the `event_experts` join, shaped
 // like the entity repositories: every mutating path runs through
@@ -153,9 +154,11 @@ export class EventExpertsRepository {
   }
 
   async insert(tx: Tx, values: EventExpertInsert): Promise<EventExpert> {
-    const [row] = await tx.insert(eventExperts).values(values).returning();
-    if (!row) throw new Error("event_expert insert returned no row");
-    return row;
+    return withSlotConflictMapping(async () => {
+      const [row] = await tx.insert(eventExperts).values(values).returning();
+      if (!row) throw new Error("event_expert insert returned no row");
+      return row;
+    });
   }
 
   async findById(id: string): Promise<EventExpert | null> {
@@ -215,18 +218,23 @@ export class EventExpertsRepository {
     expectedVersion: number,
     patch: EventExpertPatch,
   ): Promise<EventExpert | null> {
-    const [row] = await tx
-      .update(eventExperts)
-      .set({
-        ...patch,
-        version: sql`${eventExperts.version} + 1`,
-        updatedAt: new Date(),
-      })
-      .where(
-        and(eq(eventExperts.id, id), eq(eventExperts.version, expectedVersion)),
-      )
-      .returning();
-    return row ?? null;
+    return withSlotConflictMapping(async () => {
+      const [row] = await tx
+        .update(eventExperts)
+        .set({
+          ...patch,
+          version: sql`${eventExperts.version} + 1`,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(eventExperts.id, id),
+            eq(eventExperts.version, expectedVersion),
+          ),
+        )
+        .returning();
+      return row ?? null;
+    });
   }
 
   /**

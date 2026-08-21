@@ -79,6 +79,18 @@ interface VisibleRow {
   position: number;
 }
 
+/**
+ * The slot-relevant shape of one expert link — the candidate state of the event's
+ * links AFTER the command under evaluation, before it is written.
+ */
+interface LinkSlot {
+  id: string;
+  expertId: string;
+  position: number;
+  legacySpeakerId: string | null;
+  status: "active" | "retired";
+}
+
 @Injectable()
 export class EventExpertsService {
   // Explicit @Inject tokens on every dependency — the root-level
@@ -187,22 +199,18 @@ export class EventExpertsService {
       this.assertLegacyMatch(legacySpeakerId, speakers, links, null);
 
       const eligibility = await this.eligibility(tx, links, expert);
-      assertNoSlotCollision(
-        projection(
-          [
-            ...links,
-            {
-              id: PENDING_ROW_ID,
-              expertId,
-              position,
-              legacySpeakerId,
-              status: "active",
-            },
-          ],
-          speakers,
-          eligibility,
-        ),
-      );
+      const nextLinks: LinkSlot[] = [
+        ...links,
+        {
+          id: PENDING_ROW_ID,
+          expertId,
+          position,
+          legacySpeakerId,
+          status: "active",
+        },
+      ];
+      assertNoLinkSlotCollision(nextLinks);
+      assertNoSlotCollision(projection(nextLinks, speakers, eligibility));
 
       const created = await this.repo.insert(tx, {
         eventId,
@@ -265,23 +273,19 @@ export class EventExpertsService {
       }
 
       const eligibility = await this.eligibility(tx, links, expert);
-      assertNoSlotCollision(
-        projection(
-          links.map((link) =>
-            link.id === current.id
-              ? {
-                  id: link.id,
-                  expertId: link.expertId,
-                  position: nextPosition,
-                  legacySpeakerId: nextLegacyId,
-                  status: link.status,
-                }
-              : link,
-          ),
-          speakers,
-          eligibility,
-        ),
+      const nextLinks: LinkSlot[] = links.map((link) =>
+        link.id === current.id
+          ? {
+              id: link.id,
+              expertId: link.expertId,
+              position: nextPosition,
+              legacySpeakerId: nextLegacyId,
+              status: link.status,
+            }
+          : link,
       );
+      assertNoLinkSlotCollision(nextLinks);
+      assertNoSlotCollision(projection(nextLinks, speakers, eligibility));
 
       const updated = await this.repo.updateVersioned(
         tx,
@@ -366,15 +370,11 @@ export class EventExpertsService {
       const links = await this.repo.linksOfEvent(tx, current.eventId);
       const speakers = await this.repo.speakersOfEvent(tx, current.eventId);
       const eligibility = await this.eligibility(tx, links, expert);
-      assertNoSlotCollision(
-        projection(
-          links.map((link) =>
-            link.id === current.id ? { ...link, status: nextStatus } : link,
-          ),
-          speakers,
-          eligibility,
-        ),
+      const nextLinks: LinkSlot[] = links.map((link) =>
+        link.id === current.id ? { ...link, status: nextStatus } : link,
       );
+      assertNoLinkSlotCollision(nextLinks);
+      assertNoSlotCollision(projection(nextLinks, speakers, eligibility));
 
       const updated = await this.repo.updateVersioned(
         tx,
@@ -497,13 +497,7 @@ function assertLinkable(expert: ExpertLifecycle): void {
  * speaker: that is what keeps the public page from silently losing a name.
  */
 function projection(
-  links: Array<{
-    id: string;
-    expertId: string;
-    position: number;
-    legacySpeakerId: string | null;
-    status: "active" | "retired";
-  }>,
+  links: readonly LinkSlot[],
   speakers: LegacySpeakerRow[],
   eligibility: Map<string, boolean>,
 ): VisibleRow[] {
@@ -540,6 +534,33 @@ function projection(
  * expert link and an unsuppressed legacy row is not expressible as an index, so
  * it is refused here.
  */
+/**
+ * The SAME-table half of the §4 slot rule, mirroring the partial unique index
+ * `event_experts_event_position_active_uniq` exactly.
+ *
+ * `projection()` hides an active link whose expert is not eligible (draft or
+ * soft-deleted) — such a link shows nothing on the site, so it cannot collide
+ * with anything VISIBLE. The index is eligibility-blind, though: EVERY active row
+ * holds its `(event_id, position)` slot no matter who it points at. Checking only
+ * the visible projection therefore let a second link claim a slot an
+ * invisible-but-active link already owned, and the insert died on the index
+ * instead of answering 409 — the exact defect the browser flow hit, since experts
+ * authored in the admin start out unpublished.
+ */
+function assertNoLinkSlotCollision(links: readonly LinkSlot[]): void {
+  const seen = new Set<number>();
+  for (const link of links) {
+    if (link.status !== "active") continue;
+    if (seen.has(link.position)) {
+      throw new TaxonomyError(
+        "SPEAKER_POSITION_OCCUPIED",
+        "another expert link already holds this position on the event",
+      );
+    }
+    seen.add(link.position);
+  }
+}
+
 function assertNoSlotCollision(rows: VisibleRow[]): void {
   const seen = new Set<number>();
   for (const row of rows) {

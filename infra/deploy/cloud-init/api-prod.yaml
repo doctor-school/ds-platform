@@ -28,6 +28,25 @@ write_files:
   - path: /etc/ds-platform/.keep
     content: ""
     permissions: "0700"
+  # Standing build-cache GC (#1419). `pnpm deploy:prod` builds the api/portal
+  # images ON THIS BOX, and BuildKit keeps every layer it ever produced: the
+  # cache grew unbounded to 54.6 GB / 77% disk before the 2026-08-21 cleanup.
+  # `builder.gc` makes the daemon itself hold the cache under 10 GB, so the box
+  # is safe even if a deploy never runs the post-deploy prune step. Written here
+  # BEFORE the `get.docker.com` install in runcmd, so dockerd reads it on its
+  # very first start. Same 10 GB cap as the deploy-script prune
+  # (`tools/deploy/prod.mjs`, step "#1419"), which is the belt to this braces.
+  - path: /etc/docker/daemon.json
+    content: |
+      {
+        "builder": {
+          "gc": {
+            "enabled": true,
+            "defaultKeepStorage": "10GB"
+          }
+        }
+      }
+    permissions: "0644"
 
 runcmd:
   # Docker CE + compose plugin (official convenience script).

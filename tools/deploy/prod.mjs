@@ -838,6 +838,41 @@ echo "retained ds-api tags:"; sudo docker images ds-api --format '  {{.Tag}} ({{
   step("DSO-128: prod smoke (--expect-sha)");
   await runSmoke(sha);
 
+  // #1419: build-cache GC. The on-box build leaves 1-3 GB of BuildKit cache per
+  // deploy and nothing ever reclaimed it — api-prod reached 54.6 GB of cache /
+  // 77% disk before the 2026-08-21 manual cleanup. This caps the cache at the
+  // same 10 GB the daemon-level `builder.gc.defaultKeepStorage` policy uses
+  // (`/etc/docker/daemon.json`, provisioned by cloud-init/api-prod.yaml); the
+  // step keeps the cap enforced on a box whose daemon config predates it.
+  //
+  // Placed AFTER the smoke gate on purpose: until smoke passes, the build cache
+  // is a rollback asset — a failed deploy is re-built or reverted on-box, and a
+  // cold cache turns that into a 10-20 min rebuild. Prune only once the deploy
+  // is verified good.
+  //
+  // `buildx prune --reserved-space`, NOT `builder prune --filter until=`: this
+  // daemon runs the containerd snapshotter (driver=overlayfs), where the
+  // `until=` filter can silently reclaim 0 bytes.
+  //
+  // NON-FATAL by contract: the deploy has already succeeded and been smoked, so
+  // a prune failure must never fail it — hence `|| true` plus the try/catch.
+  step("#1419: build-cache GC (cap BuildKit cache at 10 GB)");
+  t = Date.now();
+  try {
+    await sshScript(
+      API_PROD,
+      `sudo docker buildx prune -f --reserved-space 10GB || true
+echo "build cache after prune:"; sudo docker system df --format '  {{.Type}}: {{.Size}} (reclaimable {{.Reclaimable}})' || true
+`,
+      { label: "build-cache prune" },
+    );
+    ok("build cache capped at 10 GB", t);
+  } catch (e) {
+    console.log(
+      `  ⚠ build-cache prune errored (deploy already succeeded): ${e?.message ?? String(e)}`,
+    );
+  }
+
   step("Cut the release at the deployed SHA (#996/§10.5 — Option A)");
   cutReleaseAtDeployedSha(sha);
 

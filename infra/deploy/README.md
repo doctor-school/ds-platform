@@ -887,6 +887,67 @@ is the one step whose omission is silent at the time and loud two weeks later: t
 retired host keeps answering until DNS is actually removed, so a stale probe stays
 green and the miss surfaces only when the name dies.
 
+## Build-cache GC on `api-prod` (#1419)
+
+`api-prod` builds the `ds-api` / `ds-portal` / `ds-admin` images **on the box**, so
+every `pnpm deploy:prod` adds 1–3 GB of BuildKit cache. Nothing reclaimed it: the
+cache reached **54.6 GB / 77% disk** before the 2026-08-21 manual cleanup dropped
+the box back to 28%. (SHA-tagged _images_ were already bounded — `prod.mjs` keeps
+the last 3 tags per repo, DSO-127 — the _build cache_ was the unbounded half.)
+
+The policy is a 10 GB cap enforced from two sides:
+
+| Layer                                               | Where                                 | Applies                                          |
+| --------------------------------------------------- | ------------------------------------- | ------------------------------------------------ |
+| Daemon GC — `builder.gc.defaultKeepStorage: "10GB"` | `/etc/docker/daemon.json`             | continuously, in dockerd, deploy or no deploy    |
+| Post-deploy prune — `buildx prune --reserved-space` | `tools/deploy/prod.mjs`, step `#1419` | once per successful deploy, after the smoke gate |
+
+**`cloud-init/api-prod.yaml` writes `daemon.json` only on box (re-)creation.** It
+never retro-applies to a running box — the live `api-prod` was provisioned before
+this policy existed, so its daemon still has no `builder.gc` block. Until the
+one-time apply below is done, the deploy-script prune step is what keeps the box
+under the cap (it runs on every successful deploy and needs no daemon change).
+
+**One-time apply on the EXISTING box.** Restarting dockerd restarts every
+container — do it in a deploy window, not during traffic. Brief downtime of the
+whole stack (api, portal, Caddy, Zitadel) is expected; there is no way to reload
+`builder.gc` without a daemon restart.
+
+```bash
+ssh ds-api-prod
+# 1. daemon.json is absent on the as-built box — create it. If it EXISTS, merge
+#    the `builder` key into the existing JSON instead of overwriting the file.
+sudo test -f /etc/docker/daemon.json && sudo cat /etc/docker/daemon.json   # inspect first
+sudo install -d -m 0755 /etc/docker
+sudo tee /etc/docker/daemon.json >/dev/null <<'JSON'
+{
+  "builder": {
+    "gc": {
+      "enabled": true,
+      "defaultKeepStorage": "10GB"
+    }
+  }
+}
+JSON
+# 2. Validate BEFORE restarting — a malformed daemon.json leaves dockerd DOWN.
+sudo dockerd --validate --config-file /etc/docker/daemon.json
+# 3. Restart + verify the stack came back.
+sudo systemctl restart docker
+sudo docker ps --format '{{.Names}}\t{{.Status}}'
+sudo docker system df
+```
+
+Then re-run `pnpm deploy:smoke` from the workstation to confirm the stack is
+serving.
+
+**Trap — never use `docker builder prune --filter until=…` here.** This daemon
+runs the **containerd snapshotter** (`driver=overlayfs`), where the `until=`
+filter can report success while reclaiming **0 bytes**. Use
+`docker buildx prune -f --reserved-space 10GB` (verified supported on-box:
+docker 29.6.1), which is what `prod.mjs` runs.
+
+Scope: `api-prod` only. `data-prod` builds nothing and needs no build-cache GC.
+
 ## Key gotchas
 
 - **152-ФЗ region/zone:** keep both VPSes + the VPC in the same **RF** region. A

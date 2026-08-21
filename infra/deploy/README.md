@@ -897,10 +897,23 @@ the last 3 tags per repo, DSO-127 — the _build cache_ was the unbounded half.)
 
 The policy is a 10 GB cap enforced from two sides:
 
-| Layer                                               | Where                                 | Applies                                          |
-| --------------------------------------------------- | ------------------------------------- | ------------------------------------------------ |
-| Daemon GC — `builder.gc.defaultKeepStorage: "10GB"` | `/etc/docker/daemon.json`             | continuously, in dockerd, deploy or no deploy    |
-| Post-deploy prune — `buildx prune --reserved-space` | `tools/deploy/prod.mjs`, step `#1419` | once per successful deploy, after the smoke gate |
+| Layer                                                 | Where                                 | Applies                                          |
+| ----------------------------------------------------- | ------------------------------------- | ------------------------------------------------ |
+| Daemon GC — `builder.gc.defaultReservedSpace: "10GB"` | `/etc/docker/daemon.json`             | continuously, in dockerd, deploy or no deploy    |
+| Post-deploy prune — `buildx prune --reserved-space`   | `tools/deploy/prod.mjs`, step `#1419` | once per successful deploy, after the smoke gate |
+
+Both sides carry the **same 10 GB figure**. In code it is the single constant
+`BUILD_CACHE_RESERVED_SPACE` (`tools/deploy/prod.mjs`); YAML cannot import a JS
+constant, so the cloud-init value is kept in sync by hand — change one, change
+all three (constant, cloud-init, this section) in the same commit, or the box's
+real ceiling silently becomes whichever is looser.
+
+`defaultReservedSpace` is the modern (docker 28+) spelling, matching the
+`--reserved-space` CLI flag the prune step uses. **Validated on `ds-api-prod`
+(docker 29.6.1) on 2026-08-21: `sudo dockerd --validate --config-file …` returns
+`configuration OK` for BOTH `defaultReservedSpace` and the legacy
+`defaultKeepStorage`.** The modern key is chosen for forward-compatibility, not
+because the legacy one is rejected.
 
 **`cloud-init/api-prod.yaml` writes `daemon.json` only on box (re-)creation.** It
 never retro-applies to a running box — the live `api-prod` was provisioned before
@@ -913,25 +926,34 @@ container — do it in a deploy window, not during traffic. Brief downtime of th
 whole stack (api, portal, Caddy, Zitadel) is expected; there is no way to reload
 `builder.gc` without a daemon restart.
 
+`/etc/docker/daemon.json` is **absent** on the live box (verified 2026-08-21), so
+this creates it — there is no existing daemon config to merge with. Stage the
+candidate in `/tmp` and **validate it there first**: a malformed
+`/etc/docker/daemon.json` stops dockerd from starting, so the file must never
+land at its real path unvalidated.
+
 ```bash
 ssh ds-api-prod
-# 1. daemon.json is absent on the as-built box — create it. If it EXISTS, merge
-#    the `builder` key into the existing JSON instead of overwriting the file.
-sudo test -f /etc/docker/daemon.json && sudo cat /etc/docker/daemon.json   # inspect first
-sudo install -d -m 0755 /etc/docker
-sudo tee /etc/docker/daemon.json >/dev/null <<'JSON'
+# 0. Confirm the premise still holds — expect "no daemon.json".
+sudo test -f /etc/docker/daemon.json && sudo cat /etc/docker/daemon.json || echo "no daemon.json"
+# 1. Stage the candidate in /tmp — NOT at /etc/docker/daemon.json yet.
+cat >/tmp/daemon.json <<'JSON'
 {
   "builder": {
     "gc": {
       "enabled": true,
-      "defaultKeepStorage": "10GB"
+      "defaultReservedSpace": "10GB"
     }
   }
 }
 JSON
-# 2. Validate BEFORE restarting — a malformed daemon.json leaves dockerd DOWN.
-sudo dockerd --validate --config-file /etc/docker/daemon.json
-# 3. Restart + verify the stack came back.
+# 2. Validate the CANDIDATE. `--validate` only parses the config; it does not
+#    touch the running daemon. Go on to step 3 only on `configuration OK`.
+sudo dockerd --validate --config-file /tmp/daemon.json
+# 3. Only now install it at the real path.
+sudo install -d -m 0755 /etc/docker
+sudo install -m 0644 -o root -g root /tmp/daemon.json /etc/docker/daemon.json
+# 4. Restart (deploy window) + verify the stack came back.
 sudo systemctl restart docker
 sudo docker ps --format '{{.Names}}\t{{.Status}}'
 sudo docker system df
@@ -939,6 +961,11 @@ sudo docker system df
 
 Then re-run `pnpm deploy:smoke` from the workstation to confirm the stack is
 serving.
+
+Cloud-init runs the same `dockerd --validate` on first boot (a `runcmd` step
+after the Docker install). It is deliberately non-blocking — it logs a loud
+`WARNING (#1419)` to `/var/log/cloud-init-output.log` rather than halting and
+leaving a half-provisioned box.
 
 **Trap — never use `docker builder prune --filter until=…` here.** This daemon
 runs the **containerd snapshotter** (`driver=overlayfs`), where the `until=`

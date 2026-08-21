@@ -54,6 +54,14 @@ const DATA_PROD = process.env.DS_DATA_PROD_SSH || "ds-data-prod";
 const REMOTE_TREE = "~/ds-platform";
 const VPC_IP = process.env.DS_DATA_PROD_VPC_IP || "192.168.0.10";
 const IMAGE_RETENTION = 3;
+// #1419: build-cache cap. SINGLE SOURCE for the post-deploy prune below. The
+// daemon-level policy in `infra/deploy/cloud-init/api-prod.yaml`
+// (`builder.gc.defaultReservedSpace` in /etc/docker/daemon.json) MUST carry the
+// same figure — the two enforce one cap from different sides, and a silent
+// disagreement makes the box's real ceiling whichever is looser. Changing this
+// constant means changing the cloud-init value and the `infra/deploy/README.md`
+// "Build-cache GC" section in the same commit.
+const BUILD_CACHE_RESERVED_SPACE = "10GB";
 
 // Reproducible on-box builds (#486). By default `docker compose build` attaches a
 // BuildKit *provenance* attestation whose metadata varies per build, so the image
@@ -841,9 +849,10 @@ echo "retained ds-api tags:"; sudo docker images ds-api --format '  {{.Tag}} ({{
   // #1419: build-cache GC. The on-box build leaves 1-3 GB of BuildKit cache per
   // deploy and nothing ever reclaimed it — api-prod reached 54.6 GB of cache /
   // 77% disk before the 2026-08-21 manual cleanup. This caps the cache at the
-  // same 10 GB the daemon-level `builder.gc.defaultKeepStorage` policy uses
-  // (`/etc/docker/daemon.json`, provisioned by cloud-init/api-prod.yaml); the
-  // step keeps the cap enforced on a box whose daemon config predates it.
+  // same figure the daemon-level `builder.gc.defaultReservedSpace` policy uses
+  // (`/etc/docker/daemon.json`, provisioned by cloud-init/api-prod.yaml) — one
+  // constant, `BUILD_CACHE_RESERVED_SPACE`; the step keeps the cap enforced on a
+  // box whose daemon config predates the policy.
   //
   // Placed AFTER the smoke gate on purpose: until smoke passes, the build cache
   // is a rollback asset — a failed deploy is re-built or reverted on-box, and a
@@ -856,17 +865,24 @@ echo "retained ds-api tags:"; sudo docker images ds-api --format '  {{.Tag}} ({{
   //
   // NON-FATAL by contract: the deploy has already succeeded and been smoked, so
   // a prune failure must never fail it — hence `|| true` plus the try/catch.
-  step("#1419: build-cache GC (cap BuildKit cache at 10 GB)");
+  step(
+    `#1419: build-cache GC (cap BuildKit cache at ${BUILD_CACHE_RESERVED_SPACE})`,
+  );
   t = Date.now();
   try {
     await sshScript(
       API_PROD,
-      `sudo docker buildx prune -f --reserved-space 10GB || true
+      `sudo docker buildx prune -f --reserved-space ${BUILD_CACHE_RESERVED_SPACE} || true
 echo "build cache after prune:"; sudo docker system df --format '  {{.Type}}: {{.Size}} (reclaimable {{.Reclaimable}})' || true
 `,
-      { label: "build-cache prune" },
+      // Build-class stall budget, not the 2-min default: pruning tens of GB of
+      // BuildKit cache walks the snapshotter's content store and can go minutes
+      // without writing a line — the first prune on a box that has never been
+      // GC'd is the slowest one. A stall abort here would only add noise to a
+      // deploy that has already passed its smoke gate.
+      { label: "build-cache prune", stallBudgetMs: STALL_BUDGET_BUILD_MS },
     );
-    ok("build cache capped at 10 GB", t);
+    ok(`build cache capped at ${BUILD_CACHE_RESERVED_SPACE}`, t);
   } catch (e) {
     console.log(
       `  ⚠ build-cache prune errored (deploy already succeeded): ${e?.message ?? String(e)}`,

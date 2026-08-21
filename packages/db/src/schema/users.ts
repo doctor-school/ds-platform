@@ -90,10 +90,13 @@ export const users = pgTable(
       sql`(${t.recordStatus} = 'retired') = (${t.deletedAt} IS NOT NULL)`,
     ),
     // §3.6 rule 3: every product read path resolves a LIVE mirror row by
-    // `zitadel_sub`; the partial index serves exactly that lookup.
+    // `zitadel_sub`; the partial index serves exactly that lookup, predicated
+    // on `record_status = 'active'` — the expression the readers use, and the
+    // only one the planner can match (the `retired ⇔ deleted_at` CHECK does not
+    // bridge predicates).
     index("users_active_zitadel_sub_idx")
       .on(t.zitadelSub)
-      .where(sql`${t.deletedAt} IS NULL`),
+      .where(sql`${t.recordStatus} = 'active'`),
   ],
 );
 

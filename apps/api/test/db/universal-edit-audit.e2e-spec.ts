@@ -276,6 +276,27 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(trail[0]!.metadata.pk).toEqual({ event_id: eventId });
     });
 
+    it("010 EARS-6: the pk extractor returns EVERY column of a multi-column primary key", async () => {
+      // No audited table carries a composite PK any more (#1278 moved
+      // `event_speakers` onto a surrogate `id`), so the multi-column arm is
+      // proven against the extractor itself rather than through a trigger:
+      // `audit_ledger` is composite-keyed on `(id, created_at)` and is the one
+      // table deliberately NOT audited (it cannot audit itself), which makes it
+      // a subject with no trigger side effects.
+      const eventId = await insertEvent();
+      const [row] = (await trailRows("events", "insert", "id", eventId)).map(
+        (r) => r.id,
+      );
+      const { rows } = await pool.query<{ pk: Record<string, string> }>(
+        `SELECT audit_extract_pk('audit_ledger'::regclass, to_jsonb(l)) AS pk
+           FROM audit_ledger l WHERE l.id = $1`,
+        [row],
+      );
+      expect(rows).toHaveLength(1);
+      expect(Object.keys(rows[0]!.pk).sort()).toEqual(["created_at", "id"]);
+      expect(rows[0]!.pk.id).toBe(row);
+    });
+
     it("010 EARS-6: all trail rows of one transaction share metadata.txid", async () => {
       const client = await pool.connect();
       let idA: string;

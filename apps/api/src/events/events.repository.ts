@@ -36,8 +36,15 @@ type Db = DrizzleHandle["db"];
  * #1278 (ADR-0003 design §3.6 rule 3) — every default read is the ACTIVE
  * projection. Retired rows stay in the table forever (a removed speaker, a
  * de-configured stream, a retired event are historical facts), so the product
- * read paths have to say so explicitly; `events_active_starts_at_idx` and the
- * partial speaker unique index are built for exactly these predicates.
+ * read paths have to say so explicitly.
+ *
+ * The predicate is `record_status = 'active'` and NOT the equivalent
+ * `deleted_at IS NULL`, and the partial indexes (`events_active_starts_at_idx`,
+ * the speaker slot index, …) are built on the SAME expression on purpose:
+ * Postgres proves a partial index applicable from the query's own restriction
+ * clauses alone and will not derive one predicate from the other through the
+ * `retired ⇔ deleted_at IS NOT NULL` CHECK. Writing the two sides differently
+ * silently costs every one of these reads its index.
  */
 const activeSpeakersOf = (eventId: string) =>
   and(
@@ -411,7 +418,7 @@ export class EventsRepository {
       const speakerRows = await tx
         .select()
         .from(eventSpeakers)
-        .where(eq(eventSpeakers.eventId, id))
+        .where(activeSpeakersOf(id))
         .orderBy(asc(eventSpeakers.position));
       const [streamRow] = await tx
         .select()

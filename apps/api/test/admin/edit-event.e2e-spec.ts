@@ -375,6 +375,43 @@ describe.skipIf(
     expect(back.position).toBe(1);
   });
 
+  it("EARS-2: a lifecycle transition returns the same ACTIVE speaker projection as every other read — a retired speaker is never republished — #1278 §3.6", async () => {
+    // `updateStateWithAudit` (publish / open room / archive) answers with the
+    // event aggregate too. If it read the raw speaker list, the SAME event would
+    // yield two different speaker lists depending on which command produced the
+    // response, and a dropped speaker would reappear on the next transition.
+    const cookie = await session(uniqueEmail("admin"), "platform_admin");
+    const created = await createEvent(cookie);
+    const id = created.id as string;
+
+    const drop = multipartBody({
+      payload: JSON.stringify({ speakers: [validPayload.speakers[0]] }),
+    });
+    const dropped = await app.inject({
+      method: "PATCH",
+      url: `/v1/admin/events/${id}`,
+      headers: admHeaders(cookie, drop.contentType),
+      payload: drop.body,
+    });
+    expect(dropped.statusCode).toBe(200);
+    const rowsAfterDrop = await speakerRows(id);
+    expect(rowsAfterDrop).toHaveLength(2);
+    expect(
+      rowsAfterDrop.filter((r) => r.record_status === "retired"),
+    ).toHaveLength(1);
+
+    const published = await app.inject({
+      method: "POST",
+      url: `/v1/admin/events/${id}/transition`,
+      headers: admHeaders(cookie, "application/json"),
+      payload: { to: "published" },
+    });
+    expect(published.statusCode).toBe(200);
+    expect((published.json() as Record<string, unknown>).speakers).toEqual([
+      validPayload.speakers[0],
+    ]);
+  });
+
   it("EARS-2: a NEW speaker may take the slot a retired one held, and re-ordering the same people keeps their rows — #1278 §3.6", async () => {
     const cookie = await session(uniqueEmail("admin"), "platform_admin");
     const created = await createEvent(cookie);

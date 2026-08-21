@@ -78,10 +78,14 @@ export const registrations = pgTable(
       sql`(${table.recordStatus} = 'retired') = (${table.deletedAt} IS NOT NULL)`,
     ),
     // §3.6 rule 3: the roster and the `EventRegistrationState` flip both read
-    // only live registrations, so the active-row path gets its own partial index.
+    // only live registrations, so the active-row path gets its own partial
+    // index — predicated on `record_status = 'active'`, the exact expression a
+    // reader must use for the planner to pick the index up (a `deleted_at IS
+    // NULL` predicate is equivalent only through the CHECK, which the planner
+    // does not consult).
     index("registrations_active_event_idx")
       .on(table.eventId)
-      .where(sql`${table.deletedAt} IS NULL`),
+      .where(sql`${table.recordStatus} = 'active'`),
   ],
 );
 

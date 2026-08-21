@@ -104,12 +104,20 @@ export const events = pgTable(
       "events_retired_iff_deleted",
       sql`(${t.recordStatus} = 'retired') = (${t.deletedAt} IS NOT NULL)`,
     ),
-    // §3.6 rule 3: the default product/admin read path is `deleted_at IS NULL`,
-    // and a partial index serves exactly that path — the public catalogue scan
-    // never pays for retired rows.
+    // §3.6 rule 3: the default product/admin read path is the ACTIVE
+    // projection, and a partial index serves exactly that path — the public
+    // catalogue scan never pays for retired rows.
+    //
+    // The predicate MUST be spelled the same way the readers spell it —
+    // `record_status = 'active'`, matching `ACTIVE_EVENT` in
+    // `events.repository.ts`. `deleted_at IS NULL` is logically equivalent
+    // through the CHECK above, but the planner proves partial-index
+    // applicability from the query's own restriction clauses and never consults
+    // a CHECK constraint to bridge the two, so an index predicated on the other
+    // column would simply never be used.
     index("events_active_starts_at_idx")
       .on(t.startsAt)
-      .where(sql`${t.deletedAt} IS NULL`),
+      .where(sql`${t.recordStatus} = 'active'`),
   ],
 );
 

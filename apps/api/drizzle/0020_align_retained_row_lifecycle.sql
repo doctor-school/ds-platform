@@ -76,11 +76,11 @@ ALTER TABLE "registrations" ADD CONSTRAINT "registrations_user_id_users_id_fk" F
 ALTER TABLE "registrations" ADD CONSTRAINT "registrations_event_id_events_id_fk" FOREIGN KEY ("event_id") REFERENCES "public"."events"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "presence_beats" ADD CONSTRAINT "presence_beats_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "presence_beats" ADD CONSTRAINT "presence_beats_event_id_events_id_fk" FOREIGN KEY ("event_id") REFERENCES "public"."events"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
-CREATE INDEX "users_active_zitadel_sub_idx" ON "users" USING btree ("zitadel_sub") WHERE "users"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX "users_active_zitadel_sub_idx" ON "users" USING btree ("zitadel_sub") WHERE "users"."record_status" = 'active';--> statement-breakpoint
 CREATE UNIQUE INDEX "event_speakers_event_position_active_uniq" ON "event_speakers" USING btree ("event_id","position") WHERE "event_speakers"."record_status" = 'active';--> statement-breakpoint
 CREATE UNIQUE INDEX "event_speakers_event_id_id_uniq" ON "event_speakers" USING btree ("event_id","id");--> statement-breakpoint
-CREATE INDEX "events_active_starts_at_idx" ON "events" USING btree ("starts_at") WHERE "events"."deleted_at" IS NULL;--> statement-breakpoint
-CREATE INDEX "registrations_active_event_idx" ON "registrations" USING btree ("event_id") WHERE "registrations"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX "events_active_starts_at_idx" ON "events" USING btree ("starts_at") WHERE "events"."record_status" = 'active';--> statement-breakpoint
+CREATE INDEX "registrations_active_event_idx" ON "registrations" USING btree ("event_id") WHERE "registrations"."record_status" = 'active';--> statement-breakpoint
 ALTER TABLE "users" ADD CONSTRAINT "users_retired_iff_deleted" CHECK (("users"."record_status" = 'retired') = ("users"."deleted_at" IS NOT NULL));--> statement-breakpoint
 ALTER TABLE "event_speakers" ADD CONSTRAINT "event_speakers_retired_iff_deleted" CHECK (("event_speakers"."record_status" = 'retired') = ("event_speakers"."deleted_at" IS NOT NULL));--> statement-breakpoint
 ALTER TABLE "event_speakers" ADD CONSTRAINT "event_speakers_position_non_negative" CHECK ("event_speakers"."position" >= 0);--> statement-breakpoint

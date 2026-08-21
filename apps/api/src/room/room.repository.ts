@@ -2,7 +2,7 @@ import { Inject, Injectable } from "@nestjs/common";
 import type { DrizzleHandle } from "@ds/db";
 import { events, streamConfig } from "@ds/db";
 import type { EventLifecycleState, StreamConfig } from "@ds/schemas";
-import { eq, or } from "drizzle-orm";
+import { and, eq, or } from "drizzle-orm";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
 
 type Db = DrizzleHandle["db"];
@@ -57,6 +57,13 @@ export class RoomRepository {
    * `streamConfig: null`, which the EARS-2 read maps to the truthful "stream
    * unavailable" room state. The provider is read from the enum column; the
    * embedRef is a provider-scoped id — never URL-sniffed at any layer.
+   *
+   * Both sides carry the #1278 active predicate (ADR-0003 design §3.6 rule 3).
+   * De-configuring a stream RETIRES its row rather than deleting it, so an event
+   * that ever had a config keeps one forever; without the join predicate the
+   * room would instantiate a player from that tombstone instead of rendering
+   * "stream unavailable". The event side is filtered for the same reason — a
+   * retired event is not roomable — inert only until a retire path lands.
    */
   async findEventForRoom(idOrSlug: string): Promise<EventForRoom | null> {
     const where = UUID_RE.test(idOrSlug)
@@ -71,8 +78,14 @@ export class RoomRepository {
         embedRef: streamConfig.embedRef,
       })
       .from(events)
-      .leftJoin(streamConfig, eq(streamConfig.eventId, events.id))
-      .where(where)
+      .leftJoin(
+        streamConfig,
+        and(
+          eq(streamConfig.eventId, events.id),
+          eq(streamConfig.recordStatus, "active"),
+        ),
+      )
+      .where(and(where, eq(events.recordStatus, "active")))
       .limit(1);
     if (!row) return null;
     return {

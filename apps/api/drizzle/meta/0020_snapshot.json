@@ -257,7 +257,7 @@
             }
           ],
           "isUnique": false,
-          "where": "\"users\".\"deleted_at\" IS NULL",
+          "where": "\"users\".\"record_status\" = 'active'",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -709,7 +709,7 @@
             }
           ],
           "isUnique": false,
-          "where": "\"events\".\"deleted_at\" IS NULL",
+          "where": "\"events\".\"record_status\" = 'active'",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -857,7 +857,7 @@
             }
           ],
           "isUnique": false,
-          "where": "\"registrations\".\"deleted_at\" IS NULL",
+          "where": "\"registrations\".\"record_status\" = 'active'",
           "concurrently": false,
           "method": "btree",
           "with": {}

@@ -37,7 +37,11 @@ nothing is ever physically deleted, every application-owned foreign key is
   nullable `deleted_at`, with a `retired ⇔ deleted_at IS NOT NULL` CHECK (or its
   `expired ⇔ …` equivalent). Removal is the transition, in one transaction;
   restore clears `deleted_at` and returns the row to an active status. Default
-  repositories filter `deleted_at IS NULL` and a partial index serves that path.
+  repositories filter on the STATUS column (`record_status = 'active'`) and the
+  partial indexes are predicated on the very same expression — Postgres matches a
+  partial index against the query's own restriction clauses and will not derive
+  one predicate from the other through the CHECK, so the two sides must be
+  spelled identically or the index is dead weight.
 - **Immutable / append-only** — declares that removal is **unsupported**. These
   tables carry NO lifecycle columns _on purpose_: the absence is the contract, so
   a reader can tell "not yet modelled" from "deliberately unremovable". The only

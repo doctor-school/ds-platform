@@ -221,6 +221,32 @@ const FLOOR_ROUTES: {
     url: `/v1/admin/topics/${ABSENT_ID}`,
     payload: {},
   },
+  // 012 EARS-4 (#1286) — the descriptive partner authoring surface. Same floor as
+  // its siblings: the `platform_admin` guard refuses before validation,
+  // idempotency or the logo upload, so an unfielded request never reaches the
+  // handler and an anonymous caller cannot tell an absent partner from a real one.
+  {
+    endpoint: "GET /v1/admin/partners",
+    method: "GET",
+    url: "/v1/admin/partners",
+  },
+  {
+    endpoint: "GET /v1/admin/partners/:id",
+    method: "GET",
+    url: `/v1/admin/partners/${ABSENT_ID}`,
+  },
+  {
+    endpoint: "POST /v1/admin/partners",
+    method: "POST",
+    url: "/v1/admin/partners",
+    payload: {},
+  },
+  {
+    endpoint: "PATCH /v1/admin/partners/:id",
+    method: "PATCH",
+    url: `/v1/admin/partners/${ABSENT_ID}`,
+    payload: {},
+  },
   // 014 EARS-1/EARS-2/EARS-17 (#1339) — the recording routes hang under an event
   // path but are their own aggregate, and they sit on the same raised floor: the
   // guard refuses before the Idempotency-Key check, so a keyless anonymous

@@ -82,8 +82,44 @@ async function createExpertForScan(page: Page, name: string): Promise<string> {
   return page.url().split("/").pop()!;
 }
 
+/**
+ * Block until nothing on the page is still ANIMATING, so axe samples a settled
+ * state rather than a frame of a transition.
+ *
+ * Why this belongs in every scan and is a root fix, not a mask. The DS controls
+ * carry `transition-all`, and a filled `Button` fades through `disabled:opacity-40`
+ * (`primitives/button.tsx` — RAISED_MOTION) whenever it flips `disabled → enabled`;
+ * the Radix `Dialog` likewise fades its content in. axe EXEMPTS a disabled control
+ * from `color-contrast`, so the first frames in which the rule applies at all are
+ * the mid-fade ones — where a 40%-alpha `bg-primary-action` under white copy
+ * genuinely misses AA. Every state this file scans right after an interaction
+ * (the picker the moment a selection enables the submit, the impact dialog the
+ * moment its loaded preview enables the confirm) lands inside exactly that window,
+ * which is why the violation appeared only in full-suite ordering and never in
+ * isolation. The settled controls are the certified `bg-primary-action` /
+ * `text-primary-foreground` pair the showcase gate already holds at AA. CSS
+ * transitions surface as `Animation` objects, so this waits on the real end
+ * condition instead of a fixed sleep; an intentionally looping animation is
+ * treated as settled, since it never ends.
+ */
+async function settle(page: Page) {
+  await page.waitForFunction(
+    () =>
+      document
+        .getAnimations()
+        .every(
+          (a) =>
+            a.playState !== "running" ||
+            a.effect?.getTiming().iterations === Infinity,
+        ),
+    undefined,
+    { timeout: 5000 },
+  );
+}
+
 async function scan(page: Page, theme: (typeof THEMES)[number]) {
   await page.locator("main, form, body").first().waitFor({ state: "visible" });
+  await settle(page);
   // Light is the only reachable admin theme (see THEMES) — ensure no stray `.dark`.
   void theme;
   await page.evaluate(() => document.documentElement.classList.remove("dark"));

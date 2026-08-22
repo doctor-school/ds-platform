@@ -71,15 +71,30 @@ lang: ru
 
 ## Расхождения макет ↔ карта
 
-Промпты следуют макету R4. Ниже — REQ, которые стоят на самом макете (`wireframe.html`), но отсутствуют в строке соответствующего экрана функциональной карты §A. Промпты следуют макету; правка карты — отдельная задача.
+Сверка сделана механически по всем 24 экранам: множество меток `REQ-\d+` внутри секции `<section class="screen" id="…">` файла `wireframe.html` против REQ-строки того же экрана в таблице §A функциональной карты. Промпты следуют макету; правка карты — отдельная задача.
 
-- `#d-home` — REQ-117, REQ-63
-- `#d-feed` — REQ-3, REQ-17, REQ-120
-- `#d-events` — REQ-48
-- `#d-event` — REQ-135, REQ-10
-- `#d-school` — REQ-2, REQ-12, REQ-92, REQ-118, REQ-120
-- `#d-lk` — REQ-3, REQ-82, REQ-139, REQ-118, REQ-57
-- `#a-cabinet` — REQ-10, REQ-135, REQ-134
-- `#a-partner` — REQ-28, REQ-63
-- `#a-apply` — REQ-131, REQ-141 (стоят в карте, но не в `screens-ru`)
-- `#d-congress` — REQ-122 (стоит в карте, но не в `screens-ru`)
+**REQ стоит на макете R4, но не в строке карты §A:**
+
+- `#d-home` — REQ-12, 34, 38, 63, 117, 136
+- `#d-feed` — REQ-3, 17, 120
+- `#d-school` — REQ-2, 12, 92, 120
+- `#d-event` — REQ-10, 135
+- `#d-lk` — REQ-3, 82, 118, 139
+- `#a-home` — REQ-137
+- `#a-events` — REQ-75
+- `#a-projects` — REQ-138
+- `#a-experts` — REQ-120
+- `#a-partners` — REQ-63
+- `#a-partner` — REQ-70
+- `#a-apply` — REQ-119, 132, 142
+- `#a-cabinet` — REQ-10, 134, 135
+- `#a-docs` — REQ-136
+
+**Обратное направление — REQ в строке карты §A, но не на макете R4:**
+
+- `#d-event` — REQ-139
+- `#d-lk` — REQ-17
+- `#a-home` — REQ-100
+- `#a-experts` — REQ-100
+
+Остальные десять экранов (`#d-events`, `#d-community`, `#d-lesson`, `#d-congress`, `#d-register`, `#d-docs`, `#a-event`, `#a-project`, `#a-expert`, `#a-invest`) сходятся в обе стороны.

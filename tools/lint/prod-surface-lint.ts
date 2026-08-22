@@ -55,6 +55,7 @@ const MANIFEST_REL = "tools/lint/prod-surface-manifest.yaml";
 const PAGE_GLOBS = [
   "apps/portal/app/**/page.{tsx,ts}",
   "apps/admin/app/**/page.{tsx,ts}",
+  "apps/doctor/app/**/page.{tsx,ts}",
 ];
 const MESSAGE_GLOBS = [
   "apps/portal/messages/*.json",

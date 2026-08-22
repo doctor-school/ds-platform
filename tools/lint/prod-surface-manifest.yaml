@@ -1,7 +1,8 @@
 # prod-surface readiness manifest (#771) — the committed source of truth for
 # which user-reachable App-Router routes are allowed to face production.
 #
-# Every `page.tsx`/`page.ts` under `apps/portal/app` and `apps/admin/app` MUST
+# Every `page.tsx`/`page.ts` under `apps/portal/app`, `apps/admin/app` and
+# `apps/doctor/app` MUST
 # have exactly one entry here; `tools/lint/prod-surface-lint.ts` (CI job
 # `prod-surface`, BLOCK) fails on any unlisted route, any stale entry, and any
 # scaffold-tell copy on a `product-ready` route.
@@ -68,6 +69,18 @@ routes:
     route: /webinars/[slug]/room
     file: apps/portal/app/webinars/[slug]/room/page.tsx
     status: product-ready
+
+  # apps/doctor — the doctor.school storefront SCAFFOLD (#1440, ADR-0015 §2).
+  # `deferred`, not `product-ready`, and honestly so: the root is the app shell
+  # (brand header, one h1, footer) with no product content, because ADR-0015 §2
+  # stage 3 is what migrates the real marketing routes here out of apps/promo.
+  # It also is not publicly reachable — no compose service and no Caddy vhost
+  # point at this app; ADR-0015 §7 makes the host cut-over a release-time step.
+  - app: doctor
+    route: /
+    file: apps/doctor/app/page.tsx
+    status: deferred
+    issue: "#1430"
 
   # apps/admin — 007 admin console (login + events CRUD/lifecycle), all real
   # Refine surfaces; root is a pure redirect to /events.

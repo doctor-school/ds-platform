@@ -19,7 +19,7 @@ Full design: [`local-dev-environment-setup-design`](../../apps/docs/content/spec
 
 Service endpoints (`DATABASE_URL`, `REDIS_URL`, `S3_ENDPOINT`, `CENTRIFUGO_URL`, `CERBOS_URL`, `IDP_ISSUER`, `SMTP_HOST`…) are recipe-specific, in `~/.ds-platform/.env.local`. Read them from there (or the running process env) — NEVER hardcode a host or port in code, specs, or instruction files; the `HOST` differs per recipe (`truenas.local`, `localhost`, a cloud VM…).
 
-Stage-B handback URLs, sharpened: every service URL handed to the owner is resolved from `.env.local` / `dev:status` and curl-probed by the lead before handoff — the owner is never the first to open it. Only api/portal are `localhost`; docker-stand services (Mailpit/Zitadel/Postgres/…) sit on the recipe HOST. Procedure: `build-ui-from-design-system` → Stage B.
+Stage-B handback URLs, sharpened: every service URL handed to the owner is resolved from `.env.local` / `dev:status` and curl-probed by the lead before handoff — the owner is never the first to open it. Only api/portal/doctor are `localhost`; docker-stand services (Mailpit/Zitadel/Postgres/…) sit on the recipe HOST. Procedure: `build-ui-from-design-system` → Stage B.
 
 ## DX commands
 
@@ -39,11 +39,11 @@ Driven by `pnpm dev:*` (env-driven launcher `tools/dev/run.mjs`): reads `.env.lo
 
 ## Parallel sessions — ports + branch databases
 
-The `api :3000` / `portal :3001` pair is the single-session default only. Sessions run concurrently (AGENTS.md §6); ports and the dev database are shared resources:
+The `api :3000` / `portal :3001` / `doctor :3004` triple (ADR-0015 gave the platform two storefronts, so a session now claims three ports; `doctor` is +4 because 3002/3003 are the fixed `showcase`/`academy-demo` dev ports) is the single-session default only. Sessions run concurrently (AGENTS.md §6); ports and the dev database are shared resources:
 
-- **Probe, don't reuse.** Run `pnpm dev:ports` — binds-and-releases to find the first free pair (3000/3001, then 3100/3101, …) and prints the `API_PORT`/`PORTAL_PORT` lines. Never bind the default blindly.
+- **Probe, don't reuse.** Run `pnpm dev:ports` — binds-and-releases to find the first free set (3000/3001/3004, then 3100/3101/3104, …) and prints the `API_PORT`/`PORTAL_PORT`/`DOCTOR_PORT` lines. Never bind the default blindly.
 - **Never kill a listener you did not start.** A foreign `localhost` server is likely another session's Stage-B live-review URL, which MUST stay up until the owner's verdict (AGENTS.md §6) — killing it is forbidden. (Overrides the single-session "KILL stale listeners first" step, which applies only to your own stale listeners on your own pair.)
-- **Record the chosen pair** in the Stage-B handoff and the Issue's stop-state comment — the owner opens the right URL; the next session knows which pairs are taken.
+- **Record the chosen set** in the Stage-B handoff and the Issue's stop-state comment — the owner opens the right URL; the next session knows which pairs are taken.
 - **Stage-B owner stands — ONE canonical home.** Production-build serve (never `next dev`), logged-in URL drive before handoff, liveness re-check on reap-prone pairs, still-live handback with a recorded relaunch recipe: [`build-ui-from-design-system`](../../apps/docs/content/skills/build-ui-from-design-system/SKILL.md) → Stage B — read it before any owner handoff. The port/DB rules here apply to those stands too.
 - **Branch worktree → branch database.** `pnpm dev:db:branch <issue-N>` creates + migrates `ds_dev_<n>` in the shared Postgres container and prints the `DATABASE_URL` to export for that session's api (session env only — never edit `~/.ds-platform/.env.local`). Broken branch DB → `pnpm dev:db:drop <N>` + re-`db:branch`, never a global rollback. `dev:rollback` rewinds the whole dataset — every branch DB at once — so with parallel sessions live it is coordination-gated (announce + ack on the board first). Zitadel/Redis/MinIO stay shared. Detail: `infra/dev-stand/README.md` → DX commands → Parallel sessions.
 

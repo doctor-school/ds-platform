@@ -10,7 +10,7 @@ Phase 0 (greenfield, brainstorm complete). Pre-pilot target: 2026 Q3 (TBD).
 
 - **Backend:** NestJS + Zod + REST + openapi-typescript (ADR-0002); `apps/api/`
 - **Data:** Postgres 17 + Drizzle + pgvector (ADR-0003); schemas in `packages/db/`, migrations in `apps/api/drizzle/`
-- **Frontend:** Next.js 15 + Refine; 4 apps — `apps/promo/`, `apps/portal/`, `apps/admin/`, `apps/cms/` (Payload v3 content-only) (ADR-0004)
+- **Frontend:** Next.js 16 + Refine; 5 apps — `apps/doctor/` (`doctor.school` storefront), `apps/portal/` (`academy.doctor.school`), `apps/promo/`, `apps/admin/`, `apps/cms/` (Payload v3 content-only) (ADR-0004, two-storefront topology ADR-0015)
 - **Mobile:** React Native + Expo + WatermelonDB (ADR-0005); `apps/mobile/`
 - **Docs:** Fumadocs (`apps/docs/`) + glossary in `apps/docs/content/product/glossary/` (ADR-0006)
 - **AI dev loop:** Claude Code + Codex async + reviewer-bot (ADR-0007)

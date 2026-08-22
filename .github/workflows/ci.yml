@@ -30,8 +30,8 @@ env:
 #   core                   setup+lint+types+unit+build+api-build-smoke+
 #                          docs-build+tokens-fresh+endpoint-authz   (BLOCK)
 #   api-e2e                unchanged                                (BLOCK)
-#   playwright-axe / playwright-academy-demo / playwright-axe-portal
-#                          unchanged                                (BLOCK)
+#   playwright-axe / playwright-academy-demo / playwright-axe-portal /
+#   playwright-axe-doctor  unchanged                                (BLOCK)
 #   standalone-boot        boots the Next standalone output both prod images
 #                          run — #1410, the gap #1407 fell through (BLOCK)
 #   guards-block           the hard-red light guards + primitives-first +
@@ -85,6 +85,7 @@ env:
 #   changes                cheap classifier job — one checkout, no install; emits
 #                          `code=true|false` for the PR's changed-file set
 #   api-e2e / playwright-axe / playwright-academy-demo / playwright-axe-portal
+#   / playwright-axe-doctor
 #                          `needs: changes` + `if: needs.changes.outputs.code == 'true'`
 #   core                   ALWAYS runs (it owns `docs-build`); its CODE steps
 #                          carry the same step-level `if:`, so a docs-only diff
@@ -1035,6 +1036,35 @@ jobs:
       - run: pnpm --filter @ds/portal exec playwright install --with-deps chromium
       - run: pnpm --filter @ds/portal test:e2e:ci
 
+  # ─── playwright-axe-doctor: the doctor.school storefront (#1440) ──────
+  # The sibling of `playwright-axe-portal`, for the SECOND storefront ADR-0015
+  # introduces. A separate job rather than an extra spec in the portal's: the two
+  # apps are separate Next builds with separate `next.config.ts` files and
+  # separate origins (that separateness is the whole point of ADR-0015 §4 — the
+  # `__Host-` session cookie cannot span them), so one job asserting one build and
+  # reasoning about the other is exactly the inference #1407 punished.
+  #
+  # BACKEND-FREE, like its sibling: the storefront root server-renders no api
+  # fetch, and `/v1/*` is reached through a rewrite at REQUEST time — so `next
+  # start` on the built app is the whole topology. The specs scan the composed
+  # page for WCAG 2 A/AA + landmark/heading structure and assert the `/v1/*`
+  # rewrite survived into the built routes manifest.
+  #
+  # PATH-GATED (#1251), same rationale as the sibling: no docs-class file feeds it.
+  playwright-axe-doctor:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with: { node-version-file: .nvmrc, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec turbo run build --filter=@ds/doctor
+      - run: pnpm --filter @ds/doctor exec playwright install --with-deps chromium
+      - run: pnpm --filter @ds/doctor test:e2e:ci
+
   # ─── standalone-boot: the deployed artifact must actually BOOT (#1410) ─
   # #1407: bumping `next` 16.3.0 → 16.3.1 crash-looped the portal AND admin
   # standalone servers on prod, and every check above stayed green — `next build`
@@ -1050,9 +1080,10 @@ jobs:
   # logic lives in `tools/ci/standalone-boot-check.mjs` so the command CI runs is
   # runnable verbatim on a workstation (`pnpm ci:standalone-boot`).
   #
-  # BOTH apps, not just the portal: they are separate images with separate traced
-  # bundles and separate `next.config.ts` files (admin additionally runs Refine),
-  # and #1407 crash-looped BOTH — asserting one and reasoning about the other is
+  # ALL THREE apps, not just the portal: they are separate images with separate
+  # traced bundles and separate `next.config.ts` files (admin additionally runs
+  # Refine; doctor is the ADR-0015 second storefront), and #1407 crash-looped the
+  # two that existed then — asserting one and reasoning about the others is
   # exactly the inference that made the incident invisible. The marginal cost is
   # one extra build on a job that pays checkout + install anyway.
   #
@@ -1073,8 +1104,8 @@ jobs:
       # Same cold-build path the `build` step exercises — no special env. The
       # standalone output is a side effect of `output: "standalone"` in each
       # app's next.config.ts, so no build flag is needed here.
-      - run: pnpm exec turbo run build --filter=@ds/portal --filter=@ds/admin
-      - run: pnpm ci:standalone-boot portal admin
+      - run: pnpm exec turbo run build --filter=@ds/portal --filter=@ds/admin --filter=@ds/doctor
+      - run: pnpm ci:standalone-boot portal admin doctor
 
   # ─── AI-specific guards from ADR-0007 §2.6 ───────────────────────────
   # The PR-body-parsing guard family (spec-link BLOCK, registry-research,
@@ -1112,6 +1143,7 @@ jobs:
         playwright-axe,
         playwright-academy-demo,
         playwright-axe-portal,
+        playwright-axe-doctor,
         standalone-boot,
       ]
     if: always()
@@ -1132,14 +1164,14 @@ jobs:
       #   must red `ci` rather than skip the gated jobs into a free green.
       #
       #   PATH-GATED — `api-e2e`, `playwright-axe`, `playwright-academy-demo`,
-      #   `playwright-axe-portal`, `standalone-boot`.
+      #   `playwright-axe-portal`, `playwright-axe-doctor`, `standalone-boot`.
       #   `success` OR `skipped` is green; `failure`/`cancelled` is still red.
       #   `skipped` here is reachable ONLY via `needs.changes.outputs.code`
       #   (a docs-only diff) or via `changes` itself not succeeding — and that
       #   second path is already red through the unconditional class above.
       #
-      # Net: a docs-only PR is green with five SKIPPED jobs; any FAILURE in any
-      # of the seven is still red; a run where the classifier broke is red.
+      # Net: a docs-only PR is green with six SKIPPED jobs; any FAILURE in any
+      # of the eight is still red; a run where the classifier broke is red.
       - name: Aggregate
         env:
           UNCONDITIONAL: |
@@ -1151,6 +1183,7 @@ jobs:
             playwright-axe=${{ needs['playwright-axe'].result }}
             playwright-academy-demo=${{ needs['playwright-academy-demo'].result }}
             playwright-axe-portal=${{ needs['playwright-axe-portal'].result }}
+            playwright-axe-doctor=${{ needs['playwright-axe-doctor'].result }}
             standalone-boot=${{ needs['standalone-boot'].result }}
         run: |
           fail=0

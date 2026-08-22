@@ -4,7 +4,7 @@ description: "Вход эпика relaunch платформы в две витр
 slug: two-site-ia-readme-ru
 milestone: https://github.com/doctor-school/ds-platform/milestone/13
 parent_issue: https://github.com/doctor-school/ds-platform/issues/1430
-status: "Discovery closed (DSP-252) · wireframe R4 owner-approved (DSP-251) · stage 1: ADR-0015 topology on main (#1432); ADR-0016 core model — #1433 in authoring"
+status: "Discovery closed (DSP-252) · wireframe R4 owner-approved (DSP-251) · stage 1 done: ADR-0015 topology (#1432) + ADR-0016 core model (#1433) on main"
 lang: ru
 ---
 
@@ -42,7 +42,7 @@ lang: ru
 
 - Discovery **закрыт** — DSP-252 (2026-08-19): все Q и OWD закрыты или переведены в ADR Commit-полосы; ревизия [R2] по двум независимым ревью влита.
 - Wireframe **R4 согласован владельцем** — DSP-251 (2026-08-22): правки R3 команды (REQ-116…142) и R4 владельца (лента событий врача, страница события Академии, эволюционная цель) — в макете и в `screens-ru.md`.
-- Этап 1 (ниже) **в работе**: топология — [ADR-0015](../../../adr/0015-two-storefront-topology-ru.md) на `main` ([#1432](https://github.com/doctor-school/ds-platform/issues/1432)); модель ядра — ADR-0016 в написании ([#1433](https://github.com/doctor-school/ds-platform/issues/1433)).
+- Этап 1 (ниже) **закрыт**: топология двух витрин — [ADR-0015](../../../adr/0015-two-storefront-topology-ru.md) ([#1432](https://github.com/doctor-school/ds-platform/issues/1432)) и базовая модель предметной области — [ADR-0016](../../../adr/0016-core-domain-model-ru.md) ([#1433](https://github.com/doctor-school/ds-platform/issues/1433)) на `main`.
 
 ## Что должно родиться из пакета — порядок этапов (решение владельца, порядок не менять)
 

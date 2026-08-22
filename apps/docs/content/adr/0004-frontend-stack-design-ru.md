@@ -1,6 +1,6 @@
 ---
 title: "DS Platform — Frontend Stack design [RU]"
-description: "1. Meta-framework: Next.js 15 App Router + RSC, один framework на все 6 веб-поверхностей. 2. App-split: 4 Next.js приложения — apps/promo (SSG/ISR,..."
+description: "1. Meta-framework: Next.js 15 App Router + RSC, один framework на все 6 веб-поверхностей. 2. App-split: 4 Next.js приложения — apps/doctor (SSG/ISR marketing routes + authenticated storefront,..."
 lang: ru
 ---
 
@@ -21,14 +21,14 @@ lang: ru
 ## 0. TL;DR
 
 1. **Meta-framework:** Next.js 15 App Router + RSC, один framework на все 6 веб-поверхностей.
-2. **App-split:** 4 Next.js приложения — `apps/promo` (SSG/ISR, doctor.school) + `apps/portal` (SSR auth, app.doctor.school) + `apps/admin` (Refine, admin.doctor.school) + `apps/cms` (Payload v3 inside Next.js, cms.doctor.school).
+2. **App-split:** 4 Next.js приложения — `apps/doctor` (SSG/ISR маркетинг + SSR-витрина под аутентификацией, doctor.school) + `apps/portal` (SSR auth, academy.doctor.school) + `apps/admin` (Refine, admin.doctor.school) + `apps/cms` (Payload v3 inside Next.js, cms.doctor.school).
 3. **Deployment topology v1-v2:** один VPS "frontend-prod" + 4 Docker containers + nginx reverse-proxy. v3+ — раздельные VPS при 1M MAU.
 4. **Admin/CMS framework:** Refine + custom REST data provider → NestJS API + Cerbos access provider + custom Zitadel auth strategy. Без headless CMS как замены backend.
 5. **Design-system:** Tailwind CSS 4 + shadcn/ui + lucide-react + Radix Primitives. Общий `packages/design-system`. Heavy-composes (TipTap rich-text, Tanstack Table, react-day-picker, Recharts/Tremor) — поверх shadcn shell.
 6. **User cabinets UI:** custom React на shadcn/ui + Tanstack Query + RHF + Zod (не Refine — brand-UX требует кастомизации).
-7. **Data-fetching:** Tanstack Query v5 + RSC hybrid (initial SSR через RSC + client interactivity через TQ) + Server Actions точечно для simple admin-mutations. Tanstack Query — единый pattern на все 4 apps. **Caveat:** Refine в `apps/admin` управляет собственным `QueryClient` через `<Refine>` provider (Refine — client-side). Это значит admin app — effectively CSR с тонким SSR-shell; RSC `HydrationBoundary` pattern применим в portal/promo/cms, но не для Refine-managed resources в admin. Tanstack Query как библиотека — общая, но cache-instances изолированы per-app.
+7. **Data-fetching:** Tanstack Query v5 + RSC hybrid (initial SSR через RSC + client interactivity через TQ) + Server Actions точечно для simple admin-mutations. Tanstack Query — единый pattern на все 4 apps. **Caveat:** Refine в `apps/admin` управляет собственным `QueryClient` через `<Refine>` provider (Refine — client-side). Это значит admin app — effectively CSR с тонким SSR-shell; RSC `HydrationBoundary` pattern применим в doctor/portal/cms, но не для Refine-managed resources в admin. Tanstack Query как библиотека — общая, но cache-instances изолированы per-app.
 8. **Forms:** RHF + `@hookform/resolvers/zod` + shadcn `<Form>`. Zod-схема — один SSOT в `packages/api-client/schemas/` (frontend + backend NestJS обе используют тот же import).
-9. **Promo content source:** Payload CMS v3 content-only в `apps/cms`, Postgres `cms.*` namespace в shared Postgres-instance из ADR-0003. Custom Lexical features для inline SSOT-glossary insertions. MCP server для AI-агентов. Custom Auth Strategy → Zitadel.
+9. **Marketing content source:** Payload CMS v3 content-only в `apps/cms`, Postgres `cms.*` namespace в shared Postgres-instance из ADR-0003. Custom Lexical features для inline SSOT-glossary insertions. MCP server для AI-агентов. Custom Auth Strategy → Zitadel.
 10. **Image optimization:** гибрид — build-time variants через Next.js static imports (promo) + `next/image` Sharp on Node (dynamic) + Payload Sharp pipeline (media library). Timeweb CDN — общий delivery cache layer.
 11. **Real-time клиент:** `centrifuge` npm package + кастомные React hooks в `packages/api-client`. Tanstack Query `invalidateQueries` по WS-событиям из Centrifugo (ADR-0002 §7).
 12. **i18n:** `next-intl` (App Router-native, RSC-compatible). Messages в `messages/ru.json` каждого app. i18n-ready с v1 для русского, multi-lang в v2+.
@@ -122,8 +122,8 @@ Self-host через `output: 'standalone'` в `next.config.ts` → Docker image
 
 ```
 apps/
-├── promo/    # SSG/ISR, doctor.school, public
-├── portal/   # SSR auth, app.doctor.school, multi-role (доктор/эксперт/клиника/инвестор)
+├── doctor/    # SSG/ISR маркетинг + SSR-витрина под аутентификацией, doctor.school
+├── portal/   # SSR auth, academy.doctor.school, multi-role (доктор/эксперт/клиника/инвестор)
 ├── admin/    # SSR auth + 2FA + Refine, admin.doctor.school (модераторы платформы)
 └── cms/      # Payload v3 inside Next.js, cms.doctor.school (маркетинг-team)
 ```
@@ -132,8 +132,8 @@ apps/
 
 **Каждое приложение держит свою host-only cookie:**
 
-- `doctor.school` (promo) — `__Host-ds_promo_session` если требуется аутентифицированное состояние для CTA / lead-форм (обычно нет — promo анонимен по умолчанию).
-- `app.doctor.school` (portal) — `__Host-ds_session`, host-only, `HttpOnly`, `Secure`, `SameSite=Lax`.
+- `doctor.school` (витрина врача) — `__Host-ds_session`, host-only, `HttpOnly`, `Secure`, `SameSite=Lax`; публичные маркетинговые и каталожные маршруты того же хоста анонимны по умолчанию.
+- `academy.doctor.school` (portal) — `__Host-ds_session`, host-only, `HttpOnly`, `Secure`, `SameSite=Lax`.
 - `admin.doctor.school` (admin) — **staged session model**. Волна 1 (в объёме live-вебинара 2026-07-17 — фича 007, минимальный event-admin): admin-приложение аутентифицируется через отгруженную 003 session cookie `__Host-ds_session` (host-only, `HttpOnly`, `Secure`, `SameSite=Lax`, без 2FA), отправляемую same-origin через admin `/v1/*` proxy — принято для одной доверенной группы `platform_admin`, чьи мутации уже идут через high-stakes introspection tier (ADR-0001 §2.5/§8). Pre-pilot hardening (обязателен до пилота 2026 Q3, трекается Issue [#718](https://github.com/doctor-school/ds-platform/issues/718)): выделенная cookie `__Host-ds_admin_session`, host-only, `SameSite=Strict`, плюс обязательная 2FA для сессий `platform_admin` — целевая session model этого ADR.
 - `cms.doctor.school` (cms) — `__Host-ds_cms_session`, host-only, для маркетинг-team.
 - `docs.doctor.school` (docs) — `__Host-ds_docs_session` если требуется auth (внутренняя SSOT для команды, обычно через VPN).
@@ -142,7 +142,7 @@ apps/
 
 #### 3.2.1. Cross-app SSO via OIDC silent re-auth — frontend implementation (DSO-63 #2)
 
-Cross-app login continuity между portal, admin, promo, docs, cms — через OIDC silent re-auth (`prompt=none`) у IdP, не через shared cookie на `.doctor.school`. Shared cookie отвергнут per ADR-0001 §6 — same-origin XSS или subdomain takeover скомпрометировали бы admin-сессию, а CSRF / fingerprint mitigations обходятся same-origin XSS. См. ADR-0001 §6 для полного обоснования.
+Cross-app login continuity между doctor, portal, admin, docs, cms — через OIDC silent re-auth (`prompt=none`) у IdP, не через shared cookie на `.doctor.school`. Shared cookie отвергнут per ADR-0001 §6 — same-origin XSS или subdomain takeover скомпрометировали бы admin-сессию, а CSRF / fingerprint mitigations обходятся same-origin XSS. См. ADR-0001 §6 для полного обоснования.
 
 **Frontend pattern для каждого Next.js app:**
 
@@ -241,10 +241,10 @@ App `cms` добавлен после фиксации Payload как promo cont
 
 ```
 nginx (reverse-proxy + TLS termination)
-  ├─ doctor.school        → promo container
-  ├─ app.doctor.school    → portal container
-  ├─ admin.doctor.school  → admin container
-  └─ cms.doctor.school    → cms container (Payload v3)
+  ├─ doctor.school           → doctor container
+  ├─ academy.doctor.school  → portal container
+  ├─ admin.doctor.school    → admin container
+  └─ cms.doctor.school      → cms container (Payload v3)
 ```
 
 4 Next.js standalone builds, каждый ~150-300MB image, ~150-300MB RAM. Итого ~1-2GB RAM на 4 контейнера. 2-4 vCPU тянет легко на v1-v2 (≤десятки тысяч MAU).
@@ -271,7 +271,7 @@ Pattern «SSR-default first paint + client-hydration + SPA-like internal navigat
 
 - SSR-shell для admin ограничен outer layout (auth-guard, theme)
 - Все Refine-managed страницы внутри — CSR (нет RSC server-fetch с HttpOnly cookie для resource data)
-- `HydrationBoundary` pattern Tanstack Query применим только в portal/promo/cms; в admin Refine управляет своим `QueryClient` (cache-instance изолирован per-app)
+- `HydrationBoundary` pattern Tanstack Query применим только в doctor/portal/cms; в admin Refine управляет своим `QueryClient` (cache-instance изолирован per-app)
 
 Для внутреннего admin tool (модераторы, ≤десятки пользователей) это acceptable trade-off — performance менее критичен чем для public-facing portal. AI pipeline UI v3 (когда появится) — обычные React-routes inside Refine, тот же CSR pattern.
 
@@ -567,7 +567,7 @@ REVOKE ALL   ON SCHEMA public FROM cms_owner;
 - Drizzle migration runner физически **не может** trogue Payload `cms.*` tables
 - Audit log на Postgres уровне (`pg_audit`) показывает чёткое разделение agent ↔ schema
 
-**Read-cross-schema (если потребуется):** портал может SELECT из `cms.pages` для рендеринга промо-контента → добавляется `GRANT SELECT ON ALL TABLES IN SCHEMA cms TO app_owner;` точечно. Write — никогда cross-schema.
+**Read-cross-schema (если потребуется):** витрина врача (`apps/doctor`, ADR-0015 §2) может SELECT из `cms.pages` для рендеринга маркетингового контента → добавляется `GRANT SELECT ON ALL TABLES IN SCHEMA cms TO app_owner;` точечно. Write — никогда cross-schema.
 
 Это требование расширяет ADR-0003 §1: single Postgres instance теперь обязывает **multi-role privilege separation** с появлением `cms.*` namespace. ADR-0003 §1 обновляется inline, чтобы это отразить.
 
@@ -719,7 +719,7 @@ export function useCentrifugoChannel(
 
 `next-intl` в каждом app:
 
-- Messages: `messages/ru.json` per app (изолированные namespaces — promo, portal, admin, cms)
+- Messages: `messages/ru.json` per app (изолированные namespaces — doctor, portal, admin, cms)
 - Общие сообщения (термины из glossary, формы) — `packages/i18n-shared/`
 - Locale-routing build-in (`[locale]/...`); single-locale `ru` пока, готово к `en` в v2+
 - Server Components compatible (RSC-native)
@@ -805,7 +805,7 @@ OQ-F8: Biome переход — trigger ESLint CI >5 минут/PR или Pretti
 ```
 ds-platform/
 ├── apps/
-│   ├── promo/
+│   ├── doctor/
 │   ├── portal/
 │   ├── admin/
 │   ├── cms/
@@ -873,7 +873,7 @@ Custom ESLint rule `no-vercel-only-api` блокирует следующие im
 ### 20.1. ADR-0001 (Identity/Auth/RBAC)
 
 - JWT auth-flow через Zitadel (закрыто по ADR-0001 §8, DSP-209).
-- **Host-only `__Host-` cookie per app** (portal, admin, promo, docs, cms) — каждое приложение имеет свой scope. Полный security profile — ADR-0001 §6.
+- **Host-only `__Host-` cookie per app** (doctor, portal, admin, docs, cms) — каждое приложение имеет свой scope. Полный security profile — ADR-0001 §6.
 - **Cross-app SSO continuity** — через OIDC silent re-auth (`prompt=none`), не через shared cookie. Implementation details — §3.2.1.
 - Two-tier validation: JWT fast-path для ≥99% запросов, IdP `/introspect` для high-stakes (payments, AU withdrawal, role-change, admin mutations, PD export).
 - Hybrid RBAC: IdP coarse roles в JWT, backend fine-grained через Cerbos.
@@ -900,7 +900,7 @@ Custom ESLint rule `no-vercel-only-api` блокирует следующие im
 
 | OQ        | Описание                                                                                                                                   | Trigger пересмотра                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | --------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| OQ-F1     | Миграция `apps/promo` на Astro                                                                                                             | Маркетинг ≥3 разработчиков, PageSpeed промо <90 на mobile, demand на visual-CMS workflow                                                                                                                                                                                                                                                                                                                                                                      |
+| OQ-F1     | Вынести маркетинговые маршруты `apps/doctor` в Astro                                                                                       | Маркетинг ≥3 разработчиков, PageSpeed промо <90 на mobile, demand на visual-CMS workflow                                                                                                                                                                                                                                                                                                                                                                      |
 | OQ-F2     | Portal split на multiple apps (доктор/эксперт/клиника/инвестор)                                                                            | Portal-bundle >500KB gzipped, или expert-CMS получает отдельный security threat model                                                                                                                                                                                                                                                                                                                                                                         |
 | OQ-F3     | Scaling топологии v3                                                                                                                       | 1M MAU достигнут, или Centrifugo+SSR на одном VPS становится bottleneck                                                                                                                                                                                                                                                                                                                                                                                       |
 | OQ-F4     | Migration Payload → Keystatic                                                                                                              | Маркетинг scope сужается до 3-5 статических лендингов И inline-glossary не нужен                                                                                                                                                                                                                                                                                                                                                                              |
@@ -932,8 +932,8 @@ Custom ESLint rule `no-vercel-only-api` блокирует следующие im
 | Качество                          | Метрика                               | v1                                                       | v3                         |
 | --------------------------------- | ------------------------------------- | -------------------------------------------------------- | -------------------------- |
 | Bundle size (portal)              | gzipped JS на главной (initial route) | ≤200KB\*                                                 | ≤300KB                     |
-| LCP (promo)                       | Mobile, throttled 3G                  | ≤2.5s                                                    | ≤2.0s                      |
-| PageSpeed (promo)                 | Mobile score                          | ≥80                                                      | ≥90                        |
+| LCP (marketing)                   | Mobile, throttled 3G                  | ≤2.5s                                                    | ≤2.0s                      |
+| PageSpeed (marketing)             | Mobile score                          | ≥80                                                      | ≥90                        |
 | TTI (portal главная)              | Mobile                                | ≤3.5s                                                    | ≤2.5s                      |
 | AI code-gen accuracy (subjective) | % first-shot working                  | ≥80% (выбор Tailwind+shadcn+RHF+Zod+TQ — все mainstream) | ≥90%                       |
 | Deploy frequency                  | Independent apps                      | 4 independent pipelines                                  | Same                       |

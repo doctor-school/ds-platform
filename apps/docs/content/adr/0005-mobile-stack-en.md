@@ -40,7 +40,7 @@ Constraints inherited:
 
 ## Decision
 
-> **Mobile phasing (DSO-63 mini-C, 2026-05-18):** Pre-pilot mobile = **responsive web / PWA** (via the portal Next.js app, ADR-0004). Native mobile (RN + Expo, §1 below) — **pilot trigger** (push notifications + offline capabilities required by the first pilot school, or RuStore / App Store distribution). v3 — full offline / gameplay. The choice in this ADR (RN + Expo as the long-term tech) **remains valid** — phasing applies to the timing of the build, not the tech choice. See engineering-readiness §"Pre-pilot deployment slice" for the full in-slice / deferred / triggered list.
+> **Mobile phasing (DSO-63 mini-C, 2026-05-18):** Pre-pilot mobile = **responsive web / PWA** (the doctor web storefront `apps/doctor`, ADR-0004). Native mobile (RN + Expo, §1 below) — **pilot trigger** (push notifications + offline capabilities required by the first pilot school, or RuStore / App Store distribution). v3 — full offline / gameplay. The choice in this ADR (RN + Expo as the long-term tech) **remains valid** — phasing applies to the timing of the build, not the tech choice. See engineering-readiness §"Pre-pilot deployment slice" for the full in-slice / deferred / triggered list.
 
 ### 1. Core: **React Native 0.78+ + Expo SDK 53+ + New Architecture + React 19 + TypeScript strict + Hermes**
 
@@ -101,7 +101,7 @@ Lesson from digest §9.1 is locked in: presence-ingest is server-side, not clien
 - Biometric: `expo-local-authentication` (Face ID/Touch ID/Android Biometric)
 - Secure storage: `expo-secure-store` for session — **refresh token TTL = 14d (ADR-0001 §6)**; `react-native-mmkv` for non-secret KV
 - IAP: `react-native-iap` (Apple+Google) + **official `react-native-rustore-billing-sdk`** — **deferred to v2**, infrastructure is not built in v1
-- Deep links: `expo-linking` + Expo Router (Universal Links + App Links); JSON config hosted via `apps/promo`
+- Deep links: `expo-linking` + Expo Router (Universal Links + App Links); JSON config hosted via `apps/doctor` on `doctor.school`
 - Referral attribution: native deep link + pasteboard (iOS) + Install Referrer (Android) → NestJS. NOT AppsFlyer/Adjust (PD zone)
 
 ### 7. Offline + sync — three-tier architecture

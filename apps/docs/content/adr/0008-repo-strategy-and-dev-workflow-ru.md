@@ -75,8 +75,8 @@ ds-platform/
 ├── apps/
 │   ├── api/                     # NestJS (ADR-0002)
 │   │   └── drizzle/             # drizzle-kit generated SQL diffs (ADR-0003 §4)
-│   ├── promo/                   # SSG/ISR doctor.school (ADR-0004 §2)
-│   ├── portal/                  # SSR app.doctor.school (ADR-0004 §2)
+│   ├── doctor/                  # SSG/ISR + SSR doctor.school (ADR-0004 §2)
+│   ├── portal/                  # SSR academy.doctor.school (ADR-0004 §2)
 │   ├── admin/                   # Refine admin.doctor.school (ADR-0004 §2)
 │   ├── cms/                     # Payload v3 cms.doctor.school — marketing-content (ADR-0004 §7)
 │   ├── docs/                    # Fumadocs portal (ADR-0006 §2)
@@ -360,7 +360,7 @@ Step 21 — admin-only. Step 22 — joint Tech Lead+AI.
 - ADR-0002 §6 — BullMQ async queue: живёт как часть `apps/api/`.
 - ADR-0002 §3-5 — Zod schemas + openapi-typescript: `packages/schemas/` + `packages/api-client/` (последний — generated артефакт).
 - ADR-0003 §4 (Drizzle ORM + drizzle-kit migrations) + §7 (pgvector): Drizzle schemas в `packages/db/schema/`; миграции в `apps/api/drizzle/`.
-- ADR-0004 §2 — 4 frontend apps: promo, portal, admin, cms (Payload v3). Все в `apps/`.
+- ADR-0004 §2 — 4 frontend apps: doctor, portal, admin, cms (Payload v3). Все в `apps/`.
 - ADR-0004 §7 — Payload v3 content-only: `apps/cms/`, marketing-content в `cms.*` schema namespace shared Postgres.
 - ADR-0004 §13 — ESLint `no-vercel-only-api` rule: `packages/eslint-config/` экспортирует.
 - ADR-0005 — RN/Expo mobile: `apps/mobile/` workspace, отдельный build с Expo EAS.

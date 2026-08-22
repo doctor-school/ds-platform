@@ -223,7 +223,7 @@ PRD §15 v2 «CTA вебинар за 200 Au» — внутренние балл
 | Secure storage       | `expo-secure-store` (Keychain/Keystore) для сессии — **refresh token TTL = 14d (ADR-0001 §6)**; `react-native-mmkv` для non-secret KV                                                                           |
 | IAP (Apple+Google)   | `react-native-iap` — **в v2**, не v1                                                                                                                                                                            |
 | IAP RuStore          | **Официальный `react-native-rustore-billing-sdk`** от RuStore — **в v2**. Custom TurboModule — только fallback                                                                                                  |
-| Deep links           | `expo-linking` + Expo Router (Universal Links + App Links); JSON-config хостится через `apps/promo`                                                                                                             |
+| Deep links           | `expo-linking` + Expo Router (Universal Links + App Links); JSON-config хостится через `apps/doctor`                                                                                                            |
 | Referral attribution | Native deep link state + pasteboard (iOS) + Install Referrer (Android) → NestJS атрибуция. НЕ AppsFlyer/Adjust (ПДн периметр)                                                                                   |
 
 ---

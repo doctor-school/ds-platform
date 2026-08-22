@@ -582,10 +582,10 @@ export const MarketingPages: CollectionConfig = {
 
 Note: `GLOSSARY_IDS` импортируется во время Payload runtime. Поэтому Payload deploy должен идти ПОСЛЕ глоссарий-генерации в `packages/glossary/src/ids.ts`. При обновлении глоссария (PR в Git) → `pnpm generate:glossary` → `git commit` → CI deploy `apps/cms` с обновлённым `GLOSSARY_IDS`. Window of inconsistency = время между merge и Payload deploy (~5 минут), что приемлемо.
 
-**Checkpoint 2 — Export-time check (CI build).** На каждом build `apps/promo` валидируется Lexical AST экспорта. Это safety net на случай если Checkpoint 1 был bypassed (e.g., direct DB write):
+**Checkpoint 2 — Export-time check (CI build).** На каждом build `apps/doctor` валидируется Lexical AST экспорта. Это safety net на случай если Checkpoint 1 был bypassed (e.g., direct DB write):
 
 ```ts
-// apps/promo/lib/payload-fetch.ts
+// apps/doctor/lib/payload-fetch.ts
 import { GLOSSARY_IDS } from "@ds/glossary/ids";
 
 function validateGlossaryRefs(lexicalState: unknown) {

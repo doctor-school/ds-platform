@@ -40,7 +40,7 @@ Constraints inherited:
 
 ## Decision
 
-> **Mobile phasing (DSO-63 mini-C, 2026-05-18):** Pre-pilot mobile = **responsive web / PWA** (через portal Next.js app, ADR-0004). Native mobile (RN + Expo, ниже §1) — **pilot trigger** (push notifications + offline-капабельности у первой pilot школы или RuStore/App Store distribution). v3 — full offline / gameplay. Решение из этого ADR (RN + Expo как long-term tech) **остаётся актуальным** — фазирование касается timing of build, не tech choice. См. engineering-readiness §"Pre-pilot deployment slice" для полного in-slice / deferred / triggered списка.
+> **Mobile phasing (DSO-63 mini-C, 2026-05-18):** Pre-pilot mobile = **responsive web / PWA** (через веб-витрину врача `apps/doctor`, ADR-0004). Native mobile (RN + Expo, ниже §1) — **pilot trigger** (push notifications + offline-капабельности у первой pilot школы или RuStore/App Store distribution). v3 — full offline / gameplay. Решение из этого ADR (RN + Expo как long-term tech) **остаётся актуальным** — фазирование касается timing of build, не tech choice. См. engineering-readiness §"Pre-pilot deployment slice" для полного in-slice / deferred / triggered списка.
 
 ### 1. Core: **React Native 0.78+ + Expo SDK 53+ + New Architecture + React 19 + TypeScript strict + Hermes**
 
@@ -101,7 +101,7 @@ Lesson из digest §9.1 закреплён: presence-ingest server-side, не c
 - Biometric: `expo-local-authentication` (Face ID/Touch ID/Android Biometric)
 - Secure storage: `expo-secure-store` для сессии — **refresh token TTL = 14d (ADR-0001 §6)**; `react-native-mmkv` для non-secret KV
 - IAP: `react-native-iap` (Apple+Google) + **официальный `react-native-rustore-billing-sdk`** — **отложено в v2**, инфраструктура не строится в v1
-- Deep links: `expo-linking` + Expo Router (Universal Links + App Links); JSON-config хостится через `apps/promo`
+- Deep links: `expo-linking` + Expo Router (Universal Links + App Links); JSON-config хостится через `apps/doctor` на `doctor.school`
 - Referral attribution: native deep link + pasteboard (iOS) + Install Referrer (Android) → NestJS. НЕ AppsFlyer/Adjust (ПДн периметр)
 
 ### 7. Offline + sync — three-tier архитектура

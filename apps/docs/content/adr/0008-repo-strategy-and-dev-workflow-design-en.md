@@ -858,7 +858,7 @@ Phase 0 (greenfield, brainstorm complete). Pre-pilot target: 2026 Q3 (TBD).
 
 - **Backend:** NestJS + Zod + REST + openapi-typescript (ADR-0002); `apps/api/`
 - **Data:** Postgres 17 + Drizzle + pgvector (ADR-0003); schemas in `packages/db/`, migrations in `apps/api/drizzle/`
-- **Frontend:** Next.js 15 + Refine; 4 apps — `apps/promo/`, `apps/portal/`, `apps/admin/`, `apps/cms/` (Payload v3 content-only) (ADR-0004)
+- **Frontend:** Next.js 15 + Refine; 4 apps — `apps/doctor/`, `apps/portal/`, `apps/admin/`, `apps/cms/` (Payload v3 content-only) (ADR-0004)
 - **Mobile:** React Native + Expo + WatermelonDB (ADR-0005); `apps/mobile/`
 - **Docs:** Fumadocs (`apps/docs/`) + glossary.yaml in `apps/docs/content/product/glossary/` (ADR-0006)
 - **AI dev loop:** Claude Code + Codex async + reviewer-bot (ADR-0007)
@@ -914,7 +914,7 @@ Concrete workflow when a trigger fires (any of OQ-R1..R12):
 - **ADR-0002** §6 — `apps/api/` implements NestJS + BullMQ.
 - **ADR-0002** §3-5 — `packages/schemas/` (Zod SSOT) + `packages/api-client/` (openapi-typescript generated SDK).
 - **ADR-0003** §4 — Drizzle TS schemas in `packages/db/schema/` + drizzle-kit SQL diff migrations in `apps/api/drizzle/`; §7 — pgvector in the same Postgres.
-- **ADR-0004** §2 — 4 frontend Next.js apps (`apps/promo/`, `apps/portal/`, `apps/admin/`, `apps/cms/`).
+- **ADR-0004** §2 — 4 frontend Next.js apps (`apps/doctor/`, `apps/portal/`, `apps/admin/`, `apps/cms/`).
 - **ADR-0004** §7 — Payload v3 in `apps/cms/` (content-only, `cms.*` schema namespace shared Postgres).
 - **ADR-0004** §13 — `packages/eslint-config/` exports the `no-vercel-only-api` rule.
 - **ADR-0005** — `apps/mobile/` — Expo SDK 53, separate build/release pipeline (Expo EAS).

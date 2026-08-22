@@ -24,6 +24,8 @@ One account per person; roles and organisation memberships are separate, revocab
 
 **Out of scope.** Column types, indexes and constraints (the implementing slice decides them per ADR-0003); the accrual-rule engine (REQ-36/48/49, two-way doors); payment integration (CON-16); the GetCourse/congress migration (REQ-105); UI and API surface; deployment topology (ADR-0015).
 
+**Two one-way doors are routed, not modelled here.** **OWD-5** — the Academy is a separate public domain with its own audience but part of one Doctor.School ecosystem, with no monetisation of its own — is a positioning/topology door owned by ADR-0015; its only trace in this design is the storefront-ownership table of §4. **OWD-7** — the exit from GetCourse, with no integration with GetCourse now or ever — constrains the REQ-105 migration named in §5 (a one-off import, never a sync), not the entity model.
+
 ---
 
 ## 2. Entities
@@ -43,41 +45,41 @@ Field lists are **indicative names and kinds**, not a schema. Every entity addit
 | `primary_specialty_id`                                                            | fk → §2.7    | Minzdrav specialty (REQ-101)              |
 | `verification_state`                                                              | enum         | unverified / verified / rejected (REQ-22) |
 
-One row per human being, on both storefronts (OWD-1). Contacts (`email`, `phone`) are never part of a partner-facing projection (OWD-2).
+One row per human being, on both storefronts (OWD-1). Contacts (`email`, `phone`) are never part of an investor-facing projection (OWD-2).
 
 ### 2.2 Role assignment
 
-| Field                                      | Kind        | Note                                                                                                                                                                  |
-| ------------------------------------------ | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `id`                                       | uuid        |                                                                                                                                                                       |
-| `person_id`                                | fk → §2.1   |                                                                                                                                                                       |
-| `role`                                     | enum        | doctor · expert · author · co-author · academy admin · verifier · finance · methodologist · producer · НМО operator · partner representative · medical representative |
-| `scope_kind` / `scope_id`                  | enum / uuid | `global` · `organisation` (§2.3) · `project` (§2.5)                                                                                                                   |
-| `valid_from` / `valid_to`                  | timestamptz | open-ended `valid_to` = currently held                                                                                                                                |
-| `granted_by` / `revoked_by` / `revoked_at` | fk / ts     | every grant and revocation also lands in `audit_ledger`                                                                                                               |
+| Field                                      | Kind        | Note                                                                                                                                                                   |
+| ------------------------------------------ | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`                                       | uuid        |                                                                                                                                                                        |
+| `person_id`                                | fk → §2.1   |                                                                                                                                                                        |
+| `role`                                     | enum        | doctor · expert · author · co-author · academy admin · verifier · finance · methodologist · producer · НМО operator · investor representative · medical representative |
+| `scope_kind` / `scope_id`                  | enum / uuid | `global` · `organisation` (§2.3) · `project` (§2.5)                                                                                                                    |
+| `valid_from` / `valid_to`                  | timestamptz | open-ended `valid_to` = currently held                                                                                                                                 |
+| `granted_by` / `revoked_by` / `revoked_at` | fk / ts     | every grant and revocation also lands in `audit_ledger`                                                                                                                |
 
 Labels that are **not** roles — ambassador, speaker, moderator, organising-committee member, mentor, "regular participant", "team" (glossary) — are attributes on the relevant entity, not role assignments.
 
 ### 2.3 Organisation
 
-| Field                                                  | Kind        | Note                                                                                |
-| ------------------------------------------------------ | ----------- | ----------------------------------------------------------------------------------- |
-| `id` / `slug` / `title`                                | uuid / text | seeded from feature-012 `partners`                                                  |
-| `kinds`                                                | enum set    | partner (investor) · clinical base · licensee / educational organisation · employer |
-| `logo_ref` / `website_url` / `description`             | text        | `logo_ref` existing                                                                 |
-| legal attributes (legal name, INN, contract reference) | text        | contracts themselves stay off-platform (OWD-3 / CON-16)                             |
+| Field                                                  | Kind        | Note                                                                                                                                                                                |
+| ------------------------------------------------------ | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id` / `slug` / `title`                                | uuid / text | seeded from feature-012 `partners`                                                                                                                                                  |
+| `kinds`                                                | enum set    | **open, extensible set** (Q-40) — starting kinds: investor · clinical base · licensee / educational organisation. "Employer" is deliberately absent: not a product role (Q-38 → NG) |
+| `logo_ref` / `website_url` / `description`             | text        | `logo_ref` existing                                                                                                                                                                 |
+| legal attributes (legal name, INN, contract reference) | text        | contracts themselves stay off-platform (OWD-3 / CON-16)                                                                                                                             |
 
-One organisation may hold several kinds at once (V-RV-10) — the clinic that is also the licensee and also the employer is one row with three kinds, not three rows.
+One organisation may hold several kinds at once (Q-40, V-RV-10) — the clinic that is also the licensee is one row with two kinds, not two rows. The set is expected to grow: adding a kind is a value, never a new table.
 
 ### 2.4 Membership (person ↔ organisation)
 
-| Field                                                   | Kind      | Note                                                      |
-| ------------------------------------------------------- | --------- | --------------------------------------------------------- |
-| `id` / `person_id` / `organisation_id`                  | uuid / fk |                                                           |
-| `role_in_organisation`                                  | enum      | admin · representative · medical representative · finance |
-| `valid_from` / `valid_to` / `revoked_at` / `revoked_by` | ts / fk   | revocation removes access, never the account (OWD-8)      |
+| Field                                                   | Kind      | Note                                                                                                                                                                                                                                         |
+| ------------------------------------------------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id` / `person_id` / `organisation_id`                  | uuid / fk |                                                                                                                                                                                                                                              |
+| `role_in_organisation`                                  | enum      | admin · investor representative · medical representative · finance; the medical representative acts as a user OF the organisation and carries a personal link / promo code, so their invitations are attributed to them personally (REQ-114) |
+| `valid_from` / `valid_to` / `revoked_at` / `revoked_by` | ts / fk   | revocation removes access, never the account (OWD-8)                                                                                                                                                                                         |
 
-Multiple simultaneous memberships are allowed. Access to doctor personalia is evaluated as _(membership is active) AND (the project is permitted for that organisation) AND (the doctor consented for that purpose)_ — OWD-2 + REQ-34.
+A person holds **at most one active membership** at a time (Q-33): a second active membership is either refused, or — if the wireframes require the softer mode — allowed with an explicit warning to the person and to both organisation admins; the choice between the two modes is wireframe detail, not a model change. Access to doctor personalia is evaluated as _(membership is active) AND (the object is sponsored by that organisation) AND (the doctor consented for that purpose)_ — the predicate is scoped to the specific sponsored object, never to a whole project (Q-32, OWD-2 + REQ-34).
 
 ### 2.5 Project — existing `projects`
 
@@ -88,7 +90,7 @@ Multiple simultaneous memberships are allowed. Access to doctor personalia is ev
 | `direction_id`                                             | fk → §2.8   | the direction the project belongs to (OWD-11) |
 | `status` / `first_published_at` / `deleted_at` / `version` | —           | existing retained-row lifecycle               |
 
-The **single traceable container** (OWD-9, rule V-RV-9). Existing links: `project_experts` (project ↔ expert), `project_partners` (project ↔ organisation), `event_projects` (project ↔ event output).
+The **single traceable container** (OWD-9, rule V-RV-9). The only project link in the schema today is `event_projects` (project ↔ event output); `project_experts` (project ↔ expert) and `project_partners` (project ↔ organisation) are **designed in feature 012** (`012-design.md`, wave 3 — #1291 / #1293) and not yet shipped, so this model inherits them as designed, not as existing tables.
 
 ### 2.6 Project outputs
 
@@ -117,11 +119,11 @@ Every output carries: `project_id`, `type`, `audience` (§4), `direction_id` whe
 - **`direction_adjacency`** — self-relation `direction_id` ↔ `adjacent_direction_id` with `kind` and `weight`.
 - **`direction_specialties`** — many-to-many `direction_id` ↔ `specialty_minzdrav_id`; this link drives content display (REQ-1).
 
-The existing `event_topics` link becomes the event↔direction link. **Rationale for the identification** (ADR-0016 §5): `012-design.md` §2 defines `topics` as the open, own, editorially managed classification axis with no adjacency and no official-list relation — the directions book minus the two relations added here.
+The `event_topics` link — likewise designed in feature 012 and not yet in the schema — becomes the event↔direction link. **Rationale for the identification** (ADR-0016 §5): `012-design.md` §2 defines `topics` as the open, own, editorially managed classification axis with no adjacency and no official-list relation — the directions book minus the two relations added here.
 
 ### 2.9 Expert — existing `experts`
 
-`id` · `slug` · `name` · `photo_ref` · `professional_role` · `credentials` · `affiliation` · `bio` · retained-row lifecycle incl. `content_removed_at` (all existing), plus `primary_direction_id` (fk → §2.8) and `organisation_id` (fk → §2.3, the clinical base / employer — OWD-4).
+`id` · `slug` · `name` · `photo_ref` · `professional_role` · `credentials` · `affiliation` · `bio` · retained-row lifecycle incl. `content_removed_at` (all existing), plus `primary_direction_id` (fk → §2.8) and `organisation_id` (fk → §2.3, the clinical base — OWD-4; never an "employer", which is not a product role).
 
 Exists **without** an account (REQ-97).
 
@@ -137,20 +139,21 @@ Invariants: at most one `confirmed` link per expert; at most one `confirmed` exp
 
 ### 2.11 Ledger account
 
-`id` · `subject_kind` (`person` · `project_fund` · `organisation` · `system`) · `subject_id` · `unit` (`attention_points` · `money`) · `opened_at` · `closed_at`. One person has one attention-points account across web and mobile (OWD-10, REQ-3).
+`id` · `subject_kind` (`person` · `project_fund` · `organisation` · `system`) · `subject_id` · `unit` (`attention_points` · `money`) · `opened_at` · `closed_at`. One person has one attention-points account across web and mobile (OWD-10, REQ-3). On erasure the person's account is **closed and its balance frozen** — postings are never deleted or rewritten (§2.12); the posting subject is re-pointed to an anonymised subject under the ADR-0009 erasure procedure (Q-35).
 
 ### 2.12 Posting
 
-| Field                                    | Kind           | Note                                                                             |
-| ---------------------------------------- | -------------- | -------------------------------------------------------------------------------- |
-| `id`                                     | uuid           | append-only, never updated or deleted (ADR-0003 §2.7)                            |
-| `debit_account_id` / `credit_account_id` | fk → §2.11     | double-entry style                                                               |
-| `amount` / `unit`                        | numeric / enum |                                                                                  |
-| `project_id`                             | fk → §2.5      | traceability across both storefronts (OWD-9)                                     |
-| `output_id` / `output_type`              | fk / enum      | the lesson/event the accrual is attributed to (REQ-31)                           |
-| `rule_id` / `rule_version`               | fk / text      | the accrual rule that produced it — rules themselves out of scope (REQ-36/48/49) |
-| `occurred_at` / `recorded_at`            | timestamptz    | business time vs record time                                                     |
-| `reverses_posting_id`                    | fk, nullable   | corrections are compensating postings                                            |
+| Field                                                 | Kind           | Note                                                                                                                                                            |
+| ----------------------------------------------------- | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`                                                  | uuid           | append-only, never updated or deleted (ADR-0003 §2.7)                                                                                                           |
+| `debit_account_id` / `credit_account_id`              | fk → §2.11     | double-entry style                                                                                                                                              |
+| `amount` / `unit`                                     | numeric / enum |                                                                                                                                                                 |
+| `project_id`                                          | fk → §2.5      | traceability across both storefronts (OWD-9)                                                                                                                    |
+| `output_id` / `output_type`                           | fk / enum      | the lesson/event the accrual is attributed to (REQ-31)                                                                                                          |
+| `rule_id` / `rule_version`                            | fk / text      | the accrual rule that produced it — rules themselves out of scope (REQ-36/48/49)                                                                                |
+| `attributed_organisation_id` / `attributed_member_id` | fk, nullable   | the **attribution subject** — the organisation and the specific member (medical representative) whose personal link / promo code produced the posting (REQ-114) |
+| `occurred_at` / `recorded_at`                         | timestamptz    | business time vs record time                                                                                                                                    |
+| `reverses_posting_id`                                 | fk, nullable   | corrections are compensating postings                                                                                                                           |
 
 A balance is a fold over postings; there is **no** mutable balance column anywhere. The "contributed → unit fund → accruals" chain (OWD-3) is a report over §2.11 + §2.12.
 
@@ -160,7 +163,7 @@ A balance is a fold over postings; there is **no** mutable balance column anywhe
 
 ### 2.14 Consent record — existing `consent_records`
 
-`id` · `user_id` · `purpose` · `version` · `captured_at` (all existing). Per-purpose, explicit, revocable (REQ-34): a revocation is a new record, never a deletion. A partner-facing projection includes only doctors with an active consent for that purpose (OWD-2, CON-2).
+`id` · `user_id` · `purpose` · `version` · `captured_at` (all existing). Per-purpose, explicit, revocable (REQ-34): a revocation is a new record, never a deletion. An investor-facing projection includes only doctors with an active consent for that purpose (OWD-2, CON-2). There is **no self-service partial revocation** (Q-35): the person either keeps the consent set the platform requires or refuses it and loses everything the platform gave them — a refusal is handled manually by a manager, and its ledger consequence is the closed, frozen account of §2.11, never a rewritten posting history.
 
 ---
 
@@ -197,7 +200,7 @@ erDiagram
 Load-bearing invariants:
 
 1. One person = one `PERSON` row on both storefronts (OWD-1).
-2. Access to another person's personalia is never a property of an account — it is _(active membership) × (permitted project) × (consent for the purpose)_.
+2. Access to another person's personalia is never a property of an account — it is _(active membership) × (sponsored object) × (consent for the purpose)_.
 3. Every output and every posting carries a `project_id` (OWD-9).
 4. Balances are derived, never stored as mutable state (OWD-10).
 5. A confirmed account↔expert link is unique on both sides.
@@ -210,7 +213,7 @@ Load-bearing invariants:
 | ---------------------------------------------------- | ---------- | --------------------------------------------------------------------- |
 | Person (account)                                     | both       | one account, two storefronts                                          |
 | Role assignment                                      | admin-only | granted in the admin surface                                          |
-| Organisation                                         | academy    | partner/clinical-base cabinets are backstage                          |
+| Organisation                                         | academy    | investor/clinical-base cabinets are backstage                         |
 | Membership                                           | academy    | managed by the organisation admin                                     |
 | Project                                              | academy    | the doctor sees outputs, not the container                            |
 | Output — event / recording                           | both       | authored in the Academy, consumed on the doctor storefront            |
@@ -238,44 +241,44 @@ Load-bearing invariants:
 | `taxonomy.projects`                                         | **kept**               | §2.5, the container — unchanged shape, gains `direction_id`                                                                                                                                                                                   |
 | `taxonomy.experts`                                          | **kept**               | §2.9, gains `primary_direction_id` + `organisation_id`                                                                                                                                                                                        |
 | `taxonomy.topics`                                           | **renamed + extended** | → `directions` (§2.8) with adjacency and the specialty link; `event_topics` follows                                                                                                                                                           |
-| `taxonomy.partners`                                         | **renamed + extended** | → `organisations` (§2.3) with `kinds`; `project_partners` follows                                                                                                                                                                             |
+| `taxonomy.partners`                                         | **renamed + extended** | → `organisations` (§2.3) with the open, extensible `kinds` set (investor · clinical base · licensee, more expected); the 012-designed `project_partners` link follows the rename                                                              |
 | `taxonomy.event_experts` / `event_projects`                 | **kept**               | feature-012 relations, absorbed as they are (#1288/#1289)                                                                                                                                                                                     |
 | `event_recordings`                                          | **kept**               | feature 014, absorbed unchanged                                                                                                                                                                                                               |
 | `consent_records`                                           | **kept**               | §2.14, ADR-0009                                                                                                                                                                                                                               |
 | `audit_ledger`                                              | **kept**               | feature 010; gains the link-transition and document-access event types                                                                                                                                                                        |
-| `lifecycle`                                                 | **kept**               | retained-row lifecycle machinery (ADR-0003 §3.6)                                                                                                                                                                                              |
+| `lifecycle.ts` (not a table)                                | **kept**               | the `record_status` pgEnum + the shared retained-row lifecycle column helpers reused by every table (ADR-0003 §3.6)                                                                                                                           |
 | `presence_beats`                                            | **kept**               | attention measurement — a posting source, not a ledger                                                                                                                                                                                        |
 | `idempotency_keys` / `media_cleanup_jobs` / `stream_config` | **kept**               | operational, untouched                                                                                                                                                                                                                        |
 | — (new)                                                     | **new**                | `role_assignments`, `memberships`, `account_expert_links`, `specialties_minzdrav`, `direction_adjacency`, `direction_specialties`, the output tables (school/course/module/lesson/podcast), `ledger_accounts`, `postings`, `document_records` |
 
 **Feature 012 and feature 014 are absorbed, not rewritten.** The only shipped-surface change is the `topics` → `directions` and `partners` → `organisations` rename, which is its own migration slice preserving the retained-row lifecycle (#1278).
 
-**REQ-105 (GetCourse people + congress registration base) is an open follow-up**, not designed here: it needs a legal basis, consent re-confirmation and a field map before the first partner report.
+**REQ-105 (GetCourse people + congress registration base) is an open follow-up**, not designed here: it needs a legal basis, consent re-confirmation and a field map before the first investor report.
 
 ---
 
 ## 6. Terminology (RU term → entity)
 
-| RU term (binding — `discovery-glossary-ru.md`) | Entity                                          |
-| ---------------------------------------------- | ----------------------------------------------- |
-| Человек / учётная запись                       | Person (account) — §2.1                         |
-| Врач                                           | Person with the `doctor` role assignment        |
-| Эксперт                                        | Expert — §2.9                                   |
-| Автор / соавтор                                | Role assignment scoped to a project/output      |
-| Инвестор = партнёр                             | Organisation with the `partner` kind — §2.3     |
-| Участник                                       | BBM-level term — out of the DS model            |
-| Клиническая база                               | Organisation with the `clinical base` kind      |
-| Представитель партнёра / медпред               | Membership with the matching role — §2.4        |
-| Верификатор                                    | Role assignment `verifier` — §2.2               |
-| Проект                                         | Project — §2.5                                  |
-| Школа / курс / урок / подкаст / событие        | Project outputs — §2.6                          |
-| Специальность (Минздрав)                       | Minzdrav specialty — §2.7                       |
-| Направление                                    | Direction — §2.8                                |
-| Очки внимания                                  | Ledger account, unit `attention_points` — §2.11 |
-| Начисление / проводка                          | Posting — §2.12                                 |
-| Фонд урока / мероприятия                       | Ledger account, subject `project_fund`          |
-| Документ врача                                 | Document record — §2.13                         |
-| Согласие                                       | Consent record — §2.14                          |
+| RU term (binding — `discovery-glossary-ru.md`) | Entity                                                                     |
+| ---------------------------------------------- | -------------------------------------------------------------------------- |
+| Человек / учётная запись                       | Person (account) — §2.1                                                    |
+| Врач                                           | Person with the `doctor` role assignment                                   |
+| Эксперт                                        | Expert — §2.9                                                              |
+| Автор / соавтор                                | Role assignment scoped to a project/output                                 |
+| Инвестор (организация)                         | Organisation with the `investor` kind — §2.3                               |
+| Участник                                       | BBM-level term — out of the DS model                                       |
+| Клиническая база                               | Organisation with the `clinical base` kind                                 |
+| Представитель инвестора / медпред              | Membership role — §2.4; the медпред carries personal attribution (REQ-114) |
+| Верификатор                                    | Role assignment `verifier` — §2.2                                          |
+| Проект                                         | Project — §2.5                                                             |
+| Школа / курс / урок / подкаст / событие        | Project outputs — §2.6                                                     |
+| Специальность (Минздрав)                       | Minzdrav specialty — §2.7                                                  |
+| Направление                                    | Direction — §2.8                                                           |
+| Очки внимания                                  | Ledger account, unit `attention_points` — §2.11                            |
+| Начисление / проводка                          | Posting — §2.12                                                            |
+| Фонд урока / мероприятия                       | Ledger account, subject `project_fund`                                     |
+| Документ врача                                 | Document record — §2.13                                                    |
+| Согласие                                       | Consent record — §2.14                                                     |
 
 The synonyms banned by the glossary are not used anywhere in this model, in entity names, or in the surfaces built from it.
 

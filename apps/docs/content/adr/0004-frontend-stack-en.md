@@ -54,13 +54,15 @@ Prohibition: `@vercel/*` packages, Edge Runtime with Vercel KV, Vercel Image Opt
 ### 2. App-split: **4 Next.js apps**
 
 ```
-apps/promo/    # SSG/ISR, doctor.school
-apps/portal/   # SSR auth + client-hydration, app.doctor.school
+apps/doctor/   # SSG/ISR marketing routes + SSR authenticated storefront, doctor.school
+apps/portal/   # SSR auth + client-hydration, academy.doctor.school (Academy backstage)
 apps/admin/    # Refine + 2FA, admin.doctor.school
 apps/cms/      # Payload v3 inside Next.js, cms.doctor.school
 ```
 
-Cookies: **host-only `__Host-` cookie per app** (`__Host-ds_session` for the portal, `__Host-ds_admin_session`, `__Host-ds_cms_session`, etc.). Cross-app SSO continuity — via OIDC silent re-auth (`prompt=none`) at the IdP, not via a shared cookie spanning `.doctor.school`. Single source of truth: ADR-0001 §6. The admin session model is **staged**: wave 1 (through the 2026-07-17 live-webinar scope, feature 007) authenticates via the shipped 003 session cookie `__Host-ds_session` (`SameSite=Lax`, no 2FA); the dedicated `__Host-ds_admin_session` (`SameSite=Strict`) + mandatory 2FA for `platform_admin` is pre-pilot hardening tracked by Issue [#718](https://github.com/doctor-school/ds-platform/issues/718) (detail: design spec §3.2).
+One application per public storefront: `apps/doctor` serves the doctor-facing storefront (public catalogue and marketing routes plus the authenticated learning surface), `apps/portal` serves the Academy backstage for experts and partners. The host map and the reasoning behind the split are fixed in ADR-0015.
+
+Cookies: **host-only `__Host-` cookie per app** (`__Host-ds_session` on each storefront host, `__Host-ds_admin_session`, `__Host-ds_cms_session`, etc.). Cross-app SSO continuity — via OIDC silent re-auth (`prompt=none`) at the IdP, not via a shared cookie spanning `.doctor.school`. Single source of truth: ADR-0001 §6. The admin session model is **staged**: wave 1 (through the 2026-07-17 live-webinar scope, feature 007) authenticates via the shipped 003 session cookie `__Host-ds_session` (`SameSite=Lax`, no 2FA); the dedicated `__Host-ds_admin_session` (`SameSite=Strict`) + mandatory 2FA for `platform_admin` is pre-pilot hardening tracked by Issue [#718](https://github.com/doctor-school/ds-platform/issues/718) (detail: design spec §3.2).
 
 Deployment v1-v2: one VPS "frontend-prod" + 4 Docker containers + nginx reverse-proxy. v3+ trigger — split at 1M MAU.
 
@@ -84,13 +86,13 @@ User cabinets in `apps/portal` — custom React (not Refine), brand-UX requires 
 
 Pattern: RSC provides initial SSR with data → `HydrationBoundary` serializes state to client → Tanstack Query handles client interactivity + cache + invalidation. Centrifugo WS events call `queryClient.invalidateQueries`. Server Actions — for simple admin mutations without client cache.
 
-Tanstack Query — unified pattern across all 4 apps (Refine is built on TQ internally). **Caveat:** Refine in `apps/admin` manages its own `QueryClient` (Refine is a client-side framework); admin app is effectively CSR with a thin SSR shell. `HydrationBoundary` is applicable in portal/promo/cms, not for Refine-managed resources in admin. See design spec §4, §5, §8.1.
+Tanstack Query — unified pattern across all 4 apps (Refine is built on TQ internally). **Caveat:** Refine in `apps/admin` manages its own `QueryClient` (Refine is a client-side framework); admin app is effectively CSR with a thin SSR shell. `HydrationBoundary` is applicable in doctor/portal/cms, not for Refine-managed resources in admin. See design spec §4, §5, §8.1.
 
 ### 6. Forms: **RHF + `zodResolver` + shadcn `<Form>`**
 
 shadcn `<Form>` primitive is **built on RHF**. Refine officially uses RHF. Zod schema — single SSOT in `packages/api-client/schemas/` (NestJS backend and frontend import the same file).
 
-### 7. Promo content source: **Payload CMS v3 content-only**
+### 7. Marketing content source: **Payload CMS v3 content-only**
 
 Payload v3 lives inside Next.js in `apps/cms`. Owns only marketing-content tables (`cms.*` schema namespace in the shared Postgres from ADR-0003). Does NOT own domain data (domain → NestJS+Drizzle via `public.*`).
 
@@ -98,7 +100,7 @@ SSOT enforcement via custom Lexical features ("Insert glossary term" button in r
 
 ### 8. Image optimization: **hybrid**
 
-- Promo SSG → Next.js static imports → build-time variants → CDN cache as static
+- Marketing routes (SSG, `apps/doctor`) → Next.js static imports → build-time variants → CDN cache as static
 - Portal/Admin dynamic → `next/image` Sharp on Node + Timeweb CDN cache
 - Payload media library → Payload's built-in Sharp pipeline → Timeweb Object Storage → CDN serve
 
@@ -118,7 +120,7 @@ Vitest (unit + integration) + RTL (component) + Playwright (E2E cross-browser).
 
 ### 12. PWA: **`serwist`** (maintained next-pwa fork) — installable manifest + service worker
 
-In `apps/portal`. Offline lesson reading — OQ-F7 (deferred v2+, depends on DSO-29).
+In `apps/doctor`. Offline lesson reading — OQ-F7 (deferred v2+, depends on DSO-29).
 
 ### 13. Lint/Format: **ESLint flat config + Prettier + plugin-tailwindcss**
 
@@ -140,12 +142,12 @@ GlitchTip MIT, self-host, RF-compliant. SDK is official Sentry — maximum LLM d
 
 - AI agents write idiomatic React on the first attempt (all selected libraries are mainstream with maximum LLM datasets).
 - One meta-framework for 4 apps → one mental model, one build/deploy pattern, one CI pipeline template.
-- 4 apps provide independent deploy cadence + isolated security perimeters (admin/cms 2FA-zone, portal/promo SSO-zone) + AI focused on one app at a time.
+- 4 apps provide independent deploy cadence + isolated security perimeters (admin/cms 2FA-zone, doctor/portal SSO-zone) + AI focused on one app at a time.
 - Type-safety end-to-end: Zod schemas from `packages/api-client/schemas/` flow from NestJS validation through RHF forms to RSC fetches without cross-language codegen.
 - RSC + Tanstack Query hybrid gives the best of both worlds — server-fetch with HttpOnly cookie + client interactivity + real-time invalidation.
 - Payload content-only resolves SSOT discipline for marketing content (inline glossary references in rich-text) without the overhead of a full headless CMS on the backend.
 - Refine + Cerbos integration inherits the policy engine from ADR-0003 — admin permissions use the same `*.yaml` policies as NestJS guards.
-- Sharp + Timeweb CDN hybrid delivers zero runtime CPU for promo (build-time) and cacheable transforms for dynamic content (Node CPU only on cold cache).
+- Sharp + Timeweb CDN hybrid delivers zero runtime CPU for the marketing routes (build-time) and cacheable transforms for dynamic content (Node CPU only on cold cache).
 
 **Inheritance caveat (for transparency):** ADR-0004 derives the end-to-end TypeScript typing benefit from ADR-0002's choice of Node.js+TS runtime. ADR-0002 §1 contains argumentation referencing existing prototypes ("3 prototypes on Next.js") and RF hiring pool — this violates the [[feedback_tech_stack_criteria_no_team_skill]] rule that was formulated later in this ADR. This does not invalidate the Next.js choice here (it stands on objective criteria — LLM dataset, UI ecosystem, RSC), but in any future revision of ADR-0002 the Node.js choice must be verifiable on objective grounds independently. If ADR-0002 is revisited without the "3 prototypes" argument, Node.js must still pass on clean criteria; otherwise the TS end-to-end benefit inherited by ADR-0004 is in question.
 
@@ -167,8 +169,8 @@ GlitchTip MIT, self-host, RF-compliant. SDK is official Sentry — maximum LLM d
 | Quality              | Metric                   | v1                      | v3     |
 | -------------------- | ------------------------ | ----------------------- | ------ |
 | Bundle size (portal) | gzipped JS on main route | ≤200KB                  | ≤300KB |
-| LCP (promo)          | Mobile, throttled 3G     | ≤2.5s                   | ≤2.0s  |
-| PageSpeed (promo)    | Mobile score             | ≥80                     | ≥90    |
+| LCP (marketing)          | Mobile, throttled 3G     | ≤2.5s                   | ≤2.0s  |
+| PageSpeed (marketing)    | Mobile score             | ≥80                     | ≥90    |
 | TTI (portal main)    | Mobile                   | ≤3.5s                   | ≤2.5s  |
 | Deploy frequency     | Independent apps         | 4 independent pipelines | Same   |
 | Web Vitals INP       | p75                      | ≤200ms                  | ≤100ms |
@@ -180,7 +182,7 @@ GlitchTip MIT, self-host, RF-compliant. SDK is official Sentry — maximum LLM d
 
 | OQ                                       | Review trigger                                                                                                                                                                                                                                                                                      |
 | ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| OQ-F1. Migrate promo to Astro            | Marketing ≥3 developers, promo PageSpeed <90 mobile, demand for visual-CMS workflow                                                                                                                                                                                                                 |
+| OQ-F1. Split the marketing routes out of `apps/doctor` into Astro            | Marketing ≥3 developers, marketing PageSpeed <90 mobile, demand for visual-CMS workflow                                                                                                                                                                                                                 |
 | OQ-F2. Portal split into multiple apps   | Portal bundle >500KB gzipped, expert-CMS has separate threat model                                                                                                                                                                                                                                  |
 | OQ-F3. v3 topology scaling               | 1M MAU reached, or Centrifugo+SSR on one VPS becomes bottleneck                                                                                                                                                                                                                                     |
 | OQ-F4. Migration Payload → Keystatic     | Marketing scope narrows to 3–5 landing pages AND inline-glossary not needed                                                                                                                                                                                                                         |

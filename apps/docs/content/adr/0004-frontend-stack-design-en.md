@@ -1,6 +1,6 @@
 ---
 title: "DS Platform — Frontend Stack design [EN]"
-description: "1. Meta-framework: Next.js 15 App Router + RSC, one framework for all 6 web surfaces. 2. App-split: 4 Next.js applications — apps/promo (SSG/ISR,..."
+description: "1. Meta-framework: Next.js 15 App Router + RSC, one framework for all 6 web surfaces. 2. App-split: 4 Next.js applications — apps/doctor (SSG/ISR marketing routes + authenticated storefront,..."
 lang: en
 ---
 
@@ -20,12 +20,12 @@ lang: en
 ## 0. TL;DR
 
 1. **Meta-framework:** Next.js 15 App Router + RSC, one framework for all 6 web surfaces.
-2. **App-split:** 4 Next.js applications — `apps/promo` (SSG/ISR, doctor.school) + `apps/portal` (SSR auth, app.doctor.school) + `apps/admin` (Refine, admin.doctor.school) + `apps/cms` (Payload v3 inside Next.js, cms.doctor.school).
+2. **App-split:** 4 Next.js applications — `apps/doctor` (SSG/ISR, doctor.school) + `apps/portal` (SSR auth, academy.doctor.school) + `apps/admin` (Refine, admin.doctor.school) + `apps/cms` (Payload v3 inside Next.js, cms.doctor.school).
 3. **Deployment topology v1-v2:** one VPS "frontend-prod" + 4 Docker containers + nginx reverse-proxy. v3+ — separate VPSes at 1M MAU.
 4. **Admin/CMS framework:** Refine + custom REST data provider → NestJS API + Cerbos access provider + custom Zitadel auth strategy. No headless CMS as a backend replacement.
 5. **Design system:** Tailwind CSS 4 + shadcn/ui + lucide-react + Radix Primitives. Shared `packages/design-system`. Heavy compositions (TipTap rich-text, Tanstack Table, react-day-picker, Recharts/Tremor) — on top of the shadcn shell.
 6. **User cabinets UI:** custom React on shadcn/ui + Tanstack Query + RHF + Zod (not Refine — brand-UX requires customization).
-7. **Data-fetching:** Tanstack Query v5 + RSC hybrid (initial SSR via RSC + client interactivity via TQ) + Server Actions selectively for simple admin mutations. Tanstack Query — unified pattern across all 4 apps. **Caveat:** Refine in `apps/admin` manages its own `QueryClient` via `<Refine>` provider (Refine is client-side). This means the admin app is effectively CSR with a thin SSR shell; the RSC `HydrationBoundary` pattern applies in portal/promo/cms but not for Refine-managed resources in admin. Tanstack Query as a library is shared, but cache instances are isolated per app.
+7. **Data-fetching:** Tanstack Query v5 + RSC hybrid (initial SSR via RSC + client interactivity via TQ) + Server Actions selectively for simple admin mutations. Tanstack Query — unified pattern across all 4 apps. **Caveat:** Refine in `apps/admin` manages its own `QueryClient` via `<Refine>` provider (Refine is client-side). This means the admin app is effectively CSR with a thin SSR shell; the RSC `HydrationBoundary` pattern applies in doctor/portal/cms but not for Refine-managed resources in admin. Tanstack Query as a library is shared, but cache instances are isolated per app.
 8. **Forms:** RHF + `@hookform/resolvers/zod` + shadcn `<Form>`. Zod schema — single SSOT in `packages/api-client/schemas/` (frontend + backend NestJS both use the same import).
 9. **Promo content source:** Payload CMS v3 content-only in `apps/cms`, Postgres `cms.*` namespace in the shared Postgres instance from ADR-0003. Custom Lexical features for inline SSOT-glossary insertions. MCP server for AI agents. Custom Auth Strategy → Zitadel.
 10. **Image optimization:** hybrid — build-time variants via Next.js static imports (promo) + `next/image` Sharp on Node (dynamic) + Payload Sharp pipeline (media library). Timeweb CDN — shared delivery cache layer.
@@ -121,8 +121,8 @@ Self-host via `output: 'standalone'` in `next.config.ts` → Docker image ~100MB
 
 ```
 apps/
-├── promo/    # SSG/ISR, doctor.school, public
-├── portal/   # SSR auth, app.doctor.school, multi-role (doctor/expert/clinic/investor)
+├── doctor/    # SSG/ISR, doctor.school, public
+├── portal/   # SSR auth, academy.doctor.school, multi-role (doctor/expert/clinic/investor)
 ├── admin/    # SSR auth + 2FA + Refine, admin.doctor.school (platform moderators)
 └── cms/      # Payload v3 inside Next.js, cms.doctor.school (marketing team)
 ```
@@ -131,8 +131,8 @@ apps/
 
 **Every app holds its own host-only cookie:**
 
-- `doctor.school` (promo) — `__Host-ds_promo_session` if authenticated state is needed for CTA / lead forms (usually not — promo is anonymous by default).
-- `app.doctor.school` (portal) — `__Host-ds_session`, host-only, `HttpOnly`, `Secure`, `SameSite=Lax`.
+- `doctor.school` (doctor storefront) — `__Host-ds_session`, host-only, `HttpOnly`, `Secure`, `SameSite=Lax`; the public marketing and catalogue routes of the same host are anonymous by default.
+- `academy.doctor.school` (portal) — `__Host-ds_session`, host-only, `HttpOnly`, `Secure`, `SameSite=Lax`.
 - `admin.doctor.school` (admin) — **staged session model**. Wave 1 (through the 2026-07-17 live-webinar scope — feature 007, minimal event-admin): the admin app authenticates via the shipped 003 session cookie `__Host-ds_session` (host-only, `HttpOnly`, `Secure`, `SameSite=Lax`, no 2FA), sent same-origin through the admin `/v1/*` proxy — accepted for one trusted `platform_admin` group whose mutations already ride the high-stakes introspection tier (ADR-0001 §2.5/§8). Pre-pilot hardening (required before the 2026 Q3 pilot, tracked by Issue [#718](https://github.com/doctor-school/ds-platform/issues/718)): dedicated `__Host-ds_admin_session` cookie, host-only, `SameSite=Strict`, plus mandatory 2FA for `platform_admin` sessions — the target session model of this ADR.
 - `cms.doctor.school` (cms) — `__Host-ds_cms_session`, host-only, for the marketing team.
 - `docs.doctor.school` (docs) — `__Host-ds_docs_session` if auth is needed (internal SSOT for the team, typically via VPN).
@@ -141,7 +141,7 @@ The full session security profile (TTL, rotation, CSRF, fingerprint binding) —
 
 #### 3.2.1. Cross-app SSO via OIDC silent re-auth — frontend implementation (DSO-63 #2)
 
-Cross-app login continuity between portal, admin, promo, docs, cms is achieved via OIDC silent re-auth (`prompt=none`) at the IdP, not via a shared cookie spanning the `.doctor.school` zone. A shared cookie was rejected per ADR-0001 §6 — same-origin XSS or subdomain takeover would compromise the admin session, and CSRF / fingerprint mitigations are bypassed by same-origin XSS. See ADR-0001 §6 for the full rationale.
+Cross-app login continuity between doctor, portal, admin, docs, cms is achieved via OIDC silent re-auth (`prompt=none`) at the IdP, not via a shared cookie spanning the `.doctor.school` zone. A shared cookie was rejected per ADR-0001 §6 — same-origin XSS or subdomain takeover would compromise the admin session, and CSRF / fingerprint mitigations are bypassed by same-origin XSS. See ADR-0001 §6 for the full rationale.
 
 **Frontend pattern per Next.js app:**
 
@@ -240,10 +240,10 @@ One VPS "frontend-prod" (Timeweb, 2–4 vCPU / 4–8 GB RAM):
 
 ```
 nginx (reverse-proxy + TLS termination)
-  ├─ doctor.school        → promo container
-  ├─ app.doctor.school    → portal container
-  ├─ admin.doctor.school  → admin container
-  └─ cms.doctor.school    → cms container (Payload v3)
+  ├─ doctor.school           → doctor container
+  ├─ academy.doctor.school  → portal container
+  ├─ admin.doctor.school    → admin container
+  └─ cms.doctor.school      → cms container (Payload v3)
 ```
 
 4 Next.js standalone builds, each ~150–300 MB image, ~150–300 MB RAM. Total ~1–2 GB RAM for 4 containers. 2–4 vCPU handles v1-v2 easily (≤tens of thousands MAU).
@@ -270,7 +270,7 @@ The pattern "SSR-default first paint + client-hydration + SPA-like internal navi
 
 - SSR shell for admin is limited to the outer layout (auth guard, theme)
 - All Refine-managed pages inside are CSR (no RSC server-fetch with HttpOnly cookie for resource data)
-- The `HydrationBoundary` pattern of Tanstack Query is only applicable in portal/promo/cms; in admin, Refine manages its own `QueryClient` (cache instance isolated per app)
+- The `HydrationBoundary` pattern of Tanstack Query is only applicable in doctor/portal/cms; in admin, Refine manages its own `QueryClient` (cache instance isolated per app)
 
 For an internal admin tool (moderators, ≤tens of users) this is an acceptable trade-off — performance is less critical than for the public-facing portal. AI pipeline UI v3 (when it appears) — ordinary React routes inside Refine, the same CSR pattern.
 
@@ -718,7 +718,7 @@ Channels from ADR-0002 §7: `user:<uuid>`, `webinar:<id>`, `leaderboard:global`,
 
 `next-intl` in each app:
 
-- Messages: `messages/ru.json` per app (isolated namespaces — promo, portal, admin, cms)
+- Messages: `messages/ru.json` per app (isolated namespaces — doctor, portal, admin, cms)
 - Shared messages (glossary terms, forms) — `packages/i18n-shared/`
 - Locale routing built-in (`[locale]/...`); single locale `ru` for now, ready for `en` in v2+
 - Server Components compatible (RSC-native)
@@ -804,7 +804,7 @@ OQ-F8: Biome migration — trigger: ESLint CI >5 min/PR or Prettier plugin ecosy
 ```
 ds-platform/
 ├── apps/
-│   ├── promo/
+│   ├── doctor/
 │   ├── portal/
 │   ├── admin/
 │   ├── cms/
@@ -872,7 +872,7 @@ Documentation:
 ### 20.1. ADR-0001 (Identity/Auth/RBAC)
 
 - JWT auth flow via Zitadel (closed per ADR-0001 §8, DSP-209).
-- **Host-only `__Host-` cookie per app** (portal, admin, promo, docs, cms) — each app has its own scope. Full security profile — ADR-0001 §6.
+- **Host-only `__Host-` cookie per app** (doctor, portal, admin, docs, cms) — each app has its own scope. Full security profile — ADR-0001 §6.
 - **Cross-app SSO continuity** — via OIDC silent re-auth (`prompt=none`), not via shared cookie. Implementation details — §3.2.1.
 - Two-tier validation: JWT fast-path for ≥99% of requests, IdP `/introspect` for high-stakes (payments, AU withdrawal, role change, admin mutations, PD export).
 - Hybrid RBAC: IdP coarse roles in JWT, backend fine-grained via Cerbos.
@@ -899,7 +899,7 @@ Documentation:
 
 | OQ        | Description                                                                                                                                    | Review trigger                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| OQ-F1     | Migrate `apps/promo` to Astro                                                                                                                  | Marketing ≥3 developers, promo PageSpeed <90 on mobile, demand for visual-CMS workflow                                                                                                                                                                                                                                                                                                                                                                |
+| OQ-F1     | Split the marketing routes of `apps/doctor` out into Astro                                                                                                                  | Marketing ≥3 developers, promo PageSpeed <90 on mobile, demand for visual-CMS workflow                                                                                                                                                                                                                                                                                                                                                                |
 | OQ-F2     | Portal split into multiple apps (doctor/expert/clinic/investor)                                                                                | Portal bundle >500 KB gzipped, or expert-CMS gets a separate security threat model                                                                                                                                                                                                                                                                                                                                                                    |
 | OQ-F3     | v3 topology scaling                                                                                                                            | 1M MAU reached, or Centrifugo+SSR on one VPS becomes bottleneck                                                                                                                                                                                                                                                                                                                                                                                       |
 | OQ-F4     | Migration Payload → Keystatic                                                                                                                  | Marketing scope narrows to 3–5 static landing pages AND inline-glossary not needed                                                                                                                                                                                                                                                                                                                                                                    |

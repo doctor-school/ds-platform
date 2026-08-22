@@ -54,13 +54,15 @@ Constraints:
 ### 2. App-split: **4 Next.js apps**
 
 ```
-apps/promo/    # SSG/ISR, doctor.school
-apps/portal/   # SSR auth + client-hydration, app.doctor.school
+apps/doctor/   # SSG/ISR маркетинговые маршруты + SSR-витрина под аутентификацией, doctor.school
+apps/portal/   # SSR auth + client-hydration, academy.doctor.school (закулисье Академии)
 apps/admin/    # Refine + 2FA, admin.doctor.school
 apps/cms/      # Payload v3 inside Next.js, cms.doctor.school
 ```
 
-Cookies: **host-only `__Host-` cookie per app** (`__Host-ds_session` у портала, `__Host-ds_admin_session`, `__Host-ds_cms_session`, etc.). Cross-app SSO continuity — через OIDC silent re-auth (`prompt=none`) у IdP, не через shared cookie на `.doctor.school`. Single source of truth: ADR-0001 §6. Session model админки — **staged**: волна 1 (в объёме live-вебинара 2026-07-17, фича 007) аутентифицируется через отгруженную 003 session cookie `__Host-ds_session` (`SameSite=Lax`, без 2FA); выделенная `__Host-ds_admin_session` (`SameSite=Strict`) + обязательная 2FA для `platform_admin` — pre-pilot hardening, трекается Issue [#718](https://github.com/doctor-school/ds-platform/issues/718) (детали: design spec §3.2).
+По одному приложению на публичную витрину: `apps/doctor` обслуживает витрину врача (публичный каталог и маркетинговые маршруты плюс обучение под аутентификацией), `apps/portal` — закулисье Академии для экспертов и партнёров. Карта хостов и обоснование разделения зафиксированы в ADR-0015.
+
+Cookies: **host-only `__Host-` cookie per app** (`__Host-ds_session` на каждом хосте витрины, `__Host-ds_admin_session`, `__Host-ds_cms_session`, etc.). Cross-app SSO continuity — через OIDC silent re-auth (`prompt=none`) у IdP, не через shared cookie на `.doctor.school`. Single source of truth: ADR-0001 §6. Session model админки — **staged**: волна 1 (в объёме live-вебинара 2026-07-17, фича 007) аутентифицируется через отгруженную 003 session cookie `__Host-ds_session` (`SameSite=Lax`, без 2FA); выделенная `__Host-ds_admin_session` (`SameSite=Strict`) + обязательная 2FA для `platform_admin` — pre-pilot hardening, трекается Issue [#718](https://github.com/doctor-school/ds-platform/issues/718) (детали: design spec §3.2).
 
 Deployment v1-v2: один VPS "frontend-prod" + 4 Docker контейнера + nginx reverse-proxy. v3+ trigger — split при 1M MAU.
 
@@ -84,13 +86,13 @@ User cabinets в `apps/portal` — custom React (не Refine), brand-UX треб
 
 Pattern: RSC даёт initial SSR с данными → `HydrationBoundary` сериализует state на клиент → Tanstack Query handles client interactivity + cache + invalidation. Centrifugo WS-события вызывают `queryClient.invalidateQueries`. Server Actions — для simple admin-mutations без client-cache.
 
-Tanstack Query — единый pattern на всех 4 apps (Refine построен на TQ внутри). **Caveat:** Refine в `apps/admin` управляет собственным `QueryClient` (Refine — client-side framework); admin app effectively CSR с тонким SSR-shell. `HydrationBoundary` применим в portal/promo/cms, не для Refine-managed resources в admin. См. design spec §4, §5, §8.1.
+Tanstack Query — единый pattern на всех 4 apps (Refine построен на TQ внутри). **Caveat:** Refine в `apps/admin` управляет собственным `QueryClient` (Refine — client-side framework); admin app effectively CSR с тонким SSR-shell. `HydrationBoundary` применим в doctor/portal/cms, не для Refine-managed resources в admin. См. design spec §4, §5, §8.1.
 
 ### 6. Forms: **RHF + `zodResolver` + shadcn `<Form>`**
 
 shadcn `<Form>` примитив **построен на RHF**. Refine официально использует RHF. Zod-схема — один SSOT в `packages/api-client/schemas/` (NestJS backend и frontend импортируют тот же файл).
 
-### 7. Promo content source: **Payload CMS v3 content-only**
+### 7. Marketing content source: **Payload CMS v3 content-only**
 
 Payload v3 живёт inside Next.js в `apps/cms`. Owns только marketing-content tables (`cms.*` schema namespace в shared Postgres из ADR-0003). НЕ trogue domain data (domain → NestJS+Drizzle через `public.*`).
 
@@ -98,7 +100,7 @@ SSOT enforcement через custom Lexical features («Insert glossary term» bu
 
 ### 8. Image optimization: **гибрид**
 
-- Promo SSG → Next.js static imports → build-time variants → CDN cache как статика
+- Marketing routes (SSG, `apps/doctor`) → Next.js static imports → build-time variants → CDN cache как статика
 - Portal/Admin dynamic → `next/image` Sharp on Node + Timeweb CDN cache
 - Payload media library → Payload's встроенный Sharp pipeline → Timeweb Object Storage → CDN serve
 
@@ -118,7 +120,7 @@ Vitest (unit + integration) + RTL (component) + Playwright (E2E cross-browser).
 
 ### 12. PWA: **`serwist`** (поддерживаемый next-pwa fork) — installable manifest + service-worker
 
-В `apps/portal`. Offline-чтение уроков — OQ-F7 (defer v2+, зависит DSO-29).
+В `apps/doctor`. Offline-чтение уроков — OQ-F7 (defer v2+, зависит DSO-29).
 
 ### 13. Lint/Format: **ESLint flat config + Prettier + plugin-tailwindcss**
 
@@ -140,12 +142,12 @@ GlitchTip MIT, self-host, RF-compliant. SDK официальный Sentry — LL
 
 - AI-агенты пишут идиоматичный React с первой попытки (все выбранные библиотеки — mainstream с максимальными LLM-датасетами).
 - Один meta-framework на 4 apps → один mental model, один build/deploy pattern, один CI-pipeline шаблон.
-- 4 apps дают independent deploy cadence + изолированные security perimeters (admin/cms 2FA-zone, portal/promo SSO-zone) + AI focused на одном app за раз.
+- 4 apps дают independent deploy cadence + изолированные security perimeters (admin/cms 2FA-zone, doctor/portal SSO-zone) + AI focused на одном app за раз.
 - Type-safety end-to-end: Zod-схемы из `packages/api-client/schemas/` текут от NestJS validation через RHF forms до RSC fetches без cross-language codegen.
 - RSC + Tanstack Query гибрид даёт лучшее из обоих миров — server-fetch с HttpOnly cookie + client interactivity + real-time invalidation.
 - Payload content-only решает SSOT-дисциплину для маркетинг-контента (glossary inline references в rich-text) без overhead полного headless CMS на backend.
 - Refine + Cerbos integration наследует policy engine из ADR-0003 — admin permissions использует те же `*.yaml` policies что NestJS guards.
-- Sharp + Timeweb CDN hybrid даёт зерo runtime CPU для promo (build-time) и кэшируемые transforms для dynamic (Node-CPU только на cold cache).
+- Sharp + Timeweb CDN hybrid даёт зерo runtime CPU для маркетинговых маршрутов (build-time) и кэшируемые transforms для dynamic (Node-CPU только на cold cache).
 
 **Inheritance caveat (для transparency):** ADR-0004 derives end-to-end TypeScript typing benefit от ADR-0002's выбора Node.js+TS runtime. ADR-0002 §1 содержит argumentation с упоминанием существующих прототипов («3 прототипа на Next.js») и hiring-pool в РФ — это нарушает правило [[feedback_tech_stack_criteria_no_team_skill]] которое позже сформулировалось в этом ADR. Это не invalidates выбор Next.js здесь (он стоит на objective criteria — LLM-датасет, UI-экосистема, RSC), но при будущей ревизии ADR-0002 Node.js choice должен быть verifiable на objective grounds independently. Если ADR-0002 будет revisited без «3 прототипа» — Node.js всё равно должен пройти по чистым критериям, иначе ADR-0004 inherited TS-end-to-end benefit под вопросом.
 
@@ -167,8 +169,8 @@ GlitchTip MIT, self-host, RF-compliant. SDK официальный Sentry — LL
 | Качество             | Метрика               | v1                      | v3     |
 | -------------------- | --------------------- | ----------------------- | ------ |
 | Bundle size (portal) | gzipped JS на главной | ≤200KB                  | ≤300KB |
-| LCP (promo)          | Mobile, throttled 3G  | ≤2.5s                   | ≤2.0s  |
-| PageSpeed (promo)    | Mobile score          | ≥80                     | ≥90    |
+| LCP (marketing)          | Mobile, throttled 3G  | ≤2.5s                   | ≤2.0s  |
+| PageSpeed (marketing)    | Mobile score          | ≥80                     | ≥90    |
 | TTI (portal главная) | Mobile                | ≤3.5s                   | ≤2.5s  |
 | Deploy frequency     | Independent apps      | 4 independent pipelines | Same   |
 | Web Vitals INP       | p75                   | ≤200ms                  | ≤100ms |
@@ -180,7 +182,7 @@ GlitchTip MIT, self-host, RF-compliant. SDK официальный Sentry — LL
 
 | OQ                                       | Триггер пересмотра                                                                                                                                                                                                                                                                                     |
 | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| OQ-F1. Миграция promo на Astro           | Маркетинг ≥3 разработчиков, PageSpeed промо <90 mobile, demand на visual-CMS workflow                                                                                                                                                                                                                  |
+| OQ-F1. Вынести маркетинговые маршруты из `apps/doctor` в Astro           | Маркетинг ≥3 разработчиков, PageSpeed маркетинга <90 mobile, demand на visual-CMS workflow                                                                                                                                                                                                                  |
 | OQ-F2. Portal split на multiple apps     | Portal-bundle >500KB gzipped, expert-CMS отдельный threat model                                                                                                                                                                                                                                        |
 | OQ-F3. Scaling топологии v3              | 1M MAU достигнут, или Centrifugo+SSR на одном VPS bottleneck                                                                                                                                                                                                                                           |
 | OQ-F4. Migration Payload → Keystatic     | Маркетинг scope сужается до 3-5 лендингов И inline-glossary не нужен                                                                                                                                                                                                                                   |

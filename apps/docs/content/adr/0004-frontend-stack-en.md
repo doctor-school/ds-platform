@@ -54,7 +54,8 @@ Prohibition: `@vercel/*` packages, Edge Runtime with Vercel KV, Vercel Image Opt
 ### 2. App-split: **4 Next.js apps**
 
 ```
-apps/doctor/   # SSG/ISR marketing routes + SSR authenticated storefront, doctor.school
+apps/doctor/   # NEW (not on disk yet) — SSG/ISR marketing routes + SSR authenticated storefront, doctor.school
+               # today `apps/promo` still holds the marketing routes on that host; it retires into apps/doctor (ADR-0015 §2, stage 3)
 apps/portal/   # SSR auth + client-hydration, academy.doctor.school (Academy backstage)
 apps/admin/    # Refine + 2FA, admin.doctor.school
 apps/cms/      # Payload v3 inside Next.js, cms.doctor.school
@@ -62,7 +63,7 @@ apps/cms/      # Payload v3 inside Next.js, cms.doctor.school
 
 One application per public storefront: `apps/doctor` serves the doctor-facing storefront (public catalogue and marketing routes plus the authenticated learning surface), `apps/portal` serves the Academy backstage for experts and partners. The host map and the reasoning behind the split are fixed in ADR-0015.
 
-Cookies: **host-only `__Host-` cookie per app** (`__Host-ds_session` on each storefront host, `__Host-ds_admin_session`, `__Host-ds_cms_session`, etc.). Cross-app SSO continuity — via OIDC silent re-auth (`prompt=none`) at the IdP, not via a shared cookie spanning `.doctor.school`. Single source of truth: ADR-0001 §6. The admin session model is **staged**: wave 1 (through the 2026-07-17 live-webinar scope, feature 007) authenticates via the shipped 003 session cookie `__Host-ds_session` (`SameSite=Lax`, no 2FA); the dedicated `__Host-ds_admin_session` (`SameSite=Strict`) + mandatory 2FA for `platform_admin` is pre-pilot hardening tracked by Issue [#718](https://github.com/doctor-school/ds-platform/issues/718) (detail: design spec §3.2).
+Cookies: **host-only `__Host-` cookie per app** (`__Host-ds_session` on each storefront host — the shared name across the two storefront hosts is deliberate: `__Host-` is host-only, so the two cookies never collide and never travel between hosts; `__Host-ds_admin_session`, `__Host-ds_cms_session`, etc.). Cross-app SSO continuity — via OIDC silent re-auth (`prompt=none`) at the IdP, not via a shared cookie spanning `.doctor.school`. Single source of truth: ADR-0001 §6. The admin session model is **staged**: wave 1 (through the 2026-07-17 live-webinar scope, feature 007) authenticates via the shipped 003 session cookie `__Host-ds_session` (`SameSite=Lax`, no 2FA); the dedicated `__Host-ds_admin_session` (`SameSite=Strict`) + mandatory 2FA for `platform_admin` is pre-pilot hardening tracked by Issue [#718](https://github.com/doctor-school/ds-platform/issues/718) (detail: design spec §3.2).
 
 Deployment v1-v2: one VPS "frontend-prod" + 4 Docker containers + nginx reverse-proxy. v3+ trigger — split at 1M MAU.
 
@@ -166,34 +167,34 @@ GlitchTip MIT, self-host, RF-compliant. SDK is official Sentry — maximum LLM d
 
 ### Architectural qualities (metrics, not declarations)
 
-| Quality              | Metric                   | v1                      | v3     |
-| -------------------- | ------------------------ | ----------------------- | ------ |
-| Bundle size (portal) | gzipped JS on main route | ≤200KB                  | ≤300KB |
-| LCP (marketing)          | Mobile, throttled 3G     | ≤2.5s                   | ≤2.0s  |
-| PageSpeed (marketing)    | Mobile score             | ≥80                     | ≥90    |
-| TTI (portal main)    | Mobile                   | ≤3.5s                   | ≤2.5s  |
-| Deploy frequency     | Independent apps         | 4 independent pipelines | Same   |
-| Web Vitals INP       | p75                      | ≤200ms                  | ≤100ms |
-| Cold start (Node)    | Per-container            | ≤2s                     | ≤1s    |
+| Quality               | Metric                   | v1                      | v3     |
+| --------------------- | ------------------------ | ----------------------- | ------ |
+| Bundle size (portal)  | gzipped JS on main route | ≤200KB                  | ≤300KB |
+| LCP (marketing)       | Mobile, throttled 3G     | ≤2.5s                   | ≤2.0s  |
+| PageSpeed (marketing) | Mobile score             | ≥80                     | ≥90    |
+| TTI (portal main)     | Mobile                   | ≤3.5s                   | ≤2.5s  |
+| Deploy frequency      | Independent apps         | 4 independent pipelines | Same   |
+| Web Vitals INP        | p75                      | ≤200ms                  | ≤100ms |
+| Cold start (Node)     | Per-container            | ≤2s                     | ≤1s    |
 
 ---
 
 ## Open questions (deferred)
 
-| OQ                                       | Review trigger                                                                                                                                                                                                                                                                                      |
-| ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| OQ-F1. Split the marketing routes out of `apps/doctor` into Astro            | Marketing ≥3 developers, marketing PageSpeed <90 mobile, demand for visual-CMS workflow                                                                                                                                                                                                                 |
-| OQ-F2. Portal split into multiple apps   | Portal bundle >500KB gzipped, expert-CMS has separate threat model                                                                                                                                                                                                                                  |
-| OQ-F3. v3 topology scaling               | 1M MAU reached, or Centrifugo+SSR on one VPS becomes bottleneck                                                                                                                                                                                                                                     |
-| OQ-F4. Migration Payload → Keystatic     | Marketing scope narrows to 3–5 landing pages AND inline-glossary not needed                                                                                                                                                                                                                         |
-| OQ-F5. Auth perimeter cms vs admin merge | Threat models converge (currently separate: marketing ≠ moderators)                                                                                                                                                                                                                                 |
-| ~~OQ-F6~~                                | ~~Timeweb CDN native image transforms~~ — closed 2026-05-14: feature does not exist on Timeweb CDN                                                                                                                                                                                                  |
-| OQ-F7. Offline lessons in PWA web        | DSO-29 mobile sync-strategy fixes the pattern; web follows                                                                                                                                                                                                                                          |
-| OQ-F8. Migration to Biome                | ESLint CI >5 min/PR, Prettier plugin ecosystem falls behind                                                                                                                                                                                                                                         |
-| OQ-F9. Storybook for design system       | Team grows to ≥2 frontend, design system >20 components                                                                                                                                                                                                                                             |
-| OQ-F10. imgproxy for image CPU           | Node CPU >70% at peak, Sharp p99 >500ms                                                                                                                                                                                                                                                             |
-| OQ-F11. Self-hosted Plausible Analytics  | v2+ marketing analytics with RF residency                                                                                                                                                                                                                                                           |
-| OQ-F12. Payload native auth fallback     | Trigger: if a Zitadel-backed custom auth strategy for Payload v3 proves infeasible during Phase 0 implementation (ADR-0001 §8 closed Zitadel; DSP-209). Consequence: Payload native auth + email-mirror via webhook outbox; SSO between cms and portal/admin breaks (marketer has a separate login) |
+| OQ                                                                | Review trigger                                                                                                                                                                                                                                                                                      |
+| ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| OQ-F1. Split the marketing routes out of `apps/doctor` into Astro | Marketing ≥3 developers, marketing PageSpeed <90 mobile, demand for visual-CMS workflow                                                                                                                                                                                                             |
+| OQ-F2. Portal split into multiple apps                            | Portal bundle >500KB gzipped, expert-CMS has separate threat model                                                                                                                                                                                                                                  |
+| OQ-F3. v3 topology scaling                                        | 1M MAU reached, or Centrifugo+SSR on one VPS becomes bottleneck                                                                                                                                                                                                                                     |
+| OQ-F4. Migration Payload → Keystatic                              | Marketing scope narrows to 3–5 landing pages AND inline-glossary not needed                                                                                                                                                                                                                         |
+| OQ-F5. Auth perimeter cms vs admin merge                          | Threat models converge (currently separate: marketing ≠ moderators)                                                                                                                                                                                                                                 |
+| ~~OQ-F6~~                                                         | ~~Timeweb CDN native image transforms~~ — closed 2026-05-14: feature does not exist on Timeweb CDN                                                                                                                                                                                                  |
+| OQ-F7. Offline lessons in PWA web                                 | DSO-29 mobile sync-strategy fixes the pattern; web follows                                                                                                                                                                                                                                          |
+| OQ-F8. Migration to Biome                                         | ESLint CI >5 min/PR, Prettier plugin ecosystem falls behind                                                                                                                                                                                                                                         |
+| OQ-F9. Storybook for design system                                | Team grows to ≥2 frontend, design system >20 components                                                                                                                                                                                                                                             |
+| OQ-F10. imgproxy for image CPU                                    | Node CPU >70% at peak, Sharp p99 >500ms                                                                                                                                                                                                                                                             |
+| OQ-F11. Self-hosted Plausible Analytics                           | v2+ marketing analytics with RF residency                                                                                                                                                                                                                                                           |
+| OQ-F12. Payload native auth fallback                              | Trigger: if a Zitadel-backed custom auth strategy for Payload v3 proves infeasible during Phase 0 implementation (ADR-0001 §8 closed Zitadel; DSP-209). Consequence: Payload native auth + email-mirror via webhook outbox; SSO between cms and portal/admin breaks (marketer has a separate login) |
 
 ## Delegated
 

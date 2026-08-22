@@ -136,7 +136,7 @@ Well under the ADR-0012 ≤30k ₽/month envelope (this is a slice; observabilit
 
 ### 5.2 TLS — Caddy with automatic Let's Encrypt
 
-Caddy on `api-prod` terminates TLS for all four public hostnames (`api.` / `app.` / `id.` / `admin.doctor.school` — the admin vhost gets the same automatic-ACME treatment as the rest) and auto-renews without operator intervention (engineering-readiness §1). HTTP-01 challenge over `:80`. No manual certificate handling — the deploy discipline requires "auto-renewal without manual agent intervention".
+Caddy on `api-prod` terminates TLS for all four public hostnames (`api.` / `academy.` / `id.` / `admin.doctor.school` — the admin vhost gets the same automatic-ACME treatment as the rest) and auto-renews without operator intervention (engineering-readiness §1). HTTP-01 challenge over `:80`. No manual certificate handling — the deploy discipline requires "auto-renewal without manual agent intervention".
 
 ### 5.3 DNS — at Beget (not Timeweb)
 

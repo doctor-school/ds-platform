@@ -35,7 +35,7 @@ The discovery package fixes the boundaries this ADR must respect as one-way door
 
 The premise «one backend / one database» is stated in the input package as a premise **to be verified** (`README-ru.md` → stage 1). This ADR verifies it against the code that exists, then fixes the front-end topology, because the previously recorded host to application map no longer describes either the product or production:
 
-- ADR-0004 §2 recorded `apps/promo` = `doctor.school` and `apps/portal` = `app.doctor.school`. In production since 2026-08-03 (Issue #1171) the portal is served at **`academy.doctor.school`**, and `app.doctor.school` is a 301 to it.
+- ADR-0004 §2 recorded `apps/promo` = `doctor.school` and `apps/portal` = `app.doctor.school`. In production since 2026-08-03 (Issue #1171) the portal is served at **`academy.doctor.school`**; `app.doctor.school` served a path-preserving 301 to it for 12 days and was then retired entirely (owner-approved 2026-08-15, Issue #1173) — it is a dead name, not a redirect.
 - The doctor-facing storefront in the new picture is a **first-class product surface** with authenticated learning, a points ledger and document flows — not the marketing landing that `apps/promo` was scoped for.
 
 ---
@@ -108,7 +108,7 @@ One row per capability the doctor storefront requires. «Fits with additions» n
 
 ### 7. Deployment shape
 
-ADR-0012 is unchanged in cluster shape: `api-prod` (API plane) and `data-prod` (persistence plane). The front-end delta is one additional container and one additional nginx virtual host: `doctor.school` → `apps/doctor`, `academy.doctor.school` → `apps/portal`, `admin.` and `cms.` as today. `app.doctor.school` remains a 301 to the academy host for as long as links to it survive in the wild.
+ADR-0012 is unchanged in cluster shape: `api-prod` (API plane) and `data-prod` (persistence plane). The front-end delta is one additional container and one additional nginx virtual host: `doctor.school` → `apps/doctor`, `academy.doctor.school` → `apps/portal`, `admin.` and `cms.` as today. `app.doctor.school` is not part of that map: the legacy host was retired per Issue #1173, so a surviving bookmark or old e-mail link on it fails DNS resolution rather than redirecting (`infra/deploy/README.md` → «Portal host cutover»).
 
 ---
 
@@ -200,8 +200,9 @@ Rejected as a framing, adopted as a migration. `apps/promo` is scoped as an SSG 
 ## Verification
 
 ```bash
-# The old host map must not survive anywhere in the docs corpus
-grep -rn "app\.doctor\.school" apps/docs/content/ | grep -v "0015-two-storefront-topology"
+# The old host map must not survive anywhere in the docs corpus —
+# both the full name and the abbreviated `app.` form used in host enumerations
+grep -rnE "app\.doctor\.school|\`app\.\`|\`app\.\` */" apps/docs/content/ | grep -v "0015-two-storefront-topology"
 grep -rn "promo/.*doctor\.school" apps/docs/content/
 
 # The academy host must be the portal host in every ADR that names it
@@ -213,6 +214,7 @@ grep -c "^### " apps/docs/content/adr/0015-two-storefront-topology-en.md apps/do
 
 **Known stale mentions in code, deliberately out of scope of this ADR (they follow at stages 3–4):**
 
+- `infra/deploy/README.md` — carries dozens of host mentions and is the SSOT for the live host facts, including the `app.doctor.school` retirement marker (§ «Portal host cutover», #1173) this ADR agrees with. Not stale; it is the record this ADR defers to and must never be edited to match a doc.
 - `tools/deploy/smoke-prod.mjs` — `PROD_PORTAL_HOST` names `academy.doctor.school` correctly, but the variable name still reads «portal» for what is now the Academy backstage host.
 - `apps/portal/package.json` — the package description still describes the portal as the doctor-facing surface.
 - `apps/promo/*` — retires into `apps/doctor` when the doctor storefront ships its marketing routes (§2).

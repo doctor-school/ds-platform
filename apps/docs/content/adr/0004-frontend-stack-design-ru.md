@@ -21,14 +21,14 @@ lang: ru
 ## 0. TL;DR
 
 1. **Meta-framework:** Next.js 15 App Router + RSC, один framework на все 6 веб-поверхностей.
-2. **App-split:** 4 Next.js приложения — `apps/doctor` (SSG/ISR, doctor.school) + `apps/portal` (SSR auth, academy.doctor.school) + `apps/admin` (Refine, admin.doctor.school) + `apps/cms` (Payload v3 inside Next.js, cms.doctor.school).
+2. **App-split:** 4 Next.js приложения — `apps/doctor` (SSG/ISR маркетинг + SSR-витрина под аутентификацией, doctor.school) + `apps/portal` (SSR auth, academy.doctor.school) + `apps/admin` (Refine, admin.doctor.school) + `apps/cms` (Payload v3 inside Next.js, cms.doctor.school).
 3. **Deployment topology v1-v2:** один VPS "frontend-prod" + 4 Docker containers + nginx reverse-proxy. v3+ — раздельные VPS при 1M MAU.
 4. **Admin/CMS framework:** Refine + custom REST data provider → NestJS API + Cerbos access provider + custom Zitadel auth strategy. Без headless CMS как замены backend.
 5. **Design-system:** Tailwind CSS 4 + shadcn/ui + lucide-react + Radix Primitives. Общий `packages/design-system`. Heavy-composes (TipTap rich-text, Tanstack Table, react-day-picker, Recharts/Tremor) — поверх shadcn shell.
 6. **User cabinets UI:** custom React на shadcn/ui + Tanstack Query + RHF + Zod (не Refine — brand-UX требует кастомизации).
 7. **Data-fetching:** Tanstack Query v5 + RSC hybrid (initial SSR через RSC + client interactivity через TQ) + Server Actions точечно для simple admin-mutations. Tanstack Query — единый pattern на все 4 apps. **Caveat:** Refine в `apps/admin` управляет собственным `QueryClient` через `<Refine>` provider (Refine — client-side). Это значит admin app — effectively CSR с тонким SSR-shell; RSC `HydrationBoundary` pattern применим в doctor/portal/cms, но не для Refine-managed resources в admin. Tanstack Query как библиотека — общая, но cache-instances изолированы per-app.
 8. **Forms:** RHF + `@hookform/resolvers/zod` + shadcn `<Form>`. Zod-схема — один SSOT в `packages/api-client/schemas/` (frontend + backend NestJS обе используют тот же import).
-9. **Promo content source:** Payload CMS v3 content-only в `apps/cms`, Postgres `cms.*` namespace в shared Postgres-instance из ADR-0003. Custom Lexical features для inline SSOT-glossary insertions. MCP server для AI-агентов. Custom Auth Strategy → Zitadel.
+9. **Marketing content source:** Payload CMS v3 content-only в `apps/cms`, Postgres `cms.*` namespace в shared Postgres-instance из ADR-0003. Custom Lexical features для inline SSOT-glossary insertions. MCP server для AI-агентов. Custom Auth Strategy → Zitadel.
 10. **Image optimization:** гибрид — build-time variants через Next.js static imports (promo) + `next/image` Sharp on Node (dynamic) + Payload Sharp pipeline (media library). Timeweb CDN — общий delivery cache layer.
 11. **Real-time клиент:** `centrifuge` npm package + кастомные React hooks в `packages/api-client`. Tanstack Query `invalidateQueries` по WS-событиям из Centrifugo (ADR-0002 §7).
 12. **i18n:** `next-intl` (App Router-native, RSC-compatible). Messages в `messages/ru.json` каждого app. i18n-ready с v1 для русского, multi-lang в v2+.
@@ -122,7 +122,7 @@ Self-host через `output: 'standalone'` в `next.config.ts` → Docker image
 
 ```
 apps/
-├── doctor/    # SSG/ISR, doctor.school, public
+├── doctor/    # SSG/ISR маркетинг + SSR-витрина под аутентификацией, doctor.school
 ├── portal/   # SSR auth, academy.doctor.school, multi-role (доктор/эксперт/клиника/инвестор)
 ├── admin/    # SSR auth + 2FA + Refine, admin.doctor.school (модераторы платформы)
 └── cms/      # Payload v3 inside Next.js, cms.doctor.school (маркетинг-team)
@@ -567,7 +567,7 @@ REVOKE ALL   ON SCHEMA public FROM cms_owner;
 - Drizzle migration runner физически **не может** trogue Payload `cms.*` tables
 - Audit log на Postgres уровне (`pg_audit`) показывает чёткое разделение agent ↔ schema
 
-**Read-cross-schema (если потребуется):** портал может SELECT из `cms.pages` для рендеринга промо-контента → добавляется `GRANT SELECT ON ALL TABLES IN SCHEMA cms TO app_owner;` точечно. Write — никогда cross-schema.
+**Read-cross-schema (если потребуется):** витрина врача (`apps/doctor`, ADR-0015 §2) может SELECT из `cms.pages` для рендеринга маркетингового контента → добавляется `GRANT SELECT ON ALL TABLES IN SCHEMA cms TO app_owner;` точечно. Write — никогда cross-schema.
 
 Это требование расширяет ADR-0003 §1: single Postgres instance теперь обязывает **multi-role privilege separation** с появлением `cms.*` namespace. ADR-0003 §1 обновляется inline, чтобы это отразить.
 
@@ -900,7 +900,7 @@ Custom ESLint rule `no-vercel-only-api` блокирует следующие im
 
 | OQ        | Описание                                                                                                                                   | Trigger пересмотра                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | --------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| OQ-F1     | Вынести маркетинговые маршруты `apps/doctor` в Astro                                                                                                             | Маркетинг ≥3 разработчиков, PageSpeed промо <90 на mobile, demand на visual-CMS workflow                                                                                                                                                                                                                                                                                                                                                                      |
+| OQ-F1     | Вынести маркетинговые маршруты `apps/doctor` в Astro                                                                                       | Маркетинг ≥3 разработчиков, PageSpeed промо <90 на mobile, demand на visual-CMS workflow                                                                                                                                                                                                                                                                                                                                                                      |
 | OQ-F2     | Portal split на multiple apps (доктор/эксперт/клиника/инвестор)                                                                            | Portal-bundle >500KB gzipped, или expert-CMS получает отдельный security threat model                                                                                                                                                                                                                                                                                                                                                                         |
 | OQ-F3     | Scaling топологии v3                                                                                                                       | 1M MAU достигнут, или Centrifugo+SSR на одном VPS становится bottleneck                                                                                                                                                                                                                                                                                                                                                                                       |
 | OQ-F4     | Migration Payload → Keystatic                                                                                                              | Маркетинг scope сужается до 3-5 статических лендингов И inline-glossary не нужен                                                                                                                                                                                                                                                                                                                                                                              |
@@ -932,8 +932,8 @@ Custom ESLint rule `no-vercel-only-api` блокирует следующие im
 | Качество                          | Метрика                               | v1                                                       | v3                         |
 | --------------------------------- | ------------------------------------- | -------------------------------------------------------- | -------------------------- |
 | Bundle size (portal)              | gzipped JS на главной (initial route) | ≤200KB\*                                                 | ≤300KB                     |
-| LCP (promo)                       | Mobile, throttled 3G                  | ≤2.5s                                                    | ≤2.0s                      |
-| PageSpeed (promo)                 | Mobile score                          | ≥80                                                      | ≥90                        |
+| LCP (marketing)                   | Mobile, throttled 3G                  | ≤2.5s                                                    | ≤2.0s                      |
+| PageSpeed (marketing)             | Mobile score                          | ≥80                                                      | ≥90                        |
 | TTI (portal главная)              | Mobile                                | ≤3.5s                                                    | ≤2.5s                      |
 | AI code-gen accuracy (subjective) | % first-shot working                  | ≥80% (выбор Tailwind+shadcn+RHF+Zod+TQ — все mainstream) | ≥90%                       |
 | Deploy frequency                  | Independent apps                      | 4 independent pipelines                                  | Same                       |

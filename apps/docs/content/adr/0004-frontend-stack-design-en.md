@@ -20,14 +20,14 @@ lang: en
 ## 0. TL;DR
 
 1. **Meta-framework:** Next.js 15 App Router + RSC, one framework for all 6 web surfaces.
-2. **App-split:** 4 Next.js applications — `apps/doctor` (SSG/ISR, doctor.school) + `apps/portal` (SSR auth, academy.doctor.school) + `apps/admin` (Refine, admin.doctor.school) + `apps/cms` (Payload v3 inside Next.js, cms.doctor.school).
+2. **App-split:** 4 Next.js applications — `apps/doctor` (SSG/ISR marketing + SSR authenticated storefront, doctor.school) + `apps/portal` (SSR auth, academy.doctor.school) + `apps/admin` (Refine, admin.doctor.school) + `apps/cms` (Payload v3 inside Next.js, cms.doctor.school).
 3. **Deployment topology v1-v2:** one VPS "frontend-prod" + 4 Docker containers + nginx reverse-proxy. v3+ — separate VPSes at 1M MAU.
 4. **Admin/CMS framework:** Refine + custom REST data provider → NestJS API + Cerbos access provider + custom Zitadel auth strategy. No headless CMS as a backend replacement.
 5. **Design system:** Tailwind CSS 4 + shadcn/ui + lucide-react + Radix Primitives. Shared `packages/design-system`. Heavy compositions (TipTap rich-text, Tanstack Table, react-day-picker, Recharts/Tremor) — on top of the shadcn shell.
 6. **User cabinets UI:** custom React on shadcn/ui + Tanstack Query + RHF + Zod (not Refine — brand-UX requires customization).
 7. **Data-fetching:** Tanstack Query v5 + RSC hybrid (initial SSR via RSC + client interactivity via TQ) + Server Actions selectively for simple admin mutations. Tanstack Query — unified pattern across all 4 apps. **Caveat:** Refine in `apps/admin` manages its own `QueryClient` via `<Refine>` provider (Refine is client-side). This means the admin app is effectively CSR with a thin SSR shell; the RSC `HydrationBoundary` pattern applies in doctor/portal/cms but not for Refine-managed resources in admin. Tanstack Query as a library is shared, but cache instances are isolated per app.
 8. **Forms:** RHF + `@hookform/resolvers/zod` + shadcn `<Form>`. Zod schema — single SSOT in `packages/api-client/schemas/` (frontend + backend NestJS both use the same import).
-9. **Promo content source:** Payload CMS v3 content-only in `apps/cms`, Postgres `cms.*` namespace in the shared Postgres instance from ADR-0003. Custom Lexical features for inline SSOT-glossary insertions. MCP server for AI agents. Custom Auth Strategy → Zitadel.
+9. **Marketing content source:** Payload CMS v3 content-only in `apps/cms`, Postgres `cms.*` namespace in the shared Postgres instance from ADR-0003. Custom Lexical features for inline SSOT-glossary insertions. MCP server for AI agents. Custom Auth Strategy → Zitadel.
 10. **Image optimization:** hybrid — build-time variants via Next.js static imports (promo) + `next/image` Sharp on Node (dynamic) + Payload Sharp pipeline (media library). Timeweb CDN — shared delivery cache layer.
 11. **Real-time client:** `centrifuge` npm package + custom React hooks in `packages/api-client`. Tanstack Query `invalidateQueries` on WS events from Centrifugo (ADR-0002 §7).
 12. **i18n:** `next-intl` (App Router-native, RSC-compatible). Messages in `messages/ru.json` of each app. i18n-ready from v1 for Russian, multi-lang in v2+.
@@ -121,7 +121,7 @@ Self-host via `output: 'standalone'` in `next.config.ts` → Docker image ~100MB
 
 ```
 apps/
-├── doctor/    # SSG/ISR, doctor.school, public
+├── doctor/    # SSG/ISR marketing + SSR authenticated storefront, doctor.school
 ├── portal/   # SSR auth, academy.doctor.school, multi-role (doctor/expert/clinic/investor)
 ├── admin/    # SSR auth + 2FA + Refine, admin.doctor.school (platform moderators)
 └── cms/      # Payload v3 inside Next.js, cms.doctor.school (marketing team)
@@ -566,7 +566,7 @@ This guarantees:
 - The Drizzle migration runner physically **cannot** touch Payload `cms.*` tables
 - Postgres-level audit log (`pg_audit`) shows a clear separation of agent ↔ schema
 
-**Cross-schema reads (if needed):** the portal may SELECT from `cms.pages` for rendering promo content → add `GRANT SELECT ON ALL TABLES IN SCHEMA cms TO app_owner;` selectively. Write — never cross-schema.
+**Cross-schema reads (if needed):** the doctor storefront (`apps/doctor`, ADR-0015 §2) may SELECT from `cms.pages` for rendering marketing content → add `GRANT SELECT ON ALL TABLES IN SCHEMA cms TO app_owner;` selectively. Write — never cross-schema.
 
 This requirement extends ADR-0003 §1: the single Postgres instance now mandates **multi-role privilege separation** with the introduction of the `cms.*` namespace. ADR-0003 §1 is updated inline to reflect this.
 
@@ -899,7 +899,7 @@ Documentation:
 
 | OQ        | Description                                                                                                                                    | Review trigger                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| OQ-F1     | Split the marketing routes of `apps/doctor` out into Astro                                                                                                                  | Marketing ≥3 developers, promo PageSpeed <90 on mobile, demand for visual-CMS workflow                                                                                                                                                                                                                                                                                                                                                                |
+| OQ-F1     | Split the marketing routes of `apps/doctor` out into Astro                                                                                     | Marketing ≥3 developers, promo PageSpeed <90 on mobile, demand for visual-CMS workflow                                                                                                                                                                                                                                                                                                                                                                |
 | OQ-F2     | Portal split into multiple apps (doctor/expert/clinic/investor)                                                                                | Portal bundle >500 KB gzipped, or expert-CMS gets a separate security threat model                                                                                                                                                                                                                                                                                                                                                                    |
 | OQ-F3     | v3 topology scaling                                                                                                                            | 1M MAU reached, or Centrifugo+SSR on one VPS becomes bottleneck                                                                                                                                                                                                                                                                                                                                                                                       |
 | OQ-F4     | Migration Payload → Keystatic                                                                                                                  | Marketing scope narrows to 3–5 static landing pages AND inline-glossary not needed                                                                                                                                                                                                                                                                                                                                                                    |
@@ -931,8 +931,8 @@ Documentation:
 | Quality                           | Metric                                   | v1                                                 | v3                      |
 | --------------------------------- | ---------------------------------------- | -------------------------------------------------- | ----------------------- |
 | Bundle size (portal)              | gzipped JS on main route (initial route) | ≤200KB\*                                           | ≤300KB                  |
-| LCP (promo)                       | Mobile, throttled 3G                     | ≤2.5s                                              | ≤2.0s                   |
-| PageSpeed (promo)                 | Mobile score                             | ≥80                                                | ≥90                     |
+| LCP (marketing)                   | Mobile, throttled 3G                     | ≤2.5s                                              | ≤2.0s                   |
+| PageSpeed (marketing)             | Mobile score                             | ≥80                                                | ≥90                     |
 | TTI (portal main)                 | Mobile                                   | ≤3.5s                                              | ≤2.5s                   |
 | AI code-gen accuracy (subjective) | % first-shot working                     | ≥80% (Tailwind+shadcn+RHF+Zod+TQ — all mainstream) | ≥90%                    |
 | Deploy frequency                  | Independent apps                         | 4 independent pipelines                            | Same                    |

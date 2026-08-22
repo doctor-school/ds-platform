@@ -1,0 +1,610 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Wireframe · doctor.school + academy.doctor.school · DSP-251</title>
+<!--
+  Clickable wireframe двух сайтов для согласования с командой (DSP-251).
+  Источник структуры: outputs/2026-08-18-discovery-ds-academy-vs-doctors/{requirements.md, screens.md};
+  тексты Академии: outputs/2026-07-24-academy-ds-content-brief.md.
+  Правила: серые рамки, системный шрифт, БЕЗ дизайна; рыба — реальные русские названия.
+  Клики: вкладки = домены, левое меню = страницы, кнопки/ссылки в контенте ведут на страницы (#id).
+  Карта экран ↔ REQ — screens.md рядом.
+  R2 (UX-ревью): правая колонка — пути пользователей (CJM, три персоны: врач / эксперт / инвестор);
+  текущий экран подсвечивает свой шаг пути. Правки из UX-ревью помечены бейджем UX. Обоснование — screens.md §UX.
+  R4 (2026-08-22, правки владельца): лента событий у врача (#d-events) + «Мои события» в ЛК, страница события Академии (#a-event) с CTA «Участвовать»,
+  эволюционная цель — дословно. Бейдж R4.
+-->
+<style>
+  :root{--b:#999;--fg:#111;--muted:#666;--soft:#f3f3f3}
+  *{box-sizing:border-box}
+  body{margin:0;font:14px/1.45 system-ui,Segoe UI,Arial,sans-serif;color:var(--fg);background:#fff}
+  .banner{background:#fff3cd;border-bottom:1px solid #e0c060;padding:6px 12px;font-size:12px}
+  header{display:flex;gap:16px;align-items:center;padding:8px 12px;border-bottom:2px solid #000;flex-wrap:wrap}
+  header h1{font-size:16px;margin:0}
+  .tabs{display:flex;gap:6px}
+  .tab{padding:4px 10px;border:1px solid #000;cursor:pointer;background:#fff}
+  .tab.active{background:#000;color:#fff}
+  .layout{display:grid;grid-template-columns:220px 1fr 290px;min-height:calc(100vh - 70px)}
+  nav{border-right:1px solid var(--b);padding:8px}
+  nav a{display:block;padding:4px 6px;color:var(--fg);text-decoration:none;border:1px solid transparent}
+  nav a.active{border-color:#000;background:var(--soft)}
+  nav .grp{margin:8px 0 2px;font-size:11px;color:var(--muted);text-transform:uppercase}
+  main{padding:12px 16px;max-width:980px}
+  .screen{display:none}
+  .screen.active{display:block}
+  .screen h2{margin:0 0 4px;font-size:15px}
+  .screen .meta{color:var(--muted);font-size:12px;margin-bottom:10px}
+  .box{border:1px solid var(--b);padding:8px 10px;margin:6px 0;background:#fff}
+  .box .t{font-weight:600;margin-bottom:4px}
+  .box .fish{color:#333}
+  .row{display:grid;gap:8px}
+  .row.c2{grid-template-columns:1fr 1fr}.row.c3{grid-template-columns:1fr 1fr 1fr}
+  a.btn,span.btn{display:inline-block;border:1px solid #000;padding:2px 8px;margin:2px 4px 2px 0;font-size:12px;color:var(--fg);text-decoration:none;background:#fff;cursor:pointer}
+  span.btn{border-style:dashed;color:var(--muted);cursor:default}
+  .req{display:inline-block;font-size:10px;padding:0 4px;border:1px solid #7aa;background:#e6f0ff;border-radius:2px;margin-left:4px;vertical-align:middle}
+  .r4{display:inline-block;font-size:10px;padding:0 4px;border:1px solid #c93;background:#fff4e0;border-radius:2px;margin-left:4px;vertical-align:middle}
+  .ux{display:inline-block;font-size:10px;padding:0 4px;border:1px solid #a7a;background:#eaf7ea;border-radius:2px;margin-left:4px;vertical-align:middle}
+  aside{border-left:1px solid var(--b);padding:10px;font-size:12px;background:#fafafa}
+  aside h3{font-size:12px;margin:0 0 6px;text-transform:uppercase;letter-spacing:.03em}
+  aside .why{color:var(--muted);margin-bottom:10px}
+  .jmap{display:none}.jmap.on{display:block}
+  .jmap .who{font-weight:600;margin:12px 0 8px;border-bottom:1px solid var(--b);padding-bottom:2px}
+  .jstep{position:relative;border:1px solid var(--b);background:#fff;padding:4px 6px;margin:0 0 18px;color:var(--muted)}
+  .jstep::after{content:'↓';position:absolute;left:50%;bottom:-16px;color:var(--muted)}
+  .jstep:last-child{margin-bottom:4px}.jstep:last-child::after{content:''}
+  .jstep .scr{display:block;font-size:10px;color:#999}
+  .jstep.cur{border-color:#000;background:#e6f0ff;color:var(--fg);font-weight:600}
+  .jstep.cur::before{content:'вы здесь';float:right;font-size:10px;font-weight:400;border:1px solid #000;padding:0 4px;margin-left:6px;background:#fff}
+  .note{font-size:12px;color:var(--muted);border-top:1px dashed var(--b);margin-top:6px;padding-top:4px}
+  .crumbs{font-size:12px;color:var(--muted);margin-bottom:8px}
+  .crumbs a{color:var(--muted)}
+  ul.plain{margin:4px 0;padding-left:18px}
+  ul.plain li{margin:2px 0}
+</style>
+</head>
+<body>
+<div class="banner"><b>WIREFRAME (DSP-251)</b> — макет двух сайтов для согласования с командой; не дизайн, только структура и тексты-рыба. Сплошная кнопка = рабочий клик, пунктирная = механика без перехода. Справа — пути пользователей (CJM): подсвечен шаг текущего экрана. Зелёный бейдж UX = правка UX-ревью R2; оранжевый бейдж R4 = правки владельца 2026-08-22 (лента событий у врача, страница события Академии, эволюционная цель). Замечания собираем на этом макете.</div>
+<header>
+  <h1>Doctor.School — два сайта одной платформы</h1>
+  <div class="tabs" id="tabs">
+    <span class="tab" data-product="ds">doctor.school · врачам</span><span class="tab" data-product="ac">academy.doctor.school · Академия</span>
+  </div>
+  <span id="bbm-tag" style="color:#bbb;font-size:11px;margin-left:auto">BBM: Академия смыслов</span>
+</header>
+<div class="layout">
+  <nav id="nav">
+    <div class="grp" data-product="ds">doctor.school</div>
+    <a href="#d-home" data-product="ds">Главная — специальности</a>
+    <a href="#d-feed" data-product="ds">Моя специальность (лента)</a>
+    <a href="#d-events" data-product="ds">События (лента)</a>
+    <a href="#d-school" data-product="ds">Школа ортобиологии</a>
+    <a href="#d-community" data-product="ds">Сообщество «Орто»</a>
+    <a href="#d-lesson" data-product="ds">Учебный модуль (путь серии)</a>
+    <a href="#d-event" data-product="ds">Событие · вебинар</a>
+    <a href="#d-congress" data-product="ds">Конгресс (фронт)</a>
+    <a href="#d-register" data-product="ds">Регистрация</a>
+    <a href="#d-lk" data-product="ds">Личный кабинет</a>
+    <a href="#d-docs" data-product="ds">Документы и контакты</a>
+    <div class="grp" data-product="ac">Академия</div>
+    <a href="#a-home" data-product="ac">Главная</a>
+    <a href="#a-events" data-product="ac">События и эфиры</a>
+    <a href="#a-event" data-product="ac">Страница события</a>
+    <a href="#a-projects" data-product="ac">Каталог: проекты</a>
+    <a href="#a-project" data-product="ac">Проект «Ортобиология»</a>
+    <a href="#a-experts" data-product="ac">Каталог: эксперты</a>
+    <a href="#a-expert" data-product="ac">Страница эксперта</a>
+    <a href="#a-partners" data-product="ac">Каталог: партнёры</a>
+    <a href="#a-partner" data-product="ac">Страница партнёра</a>
+    <a href="#a-apply" data-product="ac">Заявка автора</a>
+    <a href="#a-invest" data-product="ac">Инвесторам</a>
+    <a href="#a-cabinet" data-product="ac">Кабинет инвестора</a>
+    <a href="#a-docs" data-product="ac">Документы и контакты</a>
+  </nav>
+  <main>
+
+<!-- ===================== doctor.school ===================== -->
+<section class="screen" data-product="ds" id="d-home">
+<h2>doctor.school › Главная</h2>
+<div class="meta">Первое действие врача — выбор специальности; дальше весь контент таргетный <span class="req">REQ-101</span></div>
+<div class="box"><div class="t">Doctor.School — бесплатное образование для врачей</div>
+<div class="fish">Выбери свою специальность — получишь школы, курсы, уроки и события по своей и смежным областям <span class="req">REQ-1</span><br>С нами уже <b>12 400 врачей</b> · 105 специальностей · 340 уроков <span class="req">REQ-116</span></div></div>
+<div class="box"><div class="t">Каталог специальностей (список Минздрава, 105 + «Другое»)</div>
+<div class="fish">
+<a class="btn" href="#d-feed">Травматология и ортопедия</a>
+<a class="btn" href="#d-feed">Ревматология</a>
+<a class="btn" href="#d-feed">Неврология</a>
+<a class="btn" href="#d-feed">Эндокринология</a>
+<a class="btn" href="#d-feed">Онкология</a>
+<span class="btn">… ещё 100</span>
+<a class="btn" href="#d-feed">Другое</a></div>
+<div class="note">Выбранная специальность сохраняется в профиле; смежность — управляемый справочник (OWD-11). Если специальность уже выбрана — главная сразу открывается как <a href="#d-feed">лента специальности</a> с этими же блоками в таргетном виде</div></div>
+<div class="box"><div class="t">Календарь и анонсы ближайших событий <span class="req">REQ-2</span> <span class="req">REQ-75</span></div>
+<div class="fish">До выбора специальности — общие, после — таргетные:<br><a class="btn" href="#d-event">28.08 · Вебинар «PRP при гонартрозе»</a> <a class="btn" href="#d-congress">Конгресс «Ортобиология-2026»</a> <a class="btn" href="#d-event">Doctor Club Казань · 12.09 (офлайн)</a> · [календарь на месяц] · <a class="btn" href="#d-events">Все события</a> <span class="r4">R4</span></div></div>
+<div class="box"><div class="t">Что исследовать</div>
+<div class="fish"><a class="btn" href="#d-school">Школа ортобиологии — путь в новую специальность</a> · <a class="btn" href="#d-lesson">Урок дня</a> · разбор клинического случая недели <span class="req">REQ-12</span> · «уже записались 37 ортопедов» <span class="req">REQ-38</span></div></div>
+<div class="box"><div class="t">Топ врачей платформы <span class="req">REQ-117</span> <span class="req">REQ-63</span></div>
+<div class="fish">1. [фото] Иванов А. · травматолог · 4 120 очков · 2. [фото] Петрова Е. · ревматолог · 3 890 · 3. [фото] Сидоров К. · невролог · 3 540 · <span class="btn">весь лидерборд</span></div>
+<div class="note">Врач попадает в лидерборд только по отдельному согласию на публичное отображение (REQ-34, по умолчанию — не публиковать); смысл — «видишь себя в будущем и хочешь сюда»</div></div>
+<div class="box"><div class="t">Шапка (на всех страницах)</div>
+<div class="fish">Логотип · Поиск · <a class="btn" href="#d-register">Войти / Регистрация</a> <a class="btn" href="#d-lk">Личный кабинет</a> · внизу футер: <a class="btn" href="#d-docs">Документы и контакты</a> <span class="req">REQ-136</span> · <a class="btn" href="#a-home">Академия Doctor.School</a> — единственный след Академии здесь <span class="req">REQ-24</span></div>
+<div class="note"><span class="ux">UX</span> «Войти/Регистрация» и «Личный кабинет» — одно из двух по статусу входа; в макете показаны оба ради кликов</div></div>
+</section>
+
+<section class="screen" data-product="ds" id="d-feed">
+<h2>doctor.school › Травматология и ортопедия</h2>
+<div class="meta">Лента специальности: только таргетный контент, никакого инфошума Академии (NG-2) <span class="req">REQ-1</span> <span class="req">REQ-2</span></div>
+<div class="box"><div class="fish">У нас уже <b>1 850 травматологов-ортопедов</b> · 3 школы · 47 уроков по специальности <span class="req">REQ-116</span></div></div>
+<div class="row c2">
+<div class="box"><div class="t">Школы и курсы <span class="req">REQ-50</span></div>
+<div class="fish"><a class="btn" href="#d-school">Школа ортобиологии</a> — путь в новую специальность, бесплатно · курс-сериал «Ортобиология», 9 серий <span class="req">REQ-16</span><br>Скоро: школа артроскопии</div></div>
+<div class="box"><div class="t">Ближайшие события <span class="req">REQ-2</span></div>
+<div class="fish"><a class="btn" href="#d-event">Вебинар «PRP при гонартрозе» · 28.08</a> — уже записались 37 ортопедов <span class="req">REQ-38</span><br><a class="btn" href="#d-congress">Конгресс «Ортобиология-2026»</a> · <a class="btn" href="#d-event">Doctor Club Казань · 12.09 (офлайн)</a> — встреча коллег <span class="req">REQ-15</span><br><a class="btn" href="#d-events">Все события по специальности</a> <span class="r4">R4</span></div></div>
+</div>
+<div class="row c2">
+<div class="box"><div class="t">Уроки <span class="req">REQ-3</span></div>
+<div class="fish"><a class="btn" href="#d-lesson">Урок дня: «Клинический случай — разрыв ПКС у бегуньи»</a><br>Путь уроков как в приложении — те же уроки, один счёт очков (web + Android/iOS) <span class="req">REQ-53</span></div></div>
+<div class="box"><div class="t">Зачем это мне</div>
+<div class="fish">Новая специальность · международная стажировка · наставничество · документ по итогам курса <span class="req">REQ-12</span> <span class="req">REQ-17</span> · всё бесплатно — образование оплачивают партнёры <span class="req">REQ-13</span></div></div>
+</div>
+<div class="row c3">
+<div class="box"><div class="t">Смежные области <span class="req">REQ-1</span></div>
+<div class="fish">Спортивная медицина · Ревматология · Медицинская реабилитация — уроки и события смежных специальностей в этой же ленте (смежность — справочник OWD-11)</div></div>
+<div class="box"><div class="t">Топ травматологов <span class="req">REQ-117</span></div>
+<div class="fish">1. [фото] Иванов А. · 4 120 очков · 2. [фото] Кузнецов Д. · 2 980 · 3. … — лидерборд платформы, отфильтрованный по специальности</div></div>
+<div class="box"><div class="t">Сообщества <span class="req">REQ-120</span></div>
+<div class="fish"><a class="btn" href="#d-community">Сообщество «Орто»</a> · Ассоциация «Реабилитолог» — стандарты лечения, консенсусы, членство</div></div>
+</div>
+</section>
+
+<section class="screen" data-product="ds" id="d-events">
+<div class="crumbs"><a href="#d-feed">Травматология и ортопедия</a> › События</div>
+<h2>doctor.school › События <span class="r4">R4</span></h2>
+<div class="meta">Лента событий — ключевая часть платформы для врача: на doctor.school приходят прежде всего на мероприятия, онлайн и офлайн. Движок, календарь и страница события — те же, что в Академии (ds-platform 004/006/014); витрина у врача таргетная по специальности <span class="req">REQ-2</span> <span class="req">REQ-75</span> <span class="req">REQ-137</span> <span class="req">REQ-138</span></div>
+<div class="box"><div class="t">Фильтры и вид</div>
+<div class="fish">Вид: <span class="btn">Неделя</span> <span class="btn">Месяц</span> · <span class="btn">Будущие</span> <span class="btn">Прошедшие</span><br>Формат: <span class="btn">онлайн</span> <span class="btn">офлайн</span> <span class="btn">гибрид</span> · Тип: <span class="btn">вебинар</span> <span class="btn">конгресс</span> <span class="btn">клуб / встреча</span> <span class="btn">подкаст-эфир</span> <span class="btn">интенсив школы</span><br>Специальность: <span class="btn">моя + смежные (по умолчанию)</span> <span class="btn">все</span> · Город (для офлайн): <span class="btn">Казань</span> · <span class="btn">только с НМО</span> · <span class="btn">бесплатно по Pul</span> · Поиск: ______</div>
+<div class="note">Волна 1 ds-platform — только «Неделя/Месяц» и «Будущие/Прошедшие»; фасеты (формат, тип, специальность, город, НМО) — волна 2+, состав — уровень EARS <span class="req">REQ-138</span></div></div>
+<div class="box"><div class="t">Идёт сейчас</div>
+<div class="fish">🔴 LIVE · Эфир «Вопросы по PRP» · 412 в комнате · <a class="btn" href="#d-event">Войти в комнату эфира</a> — если записан; не записан — страница события</div></div>
+<div class="box"><div class="t">Лента (неделя, группировка по дням)</div>
+<div class="fish"><b>Чт 28.08</b> · 19:00 · онлайн · <a class="btn" href="#d-event">Вебинар «PRP при гонартрозе»</a> · Страхов М. А. · НМО 2 · 50 Pul · уже записались 37 ортопедов <span class="req">REQ-38</span><br>
+<b>Чт 04.09</b> · 18:00 · онлайн · <a class="btn" href="#d-event">Разбор клинического случая с экспертом</a> · Школа ортобиологии · 0 Pul<br>
+<b>Пт 12.09</b> · 18:30 · офлайн · Казань, ул. … · <a class="btn" href="#d-event">Doctor Club — встреча коллег</a> · 40 мест, осталось 12 <span class="req">REQ-15</span><br>
+<b>20.09</b> · онлайн · <a class="btn" href="#d-event">Старт подкаст-цикла OrthoBioSchool</a><br>
+<b>14–15.11</b> · гибрид · Москва · <a class="btn" href="#d-congress">Конгресс «Ортобиология-2026»</a> · НМО до 12</div>
+<div class="note">Карточка: дата/время (МСК) · формат · название · спикер → эксперт · школа/проект · НМО · цена в Pul · счётчик записавшихся. Клик по карточке — страница события (ds-platform 004, EARS-8)</div></div>
+<div class="box"><div class="t">Месяц</div>
+<div class="fish">[календарная сетка месяца: плашки «время · название», идущее сейчас — красным, прошедшие — приглушённо, «сегодня» — контур; ‹ › по месяцам] — реализация ds-platform 004 §5.4</div></div>
+<div class="box"><div class="t">Прошедшие</div>
+<div class="fish"><a class="btn" href="#d-event">14.08 · Вебинар «Гиалуронаты: что говорит доказательная база»</a> · запись · материалы · 218 участников <span class="req">REQ-137</span> · <a class="btn" href="#d-community">Сообщество «Орто»</a> — обсуждение</div></div>
+<div class="box"><div class="t">Мои события</div>
+<div class="fish">Записан: вебинар 28.08 · Doctor Club 12.09 · билет на конгресс → <a class="btn" href="#d-lk">Мои события в личном кабинете</a> (раздел DSP-229)</div></div>
+</section>
+
+<section class="screen" data-product="ds" id="d-school">
+<div class="crumbs"><a href="#d-feed">Травматология и ортопедия</a> › Школа ортобиологии</div>
+<h2>doctor.school › Школа ортобиологии</h2>
+<div class="meta">Школа — конечный продукт для врача; проект и закулисье остаются в Академии <span class="req">REQ-50</span> <span class="req">REQ-51</span></div>
+<div class="box"><div class="t">О школе</div>
+<div class="fish">Образовательный трек «ортобиология»: от базового курса до эксперта школы. Один модуль — один реальный клинический случай; травмы через призму спортивной медицины, сквозной сюжет анимационного сериала</div></div>
+<div class="box"><div class="t">Курс «Ортобиология. Базовый» — сериал, 9 серий <span class="req">REQ-16</span></div>
+<div class="fish">
+<a class="btn" href="#d-lesson">Серия 1 · Разрыв ПКС</a>
+<a class="btn" href="#d-lesson">Серия 2 · PRP-терапия</a>
+<a class="btn" href="#d-lesson">Серия 3 · Гонартроз</a>
+<span class="btn">… серии 4–9</span></div>
+<div class="note">Серию можно смотреть без предыдущих; сертификат — только за полное прохождение (Q-7) · маркировка «партнёрский контент, Партнёр А» <span class="req">REQ-66</span></div></div>
+<div class="row c2">
+<div class="box"><div class="t">Вебинары-разборы <span class="req">REQ-2</span></div>
+<div class="fish"><a class="btn" href="#d-event">Разбор клинического случая с экспертом · 04.09</a></div></div>
+<div class="box"><div class="t">Документ по итогам <span class="req">REQ-17</span></div>
+<div class="fish">Сертификат Doctor.School · НМО-баллы (реестр ведёт платформа) <span class="req">REQ-57</span> · нужна верификация документов — <a class="btn" href="#d-lk">пройти в ЛК</a> <span class="req">REQ-22</span></div></div>
+</div>
+<div class="row c2">
+<div class="box"><div class="t">Наставничество и стажировка <span class="req">REQ-119</span> <span class="req">REQ-12</span></div>
+<div class="fish">Пройди курс → наставничество у конкретного эксперта школы: <a class="btn" href="#a-expert">Страхов М. А.</a> · международная стажировка для лучших выпускников · <span class="btn">Хочу к наставнику</span></div></div>
+<div class="box"><div class="t">Отзывы выпускников <span class="req">REQ-118</span> <span class="req">REQ-92</span></div>
+<div class="fish">★★★★★ «Разбор ПКС — лучший формат, что видел» — Кузнецов Д., травматолог · ★★★★☆ «Хочу больше практики» — … · <span class="btn">все отзывы</span></div></div>
+</div>
+<div class="box"><div class="t">Сообщество школы <span class="req">REQ-120</span></div>
+<div class="fish"><a class="btn" href="#d-community">Сообщество «Орто»</a> — стандарты лечения, консенсусы, коллеги по направлению</div></div>
+</section>
+
+<section class="screen" data-product="ds" id="d-community">
+<div class="crumbs"><a href="#d-feed">Травматология и ортопедия</a> › Сообщество «Орто»</div>
+<h2>doctor.school › Сообщество «Орто»</h2>
+<div class="meta">Сообщество/ассоциация — сущность платформы (есть и в Академии): формируется из экспертов, связано с одной или несколькими специальностями (междисциплинарные — по смежным, OWD-11) <span class="req">REQ-120</span></div>
+<div class="box"><div class="t">О сообществе</div>
+<div class="fish">Профессиональное сообщество ортобиологии: 28 экспертов · связано со специальностями: травматология-ортопедия, спортивная медицина · модерирует Doctor.School — гарантия качества стандартов</div></div>
+<div class="row c2">
+<div class="box"><div class="t">Стандарты и консенсусы</div>
+<div class="fish">Рекомендация «PRP при гонартрозе: консенсус 2026» · Стандарт ведения разрыва ПКС · документы принимаются голосованием экспертов сообщества</div></div>
+<div class="box"><div class="t">Членство <span class="req">REQ-120</span></div>
+<div class="fish"><span class="btn">Стать членом сообщества</span> <span class="btn">Я уже член сообщества</span><br>Членство даёт: опора на стандарты — страховка от врачебных ошибок · доступ к консенсусам · статус в профиле</div></div>
+</div>
+<div class="note">Пример междисциплинарной ассоциации: «Реабилитолог» — связана с реабилитологией, неврологией, травматологией одновременно</div>
+</section>
+
+<section class="screen" data-product="ds" id="d-lesson">
+<div class="crumbs"><a href="#d-school">Школа ортобиологии</a> › Курс «Ортобиология. Базовый» › Путь серии</div>
+<h2>doctor.school › Учебный модуль «Разрыв ПКС у бегуньи» (эпизод 1)</h2>
+<div class="meta">Формат — путь эпизодов как в Duolingo (по прототипу мобильного приложения), не «страница урока»; микролёнинг: видео до 1–1,5 мин <span class="req">REQ-65</span> <span class="req">REQ-53</span></div>
+<div class="box"><div class="t">Путь серии (карта эпизодов)</div>
+<div class="fish">● Эп. 1 «Разрыв ПКС» (вы здесь) → ○ Эп. 2 «PRP-терапия» → ○ Эп. 3 «Гонартроз» → … → ★ вебинар-разбор → 🏁 сертификат</div>
+<div class="note">Эпизод можно открыть без предыдущих; сертификат — за полное прохождение (Q-7)</div></div>
+<div class="box"><div class="t">Открытая часть (без регистрации) <span class="req">REQ-20</span></div>
+<div class="fish">Описание случая · программа серии · тизер · превью анимации</div></div>
+<div class="box"><div class="t">Состав модуля (гейт — после регистрации)</div>
+<div class="fish">1. Клиническая история [видео до 1 мин] → 2. Теоретический блок [видео до 1,5 мин] → 3. Анимация случая → 4. Практическое задание → 5. Тест / клиническая задача → 6. Результат<br><a class="btn" href="#d-register">Пройти — нужна регистрация</a> · цена в Pul настраивается: этот модуль — 0 <span class="req">REQ-48</span></div>
+<div class="note">Ошибся в тесте → «исправительный» материал партнёра <span class="req">REQ-68</span> · методичка партнёра для скачивания <span class="req">REQ-67</span> · оценка ★★★★★ <span class="req">REQ-92</span></div></div>
+<div class="box"><div class="t">Очки (Пульс · Дыхание · Сознание)</div>
+<div class="fish">За прохождение модуля: +Pul (Пульс — вклад в своё образование, тратится на записи) · +Bre (Дыхание — репутация) · Con (Сознание) растёт только вверх — один счёт на web и в приложении <span class="req">REQ-3</span> · подкаст к модулю — по желанию <span class="req">REQ-35</span></div>
+<div class="note">Здесь — упрощённая подача для макета; канон механики — финмодель BBM Модуль Б и PRD v1 Прил. A</div></div>
+</section>
+
+<section class="screen" data-product="ds" id="d-event">
+<div class="crumbs"><a href="#d-feed">Травматология и ортопедия</a> › <a href="#d-events">События</a> › Событие</div>
+<h2>doctor.school › Вебинар «PRP при гонартрозе» · 28.08 19:00</h2>
+<div class="meta">Одна страница события для всех форматов (ds-platform 004): онлайн — комната эфира; офлайн — адрес, карта, как добраться, билет/QR; гибрид — и то и другое. Страница публична, без входа — ссылка от медпреда «просто работает» <span class="req">REQ-137</span> <span class="req">REQ-20</span> <span class="r4">R4</span></div>
+<div class="box"><div class="t">Открытая часть <span class="req">REQ-20</span></div>
+<div class="fish">Программа · спикер: Страхов М. А. · тизер · уже записались: 37 ортопедов <span class="req">REQ-38</span></div></div>
+<div class="box"><div class="t">Запись на событие — единственный CTA «Участвовать»</div>
+<div class="fish">Формат: онлайн · МСК · НМО 2 балла · Стоимость: 50 Pul (настраивается, может быть 0) <span class="req">REQ-48</span> · у вас 70 Pul · <a class="btn" href="#d-register">Участвовать</a><br>Гость → вход/регистрация и возврат сюда; авторизован → «Вы записаны на эфир — добавили в календарь», событие появляется в <a class="btn" href="#d-lk">Мои события</a>, напоминание перед стартом, в момент эфира кнопка ведёт в комнату <span class="r4">R4</span></div>
+<div class="note">Функциональность, не текстовка: пришедшему по ссылке медпреда Pul начисляется авансом автоматически — на этот вебинар хватает сразу, никаких сообщений «не хватает»; аванс потом отрабатывается уроками и профилем <span class="req">REQ-49</span> <span class="req">REQ-39</span></div></div>
+<div class="box"><div class="t">На эфире</div>
+<div class="fish">Партнёрская лекция с маркировкой «реклама» <span class="req">REQ-69</span> · голосовалка «зашла/не зашла» · мягкие напоминания: пройди уроки, пришли свой клинический случай <span class="req">REQ-40</span></div></div>
+<div class="box"><div class="t">После эфира <span class="req">REQ-118</span> <span class="req">REQ-135</span></div>
+<div class="fish">Оценка вебинара ★★★★★ и отзыв · мини-опрос маркетингового исследования: «Вы видели рекламу в мультике? Оцените подачу» — обратная связь по стратегии обучения, за которую платят партнёры <span class="req">REQ-69</span> <span class="req">REQ-10</span></div></div>
+</section>
+
+<section class="screen" data-product="ds" id="d-congress">
+<div class="crumbs"><a href="#d-feed">Травматология и ортопедия</a> › Конгресс</div>
+<h2>doctor.school › Конгресс «Ортобиология-2026»</h2>
+<div class="meta">Фронт конгресса виден врачу как событие; конструктор мероприятий — внутрянка Академии <span class="req">REQ-80</span></div>
+<div class="row c2">
+<div class="box"><div class="t">О конгрессе</div>
+<div class="fish">Даты · место · приветствия президиума · оргкомитет · партнёры (7 уровней: организатор … инфопартнёр) <span class="req">REQ-83</span></div></div>
+<div class="box"><div class="t">Программа</div>
+<div class="fish">Секция «PRP-терапия» · зал А · модераторы · доклады со спикерами (спикер — эксперт из общей базы, <a class="btn" href="#a-expert">страница эксперта</a>) <span class="req">REQ-97</span></div></div>
+</div>
+<div class="box"><div class="t">Участие <span class="req">REQ-84</span></div>
+<div class="fish">Бесплатно · формы: слушатель / устный доклад / тезисы / постер · конкурс молодых учёных (до 40 лет) · НМО: 6 баллов/день, макс. 12 <span class="req">REQ-85</span><br>Зарегистрирован на doctor.school? <span class="btn">Получить билет одной кнопкой</span> <span class="req">REQ-82</span> · нет — <a class="btn" href="#d-register">Регистрация</a><br><span class="btn">Подать заявку на выступление</span> — устный доклад / постер / тезисы <span class="req">REQ-122</span> <span class="req">REQ-84</span></div>
+<div class="note">ЛК участника: тезисы, отель, выставка экспонентов — входит в конструктор <span class="req">REQ-99</span></div></div>
+</section>
+
+<section class="screen" data-product="ds" id="d-register">
+<h2>doctor.school › Регистрация</h2>
+<div class="meta">Мягкий вход: почта + пароль, никаких документов <span class="req">REQ-23</span> <span class="req">REQ-22</span></div>
+<div class="box"><div class="t">Форма</div>
+<div class="fish">Почта: ______ · Пароль: ______ · Промокод / вы пришли по ссылке медпреда Партнёра А <span class="req">REQ-39</span><br>
+☑ <b>Я являюсь медицинским работником</b> — обязательная галочка, без неё регистрация невозможна (CON-11)<br>
+☑ Согласие на передачу данных партнёрам (ФИО, специальность, город, место работы — без контактов) — часть сделки «внимание ↔ бесплатное образование» <span class="req">REQ-34</span><br>
+☐ Согласие на рассылку (внешний сервис) <span class="req">REQ-115</span><br>
+<span class="btn">Зарегистрироваться → письмо-подтверждение</span></div>
+<div class="note">Согласия — отдельные, по целям, фиксируются доказуемо · отказ/отзыв — только вручную через менеджера платформы (Q-35)<br><span class="ux">UX</span> После регистрации — возврат туда, откуда пришёл (урок, вебинар, билет конгресса), а не в ЛК: врач регистрируется в момент интереса, точку интереса не терять</div></div>
+<div class="box"><div class="t">После регистрации</div>
+<div class="fish">Стартовые +20 Pul <span class="req">REQ-49</span> · «Заполни профиль → +30 Pul, доступ к сертификатам и НМО» <span class="req">REQ-23</span> · <a class="btn" href="#d-lk">В личный кабинет</a></div></div>
+</section>
+
+<section class="screen" data-product="ds" id="d-lk">
+<h2>doctor.school › Личный кабинет врача</h2>
+<div class="meta">Одна учётка на оба сайта; роли — атрибуты (врач · эксперт · автор) <span class="req">REQ-8</span> <span class="req">REQ-95</span></div>
+<div class="row c3">
+<div class="box"><div class="t">Профиль</div>
+<div class="fish">Иванов А. · травматолог-ортопед · Казань · место работы · член сообщества «Орто» <span class="req">REQ-120</span> · заполненность 60 % → +30 баллов за остальное <span class="req">REQ-23</span></div></div>
+<div class="box"><div class="t">Очки: Пульс · Дыхание · Сознание</div>
+<div class="fish">Pul (Пульс): 70 — тратится на записи · Bre (Дыхание): 12 — репутация · Con (Сознание): 3 — только вверх · история: +20 регистрация · +50 модули · −50 вебинар · пригласить коллегу → Pul обоим <span class="req">REQ-36</span></div>
+<div class="note">Упрощённая подача; канон — финмодель Модуль Б / PRD v1 Прил. A <span class="req">REQ-3</span></div></div>
+<div class="box"><div class="t">Мои события <span class="r4">R4</span></div>
+<div class="fish"><b>Предстоящие:</b> <a class="btn" href="#d-event">Вебинар 28.08</a> (онлайн, вход в комнату за 15 мин) · <a class="btn" href="#d-event">Doctor Club Казань 12.09</a> (офлайн, билет/QR) · билет на конгресс <span class="req">REQ-82</span> · «добавить в календарь» · отменить запись<br><b>Прошедшие:</b> вебинар 14.08 — запись, материалы, чекины присутствия для НМО <span class="req">REQ-139</span>, оценка ★ <span class="req">REQ-118</span><br>Курс «Ортобиология» — серия 3 из 9 · <a class="btn" href="#d-events">Найти ещё события</a></div>
+<div class="note">Раздел «Мои события» — задача DSP-229; данные те же, что в /account/events ds-platform</div></div>
+</div>
+<div class="row c2">
+<div class="box"><div class="t">Документы и верификация <span class="req">REQ-22</span></div>
+<div class="fish">Статус: зарегистрирован → верифицирован · <span class="btn">Загрузить диплом / документы</span> — доступно всегда; без верификации сертификаты и НМО не выдаются · Сертификат «Ортобиология. Базовый» · НМО-коды (ИКП)</div></div>
+<div class="box"><div class="t">Разбор врачебных ошибок <span class="req">REQ-121</span></div>
+<div class="fish"><span class="btn">Подать кейс</span> — при подаче выбор: анонимно (публикация под аватаром) / от своего имени · кейсы — только обезличенные (CON-12) · остальная механика — экспериментами (Q-41)</div></div>
+</div>
+<div class="box"><div class="t">Стать экспертом</div>
+<div class="fish"><a class="btn" href="#a-home">Академия: посмотреть закулисье и подать заявку</a> <span class="req">REQ-24</span></div></div>
+</section>
+
+<section class="screen" data-product="ds" id="d-docs">
+<h2>doctor.school › Документы и контакты</h2>
+<div class="meta">Документы и контакты — на обоих сайтах <span class="req">REQ-136</span> <span class="req">REQ-74</span></div>
+<div class="box"><div class="t">Документы</div>
+<div class="fish">Лицензия на образовательную деятельность · Политика персональных данных и согласия · Пользовательское соглашение · Правила начисления очков</div></div>
+<div class="box"><div class="t">Контакты</div>
+<div class="fish">Почта поддержки · соцсети · для клиник и организаций — <a class="btn" href="#a-home">Академия Doctor.School</a></div></div>
+</section>
+
+<!-- ===================== academy.doctor.school ===================== -->
+<section class="screen" data-product="ac" id="a-home">
+<h2>academy.doctor.school › Главная</h2>
+<div class="meta">Отдельный домен, своя аудитория (эксперты, партнёры); учётка та же, что на doctor.school <span class="req">REQ-95</span></div>
+<div class="box"><div class="t">Кто мы <span class="req">REQ-72</span> <span class="req">REQ-103</span></div>
+<div class="fish">Doctor.School создаёт бесплатное децентрализованное образование для врачей — образование, в развитии которого может участвовать каждый: и эксперт, и компания</div></div>
+<div class="row c2">
+<div class="box"><div class="t">Миссия</div>
+<div class="fish">Создать равную свободную среду для самореализации врачей, где талант важнее связей, а качественное образование доступно каждому. Сделать медобразование бесплатным, децентрализованным и открытым, создать доверительное пространство между врачами и пациентами и минимизировать врачебные ошибки</div></div>
+<div class="box"><div class="t">Эволюционная цель</div>
+<div class="fish"><b>Создаём бесплатное децентрализованное медицинское образование</b></div>
+<div class="note">Формулировка владельца дословно, без расшифровки <span class="r4">R4</span></div></div>
+</div>
+<div class="box"><div class="t">Что мы делаем — анонсы проектов</div>
+<div class="fish"><a class="btn" href="#a-project">Проект «Ортобиология»</a>: школа · конгресс · клуб · <a class="btn" href="#a-projects">Проект «Кто стоит за брендом»</a> — подкаст об экспертах · Скоро: RheumoSchool · <a class="btn" href="#a-projects">Все проекты</a></div></div>
+<div class="row c3">
+<div class="box"><div class="t">Ближайшие эфиры <span class="req">REQ-75</span></div>
+<div class="fish">21.08 подкаст с экспертом · 20.09 старт подкаст-цикла OrthoBioSchool · <a class="btn" href="#a-events">Все события и эфиры</a> <span class="req">REQ-137</span></div></div>
+<div class="box"><div class="t">Рилсы и видео <span class="req">REQ-76</span></div>
+<div class="fish">RuTube · VK Видео · YouTube — из наших соцсетей</div></div>
+<div class="box"><div class="t">Новости и блог <span class="req">REQ-78</span> <span class="req">REQ-124</span></div>
+<div class="fish">Статьи и колонки самих экспертов (не только корпоративный блог) + посты соцсетей и аналитика: запуск исследования, маркетинговая кампания</div></div>
+</div>
+<div class="row c2">
+<div class="box"><div class="t">Экспертам</div>
+<div class="fish">Участвуйте в подкасте, создайте курс или школу, выступите на конгрессе · <a class="btn" href="#a-apply">Подать заявку на участие в проекте</a> <span class="req">REQ-6</span></div></div>
+<div class="box"><div class="t">Инвесторам</div>
+<div class="fish">Внимание врачей для вашего бренда — этично и прозрачно · <a class="btn" href="#a-invest">Как это работает</a> <span class="req">REQ-7</span></div></div>
+</div>
+<div class="box"><div class="t">Футер</div>
+<div class="fish"><a class="btn" href="#a-partners">Партнёры</a> <a class="btn" href="#a-projects">Проекты</a> <a class="btn" href="#a-experts">Эксперты</a> <a class="btn" href="#a-events">События</a> <a class="btn" href="#a-docs">Документы и контакты</a> · <a class="btn" href="#d-home">doctor.school — врачам</a><br><span style="color:#bbb;font-size:11px">BBM: Академия смыслов</span> <span class="req">REQ-123</span></div>
+<div class="note"><span class="ux">UX</span> «BBM: Академия смыслов» — фоновая надпись в хедере/футере всех страниц Академии: присутствует всегда, внимания не забирает (приглушённый цвет, мелкий кегль)</div></div>
+</section>
+
+<section class="screen" data-product="ac" id="a-events">
+<h2>Академия › События и эфиры</h2>
+<div class="meta">Календарь, лента, страница события, комната эфира — уже реализовано в ds-platform (фичи 004/006/014/015); здесь не переизобретается, показана публичная поверхность <span class="req">REQ-137</span> <span class="req">REQ-75</span></div>
+<div class="box"><div class="t">Календарь и лента</div>
+<div class="fish">Переключатель «Неделя» (список по дням) / «Месяц» (календарь: live — выделен, прошедшие — приглушены) · вкладки «Будущие / Прошедшие»<br>
+<b>Чт 21.08</b> · 19:00 · <a class="btn" href="#a-event">Подкаст с экспертом</a> · проект «Кто стоит за брендом»<br>
+<b>Сб 20.09</b> · 12:00 · <a class="btn" href="#a-event">Старт подкаст-цикла OrthoBioSchool</a> · проект «Ортобиология»<br>
+<b>Прошедшие:</b> <a class="btn" href="#a-event">14.08 · Эфир «Гиалуронаты»</a> — запись</div>
+<div class="note"><span class="r4">R4</span> Каждая карточка ведёт на <a href="#a-event">страницу события</a> — как уже реализовано в ds-platform 004 (EARS-8); раньше на макете перехода не было</div></div>
+<div class="box"><div class="t">Связи</div>
+<div class="fish">Событие принадлежит одному или нескольким проектам → <a class="btn" href="#a-project">Ортобиология</a> · спикеры → <a class="btn" href="#a-experts">эксперты</a> · партнёр события <span class="req">REQ-140</span></div></div>
+</section>
+
+<section class="screen" data-product="ac" id="a-event">
+<div class="crumbs"><a href="#a-events">События и эфиры</a> › Событие</div>
+<h2>Академия › Подкаст с экспертом · 21.08 19:00 <span class="r4">R4</span></h2>
+<div class="meta">Страница события — вход в глубину воронки: с неё идёт регистрация на мероприятие. Реализовано в ds-platform 004 (страница /webinars/:slug, единственный CTA «Участвовать», EARS-3); та же страница, что у врача на doctor.school — один движок <span class="req">REQ-137</span></div>
+<div class="box"><div class="t">Описание (публично, без входа)</div>
+<div class="fish">О чём эфир · программа · спикеры → <a class="btn" href="#a-expert">Страхов М. А.</a> · проект → <a class="btn" href="#a-project">Ортобиология</a> (событие может принадлежать нескольким проектам) · партнёр события <span class="req">REQ-140</span> · формат: онлайн · МСК</div></div>
+<div class="box"><div class="t">Участвовать — единственный CTA</div>
+<div class="fish"><a class="btn" href="#d-register">Участвовать</a> · гость → вход/регистрация (та же учётка, что на doctor.school, фича 003) и возврат на эту страницу → «Вы записаны на эфир — добавили в календарь» <span class="req">REQ-95</span><br>После записи: событие в «Мои события» (/account/events) · напоминание перед стартом · в момент эфира кнопка ведёт в комнату</div>
+<div class="note">Состояния страницы: до эфира — «Участвовать»; идёт — «Войти в комнату»; завершён — запись и материалы, CTA нет; архив — заметка без CTA (ds-platform 004 EARS-4/5)</div></div>
+<div class="row c2">
+<div class="box"><div class="t">Комната эфира</div>
+<div class="fish">Плеер (RuTube/YouTube/VK) · чат · счётчик «N участников в комнате» · вход: авторизован + записан + эфир идёт (ds-platform 006)<br><span class="req">REQ-139</span> вернуть из старого сайта: «Вопрос лектору», опросы с live-графиком, чекины присутствия для НМО — в ds-platform волной 1 не унаследовано</div></div>
+<div class="box"><div class="t">После эфира</div>
+<div class="fish">Запись (ds-platform 014) · фото-отчёт · материалы · оценка и отзыв <span class="req">REQ-118</span> · другие эфиры проекта → <a class="btn" href="#a-events">События и эфиры</a></div></div>
+</div>
+</section>
+
+<section class="screen" data-product="ac" id="a-projects">
+<h2>Академия › Каталог проектов</h2>
+<div class="meta">Проект — контейнер работы Академии; школа, конгресс, подкаст — его результаты <span class="req">REQ-4</span> <span class="req">REQ-100</span></div>
+<div class="box"><div class="t">Проекты</div>
+<div class="fish">[фильтры: статус · специальность · тип результата | сортировка: новизна · активность] <span class="req">REQ-138</span><br><a class="btn" href="#a-project">Ортобиология</a> — идёт · статус, команда, инвестор, сквозной ID<br><span class="btn">Кто стоит за брендом</span> — идёт · подкаст с экспертами: кто и как делает медобразование<br><span class="btn">RheumoSchool</span> — набор экспертов · <span class="btn">NeuroSchool</span> — план</div></div>
+<div class="box"><div class="t">Хочешь свой проект? <span class="ux">UX</span></div>
+<div class="fish"><a class="btn" href="#a-apply">Подать заявку эксперта</a> · <a class="btn" href="#a-invest">Инвестировать в проект</a></div></div>
+</section>
+
+<section class="screen" data-product="ac" id="a-project">
+<div class="crumbs"><a href="#a-projects">Проекты</a> › Ортобиология</div>
+<h2>Академия › Проект «Ортобиология»</h2>
+<div class="meta">Сквозной ID проекта связывает контент, роли, начисления и платежи <span class="req">REQ-89</span></div>
+<div class="box"><div class="t">Результаты проекта <span class="req">REQ-4</span> <span class="req">REQ-11</span></div>
+<div class="fish"><a class="btn" href="#d-school">Школа ортобиологии → на doctor.school</a> · <a class="btn" href="#d-congress">Конгресс-2026</a> · подкаст-цикл школы · Doctor Club</div></div>
+<div class="row c3">
+<div class="box"><div class="t">Команда</div>
+<div class="fish">Авторы и соавторы: <a class="btn" href="#a-expert">Страхов М. А.</a> · Гаев Т. · методист, продюсер — внутренняя команда <span class="req">REQ-71</span></div></div>
+<div class="box"><div class="t">Инвестор проекта</div>
+<div class="fish">Партнёр А (фарма) — годовой эксклюзивный контракт <span class="req">REQ-90</span> · логотип по комплаенсу партнёра <span class="req">REQ-70</span></div></div>
+<div class="box"><div class="t">Закулисье <span class="req">REQ-5</span></div>
+<div class="fish">Ищем эксперта по регенеративной медицине · публикации · подкасты с экспертами</div></div>
+</div>
+<div class="box"><div class="t">Дашборд проекта — цифры для партнёра <span class="req">REQ-125</span></div>
+<div class="fish">Ёмкость рынка: 12 000 травматологов РФ · пациентов с показаниями: ~2,4 млн/год · аудитория проекта: 1 850 врачей · начальные инвестиции: [X] · потенциал монетизации и капитализации: [оценка] · внимание намайнено: 84 000 очков</div>
+<div class="note">Рыночная аналитика — то, что сразу интересно потенциальному партнёру; источники цифр — TODO(Антон)</div></div>
+<div class="box"><div class="t">Войти в проект <span class="req">REQ-126</span></div>
+<div class="fish"><a class="btn" href="#a-apply">Зайти как эксперт — подать заявку</a> <a class="btn" href="#a-invest">Хочу стать первоинвестором</a></div></div>
+</section>
+
+<section class="screen" data-product="ac" id="a-experts">
+<h2>Академия › Каталог экспертов</h2>
+<div class="meta">Группы: медицина и образование / маркетинг / общества, институты, клиники <span class="req">REQ-73</span></div>
+<div class="box"><div class="fish">[поиск по имени · фильтр: проект · специальность · группа] <span class="req">REQ-138</span></div></div>
+<div class="box"><div class="t">Медицина и образование</div>
+<div class="fish"><a class="btn" href="#a-expert">Страхов Максим Алексеевич</a> · Гаев Тимофей · … — эксперт существует в базе и без учётки <span class="req">REQ-97</span></div></div>
+<div class="row c2">
+<div class="box"><div class="t">Маркетинг медпроектов</div><div class="fish">Не врачи: маркетологи и продюсеры, которые помогают запускать и продвигать школы/курсы (группа из REQ-73; прежний заголовок «эксперты запусков и продвижения» команде был непонятен — переформулирован)</div></div>
+<div class="box"><div class="t">Общества · институты · клиники</div><div class="fish">Профессиональные сообщества и ассоциации (<a class="btn" href="#d-community">пример: «Орто»</a> <span class="req">REQ-120</span>) · клинические базы</div></div>
+</div>
+<div class="box"><div class="t">Хотите в этот каталог? <span class="ux">UX</span></div>
+<div class="fish"><a class="btn" href="#a-apply">Подать заявку эксперта</a> — путь роста и условия внутри</div></div>
+</section>
+
+<section class="screen" data-product="ac" id="a-expert">
+<div class="crumbs"><a href="#a-experts">Эксперты</a> › Страхов М. А.</div>
+<h2>Академия › Эксперт › Страхов Максим Алексеевич</h2>
+<div class="meta">Персональная страница — витрина эксперта <span class="req">REQ-77</span></div>
+<div class="box"><div class="t">Витрина</div>
+<div class="fish">Травматолог-ортопед · ведущий эксперт OrthoBioSchool · доклады на конгрессах · автор 12 уроков · публикации <span class="req">REQ-77</span><br>Намайнил через индексы: <b>124 000 очков</b> <span class="req">REQ-127</span> · индекс цитируемости: <b>47</b> (рецензии, ссылки коллег на его уроки) <span class="req">REQ-132</span></div></div>
+<div class="box"><div class="t">Участие в проектах — роль в каждом своя <span class="req">REQ-128</span> <span class="req">REQ-127</span></div>
+<div class="fish"><a class="btn" href="#a-project">Ортобиология</a> — автор уроков · <span class="btn">Кто стоит за брендом</span> — герой подкаста · <a class="btn" href="#d-congress">Конгресс-2026</a> — спикер секции · научный консультант RheumoSchool<br>Все связанные объекты: <a class="btn" href="#a-events">эфиры с ним</a> · <a class="btn" href="#d-lesson">уроки</a> · доклады · публикации</div></div>
+<div class="row c2">
+<div class="box"><div class="t">Для команды Академии</div>
+<div class="fish"><span class="btn">Пригласить в проект</span></div></div>
+<div class="box"><div class="t">Связывание с учёткой <span class="req">REQ-106</span></div>
+<div class="fish"><span class="btn">Это я</span> — видна только авторизованному, пока эксперт ни с кем не связан · заявка уходит админам Академии · подтверждение ручное, связь ставится в админке</div></div>
+</div>
+<div class="box"><div class="t">Хочу так же <span class="ux">UX</span></div>
+<div class="fish">Витрина эксперта — цель пути роста: <a class="btn" href="#a-apply">подать заявку и начать путь</a> <span class="req">REQ-131</span></div></div>
+</section>
+
+<section class="screen" data-product="ac" id="a-partners">
+<h2>Академия › Каталог партнёров</h2>
+<div class="meta">Каталог = лидерборд: рейтинг завлекает и стимулирует попасть на него <span class="req">REQ-129</span> <span class="req">REQ-63</span> · роли-атрибуты организаций: инвестор · клиническая площадка · образовательный лицензиат (Q-40) <span class="req">REQ-100</span></div>
+<div class="box"><div class="t">Лидерборд инвесторов <span class="req">REQ-9</span> <span class="req">REQ-63</span></div>
+<div class="fish">1. <a class="btn" href="#a-partner">Партнёр А (фарма)</a> — доля внимания 46 % · 3 проекта · 2. Партнёр Б (медоборудование) — 31 % · 1 проект · 3. Инвестор в цель BBM — … · логотипы по комплаенсу каждого <span class="req">REQ-70</span></div></div>
+<div class="box"><div class="t">Клинические базы <span class="req">REQ-19</span></div>
+<div class="fish">ФМБА · клиника в Казани — площадка (лекционный зал, операционные) и эксперты-преподаватели · кабинета клиники на старте нет (NG-6)</div></div>
+<div class="box"><div class="t">Хотите на этот лидерборд? <span class="ux">UX</span> <span class="req">REQ-129</span></div>
+<div class="fish"><a class="btn" href="#a-invest">Стать инвестором — как это работает</a></div></div>
+</section>
+
+<section class="screen" data-product="ac" id="a-partner">
+<div class="crumbs"><a href="#a-partners">Партнёры</a> › Партнёр А</div>
+<h2>Академия › Партнёр А (фарма)</h2>
+<div class="meta">Публичная страница организации-партнёра <span class="req">REQ-129</span> <span class="req">REQ-88</span></div>
+<div class="box"><div class="t">О компании</div>
+<div class="fish">Фарма, портфель — регенеративная медицина · инвестор проектов Академии с 2026 · логотип и материалы по комплаенсу компании <span class="req">REQ-70</span></div></div>
+<div class="row c3">
+<div class="box"><div class="t">Проекты</div>
+<div class="fish"><a class="btn" href="#a-project">Ортобиология</a> — годовой эксклюзив <span class="req">REQ-90</span></div></div>
+<div class="box"><div class="t">Эксперты и события</div>
+<div class="fish">Эксперты, работающие в проектах партнёра · <a class="btn" href="#a-events">эфиры с участием</a></div></div>
+<div class="box"><div class="t">Продукция <span class="req">REQ-130</span></div>
+<div class="fish">Каталог продуктов компании · <span class="btn">Запросить продукцию</span> — заказы через платформу (перспектива, не первый этап)</div></div>
+</div>
+</section>
+
+<section class="screen" data-product="ac" id="a-apply">
+<h2>Академия › Заявка автора</h2>
+<div class="meta">Self-service форма; та же учётка, что у врача <span class="req">REQ-42</span></div>
+<div class="box"><div class="t">Форма заявки</div>
+<div class="fish">Тема: «Ортобиология в амбулаторной практике» · специальность · формат: курс-сериал / урок / подкаст / выступление · о себе и требования к заявителю · <b>клинический случай</b> (описание кейса из практики — основа будущего урока) <span class="req">REQ-141</span> · <span class="btn">Отправить заявку</span></div>
+<div class="note"><span class="ux">UX</span> Отправка — под той же учёткой, что у врача: не залогинен → мягкий вход/регистрация, черновик заявки сохраняется</div></div>
+<div class="box"><div class="t">Что дальше (путь заявки) <span class="req">REQ-110</span></div>
+<div class="fish">1. Первичный разбор админом Академии → назначен продюсер · 2. Разговор с продюсером — он решает «берём в работу» · 3. Методист собирает программу <span class="req">REQ-108</span> · 4. Производство <span class="req">REQ-109</span> · 5. Медицинская экспертиза (на старте вручную) <span class="req">REQ-26</span> · 6. Публикация — у врачей как таргетный контент</div>
+<div class="note"><span class="req">REQ-142</span> Продюсер — <b>единое окно</b> общения эксперта: методист и остальная команда действуют за кулисами, эксперт общается с одним человеком</div></div>
+<div class="box"><div class="t">Путь роста эксперта <span class="req">REQ-131</span> <span class="req">REQ-132</span></div>
+<div class="fish">Рецензент уроков (растит индекс цитируемости; за N рецензий — международная стажировка) → соавтор → автор урока/курса → спикер и герой подкастов → <b>наставник</b> — берёт врачей на наставничество <span class="req">REQ-119</span></div>
+<div class="note">Наставником нельзя стать, ничего не сделав для платформы, — путь показывает, что и в какой последовательности делать, и мотивирует начать вкладывать экспертизу</div></div>
+<div class="box"><div class="t">Условия автора</div>
+<div class="fish">Автор/соавтор получает начисления по смарт-контракту от просмотров <span class="req">REQ-29</span> <span class="req">REQ-44</span></div></div>
+</section>
+
+<section class="screen" data-product="ac" id="a-invest">
+<h2>Академия › Инвесторам</h2>
+<div class="meta">Инвестор — канонический термин (не «спонсор», не «рекламодатель») <span class="req">REQ-9</span></div>
+<div class="box"><div class="t">Как это работает <span class="req">REQ-96</span></div>
+<div class="fish">Вы инвестируете в проект (школа, курс, конгресс) → его результаты распространяются по врачам вашей аудитории → вы видите внимание, аналитику и возврат. Модель: фикс на производство минимального урока + основная часть постфактум «за намайненное внимание» <span class="req">REQ-87</span></div></div>
+<div class="box"><div class="t">Маркетплейс инвестиций — во что можно зайти сейчас <span class="req">REQ-133</span></div>
+<div class="fish">
+[Карточка] <b>Школа ортобиологии</b> · аудитория проекта 1 850 врачей, потенциал 12 000 · первые 3 урока проинвестированы — закрыты · открыто мест: <b>6 уроков</b> · <span class="btn">Хочу инвестировать в эту школу</span><br>
+[Карточка] <b>Заявка эксперта: курс «Ортобиология в амбулаторной практике»</b> (Страхов М. А.) · потенциальная аудитория 3 000 врачей · ёмкость рынка: [оценка] · <span class="btn">Хочу инвестировать в этот курс</span><br>
+[Карточка] <b>Эксперт Гаев Т.</b> · цикл уроков в производстве · <span class="btn">Инвестировать в эксперта</span></div>
+<div class="note">Кнопка «Хочу инвестировать» → автоматически формируется КП на всю партию — вместо месяцев согласований; смысл — ажиотаж и очередь (стратегия дефицита CON-7). Каталог всех открытых заявок — возможен отдельным разделом</div></div>
+<div class="row c2">
+<div class="box"><div class="t">Что получает инвестор</div>
+<div class="fish">Аналитика внимания врачей · списки участников (без контактов) · опросы и исследования <span class="req">REQ-10</span> · годовой эксклюзив на проект <span class="req">REQ-90</span></div></div>
+<div class="box"><div class="t">Организация, не персона <span class="req">REQ-88</span></div>
+<div class="fish">Аккаунт — компания: свой админ, пользователи, медпреды · <a class="btn" href="#a-cabinet">Кабинет инвестора</a></div></div>
+</div>
+<div class="box"><div class="t">Деньги</div>
+<div class="fish">Оплата — по договору вне платформы; платформа ведёт прозрачный учёт «внесено → фонд → начисления» (CON-16)</div></div>
+<div class="box"><div class="t">Следующий шаг <span class="ux">UX</span></div>
+<div class="fish"><span class="btn">Обсудить проект — оставить заявку</span> · контакт команды Академии</div>
+<div class="note">Добавлено UX-ревью: без этого путь нового инвестора обрывался на чтении — страница объясняла модель, но не давала действия (кабинет доступен только действующим). Форма/канал — TODO(Антон)</div></div>
+</section>
+
+<section class="screen" data-product="ac" id="a-cabinet">
+<div class="crumbs"><a href="#a-invest">Инвесторам</a> › Кабинет</div>
+<h2>Академия › Кабинет инвестора (Партнёр А)</h2>
+<div class="meta">B2B-кабинет со smart-contract-отчётом <span class="req">REQ-62</span></div>
+<div class="row c2">
+<div class="box"><div class="t">Мои проекты и инвестиции</div>
+<div class="fish">Ортобиология: школа · конгресс — инвестировано / возврат · распределение фонда по смарт-контракту: авторы · соавторы · <b>первоинвестор</b> <span class="req">REQ-30</span> <span class="req">REQ-44</span> <span class="req">REQ-134</span></div>
+<div class="note"><span class="req">REQ-134</span> Развилка терминов TODO(Антон): роль в смарт-контракте — «первоинвестор» (закрыл первую эмиссию юнита); как звать ЦА Академии — варианты в screens.md §Терминология</div></div>
+<div class="box"><div class="t">Аналитика внимания <span class="req">REQ-58</span></div>
+<div class="fish">Контакты и глубина · уроки · очки → стоимость контакта <span class="req">REQ-59</span> · отставание от плана по вниманию — сигнал команде (Q-37) · <span class="btn">Повторить заказ</span> <span class="req">REQ-60</span></div></div>
+</div>
+<div class="box"><div class="t">Аудитория спонсируемого объекта</div>
+<div class="fish">Врачи, пришедшие на ваш вебинар / прошедшие ваш урок / вашу школу — целиком, с результатами; границу задаёт объект спонсорства (Q-32) · ФИО · специальность · город · место работы · что делал — <b>без контактов</b> <span class="req">REQ-18</span> <span class="req">REQ-33</span> · выгрузка для отчётности</div></div>
+<div class="row c3">
+<div class="box"><div class="t">Медпреды <span class="req">REQ-114</span></div>
+<div class="fish">100 пользователей-медпредов · у каждого персональная ссылка/промокод и персональная атрибуция приведённых врачей <span class="req">REQ-39</span> · разрез по медпредам</div></div>
+<div class="box"><div class="t">Опросы и исследования <span class="req">REQ-10</span> <span class="req">REQ-135</span></div>
+<div class="fish"><span class="btn">Запросить исследование</span> — заявка на проведение (не самозапуск): врачи дают обратную связь по маркетинговым материалам внутри стратегии обучения («Вы видели рекламу в мультике?») · «Опыт применения PRP» — 300 ответов</div></div>
+<div class="box"><div class="t">Отчёты <span class="req">REQ-45</span></div>
+<div class="fish">Закрывающие документы · фото · принтскрины · лидерборд партнёров: доля внимания, инвестиции <span class="req">REQ-63</span></div></div>
+</div>
+</section>
+
+<section class="screen" data-product="ac" id="a-docs">
+<h2>Академия › Документы и контакты</h2>
+<div class="meta">«Чтобы всё серьёзно» <span class="req">REQ-74</span> <span class="req">REQ-136</span></div>
+<div class="box"><div class="fish">Лицензия на образовательную деятельность (Doctor.School — лицензиат и эмитент документов, Q-31) · Политика персональных данных и согласия · Договоры · Конституция (бирюзовая модель) · Пользовательское соглашение</div></div>
+<div class="box"><div class="t">Контакты <span class="req">REQ-136</span></div>
+<div class="fish">Команда Академии: почта · соцсети · для инвесторов — <a class="btn" href="#a-invest">оставить заявку</a> · для экспертов — <a class="btn" href="#a-apply">заявка автора</a></div></div>
+</section>
+
+  </main>
+  <aside>
+    <h3>Пути пользователей (CJM)</h3>
+    <div class="why">Каждый экран — шаг чьего-то пути, а не «страница ради страницы». Подсвечен шаг, которому служит текущий экран. Врач живёт на doctor.school; эксперт и инвестор — в Академии.</div>
+
+    <div class="jmap" data-product="ds" id="jm-doc">
+      <div class="who">Врач</div>
+      <div class="jstep" id="jd1">Попал на сайт: обещание «бесплатное образование» <span class="scr">Главная</span></div>
+      <div class="jstep" id="jd2">Выбрал специальность → весь контент таргетный <span class="scr">Главная → Лента</span></div>
+      <div class="jstep" id="jd3">Пробует без регистрации: открытые части уроков и событий <span class="scr">Школа · Модуль · События · Конгресс</span></div>
+      <div class="jstep" id="jd4">Мягкая регистрация в момент интереса (почта + пароль) <span class="scr">Регистрация</span></div>
+      <div class="jstep" id="jd5">Учится и ходит на события, копит очки Pul/Bre/Con <span class="scr">Модуль · События · ЛК (Мои события)</span></div>
+      <div class="jstep" id="jd6">Верификация документов → сертификаты и НМО <span class="scr">ЛК</span></div>
+      <div class="jstep" id="jd7">Вырос: стать экспертом → Академия <span class="scr">ЛК → Академия</span></div>
+    </div>
+
+    <div class="jmap" data-product="ac" id="jm-exp">
+      <div class="who">Эксперт (врач-автор)</div>
+      <div class="jstep" id="je1">Узнаёт об Академии: миссия, «участвовать может каждый» <span class="scr">Главная</span></div>
+      <div class="jstep" id="je2">Смотрит закулисье: проекты, людей, эфиры, партнёров <span class="scr">Каталоги · Проект · События</span></div>
+      <div class="jstep" id="je3">Видит путь роста → подаёт заявку; CTA на каждой странице закулисья <span class="scr">Заявка</span></div>
+      <div class="jstep" id="je4">Производство с командой: продюсер → методист → экспертиза <span class="scr">Заявка · путь заявки</span></div>
+      <div class="jstep" id="je5">Публикация у врачей + витрина и начисления <span class="scr">Страница эксперта</span></div>
+    </div>
+
+    <div class="jmap" data-product="ac" id="jm-inv">
+      <div class="who">Инвестор (фарма)</div>
+      <div class="jstep" id="ji1">Узнаёт о платформе: аудитория врачей, этичная модель <span class="scr">Главная</span></div>
+      <div class="jstep" id="ji2">Понимает механику и выбирает продукт в маркетплейсе <span class="scr">Инвесторам</span></div>
+      <div class="jstep" id="ji3">Проверяет доверие: лидерборд партнёров, дашборд проекта, документы <span class="scr">Партнёры · Проекты · Документы</span></div>
+      <div class="jstep" id="ji4">«Хочу инвестировать» → авто-КП → договор вне платформы (CON-16)</div>
+      <div class="jstep" id="ji5">Работает в кабинете: аналитика, медпреды, повторный заказ <span class="scr">Кабинет инвестора</span></div>
+    </div>
+  </aside>
+</div>
+<script>
+  const tabs=[...document.querySelectorAll('.tab')], links=[...document.querySelectorAll('nav a')],
+        screens=[...document.querySelectorAll('.screen')], grps=[...document.querySelectorAll('nav .grp')],
+        jmaps=[...document.querySelectorAll('.jmap')], jsteps=[...document.querySelectorAll('.jstep')];
+  // экран → шаги CJM (контентные экраны служат и шагу «пробует» (3), и шагу «учится» (5))
+  const J={'d-home':['jd1','jd2'],'d-feed':['jd2'],'d-events':['jd2','jd3','jd5'],'d-school':['jd3','jd5'],'d-lesson':['jd3','jd5'],
+           'd-event':['jd3','jd5'],'d-congress':['jd3','jd5'],'d-community':['jd5'],'d-register':['jd4'],
+           'd-lk':['jd5','jd6','jd7'],'d-docs':['jd1'],
+           'a-home':['je1','ji1'],'a-events':['je2','ji3'],'a-event':['je2','ji3'],'a-projects':['je2','ji3'],'a-project':['je2','ji3'],
+           'a-experts':['je2'],'a-expert':['je2','je5'],'a-partners':['je2','ji3'],'a-partner':['ji3'],
+           'a-apply':['je3','je4'],'a-invest':['ji2','ji4'],'a-cabinet':['ji5'],'a-docs':['ji3']};
+  function show(id){
+    const s=document.getElementById(id)||screens[0]; if(!s) return;
+    const p=s.dataset.product;
+    screens.forEach(x=>x.classList.toggle('active',x===s));
+    links.forEach(a=>{a.classList.toggle('active',a.getAttribute('href')==='#'+s.id);
+                      a.style.display=(a.dataset.product===p)?'':'none';});
+    grps.forEach(g=>g.style.display=(g.dataset.product===p)?'':'none');
+    tabs.forEach(t=>t.classList.toggle('active',t.dataset.product===p));
+    document.getElementById('bbm-tag').style.display=(p==='ac')?'':'none';
+    const cur=J[s.id]||[];
+    jmaps.forEach(m=>m.classList.toggle('on',m.dataset.product===p));
+    jsteps.forEach(st=>st.classList.toggle('cur',cur.includes(st.id)));
+  }
+  tabs.forEach(t=>t.onclick=()=>{const first=screens.find(s=>s.dataset.product===t.dataset.product);
+    if(first){location.hash='#'+first.id; show(first.id);}});
+  window.onhashchange=()=>show(location.hash.slice(1));
+  show(location.hash.slice(1));
+</script>
+</body>
+</html>

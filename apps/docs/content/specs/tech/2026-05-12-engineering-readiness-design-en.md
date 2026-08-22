@@ -52,7 +52,7 @@ The brainstorm research confirmed that under AI-agent driven development the 202
 - **Postgres 17 + Drizzle** (ADR-0003).
 - **Redis** (single-node + AOF, see ADR-0003 §8 responsibilities matrix; not for sessions or critical jobs).
 - **Postgres outbox** for critical jobs (ADR-0003 §8).
-- **Portal Next.js app** (`app.doctor.school`).
+- **Portal Next.js app** (`academy.doctor.school`).
 - **Admin Next.js app** (`admin.doctor.school`).
 - **Docs (Fumadocs)** — internal SSOT for the team (ADR-0006).
 - **GlitchTip self-hosted** (this spec §3).

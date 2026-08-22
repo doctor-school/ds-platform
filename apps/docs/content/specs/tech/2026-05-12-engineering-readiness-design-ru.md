@@ -52,7 +52,7 @@ Brainstorm-исследование подтвердило, что под AI-age
 - **Postgres 17 + Drizzle** (ADR-0003).
 - **Redis** (single-node + AOF, see ADR-0003 §8 responsibilities matrix; not for sessions or critical jobs).
 - **Postgres outbox** для critical jobs (ADR-0003 §8).
-- **Portal Next.js app** (`app.doctor.school`).
+- **Portal Next.js app** (`academy.doctor.school`).
 - **Admin Next.js app** (`admin.doctor.school`).
 - **Docs (Fumadocs)** — внутренняя SSOT для команды (ADR-0006).
 - **GlitchTip self-hosted** (этот spec §3).

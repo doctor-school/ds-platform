@@ -55,7 +55,7 @@ This inventory is derived from **what the code on `main` actually calls**, not f
 | ------------------ | ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `caddy`            | `caddy:2`                                               | TLS termination (automatic Let's Encrypt), reverse-proxy vhosts, single-origin IdP routing                                                                                              |
 | `api`              | `ds-api:<tag>` (NestJS, `node dist/main.js`)            | main HTTP BFF/API (auth, sessions, `/me/*`, mailer, SMS-budget, events/rooms, chat-token minting, program-PDF uploads)                                                                  |
-| `portal`           | `ds-portal:<tag>` (Next.js standalone)                  | user-facing portal (`app.doctor.school`): auth screens, webinar registration, room + live chat                                                                                          |
+| `portal`           | `ds-portal:<tag>` (Next.js standalone)                  | user-facing portal (`academy.doctor.school`): auth screens, webinar registration, room + live chat                                                                                      |
 | `admin`            | `ds-admin:<tag>` (Next.js + Refine standalone)          | operator app (`admin.doctor.school`): event/program management for webinars wave-1. Dockerfile lands with the infra payload (#729); `API_PROXY_TARGET` is **build-time** (§5.4)         |
 | `centrifugo`       | `centrifugo/centrifugo` (pin matched to the dev-stand)  | real-time fan-out for webinar room chat. The api mints connection tokens (HMAC) and publishes over the server API — room chat is **fail-closed** without the env triple (§5.4)          |
 | `zitadel`          | `ghcr.io/zitadel/zitadel:v4.15.0`                       | IdP core (OIDC issuer `id.doctor.school`)                                                                                                                                               |
@@ -142,12 +142,12 @@ Caddy on `api-prod` terminates TLS for all four public hostnames (`api.` / `app.
 
 The `doctor.school` zone lives at **Beget** (`ns1/ns2.beget.com`), so Terraform does **not** manage DNS (no `twc_dns_zone`). The following A-records are created **manually at Beget**, pointing at `api-prod`'s public IPv4 (from the Terraform `api_prod_public_ip` output):
 
-| Hostname              | Target             | Purpose                                                     |
-| --------------------- | ------------------ | ----------------------------------------------------------- |
-| `api.doctor.school`   | api-prod public IP | NestJS BFF/API                                              |
-| `app.doctor.school`   | api-prod public IP | portal (Next.js)                                            |
-| `admin.doctor.school` | api-prod public IP | admin app (Next.js + Refine)                                |
-| `id.doctor.school`    | api-prod public IP | Zitadel OIDC issuer (`IDP_ISSUER=https://id.doctor.school`) |
+| Hostname                | Target             | Purpose                                                     |
+| ----------------------- | ------------------ | ----------------------------------------------------------- |
+| `api.doctor.school`     | api-prod public IP | NestJS BFF/API                                              |
+| `academy.doctor.school` | api-prod public IP | portal (Next.js)                                            |
+| `admin.doctor.school`   | api-prod public IP | admin app (Next.js + Refine)                                |
+| `id.doctor.school`      | api-prod public IP | Zitadel OIDC issuer (`IDP_ISSUER=https://id.doctor.school`) |
 
 Root `doctor.school` A-record (`92.118.115.14`, the existing site) is untouched. Email records (MX `emx.mail.ru`, SPF, DKIM selectors, `_dmarc p=none`) are already live at Beget (`reference_doctor_school_email_dns`) — no change in this slice; DMARC tightening to `p=quarantine` is a separate, later step after ~2 weeks of `rua` review.
 
@@ -287,7 +287,7 @@ The `compose/**`, Dockerfiles, cloud-init, and env templates are an **apply-read
 
 ## 10. Verification (definition of done for the slice)
 
-The slice is done when, on the live always-on stand, a user can complete both verticals end-to-end in the **actual running UI** (`app.doctor.school` / `admin.doctor.school`, Playwright on the live stand — AGENTS.md §6 "Verify UI live"):
+The slice is done when, on the live always-on stand, a user can complete both verticals end-to-end in the **actual running UI** (`academy.doctor.school` / `admin.doctor.school`, Playwright on the live stand — AGENTS.md §6 "Verify UI live"):
 
 1. Register with email → receive a **real** verification email (mail.ru) → verify.
 2. Passwordless email-OTP login → receive a real OTP email → land authenticated.

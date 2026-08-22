@@ -4,7 +4,7 @@ description: "Entry point of the epic relaunching the platform as two storefront
 slug: two-site-ia-readme
 milestone: https://github.com/doctor-school/ds-platform/milestone/13
 parent_issue: https://github.com/doctor-school/ds-platform/issues/1430
-status: "Discovery closed (DSP-252) · wireframe R4 owner-approved (DSP-251) · stage 1 (ADR) not started"
+status: "Discovery closed (DSP-252) · wireframe R4 owner-approved (DSP-251) · stage 1: ADR-0015 topology on main (#1432); ADR-0016 core model — #1433 in authoring"
 lang: en
 ---
 
@@ -42,7 +42,7 @@ Not moved (stay in `bbm`, referenced in the texts as sources): `interview-log.md
 
 - Discovery **closed** — DSP-252 (2026-08-19): every Q and OWD is closed or routed to a Commit-lane ADR; revision [R2] from two independent reviews merged in.
 - Wireframe **R4 owner-approved** — DSP-251 (2026-08-22): the team's R3 edits (REQ-116…142) and the owner's R4 edits (doctor events feed, Academy event page, evolutionary purpose verbatim) are in the wireframe and in `screens-ru.md`.
-- Stage 1 (below) **not started**.
+- Stage 1 (below) **in progress**: topology — [ADR-0015](../../../adr/0015-two-storefront-topology-en.md) on `main` ([#1432](https://github.com/doctor-school/ds-platform/issues/1432)); core model — ADR-0016 in authoring ([#1433](https://github.com/doctor-school/ds-platform/issues/1433)).
 
 ## What must be born from the package — stage order (owner decision, do not reorder)
 

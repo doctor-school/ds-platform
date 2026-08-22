@@ -223,7 +223,7 @@ PRD §15 v2 "CTA webinar for 200 Au" — internal points, IAP not needed. Real m
 | Secure storage       | `expo-secure-store` (Keychain/Keystore) for session — **refresh token TTL = 14d (ADR-0001 §6)**; `react-native-mmkv` for non-secret KV                                                                       |
 | IAP (Apple+Google)   | `react-native-iap` — **in v2**, not v1                                                                                                                                                                       |
 | IAP RuStore          | **Official `react-native-rustore-billing-sdk`** from RuStore — **in v2**. Custom TurboModule — fallback only                                                                                                 |
-| Deep links           | `expo-linking` + Expo Router (Universal Links + App Links); JSON config hosted via `apps/promo`                                                                                                              |
+| Deep links           | `expo-linking` + Expo Router (Universal Links + App Links); JSON config hosted via `apps/doctor`                                                                                                             |
 | Referral attribution | Native deep link state + pasteboard (iOS) + Install Referrer (Android) → NestJS attribution. NOT AppsFlyer/Adjust (PD zone)                                                                                  |
 
 ---

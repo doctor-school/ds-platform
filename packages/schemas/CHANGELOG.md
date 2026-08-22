@@ -1,5 +1,96 @@
 # @ds/schemas
 
+## 3.2.0
+
+### Minor Changes
+
+- [#1422](https://github.com/doctor-school/ds-platform/pull/1422) [`f81468d`](https://github.com/doctor-school/ds-platform/commit/f81468d52165898f8c7b1f0de553917f4d0ed18b) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 012 EARS-4 — descriptive partner authoring vertical ([#1286](https://github.com/doctor-school/ds-platform/issues/1286))
+
+  Additive across four packages, no breaking change to an existing export; the
+  slice consumes the W1a ([#1283](https://github.com/doctor-school/ds-platform/issues/1283)) taxonomy foundation and the [#1284](https://github.com/doctor-school/ds-platform/issues/1284) expert
+  precedent byte-for-byte rather than forking either.
+
+  - `@ds/db`: the `partners` entity — slug grammar CHECK, canonical-UUID
+    exclusion, the `partners_website_url_https` CHECK that admits only `https://`
+    addresses, the set-once `first_published_at` trigger, the `partners_audit`
+    mirror and a `pg_trgm` GIN index over `title`/`slug` for operator search.
+  - `@ds/schemas`: partner DTOs (create/update/list/detail) — a title, an optional
+    https-only website address and the permanent public identity, with `.strict()`
+    refusing the bio/description fields a partner does not have. The website
+    validator is a single exported pattern, the exact twin of the DB CHECK, so one
+    rule governs both edges.
+  - `@ds/api`: `GET/POST /v1/admin/partners` and `GET/PATCH /v1/admin/partners/:id`
+    — multipart `logo` through the shared still-image normalizer, fenced
+    idempotency, ETag/If-Match concurrency, RFC 7807 problems and audit writes.
+  - `@ds/admin`: the `partners` resource — list on the shared taxonomy list shell,
+    tabbed create/detail with «Основное», the generated-slug preview that is
+    editable until the first publication, and the logo dropzone with upload /
+    replace / clear. Unlike an expert, a partner has no initials fallback: an
+    empty logo slot stays empty, because a partner's mark is the brand's, not a
+    derivation of its name.
+
+- [#1427](https://github.com/doctor-school/ds-platform/pull/1427) [`2226016`](https://github.com/doctor-school/ds-platform/commit/222601672d17079eb06914a34dd894b6993dc4c3) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 012 EARS-7 — explicit expert-to-legacy-speaker matching ([#1289](https://github.com/doctor-school/ds-platform/issues/1289))
+
+  Additive across four packages, no breaking change to an existing export; the
+  slice binds the taxonomy `experts` entity to the legacy `event_speakers` rows an
+  event already carries, so an event's line-up stops being two disconnected lists.
+
+  - `@ds/db`: the `event_experts` link table with the `relationship_status`
+    (`active|retired`) enum, the composite FK that keeps a matched legacy speaker
+    inside its own event, the eligibility-blind partial unique index that reserves
+    one `(event_id, position)` slot per active link, and the `event_experts_audit`
+    mirror. Rider: nullable `event_speakers.content_removed_at` (additive, no
+    backfill).
+  - `@ds/schemas`: the link DTOs — create/update/list/detail with `role` 1–80
+    trimmed, `position` 0–32767 and a nullable `legacySpeakerId`.
+  - `@ds/api`: `GET/POST /v1/admin/event-experts`, `GET/PATCH
+/v1/admin/event-experts/:id` and the `retire`/`restore` transitions — fenced
+    idempotency, weak-ETag `If-Match` concurrency, the §2.3 lock protocol over the
+    candidate link set, RFC 7807 problems and audit writes. An occupied slot now
+    answers 409 `SPEAKER_POSITION_OCCUPIED` on both the application pre-check and
+    the constraint edge, never an unclassified 500.
+  - `@ds/admin`: the «Эксперты» tab on the event card — link an expert with a role
+    and a running-order position, see matched/unmatched against the legacy
+    speakers at a glance, and clear a stale match (unmatch); retire hides a link
+    from the line-up without deleting it, restore brings it back. Picking a legacy
+    speaker to CREATE a match ships with [#1426](https://github.com/doctor-school/ds-platform/issues/1426) (it needs the [#1306](https://github.com/doctor-school/ds-platform/issues/1306) speakers read).
+
+- [#1429](https://github.com/doctor-school/ds-platform/pull/1429) [`d388a70`](https://github.com/doctor-school/ds-platform/commit/d388a70455b8c04eb9fe69fbb534da2765fe25a5) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 012 EARS-6 — retained event↔project relationships with the §3.1 lifecycle-impact gate ([#1288](https://github.com/doctor-school/ds-platform/issues/1288))
+
+  Additive across four packages, no breaking change to an existing export. This is
+  the FIRST join vertical of feature 012, so it also authors the shared
+  preview→confirm seam every later relationship ([#1290](https://github.com/doctor-school/ds-platform/issues/1290)–[#1296](https://github.com/doctor-school/ds-platform/issues/1296)) reuses.
+
+  - `@ds/db`: the `event_projects` join table — the logical pair unique across
+    ACTIVE AND RETAINED rows (a retired relation is RESTORED, same row and id,
+    never re-inserted), both FKs `RESTRICT`, the `retired ⇔ deleted_at` CHECK, a
+    reverse-direction index for the project-side traversal and the
+    `event_projects_audit` mirror. `withAuditContext` / `withRequestAuditContext`
+    gained an optional transaction-config passthrough so a confirmation can open
+    its transaction SERIALIZABLE.
+  - `@ds/schemas`: the relationship DTOs — create/list/detail, the two public
+    summary shapes with their cursor page envelopes, and the `LifecycleImpact`
+    preview contract. Every public DTO is `.strict()`.
+  - `@ds/api`: `GET/POST /v1/admin/event-projects`, `GET
+/v1/admin/event-projects/:id`, its `lifecycle-impact` preview and the
+    `retire`/`restore` transitions — fenced idempotency, weak-ETag `If-Match`
+    concurrency, a signed single-transition impact token, a SERIALIZABLE
+    confirmation and RFC 7807 problems. Plus both public traversals:
+    `GET /v1/public/events/:idOrSlug/projects` and
+    `GET /v1/public/projects/:idOrSlug/events`. There is no PATCH and no DELETE —
+    the join carries no mutable attribute and nothing here is ever physically
+    removed.
+  - `@ds/admin`: the «Проекты» tab on the event card (authoring, retire, restore)
+    and the read-only «События» view on the project card, both served by one
+    panel. Retiring or restoring a link opens a dialog that first shows WHICH
+    public pages the change would affect and only then accepts the confirmation;
+    if the situation moved while the operator was reading it, the preview reloads
+    instead of the action going through on stale information.
+
+  Deploy note: `LIFECYCLE_IMPACT_TOKEN_SECRET` must be set in the production and
+  stand environments before this ships — the impact service fails closed without
+  it.
+
 ## 3.1.0
 
 ### Minor Changes

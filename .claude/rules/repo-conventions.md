@@ -17,7 +17,7 @@ Canon: AGENTS.md §2. Consult when opening a branch/PR, cutting a changeset, bum
 
 ## Monorepo layout
 
-pnpm 10 workspaces + Turborepo 2.x. Root scripts `pnpm <script>`; per-package `pnpm --filter <name> <script>`. Apps in `apps/<name>/` (api, promo, portal, admin, cms, docs, mobile, academy-demo, showcase — 9); shared code `packages/<name>/`; tooling `tools/`.
+pnpm 10 workspaces + Turborepo 2.x. Root scripts `pnpm <script>`; per-package `pnpm --filter <name> <script>`. Apps in `apps/<name>/` (api, doctor, promo, portal, admin, cms, docs, mobile, academy-demo, showcase — 10); shared code `packages/<name>/`; tooling `tools/`.
 
 ## Branches
 

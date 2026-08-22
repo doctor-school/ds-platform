@@ -15,9 +15,9 @@
 // Dockerfile), and asserts the server answers HTTP on `/` before the deadline.
 // A crash-on-boot, an entry that never listens, or a 5xx-only server is red.
 //
-// Usage:  node tools/ci/standalone-boot-check.mjs [app ...]        (default: portal admin)
+// Usage:  node tools/ci/standalone-boot-check.mjs [app ...]  (default: portal admin doctor)
 // Requires the app's production build to exist already:
-//         pnpm exec turbo run build --filter=@ds/portal --filter=@ds/admin
+//         pnpm exec turbo run build --filter=@ds/portal --filter=@ds/admin --filter=@ds/doctor
 //
 // Env:
 //   STANDALONE_BOOT_DEADLINE_MS  per-app boot deadline (default 90000)
@@ -28,7 +28,7 @@ import { cpSync, existsSync, mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-const DEFAULT_APPS = ["portal", "admin"];
+const DEFAULT_APPS = ["portal", "admin", "doctor"];
 const DEADLINE_MS = Number(process.env.STANDALONE_BOOT_DEADLINE_MS || 90_000);
 const POLL_MS = 500;
 

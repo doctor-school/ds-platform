@@ -54,7 +54,7 @@ Prohibition: `@vercel/*` packages, Edge Runtime with Vercel KV, Vercel Image Opt
 ### 2. App-split: **4 Next.js apps**
 
 ```
-apps/doctor/   # NEW (not on disk yet) — SSG/ISR marketing routes + SSR authenticated storefront, doctor.school
+apps/doctor/   # NEW (scaffold landed, not publicly routed until the release cut-over) — SSG/ISR marketing routes + SSR authenticated storefront, doctor.school
                # today `apps/promo` still holds the marketing routes on that host; it retires into apps/doctor (ADR-0015 §2, stage 3)
 apps/portal/   # SSR auth + client-hydration, academy.doctor.school (Academy backstage)
 apps/admin/    # Refine + 2FA, admin.doctor.school

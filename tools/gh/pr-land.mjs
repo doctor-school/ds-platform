@@ -69,6 +69,7 @@ import {
   parseModeAExempt,
 } from "./merge-gate.mjs";
 import { shouldMerge } from "./merge-when-green.mjs";
+import { DIRTY_EXIT, DIRTY_LINE_PREFIX } from "../dev/worktree-teardown.mjs";
 
 const TAG = "[pr:land]";
 const GH_MAX_BUFFER = 64 * 1024 * 1024; // large payloads overflow the 1 MiB default (#315).
@@ -129,7 +130,7 @@ export function stageRemedy(stage, pr) {
     case "board-done":
       return `merge landed — finish by hand: \`pnpm board:status <issue> Done\`, then \`pnpm worktree:teardown <N>\` if a worktree remains.`;
     case "teardown":
-      return `merge landed — finish by hand: \`pnpm worktree:teardown <N>\` (its output above names the holder), then re-sweep \`gh pr list\` + \`git ls-remote --heads origin\`.`;
+      return `merge landed — finish by hand: \`pnpm worktree:teardown <N>\` (its output above names the holder, or exit ${DIRTY_EXIT} = uncommitted changes listed above: commit/stash them, or re-run with \`--force\` to discard), then re-sweep \`gh pr list\` + \`git ls-remote --heads origin\`.`;
     case "re-sweep":
       return `merge landed — re-run the sweep by hand: \`gh pr list\` + \`git ls-remote --heads origin\`.`;
     default:
@@ -152,9 +153,13 @@ export function failCode(status) {
 
 /** Stage 1: the sanctioned merge gate, streamed, own statement. */
 function runGate(pr, extraArgs) {
-  return spawnSync("node", ["tools/gh/merge-gate.mjs", String(pr), ...extraArgs], {
-    stdio: "inherit",
-  });
+  return spawnSync(
+    "node",
+    ["tools/gh/merge-gate.mjs", String(pr), ...extraArgs],
+    {
+      stdio: "inherit",
+    },
+  );
 }
 
 /** Stage 2: the single mandatory Phase-0 merge command, streamed. */
@@ -173,13 +178,7 @@ function runMerge(pr) {
 function runResolveContext(pr) {
   const res = spawnSync(
     "gh",
-    [
-      "pr",
-      "view",
-      String(pr),
-      "--json",
-      "closingIssuesReferences,headRefName",
-    ],
+    ["pr", "view", String(pr), "--json", "closingIssuesReferences,headRefName"],
     { encoding: "utf8", maxBuffer: GH_MAX_BUFFER },
   );
   if (res.error)
@@ -253,11 +252,42 @@ function defaultWorktreeExists(n) {
   return existsSync(join(process.cwd(), ".claude", "worktrees", String(n)));
 }
 
-/** Stage 4: the sanctioned long-path-safe teardown, streamed. */
+/**
+ * Stage 4: the sanctioned long-path-safe teardown. Output is CAPTURED and then
+ * echoed (rather than inherited) so a dirty-tree refusal (#1454) can be lifted
+ * back out of it and named in the stage-FAIL line — the operator must see WHICH
+ * files would have been destroyed, not just a non-zero exit. The teardown is
+ * non-interactive, so the only cost is that its progress prints on completion.
+ */
 function runTeardown(n) {
-  return spawnSync("node", ["tools/dev/worktree-teardown.mjs", String(n)], {
-    stdio: "inherit",
-  });
+  const res = spawnSync(
+    "node",
+    ["tools/dev/worktree-teardown.mjs", String(n)],
+    {
+      encoding: "utf8",
+      maxBuffer: GH_MAX_BUFFER,
+    },
+  );
+  if (res.stdout) process.stdout.write(res.stdout);
+  if (res.stderr) process.stderr.write(res.stderr);
+  return res;
+}
+
+/**
+ * The uncommitted entries a teardown refusal printed, lifted out of its
+ * captured output (#1454). Pure (string -> string[]) so the guard-test harness
+ * drives it without spawning anything.
+ * @param {string} output
+ * @returns {string[]}
+ */
+export function dirtyEntriesFromTeardown(output) {
+  if (typeof output !== "string") return [];
+  const marker = `] ${DIRTY_LINE_PREFIX}`;
+  return output
+    .split(/\r?\n/)
+    .filter((line) => line.includes(marker))
+    .map((line) => line.slice(line.indexOf(marker) + marker.length).trim())
+    .filter((line) => line.length > 0);
 }
 
 /** Stage 5a: open-PR count. */
@@ -347,25 +377,37 @@ export function landPr(pr, extraArgs = [], io = {}) {
     err(`could not resolve PR #${pr} context — ${ctx.message}`);
     return exit(3);
   }
-  const issues = (ctx.issues ?? []).filter(
-    (n) => Number.isInteger(n) && n > 0,
-  );
+  const issues = (ctx.issues ?? []).filter((n) => Number.isInteger(n) && n > 0);
 
   // Stage 1 — merge gate, own statement; the #928 barrier via shouldMerge.
   const gateRes = gate(pr, extraArgs);
   if (gateRes.error)
-    return fail("gate", 3, `failed to spawn the merge gate: ${gateRes.error.message}`);
+    return fail(
+      "gate",
+      3,
+      `failed to spawn the merge gate: ${gateRes.error.message}`,
+    );
   if (!shouldMerge(gateRes.status))
-    return fail("gate", gateRes.status, `gate exit ${gateRes.status} — not GREEN`);
+    return fail(
+      "gate",
+      gateRes.status,
+      `gate exit ${gateRes.status} — not GREEN`,
+    );
   report.push("gate: OK (GREEN, Mode-a pinned)");
 
   // Stage 2 — the single mandatory Phase-0 merge command, own statement.
   const mergeRes = merge(pr);
   if (mergeRes.error)
-    return fail("merge", 3, `failed to spawn gh pr merge: ${mergeRes.error.message}`);
+    return fail(
+      "merge",
+      3,
+      `failed to spawn gh pr merge: ${mergeRes.error.message}`,
+    );
   if (mergeRes.status !== 0) return fail("merge", mergeRes.status);
   const sha = mergedSha(pr);
-  report.push(`merge: OK (squash${sha ? `, ${String(sha).slice(0, 12)}` : ""})`);
+  report.push(
+    `merge: OK (squash${sha ? `, ${String(sha).slice(0, 12)}` : ""})`,
+  );
 
   // Stage — board-clear: remove the merged PR's OWN board row so dead PR rows
   // auto-leave. NON-FATAL by contract (#1140 AC): the merge has already landed,
@@ -388,8 +430,13 @@ export function landPr(pr, extraArgs = [], io = {}) {
     for (const issue of issues) {
       const res = boardDone(issue);
       if (res.error)
-        return fail("board-done", 3, `failed to spawn set-board-status: ${res.error.message}`);
-      if (res.status !== 0) return fail("board-done", res.status, `issue #${issue}`);
+        return fail(
+          "board-done",
+          3,
+          `failed to spawn set-board-status: ${res.error.message}`,
+        );
+      if (res.status !== 0)
+        return fail("board-done", res.status, `issue #${issue}`);
     }
     report.push(`board-done: OK (#${issues.join(", #")} → Done)`);
   }
@@ -405,19 +452,39 @@ export function landPr(pr, extraArgs = [], io = {}) {
     for (const n of present) {
       const res = teardown(n);
       if (res.error)
-        return fail("teardown", 3, `failed to spawn worktree-teardown: ${res.error.message}`);
-      if (res.status !== 0)
-        return fail("teardown", res.status, `.claude/worktrees/${n}`);
+        return fail(
+          "teardown",
+          3,
+          `failed to spawn worktree-teardown: ${res.error.message}`,
+        );
+      if (res.status !== 0) {
+        const dirty = dirtyEntriesFromTeardown(
+          `${res.stdout ?? ""}\n${res.stderr ?? ""}`,
+        );
+        return fail(
+          "teardown",
+          res.status,
+          dirty.length > 0
+            ? `.claude/worktrees/${n} REFUSED — uncommitted changes:\n` +
+                dirty.map((entry) => `    ${entry}`).join("\n")
+            : `.claude/worktrees/${n}`,
+        );
+      }
     }
     report.push(`teardown: OK (.claude/worktrees/{${present.join(",")}})`);
   }
 
   // Stage 5 — re-sweep: open PRs + remote head branches, one summary line.
   const prs = listOpenPrs();
-  if (prs.status !== 0) return fail("re-sweep", prs.status, "gh pr list failed");
+  if (prs.status !== 0)
+    return fail("re-sweep", prs.status, "gh pr list failed");
   const branches = listRemoteBranches();
   if (branches.status !== 0)
-    return fail("re-sweep", branches.status, "git ls-remote --heads origin failed");
+    return fail(
+      "re-sweep",
+      branches.status,
+      "git ls-remote --heads origin failed",
+    );
   report.push(
     `re-sweep: OK (${prs.count} open PR(s), ${branches.count} remote head branch(es))`,
   );

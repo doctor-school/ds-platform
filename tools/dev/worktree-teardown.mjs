@@ -37,8 +37,10 @@
 //   3. `git worktree remove --force` (tolerating the long-path FS error),
 //   4. delete any orphan dir: Windows → PowerShell `Remove-Item -LiteralPath
 //      "\\?\<path>" -Recurse -Force` (verified most reliable one-shot purge),
-//      then `cmd /c rmdir /s /q \\?\<path>`, then a robocopy-mirror-from-empty
-//      retry; POSIX → fs.rmSync recursive,
+//      then `cmd /d /s /c rd /s /q "\\?\<path>"` — ONE command string with
+//      the long path QUOTED (#1454: passing it as a bare argv element let cmd
+//      re-parse and mangle the `\\?\` prefix, failing every >260-char tree),
+//      then a robocopy-mirror-from-empty retry; POSIX → fs.rmSync recursive,
 //   5. on Windows purge failure, escalate to holder-PID detection (#810): the
 //      cmdline sweep in step 1 misses a holder whose command line never names
 //      the tree (retro aa855696 — a dev-stand node.exe merely CWD'd inside it),
@@ -84,12 +86,13 @@ function die(msg, code = 2) {
 }
 
 /** Run a command, never throw; return {status, stdout, stderr}. */
-function run(cmd, args) {
+function run(cmd, args, extraOptions = {}) {
   // maxBuffer raised above the 1 MiB default: the Win32_Process JSON dump for
   // the process sweep (#616) can exceed it on a busy box.
   const res = spawnSync(cmd, args, {
     encoding: "utf8",
     maxBuffer: 64 * 1024 * 1024,
+    ...extraOptions,
   });
   return {
     status: res.status,
@@ -584,39 +587,179 @@ function resolveWorktreeBranch(absPath) {
   return null;
 }
 
-/** Windows long-path-aware directory purge. Returns true if the dir is gone. */
+/**
+ * Exit code for a REFUSED teardown: the target worktree has uncommitted work
+ * (#1454). Distinct from 1 (purge failed) / 2 (usage) / 3 (unresolvable) so
+ * `pr:land` can name the refusal rather than reporting a generic stage failure.
+ */
+export const DIRTY_EXIT = 4;
+
+/**
+ * Prefix each uncommitted entry is printed with, so a parent tool reading the
+ * teardown's captured output (`pr:land`) can lift the file list back out.
+ */
+export const DIRTY_LINE_PREFIX = "dirty: ";
+
+/**
+ * The uncommitted entries in a `git status --porcelain` dump — raw
+ * `XY path` lines, blank lines dropped, order preserved. Untracked files count:
+ * the teardown deletes the tree, so an unignored scratch file is data loss just
+ * like a modified tracked file.
+ *
+ * Pure (string -> string[]) so the guard-test harness drives it without a repo.
+ */
+export function parseDirtyEntries(porcelain) {
+  if (typeof porcelain !== "string") return [];
+  return porcelain
+    .split(/\r?\n/)
+    .map((line) => line.replace(/\s+$/, ""))
+    .filter((line) => line.trim().length > 0);
+}
+
+/**
+ * Uncommitted entries in the worktree at `absPath`, or null when the path is
+ * not a git worktree at all (a deregistered orphan directory has nothing to
+ * protect). Injectable `statusRunner` for the guard-test harness.
+ */
+export function worktreeDirtyEntries(
+  absPath,
+  statusRunner = (p) => run("git", ["-C", p, "status", "--porcelain"]),
+) {
+  const res = statusRunner(absPath);
+  if (!res || res.status !== 0) return null;
+  return parseDirtyEntries(res.stdout);
+}
+
+/**
+ * True when `git status` could not walk the whole tree (a >260-char untracked
+ * subtree makes git warn "could not open directory … Filename too long" and
+ * report NOTHING for it, while still exiting 0). The dirty verdict is then a
+ * FLOOR, not the full picture — the caller says so instead of implying a clean
+ * scan. Pure (string -> bool) for the guard-test harness.
+ */
+export function statusScanIncomplete(stderr) {
+  return (
+    typeof stderr === "string" &&
+    /could not open directory|filename too long/i.test(stderr)
+  );
+}
+
+/**
+ * The `\?\`-prefixed Windows long path for `absPath` (no trailing separator).
+ * Pure (string → string) so the guard-test harness can assert it on any OS.
+ */
+export function longPathForm(absPath) {
+  const winPath = win32.normalize(absPath).replace(/[\\/]+$/, "");
+  return winPath.startsWith("\\\\?\\") ? winPath : `\\\\?\\${winPath}`;
+}
+
+/**
+ * The `cmd.exe` invocation that removes a >260-char tree in ONE shot (#1454).
+ *
+ * The historical form passed the `\?\` path as its own UNQUOTED argv element
+ * (`cmd /c rmdir /s /q \?\C:\...`); cmd re-parses that tail itself and mangles
+ * the `\?\` prefix (it reads as a UNC server name), so the delete fails with a
+ * path-syntax error on every long tree — the failure the teardown then
+ * misdiagnosed as a held handle. The working form is a SINGLE command string
+ * handed to `cmd /d /s /c`, with the long path QUOTED inside it:
+ *
+ *     cmd.exe /d /s /c rd /s /q "\?\C:\...\worktrees\1450"
+ *
+ * `/s` only strips outer quotes when the command string STARTS with one — ours
+ * starts with `rd`, so the inner quotes survive verbatim. `verbatim` maps to
+ * spawn's `windowsVerbatimArguments`, which stops node from re-escaping the
+ * string it just built.
+ *
+ * Pure + platform-agnostic (string → descriptor) so the guard-test harness can
+ * assert the CONSTRUCTION on Linux CI, where the invocation itself cannot run.
+ */
+export function longPathPurgeCommand(absPath) {
+  return {
+    command: "cmd.exe",
+    args: ["/d", "/s", "/c", `rd /s /q "${longPathForm(absPath)}"`],
+    verbatim: true,
+  };
+}
+
+/**
+ * Output fragments that mean the purge died on PATH SYNTAX (the `\?\` prefix
+ * rejected or mangled) rather than on a held handle. Matching one of these
+ * forbids the holder-hunt advice — no process is holding anything (#1454).
+ */
+export const PATH_MANGLING_PATTERNS = [
+  "the filename, directory name, or volume label syntax is incorrect",
+  "the network path was not found",
+  "the specified path is invalid",
+  "invalid switch",
+  "the system cannot find the path specified",
+  "illegal characters in path",
+];
+
+/**
+ * True when purge diagnostics indicate a mangled/rejected long path rather than
+ * a holder. Pure (string → bool) so the guard-test harness drives it directly.
+ */
+export function isPathMangledFailure(output) {
+  if (typeof output !== "string" || output.length === 0) return false;
+  const blob = output.toLowerCase();
+  return PATH_MANGLING_PATTERNS.some((frag) => blob.includes(frag));
+}
+
+/**
+ * Windows long-path-aware directory purge. Returns `{ ok, diagnostics }` — `ok`
+ * true when the dir is gone, `diagnostics` the per-pass output the escalation
+ * classifies (path-mangling vs held handle, #1454).
+ */
 function purgeDirWindows(absPath) {
   const winPath = win32.normalize(absPath);
-  const longPath = `\\\\?\\${winPath}`;
-  // Pass 1 — PowerShell Remove-Item on the \\?\ literal path: verified the
+  const longPath = longPathForm(absPath);
+  const diagnostics = [];
+  const record = (label, res) => {
+    const text = `${res.stdout ?? ""}\n${res.stderr ?? ""}`.trim();
+    if (text) diagnostics.push(`${label}: ${text}`);
+  };
+  // Pass 1 — PowerShell Remove-Item on the \?\ literal path: verified the
   // most reliable one-shot purge for these trees (2026-07-05 ×2, 2026-07-13).
-  runPowerShell(
-    `Remove-Item -LiteralPath '${longPath.replace(/'/g, "''")}' -Recurse -Force -ErrorAction SilentlyContinue`,
+  record(
+    "Remove-Item",
+    runPowerShell(
+      `Remove-Item -LiteralPath '${longPath.replace(/'/g, "''")}' -Recurse -Force -ErrorAction SilentlyContinue`,
+    ),
   );
-  if (!existsSync(absPath)) return true;
-  // Pass 2 — cmd rmdir on the \\?\ path (bypasses MAX_PATH).
-  run("cmd", ["/c", "rmdir", "/s", "/q", longPath]);
-  if (!existsSync(absPath)) return true;
+  if (!existsSync(absPath)) return { ok: true, diagnostics };
+  // Pass 2 — `rd` on the QUOTED \?\ path as ONE command string (#1454).
+  const rd = longPathPurgeCommand(absPath);
+  record(
+    "rd",
+    run(rd.command, rd.args, { windowsVerbatimArguments: rd.verbatim }),
+  );
+  if (!existsSync(absPath)) return { ok: true, diagnostics };
   // Pass 3 — empty the tree with robocopy /MIR from a fresh empty dir, then retry.
   // robocopy exit codes < 8 are success-ish (1/2/3 = copied/extra/mismatch).
   const empty = mkdtempSync(join(tmpdir(), "wt-empty-"));
   try {
-    run("robocopy", [
-      empty,
-      winPath,
-      "/MIR",
-      "/NFL",
-      "/NDL",
-      "/NJH",
-      "/NJS",
-      "/NC",
-      "/NS",
-    ]);
-    run("cmd", ["/c", "rmdir", "/s", "/q", longPath]);
+    record(
+      "robocopy",
+      run("robocopy", [
+        empty,
+        winPath,
+        "/MIR",
+        "/NFL",
+        "/NDL",
+        "/NJH",
+        "/NJS",
+        "/NC",
+        "/NS",
+      ]),
+    );
+    record(
+      "rd (post-robocopy)",
+      run(rd.command, rd.args, { windowsVerbatimArguments: rd.verbatim }),
+    );
   } finally {
     rmSync(empty, { recursive: true, force: true });
   }
-  return !existsSync(absPath);
+  return { ok: !existsSync(absPath), diagnostics };
 }
 
 /**
@@ -630,7 +773,25 @@ function purgeDirWindows(absPath) {
  * killed-but-still-failing, none detectable, or enumeration unavailable —
  * never a bare "remove by hand".
  */
-function escalatePurgeFailure(absPath) {
+function escalatePurgeFailure(absPath, diagnostics = []) {
+  // A path-syntax failure is NOT a held handle (#1454): the long-path
+  // invocation itself was rejected, so the holder hunt (and the "find it by
+  // handle" advice it ends in) would be a misdiagnosis. Fail on what happened.
+  const blob = Array.isArray(diagnostics) ? diagnostics.join("\n") : "";
+  if (isPathMangledFailure(blob)) {
+    die(
+      `could not remove orphan directory '${absPath}' — the purge was rejected on PATH ` +
+        `SYNTAX, not by a process holding the tree:\n` +
+        blob
+          .split(/\r?\n/)
+          .map((line) => `    ${line}`)
+          .join("\n") +
+        `\nNo holder search applies. This is the long-path invocation failing: the ` +
+        `\\\\?\\ path must reach cmd as ONE quoted command string (see ` +
+        `longPathPurgeCommand()).`,
+      1,
+    );
+  }
   out("purge failed — escalating to holder-PID detection (#810).");
   const procs = listProcessesWindowsDetailed();
   if (!procs) {
@@ -665,7 +826,7 @@ function escalatePurgeFailure(absPath) {
   }
 
   // Retry the purge ONCE after the kills.
-  if (purgeDir(absPath)) {
+  if (purgeDir(absPath).ok) {
     out(`purged orphan directory '${absPath}' after killing its holder(s).`);
     return;
   }
@@ -691,10 +852,10 @@ function escalatePurgeFailure(absPath) {
 }
 
 function purgeDir(absPath) {
-  if (!existsSync(absPath)) return true;
+  if (!existsSync(absPath)) return { ok: true, diagnostics: [] };
   if (IS_WIN) return purgeDirWindows(absPath);
   rmSync(absPath, { recursive: true, force: true });
-  return !existsSync(absPath);
+  return { ok: !existsSync(absPath), diagnostics: [] };
 }
 
 function cleanupBranch(branch) {
@@ -725,11 +886,13 @@ function cleanupBranch(branch) {
 function main() {
   const args = process.argv.slice(2);
   let keepBranch = false;
+  let force = false;
   let branchOverride = null;
   const positional = [];
   for (let i = 0; i < args.length; i += 1) {
     const a = args[i];
     if (a === "--keep-branch") keepBranch = true;
+    else if (a === "--force") force = true;
     else if (a === "--branch")
       branchOverride = args[(i += 1)]; // consume the value
     else if (a.startsWith("--")) die(`unknown flag '${a}'`);
@@ -738,7 +901,7 @@ function main() {
 
   if (positional.length !== 1) {
     die(
-      "Usage: node tools/dev/worktree-teardown.mjs <worktree|path> [--keep-branch] [--branch <name>]",
+      "Usage: node tools/dev/worktree-teardown.mjs <worktree|path> [--force] [--keep-branch] [--branch <name>]",
     );
   }
   const absPath = resolveWorktreePath(positional[0], mainRepoRoot());
@@ -762,6 +925,36 @@ function main() {
         `Hint: pass the bare slug (e.g. 'pnpm worktree:teardown 603'); a backslashed ` +
         `Windows path can be mangled by the shell into an unresolvable string.`,
       3,
+    );
+  }
+
+  // 0b. Refuse to destroy uncommitted work (#1454). The teardown deletes the
+  //     tree outright, so a dirty worktree is silent data loss; `--force` is the
+  //     explicit opt-in. A deregistered orphan dir (no git status) has nothing
+  //     to protect and passes straight through.
+  const status = existsSync(absPath)
+    ? run("git", ["-C", absPath, "status", "--porcelain"])
+    : null;
+  const dirty = status ? worktreeDirtyEntries(absPath, () => status) : null;
+  if (status && statusScanIncomplete(status.stderr)) {
+    warn(
+      `git could not walk the whole tree when checking for uncommitted work ` +
+        `(long-path subtree) — the list below is a FLOOR, not a complete scan:\n` +
+        `    ${status.stderr.trim().split(/\r?\n/)[0]}`,
+    );
+  }
+  if (dirty && dirty.length > 0) {
+    for (const entry of dirty) out(`${DIRTY_LINE_PREFIX}${entry}`);
+    if (!force) {
+      die(
+        `'${absPath}' has ${dirty.length} uncommitted change(s) (listed above) — nothing was ` +
+          `torn down. Commit or stash them in that worktree, or re-run with --force to ` +
+          `DISCARD them.`,
+        DIRTY_EXIT,
+      );
+    }
+    warn(
+      `--force: proceeding despite ${dirty.length} uncommitted change(s) — they will be DESTROYED.`,
     );
   }
 
@@ -794,8 +987,10 @@ function main() {
   //    escalates to holder-PID detection + a single retry (#810) instead of
   //    a bare "remove by hand".
   if (existsSync(absPath)) {
-    if (purgeDir(absPath)) out(`purged orphan directory '${absPath}'.`);
-    else if (IS_WIN) escalatePurgeFailure(absPath); // die(1) inside on failure
+    const purged = purgeDir(absPath);
+    if (purged.ok) out(`purged orphan directory '${absPath}'.`);
+    else if (IS_WIN)
+      escalatePurgeFailure(absPath, purged.diagnostics); // die(1) inside
     else
       die(
         `could not remove orphan directory '${absPath}' — remove by hand.`,

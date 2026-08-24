@@ -10,6 +10,11 @@
 //    parallel session may sweep it into the wrong PR, and any green observed
 //    there is against the wrong checkout. Enforced at the moment the bad path is
 //    issued.
+//    A path inside a DIFFERENT registered worktree is a distinct verdict
+//    (`wrong-worktree`, #1453), NOT a main-tree escape: the session sits in the
+//    wrong checkout (typically a dispatch that inherited the lead's stale cwd),
+//    and the prescribed fix is `EnterWorktree path:<target worktree>` — never
+//    authoring the file elsewhere and copying it in.
 //
 // 2. Write-WARN (exit 0 + systemMessage, #854): the FIRST main-tree WRITE in a
 //    NON-isolated session (cwd not in a worktree) while parallel sessions are
@@ -26,6 +31,7 @@
 // optional stdout systemMessage) = allow. FAIL-OPEN: any parse/logic error
 // exits 0 — a guard bug must never wedge legitimate edits.
 
+import { execFileSync } from "node:child_process";
 import { readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -41,6 +47,124 @@ import {
   writeState,
 } from "./main-tree-read-guard.mjs";
 import { mutationPaths, projectRoot } from "./hook-compat.mjs";
+
+/**
+ * Absolute roots of every checkout git knows about (main tree + linked
+ * worktrees), from `git worktree list --porcelain`. `exec` is an injected seam
+ * so the spec never spawns a process. FAIL-OPEN to `[]` — when git is
+ * unavailable the caller still classifies by path shape.
+ */
+export function gitWorktreeRoots(cwd, exec) {
+  try {
+    const out = exec
+      ? exec(cwd)
+      : execFileSync("git", ["worktree", "list", "--porcelain"], {
+          cwd,
+          encoding: "utf8",
+          timeout: 5_000,
+          stdio: ["ignore", "pipe", "ignore"],
+        });
+    return String(out)
+      .split(/\r?\n/)
+      .filter((line) => line.startsWith("worktree "))
+      .map((line) => line.slice("worktree ".length).trim())
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+/** The `<…>/.claude/worktrees/<name>` root a path sits in, or "" — shape-only
+ * fallback for when `git worktree list` is unavailable. */
+export function worktreeRootOfPath(p) {
+  const m = String(p).match(/^(.*)[\\/]\.claude[\\/]worktrees[\\/]([^\\/]+)/);
+  return m ? `${m[1]}/.claude/worktrees/${m[2]}` : "";
+}
+
+/** The longest candidate root that contains `target`, or "" when none does. */
+export function owningRoot(target, roots) {
+  let best = "";
+  for (const root of roots) {
+    if (root && isUnder(target, root) && norm(root).length > norm(best).length)
+      best = root;
+  }
+  return best;
+}
+
+/**
+ * Verdict for ONE write path issued from a worktree-pinned session:
+ *
+ * - `ok` — inside the session's own worktree (or outside the repo entirely).
+ * - `wrong-worktree` (#1453) — inside a DIFFERENT registered checkout. This is
+ *   NOT a main-tree escape: the usual cause is a subagent dispatched against
+ *   worktree A while its env cwd was inherited from the lead's stale worktree
+ *   B. The fix is `EnterWorktree`; labelling it "main tree" pushed agents into
+ *   the banned author-in-scratchpad-and-copy workaround.
+ * - `main-tree-escape` (#359/#486) — inside the SHARED main tree.
+ */
+export function classifyWritePath({ target, mainRoot, worktreeRoot, roots }) {
+  const known = (roots || []).filter(Boolean);
+  // `.claude/worktrees/` holds no tracked main-tree content, so a
+  // worktree-SHAPED path is a checkout even when `git worktree list` is
+  // unavailable or the worktree was torn down — a stale target still deserves
+  // the wrong-worktree verdict, not "you escaped into the main tree".
+  const shaped = worktreeRootOfPath(target);
+  const candidates = [mainRoot, worktreeRoot, ...known];
+  if (shaped) candidates.push(shaped);
+  const owner = owningRoot(target, candidates.filter(Boolean));
+  if (!owner) return { verdict: "ok" };
+  if (norm(owner) === norm(worktreeRoot)) return { verdict: "ok" };
+  if (norm(owner) === norm(mainRoot)) return { verdict: "main-tree-escape" };
+  return {
+    verdict: "wrong-worktree",
+    targetRoot: owner,
+    registered: known.some((r) => norm(r) === norm(owner)),
+  };
+}
+
+/** `EnterWorktree path:` argument for a checkout root — the repo-relative
+ * `.claude/worktrees/<name>` when it is one, else the absolute root. */
+export function enterWorktreeArg(root) {
+  const m = String(root).match(/[\\/]\.claude[\\/]worktrees[\\/]([^\\/]+)/);
+  return m ? `.claude/worktrees/${m[1]}` : String(root);
+}
+
+export function wrongWorktreeMessage(
+  target,
+  targetRoot,
+  currentRoot,
+  registered = true,
+) {
+  const arg = enterWorktreeArg(targetRoot);
+  const stale = registered
+    ? ""
+    : `That worktree is NOT registered right now (torn down, or never created) — ` +
+      `create it first: \`pnpm task:worktree <N>\`.\n`;
+  return (
+    `BLOCKED (wrong-worktree): '${target}' belongs to ANOTHER worktree ` +
+    `('${targetRoot}'), but this session is pinned to '${currentRoot}'.\n` +
+    `This is NOT a main-tree escape — nothing is wrong with the path, the ` +
+    `session is in the wrong checkout (a dispatch that inherited a stale cwd, ` +
+    `#1453). Writing here would land the edit on the other worktree's branch.\n` +
+    stale +
+    `Switch the session to the target worktree, then re-issue the write: ` +
+    `EnterWorktree path:${arg}\n` +
+    `Do NOT author the file elsewhere (scratchpad, main tree) and copy it in — ` +
+    `that is the banned workaround this message exists to prevent (AGENTS.md §6).\n`
+  );
+}
+
+export function mainTreeEscapeMessage(target, mainRoot, worktreeRoot) {
+  return (
+    `BLOCKED: '${target}' targets the SHARED main tree, but this ` +
+    `session is isolated in a worktree.\n` +
+    `Escaping the worktree writes to the main tree (a parallel session can sweep ` +
+    `it into the wrong PR; any green there is against the wrong checkout — ` +
+    `AGENTS.md §6, memory feedback_worktree_absolute_paths_escape_isolation).\n` +
+    `Use the worktree path instead: a repo-relative path, or the worktree prefix ` +
+    `'${worktreeRoot}/...'.\n`
+  );
+}
 
 export function writeWarnMessage(liveCount) {
   return (
@@ -113,27 +237,28 @@ function main() {
     if (cwd && filePaths.length > 0) {
       const m = cwd.match(/^(.*)[\\/]\.claude[\\/]worktrees[\\/]([^\\/]+)/);
       if (m) {
-        const mainRoot = norm(m[1]);
-        const worktreeRoot = norm(`${m[1]}/.claude/worktrees/${m[2]}`);
-        const escaped = filePaths.find((p) => {
-          const target = norm(p);
-          const underMain =
-            target === mainRoot || target.startsWith(mainRoot + "/");
-          const underWorktree =
-            target === worktreeRoot || target.startsWith(worktreeRoot + "/");
-          return underMain && !underWorktree;
-        });
-        if (escaped) {
-          process.stderr.write(
-            `BLOCKED: '${escaped}' targets the SHARED main tree, but this ` +
-              `session is isolated in a worktree.\n` +
-              `Escaping the worktree writes to the main tree (a parallel session can sweep ` +
-              `it into the wrong PR; any green there is against the wrong checkout — ` +
-              `AGENTS.md §6, memory feedback_worktree_absolute_paths_escape_isolation).\n` +
-              `Use the worktree path instead: a repo-relative path, or the worktree prefix ` +
-              `'${m[1]}\\.claude\\worktrees\\${m[2]}\\...'.\n`,
-          );
-          process.exit(2);
+        const mainRoot = m[1];
+        const worktreeRoot = `${m[1]}/.claude/worktrees/${m[2]}`;
+        const roots = gitWorktreeRoots(cwd);
+        for (const p of filePaths) {
+          const { verdict, targetRoot, registered } = classifyWritePath({
+            target: p,
+            mainRoot,
+            worktreeRoot,
+            roots,
+          });
+          if (verdict === "wrong-worktree") {
+            process.stderr.write(
+              wrongWorktreeMessage(p, targetRoot, worktreeRoot, registered),
+            );
+            process.exit(2);
+          }
+          if (verdict === "main-tree-escape") {
+            process.stderr.write(
+              mainTreeEscapeMessage(p, mainRoot, worktreeRoot),
+            );
+            process.exit(2);
+          }
         }
         // In a worktree with a compliant path → isolated session, nothing to warn.
         process.exit(0);

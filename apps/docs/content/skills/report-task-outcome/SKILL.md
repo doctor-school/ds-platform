@@ -36,6 +36,16 @@ At the end of any task you report to the user (a merged PR, a completed engineer
 
 Any question you put to the owner — in the report **and** in the `⏸ ЖДУ ВАС: <одно действие>` handback line — renders as a self-contained block, four beats: **что случилось / почему спрашиваю / что изменит ответ / где посмотреть** (a live URL, or a concrete page — never "look at the diff"). **Banned:** jargon (token names, internal process terms) and any «см. Issue/отчёт» redirect that makes the owner go read something to parse the question — an Issue number is allowed only as a parenthetical aside. Before releasing the report, self-check **each** question against this form: an owner who has read nothing else must be able to answer it. Precedent: the 2026-07-06 checkpoint asked 4 questions in internal shorthand; the owner could not parse 3 of them, and the re-ask cost a full round-trip.
 
+## Owner-legibility pass (mandatory, last step before sending)
+
+Before releasing ANY owner-facing report or status — interim checkpoints included — scan your own drafted text for three token classes; each occurrence is either glossed or deleted, no third option:
+
+1. **Process nouns** (Stage-A, Stage-B, PRD, EARS, Mode-a, D-trigger, worktree, standalone-boot, …) — one plain-RU clause on first use saying what it is IN THIS report («Stage-A — утверждение дизайна владельцем до стройки»), or drop the term and say the plain thing directly.
+2. **Third-party vendor / product names** (Vercel, Zitadel, Dependabot, Renovate, …) — first use states who they are relative to this project («Vercel — авторы Next.js, библиотеки-каркаса наших сайтов; мы у них ничего не хостим»). A vendor name with no relation stated reads as a new mystery actor (precedent: «При чём тут вообще Vercel?», 2026-08-24).
+3. **File/spec paths and artifact references** — every «решения записаны в PRD» names the concrete repo path where the owner can look; a count of pending items («17 решений») never appears without the interactive-fork protocol (CLAUDE.md → Blocked-on-owner handback) taking over — the count is not an ask.
+
+The pass is a gate, not advice: a report that skips it is unreleased. Four recorded failures of the prose-only rule (#293, #753, #983, 2026-08-24) are why this is a discrete step — the enforcing hook is tracked in #1465.
+
 ## Visual-delivery recipe (reused by build-ui Stage-B supplements + mid-task decision visuals)
 
 A confirmation or report visual the user **cannot see** is worthless — images you `Read` render only in your own CLI, not to the user. To produce and DELIVER one:
@@ -61,6 +71,7 @@ A confirmation or report visual the user **cannot see** is worthless — images 
 - **A `feature`/`bug` PR whose body's `## Product note (RU)` section is left `none` or unfilled** — the «Для пользователя» paragraph is the release note; not mirroring it into the PR body fails the `product-note` guard and starves the team's Mattermost channel (Issue #654).
 - **Opening a decision request mid-thread with no "why this surfaced" context.**
 - **An owner question in internal shorthand** — jargon, a token name, or a «см. Issue/отчёт» redirect instead of the self-contained что-случилось / почему / что-изменит / где-посмотреть block.
+- **Skipping the owner-legibility pass** — an unglossed process noun, vendor name, or pathless artifact reference in the released text; or a pending-decision COUNT presented as a status line instead of entering the one-fork-per-message interactive protocol.
 - **Leaving preview PNGs in `<repo>/.playwright-mcp/`** — move them out and confirm the ignored source files are gone.
 
 ## Related

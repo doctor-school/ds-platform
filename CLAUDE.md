@@ -45,7 +45,7 @@ Then the §3.2 entry point (kind / artifact / skill). A handoff-resumed session 
 
 ## Blocked-on-owner handback
 
-Работа заблокирована ТОЛЬКО действием владельца → последняя видимая строка хода: `⏸ ЖДУ ВАС: <одно действие>; после него продолжу автономно`; поллер/wakeup — после неё, не вместо. Каждый вынесенный владельцу вопрос — самодостаточная plain-language строка (что / почему / что изменит ответ), без жаргонных отсылок к отчёту.
+Работа заблокирована ТОЛЬКО действием владельца → последняя видимая строка хода: `⏸ ЖДУ ВАС: <одно действие>; после него продолжу автономно`; поллер/wakeup — после неё, не вместо. Развилки — ИНТЕРАКТИВНО (owner 2026-08-24): ОДНА на сообщение (сущность простым RU · почему · 2–3 варианта + рекомендация), дословный ответ → в артефакт, затем следующая; список ≥2 или счётчик «осталось N» — нарушение.
 
 ## PR-review subagent (Mode a)
 
@@ -62,10 +62,6 @@ A subagent's final message lands in the lead's context and is re-read until sess
 5. Briefs in English; RU only where the RU string is itself the artifact. User-facing replies stay RU.
 6. Background dispatches are checkpointed; report only observed artifacts. Probe after a bounded interval with `pnpm dispatch:probe <N>` (one line `<ALIVE|QUIET|STILL-CLEAN> #<N> age= commits= dirty=`; STILL-CLEAN ≈10 min in ⇒ kill + re-dispatch with a tighter brief) — never "wait for the notification". Rework/re-review via SendMessage only under the AGENTS.md §6 subagent-token thresholds; a `ROTATE:` return = fresh dispatch from the checkpoint. Owner-facing status = observed artifacts only (commit / PR # / verdict); downstream steps are phrased as plan. Every impl brief carries the dispatch-brief checklist heading (memory `feedback_orchestration_brief_full_lint_before_pr`). Same for ANY background waiter, CI pollers included: a bounded FOREGROUND poll, deadline ≈ avg CI + ~2 min, terminal GREEN/RED/TIMEOUT line, parsing the `gh pr checks <N> --json name,state` STATE field, never `grep` (job names contain «pending»). The 5000/hr `gh` token is SHARED — no hand-rolled `gh run view` loops or repeated `gh project item-list --limit 2000` dumps; use `pnpm merge:gate <N>` / `run:wait`.
 7. Context budget hook: subagent ≥150K → ROTATE (checkpoint + fresh dispatch), ≥200K → tools denied except git/checkpoint; dispatch impl via `ds-implementer` (Opus, maxTurns 120).
-
-## Shell gotchas
-
-PowerShell here-strings (`@'…'@`) corrupt commit subjects in the Bash tool (→ `@`) — use `gh --body-file` / `-F` or a real bash heredoc.
 
 ## On-demand pointers
 

@@ -88,8 +88,8 @@ Around those two, the home page carries what makes the site credible and alive: 
 - Specialties (Минздрав), educational directions and schools are **three distinct things**, never merged into one on-screen list and never labelled with one word.
 - The home page carries the **scale statistics** (doctors, specialties, lessons, events) and the **evolutionary goal verbatim**, with no gloss and no «готовится» marker beside it.
 - The home page shows the **nearest events plus a compact month calendar** and a link to the full events feed; before a specialty is chosen these are general, after it they are targeted.
-- The **leaderboard** renders only doctors who gave **separate consent to public display**; the default is not to publish, and the voluntary nature is visible next to the block.
-- The storefront carries **no Academy content** — no project cards, no Academy podcasts, no partner news — and **exactly one** Academy link, in the footer.
+- The **leaderboard** renders only doctors who gave **separate consent to public display**; the default is not to publish, and the voluntary nature is visible next to the block. The leaderboard requirement is **REQ-117**, which is cross-cutting by its own text: 017 owns the **platform-wide** board on the storefront, and the specialty-filtered board is 018's — one requirement split across two features by authoring decision, not two requirements (REQ-34, REQ-117).
+- The storefront carries **no Academy content** — no project cards, no Academy podcasts, no partner news — and **exactly one** Academy link **on this surface**, in the footer — the single REQ-24 exit has a second placement, «Стать экспертом» in the doctor's cabinet, which is not part of 017.
 - The interface **never states who finances the doctor's learning**; it says only that learning is free for the doctor.
 - The site shows **no prices in roubles, no cart, no subscription** — there are no payments on the platform and doctors are never charged.
 - The **public marketing routes previously served by `apps/promo`** answer from `doctor.school` under this shell's information architecture.
@@ -134,6 +134,6 @@ Both forks below come from the screen prompt. **The canvas default is a working 
 
 **Stage A is not resolved for this feature.** The owner drew the canvas and it is vendored; the **canvas defaults are the working assumption, and the Stage-A pick is this PRD's fork table above** — no fork is decided until the owner records a pick there.
 
-- **Canvas:** [`design-source/doctor-home.dc.html`](../../../../../../design-source/doctor-home.dc.html) — screen `#d-home`, composition drawn from scratch on the tokens of `design-system.dc.html`.
+- **Canvas:** [`design-source/doctor-home.dc.html`](../../../../../../design-source/doctor-home.dc.html) — screen `#d-home`, drawn by the owner from the screen prompt [`01-d-home-ru.md`](../../product/two-site-ia/design-prompts-ru/01-d-home-ru.md); composition drawn from scratch on the tokens of `design-system.dc.html`.
 - **Units reused as-is:** the event card (`webinar-card.dc.html`), the month calendar in its compact form (`webinars-month.dc.html`), the doctor content card in its base form (its anatomy is decided on the 018 canvas, and this screen is brought into line with it), and the points plate in its base form (its anatomy is decided on the `#d-lesson` canvas).
 - The composition switcher fixed at the bottom of the canvas is a **design-review aid, not a product control**, and is not built.

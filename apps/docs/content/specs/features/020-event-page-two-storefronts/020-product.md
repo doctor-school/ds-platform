@@ -46,6 +46,8 @@ The economics stay in **attention points**: cost is a per-event Pul parameter th
 - **US-20** — As a **doctor**, the speaker is a link to their expert page and the source school or project is a link too, so the event is a way into the programme and not a dead end (REQ-137).
 - **US-21** — As an **Academy visitor**, the same event opens under the Academy header with the same content — the two storefronts never show a different event (**D-4**).
 - **US-22** — As a **product owner**, the ticket / QR unit designed here is the **same unit** «Мои события» uses in the doctor's cabinet, so a ticket is defined once.
+- **US-23** — As a **product owner**, an event's partner is a **modelled link to a partner organisation at the event level** — distinct from the project's partner and replacing the free-text `events.partnerRef` — so attribution, advertising marking and reporting rest on data rather than on a typed string (REQ-140).
+- **US-24** — As a **doctor**, the account I signed in with on `doctor.school` is the same account on `academy.doctor.school` — the two storefronts are one platform, not two sign-ins (REQ-95).
 
 ## Flows
 
@@ -79,6 +81,8 @@ The economics stay in **attention points**: cost is a per-event Pul parameter th
 - Cost is a **per-event Pul parameter that may be zero**; zero reads as «бесплатно для врача». Roubles, subscription and cart do not exist on the page (REQ-48, NG-5 / CON-16).
 - A **partner-referred doctor short of points is admitted on advance automatically and silently** — a shortfall message on that path is a defect (REQ-49, REQ-39). A self-found doctor short of points is shown how to earn the difference, without being blocked.
 - Partner attribution («from which partner») is preserved through registration and sign-up (REQ-39); who funds the event is **never rendered as interface copy** — only the legal advertising marking is.
+- **The event's partner is a modelled entity, not free text** (REQ-140): the page rests on an **event-level** partner link — separate from the project-level partner and replacing the free-text `events.partnerRef` — which feeds attribution (REQ-39) and the legal advertising marking (REQ-69). It changes no interface copy: the partner is still never rendered as who funds the event. Sponsorship **levels** and the partner-side views of that link belong to feature 030.
+- **One account across both storefronts** (REQ-95): a doctor signed in on `doctor.school` opens `#a-event` on the Academy already signed in — the same account, never a second sign-in — and registration started from either storefront returns to the page it started on.
 - A **registered doctor** gets «Вы записаны», a calendar add, a reminder before the start, a link into «Мои события», and the ability to cancel their sign-up.
 - **At event time** the CTA leads into the room for an online эфир (feature 006, with presence count) and shows the ticket / QR for an offline one.
 - **Live-эфир interaction is present** (REQ-139): «Вопрос лектору», polls with a live chart, and presence check-ins; the НМО outcome is afterwards stated plainly as credited or not, naming what was missing.
@@ -105,6 +109,7 @@ The economics stay in **attention points**: cost is a per-event Pul parameter th
 - **The event constructor / admin authoring** — feature 041, wave 7.
 - **Mobile-app screens** — separate track (F-4).
 - **A waiting-list mechanism** — no requirement exists for it; see fork F-3.
+- **Sponsorship levels and the partner-side cabinet views** of the event-level partner link — feature 030; 020 owns the link itself and what it drives on the page, not its administration (REQ-140).
 
 ## Open questions
 

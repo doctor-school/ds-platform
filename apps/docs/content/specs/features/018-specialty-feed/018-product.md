@@ -74,7 +74,7 @@ The storefront rule holds throughout: **no Academy noise** — no projects, no p
 - The feed is **targeted by the doctor's chosen specialty** and by **adjacency read from the managed reference table** (ADR-0016 §5, OWD-11); adjacent content is **explicitly labelled as adjacent** and never presented as the doctor's own specialty.
 - The feed is **publicly readable** — a guest sees every block; gated content renders an honest gate state on the card rather than disappearing, and no gated content is served to a guest.
 - **Schools and courses** are shown as the doctor's end products; a course carries its **series** framing with the episode count. The word «проект» never appears in the doctor's interface, and the Academy's backstage is not shown.
-- The **nearest events** block uses the shared event card, shows the **sign-up counter at all times**, presents an **offline meet-up as a format of event** (not a new card), and links to the full events feed for the specialty.
+- The **nearest events** block uses the shared event card, shows the **sign-up counter at all times**, presents an **offline meet-up as a format of event** (not a new card), and links to the full events feed for the specialty (REQ-2, REQ-38).
 - The **lessons** block presents the lesson of the day through the doctor content card and states that the **same lessons exist in the mobile application on one shared points account** — as a line in this block, never as a separate section of the site.
 - **«Зачем это мне»** states the exchange **from the doctor's side** — attention and time in exchange for learning and career — and says that it is **free for the doctor**. The interface **never names who finances it**.
 - The **statistics line is filtered to the specialty** (colleagues, schools, lessons), not the platform-wide figure.
@@ -126,7 +126,7 @@ All three forks come from the screen prompt. **The canvas default is a working a
 
 **Stage A is not resolved for this feature.** The owner drew the canvas and it is vendored; the **canvas defaults are the working assumption, and the Stage-A pick is this PRD's fork table above** — no fork is decided until the owner records a pick there.
 
-- **Canvas:** [`design-source/doctor-feed.dc.html`](../../../../../../design-source/doctor-feed.dc.html) — screen `#d-feed`, the feed's composition drawn from scratch on the tokens of `design-system.dc.html`; the shell is taken from the `#d-home` canvas and not redrawn.
+- **Canvas:** [`design-source/doctor-feed.dc.html`](../../../../../../design-source/doctor-feed.dc.html) — screen `#d-feed`, drawn by the owner from the screen prompt [`02-d-feed-ru.md`](../../product/two-site-ia/design-prompts-ru/02-d-feed-ru.md); the feed's composition drawn from scratch on the tokens of `design-system.dc.html`; the shell is taken from the `#d-home` canvas and not redrawn.
 - **Units reused as-is:** the storefront shell (from `#d-home`), the event card (`webinar-card.dc.html`, with the sign-up counter always visible), the expert card (`expert-card.dc.html`) where mentorship shows a person, and the points plate in its base form (its anatomy is decided on the `#d-lesson` canvas).
 - **Unit decided here:** the **doctor content card** — its anatomy is fixed on this canvas (fork F-018-2) and consumed unchanged by the later screens.
 - **One canvas line is a known defect and is not to be built:** «обучение оплачивают партнёры платформы» — the interface never names the payer; the operative copy is «бесплатно для врача». The canvas fix is pending on the owner's side (see Open questions).

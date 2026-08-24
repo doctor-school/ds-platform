@@ -5,16 +5,17 @@ import "@testing-library/jest-dom/vitest";
 
 import { installOrphanTimerTracking, flushOrphanTimers } from "./orphan-timers.setup";
 
-// #441: input-otp@1.4.2 schedules an uncleaned 0/10/50ms setTimeout triple on every
+// #441: input-otp@1.4.2 scheduled an uncleaned 0/10/50ms setTimeout triple on every
 // value/focus change (its `syncTimeouts` helper); a timer scheduled by a suite's
 // last keystrokes fires AFTER the jsdom env is torn down and reds the whole `unit`
 // job with `ReferenceError: window is not defined` (same class as #366/#405/#408,
 // but a setTimeout — neither the #377 PWM mock below nor the #408 interval guard
 // covers it). Track every pending setTimeout with its scheduling stack; after each
 // test (this hook runs LAST — afterEach is LIFO, and setup-file hooks register
-// first) unmount and defuse the orphans. The known upstream defect (input-otp
-// frames) is cleared silently; any OTHER leaked timer is OUR defect and fails the
-// test right here, attributably, instead of as an intermittent CI teardown flake.
+// first) unmount and defuse the orphans. input-otp@1.5.0 fixed that
+// upstream leak, so nothing is tolerated any more: ANY leaked timer is OUR defect
+// and fails the test right here, attributably, instead of as an intermittent CI
+// teardown flake.
 // Adopted from the portal's #434 guard (PR #442) — rationale + contract tests:
 // ./orphan-timers.setup.ts / ./src/orphan-timers.test.tsx. Doc:
 // apps/docs/content/architecture/component-testing.md → "The #434/#441 orphan-timer guard".

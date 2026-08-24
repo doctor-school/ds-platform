@@ -54,7 +54,7 @@ Constraints:
 ### 2. App-split: **4 Next.js apps**
 
 ```
-apps/doctor/   # НОВОЕ (директории ещё нет) — SSG/ISR маркетинговые маршруты + SSR-витрина под аутентификацией, doctor.school
+apps/doctor/   # НОВОЕ (каркас создан, публично не маршрутизируется до релизного cut-over) — SSG/ISR маркетинговые маршруты + SSR-витрина под аутентификацией, doctor.school
                # сегодня маркетинговые маршруты на этом хосте держит `apps/promo`; он выводится в apps/doctor (ADR-0015 §2, этап 3)
 apps/portal/   # SSR auth + client-hydration, academy.doctor.school (закулисье Академии)
 apps/admin/    # Refine + 2FA, admin.doctor.school

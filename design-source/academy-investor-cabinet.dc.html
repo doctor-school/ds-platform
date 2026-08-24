@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"><style>body{margin:0;background:#fff;font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}a{color:#2D84F2}a:hover{color:#114D9E}:focus-visible{outline:3px solid #6BB1F7;outline-offset:2px}@keyframes livePulse{0%,100%{opacity:1}50%{opacity:.4}}</style></helmet>
+
+<div style="min-height:100vh;background:{{ pageBg }}">
+  <div style="background:#0D3A77;padding:5px clamp(16px,4vw,48px);text-align:center;font-size:9px;font-weight:700;letter-spacing:.22em;text-transform:uppercase;color:rgba(255,255,255,.34)">BBM: Академия смыслов</div>
+  <header data-screen-label="a-cabinet · шапка Академии" style="background:#114D9E;padding:14px clamp(16px,4vw,48px);display:flex;align-items:center;justify-content:space-between;gap:16px">
+    <a href="Главная.dc.html" style="display:flex;flex:none"><img src="assets/ds-logo-white.svg" alt="Doctor.School · Академия" style="height:26px;display:block"></a>
+    <sc-if value="{{ isMobile }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;align-items:center;gap:12px">
+        <button onClick="{{ toggleTheme }}" title="Тема" style="font:inherit;width:44px;height:44px;background:transparent;color:#fff;border:2px solid rgba(255,255,255,.5);cursor:pointer;font-size:16px">{{ themeIcon }}</button>
+        <details style="position:relative">
+          <summary style="list-style:none;width:44px;height:44px;display:inline-flex;align-items:center;justify-content:center;background:#fff;color:#114D9E;cursor:pointer;font-size:20px;font-weight:800;box-shadow:3px 3px 0 {{ headerShadow }}">≡</summary>
+          <nav style="position:absolute;top:calc(100% + 10px);right:0;background:{{ surface }};border:2px solid {{ border }};box-shadow:5px 5px 0 {{ shadow }};padding:8px;display:flex;flex-direction:column;min-width:220px;z-index:30">
+            <a href="Проекты.dc.html" style="padding:12px 16px;font-size:15px;font-weight:700;color:{{ ink }};text-decoration:none">Проекты</a>
+            <a href="Эксперты.dc.html" style="padding:12px 16px;font-size:15px;font-weight:700;color:{{ ink }};text-decoration:none">Эксперты</a>
+            <a href="Партнёры.dc.html" style="padding:12px 16px;font-size:15px;font-weight:700;color:{{ ink }};text-decoration:none">Партнёры</a>
+            <a href="Эфиры.dc.html" style="padding:12px 16px;font-size:15px;font-weight:700;color:{{ ink }};text-decoration:none">События</a>
+            <a href="Профиль.dc.html" style="margin-top:6px;padding:12px 16px;font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};text-decoration:none;text-align:center">Кабинет</a>
+          </nav>
+        </details>
+      </div>
+    </sc-if>
+    <sc-if value="{{ isDesktop }}" hint-placeholder-val="{{ true }}">
+      <nav style="display:flex;align-items:center;gap:26px;font-size:14px;font-weight:700">
+        <a href="Проекты.dc.html" style="color:#D3E8FD;text-decoration:none" style-hover="color:#fff">Проекты</a>
+        <a href="Эксперты.dc.html" style="color:#D3E8FD;text-decoration:none" style-hover="color:#fff">Эксперты</a>
+        <a href="Партнёры.dc.html" style="color:#D3E8FD;text-decoration:none" style-hover="color:#fff">Партнёры</a>
+        <a href="Эфиры.dc.html" style="color:#D3E8FD;text-decoration:none" style-hover="color:#fff">События</a>
+        <button onClick="{{ toggleTheme }}" title="Тема" style="font:inherit;width:44px;height:44px;background:transparent;color:#fff;border:2px solid rgba(255,255,255,.5);cursor:pointer;font-size:15px" style-hover="border-color:#fff">{{ themeIcon }}</button>
+        <a href="Профиль.dc.html" style="font-size:13.5px;font-weight:700;color:#114D9E;background:#fff;padding:12px 22px;text-decoration:none;box-shadow:3px 3px 0 {{ headerShadow }};white-space:nowrap" style-hover="transform:translate(1px,1px);box-shadow:2px 2px 0 {{ headerShadow }}">Кабинет</a>
+      </nav>
+    </sc-if>
+  </header>
+
+  <!-- Постер-шапка кабинета -->
+  <div data-screen-label="a-cabinet · постер-шапка" style="background:#114D9E;padding:clamp(28px,4vw,44px) clamp(16px,4vw,48px) clamp(36px,6vw,60px)">
+    <div style="max-width:1104px;margin:0 auto">
+      <nav style="font-size:13px;font-weight:700;margin-bottom:clamp(18px,3vw,26px)">
+        <a href="Главная.dc.html" style="color:#AED4FB;text-decoration:underline;text-underline-offset:4px">Академия</a>
+        <span style="color:rgba(211,232,253,.5);margin:0 8px">/</span>
+        <a href="Инвесторам.dc.html" style="color:#AED4FB;text-decoration:underline;text-underline-offset:4px">Инвесторам</a>
+        <span style="color:rgba(211,232,253,.5);margin:0 8px">/</span>
+        <span style="color:#D3E8FD">Кабинет</span>
+      </nav>
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap">
+        <div style="font-size:12px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:#D3E8FD">Путь инвестора · шаг «работает в кабинете»</div>
+        <span style="display:inline-block;background:#fff;color:#114D9E;font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;padding:9px 14px;box-shadow:3px 3px 0 {{ headerShadow }};transform:rotate(2deg)">рабочее место</span>
+      </div>
+      <h1 style="margin:10px 0 0;font-size:clamp(28px,4.5vw,46px);line-height:1.05;font-weight:800;letter-spacing:-.035em;color:#fff">Кабинет инвестора · Партнёр А</h1>
+      <p style="margin:14px 0 0;max-width:640px;font-size:clamp(14px,2vw,16px);line-height:1.6;font-weight:500;color:#D3E8FD">Отчётность по активности врачей на doctor.school</p>
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:22px">
+        <details style="position:relative">
+          <summary style="list-style:none;display:inline-flex;align-items:center;gap:8px;background:#fff;color:#114D9E;font-size:13px;font-weight:800;padding:10px 16px;cursor:pointer;box-shadow:3px 3px 0 {{ headerShadow }}">Партнёр А <span style="font-size:11px">▾</span></summary>
+          <div style="position:absolute;top:calc(100% + 8px);left:0;background:{{ surface }};border:2px solid {{ border }};box-shadow:5px 5px 0 {{ shadow }};padding:8px;display:flex;flex-direction:column;min-width:240px;z-index:20">
+            <span style="padding:11px 14px;font-size:13.5px;font-weight:800;color:{{ ink }};background:{{ tint }}">Партнёр А ✓</span>
+            <span style="padding:11px 14px;font-size:13.5px;font-weight:700;color:{{ inkMuted }};cursor:pointer">Клиника «Мотус»</span>
+            <span style="padding:8px 14px 6px;font-size:11px;font-weight:600;line-height:1.5;color:{{ inkFaint }}">Вы состоите в двух организациях — разделы кабинета зависят от роли в выбранной</span>
+          </div>
+        </details>
+        <span style="font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#D3E8FD;border:2px solid rgba(255,255,255,.4);padding:8px 12px">Ваша роль: {{ roleLabel }}</span>
+      </div>
+    </div>
+  </div>
+
+  <main style="padding:0 clamp(16px,4vw,48px) clamp(56px,8vw,88px)">
+    <div style="max-width:1104px;margin:0 auto">
+
+      <!-- ПУСТОЙ КАБИНЕТ -->
+      <sc-if value="{{ stEmpty }}" hint-placeholder-val="{{ false }}">
+        <section data-screen-label="a-cabinet · пустой кабинет — проект ещё не стартовал" style="margin-top:clamp(36px,6vw,56px)">
+          <div style="border:2px solid {{ border }};background:{{ surface }};box-shadow:6px 6px 0 {{ shadow }};padding:clamp(24px,4vw,40px)">
+            <div style="font-size:12px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ accent }}">Договор подписан</div>
+            <div style="margin-top:12px;font-size:clamp(20px,3vw,26px);font-weight:800;letter-spacing:-.02em;line-height:1.25;color:{{ ink }}">Проект стартует 15 сентября. Аналитика появится с первого урока.</div>
+            <div style="margin-top:18px;border-top:1px solid {{ hairline }};padding-top:16px;display:flex;gap:24px;flex-wrap:wrap;font-size:13.5px;font-weight:700;color:{{ inkMuted }}">
+              <span>Заказано: Школа ортобиологии · 6 уроков</span>
+              <span>Период: год</span>
+              <span>Распределение фонда: автор 40% · соавтор 15% · первоинвестор 45%</span>
+            </div>
+            <div style="margin-top:16px;font-size:13px;line-height:1.6;color:{{ inkFaint }};max-width:560px">Пока проект готовится, команда Академии присылает статус производства уроков. Первый отчёт по вниманию придёт в этот кабинет автоматически.</div>
+          </div>
+        </section>
+      </sc-if>
+
+      <!-- ЗАГРУЗКА -->
+      <sc-if value="{{ stLoading }}" hint-placeholder-val="{{ false }}">
+        <div data-screen-label="a-cabinet · загрузка — скелет" style="margin-top:clamp(36px,6vw,56px);display:flex;flex-direction:column;gap:28px">
+          <div style="height:180px;background:{{ hairline }};animation:livePulse 1.4s ease-in-out infinite"></div>
+          <div style="height:280px;background:{{ hairline }};animation:livePulse 1.4s ease-in-out infinite"></div>
+          <div style="height:360px;background:{{ hairline }};animation:livePulse 1.4s ease-in-out infinite"></div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ stReady }}" hint-placeholder-val="{{ true }}">
+
+      <!-- ============ 2 · МОИ ПРОЕКТЫ И ИНВЕСТИЦИИ (REQ-30, REQ-44, фича 036) ============ -->
+      <sc-if value="{{ isAdmin }}" hint-placeholder-val="{{ true }}">
+      <section data-screen-label="a-cabinet · мои проекты и инвестиции" style="margin-top:clamp(36px,6vw,56px)">
+        <div style="display:flex;align-items:baseline;gap:16px;margin-bottom:20px">
+          <span style="font-size:12px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:{{ ink }};white-space:nowrap">Мои проекты и инвестиции</span>
+          <span style="flex:1;border-top:2px solid {{ ink }}"></span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:22px">
+          <sc-for list="{{ projects }}" as="pj" hint-placeholder-count="2">
+            <div style="{{ pj.cardStyle }}">
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap">
+                <div style="min-width:240px">
+                  <div style="font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ accent }}">{{ pj.kicker }}</div>
+                  <div style="margin-top:8px;font-size:20px;font-weight:800;letter-spacing:-.02em;color:{{ ink }}">{{ pj.title }}</div>
+                  <div style="margin-top:6px;font-size:13.5px;font-weight:700;color:{{ inkMuted }}">{{ pj.meta }}</div>
+                </div>
+                <span style="{{ pj.statusStyle }}">{{ pj.status }}</span>
+              </div>
+              <div style="margin-top:18px">
+                <div style="font-size:12px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:{{ inkFaint }};margin-bottom:10px">Распределение фонда по смарт-контракту</div>
+                <div style="display:flex;height:14px;border:2px solid {{ border }}">
+                  <span style="{{ pj.barA }}" title="Автор 40%"></span>
+                  <span style="{{ pj.barB }}" title="Соавтор 15%"></span>
+                  <span style="{{ pj.barC }}" title="Первоинвестор 45%"></span>
+                </div>
+                <div style="display:flex;gap:18px;flex-wrap:wrap;margin-top:10px;font-size:12.5px;font-weight:700;color:{{ inkMuted }};font-variant-numeric:tabular-nums">
+                  <span style="display:inline-flex;align-items:center;gap:7px"><span style="{{ legA }}"></span>автор 40%</span>
+                  <span style="display:inline-flex;align-items:center;gap:7px"><span style="{{ legB }}"></span>соавтор 15%</span>
+                  <span style="display:inline-flex;align-items:center;gap:7px"><span style="{{ legC }}"></span>первоинвестор 45%</span>
+                </div>
+              </div>
+              <div style="margin-top:18px;border-top:1px solid {{ hairline }};padding-top:14px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+                <button onClick="{{ pj.toggleLedger }}" style="font:inherit;font-size:13px;font-weight:800;color:{{ accent }};background:transparent;border:none;padding:0;cursor:pointer;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px">{{ pj.ledgerLabel }}</button>
+                <span style="font-size:12px;font-weight:700;color:{{ inkFaint }}">Реестр — только добавление: исправление это новая строка, баланс не редактируется</span>
+              </div>
+              <sc-if value="{{ pj.ledgerOpen }}" hint-placeholder-val="{{ false }}">
+                <!-- Развилка 4 · вариант А — полный реестр обязательств -->
+                <sc-if value="{{ ledFull }}" hint-placeholder-val="{{ true }}">
+                  <div data-screen-label="a-cabinet · реестр начислений · вариант А — полный" style="margin-top:14px;border:2px solid {{ hairline }}">
+                    <sc-for list="{{ pj.ledgerRows }}" as="lr" hint-placeholder-count="5">
+                      <div style="{{ lr.rowStyle }}">
+                        <span style="font-size:12.5px;font-weight:700;color:{{ inkFaint }};font-variant-numeric:tabular-nums;flex:none;width:52px">{{ lr.date }}</span>
+                        <span style="font-size:13px;font-weight:600;line-height:1.5;color:{{ ink }};flex:1;min-width:180px">{{ lr.what }}</span>
+                        <span style="{{ lr.roleStyle }}">{{ lr.role }}</span>
+                        <span style="font-size:13.5px;font-weight:800;color:{{ ink }};font-variant-numeric:tabular-nums;flex:none;margin-left:auto">{{ lr.sum }}</span>
+                      </div>
+                    </sc-for>
+                  </div>
+                </sc-if>
+                <!-- Развилка 4 · вариант Б — сводка без персональных обязательств -->
+                <sc-if value="{{ ledSummary }}" hint-placeholder-val="{{ false }}">
+                  <div data-screen-label="a-cabinet · реестр начислений · вариант Б — сводка" style="margin-top:14px;display:flex;gap:0;flex-wrap:wrap;border:2px solid {{ hairline }}">
+                    <sc-for list="{{ pj.ledgerSummary }}" as="ls" hint-placeholder-count="3">
+                      <div style="{{ ls.cellStyle }}">
+                        <div style="font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:{{ inkFaint }}">{{ ls.cap }}</div>
+                        <div style="margin-top:8px;font-size:22px;font-weight:800;letter-spacing:-.02em;color:{{ ink }};font-variant-numeric:tabular-nums">{{ ls.val }}</div>
+                      </div>
+                    </sc-for>
+                  </div>
+                </sc-if>
+              </sc-if>
+            </div>
+          </sc-for>
+        </div>
+        <!-- Плашка очков организации · юнит из 05-d-lesson, субъект — организация -->
+        <div data-screen-label="a-cabinet · плашка очков организации (юнит 05-d-lesson)" style="margin-top:22px;border:2px solid {{ border }};background:{{ surface }};box-shadow:5px 5px 0 {{ shadowSm }}">
+          <div style="{{ plaqueCols }}">
+            <sc-for list="{{ orgPoints }}" as="op" hint-placeholder-count="3">
+              <div style="{{ op.cellStyle }}">
+                <div style="font-size:22px;font-weight:800;letter-spacing:-.02em;color:{{ ink }};font-variant-numeric:tabular-nums">{{ op.val }}</div>
+                <div style="margin-top:5px;font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:{{ accent }}">{{ op.name }}</div>
+                <div style="margin-top:6px;font-size:12px;line-height:1.55;color:{{ inkFaint }}">{{ op.cap }}</div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="border-top:2px solid {{ hairline }};padding:12px 18px;background:{{ sectionGray }};display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+            <span style="font-size:12.5px;font-weight:700;color:{{ inkMuted }}">Очки внимания, намайненные врачами на ваших проектах</span>
+            <span style="margin-left:auto;font-size:12px;font-weight:700;color:{{ inkFaint }};font-variant-numeric:tabular-nums">Последнее: +240 Pul · вебинар 12 августа</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ 3 · АНАЛИТИКА ВНИМАНИЯ (REQ-58, REQ-59, REQ-60, Q-37) ============ -->
+      <section data-screen-label="a-cabinet · аналитика внимания" style="margin-top:clamp(44px,7vw,68px)">
+        <div style="display:flex;align-items:baseline;gap:16px;margin-bottom:20px">
+          <span style="font-size:12px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:{{ ink }};white-space:nowrap">Аналитика внимания</span>
+          <span style="flex:1;border-top:2px solid {{ ink }}"></span>
+        </div>
+
+        <sc-if value="{{ anError }}" hint-placeholder-val="{{ false }}">
+          <div data-screen-label="a-cabinet · ошибка блока аналитики" style="border:2px solid {{ danger }};background:{{ dangerTint }};padding:clamp(22px,4vw,32px);display:flex;flex-direction:column;gap:10px;align-items:flex-start">
+            <div style="font-size:17px;font-weight:800;letter-spacing:-.015em;color:{{ ink }}">Не удалось загрузить аналитику</div>
+            <div style="font-size:13.5px;line-height:1.6;color:{{ inkMuted }}">Сервер отчётности не ответил. Остальные разделы кабинета работают.</div>
+            <button onClick="{{ retryAnalytics }}" style="font:inherit;font-size:13.5px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:2px solid {{ btnBg }};padding:12px 22px;cursor:pointer;box-shadow:3px 3px 0 {{ border }}" style-hover="transform:translate(1px,1px);box-shadow:2px 2px 0 {{ border }}">Повторить</button>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ anOk }}" hint-placeholder-val="{{ true }}">
+          <div style="{{ metricsGrid }}">
+            <sc-for list="{{ metrics }}" as="mt" hint-placeholder-count="4">
+              <div style="border:2px solid {{ border }};background:{{ surface }};padding:20px 20px 22px">
+                <div style="font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:{{ inkFaint }}">{{ mt.cap }}</div>
+                <div style="margin-top:10px;font-size:clamp(24px,3vw,32px);font-weight:800;letter-spacing:-.03em;color:{{ ink }};font-variant-numeric:tabular-nums">{{ mt.val }}</div>
+                <div style="margin-top:6px;font-size:12.5px;font-weight:600;line-height:1.5;color:{{ inkMuted }}">{{ mt.sub }}</div>
+              </div>
+            </sc-for>
+          </div>
+
+          <!-- график внимания по неделям -->
+          <div style="margin-top:22px;border:2px solid {{ border }};background:{{ surface }};padding:20px 20px 16px">
+            <div style="display:flex;align-items:baseline;gap:14px;flex-wrap:wrap">
+              <span style="font-size:12px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:{{ inkFaint }}">Очки внимания по неделям</span>
+              <span style="margin-left:auto;font-size:12px;font-weight:700;color:{{ inkFaint }};font-variant-numeric:tabular-nums">июль — август</span>
+            </div>
+            <div style="display:flex;align-items:flex-end;gap:10px;height:120px;margin-top:16px">
+              <sc-for list="{{ chartBars }}" as="cb" hint-placeholder-count="8">
+                <span style="{{ cb.style }}" title="{{ cb.title }}"></span>
+              </sc-for>
+            </div>
+            <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:11px;font-weight:700;color:{{ inkFaint }};font-variant-numeric:tabular-nums"><span>нед. 27</span><span>нед. 34</span></div>
+          </div>
+
+          <!-- Развилка 2 · вариант В — плановая шкала как постоянный элемент -->
+          <sc-if value="{{ showPlanScale }}" hint-placeholder-val="{{ false }}">
+            <div data-screen-label="a-cabinet · сигнал недобора · вариант В — шкала план/факт" style="margin-top:22px;border:2px solid {{ border }};background:{{ surface }};padding:20px">
+              <div style="display:flex;align-items:baseline;gap:14px;flex-wrap:wrap">
+                <span style="font-size:12px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:{{ inkFaint }}">План / факт по вниманию</span>
+                <span style="margin-left:auto;font-size:13px;font-weight:800;color:{{ ink }};font-variant-numeric:tabular-nums">{{ planPctLabel }}</span>
+              </div>
+              <div style="margin-top:12px;height:14px;border:2px solid {{ border }};position:relative">
+                <span style="{{ planFillStyle }}"></span>
+              </div>
+              <div style="margin-top:8px;font-size:12.5px;font-weight:600;color:{{ inkMuted }};font-variant-numeric:tabular-nums">{{ planCaption }}</div>
+            </div>
+          </sc-if>
+
+          <!-- Развилка 2 · вариант А — нейтральная плашка недобора (Q-37) -->
+          <sc-if value="{{ showUnderrunPlate }}" hint-placeholder-val="{{ false }}">
+            <div data-screen-label="a-cabinet · сигнал недобора · вариант А — плашка" style="margin-top:22px;border:2px solid {{ accent }};background:{{ tint }};padding:18px 20px;display:flex;gap:14px;align-items:flex-start">
+              <span style="font-size:16px;color:{{ tintFg }};flex:none">◔</span>
+              <div style="font-size:13.5px;line-height:1.65;color:{{ tintFg }}"><b>Внимание идёт медленнее плана: 62% от планового объёма к этому сроку.</b> Команда Академии уже готовит дополнительный вебинар по проекту.</div>
+            </div>
+          </sc-if>
+
+          <!-- Перевыполнение (REQ-90) -->
+          <sc-if value="{{ showOverrun }}" hint-placeholder-val="{{ false }}">
+            <div data-screen-label="a-cabinet · перевыполнение — доплата к выставлению" style="margin-top:22px;border:2px solid {{ success }};background:{{ successTint }};padding:18px 20px;display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap">
+              <span style="font-size:16px;color:{{ success }};flex:none">↗</span>
+              <div style="font-size:13.5px;line-height:1.65;color:{{ ink }};flex:1;min-width:220px"><b>Внимание израсходовано сверх контракта: 118% планового объёма.</b> Доплата будет довыставлена по условиям договора.</div>
+              <span style="font-size:14px;font-weight:800;color:{{ ink }};font-variant-numeric:tabular-nums;flex:none">К довыставлению: 84 000 ₽</span>
+            </div>
+          </sc-if>
+
+          <div style="margin-top:22px;display:flex;align-items:center;gap:18px;flex-wrap:wrap">
+            <button onClick="{{ repeatOrder }}" style="font:inherit;font-size:14.5px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:2px solid {{ btnBg }};padding:15px 28px;cursor:pointer;box-shadow:4px 4px 0 {{ border }}" style-hover="transform:translate(2px,2px);box-shadow:2px 2px 0 {{ border }}">Повторить заказ ↗</button>
+            <span style="font-size:13px;font-weight:600;line-height:1.5;color:{{ inkMuted }};max-width:420px">{{ repeatNote }}</span>
+          </div>
+        </sc-if>
+      </section>
+      </sc-if>
+
+      <!-- ============ МЕДПРЕД · персональная ссылка (REQ-114, REQ-39) ============ -->
+      <sc-if value="{{ isRep }}" hint-placeholder-val="{{ false }}">
+        <section data-screen-label="a-cabinet · медпред — персональная ссылка" style="margin-top:clamp(36px,6vw,56px)">
+          <div style="border:2px solid {{ border }};background:{{ surface }};box-shadow:6px 6px 0 {{ shadow }};padding:clamp(22px,4vw,32px)">
+            <div style="font-size:12px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ accent }}">Ваша персональная ссылка</div>
+            <div style="margin-top:14px;display:flex;gap:12px;flex-wrap:wrap;align-items:center">
+              <code style="font-size:14px;font-weight:700;color:{{ ink }};background:{{ sectionGray }};border:2px solid {{ hairline }};padding:12px 16px;font-variant-numeric:tabular-nums">doctor.school/?from=NIK-24</code>
+              <button onClick="{{ copyLink }}" style="font:inherit;font-size:13px;font-weight:800;color:{{ ink }};background:{{ surface }};border:2px solid {{ border }};padding:12px 18px;cursor:pointer;box-shadow:3px 3px 0 {{ shadowSm }}" style-hover="transform:translate(1px,1px);box-shadow:2px 2px 0 {{ shadowSm }}">{{ copyLabel }}</button>
+              <span style="font-size:13px;font-weight:700;color:{{ inkMuted }}">Промокод: <b style="color:{{ ink }}">NIK-24</b></span>
+            </div>
+            <div style="margin-top:14px;font-size:13px;line-height:1.6;color:{{ inkFaint }};max-width:560px">Врачи, пришедшие по вашей ссылке или промокоду, атрибуцируются лично вам. Вы видите только своих врачей — в объёме, допускаемом их согласиями.</div>
+          </div>
+        </section>
+      </sc-if>
+
+      <!-- ============ 4 · АУДИТОРИЯ ВАШИХ ПРОЕКТОВ (REQ-18, REQ-33, Q-32) ============ -->
+      <section data-screen-label="a-cabinet · аудитория ваших проектов" style="margin-top:clamp(44px,7vw,68px)">
+        <div style="display:flex;align-items:baseline;gap:16px;margin-bottom:14px">
+          <span style="font-size:12px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:{{ ink }};white-space:nowrap">{{ audTitle }}</span>
+          <span style="flex:1;border-top:2px solid {{ ink }}"></span>
+        </div>
+        <div style="display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:20px">
+          <div style="font-size:13px;font-weight:600;line-height:1.6;color:{{ inkMuted }};max-width:560px;flex:1;min-width:240px">{{ audSub }}</div>
+          <span style="font-size:11.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:{{ tintFg }};background:{{ tint }};padding:8px 12px;flex:none">Контактные данные не передаются</span>
+        </div>
+
+        <!-- Развилка 1 · вариант В — сводка сверху -->
+        <sc-if value="{{ audSummaryOn }}" hint-placeholder-val="{{ false }}">
+          <div data-screen-label="a-cabinet · выборка аудитории · вариант В — сводка" style="border:2px solid {{ border }};background:{{ sectionGray }};padding:14px 18px;margin-bottom:16px;display:flex;gap:22px;flex-wrap:wrap;font-size:13.5px;font-weight:800;color:{{ ink }};font-variant-numeric:tabular-nums">
+            <span>Уникальных врачей: 1 240</span>
+            <span style="font-weight:700;color:{{ inkMuted }}">по школе 800</span>
+            <span style="font-weight:700;color:{{ inkMuted }}">по событию 640</span>
+            <span style="font-weight:700;color:{{ inkMuted }}">по уроку 310</span>
+          </div>
+        </sc-if>
+
+        <!-- Развилка 1 · А — фильтр-чипы · Б — вкладки -->
+        <sc-if value="{{ audFilterOn }}" hint-placeholder-val="{{ true }}">
+          <div data-screen-label="a-cabinet · фильтр по объекту участия" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px">
+            <sc-for list="{{ objChips }}" as="oc" hint-placeholder-count="4">
+              <button onClick="{{ oc.onClick }}" style="{{ oc.style }}">{{ oc.label }}</button>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <!-- Таблица · десктоп -->
+        <sc-if value="{{ isDesktop }}" hint-placeholder-val="{{ true }}">
+          <div style="border:2px solid {{ border }};background:{{ surface }};box-shadow:6px 6px 0 {{ shadow }}">
+            <div style="{{ audHeadStyle }}">
+              <sc-for list="{{ audHead }}" as="ah" hint-placeholder-count="6">
+                <span onClick="{{ ah.onClick }}" style="{{ ah.style }}">{{ ah.label }}</span>
+              </sc-for>
+            </div>
+            <sc-for list="{{ audRows }}" as="ar" hint-placeholder-count="6">
+              <div style="{{ ar.rowStyle }}" style-hover="{{ rowHover }}">
+                <span style="font-size:13.5px;font-weight:800;color:{{ ink }}">{{ ar.fio }}</span>
+                <span style="font-size:13px;font-weight:600;color:{{ inkMuted }}">{{ ar.spec }}</span>
+                <span style="font-size:13px;font-weight:600;color:{{ inkMuted }}">{{ ar.city }}</span>
+                <span style="font-size:13px;font-weight:600;color:{{ inkMuted }}">{{ ar.work }}</span>
+                <span style="font-size:13px;font-weight:700;color:{{ ink }}">{{ ar.act }}</span>
+                <span style="{{ ar.objStyle }}">{{ ar.obj }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <!-- Мобильный · карточки вместо таблицы -->
+        <sc-if value="{{ isMobile }}" hint-placeholder-val="{{ false }}">
+          <div data-screen-label="a-cabinet · 390 · аудитория списком карточек" style="margin:0 -16px">
+            <sc-for list="{{ audRows }}" as="ar" hint-placeholder-count="6">
+              <div style="padding:16px;border-top:1px solid {{ hairline }};background:{{ surface }}">
+                <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+                  <span style="font-size:15px;font-weight:800;color:{{ ink }}">{{ ar.fio }}</span>
+                  <span style="{{ ar.objStyle }}">{{ ar.obj }}</span>
+                </div>
+                <div style="margin-top:5px;font-size:12.5px;font-weight:600;color:{{ inkMuted }}">{{ ar.metaLine }}</div>
+                <div style="margin-top:6px;font-size:13px;font-weight:700;color:{{ ink }}">{{ ar.act }}</div>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <div style="margin-top:18px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+          <button onClick="{{ startExport }}" style="font:inherit;font-size:13.5px;font-weight:800;color:{{ ink }};background:{{ surface }};border:2px solid {{ border }};padding:13px 22px;cursor:pointer;box-shadow:4px 4px 0 {{ shadowSm }}" style-hover="transform:translate(1px,1px);box-shadow:2px 2px 0 {{ shadowSm }}">Выгрузить для отчётности</button>
+          <sc-if value="{{ exportPrep }}" hint-placeholder-val="{{ false }}">
+            <span data-screen-label="a-cabinet · выгрузка готовится" style="font-size:13px;font-weight:700;color:{{ success }}">✓ Выгрузка готовится — пришлём на рабочую почту</span>
+          </sc-if>
+          <span style="margin-left:auto;font-size:12px;font-weight:700;color:{{ inkFaint }}">ФИО · специальность · город · место работы · что делал — без контактов (норма отчётности)</span>
+        </div>
+      </section>
+
+      <!-- ============ 5–7 · МЕДПРЕДЫ · ИССЛЕДОВАНИЯ · ОТЧЁТЫ ============ -->
+      <sc-if value="{{ isAdmin }}" hint-placeholder-val="{{ true }}">
+      <section style="margin-top:clamp(44px,7vw,68px)">
+        <div style="{{ threeGrid }}">
+
+          <!-- Медпреды (REQ-114, REQ-39) -->
+          <div data-screen-label="a-cabinet · медпреды" style="border:2px solid {{ border }};background:{{ surface }};box-shadow:5px 5px 0 {{ shadowSm }};padding:22px;display:flex;flex-direction:column">
+            <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:6px">
+              <span style="font-size:12px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ ink }}">Медпреды</span>
+              <span style="flex:1;border-top:2px solid {{ ink }}"></span>
+            </div>
+            <div style="font-size:12.5px;font-weight:600;line-height:1.55;color:{{ inkMuted }};margin-bottom:14px">100 пользователей · у каждого персональная ссылка и своя атрибуция</div>
+            <div style="display:flex;flex-direction:column;flex:1">
+              <sc-for list="{{ reps }}" as="rp" hint-placeholder-count="3">
+                <div style="display:flex;align-items:baseline;gap:12px;padding:11px 0;border-top:1px solid {{ hairline }}">
+                  <span style="font-size:13.5px;font-weight:800;color:{{ ink }};flex:1;min-width:0">{{ rp.name }}</span>
+                  <span style="font-size:12px;font-weight:700;color:{{ inkFaint }};font-variant-numeric:tabular-nums;flex:none">{{ rp.promo }}</span>
+                  <span style="font-size:13px;font-weight:800;color:{{ accent }};font-variant-numeric:tabular-nums;flex:none">{{ rp.docs }}</span>
+                </div>
+              </sc-for>
+            </div>
+            <a href="#" style="margin-top:14px;font-size:13px;font-weight:800;color:{{ accent }};text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px">Разрез по медпредам · все 100</a>
+          </div>
+
+          <!-- Опросы и исследования (REQ-10, REQ-135) -->
+          <div data-screen-label="a-cabinet · опросы и исследования" style="border:2px solid {{ border }};background:{{ surface }};box-shadow:5px 5px 0 {{ shadowSm }};padding:22px;display:flex;flex-direction:column">
+            <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:6px">
+              <span style="font-size:12px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ ink }}">Опросы и исследования</span>
+              <span style="flex:1;border-top:2px solid {{ ink }}"></span>
+            </div>
+            <div style="display:flex;flex-direction:column;margin-bottom:14px">
+              <sc-for list="{{ studies }}" as="st" hint-placeholder-count="2">
+                <div style="padding:11px 0;border-top:1px solid {{ hairline }}">
+                  <div style="font-size:13.5px;font-weight:800;color:{{ ink }};line-height:1.4">{{ st.title }}</div>
+                  <div style="margin-top:3px;font-size:12px;font-weight:700;color:{{ inkFaint }};font-variant-numeric:tabular-nums">{{ st.meta }}</div>
+                </div>
+              </sc-for>
+            </div>
+            <sc-if value="{{ resClosed }}" hint-placeholder-val="{{ true }}">
+              <button onClick="{{ openRes }}" style="margin-top:auto;font:inherit;font-size:13.5px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:2px solid {{ btnBg }};padding:13px 20px;cursor:pointer;box-shadow:3px 3px 0 {{ border }};align-self:flex-start" style-hover="transform:translate(1px,1px);box-shadow:2px 2px 0 {{ border }}">Запросить исследование</button>
+            </sc-if>
+            <sc-if value="{{ resFormOpen }}" hint-placeholder-val="{{ false }}">
+              <div data-screen-label="a-cabinet · заявка на исследование" style="margin-top:auto;border-top:2px solid {{ hairline }};padding-top:14px;display:flex;flex-direction:column;gap:10px">
+                <label style="font-size:12px;font-weight:700;color:{{ ink }}">Тема исследования
+                  <input value="{{ resTopic }}" onChange="{{ resTopicChange }}" placeholder="Опыт применения PRP при гонартрозе" style="{{ resTopicStyle }}">
+                </label>
+                <sc-if value="{{ resErr }}" hint-placeholder-val="{{ false }}">
+                  <span style="font-size:12px;font-weight:700;color:{{ danger }}">⚠ Назовите тему — без неё команда не сможет оценить заявку</span>
+                </sc-if>
+                <label style="font-size:12px;font-weight:700;color:{{ ink }}">Комментарий · необязательно
+                  <textarea value="{{ resComment }}" onChange="{{ resCommentChange }}" rows="2" placeholder="Какая аудитория интересует, к какому сроку" style="{{ resCommentStyle }}"></textarea>
+                </label>
+                <div style="display:flex;gap:10px;align-items:center">
+                  <button onClick="{{ submitRes }}" style="font:inherit;font-size:13px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:2px solid {{ btnBg }};padding:11px 18px;cursor:pointer;box-shadow:3px 3px 0 {{ border }}" style-hover="transform:translate(1px,1px);box-shadow:2px 2px 0 {{ border }}">Отправить заявку</button>
+                  <button onClick="{{ closeRes }}" style="font:inherit;font-size:13px;font-weight:700;color:{{ inkMuted }};background:transparent;border:none;padding:0;cursor:pointer;text-decoration:underline;text-underline-offset:3px">Отмена</button>
+                </div>
+                <span style="font-size:11.5px;font-weight:600;line-height:1.5;color:{{ inkFaint }}">Проведение — на стороне команды Академии: заявка, не самозапуск</span>
+              </div>
+            </sc-if>
+            <sc-if value="{{ resDone }}" hint-placeholder-val="{{ false }}">
+              <div data-screen-label="a-cabinet · заявка отправлена" style="margin-top:auto;border:2px solid {{ success }};background:{{ successTint }};padding:14px 16px">
+                <div style="font-size:13.5px;font-weight:800;color:{{ ink }}">✓ Заявка отправлена</div>
+                <div style="margin-top:4px;font-size:12.5px;line-height:1.55;color:{{ inkMuted }}">Команда Академии свяжется с вами и предложит формат исследования.</div>
+              </div>
+            </sc-if>
+          </div>
+
+          <!-- Отчёты (REQ-45, REQ-63) -->
+          <div data-screen-label="a-cabinet · отчёты" style="border:2px solid {{ border }};background:{{ surface }};box-shadow:5px 5px 0 {{ shadowSm }};padding:22px;display:flex;flex-direction:column">
+            <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:6px">
+              <span style="font-size:12px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ ink }}">Отчёты</span>
+              <span style="flex:1;border-top:2px solid {{ ink }}"></span>
+            </div>
+            <div style="font-size:12.5px;font-weight:600;line-height:1.55;color:{{ inkMuted }};margin-bottom:14px">Закрывающие документы · фото · принтскрины — доказательство проведения</div>
+            <div style="display:flex;flex-direction:column;flex:1">
+              <sc-for list="{{ reports }}" as="rd" hint-placeholder-count="3">
+                <a href="#" style="display:flex;align-items:baseline;gap:12px;padding:11px 0;border-top:1px solid {{ hairline }};text-decoration:none" style-hover="background:{{ sectionGray }}">
+                  <span style="font-size:13px;font-weight:800;color:{{ accent }};text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px;flex:1;min-width:0;line-height:1.45">{{ rd.title }}</span>
+                  <span style="font-size:12px;font-weight:700;color:{{ inkFaint }};font-variant-numeric:tabular-nums;flex:none">{{ rd.date }}</span>
+                </a>
+              </sc-for>
+            </div>
+            <!-- своя позиция в лидерборде · юнит из 13-a-partners -->
+            <div data-screen-label="a-cabinet · своя позиция в лидерборде (юнит 13-a-partners)" style="margin-top:14px;border:2px solid {{ border }};background:{{ tint }};padding:14px 16px">
+              <div style="display:flex;align-items:baseline;gap:12px">
+                <span style="font-size:20px;font-weight:800;letter-spacing:-.02em;color:{{ tintFg }};font-variant-numeric:tabular-nums;flex:none">№ 2</span>
+                <div style="min-width:0">
+                  <div style="font-size:13px;font-weight:800;color:{{ tintFg }}">Лидерборд партнёров</div>
+                  <div style="margin-top:2px;font-size:12px;font-weight:700;color:{{ tintFg }};opacity:.75;font-variant-numeric:tabular-nums">доля внимания 18% · инвестиции 1–3 млн ₽</div>
+                </div>
+              </div>
+              <a href="Партнёры.dc.html" style="display:inline-block;margin-top:8px;font-size:12.5px;font-weight:800;color:{{ tintFg }};text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px">Весь лидерборд →</a>
+            </div>
+          </div>
+
+        </div>
+      </section>
+      </sc-if>
+
+      </sc-if>
+    </div>
+  </main>
+
+  <!-- Футер Академии -->
+  <footer style="border-top:2px solid {{ border }};background:{{ sectionGray }};padding:clamp(28px,4vw,40px) clamp(16px,4vw,48px)">
+    <div style="max-width:1104px;margin:0 auto;display:flex;align-items:center;gap:24px;flex-wrap:wrap">
+      <img src="{{ footLogoSrc }}" alt="Doctor.School · Академия" style="height:24px;display:block;flex:none">
+      <span style="font-size:12.5px;font-weight:600;color:{{ inkFaint }}">Academy.Doctor.School — закулисье платформы</span>
+      <nav style="margin-left:auto;display:flex;gap:20px;flex-wrap:wrap;font-size:13px;font-weight:700">
+        <a href="#" style="color:{{ inkMuted }};text-decoration:underline;text-underline-offset:4px">Документы</a>
+        <a href="#" style="color:{{ inkMuted }};text-decoration:underline;text-underline-offset:4px">Контакты</a>
+        <a href="Витрина врача - Главная.dc.html" style="color:{{ inkMuted }};text-decoration:underline;text-underline-offset:4px">Врачам — doctor.school</a>
+      </nav>
+    </div>
+  </footer>
+
+  <!-- Панель владельца -->
+  <div style="position:fixed;left:16px;bottom:16px;z-index:60;background:{{ surface }};border:2px solid {{ border }};box-shadow:5px 5px 0 {{ shadow }};padding:12px 14px;display:flex;flex-direction:column;gap:8px;max-width:360px">
+    <div style="font-size:10px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ inkFaint }}">a-cabinet · панель владельца</div>
+    <sc-for list="{{ panelRows }}" as="pr" hint-placeholder-count="6">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <span style="font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:{{ inkMuted }};width:70px;flex:none">{{ pr.label }}</span>
+        <sc-for list="{{ pr.btns }}" as="pb" hint-placeholder-count="3">
+          <button onClick="{{ pb.onClick }}" title="{{ pb.title }}" style="{{ pb.style }}">{{ pb.label }}</button>
+        </sc-for>
+      </div>
+    </sc-for>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;role&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;администратор&quot;,&quot;медпред&quot;],&quot;default&quot;:&quot;администратор&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Состояние&quot;},&quot;dataState&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;заполнен&quot;,&quot;пуст&quot;,&quot;загрузка&quot;,&quot;ошибка&quot;],&quot;default&quot;:&quot;заполнен&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Состояние&quot;},&quot;plan&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;в графике&quot;,&quot;недобор&quot;,&quot;перевыполнение&quot;],&quot;default&quot;:&quot;недобор&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Состояние&quot;},&quot;audienceVariant&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;А&quot;,&quot;Б&quot;,&quot;В&quot;],&quot;default&quot;:&quot;А&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Развилки&quot;},&quot;signalVariant&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;А&quot;,&quot;Б&quot;,&quot;В&quot;],&quot;default&quot;:&quot;А&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Развилки&quot;},&quot;ledgerVariant&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;А&quot;,&quot;Б&quot;],&quot;default&quot;:&quot;А&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Развилки&quot;}}">
+class Component extends DCLogic {
+  state = {
+    dark: false, isMobile: false,
+    roleV: null, dataV: null, planV: null, audV: null, sigV: null, ledV: null,
+    openLedger: { p1: true }, objFilter: 'Все', sortKey: null, sortDir: 1,
+    exportPrep: false, copyDone: false,
+    res: 'closed', resTopic: '', resComment: '', resAttempt: false
+  };
+  componentDidMount() {
+    try { this.setState({ dark: localStorage.getItem('ds-theme') === 'dark' }); } catch (e) {}
+    this.mq = window.matchMedia('(max-width: 900px)');
+    this.onMq = () => this.setState({ isMobile: this.mq.matches });
+    this.mq.addEventListener('change', this.onMq); this.onMq();
+  }
+  componentWillUnmount() { if (this.mq) this.mq.removeEventListener('change', this.onMq); }
+  renderVals() {
+    const s = this.state, p = this.props, d = s.dark, m = s.isMobile;
+    const pageBg = d ? 'oklch(.16 .02 250)' : '#fff';
+    const surface = d ? 'oklch(.21 .02 250)' : '#fff';
+    const ink = d ? '#fff' : 'oklch(.21 .02 250)';
+    const inkMuted = d ? 'rgba(255,255,255,.62)' : 'oklch(.45 .014 250)';
+    const inkFaint = d ? 'rgba(255,255,255,.5)' : 'oklch(.556 .012 250)';
+    const border = d ? '#fff' : 'oklch(.21 .02 250)';
+    const hairline = d ? 'rgba(255,255,255,.16)' : 'oklch(.922 .006 250)';
+    const accent = d ? '#6BB1F7' : '#2D84F2';
+    const btnBg = d ? '#6BB1F7' : '#114D9E';
+    const btnFg = d ? '#0D3A77' : '#fff';
+    const shadow = d ? '#6BB1F7' : '#114D9E';
+    const shadowSm = d ? '#1F69C8' : '#AED4FB';
+    const tint = d ? '#0D3A77' : '#D3E8FD';
+    const tintFg = d ? '#AED4FB' : '#114D9E';
+    const sectionGray = d ? 'oklch(.185 .02 250)' : 'oklch(.972 .004 250)';
+    const danger = '#C81E1E';
+    const dangerTint = d ? '#3a1414' : '#fdecec';
+    const success = d ? '#4ADE80' : '#009959';
+    const successTint = d ? '#0e2a1c' : '#e6f6ee';
+
+    // состояния и развилки (панель > пропсы)
+    const role = s.roleV != null ? s.roleV : (p.role || 'администратор');
+    const dataSt = s.dataV != null ? s.dataV : (p.dataState || 'заполнен');
+    const plan = s.planV != null ? s.planV : (p.plan || 'недобор');
+    const aud = s.audV != null ? s.audV : (p.audienceVariant || 'А');
+    const sig = s.sigV != null ? s.sigV : (p.signalVariant || 'А');
+    const led = s.ledV != null ? s.ledV : (p.ledgerVariant || 'А');
+    const isAdmin = role === 'администратор', isRep = !isAdmin;
+    const stEmpty = dataSt === 'пуст', stLoading = dataSt === 'загрузка';
+    const stReady = !stEmpty && !stLoading;
+    const anError = dataSt === 'ошибка';
+
+    // проекты
+    const seg = (w, bg) => 'display:block;width:' + w + '%;background:' + bg;
+    const dot = (bg) => 'display:inline-block;width:11px;height:11px;background:' + bg + ';border:2px solid ' + border + ';flex:none';
+    const ledgerRows = [
+      { date: '12.08', what: 'Начисление за внимание · уроки 1–3', role: 'автор', sum: '+18 400 ₽' },
+      { date: '12.08', what: 'Начисление за внимание · уроки 1–3', role: 'соавтор', sum: '+6 900 ₽' },
+      { date: '12.08', what: 'Начисление за внимание · уроки 1–3', role: 'первоинвестор', sum: '+20 700 ₽' },
+      { date: '05.08', what: 'Исправление проводки от 29.07 — новой строкой', role: 'автор', sum: '+1 200 ₽' },
+      { date: '29.07', what: 'Взнос по договору № 214-ОБ → фонд проекта', role: '—', sum: '460 000 ₽' }
+    ].map((r, i) => ({
+      ...r,
+      rowStyle: 'display:flex;align-items:baseline;gap:14px;padding:12px 16px;flex-wrap:wrap;' + (i > 0 ? 'border-top:1px solid ' + hairline : ''),
+      roleStyle: 'font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:' + tintFg + ';background:' + (r.role === '—' ? 'transparent' : tint) + ';padding:4px 9px;flex:none'
+    }));
+    const ledgerSummary = ['Внесено по договору·1 200 000 ₽', 'Фонд распределения·460 000 ₽', 'Начислено ролям·47 200 ₽'].map((x, i) => {
+      const [cap, val] = x.split('·');
+      return { cap, val, cellStyle: 'flex:1;min-width:150px;padding:16px 18px;' + (i > 0 && !m ? 'border-left:2px solid ' + hairline : i > 0 ? 'border-top:2px solid ' + hairline : '') };
+    });
+    const projects = [
+      { id: 'p1', kicker: 'Проект · результат — школа', title: 'Школа ортобиологии', meta: 'Инвестировано: 6 уроков · период: год · договор № 214-ОБ', status: 'идёт', live: true },
+      { id: 'p2', kicker: 'Проект · результат — конгресс', title: 'Конгресс «Ортобиология 2026»', meta: 'Инвестировано: генеральное участие · сентябрь', status: 'стартует 15.09', live: false }
+    ].map(pj => ({
+      ...pj,
+      cardStyle: 'border:2px solid ' + border + ';background:' + surface + ';box-shadow:6px 6px 0 ' + shadow + ';padding:' + (m ? '18px 16px' : '24px 26px'),
+      statusStyle: 'flex:none;font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;padding:7px 12px;' + (pj.live ? 'color:' + btnFg + ';background:' + btnBg : 'color:' + tintFg + ';background:' + tint),
+      barA: seg(40, accent), barB: seg(15, tint), barC: seg(45, btnBg),
+      ledgerOpen: !!s.openLedger[pj.id],
+      ledgerLabel: s.openLedger[pj.id] ? 'Свернуть историю начислений' : 'История начислений',
+      toggleLedger: () => this.setState(st => ({ openLedger: { ...st.openLedger, [pj.id]: !st.openLedger[pj.id] } })),
+      ledgerRows, ledgerSummary
+    }));
+
+    const orgPoints = [
+      { val: '47 200 Pul', name: 'Пульс', cap: 'Внимание, потраченное врачами на ваши уроки и события' },
+      { val: '12 300 Bre', name: 'Дыхание', cap: 'Репутационная активность: ответы, обратная связь' },
+      { val: '8 900 Con', name: 'Сознание', cap: 'Завершённые шаги пути врачей на ваших проектах' }
+    ].map((x, i) => ({ ...x, cellStyle: 'padding:18px 20px;' + (i > 0 && !m ? 'border-left:2px solid ' + hairline : i > 0 ? 'border-top:2px solid ' + hairline : '') }));
+
+    // аналитика
+    const metrics = [
+      { cap: 'Контактов', val: '1 240', sub: 'средняя глубина: 68% урока' },
+      { cap: 'Просмотрено уроков', val: '3 900', sub: 'веб и приложение — счёт общий' },
+      { cap: 'Очков намайнено', val: '47 200', sub: 'Pul по вашим проектам' },
+      { cap: 'Стоимость контакта', val: '214 ₽', sub: 'относительно объёма просмотренного' }
+    ];
+    const heights = [22, 34, 41, 38, 52, 47, 64, 58];
+    const chartBars = heights.map((h, i) => ({
+      style: 'flex:1;height:' + h + '%;background:' + (i === heights.length - 1 ? accent : tint) + ';border:2px solid ' + border + ';border-bottom-width:2px',
+      title: 'Неделя ' + (27 + i) + ' · ' + (h * 120) + ' очков'
+    }));
+    const planPct = plan === 'недобор' ? 62 : plan === 'перевыполнение' ? 118 : 98;
+    const showPlanScale = sig === 'В';
+    const showUnderrunPlate = sig === 'А' && plan === 'недобор';
+    const showOverrun = plan === 'перевыполнение';
+    const planFillStyle = 'display:block;height:100%;width:' + Math.min(planPct, 100) + '%;background:' + (planPct < 80 ? tintFg : planPct > 100 ? success : accent);
+    const planCaption = plan === 'недобор'
+      ? 'План к 23 августа: 76 000 очков · факт: 47 200. Команда Академии готовит дополнительный вебинар по проекту.'
+      : plan === 'перевыполнение' ? 'План к 23 августа: 76 000 очков · факт: 89 700 — сверх контракта.'
+      : 'План к 23 августа: 76 000 очков · факт: 74 500 — в графике.';
+
+    // аудитория
+    const doctors = [
+      { fio: 'Иванова Анна Сергеевна', spec: 'Травматология-ортопедия', city: 'Москва', work: 'ГКБ № 67', act: 'Прошла школу целиком', obj: 'Школа', mine: true },
+      { fio: 'Петров Дмитрий Олегович', spec: 'Ревматология', city: 'Казань', work: 'РКБ Татарстана', act: 'Урок 4 из 6', obj: 'Школа', mine: false },
+      { fio: 'Сафонова Мария Викторовна', spec: 'Спортивная медицина', city: 'Санкт-Петербург', work: 'Клиника «Согаз»', act: 'Была на вебинаре 12.08', obj: 'Событие', mine: true },
+      { fio: 'Ким Алексей Романович', spec: 'Травматология-ортопедия', city: 'Новосибирск', work: 'НИИТО', act: 'Урок «PRP в практике»', obj: 'Урок', mine: false },
+      { fio: 'Гусева Ольга Павловна', spec: 'Неврология', city: 'Екатеринбург', work: 'ОКБ № 1', act: 'Задала 3 вопроса в эфире', obj: 'Событие', mine: false },
+      { fio: 'Мельник Игорь Станиславович', spec: 'Хирургия', city: 'Краснодар', work: 'ККБ № 2', act: 'Прошёл школу целиком', obj: 'Школа', mine: false },
+      { fio: 'Волкова Елена Андреевна', spec: 'Ревматология', city: 'Самара', work: 'СОКБ им. Середавина', act: 'Смотрит урок 2', obj: 'Урок', mine: true },
+      { fio: 'Тарасов Павел Ильич', spec: 'Травматология-ортопедия', city: 'Тюмень', work: 'ОКБ № 2', act: 'Был на вебинаре 12.08', obj: 'Событие', mine: false }
+    ];
+    let list = isRep ? doctors.filter(x => x.mine) : doctors.slice();
+    if (s.objFilter !== 'Все') list = list.filter(x => x.obj === s.objFilter);
+    if (s.sortKey) list.sort((a, b) => a[s.sortKey].localeCompare(b[s.sortKey], 'ru') * s.sortDir);
+    const showObj = aud !== 'Б';
+    const cols = showObj ? '1.4fr 1.1fr .8fr 1.2fr 1.3fr .7fr' : '1.4fr 1.1fr .8fr 1.3fr 1.4fr';
+    const rowBase = 'display:grid;grid-template-columns:' + cols + ';gap:14px;padding:14px 18px;border-top:1px solid ' + hairline + ';align-items:baseline';
+    const objChipStyle = 'font-size:10.5px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:' + tintFg + ';background:' + tint + ';padding:3px 8px;justify-self:start';
+    const audRows = list.map(x => ({
+      ...x,
+      rowStyle: rowBase,
+      objStyle: showObj ? objChipStyle : 'display:none',
+      metaLine: x.spec + ' · ' + x.city + ' · ' + x.work
+    }));
+    const sortBtn = (key) => () => this.setState(st => ({ sortKey: key, sortDir: st.sortKey === key ? -st.sortDir : 1 }));
+    const headBase = 'font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:' + inkFaint;
+    const arrow = (key) => s.sortKey === key ? (s.sortDir === 1 ? ' ↑' : ' ↓') : '';
+    const audHead = [
+      { label: 'ФИО' + arrow('fio'), onClick: sortBtn('fio'), style: headBase + ';cursor:pointer;color:' + (s.sortKey === 'fio' ? accent : inkFaint) },
+      { label: 'Специальность', onClick: null, style: headBase },
+      { label: 'Город' + arrow('city'), onClick: sortBtn('city'), style: headBase + ';cursor:pointer;color:' + (s.sortKey === 'city' ? accent : inkFaint) },
+      { label: 'Место работы', onClick: null, style: headBase },
+      { label: 'Что делал', onClick: null, style: headBase }
+    ];
+    if (showObj) audHead.push({ label: 'Объект', onClick: null, style: headBase });
+    const chipDefs = ['Все', 'Школа', 'Событие', 'Урок'];
+    const chip = (label, active, tab) => 'font:inherit;cursor:pointer;font-size:12.5px;font-weight:800;padding:' + (tab ? '11px 18px' : '7px 14px') + ';border:2px solid ' + (active ? btnBg : hairline) + ';color:' + (active ? btnFg : ink) + ';background:' + (active ? btnBg : 'transparent');
+    const objChips = chipDefs.map(c => ({ label: aud === 'Б' && c !== 'Все' ? c : c, onClick: () => this.setState({ objFilter: c }), style: chip(c, s.objFilter === c, aud === 'Б') }));
+
+    // медпреды · исследования · отчёты
+    const reps = [
+      { name: 'Николаев Сергей', promo: 'NIK-24', docs: '34 врача' },
+      { name: 'Абрамова Ксения', promo: 'ABR-11', docs: '28 врачей' },
+      { name: 'Ли Тимур', promo: 'LI-07', docs: '19 врачей' }
+    ];
+    const studies = [
+      { title: 'Исследование «Опыт применения PRP»', meta: '300 ответов · завершено' },
+      { title: 'Осведомлённость о методике', meta: 'идёт · 120 ответов' }
+    ];
+    const reports = [
+      { title: 'Закрывающие документы за июль — акт, счёт-фактура', date: '05.08' },
+      { title: 'Фотоотчёт: конгресс, стенд Партнёра А', date: '22.07' },
+      { title: 'Принтскрины эфира 12 августа', date: '13.08' }
+    ];
+
+    // заявка на исследование
+    const resErr = s.resAttempt && !s.resTopic.trim();
+    const fieldStyle = (err) => 'display:block;width:100%;box-sizing:border-box;margin-top:6px;font:inherit;font-size:13px;padding:10px 12px;border:2px solid ' + (err ? danger : hairline) + ';background:' + (err ? dangerTint : surface) + ';color:' + ink + ';resize:vertical';
+
+    // панель владельца
+    const panelBtn = (active) => 'font:inherit;font-size:10.5px;font-weight:800;padding:0 8px;height:26px;cursor:pointer;border:2px solid ' + (active ? btnBg : border) + ';color:' + (active ? btnFg : ink) + ';background:' + (active ? btnBg : 'transparent');
+    const B = (label, title, active, patch) => ({ label, title, onClick: () => this.setState(patch), style: panelBtn(active) });
+    const panelRows = [
+      { label: 'Роль', btns: [B('админ', 'Администратор организации — видит всё', isAdmin, { roleV: 'администратор' }), B('медпред', 'Медпред — только свои врачи, без финансовых блоков (REQ-114)', isRep, { roleV: 'медпред' })] },
+      { label: 'Данные', btns: [B('заполн.', 'Кабинет с данными', dataSt === 'заполнен', { dataV: 'заполнен' }), B('пуст', 'Договор подписан, проект не стартовал', stEmpty, { dataV: 'пуст' }), B('загр.', 'Скелет таблицы и графиков', stLoading, { dataV: 'загрузка' }), B('ошибка', 'Блок аналитики упал — остальные живут', anError, { dataV: 'ошибка' })] },
+      { label: 'План', btns: [B('график', 'Внимание в графике', plan === 'в графике', { planV: 'в графике' }), B('недобор', 'Отставание от плана — Q-37', plan === 'недобор', { planV: 'недобор' }), B('сверх', 'Перевыполнение — доплата к выставлению (REQ-90)', plan === 'перевыполнение', { planV: 'перевыполнение' })] },
+      { label: 'Аудитория', btns: [B('А', 'Единая таблица со столбцом «объект» и фильтром', aud === 'А', { audV: 'А' }), B('Б', 'Вкладки по объектам — пересечение не видно', aud === 'Б', { audV: 'Б' }), B('В', 'Таблица + сводка уникальных врачей сверху', aud === 'В', { audV: 'В' })] },
+      { label: 'Сигнал', btns: [B('А', 'Нейтральная плашка недобора: факт + что делает команда', sig === 'А', { sigV: 'А' }), B('Б', 'Сигнал только команде — инвестор видит цифры без плана', sig === 'Б', { sigV: 'Б' }), B('В', 'Шкала план/факт как постоянный элемент', sig === 'В', { sigV: 'В' })] },
+      { label: 'Реестр', btns: [B('А', 'Полный реестр обязательств: кому и сколько', led === 'А', { ledV: 'А' }), B('Б', 'Сводка «внесено → фонд → начислено» без персональных обязательств', led === 'Б', { ledV: 'Б' })] }
+    ];
+
+    return {
+      isMobile: m, isDesktop: !m,
+      pageBg, surface, ink, inkMuted, inkFaint, border, hairline, accent, btnBg, btnFg, shadow, shadowSm, tint, tintFg, sectionGray, danger, dangerTint, success, successTint,
+      headerShadow: d ? 'oklch(.16 .02 250)' : '#0D3A77',
+      themeIcon: d ? '☾' : '☀',
+      toggleTheme: () => { const nd = !d; try { localStorage.setItem('ds-theme', nd ? 'dark' : 'light'); } catch (e) {} this.setState({ dark: nd }); },
+      footLogoSrc: d ? 'assets/ds-logo-white.svg' : 'assets/ds-logo-color.svg',
+      roleLabel: isAdmin ? 'администратор организации' : 'медпред',
+      isAdmin, isRep, stEmpty, stLoading, stReady, anError, anOk: !anError,
+      // проекты и реестр
+      projects, ledFull: led === 'А', ledSummary: led === 'Б',
+      legA: dot(accent), legB: dot(tint), legC: dot(btnBg),
+      orgPoints, plaqueCols: m ? 'display:flex;flex-direction:column' : 'display:grid;grid-template-columns:repeat(3,1fr)',
+      // аналитика
+      metrics, metricsGrid: m ? 'display:grid;grid-template-columns:1fr 1fr;gap:14px' : 'display:grid;grid-template-columns:repeat(4,1fr);gap:20px',
+      chartBars, showPlanScale, showUnderrunPlate, showOverrun,
+      planPctLabel: planPct + '% плана', planFillStyle, planCaption,
+      retryAnalytics: () => this.setState({ dataV: 'заполнен' }),
+      repeatOrder: () => {},
+      repeatNote: 'Команда Академии подготовит предложение по следующему периоду на основе этой аналитики.',
+      // аудитория
+      audTitle: isRep ? 'Ваши врачи' : 'Аудитория ваших проектов',
+      audSub: isRep ? 'Врачи, пришедшие по вашей персональной ссылке и промокоду — атрибуция лично ваша.' : 'Врачи, прошедшие вашу школу и пришедшие на ваши события — целиком, с результатами. Границу выборки задаёт объект вашего участия: школа, событие или урок.',
+      audSummaryOn: aud === 'В' && isAdmin,
+      audFilterOn: (aud === 'А' || aud === 'Б' || aud === 'В') && true,
+      objChips, audHead,
+      audHeadStyle: 'display:grid;grid-template-columns:' + cols + ';gap:14px;padding:13px 18px;background:' + sectionGray,
+      audRows, rowHover: 'background:' + sectionGray,
+      startExport: () => this.setState({ exportPrep: true }),
+      exportPrep: s.exportPrep,
+      copyLink: () => this.setState({ copyDone: true }),
+      copyLabel: s.copyDone ? '✓ Скопировано' : 'Скопировать',
+      // блоки 5–7
+      threeGrid: m ? 'display:flex;flex-direction:column;gap:18px' : 'display:grid;grid-template-columns:repeat(3,1fr);gap:22px;align-items:stretch',
+      reps, studies, reports,
+      resClosed: s.res === 'closed', resFormOpen: s.res === 'open', resDone: s.res === 'sent',
+      openRes: () => this.setState({ res: 'open', resAttempt: false }),
+      closeRes: () => this.setState({ res: 'closed', resAttempt: false }),
+      resTopic: s.resTopic, resComment: s.resComment, resErr,
+      resTopicChange: (e) => this.setState({ resTopic: e.target.value }),
+      resCommentChange: (e) => this.setState({ resComment: e.target.value }),
+      resTopicStyle: fieldStyle(resErr), resCommentStyle: fieldStyle(false),
+      submitRes: () => { if (!s.resTopic.trim()) { this.setState({ resAttempt: true }); return; } this.setState({ res: 'sent' }); },
+      panelRows
+    };
+  }
+}
+</script>
+</body>
+</html>

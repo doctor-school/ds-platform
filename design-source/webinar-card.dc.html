@@ -22,7 +22,7 @@
   </div>
   <!-- Контент -->
   <div style="padding:{{ bodyPad }};min-width:0">
-    <div style="font-size:12px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ accent }};margin-bottom:12px">{{ school }}</div>
+    <a href="{{ schoolHref }}" style="display:inline-block;font-size:12px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ accent }};margin-bottom:12px;text-decoration:none" style-hover="text-decoration:underline;text-underline-offset:3px">{{ school }}</a>
     <a href="{{ href }}" style="display:block;font-size:{{ titleSize }};font-weight:700;line-height:1.3;letter-spacing:-.02em;color:{{ ink }};margin-bottom:18px;text-decoration:none" style-hover="color:{{ accent }}">{{ title }}</a>
     <sc-if value="{{ hasChips }}" hint-placeholder-val="{{ true }}">
       <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:22px">
@@ -73,7 +73,7 @@ class Component extends DCLogic {
     // Спикеры (жирные имена через переданный массив)
     const speakers = Array.isArray(p.speakers) ? p.speakers : (p.speakers ? [p.speakers] : []);
     const speakersEl = speakers.map((s, i) =>
-      R('span', { key: i }, R('b', { style: { color: ink } }, s.name), s.org ? ' — ' + s.org : '', i < speakers.length - 1 ? R('br') : null)
+      R('span', { key: i }, R('a', { href: s.href || 'Эксперт.dc.html', style: { color: ink, fontWeight: 700, textDecoration: 'underline', textDecorationColor: d ? 'rgba(255,255,255,.35)' : 'rgba(17,77,158,.35)', textUnderlineOffset: '3px' } }, s.name), s.org ? ' — ' + s.org : '', i < speakers.length - 1 ? R('br') : null)
     );
 
     // CTA
@@ -144,6 +144,7 @@ class Component extends DCLogic {
       bodyPad: m ? '16px 16px 18px' : '30px 32px',
       titleSize: m ? '20px' : '24px',
       school: p.school || '',
+      schoolHref: p.schoolHref || 'Проект.dc.html',
       title: p.title || '',
       href: p.href || '#',
       hasChips: Array.isArray(p.chips) && p.chips.length > 0,

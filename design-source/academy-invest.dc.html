@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"><style>body{margin:0;background:#fff;font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}a{color:#2D84F2}a:hover{color:#114D9E}:focus-visible{outline:3px solid #6BB1F7;outline-offset:2px}@keyframes livePulse{0%,100%{opacity:1}50%{opacity:.4}}</style></helmet>
+
+<div style="min-height:100vh;background:{{ pageBg }}">
+  <div style="background:#0D3A77;padding:5px clamp(16px,4vw,48px);text-align:center;font-size:9px;font-weight:700;letter-spacing:.22em;text-transform:uppercase;color:rgba(255,255,255,.34)">BBM: Академия смыслов</div>
+  <header data-screen-label="a-invest · Инвесторам" style="background:#114D9E;padding:14px clamp(16px,4vw,48px);display:flex;align-items:center;justify-content:space-between;gap:16px">
+    <a href="Главная.dc.html" style="display:flex;flex:none"><img src="assets/ds-logo-white.svg" alt="Doctor.School · Академия" style="height:26px;display:block"></a>
+    <sc-if value="{{ isMobile }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;align-items:center;gap:12px">
+        <button onClick="{{ toggleTheme }}" title="Тема" style="font:inherit;width:44px;height:44px;background:transparent;color:#fff;border:2px solid rgba(255,255,255,.5);cursor:pointer;font-size:16px">{{ themeIcon }}</button>
+        <details style="position:relative">
+          <summary style="list-style:none;width:44px;height:44px;display:inline-flex;align-items:center;justify-content:center;background:#fff;color:#114D9E;cursor:pointer;font-size:20px;font-weight:800;box-shadow:3px 3px 0 {{ headerShadow }}">≡</summary>
+          <nav style="position:absolute;top:calc(100% + 10px);right:0;background:{{ surface }};border:2px solid {{ border }};box-shadow:5px 5px 0 {{ shadow }};padding:8px;display:flex;flex-direction:column;min-width:220px;z-index:30">
+            <a href="Проекты.dc.html" style="padding:12px 16px;font-size:15px;font-weight:700;color:{{ ink }};text-decoration:none">Проекты</a>
+            <a href="Эксперты.dc.html" style="padding:12px 16px;font-size:15px;font-weight:700;color:{{ ink }};text-decoration:none">Эксперты</a>
+            <a href="Партнёры.dc.html" style="padding:12px 16px;font-size:15px;font-weight:700;color:{{ ink }};text-decoration:none">Партнёры</a>
+            <a href="Эфиры.dc.html" style="padding:12px 16px;font-size:15px;font-weight:700;color:{{ ink }};text-decoration:none">События</a>
+            <a href="{{ authHref }}" style="margin-top:6px;padding:12px 16px;font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};text-decoration:none;text-align:center">{{ authLabel }}</a>
+          </nav>
+        </details>
+      </div>
+    </sc-if>
+    <sc-if value="{{ isDesktop }}" hint-placeholder-val="{{ true }}">
+      <nav style="display:flex;align-items:center;gap:26px;font-size:14px;font-weight:700">
+        <a href="Проекты.dc.html" style="color:#D3E8FD;text-decoration:none" style-hover="color:#fff">Проекты</a>
+        <a href="Эксперты.dc.html" style="color:#D3E8FD;text-decoration:none" style-hover="color:#fff">Эксперты</a>
+        <a href="Партнёры.dc.html" style="color:#D3E8FD;text-decoration:none" style-hover="color:#fff">Партнёры</a>
+        <a href="Эфиры.dc.html" style="color:#D3E8FD;text-decoration:none" style-hover="color:#fff">События</a>
+        <button onClick="{{ toggleTheme }}" title="Тема" style="font:inherit;width:44px;height:44px;background:transparent;color:#fff;border:2px solid rgba(255,255,255,.5);cursor:pointer;font-size:15px" style-hover="border-color:#fff">{{ themeIcon }}</button>
+        <a href="{{ authHref }}" style="font-size:13.5px;font-weight:700;color:#114D9E;background:#fff;padding:12px 22px;text-decoration:none;box-shadow:3px 3px 0 {{ headerShadow }};white-space:nowrap" style-hover="transform:translate(1px,1px);box-shadow:2px 2px 0 {{ headerShadow }}">{{ authLabel }}</a>
+      </nav>
+    </sc-if>
+  </header>
+
+  <!-- Постер-шапка -->
+  <div style="background:#114D9E;padding:clamp(32px,5vw,52px) clamp(16px,4vw,48px) clamp(44px,7vw,72px)">
+    <div style="max-width:1104px;margin:0 auto">
+      <nav style="font-size:13px;font-weight:700;margin-bottom:clamp(20px,3vw,30px)">
+        <a href="Главная.dc.html" style="color:#AED4FB;text-decoration:underline;text-underline-offset:4px">Академия</a>
+        <span style="color:rgba(211,232,253,.5);margin:0 8px">/</span>
+        <span style="color:#D3E8FD">Инвесторам</span>
+      </nav>
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap">
+        <div style="font-size:12px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:#D3E8FD">Путь инвестора · шаг «понял модель»</div>
+        <span style="display:inline-block;background:#fff;color:#114D9E;font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;padding:9px 14px;box-shadow:3px 3px 0 {{ headerShadow }};transform:rotate(2deg)">маркетплейс проектов</span>
+      </div>
+      <h1 style="margin:10px 0 0;font-size:clamp(32px,5.5vw,56px);line-height:1.02;font-weight:800;letter-spacing:-.035em;color:#fff">Инвесторам</h1>
+      <p style="margin:18px 0 0;max-width:680px;font-size:clamp(14.5px,2vw,16.5px);line-height:1.65;font-weight:500;color:#D3E8FD">Как устроено участие: вы входите в проект — эксперты производят обучение — врачи учатся.</p>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:28px">
+        <sc-for list="{{ pathSteps }}" as="ps" hint-placeholder-count="5">
+          <span style="{{ ps.style }}">{{ ps.label }}</span>
+          <span style="{{ ps.arrowStyle }}">→</span>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+
+  <main style="padding:0 clamp(16px,4vw,48px)">
+    <div style="max-width:1104px;margin:0 auto">
+
+      <!-- ============ КАК ЭТО РАБОТАЕТ (REQ-96) ============ -->
+      <section data-screen-label="a-invest · как это работает" style="margin-top:clamp(40px,6vw,64px)">
+        <div style="display:flex;align-items:baseline;gap:16px;margin-bottom:18px">
+          <span style="font-size:12px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:{{ ink }};white-space:nowrap">Как это работает</span>
+          <span style="flex:1;border-top:2px solid {{ ink }}"></span>
+        </div>
+        <div style="{{ stepsGrid }}">
+          <sc-for list="{{ howSteps }}" as="hs" hint-placeholder-count="3">
+            <div style="border:2px solid {{ border }};background:{{ surface }};box-shadow:6px 6px 0 {{ shadow }};padding:22px 22px 24px;display:flex;flex-direction:column;gap:10px">
+              <span style="font-size:26px;font-weight:800;letter-spacing:-.03em;color:{{ accent }};font-variant-numeric:tabular-nums">{{ hs.n }}</span>
+              <span style="font-size:16.5px;font-weight:800;letter-spacing:-.015em;line-height:1.3;color:{{ ink }}">{{ hs.title }}</span>
+              <span style="font-size:13.5px;line-height:1.6;color:{{ inkMuted }}">{{ hs.desc }}</span>
+            </div>
+          </sc-for>
+        </div>
+        <div style="margin-top:22px;border-top:1px solid {{ hairline }};border-bottom:1px solid {{ hairline }};padding:14px 4px;font-size:13.5px;font-weight:700;color:{{ inkMuted }}">Условия участия — в коммерческом предложении.</div>
+      </section>
+
+      <!-- ============ МАРКЕТПЛЕЙС (REQ-133) ============ -->
+      <section data-screen-label="a-invest · маркетплейс" style="margin-top:clamp(48px,7vw,72px)">
+        <div style="display:flex;align-items:baseline;gap:16px;margin-bottom:14px">
+          <span style="font-size:12px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:{{ ink }};white-space:nowrap">Во что можно зайти сейчас</span>
+          <span style="flex:1;border-top:2px solid {{ ink }}"></span>
+          <a href="Проекты.dc.html" style="font-size:12.5px;font-weight:700;color:{{ accent }};text-decoration:underline;text-underline-offset:4px;white-space:nowrap">Все проекты</a>
+        </div>
+        <div style="font-size:13px;font-weight:600;line-height:1.6;color:{{ inkMuted }};margin-bottom:22px;max-width:640px">Открытые позиции: школы, курсы, заявки экспертов. Наполнение показано состоянием карточки; кнопка формирует запрос коммерческого предложения.</div>
+
+        <sc-if value="{{ showTabs }}" hint-placeholder-val="{{ false }}">
+          <div data-screen-label="a-invest · каталог · вариант Б — вкладки" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:22px">
+            <sc-for list="{{ tabs }}" as="tb" hint-placeholder-count="3">
+              <button onClick="{{ tb.onClick }}" style="{{ tb.style }}">{{ tb.label }}</button>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ mpLoading }}" hint-placeholder-val="{{ false }}">
+          <div data-screen-label="a-invest · маркетплейс · загрузка" style="{{ cardsGrid }}">
+            <sc-for list="{{ skel3 }}" as="k" hint-placeholder-count="3"><div style="height:420px;background:{{ hairline }};animation:livePulse 1.4s ease-in-out infinite"></div></sc-for>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ mpError }}" hint-placeholder-val="{{ false }}">
+          <div data-screen-label="a-invest · маркетплейс · ошибка" style="border:2px solid {{ danger }};background:{{ dangerTint }};padding:clamp(24px,4vw,36px);display:flex;flex-direction:column;gap:10px;align-items:flex-start">
+            <div style="font-size:17px;font-weight:800;letter-spacing:-.015em;color:{{ ink }}">Маркетплейс не загрузился</div>
+            <div style="font-size:13.5px;line-height:1.6;color:{{ inkMuted }}">Не удалось получить список открытых позиций — сервер не ответил. Описание модели выше остаётся доступным.</div>
+            <button onClick="{{ retryMp }}" style="font:inherit;font-size:13.5px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:2px solid {{ btnBg }};padding:12px 22px;cursor:pointer;box-shadow:3px 3px 0 {{ border }}" style-hover="transform:translate(1px,1px);box-shadow:2px 2px 0 {{ border }}">Повторить</button>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ mpEmpty }}" hint-placeholder-val="{{ false }}">
+          <div data-screen-label="a-invest · маркетплейс пуст" style="border:2px dashed {{ dashedBorder }};padding:clamp(32px,6vw,52px);text-align:center">
+            <div style="font-size:19px;font-weight:800;letter-spacing:-.02em;color:{{ ink }}">Сейчас открытых позиций нет</div>
+            <p style="margin:10px auto 0;max-width:460px;font-size:14px;line-height:1.6;color:{{ inkMuted }}">Расскажите о своей задаче — подберём проект под неё.</p>
+            <div style="margin-top:20px">
+              <sc-if value="{{ reqIsModal }}" hint-placeholder-val="{{ false }}"><button onClick="{{ openModalPlain }}" style="font:inherit;font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:2px solid {{ btnBg }};padding:14px 24px;cursor:pointer;box-shadow:4px 4px 0 {{ border }}" style-hover="transform:translate(2px,2px);box-shadow:2px 2px 0 {{ border }}">Обсудить проект — оставить заявку</button></sc-if>
+              <sc-if value="{{ reqNotModal }}" hint-placeholder-val="{{ true }}"><a href="#a-invest-next" style="display:inline-block;font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:2px solid {{ btnBg }};padding:14px 24px;text-decoration:none;box-shadow:4px 4px 0 {{ border }}" style-hover="transform:translate(2px,2px);box-shadow:2px 2px 0 {{ border }}">Обсудить проект — оставить заявку</a></sc-if>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ mpFull }}" hint-placeholder-val="{{ true }}">
+          <div style="{{ cardsGrid }}">
+            <sc-for list="{{ cards }}" as="pd" hint-placeholder-count="4">
+              <div style="position:relative;height:100%;box-sizing:border-box">
+                <sc-if value="{{ pd.closed }}" hint-placeholder-val="{{ false }}">
+                  <span style="position:absolute;top:-13px;right:14px;z-index:1;display:inline-block;background:{{ btnBg }};color:{{ btnFg }};font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;padding:6px 11px;transform:rotate(2deg);box-shadow:3px 3px 0 {{ border }}">проинвестировано</span>
+                </sc-if>
+                <div tabindex="0" style="{{ pd.cardStyle }}" style-hover="{{ pd.cardHover }}">
+                  <div style="aspect-ratio:16/9;background:{{ pd.tileBg }};display:flex;align-items:center;justify-content:center;border-bottom:2px solid {{ pd.tileBorder }};position:relative;overflow:hidden;flex:none">
+                    <span style="font-size:52px;font-weight:800;letter-spacing:-.03em;color:{{ pd.tileInk }}">{{ pd.emblem }}</span>
+                    <span style="position:absolute;bottom:8px;right:10px;font-size:9.5px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ photoNote }}">обложка</span>
+                  </div>
+                  <div style="padding:18px 20px 20px;display:flex;flex-direction:column;gap:9px;flex:1;min-width:0">
+                    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+                      <span style="font-size:10.5px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ pd.kickerColor }}">{{ pd.kind }}</span>
+                      <sc-if value="{{ pd.few }}" hint-placeholder-val="{{ false }}"><span style="font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:{{ tintFg }};background:{{ tint }};padding:4px 9px;white-space:nowrap">мест почти нет</span></sc-if>
+                    </div>
+                    <div lang="ru" style="font-size:19px;font-weight:800;letter-spacing:-.02em;color:{{ pd.titleColor }};line-height:1.25;overflow-wrap:break-word;hyphens:auto;text-wrap:balance">{{ pd.title }}</div>
+                    <div style="display:flex;flex-direction:column;gap:4px;font-size:13px;line-height:1.5;color:{{ inkMuted }};font-variant-numeric:tabular-nums">
+                      <span>{{ pd.aud }}</span>
+                      <span>{{ pd.cap }}</span>
+                    </div>
+                    <div style="margin-top:6px">
+                      <span style="display:block;height:5px;background:{{ hairline }}"><span style="{{ pd.barFill }}"></span></span>
+                      <span style="display:block;margin-top:8px;font-size:12px;font-weight:700;line-height:1.5;color:{{ pd.fillColor }}">{{ pd.fillText }}</span>
+                    </div>
+                    <div style="margin-top:auto;padding-top:14px">
+                      <sc-if value="{{ pd.showBtn }}" hint-placeholder-val="{{ true }}">
+                        <button onClick="{{ pd.onCta }}" style="font:inherit;width:100%;box-sizing:border-box;font-size:13.5px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:2px solid {{ btnBg }};padding:13px 16px;cursor:pointer;box-shadow:3px 3px 0 {{ border }}" style-hover="transform:translate(1px,1px);box-shadow:2px 2px 0 {{ border }}">{{ pd.cta }}</button>
+                      </sc-if>
+                      <sc-if value="{{ pd.showSent }}" hint-placeholder-val="{{ false }}">
+                        <div style="border:2px solid {{ success }};background:{{ successTint }};padding:12px 14px;font-size:12.5px;font-weight:700;line-height:1.5;color:{{ ink }}">Запрос отправлен. Коммерческое предложение придёт на указанную почту.</div>
+                      </sc-if>
+                      <sc-if value="{{ pd.showNote }}" hint-placeholder-val="{{ false }}">
+                        <div style="border-top:1px solid {{ hairline }};padding-top:10px;font-size:12.5px;font-weight:700;line-height:1.5;color:{{ accent }}">{{ pd.noteText }}</div>
+                      </sc-if>
+                      <sc-if value="{{ pd.showKp }}" hint-placeholder-val="{{ false }}">
+                        <div data-screen-label="a-invest · кнопка · вариант Б — КП на экране" style="border:2px solid {{ border }};background:{{ sectionGray }};padding:14px 16px;display:flex;flex-direction:column;gap:8px">
+                          <span style="font-size:12.5px;font-weight:800;color:{{ ink }}">{{ pd.kpLine }}</span>
+                          <span style="font-size:12px;line-height:1.5;color:{{ inkMuted }}">Условия участия — в коммерческом предложении.</span>
+                          <button style="font:inherit;font-size:12.5px;font-weight:800;color:{{ ink }};background:transparent;border:2px solid {{ border }};padding:10px 14px;cursor:pointer;align-self:flex-start">Скачать КП</button>
+                        </div>
+                      </sc-if>
+                      <sc-if value="{{ pd.closed }}" hint-placeholder-val="{{ false }}">
+                        <div style="border-top:1px solid {{ hairline }};padding-top:12px;font-size:12.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:{{ inkFaint }}">Закрыто — проинвестировано</div>
+                      </sc-if>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+      </section>
+
+      <!-- ============ ЧТО ПОЛУЧАЕТ ИНВЕСТОР (REQ-10, REQ-90) ============ -->
+      <section data-screen-label="a-invest · что получает инвестор" style="margin-top:clamp(48px,7vw,72px)">
+        <div style="display:flex;align-items:baseline;gap:16px;margin-bottom:18px">
+          <span style="font-size:12px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:{{ ink }};white-space:nowrap">Что получает инвестор</span>
+          <span style="flex:1;border-top:2px solid {{ ink }}"></span>
+        </div>
+        <div style="{{ gainsGrid }}">
+          <sc-for list="{{ gains }}" as="g" hint-placeholder-count="4">
+            <div style="border-top:2px solid {{ ink }};padding:16px 4px 4px;display:flex;flex-direction:column;gap:8px">
+              <span style="font-size:15.5px;font-weight:800;letter-spacing:-.015em;color:{{ ink }};line-height:1.3">{{ g.title }}</span>
+              <span style="font-size:13px;line-height:1.6;color:{{ inkMuted }}">{{ g.desc }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </section>
+
+      <!-- ============ ОРГАНИЗАЦИЯ, НЕ ПЕРСОНА (REQ-88) ============ -->
+      <section data-screen-label="a-invest · организация" style="margin-top:clamp(48px,7vw,72px)">
+        <div style="display:flex;align-items:baseline;gap:16px;margin-bottom:18px">
+          <span style="font-size:12px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:{{ ink }};white-space:nowrap">Организация, не персона</span>
+          <span style="flex:1;border-top:2px solid {{ ink }}"></span>
+        </div>
+        <div style="{{ orgBox }}">
+          <div style="min-width:260px;flex:1">
+            <div style="font-size:17px;font-weight:800;letter-spacing:-.015em;color:{{ ink }};line-height:1.4">Аккаунт инвестора — организация</div>
+            <p style="margin:8px 0 0;max-width:560px;font-size:14px;line-height:1.65;color:{{ inkMuted }}">Свой администратор, несколько пользователей, в том числе медпреды — у каждого своя персональная ссылка и своя атрибуция приведённых врачей.</p>
+          </div>
+          <div style="flex:none;display:flex;flex-direction:column;gap:10px;align-items:flex-start">
+            <a href="#" title="#a-cabinet — рисуется отдельным экраном" style="font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:2px solid {{ btnBg }};padding:14px 24px;text-decoration:none;box-shadow:4px 4px 0 {{ border }};white-space:nowrap" style-hover="transform:translate(2px,2px);box-shadow:2px 2px 0 {{ border }}">{{ cabinetLabel }}</a>
+            <sc-if value="{{ isLogged }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;font-weight:700;color:{{ inkFaint }}">Вы вошли как сотрудник организации-инвестора</span></sc-if>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ КАК ОФОРМЛЯЮТСЯ ОТНОШЕНИЯ (CON-16) ============ -->
+      <section data-screen-label="a-invest · как оформляются отношения" style="margin-top:clamp(48px,7vw,72px)">
+        <div style="display:flex;align-items:baseline;gap:16px;margin-bottom:18px">
+          <span style="font-size:12px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:{{ ink }};white-space:nowrap">Как оформляются отношения</span>
+          <span style="flex:1;border-top:2px solid {{ ink }}"></span>
+        </div>
+        <div style="{{ dealGrid }}">
+          <p style="margin:0;max-width:560px;font-size:15px;line-height:1.7;color:{{ inkMuted }}">Участие оформляется договором вне платформы. Платформа ведёт прозрачный учёт по проекту, а партнёрство — годовой эксклюзивный контракт на проект.</p>
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            <sc-for list="{{ ledgerSteps }}" as="lg" hint-placeholder-count="3">
+              <span style="display:inline-block;font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:{{ tintFg }};background:{{ tint }};padding:8px 13px">{{ lg }}</span>
+              <span style="{{ lg2ArrowHidden }}"></span>
+            </sc-for>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ СЛЕДУЮЩИЙ ШАГ (правка R2 №2) ============ -->
+      <section id="a-invest-next" data-screen-label="a-invest · следующий шаг" style="margin-top:clamp(48px,7vw,72px)">
+        <div style="display:flex;align-items:baseline;gap:16px;margin-bottom:18px">
+          <span style="font-size:12px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:{{ ink }};white-space:nowrap">Следующий шаг</span>
+          <span style="flex:1;border-top:2px solid {{ ink }}"></span>
+        </div>
+
+        <sc-if value="{{ reqIsForm }}" hint-placeholder-val="{{ true }}">
+          <div data-screen-label="a-invest · заявка · вариант А — форма на экране" style="{{ formBox }}">
+            <div style="min-width:240px;flex:1">
+              <div style="font-size:22px;font-weight:800;letter-spacing:-.02em;color:{{ ink }}">Обсудить проект — оставить заявку</div>
+              <p style="margin:10px 0 0;max-width:420px;font-size:14px;line-height:1.65;color:{{ inkMuted }}">Команда Академии ответит и соберёт коммерческое предложение.</p>
+              <div style="margin-top:18px;font-size:13px;font-weight:700;color:{{ inkFaint }}">Кто уже инвестирует — <a href="Партнёры.dc.html" style="color:{{ accent }}">Партнёры</a> · во что — <a href="Проекты.dc.html" style="color:{{ accent }}">Проекты</a> · <a href="#" title="#a-docs — рисуется отдельным экраном" style="color:{{ accent }}">Документы и лицензия</a></div>
+            </div>
+            <div style="flex:1.4;min-width:280px">
+              <sc-if value="{{ formNotSent }}" hint-placeholder-val="{{ true }}">
+                <div style="display:flex;flex-direction:column;gap:16px">
+                  <sc-if value="{{ hasPrefill }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                      <span style="font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:{{ inkFaint }}">продукт</span>
+                      <span style="font-size:12px;font-weight:800;color:{{ tintFg }};background:{{ tint }};padding:6px 11px">{{ prefillTitle }}</span>
+                      <button onClick="{{ clearPrefill }}" style="font:inherit;font-size:12px;font-weight:700;color:{{ inkFaint }};background:transparent;border:0;cursor:pointer;text-decoration:underline;text-underline-offset:3px">убрать</button>
+                    </div>
+                  </sc-if>
+                  <div style="{{ fieldsGrid }}">
+                    <sc-for list="{{ formFields }}" as="ff" hint-placeholder-count="5">
+                      <div>
+                        <label style="{{ labelStyle }}">{{ ff.label }}</label>
+                        <input type="text" value="{{ ff.value }}" onChange="{{ ff.onChange }}" onBlur="{{ ff.onBlur }}" placeholder="{{ ff.placeholder }}" style="{{ ff.inputStyle }}">
+                        <div style="{{ ff.errStyle }}">⚠ {{ ff.error }}</div>
+                      </div>
+                    </sc-for>
+                  </div>
+                  <div>
+                    <label style="{{ labelStyle }}">Задача</label>
+                    <textarea value="{{ taskValue }}" onChange="{{ taskChange }}" placeholder="Например: продвигаем линейку для регенеративной медицины, ищем проект под аудиторию травматологов" rows="3" style="{{ taskStyle }}"></textarea>
+                  </div>
+                  <button onClick="{{ submitForm }}" style="font:inherit;font-size:15px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:2px solid {{ btnBg }};padding:15px 24px;cursor:pointer;box-shadow:4px 4px 0 {{ border }};align-self:flex-start" style-hover="transform:translate(2px,2px);box-shadow:2px 2px 0 {{ border }}">Отправить заявку</button>
+                </div>
+              </sc-if>
+              <sc-if value="{{ formSent }}" hint-placeholder-val="{{ false }}">
+                <div data-screen-label="a-invest · заявка отправлена" style="border:2px solid {{ success }};background:{{ successTint }};padding:24px 26px;display:flex;flex-direction:column;gap:8px">
+                  <span style="font-size:17px;font-weight:800;letter-spacing:-.015em;color:{{ ink }}">Запрос отправлен</span>
+                  <span style="font-size:13.5px;line-height:1.6;color:{{ inkMuted }}">Коммерческое предложение придёт на указанную почту.</span>
+                  <button onClick="{{ resetForm }}" style="font:inherit;margin-top:6px;font-size:12.5px;font-weight:700;color:{{ accent }};background:transparent;border:0;cursor:pointer;text-decoration:underline;text-underline-offset:3px;align-self:flex-start">Отправить ещё одну заявку</button>
+                </div>
+              </sc-if>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ reqIsContacts }}" hint-placeholder-val="{{ false }}">
+          <div data-screen-label="a-invest · заявка · вариант Б — контакт команды" style="{{ formBox }}">
+            <div style="min-width:240px;flex:1">
+              <div style="font-size:22px;font-weight:800;letter-spacing:-.02em;color:{{ ink }}">Обсудить проект</div>
+              <p style="margin:10px 0 0;max-width:420px;font-size:14px;line-height:1.65;color:{{ inkMuted }}">Команда Академии ответит и соберёт коммерческое предложение.</p>
+            </div>
+            <div style="flex:1;min-width:260px;display:flex;flex-direction:column;gap:12px">
+              <a href="mailto:partners@doctor.school" style="font-size:16px;font-weight:800;color:{{ accent }};text-decoration:underline;text-underline-offset:4px">partners@doctor.school</a>
+              <span style="font-size:15px;font-weight:700;color:{{ ink }};font-variant-numeric:tabular-nums">+7 495 120-40-80</span>
+              <span style="font-size:13px;font-weight:600;color:{{ inkFaint }}">Мессенджер — по номеру телефона · будни 10:00–19:00 мск</span>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ reqIsModal }}" hint-placeholder-val="{{ false }}">
+          <div data-screen-label="a-invest · заявка · вариант В — модальное окно" style="{{ formBox }}">
+            <div style="min-width:240px;flex:1">
+              <div style="font-size:22px;font-weight:800;letter-spacing:-.02em;color:{{ ink }}">Обсудить проект — оставить заявку</div>
+              <p style="margin:10px 0 0;max-width:480px;font-size:14px;line-height:1.65;color:{{ inkMuted }}">Одна форма для обеих кнопок: «Хочу инвестировать в…» подставляет продукт автоматически. Команда Академии ответит и соберёт коммерческое предложение.</p>
+            </div>
+            <button onClick="{{ openModalPlain }}" style="font:inherit;font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:2px solid {{ btnBg }};padding:15px 26px;cursor:pointer;box-shadow:4px 4px 0 {{ border }};white-space:nowrap" style-hover="transform:translate(2px,2px);box-shadow:2px 2px 0 {{ border }}">Оставить заявку</button>
+          </div>
+        </sc-if>
+      </section>
+
+    </div>
+  </main>
+
+  <footer style="margin-top:clamp(56px,8vw,96px)">
+    <div style="border-top:2px solid {{ ink }};padding:32px clamp(16px,4vw,48px);display:flex;align-items:center;justify-content:space-between;max-width:1104px;margin:0 auto;box-sizing:content-box;gap:16px;flex-wrap:wrap">
+      {{ footLogoEl }}
+      <nav style="display:flex;gap:20px;font-size:12.5px;font-weight:700;flex-wrap:wrap">
+        <a href="Партнёры.dc.html" style="color:{{ inkFaint }};text-decoration:none">Партнёры</a>
+        <a href="Проекты.dc.html" style="color:{{ inkFaint }};text-decoration:none">Проекты</a>
+        <a href="Эксперты.dc.html" style="color:{{ inkFaint }};text-decoration:none">Эксперты</a>
+        <a href="Эфиры.dc.html" style="color:{{ inkFaint }};text-decoration:none">События</a>
+        <a href="Академия - Документы.dc.html" style="color:{{ inkFaint }};text-decoration:none">Документы и контакты</a>
+      </nav>
+      <a href="Витрина врача - Главная.dc.html" style="font-size:12.5px;font-weight:800;color:{{ accent }};text-decoration:underline;text-underline-offset:4px;white-space:nowrap">doctor.school — врачам</a>
+    </div>
+    <div style="max-width:1104px;margin:0 auto;padding:0 clamp(16px,4vw,48px);text-align:center;font-size:10px;font-weight:800;letter-spacing:.18em;text-transform:uppercase;color:{{ inkFaint }}">BBM: Академия смыслов</div>
+    <div aria-hidden="true" style="overflow:hidden;padding-top:clamp(12px,2.4vw,28px)">
+      <div style="font-size:clamp(30px,8.2vw,154px);font-weight:800;letter-spacing:-.05em;line-height:.78;white-space:nowrap;text-align:center;color:{{ giantInk }};transform:translateY(.16em);user-select:none">Academy.Doctor.School</div>
+    </div>
+  </footer>
+
+  <!-- Модальное окно заявки (вариант В) -->
+  <sc-if value="{{ modalOpen }}" hint-placeholder-val="{{ false }}">
+    <div data-screen-label="a-invest · заявка · модальное окно" style="position:fixed;inset:0;z-index:60;background:rgba(9,30,58,.6);display:flex;align-items:flex-start;justify-content:center;overflow:auto;padding:clamp(16px,5vh,64px) 16px">
+      <div style="background:{{ surface }};border:2px solid {{ border }};box-shadow:6px 6px 0 {{ shadow }};max-width:640px;width:100%;padding:clamp(22px,4vw,34px);box-sizing:border-box">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:18px">
+          <div style="font-size:20px;font-weight:800;letter-spacing:-.02em;color:{{ ink }}">Заявка инвестора</div>
+          <button onClick="{{ closeModal }}" title="Закрыть" style="font:inherit;flex:none;width:40px;height:40px;background:transparent;color:{{ ink }};border:2px solid {{ border }};cursor:pointer;font-size:16px;font-weight:800">✕</button>
+        </div>
+        <sc-if value="{{ formNotSent }}" hint-placeholder-val="{{ true }}">
+          <div style="display:flex;flex-direction:column;gap:16px">
+            <sc-if value="{{ hasPrefill }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                <span style="font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:{{ inkFaint }}">продукт</span>
+                <span style="font-size:12px;font-weight:800;color:{{ tintFg }};background:{{ tint }};padding:6px 11px">{{ prefillTitle }}</span>
+                <button onClick="{{ clearPrefill }}" style="font:inherit;font-size:12px;font-weight:700;color:{{ inkFaint }};background:transparent;border:0;cursor:pointer;text-decoration:underline;text-underline-offset:3px">убрать</button>
+              </div>
+            </sc-if>
+            <div style="{{ fieldsGrid }}">
+              <sc-for list="{{ formFields }}" as="ff" hint-placeholder-count="5">
+                <div>
+                  <label style="{{ labelStyle }}">{{ ff.label }}</label>
+                  <input type="text" value="{{ ff.value }}" onChange="{{ ff.onChange }}" onBlur="{{ ff.onBlur }}" placeholder="{{ ff.placeholder }}" style="{{ ff.inputStyle }}">
+                  <div style="{{ ff.errStyle }}">⚠ {{ ff.error }}</div>
+                </div>
+              </sc-for>
+            </div>
+            <div>
+              <label style="{{ labelStyle }}">Задача</label>
+              <textarea value="{{ taskValue }}" onChange="{{ taskChange }}" placeholder="Например: ищем проект под аудиторию травматологов" rows="3" style="{{ taskStyle }}"></textarea>
+            </div>
+            <button onClick="{{ submitForm }}" style="font:inherit;font-size:15px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:2px solid {{ btnBg }};padding:15px 24px;cursor:pointer;box-shadow:4px 4px 0 {{ border }}" style-hover="transform:translate(2px,2px);box-shadow:2px 2px 0 {{ border }}">Отправить заявку</button>
+          </div>
+        </sc-if>
+        <sc-if value="{{ formSent }}" hint-placeholder-val="{{ false }}">
+          <div data-screen-label="a-invest · заявка отправлена · модальное окно" style="border:2px solid {{ success }};background:{{ successTint }};padding:24px 26px;display:flex;flex-direction:column;gap:8px">
+            <span style="font-size:17px;font-weight:800;letter-spacing:-.015em;color:{{ ink }}">Запрос отправлен</span>
+            <span style="font-size:13.5px;line-height:1.6;color:{{ inkMuted }}">Коммерческое предложение придёт на указанную почту.</span>
+            <button onClick="{{ closeModal }}" style="font:inherit;margin-top:6px;font-size:12.5px;font-weight:700;color:{{ accent }};background:transparent;border:0;cursor:pointer;text-decoration:underline;text-underline-offset:3px;align-self:flex-start">Закрыть</button>
+          </div>
+        </sc-if>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- Панель развилок и состояний (для владельца) -->
+  <div style="position:fixed;bottom:16px;left:16px;z-index:70;background:{{ surface }};border:2px solid {{ border }};box-shadow:4px 4px 0 {{ shadow }};padding:10px 12px 12px;display:flex;flex-direction:column;gap:8px">
+    <sc-for list="{{ panelRows }}" as="row" hint-placeholder-count="5">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="width:80px;font-size:9.5px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:{{ inkFaint }}">{{ row.label }}</span>
+        <span style="display:flex;gap:5px;flex-wrap:wrap">
+          <sc-for list="{{ row.btns }}" as="pb" hint-placeholder-count="3">
+            <button onClick="{{ pb.onClick }}" title="{{ pb.title }}" style="{{ pb.style }}">{{ pb.label }}</button>
+          </sc-for>
+        </span>
+      </div>
+    </sc-for>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;dataState&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;заполнен&quot;,&quot;загрузка&quot;,&quot;пуст&quot;,&quot;ошибка&quot;],&quot;default&quot;:&quot;заполнен&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Состояние&quot;},&quot;authState&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;гость&quot;,&quot;вошёл&quot;],&quot;default&quot;:&quot;гость&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Состояние&quot;},&quot;requestChannel&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;А — форма на экране&quot;,&quot;Б — контакт команды&quot;,&quot;В — модальное окно&quot;],&quot;default&quot;:&quot;А — форма на экране&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Развилки&quot;},&quot;investButton&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;А — заявка команде&quot;,&quot;Б — КП на экране&quot;],&quot;default&quot;:&quot;А — заявка команде&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Развилки&quot;},&quot;expertCatalog&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;А — вперемешку&quot;,&quot;Б — отдельная вкладка&quot;],&quot;default&quot;:&quot;А — вперемешку&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Развилки&quot;}}">
+class Component extends DCLogic {
+  state = {
+    dark: (() => { try { return localStorage.getItem('ds-theme') === 'dark'; } catch (e) { return false; } })(),
+    isMobile: false,
+    form: { org: '', fio: '', role: '', email: '', phone: '', task: '' },
+    touched: {}, submitAttempt: false, sent: false,
+    prefill: null, sentProducts: {}, kpOpen: {}, notes: {},
+    modalOpen: false
+  };
+  componentDidMount() {
+    this.mq = window.matchMedia('(max-width: 900px)');
+    this.upd = () => this.setState({ isMobile: this.mq.matches });
+    this.upd();
+    this.mq.addEventListener ? this.mq.addEventListener('change', this.upd) : this.mq.addListener(this.upd);
+  }
+  renderVals() {
+    const s = this.state, p = this.props, d = s.dark, m = s.isMobile;
+    const pageBg = d ? 'oklch(.16 .02 250)' : '#fff';
+    const surface = d ? 'oklch(.21 .02 250)' : '#fff';
+    const ink = d ? '#fff' : 'oklch(.21 .02 250)';
+    const inkMuted = d ? 'rgba(255,255,255,.62)' : 'oklch(.45 .014 250)';
+    const inkFaint = d ? 'rgba(255,255,255,.5)' : 'oklch(.556 .012 250)';
+    const border = d ? '#fff' : 'oklch(.21 .02 250)';
+    const hairline = d ? 'rgba(255,255,255,.16)' : 'oklch(.922 .006 250)';
+    const accent = d ? '#6BB1F7' : '#2D84F2';
+    const btnBg = d ? '#6BB1F7' : '#114D9E';
+    const btnFg = d ? '#0D3A77' : '#fff';
+    const shadow = d ? '#6BB1F7' : '#114D9E';
+    const shadowSm = d ? '#1F69C8' : '#AED4FB';
+    const tint = d ? '#0D3A77' : '#D3E8FD';
+    const tintFg = d ? '#AED4FB' : '#114D9E';
+    const tintInk = d ? '#6BB1F7' : '#114D9E';
+    const sectionGray = d ? 'oklch(.185 .02 250)' : 'oklch(.972 .004 250)';
+    const danger = '#C81E1E';
+    const dangerTint = d ? '#3a1414' : '#fdecec';
+    const success = d ? '#4ADE80' : '#009959';
+    const successTint = d ? '#0e2a1c' : '#e6f6ee';
+
+    // ── состояния и развилки (панель > пропсы) ──
+    const ds = s.dataV || p.dataState || 'заполнен';
+    const logged = s.authV != null ? s.authV === 'in' : (p.authState || 'гость') === 'вошёл';
+    const req = (s.reqV || p.requestChannel || 'А')[0]; // А форма · Б контакт · В модал
+    const btn = (s.btnV || p.investButton || 'А')[0]; // А заявка · Б КП на экране
+    const cat = (s.catV || p.expertCatalog || 'А')[0]; // А вперемешку · Б вкладки
+    const tab = s.tab || 'all';
+
+    const mpLoading = ds === 'загрузка';
+    const mpEmpty = ds === 'пуст';
+    const mpError = ds === 'ошибка';
+    const mpFull = ds === 'заполнен';
+
+    // ── путь инвестора ──
+    const stepBase = 'display:inline-block;font-size:10.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;padding:6px 11px;';
+    const arrow = 'font-size:12px;font-weight:800;color:rgba(211,232,253,.6)';
+    const mkStep = (label, here, last) => ({
+      label: here ? label + ' · вы здесь' : label,
+      style: stepBase + (here ? 'background:#fff;color:#114D9E;box-shadow:3px 3px 0 ' + (d ? 'oklch(.16 .02 250)' : '#0D3A77') : 'border:2px solid rgba(211,232,253,.45);color:#D3E8FD'),
+      arrowStyle: last ? 'display:none' : arrow
+    });
+    const pathSteps = [
+      mkStep('узнал', false, false),
+      mkStep('понял модель', true, false),
+      mkStep('проверил доверие', false, false),
+      mkStep('договор вне платформы', false, false),
+      mkStep('работает в кабинете', false, true)
+    ];
+
+    const howSteps = [
+      { n: '1', title: 'Вы инвестируете в проект', desc: 'Школу, курс или конгресс — открытые позиции ниже, в маркетплейсе.' },
+      { n: '2', title: 'Эксперты производят обучение', desc: 'Результаты проекта попадают на doctor.school и расходятся по врачам вашей аудитории.' },
+      { n: '3', title: 'Вы видите результат', desc: 'Внимание врачей, аналитика и отчёт по проекту — в кабинете организации.' }
+    ];
+
+    const gains = [
+      { title: 'Аналитика внимания врачей', desc: 'Статистика по врачам и их вниманию к результатам проекта.' },
+      { title: 'Списки участников', desc: 'Без контактных данных — состав аудитории по специальностям и регионам.' },
+      { title: 'Опросы и исследования', desc: 'Опросы и маркетинговые исследования, проводимые на платформе.' },
+      { title: 'Годовой эксклюзив на проект', desc: 'Партнёрство — годовой эксклюзивный контракт на проект.' }
+    ];
+
+    // ── продукты маркетплейса ──
+    const data = [
+      { id: 'sch', kind: 'Школа', emblem: 'Ор', title: 'Школа ортобиологии', aud: 'аудитория проекта — 1 850 врачей', cap: 'потенциал направления — 12 000', taken: 3, total: 9, status: 'open', cta: 'Хочу инвестировать в эту школу', fill: 'первые 3 урока проинвестированы — закрыты · открыто: 6 уроков', kp: 'Партия: 6 уроков × 1 850 врачей аудитории', group: 'sch' },
+      { id: 'crs', kind: 'Заявка эксперта', emblem: 'Ам', title: 'Курс «Ортобиология в амбулаторной практике»', aud: 'потенциальная аудитория — 3 000 врачей', cap: 'ёмкость направления — 8 500', taken: 6, total: 8, status: 'few', cta: 'Хочу инвестировать в этот курс', fill: 'проинвестированы 6 из 8 уроков · открыто: 2 урока', kp: 'Партия: 2 урока × 3 000 врачей аудитории', group: 'exp' },
+      { id: 'exp', kind: 'Эксперт', emblem: 'СМ', title: 'Страхов М. А. — цикл уроков в производстве', aud: 'аудитория эксперта — 2 400 врачей', cap: 'потенциал направления — 9 000', taken: 0, total: 6, status: 'open', cta: 'Инвестировать в эксперта', fill: 'цикл из 6 уроков · открыто: 6 уроков', kp: 'Партия: 6 уроков × 2 400 врачей аудитории', group: 'exp' },
+      { id: 'reg', kind: 'Курс', emblem: 'Рг', title: 'Курс-сериал по регенеративной медицине', aud: 'аудитория проекта — 2 100 врачей', cap: 'потенциал направления — 10 500', taken: 12, total: 12, status: 'closed', cta: '', fill: 'проинвестированы все 12 уроков', kp: '', group: 'sch' }
+    ];
+    const visible = (cat === 'Б' && tab !== 'all') ? data.filter(x => tab === 'exp' ? x.group === 'exp' : x.group === 'sch') : data;
+
+    const cards = visible.map(x => {
+      const closed = x.status === 'closed';
+      const few = x.status === 'few';
+      const sent = !!s.sentProducts[x.id];
+      const note = s.notes[x.id];
+      const kpOpen = !!s.kpOpen[x.id];
+      const pct = Math.round(x.taken / x.total * 100);
+      const onCta = () => {
+        if (btn === 'Б') { this.setState(st => ({ kpOpen: Object.assign({}, st.kpOpen, { [x.id]: !st.kpOpen[x.id] }) })); return; }
+        if (req === 'В') { this.setState({ modalOpen: true, prefill: x.id, sent: false }); return; }
+        if (req === 'А') { this.setState(st => ({ prefill: x.id, notes: Object.assign({}, st.notes, { [x.id]: 'Продукт добавлен в заявку — форма в блоке «Следующий шаг» ниже.' }) })); return; }
+        this.setState(st => ({ notes: Object.assign({}, st.notes, { [x.id]: 'Напишите команде Академии — контакты в блоке «Следующий шаг».' }) }));
+      };
+      return {
+        id: x.id, kind: x.kind, emblem: x.emblem, title: x.title, aud: x.aud, cap: x.cap,
+        closed, few,
+        cardStyle: 'display:flex;flex-direction:column;height:100%;box-sizing:border-box;background:' + surface + ';border:2px solid ' + (closed ? hairline : border) + ';box-shadow:' + (closed ? 'none' : '5px 5px 0 ' + shadow),
+        cardHover: closed ? '' : 'transform:translate(2px,2px);box-shadow:3px 3px 0 ' + shadow,
+        tileBg: closed ? sectionGray : tint,
+        tileBorder: closed ? hairline : border,
+        tileInk: closed ? inkFaint : tintInk,
+        kickerColor: closed ? inkFaint : accent,
+        titleColor: closed ? inkMuted : ink,
+        barFill: 'display:block;height:5px;width:' + pct + '%;background:' + (closed ? inkFaint : accent),
+        fillText: x.fill,
+        fillColor: few ? ink : (closed ? inkFaint : inkMuted),
+        cta: x.cta,
+        showBtn: !closed && !sent && !kpOpen,
+        showSent: sent,
+        showNote: !closed && !sent && !kpOpen && !!note && false, // примечание показывается под кнопкой
+        noteText: note || '',
+        showKp: kpOpen && !closed,
+        kpLine: x.kp,
+        onCta
+      };
+    });
+    // примечание под кнопкой: показываем и кнопку, и строку
+    cards.forEach(c => { const note = s.notes[c.id]; if (note && !c.showSent && !c.showKp && !c.closed) { c.showNote = true; } });
+
+    // ── вкладки (развилка 3, вариант Б) ──
+    const tabBtn = (active) => 'font:inherit;font-size:12px;font-weight:800;letter-spacing:.04em;padding:10px 16px;cursor:pointer;border:2px solid ' + (active ? btnBg : hairline) + ';color:' + (active ? btnFg : ink) + ';background:' + (active ? btnBg : 'transparent');
+    const tabs = [
+      { label: 'Все позиции', onClick: () => this.setState({ tab: 'all' }), style: tabBtn(tab === 'all') },
+      { label: 'Школы и курсы', onClick: () => this.setState({ tab: 'sch' }), style: tabBtn(tab === 'sch') },
+      { label: 'Заявки экспертов', onClick: () => this.setState({ tab: 'exp' }), style: tabBtn(tab === 'exp') }
+    ];
+
+    // ── форма заявки ──
+    const fieldDefs = [
+      { name: 'org', label: 'Организация', placeholder: 'ООО «Партнёр А»', required: true },
+      { name: 'fio', label: 'ФИО', placeholder: 'Иванова Анна Сергеевна', required: true },
+      { name: 'role', label: 'Роль в организации', placeholder: 'Руководитель направления', required: false },
+      { name: 'email', label: 'Рабочая почта', placeholder: 'a.ivanova@partner-a.ru', required: true },
+      { name: 'phone', label: 'Телефон', placeholder: '+7 900 000-00-00', required: false }
+    ];
+    const fieldError = (f) => {
+      const v = (s.form[f.name] || '').trim();
+      if (f.required && !v) return 'Заполните поле';
+      if (f.name === 'email' && v && !/^\S+@\S+\.\S+$/.test(v)) return 'Похоже, в адресе опечатка';
+      return '';
+    };
+    const formFields = fieldDefs.map(f => {
+      const rawErr = fieldError(f);
+      const err = rawErr && (s.touched[f.name] || s.submitAttempt) ? rawErr : '';
+      return {
+        label: f.label + (f.required ? '' : ' · необязательно'),
+        value: s.form[f.name],
+        placeholder: f.placeholder,
+        onChange: (e) => { const v = e.target.value; this.setState(st => ({ form: Object.assign({}, st.form, { [f.name]: v }) })); },
+        onBlur: () => this.setState(st => ({ touched: Object.assign({}, st.touched, { [f.name]: true }) })),
+        inputStyle: 'width:100%;box-sizing:border-box;font:inherit;font-size:14px;padding:12px 14px;border:2px solid ' + (err ? danger : hairline) + ';background:' + (err ? dangerTint : surface) + ';color:' + ink,
+        errStyle: err ? 'display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:' + danger + ';margin-top:7px' : 'display:none',
+        error: err
+      };
+    });
+    const formValid = fieldDefs.every(f => !fieldError(f));
+    const prefillProduct = s.prefill ? data.find(x => x.id === s.prefill) : null;
+    const submitForm = () => {
+      if (!formValid) { this.setState({ submitAttempt: true }); return; }
+      this.setState(st => ({
+        sent: true, submitAttempt: false,
+        sentProducts: st.prefill ? Object.assign({}, st.sentProducts, { [st.prefill]: true }) : st.sentProducts,
+        notes: st.prefill ? Object.assign({}, st.notes, { [st.prefill]: null }) : st.notes
+      }));
+    };
+
+    // ── панель владельца ──
+    const panelBtn = (active, wide) => 'font:inherit;font-size:11px;font-weight:800;' + (wide ? 'padding:0 9px;height:30px' : 'width:30px;height:30px') + ';cursor:pointer;border:2px solid ' + (active ? btnBg : border) + ';color:' + (active ? btnFg : ink) + ';background:' + (active ? btnBg : 'transparent');
+    const B = (label, title, active, patch, wide) => ({ label, title, onClick: () => this.setState(patch), style: panelBtn(active, wide !== false) });
+    const panelRows = [
+      { label: 'Данные', btns: [B('заполн.', 'Маркетплейс заполнен', mpFull, { dataV: 'заполнен' }), B('загр.', 'Загрузка — скелет сетки карточек', mpLoading, { dataV: 'загрузка' }), B('пуст', 'Открытых позиций нет — честная строка + CTA', mpEmpty, { dataV: 'пуст' }), B('ошибка', 'Ошибка загрузки — причина и повтор, модель читается', mpError, { dataV: 'ошибка' })] },
+      { label: 'Вход', btns: [B('гость', 'Гость — экран публичный целиком', !logged, { authV: 'out' }), B('вошёл', 'Сотрудник организации-инвестора — прямой вход в кабинет', logged, { authV: 'in' })] },
+      { label: 'Заявка', btns: [B('А', 'Форма на экране — данные сразу в CRM', req === 'А', { reqV: 'А' }, false), B('Б', 'Контакт команды без формы', req === 'Б', { reqV: 'Б' }, false), B('В', 'Форма в модальном окне, обе кнопки, продукт предзаполнен', req === 'В', { reqV: 'В' }, false)] },
+      { label: 'Кнопка', btns: [B('А', '«Хочу инвестировать» = заявка команде с подставленным продуктом', btn === 'А', { btnV: 'А' }, false), B('Б', 'Самостоятельное КП на экране: расчёт партии + «Скачать КП»', btn === 'Б', { btnV: 'Б' }, false)] },
+      { label: 'Каталог', btns: [B('А', 'Заявки экспертов вперемешку со школами и курсами', cat === 'А', { catV: 'А' }, false), B('Б', 'Отдельная вкладка «Заявки экспертов»', cat === 'Б', { catV: 'Б' }, false)] }
+    ];
+
+    const R = React.createElement;
+    const footLogoEl = R('img', { src: d ? 'assets/ds-logo-white.svg' : 'assets/ds-logo.svg', alt: 'Doctor.School · Академия', style: { height: '24px', display: 'block', flex: 'none' } });
+
+    return {
+      dark: d, isMobile: m, isDesktop: !m,
+      pageBg, surface, ink, inkMuted, inkFaint, border, hairline, accent, btnBg, btnFg, shadow, shadowSm, tint, tintFg, sectionGray,
+      danger, dangerTint, success, successTint,
+      headerShadow: d ? 'oklch(.16 .02 250)' : '#0D3A77',
+      dashedBorder: d ? 'rgba(255,255,255,.35)' : 'oklch(.8 .01 250)',
+      photoNote: d ? 'rgba(255,255,255,.4)' : 'rgba(17,77,158,.5)',
+      themeIcon: d ? '☾' : '☀',
+      toggleTheme: () => { const nd = !d; try { localStorage.setItem('ds-theme', nd ? 'dark' : 'light'); } catch (e) {} this.setState({ dark: nd }); },
+      authHref: logged ? 'Профиль.dc.html' : 'Авторизация.dc.html',
+      authLabel: logged ? 'Кабинет' : 'Войти / Регистрация',
+      isLogged: logged,
+      cabinetLabel: logged ? 'Войти в кабинет организации' : 'Кабинет инвестора',
+      pathSteps, howSteps, gains,
+      ledgerSteps: ['внесено', '→ фонд', '→ начисления'],
+      lg2ArrowHidden: 'display:none',
+      stepsGrid: m ? 'display:flex;flex-direction:column;gap:16px' : 'display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px',
+      gainsGrid: m ? 'display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px' : 'display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:24px',
+      cardsGrid: m ? 'display:flex;flex-direction:column;gap:24px' : 'display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:24px',
+      dealGrid: m ? 'display:flex;flex-direction:column;gap:20px' : 'display:flex;align-items:center;justify-content:space-between;gap:32px;flex-wrap:wrap',
+      orgBox: 'border:2px solid ' + border + ';background:' + surface + ';box-shadow:6px 6px 0 ' + shadow + ';padding:clamp(22px,4vw,34px);display:flex;align-items:center;justify-content:space-between;gap:24px;flex-wrap:wrap',
+      formBox: 'border:2px solid ' + border + ';background:' + surface + ';box-shadow:6px 6px 0 ' + shadow + ';padding:clamp(22px,4vw,38px);display:flex;align-items:flex-start;justify-content:space-between;gap:clamp(24px,4vw,48px);flex-wrap:wrap',
+      skel3: [1, 2, 3],
+      mpLoading, mpEmpty, mpError, mpFull,
+      showTabs: cat === 'Б' && mpFull,
+      tabs, cards,
+      retryMp: () => this.setState({ dataV: 'заполнен' }),
+      // заявка
+      reqIsForm: req === 'А', reqIsContacts: req === 'Б', reqIsModal: req === 'В',
+      reqNotModal: req !== 'В',
+      modalOpen: s.modalOpen && req === 'В',
+      openModalPlain: () => this.setState({ modalOpen: true, sent: false }),
+      closeModal: () => this.setState({ modalOpen: false }),
+      hasPrefill: !!prefillProduct,
+      prefillTitle: prefillProduct ? prefillProduct.kind + ' · ' + prefillProduct.title : '',
+      clearPrefill: () => this.setState({ prefill: null }),
+      formFields,
+      labelStyle: 'display:block;font-size:12px;font-weight:700;color:' + ink + ';margin-bottom:7px',
+      fieldsGrid: m ? 'display:flex;flex-direction:column;gap:14px' : 'display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 16px',
+      taskValue: s.form.task,
+      taskChange: (e) => { const v = e.target.value; this.setState(st => ({ form: Object.assign({}, st.form, { task: v }) })); },
+      taskStyle: 'width:100%;box-sizing:border-box;font:inherit;font-size:14px;line-height:1.5;padding:12px 14px;border:2px solid ' + hairline + ';background:' + surface + ';color:' + ink + ';resize:vertical',
+      submitForm,
+      resetForm: () => this.setState({ sent: false, submitAttempt: false, touched: {}, prefill: null, form: { org: '', fio: '', role: '', email: '', phone: '', task: '' } }),
+      formSent: s.sent, formNotSent: !s.sent,
+      panelRows,
+      giantInk: d ? 'rgba(255,255,255,.08)' : 'oklch(.95 .01 250)',
+      footLogoEl
+    };
+  }
+}
+</script>
+</body>
+</html>

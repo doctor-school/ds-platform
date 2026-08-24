@@ -7,49 +7,90 @@
 </head>
 <body>
 <x-dc>
-<helmet data-dc-atomics><link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"><style>body{margin:0;background:#fff;font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}:focus-visible{outline:3px solid #6BB1F7;outline-offset:2px}@keyframes livePulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.45;transform:scale(.72)}}</style></helmet>
+<helmet data-dc-atomics><link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"><style>body{margin:0;background:#fff;font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}a{color:#2D84F2}a:hover{color:#114D9E}:focus-visible{outline:3px solid #6BB1F7;outline-offset:2px}@keyframes livePulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.45;transform:scale(.72)}}html{scroll-behavior:smooth}</style></helmet>
 
 <div style="min-height:100vh;background:{{ pageBg }}">
-  <header data-screen-label="Страница вебинара" style="background:{{ headerBg }};padding:16px clamp(16px,4vw,48px);display:flex;align-items:center;justify-content:space-between;gap:16px">
-    <a href="Эфиры.dc.html" style="display:flex;flex:none"><img src="assets/ds-logo-white.svg" alt="Doctor.School" style="height:26px;display:block"></a>
-    <sc-if value="{{ isMobile }}" hint-placeholder-val="{{ false }}">
-      <div style="display:flex;align-items:center;gap:12px">
-        <button onClick="{{ toggleTheme }}" title="Тема" style="font:inherit;width:44px;height:44px;background:transparent;color:#fff;border:2px solid rgba(255,255,255,.5);cursor:pointer;font-size:16px">{{ themeIcon }}</button>
-        <details style="position:relative">
-          <summary style="list-style:none;width:44px;height:44px;display:inline-flex;align-items:center;justify-content:center;background:#fff;color:#114D9E;cursor:pointer;font-size:20px;font-weight:800;box-shadow:3px 3px 0 {{ headerShadow }}">≡</summary>
-          <nav style="position:absolute;top:calc(100% + 10px);right:0;background:{{ surface }};border:2px solid {{ border }};box-shadow:5px 5px 0 {{ shadow }};padding:8px;display:flex;flex-direction:column;min-width:200px;z-index:20">
-            <a href="Эфиры.dc.html" style="padding:12px 16px;font-size:15px;font-weight:800;color:{{ headerBg }};text-decoration:none">Эфиры</a>
-            <a href="Эфиры.dc.html" style="padding:12px 16px;font-size:15px;font-weight:700;color:{{ ink }};text-decoration:none">Школы</a>
-            <a href="Мои события.dc.html" style="padding:12px 16px;font-size:15px;font-weight:700;color:{{ ink }};text-decoration:none">Мои события</a>
-          </nav>
-        </details>
-      </div>
-    </sc-if>
-    <sc-if value="{{ isDesktop }}" hint-placeholder-val="{{ true }}">
-      <nav style="display:flex;align-items:center;gap:28px;font-size:14px;font-weight:700">
-        <a href="Эфиры.dc.html" style="color:#fff;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:6px">Эфиры</a>
-        <a href="Эфиры.dc.html" style="color:#D3E8FD;text-decoration:none">Школы</a>
-        <a href="Мои события.dc.html" style="color:#D3E8FD;text-decoration:none">Мои события</a>
-        <button onClick="{{ toggleTheme }}" title="Тема" style="font:inherit;width:44px;height:44px;background:transparent;color:#fff;border:2px solid rgba(255,255,255,.5);cursor:pointer;font-size:15px" style-hover="border-color:#fff">{{ themeIcon }}</button>
-        <button style="font:inherit;font-size:13.5px;font-weight:700;color:#114D9E;background:#fff;border:0;padding:11px 22px;cursor:pointer;box-shadow:3px 3px 0 {{ headerShadow }}" style-hover="transform:translate(1px,1px);box-shadow:2px 2px 0 {{ headerShadow }}">Войти</button>
-      </nav>
-    </sc-if>
-  </header>
 
-  <!-- Плакатное поле -->
-  <div style="background:{{ headerBg }};padding:clamp(24px,4vw,36px) clamp(16px,4vw,48px) 132px;position:relative">
-    <div style="max-width:1104px;margin:0 auto">
-      <div style="display:flex;align-items:center;gap:10px;font-size:12.5px;font-weight:700;color:#AED4FB;margin-bottom:32px;flex-wrap:wrap">
-        <a href="Эфиры.dc.html" style="color:#fff;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px">Эфиры</a><span>/</span><span>Травматология</span><span>/</span><span>Эфир № 042</span>
+  <!-- ═══ d-event · шапка витрины врача (с d-home) ═══ -->
+  <sc-if value="{{ hdrDoctor }}" hint-placeholder-val="{{ true }}">
+    <header data-screen-label="d-event · шапка витрины врача" style="background:#114D9E;padding:14px clamp(16px,4vw,48px);display:flex;align-items:center;gap:clamp(14px,2.5vw,28px)">
+      <a href="Витрина врача - Главная.dc.html" style="display:flex;flex:none"><img src="assets/ds-logo-white.svg" alt="Doctor.School" style="height:26px;display:block"></a>
+      <sc-if value="{{ isDesktop }}" hint-placeholder-val="{{ true }}">
+        <input value="{{ q }}" onInput="{{ setQ }}" placeholder="Поиск по урокам, школам и событиям" style="flex:1;max-width:440px;font:inherit;font-size:13.5px;font-weight:600;padding:12px 14px;border:2px solid rgba(255,255,255,.45);background:transparent;color:#fff;outline:none;min-width:120px" style-focus="border-color:#fff;background:rgba(255,255,255,.08)">
+        <nav style="display:flex;align-items:center;gap:14px;margin-left:auto">
+          <button onClick="{{ toggleTheme }}" title="Тема" style="font:inherit;width:44px;height:44px;background:transparent;color:#fff;border:2px solid rgba(255,255,255,.5);cursor:pointer;font-size:15px;flex:none" style-hover="border-color:#fff">{{ themeIcon }}</button>
+          <sc-if value="{{ guest }}" hint-placeholder-val="{{ true }}">
+            <a href="Авторизация.dc.html" style="font-size:13.5px;font-weight:700;color:#D3E8FD;text-decoration:none;padding:12px 6px;white-space:nowrap" style-hover="color:#fff">Войти</a>
+            <a href="Авторизация.dc.html" style="font-size:13.5px;font-weight:800;color:#114D9E;background:#fff;padding:12px 22px;text-decoration:none;white-space:nowrap;box-shadow:3px 3px 0 #0D3A77" style-hover="transform:translate(1px,1px);box-shadow:2px 2px 0 #0D3A77">Регистрация</a>
+          </sc-if>
+          <sc-if value="{{ loggedIn }}" hint-placeholder-val="{{ false }}">
+            <a href="#" title="Очки внимания: Пульс · Дыхание · Сознание. Открыть историю начислений" style="display:inline-flex;align-items:center;gap:9px;border:2px solid rgba(255,255,255,.45);padding:10px 14px;font-size:12px;font-weight:800;color:#fff;text-decoration:none;white-space:nowrap;font-variant-numeric:tabular-nums" style-hover="border-color:#fff"><span>{{ balancePul }} Pul</span><span style="opacity:.45">·</span><span>340 Bre</span><span style="opacity:.45">·</span><span>1 250 Con</span></a>
+            <a href="#" style="font-size:13.5px;font-weight:800;color:#114D9E;background:#fff;padding:12px 22px;text-decoration:none;white-space:nowrap;box-shadow:3px 3px 0 #0D3A77" style-hover="transform:translate(1px,1px);box-shadow:2px 2px 0 #0D3A77">Личный кабинет</a>
+          </sc-if>
+        </nav>
+      </sc-if>
+      <sc-if value="{{ isMobile }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;align-items:center;gap:10px;margin-left:auto">
+          <button onClick="{{ toggleTheme }}" title="Тема" style="font:inherit;width:44px;height:44px;background:transparent;color:#fff;border:2px solid rgba(255,255,255,.5);cursor:pointer;font-size:16px">{{ themeIcon }}</button>
+          <details style="position:relative">
+            <summary style="list-style:none;width:44px;height:44px;display:inline-flex;align-items:center;justify-content:center;background:#fff;color:#114D9E;cursor:pointer;font-size:20px;font-weight:800;box-shadow:3px 3px 0 #0D3A77">≡</summary>
+            <nav style="position:absolute;top:calc(100% + 10px);right:0;background:{{ surface }};border:2px solid {{ border }};box-shadow:5px 5px 0 {{ shadow }};padding:8px;display:flex;flex-direction:column;min-width:220px;z-index:30">
+              <sc-if value="{{ loggedIn }}" hint-placeholder-val="{{ false }}">
+                <a href="#" style="padding:12px 16px;font-size:12.5px;font-weight:800;color:{{ ink }};text-decoration:none;font-variant-numeric:tabular-nums">{{ balancePul }} Pul · 340 Bre · 1 250 Con</a>
+                <a href="#" style="margin-top:4px;padding:12px 16px;font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};text-decoration:none;text-align:center">Личный кабинет</a>
+              </sc-if>
+              <sc-if value="{{ guest }}" hint-placeholder-val="{{ true }}">
+                <a href="Авторизация.dc.html" style="padding:12px 16px;font-size:15px;font-weight:700;color:{{ ink }};text-decoration:none">Войти</a>
+                <a href="Авторизация.dc.html" style="margin-top:4px;padding:12px 16px;font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};text-decoration:none;text-align:center">Регистрация</a>
+              </sc-if>
+            </nav>
+          </details>
+        </div>
+      </sc-if>
+    </header>
+    <sc-if value="{{ isMobile }}" hint-placeholder-val="{{ false }}">
+      <div style="background:#114D9E;padding:0 16px 14px">
+        <input value="{{ q }}" onInput="{{ setQ }}" placeholder="Поиск по урокам, школам и событиям" style="width:100%;box-sizing:border-box;font:inherit;font-size:14px;font-weight:600;padding:13px 14px;border:2px solid rgba(255,255,255,.45);background:transparent;color:#fff;outline:none" style-focus="border-color:#fff">
       </div>
+    </sc-if>
+  </sc-if>
+
+  <!-- ═══ a-event · вариант шапки Академии (D-4) ═══ -->
+  <sc-if value="{{ hdrAcademy }}" hint-placeholder-val="{{ false }}">
+    <div style="background:#0D3A77;padding:5px clamp(16px,4vw,48px);text-align:center;font-size:9px;font-weight:700;letter-spacing:.22em;text-transform:uppercase;color:rgba(255,255,255,.34)">BBM: Академия смыслов</div>
+    <header data-screen-label="a-event · шапка Академии" style="background:#114D9E;padding:16px clamp(16px,4vw,48px);display:flex;align-items:center;justify-content:space-between;gap:16px">
+      <a href="Главная.dc.html" style="display:flex;flex:none"><img src="assets/ds-logo-white.svg" alt="Doctor.School · Академия" style="height:26px;display:block"></a>
+      <nav style="display:flex;align-items:center;gap:clamp(14px,2.5vw,28px);font-size:14px;font-weight:700;flex-wrap:wrap;justify-content:flex-end">
+        <a href="Эфиры.dc.html" style="color:#fff;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:6px">Эфиры</a>
+        <sc-if value="{{ isDesktop }}" hint-placeholder-val="{{ true }}">
+          <a href="Проекты.dc.html" style="color:#D3E8FD;text-decoration:none" style-hover="color:#fff">Проекты</a>
+          <a href="Эксперты.dc.html" style="color:#D3E8FD;text-decoration:none" style-hover="color:#fff">Эксперты</a>
+          <a href="Мои события.dc.html" style="color:#D3E8FD;text-decoration:none">Мои события</a>
+        </sc-if>
+        <button onClick="{{ toggleTheme }}" title="Тема" style="font:inherit;width:44px;height:44px;background:transparent;color:#fff;border:2px solid rgba(255,255,255,.5);cursor:pointer;font-size:15px" style-hover="border-color:#fff">{{ themeIcon }}</button>
+        <a href="Авторизация.dc.html" style="font-size:13.5px;font-weight:700;color:#114D9E;background:#fff;padding:12px 22px;text-decoration:none;box-shadow:3px 3px 0 #0D3A77" style-hover="transform:translate(1px,1px);box-shadow:2px 2px 0 #0D3A77">Войти</a>
+      </nav>
+    </header>
+  </sc-if>
+
+  <!-- ═══ d-event · постер-шапка события ═══ -->
+  <div data-screen-label="d-event · постер-шапка" style="background:#114D9E;padding:clamp(24px,4vw,36px) clamp(16px,4vw,48px) 132px;position:relative">
+    <div style="max-width:1104px;margin:0 auto">
+      <sc-if value="{{ hdrDoctor }}" hint-placeholder-val="{{ true }}">
+        <nav style="font-size:12.5px;font-weight:700;color:#AED4FB;margin-bottom:28px;display:flex;gap:8px;flex-wrap:wrap"><a href="Витрина врача - Главная.dc.html" style="color:#AED4FB;text-decoration:none" style-hover="color:#fff;text-decoration:underline;text-underline-offset:3px">Doctor.School</a><span style="opacity:.5">/</span><a href="Витрина врача - Лента специальности.dc.html" style="color:#AED4FB;text-decoration:none" style-hover="color:#fff;text-decoration:underline;text-underline-offset:3px">Травматология и ортопедия</a><span style="opacity:.5">/</span><a href="Витрина врача - События.dc.html" style="color:#AED4FB;text-decoration:none" style-hover="color:#fff;text-decoration:underline;text-underline-offset:3px">События</a><span style="opacity:.5">/</span><span style="color:#D3E8FD">Вебинар «PRP при гонартрозе»</span></nav>
+      </sc-if>
+      <sc-if value="{{ hdrAcademy }}" hint-placeholder-val="{{ false }}">
+        <nav style="font-size:12.5px;font-weight:700;color:#AED4FB;margin-bottom:28px;display:flex;gap:8px;flex-wrap:wrap"><a href="Эфиры.dc.html" style="color:#fff;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px">Эфиры</a><span style="opacity:.5">/</span><span>Травматология</span><span style="opacity:.5">/</span><span style="color:#D3E8FD">Вебинар «PRP при гонартрозе»</span></nav>
+      </sc-if>
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:32px;flex-wrap:wrap">
         <div style="max-width:760px">
-          <div style="font-size:13px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#D3E8FD;margin-bottom:16px">Школа травматологии и ортопедии · Эфир № 042</div>
-          <h1 style="margin:0;font-size:clamp(30px,5.5vw,50px);line-height:1.06;font-weight:800;letter-spacing:-.035em;color:#fff">Пластика ахиллова сухожилия: разбор клинических случаев</h1>
-          <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:24px">
-            <span style="font-size:12.5px;font-weight:700;color:#fff;border:2px solid #6BB1F7;padding:5px 12px">Травматология</span>
-            <span style="font-size:12.5px;font-weight:700;color:#fff;border:2px solid #6BB1F7;padding:5px 12px">Ортопедия</span>
-            <span style="font-size:12.5px;font-weight:700;color:#fff;border:2px solid #6BB1F7;padding:5px 12px">Спортивная медицина</span>
+          <div style="font-size:13px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#D3E8FD;margin-bottom:16px">Школа ортобиологии · Вебинар · {{ fmtWord }}</div>
+          <h1 style="margin:0;font-size:clamp(30px,5.5vw,50px);line-height:1.06;font-weight:800;letter-spacing:-.035em;color:#fff;text-wrap:balance">PRP при гонартрозе</h1>
+          <div style="margin-top:16px;font-size:clamp(15px,2vw,18px);font-weight:700;color:#D3E8FD;font-variant-numeric:tabular-nums">28 августа, 19:00 (МСК) · 90 минут</div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:22px">
+            <span style="font-size:12.5px;font-weight:700;color:#fff;border:2px solid #6BB1F7;padding:5px 12px">Травматология и ортопедия</span>
+            <span style="font-size:12.5px;font-weight:700;color:#fff;border:2px solid #6BB1F7;padding:5px 12px">Ортобиология</span>
+            <span style="font-size:12.5px;font-weight:700;color:#fff;border:2px solid #6BB1F7;padding:5px 12px">НМО 2 балла</span>
           </div>
         </div>
         <span style="{{ heroBadgeStyle }}">{{ heroBadgeEl }}</span>
@@ -57,9 +98,40 @@
     </div>
   </div>
 
+  <!-- ═══ Загрузка · скелет ═══ -->
+  <sc-if value="{{ stLoading }}" hint-placeholder-val="{{ false }}">
+    <main data-screen-label="d-event · загрузка" style="max-width:1104px;margin:-80px auto 0;padding:{{ mainPad }};position:relative;z-index:1">
+      <div style="border:2px solid {{ hairline }};background:{{ surface }};padding:30px;display:flex;gap:24px;flex-wrap:wrap">
+        <div style="width:160px;height:90px;background:{{ hairline }};animation:livePulse 1.4s ease-in-out infinite;flex:none"></div>
+        <div style="flex:1;min-width:200px;display:flex;flex-direction:column;gap:14px;justify-content:center">
+          <div style="height:14px;width:60%;background:{{ hairline }};animation:livePulse 1.4s ease-in-out infinite"></div>
+          <div style="height:12px;width:40%;background:{{ hairline }};animation:livePulse 1.4s ease-in-out infinite"></div>
+        </div>
+      </div>
+      <div style="margin-top:48px;display:grid;grid-template-columns:{{ colsTemplate }};gap:48px">
+        <div style="display:flex;flex-direction:column;gap:18px"><div style="height:14px;width:35%;background:{{ hairline }};animation:livePulse 1.4s ease-in-out infinite"></div><div style="height:12px;width:90%;background:{{ hairline }};animation:livePulse 1.4s ease-in-out infinite"></div><div style="height:12px;width:80%;background:{{ hairline }};animation:livePulse 1.4s ease-in-out infinite"></div><div style="height:12px;width:85%;background:{{ hairline }};animation:livePulse 1.4s ease-in-out infinite"></div></div>
+        <div style="display:flex;flex-direction:column;gap:18px"><div style="height:14px;width:45%;background:{{ hairline }};animation:livePulse 1.4s ease-in-out infinite"></div><div style="height:96px;background:{{ hairline }};animation:livePulse 1.4s ease-in-out infinite"></div></div>
+      </div>
+    </main>
+  </sc-if>
+
+  <!-- ═══ Ошибка ═══ -->
+  <sc-if value="{{ stError }}" hint-placeholder-val="{{ false }}">
+    <main data-screen-label="d-event · ошибка" style="max-width:1104px;margin:-80px auto 0;padding:{{ mainPad }};position:relative;z-index:1">
+      <div style="border:2px solid {{ border }};background:{{ surface }};box-shadow:6px 6px 0 {{ shadow }};padding:clamp(28px,5vw,48px);text-align:center">
+        <div style="font-size:clamp(19px,2.6vw,24px);font-weight:800;letter-spacing:-.02em;color:{{ ink }};margin-bottom:10px">Не получилось загрузить событие</div>
+        <div style="font-size:14px;line-height:1.65;color:{{ inkMuted }};max-width:480px;margin:0 auto">Сервер не ответил за 10 секунд. Ваша запись не потерялась — попробуйте обновить страницу.</div>
+        <button style="margin-top:22px;font:inherit;font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:0;padding:14px 26px;cursor:pointer;box-shadow:4px 4px 0 {{ border }}" style-hover="transform:translate(1px,1px)">Повторить</button>
+      </div>
+    </main>
+  </sc-if>
+
+  <!-- ═══════════ Основной поток страницы ═══════════ -->
+  <sc-if value="{{ stMain }}" hint-placeholder-val="{{ true }}">
   <main style="max-width:1104px;margin:-80px auto 0;padding:{{ mainPad }};position:relative;z-index:1">
-    <!-- Статус-карточка (одинакова с карточкой эфира) -->
-    <div style="{{ regCardStyle }}">
+
+    <!-- ═══ Блок 3 · запись на событие · единственный CTA «Участвовать» (вариант Б — в потоке) ═══ -->
+    <div data-screen-label="d-event · блок записи" style="{{ regCardStyle }}">
       <div style="{{ regTimeCol }}">
         <sc-if value="{{ isMobile }}" hint-placeholder-val="{{ false }}">
           <span style="{{ regLiveBadge }}"><span style="width:7px;height:7px;border-radius:50%;background:#fff;animation:livePulse 1.6s ease-in-out infinite"></span>В эфире</span>
@@ -71,96 +143,696 @@
         </sc-if>
         <sc-if value="{{ isDesktop }}" hint-placeholder-val="{{ true }}">
           <div style="font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ tintInk }}">{{ regTimeLabel }}</div>
-          <div style="font-size:{{ regTimeSize }};font-weight:800;line-height:1;letter-spacing:-.04em;color:{{ tintInk }};font-variant-numeric:tabular-nums">{{ regTime }}</div>
+          <div style="font-size:56px;font-weight:800;line-height:1;letter-spacing:-.04em;color:{{ tintInk }};font-variant-numeric:tabular-nums">{{ regTime }}</div>
           <div style="font-size:12.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:{{ regTimeSubColor }};line-height:1.6">{{ regTimeSub }}</div>
         </sc-if>
       </div>
       <div style="{{ regBodyStyle }}">
-        <div style="min-width:200px">
-          <div style="font-size:19px;font-weight:700;letter-spacing:-.01em;color:{{ ink }};margin-bottom:8px">{{ regHead }}</div>
-          <div style="font-size:13.5px;line-height:1.6;color:{{ inkMuted }}">{{ regSub }}</div>
+        <!-- строка условий · REQ-48 -->
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12.5px;font-weight:800;color:{{ ink }};letter-spacing:.02em">
+          <span>{{ fmtWord }}</span><span style="opacity:.4">·</span><span>19:00 МСК</span><span style="opacity:.4">·</span><span style="border:2px solid {{ hairline }};padding:3px 9px">НМО 2 балла</span><span style="opacity:.4">·</span><span>50 Pul</span>
+          <sc-if value="{{ loggedIn }}" hint-placeholder-val="{{ false }}"><span style="opacity:.4">·</span><span style="color:{{ accent }}">у вас {{ balancePul }} Pul</span></sc-if>
+          <span style="opacity:.4">·</span><span style="color:{{ inkMuted }};font-weight:700">уже записались 37 ортопедов</span>
         </div>
-        <div style="display:flex;gap:14px;flex-wrap:wrap">{{ regCtaEl }}</div>
+
+        <!-- Гость -->
+        <sc-if value="{{ ctaGuest }}" hint-placeholder-val="{{ true }}">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:24px;flex-wrap:wrap">
+            <div style="min-width:220px;flex:1">
+              <div style="font-size:19px;font-weight:700;letter-spacing:-.01em;color:{{ ink }};margin-bottom:8px">{{ guestHead }}</div>
+              <div style="font-size:13.5px;line-height:1.6;color:{{ inkMuted }}">Участвовать — нужна регистрация. Вернём вас на эту страницу.</div>
+            </div>
+            <a href="Авторизация.dc.html" style="font-size:15px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:2px solid {{ btnBg }};padding:15px 32px;white-space:nowrap;box-shadow:4px 4px 0 {{ border }};text-decoration:none" style-hover="transform:translate(2px,2px);box-shadow:2px 2px 0 {{ border }}">Участвовать ↗</a>
+          </div>
+        </sc-if>
+
+        <!-- Вошёл, не записан -->
+        <sc-if value="{{ ctaJoin }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:24px;flex-wrap:wrap">
+            <div style="min-width:220px;flex:1">
+              <div style="font-size:19px;font-weight:700;letter-spacing:-.01em;color:{{ ink }};margin-bottom:8px">{{ joinHead }}</div>
+              <div style="font-size:13.5px;line-height:1.6;color:{{ inkMuted }}">{{ joinSub }}</div>
+            </div>
+            <button style="font:inherit;font-size:15px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:2px solid {{ btnBg }};padding:15px 32px;white-space:nowrap;box-shadow:4px 4px 0 {{ border }};cursor:pointer" style-hover="transform:translate(2px,2px);box-shadow:2px 2px 0 {{ border }}">Участвовать</button>
+          </div>
+          <!-- не хватает очков · пришёл сам · REQ-49: намерение не блокируем -->
+          <sc-if value="{{ shortSelf }}" hint-placeholder-val="{{ false }}">
+            <div style="background:{{ tint }};padding:16px 20px;font-size:13px;line-height:1.65;color:{{ tintInk }}">На балансе 20 Pul из 50 — запишем сразу, добрать очки можно после: <a href="#" style="font-weight:800;color:{{ tintInk }};text-decoration:underline;text-underline-offset:3px">заполнить профиль +30 Pul</a> · <a href="#" style="font-weight:800;color:{{ tintInk }};text-decoration:underline;text-underline-offset:3px">пройти урок серии +20 Pul</a></div>
+          </sc-if>
+          <!-- не хватает очков · партнёрская ссылка · REQ-49/39: аванс молча -->
+          <sc-if value="{{ notePartner }}" hint-placeholder-val="{{ false }}">
+            <div style="border:2px dashed {{ dashBorder }};padding:12px 16px;font-size:12px;line-height:1.6;color:{{ inkFaint }}"><b style="letter-spacing:.08em;text-transform:uppercase;font-size:10.5px">Примечание макета</b> · Врач пришёл по персональной ссылке медпредставителя: недостающие очки начислены авансом автоматически, сообщение «не хватает» на этом пути не показывается (REQ-49, REQ-39). Атрибуция партнёру сохраняется в реестре, в интерфейсе не выводится.</div>
+          </sc-if>
+        </sc-if>
+
+        <!-- Записан -->
+        <sc-if value="{{ ctaRegistered }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:24px;flex-wrap:wrap">
+            <div style="min-width:220px;flex:1">
+              <div style="font-size:19px;font-weight:700;letter-spacing:-.01em;color:{{ ink }};margin-bottom:8px">{{ regHead }}</div>
+              <div style="font-size:13.5px;line-height:1.6;color:{{ inkMuted }}">{{ regSub }} Событие — в разделе <a href="Мои события.dc.html" style="font-weight:700;color:{{ accent }}">«Мои события»</a>.</div>
+            </div>
+            <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center">
+              <sc-if value="{{ liveNow }}" hint-placeholder-val="{{ false }}">
+                <a href="{{ liveHref }}" style="font-size:15px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:2px solid {{ btnBg }};padding:15px 32px;white-space:nowrap;box-shadow:4px 4px 0 {{ border }};text-decoration:none" style-hover="transform:translate(2px,2px);box-shadow:2px 2px 0 {{ border }}">{{ liveCta }}</a>
+              </sc-if>
+              <sc-if value="{{ notLive }}" hint-placeholder-val="{{ true }}">
+                <button style="font:inherit;font-size:14px;font-weight:700;color:{{ ink }};background:{{ surface }};border:2px solid {{ border }};padding:13px 20px;cursor:pointer;white-space:nowrap;box-shadow:4px 4px 0 {{ shadowSm }}" style-hover="transform:translate(1px,1px)">В календарь</button>
+                <button style="font:inherit;font-size:14px;font-weight:700;color:{{ inkMuted }};background:transparent;border:2px solid {{ hairline }};padding:13px 20px;cursor:pointer;white-space:nowrap">Отменить запись</button>
+              </sc-if>
+            </div>
+          </div>
+        </sc-if>
+
+        <!-- Мест не осталось · офлайн · вариант В (по умолчанию) -->
+        <sc-if value="{{ ctaSoldOut }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:24px;flex-wrap:wrap">
+            <div style="min-width:220px;flex:1">
+              <div style="font-size:19px;font-weight:700;letter-spacing:-.01em;color:{{ ink }};margin-bottom:8px">Мест не осталось</div>
+              <div style="font-size:13.5px;line-height:1.6;color:{{ inkMuted }}">Все 40 мест заняты. Запись эфира этой встречи не ведётся — следите за событиями школы.</div>
+            </div>
+            <span style="font-size:15px;font-weight:800;color:{{ inkFaint }};background:transparent;border:2px solid {{ hairline }};padding:15px 32px;white-space:nowrap">Участвовать</span>
+          </div>
+        </sc-if>
+
+        <!-- CON-11 · доступ после подтверждения статуса ═ юнит «строка статуса верификации» — анатомия в 08-d-lk -->
+        <sc-if value="{{ ctaGate }}" hint-placeholder-val="{{ false }}">
+          <div style="min-width:220px">
+            <div style="font-size:19px;font-weight:700;letter-spacing:-.01em;color:{{ ink }};margin-bottom:8px">Доступно после подтверждения статуса медработника</div>
+            <div style="font-size:13.5px;line-height:1.6;color:{{ inkMuted }}">Событие содержит информацию о рецептурных препаратах — по закону она доступна только медицинским работникам.</div>
+          </div>
+          <div style="border:2px solid {{ border }};background:{{ surface }};padding:14px 18px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+            <span style="font-size:10.5px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#8A5A00;background:#FDF4E3;padding:5px 10px;flex:none">Верификация: не проходил</span>
+            <span style="font-size:13px;line-height:1.5;color:{{ inkMuted }};flex:1;min-width:180px">Понадобятся диплом и документ о специальности, проверка — до 2 рабочих дней</span>
+            <a href="#" style="font-size:13px;font-weight:800;color:{{ accent }};white-space:nowrap;text-decoration:underline;text-underline-offset:4px">Подтвердить статус →</a>
+          </div>
+          <div style="border:2px dashed {{ dashBorder }};padding:10px 14px;font-size:11.5px;line-height:1.5;color:{{ inkFaint }}"><b style="letter-spacing:.08em;text-transform:uppercase;font-size:10px">Примечание макета</b> · юнит «строка статуса верификации» — базовый вид, анатомия задаётся в 08-d-lk; после отрисовки 08 привести к нему.</div>
+        </sc-if>
+
+        <!-- Отменено -->
+        <sc-if value="{{ ctaCancelled }}" hint-placeholder-val="{{ false }}">
+          <div style="min-width:220px">
+            <div style="font-size:19px;font-weight:700;letter-spacing:-.01em;color:{{ ink }};margin-bottom:8px">Событие отменено</div>
+            <div style="font-size:13.5px;line-height:1.6;color:{{ inkMuted }}">Мы вернули очки и напишем, когда назначим новую дату.</div>
+          </div>
+          <sc-if value="{{ loggedIn }}" hint-placeholder-val="{{ false }}">
+            <div style="background:{{ tint }};padding:12px 18px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-size:13px;font-weight:700;color:{{ tintInk }};font-variant-numeric:tabular-nums"><span style="font-weight:800">+50 Pul</span><span>возврат — событие отменено · 22 августа, 14:02</span><a href="#" style="margin-left:auto;font-weight:800;color:{{ tintInk }};text-decoration:underline;text-underline-offset:3px">История начислений →</a></div>
+          </sc-if>
+        </sc-if>
+
+        <!-- Прошло -->
+        <sc-if value="{{ ctaPast }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:24px;flex-wrap:wrap">
+            <div style="min-width:220px;flex:1">
+              <div style="font-size:19px;font-weight:700;letter-spacing:-.01em;color:{{ ink }};margin-bottom:8px">Событие завершено</div>
+              <div style="font-size:13.5px;line-height:1.6;color:{{ inkMuted }}">Запись, материалы и оценка — ниже на этой странице.</div>
+            </div>
+            <a href="#after" style="font-size:14px;font-weight:700;color:{{ ink }};background:{{ surface }};border:2px solid {{ border }};padding:13px 22px;white-space:nowrap;box-shadow:4px 4px 0 {{ shadowSm }};text-decoration:none" style-hover="transform:translate(1px,1px)">К записи ↓</a>
+          </div>
+        </sc-if>
       </div>
     </div>
 
-    <!-- Две колонки -->
-    <div style="display:grid;grid-template-columns:{{ colsTemplate }};gap:clamp(32px,4vw,56px);margin-top:64px">
+    <!-- ═══ Блок 2 · открытая часть · REQ-20, REQ-38 ═══ -->
+    <div data-screen-label="d-event · открытая часть" style="display:grid;grid-template-columns:{{ colsTemplate }};gap:clamp(32px,4vw,56px);margin-top:64px">
       <div>
         <div style="display:flex;align-items:baseline;gap:18px;margin-bottom:28px">
-          <span style="font-size:13px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ ink }};white-space:nowrap">О чём эфир</span>
+          <span style="font-size:13px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ ink }};white-space:nowrap">О чём событие</span>
           <span style="flex:1;border-top:2px solid {{ ink }}"></span>
         </div>
-        <p style="margin:0 0 36px;font-size:16px;line-height:1.7;color:{{ inkBody }};text-wrap:pretty">Разбираем три реальных случая пластики ахиллова сухожилия — от выбора техники до реабилитационного протокола. Без лекционной воды: снимки, интраоперационные видео, осложнения и честный разбор ошибок. Вопросы спикерам — прямо в чате эфира.</p>
+        <p style="margin:0 0 32px;font-size:16px;line-height:1.7;color:{{ inkBody }};text-wrap:pretty">PRP-терапия при гонартрозе: показания, доказательная база и рабочие протоколы. Разбираем реальный клинический случай — от отбора пациента до оценки результата через 6 месяцев. Вопросы спикеру — прямо в чате эфира.</p>
 
+        <!-- тизер · доступен без регистрации -->
+        <div style="border:2px solid {{ border }};background:{{ tint }};aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;position:relative;margin-bottom:36px">
+          <span style="width:64px;height:64px;border:2px solid {{ tintInk }};background:{{ surface }};color:{{ tintInk }};display:inline-flex;align-items:center;justify-content:center;font-size:22px;box-shadow:3px 3px 0 {{ shadowSm }};cursor:pointer" style-hover="transform:translate(1px,1px)">▶</span>
+          <span style="position:absolute;bottom:12px;left:14px;font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:{{ tintInk }}">Тизер · 2 минуты · без регистрации</span>
+        </div>
+
+        <div style="display:flex;align-items:baseline;gap:18px;margin-bottom:6px">
+          <span style="font-size:13px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ ink }};white-space:nowrap">Программа</span>
+          <span style="flex:1;border-top:2px solid {{ ink }}"></span>
+        </div>
         <div style="display:grid;gap:0">
           <div style="display:grid;grid-template-columns:96px 1fr;gap:24px;padding:22px 0;border-top:1px solid {{ hairline }}">
-            <div><div style="font-size:26px;font-weight:800;color:{{ accent }};letter-spacing:-.02em">01</div><div style="font-size:12px;font-weight:700;color:{{ inkFaint }};margin-top:4px;font-variant-numeric:tabular-nums">19:00–19:30</div></div>
-            <div><div style="font-size:16.5px;font-weight:700;color:{{ ink }};margin-bottom:6px">Открытая пластика: когда она всё ещё лучший выбор</div><div style="font-size:14px;line-height:1.6;color:{{ inkMuted }}">Случай №1 — спортсмен-любитель, застарелый разрыв. Анна Соколова.</div></div>
+            <div><div style="font-size:26px;font-weight:800;color:{{ accent }};letter-spacing:-.02em">01</div><div style="font-size:12px;font-weight:700;color:{{ inkFaint }};margin-top:4px;font-variant-numeric:tabular-nums">19:00–19:25</div></div>
+            <div><div style="font-size:16.5px;font-weight:700;color:{{ ink }};margin-bottom:6px">Показания и доказательная база PRP при гонартрозе</div><div style="font-size:14px;line-height:1.6;color:{{ inkMuted }}">Кому назначать, кому нет: критерии отбора по стадиям.</div></div>
           </div>
           <div style="display:grid;grid-template-columns:96px 1fr;gap:24px;padding:22px 0;border-top:1px solid {{ hairline }}">
-            <div><div style="font-size:26px;font-weight:800;color:{{ accent }};letter-spacing:-.02em">02</div><div style="font-size:12px;font-weight:700;color:{{ inkFaint }};margin-top:4px;font-variant-numeric:tabular-nums">19:30–20:10</div></div>
-            <div><div style="font-size:16.5px;font-weight:700;color:{{ ink }};margin-bottom:6px">Малоинвазивные техники и шовные системы 2026</div><div style="font-size:14px;line-height:1.6;color:{{ inkMuted }}">Случай №2 и №3 — сравнение доступов, интраоперационное видео. Михаил Верещагин.</div></div>
+            <div><div style="font-size:26px;font-weight:800;color:{{ accent }};letter-spacing:-.02em">02</div><div style="font-size:12px;font-weight:700;color:{{ inkFaint }};margin-top:4px;font-variant-numeric:tabular-nums">19:25–20:05</div></div>
+            <div><div style="font-size:16.5px;font-weight:700;color:{{ ink }};margin-bottom:6px">Протокол приготовления и введения: клинический случай</div><div style="font-size:14px;line-height:1.6;color:{{ inkMuted }}">Пациент 54 лет, II стадия. Снимки, техника, результат через 6 месяцев.</div></div>
           </div>
           <div style="display:grid;grid-template-columns:96px 1fr;gap:24px;padding:22px 0;border-top:1px solid {{ hairline }};border-bottom:1px solid {{ hairline }}">
-            <div><div style="font-size:26px;font-weight:800;color:{{ accent }};letter-spacing:-.02em">03</div><div style="font-size:12px;font-weight:700;color:{{ inkFaint }};margin-top:4px;font-variant-numeric:tabular-nums">20:10–20:30</div></div>
-            <div><div style="font-size:16.5px;font-weight:700;color:{{ ink }};margin-bottom:6px">Ответы на вопросы из чата</div><div style="font-size:14px;line-height:1.6;color:{{ inkMuted }}">Оба спикера. Самые залайканные вопросы — первыми: решает аудитория, а не регламент.</div></div>
+            <div><div style="font-size:26px;font-weight:800;color:{{ accent }};letter-spacing:-.02em">03</div><div style="font-size:12px;font-weight:700;color:{{ inkFaint }};margin-top:4px;font-variant-numeric:tabular-nums">20:05–20:30</div></div>
+            <div><div style="font-size:16.5px;font-weight:700;color:{{ ink }};margin-bottom:6px">Ответы на вопросы из чата</div><div style="font-size:14px;line-height:1.6;color:{{ inkMuted }}">Самые залайканные вопросы — первыми: решает аудитория.</div></div>
           </div>
         </div>
 
-        <div style="margin-top:48px;border:2px solid {{ hairline }};padding:24px 28px;display:flex;align-items:center;gap:24px;flex-wrap:wrap">
-          <div style="width:120px;height:56px;border:2px dashed {{ dashBorder }};display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:{{ inkFaint }};flex:none;text-align:center">Лого<br>спонсора</div>
-          <div style="font-size:13px;line-height:1.65;color:{{ inkMuted }};min-width:180px;flex:1"><b style="color:{{ ink }};text-transform:uppercase;font-size:11px;letter-spacing:.1em">При поддержке</b><br>Спонсор оплачивает эфир и не влияет на программу. Содержание определяют спикеры и школа.</div>
+        <!-- рекламная маркировка · по закону -->
+        <div style="margin-top:44px;border:2px solid {{ hairline }};padding:22px 26px;display:flex;align-items:center;gap:22px;flex-wrap:wrap">
+          <div style="width:112px;height:52px;border:2px dashed {{ dashBorder }};display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:{{ inkFaint }};flex:none;text-align:center">Лого<br>партнёра</div>
+          <div style="font-size:13px;line-height:1.65;color:{{ inkMuted }};min-width:180px;flex:1"><b style="color:{{ ink }};text-transform:uppercase;font-size:11px;letter-spacing:.1em">Партнёрский материал · Партнёр А</b><br>В программе — партнёрская лекция с пометкой «реклама». Содержание события определяют школа и спикер.</div>
         </div>
       </div>
 
       <aside>
         <div style="display:flex;align-items:baseline;gap:18px;margin-bottom:28px">
-          <span style="font-size:13px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ ink }};white-space:nowrap">Спикеры</span>
+          <span style="font-size:13px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ ink }};white-space:nowrap">{{ speakersTitle }}</span>
           <span style="flex:1;border-top:2px solid {{ ink }}"></span>
         </div>
         <div style="display:flex;flex-direction:column;gap:24px">
-          <div style="border:2px solid {{ border }};box-shadow:4px 4px 0 {{ shadowSm }};padding:24px;display:flex;gap:18px;background:{{ surface }}">
-            <span style="width:64px;height:64px;background:{{ tint }};color:{{ tintInk }};display:inline-flex;align-items:center;justify-content:center;font-size:20px;font-weight:800;flex:none">АС</span>
-            <div>
-              <div style="font-size:16px;font-weight:700;color:{{ ink }}">Анна Соколова</div>
-              <div style="font-size:13px;line-height:1.6;color:{{ inkMuted }};margin-top:6px">Травматолог-ортопед, к.м.н. · НМИЦ им. Пирогова</div>
-              <div style="font-size:12px;font-weight:700;color:{{ accent }};margin-top:10px">12 эфиров на платформе →</div>
-            </div>
+          <div style="display:flex;flex-direction:column;gap:20px">
+            <sc-for list="{{ speakerList }}" as="sp" hint-placeholder-count="1">
+              <div style="border:2px solid {{ border }};box-shadow:5px 5px 0 {{ shadow }};background:{{ surface }}">
+                <div style="aspect-ratio:3/2;background:{{ tint }};display:flex;align-items:center;justify-content:center;border-bottom:2px solid {{ border }};position:relative;overflow:hidden">
+                  <span style="font-size:52px;font-weight:800;letter-spacing:-.02em;color:{{ tintInk }}">{{ sp.initials }}</span>
+                  <span style="position:absolute;bottom:10px;right:12px;font-size:9.5px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ photoNote }}">фото</span>
+                </div>
+                <div style="padding:20px 22px 22px">
+                  <div style="font-size:10.5px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ accent }};margin-bottom:7px">{{ sp.role }}</div>
+                  <a href="Эксперт.dc.html" style="font-size:19px;font-weight:800;letter-spacing:-.02em;color:{{ ink }};text-decoration:none;line-height:1.25;display:inline-block" style-hover="color:{{ accent }};text-decoration:underline;text-underline-offset:4px">{{ sp.name }}</a>
+                  <div style="font-size:12.5px;font-weight:700;color:{{ inkFaint }};margin-top:6px">{{ sp.org }}</div>
+                  <div style="font-size:13px;line-height:1.65;color:{{ inkMuted }};margin-top:12px">{{ sp.cred }}</div>
+                  <a href="Эксперт.dc.html" style="display:inline-block;margin-top:14px;font-size:12.5px;font-weight:800;color:{{ accent }};text-decoration:underline;text-underline-offset:4px">{{ sp.meta }} · страница эксперта →</a>
+                </div>
+              </div>
+            </sc-for>
           </div>
-          <div style="border:2px solid {{ border }};box-shadow:4px 4px 0 {{ shadowSm }};padding:24px;display:flex;gap:18px;background:{{ surface }}">
-            <span style="width:64px;height:64px;background:{{ tint }};color:{{ tintInk }};display:inline-flex;align-items:center;justify-content:center;font-size:20px;font-weight:800;flex:none">МВ</span>
-            <div>
-              <div style="font-size:16px;font-weight:700;color:{{ ink }}">Михаил Верещагин</div>
-              <div style="font-size:13px;line-height:1.6;color:{{ inkMuted }};margin-top:6px">Хирург, профессор · Сеченовский университет</div>
-              <div style="font-size:12px;font-weight:700;color:{{ accent }};margin-top:10px">7 эфиров на платформе →</div>
-            </div>
-          </div>
-          <div style="background:{{ tint }};padding:24px;font-size:13.5px;line-height:1.65;color:{{ tintInk }}"><b>Школа травматологии и ортопедии</b> — 38 эфиров, 12 400 подписчиков. Ведут практикующие врачи, программа формируется голосами аудитории.<br><a href="Эфиры.dc.html" style="display:inline-block;margin-top:12px;font-weight:700;color:{{ tintInk }};text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px">Все эфиры школы</a></div>
+          <div style="background:{{ tint }};padding:24px;font-size:13.5px;line-height:1.65;color:{{ tintInk }}"><b>Школа ортобиологии</b> — результат проекта Академии: 12 уроков, 3 живых разбора. Событие входит в программу школы.<br><a href="Витрина врача - Лента специальности.dc.html" style="display:inline-block;margin-top:12px;font-weight:700;color:{{ tintInk }};text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px">Открыть школу</a></div>
+          <div style="border:2px solid {{ border }};background:{{ surface }};box-shadow:4px 4px 0 {{ shadowSm }};padding:18px 22px;font-size:13.5px;font-weight:800;color:{{ ink }}">Уже записались 37 ортопедов<div style="margin-top:6px;font-size:12px;font-weight:600;color:{{ inkFaint }}">и 14 врачей смежных специальностей</div></div>
         </div>
       </aside>
     </div>
+
+    <!-- ═══ Блок 4 · формат · гибрид: выбор участия (вариант А — при записи) ═══ -->
+    <sc-if value="{{ secChooser }}" hint-placeholder-val="{{ false }}">
+      <section data-screen-label="d-event · гибрид · выбор участия" style="margin-top:72px">
+        <div style="display:flex;align-items:baseline;gap:18px;margin-bottom:28px">
+          <span style="font-size:13px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ ink }};white-space:nowrap">Как вы будете участвовать?</span>
+          <span style="flex:1;border-top:2px solid {{ ink }}"></span>
+        </div>
+        <div style="display:grid;grid-template-columns:{{ chooserCols }};gap:24px">
+          <button onClick="{{ chooseOnsite }}" style="{{ tileOnsiteStyle }}" style-hover="transform:translate(2px,2px)">
+            <span style="font-size:11px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:{{ accent }}">Очно</span>
+            <span style="font-size:19px;font-weight:800;letter-spacing:-.02em;color:{{ ink }}">В Казани, с коллегами</span>
+            <span style="font-size:13px;line-height:1.55;color:{{ inkMuted }}">КГМУ, аудитория 3 · 40 мест, осталось 12 · отметка на входе засчитывается в НМО</span>
+          </button>
+          <button onClick="{{ chooseOnline }}" style="{{ tileOnlineStyle }}" style-hover="transform:translate(2px,2px)">
+            <span style="font-size:11px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:{{ accent }}">Онлайн</span>
+            <span style="font-size:19px;font-weight:800;letter-spacing:-.02em;color:{{ ink }}">Из любого города</span>
+            <span style="font-size:13px;line-height:1.55;color:{{ inkMuted }}">Комната эфира с чатом · для НМО — 90 минут участия и 2 отметки</span>
+          </button>
+        </div>
+        <div style="margin-top:16px;font-size:13px;line-height:1.6;color:{{ inkFaint }}">{{ chooserNote }}</div>
+      </section>
+    </sc-if>
+
+    <!-- ═══ Блок 4 · формат · эфир ═══ -->
+    <sc-if value="{{ secOnline }}" hint-placeholder-val="{{ true }}">
+      <section data-screen-label="d-event · блок формата · эфир" style="margin-top:72px">
+        <div style="display:flex;align-items:baseline;gap:18px;margin-bottom:28px">
+          <span style="font-size:13px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ ink }};white-space:nowrap">Эфир</span>
+          <span style="flex:1;border-top:2px solid {{ ink }}"></span>
+        </div>
+
+        <sc-if value="{{ liveNow }}" hint-placeholder-val="{{ false }}">
+          <div style="border:2px solid {{ border }};background:{{ surface }};box-shadow:6px 6px 0 {{ shadow }};display:flex;align-items:center;gap:20px;padding:24px 28px;flex-wrap:wrap">
+            <span style="display:inline-flex;align-items:center;gap:8px;font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#fff;background:#C81E1E;padding:8px 14px;flex:none"><span style="width:8px;height:8px;border-radius:50%;background:#fff;animation:livePulse 1.6s ease-in-out infinite"></span>Идёт эфир</span>
+            <span style="font-size:15px;font-weight:700;color:{{ ink }};flex:1;min-width:180px">412 в комнате · идёт 24 минуты</span>
+            <a href="Комната эфира v2.dc.html" style="font-size:15px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};padding:15px 30px;white-space:nowrap;box-shadow:4px 4px 0 {{ border }};text-decoration:none" style-hover="transform:translate(2px,2px);box-shadow:2px 2px 0 {{ border }}">Войти в комнату ↗</a>
+          </div>
+
+          <!-- интерактив эфира · REQ-139, REQ-69 -->
+          <div style="display:grid;grid-template-columns:{{ interCols }};gap:24px;margin-top:32px;align-items:start">
+            <div style="border:2px solid {{ border }};background:{{ surface }};box-shadow:4px 4px 0 {{ shadowSm }};padding:24px">
+              <div style="font-size:11.5px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:{{ accent }};margin-bottom:14px">Вопрос лектору</div>
+              <sc-if value="{{ qaOpen }}" hint-placeholder-val="{{ true }}">
+                <input value="{{ qaText }}" onInput="{{ setQaText }}" placeholder="Например: какой набор для PRP вы используете?" style="width:100%;box-sizing:border-box;font:inherit;font-size:13.5px;padding:12px 14px;border:2px solid {{ border }};background:{{ surface }};color:{{ ink }};outline:none" style-focus="border-color:{{ accent }}">
+                <button onClick="{{ sendQa }}" style="margin-top:12px;font:inherit;font-size:13px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:0;padding:12px 20px;cursor:pointer;box-shadow:3px 3px 0 {{ border }}" style-hover="transform:translate(1px,1px)">Отправить</button>
+              </sc-if>
+              <sc-if value="{{ qaSent }}" hint-placeholder-val="{{ false }}">
+                <div style="background:{{ tint }};padding:14px 16px;font-size:13px;line-height:1.6;color:{{ tintInk }};font-weight:700">Вопрос отправлен. Самые залайканные идут первыми — решает аудитория.</div>
+              </sc-if>
+            </div>
+            <div style="border:2px solid {{ border }};background:{{ surface }};box-shadow:4px 4px 0 {{ shadowSm }};padding:24px">
+              <div style="font-size:11.5px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:{{ accent }};margin-bottom:14px">Опрос · живой график</div>
+              <div style="font-size:14.5px;font-weight:700;color:{{ ink }};margin-bottom:16px">Какой протокол PRP вы применяете?</div>
+              <div style="display:flex;flex-direction:column;gap:10px">
+                <sc-for list="{{ pollOpts }}" as="o" hint-placeholder-count="3">
+                  <button onClick="{{ o.on }}" style="{{ o.rowStyle }}" style-hover="border-color:{{ accent }}">
+                    <span style="position:absolute;inset:0;width:{{ o.barW }};background:{{ tint }};z-index:0"></span>
+                    <span style="position:relative;z-index:1;font-size:13px;font-weight:700;color:{{ ink }}">{{ o.label }}</span>
+                    <span style="position:relative;z-index:1;margin-left:auto;font-size:13px;font-weight:800;color:{{ ink }};font-variant-numeric:tabular-nums">{{ o.pct }}</span>
+                  </button>
+                </sc-for>
+              </div>
+              <div style="margin-top:12px;font-size:12px;font-weight:700;color:{{ inkFaint }}">{{ pollNote }}</div>
+            </div>
+            <div style="border:2px solid {{ border }};background:{{ surface }};box-shadow:4px 4px 0 {{ shadowSm }};padding:24px">
+              <div style="font-size:11.5px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:{{ accent }};margin-bottom:14px">Отметка присутствия · НМО</div>
+              <div style="font-size:13.5px;line-height:1.6;color:{{ inkBody }};margin-bottom:14px">Для зачёта НМО: 90 минут участия и 2 отметки. Отметьтесь, чтобы засчитать НМО.</div>
+              <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+                <span style="font-size:20px;font-weight:800;color:{{ ink }};font-variant-numeric:tabular-nums">{{ checkLabel }}</span>
+                <sc-if value="{{ checkOpen }}" hint-placeholder-val="{{ true }}">
+                  <button onClick="{{ doCheck }}" style="font:inherit;font-size:13px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:0;padding:12px 20px;cursor:pointer;box-shadow:3px 3px 0 {{ border }}" style-hover="transform:translate(1px,1px)">Отметиться</button>
+                </sc-if>
+                <sc-if value="{{ checkDone }}" hint-placeholder-val="{{ false }}">
+                  <span style="font-size:12.5px;font-weight:800;color:#00693D">Обе отметки есть — условие НМО выполняется</span>
+                </sc-if>
+              </div>
+            </div>
+          </div>
+
+          <!-- партнёрская лекция · REQ-69 · маркировка по закону -->
+          <div style="margin-top:24px;border:2px solid {{ border }};background:{{ surface }};box-shadow:4px 4px 0 {{ shadowSm }};padding:24px 28px;display:flex;align-items:center;gap:20px;flex-wrap:wrap">
+            <span style="font-size:10.5px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#8A5A00;background:#FDF4E3;padding:5px 10px;flex:none">Реклама</span>
+            <div style="flex:1;min-width:220px">
+              <div style="font-size:15px;font-weight:700;color:{{ ink }}">Партнёрская лекция: наборы для PRP в амбулаторной практике</div>
+              <div style="font-size:12.5px;font-weight:600;color:{{ inkFaint }};margin-top:5px">20:30–20:40 · Партнёрский материал · Партнёр А</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+              <span style="font-size:12.5px;font-weight:700;color:{{ inkMuted }}">Как вам подача?</span>
+              <sc-if value="{{ adOpen }}" hint-placeholder-val="{{ true }}">
+                <button onClick="{{ adYes }}" style="font:inherit;font-size:12.5px;font-weight:800;color:{{ ink }};background:{{ surface }};border:2px solid {{ border }};padding:9px 16px;cursor:pointer;box-shadow:3px 3px 0 {{ shadowSm }}" style-hover="transform:translate(1px,1px)">Зашла</button>
+                <button onClick="{{ adNo }}" style="font:inherit;font-size:12.5px;font-weight:800;color:{{ ink }};background:{{ surface }};border:2px solid {{ border }};padding:9px 16px;cursor:pointer;box-shadow:3px 3px 0 {{ shadowSm }}" style-hover="transform:translate(1px,1px)">Не зашла</button>
+              </sc-if>
+              <sc-if value="{{ adDone }}" hint-placeholder-val="{{ false }}">
+                <span style="font-size:12.5px;font-weight:800;color:{{ accent }}">Спасибо, учли</span>
+              </sc-if>
+            </div>
+          </div>
+
+          <!-- мягкие напоминания · REQ-40 · не модальные -->
+          <div style="margin-top:24px;display:grid;grid-template-columns:{{ remindCols }};gap:16px">
+            <a href="#" style="background:{{ tint }};padding:16px 20px;font-size:13px;line-height:1.6;color:{{ tintInk }};font-weight:700;text-decoration:none">Пройдите уроки серии — они дополняют эфир →</a>
+            <a href="#" style="background:{{ tint }};padding:16px 20px;font-size:13px;line-height:1.6;color:{{ tintInk }};font-weight:700;text-decoration:none">Пришлите свой клинический случай — разберём в следующем выпуске →</a>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ beforeStart }}" hint-placeholder-val="{{ true }}">
+          <div style="border:2px solid {{ border }};background:{{ surface }};box-shadow:6px 6px 0 {{ shadow }};padding:24px 28px;display:flex;align-items:center;gap:20px;flex-wrap:wrap">
+            <span style="font-size:15px;font-weight:700;color:{{ ink }};flex:1;min-width:220px">Комната эфира откроется за 10 минут до начала{{ roomHint }}</span>
+            <span style="font-size:12.5px;font-weight:700;color:{{ inkFaint }};line-height:1.6">Во время эфира: вопрос лектору · опросы с живым графиком · отметки присутствия для НМО (90 минут и 2 отметки)</span>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ isPast }}" hint-placeholder-val="{{ false }}">
+          <div style="border:2px solid {{ hairline }};padding:20px 26px;font-size:13.5px;line-height:1.6;color:{{ inkMuted }}">Эфир завершился 28 августа в 20:32. Запись и материалы — в разделе <a href="#after" style="font-weight:700;color:{{ accent }}">«После события»</a> ниже.</div>
+        </sc-if>
+      </section>
+    </sc-if>
+
+    <!-- ═══ Блок 4 · формат · офлайн: адрес, карта, билет (D-4, макет R4) ═══ -->
+    <sc-if value="{{ secOffline }}" hint-placeholder-val="{{ false }}">
+      <section data-screen-label="d-event · блок формата · офлайн" style="margin-top:72px">
+        <div style="display:flex;align-items:baseline;gap:18px;margin-bottom:28px">
+          <span style="font-size:13px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ ink }};white-space:nowrap">Место и билет</span>
+          <span style="flex:1;border-top:2px solid {{ ink }}"></span>
+        </div>
+        <div style="display:grid;grid-template-columns:{{ colsTemplate }};gap:clamp(32px,4vw,56px);align-items:start">
+          <div>
+            <div style="border:2px solid {{ border }};background:{{ surface }};box-shadow:6px 6px 0 {{ shadow }}">
+              <div style="border-bottom:2px solid {{ border }};background:{{ tint }};aspect-ratio:16/7;display:flex;align-items:center;justify-content:center">
+                <span style="font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ tintInk }};border:2px dashed {{ tintInk }};padding:10px 18px">Карта · Казань, ул. Бутлерова, 49</span>
+              </div>
+              <div style="padding:26px 30px">
+                <div style="font-size:18px;font-weight:800;letter-spacing:-.02em;color:{{ ink }}">Казань, ул. Бутлерова, 49</div>
+                <div style="font-size:13.5px;line-height:1.6;color:{{ inkMuted }};margin-top:6px">КГМУ, корпус Б, аудитория 3 · начало в 19:00, сбор с 18:30</div>
+                <div style="margin-top:18px;display:flex;align-items:baseline;gap:14px">
+                  <span style="font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ accent }};white-space:nowrap">Как добраться</span>
+                  <span style="flex:1;border-top:1px solid {{ hairline }}"></span>
+                </div>
+                <div style="margin-top:12px;font-size:13.5px;line-height:1.7;color:{{ inkBody }}">Метро «Суконная слобода», 7 минут пешком. Парковка — во дворе корпуса Б, въезд со стороны ул. Луковского. Вход по билету, паспорт не нужен.</div>
+                <div style="margin-top:18px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+                  <span style="font-size:13px;font-weight:800;color:{{ ink }};font-variant-numeric:tabular-nums">{{ seatsLabel }}</span>
+                  <span style="flex:1;min-width:120px;height:10px;border:2px solid {{ border }};position:relative"><span style="position:absolute;inset:0;width:{{ seatsPct }};background:{{ seatsBarColor }}"></span></span>
+                </div>
+                <div style="margin-top:14px;font-size:12.5px;font-weight:700;color:{{ inkFaint }}">Отметка на входе по QR засчитывается как подтверждение присутствия для НМО.</div>
+              </div>
+            </div>
+          </div>
+          <div id="ticket">
+            <!-- ═══ юнит «билет / QR» — анатомия задаётся здесь, «Мои события» берут как есть ═══ -->
+            <sc-if value="{{ ticketOn }}" hint-placeholder-val="{{ false }}">
+              <div data-screen-label="d-event · билет / QR" style="border:2px solid {{ border }};background:#fff;box-shadow:6px 6px 0 {{ shadow }}">
+                <div style="background:#114D9E;padding:16px 22px;display:flex;align-items:center;justify-content:space-between;gap:12px">
+                  <span style="font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#fff">Ваш билет</span>
+                  <span style="{{ ticketBadgeStyle }}">{{ ticketStatus }}</span>
+                </div>
+                <div style="padding:22px;display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap;{{ ticketBodyStyle }}">
+                  <div style="width:124px;height:124px;border:2px solid oklch(.21 .02 250);position:relative;flex:none;background:conic-gradient(oklch(.21 .02 250) 90deg,#fff 0 180deg,oklch(.21 .02 250) 0 270deg,#fff 0) 0 0/14px 14px">
+                    <span style="position:absolute;top:6px;left:6px;width:24px;height:24px;border:5px solid oklch(.21 .02 250);background:#fff;box-sizing:border-box"></span>
+                    <span style="position:absolute;top:6px;right:6px;width:24px;height:24px;border:5px solid oklch(.21 .02 250);background:#fff;box-sizing:border-box"></span>
+                    <span style="position:absolute;bottom:6px;left:6px;width:24px;height:24px;border:5px solid oklch(.21 .02 250);background:#fff;box-sizing:border-box"></span>
+                  </div>
+                  <div style="flex:1;min-width:170px">
+                    <div style="font-size:15px;font-weight:800;letter-spacing:-.01em;color:oklch(.21 .02 250)">Вебинар «PRP при гонартрозе»</div>
+                    <div style="font-size:12.5px;line-height:1.6;color:oklch(.45 .014 250);margin-top:6px">28 августа, 19:00 · Казань, ул. Бутлерова, 49{{ ticketMode }}</div>
+                    <div style="font-size:12.5px;font-weight:700;color:oklch(.21 .02 250);margin-top:10px">Соколова Анна Игоревна</div>
+                    <div style="font-size:11.5px;font-weight:700;color:oklch(.556 .012 250);font-variant-numeric:tabular-nums">Билет DS-020-0137</div>
+                  </div>
+                </div>
+                <div style="border-top:2px dashed oklch(.704 .01 250);padding:12px 22px;font-size:12px;font-weight:700;color:oklch(.45 .014 250)">{{ ticketFoot }}</div>
+              </div>
+              <div style="margin-top:14px;font-size:12.5px;line-height:1.6;color:{{ inkFaint }}">Билет продублирован в <a href="Мои события.dc.html" style="font-weight:700;color:{{ accent }}">«Моих событиях»</a> — со страницы события ничего не уносится.</div>
+            </sc-if>
+            <sc-if value="{{ ticketOff }}" hint-placeholder-val="{{ true }}">
+              <div style="border:2px dashed {{ dashBorder }};padding:clamp(24px,4vw,40px);text-align:center">
+                <div style="font-size:15px;font-weight:800;color:{{ ink }};margin-bottom:8px">Билет с QR-кодом появится здесь после записи</div>
+                <div style="font-size:13px;line-height:1.6;color:{{ inkMuted }}">Покажите QR на входе — отметка засчитывается в НМО. Билет также будет в «Моих событиях».</div>
+              </div>
+            </sc-if>
+          </div>
+        </div>
+      </section>
+    </sc-if>
+
+    <!-- ═══ Блок 5 · после события · REQ-118, REQ-135 (вариант А — рядом с оценкой) ═══ -->
+    <sc-if value="{{ isPast }}" hint-placeholder-val="{{ false }}">
+      <section id="after" data-screen-label="d-event · после события" style="margin-top:72px">
+        <div style="display:flex;align-items:baseline;gap:18px;margin-bottom:28px">
+          <span style="font-size:13px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ ink }};white-space:nowrap">После события</span>
+          <span style="flex:1;border-top:2px solid {{ ink }}"></span>
+        </div>
+
+        <!-- запись · юнит webinar-archive, отсюда только вход -->
+        <div style="border:2px solid {{ border }};background:{{ surface }};box-shadow:6px 6px 0 {{ shadow }};display:flex;align-items:center;gap:22px;padding:24px 28px;flex-wrap:wrap">
+          <div style="width:150px;aspect-ratio:16/9;background:{{ tint }};display:flex;align-items:center;justify-content:center;flex:none;border:2px solid {{ border }}"><span style="font-size:18px;color:{{ tintInk }}">▶</span></div>
+          <div style="flex:1;min-width:200px">
+            <div style="font-size:16px;font-weight:800;letter-spacing:-.01em;color:{{ ink }}">Запись эфира готова · 92 минуты</div>
+            <div style="font-size:13px;line-height:1.6;color:{{ inkMuted }};margin-top:6px">Смотрели 214 врачей. Материалы: презентация спикера и протокол PRP.</div>
+          </div>
+          <div style="display:flex;gap:14px;flex-wrap:wrap">
+            <a href="Вебинар архив.dc.html" style="font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};padding:14px 26px;white-space:nowrap;box-shadow:4px 4px 0 {{ border }};text-decoration:none" style-hover="transform:translate(2px,2px);box-shadow:2px 2px 0 {{ border }}">Смотреть запись ↗</a>
+            <a href="Вебинар архив.dc.html" style="font-size:14px;font-weight:700;color:{{ ink }};background:{{ surface }};border:2px solid {{ border }};padding:12px 22px;white-space:nowrap;box-shadow:4px 4px 0 {{ shadowSm }};text-decoration:none" style-hover="transform:translate(1px,1px)">Материалы</a>
+          </div>
+        </div>
+
+        <!-- итог НМО · только записанному -->
+        <sc-if value="{{ registered }}" hint-placeholder-val="{{ false }}">
+          <div style="margin-top:24px;{{ nmoStyle }}">
+            <span style="font-size:14px;font-weight:800">{{ nmoHead }}</span>
+            <span style="font-size:13px;font-weight:600;line-height:1.6">{{ nmoSub }}</span>
+          </div>
+        </sc-if>
+
+        <div style="display:grid;grid-template-columns:{{ colsTemplate }};gap:clamp(32px,4vw,56px);margin-top:32px;align-items:start">
+          <!-- оценка и отзыв · REQ-118 -->
+          <div style="border:2px solid {{ border }};background:{{ surface }};box-shadow:4px 4px 0 {{ shadowSm }};padding:28px">
+            <div style="font-size:11.5px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:{{ accent }};margin-bottom:12px">Как прошло?</div>
+            <sc-if value="{{ reviewOpen }}" hint-placeholder-val="{{ true }}">
+              <div style="font-size:15px;font-weight:700;color:{{ ink }};margin-bottom:14px">Оцените эфир</div>
+              <div style="display:flex;gap:8px;margin-bottom:18px">
+                <sc-for list="{{ stars }}" as="s" hint-placeholder-count="5">
+                  <button onClick="{{ s.on }}" title="{{ s.title }}" style="font:inherit;font-size:28px;line-height:1;background:transparent;border:0;cursor:pointer;padding:2px;color:{{ s.color }}" style-hover="transform:translateY(-2px)">★</button>
+                </sc-for>
+              </div>
+              <textarea value="{{ reviewText }}" onInput="{{ setReviewText }}" placeholder="Оставьте отзыв — его увидят коллеги" rows="3" style="width:100%;box-sizing:border-box;font:inherit;font-size:13.5px;line-height:1.6;padding:12px 14px;border:2px solid {{ border }};background:{{ surface }};color:{{ ink }};outline:none;resize:vertical" style-focus="border-color:{{ accent }}"></textarea>
+              <button onClick="{{ sendReview }}" style="margin-top:14px;font:inherit;font-size:13.5px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:0;padding:13px 24px;cursor:pointer;box-shadow:3px 3px 0 {{ border }}" style-hover="transform:translate(1px,1px)">Отправить отзыв</button>
+            </sc-if>
+            <sc-if value="{{ reviewSent }}" hint-placeholder-val="{{ false }}">
+              <div style="background:{{ tint }};padding:16px 18px;font-size:13.5px;line-height:1.6;color:{{ tintInk }};font-weight:700">Спасибо! Отзыв появится на странице события после медицинской экспертизы формулировок.</div>
+            </sc-if>
+          </div>
+          <!-- мини-опрос исследования · REQ-135 · отдельный от отзыва, не обязателен -->
+          <div style="border:2px solid {{ hairline }};background:{{ surface }};padding:28px">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+              <span style="font-size:11.5px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:{{ inkFaint }}">Короткий вопрос от партнёра</span>
+              <span style="font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#8A5A00;background:#FDF4E3;padding:3px 8px">Реклама</span>
+            </div>
+            <div style="font-size:14px;font-weight:700;color:{{ ink }};line-height:1.5;margin-bottom:14px">Вы видели партнёрскую лекцию в эфире? Оцените подачу.</div>
+            <sc-if value="{{ mrOpen }}" hint-placeholder-val="{{ true }}">
+              <div style="display:flex;gap:10px;flex-wrap:wrap">
+                <button onClick="{{ mrVote }}" style="font:inherit;font-size:12.5px;font-weight:800;color:{{ ink }};background:{{ surface }};border:2px solid {{ border }};padding:10px 16px;cursor:pointer;box-shadow:3px 3px 0 {{ shadowSm }}" style-hover="transform:translate(1px,1px)">Зашла</button>
+                <button onClick="{{ mrVote }}" style="font:inherit;font-size:12.5px;font-weight:800;color:{{ ink }};background:{{ surface }};border:2px solid {{ border }};padding:10px 16px;cursor:pointer;box-shadow:3px 3px 0 {{ shadowSm }}" style-hover="transform:translate(1px,1px)">Не зашла</button>
+                <button onClick="{{ mrVote }}" style="font:inherit;font-size:12.5px;font-weight:700;color:{{ inkMuted }};background:transparent;border:2px solid {{ hairline }};padding:10px 16px;cursor:pointer">Не видел</button>
+                <button onClick="{{ mrSkip }}" style="font:inherit;font-size:12.5px;font-weight:700;color:{{ inkFaint }};background:transparent;border:0;padding:10px 6px;cursor:pointer;text-decoration:underline;text-underline-offset:3px">Пропустить</button>
+              </div>
+            </sc-if>
+            <sc-if value="{{ mrDone }}" hint-placeholder-val="{{ false }}">
+              <div style="font-size:13px;font-weight:700;color:{{ inkMuted }}">{{ mrDoneText }}</div>
+            </sc-if>
+            <div style="margin-top:14px;font-size:11.5px;line-height:1.55;color:{{ inkFaint }}">Не влияет на оценку эфира и НМО. Ответ уходит партнёру без вашего имени.</div>
+          </div>
+        </div>
+      </section>
+    </sc-if>
+
+    <!-- ═══ Блок 6 · связи · REQ-137 ═══ -->
+    <section data-screen-label="d-event · связи" style="margin-top:72px">
+      <div style="display:flex;align-items:baseline;gap:18px;margin-bottom:24px">
+        <span style="font-size:13px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ ink }};white-space:nowrap">Вокруг события</span>
+        <span style="flex:1;border-top:2px solid {{ ink }}"></span>
+      </div>
+      <div style="display:grid;gap:0">
+        <a href="Витрина врача - Лента специальности.dc.html" style="display:flex;align-items:center;gap:16px;padding:18px 4px;border-top:1px solid {{ hairline }};text-decoration:none" style-hover="background:{{ tint }}">
+          <span style="font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:{{ inkFaint }};width:96px;flex:none">Школа</span>
+          <span style="font-size:15px;font-weight:700;color:{{ ink }};flex:1;min-width:0">Школа ортобиологии — все уроки и события программы</span>
+          <span style="font-size:15px;font-weight:800;color:{{ accent }}">→</span>
+        </a>
+        <a href="Эксперт.dc.html" style="display:flex;align-items:center;gap:16px;padding:18px 4px;border-top:1px solid {{ hairline }};text-decoration:none" style-hover="background:{{ tint }}">
+          <span style="font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:{{ inkFaint }};width:96px;flex:none">Спикер</span>
+          <span style="font-size:15px;font-weight:700;color:{{ ink }};flex:1;min-width:0">Михаил Страхов — страница эксперта, 12 эфиров</span>
+          <span style="font-size:15px;font-weight:800;color:{{ accent }}">→</span>
+        </a>
+        <a href="#" style="display:flex;align-items:center;gap:16px;padding:18px 4px;border-top:1px solid {{ hairline }};border-bottom:1px solid {{ hairline }};text-decoration:none" style-hover="background:{{ tint }}">
+          <span style="font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:{{ inkFaint }};width:96px;flex:none">Коллеги</span>
+          <span style="font-size:15px;font-weight:700;color:{{ ink }};flex:1;min-width:0">Обсуждение события в сообществе</span>
+          <span style="font-size:15px;font-weight:800;color:{{ accent }}">→</span>
+        </a>
+      </div>
+    </section>
   </main>
+  </sc-if>
 
-  <!-- Нижний CTA -->
-  <div style="background:{{ headerBg }};padding:clamp(36px,5vw,56px) clamp(16px,4vw,48px)">
-    <div style="max-width:1104px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;gap:32px;flex-wrap:wrap">
-      <div style="font-size:clamp(24px,4vw,32px);font-weight:800;letter-spacing:-.03em;color:#fff">{{ footCtaTitle }}<br><span style="color:#D3E8FD">{{ footCtaSub }}</span></div>
-      <a href="{{ footCtaHref }}" style="font-size:16px;font-weight:800;color:#114D9E;background:#fff;border:0;padding:18px 34px;white-space:nowrap;box-shadow:4px 4px 0 {{ headerShadow }};text-decoration:none" style-hover="transform:translate(2px,2px);box-shadow:2px 2px 0 {{ headerShadow }}">{{ footCtaLabel }}</a>
+  <!-- ═══════════ Стенды ═══════════ -->
+  <sc-if value="{{ bTicket }}" hint-placeholder-val="{{ false }}">
+    <section data-screen-label="d-event · стенд · билет / QR · состояния" style="max-width:1104px;margin:0 auto;padding:clamp(36px,6vw,64px) clamp(16px,4vw,48px)">
+      <div style="display:flex;align-items:baseline;gap:16px;margin-bottom:10px"><h2 style="margin:0;font-size:clamp(22px,3vw,30px);font-weight:800;letter-spacing:-.03em;color:{{ ink }}">Билет / QR — состояния</h2><span style="flex:1;border-top:2px solid {{ ink }};transform:translateY(-6px)"></span></div>
+      <p style="margin:0 0 30px;font-size:13.5px;line-height:1.6;color:{{ inkMuted }};max-width:720px">Новый юнит: анатомия задаётся здесь (d-event), «Мои события» в 08-d-lk берут его как есть. Карточка билета всегда светлая — как печатный документ.</p>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:32px;align-items:start">
+        <sc-for list="{{ ticketBoard }}" as="t" hint-placeholder-count="3">
+          <div>
+            <div style="font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:{{ inkFaint }};margin-bottom:8px">{{ t.label }}</div>
+            <div style="border:2px solid {{ border }};background:#fff;box-shadow:6px 6px 0 {{ shadow }}">
+              <div style="background:#114D9E;padding:14px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px">
+                <span style="font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#fff">Ваш билет</span>
+                <span style="{{ t.badgeStyle }}">{{ t.status }}</span>
+              </div>
+              <div style="padding:20px;display:flex;gap:18px;align-items:flex-start;{{ t.bodyStyle }}">
+                <div style="width:104px;height:104px;border:2px solid oklch(.21 .02 250);position:relative;flex:none;background:conic-gradient(oklch(.21 .02 250) 90deg,#fff 0 180deg,oklch(.21 .02 250) 0 270deg,#fff 0) 0 0/12px 12px">
+                  <span style="position:absolute;top:5px;left:5px;width:20px;height:20px;border:4px solid oklch(.21 .02 250);background:#fff;box-sizing:border-box"></span>
+                  <span style="position:absolute;top:5px;right:5px;width:20px;height:20px;border:4px solid oklch(.21 .02 250);background:#fff;box-sizing:border-box"></span>
+                  <span style="position:absolute;bottom:5px;left:5px;width:20px;height:20px;border:4px solid oklch(.21 .02 250);background:#fff;box-sizing:border-box"></span>
+                </div>
+                <div style="flex:1;min-width:150px">
+                  <div style="font-size:14px;font-weight:800;letter-spacing:-.01em;color:oklch(.21 .02 250)">Вебинар «PRP при гонартрозе»</div>
+                  <div style="font-size:12px;line-height:1.6;color:oklch(.45 .014 250);margin-top:5px">28 августа, 19:00 · Казань, ул. Бутлерова, 49 · очно</div>
+                  <div style="font-size:12px;font-weight:700;color:oklch(.21 .02 250);margin-top:9px">Соколова Анна Игоревна</div>
+                  <div style="font-size:11px;font-weight:700;color:oklch(.556 .012 250);font-variant-numeric:tabular-nums">Билет DS-020-0137</div>
+                </div>
+              </div>
+              <div style="border-top:2px dashed oklch(.704 .01 250);padding:11px 20px;font-size:11.5px;font-weight:700;color:oklch(.45 .014 250)">{{ t.foot }}</div>
+            </div>
+            <div style="margin-top:10px;font-size:12px;line-height:1.55;color:{{ inkFaint }}">{{ t.note }}</div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-if>
+
+  <sc-if value="{{ bReg }}" hint-placeholder-val="{{ false }}">
+    <section data-screen-label="d-event · стенд · блок записи · вариант А|Б|В" style="max-width:1360px;margin:0 auto;padding:clamp(36px,6vw,64px) clamp(16px,4vw,48px)">
+      <div style="display:flex;align-items:baseline;gap:16px;margin-bottom:10px"><h2 style="margin:0;font-size:clamp(22px,3vw,30px);font-weight:800;letter-spacing:-.03em;color:{{ ink }}">Где живёт блок записи — развилка 1</h2><span style="flex:1;border-top:2px solid {{ ink }};transform:translateY(-6px)"></span></div>
+      <p style="margin:0 0 30px;font-size:13.5px;line-height:1.6;color:{{ inkMuted }};max-width:760px">Страница выше собрана на варианте Б (в потоке, как в базовом канвасе). Схемы ниже — для решения владельца.</p>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:40px;align-items:start">
+        <div>
+          <div style="font-size:12px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:{{ accent }};border-bottom:2px solid {{ hairline }};padding-bottom:10px;margin-bottom:18px">Вариант А — закреплённая карточка справа</div>
+          <div style="border:2px solid {{ hairline }};padding:18px;display:grid;grid-template-columns:1.6fr 1fr;gap:14px;background:{{ surface }}">
+            <div style="display:flex;flex-direction:column;gap:10px"><span style="height:12px;width:70%;background:{{ hairline }}"></span><span style="height:10px;width:95%;background:{{ hairline }}"></span><span style="height:10px;width:88%;background:{{ hairline }}"></span><span style="height:10px;width:92%;background:{{ hairline }}"></span><span style="height:10px;width:60%;background:{{ hairline }}"></span><span style="height:10px;width:85%;background:{{ hairline }}"></span><span style="height:10px;width:90%;background:{{ hairline }}"></span></div>
+            <div style="border:2px solid {{ border }};box-shadow:4px 4px 0 {{ shadow }};background:{{ surface }};padding:14px;display:flex;flex-direction:column;gap:9px;align-self:start;position:sticky;top:12px">
+              <span style="font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:{{ tintInk }};background:{{ tint }};padding:4px 8px;align-self:flex-start">28 авг · 19:00</span>
+              <span style="font-size:10.5px;font-weight:800;color:{{ ink }}">Онлайн · НМО 2 балла · 50 Pul</span>
+              <span style="font-size:11px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};padding:9px 12px;text-align:center">Участвовать</span>
+            </div>
+          </div>
+          <div style="margin-top:12px;font-size:12.5px;line-height:1.6;color:{{ inkMuted }}">Условия и кнопка всегда видны при прокрутке. Сильнее для конверсии; уводит от базового канваса.</div>
+        </div>
+        <div>
+          <div style="font-size:12px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:{{ accent }};border-bottom:2px solid {{ hairline }};padding-bottom:10px;margin-bottom:18px">Вариант Б — блок в потоке · на странице выше</div>
+          <div style="border:2px solid {{ hairline }};padding:18px;display:flex;flex-direction:column;gap:14px;background:{{ surface }}">
+            <div style="border:2px solid {{ border }};box-shadow:4px 4px 0 {{ shadow }};background:{{ surface }};display:grid;grid-template-columns:64px 1fr">
+              <span style="background:{{ tint }};border-right:2px solid {{ border }};display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:{{ tintInk }}">19:00</span>
+              <span style="padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px"><span style="font-size:10.5px;font-weight:800;color:{{ ink }}">Онлайн · НМО 2 · 50 Pul</span><span style="font-size:11px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};padding:8px 12px">Участвовать</span></span>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:10px"><span style="height:10px;width:95%;background:{{ hairline }}"></span><span style="height:10px;width:88%;background:{{ hairline }}"></span><span style="height:10px;width:70%;background:{{ hairline }}"></span></div>
+          </div>
+          <div style="margin-top:12px;font-size:12.5px;line-height:1.6;color:{{ inkMuted }}">Как в базовом канвасе вебинара: карточка сразу под постер-шапкой, дальше открытая часть. Спокойнее.</div>
+        </div>
+        <div>
+          <div style="font-size:12px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:{{ accent }};border-bottom:2px solid {{ hairline }};padding-bottom:10px;margin-bottom:18px">Вариант В — поток + строка снизу на мобильном</div>
+          <div style="border:2px solid {{ hairline }};background:{{ surface }};width:min(100%,260px);margin:0 auto;position:relative;padding:16px 14px 64px;display:flex;flex-direction:column;gap:10px">
+            <span style="height:12px;width:75%;background:{{ hairline }}"></span><span style="height:10px;width:95%;background:{{ hairline }}"></span><span style="height:10px;width:88%;background:{{ hairline }}"></span><span style="height:10px;width:92%;background:{{ hairline }}"></span><span style="height:10px;width:64%;background:{{ hairline }}"></span>
+            <div style="position:absolute;left:0;right:0;bottom:0;border-top:2px solid {{ border }};background:{{ surface }};padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px">
+              <span style="font-size:10.5px;font-weight:800;color:{{ ink }};line-height:1.4">50 Pul · у вас 70<br><span style="font-weight:700;color:{{ inkFaint }}">28 авг, 19:00</span></span>
+              <span style="font-size:11.5px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};padding:10px 16px">Участвовать</span>
+            </div>
+          </div>
+          <div style="margin-top:12px;font-size:12.5px;line-height:1.6;color:{{ inkMuted }}">На десктопе — вариант Б; на 390 добавляется закреплённая строка с ценой и кнопкой. Совместим с правилом единственного CTA — это та же кнопка.</div>
+        </div>
+      </div>
+    </section>
+  </sc-if>
+
+  <sc-if value="{{ bHybrid }}" hint-placeholder-val="{{ false }}">
+    <section data-screen-label="d-event · стенд · гибрид · вариант А|Б" style="max-width:1104px;margin:0 auto;padding:clamp(36px,6vw,64px) clamp(16px,4vw,48px)">
+      <div style="display:flex;align-items:baseline;gap:16px;margin-bottom:10px"><h2 style="margin:0;font-size:clamp(22px,3vw,30px);font-weight:800;letter-spacing:-.03em;color:{{ ink }}">Переключение формата гибрида — развилка 2</h2><span style="flex:1;border-top:2px solid {{ ink }};transform:translateY(-6px)"></span></div>
+      <p style="margin:0 0 30px;font-size:13.5px;line-height:1.6;color:{{ inkMuted }};max-width:760px">От выбора зависит, что попадёт в билет врача. Страница выше собрана на варианте А.</p>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:40px;align-items:start">
+        <div>
+          <div style="font-size:12px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:{{ accent }};border-bottom:2px solid {{ hairline }};padding-bottom:10px;margin-bottom:18px">Вариант А — выбор при записи</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+            <span style="border:2px solid {{ accent }};background:{{ tint }};box-shadow:4px 4px 0 {{ shadow }};padding:16px;display:flex;flex-direction:column;gap:6px"><b style="font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:{{ accent }}">Очно ✓</b><span style="font-size:13.5px;font-weight:800;color:{{ ink }}">В Казани</span><span style="font-size:11.5px;color:{{ inkMuted }}">осталось 12 мест</span></span>
+            <span style="border:2px solid {{ border }};background:{{ surface }};padding:16px;display:flex;flex-direction:column;gap:6px"><b style="font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:{{ accent }}">Онлайн</b><span style="font-size:13.5px;font-weight:800;color:{{ ink }}">Из любого города</span><span style="font-size:11.5px;color:{{ inkMuted }}">комната эфира</span></span>
+          </div>
+          <div style="margin-top:12px;font-size:12.5px;line-height:1.6;color:{{ inkMuted }}">Врач выбирает один раз при записи, дальше страница показывает только выбранный блок. Выбор фиксируется в билете; «Изменить» — рядом с билетом.</div>
+        </div>
+        <div>
+          <div style="font-size:12px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:{{ accent }};border-bottom:2px solid {{ hairline }};padding-bottom:10px;margin-bottom:18px">Вариант Б — две вкладки в блоке формата</div>
+          <div style="border:2px solid {{ border }};background:{{ surface }};box-shadow:4px 4px 0 {{ shadowSm }}">
+            <div style="display:flex;border-bottom:2px solid {{ border }}">
+              <span style="flex:1;padding:12px;text-align:center;font-size:12px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }}">Очно в Казани</span>
+              <span style="flex:1;padding:12px;text-align:center;font-size:12px;font-weight:800;color:{{ ink }};background:{{ surface }};border-left:2px solid {{ border }}">Онлайн</span>
+            </div>
+            <div style="padding:18px;display:flex;flex-direction:column;gap:10px"><span style="height:44px;background:{{ tint }};display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:{{ tintInk }}">Карта</span><span style="height:10px;width:80%;background:{{ hairline }}"></span><span style="height:10px;width:60%;background:{{ hairline }}"></span></div>
+          </div>
+          <div style="margin-top:12px;font-size:12.5px;line-height:1.6;color:{{ inkMuted }}">Оба блока живут на странице, врач переключается в любой момент. Что попадёт в билет — решает отдельный выбор при записи, вкладки его не заменяют.</div>
+        </div>
+      </div>
+    </section>
+  </sc-if>
+
+  <sc-if value="{{ bSoldout }}" hint-placeholder-val="{{ false }}">
+    <section data-screen-label="d-event · стенд · мест нет · вариант А|Б|В" style="max-width:1360px;margin:0 auto;padding:clamp(36px,6vw,64px) clamp(16px,4vw,48px)">
+      <div style="display:flex;align-items:baseline;gap:16px;margin-bottom:10px"><h2 style="margin:0;font-size:clamp(22px,3vw,30px);font-weight:800;letter-spacing:-.03em;color:{{ ink }}">Офлайн: мест не осталось — развилка 3</h2><span style="flex:1;border-top:2px solid {{ ink }};transform:translateY(-6px)"></span></div>
+      <p style="margin:0 0 30px;font-size:13.5px;line-height:1.6;color:{{ inkMuted }};max-width:760px">На странице выше — вариант В (честное состояние). Механики листа ожидания в пакете нет: варианты А и Б потребуют отдельного требования.</p>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:40px;align-items:start">
+        <div>
+          <div style="font-size:12px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:{{ accent }};border-bottom:2px solid {{ hairline }};padding-bottom:10px;margin-bottom:18px">Вариант А — список ожидания</div>
+          <div style="border:2px solid {{ border }};background:{{ surface }};box-shadow:4px 4px 0 {{ shadowSm }};padding:22px">
+            <div style="font-size:15px;font-weight:800;color:{{ ink }};margin-bottom:8px">Мест не осталось</div>
+            <div style="font-size:13px;line-height:1.6;color:{{ inkMuted }};margin-bottom:14px">Сообщим, если место освободится — обычно освобождается 2–3.</div>
+            <span style="display:inline-block;font-size:12.5px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};padding:11px 18px">В список ожидания</span>
+          </div>
+          <div style="margin-top:12px;font-size:12.5px;line-height:1.6;color:{{ inkMuted }}">⚠ Требует отдельного требования: механики листа ожидания в пакете нет.</div>
+        </div>
+        <div>
+          <div style="font-size:12px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:{{ accent }};border-bottom:2px solid {{ hairline }};padding-bottom:10px;margin-bottom:18px">Вариант Б — переключение на онлайн</div>
+          <div style="border:2px solid {{ border }};background:{{ surface }};box-shadow:4px 4px 0 {{ shadowSm }};padding:22px">
+            <div style="font-size:15px;font-weight:800;color:{{ ink }};margin-bottom:8px">Очных мест не осталось</div>
+            <div style="font-size:13px;line-height:1.6;color:{{ inkMuted }};margin-bottom:14px">Для гибрида: участвуйте онлайн — эфир тот же, НМО засчитывается по отметкам в комнате.</div>
+            <span style="display:inline-block;font-size:12.5px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};padding:11px 18px">Участвовать онлайн</span>
+          </div>
+          <div style="margin-top:12px;font-size:12.5px;line-height:1.6;color:{{ inkMuted }}">Работает только для гибрида; для чистого офлайна остаётся честное «мест нет».</div>
+        </div>
+        <div>
+          <div style="font-size:12px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:{{ accent }};border-bottom:2px solid {{ hairline }};padding-bottom:10px;margin-bottom:18px">Вариант В — только состояние · на странице выше</div>
+          <div style="border:2px solid {{ border }};background:{{ surface }};box-shadow:4px 4px 0 {{ shadowSm }};padding:22px">
+            <div style="font-size:15px;font-weight:800;color:{{ ink }};margin-bottom:8px">Мест не осталось</div>
+            <div style="font-size:13px;line-height:1.6;color:{{ inkMuted }};margin-bottom:14px">Все 40 мест заняты. Следите за событиями школы — встречи повторяются.</div>
+            <span style="display:inline-block;font-size:12.5px;font-weight:800;color:{{ inkFaint }};border:2px solid {{ hairline }};padding:11px 18px">Участвовать</span>
+          </div>
+          <div style="margin-top:12px;font-size:12.5px;line-height:1.6;color:{{ inkMuted }}">Ничего не обещаем — честное состояние в рамках текущего пакета.</div>
+        </div>
+      </div>
+    </section>
+  </sc-if>
+
+  <sc-if value="{{ bPoll }}" hint-placeholder-val="{{ false }}">
+    <section data-screen-label="d-event · стенд · мини-опрос · вариант А|Б" style="max-width:1104px;margin:0 auto;padding:clamp(36px,6vw,64px) clamp(16px,4vw,48px)">
+      <div style="display:flex;align-items:baseline;gap:16px;margin-bottom:10px"><h2 style="margin:0;font-size:clamp(22px,3vw,30px);font-weight:800;letter-spacing:-.03em;color:{{ ink }}">Куда встаёт мини-опрос партнёра — развилка 4</h2><span style="flex:1;border-top:2px solid {{ ink }};transform:translateY(-6px)"></span></div>
+      <p style="margin:0 0 30px;font-size:13.5px;line-height:1.6;color:{{ inkMuted }};max-width:760px">REQ-135: исследование подачи материалов партнёра. Отдельный от отзыва блок, не обязателен. Страница выше собрана на варианте А.</p>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:40px;align-items:start">
+        <div>
+          <div style="font-size:12px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:{{ accent }};border-bottom:2px solid {{ hairline }};padding-bottom:10px;margin-bottom:18px">Вариант А — рядом с оценкой эфира</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+            <span style="border:2px solid {{ border }};background:{{ surface }};box-shadow:3px 3px 0 {{ shadowSm }};padding:16px;display:flex;flex-direction:column;gap:8px"><b style="font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:{{ accent }}">Как прошло?</b><span style="font-size:16px;letter-spacing:2px;color:{{ accent }}">★★★★★</span><span style="height:9px;width:85%;background:{{ hairline }}"></span></span>
+            <span style="border:2px solid {{ hairline }};background:{{ surface }};padding:16px;display:flex;flex-direction:column;gap:8px"><b style="font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:{{ inkFaint }}">Вопрос партнёра · реклама</b><span style="height:9px;width:90%;background:{{ hairline }}"></span><span style="height:9px;width:60%;background:{{ hairline }}"></span></span>
+          </div>
+          <div style="margin-top:12px;font-size:12.5px;line-height:1.6;color:{{ inkMuted }}">Один экран обратной связи сразу после эфира: выше доля ответов. Блоки визуально разделены — отзыв о лекторе не смешивается с оценкой рекламы.</div>
+        </div>
+        <div>
+          <div style="font-size:12px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:{{ accent }};border-bottom:2px solid {{ hairline }};padding-bottom:10px;margin-bottom:18px">Вариант Б — позже, в «Моих событиях»</div>
+          <div style="border:2px solid {{ border }};background:{{ surface }};box-shadow:3px 3px 0 {{ shadowSm }};padding:16px;display:flex;align-items:center;gap:14px">
+            <span style="width:44px;height:44px;background:{{ tint }};display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:{{ tintInk }};flex:none">28</span>
+            <span style="flex:1;display:flex;flex-direction:column;gap:6px;min-width:0"><span style="font-size:12.5px;font-weight:800;color:{{ ink }}">PRP при гонартрозе · прошло</span><span style="font-size:11px;font-weight:700;color:{{ inkFaint }}">Короткий вопрос от партнёра · реклама · 1 минута</span></span>
+            <span style="font-size:11px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};padding:8px 12px;flex:none">Ответить</span>
+          </div>
+          <div style="margin-top:12px;font-size:12.5px;line-height:1.6;color:{{ inkMuted }}">Отзыв о лекторе и оценка рекламы разнесены по времени и месту. Чище методологически, но доля ответов ниже; строка в «Моих событиях» — зона 08-d-lk.</div>
+        </div>
+      </div>
+    </section>
+  </sc-if>
+
+  <!-- ═══ Футер витрины врача (с d-home) ═══ -->
+  <sc-if value="{{ hdrDoctor }}" hint-placeholder-val="{{ true }}">
+    <footer data-screen-label="d-event · футер витрины врача" style="border-top:2px solid {{ ink }};padding:clamp(32px,5vw,48px) clamp(16px,4vw,48px) clamp(36px,5vw,56px);margin-top:clamp(40px,7vw,80px)">
+      <div style="max-width:1104px;margin:0 auto;display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:clamp(24px,4vw,40px)">
+        <div>
+          <img src="{{ logoSrc }}" alt="Doctor.School" style="height:22px;display:block">
+          <div style="margin-top:14px;font-size:12.5px;font-weight:600;line-height:1.6;color:{{ inkFaint }}">Бесплатное образование для врачей.<br>© Doctor.School, 2026</div>
+        </div>
+        <div>
+          <div style="font-size:11.5px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:{{ inkFaint }};margin-bottom:14px">Документы и контакты</div>
+          <div style="display:flex;flex-direction:column;gap:9px">
+            <a href="#" style="font-size:13.5px;font-weight:600;color:{{ ink }};text-decoration:none" style-hover="color:{{ accent }};text-decoration:underline;text-underline-offset:3px">Пользовательское соглашение</a>
+            <a href="#" style="font-size:13.5px;font-weight:600;color:{{ ink }};text-decoration:none" style-hover="color:{{ accent }};text-decoration:underline;text-underline-offset:3px">Политика обработки персональных данных</a>
+            <a href="#" style="font-size:13.5px;font-weight:600;color:{{ ink }};text-decoration:none" style-hover="color:{{ accent }};text-decoration:underline;text-underline-offset:3px">Контакты</a>
+          </div>
+        </div>
+        <div>
+          <div style="font-size:11.5px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:{{ inkFaint }};margin-bottom:14px">Экспертам и партнёрам</div>
+          <a href="Главная.dc.html" style="font-size:13.5px;font-weight:800;color:{{ accent }};text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px">Academy.Doctor.School ↗</a>
+          <div style="margin-top:10px;font-size:12.5px;font-weight:600;line-height:1.6;color:{{ inkFaint }}">Закулисье платформы: проекты, эксперты, партнёры.</div>
+        </div>
+      </div>
+      <div aria-hidden="true" style="overflow:hidden;margin:clamp(28px,4vw,48px) calc(-1*clamp(16px,4vw,48px)) calc(-1*clamp(36px,5vw,56px))">
+        <div style="font-size:clamp(58px,12.6vw,236px);font-weight:800;letter-spacing:-.05em;line-height:.78;white-space:nowrap;text-align:center;color:{{ giantInk }};transform:translateY(.16em);user-select:none">Doctor.School</div>
+      </div>
+    </footer>
+  </sc-if>
+
+  <!-- ═══ Футер Академии ═══ -->
+  <sc-if value="{{ hdrAcademy }}" hint-placeholder-val="{{ false }}">
+    <footer data-screen-label="a-event · футер Академии" style="border-top:2px solid {{ ink }};padding:32px clamp(16px,4vw,48px);display:flex;align-items:center;justify-content:space-between;max-width:1104px;margin:clamp(40px,7vw,80px) auto 0;box-sizing:content-box;gap:16px;flex-wrap:wrap">
+      <img src="{{ logoSrc }}" alt="Doctor.School" style="height:22px;display:block">
+      <nav style="display:flex;gap:20px;font-size:12.5px;font-weight:700;flex-wrap:wrap">
+        <a href="Партнёры.dc.html" style="color:{{ inkFaint }};text-decoration:none">Партнёры</a>
+        <a href="Проекты.dc.html" style="color:{{ inkFaint }};text-decoration:none">Проекты</a>
+        <a href="Эксперты.dc.html" style="color:{{ inkFaint }};text-decoration:none">Эксперты</a>
+        <a href="Эфиры.dc.html" style="color:{{ inkFaint }};text-decoration:none">События</a>
+        <a href="Академия - Документы.dc.html" style="color:{{ inkFaint }};text-decoration:none">Документы и контакты</a>
+      </nav>
+      <a href="Витрина врача - Главная.dc.html" style="font-size:12.5px;font-weight:800;color:{{ accent }};text-decoration:underline;text-underline-offset:4px;white-space:nowrap">doctor.school — врачам</a>
+    </footer>
+    <div style="max-width:1104px;margin:0 auto;padding:0 clamp(16px,4vw,48px);text-align:center;font-size:10px;font-weight:800;letter-spacing:.18em;text-transform:uppercase;color:{{ inkFaint }}">BBM: Академия смыслов</div>
+    <div aria-hidden="true" style="overflow:hidden;padding-top:clamp(16px,3vw,36px)">
+      <div style="font-size:clamp(30px,8.2vw,154px);font-weight:800;letter-spacing:-.05em;line-height:.78;white-space:nowrap;text-align:center;color:{{ giantInk }};transform:translateY(.16em);user-select:none">Academy.Doctor.School</div>
     </div>
-  </div>
-
-  <footer style="border-top:2px solid {{ ink }};padding:32px clamp(16px,4vw,48px);display:flex;align-items:center;justify-content:space-between;max-width:1104px;margin:0 auto;box-sizing:content-box;gap:16px;flex-wrap:wrap">
-    {{ footLogoEl }}
-    <div style="font-size:12.5px;font-weight:600;color:{{ inkFaint }}">Врачи учат врачей · 2026</div>
-  </footer>
+  </sc-if>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1104,&quot;height&quot;:760},&quot;status&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;upcoming&quot;,&quot;live&quot;,&quot;ended&quot;],&quot;default&quot;:&quot;live&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Состояние эфира&quot;}}">
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1104,&quot;height&quot;:900},&quot;header&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;витрина врача&quot;,&quot;Академия&quot;],&quot;default&quot;:&quot;витрина врача&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Оболочка · D-4&quot;},&quot;format&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;эфир&quot;,&quot;офлайн&quot;,&quot;гибрид&quot;],&quot;default&quot;:&quot;эфир&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Формат · D-4&quot;},&quot;speakers&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;1&quot;,&quot;2&quot;,&quot;3&quot;],&quot;default&quot;:&quot;1&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Контент&quot;},&quot;phase&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;до начала&quot;,&quot;идёт сейчас&quot;,&quot;прошло&quot;,&quot;отменено&quot;],&quot;default&quot;:&quot;до начала&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Состояние&quot;},&quot;auth&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;гость&quot;,&quot;вошёл&quot;],&quot;default&quot;:&quot;гость&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Состояние&quot;},&quot;registered&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Состояние&quot;},&quot;pul&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;хватает&quot;,&quot;не хватает — партнёрская ссылка&quot;,&quot;не хватает — пришёл сам&quot;],&quot;default&quot;:&quot;хватает&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Состояние&quot;},&quot;medGate&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Состояние&quot;},&quot;soldOut&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Состояние&quot;},&quot;nmoOk&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Состояние&quot;},&quot;pageState&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;обычно&quot;,&quot;загрузка&quot;,&quot;ошибка&quot;],&quot;default&quot;:&quot;обычно&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Состояние&quot;},&quot;board&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;выкл&quot;,&quot;билет и QR&quot;,&quot;блок записи — А·Б·В&quot;,&quot;гибрид — А·Б&quot;,&quot;мест нет — А·Б·В&quot;,&quot;мини-опрос — А·Б&quot;],&quot;default&quot;:&quot;выкл&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Стенды&quot;}}">
 class Component extends DCLogic {
   state = {
     dark: (() => { try { return localStorage.getItem('ds-theme') === 'dark'; } catch (e) { return false; } })(),
-    isMobile: false
+    isMobile: false, q: '',
+    hybChoice: null,
+    qaText: '', qaSent: false,
+    pollVoted: null,
+    checks: 1,
+    adVoted: false,
+    stars: 0, reviewText: '', reviewSent: false,
+    mr: null
   };
   componentDidMount() {
     this.mq = window.matchMedia('(max-width: 900px)');
@@ -169,10 +841,20 @@ class Component extends DCLogic {
     this.mq.addEventListener ? this.mq.addEventListener('change', this.upd) : this.mq.addListener(this.upd);
   }
   renderVals() {
-    const d = this.state.dark, m = this.state.isMobile;
-    const status = this.props.status || 'live';
-    const isLive = status === 'live';
-    const R = React.createElement;
+    const p = this.props, s = this.state, d = s.dark, m = s.isMobile;
+    const hdrDoctor = (p.header || 'витрина врача') !== 'Академия';
+    const phase = p.phase || 'до начала';
+    const format = p.format || 'эфир';
+    const registered = !!p.registered;
+    const guest = !registered && (p.auth || 'гость') === 'гость';
+    const loggedIn = !guest;
+    const pul = p.pul || 'хватает';
+    const medGate = !!p.medGate;
+    const soldOut = !!p.soldOut;
+    const nmoOk = p.nmoOk !== false;
+    const pageState = p.pageState || 'обычно';
+    const board = p.board || 'выкл';
+
     const ink = d ? '#fff' : 'oklch(.21 .02 250)';
     const surface = d ? 'oklch(.21 .02 250)' : '#fff';
     const border = d ? '#fff' : 'oklch(.21 .02 250)';
@@ -183,79 +865,214 @@ class Component extends DCLogic {
     const tintInk = d ? '#fff' : '#114D9E';
     const btnBg = d ? '#6BB1F7' : '#114D9E';
     const btnFg = d ? '#0D3A77' : '#fff';
+    const hairline = d ? 'rgba(255,255,255,.18)' : 'oklch(.922 .006 250)';
 
-    const solidCta = (label, href) => R('a', { href: href || '#',
-      style: { fontSize: '15px', fontWeight: 800, color: btnFg, background: btnBg, border: '2px solid ' + btnBg,
-        padding: '15px 28px', whiteSpace: 'nowrap', boxShadow: '4px 4px 0 ' + border, textDecoration: 'none', display: 'inline-block' } }, label);
-    const ghostCta = (label) => R('button', {
-      style: { font: 'inherit', fontSize: '15px', fontWeight: 700, color: ink, background: surface, border: '2px solid ' + border,
-        padding: '15px 22px', cursor: 'pointer', whiteSpace: 'nowrap', boxShadow: '4px 4px 0 ' + shadowSm } }, label);
+    const isUpcoming = phase === 'до начала';
+    const isLive = phase === 'идёт сейчас';
+    const isPast = phase === 'прошло';
+    const isCancelled = phase === 'отменено';
 
-    // Бейдж в hero
+    const fmtOnline = format === 'эфир', fmtOffline = format === 'офлайн', fmtHybrid = format === 'гибрид';
+    // гибрид · вариант А: выбор при записи; записанному считаем выбранным «очно»
+    const hyb = fmtHybrid ? (s.hybChoice || (registered ? 'очно' : null)) : null;
+    const showOnline = (fmtOnline || (fmtHybrid && hyb === 'онлайн')) && !isCancelled;
+    const showOffline = (fmtOffline || (fmtHybrid && hyb === 'очно')) && !isCancelled;
+    const secChooser = fmtHybrid && !isCancelled && !isPast;
+
+    const fmtWord = fmtOnline ? 'Онлайн' : fmtOffline ? 'Офлайн · Казань' : 'Гибрид · Казань и онлайн';
+    const balancePul = pul === 'хватает' ? '70' : '20';
+
+    // hero-бейдж
+    const R = React.createElement;
     const badgeBase = 'display:inline-flex;align-items:center;gap:8px;font-size:12.5px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#fff;padding:9px 16px;transform:rotate(3deg);flex:none;margin-top:8px;box-shadow:3px 3px 0 ' + shadow;
-
-    let heroBadgeEl, heroBadgeStyle, regTimeLabel, regTime, regTimeSub, regTimeSubM, regTimeSubColor, regHead, regSub, regCtaEl,
-        footCtaTitle, footCtaSub, footCtaLabel, footCtaHref, regTimeSize = m ? '46px' : '56px';
-
-    if (status === 'upcoming') {
-      heroBadgeStyle = badgeBase + ';background:#0D8A5F';
-      heroBadgeEl = 'Скоро · через 2 дня';
-      regTimeLabel = 'Начало'; regTime = '19:00'; regTimeSub = '16 июля · среда\nМСК · 90 минут'; regTimeSubM = '16 июля · 90 мин';
-      regTimeSubColor = d ? 'rgba(255,255,255,.75)' : 'oklch(.21 .02 250)';
-      regHead = 'Регистрация открыта — 128 врачей уже записались';
-      regSub = 'Бесплатно. Пришлём ссылку на почту и напомним за час до старта.';
-      regCtaEl = [solidCta('Записаться на эфир ↗'), ghostCta('В календарь')].map((e,i)=>R('span',{key:i,style:{display:'inline-flex'}},e));
-      footCtaTitle = 'Эфир — послезавтра.'; footCtaSub = 'Займите место заранее.'; footCtaLabel = 'Записаться ↗'; footCtaHref = '#';
-    } else if (status === 'ended') {
+    let heroBadgeStyle, heroBadgeEl, regTimeLabel, regTime, regTimeSub, regTimeSubM;
+    if (isCancelled) {
       heroBadgeStyle = badgeBase + ';background:oklch(.45 .02 250);transform:rotate(-2deg)';
-      heroBadgeEl = 'Эфир завершён';
-      regTimeLabel = 'Запись'; regTime = '90'; regTimeSub = 'минут · было 16 июля\nдоступна 30 дней'; regTimeSubM = 'мин · было 16 июля';
-      regTimeSubColor = d ? 'rgba(255,255,255,.75)' : 'oklch(.21 .02 250)';
-      regHead = 'Запись готова — смотрели 214 врачей';
-      regSub = 'Полная запись эфира и материалы доступны 30 дней. Сертификат — после просмотра.';
-      regCtaEl = [solidCta('Смотреть запись ↗', 'Комната эфира.dc.html'), ghostCta('Материалы')].map((e,i)=>R('span',{key:i,style:{display:'inline-flex'}},e));
-      footCtaTitle = 'Пропустили эфир?'; footCtaSub = 'Запись доступна ещё 30 дней.'; footCtaLabel = 'Смотреть запись ↗'; footCtaHref = 'Комната эфира.dc.html';
-    } else { // live
+      heroBadgeEl = 'Отменено';
+      regTimeLabel = 'Отменено'; regTime = '—'; regTimeSub = 'было назначено\nна 28 августа'; regTimeSubM = 'было на 28 августа';
+    } else if (isPast) {
+      heroBadgeStyle = badgeBase + ';background:oklch(.45 .02 250);transform:rotate(-2deg)';
+      heroBadgeEl = 'Завершено';
+      regTimeLabel = 'Запись'; regTime = '92'; regTimeSub = 'минуты · было 28 августа\nдоступна 30 дней'; regTimeSubM = 'мин · было 28 августа';
+    } else if (isLive) {
       heroBadgeStyle = badgeBase + ';background:#C81E1E';
       heroBadgeEl = R(React.Fragment, null, R('span', { style: { width: '8px', height: '8px', borderRadius: '50%', background: '#fff', animation: 'livePulse 1.6s ease-in-out infinite' } }), 'В эфире');
-      regTimeLabel = 'Сейчас'; regTime = '19:00'; regTimeSub = '16 июля · среда\nМСК · идёт 24 мин'; regTimeSubM = 'Идёт 24 мин · МСК';
-      regTimeSubColor = d ? 'rgba(255,255,255,.75)' : 'oklch(.21 .02 250)';
-      regHead = 'Эфир уже идёт — 214 врачей смотрят';
-      regSub = 'Бесплатно. Нужна регистрация врача — почта и специальность, две минуты.';
-      regCtaEl = [solidCta('Участвовать ↗', 'Комната эфира.dc.html'), ghostCta('В календарь')].map((e,i)=>R('span',{key:i,style:{display:'inline-flex'}},e));
-      footCtaTitle = 'Эфир уже идёт.'; footCtaSub = 'Присоединяйтесь сейчас.'; footCtaLabel = 'Участвовать ↗'; footCtaHref = 'Комната эфира.dc.html';
+      regTimeLabel = 'Сейчас'; regTime = '19:00'; regTimeSub = '28 августа · пятница\nМСК · идёт 24 мин'; regTimeSubM = 'Идёт 24 мин · МСК';
+    } else {
+      heroBadgeStyle = badgeBase + ';background:#00693D';
+      heroBadgeEl = 'Скоро · через 5 дней';
+      regTimeLabel = 'Начало'; regTime = '19:00'; regTimeSub = '28 августа · пятница\nМСК · 90 минут'; regTimeSubM = '28 августа · 90 мин';
     }
 
+    // приоритет состояний CTA
+    const ctaCancelled = isCancelled;
+    const ctaGate = !ctaCancelled && medGate && !registered;
+    const ctaPast = !ctaCancelled && !ctaGate && isPast;
+    const ctaRegistered = !ctaCancelled && !ctaGate && !ctaPast && registered;
+    const ctaSoldOut = !ctaCancelled && !ctaGate && !ctaPast && !ctaRegistered && soldOut && (fmtOffline || fmtHybrid) && !guest;
+    const ctaGuest = !ctaCancelled && !ctaGate && !ctaPast && !ctaRegistered && !ctaSoldOut && guest;
+    const ctaJoin = !ctaCancelled && !ctaGate && !ctaPast && !ctaRegistered && !ctaSoldOut && !ctaGuest;
+
+    const shortSelf = ctaJoin && pul === 'не хватает — пришёл сам';
+    const notePartner = ctaJoin && pul === 'не хватает — партнёрская ссылка';
+
+    const liveNow = isLive;
+    const liveHref = showOffline && !showOnline ? '#ticket' : 'Комната эфира v2.dc.html';
+    const liveCta = showOffline && !showOnline ? 'Участвовать · билет ↓' : 'Участвовать ↗';
+
+    // билет
+    const ticketOn = registered && showOffline;
+    const tStatus = isCancelled ? 'отменён' : (isPast ? 'использован' : 'действителен');
+    const badgeGreen = 'font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#fff;background:#00693D;padding:4px 10px';
+    const badgeGrey = 'font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#fff;background:oklch(.45 .02 250);padding:4px 10px';
+    const badgeRed = 'font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#fff;background:#C81E1E;padding:4px 10px';
+
+    const pollData = [
+      { label: 'Однократное введение', n: 84 },
+      { label: 'Курс из 3 инъекций', n: 71 },
+      { label: 'Не применяю PRP', n: 46 }
+    ];
+    const voted = s.pollVoted;
+    const total = pollData.reduce((a, o) => a + o.n, 0) + (voted !== null ? 1 : 0);
+    const pollOpts = pollData.map((o, i) => {
+      const n = o.n + (voted === i ? 1 : 0);
+      const pct = Math.round(n / total * 100);
+      return {
+        label: o.label + (voted === i ? ' — ваш голос' : ''),
+        pct: voted !== null ? pct + '%' : '',
+        barW: voted !== null ? pct + '%' : '0%',
+        rowStyle: 'font:inherit;position:relative;display:flex;align-items:center;gap:10px;padding:11px 14px;border:2px solid ' + (voted === i ? accent : hairline) + ';background:' + surface + ';cursor:pointer;text-align:left;overflow:hidden',
+        on: () => this.setState({ pollVoted: i })
+      };
+    });
+
+    const stars = [1, 2, 3, 4, 5].map(n => ({
+      title: n + ' из 5',
+      color: n <= s.stars ? accent : hairline,
+      on: () => this.setState({ stars: n })
+    }));
+
+    const allSpeakers = [
+      { name: 'Михаил Страхов', role: 'Травматолог-ортопед', org: 'РНИМУ им. Пирогова', meta: '12 эфиров', cred: 'Д.м.н., профессор кафедры травматологии и ортопедии, ведёт направление ортобиологии на платформе. Автор 40+ публикаций по регенеративным методикам, член ESSKA и АТОР. В эфире разбирает доказательную базу и отвечает за протоколы.' },
+      { name: 'Анна Соколова', role: 'Травматолог-ортопед', org: 'НМИЦ им. Пирогова', meta: '7 эфиров', cred: 'К.м.н., старший научный сотрудник. Ведёт амбулаторный приём пациентов с гонартрозом — представит клинический случай с наблюдением 6 месяцев.' },
+      { name: 'Ильдар Сафин', role: 'Ревматолог', org: 'КГМУ, Казань', meta: '3 эфира', cred: 'Смежный взгляд: отбор пациентов и дифференциальная диагностика перед PRP.' }
+    ];
+    const spCount = Math.max(1, Math.min(3, parseInt(p.speakers, 10) || 1));
+    const speakerList = allSpeakers.slice(0, spCount).map(sp => ({ ...sp, initials: sp.name.split(/\s+/).map(w => w[0]).join('') }));
+
+    const seatsLeft = soldOut ? 0 : 12;
+    const boards = {
+      bTicket: board === 'билет и QR',
+      bReg: board === 'блок записи — А·Б·В',
+      bHybrid: board === 'гибрид — А·Б',
+      bSoldout: board === 'мест нет — А·Б·В',
+      bPoll: board === 'мини-опрос — А·Б'
+    };
+    const anyBoard = Object.values(boards).some(Boolean);
+
+    const chooserOn = s.hybChoice === 'очно' || (registered && !s.hybChoice);
+    const tileBase = 'font:inherit;text-align:left;display:flex;flex-direction:column;gap:8px;padding:24px;cursor:pointer;background:' + surface + ';';
+    const tileSel = 'border:2px solid ' + accent + ';box-shadow:6px 6px 0 ' + shadow;
+    const tileIdle = 'border:2px solid ' + border + ';box-shadow:4px 4px 0 ' + shadowSm;
+
     return {
-      isMobile: m, isDesktop: !m,
-      toggleTheme: () => this.setState(s => { const dark=!s.dark; try{localStorage.setItem('ds-theme',dark?'dark':'light');}catch(e){} return {dark}; }),
+      dark: d, isMobile: m, isDesktop: !m,
+      q: s.q, setQ: e => this.setState({ q: e.target.value }),
+      toggleTheme: () => this.setState(st => { const dark = !st.dark; try { localStorage.setItem('ds-theme', dark ? 'dark' : 'light'); } catch (e) {} return { dark }; }),
       themeIcon: d ? '☀' : '☾',
       pageBg: d ? 'oklch(.16 .02 250)' : '#fff',
-      headerBg: '#114D9E',
-      headerShadow: d ? 'oklch(.16 .02 250)' : '#114D9E',
-      surface, ink, border, shadow, shadowSm, accent, tint, tintInk, btnBg, btnFg,
+      surface, ink, border, shadow, shadowSm, accent, tint, tintInk, btnBg, btnFg, hairline,
       inkBody: d ? 'rgba(255,255,255,.82)' : 'oklch(.27 .018 250)',
       inkMuted: d ? 'rgba(255,255,255,.62)' : 'oklch(.45 .014 250)',
       inkFaint: d ? 'rgba(255,255,255,.5)' : 'oklch(.556 .012 250)',
-      hairline: d ? 'rgba(255,255,255,.18)' : 'oklch(.922 .006 250)',
       dashBorder: d ? 'rgba(255,255,255,.4)' : 'oklch(.704 .01 250)',
-      footLogoEl: React.createElement('img', { src: d ? 'assets/ds-logo-white.svg' : 'assets/ds-logo-color.svg', alt: 'Doctor.School', style: { height: '22px', display: 'block' } }),
+      photoNote: d ? 'rgba(255,255,255,.4)' : 'rgba(17,77,158,.5)',
+      logoSrc: d ? 'assets/ds-logo-white.svg' : 'assets/ds-logo-color.svg',
+      giantInk: d ? 'rgba(174,212,251,.09)' : 'oklch(.945 .018 250)',
+      speakersTitle: spCount > 1 ? 'Спикеры' : 'Ведёт',
+      speakerList,
+      hdrDoctor, hdrAcademy: !hdrDoctor,
+      guest, loggedIn, balancePul,
+      fmtWord,
+      heroBadgeStyle, heroBadgeEl,
+      stLoading: pageState === 'загрузка' && !anyBoard,
+      stError: pageState === 'ошибка' && !anyBoard,
+      stMain: pageState === 'обычно' && !anyBoard,
+      ...boards,
       colsTemplate: m ? '1fr' : '1fr 380px',
+      interCols: m ? '1fr' : 'repeat(3,1fr)',
+      remindCols: m ? '1fr' : '1fr 1fr',
+      chooserCols: m ? '1fr' : '1fr 1fr',
       mainPad: m ? '0 16px 64px' : '0 clamp(16px,4vw,48px) 96px',
-      regCardStyle: m
+      regCardStyle: (m
         ? 'background:' + surface + ';border:0;box-shadow:none;display:block;margin:0 -16px'
-        : 'background:' + surface + ';border:2px solid ' + border + ';box-shadow:6px 6px 0 ' + shadow + ';display:grid;grid-template-columns:196px 1fr',
+        : 'background:' + surface + ';border:2px solid ' + border + ';box-shadow:6px 6px 0 ' + shadow + ';display:grid;grid-template-columns:196px 1fr'),
       regTimeCol: 'background:' + tint + ';display:flex;' + (m
         ? 'flex-direction:column;align-items:stretch;gap:10px;padding:14px 16px'
         : 'flex-direction:column;gap:14px;padding:30px 24px;border-right:2px solid ' + border),
-      regBodyStyle: m
-        ? 'padding:20px;display:flex;flex-direction:column;gap:16px'
-        : 'padding:28px 32px;display:flex;align-items:center;justify-content:space-between;gap:24px;flex-wrap:wrap',
+      regBodyStyle: (m ? 'padding:20px' : 'padding:26px 32px') + ';display:flex;flex-direction:column;gap:18px',
       regLiveBadge: (isLive && m)
         ? 'align-self:flex-start;display:inline-flex;align-items:center;gap:7px;font-size:10.5px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#fff;background:#C81E1E;padding:5px 11px'
         : 'display:none',
-      heroBadgeEl, heroBadgeStyle, regTimeLabel, regTime, regTimeSub, regTimeSubColor, regTimeSize,
-      regHead, regSub, regCtaEl, footCtaTitle, footCtaSub, footCtaLabel, footCtaHref, regTimeSubM
+      regTimeLabel, regTime, regTimeSub, regTimeSubM,
+      regTimeSubColor: d ? 'rgba(255,255,255,.75)' : 'oklch(.21 .02 250)',
+      ctaGuest, ctaJoin, ctaRegistered, ctaSoldOut, ctaGate, ctaCancelled, ctaPast,
+      guestHead: isLive ? 'Эфир уже идёт — присоединяйтесь' : 'Бесплатно для врача — за очки внимания',
+      joinHead: isLive ? 'Эфир уже идёт — 412 врачей в комнате' : 'Запись открыта',
+      joinSub: 'Спишем 50 Pul при записи. Напомним за час до начала, ссылка придёт на почту.',
+      shortSelf, notePartner,
+      regHead: showOffline && !showOnline ? 'Вы записаны — место закреплено' : 'Вы записаны на эфир — добавили в календарь',
+      regSub: 'Напомним за час до начала.',
+      liveNow, notLive: !liveNow, liveHref, liveCta,
+      secChooser,
+      secOnline: showOnline && !isPast,
+      secOffline: showOffline,
+      isPast, registered,
+      chooseOnsite: () => this.setState({ hybChoice: 'очно' }),
+      chooseOnline: () => this.setState({ hybChoice: 'онлайн' }),
+      tileOnsiteStyle: tileBase + (hyb === 'очно' ? tileSel : tileIdle),
+      tileOnlineStyle: tileBase + (hyb === 'онлайн' ? tileSel : tileIdle),
+      chooserNote: hyb
+        ? (registered
+          ? 'В вашем билете: ' + (hyb === 'очно' ? 'очное участие в Казани' : 'участие онлайн') + '. Изменить можно до 27 августа — билет обновится.'
+          : 'Выбор попадёт в ваш билет при записи. Изменить можно до 27 августа.')
+        : 'Выбор попадёт в ваш билет при записи — от него зависит, что покажем на входе.',
+      roomHint: registered ? ' — ссылка придёт на почту и появится здесь' : '',
+      beforeStart: showOnline && isUpcoming,
+      qaText: s.qaText, setQaText: e => this.setState({ qaText: e.target.value }),
+      qaOpen: !s.qaSent, qaSent: s.qaSent, sendQa: () => this.setState({ qaSent: true }),
+      pollOpts, pollNote: voted !== null ? 'Ответили ' + total + ' врачей · график живой' : 'Выберите вариант — покажем живой график',
+      checkLabel: s.checks + ' из 2',
+      checkOpen: s.checks < 2, checkDone: s.checks >= 2,
+      doCheck: () => this.setState(st => ({ checks: Math.min(2, st.checks + 1) })),
+      adOpen: !s.adVoted, adDone: s.adVoted, adYes: () => this.setState({ adVoted: true }), adNo: () => this.setState({ adVoted: true }),
+      seatsLabel: soldOut ? '40 мест · мест не осталось' : '40 мест, осталось 12',
+      seatsPct: soldOut ? '100%' : '70%',
+      seatsBarColor: soldOut ? 'oklch(.45 .02 250)' : accent,
+      ticketOn, ticketOff: !ticketOn,
+      ticketStatus: tStatus,
+      ticketBadgeStyle: tStatus === 'действителен' ? badgeGreen : (tStatus === 'использован' ? badgeGrey : badgeRed),
+      ticketBodyStyle: tStatus === 'действителен' ? '' : 'opacity:.55',
+      ticketMode: fmtHybrid ? ' · ' + (hyb === 'онлайн' ? 'онлайн' : 'очно') : ' · очно',
+      ticketFoot: tStatus === 'действителен'
+        ? 'Покажите QR на входе — отметка засчитывается в НМО'
+        : (tStatus === 'использован' ? 'Отметка на входе получена 28 августа, 18:47 — засчитана в НМО' : 'Билет отменён — событие не состоится, очки возвращены'),
+      nmoStyle: (nmoOk
+        ? 'background:' + tint + ';color:' + tintInk
+        : 'border:2px solid ' + border + ';color:' + ink + ';background:' + surface) + ';padding:16px 22px;display:flex;align-items:baseline;gap:14px;flex-wrap:wrap',
+      nmoHead: nmoOk ? 'НМО засчитано: 2 балла' : 'НМО не засчитано',
+      nmoSub: nmoOk ? '96 минут участия и 2 отметки — условия выполнены. Код подтверждения — в личном кабинете.' : 'Нужно 90 минут участия и 2 отметки; у вас 54 минуты и 1 отметка. Посмотрите запись — время записи в НМО не входит.',
+      stars, reviewText: s.reviewText, setReviewText: e => this.setState({ reviewText: e.target.value }),
+      reviewOpen: !s.reviewSent, reviewSent: s.reviewSent,
+      sendReview: () => this.setState({ reviewSent: true }),
+      mrOpen: s.mr === null, mrDone: s.mr !== null,
+      mrVote: () => this.setState({ mr: 'ok' }), mrSkip: () => this.setState({ mr: 'skip' }),
+      mrDoneText: s.mr === 'skip' ? 'Пропустили — вопрос больше не покажем.' : 'Спасибо! Ответ учтён.',
+      ticketBoard: [
+        { label: 'Действителен · до и во время события', status: 'действителен', badgeStyle: badgeGreen, bodyStyle: '', foot: 'Покажите QR на входе — отметка засчитывается в НМО', note: 'Базовое состояние: QR активен, билет продублирован в «Моих событиях».' },
+        { label: 'Использован · после отметки на входе', status: 'использован', badgeStyle: badgeGrey, bodyStyle: 'opacity:.55', foot: 'Отметка на входе получена 28 августа, 18:47 — засчитана в НМО', note: 'QR гасится после чекина; время отметки — источник подтверждения для НМО.' },
+        { label: 'Отменён · событие отменено или запись снята', status: 'отменён', badgeStyle: badgeRed, bodyStyle: 'opacity:.55', foot: 'Билет отменён — событие не состоится, очки возвращены', note: 'Возврат очков — новой строкой в истории начислений, баланс не редактируется.' }
+      ]
     };
   }
 }

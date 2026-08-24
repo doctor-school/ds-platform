@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"><style>body{margin:0;background:#fff;font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}a{color:#2D84F2}a:hover{color:#114D9E}:focus-visible{outline:3px solid #6BB1F7;outline-offset:2px}@keyframes livePulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.45;transform:scale(.72)}}</style></helmet>
+
+<div style="min-height:100vh;background:{{ pageBg }}">
+
+  <!-- ═══ Оболочка · шапка витрины врача (с #d-home, как есть) ═══ -->
+  <header data-screen-label="d-school · шапка" style="background:#114D9E;padding:14px clamp(16px,4vw,48px);display:flex;align-items:center;gap:clamp(14px,2.5vw,28px)">
+    <a href="Витрина врача - Главная.dc.html" style="display:flex;flex:none"><img src="assets/ds-logo-white.svg" alt="Doctor.School" style="height:26px;display:block"></a>
+    <sc-if value="{{ isDesktop }}" hint-placeholder-val="{{ true }}">
+      <input value="{{ q }}" onInput="{{ setQ }}" placeholder="Поиск по урокам, школам и событиям" style="flex:1;max-width:440px;font:inherit;font-size:13.5px;font-weight:600;padding:12px 14px;border:2px solid rgba(255,255,255,.45);background:transparent;color:#fff;outline:none;min-width:120px" style-focus="border-color:#fff;background:rgba(255,255,255,.08)">
+      <nav style="display:flex;align-items:center;gap:14px;margin-left:auto">
+        <button onClick="{{ toggleTheme }}" title="Тема" style="font:inherit;width:44px;height:44px;background:transparent;color:#fff;border:2px solid rgba(255,255,255,.5);cursor:pointer;font-size:15px;flex:none" style-hover="border-color:#fff">{{ themeIcon }}</button>
+        <sc-if value="{{ guest }}" hint-placeholder-val="{{ true }}">
+          <a href="Авторизация.dc.html" style="font-size:13.5px;font-weight:700;color:#D3E8FD;text-decoration:none;padding:12px 6px;white-space:nowrap" style-hover="color:#fff">Войти</a>
+          <a href="Авторизация.dc.html" style="font-size:13.5px;font-weight:800;color:#114D9E;background:#fff;padding:12px 22px;text-decoration:none;white-space:nowrap;box-shadow:3px 3px 0 #0D3A77" style-hover="transform:translate(1px,1px);box-shadow:2px 2px 0 #0D3A77">Регистрация</a>
+        </sc-if>
+        <sc-if value="{{ loggedIn }}" hint-placeholder-val="{{ false }}">
+          <a href="#" title="Очки внимания: Пульс · Дыхание · Сознание. Открыть историю начислений" style="display:inline-flex;align-items:center;gap:9px;border:2px solid rgba(255,255,255,.45);padding:10px 14px;font-size:12px;font-weight:800;color:#fff;text-decoration:none;white-space:nowrap;font-variant-numeric:tabular-nums" style-hover="border-color:#fff"><span>120 Pul</span><span style="opacity:.45">·</span><span>340 Bre</span><span style="opacity:.45">·</span><span>1 250 Con</span></a>
+          <a href="#" style="font-size:13.5px;font-weight:800;color:#114D9E;background:#fff;padding:12px 22px;text-decoration:none;white-space:nowrap;box-shadow:3px 3px 0 #0D3A77" style-hover="transform:translate(1px,1px);box-shadow:2px 2px 0 #0D3A77">Личный кабинет</a>
+        </sc-if>
+      </nav>
+    </sc-if>
+    <sc-if value="{{ isMobile }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;align-items:center;gap:10px;margin-left:auto">
+        <button onClick="{{ toggleTheme }}" title="Тема" style="font:inherit;width:44px;height:44px;background:transparent;color:#fff;border:2px solid rgba(255,255,255,.5);cursor:pointer;font-size:16px">{{ themeIcon }}</button>
+        <details style="position:relative">
+          <summary style="list-style:none;width:44px;height:44px;display:inline-flex;align-items:center;justify-content:center;background:#fff;color:#114D9E;cursor:pointer;font-size:20px;font-weight:800;box-shadow:3px 3px 0 #0D3A77">≡</summary>
+          <nav style="position:absolute;top:calc(100% + 10px);right:0;background:{{ surface }};border:2px solid {{ border }};box-shadow:5px 5px 0 {{ shadow }};padding:8px;display:flex;flex-direction:column;min-width:220px;z-index:30">
+            <sc-if value="{{ loggedIn }}" hint-placeholder-val="{{ false }}">
+              <a href="#" style="padding:12px 16px;font-size:12.5px;font-weight:800;color:{{ ink }};text-decoration:none;font-variant-numeric:tabular-nums">120 Pul · 340 Bre · 1 250 Con</a>
+              <a href="#" style="margin-top:4px;padding:12px 16px;font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};text-decoration:none;text-align:center">Личный кабинет</a>
+            </sc-if>
+            <sc-if value="{{ guest }}" hint-placeholder-val="{{ true }}">
+              <a href="Авторизация.dc.html" style="padding:12px 16px;font-size:15px;font-weight:700;color:{{ ink }};text-decoration:none">Войти</a>
+              <a href="Авторизация.dc.html" style="margin-top:4px;padding:12px 16px;font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};text-decoration:none;text-align:center">Регистрация</a>
+            </sc-if>
+          </nav>
+        </details>
+      </div>
+    </sc-if>
+  </header>
+
+  <!-- ═══ Постер-шапка школы ═══ -->
+  <div data-screen-label="d-school · постер-шапка" style="background:#114D9E;padding:clamp(30px,5vw,52px) clamp(16px,4vw,48px) clamp(36px,6vw,64px)">
+    <div style="max-width:1104px;margin:0 auto">
+      <nav style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12.5px;font-weight:700">
+        <a href="Витрина врача - Лента специальности.dc.html" style="color:#D3E8FD;text-decoration:none" style-hover="color:#fff;text-decoration:underline;text-underline-offset:3px">Травматология и ортопедия</a>
+        <span style="color:rgba(255,255,255,.4)">›</span>
+        <span style="color:#fff">Школа ортобиологии</span>
+      </nav>
+      <div style="margin-top:clamp(20px,3vw,30px);font-size:12px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:#D3E8FD">Школа · направление «ортобиология» · бесплатно для врача</div>
+      <div style="display:flex;align-items:flex-start;gap:24px;flex-wrap:wrap">
+        <h1 style="margin:14px 0 0;font-size:clamp(32px,5vw,56px);line-height:1.03;font-weight:800;letter-spacing:-.035em;color:#fff;text-wrap:balance;flex:1;min-width:min(100%,320px)">Школа ортобиологии</h1>
+        <span style="flex:none;margin-top:18px;display:inline-block;border:2px solid #fff;color:#fff;padding:10px 16px;font-size:12.5px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;transform:rotate(2.5deg)">{{ heroBadge }}</span>
+      </div>
+      <p style="margin:18px 0 0;max-width:640px;font-size:clamp(14px,1.8vw,15.5px);line-height:1.65;font-weight:500;color:#D3E8FD">Курс-сериал, вебинары-разборы, наставничество и стажировка. Учитесь в удобном порядке — с компьютера или с телефона, счёт очков общий.</p>
+    </div>
+  </div>
+
+  <main style="display:flex;flex-direction:column;padding-bottom:clamp(48px,7vw,88px)">
+
+    <!-- ═══ Загрузка · скелет страницы ═══ -->
+    <sc-if value="{{ stLoading }}" hint-placeholder-val="{{ false }}">
+      <section data-screen-label="d-school · загрузка" style="padding:0 clamp(16px,4vw,48px);margin-top:clamp(40px,6vw,68px)">
+        <div style="max-width:1104px;margin:0 auto;display:flex;flex-direction:column;gap:22px">
+          <div style="height:16px;width:34%;background:{{ hairline }};animation:livePulse 1.4s ease-in-out infinite"></div>
+          <div style="height:12px;width:70%;background:{{ hairline }};animation:livePulse 1.4s ease-in-out infinite"></div>
+          <div style="height:12px;width:56%;background:{{ hairline }};animation:livePulse 1.4s ease-in-out infinite"></div>
+          <div style="border:2px solid {{ hairline }};padding:22px;display:flex;flex-direction:column;gap:14px">
+            <sc-for list="{{ skeletonRows }}" as="s" hint-placeholder-count="4">
+              <div style="display:flex;gap:16px;align-items:center">
+                <div style="width:56px;height:14px;background:{{ hairline }};animation:livePulse 1.4s ease-in-out infinite;flex:none"></div>
+                <div style="flex:1;height:14px;background:{{ hairline }};animation:livePulse 1.4s ease-in-out infinite"></div>
+                <div style="width:52px;height:14px;background:{{ hairline }};animation:livePulse 1.4s ease-in-out infinite;flex:none"></div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="height:180px;background:{{ hairline }};animation:livePulse 1.4s ease-in-out infinite"></div>
+        </div>
+      </section>
+    </sc-if>
+
+    <sc-if value="{{ stReady }}" hint-placeholder-val="{{ true }}">
+
+    <!-- ═══ О школе (REQ-50, REQ-51) ═══ -->
+    <section data-screen-label="d-school · о школе" style="padding:0 clamp(16px,4vw,48px);margin-top:clamp(40px,6vw,68px)">
+      <div style="max-width:1104px;margin:0 auto">
+        <div style="display:flex;align-items:baseline;gap:16px;margin-bottom:clamp(18px,3vw,24px)">
+          <h2 style="margin:0;font-size:clamp(24px,3.6vw,36px);line-height:1.05;font-weight:800;letter-spacing:-.03em;color:{{ ink }};white-space:nowrap">О школе</h2>
+          <span style="flex:1;border-top:2px solid {{ ink }};transform:translateY(-6px)"></span>
+        </div>
+        <p style="margin:0;max-width:680px;font-size:15.5px;line-height:1.7;font-weight:500;color:{{ ink }}">Образовательный трек «ортобиология»: от базового курса до эксперта школы. Один модуль — один реальный клинический случай; травмы через призму спортивной медицины, сквозной сюжет анимационного сериала.</p>
+        <div style="margin-top:clamp(18px,3vw,26px);display:grid;grid-template-columns:{{ threeCols }};gap:{{ tileGap }}">
+          <div style="background:{{ sectionGray }};padding:18px 20px"><div style="font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ inkFaint }}">Формат</div><div style="margin-top:8px;font-size:14px;font-weight:700;line-height:1.5;color:{{ ink }}">Один модуль — один реальный клинический случай</div></div>
+          <div style="background:{{ sectionGray }};padding:18px 20px"><div style="font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ inkFaint }}">Сюжет</div><div style="margin-top:8px;font-size:14px;font-weight:700;line-height:1.5;color:{{ ink }}">Сквозной сюжет анимационного сериала — от травмы до исхода</div></div>
+          <div style="background:{{ tint }};padding:18px 20px"><div style="font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ tintFg }}">Куда ведёт</div><div style="margin-top:8px;font-size:14px;font-weight:700;line-height:1.5;color:{{ tintFg }}">От базового курса — к наставничеству и статусу эксперта школы</div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══ Документ по итогам · вариант Б размещения (сразу после «О школе») ═══ -->
+    <sc-if value="{{ docEarly }}" hint-placeholder-val="{{ false }}">
+      <section data-screen-label="d-school · документ по итогам (вариант Б — до курса)" style="padding:0 clamp(16px,4vw,48px);margin-top:clamp(44px,7vw,76px)">
+        <div style="max-width:1104px;margin:0 auto">
+          <div style="display:flex;align-items:baseline;gap:16px;margin-bottom:clamp(18px,3vw,24px)">
+            <h2 style="margin:0;font-size:clamp(24px,3.6vw,36px);line-height:1.05;font-weight:800;letter-spacing:-.03em;color:{{ ink }};white-space:nowrap">Документ по итогам</h2>
+            <span style="flex:1;border-top:2px solid {{ ink }};transform:translateY(-6px)"></span>
+          </div>
+          <div style="{{ docWrapStyle }}">
+            <div style="display:grid;grid-template-columns:{{ twoCols }};gap:2px;background:{{ hairline }}">
+              <div style="background:{{ docTileBg }};padding:clamp(18px,3vw,26px)"><div style="font-size:11.5px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:{{ accent }}">Сертификат</div><div style="margin-top:10px;font-size:18px;font-weight:800;letter-spacing:-.015em;color:{{ ink }}">Сертификат Doctor.School</div><p style="margin:8px 0 0;font-size:13.5px;line-height:1.6;color:{{ inkMuted }}">Выдаётся за полное прохождение курса — все 9 серий и итоговый разбор.</p></div>
+              <div style="background:{{ docTileBg }};padding:clamp(18px,3vw,26px)"><div style="font-size:11.5px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:{{ accent }}">НМО</div><div style="margin-top:10px;font-size:18px;font-weight:800;letter-spacing:-.015em;color:{{ ink }}">Учёт НМО</div><p style="margin:8px 0 0;font-size:13.5px;line-height:1.6;color:{{ inkMuted }}">Баллы подтверждает провайдер мероприятия через портал НМО. Платформа ведёт реестр начислений и учитывает их в вашем профиле.</p></div>
+            </div>
+            <div style="border-top:2px solid {{ docDivider }};padding:16px clamp(18px,3vw,26px);display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+              <span style="{{ verifyChipStyle }}">{{ verifyChip }}</span>
+              <span style="flex:1;min-width:220px;font-size:13px;line-height:1.6;font-weight:600;color:{{ inkMuted }}">{{ verifyText }}</span>
+              <sc-if value="{{ verifyLink }}" hint-placeholder-val="{{ false }}"><a href="#" style="flex:none;font-size:13px;font-weight:800;color:{{ accent }};text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px">Загрузить документы в личном кабинете →</a></sc-if>
+              <span style="flex:none;font-size:9.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:{{ inkFaint }};border:1px dashed {{ inkFaint }};padding:3px 7px">юнит «строка статуса верификации» — анатомия в 08-d-lk</span>
+            </div>
+          </div>
+        </div>
+      </section>
+    </sc-if>
+
+    <!-- ═══ Полоса-предупреждение над курсом (развилка 3 · вариант Б) ═══ -->
+    <sc-if value="{{ hintBandShow }}" hint-placeholder-val="{{ false }}">
+      <section style="padding:0 clamp(16px,4vw,48px);margin-top:clamp(28px,4vw,40px)">
+        <div style="max-width:1104px;margin:0 auto;border:2px solid {{ accent }};background:{{ tint }};padding:14px 18px;display:flex;gap:12px;align-items:baseline;flex-wrap:wrap">
+          <span style="font-size:14px;color:{{ tintFg }};flex:none">ⓘ</span>
+          <span style="flex:1;min-width:240px;font-size:13.5px;line-height:1.6;font-weight:600;color:{{ ink }}">Курс доступен полностью без документов. Чтобы получить сертификат и НМО, подтвердите документы.</span>
+          <a href="#" style="flex:none;font-size:13px;font-weight:800;color:{{ tintFg }};text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px">Загрузить документы в личном кабинете →</a>
+        </div>
+      </section>
+    </sc-if>
+
+    <!-- ═══ Курс-сериал (REQ-16, Q-7, REQ-66) ═══ -->
+    <section data-screen-label="d-school · курс-сериал" style="padding:0 clamp(16px,4vw,48px);margin-top:clamp(44px,7vw,76px)">
+      <div style="max-width:1104px;margin:0 auto">
+        <div style="font-size:11.5px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ accent }};margin-bottom:10px">Курс-сериал · 9 серий</div>
+        <div style="display:flex;align-items:baseline;gap:16px;margin-bottom:12px">
+          <h2 style="margin:0;font-size:clamp(24px,3.6vw,36px);line-height:1.05;font-weight:800;letter-spacing:-.03em;color:{{ ink }}">Курс «Ортобиология. Базовый»</h2>
+          <span style="flex:1;border-top:2px solid {{ ink }};transform:translateY(-6px);min-width:40px"></span>
+        </div>
+        <div style="display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:clamp(18px,3vw,24px)">
+          <span style="font-size:13px;font-weight:700;color:{{ inkMuted }}">Серию можно смотреть без предыдущих.</span>
+          <span style="font-size:13px;font-weight:700;color:{{ inkMuted }}">Сертификат — за полное прохождение курса.</span>
+          <span style="margin-left:auto;font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:{{ inkFaint }};border:1px solid {{ hairline }};padding:3px 7px">Партнёрский материал · Партнёр А</span>
+        </div>
+
+        <!-- пусто · школа готовится -->
+        <sc-if value="{{ stEmpty }}" hint-placeholder-val="{{ false }}">
+          <div style="border:2px dashed {{ dashedBorder }};padding:clamp(26px,4vw,44px);text-align:center">
+            <div style="font-size:17px;font-weight:800;letter-spacing:-.01em;color:{{ ink }};margin-bottom:8px">Школа готовится</div>
+            <div style="font-size:14px;line-height:1.65;color:{{ inkMuted }};max-width:520px;margin:0 auto">Первые серии появятся осенью — оставьте специальность, мы покажем их в вашей ленте.</div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ notEmpty }}" hint-placeholder-val="{{ true }}">
+
+          <!-- прогресс вошедшего -->
+          <sc-if value="{{ showProgress }}" hint-placeholder-val="{{ false }}">
+            <div style="margin-bottom:18px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+              <div style="flex:1;min-width:180px"><div style="height:8px;border:1px solid {{ hairline }};background:{{ trackBg }}"><div style="height:100%;width:{{ progressW }};background:{{ accent }}"></div></div><div style="margin-top:7px;font-size:12.5px;font-weight:700;color:{{ inkMuted }}">{{ progressLabel }}</div></div>
+              <sc-if value="{{ started }}" hint-placeholder-val="{{ false }}"><a href="Витрина врача - Учебный модуль.dc.html" style="flex:none;font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:2px solid {{ btnBg }};padding:13px 24px;text-decoration:none;box-shadow:{{ btnShadow }}" style-hover="transform:translate(2px,2px)">Продолжить — серия 3 →</a></sc-if>
+              <sc-if value="{{ completed }}" hint-placeholder-val="{{ false }}"><span style="flex:none;font-size:13.5px;font-weight:800;color:{{ green }}">✓ Все 9 серий пройдены</span></sc-if>
+            </div>
+          </sc-if>
+
+          <!-- Вариант А · вертикальный список серий -->
+          <sc-if value="{{ vA }}" hint-placeholder-val="{{ true }}">
+            <div style="{{ courseWrapStyle }}">
+              <sc-for list="{{ rowsA }}" as="s" hint-placeholder-count="3">
+                <div style="{{ s.rowStyle }}" style-hover="{{ rowHover }}">
+                  <span style="flex:none;width:64px;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:{{ accent }};font-variant-numeric:tabular-nums">{{ s.num }}</span>
+                  <a href="Витрина врача - Учебный модуль.dc.html" style="flex:1;min-width:0;font-size:15px;font-weight:700;letter-spacing:-.01em;line-height:1.4;color:{{ ink }};text-decoration:none" style-hover="color:{{ accent }};text-decoration:underline;text-underline-offset:3px">{{ s.title }}</a>
+                  <span style="flex:none;font-size:12px;font-weight:700;color:{{ inkFaint }};font-variant-numeric:tabular-nums">{{ s.dur }}</span>
+                  <sc-if value="{{ s.done }}"><span style="flex:none;font-size:12.5px;font-weight:800;color:{{ green }};white-space:nowrap">✓ пройдена</span></sc-if>
+                  <sc-if value="{{ s.next }}"><a href="Витрина врача - Учебный модуль.dc.html" style="flex:none;font-size:12.5px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};padding:9px 14px;text-decoration:none;white-space:nowrap">Следующая →</a></sc-if>
+                  <sc-if value="{{ s.plain }}"><a href="Витрина врача - Учебный модуль.dc.html" style="flex:none;font-size:12.5px;font-weight:800;color:{{ accent }};text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px;white-space:nowrap">Смотреть →</a></sc-if>
+                  <sc-if value="{{ s.gated }}"><a href="Авторизация.dc.html" title="Смотреть серию — нужна регистрация" style="flex:none;font-size:12.5px;font-weight:800;color:{{ inkFaint }};text-decoration:none;white-space:nowrap" style-hover="color:{{ accent }}">🔒 смотреть</a></sc-if>
+                </div>
+              </sc-for>
+              <sc-if value="{{ showTail }}" hint-placeholder-val="{{ true }}">
+                <button onClick="{{ toggleTail }}" style="font:inherit;display:flex;align-items:baseline;gap:16px;width:100%;box-sizing:border-box;text-align:left;padding:{{ rowPad }};border:0;border-top:1px solid {{ hairline }};background:{{ sectionGray }};cursor:pointer" style-hover="background:{{ tint }}">
+                  <span style="flex:none;width:64px;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:{{ inkFaint }}">Серии</span>
+                  <span style="flex:1;font-size:15px;font-weight:800;letter-spacing:-.01em;color:{{ ink }}">Серии 4–9 · ещё шесть ▾</span>
+                </button>
+              </sc-if>
+              <sc-if value="{{ showCollapse }}" hint-placeholder-val="{{ false }}">
+                <button onClick="{{ toggleTail }}" style="font:inherit;width:100%;box-sizing:border-box;text-align:left;padding:{{ rowPad }};border:0;border-top:1px solid {{ hairline }};background:{{ sectionGray }};font-size:13.5px;font-weight:800;color:{{ ink }};cursor:pointer" style-hover="background:{{ tint }}">Свернуть до серий 1–3 ▴</button>
+              </sc-if>
+            </div>
+          </sc-if>
+
+          <!-- Вариант Б · сезонная полоса -->
+          <sc-if value="{{ vB }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;gap:14px;overflow-x:auto;padding:4px 2px 16px;-webkit-overflow-scrolling:touch">
+              <sc-for list="{{ stripB }}" as="s" hint-placeholder-count="5">
+                <a href="Витрина врача - Учебный модуль.dc.html" style="{{ s.cardStyle }}" style-hover="transform:translate(2px,2px);box-shadow:3px 3px 0 {{ shadow }}">
+                  <span style="font-size:30px;font-weight:800;line-height:1;letter-spacing:-.04em;color:{{ s.numColor }};font-variant-numeric:tabular-nums">{{ s.num2 }}</span>
+                  <span style="font-size:14.5px;font-weight:800;letter-spacing:-.01em;line-height:1.3;color:{{ s.titleColor }}">{{ s.title }}</span>
+                  <span style="margin-top:auto;font-size:12px;font-weight:700;color:{{ inkFaint }};font-variant-numeric:tabular-nums">{{ s.dur }}</span>
+                  <sc-if value="{{ s.done }}"><span style="font-size:12px;font-weight:800;color:{{ green }}">✓ пройдена</span></sc-if>
+                  <sc-if value="{{ s.next }}"><span style="font-size:12px;font-weight:800;color:{{ tintFg }}">Следующая →</span></sc-if>
+                  <sc-if value="{{ s.gated }}"><span style="font-size:12px;font-weight:800;color:{{ inkFaint }}">🔒 нужна регистрация</span></sc-if>
+                </a>
+              </sc-for>
+            </div>
+            <div style="font-size:12px;font-weight:600;color:{{ inkFaint }}">Полоса прокручивается — 9 серий →</div>
+          </sc-if>
+
+          <!-- Вариант В · дорожка -->
+          <sc-if value="{{ vC }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;align-items:flex-start;overflow-x:auto;padding:6px 2px 14px;-webkit-overflow-scrolling:touch">
+              <sc-for list="{{ pathC }}" as="n" hint-placeholder-count="9">
+                <sc-if value="{{ n.conn }}"><span style="{{ n.connStyle }}"></span></sc-if>
+                <sc-if value="{{ n.isNode }}">
+                  <a href="Витрина врача - Учебный модуль.dc.html" style="flex:none;width:118px;display:flex;flex-direction:column;align-items:center;text-align:center;text-decoration:none" style-hover="opacity:.85">
+                    <span style="{{ n.boxStyle }}">{{ n.icon }}</span>
+                    <span style="margin-top:10px;font-size:12.5px;font-weight:800;letter-spacing:-.01em;line-height:1.3;color:{{ ink }}">{{ n.title }}</span>
+                    <span style="margin-top:4px;font-size:11px;font-weight:700;color:{{ inkFaint }};font-variant-numeric:tabular-nums">{{ n.dur }}</span>
+                    <sc-if value="{{ n.next }}"><span style="margin-top:6px;font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:{{ btnFg }};background:{{ btnBg }};padding:3px 8px">Вы здесь</span></sc-if>
+                  </a>
+                </sc-if>
+              </sc-for>
+            </div>
+          </sc-if>
+
+          <!-- гейт гостя (REQ-20) -->
+          <sc-if value="{{ showGate }}" hint-placeholder-val="{{ true }}">
+            <div style="margin-top:22px;border:2px solid {{ gateBorder }};background:{{ tint }};padding:clamp(18px,3vw,26px);display:flex;align-items:center;gap:18px;flex-wrap:wrap;box-shadow:{{ cardShadow }}">
+              <span style="font-size:22px;flex:none">🔒</span>
+              <div style="flex:1;min-width:240px">
+                <div style="font-size:16px;font-weight:800;letter-spacing:-.01em;color:{{ tintFg }}">Смотреть серию — нужна регистрация. Вернём вас сюда.</div>
+                <div style="margin-top:5px;font-size:13px;font-weight:600;line-height:1.55;color:{{ inkMuted }}">Описание, программа и тизеры открыты. Достаточно почты с подтверждением — диплом на входе не нужен.</div>
+              </div>
+              <a href="Авторизация.dc.html" style="flex:none;font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:2px solid {{ btnBg }};padding:14px 24px;text-decoration:none;box-shadow:{{ btnShadow }}" style-hover="transform:translate(2px,2px)">Зарегистрироваться и смотреть</a>
+            </div>
+          </sc-if>
+
+        </sc-if>
+      </div>
+    </section>
+
+    <!-- ═══ Вебинары-разборы (REQ-2) ═══ -->
+    <section data-screen-label="d-school · вебинары-разборы" style="padding:0 clamp(16px,4vw,48px);margin-top:clamp(44px,7vw,76px)">
+      <div style="max-width:1104px;margin:0 auto">
+        <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:18px;flex-wrap:wrap;margin-bottom:clamp(18px,3vw,24px)">
+          <h2 style="margin:0;font-size:clamp(24px,3.6vw,36px);line-height:1.05;font-weight:800;letter-spacing:-.03em;color:{{ ink }}">Вебинары-разборы</h2>
+          <a href="Витрина врача - События.dc.html" style="font-size:14px;font-weight:800;color:{{ accent }};text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:5px;white-space:nowrap">Все события →</a>
+        </div>
+        <sc-if value="{{ stEmpty }}" hint-placeholder-val="{{ false }}">
+          <div style="border:2px dashed {{ dashedBorder }};padding:clamp(22px,4vw,36px);text-align:center;font-size:14px;font-weight:600;color:{{ inkMuted }}">Событий школы пока нет — они появятся вместе с первыми сериями.</div>
+        </sc-if>
+        <sc-if value="{{ notEmpty }}" hint-placeholder-val="{{ true }}">
+          <div style="display:flex;flex-direction:column;gap:{{ evGap }}">
+            <dc-import name="ВебинарКарточка" dark="{{ dark }}" variant="scheduled" num="Вебинар-разбор" time="19:00" time-sub="4 сентября · чт" school="Школа ортобиологии" title="Разбор клинического случая с экспертом" chips="{{ ev1Chips }}" speakers="{{ ev1Speakers }}" cta="Участвовать ↗" hint-size="100%,220px"></dc-import>
+            <dc-import name="ВебинарКарточка" dark="{{ dark }}" variant="scheduled" num="Вебинар-разбор" time="18:00" time-sub="18 сентября · чт" school="Школа ортобиологии" title="PRP-терапия в амбулаторной практике: вопросы и ответы" chips="{{ ev2Chips }}" speakers="{{ ev2Speakers }}" cta="Участвовать ↗" hint-size="100%,220px"></dc-import>
+          </div>
+        </sc-if>
+      </div>
+    </section>
+
+    <!-- ═══ Документ по итогам · размещение по R4 (REQ-17, REQ-57, REQ-22) ═══ -->
+    <sc-if value="{{ docAfter }}" hint-placeholder-val="{{ true }}">
+      <section data-screen-label="d-school · документ по итогам" style="padding:0 clamp(16px,4vw,48px);margin-top:clamp(44px,7vw,76px)">
+        <div style="max-width:1104px;margin:0 auto">
+          <div style="display:flex;align-items:baseline;gap:16px;margin-bottom:clamp(18px,3vw,24px)">
+            <h2 style="margin:0;font-size:clamp(24px,3.6vw,36px);line-height:1.05;font-weight:800;letter-spacing:-.03em;color:{{ ink }};white-space:nowrap">Документ по итогам</h2>
+            <span style="flex:1;border-top:2px solid {{ ink }};transform:translateY(-6px)"></span>
+          </div>
+          <div style="{{ docWrapStyle }}">
+            <sc-if value="{{ certReady }}" hint-placeholder-val="{{ false }}">
+              <div style="border-bottom:2px solid {{ green }};background:{{ greenTint }};padding:16px clamp(18px,3vw,26px);display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+                <span style="flex:none;font-size:16px;color:{{ green }}">✓</span>
+                <span style="flex:1;min-width:220px;font-size:14.5px;font-weight:800;color:{{ ink }}">Курс пройден полностью — сертификат доступен. НМО учтены в реестре начислений.</span>
+                <a href="#" style="flex:none;font-size:13.5px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:2px solid {{ btnBg }};padding:12px 20px;text-decoration:none;box-shadow:{{ btnShadow }}" style-hover="transform:translate(2px,2px)">Скачать сертификат</a>
+              </div>
+            </sc-if>
+            <sc-if value="{{ certWaiting }}" hint-placeholder-val="{{ false }}">
+              <div style="border-bottom:2px solid {{ docDivider }};background:{{ tint }};padding:16px clamp(18px,3vw,26px);display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+                <span style="flex:none;font-size:14px;color:{{ tintFg }}">ⓘ</span>
+                <span style="flex:1;min-width:240px;font-size:14.5px;font-weight:800;line-height:1.5;color:{{ tintFg }}">Курс пройден полностью. Сертификат ждёт верификации документов — как только их подтвердят, он появится здесь и в личном кабинете.</span>
+              </div>
+            </sc-if>
+            <div style="display:grid;grid-template-columns:{{ twoCols }};gap:2px;background:{{ hairline }}">
+              <div style="background:{{ docTileBg }};padding:clamp(18px,3vw,26px)"><div style="font-size:11.5px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:{{ accent }}">Сертификат</div><div style="margin-top:10px;font-size:18px;font-weight:800;letter-spacing:-.015em;color:{{ ink }}">Сертификат Doctor.School</div><p style="margin:8px 0 0;font-size:13.5px;line-height:1.6;color:{{ inkMuted }}">Выдаётся за полное прохождение курса — все 9 серий и итоговый разбор.</p></div>
+              <div style="background:{{ docTileBg }};padding:clamp(18px,3vw,26px)"><div style="font-size:11.5px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:{{ accent }}">НМО</div><div style="margin-top:10px;font-size:18px;font-weight:800;letter-spacing:-.015em;color:{{ ink }}">Учёт НМО</div><p style="margin:8px 0 0;font-size:13.5px;line-height:1.6;color:{{ inkMuted }}">Баллы подтверждает провайдер мероприятия через портал НМО. Платформа ведёт реестр начислений и учитывает их в вашем профиле.</p></div>
+            </div>
+            <div style="border-top:2px solid {{ docDivider }};padding:16px clamp(18px,3vw,26px);display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+              <span style="{{ verifyChipStyle }}">{{ verifyChip }}</span>
+              <span style="flex:1;min-width:220px;font-size:13px;line-height:1.6;font-weight:600;color:{{ inkMuted }}">{{ verifyText }}</span>
+              <sc-if value="{{ verifyLink }}" hint-placeholder-val="{{ false }}"><a href="#" style="flex:none;font-size:13px;font-weight:800;color:{{ accent }};text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px">Загрузить документы в личном кабинете →</a></sc-if>
+              <span style="flex:none;font-size:9.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:{{ inkFaint }};border:1px dashed {{ inkFaint }};padding:3px 7px">юнит «строка статуса верификации» — анатомия в 08-d-lk</span>
+            </div>
+          </div>
+        </div>
+      </section>
+    </sc-if>
+
+    <!-- ═══ Наставничество и стажировка (REQ-119, REQ-12) ═══ -->
+    <section data-screen-label="d-school · наставничество" style="padding:0 clamp(16px,4vw,48px);margin-top:clamp(44px,7vw,76px)">
+      <div style="max-width:1104px;margin:0 auto">
+        <div style="display:flex;align-items:baseline;gap:16px;margin-bottom:clamp(18px,3vw,24px)">
+          <h2 style="margin:0;font-size:clamp(24px,3.6vw,36px);line-height:1.05;font-weight:800;letter-spacing:-.03em;color:{{ ink }};white-space:nowrap">Наставничество и стажировка</h2>
+          <span style="flex:1;border-top:2px solid {{ ink }};transform:translateY(-6px)"></span>
+        </div>
+        <div style="display:grid;grid-template-columns:{{ mentorCols }};gap:clamp(20px,3.5vw,36px);align-items:start">
+          <div style="min-width:0">
+            <p style="margin:0;max-width:560px;font-size:15px;line-height:1.7;font-weight:500;color:{{ ink }}">Пройдите курс — и продолжите у наставника школы: разборы ваших собственных случаев, техника под контролем эксперта, путь к новой специальности.</p>
+            <div style="margin-top:16px;background:{{ sectionGray }};padding:16px 18px;max-width:560px;box-sizing:border-box"><div style="font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ inkFaint }}">Для лучших выпускников</div><div style="margin-top:6px;font-size:14px;font-weight:700;line-height:1.5;color:{{ ink }}">Международная стажировка — по итогам курса и рекомендации наставника</div></div>
+            <div style="margin-top:22px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+              <a href="{{ mentorCtaHref }}" style="font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:2px solid {{ btnBg }};padding:14px 26px;text-decoration:none;box-shadow:{{ btnShadow }}" style-hover="transform:translate(2px,2px)">Хочу к наставнику</a>
+              <span style="font-size:12.5px;font-weight:600;color:{{ inkFaint }}">Наставничество открывается после полного прохождения курса</span>
+            </div>
+          </div>
+          <dc-import name="ЭкспертКарточка" dark="{{ dark }}" full-name="Анна Соколова" role="Травматолог-ортопед" credentials="д.м.н., ведущий научный сотрудник" org="НМИЦ им. Пирогова" meta="Наставник школы →" href="Эксперт.dc.html" hint-size="300px,430px"></dc-import>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══ Отзывы выпускников (REQ-118, REQ-92) ═══ -->
+    <section data-screen-label="d-school · отзывы" style="padding:0 clamp(16px,4vw,48px);margin-top:clamp(44px,7vw,76px)">
+      <div style="max-width:1104px;margin:0 auto">
+        <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:18px;flex-wrap:wrap;margin-bottom:clamp(18px,3vw,24px)">
+          <div>
+            <h2 style="margin:0;font-size:clamp(24px,3.6vw,36px);line-height:1.05;font-weight:800;letter-spacing:-.03em;color:{{ ink }}">Отзывы выпускников</h2>
+            <sc-if value="{{ reviewsOk }}" hint-placeholder-val="{{ true }}"><div style="margin-top:10px;font-size:13.5px;font-weight:800;color:{{ ink }}"><span style="color:{{ accent }}">★★★★★</span> 4,8 из 5 · 26 отзывов</div></sc-if>
+          </div>
+          <sc-if value="{{ reviewsOk }}" hint-placeholder-val="{{ true }}"><a href="#" style="font-size:14px;font-weight:800;color:{{ accent }};text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:5px;white-space:nowrap">Все отзывы →</a></sc-if>
+        </div>
+        <sc-if value="{{ reviewsOk }}" hint-placeholder-val="{{ true }}">
+          <div style="display:grid;grid-template-columns:{{ twoCols }};gap:{{ tileGap }}">
+            <div style="background:{{ sectionGray }};padding:clamp(18px,3vw,26px)"><div style="font-size:16.5px;font-weight:700;line-height:1.5;letter-spacing:-.01em;color:{{ ink }}">«Разбор ПКС — лучший формат, что я видел»</div><div style="margin-top:12px;font-size:12.5px;font-weight:700;color:{{ inkFaint }}">травматолог, Казань</div></div>
+            <div style="background:{{ sectionGray }};padding:clamp(18px,3vw,26px)"><div style="font-size:16.5px;font-weight:700;line-height:1.5;letter-spacing:-.01em;color:{{ ink }}">«Хочу больше практики»</div><div style="margin-top:12px;font-size:12.5px;font-weight:700;color:{{ inkFaint }}">ортопед, Екатеринбург</div></div>
+          </div>
+        </sc-if>
+        <sc-if value="{{ reviewsEmpty }}" hint-placeholder-val="{{ false }}">
+          <div style="border:2px dashed {{ dashedBorder }};padding:clamp(22px,4vw,36px);text-align:center;font-size:14px;font-weight:600;color:{{ inkMuted }}">Отзывов пока нет — первый поток ещё учится. Отзыв можно оставить после прохождения курса.</div>
+        </sc-if>
+        <sc-if value="{{ reviewsError }}" hint-placeholder-val="{{ false }}">
+          <div style="border:2px solid {{ danger }};background:{{ dangerTint }};padding:18px 20px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+            <span style="font-size:16px;color:{{ danger }};flex:none">✕</span>
+            <span style="flex:1;min-width:220px;font-size:14px;font-weight:700;color:{{ ink }}">Не удалось загрузить отзывы. Остальная страница работает.</span>
+            <button style="font:inherit;font-size:13.5px;font-weight:700;color:{{ ink }};background:{{ surface }};border:2px solid {{ border }};padding:12px 22px;cursor:pointer" style-hover="background:{{ tint }}">Повторить</button>
+          </div>
+        </sc-if>
+      </div>
+    </section>
+
+    <!-- ═══ Сообщество школы (REQ-120) ═══ -->
+    <section data-screen-label="d-school · сообщество" style="padding:0 clamp(16px,4vw,48px);margin-top:clamp(44px,7vw,76px)">
+      <div style="max-width:1104px;margin:0 auto">
+        <div style="{{ communityStyle }}">
+          <div style="flex:1;min-width:240px">
+            <div style="font-size:11.5px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ tintFg }};margin-bottom:10px">Сообщество школы</div>
+            <div style="font-size:clamp(19px,2.6vw,24px);font-weight:800;letter-spacing:-.02em;line-height:1.2;color:{{ tintFg }}">Сообщество «Орто» — стандарты лечения, консенсусы, коллеги по направлению</div>
+          </div>
+          <a href="#" style="flex:none;font-size:14px;font-weight:800;color:{{ tintFg }};border:2px solid {{ tintFg }};padding:13px 24px;text-decoration:none;white-space:nowrap" style-hover="background:{{ surface }}">Перейти в сообщество →</a>
+        </div>
+      </div>
+    </section>
+
+    </sc-if>
+  </main>
+
+  <!-- ═══ Оболочка · футер витрины врача (с #d-home, как есть) ═══ -->
+  <footer data-screen-label="d-school · футер" style="border-top:2px solid {{ ink }};padding:clamp(32px,5vw,48px) clamp(16px,4vw,48px) clamp(36px,5vw,56px)">
+    <div style="max-width:1104px;margin:0 auto;display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:clamp(24px,4vw,40px)">
+      <div>
+        <img src="{{ logoSrc }}" alt="Doctor.School" style="height:22px;display:block">
+        <div style="margin-top:14px;font-size:12.5px;font-weight:600;line-height:1.6;color:{{ inkFaint }}">Бесплатное образование для врачей.<br>© Doctor.School, 2026</div>
+      </div>
+      <div>
+        <div style="font-size:11.5px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:{{ inkFaint }};margin-bottom:14px">Документы и контакты</div>
+        <div style="display:flex;flex-direction:column;gap:9px">
+          <a href="#" style="font-size:13.5px;font-weight:600;color:{{ ink }};text-decoration:none" style-hover="color:{{ accent }};text-decoration:underline;text-underline-offset:3px">Пользовательское соглашение</a>
+          <a href="#" style="font-size:13.5px;font-weight:600;color:{{ ink }};text-decoration:none" style-hover="color:{{ accent }};text-decoration:underline;text-underline-offset:3px">Политика обработки персональных данных</a>
+          <a href="#" style="font-size:13.5px;font-weight:600;color:{{ ink }};text-decoration:none" style-hover="color:{{ accent }};text-decoration:underline;text-underline-offset:3px">Контакты</a>
+        </div>
+      </div>
+      <div>
+        <div style="font-size:11.5px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:{{ inkFaint }};margin-bottom:14px">Экспертам и партнёрам</div>
+        <a href="Главная.dc.html" style="font-size:13.5px;font-weight:800;color:{{ accent }};text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px">Academy.Doctor.School ↗</a>
+        <div style="margin-top:10px;font-size:12.5px;font-weight:600;line-height:1.6;color:{{ inkFaint }}">Закулисье платформы: проекты, эксперты, партнёры.</div>
+      </div>
+    </div>
+    <div aria-hidden="true" style="overflow:hidden;margin:clamp(28px,4vw,48px) calc(-1*clamp(16px,4vw,48px)) calc(-1*clamp(36px,5vw,56px))">
+      <div style="font-size:clamp(58px,12.6vw,236px);font-weight:800;letter-spacing:-.05em;line-height:.78;white-space:nowrap;text-align:center;color:{{ giantInk }};transform:translateY(.16em);user-select:none">Doctor.School</div>
+    </div>
+  </footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;viewerState&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;гость&quot;,&quot;вошёл · документы не загружены&quot;,&quot;курс начат&quot;,&quot;пройден · сертификат доступен&quot;,&quot;пройден · документы не подтверждены&quot;],&quot;default&quot;:&quot;гость&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Состояние&quot;},&quot;dataState&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;обычно&quot;,&quot;загрузка&quot;,&quot;школа готовится&quot;,&quot;ошибка блока отзывов&quot;],&quot;default&quot;:&quot;обычно&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Состояние&quot;},&quot;courseVariant&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;А — вертикальный список&quot;,&quot;Б — сезонная полоса&quot;,&quot;В — дорожка&quot;],&quot;default&quot;:&quot;А — вертикальный список&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Развилки&quot;},&quot;docPlacement&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;после курса (R4)&quot;,&quot;сразу после «О школе»&quot;],&quot;default&quot;:&quot;после курса (R4)&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Развилки&quot;},&quot;verifyHint&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;подсказка в блоке документа&quot;,&quot;полоса над курсом&quot;],&quot;default&quot;:&quot;подсказка в блоке документа&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Развилки&quot;}}">
+class Component extends DCLogic {
+  state = {
+    dark: (() => { try { return localStorage.getItem('ds-theme') === 'dark'; } catch (e) { return false; } })(),
+    isMobile: false, q: '', tailOpen: false
+  };
+  componentDidMount() {
+    this.mq = window.matchMedia('(max-width: 900px)');
+    this.upd = () => this.setState({ isMobile: this.mq.matches });
+    this.upd();
+    this.mq.addEventListener ? this.mq.addEventListener('change', this.upd) : this.mq.addListener(this.upd);
+  }
+  componentWillUnmount() {
+    if (this.mq) this.mq.removeEventListener ? this.mq.removeEventListener('change', this.upd) : this.mq.removeListener(this.upd);
+  }
+  renderVals() {
+    const p = this.props;
+    const d = this.state.dark;
+    const m = this.state.isMobile;
+
+    const vs = p.viewerState || 'гость';
+    const guest = vs === 'гость';
+    const loggedIn = !guest;
+    const started = vs === 'курс начат';
+    const certReady = vs === 'пройден · сертификат доступен';
+    const certWaiting = vs === 'пройден · документы не подтверждены';
+    const completed = certReady || certWaiting;
+    const docsMissing = loggedIn && !certReady;
+
+    const stKey = p.dataState || 'обычно';
+    const stLoading = stKey === 'загрузка';
+    const stEmpty = stKey === 'школа готовится';
+    const reviewsError = stKey === 'ошибка блока отзывов';
+    const stReady = !stLoading;
+
+    const vKey = (p.courseVariant || 'А')[0];
+    const vA = vKey === 'А', vB = vKey === 'Б', vC = vKey === 'В';
+    const docEarly = (p.docPlacement || '')[0] === 'с' ? false : (p.docPlacement || 'после').startsWith('сразу');
+    const docAfter = !((p.docPlacement || 'после курса (R4)').startsWith('сразу'));
+    const hintBand = (p.verifyHint || '').startsWith('полоса');
+
+    const ink = d ? '#fff' : 'oklch(.21 .02 250)';
+    const inkMuted = d ? 'rgba(255,255,255,.62)' : 'oklch(.45 .014 250)';
+    const inkFaint = d ? 'rgba(255,255,255,.5)' : 'oklch(.556 .012 250)';
+    const surface = d ? 'oklch(.21 .02 250)' : '#fff';
+    const pageBg = d ? 'oklch(.16 .02 250)' : '#fff';
+    const border = d ? '#fff' : 'oklch(.21 .02 250)';
+    const hairline = d ? 'rgba(255,255,255,.16)' : 'oklch(.922 .006 250)';
+    const sectionGray = d ? 'oklch(.185 .02 250)' : 'oklch(.955 .004 250)';
+    const accent = d ? '#6BB1F7' : '#2D84F2';
+    const btnBg = d ? '#6BB1F7' : '#114D9E';
+    const btnFg = d ? '#0D3A77' : '#fff';
+    const tint = d ? '#0D3A77' : '#D3E8FD';
+    const tintFg = d ? '#AED4FB' : '#114D9E';
+    const shadow = d ? '#6BB1F7' : '#114D9E';
+    const green = d ? '#4ADE80' : '#009959';
+    const greenTint = d ? '#0e2a1c' : '#e6f6ee';
+    const danger = d ? '#E15555' : '#C81E1E';
+    const dangerTint = d ? '#3a1414' : '#fdecec';
+    const dashedBorder = d ? 'rgba(255,255,255,.35)' : 'oklch(.75 .01 250)';
+
+    const SER = [
+      { n: 1, title: 'Разрыв ПКС', dur: '22 мин' },
+      { n: 2, title: 'PRP-терапия', dur: '18 мин' },
+      { n: 3, title: 'Гонартроз', dur: '25 мин' },
+      { n: 4, title: 'BMAC: концентрат костного мозга', dur: '20 мин' },
+      { n: 5, title: 'Тендинопатии', dur: '17 мин' },
+      { n: 6, title: 'Хрящевые дефекты', dur: '24 мин' },
+      { n: 7, title: 'Ортобиология тазобедренного сустава', dur: '19 мин' },
+      { n: 8, title: 'Реабилитация после пластики', dur: '21 мин' },
+      { n: 9, title: 'Итоговый разбор и тест', dur: '28 мин' }
+    ];
+    const flags = s => ({
+      done: completed || (started && s.n <= 2),
+      next: started && s.n === 3,
+      gated: guest
+    });
+    const rowPad = m ? '14px 16px' : '16px 22px';
+    const visible = this.state.tailOpen ? SER : SER.slice(0, 3);
+    const rowsA = visible.map(s => {
+      const f = flags(s);
+      return {
+        num: 'Серия ' + s.n, title: s.title, dur: s.dur,
+        done: f.done, next: f.next, gated: f.gated, plain: !f.done && !f.next && !f.gated,
+        rowStyle: 'display:flex;align-items:baseline;gap:' + (m ? '10px' : '16px') + ';padding:' + rowPad + ';border-top:1px solid ' + hairline + (f.next ? ';background:' + tint : '')
+      };
+    });
+    const stripB = SER.map(s => {
+      const f = flags(s);
+      return {
+        num2: String(s.n).padStart(2, '0'), title: s.title, dur: s.dur,
+        done: f.done, next: f.next, gated: f.gated,
+        numColor: f.next ? tintFg : (f.done ? green : accent),
+        titleColor: f.next ? tintFg : ink,
+        cardStyle: 'flex:none;width:200px;min-height:150px;box-sizing:border-box;display:flex;flex-direction:column;gap:8px;padding:18px;text-decoration:none;border:2px solid ' + border + ';background:' + (f.next ? tint : surface) + (m ? '' : ';box-shadow:5px 5px 0 ' + shadow)
+      };
+    });
+    const pathC = [];
+    SER.forEach((s, i) => {
+      const f = flags(s);
+      if (i > 0) pathC.push({ conn: true, connStyle: 'flex:none;width:30px;margin-top:26px;border-top:2px solid ' + (f.done || (started && s.n === 3) ? accent : hairline) });
+      pathC.push({
+        isNode: true, title: s.title, dur: s.dur, next: f.next,
+        icon: f.done ? '✓' : String(s.n),
+        boxStyle: 'width:54px;height:54px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;font-size:16px;font-weight:800;border:2px solid ' +
+          (f.done ? green + ';background:' + green + ';color:#fff' : f.next ? btnBg + ';background:' + btnBg + ';color:' + btnFg : border + ';background:' + surface + ';color:' + ink)
+      });
+    });
+
+    const pct = certReady || certWaiting ? 100 : 22;
+    const heroBadge = stEmpty ? 'Скоро' : completed ? 'Курс пройден' : started ? 'Серия 3 из 9' : 'Курс-сериал · 9 серий';
+
+    let verifyChip, verifyText, verifyChipStyle, verifyLink = false;
+    const chipBase = 'flex:none;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;padding:5px 10px;';
+    if (guest) {
+      verifyChip = 'После регистрации';
+      verifyText = 'Документы подтверждаются в личном кабинете — на входе они не нужны. Без подтверждённых документов сертификат и НМО не выдаются.';
+      verifyChipStyle = chipBase + 'background:' + sectionGray + ';color:' + inkMuted;
+    } else if (certReady) {
+      verifyChip = 'Документы подтверждены';
+      verifyText = 'Верификация пройдена — сертификат и учёт НМО доступны.';
+      verifyChipStyle = chipBase + 'background:' + greenTint + ';color:' + green;
+    } else {
+      verifyChip = 'Документы не загружены';
+      verifyText = 'Чтобы получить сертификат и НМО, подтвердите документы. Курс при этом доступен полностью.';
+      verifyChipStyle = chipBase + 'background:' + sectionGray + ';color:' + ink;
+      verifyLink = true;
+    }
+
+    return {
+      dark: d, isDesktop: !m, isMobile: m,
+      q: this.state.q, setQ: e => this.setState({ q: e.target.value }),
+      toggleTheme: () => this.setState(s => { const dark = !s.dark; try { localStorage.setItem('ds-theme', dark ? 'dark' : 'light'); } catch (e) {} return { dark }; }),
+      themeIcon: d ? '☀' : '☾',
+      guest, loggedIn, started, completed, certReady, certWaiting,
+      stLoading, stReady, stEmpty, notEmpty: !stEmpty,
+      vA, vB, vC, docEarly: docAfter ? false : true, docAfter,
+      hintBandShow: hintBand && loggedIn && !certReady && stReady && !stEmpty,
+      heroBadge,
+      rowsA, stripB, pathC, rowPad,
+      rowHover: 'background:' + (d ? 'oklch(.24 .022 250)' : 'oklch(.965 .006 250)'),
+      showTail: vA && !this.state.tailOpen,
+      showCollapse: vA && this.state.tailOpen,
+      toggleTail: () => this.setState(s => ({ tailOpen: !s.tailOpen })),
+      showProgress: loggedIn && (started || completed) && !stEmpty,
+      progressW: pct + '%', progressLabel: completed ? 'Пройдено 9 серий из 9' : 'Пройдено 2 серии из 9 · следующая — серия 3',
+      trackBg: d ? 'rgba(255,255,255,.08)' : 'oklch(.955 .004 250)',
+      showGate: guest && !stEmpty,
+      gateBorder: m ? hairline : border,
+      courseWrapStyle: m ? 'margin:0 -16px;background:' + surface : 'border:2px solid ' + border + ';background:' + surface + ';box-shadow:6px 6px 0 ' + shadow,
+      docWrapStyle: m ? 'margin:0 -16px;border-top:2px solid ' + hairline + ';border-bottom:2px solid ' + hairline + ';background:' + surface : 'border:2px solid ' + border + ';background:' + surface + ';box-shadow:6px 6px 0 ' + shadow,
+      docTileBg: surface, docDivider: m ? hairline : border,
+      verifyChip, verifyText, verifyChipStyle, verifyLink,
+      ev1Chips: ['Онлайн', 'НМО · 2 ЗЕТ', 'Бесплатно'],
+      ev1Speakers: [{ name: 'Анна Соколова', org: 'НМИЦ им. Пирогова' }],
+      ev2Chips: ['Онлайн', 'НМО · 1 ЗЕТ', '40 Pul'],
+      ev2Speakers: [{ name: 'Дмитрий Ершов', org: 'ЦИТО им. Приорова' }],
+      evGap: m ? '24px' : '20px',
+      mentorCols: m ? '1fr' : 'minmax(0,1fr) 300px',
+      mentorCtaHref: guest ? 'Авторизация.dc.html' : '#',
+      reviewsOk: !stEmpty && !reviewsError, reviewsEmpty: stEmpty && !reviewsError, reviewsError,
+      communityStyle: (m ? 'margin:0 -16px;' : 'border:2px solid ' + border + ';box-shadow:6px 6px 0 ' + shadow + ';') + 'background:' + tint + ';padding:clamp(22px,4vw,36px);display:flex;align-items:center;gap:22px;flex-wrap:wrap',
+      threeCols: m ? '1fr' : 'repeat(3,1fr)', twoCols: m ? '1fr' : '1fr 1fr', tileGap: m ? '10px' : '14px',
+      skeletonRows: [1, 2, 3, 4],
+      ink, inkMuted, inkFaint, surface, pageBg, border, hairline, sectionGray, accent, btnBg, btnFg, tint, tintFg, shadow, green, greenTint, danger, dangerTint, dashedBorder,
+      cardShadow: m ? 'none' : '6px 6px 0 ' + shadow,
+      btnShadow: m ? 'none' : '3px 3px 0 ' + border,
+      logoSrc: d ? 'assets/ds-logo-white.svg' : 'assets/ds-logo-color.svg',
+      giantInk: d ? 'rgba(174,212,251,.09)' : 'oklch(.945 .018 250)'
+    };
+  }
+}
+</script>
+</body>
+</html>

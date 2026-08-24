@@ -7,15 +7,15 @@
 </head>
 <body>
 <x-dc>
-<helmet data-dc-atomics><link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"><style>body{margin:0;background:#fff;font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}:focus-visible{outline:3px solid #6BB1F7;outline-offset:2px}@keyframes livePulse{0%,100%{opacity:1}50%{opacity:.4}}</style></helmet>
+<helmet data-dc-atomics><link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"><style>body{margin:0;background:#fff;font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}a{color:#2D84F2}a:hover{color:#114D9E}:focus-visible{outline:3px solid #6BB1F7;outline-offset:2px}@keyframes livePulse{0%,100%{opacity:1}50%{opacity:.4}}</style></helmet>
 
 <div style="min-height:100vh;background:{{ page }};display:flex;flex-direction:column">
   <!-- Превью-панель (переключатель экранов) -->
   <div style="background:{{ page }};border-bottom:2px solid {{ border }};padding:12px clamp(16px,4vw,40px);display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
-    <span style="font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ inkFaint }}">Doctor.School · авторизация</span>
-    <div style="display:flex;align-items:center;gap:12px">
+    <span style="font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ inkFaint }}">Doctor.School · d-register · вход и регистрация</span>
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
       <div style="display:flex;border:2px solid {{ border }};overflow:hidden">
-        <sc-for list="{{ screenTabs }}" as="st" hint-placeholder-count="4"><button onClick="{{ st.onClick }}" style="{{ st.style }}">{{ st.name }}</button></sc-for>
+        <sc-for list="{{ screenTabs }}" as="st" hint-placeholder-count="5"><button onClick="{{ st.onClick }}" style="{{ st.style }}">{{ st.name }}</button></sc-for>
       </div>
       <button onClick="{{ toggleTheme }}" title="Тема" style="font:inherit;width:44px;height:44px;background:transparent;color:{{ ink }};border:2px solid {{ border }};cursor:pointer;font-size:15px;flex:none">{{ themeIcon }}</button>
     </div>
@@ -26,21 +26,28 @@
     <!-- Колонка формы -->
     <div style="order:2;display:flex;flex-direction:column;padding:clamp(24px,4vw,48px) clamp(16px,4vw,40px);background:{{ page }};min-width:0">
       <img src="{{ logoSrc }}" alt="Doctor.School" style="height:30px;align-self:flex-start;display:block">
-      <div style="flex:1;display:flex;align-items:center;justify-content:center;padding:32px 0">
-        <div style="width:100%;max-width:440px;background:{{ surface }};border:2px solid {{ border }};box-shadow:6px 6px 0 {{ shadow }};padding:clamp(24px,4vw,36px)">
 
-          <!-- бейдж-иконка + заголовок -->
+      <!-- Мобильный контекст возврата · вариант Б (карточка над формой, фоновая плашка) -->
+      <sc-if value="{{ showGateCardMobile }}" hint-placeholder-val="{{ false }}">
+        <div data-screen-label="d-register · контекст возврата · моб" style="margin:20px -16px 0;background:{{ sectionGray }};padding:16px 16px 4px">
+          <div style="font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ inkFaint }};margin-bottom:6px">Вы вернётесь к этому событию</div>
+          <dc-import name="ВебинарКарточка" hint-size="100%,200px" dark="{{ darkFlag }}" variant="scheduled" num="Эфир № 057" time="19:00" time-sub="28 августа · чт" school="Школа ортобиологии" title="PRP при гонартрозе: показания, протоколы, ошибки" speakers="{{ gateSpeakers }}" cta="Участвовать ↗" show-secondary="{{ false }}"></dc-import>
+        </div>
+      </sc-if>
+
+      <div style="flex:1;display:flex;align-items:center;justify-content:center;padding:32px 0">
+        <div style="width:100%;max-width:460px;background:{{ surface }};border:2px solid {{ border }};box-shadow:6px 6px 0 {{ shadow }};padding:clamp(24px,4vw,36px)">
+
           <span style="width:52px;height:52px;background:{{ tint }};color:{{ accent }};display:inline-flex;align-items:center;justify-content:center;margin-bottom:20px">{{ screenIcon }}</span>
           <h1 style="margin:0;font-size:26px;font-weight:800;letter-spacing:-.025em;color:{{ ink }};line-height:1.15">{{ title }}</h1>
           <p style="margin:10px 0 24px;font-size:14px;line-height:1.55;color:{{ inkMuted }}">{{ description }}</p>
 
-          <!-- ============ ВХОД ============ -->
+          <!-- ============ ВХОД (как есть, из базы) ============ -->
           <sc-if value="{{ isLogin }}" hint-placeholder-val="{{ true }}">
             <div style="display:grid;grid-template-columns:1fr 1fr;border:2px solid {{ border }};margin-bottom:22px">
               <button onClick="{{ tabPw }}" style="{{ tabPwStyle }}">Пароль</button>
               <button onClick="{{ tabOtp }}" style="{{ tabOtpStyle }}">По коду</button>
             </div>
-
             <sc-if value="{{ loginPw }}" hint-placeholder-val="{{ true }}">
               <div style="display:flex;flex-direction:column;gap:18px">
                 <div>
@@ -59,7 +66,6 @@
                 <button style="font:inherit;width:100%;font-size:15px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:2px solid {{ btnBg }};padding:14px;cursor:pointer;box-shadow:4px 4px 0 {{ border }}" style-hover="transform:translate(2px,2px);box-shadow:2px 2px 0 {{ border }}">Войти</button>
               </div>
             </sc-if>
-
             <sc-if value="{{ loginOtp }}" hint-placeholder-val="{{ false }}">
               <sc-if value="{{ otpNotSent }}" hint-placeholder-val="{{ true }}">
                 <div style="display:flex;flex-direction:column;gap:18px">
@@ -83,40 +89,183 @@
                 {{ otpFocusEl }}
               </sc-if>
             </sc-if>
-
             <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-top:24px;padding-top:20px;border-top:2px solid {{ hairline }}">
               <button onClick="{{ goRegister }}" style="font:inherit;font-size:13px;font-weight:700;color:{{ accent }};background:transparent;border:0;cursor:pointer;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px">Создать аккаунт</button>
               <button onClick="{{ goReset }}" style="font:inherit;font-size:13px;font-weight:700;color:{{ accent }};background:transparent;border:0;cursor:pointer;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px">Забыли пароль?</button>
             </div>
           </sc-if>
 
-          <!-- ============ РЕГИСТРАЦИЯ ============ -->
+          <!-- ============ РЕГИСТРАЦИЯ · #d-register ============ -->
           <sc-if value="{{ isRegister }}" hint-placeholder-val="{{ false }}">
-            <div style="display:flex;flex-direction:column;gap:18px">
+            <div data-screen-label="d-register · форма" style="display:flex;flex-direction:column;gap:18px">
+
+              <!-- Контекст возврата · вариант А (строка над формой) -->
+              <sc-if value="{{ showGateLine }}" hint-placeholder-val="{{ false }}">
+                <div style="display:flex;gap:10px;align-items:flex-start;background:{{ tint }};padding:12px 14px">
+                  <span style="flex:none;font-size:14px;color:{{ tintFg }}">↩</span>
+                  <span style="font-size:13px;line-height:1.55;font-weight:600;color:{{ tintFg }}">После подтверждения почты вы вернётесь к вебинару «PRP при гонартрозе».</span>
+                </div>
+              </sc-if>
+
+              <!-- Атрибуция партнёра (REQ-39) — видима, не спрятана -->
+              <sc-if value="{{ isPartner }}" hint-placeholder-val="{{ false }}">
+                <div style="border:2px solid {{ border }};background:{{ sectionGray }};padding:12px 14px;display:flex;gap:10px;align-items:flex-start">
+                  <span style="flex:none;width:26px;height:26px;background:{{ tint }};color:{{ tintFg }};display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:800">П</span>
+                  <div style="min-width:0">
+                    <div style="font-size:13px;font-weight:700;color:{{ ink }};line-height:1.45">Вы пришли по ссылке представителя Партнёра А</div>
+                    <div style="font-size:12px;font-weight:600;color:{{ inkFaint }};margin-top:3px">Промокод партнёра применён автоматически.</div>
+                  </div>
+                </div>
+              </sc-if>
+
               <div>
                 <label style="{{ fRegEmail.labelStyle }}">{{ fRegEmail.label }}</label>
                 <input type="email" value="{{ fRegEmail.value }}" onChange="{{ fRegEmail.onChange }}" onBlur="{{ fRegEmail.onBlur }}" placeholder="{{ fRegEmail.placeholder }}" style="{{ fRegEmail.inputStyle }}">
                 <div style="{{ fRegEmail.errStyle }}">⚠ {{ fRegEmail.error }}</div>
+                <sc-if value="{{ emailTaken }}" hint-placeholder-val="{{ false }}"><button onClick="{{ goLogin }}" style="font:inherit;margin-top:6px;font-size:12.5px;font-weight:700;color:{{ accent }};background:transparent;border:0;padding:0;cursor:pointer;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px">Войти с этой почтой →</button></sc-if>
               </div>
               <div>
                 <label style="{{ fRegPw.labelStyle }}">{{ fRegPw.label }}</label>
-                <input type="{{ pwType }}" value="{{ fRegPw.value }}" onChange="{{ fRegPw.onChange }}" onBlur="{{ fRegPw.onBlur }}" placeholder="••••••••" style="{{ fRegPw.inputStyle }}">
+                <div style="position:relative">
+                  <input type="{{ pwType }}" value="{{ fRegPw.value }}" onChange="{{ fRegPw.onChange }}" onBlur="{{ fRegPw.onBlur }}" placeholder="••••••••" style="{{ fRegPw.inputStyle }};padding-right:52px">
+                  <button onClick="{{ togglePw }}" type="button" style="position:absolute;top:0;right:0;height:100%;width:48px;background:transparent;border:0;cursor:pointer;font-size:12px;font-weight:800;color:{{ accent }}">{{ pwToggle }}</button>
+                </div>
                 <div style="{{ fRegPwHint }}">Минимум 8 символов, буквы и цифры.</div>
                 <div style="{{ fRegPw.errStyle }}">⚠ {{ fRegPw.error }}</div>
               </div>
-              <p style="margin:0;font-size:12px;line-height:1.55;color:{{ inkFaint }}">Продолжая, вы соглашаетесь с условиями использования и политикой конфиденциальности.</p>
-              <button style="font:inherit;width:100%;font-size:15px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:2px solid {{ btnBg }};padding:14px;cursor:pointer;box-shadow:4px 4px 0 {{ border }}" style-hover="transform:translate(2px,2px);box-shadow:2px 2px 0 {{ border }}">Создать аккаунт</button>
+              <sc-if value="{{ showPromo }}" hint-placeholder-val="{{ true }}">
+                <div>
+                  <label style="{{ fPromo.labelStyle }}">{{ fPromo.label }}</label>
+                  <input type="text" value="{{ fPromo.value }}" onChange="{{ fPromo.onChange }}" placeholder="{{ fPromo.placeholder }}" style="{{ fPromo.inputStyle }}">
+                </div>
+              </sc-if>
+
+              <!-- ── Блок согласий · вариант А — плоский список ── -->
+              <sc-if value="{{ consentA }}" hint-placeholder-val="{{ true }}">
+                <div data-screen-label="d-register · согласия · вариант А" style="display:flex;flex-direction:column;gap:14px;border-top:2px solid {{ hairline }};padding-top:18px">
+                  <div onClick="{{ cbMed.toggle }}" style="{{ cbRowStyle }}">
+                    <span style="{{ cbMed.boxStyle }}">{{ cbMed.mark }}</span>
+                    <div style="min-width:0">
+                      <div style="{{ cbLabelStyle }}">Я являюсь медицинским работником <span style="{{ reqTagStyle }}">обязательно</span></div>
+                      <div style="{{ cbSubStyle }}">Требование закона: часть материалов доступна только медицинским работникам.</div>
+                    </div>
+                  </div>
+                  <div onClick="{{ cbPartners.toggle }}" style="{{ cbRowStyle }}">
+                    <span style="{{ cbPartners.boxStyle }}">{{ cbPartners.mark }}</span>
+                    <div style="min-width:0">
+                      <div style="{{ cbLabelStyle }}">Согласен на передачу партнёрам платформы данных: ФИО, специальность, город, место работы. Контакты не передаются. <span style="{{ reqTagStyle }}">обязательно</span></div>
+                      <div style="{{ cbSubStyle }}">Это условие бесплатного для врача обучения: без согласия часть материалов недоступна.</div>
+                    </div>
+                  </div>
+                  <div onClick="{{ cbMail.toggle }}" style="{{ cbRowStyle }}">
+                    <span style="{{ cbMail.boxStyle }}">{{ cbMail.mark }}</span>
+                    <div style="min-width:0">
+                      <div style="{{ cbLabelMutedStyle }}">Хочу получать письма о новых школах и событиях <span style="{{ optTagStyle }}">необязательно</span></div>
+                      <div style="{{ cbSubStyle }}">Необязательно. Письма отправляет внешний сервис рассылок.</div>
+                    </div>
+                  </div>
+                </div>
+              </sc-if>
+
+              <!-- ── Блок согласий · вариант Б — два уровня ── -->
+              <sc-if value="{{ consentB }}" hint-placeholder-val="{{ false }}">
+                <div data-screen-label="d-register · согласия · вариант Б" style="border:2px solid {{ border }}">
+                  <div style="border-bottom:2px solid {{ border }};background:{{ sectionGray }};padding:9px 14px;font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ ink }}">Условия доступа</div>
+                  <div style="padding:16px 14px;display:flex;flex-direction:column;gap:14px">
+                    <div onClick="{{ cbMed.toggle }}" style="{{ cbRowStyle }}">
+                      <span style="{{ cbMed.boxStyle }}">{{ cbMed.mark }}</span>
+                      <div style="min-width:0">
+                        <div style="{{ cbLabelStyle }}">Я являюсь медицинским работником</div>
+                        <div style="{{ cbSubStyle }}">Требование закона: часть материалов доступна только медицинским работникам.</div>
+                      </div>
+                    </div>
+                    <div onClick="{{ cbPartners.toggle }}" style="{{ cbRowStyle }}">
+                      <span style="{{ cbPartners.boxStyle }}">{{ cbPartners.mark }}</span>
+                      <div style="min-width:0">
+                        <div style="{{ cbLabelStyle }}">Согласен на передачу партнёрам платформы данных: ФИО, специальность, город, место работы. Контакты не передаются.</div>
+                        <div style="{{ cbSubStyle }}">Это условие бесплатного для врача обучения: без согласия часть материалов недоступна.</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div onClick="{{ cbMail.toggle }}" style="{{ cbRowStyle }}">
+                  <span style="{{ cbMail.boxStyle }}">{{ cbMail.mark }}</span>
+                  <div style="min-width:0">
+                    <div style="{{ cbLabelMutedStyle }}">Хочу получать письма о новых школах и событиях <span style="{{ optTagStyle }}">необязательно</span></div>
+                    <div style="{{ cbSubStyle }}">Необязательно. Письма отправляет внешний сервис рассылок.</div>
+                  </div>
+                </div>
+              </sc-if>
+
+              <!-- ── Блок согласий · вариант В — раскрываемый состав данных ── -->
+              <sc-if value="{{ consentC }}" hint-placeholder-val="{{ false }}">
+                <div data-screen-label="d-register · согласия · вариант В" style="display:flex;flex-direction:column;gap:14px;border-top:2px solid {{ hairline }};padding-top:18px">
+                  <div onClick="{{ cbMed.toggle }}" style="{{ cbRowStyle }}">
+                    <span style="{{ cbMed.boxStyle }}">{{ cbMed.mark }}</span>
+                    <div style="min-width:0">
+                      <div style="{{ cbLabelStyle }}">Я являюсь медицинским работником <span style="{{ reqTagStyle }}">обязательно</span></div>
+                      <div style="{{ cbSubStyle }}">Требование закона: часть материалов доступна только медицинским работникам.</div>
+                    </div>
+                  </div>
+                  <div>
+                    <div onClick="{{ cbPartners.toggle }}" style="{{ cbRowStyle }}">
+                      <span style="{{ cbPartners.boxStyle }}">{{ cbPartners.mark }}</span>
+                      <div style="min-width:0">
+                        <div style="{{ cbLabelStyle }}">Согласен на передачу партнёрам платформы данных о себе <span style="{{ reqTagStyle }}">обязательно</span></div>
+                        <div style="{{ cbSubStyle }}">Это условие бесплатного для врача обучения: без согласия часть материалов недоступна. <button onClick="{{ toggleDataList }}" style="{{ dataListLinkStyle }}">{{ dataListLabel }}</button></div>
+                      </div>
+                    </div>
+                    <sc-if value="{{ dataListOpen }}" hint-placeholder-val="{{ false }}">
+                      <div style="margin:10px 0 0 34px;border:2px solid {{ hairline }};padding:12px 14px;font-size:12.5px;line-height:1.7;font-weight:600;color:{{ inkMuted }}">Передаются: ФИО · специальность · город · место работы.<br>Не передаются: телефон, почта и другие контакты.</div>
+                    </sc-if>
+                  </div>
+                  <div onClick="{{ cbMail.toggle }}" style="{{ cbRowStyle }}">
+                    <span style="{{ cbMail.boxStyle }}">{{ cbMail.mark }}</span>
+                    <div style="min-width:0">
+                      <div style="{{ cbLabelMutedStyle }}">Хочу получать письма о новых школах и событиях <span style="{{ optTagStyle }}">необязательно</span></div>
+                      <div style="{{ cbSubStyle }}">Необязательно. Письма отправляет внешний сервис рассылок.</div>
+                    </div>
+                  </div>
+                </div>
+              </sc-if>
+
+              <!-- Обещание стартовых очков (развилка 3, вариант «на форме») -->
+              <sc-if value="{{ promiseOnForm }}" hint-placeholder-val="{{ false }}">
+                <div style="align-self:flex-start;background:{{ tint }};color:{{ tintFg }};padding:7px 12px;font-size:12.5px;font-weight:800;font-variant-numeric:tabular-nums">+20 Pul — начислим после подтверждения почты</div>
+              </sc-if>
+
+              <!-- Ошибка отправки -->
+              <sc-if value="{{ serverError }}" hint-placeholder-val="{{ false }}">
+                <div style="border:2px solid {{ danger }};background:{{ dangerTint }};padding:13px 14px;display:flex;gap:10px;align-items:flex-start">
+                  <span style="flex:none;color:{{ danger }};font-size:14px">⚠</span>
+                  <div style="font-size:13px;line-height:1.55;color:{{ ink }}"><b>Не удалось отправить — сервер недоступен.</b> Введённое сохранено. <button onClick="{{ retrySend }}" style="font:inherit;font-size:13px;font-weight:800;color:{{ accent }};background:transparent;border:0;padding:0;cursor:pointer;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px">Попробовать ещё раз</button></div>
+                </div>
+              </sc-if>
+
+              <div>
+                <button onClick="{{ submitReg }}" disabled="{{ regDisabled }}" style="{{ regBtnStyle }}" style-hover="{{ regBtnHover }}">Зарегистрироваться</button>
+                <sc-if value="{{ regInvalid }}" hint-placeholder-val="{{ false }}">
+                  <div style="{{ regReasonStyle }}">{{ regReason }}</div>
+                </sc-if>
+              </div>
+
+              <p style="margin:0;font-size:12px;line-height:1.6;color:{{ inkFaint }}">Согласия раздельные и фиксируются с датой. Изменить или отозвать согласие можно через менеджера платформы.</p>
             </div>
             <div style="margin-top:24px;padding-top:20px;border-top:2px solid {{ hairline }}">
               <button onClick="{{ goLogin }}" style="font:inherit;font-size:13px;font-weight:700;color:{{ accent }};background:transparent;border:0;cursor:pointer;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px">Уже есть аккаунт? Войти</button>
             </div>
           </sc-if>
 
-          <!-- ============ ПОДТВЕРЖДЕНИЕ (VERIFY) ============ -->
+          <!-- ============ ПИСЬМО ОТПРАВЛЕНО (VERIFY, из базы) ============ -->
           <sc-if value="{{ isVerify }}" hint-placeholder-val="{{ false }}">
-            <div style="display:flex;flex-direction:column;gap:24px">
+            <div data-screen-label="d-register · письмо отправлено" style="display:flex;flex-direction:column;gap:24px">
               <div style="display:flex;flex-direction:column;gap:14px">
-                <div style="font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ inkFaint }}">Новый аккаунт — введите код</div>
+                <sc-if value="{{ fromGate }}" hint-placeholder-val="{{ true }}">
+                  <div style="display:flex;gap:10px;align-items:flex-start;background:{{ tint }};padding:12px 14px">
+                    <span style="flex:none;font-size:14px;color:{{ tintFg }}">↩</span>
+                    <span style="font-size:13px;line-height:1.55;font-weight:600;color:{{ tintFg }}">Подтвердите почту — и вернётесь к вебинару «PRP при гонартрозе».</span>
+                  </div>
+                </sc-if>
                 <div>
                   <label style="display:block;font-size:12px;font-weight:700;color:{{ ink }};margin-bottom:10px">Код из письма</label>
                   <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -126,7 +275,7 @@
                 <sc-if value="{{ verified }}" hint-placeholder-val="{{ false }}">
                   <div style="border:2px solid {{ success }};background:{{ successTint }};padding:12px 14px;display:flex;gap:10px;align-items:center;font-size:13px;font-weight:700;color:{{ ink }}"><span style="color:{{ success }}">✓</span>Код принят — входим…</div>
                 </sc-if>
-                <button style="font:inherit;width:100%;font-size:15px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:2px solid {{ btnBg }};padding:14px;cursor:pointer;box-shadow:4px 4px 0 {{ border }}" style-hover="transform:translate(2px,2px);box-shadow:2px 2px 0 {{ border }}">Подтвердить</button>
+                <button onClick="{{ goSuccess }}" style="font:inherit;width:100%;font-size:15px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:2px solid {{ btnBg }};padding:14px;cursor:pointer;box-shadow:4px 4px 0 {{ border }}" style-hover="transform:translate(2px,2px);box-shadow:2px 2px 0 {{ border }}">Подтвердить</button>
                 <div style="display:flex;flex-direction:column;gap:8px">
                   <div style="display:flex;justify-content:flex-end">
                     <button onClick="{{ resend }}" style="{{ resendStyle }}">{{ resendLabel }}</button>
@@ -147,7 +296,43 @@
             </div>
           </sc-if>
 
-          <!-- ============ СБРОС ПАРОЛЯ (RESET) ============ -->
+          <!-- ============ УСПЕХ · стартовые очки и возврат (REQ-49, правка R2 №1) ============ -->
+          <sc-if value="{{ isSuccess }}" hint-placeholder-val="{{ false }}">
+            <div data-screen-label="d-register · после регистрации" style="display:flex;flex-direction:column;gap:20px">
+              <!-- юнит «плашка очков» — анатомия в 05-d-lesson, здесь как есть -->
+              <div style="border:2px solid {{ border }};background:{{ surface }};box-shadow:3px 3px 0 {{ shadowSm }}">
+                <div style="{{ plaqueColsStyle }}">
+                  <sc-for list="{{ pointKinds }}" as="pk" hint-placeholder-count="3">
+                    <div style="{{ pk.colStyle }}">
+                      <div style="font-size:24px;font-weight:800;line-height:1;letter-spacing:-.03em;color:{{ tintFg }};font-variant-numeric:tabular-nums">{{ pk.val }}</div>
+                      <div style="margin-top:7px;font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:{{ ink }}">{{ pk.name }}</div>
+                      <div style="margin-top:5px;font-size:11.5px;font-weight:600;line-height:1.5;color:{{ inkMuted }}">{{ pk.cap }}</div>
+                    </div>
+                  </sc-for>
+                </div>
+                <div style="border-top:2px solid {{ border }};padding:11px 14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:{{ sectionGray }}">
+                  <a href="#" style="font-size:12.5px;font-weight:800;white-space:nowrap">История начислений →</a>
+                  <span style="font-size:11.5px;font-weight:700;color:{{ inkFaint }};font-variant-numeric:tabular-nums">+20 Pul за регистрацию · сегодня</span>
+                </div>
+              </div>
+              <!-- мотивация дозаполнить профиль (REQ-23) -->
+              <div style="border:2px solid {{ hairline }};padding:14px 16px;display:flex;gap:12px;align-items:flex-start">
+                <span style="flex:none;width:26px;height:26px;background:{{ tint }};color:{{ tintFg }};display:inline-flex;align-items:center;justify-content:center;font-size:13px;font-weight:800">+</span>
+                <div style="font-size:13px;line-height:1.6;color:{{ inkMuted }}"><b style="color:{{ ink }}">Заполните профиль — ещё 30 Pul</b> и доступ к сертификатам и НМО. Это можно сделать позже в личном кабинете.</div>
+              </div>
+              <sc-if value="{{ fromGate }}" hint-placeholder-val="{{ true }}">
+                <button style="font:inherit;width:100%;font-size:15px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:2px solid {{ btnBg }};padding:14px;cursor:pointer;box-shadow:4px 4px 0 {{ border }}" style-hover="transform:translate(2px,2px);box-shadow:2px 2px 0 {{ border }}">Вернуться к вебинару «PRP при гонартрозе» →</button>
+              </sc-if>
+              <sc-if value="{{ noGate }}" hint-placeholder-val="{{ false }}">
+                <button style="font:inherit;width:100%;font-size:15px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:2px solid {{ btnBg }};padding:14px;cursor:pointer;box-shadow:4px 4px 0 {{ border }}" style-hover="transform:translate(2px,2px);box-shadow:2px 2px 0 {{ border }}">В личный кабинет</button>
+              </sc-if>
+              <sc-if value="{{ fromGate }}" hint-placeholder-val="{{ true }}">
+                <button style="font:inherit;align-self:center;font-size:13px;font-weight:700;color:{{ inkMuted }};background:transparent;border:0;cursor:pointer;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px">В личный кабинет</button>
+              </sc-if>
+            </div>
+          </sc-if>
+
+          <!-- ============ СБРОС ПАРОЛЯ (из базы) ============ -->
           <sc-if value="{{ isReset }}" hint-placeholder-val="{{ false }}">
             <sc-if value="{{ resetRequest }}" hint-placeholder-val="{{ true }}">
               <div style="display:flex;flex-direction:column;gap:18px">
@@ -196,30 +381,41 @@
     <sc-if value="{{ isDesktop }}" hint-placeholder-val="{{ true }}">
     <div style="order:1;background:{{ headerBg }};padding:clamp(40px,4vw,64px);display:flex;flex-direction:column;color:#fff">
       <img src="assets/ds-logo-white.svg" alt="" style="height:40px;align-self:flex-start;display:block">
-      <div style="flex:1;display:flex;flex-direction:column;justify-content:center;gap:20px">
-        <div style="font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#D3E8FD">Врачи учат врачей</div>
-        <h2 style="margin:0;font-size:clamp(30px,3.4vw,46px);line-height:1.05;font-weight:800;letter-spacing:-.035em;color:#fff;max-width:16ch">{{ panelHeadline }}</h2>
-        <p style="margin:0;font-size:17px;line-height:1.55;color:#D3E8FD;max-width:34ch">Бесплатные эфиры, записи и сертификаты НМО — от практикующих врачей 38 школ.</p>
-      </div>
-      <div style="font-size:13px;font-weight:600;color:rgba(255,255,255,.8)">Бесплатно · без бюрократии · © Doctor.School 2026</div>
+      <!-- Контекст возврата · вариант Б — карточка события в сплите -->
+      <sc-if value="{{ showGateCardPanel }}" hint-placeholder-val="{{ false }}">
+        <div data-screen-label="d-register · контекст возврата · вариант Б" style="flex:1;display:flex;flex-direction:column;justify-content:center;gap:20px;padding:32px 0">
+          <div style="font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#D3E8FD">Вы вернётесь к этому событию</div>
+          <div style="max-width:560px"><dc-import name="ВебинарКарточка" hint-size="100%,220px" dark="{{ false }}" variant="scheduled" num="Эфир № 057" time="19:00" time-sub="28 августа · чт" school="Школа ортобиологии" title="PRP при гонартрозе: показания, протоколы, ошибки" speakers="{{ gateSpeakers }}" cta="Участвовать ↗" show-secondary="{{ false }}"></dc-import></div>
+          <p style="margin:0;font-size:14px;line-height:1.6;color:#D3E8FD;max-width:44ch">После подтверждения почты вы вернётесь сюда же — место за вами.</p>
+        </div>
+      </sc-if>
+      <sc-if value="{{ showBrandPanel }}" hint-placeholder-val="{{ true }}">
+        <div style="flex:1;display:flex;flex-direction:column;justify-content:center;gap:20px">
+          <div style="font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#D3E8FD">Врачи учат врачей</div>
+          <h2 style="margin:0;font-size:clamp(30px,3.4vw,46px);line-height:1.05;font-weight:800;letter-spacing:-.035em;color:#fff;max-width:16ch">{{ panelHeadline }}</h2>
+          <p style="margin:0;font-size:17px;line-height:1.55;color:#D3E8FD;max-width:34ch">Бесплатные эфиры, записи и сертификаты НМО — от практикующих врачей 38 школ.</p>
+        </div>
+      </sc-if>
+      <div style="font-size:13px;font-weight:600;color:rgba(255,255,255,.8)">Бесплатно для врача · без бюрократии · © Doctor.School 2026</div>
     </div>
     </sc-if>
   </div>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script>
+<script type="text/x-dc" data-dc-script data-props="{&quot;fromGate&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Контекст&quot;},&quot;partnerLink&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Контекст&quot;},&quot;formState&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;пусто&quot;,&quot;заполнено&quot;,&quot;ошибки&quot;,&quot;сбой сети&quot;],&quot;default&quot;:&quot;пусто&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Состояние формы&quot;},&quot;consentVariant&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;А — плоский список&quot;,&quot;Б — два уровня&quot;,&quot;В — раскрываемый состав&quot;],&quot;default&quot;:&quot;А — плоский список&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Развилки&quot;},&quot;returnVariant&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;А — строка над формой&quot;,&quot;Б — карточка в сплите&quot;],&quot;default&quot;:&quot;А — строка над формой&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Развилки&quot;},&quot;promisePoints&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Развилки&quot;}}">
 class Component extends DCLogic {
   state = {
     dark: (() => { try { return localStorage.getItem('ds-theme') === 'dark'; } catch (e) { return false; } })(),
     isMobile: false,
-    screen: 'login',
+    screen: 'register',
     loginTab: 'password',
     otpChannel: 'email',
     otpSent: false,
     resetStage: 'request',
-    values: {}, touched: {},
+    values: {}, touched: {}, checks: {},
     otp: Array(8).fill(''),
-    cooldown: 0, notice: false, verified: false, showPw: false
+    cooldown: 0, notice: false, verified: false, showPw: false,
+    dataListOpen: false, serverHidden: false
   };
   componentDidMount() {
     this.mq = window.matchMedia('(max-width: 900px)');
@@ -231,13 +427,14 @@ class Component extends DCLogic {
   componentWillUnmount() { clearInterval(this.timer); }
 
   resetSub(extra) {
-    return Object.assign({ loginTab: 'password', otpChannel: 'email', otpSent: false, resetStage: 'request', otp: Array(8).fill(''), cooldown: 0, notice: false, verified: false, values: {}, touched: {} }, extra || {});
+    return Object.assign({ loginTab: 'password', otpChannel: 'email', otpSent: false, resetStage: 'request', otp: Array(8).fill(''), cooldown: 0, notice: false, verified: false, values: {}, touched: {}, checks: {}, dataListOpen: false, serverHidden: false }, extra || {});
   }
   go(screen) { this.setState(this.resetSub({ screen })); }
+  goKeep(screen) { this.setState({ screen, otp: Array(8).fill(''), notice: false, verified: false, cooldown: 0 }); }
   startCd() { this.setState({ cooldown: 30 }); }
 
   renderVals() {
-    const s = this.state, d = s.dark, m = s.isMobile, R = React.createElement;
+    const s = this.state, p = this.props, d = s.dark, m = s.isMobile, R = React.createElement;
     const page = d ? 'oklch(.16 .02 250)' : '#fff';
     const surface = d ? 'oklch(.21 .02 250)' : '#fff';
     const ink = d ? '#fff' : 'oklch(.21 .02 250)';
@@ -252,11 +449,23 @@ class Component extends DCLogic {
     const tintFg = d ? '#AED4FB' : '#114D9E';
     const shadow = d ? '#6BB1F7' : '#114D9E';
     const shadowSm = d ? '#1F69C8' : '#AED4FB';
+    const sectionGray = d ? 'oklch(.185 .02 250)' : 'oklch(.972 .004 250)';
     const headerBg = '#114D9E';
     const danger = '#C81E1E';
     const dangerTint = d ? '#3a1414' : '#fdecec';
     const success = d ? '#4ADE80' : '#009959';
     const successTint = d ? '#0e2a1c' : '#e6f6ee';
+
+    // ── настройки d-register (Tweaks) ──
+    const fromGate = p.fromGate !== undefined ? !!p.fromGate : true;
+    const isPartner = !!p.partnerLink;
+    const consentKey = (p.consentVariant || 'А')[0];
+    const returnKey = (p.returnVariant || 'А')[0];
+    const fs = p.formState || 'пусто';
+    const promiseOnForm = !!p.promisePoints;
+    const seeds = fs === 'пусто' ? {} : fs === 'ошибки' ? { regEmail: 'anna@nmic.ru', regPw: 'q1w2' } : { regEmail: 'anna@nmic.ru', regPw: 'ortho-2026' };
+    const forceTouched = fs === 'ошибки';
+    const seedChecked = fs === 'заполнено' || fs === 'сбой сети';
 
     // валидаторы
     const emailOk = v => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v);
@@ -264,13 +473,16 @@ class Component extends DCLogic {
     const vEmail = v => emailOk(v) ? '' : 'Неверный формат e-mail';
     const vPhone = v => phoneOk(v) ? '' : 'Телефон в формате +7 900 000-00-00';
     const vIdent = v => (emailOk(v) || phoneOk(v)) ? '' : 'Введите e-mail или телефон';
-    const vNewPw = v => (v.length >= 8 && /[a-zа-я]/i.test(v) && /\d/.test(v)) ? '' : 'Минимум 8 символов, буквы и цифры';
+    const vNewPw = v => v.length < 8 ? 'Пароль короче 8 символов' : (/[a-zа-я]/i.test(v) && /\d/.test(v)) ? '' : 'Нужны буквы и цифры';
 
-    const mkField = (name, label, placeholder, validate, required) => {
-      const val = s.values[name] || '';
-      const touched = !!s.touched[name];
+    const effVal = (name) => s.values[name] !== undefined ? s.values[name] : (seeds[name] || '');
+    const mkField = (name, label, placeholder, validate, required, useSeed) => {
+      const val = useSeed ? effVal(name) : (s.values[name] || '');
+      const touched = !!s.touched[name] || (useSeed && forceTouched);
       let err = '';
       if (touched) { if (!val && required) err = required; else if (val && validate) err = validate(val) || ''; }
+      // серверная ошибка «почта занята» в состоянии «ошибки»
+      if (name === 'regEmail' && fs === 'ошибки' && val === 'anna@nmic.ru') err = 'Такая почта уже зарегистрирована — войдите';
       return {
         label, placeholder, value: val, error: err,
         onChange: (e) => { const v = e.target.value; this.setState(st => ({ values: Object.assign({}, st.values, { [name]: v }) })); },
@@ -281,6 +493,32 @@ class Component extends DCLogic {
       };
     };
 
+    // ── чекбоксы согласий ──
+    const attempted = !!s.attempted || fs === 'ошибки';
+    const cbEff = (k) => s.checks[k] !== undefined ? s.checks[k] : (seedChecked ? k !== 'mail' : false);
+    const mkCb = (k, required) => {
+      const on = cbEff(k);
+      const alarm = required && !on && attempted;
+      return {
+        toggle: () => this.setState(st => ({ checks: Object.assign({}, st.checks, { [k]: !cbEff(k) }) })),
+        mark: on ? '✓' : '',
+        boxStyle: 'flex:none;width:22px;height:22px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;border:2px solid ' + (alarm ? danger : (required ? border : hairline)) + ';background:' + (on ? btnBg : (alarm ? dangerTint : surface)) + ';color:' + btnFg
+      };
+    };
+    const cbMed = mkCb('med', true), cbPartners = mkCb('partners', true), cbMail = mkCb('mail', false);
+    const medOn = cbEff('med'), partnersOn = cbEff('partners');
+
+    const fRegEmail = mkField('regEmail', 'Рабочая почта', 'doctor@clinic.ru', vEmail, 'Введите e-mail', true);
+    const fRegPw = mkField('regPw', 'Пароль', '', vNewPw, 'Придумайте пароль', true);
+    const emailVal = effVal('regEmail'), pwVal = effVal('regPw');
+    const emailTaken = fRegEmail.error === 'Такая почта уже зарегистрирована — войдите';
+    const fieldsOk = emailOk(emailVal) && !emailTaken && vNewPw(pwVal) === '';
+    const regValid = fieldsOk && medOn && partnersOn;
+    const regReason = !medOn ? 'Отметьте, что вы медицинский работник — без этого регистрация невозможна.'
+      : !partnersOn ? 'Без согласия на передачу данных партнёрам регистрация невозможна.'
+      : 'Заполните почту и пароль, чтобы продолжить.';
+    const serverError = fs === 'сбой сети' && !s.serverHidden;
+
     // OTP слоты
     const otpInput = (i, len, e) => {
       const ch = (e.target.value || '').replace(/\s/g, '').slice(-1);
@@ -289,7 +527,7 @@ class Component extends DCLogic {
       this.setState({ otp, verified: done ? true : s.verified });
       if (ch && i < len - 1) { const n = document.getElementById('otp-' + (i + 1)); if (n) n.focus(); }
     };
-    const otpKey = (i, e) => { if (e.key === 'Backspace' && !s.otp[i] && i > 0) { const p = document.getElementById('otp-' + (i - 1)); if (p) p.focus(); } };
+    const otpKey = (i, e) => { if (e.key === 'Backspace' && !s.otp[i] && i > 0) { const pEl = document.getElementById('otp-' + (i - 1)); if (pEl) pEl.focus(); } };
     const makeSlots = (len) => Array.from({ length: len }, (_, i) => {
       const filled = !!s.otp[i];
       return {
@@ -299,34 +537,33 @@ class Component extends DCLogic {
       };
     });
 
-    // resend / cooldown
     const resendLabel = s.cooldown > 0 ? ('Отправить снова · ' + s.cooldown + ' с') : 'Отправить снова';
     const resendStyle = 'font:inherit;font-size:13px;font-weight:800;font-variant-numeric:tabular-nums;background:transparent;border:0;cursor:' + (s.cooldown > 0 ? 'default' : 'pointer') + ';color:' + (s.cooldown > 0 ? inkFaint : accent) + ';text-decoration:' + (s.cooldown > 0 ? 'none' : 'underline') + ';text-decoration-thickness:2px;text-underline-offset:4px';
 
-    // маскированный адрес
-    const dest = s.values['otpId'] || s.values['resetId'] || 'anna@nmic.ru';
+    const dest = emailVal || s.values['otpId'] || s.values['resetId'] || 'anna@nmic.ru';
     const maskedDest = dest.includes('@') ? dest.replace(/^(.).*(@.).*(\..*)$/, '$1•••$2•••$3') : dest.replace(/\d(?=\d{2})/g, '•');
 
     // иконки
-    const svg = (paths) => R('svg', { width: 26, height: 26, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' }, paths.map((p, i) => R('path', { key: i, d: p })));
+    const svg = (paths) => R('svg', { width: 26, height: 26, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' }, paths.map((pt, i) => R('path', { key: i, d: pt })));
     const icons = {
       login: svg(['M12 3l7 3v5c0 4.5-3 7.6-7 9-4-1.4-7-4.5-7-9V6z', 'M9 12l2 2 4-4']),
       register: svg(['M9 21c0-3.3 2.7-6 6-6', 'M6 8a3 3 0 1 0 6 0 3 3 0 0 0-6 0', 'M18 8v6', 'M15 11h6']),
       verify: svg(['M3 6h18v12H3z', 'M3 7l9 6 9-6', 'M8 20l3 3 6-6']),
+      success: svg(['M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18', 'M8 12l3 3 5-6']),
       reset: svg(['M8 13a4 4 0 1 0-4-4', 'M8 9l12 12', 'M17 18l2-2', 'M19 16l2-2'])
     };
-    const iconKey = s.screen;
     const titles = {
-      login: ['Вход', 'Войдите в личный кабинет врача'],
-      register: ['Создание аккаунта', 'Бесплатно, за две минуты — нужны только e-mail и пароль'],
-      verify: ['Проверьте почту', 'Мы отправили код на ' + maskedDest + '. Введите его, чтобы завершить регистрацию.'],
+      login: ['Вход', 'Войдите — аккаунт один для doctor.school и Академии'],
+      register: ['Регистрация', 'Почта и пароль — этого достаточно. Документы на входе не нужны.'],
+      verify: ['Проверьте почту', 'Письмо отправлено на ' + maskedDest + '. ' + (fromGate ? 'Подтвердите почту — и вернётесь к вебинару.' : 'Подтвердите почту, чтобы завершить регистрацию.')],
+      success: ['Почта подтверждена', 'Вам начислено 20 Pul — стартовые очки за регистрацию.'],
       reset: s.resetStage === 'request'
         ? ['Сброс пароля', 'Укажите e-mail или телефон — пришлём код для сброса.']
         : ['Новый пароль', 'Код отправлен на ' + maskedDest + '. Введите его и задайте новый пароль.']
     };
-    const panelHeadlines = { login: 'С возвращением в эфир', register: 'Присоединяйтесь к сообществу врачей', verify: 'Ещё один шаг', reset: 'Вернём доступ за минуту' };
+    const panelHeadlines = { login: 'С возвращением в эфир', register: fromGate ? 'Один шаг — и обратно к вебинару' : 'Учитесь у практикующих врачей', verify: 'Ещё один шаг', success: 'Добро пожаловать', reset: 'Вернём доступ за минуту' };
 
-    // login otp focus-screen элемент (после отправки)
+    // login otp focus-screen
     const otpFocusEl = R('div', { style: { display: 'flex', flexDirection: 'column', gap: '18px' } },
       R('div', null,
         R('div', { style: { fontSize: '14px', fontWeight: 700, color: ink } }, 'Введите код'),
@@ -341,18 +578,41 @@ class Component extends DCLogic {
 
     const segTab = (on) => 'font:inherit;padding:11px 6px;text-align:center;font-size:13.5px;font-weight:' + (on ? 800 : 700) + ';border:0;cursor:pointer;color:' + (on ? btnFg : tintFg) + ';background:' + (on ? btnBg : surface);
     const chBtn = (on) => 'font:inherit;flex:1;font-size:13px;font-weight:' + (on ? 800 : 700) + ';cursor:pointer;padding:10px;color:' + (on ? btnFg : tintFg) + ';background:' + (on ? btnBg : 'transparent') + ';border:2px solid ' + (on ? btnBg : hairline);
-    const scrTab = (name, key) => ({ name, onClick: () => this.go(key), style: 'font:inherit;font-size:12px;font-weight:' + (s.screen === key ? 800 : 700) + ';padding:9px 14px;border:0;cursor:pointer;color:' + (s.screen === key ? btnFg : ink) + ';background:' + (s.screen === key ? btnBg : surface) + (key !== 'login' ? ';border-left:2px solid ' + border : '') });
+    const scrTab = (name, key, first) => ({ name, onClick: () => this.go(key), style: 'font:inherit;font-size:12px;font-weight:' + (s.screen === key ? 800 : 700) + ';padding:9px 12px;border:0;cursor:pointer;color:' + (s.screen === key ? btnFg : ink) + ';background:' + (s.screen === key ? btnBg : surface) + (first ? '' : ';border-left:2px solid ' + border) });
+
+    // ── плашка очков (юнит из 05-d-lesson) ──
+    const colBorder = (i) => m ? (i > 0 ? 'border-top:2px solid ' + hairline : '') : (i > 0 ? 'border-left:2px solid ' + hairline : '');
+    const pointKinds = [
+      { val: '+20 Pul', name: 'Пульс', cap: 'Тратится на записи и доступы.' },
+      { val: '0 Bre', name: 'Дыхание', cap: 'Репутация: растёт за ответы и активность.' },
+      { val: '0 Con', name: 'Сознание', cap: 'Начисляется за завершённые шаги, только растёт.' }
+    ].map((pk, i) => Object.assign(pk, { colStyle: 'padding:16px 14px;min-width:0;' + colBorder(i) }));
+
+    // ── контекст возврата ──
+    const gateCardOnPanel = fromGate && returnKey === 'Б' && s.screen === 'register';
+    const showGateCardPanel = gateCardOnPanel && !m;
+    const showGateCardMobile = gateCardOnPanel && m;
+    const showGateLine = fromGate && returnKey === 'А' && s.screen === 'register';
+
+    const gateSpeakers = [{ name: 'Анна Крылова', org: 'НМИЦ травматологии' }];
+
+    const regBtnBase = 'font:inherit;width:100%;font-size:15px;font-weight:800;padding:14px;box-sizing:border-box;';
+    const regBtnStyle = regValid
+      ? regBtnBase + 'color:' + btnFg + ';background:' + btnBg + ';border:2px solid ' + btnBg + ';cursor:pointer;box-shadow:4px 4px 0 ' + border
+      : regBtnBase + 'color:' + inkFaint + ';background:' + sectionGray + ';border:2px solid ' + hairline + ';cursor:not-allowed;box-shadow:none';
+    const regBtnHover = regValid ? 'transform:translate(2px,2px);box-shadow:2px 2px 0 ' + border : '';
 
     return {
       toggleTheme: () => this.setState(st => { const dark = !st.dark; try { localStorage.setItem('ds-theme', dark ? 'dark' : 'light'); } catch (e) {} return { dark }; }),
       themeIcon: d ? '☀' : '☾',
-      isDesktop: !m, page, surface, ink, inkMuted, inkFaint, border, hairline, accent, btnBg, btnFg, tint, tintFg, shadow, shadowSm, headerBg, danger, dangerTint, success, successTint,
-      shellCols: m ? '1fr' : '.95fr 1.05fr',
+      darkFlag: d,
+      isDesktop: !m, page, surface, ink, inkMuted, inkFaint, border, hairline, accent, btnBg, btnFg, tint, tintFg, shadow, shadowSm, sectionGray, headerBg, danger, dangerTint, success, successTint,
+      shellCols: m ? '1fr' : (gateCardOnPanel ? '1.1fr .9fr' : '.95fr 1.05fr'),
       logoSrc: d ? 'assets/ds-logo-white.svg' : 'assets/ds-logo-color.svg',
-      screenTabs: [scrTab('Вход', 'login'), scrTab('Регистрация', 'register'), scrTab('Код', 'verify'), scrTab('Сброс', 'reset')],
-      screenIcon: icons[iconKey], title: titles[s.screen][0], description: titles[s.screen][1],
+      screenTabs: [scrTab('Вход', 'login', true), scrTab('Регистрация', 'register'), scrTab('Письмо', 'verify'), scrTab('Успех', 'success'), scrTab('Сброс', 'reset')],
+      screenIcon: icons[s.screen], title: titles[s.screen][0], description: titles[s.screen][1],
       panelHeadline: panelHeadlines[s.screen],
-      isLogin: s.screen === 'login', isRegister: s.screen === 'register', isVerify: s.screen === 'verify', isReset: s.screen === 'reset',
+      isLogin: s.screen === 'login', isRegister: s.screen === 'register', isVerify: s.screen === 'verify', isSuccess: s.screen === 'success', isReset: s.screen === 'reset',
       // login
       loginPw: s.loginTab === 'password', loginOtp: s.loginTab === 'otp',
       tabPw: () => this.setState({ loginTab: 'password' }), tabOtp: () => this.setState({ loginTab: 'otp' }),
@@ -368,14 +628,37 @@ class Component extends DCLogic {
         ? mkField('otpId', 'Электронная почта', 'doctor@clinic.ru', vEmail, 'Введите e-mail')
         : mkField('otpId', 'Телефон', '+7 900 000-00-00', vPhone, 'Введите телефон'),
       pwType: s.showPw ? 'text' : 'password', pwToggle: s.showPw ? 'Скрыть' : 'Показать', togglePw: () => this.setState({ showPw: !s.showPw }),
-      // register
-      fRegEmail: mkField('regEmail', 'Электронная почта', 'doctor@clinic.ru', vEmail, 'Введите e-mail'),
-      fRegPw: mkField('regPw', 'Пароль', '', vNewPw, 'Придумайте пароль'),
-      fRegPwHint: (s.touched['regPw'] && s.values['regPw'] && vNewPw(s.values['regPw'])) ? 'display:none' : 'font-size:12px;font-weight:600;color:' + inkFaint + ';margin-top:7px',
-      // verify
+      // register · d-register
+      fRegEmail, fRegPw, emailTaken,
+      fRegPwHint: (fRegPw.error) ? 'display:none' : 'font-size:12px;font-weight:600;color:' + inkFaint + ';margin-top:7px',
+      fPromo: mkField('promo', 'Промокод — если есть', 'DS-2026', null, null, true),
+      showPromo: !isPartner, isPartner,
+      fromGate, noGate: !fromGate,
+      showGateLine, showGateCardPanel, showGateCardMobile, showBrandPanel: !gateCardOnPanel || m, gateSpeakers,
+      consentA: consentKey === 'А', consentB: consentKey === 'Б', consentC: consentKey === 'В',
+      cbMed, cbPartners, cbMail,
+      cbRowStyle: 'display:flex;gap:12px;align-items:flex-start;cursor:pointer',
+      cbLabelStyle: 'font-size:13.5px;font-weight:700;line-height:1.5;color:' + ink,
+      cbLabelMutedStyle: 'font-size:13.5px;font-weight:600;line-height:1.5;color:' + inkMuted,
+      cbSubStyle: 'margin-top:4px;font-size:12px;font-weight:600;line-height:1.55;color:' + inkFaint,
+      reqTagStyle: 'display:inline-block;margin-left:6px;vertical-align:1px;font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:' + tintFg + ';background:' + tint + ';padding:2px 7px',
+      optTagStyle: 'display:inline-block;margin-left:6px;vertical-align:1px;font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:' + inkFaint + ';border:1px solid ' + hairline + ';padding:1px 6px',
+      dataListOpen: s.dataListOpen,
+      toggleDataList: (e) => { e.stopPropagation(); this.setState({ dataListOpen: !s.dataListOpen }); },
+      dataListLabel: s.dataListOpen ? 'Скрыть перечень' : 'Что именно передаётся',
+      dataListLinkStyle: 'font:inherit;font-size:12px;font-weight:800;color:' + accent + ';background:transparent;border:0;padding:0;cursor:pointer;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:3px',
+      promiseOnForm, serverError,
+      retrySend: () => this.setState({ serverHidden: true }),
+      regDisabled: !regValid, regInvalid: !regValid, regReason, regBtnStyle, regBtnHover,
+      regReasonStyle: 'margin-top:8px;font-size:12.5px;font-weight:700;line-height:1.5;color:' + ((!medOn || !partnersOn) && attempted ? danger : inkFaint),
+      submitReg: () => { if (!regValid) { this.setState({ attempted: true, touched: Object.assign({}, s.touched, { regEmail: true, regPw: true }) }); return; } if (fs === 'сбой сети' && !s.serverHidden) return; this.goKeep('verify'); this.startCd(); },
+      // очки
+      pointKinds, plaqueColsStyle: 'display:grid;grid-template-columns:' + (m ? '1fr' : 'repeat(3,1fr)'),
+      // verify / success
       verifySlots: makeSlots(6), verified: s.verified, notice: s.notice, maskedDest,
       resendLabel, resendStyle,
       resend: () => { if (s.cooldown > 0) return; this.setState({ notice: true, otp: Array(8).fill(''), verified: false }); this.startCd(); },
+      goSuccess: () => this.goKeep('success'),
       // reset
       resetRequest: s.resetStage === 'request', resetComplete: s.resetStage === 'complete',
       fResetId: mkField('resetId', 'Email или телефон', 'doctor@clinic.ru', vIdent, 'Введите e-mail или телефон'),

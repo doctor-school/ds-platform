@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"><style>body{margin:0;background:#fff;font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}a{color:#2D84F2}a:hover{color:#114D9E}:focus-visible{outline:3px solid #6BB1F7;outline-offset:2px}html{scroll-behavior:smooth}</style></helmet>
+
+<div style="min-height:100vh;background:{{ pageBg }}">
+  <!-- Оболочка Академии · как в home.dc.html -->
+  <div style="background:#0D3A77;padding:5px clamp(16px,4vw,48px);text-align:center;font-size:9px;font-weight:700;letter-spacing:.22em;text-transform:uppercase;color:rgba(255,255,255,.34)">BBM: Академия смыслов</div>
+  <header data-screen-label="a-apply · заявка автора" style="background:#114D9E;padding:14px clamp(16px,4vw,48px);display:flex;align-items:center;justify-content:space-between;gap:16px">
+    <a href="Главная.dc.html" style="display:flex;flex:none"><img src="assets/ds-logo-white.svg" alt="Doctor.School · Академия" style="height:26px;display:block"></a>
+    <sc-if value="{{ isMobile }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;align-items:center;gap:12px">
+        <button onClick="{{ toggleTheme }}" title="Тема" style="font:inherit;width:44px;height:44px;background:transparent;color:#fff;border:2px solid rgba(255,255,255,.5);cursor:pointer;font-size:16px">{{ themeIcon }}</button>
+        <details style="position:relative">
+          <summary style="list-style:none;width:44px;height:44px;display:inline-flex;align-items:center;justify-content:center;background:#fff;color:#114D9E;cursor:pointer;font-size:20px;font-weight:800;box-shadow:3px 3px 0 {{ headerShadow }}">≡</summary>
+          <nav style="position:absolute;top:calc(100% + 10px);right:0;background:{{ surface }};border:2px solid {{ border }};box-shadow:5px 5px 0 {{ shadow }};padding:8px;display:flex;flex-direction:column;min-width:220px;z-index:30">
+            <a href="Проекты.dc.html" style="padding:12px 16px;font-size:15px;font-weight:700;color:{{ ink }};text-decoration:none">Проекты</a>
+            <a href="Эксперты.dc.html" style="padding:12px 16px;font-size:15px;font-weight:700;color:{{ ink }};text-decoration:none">Эксперты</a>
+            <a href="Эфиры.dc.html" style="padding:12px 16px;font-size:15px;font-weight:700;color:{{ ink }};text-decoration:none">События</a>
+            <a href="{{ authHref }}" style="margin-top:6px;padding:12px 16px;font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};text-decoration:none;text-align:center">{{ authLabel }}</a>
+          </nav>
+        </details>
+      </div>
+    </sc-if>
+    <sc-if value="{{ isDesktop }}" hint-placeholder-val="{{ true }}">
+      <nav style="display:flex;align-items:center;gap:26px;font-size:14px;font-weight:700">
+        <a href="Проекты.dc.html" style="color:#D3E8FD;text-decoration:none" style-hover="color:#fff">Проекты</a>
+        <a href="Эксперты.dc.html" style="color:#D3E8FD;text-decoration:none" style-hover="color:#fff">Эксперты</a>
+        <a href="Эфиры.dc.html" style="color:#D3E8FD;text-decoration:none" style-hover="color:#fff">События</a>
+        <button onClick="{{ toggleTheme }}" title="Тема" style="font:inherit;width:44px;height:44px;background:transparent;color:#fff;border:2px solid rgba(255,255,255,.5);cursor:pointer;font-size:15px" style-hover="border-color:#fff">{{ themeIcon }}</button>
+        <a href="{{ authHref }}" style="font-size:13.5px;font-weight:700;color:#114D9E;background:#fff;padding:12px 22px;text-decoration:none;box-shadow:3px 3px 0 {{ headerShadow }};white-space:nowrap" style-hover="transform:translate(1px,1px);box-shadow:2px 2px 0 {{ headerShadow }}">{{ authLabel }}</a>
+      </nav>
+    </sc-if>
+  </header>
+
+  <!-- Постер-шапка -->
+  <div style="background:#114D9E;padding:clamp(32px,5vw,52px) clamp(16px,4vw,48px) clamp(44px,7vw,72px)">
+    <div style="max-width:1104px;margin:0 auto">
+      <nav style="font-size:13px;font-weight:700;margin-bottom:clamp(20px,3vw,30px)">
+        <a href="Главная.dc.html" style="color:#AED4FB;text-decoration:underline;text-underline-offset:4px">Академия</a>
+        <span style="color:rgba(211,232,253,.5);margin:0 8px">/</span>
+        <span style="color:#D3E8FD">Заявка автора</span>
+      </nav>
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap">
+        <div style="font-size:12px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:#D3E8FD">Путь эксперта · шаг «подал заявку»</div>
+        <span style="display:inline-block;background:#fff;color:#114D9E;font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;padding:9px 14px;box-shadow:3px 3px 0 {{ headerShadow }};transform:rotate(2deg)">приём открыт</span>
+      </div>
+      <h1 style="margin:10px 0 0;font-size:clamp(32px,5.5vw,56px);line-height:1.02;font-weight:800;letter-spacing:-.035em;color:#fff;text-wrap:balance">Заявка автора</h1>
+      <p style="margin:20px 0 0;max-width:640px;font-size:clamp(14.5px,2vw,16px);line-height:1.65;font-weight:500;color:#D3E8FD">Расскажите, чему вы хотите научить врачей. Дальше с вами будет работать команда Академии — общаться вы будете с одним человеком, продюсером.</p>
+    </div>
+  </div>
+
+  <main style="display:flex;flex-direction:column">
+
+    <!-- ============ ФОРМА ЗАЯВКИ (REQ-42, REQ-141) ============ -->
+    <section data-screen-label="a-apply · форма заявки" style="order:{{ formOrd }};padding:0 clamp(16px,4vw,48px);margin-top:clamp(44px,6vw,72px)">
+      <div style="max-width:1104px;margin:0 auto;display:grid;grid-template-columns:{{ formCols }};gap:clamp(24px,4vw,44px);align-items:start">
+        <div style="min-width:0">
+
+          <!-- Повторная заявка -->
+          <sc-if value="{{ repeatBanner }}" hint-placeholder-val="{{ false }}">
+            <div style="border:2px solid {{ border }};background:{{ sectionGray }};padding:14px 16px;display:flex;gap:12px;align-items:flex-start;margin-bottom:20px">
+              <span style="flex:none;width:26px;height:26px;background:{{ tint }};color:{{ tintFg }};display:inline-flex;align-items:center;justify-content:center;font-size:13px;font-weight:800">!</span>
+              <div style="font-size:13px;line-height:1.6;color:{{ inkMuted }}"><b style="color:{{ ink }}">Ваша предыдущая заявка в работе.</b> Новую можно отправить, если это другой проект.</div>
+            </div>
+          </sc-if>
+
+          <!-- Черновик восстановлен -->
+          <sc-if value="{{ draftNotice }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;gap:10px;align-items:flex-start;background:{{ tint }};padding:12px 14px;margin-bottom:20px">
+              <span style="flex:none;font-size:14px;color:{{ tintFg }}">↩</span>
+              <span style="font-size:13px;line-height:1.55;font-weight:600;color:{{ tintFg }}">Черновик сохранён — мы заполнили поля тем, что вы ввели до входа.</span>
+            </div>
+          </sc-if>
+
+          <!-- ГЕЙТ УЧЁТКИ (правка R2 №3) -->
+          <sc-if value="{{ isGate }}" hint-placeholder-val="{{ false }}">
+            <div data-screen-label="a-apply · гейт учётки" style="background:{{ surface }};border:2px solid {{ border }};box-shadow:6px 6px 0 {{ shadow }};padding:clamp(24px,4vw,36px)">
+              <span style="width:52px;height:52px;background:{{ tint }};color:{{ accent }};display:inline-flex;align-items:center;justify-content:center;margin-bottom:20px;font-size:22px;font-weight:800">→</span>
+              <h2 style="margin:0;font-size:24px;font-weight:800;letter-spacing:-.025em;color:{{ ink }};line-height:1.15">Войдите, чтобы отправить заявку</h2>
+              <p style="margin:12px 0 0;font-size:14px;line-height:1.6;color:{{ inkMuted }}">Заявка отправляется под той же учётной записью, что у врача — отдельной «регистрации эксперта» нет. Черновик сохранён: после входа вы вернётесь сюда, поля будут заполнены.</p>
+              <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:24px">
+                <a href="Авторизация.dc.html" style="font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:2px solid {{ btnBg }};padding:14px 24px;text-decoration:none;box-shadow:4px 4px 0 {{ border }}" style-hover="transform:translate(2px,2px);box-shadow:2px 2px 0 {{ border }}">Войти / Регистрация</a>
+                <button onClick="{{ gateReturn }}" style="font:inherit;font-size:14px;font-weight:700;color:{{ ink }};background:{{ surface }};border:2px solid {{ border }};padding:14px 24px;cursor:pointer;box-shadow:4px 4px 0 {{ shadowSm }}" style-hover="transform:translate(2px,2px);box-shadow:2px 2px 0 {{ shadowSm }}">Я вошёл — вернуться к заявке</button>
+              </div>
+              <div style="margin-top:20px;padding-top:16px;border-top:2px solid {{ hairline }};font-size:12.5px;font-weight:700;color:{{ inkFaint }}">✓ Черновик заявки сохранён · тема «{{ draftTopic }}»</div>
+            </div>
+          </sc-if>
+
+          <!-- ЗАЯВКА ОТПРАВЛЕНА -->
+          <sc-if value="{{ isSent }}" hint-placeholder-val="{{ false }}">
+            <div data-screen-label="a-apply · подтверждение отправки" style="background:{{ surface }};border:2px solid {{ border }};box-shadow:6px 6px 0 {{ shadow }};padding:clamp(24px,4vw,36px)">
+              <span style="width:52px;height:52px;background:{{ successTint }};color:{{ success }};display:inline-flex;align-items:center;justify-content:center;margin-bottom:20px;font-size:22px;font-weight:800">✓</span>
+              <h2 style="margin:0;font-size:24px;font-weight:800;letter-spacing:-.025em;color:{{ ink }};line-height:1.15">Заявка отправлена</h2>
+              <p style="margin:12px 0 0;font-size:14px;line-height:1.6;color:{{ inkMuted }}">Администратор Академии разберёт её и назначит продюсера — он свяжется с вами. Дальше вы общаетесь с одним человеком: остальная команда работает за кулисами.</p>
+              <div style="margin-top:22px;border:2px solid {{ hairline }};padding:16px;display:flex;flex-direction:column;gap:10px">
+                <div style="font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ inkFaint }}">Пока ждёте — посмотрите</div>
+                <a href="Проекты.dc.html" style="font-size:13.5px;font-weight:800;text-underline-offset:4px">Проекты Академии →</a>
+                <a href="Эксперты.dc.html" style="font-size:13.5px;font-weight:800;text-underline-offset:4px">Эксперты, которые их делают →</a>
+              </div>
+              <button onClick="{{ sentAgain }}" style="font:inherit;margin-top:20px;font-size:13px;font-weight:700;color:{{ inkMuted }};background:transparent;border:0;padding:0;cursor:pointer;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px">Отправить ещё одну заявку — про другой проект</button>
+            </div>
+          </sc-if>
+
+          <!-- ФОРМА -->
+          <sc-if value="{{ isForm }}" hint-placeholder-val="{{ true }}">
+            <div style="background:{{ surface }};border:2px solid {{ border }};box-shadow:6px 6px 0 {{ shadow }};padding:clamp(24px,4vw,36px)">
+              <div style="display:flex;flex-direction:column;gap:20px">
+
+                <sc-if value="{{ loggedIn }}" hint-placeholder-val="{{ false }}">
+                  <div style="display:flex;gap:10px;align-items:center;background:{{ sectionGray }};border:2px solid {{ hairline }};padding:11px 14px;font-size:12.5px;font-weight:700;color:{{ inkMuted }}"><span style="flex:none;width:24px;height:24px;background:{{ tint }};color:{{ tintFg }};display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:800">АК</span>Отправите как Анна Крылова · anna@nmic.ru — учётная запись одна для doctor.school и Академии</div>
+                </sc-if>
+
+                <div>
+                  <label style="{{ fTopic.labelStyle }}">Тема <span style="{{ reqTagStyle }}">обязательно</span></label>
+                  <input type="text" value="{{ fTopic.value }}" onChange="{{ fTopic.onChange }}" onBlur="{{ fTopic.onBlur }}" placeholder="Ортобиология в амбулаторной практике" style="{{ fTopic.inputStyle }}">
+                  <div style="{{ fTopic.errStyle }}">⚠ {{ fTopic.error }}</div>
+                </div>
+
+                <div>
+                  <label style="{{ fTopic.labelStyle }}">Специальность</label>
+                  <select value="{{ specValue }}" onChange="{{ specChange }}" style="{{ specStyle }}">
+                    <sc-for list="{{ specOptions }}" as="so" hint-placeholder-count="5"><option value="{{ so }}">{{ so }}</option></sc-for>
+                  </select>
+                  <div style="font-size:12px;font-weight:600;color:{{ inkFaint }};margin-top:7px">Официальный список специальностей Минздрава; если вашей нет — выберите «Другое».</div>
+                </div>
+
+                <div>
+                  <label style="{{ fTopic.labelStyle }}">Формат <span style="{{ reqTagStyle }}">обязательно</span></label>
+                  <div style="display:flex;gap:8px;flex-wrap:wrap">
+                    <sc-for list="{{ formatBtns }}" as="fb" hint-placeholder-count="4"><button onClick="{{ fb.onClick }}" style="{{ fb.style }}">{{ fb.label }}</button></sc-for>
+                  </div>
+                  <div style="{{ formatErrStyle }}">⚠ Выберите формат</div>
+                </div>
+
+                <div>
+                  <label style="{{ fAbout.labelStyle }}">О себе</label>
+                  <textarea value="{{ fAbout.value }}" onChange="{{ fAbout.onChange }}" onBlur="{{ fAbout.onBlur }}" placeholder="Где практикуете, чем занимаетесь, что уже преподавали" rows="3" style="{{ fAbout.inputStyle }};resize:vertical;min-height:84px"></textarea>
+                </div>
+
+                <!-- Клинический случай — содержательное ядро (REQ-141) -->
+                <div style="border:2px solid {{ caseBorder }};background:{{ caseBg }};padding:16px;margin:0 -2px">
+                  <label style="{{ fCase.labelStyle }}">Клинический случай из вашей практики — с него начнётся первый урок <span style="{{ caseTagStyle }}">{{ caseTag }}</span></label>
+                  <textarea value="{{ fCase.value }}" onChange="{{ fCase.onChange }}" onBlur="{{ fCase.onBlur }}" placeholder="Что за пациент, что сделали, что получилось" rows="5" style="{{ fCase.inputStyle }};resize:vertical;min-height:120px"></textarea>
+                  <div style="{{ fCase.errStyle }}">⚠ {{ fCase.error }}</div>
+                  <div style="{{ caseHintStyle }}">Кейс — основа будущего урока: методист соберёт вокруг него программу. Хотя бы несколько предложений.</div>
+                </div>
+
+                <sc-if value="{{ serverError }}" hint-placeholder-val="{{ false }}">
+                  <div style="border:2px solid {{ danger }};background:{{ dangerTint }};padding:13px 14px;display:flex;gap:10px;align-items:flex-start">
+                    <span style="flex:none;color:{{ danger }};font-size:14px">⚠</span>
+                    <div style="font-size:13px;line-height:1.55;color:{{ ink }}"><b>Не удалось отправить — сервер недоступен.</b> Введённое сохранено. <button onClick="{{ retrySend }}" style="font:inherit;font-size:13px;font-weight:800;color:{{ accent }};background:transparent;border:0;padding:0;cursor:pointer;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px">Попробовать ещё раз</button></div>
+                  </div>
+                </sc-if>
+
+                <div>
+                  <button onClick="{{ submit }}" style="font:inherit;width:100%;font-size:15px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:2px solid {{ btnBg }};padding:15px;cursor:pointer;box-shadow:4px 4px 0 {{ border }};box-sizing:border-box" style-hover="transform:translate(2px,2px);box-shadow:2px 2px 0 {{ border }}">Отправить заявку</button>
+                  <sc-if value="{{ guest }}" hint-placeholder-val="{{ true }}">
+                    <p style="margin:10px 0 0;font-size:12.5px;line-height:1.6;color:{{ inkFaint }}">Отправка — под той же учётной записью, что у врача. Если вы ещё не входили, мы сохраним черновик и вернём вас сюда.</p>
+                  </sc-if>
+                </div>
+              </div>
+            </div>
+          </sc-if>
+        </div>
+
+        <!-- Путь роста · вариант В: «сейчас вы здесь» рядом с формой -->
+        <sc-if value="{{ growV }}" hint-placeholder-val="{{ false }}">
+          <aside data-screen-label="a-apply · путь роста · вариант В" style="border:2px solid {{ border }};background:{{ surface }};box-shadow:5px 5px 0 {{ shadowSm }};padding:20px;position:sticky;top:20px">
+            <div style="font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ accent }};margin-bottom:14px">Куда можно вырасти</div>
+            <div style="display:flex;flex-direction:column">
+              <sc-for list="{{ growCompact }}" as="g" hint-placeholder-count="5">
+                <div style="{{ g.rowStyle }}">
+                  <span style="{{ g.dotStyle }}">{{ g.mark }}</span>
+                  <div style="min-width:0;padding-bottom:14px">
+                    <div style="{{ g.nameStyle }}">{{ g.name }}<sc-if value="{{ g.here }}" hint-placeholder-val="{{ false }}"><span style="margin-left:8px;font-size:9.5px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:{{ tintFg }};background:{{ tint }};padding:2px 7px">вы здесь</span></sc-if></div>
+                    <sc-if value="{{ g.hasNote }}" hint-placeholder-val="{{ false }}"><div style="margin-top:3px;font-size:11.5px;font-weight:600;line-height:1.5;color:{{ inkFaint }}">{{ g.note }}</div></sc-if>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+            <div style="border-top:2px solid {{ hairline }};padding-top:12px;font-size:11.5px;font-weight:600;line-height:1.55;color:{{ inkFaint }}">Наставником становятся те, кто уже вложился в платформу.</div>
+          </aside>
+        </sc-if>
+      </div>
+    </section>
+
+    <!-- ============ ЧТО ДАЛЬШЕ · ПУТЬ ЗАЯВКИ (REQ-108…110, 26, 142) ============ -->
+    <section data-screen-label="a-apply · путь заявки" style="order:{{ pathOrd }};padding:0 clamp(16px,4vw,48px);margin-top:clamp(44px,6vw,72px)">
+      <div style="max-width:1104px;margin:0 auto">
+        <div style="font-size:11.5px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ accent }};margin-bottom:10px">Путь заявки</div>
+        <h2 style="margin:0;font-size:clamp(26px,4vw,40px);line-height:1.05;font-weight:800;letter-spacing:-.03em;color:{{ ink }}">Что будет дальше</h2>
+        <div style="border-top:2px solid {{ ink }};margin:18px 0 clamp(20px,4vw,30px)"></div>
+        <div style="{{ pathGrid }}">
+          <sc-for list="{{ pathSteps }}" as="ps" hint-placeholder-count="6">
+            <div style="{{ ps.wrap }}">
+              <div style="font-size:22px;font-weight:800;letter-spacing:-.03em;color:{{ tintInk }};font-variant-numeric:tabular-nums">{{ ps.n }}</div>
+              <div style="margin-top:8px;font-size:14px;font-weight:800;letter-spacing:-.01em;line-height:1.3;color:{{ ink }}">{{ ps.title }}</div>
+              <div style="margin-top:6px;font-size:12.5px;font-weight:600;line-height:1.55;color:{{ inkMuted }}">{{ ps.text }}</div>
+            </div>
+          </sc-for>
+        </div>
+        <!-- Единое окно (REQ-142) -->
+        <div style="margin-top:20px;border:2px solid {{ border }};background:{{ tint }};padding:16px 18px;display:flex;gap:14px;align-items:flex-start">
+          <span style="flex:none;width:34px;height:34px;background:{{ surface }};border:2px solid {{ border }};color:{{ tintFg }};display:inline-flex;align-items:center;justify-content:center;font-size:15px;font-weight:800">1</span>
+          <div style="font-size:14px;line-height:1.6;font-weight:600;color:{{ tintFg }}"><b>Общаться вы будете с одним человеком — продюсером.</b> Остальная команда — методист, производство, медицинская экспертиза — работает за кулисами.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ ПУТЬ РОСТА · варианты А и Б (REQ-131, 132, 119) ============ -->
+    <sc-if value="{{ growSection }}" hint-placeholder-val="{{ true }}">
+      <section data-screen-label="a-apply · путь роста эксперта" style="order:{{ growOrd }};padding:0 clamp(16px,4vw,48px);margin-top:clamp(44px,6vw,72px)">
+        <div style="max-width:1104px;margin:0 auto">
+          <div style="font-size:11.5px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ accent }};margin-bottom:10px">Путь роста</div>
+          <h2 style="margin:0;font-size:clamp(26px,4vw,40px);line-height:1.05;font-weight:800;letter-spacing:-.03em;color:{{ ink }}">Куда можно вырасти</h2>
+          <div style="border-top:2px solid {{ ink }};margin:18px 0 clamp(20px,4vw,30px)"></div>
+
+          <!-- Вариант А — горизонтальная лестница -->
+          <sc-if value="{{ growA }}" hint-placeholder-val="{{ true }}">
+            <div data-screen-label="a-apply · путь роста · вариант А" style="{{ ladderGrid }}">
+              <sc-for list="{{ growSteps }}" as="g" hint-placeholder-count="5">
+                <div style="{{ g.cellStyle }}">
+                  <div style="{{ g.stepNumStyle }}">{{ g.num }}</div>
+                  <div style="margin-top:10px;font-size:15px;font-weight:800;letter-spacing:-.01em;line-height:1.25;color:{{ ink }}">{{ g.name }}</div>
+                  <div style="margin-top:6px;font-size:12px;font-weight:600;line-height:1.55;color:{{ inkMuted }}">{{ g.short }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+
+          <!-- Вариант Б — вертикальный список «что для этого сделать» -->
+          <sc-if value="{{ growB }}" hint-placeholder-val="{{ false }}">
+            <div data-screen-label="a-apply · путь роста · вариант Б" style="display:flex;flex-direction:column;max-width:760px">
+              <sc-for list="{{ growSteps }}" as="g" hint-placeholder-count="5">
+                <div style="display:flex;gap:16px;padding:18px 0;border-bottom:2px solid {{ hairline }}">
+                  <div style="{{ g.stepNumStyle }};flex:none">{{ g.num }}</div>
+                  <div style="min-width:0">
+                    <div style="font-size:16px;font-weight:800;letter-spacing:-.01em;color:{{ ink }}">{{ g.name }}</div>
+                    <div style="margin-top:5px;font-size:13px;font-weight:600;line-height:1.6;color:{{ inkMuted }}">{{ g.action }}</div>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+
+          <div style="margin-top:20px;display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start">
+            <div style="border:2px solid {{ hairline }};padding:14px 16px;display:flex;gap:12px;align-items:flex-start;flex:1;min-width:280px">
+              <span style="flex:none;width:26px;height:26px;background:{{ tint }};color:{{ tintFg }};display:inline-flex;align-items:center;justify-content:center;font-size:13px;font-weight:800">✈</span>
+              <div style="font-size:13px;line-height:1.6;color:{{ inkMuted }}"><b style="color:{{ ink }}">Рецензентам — индекс цитируемости.</b> За 10 рецензий — международная стажировка.</div>
+            </div>
+            <div style="border:2px solid {{ hairline }};padding:14px 16px;display:flex;gap:12px;align-items:flex-start;flex:1;min-width:280px">
+              <span style="flex:none;width:26px;height:26px;background:{{ tint }};color:{{ tintFg }};display:inline-flex;align-items:center;justify-content:center;font-size:13px;font-weight:800">★</span>
+              <div style="font-size:13px;line-height:1.6;color:{{ inkMuted }}"><b style="color:{{ ink }}">Наставник — верхняя ступень.</b> Наставником становятся те, кто уже вложился в платформу.</div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </sc-if>
+
+    <!-- ============ УСЛОВИЯ АВТОРА (REQ-29, REQ-44) ============ -->
+    <section data-screen-label="a-apply · условия автора" style="order:{{ termsOrd }};padding:0 clamp(16px,4vw,48px);margin-top:clamp(44px,6vw,72px)">
+      <div style="max-width:1104px;margin:0 auto;border:2px solid {{ border }};background:{{ surface }};box-shadow:6px 6px 0 {{ shadow }};padding:clamp(20px,4vw,32px);display:flex;gap:clamp(16px,3vw,32px);flex-wrap:wrap;align-items:flex-start">
+        <div style="flex:1;min-width:260px">
+          <div style="font-size:11.5px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ accent }};margin-bottom:10px">Условия автора</div>
+          <div style="font-size:clamp(17px,2.2vw,21px);font-weight:800;letter-spacing:-.02em;line-height:1.3;color:{{ ink }}">Автор и соавтор получают начисления по смарт-контракту — от просмотров опубликованных уроков</div>
+        </div>
+        <div style="flex:1;min-width:260px;font-size:13.5px;line-height:1.65;font-weight:600;color:{{ inkMuted }}">Роли — атрибуты одной учётной записи: один человек может быть врачом, автором и соавтором одновременно. Условия фиксируются при взятии проекта в работу.</div>
+      </div>
+    </section>
+
+    <!-- ============ ВЫХОД ИЗ ТУПИКА ============ -->
+    <section data-screen-label="a-apply · выход из тупика" style="order:{{ exitOrd }};padding:0 clamp(16px,4vw,48px);margin-top:clamp(44px,6vw,72px)">
+      <div style="max-width:1104px;margin:0 auto">
+        <h2 style="margin:0;font-size:clamp(22px,3vw,30px);line-height:1.1;font-weight:800;letter-spacing:-.025em;color:{{ ink }}">Пока не готовы?</h2>
+        <p style="margin:10px 0 clamp(20px,4vw,28px);max-width:560px;font-size:14px;line-height:1.6;color:{{ inkMuted }}">Посмотрите проекты Академии и экспертов, которые их делают, — заявку можно подать в любой момент.</p>
+        <div style="{{ exitGrid }}">
+          <div style="display:flex;flex-direction:column;gap:14px;min-width:0">
+            <a href="Проекты.dc.html" style="font-size:14px;font-weight:800;text-underline-offset:5px;text-decoration-thickness:2px">Посмотреть проекты →</a>
+            <dc-import name="ПроектКарточка" dark="{{ dark }}" kind="Проект" title="Ортобиология" emblem="Ор" description="Направление регенеративной медицины: PRP, клеточные технологии и доказательная практика." count="школа · конгресс · клуб" href="Проект.dc.html" hint-size="100%,380px"></dc-import>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:14px;min-width:0">
+            <a href="Эксперты.dc.html" style="font-size:14px;font-weight:800;text-underline-offset:5px;text-decoration-thickness:2px">Посмотреть экспертов →</a>
+            <dc-import name="ЭкспертКарточка" dark="{{ dark }}" full-name="Страхов М. А." role="Автор проекта" credentials="к.м.н., травматолог-ортопед" org="РНИМУ им. Пирогова" meta="куратор проекта «Ортобиология»" href="Эксперт.dc.html" hint-size="100%,380px"></dc-import>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Футер Академии · как в home.dc.html -->
+  <footer style="margin-top:clamp(56px,8vw,96px)">
+    <div style="border-top:2px solid {{ ink }};padding:32px clamp(16px,4vw,48px);display:flex;align-items:center;justify-content:space-between;max-width:1104px;margin:0 auto;box-sizing:content-box;gap:16px;flex-wrap:wrap">
+      {{ footLogoEl }}
+      <nav style="display:flex;gap:20px;font-size:12.5px;font-weight:700;flex-wrap:wrap">
+        <a href="Партнёры.dc.html" style="color:{{ inkFaint }};text-decoration:none">Партнёры</a>
+        <a href="Проекты.dc.html" style="color:{{ inkFaint }};text-decoration:none">Проекты</a>
+        <a href="Эксперты.dc.html" style="color:{{ inkFaint }};text-decoration:none">Эксперты</a>
+        <a href="Эфиры.dc.html" style="color:{{ inkFaint }};text-decoration:none">События</a>
+        <a href="Академия - Документы.dc.html" style="color:{{ inkFaint }};text-decoration:none">Документы и контакты</a>
+      </nav>
+      <a href="Витрина врача - Главная.dc.html" style="font-size:12.5px;font-weight:800;color:{{ accent }};text-decoration:underline;text-underline-offset:4px;white-space:nowrap">doctor.school — врачам</a>
+    </div>
+    <div style="max-width:1104px;margin:0 auto;padding:0 clamp(16px,4vw,48px);text-align:center;font-size:10px;font-weight:800;letter-spacing:.18em;text-transform:uppercase;color:{{ inkFaint }}">BBM: Академия смыслов</div>
+    <div aria-hidden="true" style="overflow:hidden;padding-top:clamp(12px,2.4vw,28px)">
+      <div style="font-size:clamp(30px,8.2vw,154px);font-weight:800;letter-spacing:-.05em;line-height:.78;white-space:nowrap;text-align:center;color:{{ giantInk }};transform:translateY(.16em);user-select:none">Academy.Doctor.School</div>
+    </div>
+  </footer>
+
+  <!-- Панель развилок и состояний (для владельца) -->
+  <div style="position:fixed;bottom:16px;left:16px;z-index:50;background:{{ surface }};border:2px solid {{ border }};box-shadow:4px 4px 0 {{ shadow }};padding:10px 12px 12px;display:flex;flex-direction:column;gap:8px">
+    <sc-for list="{{ panelRows }}" as="row" hint-placeholder-count="7">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="width:76px;font-size:9.5px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:{{ inkFaint }}">{{ row.label }}</span>
+        <span style="display:flex;gap:5px;flex-wrap:wrap">
+          <sc-for list="{{ row.btns }}" as="pb" hint-placeholder-count="3">
+            <button onClick="{{ pb.onClick }}" title="{{ pb.title }}" style="{{ pb.style }}">{{ pb.label }}</button>
+          </sc-for>
+        </span>
+      </div>
+    </sc-for>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;authState&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;гость&quot;,&quot;вошёл&quot;],&quot;default&quot;:&quot;гость&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Состояние&quot;},&quot;formState&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;пусто&quot;,&quot;заполнено&quot;,&quot;ошибки&quot;,&quot;сбой сети&quot;,&quot;черновик&quot;,&quot;отправлено&quot;],&quot;default&quot;:&quot;пусто&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Состояние&quot;},&quot;repeatApplication&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Состояние&quot;},&quot;growthVariant&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;А — горизонтальная лестница&quot;,&quot;Б — список с действиями&quot;,&quot;В — компактно рядом с формой&quot;],&quot;default&quot;:&quot;А — горизонтальная лестница&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Развилки&quot;},&quot;caseRequired&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Развилки&quot;},&quot;blockOrder&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;форма первой&quot;,&quot;путь заявки первым&quot;],&quot;default&quot;:&quot;форма первой&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Развилки&quot;}}">
+class Component extends DCLogic {
+  state = {
+    dark: (() => { try { return localStorage.getItem('ds-theme') === 'dark'; } catch (e) { return false; } })(),
+    isMobile: false,
+    values: {}, touched: {}, attempted: false, serverHidden: false,
+    scr: null, spec: null, format: null
+  };
+  componentDidMount() {
+    this.mq = window.matchMedia('(max-width: 900px)');
+    this.upd = () => this.setState({ isMobile: this.mq.matches });
+    this.upd();
+    this.mq.addEventListener ? this.mq.addEventListener('change', this.upd) : this.mq.addListener(this.upd);
+  }
+  renderVals() {
+    const s = this.state, p = this.props, d = s.dark, m = s.isMobile;
+    const pageBg = d ? 'oklch(.16 .02 250)' : '#fff';
+    const surface = d ? 'oklch(.21 .02 250)' : '#fff';
+    const ink = d ? '#fff' : 'oklch(.21 .02 250)';
+    const inkMuted = d ? 'rgba(255,255,255,.62)' : 'oklch(.45 .014 250)';
+    const inkFaint = d ? 'rgba(255,255,255,.5)' : 'oklch(.556 .012 250)';
+    const border = d ? '#fff' : 'oklch(.21 .02 250)';
+    const hairline = d ? 'rgba(255,255,255,.16)' : 'oklch(.922 .006 250)';
+    const accent = d ? '#6BB1F7' : '#2D84F2';
+    const btnBg = d ? '#6BB1F7' : '#114D9E';
+    const btnFg = d ? '#0D3A77' : '#fff';
+    const shadow = d ? '#6BB1F7' : '#114D9E';
+    const shadowSm = d ? '#1F69C8' : '#AED4FB';
+    const tint = d ? '#0D3A77' : '#D3E8FD';
+    const tintFg = d ? '#AED4FB' : '#114D9E';
+    const tintInk = d ? '#6BB1F7' : '#114D9E';
+    const sectionGray = d ? 'oklch(.185 .02 250)' : 'oklch(.972 .004 250)';
+    const danger = '#C81E1E';
+    const dangerTint = d ? '#3a1414' : '#fdecec';
+    const success = d ? '#4ADE80' : '#009959';
+    const successTint = d ? '#0e2a1c' : '#e6f6ee';
+
+    // ── развилки и состояния (панель > пропсы) ──
+    const logged = s.authV != null ? s.authV === 'in' : (p.authState || 'гость') === 'вошёл';
+    const fs = s.formV || p.formState || 'пусто';
+    const repeatBanner = s.repV != null ? s.repV === 'on' : !!p.repeatApplication;
+    const gv = (s.growV0 || p.growthVariant || 'А')[0];
+    const caseReq = s.caseV != null ? s.caseV === 'req' : (p.caseRequired !== undefined ? !!p.caseRequired : true);
+    const formFirst = s.ordV != null ? s.ordV === 'form' : (p.blockOrder || 'форма первой')[0] === 'ф';
+    const scr = s.scr || (fs === 'отправлено' ? 'sent' : fs === 'черновик' ? 'draft' : 'form');
+
+    const seeds = (fs === 'пусто') ? {} : (fs === 'ошибки')
+      ? { about: 'Травматолог-ортопед, ГКБ им. Юдина.', case: 'Пациент 54 лет.' }
+      : { topic: 'Ортобиология в амбулаторной практике', about: 'Травматолог-ортопед, ГКБ им. Юдина. 12 лет практики, веду приём и малые вмешательства; читал циклы для ординаторов.', case: 'Пациент 54 лет с гонартрозом II стадии, не отвечал на стандартную терапию. Провели курс PRP по протоколу из трёх инъекций; через 8 недель — снижение боли по ВАШ с 7 до 3 и возврат к ходьбе без трости. Разбор показаний, протокола и типичных ошибок.' };
+    const forceTouched = fs === 'ошибки';
+    const seedFormat = (fs === 'заполнено' || fs === 'сбой сети' || fs === 'черновик') ? 'курс-сериал' : null;
+
+    const effVal = (name) => s.values[name] !== undefined ? s.values[name] : (seeds[name] || '');
+    const mkField = (name, validate, required) => {
+      const val = effVal(name);
+      const touched = !!s.touched[name] || forceTouched || s.attempted;
+      let err = '';
+      if (touched) { if (!val && required) err = required; else if (val && validate) err = validate(val) || ''; }
+      return {
+        value: val, error: err,
+        onChange: (e) => { const v = e.target.value; this.setState(st => ({ values: Object.assign({}, st.values, { [name]: v }) })); },
+        onBlur: () => this.setState(st => ({ touched: Object.assign({}, st.touched, { [name]: true }) })),
+        labelStyle: 'display:block;font-size:12px;font-weight:700;color:' + ink + ';margin-bottom:7px',
+        inputStyle: 'width:100%;box-sizing:border-box;font:inherit;font-size:14px;line-height:1.5;padding:12px 14px;border:2px solid ' + (err ? danger : hairline) + ';background:' + (err ? dangerTint : surface) + ';color:' + ink + ';outline:none',
+        errStyle: err ? 'display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:' + danger + ';margin-top:7px' : 'display:none'
+      };
+    };
+    const vCase = (v) => v.trim().length < 60 ? 'Опишите случай подробнее — хотя бы несколько предложений: что за пациент, что сделали, что получилось' : '';
+    const fTopic = mkField('topic', null, 'Укажите тему заявки');
+    const fAbout = mkField('about', null, null);
+    const fCase = mkField('case', caseReq ? vCase : null, caseReq ? 'Опишите клинический случай — с него начнётся первый урок' : null);
+    const caseVal = effVal('case');
+    const caseSoftHint = !caseReq && (!caseVal || vCase(caseVal));
+
+    // специальность
+    const specOptions = ['Выберите специальность', 'Травматология и ортопедия', 'Ревматология', 'Хирургия', 'Терапия', 'Неврология', 'Другое'];
+    const specValue = s.spec || (logged ? 'Травматология и ортопедия' : (fs === 'пусто' ? 'Выберите специальность' : 'Травматология и ортопедия'));
+    const specStyle = 'width:100%;box-sizing:border-box;font:inherit;font-size:14px;padding:12px 14px;border:2px solid ' + hairline + ';background:' + surface + ';color:' + (specValue === specOptions[0] ? inkFaint : ink) + ';outline:none;appearance:none';
+
+    // формат
+    const formats = ['курс-сериал', 'отдельный урок', 'подкаст', 'выступление'];
+    const fmt = s.format || seedFormat;
+    const fmtErr = (s.attempted || forceTouched) && !fmt;
+    const formatBtns = formats.map(f => ({
+      label: f,
+      onClick: () => this.setState({ format: f }),
+      style: 'font:inherit;font-size:13px;font-weight:' + (fmt === f ? 800 : 700) + ';padding:11px 16px;cursor:pointer;color:' + (fmt === f ? btnFg : ink) + ';background:' + (fmt === f ? btnBg : surface) + ';border:2px solid ' + (fmt === f ? btnBg : (fmtErr ? danger : hairline))
+    }));
+
+    const valid = !!effVal('topic') && !!fmt && (!caseReq || vCase(caseVal) === '');
+    const serverError = fs === 'сбой сети' && !s.serverHidden;
+    const submit = () => {
+      this.setState({ attempted: true, touched: { topic: true, about: true, case: true } });
+      if (!valid) return;
+      if (serverError) return;
+      this.setState({ scr: logged ? 'sent' : 'gate' });
+    };
+
+    // путь заявки — 6 шагов
+    const pathSteps = [
+      { title: 'Разбор заявки', text: 'Заявку разбирает администратор Академии и назначает продюсера.' },
+      { title: 'Разговор с продюсером', text: 'Продюсер связывается с вами и вместе с вами решает, берём ли проект в работу.' },
+      { title: 'Программа', text: 'Методист собирает программу: модули, уроки, результат обучения.' },
+      { title: 'Производство', text: 'Съёмки, монтаж, сборка уроков — с командой производства.' },
+      { title: 'Медицинская экспертиза', text: 'Контент согласуют несколько экспертов.' },
+      { title: 'Публикация', text: 'Уроки приходят врачам по их специальности на doctor.school.' }
+    ].map((x, i) => Object.assign(x, {
+      n: '0' + (i + 1),
+      wrap: m ? 'padding:16px 0;border-bottom:2px solid ' + hairline : 'background:' + surface + ';border:2px solid ' + border + ';padding:18px;min-height:130px;box-sizing:border-box'
+    }));
+
+    // путь роста — ступени
+    const stepNumStyle = 'width:34px;height:34px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;border:2px solid ' + border + ';color:' + tintInk + ';background:' + surface;
+    const growData = [
+      { name: 'Рецензент уроков', short: 'Растёт индекс цитируемости; за 10 рецензий — стажировка.', action: 'Начните с рецензий на готовящиеся уроки — растёт индекс цитируемости; за 10 рецензий — международная стажировка.' },
+      { name: 'Соавтор', short: 'Участие в чужом курсе или уроке.', action: 'Присоединитесь к проекту действующего автора — соавторство фиксируется в смарт-контракте.' },
+      { name: 'Автор урока или курса', short: 'Свой проект с командой Академии.', action: 'Подайте заявку с темой и клиническим случаем — этот экран и есть первый шаг.' },
+      { name: 'Спикер и герой подкастов', short: 'Выступления и подкасты Академии.', action: 'Выступайте на событиях направления и в подкастах — по приглашению продюсера.' },
+      { name: 'Наставник', short: 'Берёт врачей на наставничество.', action: 'Верхняя ступень: наставником становятся те, кто уже вложился в платформу.' }
+    ];
+    const growSteps = growData.map((g, i) => Object.assign({}, g, {
+      num: i + 1, stepNumStyle,
+      cellStyle: (m ? 'padding:16px 0;border-bottom:2px solid ' + hairline : 'background:' + surface + ';border:2px solid ' + border + ';box-shadow:3px 3px 0 ' + shadowSm + ';padding:18px;box-sizing:border-box')
+    }));
+    const growCompact = growData.map((g, i) => {
+      const here = i === 2;
+      return {
+        name: g.name, note: i === 0 ? g.short : '', hasNote: i === 0, here,
+        mark: here ? '●' : (i + 1),
+        rowStyle: 'display:flex;gap:12px;align-items:flex-start',
+        dotStyle: 'flex:none;width:26px;height:26px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;border:2px solid ' + (here ? btnBg : hairline) + ';color:' + (here ? btnFg : inkFaint) + ';background:' + (here ? btnBg : surface),
+        nameStyle: 'font-size:13.5px;font-weight:' + (here ? 800 : 700) + ';color:' + (here ? ink : inkMuted)
+      };
+    });
+
+    // панель владельца
+    const varBtn = (active, wide) => 'font:inherit;font-size:11px;font-weight:800;' + (wide ? 'padding:0 9px;height:30px' : 'width:30px;height:30px') + ';cursor:pointer;border:2px solid ' + (active ? btnBg : border) + ';color:' + (active ? btnFg : ink) + ';background:' + (active ? btnBg : 'transparent');
+    const B = (label, title, active, patch, wide) => ({ label, title, onClick: () => this.setState(Object.assign({ attempted: false, serverHidden: false }, patch)), style: varBtn(active, wide !== false) });
+    const panelRows = [
+      { label: 'Экран', btns: [B('форма', 'Форма заявки', scr === 'form', { scr: 'form', formV: s.formV }), B('гейт', 'Гейт учётки', scr === 'gate', { scr: 'gate', formV: 'заполнено', authV: 'out' }), B('чернов.', 'Возврат с сохранённым черновиком', scr === 'draft', { scr: 'draft', formV: 'черновик', authV: 'in' }), B('отпр.', 'Заявка отправлена', scr === 'sent', { scr: 'sent' })] },
+      { label: 'Форма', btns: [B('пусто', 'Пустая форма', fs === 'пусто', { formV: 'пусто', scr: 'form', values: {}, touched: {}, format: null }), B('запол.', 'Заполнено', fs === 'заполнено', { formV: 'заполнено', scr: 'form', values: {}, touched: {} }), B('ошибки', 'Ошибки валидации', fs === 'ошибки', { formV: 'ошибки', scr: 'form', values: {}, touched: {}, format: null }), B('сбой', 'Ошибка отправки', fs === 'сбой сети', { formV: 'сбой сети', scr: 'form' })] },
+      { label: 'Вход', btns: [B('гость', 'Гость', !logged, { authV: 'out' }), B('вошёл', 'Вошедший', logged, { authV: 'in' })] },
+      { label: 'Повторная', btns: [B('нет', 'Первая заявка', !repeatBanner, { repV: 'off' }), B('да', 'Предыдущая заявка в работе', repeatBanner, { repV: 'on' })] },
+      { label: 'Рост', btns: [B('А', 'Горизонтальная лестница', gv === 'А', { growV0: 'А' }, false), B('Б', 'Вертикальный список с действиями', gv === 'Б', { growV0: 'Б' }, false), B('В', 'Компактный блок рядом с формой', gv === 'В', { growV0: 'В' }, false)] },
+      { label: 'Кейс', btns: [B('обяз.', 'Клинический случай обязателен', caseReq, { caseV: 'req' }), B('желат.', 'Желателен с сильной подсказкой', !caseReq, { caseV: 'opt' })] },
+      { label: 'Порядок', btns: [B('форма', 'Форма первым экраном', formFirst, { ordV: 'form' }), B('путь', 'Путь заявки первым', !formFirst, { ordV: 'path' })] }
+    ];
+
+    return {
+      dark: d, isMobile: m, isDesktop: !m,
+      pageBg, surface, ink, inkMuted, inkFaint, border, hairline, accent, btnBg, btnFg, shadow, shadowSm, tint, tintFg, tintInk, sectionGray, danger, dangerTint, success, successTint,
+      headerShadow: d ? 'oklch(.16 .02 250)' : '#0D3A77',
+      authHref: logged ? 'Профиль.dc.html' : 'Авторизация.dc.html',
+      authLabel: logged ? 'Кабинет' : 'Войти / Регистрация',
+      guest: !logged, loggedIn: logged,
+      isForm: scr === 'form' || scr === 'draft', isGate: scr === 'gate', isSent: scr === 'sent',
+      draftNotice: scr === 'draft',
+      repeatBanner: repeatBanner && scr !== 'sent',
+      fTopic, fAbout, fCase,
+      reqTagStyle: 'display:inline-block;margin-left:6px;vertical-align:1px;font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:' + tintFg + ';background:' + tint + ';padding:2px 7px',
+      caseTag: caseReq ? 'обязательно' : 'желательно',
+      caseTagStyle: caseReq
+        ? 'display:inline-block;margin-left:6px;vertical-align:1px;font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:' + tintFg + ';background:' + tint + ';padding:2px 7px'
+        : 'display:inline-block;margin-left:6px;vertical-align:1px;font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:' + inkFaint + ';border:1px solid ' + hairline + ';padding:1px 6px',
+      caseBorder: fCase.error ? danger : border,
+      caseBg: sectionGray,
+      caseHintStyle: (fCase.error ? 'display:none' : 'font-size:12px;font-weight:' + (caseSoftHint ? 700 : 600) + ';line-height:1.55;color:' + (caseSoftHint ? tintFg : inkFaint) + ';margin-top:8px'),
+      specOptions, specValue, specStyle,
+      specChange: (e) => this.setState({ spec: e.target.value }),
+      formatBtns,
+      formatErrStyle: fmtErr ? 'display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:' + danger + ';margin-top:8px' : 'display:none',
+      serverError,
+      retrySend: () => this.setState({ serverHidden: true }),
+      submit,
+      draftTopic: effVal('topic') || 'Ортобиология в амбулаторной практике',
+      gateReturn: () => this.setState({ scr: 'draft', authV: 'in', formV: fs === 'пусто' ? 'черновик' : fs }),
+      sentAgain: () => this.setState({ scr: 'form', formV: 'пусто', repV: 'on', values: {}, touched: {}, format: null, attempted: false }),
+      formCols: (!m && gv === 'В') ? 'minmax(0,1.5fr) minmax(0,1fr)' : '1fr',
+      growV: gv === 'В', growSection: gv !== 'В', growA: gv === 'А', growB: gv === 'Б',
+      growSteps, growCompact,
+      pathSteps,
+      pathGrid: m ? 'display:flex;flex-direction:column;border-top:2px solid ' + hairline : 'display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:20px',
+      ladderGrid: m ? 'display:flex;flex-direction:column;border-top:2px solid ' + hairline : 'display:grid;grid-template-columns:repeat(5,1fr);gap:16px',
+      exitGrid: m ? 'display:flex;flex-direction:column;gap:24px' : 'display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:clamp(20px,3vw,32px);align-items:start',
+      formOrd: formFirst ? 1 : 2, pathOrd: formFirst ? 2 : 1, growOrd: 3, termsOrd: 4, exitOrd: 5,
+      toggleTheme: () => this.setState(x => { const dark = !x.dark; try { localStorage.setItem('ds-theme', dark ? 'dark' : 'light'); } catch (e) {} return { dark }; }),
+      themeIcon: d ? '☀' : '☾',
+      footLogoEl: React.createElement('img', { src: d ? 'assets/ds-logo-white.svg' : 'assets/ds-logo-color.svg', alt: 'Doctor.School', style: { height: '22px', display: 'block' } }),
+      giantInk: d ? 'rgba(174,212,251,.09)' : 'oklch(.945 .018 250)',
+      panelRows
+    };
+  }
+}
+</script>
+</body>
+</html>

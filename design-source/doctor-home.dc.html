@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"><style>body{margin:0;background:#fff;font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}a{color:#2D84F2}a:hover{color:#114D9E}:focus-visible{outline:3px solid #6BB1F7;outline-offset:2px}@keyframes livePulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.45;transform:scale(.72)}}html{scroll-behavior:smooth}</style></helmet>
+
+<div style="min-height:100vh;background:{{ pageBg }}">
+
+  <!-- ═══ Оболочка · шапка витрины врача ═══ -->
+  <header data-screen-label="d-home · шапка" style="background:#114D9E;padding:14px clamp(16px,4vw,48px);display:flex;align-items:center;gap:clamp(14px,2.5vw,28px)">
+    <a href="Витрина врача — Главная.dc.html" style="display:flex;flex:none"><img src="assets/ds-logo-white.svg" alt="Doctor.School" style="height:26px;display:block"></a>
+    <sc-if value="{{ isDesktop }}" hint-placeholder-val="{{ true }}">
+      <input value="{{ q }}" onInput="{{ setQ }}" placeholder="Поиск по урокам, школам и событиям" style="flex:1;max-width:440px;font:inherit;font-size:13.5px;font-weight:600;padding:12px 14px;border:2px solid rgba(255,255,255,.45);background:transparent;color:#fff;outline:none;min-width:120px" style-focus="border-color:#fff;background:rgba(255,255,255,.08)">
+      <nav style="display:flex;align-items:center;gap:14px;margin-left:auto">
+        <button onClick="{{ toggleTheme }}" title="Тема" style="font:inherit;width:44px;height:44px;background:transparent;color:#fff;border:2px solid rgba(255,255,255,.5);cursor:pointer;font-size:15px;flex:none" style-hover="border-color:#fff">{{ themeIcon }}</button>
+        <sc-if value="{{ guest }}" hint-placeholder-val="{{ true }}">
+          <a href="Авторизация.dc.html" style="font-size:13.5px;font-weight:700;color:#D3E8FD;text-decoration:none;padding:12px 6px;white-space:nowrap" style-hover="color:#fff">Войти</a>
+          <a href="Авторизация.dc.html" style="font-size:13.5px;font-weight:800;color:#114D9E;background:#fff;padding:12px 22px;text-decoration:none;white-space:nowrap;box-shadow:3px 3px 0 #0D3A77" style-hover="transform:translate(1px,1px);box-shadow:2px 2px 0 #0D3A77">Регистрация</a>
+        </sc-if>
+        <sc-if value="{{ loggedIn }}" hint-placeholder-val="{{ false }}">
+          <a href="#" title="Очки внимания: Пульс · Дыхание · Сознание. Открыть историю начислений" style="display:inline-flex;align-items:center;gap:9px;border:2px solid rgba(255,255,255,.45);padding:10px 14px;font-size:12px;font-weight:800;color:#fff;text-decoration:none;white-space:nowrap;font-variant-numeric:tabular-nums" style-hover="border-color:#fff"><span>120 Pul</span><span style="opacity:.45">·</span><span>340 Bre</span><span style="opacity:.45">·</span><span>1 250 Con</span></a>
+          <a href="#" style="font-size:13.5px;font-weight:800;color:#114D9E;background:#fff;padding:12px 22px;text-decoration:none;white-space:nowrap;box-shadow:3px 3px 0 #0D3A77" style-hover="transform:translate(1px,1px);box-shadow:2px 2px 0 #0D3A77">Личный кабинет</a>
+        </sc-if>
+      </nav>
+    </sc-if>
+    <sc-if value="{{ isMobile }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;align-items:center;gap:10px;margin-left:auto">
+        <button onClick="{{ toggleTheme }}" title="Тема" style="font:inherit;width:44px;height:44px;background:transparent;color:#fff;border:2px solid rgba(255,255,255,.5);cursor:pointer;font-size:16px">{{ themeIcon }}</button>
+        <details style="position:relative">
+          <summary style="list-style:none;width:44px;height:44px;display:inline-flex;align-items:center;justify-content:center;background:#fff;color:#114D9E;cursor:pointer;font-size:20px;font-weight:800;box-shadow:3px 3px 0 #0D3A77">≡</summary>
+          <nav style="position:absolute;top:calc(100% + 10px);right:0;background:{{ surface }};border:2px solid {{ border }};box-shadow:5px 5px 0 {{ shadow }};padding:8px;display:flex;flex-direction:column;min-width:220px;z-index:30">
+            <sc-if value="{{ loggedIn }}" hint-placeholder-val="{{ false }}">
+              <a href="#" style="padding:12px 16px;font-size:12.5px;font-weight:800;color:{{ ink }};text-decoration:none;font-variant-numeric:tabular-nums">120 Pul · 340 Bre · 1 250 Con</a>
+              <a href="#" style="margin-top:4px;padding:12px 16px;font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};text-decoration:none;text-align:center">Личный кабинет</a>
+            </sc-if>
+            <sc-if value="{{ guest }}" hint-placeholder-val="{{ true }}">
+              <a href="Авторизация.dc.html" style="padding:12px 16px;font-size:15px;font-weight:700;color:{{ ink }};text-decoration:none">Войти</a>
+              <a href="Авторизация.dc.html" style="margin-top:4px;padding:12px 16px;font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};text-decoration:none;text-align:center">Регистрация</a>
+            </sc-if>
+          </nav>
+        </details>
+      </div>
+    </sc-if>
+  </header>
+  <sc-if value="{{ isMobile }}" hint-placeholder-val="{{ false }}">
+    <div style="background:#114D9E;padding:0 16px 14px">
+      <input value="{{ q }}" onInput="{{ setQ }}" placeholder="Поиск по урокам, школам и событиям" style="width:100%;box-sizing:border-box;font:inherit;font-size:14px;font-weight:600;padding:13px 14px;border:2px solid rgba(255,255,255,.45);background:transparent;color:#fff;outline:none" style-focus="border-color:#fff">
+    </div>
+  </sc-if>
+
+  <!-- ═══ Герой ═══ -->
+  <div style="background:#114D9E;padding:clamp(44px,7vw,84px) clamp(16px,4vw,48px) clamp(48px,7vw,88px)">
+    <div style="max-width:1104px;margin:0 auto">
+      <div style="font-size:12px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:#D3E8FD;margin-bottom:20px">Медицинская образовательная платформа</div>
+      <h1 style="margin:0;font-size:clamp(34px,5.6vw,60px);line-height:1.02;font-weight:800;letter-spacing:-.035em;color:#fff;text-wrap:balance">Doctor.School — бесплатное образование для врачей</h1>
+      <p style="margin:24px 0 0;max-width:640px;font-size:clamp(15px,2vw,17px);line-height:1.65;font-weight:500;color:#D3E8FD">Выберите специальность — получите школы, курсы, уроки и события своей и смежных областей. Обучение бесплатно.</p>
+      <div style="margin-top:42px;border:2px solid rgba(255,255,255,.55);background:rgba(255,255,255,.55);display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:2px">
+        <div style="background:#114D9E;padding:clamp(18px,3vw,26px) clamp(16px,2.5vw,26px)"><div style="font-size:clamp(30px,4vw,46px);font-weight:800;line-height:1;letter-spacing:-.04em;color:#fff;font-variant-numeric:tabular-nums">12 400</div><div style="margin-top:8px;font-size:11.5px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#D3E8FD">врачей уже с нами</div></div>
+        <div style="background:#114D9E;padding:clamp(18px,3vw,26px) clamp(16px,2.5vw,26px)"><div style="font-size:clamp(30px,4vw,46px);font-weight:800;line-height:1;letter-spacing:-.04em;color:#fff;font-variant-numeric:tabular-nums">105</div><div style="margin-top:8px;font-size:11.5px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#D3E8FD">специальностей</div></div>
+        <div style="background:#114D9E;padding:clamp(18px,3vw,26px) clamp(16px,2.5vw,26px)"><div style="font-size:clamp(30px,4vw,46px);font-weight:800;line-height:1;letter-spacing:-.04em;color:#fff;font-variant-numeric:tabular-nums">340</div><div style="margin-top:8px;font-size:11.5px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#D3E8FD">уроков</div></div>
+        <div style="background:#114D9E;padding:clamp(18px,3vw,26px) clamp(16px,2.5vw,26px)"><div style="font-size:clamp(30px,4vw,46px);font-weight:800;line-height:1;letter-spacing:-.04em;color:#fff;font-variant-numeric:tabular-nums">86</div><div style="margin-top:8px;font-size:11.5px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#D3E8FD">событий за год</div></div>
+      </div>
+      <div style="margin-top:36px;display:inline-block;border:2px solid rgba(255,255,255,.55);padding:14px 20px;font-size:14px;font-weight:800;letter-spacing:.01em;color:#fff">Создаём бесплатное децентрализованное медицинское образование</div>
+    </div>
+  </div>
+
+  <main style="display:flex;flex-direction:column">
+
+    <!-- ═══ Каталог специальностей ═══ -->
+    <section data-screen-label="d-home · каталог специальностей" style="padding:0 clamp(16px,4vw,48px);margin-top:clamp(44px,7vw,80px)">
+      <div style="max-width:1104px;margin:0 auto">
+        <div style="display:flex;align-items:baseline;gap:16px;margin-bottom:clamp(18px,3vw,26px)">
+          <h2 style="margin:0;font-size:clamp(24px,3.6vw,36px);line-height:1.05;font-weight:800;letter-spacing:-.03em;color:{{ ink }};white-space:nowrap">Ваша специальность</h2>
+          <span style="flex:1;border-top:2px solid {{ ink }};transform:translateY(-6px)"></span>
+        </div>
+
+        <!-- выбранная специальность · свёрнутый каталог -->
+        <sc-if value="{{ chosen }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;background:{{ tint }};padding:18px 22px">
+            <span style="font-size:17px;font-weight:800;letter-spacing:-.01em;color:{{ tintFg }}">Травматология и ортопедия</span>
+            <button onClick="{{ changeSpec }}" style="font:inherit;font-size:13px;font-weight:700;color:{{ tintFg }};background:transparent;border:0;padding:4px 0;cursor:pointer;text-decoration:underline;text-underline-offset:4px">▾ сменить</button>
+            <span style="margin-left:auto;font-size:12.5px;font-weight:600;color:{{ inkMuted }}">Контент подобран по вашей специальности и смежным областям</span>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ catalogOpen }}" hint-placeholder-val="{{ true }}">
+
+          <!-- загрузка · скелет каталога -->
+          <sc-if value="{{ stLoading }}" hint-placeholder-val="{{ false }}">
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px">
+              <sc-for list="{{ skeletonTiles }}" as="s" hint-placeholder-count="8"><div style="height:58px;background:{{ hairline }};animation:livePulse 1.4s ease-in-out infinite"></div></sc-for>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ stReady }}" hint-placeholder-val="{{ true }}">
+
+            <!-- Вариант А · плитки -->
+            <sc-if value="{{ vA }}" hint-placeholder-val="{{ true }}">
+              <input value="{{ catQ }}" onInput="{{ setCatQ }}" placeholder="Начните вводить название" style="width:100%;box-sizing:border-box;font:inherit;font-size:15px;font-weight:600;padding:15px 16px;border:2px solid {{ border }};background:{{ surface }};color:{{ ink }};outline:none;margin-bottom:16px" style-focus="border-color:#6BB1F7;box-shadow:0 0 0 3px rgba(107,177,247,.5)">
+              <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px">
+                <sc-for list="{{ catTiles }}" as="t" hint-placeholder-count="12">
+                  <a href="#" style="display:flex;align-items:center;min-height:56px;box-sizing:border-box;padding:14px 16px;border:2px solid {{ border }};background:{{ surface }};font-size:14.5px;font-weight:700;line-height:1.3;letter-spacing:-.01em;color:{{ ink }};text-decoration:none;box-shadow:{{ tileShadow }}" style-hover="background:{{ tint }};color:{{ tintFg }}">{{ t }}</a>
+                </sc-for>
+              </div>
+              <sc-if value="{{ noCatResults }}" hint-placeholder-val="{{ false }}">
+                <div style="padding:22px 0;font-size:14px;font-weight:600;color:{{ inkMuted }}">Ничего не найдено. Проверьте написание или выберите «Другое».</div>
+              </sc-if>
+              <sc-if value="{{ showExpand }}" hint-placeholder-val="{{ true }}">
+                <button onClick="{{ expand }}" style="font:inherit;margin-top:18px;font-size:14px;font-weight:700;color:{{ ink }};background:{{ surface }};border:2px solid {{ border }};padding:13px 24px;cursor:pointer;box-shadow:{{ btnShadowSm }}" style-hover="transform:translate(1px,1px)">Показать все 105 ▾</button>
+              </sc-if>
+            </sc-if>
+
+            <!-- Вариант Б · поиск как главный элемент -->
+            <sc-if value="{{ vB }}" hint-placeholder-val="{{ false }}">
+              <div style="max-width:720px;margin:0 auto;text-align:center;padding:clamp(6px,1vw,12px) 0 4px">
+                <input value="{{ catQ }}" onInput="{{ setCatQ }}" placeholder="Начните вводить название" style="width:100%;box-sizing:border-box;font:inherit;font-size:clamp(16px,2vw,19px);font-weight:600;padding:19px 20px;border:2px solid {{ border }};background:{{ surface }};color:{{ ink }};outline:none;box-shadow:{{ cardShadowSm }}" style-focus="border-color:#6BB1F7">
+                <div style="margin:20px 0 12px;font-size:11.5px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ inkFaint }}">Частые специальности</div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center">
+                  <sc-for list="{{ catTiles }}" as="t" hint-placeholder-count="10">
+                    <a href="#" style="font-size:13px;font-weight:700;color:{{ tintFg }};background:transparent;padding:8px 14px;border:2px solid {{ chipBorder }};text-decoration:none" style-hover="background:{{ tint }}">{{ t }}</a>
+                  </sc-for>
+                </div>
+                <sc-if value="{{ showExpand }}" hint-placeholder-val="{{ true }}">
+                  <button onClick="{{ expand }}" style="font:inherit;margin-top:22px;font-size:13.5px;font-weight:700;color:{{ ink }};background:transparent;border:0;padding:4px;cursor:pointer;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:5px">Показать весь список — 105 ▾</button>
+                </sc-if>
+              </div>
+            </sc-if>
+
+            <!-- Вариант В · алфавитный список -->
+            <sc-if value="{{ vC }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:22px">
+                <sc-for list="{{ letters }}" as="L" hint-placeholder-count="14">
+                  <a href="{{ L.href }}" style="width:36px;height:36px;display:inline-flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:{{ tintFg }};border:2px solid {{ chipBorder }};text-decoration:none" style-hover="background:{{ tint }}">{{ L.ch }}</a>
+                </sc-for>
+              </div>
+              <div style="{{ colsStyle }}">
+                <sc-for list="{{ catGroups }}" as="g" hint-placeholder-count="6">
+                  <div id="{{ g.id }}" style="break-inside:avoid;margin-bottom:24px">
+                    <div style="font-size:13px;font-weight:800;color:{{ accent }};border-bottom:2px solid {{ hairline }};padding-bottom:6px;margin-bottom:10px">{{ g.ch }}</div>
+                    <div style="display:flex;flex-direction:column;gap:2px">
+                      <sc-for list="{{ g.items }}" as="n" hint-placeholder-count="4">
+                        <a href="#" style="font-size:13.5px;font-weight:600;line-height:1.4;color:{{ ink }};text-decoration:none;padding:5px 0" style-hover="color:{{ accent }};text-decoration:underline;text-underline-offset:3px">{{ n }}</a>
+                      </sc-for>
+                    </div>
+                  </div>
+                </sc-for>
+              </div>
+            </sc-if>
+
+          </sc-if>
+        </sc-if>
+      </div>
+    </section>
+
+    <!-- ═══ Ближайшие события ═══ -->
+    <section data-screen-label="d-home · события" style="padding:0 clamp(16px,4vw,48px);margin-top:clamp(52px,8vw,92px)">
+      <div style="max-width:1104px;margin:0 auto">
+        <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:18px;flex-wrap:wrap;margin-bottom:clamp(18px,3.5vw,30px)">
+          <div>
+            <div style="font-size:11.5px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ accent }};margin-bottom:10px">{{ evKicker }}</div>
+            <h2 style="margin:0;font-size:clamp(24px,3.6vw,36px);line-height:1.05;font-weight:800;letter-spacing:-.03em;color:{{ ink }}">Ближайшие события</h2>
+          </div>
+          <a href="#" style="font-size:14px;font-weight:800;color:{{ accent }};text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:5px;white-space:nowrap">Все события →</a>
+        </div>
+
+        <div style="min-width:0;display:flex;flex-direction:column;gap:{{ evGap }}">
+
+            <sc-if value="{{ stReady }}" hint-placeholder-val="{{ true }}">
+              <sc-if value="{{ evHas }}" hint-placeholder-val="{{ true }}">
+                <sc-for list="{{ feedCards }}" as="ev" hint-placeholder-count="3">
+                  <dc-import name="ВебинарКарточка" dark="{{ dark }}" variant="{{ ev.variant }}" num="{{ ev.num }}" time="{{ ev.time }}" time-sub="{{ ev.timeSub }}" school="{{ ev.school }}" title="{{ ev.title }}" chips="{{ ev.chips }}" speakers="{{ ev.speakers }}" cta="Участвовать ↗" hint-size="100%,220px"></dc-import>
+                </sc-for>
+              </sc-if>
+              <sc-if value="{{ evEmpty }}" hint-placeholder-val="{{ false }}">
+                <div style="border:2px dashed {{ dashedBorder }};padding:clamp(26px,4vw,40px);text-align:center">
+                  <div style="font-size:16px;font-weight:700;color:{{ ink }};margin-bottom:8px">Пока ничего не запланировано по вашей специальности</div>
+                  <div style="font-size:14px;line-height:1.6;color:{{ inkMuted }}">Посмотрите события смежных областей — <a href="#" style="font-weight:700;color:{{ accent }}">все события →</a></div>
+                </div>
+              </sc-if>
+            </sc-if>
+
+            <sc-if value="{{ stLoading }}" hint-placeholder-val="{{ false }}">
+              <sc-for list="{{ skeletonCards }}" as="s" hint-placeholder-count="3">
+                <div style="border:2px solid {{ hairline }};background:{{ surface }};display:flex;gap:20px;padding:26px 28px">
+                  <div style="width:120px;height:76px;background:{{ hairline }};animation:livePulse 1.4s ease-in-out infinite;flex:none"></div>
+                  <div style="flex:1;display:flex;flex-direction:column;gap:12px;justify-content:center">
+                    <div style="height:12px;width:35%;background:{{ hairline }};animation:livePulse 1.4s ease-in-out infinite"></div>
+                    <div style="height:14px;width:80%;background:{{ hairline }};animation:livePulse 1.4s ease-in-out infinite"></div>
+                    <div style="height:12px;width:55%;background:{{ hairline }};animation:livePulse 1.4s ease-in-out infinite"></div>
+                  </div>
+                </div>
+              </sc-for>
+            </sc-if>
+
+            <sc-if value="{{ stError }}" hint-placeholder-val="{{ false }}">
+              <div style="border:2px solid {{ danger }};background:{{ dangerTint }};padding:clamp(22px,4vw,32px);display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+                <span style="font-size:18px;color:{{ danger }};flex:none">⚠</span>
+                <div style="flex:1;min-width:200px;font-size:14.5px;font-weight:700;color:{{ ink }}">Не удалось загрузить события.</div>
+                <button style="font:inherit;font-size:13.5px;font-weight:700;color:{{ ink }};background:{{ surface }};border:2px solid {{ border }};padding:12px 22px;cursor:pointer" style-hover="background:{{ tint }}">Обновить</button>
+              </div>
+            </sc-if>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══ Что исследовать ═══ -->
+    <section data-screen-label="d-home · что исследовать" style="padding:0 clamp(16px,4vw,48px);margin-top:clamp(52px,8vw,92px)">
+      <div style="max-width:1104px;margin:0 auto">
+        <div style="font-size:11.5px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ accent }};margin-bottom:10px">Форматы</div>
+        <h2 style="margin:0 0 clamp(18px,3.5vw,30px);font-size:clamp(24px,3.6vw,36px);line-height:1.05;font-weight:800;letter-spacing:-.03em;color:{{ ink }}">Что исследовать</h2>
+        <div style="display:flex;flex-direction:column;gap:clamp(20px,3.5vw,32px)">
+
+          <!-- Блок · Школа -->
+          <div style="border:{{ cardBorder }};background:{{ surface }};box-shadow:{{ cardShadow }};display:grid;grid-template-columns:{{ schoolCols }}">
+            <div style="padding:clamp(22px,4vw,36px);min-width:0">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:16px">
+                <span style="font-size:11.5px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ accent }}">Школа</span>
+                <a href="#" style="font-size:13px;font-weight:800;color:{{ accent }};text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px;white-space:nowrap">Все школы →</a>
+              </div>
+              <a href="#" style="display:block;font-size:clamp(21px,3vw,28px);font-weight:800;letter-spacing:-.025em;line-height:1.15;color:{{ ink }};text-decoration:none" style-hover="color:{{ accent }}">Школа ортобиологии — путь в новую специальность</a>
+              <p style="margin:14px 0 0;max-width:560px;font-size:14px;line-height:1.65;color:{{ inkMuted }}">Цикл из 12 уроков и живых разборов: от биологии тканей до протоколов применения. Сертификат — за полное прохождение.</p>
+              <div style="margin-top:18px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+                <span style="font-size:12.5px;font-weight:800;color:{{ green }}">Уже записались 37 ортопедов</span>
+                <span style="font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:{{ inkFaint }};border:1px solid {{ hairline }};padding:3px 7px">Партнёрский материал · Партнёр А</span>
+              </div>
+            </div>
+            <div style="background:{{ tint }};border-left:{{ schoolDivider }};padding:clamp(22px,4vw,32px);display:flex;flex-direction:column;justify-content:center;gap:14px">
+              <div><div style="font-size:34px;font-weight:800;line-height:1;letter-spacing:-.04em;color:{{ tintFg }};font-variant-numeric:tabular-nums">12</div><div style="margin-top:6px;font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ tintFg }}">уроков в программе</div></div>
+              <a href="#" style="align-self:flex-start;font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:2px solid {{ btnBg }};padding:13px 24px;text-decoration:none;white-space:nowrap;box-shadow:{{ btnShadow }}" style-hover="transform:translate(1px,1px)">Открыть школу ↗</a>
+            </div>
+          </div>
+
+          <!-- Блок · Урок дня -->
+          <div style="border:{{ cardBorder }};background:{{ surface }};box-shadow:{{ cardShadow }};display:grid;grid-template-columns:{{ lessonCols }}">
+            <div style="background:{{ tint }};border-right:{{ lessonDivider }};padding:clamp(20px,3.5vw,30px) clamp(18px,3vw,26px);display:flex;flex-direction:column;gap:10px;justify-content:center">
+              <div style="font-size:34px;font-weight:800;line-height:1;letter-spacing:-.04em;color:{{ tintFg }};font-variant-numeric:tabular-nums">14 мин</div>
+              <div style="font-size:10px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ tintFg }}">Урок дня · 23 августа</div>
+            </div>
+            <div style="padding:clamp(20px,3.5vw,30px) clamp(18px,3vw,32px);min-width:0">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:12px">
+                <span style="font-size:11.5px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ accent }}">Урок дня</span>
+                <a href="#" style="font-size:13px;font-weight:800;color:{{ accent }};text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px;white-space:nowrap">Все уроки →</a>
+              </div>
+              <a href="#" style="display:block;font-size:clamp(19px,2.4vw,23px);font-weight:700;letter-spacing:-.02em;line-height:1.3;color:{{ ink }};text-decoration:none" style-hover="color:{{ accent }}">Компрессионные переломы позвонков: что видно на рентгене</a>
+              <div style="margin-top:14px;display:flex;align-items:center;gap:18px;flex-wrap:wrap">
+                <a href="#" style="font-size:13.5px;font-weight:700;color:{{ ink }};background:{{ surface }};border:2px solid {{ border }};padding:12px 22px;text-decoration:none;white-space:nowrap;box-shadow:{{ btnShadowSm }}" style-hover="transform:translate(1px,1px)">Смотреть урок →</a>
+                <span style="font-size:12px;font-weight:700;color:{{ inkFaint }}">10 Pul · конспект прилагается</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Блок · Разбор клинического случая недели -->
+          <div style="border:{{ cardBorder }};background:{{ surface }};box-shadow:{{ cardShadow }};padding:clamp(22px,4vw,36px)">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:16px">
+              <span style="font-size:11.5px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ accent }}">Разбор клинического случая недели</span>
+              <a href="#" style="font-size:13px;font-weight:800;color:{{ accent }};text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px;white-space:nowrap">Все разборы →</a>
+            </div>
+            <a href="#" style="display:block;max-width:720px;font-size:clamp(21px,3vw,28px);font-weight:800;letter-spacing:-.025em;line-height:1.15;color:{{ ink }};text-decoration:none" style-hover="color:{{ accent }}">Клинический случай: боль в колене у бегуна 42 лет</a>
+            <div style="margin-top:20px;display:flex;align-items:stretch;gap:{{ caseGap }};flex-wrap:wrap">
+              <div style="flex:1;min-width:130px;background:{{ sectionGray }};padding:14px 16px"><div style="font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:{{ inkFaint }}">Шаг 1</div><div style="margin-top:6px;font-size:13.5px;font-weight:700;color:{{ ink }}">Анамнез</div></div>
+              <div style="flex:1;min-width:130px;background:{{ sectionGray }};padding:14px 16px"><div style="font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:{{ inkFaint }}">Шаг 2</div><div style="margin-top:6px;font-size:13.5px;font-weight:700;color:{{ ink }}">Осмотр</div></div>
+              <div style="flex:1;min-width:130px;background:{{ sectionGray }};padding:14px 16px"><div style="font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:{{ inkFaint }}">Шаг 3</div><div style="margin-top:6px;font-size:13.5px;font-weight:700;color:{{ ink }}">Снимки</div></div>
+              <div style="flex:1;min-width:130px;background:{{ tint }};padding:14px 16px"><div style="font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:{{ tintFg }}">В среду</div><div style="margin-top:6px;font-size:13.5px;font-weight:800;color:{{ tintFg }}">Решение</div></div>
+            </div>
+            <div style="margin-top:18px;display:flex;align-items:center;gap:18px;flex-wrap:wrap">
+              <a href="#" style="font-size:13.5px;font-weight:700;color:{{ ink }};background:{{ surface }};border:2px solid {{ border }};padding:12px 22px;text-decoration:none;white-space:nowrap;box-shadow:{{ btnShadowSm }}" style-hover="transform:translate(1px,1px)">Открыть разбор →</a>
+              <span style="font-size:12px;font-weight:700;color:{{ inkFaint }}">Новый случай — каждую среду</span>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══ Топ врачей платформы ═══ -->
+    <section data-screen-label="d-home · лидерборд" style="padding:0 clamp(16px,4vw,48px);margin-top:clamp(52px,8vw,92px);margin-bottom:clamp(56px,9vw,104px)">
+      <div style="max-width:1104px;margin:0 auto">
+        <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:18px;flex-wrap:wrap;margin-bottom:clamp(18px,3.5vw,30px)">
+          <div>
+            <div style="font-size:11.5px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ accent }};margin-bottom:10px">Сообщество</div>
+            <h2 style="margin:0;font-size:clamp(24px,3.6vw,36px);line-height:1.05;font-weight:800;letter-spacing:-.03em;color:{{ ink }}">Топ врачей платформы</h2>
+          </div>
+          <a href="#" style="font-size:14px;font-weight:800;color:{{ accent }};text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:5px;white-space:nowrap">Весь лидерборд →</a>
+        </div>
+        <div style="border:{{ cardBorder }};background:{{ surface }};box-shadow:{{ cardShadow }}">
+          <sc-for list="{{ leaders }}" as="p" hint-placeholder-count="5">
+            <div style="display:grid;grid-template-columns:44px 44px 1fr auto;gap:16px;align-items:center;padding:16px 22px;border-bottom:1px solid {{ hairline }}">
+              <span style="font-size:20px;font-weight:800;color:{{ inkFaint }};font-variant-numeric:tabular-nums">{{ p.rank }}</span>
+              <span style="width:44px;height:44px;background:{{ tint }};color:{{ tintFg }};display:inline-flex;align-items:center;justify-content:center;font-size:14px;font-weight:800">{{ p.init }}</span>
+              <span style="min-width:0"><span style="display:block;font-size:15px;font-weight:700;color:{{ ink }};letter-spacing:-.01em">{{ p.name }}</span><span style="display:block;font-size:12.5px;font-weight:600;color:{{ inkFaint }};margin-top:2px">{{ p.spec }}</span></span>
+              <span style="font-size:15px;font-weight:800;color:{{ tintFg }};font-variant-numeric:tabular-nums;white-space:nowrap">{{ p.pts }}</span>
+            </div>
+          </sc-for>
+          <sc-if value="{{ loggedIn }}" hint-placeholder-val="{{ false }}">
+            <div style="padding:16px 22px;background:{{ sectionGray }};font-size:13px;line-height:1.6;font-weight:600;color:{{ inkMuted }}">Вашей строки здесь нет: вы не разрешали показывать себя публично. По умолчанию врачи в лидерборд не попадают — это можно изменить в личном кабинете.</div>
+          </sc-if>
+          <div style="padding:14px 22px;font-size:12.5px;font-weight:600;color:{{ inkFaint }};border-top:1px solid {{ hairline }}">В лидерборде участвуют врачи, которые разрешили показывать себя публично.</div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ═══ Оболочка · футер витрины врача ═══ -->
+  <footer data-screen-label="d-home · футер" style="border-top:2px solid {{ ink }};padding:clamp(32px,5vw,48px) clamp(16px,4vw,48px) clamp(36px,5vw,56px)">
+    <div style="max-width:1104px;margin:0 auto;display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:clamp(24px,4vw,40px)">
+      <div>
+        <img src="{{ logoSrc }}" alt="Doctor.School" style="height:22px;display:block">
+        <div style="margin-top:14px;font-size:12.5px;font-weight:600;line-height:1.6;color:{{ inkFaint }}">Бесплатное образование для врачей.<br>© Doctor.School, 2026</div>
+      </div>
+      <div>
+        <div style="font-size:11.5px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:{{ inkFaint }};margin-bottom:14px">Документы и контакты</div>
+        <div style="display:flex;flex-direction:column;gap:9px">
+          <a href="#" style="font-size:13.5px;font-weight:600;color:{{ ink }};text-decoration:none" style-hover="color:{{ accent }};text-decoration:underline;text-underline-offset:3px">Пользовательское соглашение</a>
+          <a href="#" style="font-size:13.5px;font-weight:600;color:{{ ink }};text-decoration:none" style-hover="color:{{ accent }};text-decoration:underline;text-underline-offset:3px">Политика обработки персональных данных</a>
+          <a href="#" style="font-size:13.5px;font-weight:600;color:{{ ink }};text-decoration:none" style-hover="color:{{ accent }};text-decoration:underline;text-underline-offset:3px">Контакты</a>
+        </div>
+      </div>
+      <div>
+        <div style="font-size:11.5px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:{{ inkFaint }};margin-bottom:14px">Экспертам и партнёрам</div>
+        <a href="Главная.dc.html" style="font-size:13.5px;font-weight:800;color:{{ accent }};text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px">Academy.Doctor.School ↗</a>
+        <div style="margin-top:10px;font-size:12.5px;font-weight:600;line-height:1.6;color:{{ inkFaint }}">Закулисье платформы: проекты, эксперты, партнёры.</div>
+      </div>
+    </div>
+    <div aria-hidden="true" style="overflow:hidden;margin:clamp(28px,4vw,48px) calc(-1*clamp(16px,4vw,48px)) calc(-1*clamp(36px,5vw,56px))">
+      <div style="font-size:clamp(58px,12.6vw,236px);font-weight:800;letter-spacing:-.05em;line-height:.78;white-space:nowrap;text-align:center;color:{{ giantInk }};transform:translateY(.16em);user-select:none">Doctor.School</div>
+    </div>
+  </footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;loggedIn&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Состояние&quot;},&quot;specialtyChosen&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Состояние&quot;},&quot;dataState&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;обычно&quot;,&quot;загрузка&quot;,&quot;пусто&quot;,&quot;ошибка&quot;],&quot;default&quot;:&quot;обычно&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Состояние&quot;},&quot;catalogVariant&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;А — плитки&quot;,&quot;Б — поиск&quot;,&quot;В — алфавит&quot;],&quot;default&quot;:&quot;А — плитки&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Развилки&quot;}}">
+class Component extends DCLogic {
+  state = {
+    dark: (() => { try { return localStorage.getItem('ds-theme') === 'dark'; } catch (e) { return false; } })(),
+    isMobile: false, q: '', catQ: '', expanded: false, changing: false
+  };
+  componentDidMount() {
+    this.mq = window.matchMedia('(max-width: 900px)');
+    this.upd = () => this.setState({ isMobile: this.mq.matches });
+    this.upd();
+    this.mq.addEventListener ? this.mq.addEventListener('change', this.upd) : this.mq.addListener(this.upd);
+  }
+  componentWillUnmount() {
+    if (this.mq) this.mq.removeEventListener ? this.mq.removeEventListener('change', this.upd) : this.mq.removeListener(this.upd);
+  }
+  renderVals() {
+    const p = this.props;
+    const d = this.state.dark;
+    const m = this.state.isMobile;
+    const loggedIn = !!(p.loggedIn ?? false);
+    const chosenProp = !!(p.specialtyChosen ?? false);
+    const chosen = chosenProp && !this.state.changing;
+    const vKey = (p.catalogVariant || 'А')[0];
+    const stKey = p.dataState || 'обычно';
+    const stLoading = stKey === 'загрузка';
+    const stError = stKey === 'ошибка';
+    const stEmptyCal = stKey === 'пусто';
+    const stReady = !stLoading;
+
+    const ink = d ? '#fff' : 'oklch(.21 .02 250)';
+    const inkMuted = d ? 'rgba(255,255,255,.62)' : 'oklch(.45 .014 250)';
+    const inkFaint = d ? 'rgba(255,255,255,.5)' : 'oklch(.556 .012 250)';
+    const surface = d ? 'oklch(.21 .02 250)' : '#fff';
+    const pageBg = d ? 'oklch(.16 .02 250)' : '#fff';
+    const border = d ? '#fff' : 'oklch(.21 .02 250)';
+    const hairline = d ? 'rgba(255,255,255,.16)' : 'oklch(.922 .006 250)';
+    const sectionGray = d ? 'oklch(.185 .02 250)' : 'oklch(.955 .004 250)';
+    const accent = d ? '#6BB1F7' : '#2D84F2';
+    const btnBg = d ? '#6BB1F7' : '#114D9E';
+    const btnFg = d ? '#0D3A77' : '#fff';
+    const tint = d ? '#0D3A77' : '#D3E8FD';
+    const tintFg = d ? '#AED4FB' : '#114D9E';
+    const chipBorder = d ? 'rgba(107,177,247,.45)' : '#AED4FB';
+    const shadow = d ? '#6BB1F7' : '#114D9E';
+    const shadowSm = d ? '#1F69C8' : '#AED4FB';
+
+    // Специальности (номенклатура Минздрава; в интерфейсе счёт фиксирован — 105)
+    const popular = ['Терапия','Педиатрия','Хирургия','Кардиология','Неврология','Акушерство и гинекология','Травматология и ортопедия','Онкология','Анестезиология-реаниматология','Офтальмология','Оториноларингология','Эндокринология'];
+    const rest = ['Аллергология и иммунология','Бактериология','Вирусология','Гастроэнтерология','Гематология','Генетика','Гериатрия','Дерматовенерология','Детская кардиология','Детская онкология','Детская урология-андрология','Детская хирургия','Детская эндокринология','Диетология','Инфекционные болезни','Клиническая лабораторная диагностика','Клиническая фармакология','Колопроктология','Косметология','Лечебная физкультура и спортивная медицина','Мануальная терапия','Нейрохирургия','Неонатология','Нефрология','Общая врачебная практика (семейная медицина)','Организация здравоохранения','Ортодонтия','Патологическая анатомия','Пластическая хирургия','Профпатология','Психиатрия','Психиатрия-наркология','Психотерапия','Пульмонология','Радиология','Радиотерапия','Ревматология','Рентгенология','Рентгенэндоваскулярные диагностика и лечение','Рефлексотерапия','Сердечно-сосудистая хирургия','Сексология','Скорая медицинская помощь','Стоматология детская','Стоматология общей практики','Стоматология ортопедическая','Стоматология терапевтическая','Стоматология хирургическая','Судебно-медицинская экспертиза','Сурдология-оториноларингология','Токсикология','Торакальная хирургия','Трансфузиология','Ультразвуковая диагностика','Урология','Физиотерапия','Физическая и реабилитационная медицина','Фтизиатрия','Функциональная диагностика','Челюстно-лицевая хирургия','Эндоскопия','Эпидемиология'];
+    const all = popular.concat(rest).sort((a, b) => a.localeCompare(b, 'ru'));
+    const catQ = this.state.catQ.trim().toLowerCase();
+    const filtered = catQ ? all.filter(n => n.toLowerCase().includes(catQ)) : null;
+    let catTiles, showExpand = false;
+    if (filtered) { catTiles = filtered.concat(['Другое']); }
+    else if (this.state.expanded || vKey === 'В') { catTiles = all.concat(['Другое']); }
+    else { catTiles = (vKey === 'Б' ? popular.slice(0, 10) : popular).concat(['Другое']); showExpand = true; }
+    const noCatResults = !!filtered && filtered.length === 0;
+
+    // Группы по букве (вариант В)
+    const src = (filtered || all).concat(['Другое']);
+    const groupMap = {};
+    src.forEach(n => { const ch = n === 'Другое' ? '…' : n[0].toUpperCase(); (groupMap[ch] = groupMap[ch] || []).push(n); });
+    const catGroups = Object.keys(groupMap).sort((a, b) => a === '…' ? 1 : b === '…' ? -1 : a.localeCompare(b, 'ru')).map(ch => ({ ch, id: 'lt-' + ch, items: groupMap[ch] }));
+    const letters = catGroups.filter(g => g.ch !== '…').map(g => ({ ch: g.ch, href: '#lt-' + g.ch }));
+
+    // События
+    const generalCards = [
+      { variant: 'live', num: 'Эфир № 088', time: '19:00', timeSub: '24 августа · пн', school: 'Школа кардиологии', title: 'Хроническая сердечная недостаточность: разбор амбулаторных случаев', chips: ['Онлайн', 'НМО · 2 ЗЕТ', '40 Pul'], speakers: [{ name: 'Пётр Малахов', org: 'НМИЦ кардиологии им. Чазова' }] },
+      { variant: 'scheduled', num: 'Эфир № 089', time: '18:00', timeSub: '26 августа · ср', school: 'Школа педиатрии', title: 'Лихорадка без очага у детей до трёх лет: тактика первых суток', chips: ['Онлайн', 'НМО · 1 ЗЕТ', 'Бесплатно'], speakers: [{ name: 'Ольга Ким', org: 'ДГКБ им. Башляевой' }] },
+      { variant: 'scheduled', num: 'Конференция', time: '10:00', timeSub: '29 августа · сб', school: 'Направление терапии', title: 'Полиморбидный пациент на приёме: приоритеты назначений', chips: ['Гибрид · Москва', 'НМО · 4 ЗЕТ', '120 Pul'], speakers: [{ name: 'Анна Соколова', org: 'НМИЦ им. Пирогова' }] }
+    ];
+    const targetedCards = [
+      { variant: 'scheduled', num: 'Эфир № 090', time: '19:00', timeSub: '26 августа · ср', school: 'Школа травматологии и ортопедии', title: 'Пластика ахиллова сухожилия: разбор клинических случаев', chips: ['Онлайн', 'НМО · 2 ЗЕТ', '40 Pul'], speakers: [{ name: 'Анна Соколова', org: 'НМИЦ им. Пирогова' }] },
+      { variant: 'scheduled', num: 'Семинар', time: '11:00', timeSub: '29 августа · сб', school: 'Школа ортобиологии', title: 'PRP-терапия при тендинопатиях: показания и протоколы', chips: ['Офлайн · Москва', 'НМО · 3 ЗЕТ', '80 Pul'], speakers: [{ name: 'Дмитрий Ершов', org: 'ЦИТО им. Приорова' }] },
+      { variant: 'scheduled', num: 'Эфир № 091', time: '18:00', timeSub: '31 августа · пн', school: 'Смежное · Ревматология', title: 'Боль в суставе без травмы: когда направлять к ревматологу', chips: ['Онлайн', 'НМО · 1 ЗЕТ', 'Бесплатно'], speakers: [{ name: 'Мария Введенская', org: 'Клиника «Рассвет»' }] }
+    ];
+    const feedCards = chosen ? targetedCards : generalCards;
+    const evHas = !stEmptyCal && !stError;
+    const evEmpty = stEmptyCal;
+
+    // Лидерборд
+    const leaders = [
+      { rank: '1', init: 'АС', name: 'Анна Соколова', spec: 'Травматология и ортопедия', pts: '4 120 Con' },
+      { rank: '2', init: 'ПМ', name: 'Пётр Малахов', spec: 'Кардиология', pts: '3 870 Con' },
+      { rank: '3', init: 'ОК', name: 'Ольга Ким', spec: 'Педиатрия', pts: '3 540 Con' },
+      { rank: '4', init: 'ДЕ', name: 'Дмитрий Ершов', spec: 'Травматология и ортопедия', pts: '2 980 Con' },
+      { rank: '5', init: 'МВ', name: 'Мария Введенская', spec: 'Ревматология', pts: '2 760 Con' }
+    ];
+
+    return {
+      dark: d, isMobile: m, isDesktop: !m, loggedIn, guest: !loggedIn,
+      pageBg, surface, ink, inkMuted, inkFaint, border, hairline, sectionGray,
+      accent, btnBg, btnFg, tint, tintFg, chipBorder, shadow,
+      danger: '#C81E1E', dangerTint: d ? '#3a1414' : '#fdecec',
+      green: d ? '#4ADE80' : '#009959',
+      dashedBorder: d ? 'rgba(255,255,255,.35)' : 'oklch(.75 .01 250)',
+      logoSrc: d ? 'assets/ds-logo-white.svg' : 'assets/ds-logo-color.svg',
+      giantInk: d ? 'rgba(174,212,251,.09)' : 'oklch(.945 .018 250)',
+      toggleTheme: () => this.setState(s => { const dark = !s.dark; try { localStorage.setItem('ds-theme', dark ? 'dark' : 'light'); } catch (e) {} return { dark }; }),
+      themeIcon: d ? '☀' : '☾',
+      q: this.state.q, setQ: e => this.setState({ q: e.target.value }),
+      // каталог
+      chosen, catalogOpen: !chosen,
+      changeSpec: () => this.setState({ changing: true }),
+      vA: vKey === 'А', vB: vKey === 'Б', vC: vKey === 'В',
+      catQ: this.state.catQ, setCatQ: e => this.setState({ catQ: e.target.value, expanded: false }),
+      catTiles, showExpand: showExpand && !noCatResults, noCatResults,
+      expand: () => this.setState({ expanded: true }),
+      catGroups, letters,
+      colsStyle: 'columns:' + (m ? 2 : 4) + ';column-gap:' + (m ? 24 : 36) + 'px',
+      skeletonTiles: [1,2,3,4,5,6,7,8,9,10,11,12], skeletonCards: [1,2,3],
+      tileShadow: m ? 'none' : '3px 3px 0 ' + shadowSm,
+      btnShadow: m ? 'none' : '3px 3px 0 ' + border,
+      btnShadowSm: m ? 'none' : '3px 3px 0 ' + shadowSm,
+      // состояния данных
+      stLoading, stError, stReady, evHas, evEmpty,
+      evKicker: chosen ? 'По вашей специальности и смежным областям' : 'События',
+      feedCards,
+      evGap: m ? '18px' : '28px',
+      // блоки контента и лидерборд
+      schoolCols: m ? '1fr' : 'minmax(0,1fr) 300px',
+      schoolDivider: m ? '0' : '2px solid ' + border,
+      lessonCols: m ? '1fr' : '220px minmax(0,1fr)',
+      lessonDivider: m ? '0' : '2px solid ' + border,
+      caseGap: m ? '8px' : '12px',
+      cardBorder: m ? '2px solid ' + hairline : '2px solid ' + border,
+      cardShadow: m ? 'none' : '5px 5px 0 ' + shadow,
+      cardShadowSm: m ? 'none' : '4px 4px 0 ' + shadowSm,
+      leaders
+    };
+  }
+}
+</script>
+</body>
+</html>

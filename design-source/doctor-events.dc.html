@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"><style>body{margin:0;background:#fff;font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}a{color:#2D84F2}a:hover{color:#114D9E}:focus-visible{outline:3px solid #6BB1F7;outline-offset:2px}@keyframes livePulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.45;transform:scale(.72)}}html{scroll-behavior:smooth}</style></helmet>
+
+<div style="min-height:100vh;background:{{ pageBg }}">
+
+  <!-- ═══ Оболочка · шапка витрины врача (с d-home) ═══ -->
+  <header data-screen-label="d-events · шапка" style="background:#114D9E;padding:14px clamp(16px,4vw,48px);display:flex;align-items:center;gap:clamp(14px,2.5vw,28px)">
+    <a href="Витрина врача - Главная.dc.html" style="display:flex;flex:none"><img src="assets/ds-logo-white.svg" alt="Doctor.School" style="height:26px;display:block"></a>
+    <sc-if value="{{ isDesktop }}" hint-placeholder-val="{{ true }}">
+      <input value="{{ q }}" onInput="{{ setQ }}" placeholder="Поиск по урокам, школам и событиям" style="flex:1;max-width:440px;font:inherit;font-size:13.5px;font-weight:600;padding:12px 14px;border:2px solid rgba(255,255,255,.45);background:transparent;color:#fff;outline:none;min-width:120px" style-focus="border-color:#fff;background:rgba(255,255,255,.08)">
+      <nav style="display:flex;align-items:center;gap:14px;margin-left:auto">
+        <button onClick="{{ toggleTheme }}" title="Тема" style="font:inherit;width:44px;height:44px;background:transparent;color:#fff;border:2px solid rgba(255,255,255,.5);cursor:pointer;font-size:15px;flex:none" style-hover="border-color:#fff">{{ themeIcon }}</button>
+        <sc-if value="{{ guest }}" hint-placeholder-val="{{ true }}">
+          <a href="Авторизация.dc.html" style="font-size:13.5px;font-weight:700;color:#D3E8FD;text-decoration:none;padding:12px 6px;white-space:nowrap" style-hover="color:#fff">Войти</a>
+          <a href="Авторизация.dc.html" style="font-size:13.5px;font-weight:800;color:#114D9E;background:#fff;padding:12px 22px;text-decoration:none;white-space:nowrap;box-shadow:3px 3px 0 #0D3A77" style-hover="transform:translate(1px,1px);box-shadow:2px 2px 0 #0D3A77">Регистрация</a>
+        </sc-if>
+        <sc-if value="{{ loggedIn }}" hint-placeholder-val="{{ false }}">
+          <a href="#" title="Очки внимания: Пульс · Дыхание · Сознание. Открыть историю начислений" style="display:inline-flex;align-items:center;gap:9px;border:2px solid rgba(255,255,255,.45);padding:10px 14px;font-size:12px;font-weight:800;color:#fff;text-decoration:none;white-space:nowrap;font-variant-numeric:tabular-nums" style-hover="border-color:#fff"><span>120 Pul</span><span style="opacity:.45">·</span><span>340 Bre</span><span style="opacity:.45">·</span><span>1 250 Con</span></a>
+          <a href="#" style="font-size:13.5px;font-weight:800;color:#114D9E;background:#fff;padding:12px 22px;text-decoration:none;white-space:nowrap;box-shadow:3px 3px 0 #0D3A77" style-hover="transform:translate(1px,1px);box-shadow:2px 2px 0 #0D3A77">Личный кабинет</a>
+        </sc-if>
+      </nav>
+    </sc-if>
+    <sc-if value="{{ isMobile }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;align-items:center;gap:10px;margin-left:auto">
+        <button onClick="{{ toggleTheme }}" title="Тема" style="font:inherit;width:44px;height:44px;background:transparent;color:#fff;border:2px solid rgba(255,255,255,.5);cursor:pointer;font-size:16px">{{ themeIcon }}</button>
+        <details style="position:relative">
+          <summary style="list-style:none;width:44px;height:44px;display:inline-flex;align-items:center;justify-content:center;background:#fff;color:#114D9E;cursor:pointer;font-size:20px;font-weight:800;box-shadow:3px 3px 0 #0D3A77">≡</summary>
+          <nav style="position:absolute;top:calc(100% + 10px);right:0;background:{{ surface }};border:2px solid {{ border }};box-shadow:5px 5px 0 {{ shadow }};padding:8px;display:flex;flex-direction:column;min-width:220px;z-index:30">
+            <sc-if value="{{ loggedIn }}" hint-placeholder-val="{{ false }}">
+              <a href="#" style="padding:12px 16px;font-size:12.5px;font-weight:800;color:{{ ink }};text-decoration:none;font-variant-numeric:tabular-nums">120 Pul · 340 Bre · 1 250 Con</a>
+              <a href="#" style="margin-top:4px;padding:12px 16px;font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};text-decoration:none;text-align:center">Личный кабинет</a>
+            </sc-if>
+            <sc-if value="{{ guest }}" hint-placeholder-val="{{ true }}">
+              <a href="Авторизация.dc.html" style="padding:12px 16px;font-size:15px;font-weight:700;color:{{ ink }};text-decoration:none">Войти</a>
+              <a href="Авторизация.dc.html" style="margin-top:4px;padding:12px 16px;font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};text-decoration:none;text-align:center">Регистрация</a>
+            </sc-if>
+          </nav>
+        </details>
+      </div>
+    </sc-if>
+  </header>
+  <sc-if value="{{ isMobile }}" hint-placeholder-val="{{ false }}">
+    <div style="background:#114D9E;padding:0 16px 14px">
+      <input value="{{ q }}" onInput="{{ setQ }}" placeholder="Поиск по урокам, школам и событиям" style="width:100%;box-sizing:border-box;font:inherit;font-size:14px;font-weight:600;padding:13px 14px;border:2px solid rgba(255,255,255,.45);background:transparent;color:#fff;outline:none" style-focus="border-color:#fff">
+    </div>
+  </sc-if>
+
+  <!-- ═══ «Идёт сейчас» · вариант Б — закреплённая строка ═══ -->
+  <sc-if value="{{ stickyLiveOn }}" hint-placeholder-val="{{ false }}">
+    <a href="{{ liveHref }}" data-screen-label="d-events · идёт сейчас · вариант Б" style="position:sticky;top:0;z-index:40;display:flex;align-items:center;gap:14px;background:#C81E1E;color:#fff;text-decoration:none;padding:12px clamp(16px,4vw,48px);border-bottom:2px solid {{ border }}" style-hover="background:#A81616">
+      <span style="display:inline-flex;align-items:center;gap:8px;font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;flex:none"><span style="width:8px;height:8px;border-radius:50%;background:#fff;animation:livePulse 1.6s ease-in-out infinite"></span>В эфире</span>
+      <span style="font-size:13.5px;font-weight:700;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Эфир «Вопросы по PRP» · 412 в комнате</span>
+      <span style="margin-left:auto;font-size:13px;font-weight:800;white-space:nowrap;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px">{{ liveCtaLabel }} →</span>
+    </a>
+  </sc-if>
+
+  <!-- ═══ Постер-шапка ═══ -->
+  <div data-screen-label="d-events · постер-шапка" style="background:#114D9E;padding:clamp(30px,4.5vw,50px) clamp(16px,4vw,48px) clamp(32px,4.5vw,54px);position:relative">
+    <div style="max-width:{{ mainMax }};margin:0 auto">
+      <nav style="font-size:12.5px;font-weight:700;color:#AED4FB;margin-bottom:18px"><a href="Витрина врача - Главная.dc.html" style="color:#AED4FB;text-decoration:none" style-hover="color:#fff;text-decoration:underline;text-underline-offset:3px">Doctor.School</a><span style="opacity:.5"> / </span><a href="Витрина врача - Лента специальности.dc.html" style="color:#AED4FB;text-decoration:none" style-hover="color:#fff;text-decoration:underline;text-underline-offset:3px">Травматология и ортопедия</a><span style="opacity:.5"> / </span><span style="color:#D3E8FD">События</span></nav>
+      <div style="font-size:12px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:#D3E8FD;margin-bottom:14px">Календарь и анонсы · время — МСК</div>
+      <h1 style="margin:0;font-size:clamp(30px,4.6vw,50px);line-height:1.04;font-weight:800;letter-spacing:-.035em;color:#fff">События</h1>
+      <div style="margin-top:14px;font-size:13.5px;font-weight:600;color:#D3E8FD;max-width:640px;line-height:1.6">Вебинары, разборы случаев, офлайн-встречи коллег и конгрессы по вашей специальности</div>
+    </div>
+    <span style="position:absolute;top:22px;right:clamp(16px,4vw,48px);font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#114D9E;background:#fff;padding:7px 13px;transform:rotate(3deg);box-shadow:3px 3px 0 #0D3A77">{{ posterBadge }}</span>
+  </div>
+
+  <!-- ═══ Стенд · карточка события — состояния ═══ -->
+  <sc-if value="{{ boardOn }}" hint-placeholder-val="{{ false }}">
+    <section data-screen-label="d-events · стенд карточки события" style="padding:clamp(36px,6vw,64px) clamp(16px,4vw,48px)">
+      <div style="max-width:820px;margin:0 auto">
+        <div style="display:flex;align-items:baseline;gap:16px;margin-bottom:10px">
+          <h2 style="margin:0;font-size:clamp(22px,3vw,30px);font-weight:800;letter-spacing:-.03em;color:{{ ink }}">Карточка события — состояния</h2>
+          <span style="flex:1;border-top:2px solid {{ ink }};transform:translateY(-6px)"></span>
+        </div>
+        <p style="margin:0 0 30px;font-size:13.5px;line-height:1.6;color:{{ inkMuted }};max-width:720px">Юнит `webinar-card` без изменений. Наведение и фокус — интерактивны: наведите курсор или пройдитесь Tab.</p>
+        <div style="display:flex;flex-direction:column;gap:26px">
+          <sc-for list="{{ boardItems }}" as="b" hint-placeholder-count="5">
+            <div>
+              <div style="font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:{{ inkFaint }};margin-bottom:8px">{{ b.label }}</div>
+              <dc-import name="ВебинарКарточка" dark="{{ dark }}" variant="{{ b.variant }}" num="{{ b.num }}" time="{{ b.time }}" time-sub="{{ b.timeSub }}" school="{{ b.school }}" title="{{ b.title }}" chips="{{ b.chips }}" speakers="{{ b.speakers }}" cta="{{ b.cta }}" show-secondary="{{ noVal }}" hint-size="100%,220px"></dc-import>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </section>
+  </sc-if>
+
+  <sc-if value="{{ boardOff }}" hint-placeholder-val="{{ true }}">
+  <main style="padding:clamp(24px,4vw,40px) clamp(16px,4vw,48px) clamp(56px,9vw,104px)">
+    <div style="max-width:{{ mainMax }};margin:0 auto">
+    <div style="{{ mainGrid }}">
+
+      <!-- ═══ Панель фасетов · юнит, задаётся здесь (D-1) ═══ -->
+      <aside data-screen-label="d-events · панель фасетов" style="{{ asideStyle }}">
+        <div style="font-size:10.5px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ inkFaint }};margin-bottom:12px">Панель фасетов · {{ waveNote }}</div>
+        <div style="{{ segRowStyle }}">
+          <sc-if value="{{ viewSegOn }}" hint-placeholder-val="{{ true }}">
+            <div style="display:inline-grid;grid-template-columns:auto auto;border:2px solid {{ border }};background:{{ surface }};box-shadow:{{ shadow3 }}">
+              <button onClick="{{ setWeek }}" style="{{ segWeekStyle }}">Неделя</button>
+              <button onClick="{{ setMonth }}" style="{{ segMonthStyle }}">Месяц</button>
+            </div>
+          </sc-if>
+          <div style="display:inline-grid;grid-template-columns:auto auto;border:2px solid {{ border }};background:{{ surface }};box-shadow:{{ shadow3 }}">
+            <button onClick="{{ setFuture }}" style="{{ segFutStyle }}">Будущие</button>
+            <button onClick="{{ setPast }}" style="{{ segPastStyle }}">Прошедшие</button>
+          </div>
+          <sc-if value="{{ filterBtnOn }}" hint-placeholder-val="{{ false }}">
+            <button onClick="{{ toggleFilters }}" style="{{ filterBtnStyle }}">Фильтры{{ appliedSuffix }} <span style="font-size:10px">{{ filterCaret }}</span></button>
+          </sc-if>
+        </div>
+        <sc-if value="{{ facetsVisible }}" hint-placeholder-val="{{ true }}">
+          <div style="{{ facetWrap }}">
+            <sc-for list="{{ facets }}" as="f" hint-placeholder-count="4">
+              <div style="{{ f.wrapStyle }}">
+                <button onClick="{{ f.onClick }}" style="{{ f.btnStyle }}">
+                  <span style="min-width:0"><span style="display:block;font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ accent }};margin-bottom:3px">{{ f.label }}</span><span style="{{ f.valueStyle }}">{{ f.value }}</span></span>
+                  <span style="font-size:10px;color:{{ ink }};flex:none">{{ f.caret }}</span>
+                </button>
+              </div>
+            </sc-for>
+            <sc-if value="{{ searchOn }}" hint-placeholder-val="{{ true }}">
+              <input value="{{ fq }}" onInput="{{ setFq }}" placeholder="Поиск по названию" style="{{ fqStyle }}">
+            </sc-if>
+          </div>
+          <sc-if value="{{ facetPanelOpen }}" hint-placeholder-val="{{ false }}">
+            <div style="{{ optPanelStyle }}">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px">
+                <span style="font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ tintFg }}">{{ optTitle }}</span>
+                <button onClick="{{ closeFacet }}" style="font:inherit;font-size:17px;line-height:1;color:{{ tintFg }};background:transparent;border:0;cursor:pointer;padding:4px">✕</button>
+              </div>
+              <div style="{{ optGrid }}">
+                <sc-for list="{{ optList }}" as="o" hint-placeholder-count="4">
+                  <button onClick="{{ o.onClick }}" style="{{ o.style }}"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ o.name }}</span><span style="{{ o.metaStyle }}">{{ o.meta }}</span></button>
+                </sc-for>
+              </div>
+              <sc-if value="{{ optHint }}" hint-placeholder-val="{{ false }}">
+                <div style="margin-top:10px;font-size:12px;font-weight:600;color:{{ tintFg }};opacity:.8">{{ optHint }}</div>
+              </sc-if>
+            </div>
+          </sc-if>
+          <sc-if value="{{ hasBadges }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:14px">
+              <span style="font-size:12.5px;font-weight:700;color:{{ inkMuted }}">Фильтры:</span>
+              <sc-for list="{{ badges }}" as="bd" hint-placeholder-count="1">
+                <button onClick="{{ bd.onClear }}" style="font:inherit;display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:0;padding:7px 14px;cursor:pointer">{{ bd.text }} <span style="font-size:14px">✕</span></button>
+              </sc-for>
+              <button onClick="{{ resetAll }}" style="font:inherit;font-size:12.5px;font-weight:700;color:{{ accent }};background:transparent;border:0;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px;cursor:pointer">Сбросить фильтры</button>
+            </div>
+          </sc-if>
+        </sc-if>
+      </aside>
+
+      <div style="min-width:0">
+
+        <!-- ═══ «Идёт сейчас» · вариант А — блок над лентой ═══ -->
+        <sc-if value="{{ liveBlockOn }}" hint-placeholder-val="{{ true }}">
+          <section data-screen-label="d-events · идёт сейчас" style="{{ liveWrapStyle }}">
+            <span style="display:inline-flex;align-items:center;gap:8px;font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#fff;background:#C81E1E;padding:8px 14px;flex:none"><span style="width:8px;height:8px;border-radius:50%;background:#fff;animation:livePulse 1.6s ease-in-out infinite"></span>Идёт сейчас</span>
+            <div style="flex:1;min-width:220px">
+              <a href="Вебинар.dc.html" style="display:block;font-size:clamp(17px,2.4vw,21px);font-weight:800;letter-spacing:-.02em;color:{{ ink }};text-decoration:none;line-height:1.25" style-hover="color:{{ accent }}">Эфир «Вопросы по PRP»</a>
+              <div style="margin-top:5px;font-size:12.5px;font-weight:700;color:{{ inkMuted }};font-variant-numeric:tabular-nums">412 в комнате · Школа ортобиологии · до 20:30 МСК</div>
+            </div>
+            <a href="{{ liveHref }}" style="font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:2px solid {{ btnBg }};padding:14px 24px;text-decoration:none;white-space:nowrap;box-shadow:{{ btnShadow4 }}" style-hover="transform:translate(1px,1px)">{{ liveCtaLabel }}</a>
+          </section>
+        </sc-if>
+
+        <!-- ═══ Ошибка загрузки ═══ -->
+        <sc-if value="{{ stError }}" hint-placeholder-val="{{ false }}">
+          <div style="border:2px solid {{ danger }};background:{{ dangerTint }};padding:clamp(22px,4vw,32px);display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:clamp(28px,5vw,44px)">
+            <span style="font-size:18px;color:{{ danger }};flex:none">⚠</span>
+            <div style="flex:1;min-width:200px"><div style="font-size:14.5px;font-weight:700;color:{{ ink }}">Не удалось загрузить ленту событий</div><div style="margin-top:4px;font-size:12.5px;font-weight:600;color:{{ inkMuted }}">Сервер не ответил. Календарь и остальные блоки работают.</div></div>
+            <button style="font:inherit;font-size:13.5px;font-weight:700;color:{{ ink }};background:{{ surface }};border:2px solid {{ border }};padding:12px 22px;cursor:pointer" style-hover="background:{{ tint }}">Повторить</button>
+          </div>
+        </sc-if>
+
+        <!-- ═══ Загрузка · скелет ═══ -->
+        <sc-if value="{{ stLoading }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;flex-direction:column;gap:24px">
+            <div style="height:16px;width:180px;background:{{ hairline }};animation:livePulse 1.4s ease-in-out infinite"></div>
+            <sc-for list="{{ skeletonCards }}" as="s" hint-placeholder-count="3">
+              <div style="border:2px solid {{ hairline }};background:{{ surface }};display:flex;gap:20px;padding:26px 28px">
+                <div style="width:140px;height:80px;background:{{ hairline }};animation:livePulse 1.4s ease-in-out infinite;flex:none"></div>
+                <div style="flex:1;display:flex;flex-direction:column;gap:12px;justify-content:center">
+                  <div style="height:12px;width:30%;background:{{ hairline }};animation:livePulse 1.4s ease-in-out infinite"></div>
+                  <div style="height:14px;width:75%;background:{{ hairline }};animation:livePulse 1.4s ease-in-out infinite"></div>
+                  <div style="height:12px;width:50%;background:{{ hairline }};animation:livePulse 1.4s ease-in-out infinite"></div>
+                </div>
+              </div>
+            </sc-for>
+            <div style="border:2px solid {{ hairline }};height:220px;background:{{ surface }};display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:2px;padding:2px;box-sizing:border-box">
+              <sc-for list="{{ skeletonCells }}" as="s" hint-placeholder-count="7"><div style="background:{{ hairline }};opacity:.4;animation:livePulse 1.4s ease-in-out infinite"></div></sc-for>
+            </div>
+          </div>
+        </sc-if>
+
+        <!-- ═══ Пусто по специальности ═══ -->
+        <sc-if value="{{ stEmptySpec }}" hint-placeholder-val="{{ false }}">
+          <div>
+            <div style="border:2px dashed {{ dashedBorder }};padding:clamp(28px,5vw,48px);text-align:center">
+              <div style="font-size:clamp(18px,2.6vw,22px);font-weight:800;letter-spacing:-.02em;color:{{ ink }};margin-bottom:10px">По вашей специальности событий пока нет</div>
+              <div style="font-size:14px;line-height:1.65;color:{{ inkMuted }};max-width:520px;margin:0 auto">Ближайшие 4 события — в смежных областях. Они помечены как смежные, а не выданы за «ваши».</div>
+            </div>
+            <div style="display:flex;align-items:baseline;gap:14px;margin:clamp(28px,5vw,40px) 0 18px"><span style="font-size:15px;font-weight:800;letter-spacing:-.01em;color:{{ ink }};white-space:nowrap">Смежные области · ближайшее</span><span style="flex:1;border-top:2px solid {{ hairline }};transform:translateY(-4px)"></span></div>
+            <div style="display:flex;flex-direction:column;gap:{{ evGap }}">
+              <sc-for list="{{ adjacentCards }}" as="ev" hint-placeholder-count="2">
+                <dc-import name="ВебинарКарточка" dark="{{ dark }}" variant="{{ ev.variant }}" num="{{ ev.num }}" time="{{ ev.time }}" time-sub="{{ ev.timeSub }}" school="{{ ev.school }}" title="{{ ev.title }}" chips="{{ ev.chips }}" speakers="{{ ev.speakers }}" cta="{{ ev.cta }}" show-secondary="{{ noVal }}" href="Вебинар.dc.html" hint-size="100%,220px"></dc-import>
+              </sc-for>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ showContent }}" hint-placeholder-val="{{ true }}">
+
+          <!-- ═══ Мини-месяц · развилка 2, вариант Б — оба вида сразу ═══ -->
+          <sc-if value="{{ miniMonthOn }}" hint-placeholder-val="{{ false }}">
+            <div data-screen-label="d-events · мини-календарь (вариант Б)" style="border:2px solid {{ border }};background:{{ surface }};box-shadow:{{ cardShadow }};margin-bottom:clamp(28px,5vw,44px)">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 16px;border-bottom:2px solid {{ border }}">
+                <span style="font-size:13.5px;font-weight:800;color:{{ ink }}">Август 2026</span>
+                <span style="display:inline-flex;gap:6px"><button style="font:inherit;font-size:14px;font-weight:800;color:{{ ink }};background:transparent;border:2px solid {{ hairline }};padding:4px 12px;cursor:pointer">‹</button><button style="font:inherit;font-size:14px;font-weight:800;color:{{ ink }};background:transparent;border:2px solid {{ hairline }};padding:4px 12px;cursor:pointer">›</button></span>
+              </div>
+              <div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));padding:10px 12px 4px">
+                <sc-for list="{{ dows }}" as="dw" hint-placeholder-count="7"><span style="text-align:center;font-size:9.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:{{ dw.color }};padding:4px 0">{{ dw.name }}</span></sc-for>
+              </div>
+              <div style="padding:0 12px 12px">
+                <sc-for list="{{ miniWeeks }}" as="wk" hint-placeholder-count="6">
+                  <div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr))">
+                    <sc-for list="{{ wk }}" as="c" hint-placeholder-count="7">
+                      <span style="{{ c.miniStyle }}">{{ c.d }}<span style="display:flex;gap:2px;height:5px;align-items:center;justify-content:center;margin-top:1px"><sc-for list="{{ c.dots }}" as="dot" hint-placeholder-count="0"><span style="{{ dot }}"></span></sc-for></span></span>
+                    </sc-for>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </sc-if>
+
+          <!-- ═══ Лента · неделя, группировка по дням ═══ -->
+          <sc-if value="{{ weekOn }}" hint-placeholder-val="{{ true }}">
+            <sc-if value="{{ hasFeed }}" hint-placeholder-val="{{ true }}">
+              <section data-screen-label="d-events · лента по дням" style="display:flex;flex-direction:column;gap:clamp(28px,5vw,40px)">
+                <sc-for list="{{ days }}" as="day" hint-placeholder-count="3">
+                  <div>
+                    <div style="display:flex;align-items:baseline;gap:14px;margin-bottom:16px"><span style="font-size:15px;font-weight:800;letter-spacing:-.01em;color:{{ ink }};white-space:nowrap">{{ day.label }}</span><span style="flex:1;border-top:2px solid {{ hairline }};transform:translateY(-4px)"></span><span style="font-size:12px;font-weight:700;color:{{ inkFaint }};white-space:nowrap">{{ day.note }}</span></div>
+                    <div style="display:flex;flex-direction:column;gap:{{ evGap }}">
+                      <sc-for list="{{ day.cards }}" as="ev" hint-placeholder-count="1">
+                        <dc-import name="ВебинарКарточка" dark="{{ dark }}" variant="{{ ev.variant }}" num="{{ ev.num }}" time="{{ ev.time }}" time-sub="{{ ev.timeSub }}" school="{{ ev.school }}" title="{{ ev.title }}" chips="{{ ev.chips }}" speakers="{{ ev.speakers }}" cta="{{ ev.cta }}" cta-href="{{ ev.ctaHref }}" show-secondary="{{ noVal }}" href="Вебинар.dc.html" hint-size="100%,220px"></dc-import>
+                      </sc-for>
+                    </div>
+                  </div>
+                </sc-for>
+              </section>
+              <sc-if value="{{ guestGateOn }}" hint-placeholder-val="{{ true }}">
+                <div style="margin-top:clamp(24px,4vw,36px);background:{{ tint }};padding:16px 22px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+                  <span style="font-size:13.5px;font-weight:800;color:{{ tintFg }}">Участвовать — нужна регистрация.</span>
+                  <span style="font-size:12.5px;font-weight:600;color:{{ tintFg }};opacity:.85">После регистрации вы вернётесь ровно сюда, к выбранному событию.</span>
+                </div>
+              </sc-if>
+            </sc-if>
+            <sc-if value="{{ emptyFilterOn }}" hint-placeholder-val="{{ false }}">
+              <div style="border:2px dashed {{ dashedBorder }};padding:clamp(28px,5vw,48px);text-align:center">
+                <div style="font-size:clamp(18px,2.6vw,22px);font-weight:800;letter-spacing:-.02em;color:{{ ink }};margin-bottom:10px">По этим условиям событий нет</div>
+                <div style="font-size:14px;line-height:1.65;color:{{ inkMuted }};max-width:520px;margin:0 auto">Попробуйте снять фильтр по городу или посмотреть все специальности.</div>
+                <div style="margin-top:22px;display:flex;gap:14px;justify-content:center;flex-wrap:wrap">
+                  <button onClick="{{ resetAll }}" style="font:inherit;font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:2px solid {{ btnBg }};padding:14px 24px;cursor:pointer;box-shadow:{{ btnShadow }}" style-hover="transform:translate(1px,1px)">Сбросить фильтры</button>
+                  <button onClick="{{ setAllSpecs }}" style="font:inherit;font-size:14px;font-weight:700;color:{{ ink }};background:{{ surface }};border:2px solid {{ border }};padding:12px 22px;cursor:pointer;box-shadow:{{ btnShadowSm }}" style-hover="transform:translate(1px,1px)">Все специальности</button>
+                </div>
+              </div>
+            </sc-if>
+          </sc-if>
+
+          <!-- ═══ Месяц · календарная сетка ═══ -->
+          <sc-if value="{{ monthOn }}" hint-placeholder-val="{{ false }}">
+            <section data-screen-label="d-events · месяц">
+              <div style="display:flex;align-items:stretch;gap:12px;flex-wrap:wrap;margin-bottom:20px">
+                <span style="display:inline-flex;align-items:center;font-size:16px;font-weight:800;letter-spacing:-.02em;color:{{ ink }};padding-right:6px">Август 2026</span>
+                <button style="font:inherit;font-size:16px;font-weight:800;color:{{ ink }};background:{{ surface }};border:2px solid {{ border }};padding:8px 16px;cursor:pointer;box-shadow:{{ shadow3 }}">‹</button>
+                <button style="font:inherit;font-size:16px;font-weight:800;color:{{ ink }};background:{{ surface }};border:2px solid {{ border }};padding:8px 16px;cursor:pointer;box-shadow:{{ shadow3 }}">›</button>
+                <button style="font:inherit;display:inline-flex;align-items:center;font-size:13.5px;font-weight:700;color:{{ tintFg }};background:{{ surface }};border:2px solid {{ border }};padding:8px 20px;box-shadow:{{ shadow3 }};cursor:pointer">Сегодня</button>
+                <span style="flex:1"></span>
+                <span style="display:inline-flex;align-items:center;font-size:12.5px;font-weight:700;color:{{ inkFaint }}">Сентябрь 2026 →</span>
+              </div>
+              <sc-if value="{{ isDesktop }}" hint-placeholder-val="{{ true }}">
+                <div style="border:2px solid {{ border }};box-shadow:{{ cardShadow }};background:{{ surface }}">
+                  <div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));border-bottom:2px solid {{ border }}">
+                    <sc-for list="{{ dows }}" as="dw" hint-placeholder-count="7"><span style="padding:12px;font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ dw.color }}">{{ dw.name }}</span></sc-for>
+                  </div>
+                  <sc-for list="{{ weeks }}" as="wk" hint-placeholder-count="6">
+                    <div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));border-bottom:1px solid {{ hairline }}">
+                      <sc-for list="{{ wk }}" as="c" hint-placeholder-count="7">
+                        <div style="{{ c.cellStyle }}">
+                          <span style="{{ c.dateStyle }}">{{ c.dateLabel }}</span>
+                          <div style="margin-top:2px">
+                            <sc-for list="{{ c.events }}" as="ev" hint-placeholder-count="0">
+                              <a href="Вебинар.dc.html" style="{{ ev.style }}"><span style="{{ ev.textStyle }}">{{ ev.text }}</span></a>
+                            </sc-for>
+                          </div>
+                        </div>
+                      </sc-for>
+                    </div>
+                  </sc-for>
+                </div>
+                <div style="display:flex;align-items:center;gap:20px;font-size:12px;font-weight:700;color:{{ inkMuted }};flex-wrap:wrap;margin-top:20px">
+                  <span style="display:inline-flex;align-items:center;gap:8px"><span style="width:12px;height:12px;background:#C81E1E"></span>Идёт сейчас</span>
+                  <span style="display:inline-flex;align-items:center;gap:8px"><span style="width:12px;height:12px;background:{{ tint }}"></span>Запланировано</span>
+                  <span style="display:inline-flex;align-items:center;gap:8px"><span style="width:12px;height:12px;background:{{ mutedCellBg }};border:1px solid {{ hairline }}"></span>Прошло</span>
+                  <span style="display:inline-flex;align-items:center;gap:8px"><span style="width:12px;height:12px;border:3px solid {{ btnBg }};box-sizing:border-box"></span>Сегодня</span>
+                </div>
+              </sc-if>
+              <sc-if value="{{ isMobile }}" hint-placeholder-val="{{ false }}">
+                <div style="border:2px solid {{ border }};background:{{ surface }}">
+                  <div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));border-bottom:2px solid {{ border }}">
+                    <sc-for list="{{ dows }}" as="dw" hint-placeholder-count="7"><span style="padding:8px 0;text-align:center;font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:{{ dw.color }}">{{ dw.name }}</span></sc-for>
+                  </div>
+                  <sc-for list="{{ weeks }}" as="wk" hint-placeholder-count="6">
+                    <div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr))">
+                      <sc-for list="{{ wk }}" as="c" hint-placeholder-count="7">
+                        <button onClick="{{ c.onClick }}" style="{{ c.mStyle }}">
+                          <span style="{{ c.mDate }}">{{ c.d }}</span>
+                          <span style="display:flex;gap:3px;height:6px;align-items:center;justify-content:center"><sc-for list="{{ c.dots }}" as="dot" hint-placeholder-count="0"><span style="{{ dot }}"></span></sc-for></span>
+                        </button>
+                      </sc-for>
+                    </div>
+                  </sc-for>
+                </div>
+                <div style="display:flex;align-items:baseline;gap:14px;margin:26px 0 16px">
+                  <span style="font-size:13px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:{{ ink }};white-space:nowrap">{{ agendaTitle }}</span>
+                  <span style="flex:1;border-top:2px solid {{ ink }}"></span>
+                </div>
+                <sc-if value="{{ hasAgenda }}" hint-placeholder-val="{{ true }}">
+                  <div style="display:flex;flex-direction:column;gap:12px">
+                    <sc-for list="{{ agenda }}" as="a" hint-placeholder-count="2">
+                      <a href="Вебинар.dc.html" style="{{ a.rowStyle }}">
+                        <div style="display:flex;flex-direction:column;align-items:center;flex:none;min-width:52px">
+                          <span style="{{ a.badgeStyle }}">{{ a.badge }}</span>
+                          <span style="font-size:16px;font-weight:800;color:{{ a.timeColor }};letter-spacing:-.02em;font-variant-numeric:tabular-nums">{{ a.time }}</span>
+                        </div>
+                        <div style="min-width:0"><div style="font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:{{ accent }};margin-bottom:4px">{{ a.school }}</div><div style="font-size:14.5px;font-weight:700;line-height:1.3;letter-spacing:-.01em;color:{{ ink }}">{{ a.title }}</div></div>
+                      </a>
+                    </sc-for>
+                  </div>
+                </sc-if>
+                <sc-if value="{{ noAgenda }}" hint-placeholder-val="{{ false }}">
+                  <div style="border:2px dashed {{ dashedBorder }};padding:24px;text-align:center;font-size:14px;font-weight:600;color:{{ inkMuted }}">В этот день событий нет</div>
+                </sc-if>
+              </sc-if>
+            </section>
+          </sc-if>
+
+          <!-- ═══ Прошедшие · срез под лентой будущих ═══ -->
+          <sc-if value="{{ pastTeaserOn }}" hint-placeholder-val="{{ true }}">
+            <section data-screen-label="d-events · прошедшие" style="margin-top:clamp(48px,8vw,80px)">
+              <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:18px;flex-wrap:wrap;margin-bottom:clamp(18px,3.5vw,26px)">
+                <div>
+                  <div style="font-size:11.5px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ accent }};margin-bottom:10px">Записи и материалы</div>
+                  <h2 style="margin:0;font-size:clamp(22px,3.2vw,32px);line-height:1.05;font-weight:800;letter-spacing:-.03em;color:{{ ink }}">Прошедшие</h2>
+                </div>
+                <button onClick="{{ setPast }}" style="font:inherit;font-size:14px;font-weight:800;color:{{ accent }};background:transparent;border:0;cursor:pointer;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:5px;white-space:nowrap;padding:0">Все прошедшие →</button>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:{{ evGap }}">
+                <sc-for list="{{ pastTeaser }}" as="ev" hint-placeholder-count="2">
+                  <dc-import name="ВебинарКарточка" dark="{{ dark }}" variant="past" num="{{ ev.num }}" time="{{ ev.time }}" time-sub="{{ ev.timeSub }}" school="{{ ev.school }}" title="{{ ev.title }}" chips="{{ ev.chips }}" speakers="{{ ev.speakers }}" href="Вебинар архив.dc.html" cta-href="Вебинар архив.dc.html" hint-size="100%,220px"></dc-import>
+                </sc-for>
+              </div>
+              <div style="margin-top:{{ evGap }};background:{{ sectionGray }};padding:15px 20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+                <span style="font-size:13px;font-weight:700;color:{{ ink }}">Пропустили эфир — обсудите запись с коллегами.</span>
+                <a href="#" style="font-size:13px;font-weight:800;color:{{ accent }};text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px">Сообщество «Орто» →</a>
+              </div>
+            </section>
+          </sc-if>
+
+          <!-- ═══ Мои события · срез (D-2) ═══ -->
+          <sc-if value="{{ myOn }}" hint-placeholder-val="{{ false }}">
+            <section data-screen-label="d-events · мои события" style="margin-top:clamp(48px,8vw,80px)">
+              <div style="display:flex;align-items:baseline;gap:16px;margin-bottom:clamp(18px,3.5vw,26px)">
+                <h2 style="margin:0;font-size:clamp(22px,3.2vw,32px);line-height:1.05;font-weight:800;letter-spacing:-.03em;color:{{ ink }};white-space:nowrap">Мои события</h2>
+                <span style="flex:1;border-top:2px solid {{ ink }};transform:translateY(-6px)"></span>
+              </div>
+              <div style="border:{{ myBorder }};background:{{ surface }};box-shadow:{{ cardShadow }}">
+                <sc-for list="{{ myRows }}" as="r" hint-placeholder-count="2">
+                  <a href="Вебинар.dc.html" style="display:flex;align-items:center;gap:16px;padding:16px 22px;border-bottom:1px solid {{ hairline }};text-decoration:none" style-hover="background:{{ sectionGray }}">
+                    <span style="font-size:13px;font-weight:800;color:{{ okColor }};flex:none">✓</span>
+                    <span style="min-width:0;flex:1"><span style="display:block;font-size:14.5px;font-weight:700;color:{{ ink }};letter-spacing:-.01em">{{ r.title }}</span><span style="display:block;font-size:12.5px;font-weight:600;color:{{ inkFaint }};margin-top:2px">{{ r.meta }}</span></span>
+                    <span style="font-size:12.5px;font-weight:700;color:{{ inkMuted }};white-space:nowrap">{{ r.tag }}</span>
+                  </a>
+                </sc-for>
+                <div style="display:flex;align-items:center;gap:16px;padding:16px 22px;border-bottom:1px solid {{ hairline }}">
+                  <span style="width:52px;height:52px;flex:none;border:2px solid {{ border }};background:repeating-linear-gradient(0deg,{{ ink }} 0 3px,transparent 3px 6px),repeating-linear-gradient(90deg,{{ ink }} 0 3px,{{ surface }} 3px 6px)"></span>
+                  <span style="min-width:0;flex:1"><span style="display:block;font-size:14.5px;font-weight:700;color:{{ ink }};letter-spacing:-.01em">Билет на конгресс «Ортобиология-2026»</span><span style="display:block;font-size:12.5px;font-weight:600;color:{{ inkFaint }};margin-top:2px">DS-7141-K · 14–15 ноября · Москва, ЦМТ</span></span>
+                  <span style="font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:{{ okColor }};border:2px solid {{ okColor }};padding:5px 10px;white-space:nowrap">Действителен</span>
+                </div>
+                <div style="padding:14px 22px">
+                  <a href="#" style="font-size:13.5px;font-weight:800;color:{{ accent }};text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px">Все мои события в личном кабинете →</a>
+                </div>
+              </div>
+            </section>
+          </sc-if>
+
+        </sc-if>
+      </div>
+    </div>
+    </div>
+  </main>
+  </sc-if>
+
+  <!-- ═══ Оболочка · футер витрины врача (с d-home) ═══ -->
+  <footer data-screen-label="d-events · футер" style="border-top:2px solid {{ ink }};padding:clamp(32px,5vw,48px) clamp(16px,4vw,48px) clamp(36px,5vw,56px)">
+    <div style="max-width:1104px;margin:0 auto;display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:clamp(24px,4vw,40px)">
+      <div>
+        <img src="{{ logoSrc }}" alt="Doctor.School" style="height:22px;display:block">
+        <div style="margin-top:14px;font-size:12.5px;font-weight:600;line-height:1.6;color:{{ inkFaint }}">Бесплатное образование для врачей.<br>© Doctor.School, 2026</div>
+      </div>
+      <div>
+        <div style="font-size:11.5px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:{{ inkFaint }};margin-bottom:14px">Документы и контакты</div>
+        <div style="display:flex;flex-direction:column;gap:9px">
+          <a href="#" style="font-size:13.5px;font-weight:600;color:{{ ink }};text-decoration:none" style-hover="color:{{ accent }};text-decoration:underline;text-underline-offset:3px">Пользовательское соглашение</a>
+          <a href="#" style="font-size:13.5px;font-weight:600;color:{{ ink }};text-decoration:none" style-hover="color:{{ accent }};text-decoration:underline;text-underline-offset:3px">Политика обработки персональных данных</a>
+          <a href="#" style="font-size:13.5px;font-weight:600;color:{{ ink }};text-decoration:none" style-hover="color:{{ accent }};text-decoration:underline;text-underline-offset:3px">Контакты</a>
+        </div>
+      </div>
+      <div>
+        <div style="font-size:11.5px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:{{ inkFaint }};margin-bottom:14px">Экспертам и партнёрам</div>
+        <a href="Главная.dc.html" style="font-size:13.5px;font-weight:800;color:{{ accent }};text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px">Academy.Doctor.School ↗</a>
+        <div style="margin-top:10px;font-size:12.5px;font-weight:600;line-height:1.6;color:{{ inkFaint }}">Закулисье платформы: проекты, эксперты, партнёры.</div>
+      </div>
+    </div>
+    <div aria-hidden="true" style="overflow:hidden;margin:clamp(28px,4vw,48px) calc(-1*clamp(16px,4vw,48px)) calc(-1*clamp(36px,5vw,56px))">
+      <div style="font-size:clamp(58px,12.6vw,236px);font-weight:800;letter-spacing:-.05em;line-height:.78;white-space:nowrap;text-align:center;color:{{ giantInk }};transform:translateY(.16em);user-select:none">Doctor.School</div>
+    </div>
+  </footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;loggedIn&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Состояние&quot;},&quot;dataState&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;обычно&quot;,&quot;загрузка&quot;,&quot;пусто по фильтру&quot;,&quot;пусто по специальности&quot;,&quot;ошибка&quot;,&quot;нет живого эфира&quot;],&quot;default&quot;:&quot;обычно&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Состояние&quot;},&quot;filterWave&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;волна 1&quot;,&quot;промежуточное — формат и тип&quot;,&quot;полный набор&quot;],&quot;default&quot;:&quot;полный набор&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Панель фасетов · D-1&quot;},&quot;panelVariant&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;А — строка чипов&quot;,&quot;Б — боковая панель&quot;,&quot;В — кнопка «Фильтры»&quot;],&quot;default&quot;:&quot;А — строка чипов&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Развилки&quot;},&quot;layoutVariant&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;А — переключатель вида&quot;,&quot;Б — оба сразу&quot;],&quot;default&quot;:&quot;А — переключатель вида&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Развилки&quot;},&quot;liveVariant&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;А — блок над лентой&quot;,&quot;Б — закреплённая строка&quot;,&quot;В — карточка в дне&quot;],&quot;default&quot;:&quot;А — блок над лентой&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Развилки&quot;},&quot;cardBoard&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Стенд&quot;}}">
+class Component extends DCLogic {
+  state = {
+    dark: (() => { try { return localStorage.getItem('ds-theme') === 'dark'; } catch (e) { return false; } })(),
+    isMobile: false, q: '',
+    view: 'Неделя', tense: 'Будущие',
+    openFacet: null, filtersOpen: false,
+    fSel: { fmt: 'Все', typ: 'Все', spec: 'Моя и смежные', city: 'Все города' },
+    nmo: false, freePul: false, fq: '', selDay: 23
+  };
+  componentDidMount() {
+    this.mq = window.matchMedia('(max-width: 900px)');
+    this.upd = () => this.setState({ isMobile: this.mq.matches });
+    this.upd();
+    this.mq.addEventListener ? this.mq.addEventListener('change', this.upd) : this.mq.addListener(this.upd);
+  }
+  componentWillUnmount() {
+    if (this.mq) this.mq.removeEventListener ? this.mq.removeEventListener('change', this.upd) : this.mq.removeListener(this.upd);
+  }
+  renderVals() {
+    const p = this.props, s = this.state;
+    const d = s.dark, m = s.isMobile;
+    const loggedIn = !!(p.loggedIn ?? false);
+    const stKey = p.dataState || 'обычно';
+    const stLoading = stKey === 'загрузка';
+    const stEmptySpec = stKey === 'пусто по специальности';
+    const stError = stKey === 'ошибка';
+    const forcedEmpty = stKey === 'пусто по фильтру';
+    const noLive = stKey === 'нет живого эфира';
+    const wave = (p.filterWave || 'полный набор')[0] === 'в' ? 1 : ((p.filterWave || '')[0] === 'п' && (p.filterWave || '').indexOf('ромежут') === 1 ? 2 : 3);
+    const pv = (p.panelVariant || 'А')[0];
+    const lv = (p.layoutVariant || 'А')[0];
+    const liveV = (p.liveVariant || 'А')[0];
+    const boardOn = !!p.cardBoard;
+
+    const ink = d ? '#fff' : 'oklch(.21 .02 250)';
+    const inkMuted = d ? 'rgba(255,255,255,.62)' : 'oklch(.45 .014 250)';
+    const inkFaint = d ? 'rgba(255,255,255,.5)' : 'oklch(.556 .012 250)';
+    const surface = d ? 'oklch(.21 .02 250)' : '#fff';
+    const pageBg = d ? 'oklch(.16 .02 250)' : '#fff';
+    const border = d ? '#fff' : 'oklch(.21 .02 250)';
+    const hairline = d ? 'rgba(255,255,255,.16)' : 'oklch(.922 .006 250)';
+    const sectionGray = d ? 'oklch(.185 .02 250)' : 'oklch(.955 .004 250)';
+    const accent = d ? '#6BB1F7' : '#2D84F2';
+    const btnBg = d ? '#6BB1F7' : '#114D9E';
+    const btnFg = d ? '#0D3A77' : '#fff';
+    const tint = d ? '#0D3A77' : '#D3E8FD';
+    const tintFg = d ? '#AED4FB' : '#114D9E';
+    const shadow = d ? '#6BB1F7' : '#114D9E';
+    const shadowSm = d ? '#1F69C8' : '#AED4FB';
+    const mutedCellBg = d ? 'oklch(.185 .02 250)' : 'oklch(.985 .002 250)';
+    const muteInk = d ? 'rgba(255,255,255,.4)' : 'oklch(.704 .01 250)';
+    const okColor = d ? '#4ADE80' : '#009959';
+
+    // ---- Панель фасетов (юнит, D-1) ----
+    const sel = s.fSel;
+    const facetDefs = [];
+    if (wave >= 2) {
+      facetDefs.push({ key: 'fmt', label: 'Формат', all: 'Все', options: ['Все', 'Онлайн', 'Офлайн', 'Гибрид'] });
+      facetDefs.push({ key: 'typ', label: 'Тип', all: 'Все', options: ['Все', 'Вебинар', 'Конгресс', 'Клуб · встреча', 'Подкаст-эфир', 'Интенсив школы'] });
+    }
+    if (wave >= 3) {
+      facetDefs.push({ key: 'spec', label: 'Специальность', all: 'Моя и смежные', options: ['Моя и смежные', 'Все специальности'] });
+      facetDefs.push({ key: 'city', label: 'Город', all: 'Все города', options: ['Все города', 'Казань', 'Москва', 'Санкт-Петербург', 'Новосибирск'], hint: 'Город действует на офлайн- и гибридные события.' });
+    }
+    const openKey = s.openFacet;
+    const facetBtn = (open) => `font:inherit;display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;height:100%;box-sizing:border-box;padding:13px 16px;text-align:left;cursor:pointer;background:${open ? tint : surface};border:2px solid ${border};box-shadow:${open || m ? 'none' : '3px 3px 0 ' + shadowSm}`;
+    const sidebarMode = pv === 'Б' && !m;
+    const facets = facetDefs.map(f => {
+      const val = sel[f.key], open = openKey === f.key, active = val !== f.all;
+      return {
+        label: f.label, value: val, caret: open ? '▲' : '▼',
+        valueStyle: `display:block;font-size:15px;font-weight:800;color:${active ? accent : ink};overflow:hidden;text-overflow:ellipsis;white-space:nowrap`,
+        btnStyle: facetBtn(open),
+        wrapStyle: sidebarMode || m ? 'flex:1 1 100%;min-width:0' : 'flex:1;min-width:220px',
+        onClick: () => this.setState(st => ({ openFacet: st.openFacet === f.key ? null : f.key }))
+      };
+    });
+    const od = facetDefs.find(f => f.key === openKey);
+    let optList = [], optTitle = '', optHint = '';
+    if (od) {
+      optTitle = od.label;
+      optHint = od.hint || '';
+      optList = od.options.map(name => {
+        const active = sel[od.key] === name;
+        return {
+          name, meta: active ? '✓' : '',
+          metaStyle: `flex:none;font-size:12px;font-weight:800;color:${active ? btnFg : accent}`,
+          style: `font:inherit;display:flex;align-items:center;justify-content:space-between;gap:10px;box-sizing:border-box;min-width:0;padding:10px 12px;font-size:13.5px;text-align:left;cursor:pointer;font-weight:${active ? 800 : 600};color:${active ? btnFg : ink};background:${active ? btnBg : surface};border:2px solid ${active ? btnBg : 'transparent'}`,
+          onClick: () => this.setState(st => ({ openFacet: null, fSel: { ...st.fSel, [od.key]: name } }))
+        };
+      });
+    }
+    if (wave >= 3) [
+      { key: 'nmo', label: 'НМО', on: s.nmo, onLabel: '✓ Только с НМО', offLabel: 'Не важно' },
+      { key: 'freePul', label: 'Цена в Pul', on: s.freePul, onLabel: '✓ Бесплатно', offLabel: 'Любая' }
+    ].forEach(t => facets.push({
+      label: t.label, value: t.on ? t.onLabel : t.offLabel, caret: t.on ? '✕' : '',
+      valueStyle: `display:block;font-size:15px;font-weight:800;color:${t.on ? accent : ink};overflow:hidden;text-overflow:ellipsis;white-space:nowrap`,
+      btnStyle: facetBtn(false),
+      wrapStyle: sidebarMode || m ? 'flex:1 1 100%;min-width:0' : 'flex:1;min-width:200px',
+      onClick: () => this.setState(st => ({ [t.key]: !st[t.key] }))
+    }));
+    const togglesArr = [];
+    const badges = [];
+    facetDefs.forEach(f => { if (sel[f.key] !== f.all) badges.push({ text: f.label.split(' ·')[0] + ': ' + sel[f.key], onClear: () => this.setState(st => ({ fSel: { ...st.fSel, [f.key]: f.all } })) }); });
+    if (s.nmo) badges.push({ text: 'Только с НМО', onClear: () => this.setState({ nmo: false }) });
+    if (s.freePul) badges.push({ text: 'Бесплатно по Pul', onClear: () => this.setState({ freePul: false }) });
+    if (s.fq.trim()) badges.push({ text: 'Поиск: «' + s.fq.trim() + '»', onClear: () => this.setState({ fq: '' }) });
+    const appliedCount = badges.length;
+    const resetAll = () => this.setState({ fSel: { fmt: 'Все', typ: 'Все', spec: 'Моя и смежные', city: 'Все города' }, nmo: false, freePul: false, fq: '', openFacet: null });
+
+    const filterBtnOn = m || pv === 'В';
+    const facetsVisible = facetDefs.length > 0 && (!filterBtnOn || s.filtersOpen);
+    const seg = (active) => `font:inherit;padding:11px 18px;font-size:13px;cursor:pointer;border:0;font-weight:${active ? 800 : 700};color:${active ? btnFg : tintFg};background:${active ? btnBg : surface};${active ? '' : ''}`;
+
+    // ---- Данные событий ----
+    const cta = loggedIn ? 'Участвовать ↗' : 'Участвовать ↗';
+    const E = (o) => ({ cta, ctaHref: loggedIn ? '' : 'Авторизация.dc.html', ...o });
+    const futureAll = [
+      E({ day: 'Чт, 28 августа', note: 'через 5 дней', variant: loggedIn ? 'registered' : 'scheduled', num: 'Вебинар', time: '19:00', timeSub: '28 августа · чт', school: 'Школа ортобиологии', title: 'PRP при гонартрозе: показания, протокол, ошибки', chips: ['Онлайн', 'НМО · 2 ЗЕТ', '50 Pul', 'Уже записались 37 ортопедов'], speakers: [{ name: 'Михаил Страхов', org: 'ЦИТО им. Приорова' }], fmt: 'Онлайн', typ: 'Вебинар', nmo: true, free: false, city: '' }),
+      E({ day: 'Чт, 4 сентября', note: '', variant: 'scheduled', num: 'Разбор', time: '18:00', timeSub: '4 сентября · чт', school: 'Школа ортобиологии', title: 'Разбор клинического случая с экспертом', chips: ['Онлайн', 'Бесплатно', 'Уже записались 24 ортопеда'], speakers: [{ name: 'Дмитрий Ершов', org: 'ЦИТО им. Приорова' }], fmt: 'Онлайн', typ: 'Вебинар', nmo: false, free: true, city: '' }),
+      E({ day: 'Пт, 12 сентября', note: 'офлайн · Казань', variant: loggedIn ? 'registered' : 'scheduled', num: 'Doctor Club', time: '18:30', timeSub: '12 сентября · пт', school: 'Встречи коллег · офлайн', title: 'Doctor Club Казань — встреча коллег по направлению', chips: ['Офлайн · Казань', 'Бесплатно', '40 мест · осталось 12'], speakers: [{ name: 'Анна Соколова', org: 'ведущая клуба' }], fmt: 'Офлайн', typ: 'Клуб · встреча', nmo: false, free: true, city: 'Казань' }),
+      E({ day: 'Сб, 20 сентября', note: '', variant: 'scheduled', num: 'Подкаст', time: '17:00', timeSub: '20 сентября · сб', school: 'Школа ортобиологии', title: 'Старт подкаст-цикла OrthoBioSchool', chips: ['Онлайн', 'Бесплатно', 'Подкаст-эфир'], speakers: [{ name: 'Дмитрий Ершов', org: 'автор цикла' }], fmt: 'Онлайн', typ: 'Подкаст-эфир', nmo: false, free: true, city: '' }),
+      E({ day: '14–15 ноября', note: 'гибрид · Москва', variant: 'scheduled', num: 'Конгресс', time: '10:00', timeSub: '14–15 ноября', school: 'Конгрессы платформы', title: 'Конгресс «Ортобиология-2026»', chips: ['Гибрид · Москва', 'НМО · до 12 ЗЕТ', '200 Pul · очный билет', 'Уже записались 214 врачей'], speakers: [{ name: 'Программный комитет', org: '12 экспертов направления' }], fmt: 'Гибрид', typ: 'Конгресс', nmo: true, free: false, city: 'Москва' })
+    ];
+    const pastAll = [
+      { day: 'Чт, 14 августа', note: 'запись доступна', num: 'Вебинар', time: '19:00', timeSub: '14 августа · чт', school: 'Школа ортобиологии', title: 'Гиалуронаты: что говорит доказательная база', chips: ['Запись · 54 мин', 'Материалы · PDF', '218 участников'], speakers: [{ name: 'Михаил Страхов', org: 'ЦИТО им. Приорова' }], fmt: 'Онлайн', typ: 'Вебинар', nmo: false, free: true, city: '' },
+      { day: 'Чт, 7 августа', note: 'запись доступна', num: 'Разбор', time: '18:00', timeSub: '7 августа · чт', school: 'Школа травматологии и ортопедии', title: 'Осложнения после PRP: разбор трёх случаев', chips: ['Запись · 47 мин', '176 участников'], speakers: [{ name: 'Дмитрий Ершов', org: 'ЦИТО им. Приорова' }], fmt: 'Онлайн', typ: 'Вебинар', nmo: false, free: true, city: '' }
+    ];
+    const match = (e) => {
+      if (sel.fmt !== 'Все' && e.fmt !== sel.fmt) return false;
+      if (sel.typ !== 'Все' && e.typ !== sel.typ) return false;
+      if (sel.city !== 'Все города' && e.city !== sel.city) return false;
+      if (s.nmo && !e.nmo) return false;
+      if (s.freePul && !e.free) return false;
+      if (s.fq.trim() && e.title.toLowerCase().indexOf(s.fq.trim().toLowerCase()) === -1) return false;
+      return true;
+    };
+    const isPastTense = s.tense === 'Прошедшие';
+    let list = (isPastTense ? pastAll.map(e => ({ ...e, variant: 'past' })) : futureAll).filter(match);
+    if (forcedEmpty) list = [];
+    // «Идёт сейчас» вариант В — карточка внутри сегодняшнего дня
+    const liveCard = { day: 'Сегодня · сб, 23 августа', note: 'идёт сейчас', variant: 'live', num: 'Эфир', time: '19:00', timeSub: '23 августа · сб', school: 'Школа ортобиологии', title: 'Эфир «Вопросы по PRP»', chips: ['Онлайн', '412 в комнате', 'Бесплатно'], speakers: [{ name: 'Михаил Страхов', org: 'ЦИТО им. Приорова' }], cta: loggedIn ? 'Войти в комнату эфира ↗' : 'Открыть страницу события ↗', ctaHref: loggedIn ? 'Комната эфира v2.dc.html' : 'Вебинар.dc.html' };
+    if (liveV === 'В' && !noLive && !isPastTense && !forcedEmpty) list = [liveCard, ...list];
+    const dayMap = [];
+    list.forEach(e => {
+      let g = dayMap.find(x => x.label === e.day);
+      if (!g) { g = { label: e.day, note: e.note || '', cards: [] }; dayMap.push(g); }
+      g.cards.push(e);
+    });
+
+    // ---- Календарь · август 2026 ----
+    const Y = 2026, M = 7, TODAY = 23;
+    const dim = new Date(Y, M + 1, 0).getDate();
+    const startDow = (new Date(Y, M, 1).getDay() + 6) % 7;
+    const evByDay = {
+      23: [{ t: '19:00', title: 'Эфир «Вопросы по PRP»', school: 'Школа ортобиологии', live: !noLive }],
+      25: [{ t: '18:00', title: 'Гипотиреоз: разборы', school: 'Смежное · Эндокринология' }],
+      28: [{ t: '19:00', title: 'PRP при гонартрозе', school: 'Школа ортобиологии' }],
+      31: [{ t: '18:00', title: 'Боль в суставе без травмы', school: 'Смежное · Ревматология' }]
+    };
+    const pastNote = { 7: '1 запись', 14: '1 запись', 19: '2 записи' };
+    const cells = [];
+    for (let i = 0; i < startDow; i++) cells.push(null);
+    for (let dd = 1; dd <= dim; dd++) cells.push(dd);
+    while (cells.length % 7) cells.push(null);
+    const weeks = [], miniWeeks = [];
+    for (let w = 0; w < cells.length / 7; w++) {
+      const row = [], mrow = [];
+      for (let c = 0; c < 7; c++) {
+        const dd = cells[w * 7 + c];
+        const weekend = c >= 5;
+        const isToday = dd === TODAY, isPast = dd !== null && dd < TODAY;
+        const evs = dd ? (evByDay[dd] || []) : [];
+        const cellBase = `min-height:118px;padding:10px;border-right:1px solid ${hairline};box-sizing:border-box;min-width:0;background:${dd === null || isPast || weekend ? mutedCellBg : surface};${isToday ? 'outline:3px solid ' + btnBg + ';outline-offset:-3px;position:relative;' : ''}`;
+        const clamp2 = 'display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden';
+        const pills = evs.map(e => ({
+          text: e.t + ' · ' + e.title,
+          style: `display:block;margin-top:6px;padding:6px 8px;text-decoration:none;background:${e.live ? '#C81E1E' : tint};color:${e.live ? '#fff' : tintFg};font-size:11px;font-weight:700;line-height:1.35`,
+          textStyle: clamp2
+        }));
+        if (dd && isPast && pastNote[dd]) pills.push({ text: pastNote[dd], style: `display:block;margin-top:6px;font-size:11px;font-weight:600;color:${muteInk};text-decoration:none;pointer-events:none`, textStyle: '' });
+        const dots = evs.map(e => `width:6px;height:6px;border-radius:50%;flex:none;background:${e.live ? '#C81E1E' : (s.selDay === dd ? '#fff' : accent)}`);
+        const dnum = dd || '';
+        row.push({
+          d: dnum, dateLabel: dd ? (isToday ? dd + ' · сегодня' : String(dd)) : '',
+          dateStyle: isToday ? `font-size:13px;font-weight:800;color:${btnFg};background:${btnBg};padding:2px 8px` : `font-size:13px;font-weight:800;color:${isPast || dd === null || weekend ? muteInk : ink};font-variant-numeric:tabular-nums`,
+          cellStyle: cellBase, events: pills,
+          mStyle: `font:inherit;border:0;cursor:${dd ? 'pointer' : 'default'};padding:8px 0 7px;display:flex;flex-direction:column;align-items:center;gap:5px;min-height:52px;background:${dd && s.selDay === dd ? btnBg : (isToday ? tint : 'transparent')}`,
+          mDate: `font-size:15px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums;color:${dd && s.selDay === dd ? '#fff' : (isToday ? accent : (isPast || dd === null ? muteInk : ink))}`,
+          dots,
+          onClick: dd ? (() => this.setState({ selDay: dd })) : (() => {}),
+          miniStyle: `text-align:center;padding:5px 0 3px;font-size:11px;font-weight:800;font-variant-numeric:tabular-nums;color:${isToday ? accent : (isPast || dd === null ? muteInk : ink)};${isToday ? 'box-shadow:inset 0 0 0 2px ' + accent + ';' : ''}`
+        });
+        mrow.push(row[row.length - 1]);
+      }
+      weeks.push(row); miniWeeks.push(mrow);
+    }
+    const selEvs = evByDay[s.selDay] || [];
+    const agenda = selEvs.map(e => ({
+      time: e.t, title: e.title, school: e.school,
+      badge: e.live ? 'LIVE' : '', badgeStyle: e.live ? 'font-size:9px;font-weight:800;letter-spacing:.1em;color:#fff;background:#C81E1E;padding:2px 6px;margin-bottom:3px' : 'display:none',
+      timeColor: e.live ? '#C81E1E' : ink,
+      rowStyle: `display:flex;gap:14px;align-items:flex-start;text-decoration:none;border:2px solid ${e.live ? '#C81E1E' : hairline};padding:14px 16px;background:${surface}`
+    }));
+
+    // ---- Стенд карточки ----
+    const bC = { num: 'Вебинар', time: '19:00', timeSub: '28 августа · чт', school: 'Школа ортобиологии', title: 'PRP при гонартрозе: показания, протокол, ошибки', speakers: [{ name: 'Михаил Страхов', org: 'ЦИТО им. Приорова' }] };
+    const boardItems = [
+      { label: 'Обычная · наведение и фокус интерактивны', variant: 'scheduled', ...bC, chips: ['Онлайн', 'НМО · 2 ЗЕТ', '50 Pul', 'Уже записались 37 ортопедов'], cta: 'Участвовать ↗' },
+      { label: 'Вы записаны', variant: 'registered', ...bC, chips: ['Онлайн', 'НМО · 2 ЗЕТ', 'Вы записаны'], cta: '' },
+      { label: 'Идёт сейчас', variant: 'live', ...bC, num: 'Эфир', time: 'LIVE', timeSub: 'сейчас · 412 в комнате', title: 'Эфир «Вопросы по PRP»', chips: ['Онлайн', 'Бесплатно'], cta: 'Войти в комнату эфира ↗' },
+      { label: 'Мест не осталось · офлайн', variant: 'scheduled', num: 'Doctor Club', time: '18:30', timeSub: '12 сентября · пт', school: 'Встречи коллег · офлайн', title: 'Doctor Club Казань — встреча коллег по направлению', chips: ['Офлайн · Казань', '40 мест · мест не осталось'], speakers: [{ name: 'Анна Соколова', org: 'ведущая клуба' }], cta: 'Открыть страницу события ↗' },
+      { label: 'Прошло — есть запись', variant: 'past', ...bC, timeSub: '14 августа · чт', title: 'Гиалуронаты: что говорит доказательная база', chips: ['Запись · 54 мин', 'Материалы · PDF', '218 участников'], cta: '' }
+    ];
+
+    const normalish = !stLoading && !stEmptySpec && !stError;
+    const bothMode = lv === 'Б';
+    const weekOn = normalish && (bothMode || s.view === 'Неделя');
+    const monthOn = normalish && !bothMode && s.view === 'Месяц';
+    const hasFeed = dayMap.length > 0;
+    const waveNote = wave === 1 ? 'волна 1 — только вид и время' : (wave === 2 ? 'промежуточное — добавлены формат и тип' : 'полный набор · REQ-138');
+
+    return {
+      dark: d, isMobile: m, isDesktop: !m, loggedIn, guest: !loggedIn, noVal: false,
+      pageBg, surface, ink, inkMuted, inkFaint, border, hairline, sectionGray,
+      accent, btnBg, btnFg, tint, tintFg, shadow, mutedCellBg, okColor,
+      danger: '#C81E1E', dangerTint: d ? '#3a1414' : '#fdecec',
+      dashedBorder: d ? 'rgba(255,255,255,.35)' : 'oklch(.75 .01 250)',
+      logoSrc: d ? 'assets/ds-logo-white.svg' : 'assets/ds-logo-color.svg',
+      giantInk: d ? 'rgba(174,212,251,.09)' : 'oklch(.945 .018 250)',
+      toggleTheme: () => this.setState(st => { const dark = !st.dark; try { localStorage.setItem('ds-theme', dark ? 'dark' : 'light'); } catch (e) {} return { dark }; }),
+      themeIcon: d ? '☀' : '☾',
+      q: s.q, setQ: e => this.setState({ q: e.target.value }),
+      posterBadge: loggedIn ? 'Ваше расписание' : 'Открыто без регистрации',
+      // состояния
+      stLoading, stEmptySpec, stError, boardOn, boardOff: !boardOn, showContent: normalish,
+      skeletonCards: [1, 2, 3], skeletonCells: [1, 2, 3, 4, 5, 6, 7],
+      // геометрия по варианту панели (развилка 1)
+      mainMax: pv === 'Б' && !m ? '1240px' : '1104px',
+      mainGrid: sidebarMode ? 'display:grid;grid-template-columns:300px minmax(0,1fr);gap:clamp(28px,3.5vw,44px);align-items:start' : 'display:block',
+      asideStyle: sidebarMode
+        ? `position:sticky;top:20px;border:2px solid ${border};background:${surface};box-shadow:5px 5px 0 ${shadow};padding:18px`
+        : `margin-bottom:clamp(28px,5vw,44px);${m ? '' : 'border-bottom:2px solid ' + hairline + ';padding-bottom:clamp(20px,3vw,28px)'}`,
+      segRowStyle: `display:flex;gap:12px;flex-wrap:wrap;${sidebarMode ? 'flex-direction:column;align-items:stretch;' : 'align-items:center;'}margin-bottom:${facetsVisible ? '14px' : '0'}`,
+      facetWrap: sidebarMode ? 'display:flex;flex-direction:column;gap:10px' : 'display:flex;flex-wrap:wrap;gap:10px;align-items:stretch',
+      waveNote,
+      viewSegOn: !bothMode,
+      setWeek: () => this.setState({ view: 'Неделя' }),
+      setMonth: () => this.setState({ view: 'Месяц' }),
+      setFuture: () => this.setState({ tense: 'Будущие' }),
+      setPast: () => this.setState({ tense: 'Прошедшие' }),
+      segWeekStyle: seg(s.view === 'Неделя'),
+      segMonthStyle: seg(s.view === 'Месяц') + ';border-left:2px solid ' + border,
+      segFutStyle: seg(s.tense === 'Будущие'),
+      segPastStyle: seg(s.tense === 'Прошедшие') + ';border-left:2px solid ' + border,
+      shadow3: m ? 'none' : '3px 3px 0 ' + shadowSm,
+      filterBtnOn: filterBtnOn && facetDefs.length > 0,
+      toggleFilters: () => this.setState(st => ({ filtersOpen: !st.filtersOpen })),
+      filterBtnStyle: `font:inherit;font-size:13px;font-weight:800;color:${s.filtersOpen ? btnFg : tintFg};background:${s.filtersOpen ? btnBg : surface};border:2px solid ${border};padding:11px 18px;cursor:pointer;box-shadow:${m || s.filtersOpen ? 'none' : '3px 3px 0 ' + shadowSm};display:inline-flex;align-items:center;gap:8px`,
+      appliedSuffix: appliedCount ? ' · ' + appliedCount : '',
+      filterCaret: s.filtersOpen ? '▲' : '▼',
+      facetsVisible, facets, togglesArr,
+      searchOn: wave >= 3,
+      fq: s.fq, setFq: e => this.setState({ fq: e.target.value }),
+      fqStyle: `font:inherit;font-size:14px;font-weight:600;color:${ink};background:${surface};border:2px solid ${border};padding:13px 16px;box-sizing:border-box;${sidebarMode || m ? 'width:100%' : 'flex:1;min-width:220px'}`,
+      facetPanelOpen: !!od,
+      optPanelStyle: `margin-top:10px;background:${tint};border:2px solid ${border};box-shadow:${m ? '4px 4px' : '6px 6px'} 0 ${shadow};padding:${m ? '14px' : '18px'}`,
+      optTitle, optHint, optList,
+      optGrid: `display:grid;grid-template-columns:${sidebarMode || m ? '1fr' : 'repeat(auto-fill,minmax(210px,1fr))'};gap:6px`,
+      closeFacet: () => this.setState({ openFacet: null }),
+      hasBadges: badges.length > 0, badges, resetAll,
+      setAllSpecs: () => { this.setState(st => ({ fSel: { ...st.fSel, spec: 'Все специальности' } })); resetAll(); },
+      // идёт сейчас (развилка 3)
+      stickyLiveOn: liveV === 'Б' && !noLive && !boardOn,
+      liveBlockOn: liveV === 'А' && !noLive && normalish,
+      liveWrapStyle: `display:flex;align-items:center;gap:18px;flex-wrap:wrap;border:2px solid #C81E1E;background:${surface};box-shadow:${m ? 'none' : '6px 6px 0 #C81E1E'};padding:clamp(16px,3vw,24px);margin-bottom:clamp(28px,5vw,44px)`,
+      liveHref: loggedIn ? 'Комната эфира v2.dc.html' : 'Вебинар.dc.html',
+      liveCtaLabel: loggedIn ? 'Войти в комнату эфира' : 'Открыть страницу события',
+      btnShadow4: m ? 'none' : '4px 4px 0 ' + border,
+      // лента
+      weekOn, monthOn, miniMonthOn: bothMode && normalish,
+      hasFeed, emptyFilterOn: !hasFeed,
+      days: dayMap, evGap: m ? '18px' : '28px',
+      guestGateOn: !loggedIn && hasFeed && !isPastTense,
+      pastTeaserOn: !isPastTense && weekOn && hasFeed,
+      pastTeaser: pastAll,
+      adjacentCards: [
+        { variant: 'scheduled', num: 'Вебинар', time: '18:00', timeSub: '31 августа · пн', school: 'Смежное · Ревматология', title: 'Боль в суставе без травмы: когда направлять к ревматологу', chips: ['Онлайн', 'НМО · 1 ЗЕТ', 'Бесплатно', 'Смежная область'], speakers: [{ name: 'Мария Введенская', org: 'Клиника «Рассвет»' }], cta: 'Участвовать ↗' },
+        { variant: 'scheduled', num: 'Вебинар', time: '18:00', timeSub: '25 августа · пн', school: 'Смежное · Эндокринология', title: 'Гипотиреоз: клинические разборы', chips: ['Онлайн', 'Бесплатно', 'Смежная область'], speakers: [{ name: 'Ольга Ким', org: 'Школа эндокринологии' }], cta: 'Участвовать ↗' }
+      ],
+      // месяц
+      dows: ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'].map((n, i) => ({ name: n, color: i >= 5 ? muteInk : inkFaint })),
+      weeks, miniWeeks,
+      agendaTitle: s.selDay + ' августа' + (s.selDay === TODAY ? ' · сегодня' : ''),
+      hasAgenda: agenda.length > 0, noAgenda: agenda.length === 0, agenda,
+      // мои события
+      myOn: loggedIn && normalish,
+      myBorder: m ? '2px solid ' + hairline : '2px solid ' + border,
+      myRows: [
+        { title: 'Вебинар «PRP при гонартрозе»', meta: '28 августа · 19:00 МСК · онлайн', tag: 'через 5 дней' },
+        { title: 'Doctor Club Казань — встреча коллег', meta: '12 сентября · 18:30 · офлайн', tag: 'офлайн' }
+      ],
+      // стенд
+      boardItems,
+      cardShadow: m ? 'none' : '6px 6px 0 ' + shadow,
+      btnShadow: m ? 'none' : '3px 3px 0 ' + border,
+      btnShadowSm: m ? 'none' : '3px 3px 0 ' + shadowSm
+    };
+  }
+}
+</script>
+</body>
+</html>

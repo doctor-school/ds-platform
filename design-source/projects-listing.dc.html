@@ -11,8 +11,9 @@
 
 <div style="min-height:100vh;background:{{ pageBg }};display:flex;flex-direction:column">
   <!-- Хедер -->
+  <div style="background:#0D3A77;padding:5px clamp(16px,4vw,48px);text-align:center;font-size:9px;font-weight:700;letter-spacing:.22em;text-transform:uppercase;color:rgba(255,255,255,.34)">BBM: Академия смыслов</div>
   <header data-screen-label="Каталог проектов" style="background:#114D9E;padding:16px clamp(16px,4vw,48px);display:flex;align-items:center;justify-content:space-between;gap:16px">
-    <a href="Главная.dc.html" style="display:flex;flex:none"><img src="assets/ds-logo-white.svg" alt="Doctor.School" style="height:26px;display:block"></a>
+    <a href="Главная.dc.html" style="display:flex;flex:none"><img src="assets/ds-logo-white.svg" alt="Doctor.School · Академия" style="height:26px;display:block"></a>
     <sc-if value="{{ isMobile }}" hint-placeholder-val="{{ false }}">
       <div style="display:flex;align-items:center;gap:12px">
         <button onClick="{{ toggleTheme }}" title="Тема" style="font:inherit;width:44px;height:44px;background:transparent;color:#fff;border:2px solid rgba(255,255,255,.5);cursor:pointer;font-size:16px">{{ themeIcon }}</button>
@@ -76,15 +77,17 @@
     <div style="border-top:2px solid {{ ink }};padding:32px clamp(16px,4vw,48px);display:flex;align-items:center;justify-content:space-between;max-width:1104px;margin:0 auto;box-sizing:content-box;gap:16px;flex-wrap:wrap">
       {{ footLogoEl }}
       <nav style="display:flex;gap:20px;font-size:12.5px;font-weight:700;flex-wrap:wrap">
-        <a href="Эфиры.dc.html" style="color:{{ inkFaint }};text-decoration:none">Эфиры</a>
+        <a href="Партнёры.dc.html" style="color:{{ inkFaint }};text-decoration:none">Партнёры</a>
         <a href="Проекты.dc.html" style="color:{{ inkFaint }};text-decoration:none">Проекты</a>
         <a href="Эксперты.dc.html" style="color:{{ inkFaint }};text-decoration:none">Эксперты</a>
-        <a href="Главная.dc.html#partner-form" style="color:{{ inkFaint }};text-decoration:none">Партнёрство</a>
+        <a href="Эфиры.dc.html" style="color:{{ inkFaint }};text-decoration:none">События</a>
+        <a href="Академия - Документы.dc.html" style="color:{{ inkFaint }};text-decoration:none">Документы и контакты</a>
       </nav>
-      <div style="font-size:12.5px;font-weight:600;color:{{ inkFaint }}">Врачи учат врачей · 2026</div>
+      <a href="Витрина врача - Главная.dc.html" style="font-size:12.5px;font-weight:800;color:{{ accent }};text-decoration:underline;text-underline-offset:4px;white-space:nowrap">doctor.school — врачам</a>
     </div>
+    <div style="max-width:1104px;margin:0 auto;padding:0 clamp(16px,4vw,48px);text-align:center;font-size:10px;font-weight:800;letter-spacing:.18em;text-transform:uppercase;color:{{ inkFaint }}">BBM: Академия смыслов</div>
     <div aria-hidden="true" style="overflow:hidden;padding-top:clamp(16px,3vw,36px)">
-      <div style="font-size:clamp(58px,12.6vw,236px);font-weight:800;letter-spacing:-.05em;line-height:.78;white-space:nowrap;text-align:center;color:{{ giantInk }};transform:translateY(.16em);user-select:none">Doctor.School</div>
+      <div style="font-size:clamp(30px,8.2vw,154px);font-weight:800;letter-spacing:-.05em;line-height:.78;white-space:nowrap;text-align:center;color:{{ giantInk }};transform:translateY(.16em);user-select:none">Academy.Doctor.School</div>
     </div>
   </footer>
 </div>

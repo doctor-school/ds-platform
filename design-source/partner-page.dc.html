@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"><style>body{margin:0;background:#fff;font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}a{color:#2D84F2}a:hover{color:#114D9E}:focus-visible{outline:3px solid #6BB1F7;outline-offset:2px}@keyframes livePulse{0%,100%{opacity:1}50%{opacity:.4}}</style></helmet>
+
+<div style="min-height:100vh;background:{{ pageBg }}">
+  <div style="background:#0D3A77;padding:5px clamp(16px,4vw,48px);text-align:center;font-size:9px;font-weight:700;letter-spacing:.22em;text-transform:uppercase;color:rgba(255,255,255,.34)">BBM: Академия смыслов</div>
+  <header data-screen-label="a-partner · страница партнёра" style="background:#114D9E;padding:14px clamp(16px,4vw,48px);display:flex;align-items:center;justify-content:space-between;gap:16px">
+    <a href="Главная.dc.html" style="display:flex;flex:none"><img src="assets/ds-logo-white.svg" alt="Doctor.School · Академия" style="height:26px;display:block"></a>
+    <sc-if value="{{ isMobile }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;align-items:center;gap:12px">
+        <button onClick="{{ toggleTheme }}" title="Тема" style="font:inherit;width:44px;height:44px;background:transparent;color:#fff;border:2px solid rgba(255,255,255,.5);cursor:pointer;font-size:16px">{{ themeIcon }}</button>
+        <details style="position:relative">
+          <summary style="list-style:none;width:44px;height:44px;display:inline-flex;align-items:center;justify-content:center;background:#fff;color:#114D9E;cursor:pointer;font-size:20px;font-weight:800;box-shadow:3px 3px 0 {{ headerShadow }}">≡</summary>
+          <nav style="position:absolute;top:calc(100% + 10px);right:0;background:{{ surface }};border:2px solid {{ border }};box-shadow:5px 5px 0 {{ shadow }};padding:8px;display:flex;flex-direction:column;min-width:220px;z-index:30">
+            <a href="Проекты.dc.html" style="padding:12px 16px;font-size:15px;font-weight:700;color:{{ ink }};text-decoration:none">Проекты</a>
+            <a href="Эксперты.dc.html" style="padding:12px 16px;font-size:15px;font-weight:700;color:{{ ink }};text-decoration:none">Эксперты</a>
+            <a href="Партнёры.dc.html" style="padding:12px 16px;font-size:15px;font-weight:800;color:{{ accent }};text-decoration:none">Партнёры</a>
+            <a href="Эфиры.dc.html" style="padding:12px 16px;font-size:15px;font-weight:700;color:{{ ink }};text-decoration:none">События</a>
+            <a href="{{ authHref }}" style="margin-top:6px;padding:12px 16px;font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};text-decoration:none;text-align:center">{{ authLabel }}</a>
+          </nav>
+        </details>
+      </div>
+    </sc-if>
+    <sc-if value="{{ isDesktop }}" hint-placeholder-val="{{ true }}">
+      <nav style="display:flex;align-items:center;gap:26px;font-size:14px;font-weight:700">
+        <a href="Проекты.dc.html" style="color:#D3E8FD;text-decoration:none" style-hover="color:#fff">Проекты</a>
+        <a href="Эксперты.dc.html" style="color:#D3E8FD;text-decoration:none" style-hover="color:#fff">Эксперты</a>
+        <a href="Партнёры.dc.html" style="color:#fff;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:6px">Партнёры</a>
+        <a href="Эфиры.dc.html" style="color:#D3E8FD;text-decoration:none" style-hover="color:#fff">События</a>
+        <button onClick="{{ toggleTheme }}" title="Тема" style="font:inherit;width:44px;height:44px;background:transparent;color:#fff;border:2px solid rgba(255,255,255,.5);cursor:pointer;font-size:15px" style-hover="border-color:#fff">{{ themeIcon }}</button>
+        <a href="{{ authHref }}" style="font-size:13.5px;font-weight:700;color:#114D9E;background:#fff;padding:12px 22px;text-decoration:none;box-shadow:3px 3px 0 {{ headerShadow }};white-space:nowrap" style-hover="transform:translate(1px,1px);box-shadow:2px 2px 0 {{ headerShadow }}">{{ authLabel }}</a>
+      </nav>
+    </sc-if>
+  </header>
+
+  <!-- Постер-шапка · юнит project-page как есть, отличается содержимое (REQ-70) -->
+  <div style="background:#114D9E;padding:clamp(32px,5vw,52px) clamp(16px,4vw,48px) clamp(44px,7vw,72px)">
+    <div style="max-width:1104px;margin:0 auto">
+      <nav style="font-size:13px;font-weight:700;margin-bottom:clamp(20px,3vw,30px)">
+        <a href="Главная.dc.html" style="color:#AED4FB;text-decoration:underline;text-underline-offset:4px">Академия</a>
+        <span style="color:rgba(211,232,253,.5);margin:0 8px">/</span>
+        <a href="Партнёры.dc.html" style="color:#AED4FB;text-decoration:underline;text-underline-offset:4px">Партнёры</a>
+        <span style="color:rgba(211,232,253,.5);margin:0 8px">/</span>
+        <span style="color:#D3E8FD">Партнёр А</span>
+      </nav>
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap">
+        <div style="font-size:12px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:#D3E8FD">Партнёр · путь инвестора · шаг «проверил доверие»</div>
+        <span style="display:inline-block;background:#fff;color:#114D9E;font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;padding:9px 14px;box-shadow:3px 3px 0 {{ headerShadow }};transform:rotate(2deg)">инвестор с 2026 года</span>
+      </div>
+      <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:32px;flex-wrap:wrap">
+        <div style="min-width:0">
+          <h1 style="margin:10px 0 0;font-size:clamp(32px,5.5vw,56px);line-height:1.02;font-weight:800;letter-spacing:-.035em;color:#fff">Партнёр А</h1>
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:18px">
+            <sc-for list="{{ roleChips }}" as="rc" hint-placeholder-count="2">
+              <span style="display:inline-block;font-size:10.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#114D9E;background:#D3E8FD;padding:5px 10px">{{ rc }}</span>
+            </sc-for>
+          </div>
+          <p style="margin:18px 0 0;max-width:620px;font-size:clamp(14.5px,2vw,16px);line-height:1.65;font-weight:500;color:#D3E8FD">Фармацевтическая компания, портфель — регенеративная медицина. Инвестирует в проекты Академии с 2026 года.</p>
+          <sc-if value="{{ numbersInHero }}" hint-placeholder-val="{{ true }}">
+            <div style="display:flex;gap:clamp(20px,4vw,44px);flex-wrap:wrap;margin-top:32px;font-size:12px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#D3E8FD">
+              <sc-if value="{{ hasReg }}" hint-placeholder-val="{{ true }}">
+                <span title="Та же величина, что ранжирует лидерборд партнёров"><span style="color:#fff;font-size:15px">46%</span> доля внимания</span>
+                <span><span style="color:#fff;font-size:15px">№ 1</span> в лидерборде</span>
+              </sc-if>
+              <sc-if value="{{ noReg }}" hint-placeholder-val="{{ false }}"><span style="text-transform:none;letter-spacing:0;font-weight:600;font-size:13px">Доля внимания появится, когда по проектам накопится статистика</span></sc-if>
+              <span><span style="color:#fff;font-size:15px">{{ projCountN }}</span> {{ projCountWord }}</span>
+            </div>
+          </sc-if>
+        </div>
+        <sc-if value="{{ logoOk }}" hint-placeholder-val="{{ true }}">
+          <div title="Место логотипа — пропорции и фон по комплаенсу компании (REQ-70)" style="flex:none;width:200px;height:64px;background:#fff;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:#114D9E;box-shadow:4px 4px 0 {{ headerShadow }}">логотип</div>
+        </sc-if>
+        <sc-if value="{{ noLogo }}" hint-placeholder-val="{{ false }}">
+          <div style="flex:none;max-width:220px;border:2px dashed rgba(255,255,255,.5);padding:12px 16px;font-size:12px;line-height:1.55;font-weight:600;color:#D3E8FD">Знак не размещается — по комплаенсу компании организация названа текстом</div>
+        </sc-if>
+      </div>
+    </div>
+  </div>
+
+  <main style="padding:0 clamp(16px,4vw,48px)">
+    <div style="max-width:1104px;margin:0 auto">
+
+      <!-- Загрузка · скелет блоков -->
+      <sc-if value="{{ showSkeleton }}" hint-placeholder-val="{{ false }}">
+        <div data-screen-label="a-partner · загрузка" style="margin-top:clamp(40px,6vw,64px);display:flex;flex-direction:column;gap:28px">
+          <div style="height:20px;width:34%;background:{{ hairline }};animation:livePulse 1.4s ease-in-out infinite"></div>
+          <div style="height:88px;background:{{ hairline }};animation:livePulse 1.4s ease-in-out infinite"></div>
+          <div style="height:20px;width:22%;background:{{ hairline }};animation:livePulse 1.4s ease-in-out infinite"></div>
+          <div style="{{ skelGrid }}">
+            <sc-for list="{{ skel3 }}" as="k" hint-placeholder-count="3"><div style="height:300px;background:{{ hairline }};animation:livePulse 1.4s ease-in-out infinite"></div></sc-for>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ showBody }}" hint-placeholder-val="{{ true }}">
+        <div>
+
+        <!-- ============ О КОМПАНИИ (REQ-88, REQ-70, REQ-63) ============ -->
+        <section data-screen-label="a-partner · о компании" style="margin-top:clamp(40px,6vw,64px)">
+          <div style="display:flex;align-items:baseline;gap:16px;margin-bottom:18px">
+            <span style="font-size:12px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:{{ ink }};white-space:nowrap">О компании</span>
+            <span style="flex:1;border-top:2px solid {{ ink }}"></span>
+          </div>
+          <div style="{{ aboutGrid }}">
+            <div style="min-width:0">
+              <p style="margin:0;max-width:620px;font-size:15px;line-height:1.7;color:{{ inkMuted }}">Фармацевтическая компания, портфель — регенеративная медицина. Инвестирует в проекты Академии с 2026 года: школа и курс-сериал по ортобиологии, эфиры с экспертами направления.</p>
+              <div style="font-size:12.5px;font-weight:600;color:{{ inkFaint }};margin-top:14px">Логотип и материалы размещены по требованиям комплаенса компании</div>
+            </div>
+            <div style="flex:none;display:flex;flex-direction:column;gap:6px;font-size:12px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:{{ inkFaint }}">
+              <span>страница принадлежит организации</span>
+              <span style="color:{{ ink }}">несколько пользователей · свой администратор</span>
+            </div>
+          </div>
+
+          <!-- Витринная строка цифр · юнит «строка лидерборда» из a-partners как есть (REQ-63) -->
+          <sc-if value="{{ numbersInBlock }}" hint-placeholder-val="{{ false }}">
+            <div style="margin-top:24px">
+              <div style="font-size:10.5px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ inkFaint }};margin-bottom:10px">Строка партнёра в лидерборде</div>
+              <div style="{{ boardBox }}">
+                <a href="Партнёры.dc.html" title="Лидерборд партнёров — #a-partners" style="display:grid;grid-template-columns:{{ rowGrid }};gap:18px;align-items:center;padding:15px {{ rowPad }};text-decoration:none" style-hover="background:{{ sectionGray }}">
+                  <span style="{{ rankStyle }}">1</span>
+                  <span style="{{ tileStyle }}">{{ tileTxt }}</span>
+                  <span style="min-width:0;display:flex;flex-direction:column;gap:5px">
+                    <span style="font-size:16px;font-weight:800;letter-spacing:-.015em;color:{{ ink }}">Партнёр · Партнёр А</span>
+                    <span style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="{{ typeChipStyle }}">фарма</span><span style="font-size:12px;font-weight:700;color:{{ inkFaint }}">{{ rolesLine }}</span></span>
+                  </span>
+                  <span style="text-align:right;min-width:0">
+                    <sc-if value="{{ hasReg }}" hint-placeholder-val="{{ true }}">
+                      <span style="font-size:19px;font-weight:800;letter-spacing:-.02em;color:{{ ink }};font-variant-numeric:tabular-nums">46%</span>
+                      <span style="display:block;height:5px;background:{{ hairline }};margin-top:7px"><span style="display:block;height:5px;width:46%;margin-left:auto;background:{{ accent }}"></span></span>
+                    </sc-if>
+                    <sc-if value="{{ noReg }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;font-weight:600;line-height:1.5;color:{{ inkFaint }};display:block">Доля внимания появится, когда накопится статистика</span></sc-if>
+                  </span>
+                  <span style="text-align:right;font-size:13.5px;font-weight:700;color:{{ inkMuted }};font-variant-numeric:tabular-nums">20–50 млн ₽</span>
+                  <span style="text-align:right;font-size:13.5px;font-weight:700;color:{{ inkMuted }};font-variant-numeric:tabular-nums">{{ projCountTxt }}</span>
+                  <span style="font-size:15px;color:{{ accent }}">→</span>
+                </a>
+              </div>
+            </div>
+          </sc-if>
+        </section>
+
+        <!-- ============ ПРОЕКТЫ (REQ-90) ============ -->
+        <section data-screen-label="a-partner · проекты" style="margin-top:clamp(48px,7vw,72px)">
+          <div style="display:flex;align-items:baseline;gap:16px;margin-bottom:18px">
+            <span style="font-size:12px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:{{ ink }};white-space:nowrap">Проекты</span>
+            <span style="flex:1;border-top:2px solid {{ ink }}"></span>
+            <a href="Проекты.dc.html" style="font-size:12.5px;font-weight:700;color:{{ accent }};text-decoration:underline;text-underline-offset:4px;white-space:nowrap">Все проекты</a>
+          </div>
+          <sc-if value="{{ hasProjects }}" hint-placeholder-val="{{ true }}">
+            <div style="{{ projGrid }}">
+              <sc-for list="{{ projects }}" as="pr" hint-placeholder-count="3">
+                <div style="position:relative">
+                  <sc-if value="{{ pr.exclusive }}" hint-placeholder-val="{{ false }}">
+                    <span title="Годовой эксклюзивный контракт на проект (REQ-90)" style="position:absolute;top:-13px;right:14px;z-index:1;display:inline-block;background:{{ btnBg }};color:{{ btnFg }};font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;padding:6px 11px;transform:rotate(2deg);box-shadow:3px 3px 0 {{ border }}">годовой эксклюзив</span>
+                  </sc-if>
+                  <dc-import name="ПроектКарточка" dark="{{ dark }}" kind="{{ pr.kind }}" title="{{ pr.title }}" description="{{ pr.desc }}" count="{{ pr.count }}" partner-name="" emblem="{{ pr.emblem }}" href="Проект.dc.html" hint-size="100%,440px"></dc-import>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+          <sc-if value="{{ noProjects }}" hint-placeholder-val="{{ false }}">
+            <div data-screen-label="a-partner · нет проектов" style="border:2px dashed {{ dashedBorder }};padding:clamp(32px,6vw,52px);text-align:center">
+              <div style="font-size:19px;font-weight:800;letter-spacing:-.02em;color:{{ ink }}">Первый проект партнёра готовится к запуску</div>
+              <p style="margin:10px auto 0;max-width:460px;font-size:14px;line-height:1.6;color:{{ inkMuted }}">Команда Академии собирает проект вместе с экспертами направления — результат появится здесь.</p>
+            </div>
+          </sc-if>
+        </section>
+
+        <!-- ============ ЭКСПЕРТЫ И СОБЫТИЯ ============ -->
+        <section data-screen-label="a-partner · эксперты и события" style="margin-top:clamp(48px,7vw,72px)">
+          <div style="display:flex;align-items:baseline;gap:16px;margin-bottom:18px">
+            <span style="font-size:12px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:{{ ink }};white-space:nowrap">Эксперты проектов партнёра</span>
+            <span style="flex:1;border-top:2px solid {{ ink }}"></span>
+            <a href="Эксперты.dc.html" style="font-size:12.5px;font-weight:700;color:{{ accent }};text-decoration:underline;text-underline-offset:4px;white-space:nowrap">Все эксперты</a>
+          </div>
+          <sc-if value="{{ hasExperts }}" hint-placeholder-val="{{ true }}">
+            <div>
+              <div style="{{ expGrid }}">
+                <dc-import name="ЭкспертКарточка" dark="{{ dark }}" full-name="Страхов М. А." role="Автор проекта" credentials="к.м.н., травматолог-ортопед" org="РНИМУ им. Пирогова" meta="Куратор направления" href="Эксперт.dc.html" hint-size="100%,420px"></dc-import>
+                <dc-import name="ЭкспертКарточка" dark="{{ dark }}" full-name="Гаев Т." role="Соавтор" credentials="травматолог-ортопед" org="ГКБ им. Юдина" meta="Соавтор школы" href="Эксперт.dc.html" hint-size="100%,420px"></dc-import>
+                <dc-import name="ЭкспертКарточка" dark="{{ dark }}" full-name="Игорь Савченко" role="Эксперт школы" credentials="врач высшей категории" org="ЦИТО им. Приорова" meta="3 эфира школы" href="Эксперт.dc.html" hint-size="100%,420px"></dc-import>
+              </div>
+              <div style="display:flex;align-items:baseline;gap:16px;margin:clamp(28px,4vw,40px) 0 18px">
+                <span style="font-size:12px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:{{ ink }};white-space:nowrap">Эфиры с участием</span>
+                <span style="flex:1;border-top:2px solid {{ hairline }}"></span>
+                <a href="Эфиры.dc.html" style="font-size:12.5px;font-weight:700;color:{{ accent }};text-decoration:underline;text-underline-offset:4px;white-space:nowrap">Все события Академии</a>
+              </div>
+              <div style="{{ evGrid }}">
+                <dc-import name="ВебинарКарточка" dark="{{ dark }}" variant="scheduled" num="Эфир № 057" time="19:00" time-sub="4 сентября · чт" school="Школа ортобиологии" title="PRP-терапия в амбулаторной практике: показания и протоколы" speakers="{{ ev1Speakers }}" cta="Участвовать ↗" hint-size="100%,240px"></dc-import>
+                <dc-import name="ВебинарКарточка" dark="{{ dark }}" variant="past" num="Эфир № 049" time="19:00" time-sub="14 августа · чт" school="Школа ортобиологии" title="Клеточные технологии в травматологии: разбор клинических случаев" speakers="{{ ev2Speakers }}" hint-size="100%,240px"></dc-import>
+              </div>
+            </div>
+          </sc-if>
+          <sc-if value="{{ noExperts }}" hint-placeholder-val="{{ false }}">
+            <div data-screen-label="a-partner · нет экспертов и событий" style="border-top:1px solid {{ hairline }};border-bottom:1px solid {{ hairline }};padding:16px 4px;font-size:13.5px;font-weight:600;color:{{ inkMuted }}">Эксперты и эфиры появятся после запуска первого проекта партнёра.</div>
+          </sc-if>
+        </section>
+
+        <!-- ============ ПРОДУКЦИЯ (REQ-130, D-3) · развилка 1 ============ -->
+        <sc-if value="{{ prodA }}" hint-placeholder-val="{{ true }}">
+          <section data-screen-label="a-partner · продукция · вариант А (раздел-заготовка)" style="margin-top:clamp(48px,7vw,72px)">
+            <div style="display:flex;align-items:baseline;gap:16px;margin-bottom:14px">
+              <span style="font-size:12px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:{{ ink }};white-space:nowrap">Продукция</span>
+              <span style="flex:1;border-top:2px solid {{ ink }}"></span>
+              <span style="font-size:10.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:{{ tintFg }};background:{{ tint }};padding:4px 9px;white-space:nowrap">Партнёрский материал · Партнёр А</span>
+            </div>
+            <div style="font-size:13px;font-weight:600;line-height:1.6;color:{{ inkMuted }};margin-bottom:22px;max-width:640px">Каталог продуктов компании, которые встречаются в проектах Академии.</div>
+            <div style="{{ prodGrid }}">
+              <sc-for list="{{ products }}" as="pd" hint-placeholder-count="3">
+                <div style="{{ prodCard }}">
+                  <span style="{{ prodTile }}">{{ pd.mono }}</span>
+                  <span style="font-size:16px;font-weight:800;letter-spacing:-.015em;color:{{ ink }};line-height:1.3;margin-top:14px">{{ pd.name }}</span>
+                  <span style="font-size:13px;line-height:1.55;color:{{ inkMuted }};margin-top:6px">{{ pd.desc }}</span>
+                </div>
+              </sc-for>
+            </div>
+            <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-top:22px">
+              <button disabled="{{ true }}" title="REQ-130 — перспектива, не первый этап" style="font:inherit;font-size:14px;font-weight:800;color:{{ inkFaint }};background:transparent;border:2px solid {{ hairline }};padding:14px 24px;cursor:not-allowed">Запросить продукцию</button>
+              <span style="font-size:12.5px;font-weight:700;color:{{ inkFaint }}">Готовится: заказ продукции через платформу появится позже</span>
+            </div>
+          </section>
+        </sc-if>
+        <sc-if value="{{ prodB }}" hint-placeholder-val="{{ false }}">
+          <section data-screen-label="a-partner · продукция · вариант Б (место зарезервировано)" style="margin-top:clamp(48px,7vw,72px)">
+            <div style="border:2px dashed {{ dashedBorder }};padding:20px 22px;font-size:12.5px;line-height:1.6;font-weight:600;color:{{ inkFaint }}">Пометка для владельца: здесь зарезервировано место под раздел «Продукция» (REQ-130). На витрине раздел не показывается до включения заказа продукции; при включении встаёт между «Эксперты и события» и выходом, по геометрии раздела варианта А.</div>
+          </section>
+        </sc-if>
+        <sc-if value="{{ prodV }}" hint-placeholder-val="{{ false }}">
+          <section data-screen-label="a-partner · продукция · вариант В (свёрнутая строка)" style="margin-top:clamp(48px,7vw,72px)">
+            <div style="display:flex;align-items:baseline;gap:16px;margin-bottom:14px">
+              <span style="font-size:12px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:{{ ink }};white-space:nowrap">Продукция</span>
+              <span style="flex:1;border-top:2px solid {{ ink }}"></span>
+            </div>
+            <div style="border-top:1px solid {{ hairline }};border-bottom:1px solid {{ hairline }};padding:16px 4px;display:flex;align-items:baseline;justify-content:space-between;gap:16px;flex-wrap:wrap">
+              <span style="font-size:13.5px;font-weight:700;color:{{ ink }}">Продукция компании — по запросу через менеджера</span>
+              <span style="font-size:10.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:{{ tintFg }};background:{{ tint }};padding:4px 9px">Партнёрский материал · Партнёр А</span>
+            </div>
+          </section>
+        </sc-if>
+
+        <!-- ============ ВЫХОД ИЗ ТУПИКА ============ -->
+        <section data-screen-label="a-partner · выход" style="margin-top:clamp(48px,7vw,72px)">
+          <div style="{{ ctaBox }}">
+            <div style="min-width:260px;flex:1">
+              <div style="font-size:22px;font-weight:800;letter-spacing:-.02em;color:{{ ink }}">Хотите так же?</div>
+              <div style="font-size:14px;line-height:1.65;color:{{ inkMuted }};margin-top:8px;max-width:560px">Организации участвуют в проектах Академии и получают свою публичную страницу. Как это устроено и с чего начать — на странице для инвесторов.</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap">
+              <a href="Партнёры.dc.html" style="font-size:13.5px;font-weight:700;color:{{ accent }};text-decoration:underline;text-underline-offset:4px;white-space:nowrap">Все партнёры</a>
+              <a href="#" title="#a-invest — рисуется отдельным экраном" style="font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:2px solid {{ btnBg }};padding:14px 24px;text-decoration:none;box-shadow:4px 4px 0 {{ border }};white-space:nowrap" style-hover="transform:translate(2px,2px);box-shadow:2px 2px 0 {{ border }}">Стать инвестором — как это работает</a>
+            </div>
+          </div>
+        </section>
+
+        </div>
+      </sc-if>
+    </div>
+  </main>
+
+  <footer style="margin-top:clamp(56px,8vw,96px)">
+    <div style="border-top:2px solid {{ ink }};padding:32px clamp(16px,4vw,48px);display:flex;align-items:center;justify-content:space-between;max-width:1104px;margin:0 auto;box-sizing:content-box;gap:16px;flex-wrap:wrap">
+      {{ footLogoEl }}
+      <nav style="display:flex;gap:20px;font-size:12.5px;font-weight:700;flex-wrap:wrap">
+        <a href="Партнёры.dc.html" style="color:{{ accent }};text-decoration:none">Партнёры</a>
+        <a href="Проекты.dc.html" style="color:{{ inkFaint }};text-decoration:none">Проекты</a>
+        <a href="Эксперты.dc.html" style="color:{{ inkFaint }};text-decoration:none">Эксперты</a>
+        <a href="Эфиры.dc.html" style="color:{{ inkFaint }};text-decoration:none">События</a>
+        <a href="Академия - Документы.dc.html" style="color:{{ inkFaint }};text-decoration:none">Документы и контакты</a>
+      </nav>
+      <a href="Витрина врача - Главная.dc.html" style="font-size:12.5px;font-weight:800;color:{{ accent }};text-decoration:underline;text-underline-offset:4px;white-space:nowrap">doctor.school — врачам</a>
+    </div>
+    <div style="max-width:1104px;margin:0 auto;padding:0 clamp(16px,4vw,48px);text-align:center;font-size:10px;font-weight:800;letter-spacing:.18em;text-transform:uppercase;color:{{ inkFaint }}">BBM: Академия смыслов</div>
+    <div aria-hidden="true" style="overflow:hidden;padding-top:clamp(12px,2.4vw,28px)">
+      <div style="font-size:clamp(30px,8.2vw,154px);font-weight:800;letter-spacing:-.05em;line-height:.78;white-space:nowrap;text-align:center;color:{{ giantInk }};transform:translateY(.16em);user-select:none">Academy.Doctor.School</div>
+    </div>
+  </footer>
+
+  <!-- Панель развилок и состояний (для владельца) -->
+  <div style="position:fixed;bottom:16px;left:16px;z-index:50;background:{{ surface }};border:2px solid {{ border }};box-shadow:4px 4px 0 {{ shadow }};padding:10px 12px 12px;display:flex;flex-direction:column;gap:8px">
+    <sc-for list="{{ panelRows }}" as="row" hint-placeholder-count="7">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="width:80px;font-size:9.5px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:{{ inkFaint }}">{{ row.label }}</span>
+        <span style="display:flex;gap:5px;flex-wrap:wrap">
+          <sc-for list="{{ row.btns }}" as="pb" hint-placeholder-count="3">
+            <button onClick="{{ pb.onClick }}" title="{{ pb.title }}" style="{{ pb.style }}">{{ pb.label }}</button>
+          </sc-for>
+        </span>
+      </div>
+    </sc-for>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;dataState&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;заполнена&quot;,&quot;загрузка&quot;,&quot;нет проектов&quot;,&quot;нет экспертов и событий&quot;,&quot;нет данных реестра&quot;],&quot;default&quot;:&quot;заполнена&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Состояние&quot;},&quot;authState&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;гость&quot;,&quot;вошёл&quot;],&quot;default&quot;:&quot;гость&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Состояние&quot;},&quot;logo&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;размещён&quot;,&quot;не разрешён комплаенсом&quot;],&quot;default&quot;:&quot;размещён&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Состояние&quot;},&quot;roles&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;одна — инвестор&quot;,&quot;две — инвестор · клиническая площадка&quot;],&quot;default&quot;:&quot;одна — инвестор&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Состояние&quot;},&quot;production&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;А — раздел-заготовка&quot;,&quot;Б — место зарезервировано&quot;,&quot;В — свёрнутая строка&quot;],&quot;default&quot;:&quot;А — раздел-заготовка&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Развилки&quot;},&quot;exclusivity&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;А — пометка на карточке&quot;,&quot;Б — не показывать&quot;],&quot;default&quot;:&quot;А — пометка на карточке&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Развилки&quot;},&quot;numbersPlacement&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;А — в шапке&quot;,&quot;Б — в блоке «О компании»&quot;],&quot;default&quot;:&quot;А — в шапке&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Развилки&quot;}}">
+class Component extends DCLogic {
+  state = {
+    dark: (() => { try { return localStorage.getItem('ds-theme') === 'dark'; } catch (e) { return false; } })(),
+    isMobile: false
+  };
+  componentDidMount() {
+    this.mq = window.matchMedia('(max-width: 900px)');
+    this.upd = () => this.setState({ isMobile: this.mq.matches });
+    this.upd();
+    this.mq.addEventListener ? this.mq.addEventListener('change', this.upd) : this.mq.addListener(this.upd);
+  }
+  renderVals() {
+    const s = this.state, p = this.props, d = s.dark, m = s.isMobile;
+    const pageBg = d ? 'oklch(.16 .02 250)' : '#fff';
+    const surface = d ? 'oklch(.21 .02 250)' : '#fff';
+    const ink = d ? '#fff' : 'oklch(.21 .02 250)';
+    const inkMuted = d ? 'rgba(255,255,255,.62)' : 'oklch(.45 .014 250)';
+    const inkFaint = d ? 'rgba(255,255,255,.5)' : 'oklch(.556 .012 250)';
+    const border = d ? '#fff' : 'oklch(.21 .02 250)';
+    const hairline = d ? 'rgba(255,255,255,.16)' : 'oklch(.922 .006 250)';
+    const accent = d ? '#6BB1F7' : '#2D84F2';
+    const btnBg = d ? '#6BB1F7' : '#114D9E';
+    const btnFg = d ? '#0D3A77' : '#fff';
+    const shadow = d ? '#6BB1F7' : '#114D9E';
+    const shadowSm = d ? '#1F69C8' : '#AED4FB';
+    const tint = d ? '#0D3A77' : '#D3E8FD';
+    const tintFg = d ? '#AED4FB' : '#114D9E';
+    const tintInk = d ? '#6BB1F7' : '#114D9E';
+    const sectionGray = d ? 'oklch(.185 .02 250)' : 'oklch(.972 .004 250)';
+
+    // ── состояния и развилки (панель > пропсы) ──
+    const ds = s.dataV || p.dataState || 'заполнена';
+    const logged = s.authV != null ? s.authV === 'in' : (p.authState || 'гость') === 'вошёл';
+    const logoOk = s.logoV != null ? s.logoV === 'ok' : (p.logo || 'размещён') === 'размещён';
+    const twoRoles = s.rolesV != null ? s.rolesV === 'two' : (p.roles || 'одна')[0] === 'д';
+    const prod = (s.prodV0 || p.production || 'А')[0];
+    const excl = (s.exclV0 || p.exclusivity || 'А')[0];
+    const numsHero = s.numsV != null ? s.numsV === 'hero' : (p.numbersPlacement || 'А — в шапке')[0] === 'А';
+
+    const loading = ds === 'загрузка';
+    const noProjects = ds === 'нет проектов';
+    const noExperts = ds === 'нет экспертов и событий' || noProjects;
+    const noReg = ds === 'нет данных реестра';
+
+    const roleChips = twoRoles ? ['инвестор', 'клиническая площадка', 'фарма'] : ['инвестор', 'фарма'];
+    const rolesLine = twoRoles ? 'инвестор · клиническая площадка' : 'инвестор';
+    const projCountN = noProjects ? '0' : '3';
+    const projCountWord = noProjects ? 'проектов' : 'проекта';
+
+    const projects = noProjects ? [] : [
+      { kind: 'Школа', title: 'Ортобиология — школа и курс-сериал', desc: 'PRP, клеточные технологии и биоортопедия в практике травматолога. Модули, эфиры и очные разборы — бесплатно для врача.', count: '24 эфира', emblem: 'Ор', exclusive: excl === 'А' },
+      { kind: 'Конгресс', title: 'Конгресс-2026', desc: 'Ежегодная очная встреча направления · Москва, октябрь.', count: '2 дня программы', emblem: 'Кг', exclusive: false },
+      { kind: 'Подкаст', title: 'Подкаст-цикл школы', desc: 'Разговоры с экспертами направления регенеративной медицины.', count: '12 выпусков', emblem: 'Пк', exclusive: false }
+    ];
+
+    const products = [
+      { mono: 'П1', name: 'Набор для PRP-терапии', desc: 'Расходные материалы для процедур в амбулаторной практике.' },
+      { mono: 'П2', name: 'Центрифуга лабораторная', desc: 'Оборудование для подготовки препаратов в клинике.' },
+      { mono: 'П3', name: 'Гиалуроновая линейка', desc: 'Препараты для внутрисуставного введения.' }
+    ];
+
+    const logoTile = 'flex:none;width:52px;height:52px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;letter-spacing:-.02em;background:' + tint + ';color:' + tintInk;
+    const noLogoTile = 'flex:none;width:52px;height:52px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;border:2px dashed ' + (d ? 'rgba(255,255,255,.35)' : 'oklch(.8 .01 250)') + ';color:' + inkFaint;
+
+    const panelBtn = (active, wide) => 'font:inherit;font-size:11px;font-weight:800;' + (wide ? 'padding:0 9px;height:30px' : 'width:30px;height:30px') + ';cursor:pointer;border:2px solid ' + (active ? btnBg : border) + ';color:' + (active ? btnFg : ink) + ';background:' + (active ? btnBg : 'transparent');
+    const B = (label, title, active, patch, wide) => ({ label, title, onClick: () => this.setState(patch), style: panelBtn(active, wide !== false) });
+    const panelRows = [
+      { label: 'Данные', btns: [B('заполн.', 'Заполненная страница', ds === 'заполнена', { dataV: 'заполнена' }), B('загр.', 'Загрузка — скелет шапки и блоков', loading, { dataV: 'загрузка' }), B('нет проектов', 'Новый инвестор — проекты готовятся', noProjects, { dataV: 'нет проектов' }), B('нет эксп.', 'Нет экспертов и событий — блок сворачивается в строку', ds === 'нет экспертов и событий', { dataV: 'нет экспертов и событий' }), B('нет реестра', 'Нет данных реестра (blocked_by 036) — пояснение вместо процента', noReg, { dataV: 'нет данных реестра' })] },
+      { label: 'Вход', btns: [B('гость', 'Гость', !logged, { authV: 'out' }), B('вошёл', 'Вошедший', logged, { authV: 'in' })] },
+      { label: 'Логотип', btns: [B('есть', 'Логотип размещён по комплаенсу', logoOk, { logoV: 'ok' }), B('текст', 'Логотип не разрешён — текстовое название (REQ-70)', !logoOk, { logoV: 'no' })] },
+      { label: 'Роли', btns: [B('одна', 'Инвестор', !twoRoles, { rolesV: 'one' }), B('две', 'Инвестор · клиническая площадка (Q-40, REQ-28)', twoRoles, { rolesV: 'two' })] },
+      { label: 'Продукция', btns: [B('А', 'Видимый раздел-заготовка с пометкой «готовится»', prod === 'А', { prodV0: 'А' }, false), B('Б', 'Раздела нет — место зарезервировано, описано словами', prod === 'Б', { prodV0: 'Б' }, false), B('В', 'Свёрнутая строка «по запросу через менеджера»', prod === 'В', { prodV0: 'В' }, false)] },
+      { label: 'Эксклюзив', btns: [B('А', 'Пометка «годовой эксклюзив» на карточке проекта (CON-7)', excl === 'А', { exclV0: 'А' }, false), B('Б', 'Не показывать — эксклюзивность остаётся предметом договора', excl === 'Б', { exclV0: 'Б' }, false)] },
+      { label: 'Цифры', btns: [B('шапка', 'Витринные цифры в постер-шапке — читаются как рейтинговые', numsHero, { numsV: 'hero' }), B('о комп.', 'Строка лидерборда в блоке «О компании» — читается как справка', !numsHero, { numsV: 'block' })] }
+    ];
+
+    return {
+      dark: d, isMobile: m, isDesktop: !m,
+      pageBg, surface, ink, inkMuted, inkFaint, border, hairline, accent, btnBg, btnFg, shadow, shadowSm, tint, tintFg, tintInk, sectionGray,
+      headerShadow: d ? 'oklch(.16 .02 250)' : '#0D3A77',
+      dashedBorder: d ? 'rgba(255,255,255,.35)' : 'oklch(.8 .01 250)',
+      authHref: logged ? 'Профиль.dc.html' : 'Авторизация.dc.html',
+      authLabel: logged ? 'Кабинет' : 'Войти / Регистрация',
+      roleChips, rolesLine,
+      logoOk, noLogo: !logoOk,
+      numbersInHero: numsHero, numbersInBlock: !numsHero && !loading,
+      hasReg: !noReg, noReg,
+      projCountN, projCountWord,
+      projCountTxt: noProjects ? 'проекты готовятся' : '3 проекта',
+      showSkeleton: loading, showBody: !loading,
+      skel3: [1, 2, 3],
+      skelGrid: m ? 'display:flex;flex-direction:column;gap:16px' : 'display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px',
+      hasProjects: !noProjects, noProjects,
+      hasExperts: !noExperts, noExperts,
+      projects, products,
+      projGrid: m ? 'display:flex;flex-direction:column;gap:24px' : 'display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:20px',
+      expGrid: m ? 'display:flex;flex-direction:column;gap:16px' : 'display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:20px',
+      evGrid: m ? 'display:flex;flex-direction:column;margin:0 -16px' : 'display:grid;grid-template-columns:minmax(0,1fr);gap:24px',
+      ev1Speakers: [{ name: 'Страхов М. А.', org: 'РНИМУ им. Пирогова' }],
+      ev2Speakers: [{ name: 'Игорь Савченко', org: 'ЦИТО им. Приорова' }],
+      aboutGrid: m ? 'display:flex;flex-direction:column;gap:18px' : 'display:flex;align-items:flex-start;justify-content:space-between;gap:40px',
+      boardBox: m ? 'margin:0 -16px;background:' + surface + ';border-top:1px solid ' + hairline + ';border-bottom:1px solid ' + hairline : 'background:' + surface + ';border:2px solid ' + border + ';box-shadow:6px 6px 0 ' + shadow,
+      rowPad: m ? '16px' : '20px',
+      rowGrid: m ? '34px minmax(0,1fr) 20px' : '34px 52px minmax(0,1fr) 150px 140px 110px 20px',
+      rankStyle: 'flex:none;width:34px;height:34px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;font-variant-numeric:tabular-nums;background:' + tint + ';color:' + tintFg + (m ? ';display:none' : ''),
+      tileStyle: (logoOk ? logoTile : noLogoTile) + (m ? ';display:none' : ''),
+      tileTxt: logoOk ? 'ПА' : 'текст',
+      typeChipStyle: 'display:inline-block;font-size:10.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:' + tintFg + ';background:' + tint + ';padding:3px 8px',
+      prodA: prod === 'А' && !loading, prodB: prod === 'Б' && !loading, prodV: prod === 'В' && !loading,
+      prodGrid: m ? 'display:flex;flex-direction:column;margin:0 -16px' : 'display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:20px',
+      prodCard: m ? 'display:flex;flex-direction:column;padding:18px 16px;border-bottom:1px solid ' + hairline + ';background:' + surface : 'display:flex;flex-direction:column;background:' + surface + ';border:2px solid ' + border + ';box-shadow:5px 5px 0 ' + shadowSm + ';padding:22px;box-sizing:border-box',
+      prodTile: 'flex:none;width:44px;height:44px;display:inline-flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;background:' + tint + ';color:' + tintInk,
+      ctaBox: m ? 'margin:0 -16px;background:' + sectionGray + ';padding:24px 16px;display:flex;flex-direction:column;gap:20px;align-items:flex-start' : 'background:' + surface + ';border:2px solid ' + border + ';box-shadow:6px 6px 0 ' + shadow + ';padding:clamp(24px,4vw,36px);display:flex;align-items:center;justify-content:space-between;gap:24px;flex-wrap:wrap',
+      toggleTheme: () => this.setState(x => { const dark = !x.dark; try { localStorage.setItem('ds-theme', dark ? 'dark' : 'light'); } catch (e) {} return { dark }; }),
+      themeIcon: d ? '☀' : '☾',
+      footLogoEl: React.createElement('img', { src: d ? 'assets/ds-logo-white.svg' : 'assets/ds-logo-color.svg', alt: 'Doctor.School', style: { height: '22px', display: 'block' } }),
+      giantInk: d ? 'rgba(174,212,251,.09)' : 'oklch(.945 .018 250)',
+      panelRows
+    };
+  }
+}
+</script>
+</body>
+</html>

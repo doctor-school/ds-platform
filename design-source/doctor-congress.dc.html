@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"><style>body{margin:0;background:#fff;font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}a{color:#2D84F2}a:hover{color:#114D9E}:focus-visible{outline:3px solid #6BB1F7;outline-offset:2px}@keyframes livePulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.45;transform:scale(.72)}}html{scroll-behavior:smooth}</style></helmet>
+
+<div style="min-height:100vh;background:{{ pageBg }};padding-bottom:{{ stickyPad }}">
+
+  <!-- ═══ d-congress · шапка витрины врача (юнит с d-home, как есть) ═══ -->
+  <header data-screen-label="d-congress · шапка витрины врача" style="background:#114D9E;padding:14px clamp(16px,4vw,48px);display:flex;align-items:center;gap:clamp(14px,2.5vw,28px)">
+    <a href="Витрина врача - Главная.dc.html" style="display:flex;flex:none"><img src="assets/ds-logo-white.svg" alt="Doctor.School" style="height:26px;display:block"></a>
+    <sc-if value="{{ isDesktop }}" hint-placeholder-val="{{ true }}">
+      <input value="{{ q }}" onInput="{{ setQ }}" placeholder="Поиск по урокам, школам и событиям" style="flex:1;max-width:440px;font:inherit;font-size:13.5px;font-weight:600;padding:12px 14px;border:2px solid rgba(255,255,255,.45);background:transparent;color:#fff;outline:none;min-width:120px" style-focus="border-color:#fff;background:rgba(255,255,255,.08)">
+      <nav style="display:flex;align-items:center;gap:14px;margin-left:auto">
+        <button onClick="{{ toggleTheme }}" title="Тема" style="font:inherit;width:44px;height:44px;background:transparent;color:#fff;border:2px solid rgba(255,255,255,.5);cursor:pointer;font-size:15px;flex:none" style-hover="border-color:#fff">{{ themeIcon }}</button>
+        <sc-if value="{{ guest }}" hint-placeholder-val="{{ true }}">
+          <a href="Авторизация.dc.html" style="font-size:13.5px;font-weight:700;color:#D3E8FD;text-decoration:none;padding:12px 6px;white-space:nowrap" style-hover="color:#fff">Войти</a>
+          <a href="Авторизация.dc.html" style="font-size:13.5px;font-weight:800;color:#114D9E;background:#fff;padding:12px 22px;text-decoration:none;white-space:nowrap;box-shadow:3px 3px 0 #0D3A77" style-hover="transform:translate(1px,1px);box-shadow:2px 2px 0 #0D3A77">Регистрация</a>
+        </sc-if>
+        <sc-if value="{{ loggedIn }}" hint-placeholder-val="{{ false }}">
+          <a href="#" title="Очки внимания: Пульс · Дыхание · Сознание. Открыть историю начислений" style="display:inline-flex;align-items:center;gap:9px;border:2px solid rgba(255,255,255,.45);padding:10px 14px;font-size:12px;font-weight:800;color:#fff;text-decoration:none;white-space:nowrap;font-variant-numeric:tabular-nums" style-hover="border-color:#fff"><span>120 Pul</span><span style="opacity:.45">·</span><span>340 Bre</span><span style="opacity:.45">·</span><span>1 250 Con</span></a>
+          <a href="Витрина врача - Личный кабинет.dc.html" style="font-size:13.5px;font-weight:800;color:#114D9E;background:#fff;padding:12px 22px;text-decoration:none;white-space:nowrap;box-shadow:3px 3px 0 #0D3A77" style-hover="transform:translate(1px,1px);box-shadow:2px 2px 0 #0D3A77">Личный кабинет</a>
+        </sc-if>
+      </nav>
+    </sc-if>
+    <sc-if value="{{ isMobile }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;align-items:center;gap:10px;margin-left:auto">
+        <button onClick="{{ toggleTheme }}" title="Тема" style="font:inherit;width:44px;height:44px;background:transparent;color:#fff;border:2px solid rgba(255,255,255,.5);cursor:pointer;font-size:16px">{{ themeIcon }}</button>
+        <details style="position:relative">
+          <summary style="list-style:none;width:44px;height:44px;display:inline-flex;align-items:center;justify-content:center;background:#fff;color:#114D9E;cursor:pointer;font-size:20px;font-weight:800;box-shadow:3px 3px 0 #0D3A77">≡</summary>
+          <nav style="position:absolute;top:calc(100% + 10px);right:0;background:{{ surface }};border:2px solid {{ border }};box-shadow:5px 5px 0 {{ shadow }};padding:8px;display:flex;flex-direction:column;min-width:220px;z-index:30">
+            <sc-if value="{{ loggedIn }}" hint-placeholder-val="{{ false }}">
+              <a href="#" style="padding:12px 16px;font-size:12.5px;font-weight:800;color:{{ ink }};text-decoration:none;font-variant-numeric:tabular-nums">120 Pul · 340 Bre · 1 250 Con</a>
+              <a href="Витрина врача - Личный кабинет.dc.html" style="margin-top:4px;padding:12px 16px;font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};text-decoration:none;text-align:center">Личный кабинет</a>
+            </sc-if>
+            <sc-if value="{{ guest }}" hint-placeholder-val="{{ true }}">
+              <a href="Авторизация.dc.html" style="padding:12px 16px;font-size:15px;font-weight:700;color:{{ ink }};text-decoration:none">Войти</a>
+              <a href="Авторизация.dc.html" style="margin-top:4px;padding:12px 16px;font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};text-decoration:none;text-align:center">Регистрация</a>
+            </sc-if>
+          </nav>
+        </details>
+      </div>
+    </sc-if>
+  </header>
+  <sc-if value="{{ isMobile }}" hint-placeholder-val="{{ false }}">
+    <div style="background:#114D9E;padding:0 16px 14px">
+      <input value="{{ q }}" onInput="{{ setQ }}" placeholder="Поиск по урокам, школам и событиям" style="width:100%;box-sizing:border-box;font:inherit;font-size:14px;font-weight:600;padding:13px 14px;border:2px solid rgba(255,255,255,.45);background:transparent;color:#fff;outline:none" style-focus="border-color:#fff"></div>
+  </sc-if>
+
+  <!-- ═══ d-congress · постер-шапка (юнит с webinar-page, как есть; отличия: номер выпуска, даты, место) ═══ -->
+  <div data-screen-label="d-congress · постер-шапка" style="background:#114D9E;padding:clamp(24px,4vw,36px) clamp(16px,4vw,48px) clamp(48px,6vw,72px)">
+    <div style="max-width:1104px;margin:0 auto">
+      <nav style="font-size:12.5px;font-weight:700;color:#AED4FB;margin-bottom:28px;display:flex;gap:8px;flex-wrap:wrap"><a href="Витрина врача - Главная.dc.html" style="color:#AED4FB;text-decoration:none" style-hover="color:#fff;text-decoration:underline;text-underline-offset:3px">Doctor.School</a><span style="opacity:.5">/</span><a href="Витрина врача - Лента специальности.dc.html" style="color:#AED4FB;text-decoration:none" style-hover="color:#fff;text-decoration:underline;text-underline-offset:3px">Травматология и ортопедия</a><span style="opacity:.5">/</span><span style="color:#D3E8FD">Конгресс</span></nav>
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:32px;flex-wrap:wrap">
+        <div style="max-width:760px">
+          <div style="font-size:13px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#D3E8FD;margin-bottom:16px">Конгресс · офлайн · VII выпуск</div>
+          <h1 style="margin:0;font-size:clamp(30px,5.5vw,50px);line-height:1.06;font-weight:800;letter-spacing:-.035em;color:#fff;text-wrap:balance">Ортобиология-2026</h1>
+          <div style="margin-top:16px;font-size:clamp(15px,2vw,18px);font-weight:700;color:#D3E8FD;font-variant-numeric:tabular-nums">14–15 ноября 2026 · Казань, конгресс-холл «Ривьера»</div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:22px">
+            <span style="font-size:12.5px;font-weight:700;color:#fff;border:2px solid #6BB1F7;padding:5px 12px">Травматология и ортопедия</span>
+            <span style="font-size:12.5px;font-weight:700;color:#fff;border:2px solid #6BB1F7;padding:5px 12px">Ортобиология</span>
+            <span style="font-size:12.5px;font-weight:700;color:#fff;border:2px solid #6BB1F7;padding:5px 12px">2 дня · 6 секций</span>
+          </div>
+        </div>
+        <span style="{{ heroBadgeStyle }}">{{ heroBadgeText }}</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ минимальный выпуск (развилка 2 · вариант А · F-2 «б») ═══ -->
+  <sc-if value="{{ minIntake }}" hint-placeholder-val="{{ false }}">
+    <main data-screen-label="d-congress · минимальный выпуск (F-2 б)" style="max-width:760px;margin:0 auto;padding:clamp(36px,6vw,64px) clamp(16px,4vw,48px)">
+      <p style="margin:0 0 28px;font-size:16px;line-height:1.7;color:{{ inkBody }};text-wrap:pretty">VII конгресс по ортобиологии: два дня докладов, разборов и дискуссий об инъекционных и клеточных технологиях в травматологии и ортопедии. Участие бесплатное для всех врачей. Программа и список секций появятся на этой странице ближе к конгрессу.</p>
+      <div style="border:2px solid {{ border }};background:{{ surface }};box-shadow:6px 6px 0 {{ shadow }};padding:clamp(22px,4vw,32px)">
+        <div style="font-size:19px;font-weight:800;letter-spacing:-.01em;color:{{ ink }};margin-bottom:8px">Регистрация на конгресс</div>
+        <div style="font-size:13.5px;line-height:1.6;color:{{ inkMuted }};margin-bottom:20px">Данные попадают в вашу учётную запись Doctor.School — билет появится в «Моих событиях», когда откроется выдача.</div>
+        <sc-if value="{{ guest }}" hint-placeholder-val="{{ true }}">
+          <a href="Авторизация.dc.html" style="display:inline-block;font-size:15px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:2px solid {{ btnBg }};padding:15px 32px;text-decoration:none;box-shadow:4px 4px 0 {{ border }}" style-hover="transform:translate(2px,2px);box-shadow:2px 2px 0 {{ border }}">Получить билет — нужна регистрация ↗</a>
+          <div style="margin-top:12px;font-size:12.5px;color:{{ inkFaint }};font-weight:600">Вернём вас на эту страницу.</div>
+        </sc-if>
+        <sc-if value="{{ loggedIn }}" hint-placeholder-val="{{ false }}">
+          <button style="font:inherit;font-size:15px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:2px solid {{ btnBg }};padding:15px 32px;cursor:pointer;box-shadow:4px 4px 0 {{ border }}" style-hover="transform:translate(2px,2px);box-shadow:2px 2px 0 {{ border }}">Получить билет</button>
+        </sc-if>
+      </div>
+      <div style="margin-top:20px;border:2px dashed {{ dashBorder }};padding:12px 16px;font-size:11.5px;line-height:1.6;color:{{ inkFaint }}"><b style="letter-spacing:.08em;text-transform:uppercase;font-size:10px">Примечание макета</b> · артборд развилки 2, вариант А: ранний приём регистраций (фича 044, волна 2) до сборки полного фронта. Форма пишет в базу платформы (F-2 «б»).</div>
+    </main>
+  </sc-if>
+
+  <sc-if value="{{ full }}" hint-placeholder-val="{{ true }}">
+  <main style="max-width:1104px;margin:0 auto;padding:clamp(36px,6vw,64px) clamp(16px,4vw,48px) 0">
+
+    <!-- ═══ пара колонок: о конгрессе + программа ═══ -->
+    <div style="display:grid;grid-template-columns:{{ pairCols }};gap:clamp(32px,4vw,56px);align-items:start">
+
+      <!-- ═══ Блок 2 · О конгрессе ═══ -->
+      <div data-screen-label="d-congress · о конгрессе" style="min-width:0">
+        <div style="display:flex;align-items:baseline;gap:18px;margin-bottom:24px">
+          <span style="font-size:13px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ ink }};white-space:nowrap">О конгрессе</span>
+          <span style="flex:1;border-top:2px solid {{ ink }}"></span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:2px;border:2px solid {{ border }};background:{{ border }};margin-bottom:32px">
+          <div style="background:{{ surface }};padding:16px 14px"><div style="font-size:24px;font-weight:800;letter-spacing:-.03em;color:{{ ink }};font-variant-numeric:tabular-nums">VII</div><div style="margin-top:5px;font-size:10.5px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:{{ inkFaint }}">выпуск</div></div>
+          <div style="background:{{ surface }};padding:16px 14px"><div style="font-size:24px;font-weight:800;letter-spacing:-.03em;color:{{ ink }};font-variant-numeric:tabular-nums">2</div><div style="margin-top:5px;font-size:10.5px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:{{ inkFaint }}">дня</div></div>
+          <div style="background:{{ surface }};padding:16px 14px"><div style="font-size:24px;font-weight:800;letter-spacing:-.03em;color:{{ ink }};font-variant-numeric:tabular-nums">6</div><div style="margin-top:5px;font-size:10.5px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:{{ inkFaint }}">секций</div></div>
+        </div>
+
+        <div style="font-size:11.5px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:{{ accent }};margin-bottom:14px">Приветствие президиума</div>
+        <div style="display:flex;flex-direction:column;gap:16px;margin-bottom:32px">
+          <sc-for list="{{ greetings }}" as="g" hint-placeholder-count="2">
+            <div style="border:2px solid {{ hairline }};padding:16px 18px;display:flex;gap:14px;align-items:flex-start">
+              <span style="width:44px;height:44px;flex:none;background:{{ tint }};color:{{ tintFg }};display:inline-flex;align-items:center;justify-content:center;font-size:13px;font-weight:800">{{ g.init }}</span>
+              <div style="min-width:0"><div style="font-size:13px;line-height:1.6;color:{{ inkBody }};font-style:italic">«{{ g.quote }}»</div><a href="Эксперт.dc.html" style="display:inline-block;margin-top:8px;font-size:12.5px;font-weight:800;color:{{ accent }};text-decoration:none" style-hover="text-decoration:underline;text-underline-offset:3px">{{ g.name }}</a><div style="font-size:11.5px;font-weight:600;color:{{ inkFaint }};margin-top:2px">{{ g.role }}</div></div>
+            </div>
+          </sc-for>
+        </div>
+
+        <div style="font-size:11.5px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:{{ accent }};margin-bottom:14px">Оргкомитет</div>
+        <div style="display:flex;flex-direction:column;margin-bottom:32px">
+          <sc-for list="{{ committee }}" as="c" hint-placeholder-count="4">
+            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid {{ hairline }}"><a href="Эксперт.dc.html" style="font-size:13.5px;font-weight:700;color:{{ ink }};text-decoration:none" style-hover="color:{{ accent }};text-decoration:underline;text-underline-offset:3px">{{ c.name }}</a><span style="font-size:12px;font-weight:600;color:{{ inkFaint }};text-align:right">{{ c.role }}</span></div>
+          </sc-for>
+        </div>
+
+        <!-- партнёры · 7 уровней (развилка 4: А — размер по уровню · Б — один размер) -->
+        <div data-screen-label="d-congress · партнёры · вариант А|Б" style="font-size:11.5px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:{{ accent }};margin-bottom:14px">Партнёры конгресса</div>
+        <div style="display:flex;flex-direction:column;gap:18px">
+          <sc-for list="{{ partnerLevels }}" as="lv" hint-placeholder-count="7">
+            <div>
+              <div style="font-size:10.5px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:{{ inkFaint }};margin-bottom:8px">{{ lv.label }}</div>
+              <div style="display:flex;gap:10px;flex-wrap:wrap">
+                <sc-for list="{{ lv.orgs }}" as="o" hint-placeholder-count="2">
+                  <span style="{{ lv.tileStyle }}">{{ o }}</span>
+                </sc-for>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="margin-top:16px;font-size:11.5px;line-height:1.6;color:{{ inkFaint }}">Уровень указан у каждой группы логотипов. Партнёрские секции в программе несут пометку «Партнёрский материал».</div>
+      </div>
+
+      <!-- ═══ Блок 3 · Программа (ритм дней — юнит webinars-listing, как есть) ═══ -->
+      <div data-screen-label="d-congress · программа" style="min-width:0">
+        <div style="display:flex;align-items:baseline;gap:18px;margin-bottom:24px">
+          <span style="font-size:13px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ ink }};white-space:nowrap">Программа</span>
+          <span style="flex:1;border-top:2px solid {{ ink }}"></span>
+        </div>
+
+        <!-- загрузка · скелет программы -->
+        <sc-if value="{{ progLoading }}" hint-placeholder-val="{{ false }}">
+          <div data-screen-label="d-congress · программа · загрузка" style="display:flex;flex-direction:column;gap:18px">
+            <div style="height:14px;width:30%;background:{{ hairline }};animation:livePulse 1.4s ease-in-out infinite"></div>
+            <div style="height:96px;background:{{ hairline }};animation:livePulse 1.4s ease-in-out infinite"></div>
+            <div style="height:96px;background:{{ hairline }};animation:livePulse 1.4s ease-in-out infinite"></div>
+            <div style="height:14px;width:30%;background:{{ hairline }};animation:livePulse 1.4s ease-in-out infinite"></div>
+            <div style="height:96px;background:{{ hairline }};animation:livePulse 1.4s ease-in-out infinite"></div>
+          </div>
+        </sc-if>
+
+        <!-- ошибка загрузки блока · остальной экран живёт -->
+        <sc-if value="{{ progError }}" hint-placeholder-val="{{ false }}">
+          <div data-screen-label="d-congress · программа · ошибка блока" style="border:2px solid {{ danger }};background:{{ dangerTint }};padding:clamp(22px,4vw,32px);display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+            <span style="font-size:18px;color:{{ danger }};flex:none">⚠</span>
+            <div style="flex:1;min-width:200px"><div style="font-size:14.5px;font-weight:700;color:{{ ink }}">Не удалось загрузить программу.</div><div style="font-size:12.5px;color:{{ inkMuted }};margin-top:4px">Сервер не ответил за 10 секунд. Остальная страница работает.</div></div>
+            <button style="font:inherit;font-size:13.5px;font-weight:700;color:{{ ink }};background:{{ surface }};border:2px solid {{ border }};padding:12px 22px;cursor:pointer" style-hover="background:{{ tint }}">Повторить</button>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ progOn }}" hint-placeholder-val="{{ true }}">
+
+          <!-- программа формируется -->
+          <sc-if value="{{ progForming }}" hint-placeholder-val="{{ false }}">
+            <div style="background:{{ tint }};padding:14px 18px;font-size:13px;line-height:1.6;font-weight:600;color:{{ tintFg }};margin-bottom:24px">Программа формируется. Секции уже определены — доклады появятся ближе к конгрессу.</div>
+          </sc-if>
+
+          <!-- вариант В · панель фильтров (юнит events-filter, как есть; отличается состав фасетов: зал и специальность) -->
+          <sc-if value="{{ vFilter }}" hint-placeholder-val="{{ false }}">
+            <div data-screen-label="d-congress · программа · фильтр (вариант В)" style="border:2px solid {{ border }};background:{{ surface }};box-shadow:3px 3px 0 {{ shadowSm }};padding:14px 18px;display:flex;gap:20px;flex-wrap:wrap;align-items:center;margin-bottom:24px">
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                <span style="font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:{{ inkFaint }}">Зал</span>
+                <sc-for list="{{ hallChips }}" as="h" hint-placeholder-count="3"><button onClick="{{ h.onClick }}" style="{{ h.style }}">{{ h.label }}</button></sc-for>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                <span style="font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:{{ inkFaint }}">Специальность</span>
+                <sc-for list="{{ specChips }}" as="h" hint-placeholder-count="3"><button onClick="{{ h.onClick }}" style="{{ h.style }}">{{ h.label }}</button></sc-for>
+              </div>
+              <sc-if value="{{ filterActive }}" hint-placeholder-val="{{ false }}">
+                <button onClick="{{ resetFilter }}" style="font:inherit;margin-left:auto;font-size:12.5px;font-weight:700;color:{{ accent }};background:transparent;border:0;cursor:pointer;text-decoration:underline;text-underline-offset:4px">Сбросить</button>
+              </sc-if>
+            </div>
+          </sc-if>
+
+          <!-- вариант А · сетка залов -->
+          <sc-if value="{{ vGrid }}" hint-placeholder-val="{{ false }}">
+            <div data-screen-label="d-congress · программа · сетка (вариант А)" style="display:flex;flex-direction:column;gap:8px">
+              <sc-for list="{{ days }}" as="day" hint-placeholder-count="2">
+                <div style="{{ dayHeaderStyle }}"><span style="font-size:13px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ ink }};white-space:nowrap">{{ day.label }}</span><span style="{{ dayRuleStyle }}"></span></div>
+                <div style="{{ gridCols }}">
+                  <sc-for list="{{ day.halls }}" as="hall" hint-placeholder-count="2">
+                    <div style="min-width:0">
+                      <div style="background:{{ sectionGray }};padding:8px 12px;font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:{{ inkFaint }};margin-bottom:10px">{{ hall.name }}</div>
+                      <div style="display:flex;flex-direction:column;gap:12px">
+                        <sc-for list="{{ hall.sections }}" as="sec" hint-placeholder-count="2">
+                          <div style="{{ sec.cardStyle }}">
+                            <div style="font-size:11.5px;font-weight:800;color:{{ inkFaint }};font-variant-numeric:tabular-nums">{{ sec.time }}</div>
+                            <div style="font-size:15px;font-weight:800;letter-spacing:-.01em;color:{{ ink }};margin-top:4px">Секция «{{ sec.title }}»</div>
+                            <div style="font-size:12px;font-weight:600;color:{{ inkFaint }};margin-top:4px">{{ sec.mods }}</div>
+                          </div>
+                        </sc-for>
+                      </div>
+                    </div>
+                  </sc-for>
+                </div>
+              </sc-for>
+              <div style="margin-top:8px;font-size:11.5px;line-height:1.6;color:{{ inkFaint }}">Сетка показывает параллельность залов; состав докладов каждой секции — в списке по дням (вариант Б/В).</div>
+            </div>
+          </sc-if>
+
+          <!-- варианты Б и В · список по дням (десктоп) -->
+          <sc-if value="{{ vListDesktop }}" hint-placeholder-val="{{ true }}">
+            <div style="display:flex;flex-direction:column">
+              <sc-for list="{{ days }}" as="day" hint-placeholder-count="2">
+                <div style="{{ dayHeaderStyle }}"><span style="font-size:13px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ ink }};white-space:nowrap">{{ day.label }}</span><span style="{{ dayRuleStyle }}"></span></div>
+                <div style="display:flex;flex-direction:column;gap:20px">
+                  <sc-for list="{{ day.sections }}" as="sec" hint-placeholder-count="3">
+                    <div style="{{ sec.cardStyle }}">
+                      <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+                        <span style="font-size:12px;font-weight:800;color:{{ inkFaint }};font-variant-numeric:tabular-nums">{{ sec.time }}</span>
+                        <span style="font-size:10.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:{{ tintFg }};background:{{ tint }};padding:3px 8px">{{ sec.hall }}</span>
+                        <sc-if value="{{ sec.partner }}" hint-placeholder-val="{{ false }}"><span style="font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:{{ inkFaint }};border:1px solid {{ hairline }};padding:3px 7px">{{ sec.partner }}</span></sc-if>
+                        <sc-if value="{{ sec.young }}" hint-placeholder-val="{{ false }}"><span style="font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#00693D;background:#E6F6EE;padding:3px 7px">Конкурс · до 40 лет</span></sc-if>
+                      </div>
+                      <div style="font-size:17px;font-weight:800;letter-spacing:-.015em;color:{{ ink }};margin-top:8px">Секция «{{ sec.title }}»</div>
+                      <div style="font-size:12.5px;font-weight:600;color:{{ inkFaint }};margin-top:4px">{{ sec.mods }}</div>
+                      <sc-if value="{{ progTalks }}" hint-placeholder-val="{{ true }}">
+                        <div style="display:flex;flex-direction:column;margin-top:14px">
+                          <sc-for list="{{ sec.talks }}" as="tk" hint-placeholder-count="3">
+                            <div style="{{ tk.rowStyle }}">
+                              <div style="min-width:0"><span style="{{ tk.liveStyle }}"><span style="width:7px;height:7px;border-radius:50%;background:#fff;animation:livePulse 1.6s ease-in-out infinite"></span>идёт сейчас</span><span style="font-size:13.5px;font-weight:700;line-height:1.45;color:{{ ink }}">Доклад «{{ tk.t }}»</span></div>
+                              <a href="Эксперт.dc.html" style="{{ tk.spStyle }}" style-hover="text-decoration:underline;text-underline-offset:3px">{{ tk.s }}</a>
+                            </div>
+                          </sc-for>
+                        </div>
+                      </sc-if>
+                      <sc-if value="{{ progForming }}" hint-placeholder-val="{{ false }}">
+                        <div style="margin-top:14px;border:2px dashed {{ dashBorder }};padding:12px 16px;font-size:12.5px;font-weight:600;color:{{ inkFaint }}">Доклады этой секции появятся ближе к конгрессу.</div>
+                      </sc-if>
+                    </div>
+                  </sc-for>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+
+          <!-- мобильный · аккордеон по дням -->
+          <sc-if value="{{ vListMobile }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-direction:column;margin:0 -16px">
+              <sc-for list="{{ days }}" as="day" hint-placeholder-count="2">
+                <details open="{{ day.open }}" style="border-top:2px solid {{ hairline }}">
+                  <summary style="list-style:none;padding:16px;background:{{ sectionGray }};display:flex;align-items:center;justify-content:space-between;cursor:pointer"><span style="font-size:13px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ ink }}">{{ day.label }}</span><span style="font-size:14px;font-weight:800;color:{{ inkFaint }}">▾</span></summary>
+                  <div style="display:flex;flex-direction:column">
+                    <sc-for list="{{ day.sections }}" as="sec" hint-placeholder-count="3">
+                      <div style="padding:18px 16px;border-top:1px solid {{ hairline }};{{ sec.mobStyle }}">
+                        <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap"><span style="font-size:12px;font-weight:800;color:{{ inkFaint }};font-variant-numeric:tabular-nums">{{ sec.time }}</span><span style="font-size:10.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:{{ tintFg }};background:{{ tint }};padding:3px 8px">{{ sec.hall }}</span></div>
+                        <div style="font-size:16px;font-weight:800;letter-spacing:-.015em;color:{{ ink }};margin-top:7px">Секция «{{ sec.title }}»</div>
+                        <div style="font-size:12px;font-weight:600;color:{{ inkFaint }};margin-top:3px">{{ sec.mods }}</div>
+                        <sc-if value="{{ progTalks }}" hint-placeholder-val="{{ true }}">
+                          <div style="display:flex;flex-direction:column;gap:12px;margin-top:12px">
+                            <sc-for list="{{ sec.talks }}" as="tk" hint-placeholder-count="3">
+                              <div><span style="{{ tk.liveStyle }}"><span style="width:7px;height:7px;border-radius:50%;background:#fff;animation:livePulse 1.6s ease-in-out infinite"></span>идёт сейчас</span><div style="font-size:13.5px;font-weight:700;line-height:1.45;color:{{ ink }}">Доклад «{{ tk.t }}»</div><a href="Эксперт.dc.html" style="{{ tk.spStyleM }}">{{ tk.s }}</a></div>
+                            </sc-for>
+                          </div>
+                        </sc-if>
+                        <sc-if value="{{ progForming }}" hint-placeholder-val="{{ false }}">
+                          <div style="margin-top:12px;font-size:12.5px;font-weight:600;color:{{ inkFaint }}">Доклады появятся ближе к конгрессу.</div>
+                        </sc-if>
+                      </div>
+                    </sc-for>
+                  </div>
+                </details>
+              </sc-for>
+            </div>
+          </sc-if>
+
+        </sc-if>
+      </div>
+    </div>
+
+    <!-- ═══ Блок 4 · Участие ═══ -->
+    <section id="join" data-screen-label="d-congress · участие" style="margin-top:clamp(48px,7vw,80px)">
+      <div style="display:flex;align-items:baseline;gap:18px;margin-bottom:24px">
+        <span style="font-size:13px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ ink }};white-space:nowrap">Участие</span>
+        <span style="flex:1;border-top:2px solid {{ ink }}"></span>
+      </div>
+      <div style="{{ joinCardStyle }}">
+        <div style="{{ joinTintCol }}">
+          <div style="font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ tintFg }}">Даты конгресса</div>
+          <div style="font-size:clamp(34px,4vw,44px);font-weight:800;line-height:1.05;letter-spacing:-.04em;color:{{ tintFg }};font-variant-numeric:tabular-nums">14–15<br>ноября</div>
+          <div style="font-size:12.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:{{ tintFg }};line-height:1.5">Казань · «Ривьера»</div>
+        </div>
+        <div style="{{ joinBodyStyle }}">
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12.5px;font-weight:800;color:{{ ink }};letter-spacing:.02em">
+            <span style="color:{{ green }}">Участие бесплатное для всех врачей</span><span style="opacity:.4">·</span><span>слушатель</span><span style="opacity:.4">·</span><span>устный доклад</span><span style="opacity:.4">·</span><span>публикация тезисов</span><span style="opacity:.4">·</span><span>постерный доклад</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12.5px;font-weight:700;color:{{ inkMuted }}">
+            <span style="border:2px solid {{ hairline }};padding:3px 9px;font-weight:800;color:{{ ink }}">НМО этого выпуска</span><span>6 баллов за день, максимум 12</span><span style="opacity:.4">·</span><span>7 специальностей</span><span style="opacity:.4">·</span><span>учёт по бейджу со штрихкодом, сертификат придёт на почту</span>
+          </div>
+          <div style="font-size:12.5px;font-weight:700;color:{{ inkMuted }}"><span style="font-weight:800;color:{{ ink }}">Конкурс молодых учёных</span> — для авторов до 40 лет, работы подаются как устный или постерный доклад.</div>
+
+          <!-- CTA · единственная кнопка участия, языком конгресса — «Получить билет» (REQ-82) -->
+          <sc-if value="{{ ctaSoon }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:24px;flex-wrap:wrap">
+              <div style="min-width:220px;flex:1"><div style="font-size:19px;font-weight:700;letter-spacing:-.01em;color:{{ ink }};margin-bottom:6px">Регистрация скоро откроется</div><div style="font-size:13.5px;line-height:1.6;color:{{ inkMuted }}">Выдача билетов начнётся в ноябре 2026. Страница уже показывает программу и условия.</div></div>
+              <span style="font-size:15px;font-weight:800;color:{{ inkFaint }};border:2px solid {{ hairline }};padding:15px 32px;white-space:nowrap">Получить билет</span>
+            </div>
+          </sc-if>
+          <sc-if value="{{ ctaGuest }}" hint-placeholder-val="{{ true }}">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:24px;flex-wrap:wrap">
+              <div style="min-width:220px;flex:1"><div style="font-size:19px;font-weight:700;letter-spacing:-.01em;color:{{ ink }};margin-bottom:6px">Билет — за одну минуту</div><div style="font-size:13.5px;line-height:1.6;color:{{ inkMuted }}">Получить билет — нужна регистрация. Вернём вас на эту страницу.</div></div>
+              <a href="Авторизация.dc.html" style="font-size:15px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:2px solid {{ btnBg }};padding:15px 32px;white-space:nowrap;box-shadow:4px 4px 0 {{ border }};text-decoration:none" style-hover="transform:translate(2px,2px);box-shadow:2px 2px 0 {{ border }}">Получить билет ↗</a>
+            </div>
+          </sc-if>
+          <sc-if value="{{ ctaGet }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:24px;flex-wrap:wrap">
+              <div style="min-width:220px;flex:1"><div style="font-size:19px;font-weight:700;letter-spacing:-.01em;color:{{ ink }};margin-bottom:6px">Билет — одной кнопкой</div><div style="font-size:13.5px;line-height:1.6;color:{{ inkMuted }}">Данные возьмём из вашей учётной записи — повторная регистрация не нужна. Билет появится здесь и в «Моих событиях».</div></div>
+              <button style="font:inherit;font-size:15px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:2px solid {{ btnBg }};padding:15px 32px;white-space:nowrap;box-shadow:4px 4px 0 {{ border }};cursor:pointer" style-hover="transform:translate(2px,2px);box-shadow:2px 2px 0 {{ border }}">Получить билет</button>
+            </div>
+          </sc-if>
+          <sc-if value="{{ ctaTicket }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-direction:column;gap:16px">
+              <div style="font-size:15px;font-weight:800;color:{{ green }}">{{ ticketHead }}</div>
+              <!-- ═══ юнит «билет / QR» — как есть (анатомия в 04-d-event); отличаются даты выпуска и адрес площадки ═══ -->
+              <div style="max-width:520px">
+                <div data-screen-label="d-congress · билет / QR" style="border:2px solid {{ border }};background:#fff;box-shadow:6px 6px 0 {{ shadow }}">
+                  <div style="background:#114D9E;padding:16px 22px;display:flex;align-items:center;justify-content:space-between;gap:12px">
+                    <span style="font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#fff">Ваш билет</span>
+                    <span style="{{ ticketBadgeStyle }}">{{ ticketStatus }}</span>
+                  </div>
+                  <div style="padding:22px;display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap;{{ ticketBodyStyle }}">
+                    <div style="width:124px;height:124px;border:2px solid oklch(.21 .02 250);position:relative;flex:none;background:conic-gradient(oklch(.21 .02 250) 90deg,#fff 0 180deg,oklch(.21 .02 250) 0 270deg,#fff 0) 0 0/14px 14px">
+                      <span style="position:absolute;top:6px;left:6px;width:24px;height:24px;border:5px solid oklch(.21 .02 250);background:#fff;box-sizing:border-box"></span>
+                      <span style="position:absolute;top:6px;right:6px;width:24px;height:24px;border:5px solid oklch(.21 .02 250);background:#fff;box-sizing:border-box"></span>
+                      <span style="position:absolute;bottom:6px;left:6px;width:24px;height:24px;border:5px solid oklch(.21 .02 250);background:#fff;box-sizing:border-box"></span>
+                    </div>
+                    <div style="flex:1;min-width:170px">
+                      <div style="font-size:15px;font-weight:800;letter-spacing:-.01em;color:oklch(.21 .02 250)">Конгресс «Ортобиология-2026»</div>
+                      <div style="font-size:12.5px;line-height:1.6;color:oklch(.45 .014 250);margin-top:6px">14–15 ноября 2026 · Казань, конгресс-холл «Ривьера» · очно</div>
+                      <div style="font-size:12.5px;font-weight:700;color:oklch(.21 .02 250);margin-top:10px">Соколова Анна Игоревна</div>
+                      <div style="font-size:11.5px;font-weight:700;color:oklch(.556 .012 250);font-variant-numeric:tabular-nums">Билет ОБ-2026-0412</div>
+                    </div>
+                  </div>
+                  <div style="border-top:2px dashed oklch(.704 .01 250);padding:12px 22px;font-size:12px;font-weight:700;color:oklch(.45 .014 250)">{{ ticketFoot }}</div>
+                </div>
+                <div style="margin-top:14px;font-size:12.5px;line-height:1.6;color:{{ inkFaint }}">Билет продублирован в <a href="Мои события.dc.html" style="font-weight:700;color:{{ accent }}">«Моих событиях»</a>.</div>
+              </div>
+            </div>
+          </sc-if>
+          <sc-if value="{{ ctaDone }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:24px;flex-wrap:wrap">
+              <div style="min-width:220px;flex:1"><div style="font-size:19px;font-weight:700;letter-spacing:-.01em;color:{{ ink }};margin-bottom:6px">Конгресс завершён</div><div style="font-size:13.5px;line-height:1.6;color:{{ inkMuted }}">Сертификаты отправлены участникам по электронной почте. Фото, видео и тезисы — ниже на странице.</div></div>
+              <a href="#materials" style="font-size:14px;font-weight:700;color:{{ ink }};background:{{ surface }};border:2px solid {{ border }};padding:13px 22px;white-space:nowrap;box-shadow:4px 4px 0 {{ shadowSm }};text-decoration:none" style-hover="transform:translate(1px,1px)">К материалам ↓</a>
+            </div>
+          </sc-if>
+
+          <!-- второе действие · заявка на выступление (REQ-122) -->
+          <div style="border-top:1px solid {{ hairline }};padding-top:18px;display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap">
+            <div style="min-width:220px;flex:1"><div style="font-size:14.5px;font-weight:800;color:{{ ink }}">Хотите выступить?</div><div style="font-size:12.5px;line-height:1.6;color:{{ inkMuted }};margin-top:3px">Устный доклад, постерный доклад или публикация тезисов — заявку рассматривает оргкомитет.</div></div>
+            <sc-if value="{{ applySent }}" hint-placeholder-val="{{ false }}">
+              <span style="font-size:13px;font-weight:800;color:{{ tintFg }};background:{{ tint }};padding:13px 20px;white-space:nowrap">Заявка на рассмотрении</span>
+            </sc-if>
+            <sc-if value="{{ applyBtn }}" hint-placeholder-val="{{ true }}">
+              <a href="#apply" style="font-size:14px;font-weight:700;color:{{ ink }};background:{{ surface }};border:2px solid {{ border }};padding:13px 22px;white-space:nowrap;box-shadow:4px 4px 0 {{ shadowSm }};text-decoration:none" style-hover="transform:translate(1px,1px)">Подать заявку на выступление</a>
+            </sc-if>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══ форма заявки на выступление · состояния пусто/заполнено/ошибка/отправлено ═══ -->
+    <sc-if value="{{ applyFormOn }}" hint-placeholder-val="{{ false }}">
+      <section id="apply" data-screen-label="d-congress · заявка на выступление" style="margin-top:clamp(36px,5vw,56px)">
+        <div style="max-width:640px;border:2px solid {{ border }};background:{{ surface }};box-shadow:6px 6px 0 {{ shadow }};padding:clamp(22px,4vw,32px)">
+          <div style="font-size:19px;font-weight:800;letter-spacing:-.01em;color:{{ ink }};margin-bottom:20px">Заявка на выступление</div>
+          <sc-if value="{{ applyOk }}" hint-placeholder-val="{{ false }}">
+            <div style="background:#E6F6EE;padding:16px 20px;font-size:14px;line-height:1.6;font-weight:700;color:#00693D">Заявка отправлена. Оргкомитет ответит на вашу почту.</div>
+          </sc-if>
+          <sc-if value="{{ applyFields }}" hint-placeholder-val="{{ true }}">
+            <div style="display:flex;flex-direction:column;gap:18px">
+              <div>
+                <div style="font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:{{ inkFaint }};margin-bottom:8px">Форма участия</div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap">
+                  <sc-for list="{{ applyForms }}" as="f" hint-placeholder-count="3"><button onClick="{{ f.onClick }}" style="{{ f.style }}">{{ f.label }}</button></sc-for>
+                </div>
+              </div>
+              <div>
+                <div style="font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:{{ inkFaint }};margin-bottom:8px">Тема доклада</div>
+                <input value="{{ applyTopic }}" onInput="{{ setApplyTopic }}" placeholder="Например: PRP при эпикондилите — данные 120 пациентов" style="{{ topicInputStyle }}" style-focus="border-color:#6BB1F7;box-shadow:0 0 0 3px rgba(107,177,247,.5)">
+                <sc-if value="{{ applyErr }}" hint-placeholder-val="{{ false }}"><div style="margin-top:7px;font-size:12.5px;font-weight:700;color:{{ danger }}">Укажите тему доклада</div></sc-if>
+              </div>
+              <div>
+                <div style="font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:{{ inkFaint }};margin-bottom:8px">Соавторы</div>
+                <input value="{{ applyCo }}" onInput="{{ setApplyCo }}" placeholder="ФИО через запятую — если есть" style="width:100%;box-sizing:border-box;font:inherit;font-size:14.5px;font-weight:600;padding:14px 16px;border:2px solid {{ border }};background:{{ surface }};color:{{ ink }};outline:none" style-focus="border-color:#6BB1F7;box-shadow:0 0 0 3px rgba(107,177,247,.5)">
+              </div>
+              <div>
+                <div style="font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:{{ inkFaint }};margin-bottom:8px">Тезисы — файл или текст</div>
+                <div style="border:2px dashed {{ dashBorder }};padding:20px;text-align:center;font-size:13px;font-weight:600;color:{{ inkMuted }};cursor:pointer" style-hover="background:{{ sectionGray }}">Перетащите файл (PDF или DOCX) — или <span style="color:{{ accent }};font-weight:800;text-decoration:underline;text-underline-offset:3px">вставьте текст</span></div>
+              </div>
+              <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+                <button onClick="{{ submitApply }}" style="font:inherit;font-size:14.5px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:2px solid {{ btnBg }};padding:14px 28px;cursor:pointer;box-shadow:4px 4px 0 {{ border }}" style-hover="transform:translate(2px,2px);box-shadow:2px 2px 0 {{ border }}">Отправить заявку</button>
+                <span style="font-size:12px;font-weight:600;color:{{ inkFaint }}">Работы авторов до 40 лет участвуют в конкурсе молодых учёных.</span>
+              </div>
+            </div>
+          </sc-if>
+        </div>
+      </section>
+    </sc-if>
+
+    <!-- ═══ Блок 5 · Что входит в участие (REQ-99, развилка 3: А — заглушки · Б — строка) ═══ -->
+    <section data-screen-label="d-congress · участнику · вариант А|Б" style="margin-top:clamp(48px,7vw,80px)">
+      <div style="display:flex;align-items:baseline;gap:18px;margin-bottom:24px">
+        <span style="font-size:13px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ ink }};white-space:nowrap">Что входит в участие</span>
+        <span style="flex:1;border-top:2px solid {{ ink }}"></span>
+      </div>
+      <sc-if value="{{ extrasTiles }}" hint-placeholder-val="{{ true }}">
+        <div style="display:grid;grid-template-columns:{{ extrasCols }};gap:14px">
+          <sc-for list="{{ extras }}" as="x" hint-placeholder-count="4">
+            <a href="#" style="display:block;border:2px solid {{ hairline }};background:{{ surface }};padding:18px 20px;text-decoration:none" style-hover="border-color:{{ border }}">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:10px"><span style="font-size:14.5px;font-weight:800;letter-spacing:-.01em;color:{{ ink }}">{{ x.name }}</span><span style="font-size:9.5px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:{{ inkFaint }};border:1px solid {{ hairline }};padding:3px 7px;white-space:nowrap">появится</span></div>
+              <div style="margin-top:7px;font-size:12.5px;line-height:1.55;color:{{ inkMuted }}">{{ x.note }}</div>
+              <div style="margin-top:10px;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:{{ accent }}">Раздел участника →</div>
+            </a>
+          </sc-for>
+        </div>
+      </sc-if>
+      <sc-if value="{{ extrasLine }}" hint-placeholder-val="{{ false }}">
+        <div style="background:{{ sectionGray }};padding:16px 20px;font-size:13.5px;line-height:1.7;font-weight:600;color:{{ inkMuted }}">Что входит в участие: <a href="#" style="font-weight:800;color:{{ accent }}">кабинет участника</a> · <a href="#" style="font-weight:800;color:{{ accent }}">подача тезисов</a> · <a href="#" style="font-weight:800;color:{{ accent }}">бронирование отеля</a> · <a href="#" style="font-weight:800;color:{{ accent }}">выставка экспонентов</a> — разделы участника, откроются к конгрессу.</div>
+      </sc-if>
+    </section>
+
+    <!-- ═══ Блок 6 · Материалы прошлого выпуска ═══ -->
+    <section id="materials" data-screen-label="d-congress · материалы прошлого выпуска" style="margin-top:clamp(48px,7vw,80px);margin-bottom:clamp(56px,9vw,104px)">
+      <div style="display:flex;align-items:baseline;gap:18px;margin-bottom:6px">
+        <span style="font-size:13px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ ink }};white-space:nowrap">{{ materialsTitle }}</span>
+        <span style="flex:1;border-top:2px solid {{ ink }}"></span>
+      </div>
+      <div style="font-size:12.5px;font-weight:600;color:{{ inkFaint }};margin-bottom:22px">{{ materialsSub }}</div>
+      <div style="display:grid;grid-template-columns:{{ extrasCols }};gap:14px">
+        <a href="#" style="display:block;border:2px solid {{ border }};background:{{ surface }};box-shadow:5px 5px 0 {{ shadow }};text-decoration:none" style-hover="transform:translate(2px,2px);box-shadow:3px 3px 0 {{ shadow }}">
+          <div style="aspect-ratio:16/10;background:{{ tint }};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:{{ tintFg }}">Фотоотчёт</div>
+          <div style="padding:14px 18px"><div style="font-size:14.5px;font-weight:800;color:{{ ink }}">Фото</div><div style="font-size:12px;font-weight:600;color:{{ inkFaint }};margin-top:3px">240 снимков · 2 дня</div></div>
+        </a>
+        <a href="#" style="display:block;border:2px solid {{ border }};background:{{ surface }};box-shadow:5px 5px 0 {{ shadow }};text-decoration:none" style-hover="transform:translate(2px,2px);box-shadow:3px 3px 0 {{ shadow }}">
+          <div style="aspect-ratio:16/10;background:{{ tint }};display:flex;align-items:center;justify-content:center;position:relative"><span style="width:52px;height:52px;border:2px solid {{ tintFg }};background:{{ surface }};color:{{ tintFg }};display:inline-flex;align-items:center;justify-content:center;font-size:18px;box-shadow:3px 3px 0 {{ shadowSm }}">▶</span></div>
+          <div style="padding:14px 18px"><div style="font-size:14.5px;font-weight:800;color:{{ ink }}">Видео докладов</div><div style="font-size:12px;font-weight:600;color:{{ inkFaint }};margin-top:3px">38 записей · доступны после входа</div></div>
+        </a>
+        <a href="#" style="display:block;border:2px solid {{ border }};background:{{ surface }};box-shadow:5px 5px 0 {{ shadow }};text-decoration:none" style-hover="transform:translate(2px,2px);box-shadow:3px 3px 0 {{ shadow }}">
+          <div style="aspect-ratio:16/10;background:{{ sectionGray }};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:{{ inkFaint }}">PDF · 312 стр.</div>
+          <div style="padding:14px 18px"><div style="font-size:14.5px;font-weight:800;color:{{ ink }}">Сборник тезисов</div><div style="font-size:12px;font-weight:600;color:{{ inkFaint }};margin-top:3px">VI выпуск · 2025</div></div>
+        </a>
+      </div>
+    </section>
+
+  </main>
+  </sc-if>
+
+  <!-- ═══ футер витрины врача (юнит с d-home, как есть) ═══ -->
+  <footer data-screen-label="d-congress · футер" style="border-top:2px solid {{ ink }};padding:clamp(32px,5vw,48px) clamp(16px,4vw,48px) clamp(36px,5vw,56px)">
+    <div style="max-width:1104px;margin:0 auto;display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:clamp(24px,4vw,40px)">
+      <div>
+        <img src="{{ logoSrc }}" alt="Doctor.School" style="height:22px;display:block">
+        <div style="margin-top:14px;font-size:12.5px;font-weight:600;line-height:1.6;color:{{ inkFaint }}">Бесплатное образование для врачей.<br>© Doctor.School, 2026</div>
+      </div>
+      <div>
+        <div style="font-size:11.5px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:{{ inkFaint }};margin-bottom:14px">Документы и контакты</div>
+        <div style="display:flex;flex-direction:column;gap:9px">
+          <a href="#" style="font-size:13.5px;font-weight:600;color:{{ ink }};text-decoration:none" style-hover="color:{{ accent }};text-decoration:underline;text-underline-offset:3px">Пользовательское соглашение</a>
+          <a href="#" style="font-size:13.5px;font-weight:600;color:{{ ink }};text-decoration:none" style-hover="color:{{ accent }};text-decoration:underline;text-underline-offset:3px">Политика обработки персональных данных</a>
+          <a href="#" style="font-size:13.5px;font-weight:600;color:{{ ink }};text-decoration:none" style-hover="color:{{ accent }};text-decoration:underline;text-underline-offset:3px">Контакты</a>
+        </div>
+      </div>
+      <div>
+        <div style="font-size:11.5px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:{{ inkFaint }};margin-bottom:14px">Экспертам и партнёрам</div>
+        <a href="Главная.dc.html" style="font-size:13.5px;font-weight:800;color:{{ accent }};text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px">Academy.Doctor.School ↗</a>
+        <div style="margin-top:10px;font-size:12.5px;font-weight:600;line-height:1.6;color:{{ inkFaint }}">Закулисье платформы: проекты, эксперты, партнёры.</div>
+      </div>
+    </div>
+    <div aria-hidden="true" style="overflow:hidden;margin:clamp(28px,4vw,48px) calc(-1*clamp(16px,4vw,48px)) calc(-1*clamp(36px,5vw,56px))">
+      <div style="font-size:clamp(58px,12.6vw,236px);font-weight:800;letter-spacing:-.05em;line-height:.78;white-space:nowrap;text-align:center;color:{{ giantInk }};transform:translateY(.16em);user-select:none">Doctor.School</div>
+    </div>
+  </footer>
+
+  <!-- ═══ мобильный · липкая кнопка билета ═══ -->
+  <sc-if value="{{ stickyOn }}" hint-placeholder-val="{{ false }}">
+    <div data-screen-label="d-congress · 390 · липкий CTA" style="position:fixed;bottom:0;left:0;right:0;z-index:40;background:{{ surface }};border-top:2px solid {{ border }};padding:12px 16px;display:flex;align-items:center;gap:14px">
+      <div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:800;color:{{ ink }}">14–15 ноября · Казань</div><div style="font-size:11px;font-weight:600;color:{{ inkFaint }}">Участие бесплатное для всех врачей</div></div>
+      <sc-if value="{{ guest }}" hint-placeholder-val="{{ true }}"><a href="Авторизация.dc.html" style="font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};padding:14px 20px;text-decoration:none;white-space:nowrap;box-shadow:3px 3px 0 {{ border }}">Получить билет ↗</a></sc-if>
+      <sc-if value="{{ loggedIn }}" hint-placeholder-val="{{ false }}"><button style="font:inherit;font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:0;padding:14px 20px;cursor:pointer;white-space:nowrap;box-shadow:3px 3px 0 {{ border }}">Получить билет</button></sc-if>
+    </div>
+  </sc-if>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1104,&quot;height&quot;:1100},&quot;loggedIn&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Состояние&quot;},&quot;ticketReceived&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Состояние&quot;},&quot;releaseState&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;регистрация скоро&quot;,&quot;регистрация открыта&quot;,&quot;идёт сейчас&quot;,&quot;завершён&quot;],&quot;default&quot;:&quot;регистрация открыта&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Состояние&quot;},&quot;dataState&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;обычно&quot;,&quot;загрузка&quot;,&quot;ошибка блока&quot;,&quot;программа формируется&quot;],&quot;default&quot;:&quot;обычно&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Состояние&quot;},&quot;applicationState&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;скрыта&quot;,&quot;пусто&quot;,&quot;заполнено&quot;,&quot;ошибка&quot;,&quot;отправлено&quot;],&quot;default&quot;:&quot;скрыта&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Заявка на выступление&quot;},&quot;programVariant&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;А — сетка залов&quot;,&quot;Б — список по дням&quot;,&quot;В — список с фильтром&quot;],&quot;default&quot;:&quot;В — список с фильтром&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Развилки&quot;},&quot;partnersVariant&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;А — размер по уровню&quot;,&quot;Б — один размер&quot;],&quot;default&quot;:&quot;А — размер по уровню&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Развилки&quot;},&quot;extrasVariant&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;А — заглушки-разделы&quot;,&quot;Б — строка-перечисление&quot;],&quot;default&quot;:&quot;А — заглушки-разделы&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Развилки&quot;},&quot;minIntake&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Развилки&quot;}}">
+class Component extends DCLogic {
+  state = {
+    dark: (() => { try { return localStorage.getItem('ds-theme') === 'dark'; } catch (e) { return false; } })(),
+    isMobile: false, q: '', fHall: 'все', fSpec: 'все',
+    applyForm: 'устный доклад', applyTopic: '', applyCo: '', applyTriedSubmit: false
+  };
+  componentDidMount() {
+    this.mq = window.matchMedia('(max-width: 900px)');
+    this.upd = () => this.setState({ isMobile: this.mq.matches });
+    this.upd();
+    this.mq.addEventListener ? this.mq.addEventListener('change', this.upd) : this.mq.addListener(this.upd);
+  }
+  componentWillUnmount() {
+    if (this.mq) this.mq.removeEventListener ? this.mq.removeEventListener('change', this.upd) : this.mq.removeListener(this.upd);
+  }
+  renderVals() {
+    const p = this.props, s = this.state, d = s.dark, m = s.isMobile;
+    const loggedIn = !!(p.loggedIn ?? false);
+    const ticket = loggedIn && !!(p.ticketReceived ?? false);
+    const release = p.releaseState || 'регистрация открыта';
+    const dataState = p.dataState || 'обычно';
+    const applyState = p.applicationState || 'скрыта';
+    const progVariant = (p.programVariant || 'В')[0];
+    const partnersA = (p.partnersVariant || 'А')[0] === 'А';
+    const extrasTiles = (p.extrasVariant || 'А')[0] === 'А';
+    const minIntake = !!(p.minIntake ?? false);
+
+    const ink = d ? '#fff' : 'oklch(.21 .02 250)';
+    const inkBody = d ? 'rgba(255,255,255,.8)' : 'oklch(.32 .016 250)';
+    const inkMuted = d ? 'rgba(255,255,255,.62)' : 'oklch(.45 .014 250)';
+    const inkFaint = d ? 'rgba(255,255,255,.5)' : 'oklch(.556 .012 250)';
+    const surface = d ? 'oklch(.21 .02 250)' : '#fff';
+    const pageBg = d ? 'oklch(.16 .02 250)' : '#fff';
+    const border = d ? '#fff' : 'oklch(.21 .02 250)';
+    const hairline = d ? 'rgba(255,255,255,.16)' : 'oklch(.922 .006 250)';
+    const sectionGray = d ? 'oklch(.185 .02 250)' : 'oklch(.955 .004 250)';
+    const accent = d ? '#6BB1F7' : '#2D84F2';
+    const btnBg = d ? '#6BB1F7' : '#114D9E';
+    const btnFg = d ? '#0D3A77' : '#fff';
+    const tint = d ? '#0D3A77' : '#D3E8FD';
+    const tintFg = d ? '#AED4FB' : '#114D9E';
+    const shadow = d ? '#6BB1F7' : '#114D9E';
+    const shadowSm = d ? '#1F69C8' : '#AED4FB';
+    const green = d ? '#4ADE80' : '#00693D';
+    const danger = d ? '#E15555' : '#C81E1E';
+    const dangerTint = d ? '#3a1414' : '#FDECEC';
+    const dashBorder = d ? 'rgba(255,255,255,.35)' : 'oklch(.704 .01 250)';
+
+    // состояние выпуска
+    const isSoon = release === 'регистрация скоро', isOpen = release === 'регистрация открыта',
+      isLive = release === 'идёт сейчас', isDone = release === 'завершён';
+    const badgeMap = {
+      'регистрация скоро': ['Регистрация скоро', 'background:transparent;color:#D3E8FD;border:2px solid #6BB1F7'],
+      'регистрация открыта': ['Регистрация открыта', 'background:#fff;color:#114D9E;box-shadow:4px 4px 0 #0D3A77'],
+      'идёт сейчас': ['Идёт сейчас', 'background:#C81E1E;color:#fff;box-shadow:4px 4px 0 #0D3A77'],
+      'завершён': ['Завершён', 'background:transparent;color:#AED4FB;border:2px solid rgba(255,255,255,.4)']
+    };
+    const [heroBadgeText, badgeExtra] = badgeMap[release];
+    const heroBadgeStyle = 'flex:none;font-size:13px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;padding:12px 20px;transform:rotate(3deg);white-space:nowrap;' + badgeExtra;
+
+    // программа
+    const progLoading = dataState === 'загрузка';
+    const progError = dataState === 'ошибка блока';
+    const progForming = dataState === 'программа формируется';
+    const progOn = !progLoading && !progError;
+    const progTalks = !progForming;
+
+    const secBase = 'border:2px solid ' + hairline + ';padding:18px 20px;background:' + surface;
+    const secLive = 'border:2px solid ' + border + ';padding:18px 20px;background:' + surface + ';box-shadow:5px 5px 0 ' + shadow;
+    const spBase = 'flex:none;font-size:12.5px;font-weight:800;color:' + accent + ';text-decoration:none;white-space:nowrap';
+    const spM = 'display:inline-block;margin-top:3px;font-size:12px;font-weight:800;color:' + accent + ';text-decoration:none';
+    const liveChip = 'display:inline-flex;align-items:center;gap:6px;font-size:9.5px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#fff;background:#C81E1E;padding:3px 8px;margin-right:8px;vertical-align:2px';
+    const mkTalk = (t, sp, live) => ({
+      t, s: sp || '',
+      rowStyle: 'display:flex;align-items:baseline;justify-content:space-between;gap:16px;padding:11px 0;border-top:1px solid ' + hairline,
+      spStyle: sp ? spBase : 'display:none',
+      spStyleM: sp ? spM : 'display:none',
+      liveStyle: live ? liveChip : 'display:none'
+    });
+    const liveOn = isLive && progTalks;
+    const rawDays = [
+      { label: 'День 1 · 14 ноября', open: true, sections: [
+        { time: '10:00–13:30', hall: 'Зал А', title: 'PRP-терапия', mods: 'Модераторы: Иванов А. П., Соколова М. В.', spec: 'Травматология и ортопедия', talks: [
+          mkTalk('PRP при гонартрозе: чему научили пять лет практики', 'Соколова М. В.', liveOn),
+          mkTalk('Подготовка препарата: протоколы и типичные ошибки', 'Иванов А. П.', false),
+          mkTalk('PRP в амбулаторной практике: организация кабинета', 'Крылова Е. Н.', false)], live: liveOn },
+        { time: '10:00–13:30', hall: 'Зал Б', title: 'Клеточные технологии', mods: 'Модератор: Гусев Д. С.', spec: 'Ревматология', talks: [
+          mkTalk('SVF-терапия: доказательная база 2026 года', 'Гусев Д. С.', false),
+          mkTalk('Костный мозг против жировой ткани: что выбрать', 'Мельник О. В.', false)] },
+        { time: '14:30–18:00', hall: 'Зал А', title: 'Ортобиология в спортивной медицине', mods: 'Модератор: Соколова М. В.', spec: 'Спортивная медицина', partner: 'Партнёрский материал · Партнёр А', talks: [
+          mkTalk('Возвращение в спорт после PRP: критерии допуска', 'Барсуков И. И.', false),
+          mkTalk('Травмы ахиллова сухожилия у бегунов-любителей', 'Крылова Е. Н.', false)] }
+      ]},
+      { label: 'День 2 · 15 ноября', open: false, sections: [
+        { time: '10:00–13:00', hall: 'Зал А', title: 'Регенерация хряща', mods: 'Модератор: Иванов А. П.', spec: 'Травматология и ортопедия', talks: [
+          mkTalk('Матрицы и скаффолды: от лаборатории к операционной', 'Мельник О. В.', false),
+          mkTalk('Комбинированные протоколы: PRP и гиалуроновая кислота', 'Соколова М. В.', false)] },
+        { time: '10:00–13:00', hall: 'Зал Б', title: 'Конкурс молодых учёных', mods: 'Жюри: президиум конгресса', spec: 'Все специальности', young: true, talks: [
+          mkTalk('Постерная сессия: 24 работы участников до 40 лет', '', false),
+          mkTalk('Устные доклады финалистов', '', false)] },
+        { time: '14:00–16:30', hall: 'Зал А', title: 'Итоговая дискуссия', mods: 'Модераторы: президиум', spec: 'Все специальности', talks: [
+          mkTalk('Круглый стол: ортобиология в повседневной практике', 'Иванов А. П.', false)] }
+      ]}
+    ];
+    // фильтр (вариант В)
+    const vFilter = progVariant === 'В' && !m;
+    const fHall = s.fHall, fSpec = s.fSpec;
+    const specList = ['все', 'Травматология и ортопедия', 'Ревматология', 'Спортивная медицина'];
+    const chip = (act) => 'font:inherit;font-size:12.5px;font-weight:700;padding:8px 14px;cursor:pointer;border:2px solid ' + (act ? btnBg : (d ? 'rgba(107,177,247,.45)' : '#AED4FB')) + ';background:' + (act ? btnBg : 'transparent') + ';color:' + (act ? btnFg : tintFg);
+    const hallChips = ['все', 'Зал А', 'Зал Б'].map(h => ({ label: h, style: chip(fHall === h), onClick: () => this.setState({ fHall: h }) }));
+    const specChips = specList.map(h => ({ label: h === 'все' ? 'все' : h, style: chip(fSpec === h), onClick: () => this.setState({ fSpec: h }) }));
+    const filterActive = fHall !== 'все' || fSpec !== 'все';
+    const passes = sec => (fHall === 'все' || sec.hall === fHall) && (fSpec === 'все' || sec.spec === fSpec || sec.spec === 'Все специальности');
+    const days = rawDays.map(day => {
+      const sections = (vFilter ? day.sections.filter(passes) : day.sections).map(sec => ({
+        ...sec,
+        partner: sec.partner || false, young: sec.young || false,
+        cardStyle: sec.live ? secLive : secBase,
+        mobStyle: sec.live ? 'background:' + tint : ''
+      }));
+      const halls = ['Зал А', 'Зал Б'].map(name => ({ name, sections: day.sections.filter(x => x.hall === name).map(sec => ({ ...sec, cardStyle: (sec.live ? secLive : secBase) })) }));
+      return { ...day, sections, halls };
+    });
+
+    // CTA
+    const ctaSoon = isSoon;
+    const ctaGuest = !loggedIn && (isOpen || isLive);
+    const ctaGet = loggedIn && !ticket && (isOpen || isLive);
+    const ctaTicket = ticket && !isDone;
+    const ctaDone = isDone && !ticket;
+    const ticketHead = isLive ? 'Вы участвуете · программа идёт — билет действителен оба дня' : 'Билет получен · вход по QR-коду';
+    const badgeGreen = 'font-size:10.5px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#00693D;background:#E6F6EE;padding:5px 10px';
+
+    // заявка
+    const applySent = applyState === 'отправлено';
+    const applyFormOn = ['пусто', 'заполнено', 'ошибка', 'отправлено'].includes(applyState);
+    const applyErr = applyState === 'ошибка' && !s.applyTopic.trim();
+    const applyTopic = s.applyTopic || (applyState === 'заполнено' ? 'PRP при эпикондилите — данные 120 пациентов' : '');
+    const applyCo = s.applyCo || (applyState === 'заполнено' ? 'Гусев Д. С.' : '');
+    const applyForms = ['устный доклад', 'постерный доклад', 'публикация тезисов'].map(f => ({ label: f, style: chip(s.applyForm === f), onClick: () => this.setState({ applyForm: f }) }));
+
+    const extras = [
+      { name: 'Кабинет участника', note: 'Ваши доклады, тезисы и сертификаты этого выпуска.' },
+      { name: 'Подача тезисов', note: 'Загрузка и статус рассмотрения — через кабинет.' },
+      { name: 'Бронирование отеля', note: 'Партнёрские отели рядом с конгресс-холлом.' },
+      { name: 'Выставка экспонентов', note: 'План выставки и список стендов.' }
+    ];
+
+    const partnerTile = (h, fs) => 'display:inline-flex;align-items:center;justify-content:center;min-width:96px;height:' + h + 'px;padding:0 18px;border:2px dashed ' + dashBorder + ';font-size:' + fs + 'px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:' + inkFaint;
+    const lvl = (label, orgs, h, fs) => ({ label, orgs, tileStyle: partnersA ? partnerTile(h, fs) : partnerTile(44, 10.5) });
+    const partnerLevels = [
+      lvl('Организатор', ['Школа ортобиологии'], 72, 13),
+      lvl('Генеральный партнёр', ['Партнёр А'], 64, 12),
+      lvl('Официальный партнёр', ['Партнёр Б', 'Партнёр В'], 56, 11.5),
+      lvl('Партнёр секции', ['Партнёр Г'], 50, 11),
+      lvl('Технический партнёр', ['Партнёр Д'], 46, 10.5),
+      lvl('Партнёр выставки', ['Партнёр Е', 'Партнёр Ж'], 44, 10.5),
+      lvl('Информационный партнёр', ['Издание «Ортопедия сегодня»', 'Портал МедСобытия'], 40, 10)
+    ];
+
+    return {
+      isMobile: m, isDesktop: !m, dark: d, guest: !loggedIn, loggedIn,
+      themeIcon: d ? '☀' : '☾',
+      toggleTheme: () => { const nd = !d; try { localStorage.setItem('ds-theme', nd ? 'dark' : 'light'); } catch (e) {} this.setState({ dark: nd }); },
+      q: s.q, setQ: e => this.setState({ q: e.target.value }),
+      pageBg, surface, ink, inkBody, inkMuted, inkFaint, border, hairline, sectionGray, accent,
+      btnBg, btnFg, tint, tintFg, shadow, shadowSm, green, danger, dangerTint, dashBorder,
+      logoSrc: d ? 'assets/ds-logo-white.svg' : 'assets/ds-logo-color.svg',
+      giantInk: d ? 'rgba(174,212,251,.09)' : 'oklch(.945 .018 250)',
+      heroBadgeStyle, heroBadgeText,
+      minIntake, full: !minIntake,
+      pairCols: m ? '1fr' : '340px 1fr',
+      dayHeaderStyle: m ? 'margin:32px -16px 0;padding:14px 16px 12px;background:' + sectionGray + ';display:flex;align-items:center' : 'display:flex;align-items:baseline;gap:18px;margin:40px 0 20px',
+      dayRuleStyle: m ? 'display:none' : 'flex:1;border-top:2px solid ' + ink,
+      gridCols: 'display:grid;grid-template-columns:1fr 1fr;gap:16px',
+      progLoading, progError, progOn, progForming, progTalks,
+      vGrid: progVariant === 'А' && !m,
+      vFilter, hallChips, specChips, filterActive,
+      resetFilter: () => this.setState({ fHall: 'все', fSpec: 'все' }),
+      vListDesktop: !m && progVariant !== 'А',
+      vListMobile: m,
+      days,
+      greetings: [
+        { init: 'ИА', name: 'Иванов Алексей Петрович', role: 'Президент конгресса, д. м. н.', quote: 'Седьмой выпуск — о том, как ортобиология становится повседневной практикой, а не экспериментом.' },
+        { init: 'СМ', name: 'Соколова Мария Викторовна', role: 'Председатель программного комитета, к. м. н.', quote: 'Каждый доклад этого года прошёл медицинскую экспертизу программного комитета.' }
+      ],
+      committee: [
+        { name: 'Иванов А. П.', role: 'президент конгресса' },
+        { name: 'Соколова М. В.', role: 'программный комитет' },
+        { name: 'Гусев Д. С.', role: 'научный секретарь' },
+        { name: 'Крылова Е. Н.', role: 'секции и залы' },
+        { name: 'Барсуков И. И.', role: 'работа с докладчиками' }
+      ],
+      partnerLevels,
+      joinCardStyle: m ? 'background:' + sectionGray + ';margin:0 -16px;padding:0' : 'border:2px solid ' + border + ';background:' + surface + ';box-shadow:6px 6px 0 ' + shadow + ';display:grid;grid-template-columns:220px 1fr',
+      joinTintCol: (m ? 'padding:20px 16px;' : 'padding:28px 24px;') + 'background:' + tint + ';display:flex;flex-direction:column;gap:10px;justify-content:center',
+      joinBodyStyle: (m ? 'padding:20px 16px;' : 'padding:28px 32px;') + 'display:flex;flex-direction:column;gap:18px;min-width:0',
+      ctaSoon, ctaGuest, ctaGet, ctaTicket, ctaDone, ticketHead,
+      ticketStatus: isDone ? 'использован' : 'действителен',
+      ticketBadgeStyle: isDone ? 'font-size:10.5px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:oklch(.45 .014 250);background:oklch(.922 .006 250);padding:5px 10px' : badgeGreen,
+      ticketBodyStyle: isDone ? 'opacity:.55' : '',
+      ticketFoot: isDone ? 'Отметка на входе получена 14 ноября, 09:12 — засчитана в НМО' : 'Покажите QR на входе — отметка по бейджу засчитывается в НМО',
+      applySent, applyBtn: !applySent, applyFormOn,
+      applyOk: applyState === 'отправлено', applyFields: applyState !== 'отправлено',
+      applyErr, applyForms, applyTopic, applyCo,
+      setApplyTopic: e => this.setState({ applyTopic: e.target.value }),
+      setApplyCo: e => this.setState({ applyCo: e.target.value }),
+      submitApply: () => this.setState({ applyTriedSubmit: true }),
+      topicInputStyle: 'width:100%;box-sizing:border-box;font:inherit;font-size:14.5px;font-weight:600;padding:14px 16px;border:2px solid ' + (applyErr ? danger : border) + ';background:' + surface + ';color:' + ink + ';outline:none',
+      extrasTiles, extrasLine: !extrasTiles,
+      extras, extrasCols: m ? '1fr' : 'repeat(auto-fit,minmax(230px,1fr))',
+      materialsTitle: isDone ? 'Материалы этого выпуска' : 'Материалы прошлого выпуска',
+      materialsSub: isDone ? 'Ортобиология-2026 · VII выпуск' : 'Ортобиология-2025 · VI выпуск · Казань',
+      stickyOn: m && !minIntake && !ticket && (isOpen || isLive),
+      stickyPad: m && !ticket && (isOpen || isLive) ? '76px' : '0'
+    };
+  }
+}
+</script>
+</body>
+</html>

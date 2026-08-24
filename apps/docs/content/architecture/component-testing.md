@@ -107,17 +107,20 @@ heavyweight one. The design-system setup additionally keeps its #377
 password-manager shim. Folding the common core into a shared Vitest preset /
 config package remains a reasonable future consolidation — deferred until a third
 consumer makes the abstraction worth it; the two guard copies are cross-noted in
-their headers so a future upstream `input-otp` fix updates both.)
+their headers so an upstream `input-otp` change updates both.)
 
 ## The #434/#441 orphan-timer guard (portal + design-system setups — this one IS behaviour)
 
-`input-otp@1.4.2` schedules a 0/10/50 ms `setTimeout` triple on every value/focus
-change and returns **no cleanup** from the scheduling effect. A timer scheduled by
-a suite's final keystrokes therefore outlives the file's jsdom environment; the
-late callback reaches React's state dispatch, touches the torn-down `window`, and
-red-lights the whole `unit` CI job with an intermittent
-`ReferenceError: window is not defined` (#405's class, a different root timer —
-upstream has no newer release to bump to).
+`input-otp@1.4.2` scheduled a 0/10/50 ms `setTimeout` triple on every value/focus
+change and returned **no cleanup** from the scheduling effect. A timer scheduled by
+a suite's final keystrokes therefore outlived the file's jsdom environment; the
+late callback reached React's state dispatch, touched the torn-down `window`, and
+red-lit the whole `unit` CI job with an intermittent
+`ReferenceError: window is not defined` (#405's class, a different root timer).
+`input-otp@1.5.0` (#1458) fixed that leak upstream — the scheduling effect now
+clears its own handles — so no dependency defect is tolerated any more. The guard
+stays as a standing class-guard: it is what makes an `input-otp` regression, or the
+same leak from any other component, fail attributably instead of intermittently.
 
 Both the portal and the design-system `vitest.setup.ts` defend deterministically
 (`apps/portal/orphan-timers.setup.ts` and `packages/design-system/orphan-timers.setup.ts`,
@@ -125,16 +128,13 @@ each contract-tested by a co-located `orphan-timers.test.tsx`): they wrap the
 environment's `setTimeout`/`clearTimeout`
 to track every pending handle with its scheduling stack, and a setup-level global
 `afterEach` — running **after** the file's own hooks (afterEach is LIFO) —
-unmounts (`cleanup()`) and defuses every orphan:
+unmounts (`cleanup()`) and defuses every orphan.
 
-- an orphan whose scheduling stack contains an `input-otp` frame is the
-  **documented upstream defect** — cleared silently (post-unmount the sync tick
-  is dead code);
-- **any other** leaked `setTimeout` fails the test on the spot, with the
-  scheduling site in the message. That is a real defect in the component or test
-  you just wrote: clear the timer in the owning effect's cleanup, or drive the
-  test on fake timers (`vi.useFakeTimers()` — the mock swaps the wrapper out, so
-  controlled timers are never tracked; `vi.useRealTimers()` restores it).
+**Every** leaked `setTimeout` fails the test on the spot, with the scheduling site
+in the message. That is a real defect in the component or test you just wrote:
+clear the timer in the owning effect's cleanup, or drive the test on fake timers
+(`vi.useFakeTimers()` — the mock swaps the wrapper out, so controlled timers are
+never tracked; `vi.useRealTimers()` restores it).
 
 ## The hard caveat — jsdom does not replace the live stand
 

@@ -21,8 +21,8 @@ import { flushOrphanTimers } from "./orphan-timers.setup";
  * The tracking itself is installed once in vitest.setup.ts; these tests pin the
  * helper's contract: pending timers are tracked, fired/cleared timers are not,
  * `flushOrphanTimers()` defuses what remains (it must never fire after a flush),
- * and orphans are classified by their scheduling stack — the known upstream
- * defect (`input-otp` frames) versus a foreign leak our own code must fix.
+ * and any handle still pending past unmount is a leak our own code must fix —
+ * `input-otp@1.5.0` clears its own timers, so no upstream defect is tolerated.
  */
 
 function SlottedHarness() {
@@ -53,8 +53,7 @@ describe("#434 orphan-timer tracking (vitest.setup.ts)", () => {
     const cb = vi.fn();
     setTimeout(cb, 30);
 
-    const { foreign, known } = flushOrphanTimers();
-    expect(known).toHaveLength(0);
+    const { foreign } = flushOrphanTimers();
     expect(foreign).toHaveLength(1);
     expect(foreign[0].stack).toContain("orphan-timers.test");
 
@@ -69,9 +68,8 @@ describe("#434 orphan-timer tracking (vitest.setup.ts)", () => {
     await wait(10);
 
     expect(cb).toHaveBeenCalledTimes(1);
-    const { foreign, known } = flushOrphanTimers();
+    const { foreign } = flushOrphanTimers();
     expect(foreign).toHaveLength(0);
-    expect(known).toHaveLength(0);
   });
 
   it("#434: clearTimeout untracks the handle", () => {
@@ -79,9 +77,8 @@ describe("#434 orphan-timer tracking (vitest.setup.ts)", () => {
     const handle = setTimeout(cb, 1000);
     clearTimeout(handle);
 
-    const { foreign, known } = flushOrphanTimers();
+    const { foreign } = flushOrphanTimers();
     expect(foreign).toHaveLength(0);
-    expect(known).toHaveLength(0);
   });
 
   it("#434: tracking survives a fake-timer cycle (vi.useFakeTimers/useRealTimers)", () => {
@@ -100,7 +97,7 @@ describe("#434 orphan-timer tracking (vitest.setup.ts)", () => {
     expect(foreign).toHaveLength(1);
   });
 
-  it("#434: input-otp's uncleaned syncTimeouts survive unmount and are classified as the known upstream defect", async () => {
+  it("#434: input-otp@1.5.0 clears its own syncTimeouts — unmount leaves no orphan", async () => {
     const user = userEvent.setup();
     render(<SlottedHarness />);
 
@@ -108,14 +105,13 @@ describe("#434 orphan-timer tracking (vitest.setup.ts)", () => {
     await user.click(input);
     await user.keyboard("1");
 
-    // Unmount immediately — the 0/10/50ms sync triple from the last value change
-    // is still pending (input-otp returns no effect cleanup). This is the exact
-    // state a suite's last test leaves the environment in.
+    // Unmount immediately — the exact state a suite's last test leaves the
+    // environment in. input-otp@1.5.0 clears its 0/10/50ms sync triple in the
+    // scheduling effect's cleanup, so nothing survives the unmount; a regression
+    // (upstream, or in our own OtpField wiring) surfaces here as an orphan.
     cleanup();
 
-    const { known, foreign } = flushOrphanTimers();
-    expect(known.length).toBeGreaterThan(0);
-    expect(known.every((o) => /input-otp/.test(o.stack))).toBe(true);
+    const { foreign } = flushOrphanTimers();
     expect(foreign).toHaveLength(0);
   });
 });

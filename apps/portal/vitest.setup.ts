@@ -4,14 +4,14 @@ import { afterEach } from "vitest";
 
 import { installOrphanTimerTracking, flushOrphanTimers } from "./orphan-timers.setup";
 
-// #434: input-otp@1.4.2 schedules an uncleaned 0/10/50ms setTimeout triple on
+// #434: input-otp@1.4.2 scheduled an uncleaned 0/10/50ms setTimeout triple on
 // every value/focus change; a timer scheduled by a suite's last keystrokes fires
 // AFTER the jsdom env is torn down and reds the whole `unit` job with
 // `ReferenceError: window is not defined` (same class as #405). Track every
 // pending setTimeout with its scheduling stack; after each test (this hook runs
 // LAST — afterEach is LIFO, and setup-file hooks register first) unmount and
-// defuse the orphans. The known upstream defect (input-otp frames) is cleared
-// silently; any OTHER leaked timer is OUR defect and fails the test right here,
+// defuse the orphans. input-otp@1.5.0 fixed that upstream leak, so
+// nothing is tolerated any more: ANY leaked timer is OUR defect and fails the test right here,
 // attributably, instead of as an intermittent CI teardown flake. Rationale +
 // contract tests: ./orphan-timers.setup.ts / ./orphan-timers.test.tsx. Doc:
 // apps/docs/content/architecture/component-testing.md → "The #434/#441 orphan-timer guard".

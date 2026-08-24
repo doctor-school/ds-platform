@@ -5,39 +5,36 @@
  * `apps/portal/orphan-timers.setup.ts` (PR #442, commit f21f429). The same latent
  * exposure lives here — `otp-field.test.tsx` and the auth-block suites drive
  * `input-otp` under real timers — so the environment defends itself the same way.
- * The two copies are siblings: a future upstream `input-otp` fix (or a rework of
+ * The two copies are siblings: an upstream `input-otp` change (or a rework of
  * this guard) must update BOTH. There is no shared test-util package in the repo
  * (per-location `vitest.setup.ts` is the standing convention) and one helper does
  * not justify inventing a heavyweight one — so this is a deliberate per-package
  * copy, not a fork of intent.
  *
- * Why: `input-otp@1.4.2` schedules a 0/10/50ms `setTimeout` triple on every
- * value/focus change (its minified `syncTimeouts` helper) and returns NO cleanup
+ * Why: `input-otp@1.4.2` scheduled a 0/10/50ms `setTimeout` triple on every
+ * value/focus change (its minified `syncTimeouts` helper) and returned NO cleanup
  * from the scheduling effect, so timers scheduled by a suite's final keystrokes
- * outlive the file's JSDOM environment; the late callback then reaches React's
+ * outlived the file's JSDOM environment; the late callback then reaches React's
  * `dispatchSetState` → `resolveUpdatePriority`, which touches the torn-down
  * `window` and red-lights the whole `unit` job with an intermittent
  * `ReferenceError: window is not defined` (same class as #366/#405/#408, a
  * different timer than those interval guards cover). The design-system's #377 PWM
  * mock and #408 interval guard defuse `setInterval` leaks only; the 0/10/50ms
- * `setTimeout` triple is covered by neither. Upstream offers no newer release
- * (1.4.2 is latest), so the environment defends itself deterministically instead
- * of racing the teardown.
+ * `setTimeout` triple is covered by neither. `input-otp@1.5.0` fixed the leak
+ * upstream (the scheduling effect now clears its own handles), so the guard is no
+ * longer tolerating a known defect — it stays as a standing class-guard that keeps
+ * the whole class of leak deterministic instead of racing the teardown.
  *
  * How: `installOrphanTimerTracking()` (called once from vitest.setup.ts, BEFORE
  * any test can snapshot the globals) wraps the environment's `setTimeout` /
  * `clearTimeout` to keep a live map of pending handles plus the stack of each
  * scheduling site. `flushOrphanTimers()` (called from the setup-level global
  * `afterEach`, i.e. after RTL `cleanup()` has unmounted everything) defuses every
- * still-pending handle and classifies it by its scheduling stack:
- *
- *   - `known`   — the documented upstream defect (an `input-otp` frame in the
- *                 stack): defused silently; once unmounted the sync tick is dead
- *                 code by definition.
- *   - `foreign` — anything else: a timer OUR code (or a test) leaked past its
- *                 unmount. The setup afterEach turns these into a hard, locally
- *                 attributable failure (the #405/#408 class-guard pattern) instead
- *                 of an intermittent CI teardown flake.
+ * still-pending handle and reports it as a `foreign` leak — a timer OUR code (or a
+ * test) left past its unmount. The setup afterEach turns these into a hard,
+ * locally attributable failure (the #405/#408 class-guard pattern) instead of an
+ * intermittent CI teardown flake. There is no tolerated-defect bucket: since
+ * `input-otp@1.5.0` no dependency is allowed to leak a timer past unmount.
  *
  * Fake timers stay orthogonal: `vi.useFakeTimers()` swaps `globalThis.setTimeout`
  * for the mock (scheduling under it is controlled and untracked) and
@@ -51,9 +48,6 @@ export interface OrphanTimer {
   /** The delay the orphan was scheduled with (undefined = 0-ish). */
   delay: number | undefined;
 }
-
-/** Frames that mark the documented upstream defect (see module header). */
-const KNOWN_UPSTREAM = /input-otp/;
 
 type TimerHandle = ReturnType<typeof globalThis.setTimeout>;
 
@@ -105,13 +99,12 @@ export function installOrphanTimerTracking(): void {
  * Defuse every still-pending tracked timeout and report what was found.
  * Idempotent per accumulation: the pending map is drained on every call.
  */
-export function flushOrphanTimers(): { known: OrphanTimer[]; foreign: OrphanTimer[] } {
-  const known: OrphanTimer[] = [];
+export function flushOrphanTimers(): { foreign: OrphanTimer[] } {
   const foreign: OrphanTimer[] = [];
   for (const [handle, orphan] of pending) {
     originalClearTimeout(handle);
-    (KNOWN_UPSTREAM.test(orphan.stack) ? known : foreign).push(orphan);
+    foreign.push(orphan);
   }
   pending.clear();
-  return { known, foreign };
+  return { foreign };
 }

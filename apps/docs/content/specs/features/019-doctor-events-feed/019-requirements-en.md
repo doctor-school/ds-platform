@@ -1,0 +1,243 @@
+---
+title: "019 — The doctor events feed"
+description: "Requirements for `#d-events`, the doctor storefront's own events surface: the day-grouped feed with the month calendar standing beside it as navigation, the dedicated calendar page the owner attached to that pick, the «идёт сейчас» block above the feed, the widened format vocabulary with offline city and seats, the shared `events-filter` panel carried as a desktop sidebar and a mobile sheet at the full REQ-138 strength with its intermediate fill states, the «Прошедшие» tense leading into 014's recordings, the short «Мои события» cut, the guest read path that returns to the exact feed state, and the honest loading / empty / error renders of every block."
+slug: 019-doctor-events-feed
+status: Draft
+surface: user-facing
+tracker: https://github.com/doctor-school/ds-platform/milestone/13
+prior_decisions:
+  - ADR-0014 — Product-design delivery lifecycle (§2 PRD → EARS `realizes:` trace; Stage A precedes user-facing implementation; the vendored canvas is the composition source of truth)
+  - ADR-0015 — Two-storefront topology (§2 host-to-application map; the events feed is a route of `apps/doctor` on `doctor.school`; §4 one session model across the two hosts)
+  - "ADR-0016 — Core domain model (§4 events as results of a project; §5 the two linked reference books with adjacency; §6 the points ledger; §8 every entity declares its storefront ownership)"
+  - "ADR-0001 — Identity / Auth / RBAC (the feed reads: `access: public`; the live room and «Мои события»: `access: authenticated`)"
+  - ADR-0002 — Backend Core Stack (NestJS + nestjs-zod; REST/OpenAPI under `/v1`; RFC 7807 Problem Details)
+  - ADR-0003 — Data Layer (retained rows, restrictive foreign keys, no physical delete)
+  - ADR-0004 — Frontend Stack (Next.js 15 on the shared design system)
+  - ADR-0006 — Documentation & SSOT (§4 feature-spec triplet + flat EARS numbering)
+  - ADR-0013 — Design-token SoT and the design-system-first adoption gate
+lang: en
+---
+
+> **EN (this)** · **RU:** [`019-requirements-ru.md`](./019-requirements-ru.md)
+>
+> PRD source: [`019-product.md`](./019-product.md) (US-1…US-15). Epic: [Two-site IA — product brief](../../product/two-site-ia/brief.md). 019 is the **third feature of wave 1** and is `blocked_by` **017** (the storefront shell and the chosen specialty) and **018** (the event-card anatomy and the adjacency the feed is targeted by). It puts a screen in front of a doctor, so `surface: user-facing`.
+
+# 019 — The doctor events feed (Requirements)
+
+## Stage-A decisions in force
+
+All four PRD forks are settled; nothing below re-opens them.
+
+| Fork        | Decision                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **F-019-1** | **Б — the facet panel is a sidebar on desktop and a sheet on mobile.** Owner pick 2026-08-25, verbatim «Б — боковая панель (Рекомендуется)». The canvas `panelVariant` default `А` (a chip row above the feed) is superseded; variants А and В are not built.                                                                                                                                                                                                                  |
+| **F-019-2** | **Б — the month calendar and the day feed are shown at once**, the month acting as navigation and the day feed as the body. Owner pick 2026-08-25, verbatim «Б норм, но тогда надо предусмотреть отдельую страницу с календарём по анаогии с той, что мы сделали в Академии». The pick carries an **owner condition — a dedicated calendar page analogous to the Academy's** — which is owned by **EARS-5**, not deferred. No one-view-at-a-time switch of variant А is built. |
+| **F-019-3** | **А — «Идёт сейчас» is a block above the feed.** Owner pick 2026-08-25, verbatim «А — блок над лентой (Рекомендуется)». No pinned scroll strip (Б) and no highlighted in-day card (В) is built.                                                                                                                                                                                                                                                                                |
+| **F-019-4** | **N/A — not a product fork.** `filterWave` is a canvas viewing default; by owner decision **D-1** all three fill states of the facet panel — wave 1, intermediate, full set — stay mandatory obligations of the panel unit. Which facets 019 itself ships is a lead decision, recorded as **LD-4**.                                                                                                                                                                            |
+
+The canvas **state** props are not forks — they are content-driven obligations every 019 surface must handle: `loggedIn` (guest / signed in) and `dataState` (`обычно` · loading skeleton · empty by facet · empty by specialty · error · no live эфир), plus the event card's own states (normal, hover, focus, «вы записаны», «мест не осталось», «идёт сейчас», «прошло — есть запись»). The canvas's `cardBoard` state stand is a design-review aid and is not built.
+
+## Outcomes
+
+- A doctor opens «События» and, in one screen, learns what is running right now, what is happening this week in their specialty, and what they missed that has a recording — without a search and without leaving the doctor storefront.
+- The month calendar and the day feed stand together (F-019-2): «what is on Thursday» is answered by the feed, «what is on this month» by the calendar beside it, and the doctor never trades one question for the other.
+- A dedicated calendar page exists, analogous to the Academy's, for the doctor who came to plan a month rather than to pick an evening (the owner condition attached to F-019-2).
+- Every format — webinar, online meeting, offline colleagues' meet-up (Doctor Club), congress, podcast broadcast — lives in one feed and is distinguishable at a glance, with an offline event carrying its city and remaining seats wherever it is rendered.
+- The shared `events-filter` panel grows here to the full REQ-138 facet set as a **desktop sidebar and a mobile sheet**, and the Academy catalogs later reuse the same unit rather than a copy.
+- Feed state is addressable: the view, the tense and the applied facets live in the URL, so a shared link, a browser back and a return from registration all land on the same screen the doctor left.
+- Nothing on the screen is a blank page: an empty facet result names the condition that emptied it, an empty specialty offers adjacent areas, a load in flight renders skeletons and a failed read states its cause in Russian with a working retry.
+- The feed re-invents no engine: the listing engine and event card come from 004 and 018, the recordings from 014, the room from 006, and 019 composes them (REQ-137).
+
+## Scope
+
+**In:**
+
+- The **events route** `#d-events` in `apps/doctor` on `doctor.school`, rendered inside 017's shell, with the breadcrumbs «<специальность> › События», the screen title and the view row (Неделя / Месяц · Будущие / Прошедшие).
+- The **day-grouped feed** targeted by the doctor's specialty and its adjacency set, resolved from 017's targeting and 018's managed adjacency — never computed here.
+- The **month calendar rendered beside the feed** per F-019-2, acting as navigation over the same read, with «Сегодня» and the live marker.
+- The **dedicated calendar page** analogous to the Academy's month view — the owner condition of F-019-2 — as its own route of `apps/doctor` over the same read contract (EARS-5).
+- The **«Идёт сейчас» block above the feed** per F-019-3 with the presence count, entering 006's room for a registered doctor and 020's event page otherwise, and absent — not empty — when nothing is live.
+- The **event card reused unchanged** from 018 / `design-source/webinar-card.dc.html`, widened to the full format vocabulary, always showing the sign-up count, showing city and remaining seats for an offline event, expressing cost only in Pul with zero cost reading «бесплатно для врача», and carrying НМО as a badge only.
+- The **`events-filter` panel** as the shared design-system unit in F-019-1 form (desktop sidebar, mobile sheet behind a counted «Фильтры» control), carrying the full REQ-138 facet set, keeping applied facets visible with a reset, and rendering correctly in all three D-1 fill states.
+- **URL-addressable feed state** — view, tense and applied facets — as the single source of the screen's state (LD-1).
+- The **«Прошедшие» tense**, re-reading the same cards with recording and materials from feature 014 in place of the sign-up action.
+- The **short «Мои события» cut** for a signed-in doctor with «Все мои события в личном кабинете →» into `#d-lk`, absent entirely for a guest (D-2).
+- The **guest read path**: the whole feed and calendar readable with no account, the card action routing into feature 021 and returning to the exact feed state it left.
+- All `dataState` renders — skeletons for the feed and the month grid, the two distinct empty statements, the per-block error with a retry — and the no-live-эфир render.
+- Mobile-breakpoint parity at 390, both themes, and the `playwright-axe` accessibility bar on the events route and the calendar page.
+
+**Out:**
+
+- **The live room itself** — feature **006**; 019 renders only the way in.
+- **The event page** `#d-event` — feature **020**; every card and the live block link into it.
+- **Registration and consents** — feature **021**; 019 routes into it and defines the return target only.
+- **The full «Мои события» section, congress tickets and НМО check-ins** — `#d-lk` (feature **022**), features **020** / **038**. The 019 cut lists what the doctor is signed up for and links out; it renders no ticket, no QR and no check-in affordance.
+- **Recording production and editing states** — feature **014**; 019 links to what 014 publishes and models no editing state.
+- **The listing engine and the event card anatomy** — features **004** / **018**; 019 composes them and forks neither (REQ-137).
+- **The specialty adjacency directory** — feature **018** owns it; 019 consumes the resolved set and defines no adjacency of its own.
+- **Academy surfaces** — projects, partners, Academy podcasts and Academy news (NG-2, REQ-24).
+- **Event authoring / the event constructor** — feature **041**, wave 7.
+- **The congress front** — feature **026**; congress _events_ appear in this feed as a format per LD-5, while the congress's own surface stays out.
+- **Mobile-application screens** — a separate track (F-4).
+- **The community-discussion affordance of PRD US-11** — «Прошедшие» delivers the recording and the materials (EARS-10); the «перенести обсуждение в сообщество» half is **deferred**. There is no event → community mapping in the model, community surfaces are features **027** / **022**, and choosing which community an event's discussion belongs to is a product decision rather than a rendering detail. No discussion link, no community picker and no placeholder control ships in 019; the deferral is tracked as its own Issue on the 019 parent and carried forward in the open questions below.
+- **The legal marking of partner material** — CON-8 / CON-14 assign the marking obligation (legal qualification, responsible party, ERID, ОРД) to features **040** / **024**. 019 renders no marking of its own and models no marking field.
+
+## Constraints
+
+- **017 and 018 must land first.** 019 renders inside 017's shell and consumes 017's chosen specialty and targeting set plus 018's event-card unit and managed adjacency; no 019 clause may be satisfied by re-implementing a shell, a card or an adjacency rule, and none by building inside `apps/promo` or `apps/portal`.
+- **No new listing engine.** The feed, the month grid, the archive slice, the card and the facet panel are the existing shared units (`webinars-listing`, `webinars-month`, `webinar-archive`, `webinar-card`, `events-filter`). A screen-local re-implementation of any of them is a defect (REQ-137).
+- **No financing statement, anywhere.** Cost is stated only in Pul attention points and zero cost reads «бесплатно для врача». No rendered string in any state, breakpoint or theme names who funds an event, and no «who pays» wording exists in the interface copy or in any response field.
+- **Glossary canon.** Where an organisation behind the platform is named at all it is «инвестор (организация)» / «первоинвестор»; «партнёр» is never used as the money-carrier in a doctor-facing string.
+- **No commerce.** No price in roubles, no cart, no subscription and no payment affordance on any 019 surface (REQ-48, NG-5 / CON-16).
+- **НМО is an attribute and a facet, never the headline.** НМО may badge an event and may narrow the feed; it is not the screen's title and not its primary filter (NG-1).
+- **No Academy noise.** Academy podcasts, Academy news, partner news, project cards and backstage navigation appear in no block of this feed; the word «проект» appears in no doctor-facing string (NG-2, REQ-24). A **podcast broadcast** is an event of the doctor's own feed and is not Academy media noise — the distinction is the entity, not the topic.
+- **Public by default.** The whole feed, the calendar and the calendar page are readable with no account. Sign-in changes what an action does, never whether content is readable.
+- **The room is never entered from the feed by an unregistered doctor.** The live block's action resolves to 006's room only for a doctor with a registration on that event; every other reader is sent to 020's event page.
+- **Honest states, no placeholders.** Every block renders exactly one of content, skeleton, an honest empty statement, or an explicit Russian-language error with a working retry. An empty labelled box, an unresolving spinner, a dead control and a «скоро» stub standing in for a missing deliverable each fail review.
+- **Design-system only.** Every element comes from `@ds/design-system` primitives with tokens-only styling and full interaction states; the vendored canvas is the composition source, and the canvas's `cardBoard` state stand is a review aid that is not built.
+
+## Prior decisions
+
+- **ADR-0015 §2:** the events feed and the calendar page are routes of `apps/doctor`; public storefront pages are statically generated or ISR and authenticated views are SSR with the host-only session cookie — which is why the live block and «Мои события» are the two parts of the screen that are viewer-dependent.
+- **ADR-0015 §4:** one session model across the two hosts, so a doctor who registers via feature 021 returns to this feed already signed in.
+- **ADR-0016 §4:** an event is a result of a project; the project is the Academy's entity and never surfaces on the doctor's storefront, so a card names the school or the source, never the project.
+- **ADR-0016 §5:** the closed `specialties_minzdrav` book and the open `directions` book with adjacency as a weighted self-relation — the substrate of «моя и смежные» targeting and of the empty-specialty fallback.
+- **ADR-0016 §6:** points and money are one append-only ledger family; the Pul cost on a card reads from it, and «бесплатно для врача» is the rendering of a zero cost rather than a marketing string.
+- **ADR-0014 §2:** the PRD is the source of this triplet, each clause carries `realizes: US-N`, and a recorded Stage-A pick is a decision rather than a question to re-open.
+- **ADR-0013 + AGENTS.md §6:** implementation runs the design-system-first gate and builds from the vendored `design-source/` files rather than from issue prose.
+- **ADR-0006 §4:** the feature-spec triplet and flat EARS numbering; `it('EARS-N: …')` test titles.
+- **Feature 017** owns the shell, the specialty books and the remembered choice. **Feature 018** owns the event-card anatomy and the managed adjacency. **Feature 004** owns the listing engine, **014** the recordings and **006** the room. 019 composes all of them and re-models none.
+
+## Lead technical decisions
+
+Each records a call the PRD left open. They are lead decisions in the AGENTS.md §6 decision-debt sense — reversible behind a stated contract, and named here rather than buried in the design.
+
+- **LD-1 — the URL is the single source of the feed's state.** The PRD marks URL persistence unresolved. 019 puts the view (`week` | `month`), the tense (`upcoming` | `past`) and every applied facet in the query string, and the rendered screen is a pure function of that URL plus the viewer's session. A shared link reproduces the screen for another doctor, the browser back button moves between states rather than out of the feed, and the return from feature 021's registration is just the URL the doctor left. This is also what makes the guest path of EARS-12 a specified return rather than a best-effort one, and it settles for 019 the same question 014 left open for its «Прошедшие» tab — 014 may adopt the same contract without changing its own read model.
+- **LD-2 — the feed runs to a fixed horizon and pages beyond it; there is no infinite scroll.** «Будущие» renders a bounded forward horizon of day groups and «Прошедшие» a bounded backward one, each with an explicit «показать ещё» that extends the range in the URL per LD-1. Depth lives in one place in the read contract, so changing it is configuration rather than a spec change, and a screen whose state is addressable cannot also be an unbounded scroll whose position is unreproducible.
+- **LD-3 — the month calendar and the dedicated calendar page are one unit over one read contract.** F-019-2's in-feed month grid and the owner-conditioned calendar page render the same `webinars-month` unit against the same targeted read; the page differs only in that the month is the body rather than the navigation, and in carrying its own route, breadcrumbs and full-width composition. Two calendars over two reads would drift within one release; this way the owner's condition costs a route and a layout, not a second mechanism.
+- **LD-4 — 019 ships the full REQ-138 facet set, and the panel still owes all three D-1 fill states.** The PRD deliberately leaves «which facets ship in wave 1 of 019» open. Every facet REQ-138 names — format, kind, specialty, city, НМО, «бесплатно по Pul», name search — reads an attribute the event model already carries, so a subset would defer nothing but would ship the doctor a panel that answers fewer questions than the feed can. The panel unit nevertheless declares and renders the wave-1, intermediate and full fill states (D-1), because the Academy catalogs that later reuse it will mount it with fewer facets, and the grid must hold in every one of those states.
+- **LD-5 — a congress is a format of the event card in this feed, not a surface of its own.** The PRD flags the tension between congress events appearing in wave 1 and the congress front being feature 026 in a late wave. 019 treats a congress as a format value: it renders in the same card, may span dates and may be hybrid, and it links to 020's event page like every other format. Feature 026 later adds the congress's own front without changing this feed — the feed shows events, and a congress event is an event.
+- **LD-6 — the live block is server-resolved and self-clearing, with no client-side liveness invention.** «Идёт сейчас» renders from the room state feature 006 publishes, together with the presence count that comes with it; the block refreshes on a bounded interval and disappears when the эфир ends rather than freezing on a stale LIVE badge. The client never infers liveness from a start time, and with nothing live the block is absent from the tree — not rendered empty — so it leaves no hole in the grid (REQ-137).
+- **LD-7 — the guest's action target is preserved, not re-derived.** A guest action on a card carries both the event and the feed URL of LD-1 into feature 021, and 021 returns the doctor to that URL with the action resumed on the same card. No «last page» heuristic, no session-stored breadcrumb and no landing on the feed's default state after registering.
+- **LD-8 — «Мои события» is a viewer-scoped cut with a real destination, sequenced behind its dependencies.** The block reads the signed-in doctor's own registrations (created by feature 021) and links to `#d-lk` (feature 022). It therefore ships behind both: its Issue is `blocked_by` 021 for the data and 022 for the link target, rather than shipping earlier with an empty list or a link that resolves nowhere. A guest does not see the block at all (D-2), and no ticket, QR or check-in is rendered here.
+- **LD-9 — an empty specialty and an empty facet result are two different renders.** «Nothing matched your facets» names the narrowest applied condition and offers to weaken exactly that one; «nothing exists in your specialty yet» offers the nearest events of the adjacent areas resolved from 018's managed relation. Collapsing them into one empty state would tell a doctor in a rare specialty to loosen a filter they never set.
+
+## Event Model
+
+### Commands
+
+019 is a read surface and introduces **no new commands**. The writes reachable from it belong to other features and are performed on their own surfaces:
+
+- `RegisterForEvent(eventId)` — features 021 / 005, reached from a card action and returning to the feed URL of LD-1 / LD-7.
+- `EnterRoom(eventId)` — feature 006, reached from the live block by a registered doctor.
+- `ChangeSpecialty(specialtyId)` — feature 017, reached from the breadcrumbs.
+
+### Events
+
+019 emits no domain events. It **consumes**:
+
+| Consumed event                    | Effect on the screen                                                                                                                                              |
+| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `SpecialtyChosen` (017)           | The feed, the calendar and the calendar page exist for that actor, targeted to the specialty and its adjacency set.                                               |
+| `SpecialtyChanged` (017)          | The feed, the month grid and the facet panel re-read for the new specialty; applied facets that remain valid survive, the rest are cleared and stated as cleared. |
+| `RoomOpened` / `RoomClosed` (006) | The live block appears with its presence count, and disappears from the tree when the эфир ends (LD-6).                                                           |
+| `RecordingPublished` (014)        | A past event's card gains its «прошло — есть запись» state and its link to the recording and materials.                                                           |
+| `RegistrationCreated` (021)       | The doctor's card state becomes «вы записаны» and the event enters the «Мои события» cut.                                                                         |
+
+### Read models
+
+- `DoctorEventsFeed { view: 'week' | 'month', tense: 'upcoming' | 'past', facets: AppliedFacets, days: DayGroup[], horizon: { from, to, hasMore }, live: LiveStrip | null, myEvents: MyEventsCut | null }` — the whole screen as a function of the URL (LD-1) and the session.
+- `DayGroup { date, weekday, items: PublicEventSummary[] }` — the day grouping of the week feed.
+- `PublicEventSummary { id, href, startsAt, endsAt, format: 'webinar' | 'online-meeting' | 'offline-meetup' | 'congress' | 'podcast', kind, title, speaker, source, nmo: boolean, pulCost, signUpCount, city?, seatsLeft?, state: normal | registered | soldOut | live | recorded }` — the card payload; `pulCost === 0` renders «бесплатно для врача», and no field names a financier.
+- `MonthGrid { month, days: { date, count, hasLive }[], today }` — the month unit of LD-3, shared by the in-feed calendar and the calendar page.
+- `LiveStrip { eventId, title, href, presenceCount, viewerIsRegistered }` — `null` when nothing is live (LD-6).
+- `AppliedFacets { format[], kind[], specialtyScope: 'mine-and-adjacent' | 'all' | SpecialtyRef[], city[], nmoOnly, freeByPul, query }` — the full REQ-138 set of LD-4, mirrored one-to-one into the URL.
+- `FacetPanelState { fill: 'wave-1' | 'intermediate' | 'full', appliedCount, resetHref }` — the D-1 fill states the shared unit declares.
+- `PastEventSummary { …PublicEventSummary, recording?: { href }, materials: { title, href }[] }` — the «Прошедшие» reading, resolved from feature 014.
+- `MyEventsCut { items: PublicEventSummary[], cabinetHref }` — signed-in only (D-2, LD-8).
+- `EmptyState { reason: 'no-match' | 'empty-specialty', narrowestFacet?, weakenHref?, adjacentAreas?: { direction, feedHref }[] }` — the two distinct renders of LD-9.
+
+### Policies
+
+- Every 019 read is public; the session changes only the live block's action target, the card's `state` and the presence of the «Мои события» cut.
+- The rendered screen is determined by the URL plus the session and by nothing else (LD-1); no server-side or client-side memory of a previous visit alters it.
+- Targeting resolves from 017's targeting set and 018's managed adjacency; 019 issues no adjacency logic and no ranking of its own.
+- The live block exists exactly while 006 reports an open room for a targeted event (LD-6).
+- A past event offers a recording exactly when 014 has published one; absence of a recording renders as the card without the recording action, never as a dead link.
+
+## EARS requirements
+
+> Flat numbering per ADR-0006 §4. Every clause realizes one or more PRD stories and is covered by `019-scenarios.feature`.
+
+- **EARS-1** _(realizes: US-1)_ — When a visitor opens `#d-events` on `doctor.school`, the storefront shall render it inside feature 017's shell layout with the breadcrumbs «<специальность> › События», the screen title and the view row (Неделя / Месяц · Будущие / Прошедшие), composed in the canvas order — view row, then the «Идёт сейчас» block when one exists, then the facet sidebar beside the body, then the day-grouped feed — and shall define no header, navigation or footer of its own.
+- **EARS-2** _(realizes: US-4, US-5, US-10, US-14)_ — When the feed renders an event, it shall use the **shared event-card unit** whose anatomy feature 018 owns, with no screen-local re-implementation, and that card shall carry the date and time, the format — webinar, online meeting, offline colleagues' meet-up, congress or podcast broadcast, each visually distinguishable without reading the text — the kind, the speaker, the source school, НМО as a badge only, the cost in Pul attention points with a zero cost rendered as «бесплатно для врача» and never in roubles, and the sign-up count of colleagues visible in every card state; an **offline** event shall additionally carry its **city and remaining seats** wherever the card is rendered, a congress may span dates and be hybrid, and no card, response field or rendered string shall state who finances the event.
+- **EARS-3** _(realizes: US-1)_ — When any visitor opens the feed, it shall group events **by day** within the tense and horizon of the URL, targeted to the doctor's specialty and its adjacent directions as resolved from feature 017's targeting and feature 018's managed adjacency relation — never from name similarity or any computed likeness — shall render a bounded horizon with an explicit «показать ещё» that extends the range per LD-2, and shall introduce no listing engine of its own beyond the shared `webinars-listing` unit (REQ-137).
+- **EARS-4** _(realizes: US-3)_ — When the feed is rendered on a desktop breakpoint, the **month calendar and the day feed shall be shown at once** per F-019-2, the month grid acting as navigation over the same targeted read with «Сегодня» marked and days carrying a live marker, and selecting a day shall move the feed body to that day by changing the URL per LD-1 without a full-page reload of the shell; no one-view-at-a-time switch shall be built.
+- **EARS-5** _(realizes: US-3)_ — The doctor storefront shall provide a **dedicated calendar page** analogous to the Academy's month view — the owner condition recorded with F-019-2 — as its own route of `apps/doctor` rendering the same `webinars-month` unit over the same targeted read contract per LD-3, with the month as the body of the page, its own breadcrumbs inside 017's shell, the same facet panel and tense controls, and a day selection that leads into the feed at that day; the page shall duplicate neither the read contract nor the calendar unit.
+- **EARS-6** _(realizes: US-2)_ — While feature 006 reports an open room for a targeted event, the screen shall render the **«Идёт сейчас» block above the feed** per F-019-3 with the LIVE marker, the title and the presence count, and its action shall lead a **registered** doctor into feature 006's room and every other reader — signed in or not — to feature 020's event page and never into the room; the block shall refresh on a bounded interval and clear itself when the эфир ends per LD-6, shall never infer liveness from a start time in the client, and when nothing is live shall be **absent from the tree** rather than rendered as an empty block.
+- **EARS-7** _(realizes: US-6, US-15)_ — When the feed renders its filters, it shall use the **shared `events-filter` unit** as a **sidebar on desktop** per F-019-1, carrying the full REQ-138 facet set per LD-4 — format, kind, specialty (defaulting to «моя и смежные»), city for offline events, «только с НМО», «бесплатно по Pul» and name search — keeping every applied facet visible with a working reset, stating the applied count, and shall declare and correctly render the three D-1 fill states (wave 1, intermediate, full set) so that a consumer mounting the panel with fewer facets breaks neither the panel nor the screen grid; 019 shall create no private copy of the panel.
+- **EARS-8** _(realizes: US-6, US-13)_ — When the view, the tense, a facet or the horizon changes, the screen shall write that state into the **URL** and shall render as a pure function of that URL plus the viewer's session per LD-1, so that a shared link reproduces the screen for another reader, the browser back button moves between feed states rather than out of the feed, and a return from feature 021 lands on the exact state the doctor left per LD-7; no feed state shall live only in client memory and none shall be restored from a «last visit» heuristic.
+- **EARS-9** _(realizes: US-8, US-9)_ — When a read is in flight, the feed and the month grid shall render **skeletons**; when the applied facets match nothing, the screen shall state **which condition emptied it**, name the narrowest applied facet and offer a concrete weakening of exactly that facet; when the doctor's own specialty has nothing at all, the screen shall instead offer the **nearest events of the adjacent areas** resolved from feature 018's managed relation per LD-9; and when a read fails, the affected block shall state the cause in Russian and offer a retry that re-runs only that read while the other blocks stay usable — a blank page, an empty labelled box, an unresolving spinner and a single merged empty state shall each be a defect.
+- **EARS-10** _(realizes: US-11)_ — When the tense is «Прошедшие», the feed shall re-read the **same cards with a changed meaning** — the recording and the materials published by feature **014** in place of the sign-up action, with the card in its «прошло — есть запись» state — shall render a past event that has no published recording as the card without the recording action rather than as a dead link, and shall model no recording production or editing state of its own; the community-discussion affordance of US-11 is **deferred** per Scope → Out and no discussion link or placeholder control shall ship.
+- **EARS-11** _(realizes: US-12)_ — When a **signed-in** doctor opens the screen, it shall render the short **«Мои события»** cut of the events that doctor is registered for, with «Все мои события в личном кабинете →» into `#d-lk`, and shall render **no** block at all for a guest per D-2; the cut shall carry no ticket, QR or НМО check-in, shall not grow into a second full section, and shall ship behind its dependencies per LD-8 — feature 021 for the registrations it reads and feature 022 for the destination it links to — rather than earlier with an empty list or a link that resolves nowhere.
+- **EARS-12** _(realizes: US-13)_ — When a visitor with no account opens the screen, the feed, the month calendar, the calendar page, the facet panel and the «Прошедшие» tense shall be **fully readable**, and only the **action on a card** shall require an account: it shall carry both the event and the current feed URL into feature 021's registration and return the doctor to that exact URL with the action resumed on the same card per LD-7; no block shall be hidden from a guest except the «Мои события» cut, and no gated payload shall be delivered to the client and hidden there.
+- **EARS-13** _(realizes: US-7)_ — When any 019 surface is rendered below the mobile breakpoint, the facet panel shall collapse into a **«Фильтры» control carrying the count of applied facets** and open as a sheet per F-019-1, the day feed, the month grid, the live block, every card state and the «Мои события» cut shall each render in the canvas mobile composition and stay fully operable at 390 in both themes, and the events route and the calendar page shall pass the `playwright-axe` gate with every card a real labelled link, every facet a real control with a visible state, the view and tense controls keyboard-operable, and the LIVE state announced to a screen reader rather than conveyed by colour alone.
+- **EARS-14** _(realizes: US-4)_ — The feed shall contain **events and only events**: no Academy podcast episode, Academy news item, partner news item, project card or backstage navigation entry shall appear in any of its blocks, the word «проект» shall appear in no doctor-facing string, no price in roubles, cart, subscription or payment affordance shall exist on any surface of this feature, НМО shall appear only as a badge and a facet and never as the screen's heading or primary filter, and every doctor-facing string shall follow the glossary canon — an organisation behind the platform is «инвестор (организация)» / «первоинвестор» and «партнёр» is never the money-carrier; a **podcast broadcast event** is an event of this feed and is not Academy media noise.
+- **EARS-15** _(realizes: US-15 · process gate — not a code Issue)_ — Before implementation of each 019 surface begins, the team shall run the `build-ui-from-design-system` gate against `design-source/doctor-events.dc.html` and the reused units (`webinar-card.dc.html`, `webinars-listing`, `webinars-month`, `webinar-archive`, `events-filter`) as the composition source of truth, build from `@ds/design-system` primitives with full interaction states and tokens-only styling, cover every `dataState`, both `loggedIn` states, all seven card states and all three facet fill states at both breakpoints and in both themes, and re-confirm the rendered result with the product owner on the live stand before merge; the recorded Stage-A picks (F-019-1 **Б**, F-019-2 **Б** with its calendar-page condition, F-019-3 **А**) shall be treated as decisions rather than re-opened questions, and the canvas `cardBoard` state stand shall not be built.
+
+## Invariants
+
+- The screen renders inside exactly one shell — 017's — and defines no header, navigation or footer of its own.
+- Exactly one event-card implementation exists (018's unit) and exactly one facet-panel implementation exists (`events-filter`); 019 holds no private copy of either.
+- The rendered screen is a pure function of the URL plus the viewer's session; no feed state exists that a link cannot reproduce.
+- The live block exists exactly while 006 reports an open room, and its room action is reachable only by a registered doctor.
+- Every card in every state shows the sign-up count; every offline card shows its city and remaining seats.
+- No response field or rendered string of this feature states who finances an event, and none carries a price in roubles, a cart or a subscription.
+- «проект» appears in no doctor-facing string, and no Academy content or crossing exists on any 019 surface.
+- НМО appears only as a badge and a facet, never as a heading or the primary filter.
+- An empty facet result and an empty specialty are two distinct renders, and neither is a blank page.
+- Every block renders exactly one of content, skeleton, an honest empty statement, or an explicit error with a working retry; a failing read is contained to its own block.
+- The «Мои события» cut exists only for a signed-in doctor and never for a guest.
+
+## Verification
+
+| EARS | Test type                           | Indicative target                                                                                          | Required proof                                                                                                                                                                                                                                                            |
+| ---- | ----------------------------------- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1    | Playwright + tree scan              | `apps/doctor/e2e/events-layout.spec.ts`                                                                    | Route renders inside 017's shell; breadcrumbs, title and view row present; the canvas composition order holds; the tree scan finds exactly one header/footer implementation and none owned by 019.                                                                        |
+| 2    | Vitest unit + Playwright + showcase | `packages/design-system/test/event-card.spec.tsx`, `apps/doctor/e2e/events-card.spec.ts`                   | All five formats render distinguishably from one shared unit; sign-up count present in every state; offline card shows city and seats; zero cost renders «бесплатно для врача»; no rouble string; no screen-local card in the tree.                                       |
+| 3    | Vitest e2e + Playwright             | `apps/api/test/storefront/doctor-events-feed.e2e-spec.ts`, `apps/doctor/e2e/events-feed.spec.ts`           | Day grouping within the horizon; targeting matches 017's set and 018's adjacency rows; an adjacency-less specialty yields no adjacent items; «показать ещё» extends the range in the URL; no ranking field in the response.                                               |
+| 4    | Playwright                          | `apps/doctor/e2e/events-month-beside-feed.spec.ts`                                                         | Month grid and day feed visible together at 1440; «Сегодня» marked; a day with a live эфир marked; selecting a day changes the URL and moves the feed body without reloading the shell; no view-switch-only rendering exists.                                             |
+| 5    | Playwright + Vitest e2e             | `apps/doctor/e2e/events-calendar-page.spec.ts`, `apps/api/test/storefront/doctor-events-month.e2e-spec.ts` | The dedicated calendar route renders the month as the page body inside 017's shell with facets and tense; it hits the same read contract as the in-feed grid; a day selection lands in the feed at that day; one calendar unit.                                           |
+| 6    | Vitest e2e + Playwright             | `apps/api/test/storefront/doctor-events-live.e2e-spec.ts`, `apps/doctor/e2e/events-live.spec.ts`           | Block present with presence count while 006 reports an open room; registered doctor reaches the room; unregistered and anonymous readers reach 020's event page; the block clears when the room closes; with nothing live the block is absent from the DOM.               |
+| 7    | Vitest unit + Playwright + showcase | `packages/design-system/test/events-filter.spec.tsx`, `apps/doctor/e2e/events-facets.spec.ts`              | Sidebar rendering at desktop; all seven REQ-138 facets applied and combined; applied facets visible with a working reset and count; the panel renders correctly mounted in each of the three fill states; one shared panel module.                                        |
+| 8    | Playwright + Vitest e2e             | `apps/doctor/e2e/events-url-state.spec.ts`, `apps/api/test/storefront/doctor-events-query.e2e-spec.ts`     | View, tense, facets and horizon round-trip through the URL; a pasted link reproduces the screen in a fresh context; back moves between feed states; the 021 return lands on the exact prior URL with the action resumed.                                                  |
+| 9    | Playwright + Vitest e2e             | `apps/doctor/e2e/events-states.spec.ts`, `apps/api/test/storefront/doctor-events-states.e2e-spec.ts`       | Skeletons for feed and month grid; the no-match state names the narrowest facet and its weakening; the empty-specialty state offers adjacent areas; the two states are textually distinct; a failing read retries only its own block.                                     |
+| 10   | Vitest e2e + Playwright             | `apps/api/test/storefront/doctor-events-past.e2e-spec.ts`, `apps/doctor/e2e/events-past.spec.ts`           | «Прошедшие» renders the same card unit with recording and materials from 014; a past event with no recording renders without the action and with no dead link; no discussion link or community control anywhere in the tense.                                             |
+| 11   | Vitest e2e + Playwright             | `apps/api/test/storefront/doctor-events-mine.e2e-spec.ts`, `apps/doctor/e2e/events-mine.spec.ts`           | The cut lists only the signed-in doctor's registrations; the cabinet link resolves to `#d-lk`; a guest response carries no cut and the guest DOM has no block; no ticket, QR or check-in rendered.                                                                        |
+| 12   | Playwright + Vitest e2e             | `apps/doctor/e2e/events-guest.spec.ts`, `apps/api/test/storefront/doctor-events-guest.e2e-spec.ts`         | An anonymous read returns the full feed, calendar and past tense; the card action routes into 021 carrying event + feed URL and returns to it; only the «Мои события» cut is absent; no gated payload delivered then hidden.                                              |
+| 13   | Playwright + axe + UI lint          | `apps/doctor/e2e/events-mobile.spec.ts`                                                                    | 390 and 1440 in both themes; the «Фильтры» control shows the applied count and opens the sheet; axe clean on the events route and the calendar page; cards are labelled links; view/tense keyboard-operable; LIVE not colour-only.                                        |
+| 14   | Playwright + full-text scan         | `apps/doctor/e2e/events-purity.spec.ts`                                                                    | A scan of every rendered state × breakpoint × theme finds no Academy news/podcast-episode/project card, no «проект», no rouble price, cart or subscription, no payer statement and no «партнёр» as money-carrier; НМО only as badge and facet.                            |
+| 15   | Owner record + eyes-on render check | Stage-A record in `019-product.md`; Stage-B verdict on the Issue                                           | Canvas-derived composition verified against the vendored files; every `dataState` × both `loggedIn` × all card states × all three facet fill states reviewed at both breakpoints and themes; owner live-stand confirmation before merge. Process gate — not a code Issue. |
+| all  | Playwright BDD                      | `019-scenarios.feature`                                                                                    | Every EARS tag executes against the real `apps/doctor` → NestJS → Postgres stack; no seeded stand-in for the room state, the recordings or the adjacency table, and no placeholder block state accepted.                                                                  |
+
+## Dependencies and sequencing
+
+- **019 is blocked by 017 and 018.** The shell layout and the chosen specialty come from 017; the event-card unit and the managed adjacency come from 018. No 019 clause may be satisfied by re-implementing any of them or by seeding adjacency by hand.
+- **EARS-2 and EARS-7 precede the blocks that compose them.** The card unit's format widening and the facet panel are the substrate of EARS-3, EARS-4, EARS-5, EARS-9 and EARS-10; building the composition first means rebuilding it.
+- **EARS-8 precedes EARS-12.** The guest return of LD-7 is the URL contract of LD-1; there is no return target before the state is addressable.
+- **EARS-6 depends on feature 006** for the room state and presence count, and on feature 020 for the non-registered destination.
+- **EARS-10 depends on feature 014** for published recordings and materials; 019 renders what 014 publishes and never a stand-in.
+- **EARS-11 is blocked by features 021 and 022** per LD-8 — 021 creates the registrations it reads, 022 owns the `#d-lk` destination it links to.
+- **Feature 020** is `blocked_by` 019 for the card anatomy and the transition out of the doctor's feed; the dependency runs one way in each direction and neither feature builds the other's surface.
+- **The Academy catalogs (features 030 / 031)** consume the `events-filter` unit EARS-7 grows and must not re-define it.
+
+## Open questions carried forward
+
+These stay open; each is designed around above rather than resolved here, and each is a product decision the owner still owns.
+
+- **Where an event's discussion belongs** — US-11's community half is deferred out of 019 and tracked as its own Issue on the 019 parent. Which community an event's discussion lands in, whether the mapping is per event, per school or per direction, and what a guest sees are all owner decisions; 019 ships «Прошедшие» with the recording and the materials rather than inventing a destination.
+- **Which facets a doctor actually uses** — LD-4 ships the full REQ-138 set; whether some facets earn their place is an observation the live screen will answer, and removing one later is deleting a facet, not unwinding a mechanism.
+- **How deep «Будущие» and «Прошедшие» run before paging** — LD-2 fixes a bounded horizon with «показать ещё»; the specific depth is configuration in the read contract.
+- **Whether the congress front eventually pulls congress events out of this feed** — LD-5 keeps a congress a format here; feature 026 may later add a congress surface without changing the feed.
+- **What «моя и смежные» means concretely** — the adjacency directory is owned by 018; 019 consumes it and never defines it.
+- **Whether feature 014 adopts the URL-state contract** for its own «Прошедшие» tab — LD-1 settles the question for 019 only.

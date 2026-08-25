@@ -12,10 +12,11 @@ set -euo pipefail
 TYPE="${1:?usage: backup.sh <full|incr>}"
 
 # Re-load the env cron dropped (written by entrypoint.sh).
-if [[ -f /etc/pgbackrest/pgbackrest.env ]]; then
+DS_PGBACKREST_ENV_FILE="${DS_PGBACKREST_ENV_FILE:-/etc/pgbackrest/pgbackrest.env}"
+if [[ -f "$DS_PGBACKREST_ENV_FILE" ]]; then
   set -a
   # shellcheck disable=SC1091
-  . /etc/pgbackrest/pgbackrest.env
+  . "$DS_PGBACKREST_ENV_FILE"
   set +a
 fi
 

@@ -5,6 +5,27 @@ slug: 019-doctor-events-feed
 status: Draft
 surface: user-facing
 tracker: https://github.com/doctor-school/ds-platform/milestone/13
+issues:
+  [
+    1515,
+    1516,
+    1517,
+    1518,
+    1519,
+    1520,
+    1521,
+    1522,
+    1523,
+    1524,
+    1525,
+    1526,
+    1527,
+    1528,
+    1529,
+    1530,
+    1531,
+    1532,
+  ]
 prior_decisions:
   - ADR-0014 — Product-design delivery lifecycle (§2 PRD → EARS `realizes:` trace; Stage A precedes user-facing implementation; the vendored canvas is the composition source of truth)
   - ADR-0015 — Two-storefront topology (§2 host-to-application map; the events feed is a route of `apps/doctor` on `doctor.school`; §4 one session model across the two hosts)
@@ -79,7 +100,7 @@ The canvas **state** props are not forks — they are content-driven obligations
 - **Event authoring / the event constructor** — feature **041**, wave 7.
 - **The congress front** — feature **026**; congress _events_ appear in this feed as a format per LD-5, while the congress's own surface stays out.
 - **Mobile-application screens** — a separate track (F-4).
-- **The community-discussion affordance of PRD US-11** — «Прошедшие» delivers the recording and the materials (EARS-10); the «перенести обсуждение в сообщество» half is **deferred**. There is no event → community mapping in the model, community surfaces are features **027** / **022**, and choosing which community an event's discussion belongs to is a product decision rather than a rendering detail. No discussion link, no community picker and no placeholder control ships in 019; the deferral is tracked as its own Issue on the 019 parent and carried forward in the open questions below.
+- **The community-discussion affordance of PRD US-11** — «Прошедшие» delivers the recording and the materials (EARS-10); the «перенести обсуждение в сообщество» half is **deferred**. There is no event → community mapping in the model, community surfaces are features **027** / **022**, and choosing which community an event's discussion belongs to is a product decision rather than a rendering detail. No discussion link, no community picker and no placeholder control ships in 019; the deferral is tracked as its own Issue on the 019 parent (#1532) and carried forward in the open questions below.
 - **The legal marking of partner material** — CON-8 / CON-14 assign the marking obligation (legal qualification, responsible party, ERID, ОРД) to features **040** / **024**. 019 renders no marking of its own and models no marking field.
 
 ## Constraints
@@ -235,7 +256,7 @@ Each records a call the PRD left open. They are lead decisions in the AGENTS.md 
 
 These stay open; each is designed around above rather than resolved here, and each is a product decision the owner still owns.
 
-- **Where an event's discussion belongs** — US-11's community half is deferred out of 019 and tracked as its own Issue on the 019 parent. Which community an event's discussion lands in, whether the mapping is per event, per school or per direction, and what a guest sees are all owner decisions; 019 ships «Прошедшие» with the recording and the materials rather than inventing a destination.
+- **Where an event's discussion belongs** — US-11's community half is deferred out of 019 and tracked as its own Issue on the 019 parent (#1532). Which community an event's discussion lands in, whether the mapping is per event, per school or per direction, and what a guest sees are all owner decisions; 019 ships «Прошедшие» with the recording and the materials rather than inventing a destination.
 - **Which facets a doctor actually uses** — LD-4 ships the full REQ-138 set; whether some facets earn their place is an observation the live screen will answer, and removing one later is deleting a facet, not unwinding a mechanism.
 - **How deep «Будущие» and «Прошедшие» run before paging** — LD-2 fixes a bounded horizon with «показать ещё»; the specific depth is configuration in the read contract.
 - **Whether the congress front eventually pulls congress events out of this feed** — LD-5 keeps a congress a format here; feature 026 may later add a congress surface without changing the feed.

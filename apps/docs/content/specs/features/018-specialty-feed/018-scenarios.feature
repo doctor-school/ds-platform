@@ -121,7 +121,8 @@ Feature: A doctor returns to one screen that shows what to attend, what to learn
   Scenario: «Зачем это мне» states the exchange and stops at free-for-the-doctor
     When a visitor opens the feed
     Then the value block states a new specialty, an international placement, mentorship with an expert and a document at the end of a course
-    And it states «всё бесплатно для врача» with the legal partner marking
+    And it closes on «всё бесплатно для врача»
+    And no marking, badge or attribution is rendered beside that statement
 
   @EARS-7 @failure
   Scenario: No rendered state ever names who pays

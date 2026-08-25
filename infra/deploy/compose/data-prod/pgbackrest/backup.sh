@@ -20,4 +20,4 @@ if [[ -f /etc/pgbackrest/pgbackrest.env ]]; then
 fi
 
 echo "[$(date -u +%FT%TZ)] pgbackrest ${TYPE} backup starting"
-exec gosu postgres pgbackrest --stanza=ds --type="${TYPE}" backup
+exec "${BASH_SOURCE[0]%/*}/gosu" postgres pgbackrest --stanza=ds --type="${TYPE}" backup

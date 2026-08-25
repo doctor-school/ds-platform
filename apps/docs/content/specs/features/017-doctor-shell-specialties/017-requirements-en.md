@@ -1,0 +1,247 @@
+---
+title: "017 — Doctor storefront shell and the specialty catalog"
+description: "Requirements for the doctor storefront shell (header by sign-in status, navigation, footer with the single Academy exit), the closed Минздрав specialty reference book of 105 entries plus «Другое» presented as a search-first catalog, the remembered choice in the profile and in the anonymous session, adjacency-driven targeting from a managed reference table, the home page scale statistics, the nearest-events calendar block with its empty, loading and error states, the «Что исследовать» formats block, the voluntary platform leaderboard as its own section, and the arrival of the public marketing routes in apps/doctor."
+slug: 017-doctor-shell-specialties
+status: Draft
+surface: user-facing
+tracker: https://github.com/doctor-school/ds-platform/milestone/13
+issues:
+  [
+    1477,
+    1478,
+    1479,
+    1480,
+    1481,
+    1482,
+    1483,
+    1484,
+    1485,
+    1486,
+    1487,
+    1488,
+    1489,
+    1490,
+    1491,
+    1492,
+    1493,
+  ]
+prior_decisions:
+  - ADR-0014 — Product-design delivery lifecycle (§2 PRD → EARS `realizes:` trace; Stage A precedes user-facing implementation; the vendored canvas is the composition source of truth)
+  - ADR-0015 — Two-storefront topology (§2 host-to-application map; `apps/doctor` is a new Next.js 15 application; `apps/promo` folds into it; §4 session and access across the two hosts)
+  - "ADR-0016 — Core domain model (§5 two linked reference books — closed `specialties_minzdrav` and open `directions` with adjacency and a many-to-many link; §8 every entity declares its storefront ownership)"
+  - "ADR-0001 — Identity / Auth / RBAC (storefront reads: `access: public`; the remembered specialty on a profile: `access: authenticated`)"
+  - ADR-0002 — Backend Core Stack (NestJS + nestjs-zod; REST/OpenAPI under `/v1`; RFC 7807 Problem Details; idempotent mutations)
+  - ADR-0003 — Data Layer (retained rows, restrictive foreign keys, no physical delete)
+  - ADR-0004 — Frontend Stack (Next.js 15 on the shared design system)
+  - ADR-0006 — Documentation & SSOT (§4 feature-spec triplet + flat EARS numbering)
+  - ADR-0013 — Design-token SoT and the design-system-first adoption gate
+lang: en
+---
+
+> **EN (this)** · **RU:** [`017-requirements-ru.md`](./017-requirements-ru.md)
+>
+> PRD source: [`017-product.md`](./017-product.md) (US-1…US-16). Epic: [Two-site IA — product brief](../../product/two-site-ia/brief.md). 017 is the **first feature of wave 1** and the shell that 018–021 consume. It puts screens in front of a doctor, so `surface: user-facing`.
+
+# 017 — Doctor storefront shell and the specialty catalog (Requirements)
+
+## Stage-A decisions in force
+
+Both PRD forks are decided; nothing below re-opens them.
+
+| Fork        | Decision                                                                                                                                                                                                                                                                                                                           |
+| ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **F-017-1** | **Б — search as the hero element**: a large search field over the whole list, the frequent specialties beneath it, and «Показать весь список — 105» opening the rest. Owner pick 2026-08-25, verbatim «Б — поиск + плитки (Рекомендуется)». The canvas `catalogVariant` default `А` is superseded; variants А and В are not built. |
+| **F-017-2** | **A separate home-page section** for the leaderboard, not a compact plate beside the catalog. Owner pick 2026-08-25, verbatim «Отдельная секция (Рекомендуется)». The canvas carries no prop for the alternative and none is drawn.                                                                                                |
+
+The canvas **state** props are not forks — they are content-driven obligations every 017 surface must handle: `loggedIn` (guest / signed in), `specialtyChosen` (chosen / not chosen) and `dataState` (`обычно` · `загрузка` skeleton · `пусто` empty calendar · `ошибка` load error).
+
+## Outcomes
+
+- `doctor.school` has one shell — header, navigation, footer — defined once and consumed unchanged by every doctor-facing screen of features 018–021.
+- The header states the visitor's sign-in status unambiguously: exactly one of «Войти / Регистрация» or «Личный кабинет» plus the points plate, never both and never an in-between.
+- A doctor's first action is choosing a specialty, and the 105-entry Минздрав list is reachable both by typing a name and by browsing what exists — never as a bare 105-item scroll.
+- The choice is remembered — on the profile for a signed-in doctor, in the anonymous session for a guest — so the second visit opens the targeted view with the catalog collapsed to a changeable row.
+- Targeting follows the managed adjacency reference table, so an operator changes what a specialty sees by editing a reference book rather than a page.
+- The home page is credible and alive before anything is chosen: scale statistics, the nearest events with a month calendar, the formats showcase and the voluntary leaderboard, none of which block the page.
+- A doctor never meets the Academy's backstage on the storefront; one footer link is the entire crossing.
+- The public marketing routes answer from `doctor.school` inside one information architecture.
+
+## Scope
+
+**In:**
+
+- The **storefront shell** in `apps/doctor` — header (logo, the header search field per the deferral below, theme control, and exactly one of the guest or signed-in action cluster), the navigation, and the footer with «Документы и контакты» and the single Academy link — built from `design-source/doctor-home.dc.html` and exported as the layout every later doctor-facing route consumes.
+- The **home page** at `/` on `doctor.school`: hero (kicker, headline, sub-line, the four scale counters, the evolutionary goal verbatim), the specialty catalog, the nearest-events block with the compact month calendar, «Что исследовать», and the platform leaderboard section.
+- The **`specialties_minzdrav` reference book** — the closed official list of 105 entries plus «Другое» (ADR-0016 §5) — and its public read contract.
+- The **specialty catalog** in Stage-A variant **Б**, with search over the full list, the frequent-specialty set, the expand control, «Другое» reachable from both the search result and the expanded list, and the no-match state.
+- **Remembering the chosen specialty**: on the profile for an authenticated doctor, in the anonymous session for a guest, plus the collapsed «сменить» row and re-choice.
+- **Targeting and adjacency reads** over the managed `directions` ↔ `specialties_minzdrav` link (ADR-0016 §5) — 017 consumes the reference books and exposes the resolved targeting set the storefront blocks read; it does not re-model the taxonomy.
+- The **nearest-events block**: the event cards from `design-source/webinar-card.dc.html`, the compact month calendar from `design-source/webinars-month.dc.html`, the «Все события» link into 019, and the four `dataState` renders.
+- The **«Что исследовать»** block — the school, the lesson of the day and the clinical-case review, each with its own «Все …» link.
+- The **platform-wide leaderboard section** — consented rows only, the voluntary note, the signed-in-without-consent explanation, and the «Весь лидерборд →» link.
+- The **arrival of the public marketing routes** in `apps/doctor` under this shell's information architecture, with the route inventory produced and confirmed as part of that clause.
+- Mobile-breakpoint parity and the `playwright-axe` accessibility bar on every surface above.
+
+**Out:**
+
+- **The specialty feed** the choice opens — feature **018**. 017 delivers the choice, the shell and the storefront's own blocks.
+- **The events feed** `#d-events` — feature **019**; 017 links to it.
+- **The event page and registration** — features **020** / **021**; the header's «Войти / Регистрация» only leads there and 017 draws neither surface.
+- **The doctor's cabinet** — the public-display consent toggle the leaderboard reads, privacy settings, documents and the «Стать экспертом» crossing all live in the cabinet. 017 reads the consent flag and never offers a control to change it.
+- **The header search destination.** Where the header search field leads is unresolved in the PRD and no results surface exists in the package. 017 therefore ships the shell **without an active header search control** (LD-6) — the field lands with the feature that answers it. A rendered field that submits nowhere would be a banned user-facing placeholder, so none ships.
+- **Taking `apps/promo` out of service** — a separate wave-1 engineering deliverable (ADR-0015 §2); 017 owns only the arrival of the routes.
+- **The full leaderboard page** — 017 renders the section and the link out.
+- **Mobile applications** — a separate track and repository; the site's mobile breakpoint is in scope, the app is not.
+- **The Academy's own screens** — everything behind the footer link belongs to the Academy features.
+- **Editing the reference books.** Operator maintenance of specialties, directions and their adjacency links is the taxonomy owner's surface; 017 reads them.
+
+## Constraints
+
+- **`apps/doctor` must exist first.** 017 is `blocked_by` [#1440](https://github.com/doctor-school/ds-platform/issues/1440); no 017 clause may be satisfied by building inside `apps/promo` or `apps/portal`.
+- **One shell, defined once.** The header, navigation and footer exist as a single layout unit in `apps/doctor`. A screen-local copy of any of the three, in 017 or in 018–021, is a defect.
+- **The specialty book is closed.** `specialties_minzdrav` is not editorially extendable; «Другое» is a member of the book, not a UI escape hatch invented on the page.
+- **Three distinct things.** Specialties (Минздрав), directions and schools are never merged into one on-screen list and never labelled with one word.
+- **Adjacency is read, never derived.** Adjacent content comes from the managed `directions` ↔ `specialties_minzdrav` link and the direction adjacency self-relation. String similarity, shared prefixes and embedding similarity are all refused at review, and adjacent content is never presented as the doctor's own specialty.
+- **Nothing blocks the home page.** No modal gate, no interstitial, no empty page and no scroll lock keys on the absence of a chosen specialty.
+- **Public by default.** The home page, the catalog, the events block, «Что исследовать» and the leaderboard are all readable with no account; nothing on 017's surface requires a session to read.
+- **The leaderboard is opt-in.** A doctor appears only with the recorded separate consent to public display. The default is not to publish; no row is fabricated, inferred or anonymised into existence.
+- **No financing statement.** The interface says that learning is free for the doctor and never states who pays for it.
+- **No commerce.** No prices in roubles, no cart, no subscription and no payment affordance exists on any 017 surface.
+- **No Academy content.** No project cards, no Academy podcasts, no partner news; exactly one Academy link on this surface, in the footer.
+- **Honest states, no placeholders.** Every block renders a real state for each `dataState` — content, skeleton, an honest empty statement, or an explicit error with a working retry. A spinner that never resolves, an empty labelled box and a «скоро» stub each fail review.
+- **Design-system only.** Every element comes from `@ds/design-system` primitives with tokens-only styling and full interaction states; the vendored canvas is the composition source, and the composition switcher at the foot of the canvas is a review aid that is not built.
+
+## Prior decisions
+
+- **ADR-0015 §2:** `apps/doctor` is a new Next.js 15 application on the shared design system, `@ds/api-client` and `packages/schemas`; public storefront pages are statically generated or ISR and authenticated pages are SSR with the host-only session cookie; `apps/promo`'s marketing routes become route segments of `apps/doctor`.
+- **ADR-0015 §4:** one IdP and one session model across the two hosts — 017 reads sign-in status, it does not define a second authentication.
+- **ADR-0016 §5:** two linked reference books — the closed `specialties_minzdrav` (105 + «Другое») and the open `directions` book carrying adjacency as a weighted self-relation and a many-to-many link to specialties. The feature-012 `topics` row family **is** the directions book, extended; 017 introduces no third axis.
+- **ADR-0016 §8:** every entity declares its storefront ownership; 017's surfaces are `doctor`-owned and the invariant «the doctor has no access to the backstage» is checkable at the model level.
+- **ADR-0014 §2:** the PRD is the source of this triplet, each clause carries `realizes: US-N`, and a recorded Stage-A pick is a decision rather than a question to re-open.
+- **ADR-0013 + AGENTS.md §6:** implementation runs the design-system-first gate and builds from the vendored `design-source/` files rather than from issue prose.
+- **ADR-0006 §4:** the feature-spec triplet and flat EARS numbering; `it('EARS-N: …')` test titles.
+- **Feature 012:** owns the taxonomy row family that ADR-0016 §5 extends into `directions`. 017 reads it; it does not re-model it.
+- **Feature 019:** owns the events feed 017's calendar block links to; 017 renders the nearest events on the home page and does not build the feed.
+
+## Lead technical decisions
+
+Each records a call the PRD left open. They are lead decisions in the AGENTS.md §6 decision-debt sense — reversible behind a stated contract, and named here rather than buried in the design.
+
+- **LD-1 — one primary specialty, stored as a link row.** The PRD assumes exactly one primary specialty and marks the assumption unconfirmed. 017 ships exactly one: the catalog is a single-choice control and every targeting read resolves one specialty. Persistence is a `(doctor, specialty, role: primary)` link row rather than a column on the profile, so raising the cap later is an additive change to the same table instead of a re-model. No second-specialty control, field or flag ships — the shape is a storage choice, not a hidden feature.
+- **LD-2 — the anonymous choice is adopted, never overwritten.** A guest's choice lives in the anonymous session. On the first authenticated navigation after sign-in or registration, it is written to the profile **only when the profile holds no primary specialty**; when the profile already holds one, the profile wins and the session value is discarded. Nothing is merged, nothing is queued for the doctor to resolve, and no cross-device carry exists — a session is per-device by definition, and the profile is the cross-device mechanism. This makes the common case (a guest chooses, then registers) lossless without ever silently changing an existing doctor's specialty.
+- **LD-3 — the scale statistics are computed, cached and never operator-typed.** The four counters are served by one read returning already-computed figures with a bounded staleness window; no counter is a number an operator types into a settings screen, and none is computed per request by counting rows on the read path. How the projection refreshes stays behind that contract, so a change of refresh strategy is not a spec change. A counter whose source is unavailable is omitted with its neighbours still rendering, rather than showing a zero.
+- **LD-4 — the Academy link targets the Academy home page.** The footer link resolves to `academy.doctor.school/`. A doctor-oriented entry point on the Academy can replace the target later by changing one href; the decision that is spec-level is that the crossing is **one** link in the footer, not where on the Academy it lands.
+- **LD-5 — «Другое» is a real member of the book with a general fallback.** Choosing «Другое» is remembered exactly like any specialty; the storefront then serves the general, non-targeted selections and says so in the affected blocks. It never yields an empty targeted feed, and it never silently behaves as «no choice made» — the collapsed row names «Другое» and offers «сменить» like any other choice.
+- **LD-6 — the header search field is deferred, not stubbed.** Its destination and coverage are unresolved and no results surface exists in the package. The shell layout reserves the header slot in its composition, and 017 ships **no** search input in it; the input and its behaviour land with the feature that owns the results surface. This keeps AGENTS.md §6's no-untracked-seam and no-user-facing-placeholder rules both satisfied: there is no dead control on a production surface, and the obligation is a named out-of-scope deferral rather than a code comment.
+- **LD-7 — the marketing route inventory is a deliverable, not an assumption.** The epic map states that the marketing routes move; it does not list them. EARS-13 therefore produces the enumerated inventory of the `apps/promo` public routes with their target paths under the storefront IA, confirms it with the product owner, and only then moves them. No route is dropped silently and none is invented.
+
+## Event Model
+
+### Commands
+
+- `ChooseSpecialty(specialtyId, actor: guest-session | doctor)` — record the primary specialty for the actor. Idempotent for the same value; re-choosing replaces the previous value on the same link row family.
+- `ChangeSpecialty(specialtyId)` — the same command re-issued from the collapsed «сменить» row; there is no separate clear command and no «no specialty» state to return to once a choice exists.
+- `AdoptSessionSpecialty()` — internal, LD-2: copy the anonymous session's choice into a profile that has none, on first authenticated navigation.
+
+### Events
+
+| Event                     | Meaning                                                                                                                        |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `SpecialtyChosen`         | The actor now has a primary specialty; every storefront block re-reads its targeted form and the catalog collapses to the row. |
+| `SpecialtyChanged`        | The primary specialty was replaced; targeting follows with no page-level edit.                                                 |
+| `SessionSpecialtyAdopted` | A guest's session choice became the profile value because the profile held none.                                               |
+
+### Read models
+
+- `SpecialtyBook { entries: { id, code, name, isOther }[], total }` — the closed Минздрав list plus «Другое», public.
+- `FrequentSpecialties { entries: SpecialtyRef[] }` — the frequent set the search-first catalog renders beneath the field.
+- `SpecialtySearchResult { matches: SpecialtyRef[], query }` — the narrowed list, including the empty-match case.
+- `TargetingSet { primary: SpecialtyRef, directions: DirectionRef[], adjacentDirections: DirectionRef[] }` — resolved from the managed link and adjacency relations; the single source every targeted block reads.
+- `ScaleStatistics { doctors, specialties, lessons, eventsPerYear, computedAt }` — LD-3.
+- `HomeEvents { items: PublicEventSummary[], month: CalendarMonth, targeted: boolean }` — the nearest events plus the compact calendar.
+- `Leaderboard { rows: { rank, initials, displayName, specialty, points }[], viewerHasConsent: boolean | null }` — consented rows only.
+
+### Policies
+
+- Every 017 read is public; none requires a session. Sign-in status changes what the header renders and where the specialty is stored, never whether the page is readable.
+- A leaderboard row exists only for a doctor with a recorded public-display consent. Absence of consent is indistinguishable from absence of the doctor.
+- The targeting set is resolved from the reference books on read; no per-page targeting configuration exists.
+- The specialty book is served from the closed reference table; no endpoint accepts a specialty that is not a member of it.
+
+## EARS requirements
+
+> Flat numbering per ADR-0006 §4. Every clause realizes one or more PRD stories and is covered by `017-scenarios.feature`.
+
+- **EARS-1** _(realizes: US-7, US-12, US-16)_ — The storefront shall define its header, navigation and footer once in `apps/doctor` as a single shell layout built from `design-source/doctor-home.dc.html`, rendering the logo, the theme control and **exactly one** of the guest cluster («Войти» plus «Регистрация») or the signed-in cluster (the points plate plus «Личный кабинет») according to sign-in status — never both, never neither, and never a transitional state visible to the doctor — and shall render the footer with the «Документы и контакты» links and exactly one Academy link; every doctor-facing route of 017 and of features 018–021 shall consume that layout, and a screen-local re-implementation of the header, navigation or footer shall be a defect.
+- **EARS-2** _(realizes: US-1, US-8)_ — When any visitor opens the storefront home page, the hero shall render the kicker, the headline, the sub-line stating that learning is free for the doctor, the evolutionary goal **verbatim** with no gloss and no «готовится» marker beside it, and the four scale counters — doctors, specialties, lessons and events — from one computed read per LD-3; the interface shall never state who finances the doctor's learning, and no price in roubles, cart, subscription or payment affordance shall appear on any 017 surface.
+- **EARS-3** _(realizes: US-15)_ — The platform shall serve the closed Минздрав specialty reference book — 105 entries plus «Другое» — from `specialties_minzdrav` per ADR-0016 §5 through a public read, shall reject any specialty reference that is not a member of that book, and shall keep specialties, directions and schools as three distinct things: never merged into one on-screen list, never labelled with one word, and never editorially extended from a storefront surface.
+- **EARS-4** _(realizes: US-2, US-6)_ — When a visitor with no chosen specialty opens the home page, the storefront shall render the specialty catalog as the page's first action in Stage-A variant **Б** — a large labelled search field over the whole list, the frequent specialties beneath it, and a «Показать весь список — 105» control that reveals the remainder including «Другое» — and shall present the list as a bare 105-item scroll in no state; the rest of the home page shall remain fully readable and scrollable with no modal gate, interstitial, scroll lock or empty page keyed on the absence of a choice.
+- **EARS-5** _(realizes: US-3)_ — When a visitor types into the catalog search field, the catalog shall narrow the list to entries matching the typed fragment anywhere in the name, case- and «ё/е»-insensitively, over the **whole** book rather than the frequent set alone; when nothing matches it shall state so in plain Russian, keep the typed query editable and the search recoverable, and keep «Другое» reachable; and it shall reach every entry of the book by typing as well as by expanding.
+- **EARS-6** _(realizes: US-4)_ — When a visitor chooses a specialty, the platform shall record it as that actor's single primary specialty — on the profile for an authenticated doctor and in the anonymous session for a guest — and shall open every subsequent visit directly in the targeted view; on the first authenticated navigation after sign-in or registration it shall copy an anonymous session choice into a profile that holds none and shall discard it, without merging or prompting, when the profile already holds one, per LD-2.
+- **EARS-7** _(realizes: US-5)_ — When a visitor with a remembered specialty opens the home page, the catalog shall render collapsed to a single row naming that specialty — «Другое» included — with a «сменить» control and the line stating that content is selected by the specialty and adjacent areas; activating «сменить» shall re-open the catalog in its full variant-Б form, and choosing another entry shall re-target every block and be remembered in turn with no separate save step.
+- **EARS-8** _(realizes: US-2, US-15)_ — When any storefront block renders in its targeted form, its content selection shall be resolved from the chosen specialty plus the adjacent areas read from the managed `directions` ↔ `specialties_minzdrav` link and the direction adjacency self-relation of ADR-0016 §5 — never from name similarity, shared prefixes or any computed likeness — and adjacent content shall be labelled as adjacent and never as the doctor's own specialty; when the chosen entry is «Другое» the blocks shall serve the general non-targeted selections and say so, and shall never render an empty targeted result in its place.
+- **EARS-9** _(realizes: US-9)_ — When any visitor opens the home page, the events block shall render the nearest events as the reused event card unit plus the compact month calendar and a «Все события» link into feature 019 — general before a specialty is chosen and targeted after — and shall render each `dataState` honestly: the loading skeleton while the read is in flight, an explicit empty statement pointing at adjacent areas when no upcoming event matches, and an explicit Russian-language error with a working retry when the read fails, with the rest of the page staying usable in every case.
+- **EARS-10** _(realizes: US-10)_ — When any visitor opens the home page, the «Что исследовать» block shall render the three formats drawn on the canvas — a school with its lesson count, the lesson of the day with its duration, and the clinical-case review with its steps — each with its own «Все …» link to the corresponding surface, so that a doctor understands what the formats are before committing to any of them.
+- **EARS-11** _(realizes: US-11)_ — When any visitor opens the home page, the platform leaderboard shall render as **its own home-page section** per the F-017-2 owner pick, listing only doctors with a recorded separate consent to public display, stating beside the block that participation is voluntary, and offering the «Весь лидерборд →» link; a signed-in doctor without that consent shall be told calmly, in the block, that they have no row because they have not allowed public display and that this is changeable in the cabinet, and no row shall ever be fabricated, inferred, anonymised into existence or created by any default other than not publishing.
+- **EARS-12** _(realizes: US-12)_ — The storefront shall carry no Academy content of its own — no project cards, no Academy podcasts, no partner news, no backstage navigation — and shall expose exactly one crossing into the Academy on this surface: the footer link, targeting the Academy home page per LD-4; a second Academy link, an Academy content block or an Academy navigation entry anywhere on a 017 surface shall be a defect.
+- **EARS-13** _(realizes: US-14)_ — When the public marketing routes move out of `apps/promo`, the feature shall first produce the enumerated inventory of those routes with their target paths under the storefront information architecture and confirm it with the product owner per LD-7, then serve them from `apps/doctor` under this shell so that a visitor following an old marketing link stays inside one information architecture with one navigation; no route shall be dropped silently, none shall be invented, and taking `apps/promo` out of service shall remain a separate deliverable that this clause does not perform.
+- **EARS-14** _(realizes: US-13)_ — When any 017 surface is rendered below the mobile breakpoint, the header and its action cluster, the catalog with its search field and expand control, the collapsed specialty row, the events block with the compact calendar, «Что исследовать» and the leaderboard shall each render in the canvas mobile composition and remain fully operable; every 017 surface shall pass the `playwright-axe` gate with the search field labelled, every catalog entry and expand control a real labelled interactive element, and the leaderboard readable by a screen reader.
+- **EARS-15** _(realizes: US-16 · process gate — not a code Issue)_ — Before implementation of each 017 surface begins, the team shall run the `build-ui-from-design-system` gate against `design-source/doctor-home.dc.html` and the reused units as the composition source of truth, build from `@ds/design-system` primitives with full interaction states and tokens-only styling, cover all four `dataState` renders and both `loggedIn` and `specialtyChosen` states at both breakpoints and in both themes, and re-confirm the rendered result with the product owner on the live stand before merge; the recorded Stage-A picks (variant **Б**, the leaderboard as a separate section) shall be treated as decisions rather than re-opened questions, and the canvas composition switcher shall not be built.
+
+## Invariants
+
+- Exactly one shell layout exists in `apps/doctor`; every doctor-facing route renders it.
+- At every moment the header shows exactly one of the guest cluster or the signed-in cluster.
+- A doctor or guest holds at most one primary specialty, and it is always a member of the closed book («Другое» included).
+- No endpoint accepts, and no surface offers, a specialty outside `specialties_minzdrav`.
+- Adjacency used for targeting always traces to a managed reference row; no targeting decision is derivable from a string comparison.
+- Adjacent content is never presented as the doctor's own specialty.
+- The home page is readable with no account and is never blocked by the absence of a chosen specialty.
+- Every block of the home page renders exactly one of: content, skeleton, an honest empty statement, or an explicit error with a retry — never an empty box or an unresolving spinner.
+- A leaderboard row exists only where a public-display consent is recorded; the default is not to publish.
+- Exactly one Academy link exists on the storefront surface, and it is in the footer.
+- No 017 response or surface states who finances the doctor's learning, and none carries a price, cart or subscription.
+- Specialties, directions and schools are three separate on-screen concepts in every surface 017 ships.
+
+## Verification
+
+| EARS | Test type                           | Indicative target                                                                                   | Required proof                                                                                                                                                                                                                 |
+| ---- | ----------------------------------- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1    | Playwright + unit                   | `apps/doctor/e2e/shell.spec.ts`, `apps/doctor/test/shell.spec.tsx`                                  | Guest and signed-in renders each show exactly one action cluster; the same layout module renders on every 017 route; the footer carries the documents links and one Academy link; no route defines its own header/footer.      |
+| 2    | Playwright + Vitest e2e             | `apps/doctor/e2e/home-hero.spec.ts`, `apps/api/test/storefront/statistics.e2e-spec.ts`              | Evolutionary goal rendered verbatim with no marker; four counters from one computed read with `computedAt`; no rouble amount, cart, subscription or financing statement anywhere in the rendered page or the API response.     |
+| 3    | Vitest e2e + DB constraints         | `apps/api/test/storefront/specialties.e2e-spec.ts`                                                  | Public read returns 105 entries plus «Другое»; a non-member reference is refused; no storefront path writes the book; specialties, directions and schools are distinct read models.                                            |
+| 4    | Playwright + axe                    | `apps/doctor/e2e/specialty-catalog.spec.ts`                                                         | Variant Б composition: hero search field, frequent set, «Показать весь список — 105»; the page scrolls fully with no choice made; no modal, interstitial or scroll lock exists in any state.                                   |
+| 5    | Vitest unit + Playwright            | `apps/api/test/storefront/specialty-search.spec.ts`, `apps/doctor/e2e/specialty-catalog.spec.ts`    | Substring, case- and ё/е-insensitive matching over the whole book; every entry reachable by typing; no-match state with the query preserved and «Другое» reachable.                                                            |
+| 6    | Vitest e2e + Playwright             | `apps/api/test/storefront/specialty-choice.e2e-spec.ts`, `apps/doctor/e2e/specialty-memory.spec.ts` | Guest choice survives in the session; doctor choice persists on the profile; return visit opens targeted; LD-2 adoption on an empty profile and discard on a populated one, with no prompt and no merge.                       |
+| 7    | Playwright                          | `apps/doctor/e2e/specialty-memory.spec.ts`                                                          | Collapsed row names the specialty («Другое» included) with «сменить»; re-opening restores the full variant-Б catalog; re-choice re-targets every block and persists with no save step.                                         |
+| 8    | Vitest e2e + unit                   | `apps/api/test/storefront/targeting.e2e-spec.ts`                                                    | Targeting set resolved from the managed link and adjacency rows; a renamed specialty with no link yields no adjacency; adjacent items carry the adjacent label; «Другое» yields the general selection with its statement.      |
+| 9    | Playwright + Vitest e2e             | `apps/doctor/e2e/home-events.spec.ts`, `apps/api/test/storefront/home-events.e2e-spec.ts`           | All four `dataState` renders including a working retry after a failed read; general before choice and targeted after; the calendar and «Все события» link present; the rest of the page usable in every state.                 |
+| 10   | Playwright                          | `apps/doctor/e2e/home-formats.spec.ts`                                                              | Three format blocks with their own «Все …» links resolving to the corresponding surfaces.                                                                                                                                      |
+| 11   | Vitest e2e + Playwright + axe       | `apps/api/test/storefront/leaderboard.e2e-spec.ts`, `apps/doctor/e2e/home-leaderboard.spec.ts`      | Own section per F-017-2; only consented doctors present in the response body; a non-consenting signed-in doctor sees the calm explanation and no row; the voluntary note visible; screen-reader readable.                      |
+| 12   | Playwright + tree scan              | `apps/doctor/e2e/shell.spec.ts`                                                                     | Exactly one Academy link on the rendered storefront, in the footer, targeting the Academy home page; no Academy content block or navigation entry on any 017 surface.                                                          |
+| 13   | Owner record + Playwright           | Route inventory recorded on the EARS-13 Issue; `apps/doctor/e2e/marketing-routes.spec.ts`           | Confirmed inventory before the move; every listed route answers from `doctor.school` under the shell; no route 404s after the move; `apps/promo` retirement not performed here.                                                |
+| 14   | Playwright + axe + UI lint          | `apps/doctor/e2e/mobile.spec.ts`                                                                    | Both breakpoints and both themes; axe clean on every 017 route; keyboard reach on the catalog, expand control, «сменить», calendar and leaderboard; tokens-only styling.                                                       |
+| 15   | Owner record + eyes-on render check | Stage-A record in `017-product.md`; Stage-B verdict on the Issue                                    | Canvas-derived composition verified against the vendored files; all four `dataState` × both `loggedIn` × both `specialtyChosen` renders reviewed; owner live-stand confirmation before merge. Process gate — not a code Issue. |
+| all  | Playwright BDD                      | `017-scenarios.feature`                                                                             | Every EARS tag executes against the real `apps/doctor` → NestJS → Postgres stack; no seeded stand-in for the reference book, no fake targeting and no placeholder surface accepted.                                            |
+
+## Dependencies and sequencing
+
+- **017 is blocked by [#1440](https://github.com/doctor-school/ds-platform/issues/1440)** — `apps/doctor` does not exist yet. EARS-1 is the first buildable clause and every other clause consumes its layout.
+- **EARS-3 precedes EARS-4…EARS-8.** The reference-book read is the substrate of the catalog, the search, the memory and the targeting.
+- **EARS-8 depends on the ADR-0016 §5 reference books.** The `directions` extension of the feature-012 taxonomy row family and its adjacency relation are prerequisites; where that extension is not yet in place, the EARS-8 child Issue carries a `blocked_by` edge to it with the rationale recorded on the edge. No 017 clause may be satisfied by seeding an adjacency table by hand.
+- **EARS-11 reads the cabinet's public-display consent flag.** 017 consumes it and never writes it; the consent control itself is the cabinet's deliverable.
+- **EARS-9 links into feature 019** and reuses the event card and month-calendar units; it does not build the events feed.
+- **Features 018–021 consume EARS-1's shell.** The shell must land before their surfaces are built, and none of them re-defines it.
+- **EARS-13 precedes the `apps/promo` retirement deliverable** (ADR-0015 §2), which is tracked separately in wave 1.
+
+## Open questions carried forward
+
+These stay open; each is designed around above rather than resolved here, and each is a product decision the owner still owns.
+
+- **Where the header search leads and what it covers** — LD-6 defers the control rather than shipping a dead one.
+- **What «Другое» targeting means in detail** — LD-5 fixes the general fallback and the honest statement; a richer treatment (for example a free-text area of interest) is a later product decision.
+- **How the scale statistics are computed and refreshed** — LD-3 fixes the contract and rules out operator-typed numbers; the refresh strategy stays behind it.
+- **How many specialties one doctor may hold** — LD-1 ships exactly one and stores it so the cap can be raised additively.
+- **Whether an anonymous choice survives sign-in and across devices** — LD-2 fixes adopt-if-empty and no cross-device carry.
+- **The Academy link's precise destination** — LD-4 targets the Academy home page; a doctor-oriented entry point is an href change.
+- **Which marketing routes move** — LD-7 makes the inventory a confirmed deliverable of EARS-13 rather than an assumption.

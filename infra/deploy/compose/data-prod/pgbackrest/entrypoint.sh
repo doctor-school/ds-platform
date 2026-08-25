@@ -8,10 +8,11 @@
 set -euo pipefail
 
 # 1. Freeze the pgbackrest-relevant env for cron jobs (see backup.sh).
-mkdir -p /etc/pgbackrest
+DS_PGBACKREST_ENV_FILE="${DS_PGBACKREST_ENV_FILE:-/etc/pgbackrest/pgbackrest.env}"
+mkdir -p "$(dirname "$DS_PGBACKREST_ENV_FILE")"
 # Only PGBACKREST_* + TZ — never dump the whole env into a file.
-{ env | grep -E '^(PGBACKREST_|TZ)=' || true; } > /etc/pgbackrest/pgbackrest.env
-chmod 0600 /etc/pgbackrest/pgbackrest.env
+{ env | grep -E '^(PGBACKREST_[A-Za-z0-9_]+|TZ)=' || true; } > "$DS_PGBACKREST_ENV_FILE"
+chmod 0600 "$DS_PGBACKREST_ENV_FILE"
 
 # 2. Wait for Postgres to accept connections over the shared socket, then ensure the
 #    stanza exists. `stanza-create` is idempotent (a second run is a no-op); `check`

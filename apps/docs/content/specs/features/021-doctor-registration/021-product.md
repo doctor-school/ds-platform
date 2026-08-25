@@ -81,7 +81,7 @@ On top of that the surface **credits starting attention points** (REQ-49) and mo
 
 1. A registered doctor with insufficient points reaches an эфир they intend to attend, especially having arrived on a partner's link to that very эфир.
 2. The policy admits them **on advance**, to be worked off later (profile, lessons).
-3. The advance rules and the point values themselves are an **open owner fork** — see Open questions; nothing about them is decided by this PRD.
+3. The point values are fixed by the owner (2026-08-25): **+20 Pul for registration, +30 Pul for profile completion**; advance availability is a **per-event configurable parameter** — an event carries its Pul cost and an advance-availability flag (see Open questions → REQ-49 for the verbatim record).
 
 **Consent lifecycle (US-10, US-21):**
 
@@ -108,7 +108,7 @@ On top of that the surface **credits starting attention points** (REQ-49) and mo
 - When the doctor arrived on a partner's promo code or a medical representative's personal link, the **attribution is visible on the screen** and is attached to the resulting account; without one, the same screen renders with no attribution element.
 - After email confirmation the doctor is **returned to the point of interest** they came from, with «to my account» as a secondary action; the account page is never the default outcome of registration.
 - A registration with **no return context** completes and lands on a defined destination — no empty return element, no dead link.
-- **Starting points are credited for registering**, and the success state names what completing the profile adds and what it unlocks (certificates, НМО). The concrete values and the advance policy are not fixed by this PRD (Open questions).
+- **Starting points are credited for registering**, and the success state names what completing the profile adds and what it unlocks (certificates, НМО). The values are fixed by the owner (2026-08-25): **+20 Pul for registration, +30 Pul for profile completion**; advance availability is a per-event configurable flag (REQ-49 record in Open questions).
 - Every error state is **actionable in the field where it occurred** — malformed email, already-registered email, too-short password — and a disabled submit button **always states its reason next to it**.
 - A failed submission **preserves what the doctor typed**.
 - Registration produces **one account that works on both storefronts** (REQ-95); this surface offers no separate Academy sign-up and no account-type choice («doctor / expert») — roles are attributes of one account (ADR-0016 §1).
@@ -132,7 +132,7 @@ On top of that the surface **credits starting attention points** (REQ-49) and mo
 
 ## Open questions
 
-- **REQ-49 accrual — an open owner fork, not a decision.** How many points registration credits, how many profile completion adds, and on what conditions a doctor short of points is admitted **on advance** to an event they clearly intend to attend (and how that advance is worked off) are **owner calls that remain open**. The prompt's draft copy («+20 Pul», «+30 Pul for the profile») is placeholder text, not a product decision, and the naming of the point unit in the interface is an owner copy decision alongside it. _Owner picks 2026-08-25 (interactive walkthrough): values fixed at **+20 Pul for registration / +30 Pul for profile completion**; the interface unit is **Pul** (verbatim: «Pul (Рекомендуется)»); the advance is a **per-event configurable parameter** (verbatim RU: «Одно из требований - это настраиваемые баллы за событие. Какие-то не будут доступны авансом, какие-то да.») — an event carries both its Pul cost and an advance-availability flag._
+- **REQ-49 accrual — decided by the owner 2026-08-25.** Only the advance work-off mechanics remain open (they belong to the accruals feature 025). _Owner picks 2026-08-25 (interactive walkthrough): values fixed at **+20 Pul for registration / +30 Pul for profile completion**; the interface unit is **Pul** (verbatim: «Pul (Рекомендуется)»); the advance is a **per-event configurable parameter** (verbatim RU: «Одно из требований - это настраиваемые баллы за событие. Какие-то не будут доступны авансом, какие-то да.») — an event carries both its Pul cost and an advance-availability flag._
 - **Where a direct registration lands** when there is no point of interest to return to — the specialty feed (018), the storefront home (017), or the account (022).
 - **How long a return context survives.** A doctor who confirms the letter days later returns to content that may have started, ended or been unpublished; what they see then is unresolved.
 - **Whether the promo code is a form field at all**, or attribution arrives only by link. The canvas draws the field; whether a doctor ever types a code by hand is an owner call.

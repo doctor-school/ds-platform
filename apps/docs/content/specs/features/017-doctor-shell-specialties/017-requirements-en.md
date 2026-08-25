@@ -5,6 +5,26 @@ slug: 017-doctor-shell-specialties
 status: Draft
 surface: user-facing
 tracker: https://github.com/doctor-school/ds-platform/milestone/13
+issues:
+  [
+    1477,
+    1478,
+    1479,
+    1480,
+    1481,
+    1482,
+    1483,
+    1484,
+    1485,
+    1486,
+    1487,
+    1488,
+    1489,
+    1490,
+    1491,
+    1492,
+    1493,
+  ]
 prior_decisions:
   - ADR-0014 — Product-design delivery lifecycle (§2 PRD → EARS `realizes:` trace; Stage A precedes user-facing implementation; the vendored canvas is the composition source of truth)
   - ADR-0015 — Two-storefront topology (§2 host-to-application map; `apps/doctor` is a new Next.js 15 application; `apps/promo` folds into it; §4 session and access across the two hosts)

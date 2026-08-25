@@ -5,6 +5,26 @@ slug: 017-doctor-shell-specialties-ru
 status: Draft
 surface: user-facing
 tracker: https://github.com/doctor-school/ds-platform/milestone/13
+issues:
+  [
+    1477,
+    1478,
+    1479,
+    1480,
+    1481,
+    1482,
+    1483,
+    1484,
+    1485,
+    1486,
+    1487,
+    1488,
+    1489,
+    1490,
+    1491,
+    1492,
+    1493,
+  ]
 prior_decisions:
   - ADR-0014 — жизненный цикл продуктового дизайна (§2 связь PRD → EARS через `realizes:`; Stage A до реализации пользовательской поверхности; канвас — источник композиции)
   - ADR-0015 — топология двух витрин (§2 карта «хост → приложение»; `apps/doctor` — новое приложение Next.js 15; `apps/promo` сворачивается в него; §4 сессия и доступ между двумя хостами)

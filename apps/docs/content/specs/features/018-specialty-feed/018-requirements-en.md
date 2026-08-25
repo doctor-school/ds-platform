@@ -5,6 +5,26 @@ slug: 018-specialty-feed
 status: Draft
 surface: user-facing
 tracker: https://github.com/doctor-school/ds-platform/milestone/13
+issues:
+  [
+    1495,
+    1496,
+    1497,
+    1498,
+    1499,
+    1500,
+    1501,
+    1502,
+    1503,
+    1504,
+    1505,
+    1506,
+    1507,
+    1508,
+    1509,
+    1510,
+    1511,
+  ]
 prior_decisions:
   - ADR-0014 — Product-design delivery lifecycle (§2 PRD → EARS `realizes:` trace; Stage A precedes user-facing implementation; the vendored canvas is the composition source of truth)
   - ADR-0015 — Two-storefront topology (§2 host-to-application map; the feed is a route of `apps/doctor` on `doctor.school`; §4 one session model across the two hosts)

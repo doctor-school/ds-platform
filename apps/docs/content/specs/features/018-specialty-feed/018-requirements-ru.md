@@ -5,6 +5,26 @@ slug: 018-specialty-feed-ru
 status: Draft
 surface: user-facing
 tracker: https://github.com/doctor-school/ds-platform/milestone/13
+issues:
+  [
+    1495,
+    1496,
+    1497,
+    1498,
+    1499,
+    1500,
+    1501,
+    1502,
+    1503,
+    1504,
+    1505,
+    1506,
+    1507,
+    1508,
+    1509,
+    1510,
+    1511,
+  ]
 prior_decisions:
   - ADR-0014 — жизненный цикл продуктового дизайна (§2 связь PRD → EARS через `realizes:`; Stage A до реализации пользовательской поверхности; канвас — источник композиции)
   - ADR-0015 — топология двух витрин (§2 карта «хост → приложение»; лента — маршрут `apps/doctor` на `doctor.school`; §4 одна модель сессии на двух хостах)

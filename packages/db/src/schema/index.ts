@@ -9,3 +9,4 @@ export * from "./registrations.js";
 export * from "./presence-beats.js";
 export * from "./taxonomy.js";
 export * from "./media-cleanup-jobs.js";
+export * from "./specialties.js";

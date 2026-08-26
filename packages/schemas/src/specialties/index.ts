@@ -1,0 +1,17 @@
+export {
+  FrequentSpecialtiesSchema,
+  isSpecialtyBookMember,
+  SPECIALTY_CODE_MAX_LENGTH,
+  SPECIALTY_CODE_REGEX,
+  SPECIALTY_ERROR_CODES,
+  SPECIALTY_NAME_MAX_LENGTH,
+  SPECIALTY_OTHER_CODE,
+  SpecialtyBookSchema,
+  SpecialtyCodeSchema,
+  SpecialtyErrorCodeSchema,
+  SpecialtyRefSchema,
+  type FrequentSpecialties,
+  type SpecialtyBook,
+  type SpecialtyErrorCode,
+  type SpecialtyRef,
+} from './specialties.schema.js';

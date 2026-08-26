@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"><style>body{margin:0;background:#fff;font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}a{color:#2D84F2}a:hover{color:#114D9E}:focus-visible{outline:3px solid #6BB1F7;outline-offset:2px}@keyframes livePulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.45;transform:scale(.72)}}html{scroll-behavior:smooth}</style></helmet>
+
+<div style="min-height:100vh;background:#fff">
+
+  <!-- ═══ d-event А · шапка витрины врача (гость) ═══ -->
+  <header data-screen-label="d-event А · шапка витрины врача" style="background:#114D9E;padding:14px clamp(16px,4vw,48px);display:flex;align-items:center;gap:clamp(14px,2.5vw,28px)">
+    <a href="Витрина врача - Главная.dc.html" style="display:flex;flex:none"><img src="assets/ds-logo-white.svg" alt="Doctor.School" style="height:26px;display:block"></a>
+    <sc-if value="{{ isDesktop }}" hint-placeholder-val="{{ true }}">
+      <input placeholder="Поиск по урокам, школам и событиям" style="flex:1;max-width:440px;font:inherit;font-size:13.5px;font-weight:600;padding:12px 14px;border:2px solid rgba(255,255,255,.45);background:transparent;color:#fff;outline:none;min-width:120px" style-focus="border-color:#fff;background:rgba(255,255,255,.08)">
+      <nav style="display:flex;align-items:center;gap:14px;margin-left:auto">
+        <a href="Авторизация.dc.html" style="font-size:13.5px;font-weight:700;color:#D3E8FD;text-decoration:none;padding:12px 6px;white-space:nowrap" style-hover="color:#fff">Войти</a>
+        <a href="Авторизация.dc.html" style="font-size:13.5px;font-weight:800;color:#114D9E;background:#fff;padding:12px 22px;text-decoration:none;white-space:nowrap;box-shadow:3px 3px 0 #0D3A77" style-hover="transform:translate(1px,1px);box-shadow:2px 2px 0 #0D3A77">Регистрация</a>
+      </nav>
+    </sc-if>
+    <sc-if value="{{ isMobile }}" hint-placeholder-val="{{ false }}">
+      <details style="position:relative;margin-left:auto">
+        <summary style="list-style:none;width:44px;height:44px;display:inline-flex;align-items:center;justify-content:center;background:#fff;color:#114D9E;cursor:pointer;font-size:20px;font-weight:800;box-shadow:3px 3px 0 #0D3A77">≡</summary>
+        <nav style="position:absolute;top:calc(100% + 10px);right:0;background:#fff;border:2px solid oklch(.21 .02 250);box-shadow:5px 5px 0 #114D9E;padding:8px;display:flex;flex-direction:column;min-width:220px;z-index:30">
+          <a href="Авторизация.dc.html" style="padding:12px 16px;font-size:15px;font-weight:700;color:oklch(.21 .02 250);text-decoration:none">Войти</a>
+          <a href="Авторизация.dc.html" style="margin-top:4px;padding:12px 16px;font-size:14px;font-weight:800;color:#fff;background:#114D9E;text-decoration:none;text-align:center">Регистрация</a>
+        </nav>
+      </details>
+    </sc-if>
+  </header>
+  <sc-if value="{{ isMobile }}" hint-placeholder-val="{{ false }}">
+    <div style="background:#114D9E;padding:0 16px 14px">
+      <input placeholder="Поиск по урокам, школам и событиям" style="width:100%;box-sizing:border-box;font:inherit;font-size:14px;font-weight:600;padding:13px 14px;border:2px solid rgba(255,255,255,.45);background:transparent;color:#fff;outline:none" style-focus="border-color:#fff">
+    </div>
+  </sc-if>
+
+  <!-- ═══ d-event А · постер-шапка события ═══ -->
+  <div data-screen-label="d-event А · постер-шапка" style="background:#114D9E;padding:clamp(24px,4vw,36px) clamp(16px,4vw,48px) 132px;position:relative">
+    <div style="max-width:1104px;margin:0 auto">
+      <nav style="font-size:12.5px;font-weight:700;color:#AED4FB;margin-bottom:28px;display:flex;gap:8px;flex-wrap:wrap"><a href="Витрина врача - Главная.dc.html" style="color:#AED4FB;text-decoration:none" style-hover="color:#fff;text-decoration:underline;text-underline-offset:3px">Doctor.School</a><span style="opacity:.5">/</span><a href="Витрина врача - Лента специальности.dc.html" style="color:#AED4FB;text-decoration:none" style-hover="color:#fff;text-decoration:underline;text-underline-offset:3px">Травматология и ортопедия</a><span style="opacity:.5">/</span><a href="Витрина врача - События.dc.html" style="color:#AED4FB;text-decoration:none" style-hover="color:#fff;text-decoration:underline;text-underline-offset:3px">События</a><span style="opacity:.5">/</span><span style="color:#D3E8FD">Вебинар «PRP при гонартрозе»</span></nav>
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:32px;flex-wrap:wrap">
+        <div style="max-width:760px">
+          <div style="font-size:13px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#D3E8FD;margin-bottom:16px">Школа ортобиологии · Вебинар · Онлайн</div>
+          <h1 style="margin:0;font-size:clamp(30px,5.5vw,50px);line-height:1.06;font-weight:800;letter-spacing:-.035em;color:#fff;text-wrap:balance">PRP при гонартрозе</h1>
+          <div style="margin-top:16px;font-size:clamp(15px,2vw,18px);font-weight:700;color:#D3E8FD;font-variant-numeric:tabular-nums">28 августа, 19:00 (МСК) · 90 минут</div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:22px">
+            <span style="font-size:12.5px;font-weight:700;color:#fff;border:2px solid #6BB1F7;padding:5px 12px">Травматология и ортопедия</span>
+            <span style="font-size:12.5px;font-weight:700;color:#fff;border:2px solid #6BB1F7;padding:5px 12px">Ортобиология</span>
+            <span style="font-size:12.5px;font-weight:700;color:#fff;border:2px solid #6BB1F7;padding:5px 12px">НМО 2 балла</span>
+          </div>
+        </div>
+        <span style="display:inline-flex;align-items:center;gap:8px;font-size:12.5px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#fff;padding:9px 16px;transform:rotate(3deg);flex:none;margin-top:8px;box-shadow:3px 3px 0 #114D9E;background:#00693D">Скоро · через 5 дней</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════ Основной поток · вариант А: правая колонка на всю страницу ═══════════ -->
+  <main style="{{ mainStyle }}">
+
+    <!-- ─── Левая колонка ─── -->
+    <div style="min-width:0">
+      <!-- открытая часть · описание -->
+      <section data-screen-label="d-event А · о чём событие" style="{{ leftTopPad }}">
+        <div style="display:flex;align-items:baseline;gap:18px;margin-bottom:28px">
+          <span style="font-size:13px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:oklch(.21 .02 250);white-space:nowrap">О чём событие</span>
+          <span style="flex:1;border-top:2px solid oklch(.21 .02 250)"></span>
+        </div>
+        <p style="margin:0 0 32px;font-size:16px;line-height:1.7;color:oklch(.27 .018 250);text-wrap:pretty">PRP-терапия при гонартрозе: показания, доказательная база и рабочие протоколы. Разбираем реальный клинический случай — от отбора пациента до оценки результата через 6 месяцев. Вопросы спикеру — прямо в чате эфира.</p>
+        <sc-if value="{{ teaser }}" hint-placeholder-val="{{ true }}">
+          <div style="border:2px solid oklch(.21 .02 250);background:#D3E8FD;aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;position:relative;margin-bottom:36px">
+            <span style="width:64px;height:64px;border:2px solid #114D9E;background:#fff;color:#114D9E;display:inline-flex;align-items:center;justify-content:center;font-size:22px;box-shadow:3px 3px 0 #AED4FB;cursor:pointer" style-hover="transform:translate(1px,1px)">▶</span>
+            <span style="position:absolute;bottom:12px;left:14px;font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#114D9E">Тизер · 2 минуты · без регистрации</span>
+          </div>
+        </sc-if>
+      </section>
+
+      <!-- программа -->
+      <section data-screen-label="d-event А · программа">
+        <div style="display:flex;align-items:baseline;gap:18px;margin-bottom:6px">
+          <span style="font-size:13px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:oklch(.21 .02 250);white-space:nowrap">Программа</span>
+          <span style="flex:1;border-top:2px solid oklch(.21 .02 250)"></span>
+        </div>
+        <sc-if value="{{ noProgram }}" hint-placeholder-val="{{ false }}">
+          <div style="margin-top:16px;border:2px dashed oklch(.704 .01 250);padding:26px 28px">
+            <div style="font-size:15px;font-weight:800;color:oklch(.21 .02 250);margin-bottom:6px">Программу опубликуем ближе к дате эфира</div>
+            <div style="font-size:13px;line-height:1.6;color:oklch(.45 .014 250)">Записанным пришлём её на почту. Запись уже открыта — программа не влияет на условия участия.</div>
+          </div>
+        </sc-if>
+        <sc-if value="{{ program }}" hint-placeholder-val="{{ true }}">
+        <div style="display:grid;gap:0">
+          <div style="display:grid;grid-template-columns:96px 1fr;gap:24px;padding:22px 0;border-top:1px solid oklch(.922 .006 250)">
+            <div><div style="font-size:26px;font-weight:800;color:#2D84F2;letter-spacing:-.02em">01</div><div style="font-size:12px;font-weight:700;color:oklch(.556 .012 250);margin-top:4px;font-variant-numeric:tabular-nums">19:00–19:25</div></div>
+            <div><div style="font-size:16.5px;font-weight:700;color:oklch(.21 .02 250);margin-bottom:6px">Показания и доказательная база PRP при гонартрозе</div><div style="font-size:14px;line-height:1.6;color:oklch(.45 .014 250)">Кому назначать, кому нет: критерии отбора по стадиям.</div></div>
+          </div>
+          <div style="display:grid;grid-template-columns:96px 1fr;gap:24px;padding:22px 0;border-top:1px solid oklch(.922 .006 250)">
+            <div><div style="font-size:26px;font-weight:800;color:#2D84F2;letter-spacing:-.02em">02</div><div style="font-size:12px;font-weight:700;color:oklch(.556 .012 250);margin-top:4px;font-variant-numeric:tabular-nums">19:25–20:05</div></div>
+            <div><div style="font-size:16.5px;font-weight:700;color:oklch(.21 .02 250);margin-bottom:6px">Протокол приготовления и введения: клинический случай</div><div style="font-size:14px;line-height:1.6;color:oklch(.45 .014 250)">Пациент 54 лет, II стадия. Снимки, техника, результат через 6 месяцев.</div></div>
+          </div>
+          <div style="display:grid;grid-template-columns:96px 1fr;gap:24px;padding:22px 0;border-top:1px solid oklch(.922 .006 250);border-bottom:1px solid oklch(.922 .006 250)">
+            <div><div style="font-size:26px;font-weight:800;color:#2D84F2;letter-spacing:-.02em">03</div><div style="font-size:12px;font-weight:700;color:oklch(.556 .012 250);margin-top:4px;font-variant-numeric:tabular-nums">20:05–20:30</div></div>
+            <div><div style="font-size:16.5px;font-weight:700;color:oklch(.21 .02 250);margin-bottom:6px">Ответы на вопросы из чата</div><div style="font-size:14px;line-height:1.6;color:oklch(.45 .014 250)">Самые залайканные вопросы — первыми: решает аудитория.</div></div>
+          </div>
+        </div>
+        </sc-if>
+        <!-- рекламная маркировка · по закону -->
+        <div style="margin-top:44px;border:2px solid oklch(.922 .006 250);padding:22px 26px;display:flex;align-items:center;gap:22px;flex-wrap:wrap">
+          <div style="width:112px;height:52px;border:2px dashed oklch(.704 .01 250);display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:oklch(.556 .012 250);flex:none;text-align:center">Лого<br>партнёра</div>
+          <div style="font-size:13px;line-height:1.65;color:oklch(.45 .014 250);min-width:180px;flex:1"><b style="color:oklch(.21 .02 250);text-transform:uppercase;font-size:11px;letter-spacing:.1em">Партнёрский материал · Партнёр А</b><br>В программе — партнёрская лекция с пометкой «реклама». Содержание события определяют школа и спикер.</div>
+        </div>
+      </section>
+
+      <!-- ведёт · уезжает с прокруткой вместе со страницей -->
+      <section data-screen-label="d-event А · спикер" style="margin-top:72px">
+        <div style="display:flex;align-items:baseline;gap:18px;margin-bottom:28px">
+          <span style="font-size:13px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:oklch(.21 .02 250);white-space:nowrap">Ведёт</span>
+          <span style="flex:1;border-top:2px solid oklch(.21 .02 250)"></span>
+        </div>
+        <div style="border:2px solid oklch(.21 .02 250);box-shadow:5px 5px 0 #114D9E;background:#fff;display:grid;grid-template-columns:{{ spCols }}">
+          <div style="{{ spPhotoStyle }}">
+            <span style="font-size:52px;font-weight:800;letter-spacing:-.02em;color:#114D9E">МС</span>
+            <span style="position:absolute;bottom:10px;right:12px;font-size:9.5px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:rgba(17,77,158,.5)">фото</span>
+          </div>
+          <div style="padding:22px 26px">
+            <div style="font-size:10.5px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#2D84F2;margin-bottom:7px">Травматолог-ортопед</div>
+            <a href="Эксперт.dc.html" style="font-size:19px;font-weight:800;letter-spacing:-.02em;color:oklch(.21 .02 250);text-decoration:none;line-height:1.25;display:inline-block" style-hover="color:#2D84F2;text-decoration:underline;text-underline-offset:4px">Михаил Страхов</a>
+            <div style="font-size:12.5px;font-weight:700;color:oklch(.556 .012 250);margin-top:6px">РНИМУ им. Пирогова</div>
+            <div style="font-size:13px;line-height:1.65;color:oklch(.45 .014 250);margin-top:12px">Д.м.н., профессор кафедры травматологии и ортопедии, ведёт направление ортобиологии на платформе. Автор 40+ публикаций по регенеративным методикам, член ESSKA и АТОР. В эфире разбирает доказательную базу и отвечает за протоколы.</div>
+            <a href="Эксперт.dc.html" style="display:inline-block;margin-top:14px;font-size:12.5px;font-weight:800;color:#2D84F2;text-decoration:underline;text-underline-offset:4px">12 эфиров · страница эксперта →</a>
+          </div>
+        </div>
+      </section>
+
+      <!-- блок формата · эфир · до начала -->
+      <section data-screen-label="d-event А · блок формата · эфир" style="margin-top:72px">
+        <div style="display:flex;align-items:baseline;gap:18px;margin-bottom:28px">
+          <span style="font-size:13px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:oklch(.21 .02 250);white-space:nowrap">Эфир</span>
+          <span style="flex:1;border-top:2px solid oklch(.21 .02 250)"></span>
+        </div>
+        <div style="border:2px solid oklch(.21 .02 250);background:#fff;box-shadow:6px 6px 0 #114D9E;padding:24px 28px;display:flex;flex-direction:column;gap:12px">
+          <span style="font-size:15px;font-weight:700;color:oklch(.21 .02 250)">Комната эфира откроется за 10 минут до начала</span>
+          <span style="font-size:12.5px;font-weight:700;color:oklch(.556 .012 250);line-height:1.6">Во время эфира: вопрос лектору · опросы с живым графиком · отметки присутствия для НМО (90 минут и 2 отметки)</span>
+        </div>
+      </section>
+
+      <!-- связи -->
+      <section data-screen-label="d-event А · связи" style="margin-top:72px">
+        <div style="display:flex;align-items:baseline;gap:18px;margin-bottom:24px">
+          <span style="font-size:13px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:oklch(.21 .02 250);white-space:nowrap">Вокруг события</span>
+          <span style="flex:1;border-top:2px solid oklch(.21 .02 250)"></span>
+        </div>
+        <div style="display:grid;gap:0">
+          <a href="Витрина врача - Лента специальности.dc.html" style="display:flex;align-items:center;gap:16px;padding:18px 4px;border-top:1px solid oklch(.922 .006 250);text-decoration:none" style-hover="background:#D3E8FD">
+            <span style="font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:oklch(.556 .012 250);width:96px;flex:none">Школа</span>
+            <span style="font-size:15px;font-weight:700;color:oklch(.21 .02 250);flex:1;min-width:0">Школа ортобиологии — все уроки и события программы</span>
+            <span style="font-size:15px;font-weight:800;color:#2D84F2">→</span>
+          </a>
+          <a href="Эксперт.dc.html" style="display:flex;align-items:center;gap:16px;padding:18px 4px;border-top:1px solid oklch(.922 .006 250);text-decoration:none" style-hover="background:#D3E8FD">
+            <span style="font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:oklch(.556 .012 250);width:96px;flex:none">Спикер</span>
+            <span style="font-size:15px;font-weight:700;color:oklch(.21 .02 250);flex:1;min-width:0">Михаил Страхов — страница эксперта, 12 эфиров</span>
+            <span style="font-size:15px;font-weight:800;color:#2D84F2">→</span>
+          </a>
+          <a href="#" style="display:flex;align-items:center;gap:16px;padding:18px 4px;border-top:1px solid oklch(.922 .006 250);border-bottom:1px solid oklch(.922 .006 250);text-decoration:none" style-hover="background:#D3E8FD">
+            <span style="font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:oklch(.556 .012 250);width:96px;flex:none">Коллеги</span>
+            <span style="font-size:15px;font-weight:700;color:oklch(.21 .02 250);flex:1;min-width:0">Обсуждение события в сообществе</span>
+            <span style="font-size:15px;font-weight:800;color:#2D84F2">→</span>
+          </a>
+        </div>
+      </section>
+    </div>
+
+    <!-- ─── Правая колонка · одна на страницу ─── -->
+    <aside style="{{ asideStyle }}">
+      <!-- 1 · карточка записи · закреплена (вариант А, развилка 1) -->
+      <div data-screen-label="d-event А · карточка записи (закреплена)" style="z-index:5;{{ pin }}">
+        <div style="border:2px solid oklch(.21 .02 250);background:#fff;box-shadow:6px 6px 0 #114D9E">
+          <div style="background:#D3E8FD;border-bottom:2px solid oklch(.21 .02 250);padding:20px 24px;display:flex;align-items:center;gap:14px">
+            <span style="font-size:40px;font-weight:800;line-height:1;letter-spacing:-.04em;color:#114D9E;font-variant-numeric:tabular-nums">19:00</span>
+            <span style="font-size:12.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#114D9E;line-height:1.45">28 августа<br>пятница · МСК</span>
+          </div>
+          <div style="padding:22px 24px;display:flex;flex-direction:column;gap:0">
+            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid oklch(.922 .006 250)">
+              <span style="font-size:12px;font-weight:700;color:oklch(.556 .012 250)">Участие</span>
+              <span style="font-size:13.5px;font-weight:800;color:#00693D">Бесплатно для врача</span>
+            </div>
+            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid oklch(.922 .006 250)">
+              <span style="font-size:12px;font-weight:700;color:oklch(.556 .012 250)">Формат</span>
+              <span style="font-size:13.5px;font-weight:800;color:oklch(.21 .02 250)">Онлайн · комната эфира</span>
+            </div>
+            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid oklch(.922 .006 250)">
+              <span style="font-size:12px;font-weight:700;color:oklch(.556 .012 250)">Длительность</span>
+              <span style="font-size:13.5px;font-weight:800;color:oklch(.21 .02 250);font-variant-numeric:tabular-nums">90 минут</span>
+            </div>
+            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:10px 0">
+              <span style="font-size:12px;font-weight:700;color:oklch(.556 .012 250)">НМО</span>
+              <span style="font-size:12px;font-weight:800;color:oklch(.21 .02 250);border:2px solid oklch(.922 .006 250);padding:3px 9px">2 балла</span>
+            </div>
+            <a href="Авторизация.dc.html" style="margin-top:14px;display:block;text-align:center;font-size:15px;font-weight:800;color:#fff;background:#114D9E;border:2px solid #114D9E;padding:15px 20px;box-shadow:4px 4px 0 oklch(.21 .02 250);text-decoration:none" style-hover="transform:translate(2px,2px);box-shadow:2px 2px 0 oklch(.21 .02 250)">Участвовать ↗</a>
+            <div style="margin-top:12px;font-size:12.5px;line-height:1.6;color:oklch(.45 .014 250)">Нужна регистрация — вернём вас на эту страницу.</div>
+            <div style="margin-top:10px;padding-top:12px;border-top:1px solid oklch(.922 .006 250);font-size:12.5px;font-weight:800;color:oklch(.21 .02 250)">Уже записались 37 ортопедов<div style="margin-top:4px;font-size:11.5px;font-weight:600;color:oklch(.556 .012 250)">и 14 врачей смежных специальностей</div></div>
+          </div>
+        </div>
+      </div>
+
+    </aside>
+  </main>
+
+  <!-- ═══ Футер витрины врача ═══ -->
+  <footer data-screen-label="d-event А · футер" style="border-top:2px solid oklch(.21 .02 250);padding:clamp(32px,5vw,48px) clamp(16px,4vw,48px) clamp(36px,5vw,56px)">
+    <div style="max-width:1104px;margin:0 auto;display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:clamp(24px,4vw,40px)">
+      <div>
+        <img src="assets/ds-logo-color.svg" alt="Doctor.School" style="height:22px;display:block">
+        <div style="margin-top:14px;font-size:12.5px;font-weight:600;line-height:1.6;color:oklch(.556 .012 250)">Бесплатное образование для врачей.<br>© Doctor.School, 2026</div>
+      </div>
+      <div>
+        <div style="font-size:11.5px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:oklch(.556 .012 250);margin-bottom:14px">Документы и контакты</div>
+        <div style="display:flex;flex-direction:column;gap:9px">
+          <a href="#" style="font-size:13.5px;font-weight:600;color:oklch(.21 .02 250);text-decoration:none" style-hover="color:#2D84F2;text-decoration:underline;text-underline-offset:3px">Пользовательское соглашение</a>
+          <a href="#" style="font-size:13.5px;font-weight:600;color:oklch(.21 .02 250);text-decoration:none" style-hover="color:#2D84F2;text-decoration:underline;text-underline-offset:3px">Политика обработки персональных данных</a>
+          <a href="#" style="font-size:13.5px;font-weight:600;color:oklch(.21 .02 250);text-decoration:none" style-hover="color:#2D84F2;text-decoration:underline;text-underline-offset:3px">Контакты</a>
+        </div>
+      </div>
+      <div>
+        <div style="font-size:11.5px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:oklch(.556 .012 250);margin-bottom:14px">Экспертам и партнёрам</div>
+        <a href="Главная.dc.html" style="font-size:13.5px;font-weight:800;color:#2D84F2;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px">Academy.Doctor.School ↗</a>
+        <div style="margin-top:10px;font-size:12.5px;font-weight:600;line-height:1.6;color:oklch(.556 .012 250)">Закулисье платформы: проекты, эксперты, партнёры.</div>
+      </div>
+    </div>
+    <div aria-hidden="true" style="overflow:hidden;margin:clamp(28px,4vw,48px) calc(-1*clamp(16px,4vw,48px)) calc(-1*clamp(36px,5vw,56px))">
+      <div style="font-size:clamp(58px,12.6vw,236px);font-weight:800;letter-spacing:-.05em;line-height:.78;white-space:nowrap;text-align:center;color:oklch(.945 .018 250);transform:translateY(.16em);user-select:none">Doctor.School</div>
+    </div>
+  </footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440,&quot;height&quot;:900},&quot;pinned&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Развилка 1 · вариант А&quot;},&quot;teaser&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Контент&quot;},&quot;program&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Контент&quot;}}">
+class Component extends DCLogic {
+  state = { isMobile: false };
+  componentDidMount() {
+    this.mq = window.matchMedia('(max-width: 900px)');
+    this.upd = () => this.setState({ isMobile: this.mq.matches });
+    this.upd();
+    this.mq.addEventListener ? this.mq.addEventListener('change', this.upd) : this.mq.addListener(this.upd);
+  }
+  renderVals() {
+    const program = this.props.program ?? true;
+    const m = this.state.isMobile;
+    return {
+      program, noProgram: !program,
+      teaser: this.props.teaser ?? true,
+      isMobile: m, isDesktop: !m,
+      mainStyle: m
+        ? 'max-width:1104px;margin:-80px auto 0;padding:0 16px 64px;position:relative;z-index:1;display:grid;grid-template-columns:1fr;gap:40px'
+        : 'max-width:1104px;margin:-80px auto 0;padding:0 clamp(16px,4vw,48px) 96px;position:relative;z-index:1;display:grid;grid-template-columns:1fr 360px;gap:48px',
+      asideStyle: m ? 'min-width:0;order:-1' : 'min-width:0',
+      leftTopPad: m ? 'padding-top:8px' : 'padding-top:104px',
+      pin: (!m && (this.props.pinned ?? true)) ? 'position:sticky;top:20px;' : '',
+      spCols: m ? '1fr' : '220px 1fr',
+      spPhotoStyle: m
+        ? 'background:#D3E8FD;display:flex;align-items:center;justify-content:center;border-bottom:2px solid oklch(.21 .02 250);position:relative;overflow:hidden;min-height:160px'
+        : 'background:#D3E8FD;display:flex;align-items:center;justify-content:center;border-right:2px solid oklch(.21 .02 250);position:relative;overflow:hidden;min-height:200px'
+    };
+  }
+}
+</script>
+</body>
+</html>

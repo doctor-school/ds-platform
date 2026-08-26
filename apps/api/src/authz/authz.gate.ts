@@ -12,6 +12,7 @@ import { Module } from "@nestjs/common";
 import { DiscoveryModule, NestFactory } from "@nestjs/core";
 import { AppModule } from "../app.module.js";
 import { collectAuthzRows, type AuthzScanResult } from "./authz.discovery.js";
+import { ROUTE_SCAN_ENV } from "./route-scan.js";
 
 // DiscoveryService needs DiscoveryModule in the graph; wrapping the real
 // AppModule makes the gate observe exactly the route set that serves traffic
@@ -38,6 +39,11 @@ export async function scanRealRouteSet(): Promise<AuthzScanResult> {
   // verifies an envelope — so a placeholder satisfies the fail-closed
   // construction check without ever signing anything.
   process.env.LIFECYCLE_IMPACT_TOKEN_SECRET ??= "authz-lint-placeholder-secret";
+  // StorefrontModule seeds the 017 reference book from its init hook — a real
+  // query, which the three placeholders above cannot stand in for. The gate
+  // declares route-scan mode so that bootstrap step (and any later one belonging
+  // to a serving process) skips itself; see `route-scan.ts`.
+  process.env[ROUTE_SCAN_ENV] = "1";
 
   const app = await NestFactory.createApplicationContext(AuthzGateModule, {
     logger: false,

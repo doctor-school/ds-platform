@@ -9,9 +9,11 @@ export {
   SpecialtyBookSchema,
   SpecialtyCodeSchema,
   SpecialtyErrorCodeSchema,
+  SpecialtyProblemDetailsSchema,
   SpecialtyRefSchema,
   type FrequentSpecialties,
   type SpecialtyBook,
   type SpecialtyErrorCode,
+  type SpecialtyProblemDetails,
   type SpecialtyRef,
 } from './specialties.schema.js';

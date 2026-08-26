@@ -1,0 +1,2416 @@
+{
+  "id": "e6041f96-2084-4a25-b592-c6afa1c161f6",
+  "prevId": "093aa3e3-f5e4-40e5-b6d3-8765b146b88e",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.idempotency_keys": {
+      "name": "idempotency_keys",
+      "schema": "",
+      "columns": {
+        "key": {
+          "name": "key",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "scope": {
+          "name": "scope",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "actor_id": {
+          "name": "actor_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "method": {
+          "name": "method",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "route": {
+          "name": "route",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "request_fingerprint": {
+          "name": "request_fingerprint",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "response_status": {
+          "name": "response_status",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "response_body": {
+          "name": "response_body",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "response_etag": {
+          "name": "response_etag",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "response_location": {
+          "name": "response_location",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "execution_state": {
+          "name": "execution_state",
+          "type": "idempotency_execution_state",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'processing'"
+        },
+        "lease_epoch": {
+          "name": "lease_epoch",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "lease_owner": {
+          "name": "lease_owner",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "lease_expires_at": {
+          "name": "lease_expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cleanup_object_key": {
+          "name": "cleanup_object_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "idempotency_record_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'active'"
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "idempotency_keys_expired_iff_deleted": {
+          "name": "idempotency_keys_expired_iff_deleted",
+          "value": "(\"idempotency_keys\".\"status\" = 'expired') = (\"idempotency_keys\".\"deleted_at\" IS NOT NULL)"
+        },
+        "idempotency_keys_active_is_bound": {
+          "name": "idempotency_keys_active_is_bound",
+          "value": "\"idempotency_keys\".\"status\" <> 'active' OR (\n        \"idempotency_keys\".\"method\" IS NOT NULL\n        AND \"idempotency_keys\".\"route\" IS NOT NULL\n        AND \"idempotency_keys\".\"request_fingerprint\" IS NOT NULL\n      )"
+        },
+        "idempotency_keys_expired_is_cleared": {
+          "name": "idempotency_keys_expired_is_cleared",
+          "value": "\"idempotency_keys\".\"status\" <> 'expired' OR (\n        \"idempotency_keys\".\"actor_id\" IS NULL\n        AND \"idempotency_keys\".\"method\" IS NULL\n        AND \"idempotency_keys\".\"route\" IS NULL\n        AND \"idempotency_keys\".\"request_fingerprint\" IS NULL\n        AND \"idempotency_keys\".\"response_body\" IS NULL\n        AND \"idempotency_keys\".\"response_etag\" IS NULL\n        AND \"idempotency_keys\".\"response_location\" IS NULL\n        AND \"idempotency_keys\".\"lease_owner\" IS NULL\n        AND \"idempotency_keys\".\"lease_expires_at\" IS NULL\n      )"
+        },
+        "idempotency_keys_lease_epoch_positive": {
+          "name": "idempotency_keys_lease_epoch_positive",
+          "value": "\"idempotency_keys\".\"lease_epoch\" >= 1"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.users": {
+      "name": "users",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "zitadel_sub": {
+          "name": "zitadel_sub",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "email": {
+          "name": "email",
+          "type": "citext",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "phone": {
+          "name": "phone",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "display_name": {
+          "name": "display_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "email_verified": {
+          "name": "email_verified",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "phone_verified": {
+          "name": "phone_verified",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "role": {
+          "name": "role",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'doctor_guest'"
+        },
+        "deactivated_at": {
+          "name": "deactivated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "record_status": {
+          "name": "record_status",
+          "type": "record_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'active'"
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "users_active_zitadel_sub_idx": {
+          "name": "users_active_zitadel_sub_idx",
+          "columns": [
+            {
+              "expression": "zitadel_sub",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"users\".\"record_status\" = 'active'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "users_zitadel_sub_unique": {
+          "name": "users_zitadel_sub_unique",
+          "nullsNotDistinct": false,
+          "columns": ["zitadel_sub"]
+        },
+        "users_email_unique": {
+          "name": "users_email_unique",
+          "nullsNotDistinct": false,
+          "columns": ["email"]
+        },
+        "users_phone_unique": {
+          "name": "users_phone_unique",
+          "nullsNotDistinct": false,
+          "columns": ["phone"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "users_email_or_phone": {
+          "name": "users_email_or_phone",
+          "value": "\"users\".\"email\" IS NOT NULL OR \"users\".\"phone\" IS NOT NULL"
+        },
+        "users_retired_iff_deleted": {
+          "name": "users_retired_iff_deleted",
+          "value": "(\"users\".\"record_status\" = 'retired') = (\"users\".\"deleted_at\" IS NOT NULL)"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.consent_records": {
+      "name": "consent_records",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "purpose": {
+          "name": "purpose",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "version": {
+          "name": "version",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "captured_at": {
+          "name": "captured_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "consent_records_user_id_users_id_fk": {
+          "name": "consent_records_user_id_users_id_fk",
+          "tableFrom": "consent_records",
+          "tableTo": "users",
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.audit_ledger": {
+      "name": "audit_ledger",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "event_id": {
+          "name": "event_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "event_type": {
+          "name": "event_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "subject_id": {
+          "name": "subject_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sid": {
+          "name": "sid",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reason": {
+          "name": "reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "metadata": {
+          "name": "metadata",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "audit_ledger_pkey": {
+          "name": "audit_ledger_pkey",
+          "columns": ["id", "created_at"]
+        }
+      },
+      "uniqueConstraints": {
+        "audit_ledger_event_id_unique": {
+          "name": "audit_ledger_event_id_unique",
+          "nullsNotDistinct": false,
+          "columns": ["event_id", "created_at"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.event_speakers": {
+      "name": "event_speakers",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "event_id": {
+          "name": "event_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "position": {
+          "name": "position",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "regalia": {
+          "name": "regalia",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "record_status": {
+          "name": "record_status",
+          "type": "record_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'active'"
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "content_removed_at": {
+          "name": "content_removed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "event_speakers_event_position_active_uniq": {
+          "name": "event_speakers_event_position_active_uniq",
+          "columns": [
+            {
+              "expression": "event_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "position",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"event_speakers\".\"record_status\" = 'active'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "event_speakers_event_id_id_uniq": {
+          "name": "event_speakers_event_id_id_uniq",
+          "columns": [
+            {
+              "expression": "event_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "event_speakers_event_id_events_id_fk": {
+          "name": "event_speakers_event_id_events_id_fk",
+          "tableFrom": "event_speakers",
+          "tableTo": "events",
+          "columnsFrom": ["event_id"],
+          "columnsTo": ["id"],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "event_speakers_retired_iff_deleted": {
+          "name": "event_speakers_retired_iff_deleted",
+          "value": "(\"event_speakers\".\"record_status\" = 'retired') = (\"event_speakers\".\"deleted_at\" IS NOT NULL)"
+        },
+        "event_speakers_position_non_negative": {
+          "name": "event_speakers_position_non_negative",
+          "value": "\"event_speakers\".\"position\" >= 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.events": {
+      "name": "events",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "slug": {
+          "name": "slug",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "school": {
+          "name": "school",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "starts_at": {
+          "name": "starts_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "duration_min": {
+          "name": "duration_min",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "specialties": {
+          "name": "specialties",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'"
+        },
+        "partner_ref": {
+          "name": "partner_ref",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "program_pdf_ref": {
+          "name": "program_pdf_ref",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "state": {
+          "name": "state",
+          "type": "event_lifecycle_state",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'draft'"
+        },
+        "live_at": {
+          "name": "live_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "recording_expected_by": {
+          "name": "recording_expected_by",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "record_status": {
+          "name": "record_status",
+          "type": "record_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'active'"
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "events_active_starts_at_idx": {
+          "name": "events_active_starts_at_idx",
+          "columns": [
+            {
+              "expression": "starts_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"events\".\"record_status\" = 'active'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "events_slug_unique": {
+          "name": "events_slug_unique",
+          "nullsNotDistinct": false,
+          "columns": ["slug"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "events_retired_iff_deleted": {
+          "name": "events_retired_iff_deleted",
+          "value": "(\"events\".\"record_status\" = 'retired') = (\"events\".\"deleted_at\" IS NOT NULL)"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.stream_config": {
+      "name": "stream_config",
+      "schema": "",
+      "columns": {
+        "event_id": {
+          "name": "event_id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "provider": {
+          "name": "provider",
+          "type": "stream_provider",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "embed_ref": {
+          "name": "embed_ref",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "record_status": {
+          "name": "record_status",
+          "type": "record_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'active'"
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "stream_config_event_id_events_id_fk": {
+          "name": "stream_config_event_id_events_id_fk",
+          "tableFrom": "stream_config",
+          "tableTo": "events",
+          "columnsFrom": ["event_id"],
+          "columnsTo": ["id"],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "stream_config_retired_iff_deleted": {
+          "name": "stream_config_retired_iff_deleted",
+          "value": "(\"stream_config\".\"record_status\" = 'retired') = (\"stream_config\".\"deleted_at\" IS NOT NULL)"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.registrations": {
+      "name": "registrations",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "event_id": {
+          "name": "event_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "registered_at": {
+          "name": "registered_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "record_status": {
+          "name": "record_status",
+          "type": "record_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'active'"
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "registrations_active_event_idx": {
+          "name": "registrations_active_event_idx",
+          "columns": [
+            {
+              "expression": "event_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"registrations\".\"record_status\" = 'active'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "registrations_user_id_users_id_fk": {
+          "name": "registrations_user_id_users_id_fk",
+          "tableFrom": "registrations",
+          "tableTo": "users",
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "registrations_event_id_events_id_fk": {
+          "name": "registrations_event_id_events_id_fk",
+          "tableFrom": "registrations",
+          "tableTo": "events",
+          "columnsFrom": ["event_id"],
+          "columnsTo": ["id"],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "registrations_user_id_event_id_unique": {
+          "name": "registrations_user_id_event_id_unique",
+          "nullsNotDistinct": false,
+          "columns": ["user_id", "event_id"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "registrations_retired_iff_deleted": {
+          "name": "registrations_retired_iff_deleted",
+          "value": "(\"registrations\".\"record_status\" = 'retired') = (\"registrations\".\"deleted_at\" IS NOT NULL)"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.presence_beats": {
+      "name": "presence_beats",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "event_id": {
+          "name": "event_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "beat_at": {
+          "name": "beat_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "presence_beats_event_user_beat_idx": {
+          "name": "presence_beats_event_user_beat_idx",
+          "columns": [
+            {
+              "expression": "event_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "beat_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "presence_beats_user_id_users_id_fk": {
+          "name": "presence_beats_user_id_users_id_fk",
+          "tableFrom": "presence_beats",
+          "tableTo": "users",
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "presence_beats_event_id_events_id_fk": {
+          "name": "presence_beats_event_id_events_id_fk",
+          "tableFrom": "presence_beats",
+          "tableTo": "events",
+          "columnsFrom": ["event_id"],
+          "columnsTo": ["id"],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.event_experts": {
+      "name": "event_experts",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "event_id": {
+          "name": "event_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "expert_id": {
+          "name": "expert_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "role": {
+          "name": "role",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "position": {
+          "name": "position",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "legacy_speaker_id": {
+          "name": "legacy_speaker_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "relationship_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'active'"
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "event_experts_event_expert_key": {
+          "name": "event_experts_event_expert_key",
+          "columns": [
+            {
+              "expression": "event_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "expert_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "event_experts_legacy_speaker_key": {
+          "name": "event_experts_legacy_speaker_key",
+          "columns": [
+            {
+              "expression": "legacy_speaker_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "event_experts_event_position_active_uniq": {
+          "name": "event_experts_event_position_active_uniq",
+          "columns": [
+            {
+              "expression": "event_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "position",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"event_experts\".\"status\" = 'active'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "event_experts_event_id_events_id_fk": {
+          "name": "event_experts_event_id_events_id_fk",
+          "tableFrom": "event_experts",
+          "tableTo": "events",
+          "columnsFrom": ["event_id"],
+          "columnsTo": ["id"],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "event_experts_expert_id_experts_id_fk": {
+          "name": "event_experts_expert_id_experts_id_fk",
+          "tableFrom": "event_experts",
+          "tableTo": "experts",
+          "columnsFrom": ["expert_id"],
+          "columnsTo": ["id"],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "event_experts_event_legacy_speaker_fk": {
+          "name": "event_experts_event_legacy_speaker_fk",
+          "tableFrom": "event_experts",
+          "tableTo": "event_speakers",
+          "columnsFrom": ["event_id", "legacy_speaker_id"],
+          "columnsTo": ["event_id", "id"],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "event_experts_retired_iff_deleted": {
+          "name": "event_experts_retired_iff_deleted",
+          "value": "(\"event_experts\".\"status\" = 'retired') = (\"event_experts\".\"deleted_at\" IS NOT NULL)"
+        },
+        "event_experts_role_bounds": {
+          "name": "event_experts_role_bounds",
+          "value": "\"event_experts\".\"role\" IS NULL OR char_length(\"event_experts\".\"role\") BETWEEN 1 AND 80"
+        },
+        "event_experts_position_bounds": {
+          "name": "event_experts_position_bounds",
+          "value": "\"event_experts\".\"position\" BETWEEN 0 AND 32767"
+        },
+        "event_experts_version_positive": {
+          "name": "event_experts_version_positive",
+          "value": "\"event_experts\".\"version\" >= 1"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.event_projects": {
+      "name": "event_projects",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "event_id": {
+          "name": "event_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "project_id": {
+          "name": "project_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "relationship_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'active'"
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "event_projects_pair_key": {
+          "name": "event_projects_pair_key",
+          "columns": [
+            {
+              "expression": "event_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "project_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "event_projects_project_id_idx": {
+          "name": "event_projects_project_id_idx",
+          "columns": [
+            {
+              "expression": "project_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "event_projects_event_id_events_id_fk": {
+          "name": "event_projects_event_id_events_id_fk",
+          "tableFrom": "event_projects",
+          "tableTo": "events",
+          "columnsFrom": ["event_id"],
+          "columnsTo": ["id"],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "event_projects_project_id_projects_id_fk": {
+          "name": "event_projects_project_id_projects_id_fk",
+          "tableFrom": "event_projects",
+          "tableTo": "projects",
+          "columnsFrom": ["project_id"],
+          "columnsTo": ["id"],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "event_projects_retired_iff_deleted": {
+          "name": "event_projects_retired_iff_deleted",
+          "value": "(\"event_projects\".\"status\" = 'retired') = (\"event_projects\".\"deleted_at\" IS NOT NULL)"
+        },
+        "event_projects_version_positive": {
+          "name": "event_projects_version_positive",
+          "value": "\"event_projects\".\"version\" >= 1"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.experts": {
+      "name": "experts",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "slug": {
+          "name": "slug",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "photo_ref": {
+          "name": "photo_ref",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "professional_role": {
+          "name": "professional_role",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "credentials": {
+          "name": "credentials",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "affiliation": {
+          "name": "affiliation",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "bio": {
+          "name": "bio",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "first_published_at": {
+          "name": "first_published_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "taxonomy_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'draft'"
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "content_removed_at": {
+          "name": "content_removed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "experts_slug_key": {
+          "name": "experts_slug_key",
+          "columns": [
+            {
+              "expression": "slug",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "experts_retired_iff_deleted": {
+          "name": "experts_retired_iff_deleted",
+          "value": "(\"experts\".\"status\" = 'retired') = (\"experts\".\"deleted_at\" IS NOT NULL)"
+        },
+        "experts_slug_pattern": {
+          "name": "experts_slug_pattern",
+          "value": "\"experts\".\"slug\" ~ '^[a-z0-9]+(-[a-z0-9]+)*$'"
+        },
+        "experts_slug_not_uuid": {
+          "name": "experts_slug_not_uuid",
+          "value": "\"experts\".\"slug\" !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'"
+        },
+        "experts_name_bounds": {
+          "name": "experts_name_bounds",
+          "value": "\"experts\".\"name\" IS NULL OR char_length(\"experts\".\"name\") BETWEEN 1 AND 160"
+        },
+        "experts_professional_role_bounds": {
+          "name": "experts_professional_role_bounds",
+          "value": "\"experts\".\"professional_role\" IS NULL OR char_length(\"experts\".\"professional_role\") BETWEEN 1 AND 160"
+        },
+        "experts_credentials_bounds": {
+          "name": "experts_credentials_bounds",
+          "value": "\"experts\".\"credentials\" IS NULL OR char_length(\"experts\".\"credentials\") BETWEEN 1 AND 500"
+        },
+        "experts_affiliation_bounds": {
+          "name": "experts_affiliation_bounds",
+          "value": "\"experts\".\"affiliation\" IS NULL OR char_length(\"experts\".\"affiliation\") BETWEEN 1 AND 240"
+        },
+        "experts_bio_bounds": {
+          "name": "experts_bio_bounds",
+          "value": "\"experts\".\"bio\" IS NULL OR char_length(\"experts\".\"bio\") BETWEEN 1 AND 4000"
+        },
+        "experts_version_positive": {
+          "name": "experts_version_positive",
+          "value": "\"experts\".\"version\" >= 1"
+        },
+        "experts_published_has_first_published_at": {
+          "name": "experts_published_has_first_published_at",
+          "value": "\"experts\".\"status\" <> 'published' OR \"experts\".\"first_published_at\" IS NOT NULL"
+        },
+        "experts_name_present_unless_removed": {
+          "name": "experts_name_present_unless_removed",
+          "value": "\"experts\".\"content_removed_at\" IS NOT NULL OR \"experts\".\"name\" IS NOT NULL"
+        },
+        "experts_content_removed_shape": {
+          "name": "experts_content_removed_shape",
+          "value": "\"experts\".\"content_removed_at\" IS NULL OR (\n        \"experts\".\"status\" = 'retired'\n        AND \"experts\".\"deleted_at\" IS NOT NULL\n        AND \"experts\".\"name\" IS NULL\n        AND \"experts\".\"photo_ref\" IS NULL\n        AND \"experts\".\"professional_role\" IS NULL\n        AND \"experts\".\"credentials\" IS NULL\n        AND \"experts\".\"affiliation\" IS NULL\n        AND \"experts\".\"bio\" IS NULL\n      )"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.partners": {
+      "name": "partners",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "slug": {
+          "name": "slug",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "logo_ref": {
+          "name": "logo_ref",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "website_url": {
+          "name": "website_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "first_published_at": {
+          "name": "first_published_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "taxonomy_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'draft'"
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "partners_slug_key": {
+          "name": "partners_slug_key",
+          "columns": [
+            {
+              "expression": "slug",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "partners_retired_iff_deleted": {
+          "name": "partners_retired_iff_deleted",
+          "value": "(\"partners\".\"status\" = 'retired') = (\"partners\".\"deleted_at\" IS NOT NULL)"
+        },
+        "partners_slug_pattern": {
+          "name": "partners_slug_pattern",
+          "value": "\"partners\".\"slug\" ~ '^[a-z0-9]+(-[a-z0-9]+)*$'"
+        },
+        "partners_slug_not_uuid": {
+          "name": "partners_slug_not_uuid",
+          "value": "\"partners\".\"slug\" !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'"
+        },
+        "partners_title_bounds": {
+          "name": "partners_title_bounds",
+          "value": "char_length(\"partners\".\"title\") BETWEEN 1 AND 160"
+        },
+        "partners_website_url_bounds": {
+          "name": "partners_website_url_bounds",
+          "value": "\"partners\".\"website_url\" IS NULL OR char_length(\"partners\".\"website_url\") BETWEEN 1 AND 2048"
+        },
+        "partners_website_url_https": {
+          "name": "partners_website_url_https",
+          "value": "\"partners\".\"website_url\" IS NULL OR \"partners\".\"website_url\" ~ '^https://[^\\s/?#]+[^\\s]*$'"
+        },
+        "partners_version_positive": {
+          "name": "partners_version_positive",
+          "value": "\"partners\".\"version\" >= 1"
+        },
+        "partners_published_has_first_published_at": {
+          "name": "partners_published_has_first_published_at",
+          "value": "\"partners\".\"status\" <> 'published' OR \"partners\".\"first_published_at\" IS NOT NULL"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.projects": {
+      "name": "projects",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "slug": {
+          "name": "slug",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "kind": {
+          "name": "kind",
+          "type": "project_kind",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cover_ref": {
+          "name": "cover_ref",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "first_published_at": {
+          "name": "first_published_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "taxonomy_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'draft'"
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "projects_slug_key": {
+          "name": "projects_slug_key",
+          "columns": [
+            {
+              "expression": "slug",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "projects_retired_iff_deleted": {
+          "name": "projects_retired_iff_deleted",
+          "value": "(\"projects\".\"status\" = 'retired') = (\"projects\".\"deleted_at\" IS NOT NULL)"
+        },
+        "projects_slug_pattern": {
+          "name": "projects_slug_pattern",
+          "value": "\"projects\".\"slug\" ~ '^[a-z0-9]+(-[a-z0-9]+)*$'"
+        },
+        "projects_slug_not_uuid": {
+          "name": "projects_slug_not_uuid",
+          "value": "\"projects\".\"slug\" !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'"
+        },
+        "projects_title_bounds": {
+          "name": "projects_title_bounds",
+          "value": "char_length(\"projects\".\"title\") BETWEEN 1 AND 160"
+        },
+        "projects_description_bounds": {
+          "name": "projects_description_bounds",
+          "value": "\"projects\".\"description\" IS NULL OR char_length(\"projects\".\"description\") BETWEEN 1 AND 2000"
+        },
+        "projects_version_positive": {
+          "name": "projects_version_positive",
+          "value": "\"projects\".\"version\" >= 1"
+        },
+        "projects_published_has_first_published_at": {
+          "name": "projects_published_has_first_published_at",
+          "value": "\"projects\".\"status\" <> 'published' OR \"projects\".\"first_published_at\" IS NOT NULL"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.topics": {
+      "name": "topics",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "slug": {
+          "name": "slug",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "first_published_at": {
+          "name": "first_published_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "taxonomy_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'draft'"
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "topics_slug_key": {
+          "name": "topics_slug_key",
+          "columns": [
+            {
+              "expression": "slug",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "topics_retired_iff_deleted": {
+          "name": "topics_retired_iff_deleted",
+          "value": "(\"topics\".\"status\" = 'retired') = (\"topics\".\"deleted_at\" IS NOT NULL)"
+        },
+        "topics_slug_pattern": {
+          "name": "topics_slug_pattern",
+          "value": "\"topics\".\"slug\" ~ '^[a-z0-9]+(-[a-z0-9]+)*$'"
+        },
+        "topics_slug_not_uuid": {
+          "name": "topics_slug_not_uuid",
+          "value": "\"topics\".\"slug\" !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'"
+        },
+        "topics_title_bounds": {
+          "name": "topics_title_bounds",
+          "value": "char_length(\"topics\".\"title\") BETWEEN 1 AND 120"
+        },
+        "topics_version_positive": {
+          "name": "topics_version_positive",
+          "value": "\"topics\".\"version\" >= 1"
+        },
+        "topics_published_has_first_published_at": {
+          "name": "topics_published_has_first_published_at",
+          "value": "\"topics\".\"status\" <> 'published' OR \"topics\".\"first_published_at\" IS NOT NULL"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.media_cleanup_jobs": {
+      "name": "media_cleanup_jobs",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "status": {
+          "name": "status",
+          "type": "media_cleanup_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'active'"
+        },
+        "execution_state": {
+          "name": "execution_state",
+          "type": "media_cleanup_execution_state",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'pending'"
+        },
+        "cleanup_kind": {
+          "name": "cleanup_kind",
+          "type": "media_cleanup_kind",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "entity_kind": {
+          "name": "entity_kind",
+          "type": "media_entity_kind",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "entity_id": {
+          "name": "entity_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "slot": {
+          "name": "slot",
+          "type": "media_slot",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "object_key": {
+          "name": "object_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cdn_key": {
+          "name": "cdn_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "lease_epoch": {
+          "name": "lease_epoch",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "lease_owner": {
+          "name": "lease_owner",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "lease_expires_at": {
+          "name": "lease_expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_error": {
+          "name": "last_error",
+          "type": "media_cleanup_error",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "attempt_count": {
+          "name": "attempt_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "completed_at": {
+          "name": "completed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "media_cleanup_jobs_expired_iff_deleted": {
+          "name": "media_cleanup_jobs_expired_iff_deleted",
+          "value": "(\"media_cleanup_jobs\".\"status\" = 'expired') = (\"media_cleanup_jobs\".\"deleted_at\" IS NOT NULL)"
+        },
+        "media_cleanup_jobs_terminal_is_cleared": {
+          "name": "media_cleanup_jobs_terminal_is_cleared",
+          "value": "\"media_cleanup_jobs\".\"status\" <> 'expired' OR (\n        \"media_cleanup_jobs\".\"execution_state\" = 'completed'\n        AND \"media_cleanup_jobs\".\"object_key\" IS NULL\n        AND \"media_cleanup_jobs\".\"cdn_key\" IS NULL\n        AND \"media_cleanup_jobs\".\"entity_id\" IS NULL\n        AND \"media_cleanup_jobs\".\"lease_owner\" IS NULL\n        AND \"media_cleanup_jobs\".\"lease_expires_at\" IS NULL\n        AND \"media_cleanup_jobs\".\"last_error\" IS NULL\n        AND \"media_cleanup_jobs\".\"completed_at\" IS NOT NULL\n      )"
+        },
+        "media_cleanup_jobs_active_has_locator": {
+          "name": "media_cleanup_jobs_active_has_locator",
+          "value": "\"media_cleanup_jobs\".\"status\" <> 'active' OR (\"media_cleanup_jobs\".\"object_key\" IS NOT NULL AND \"media_cleanup_jobs\".\"entity_id\" IS NOT NULL)"
+        },
+        "media_cleanup_jobs_lease_epoch_non_negative": {
+          "name": "media_cleanup_jobs_lease_epoch_non_negative",
+          "value": "\"media_cleanup_jobs\".\"lease_epoch\" >= 0"
+        },
+        "media_cleanup_jobs_attempts_non_negative": {
+          "name": "media_cleanup_jobs_attempts_non_negative",
+          "value": "\"media_cleanup_jobs\".\"attempt_count\" >= 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.event_recordings": {
+      "name": "event_recordings",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "event_id": {
+          "name": "event_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "kind": {
+          "name": "kind",
+          "type": "recording_kind",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "provider": {
+          "name": "provider",
+          "type": "stream_provider",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "embed_ref": {
+          "name": "embed_ref",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "poster_ref": {
+          "name": "poster_ref",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "duration_sec": {
+          "name": "duration_sec",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "recording_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'draft'"
+        },
+        "first_published_at": {
+          "name": "first_published_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "event_recordings_event_kind_active_uniq": {
+          "name": "event_recordings_event_kind_active_uniq",
+          "columns": [
+            {
+              "expression": "event_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "kind",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"event_recordings\".\"deleted_at\" IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "event_recordings_event_published_idx": {
+          "name": "event_recordings_event_published_idx",
+          "columns": [
+            {
+              "expression": "event_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "kind",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"event_recordings\".\"status\" = 'published' AND \"event_recordings\".\"deleted_at\" IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "event_recordings_event_id_events_id_fk": {
+          "name": "event_recordings_event_id_events_id_fk",
+          "tableFrom": "event_recordings",
+          "tableTo": "events",
+          "columnsFrom": ["event_id"],
+          "columnsTo": ["id"],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "event_recordings_retired_iff_deleted": {
+          "name": "event_recordings_retired_iff_deleted",
+          "value": "(\"event_recordings\".\"status\" = 'retired') = (\"event_recordings\".\"deleted_at\" IS NOT NULL)"
+        },
+        "event_recordings_published_has_first_published_at": {
+          "name": "event_recordings_published_has_first_published_at",
+          "value": "\"event_recordings\".\"status\" <> 'published' OR \"event_recordings\".\"first_published_at\" IS NOT NULL"
+        },
+        "event_recordings_embed_ref_bounds": {
+          "name": "event_recordings_embed_ref_bounds",
+          "value": "char_length(\"event_recordings\".\"embed_ref\") BETWEEN 1 AND 500"
+        },
+        "event_recordings_poster_ref_bounds": {
+          "name": "event_recordings_poster_ref_bounds",
+          "value": "\"event_recordings\".\"poster_ref\" IS NULL OR char_length(\"event_recordings\".\"poster_ref\") BETWEEN 1 AND 500"
+        },
+        "event_recordings_duration_bounds": {
+          "name": "event_recordings_duration_bounds",
+          "value": "\"event_recordings\".\"duration_sec\" IS NULL OR (\"event_recordings\".\"duration_sec\" > 0 AND \"event_recordings\".\"duration_sec\" <= 86400)"
+        },
+        "event_recordings_version_positive": {
+          "name": "event_recordings_version_positive",
+          "value": "\"event_recordings\".\"version\" >= 1"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.specialties_minzdrav": {
+      "name": "specialties_minzdrav",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "code": {
+          "name": "code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "is_other": {
+          "name": "is_other",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "frequent_rank": {
+          "name": "frequent_rank",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "specialties_minzdrav_code_key": {
+          "name": "specialties_minzdrav_code_key",
+          "columns": [
+            {
+              "expression": "code",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "specialties_minzdrav_name_key": {
+          "name": "specialties_minzdrav_name_key",
+          "columns": [
+            {
+              "expression": "name",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "specialties_minzdrav_is_other_key": {
+          "name": "specialties_minzdrav_is_other_key",
+          "columns": [
+            {
+              "expression": "is_other",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"specialties_minzdrav\".\"is_other\"",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "specialties_minzdrav_frequent_rank_key": {
+          "name": "specialties_minzdrav_frequent_rank_key",
+          "columns": [
+            {
+              "expression": "frequent_rank",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"specialties_minzdrav\".\"frequent_rank\" IS NOT NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "specialties_minzdrav_code_format": {
+          "name": "specialties_minzdrav_code_format",
+          "value": "\"specialties_minzdrav\".\"code\" ~ '^[a-z0-9]+(-[a-z0-9]+)*$' AND length(\"specialties_minzdrav\".\"code\") <= 128"
+        },
+        "specialties_minzdrav_name_nonempty": {
+          "name": "specialties_minzdrav_name_nonempty",
+          "value": "length(btrim(\"specialties_minzdrav\".\"name\")) > 0 AND length(\"specialties_minzdrav\".\"name\") <= 256"
+        },
+        "specialties_minzdrav_frequent_rank_positive": {
+          "name": "specialties_minzdrav_frequent_rank_positive",
+          "value": "\"specialties_minzdrav\".\"frequent_rank\" IS NULL OR \"specialties_minzdrav\".\"frequent_rank\" >= 1"
+        }
+      },
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {
+    "public.record_status": {
+      "name": "record_status",
+      "schema": "public",
+      "values": ["active", "retired"]
+    },
+    "public.idempotency_execution_state": {
+      "name": "idempotency_execution_state",
+      "schema": "public",
+      "values": ["processing", "completed"]
+    },
+    "public.idempotency_record_status": {
+      "name": "idempotency_record_status",
+      "schema": "public",
+      "values": ["active", "expired"]
+    },
+    "public.event_lifecycle_state": {
+      "name": "event_lifecycle_state",
+      "schema": "public",
+      "values": ["draft", "published", "live", "ended", "archived"]
+    },
+    "public.stream_provider": {
+      "name": "stream_provider",
+      "schema": "public",
+      "values": ["rutube", "youtube", "vk", "cdnvideo"]
+    },
+    "public.project_kind": {
+      "name": "project_kind",
+      "schema": "public",
+      "values": ["school", "media", "program"]
+    },
+    "public.relationship_status": {
+      "name": "relationship_status",
+      "schema": "public",
+      "values": ["active", "retired"]
+    },
+    "public.taxonomy_status": {
+      "name": "taxonomy_status",
+      "schema": "public",
+      "values": ["draft", "published", "retired"]
+    },
+    "public.media_cleanup_error": {
+      "name": "media_cleanup_error",
+      "schema": "public",
+      "values": [
+        "object_storage_unavailable",
+        "cdn_unavailable",
+        "still_referenced",
+        "unknown"
+      ]
+    },
+    "public.media_cleanup_execution_state": {
+      "name": "media_cleanup_execution_state",
+      "schema": "public",
+      "values": ["pending", "processing", "completed"]
+    },
+    "public.media_cleanup_kind": {
+      "name": "media_cleanup_kind",
+      "schema": "public",
+      "values": ["replace", "clear", "content_removal"]
+    },
+    "public.media_cleanup_status": {
+      "name": "media_cleanup_status",
+      "schema": "public",
+      "values": ["active", "expired"]
+    },
+    "public.media_entity_kind": {
+      "name": "media_entity_kind",
+      "schema": "public",
+      "values": ["project", "expert", "partner"]
+    },
+    "public.media_slot": {
+      "name": "media_slot",
+      "schema": "public",
+      "values": ["cover", "photo", "logo"]
+    },
+    "public.recording_kind": {
+      "name": "recording_kind",
+      "schema": "public",
+      "values": ["edited", "raw"]
+    },
+    "public.recording_status": {
+      "name": "recording_status",
+      "schema": "public",
+      "values": ["draft", "published", "retired"]
+    }
+  },
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

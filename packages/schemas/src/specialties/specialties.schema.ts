@@ -84,6 +84,30 @@ export const SpecialtyErrorCodeSchema = z.enum(SPECIALTY_ERROR_CODES);
 export type SpecialtyErrorCode = z.infer<typeof SpecialtyErrorCodeSchema>;
 
 /**
+ * The wire body of a storefront specialty failure: RFC 7807 plus the two
+ * platform fields `errorCode` and `traceId` (ADR-0002; 017-design §7). Field for
+ * field the same envelope 012 serves — deliberately so, a client parses ONE
+ * problem shape — but its `errorCode` is narrowed to the specialty codes rather
+ * than reusing the taxonomy enum: a storefront reference-book refusal is not a
+ * content-taxonomy error, and admitting it into that enum would let a taxonomy
+ * throw site name it (and vice versa) with the compiler's blessing.
+ *
+ * No database key, table name or internal lifecycle state ever appears here.
+ */
+export const SpecialtyProblemDetailsSchema = z.object({
+  type: z.string(),
+  title: z.string(),
+  status: z.number().int(),
+  detail: z.string().optional(),
+  instance: z.string().optional(),
+  errorCode: SpecialtyErrorCodeSchema,
+  traceId: z.string(),
+});
+export type SpecialtyProblemDetails = z.infer<
+  typeof SpecialtyProblemDetailsSchema
+>;
+
+/**
  * The membership rule itself, as a reusable predicate over a resolved book.
  * This is the mechanism every specialty-accepting path consumes (the choose-
  * specialty handler of EARS-6 among them): a reference is acceptable ONLY when

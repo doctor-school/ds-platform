@@ -20,6 +20,7 @@ import { MeModule } from "./me/me.module.js";
 import { AuditModule } from "./audit/audit.module.js";
 import { TaxonomyModule } from "./taxonomy/taxonomy.module.js";
 import { RecordingsModule } from "./recordings/recordings.module.js";
+import { StorefrontModule } from "./storefront/storefront.module.js";
 
 @Module({
   imports: [
@@ -63,6 +64,10 @@ import { RecordingsModule } from "./recordings/recordings.module.js";
     // (#1339 EARS-1/EARS-2). After TaxonomyModule: it consumes that module's
     // exported IdempotencyService and RFC 7807 filter (EARS-17).
     RecordingsModule,
+    // 017 doctor storefront — the closed Минздрав specialty reference book, its
+    // public read and the membership mechanism (#1479 EARS-3). After
+    // DatabaseModule: its boot-time seed upserts the book through that handle.
+    StorefrontModule,
     // 005 registration write + per-user EventRegistrationState read
     // (doctor_guest-authenticated).
     RegistrationModule,

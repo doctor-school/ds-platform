@@ -48,4 +48,9 @@ export const AUDIT_CAPTURE_ALLOWLIST: readonly {
     rationale:
       "append-only telemetry stream, itself an event log — auditing would duplicate the stream 1:1 with no WHO/WHAT gain (010-design §5)",
   },
+  {
+    table: "specialties_minzdrav",
+    rationale:
+      "seeded reference book with NO actor write path — the only writer is the provenance-stamped boot seed (017-design §2), so every row change has the same WHO (the deploy) and the same WHY (the committed nomenclature order, already in git); no storefront or admin surface can mutate it, and 017 EARS-3 tests that absence. The ledger's question «which principal changed this and when» has no domain answer here (010-design §5)",
+  },
 ];

@@ -1,5 +1,12 @@
 # @ds/design-system
 
+## 5.1.2
+
+### Patch Changes
+
+- Updated dependencies [[`f1a6062`](https://github.com/doctor-school/ds-platform/commit/f1a606231c5c3c5ead47465023db479fb4d3b416)]:
+  - @ds/schemas@3.3.0
+
 ## 5.1.1
 
 ### Patch Changes

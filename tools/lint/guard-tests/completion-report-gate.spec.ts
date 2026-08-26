@@ -258,6 +258,44 @@ const GENUINE_REPORT_PLAIN_MERGED =
   "Готово: PR #1567 смержен (squash), Issue #1567 закрыта, CI зелёный.\n" +
   "Ветка удалена, board Status = Done.\n\n" +
   "🖼 Проверить глазами: `pnpm vitest run tools/lint/guard-tests`.";
+// #1569 review regression guards — GENUINE terminal reports whose tails carry
+// the phrasings the first #1567 cut put into the full-text interim set. Each
+// blocks on `main` and MUST keep blocking: the markers are object-scoped now.
+//
+// G-1 — the #962 handoff tail in the future tense: awaiting the OWNER's Stage-B
+// GO is the mandated close of a `user-facing` report, not an in-flight step.
+const GENUINE_REPORT_AWAITS_STAGE_B =
+  "Готово: PR #1569 смержен (squash), Issue #1567 закрыта, CI зелёный.\n\n" +
+  "Дальше: дождусь вашего Stage-B GO.";
+// G-2 — the mandated «🖼 Проверить глазами» section routinely leaves the stand
+// running; «стенд работает в фоне» is not a background MACHINE step.
+const GENUINE_REPORT_STAND_IN_BACKGROUND =
+  "Готово: PR #1569 смержен (squash), Issue #1567 закрыта.\n\n" +
+  "🖼 Проверить глазами: стенд работает в фоне на 3001.";
+// G-3 — PAST-tense narration of a completed sub-step (#962 closed this shape).
+const GENUINE_REPORT_PAST_RETURN =
+  "Готово: #1569 смержен, ветка удалена.\n\n" +
+  "Субагент отработал, по его возврату я смержил ветку.";
+// G-4 — the «уже» trade-off (#1569 review SUGGESTION): the adjacency strip is
+// per-occurrence, so a report with a SECOND unmarked verb still fires.
+const GENUINE_REPORT_ALREADY_MERGED_PLUS_VERB =
+  "Готово. PR #1569 уже смержен, ветка удалена, Issue #1567 закрыта — " +
+  "задача выполнена.";
+// G-5 — a «План сессии» opening followed by the full terminal-report structure:
+// the session-plan exemption must not cover it (#1569 review SUGGESTION).
+const GENUINE_REPORT_AFTER_SESSION_PLAN =
+  "**План сессии**\n" +
+  "**Тип:** техническая\n" +
+  "**Что делаем:** 1. Починить stop-гейт.\n\n" +
+  "Готово: PR #1569 смержен, Issue #1567 закрыта.\n\n" +
+  "🖼 Проверить глазами: `pnpm vitest run tools/lint/guard-tests`.";
+// G-6 — the #984 DoD-vs-title punt behind a polite imperative tail: the ask
+// exemption must NOT excuse it (#1569 review SUGGESTION).
+const DEFERRED_RELEASE_POLITE_TAIL =
+  "Готово: PR #1569 смержен (squash), CI зелёный, board Done.\n\n" +
+  "📈 % от запланированного: 90%.\n\n" +
+  "Осталось: задеплоить в прод.\n\n" +
+  "Скажите, когда деплоить.";
 
 describe("completion-report-gate hook (spawned end-to-end)", () => {
   it("allows all five #1567 live conversational false fires (exit 0)", () => {
@@ -729,6 +767,40 @@ describe("#1567 conversational-turn discounts", () => {
     // no-regression: a settled report is still not interim
     expect(isInterimStatus(GENUINE_REPORT_PLAIN_MERGED)).toBe(false);
     expect(isInterimStatus(COMPLETION_NO_MARKER)).toBe(false);
+  });
+
+  it("STILL blocks genuine reports carrying the object-less phrasings (#1569 review)", () => {
+    for (const text of [
+      GENUINE_REPORT_AWAITS_STAGE_B,
+      GENUINE_REPORT_STAND_IN_BACKGROUND,
+      GENUINE_REPORT_PAST_RETURN,
+      GENUINE_REPORT_ALREADY_MERGED_PLUS_VERB,
+      GENUINE_REPORT_AFTER_SESSION_PLAN,
+    ]) {
+      expect(isInterimStatus(text), text).toBe(false);
+      expect(isCompletionReport(text), text).toBe(true);
+      expect(
+        decideBlock({ stopHookActive: false, lastAssistantText: text }).block,
+        text,
+      ).toBe(true);
+      const r = runHook(stopPayload(transcriptWith(text)));
+      expect(r.status, text).toBe(2);
+      expect(r.stderr, text).toContain("report-task-outcome");
+    }
+  });
+
+  it("#984 DoD refusal survives a polite imperative tail (#1569 review)", () => {
+    expect(isDecisionRequest(DEFERRED_RELEASE_POLITE_TAIL)).toBe(true);
+    expect(refusesDeferredRelease(DEFERRED_RELEASE_POLITE_TAIL)).toBe(true);
+    expect(
+      decideBlock({
+        stopHookActive: false,
+        lastAssistantText: DEFERRED_RELEASE_POLITE_TAIL,
+      }).block,
+    ).toBe(true);
+    const r = runHook(stopPayload(transcriptWith(DEFERRED_RELEASE_POLITE_TAIL)));
+    expect(r.status).toBe(2);
+    expect(r.stderr).toContain("DoD-vs-title");
   });
 
   it("decideBlock() never blocks the five live turns, and STILL blocks a plain report", () => {

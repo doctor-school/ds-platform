@@ -61,7 +61,18 @@ export const PRIOR_COMPLETION_RE =
  * report completion is not silently discounted. Stripped before the verb test.
  */
 export const QUOTED_MENTION_RE =
-  /[«"'„][^\S\n]*[\wа-яё]*(?:смерж|выполнен|заверш[её]н|merged)[\wа-яё]*[^\S\n]*[»"'“]/gi;
+  /[«"'„“][^\S\n]*[\wа-яё]*(?:смерж|выполнен|заверш[её]н|merged)[\wа-яё]*[^\S\n]*[»"'“”]/gi;
+
+/** Size of the opening slice the opening-anchored markers apply to (#990).
+ * Declared here, above its first use in `isSessionPlan` (#1569 review NIT). */
+export const INTERIM_OPENING_SLICE = 200;
+
+/** Report-structure markers of the mandated terminal-report shape (skill
+ * `report-task-outcome`): «🖼 Проверить глазами» / «% от запланированного».
+ * Their presence means the turn IS structured as a terminal report, so the
+ * «План сессии» opening exemption must not apply to it (#1569 review). */
+export const REPORT_STRUCTURE_RE =
+  /🖼|Проверить\s+глазами|%\s*от\s+запланированного/i;
 
 /** Session-plan opening (#1567): CLAUDE.md mandates that the FIRST reply of a
  * session opens with the owner-facing «План сессии» block. Such a turn routinely
@@ -72,11 +83,15 @@ export const QUOTED_MENTION_RE =
  * real report does not exempt it. */
 export const SESSION_PLAN_RE = /План\s+сесси/i;
 
-/** True when the turn OPENS with the mandated «План сессии» block (#1567). */
+/** True when the turn OPENS with the mandated «План сессии» block (#1567) AND
+ * does NOT carry the terminal-report structure. A single turn may legitimately
+ * open with the session plan and then do and report the whole task (plausible
+ * for a small task); in that case the report-structure markers are present and
+ * the turn must stay subject to the gate (#1569 review). */
 export function isSessionPlan(text) {
-  return SESSION_PLAN_RE.test(
-    String(text || "").slice(0, INTERIM_OPENING_SLICE),
-  );
+  const raw = String(text || "");
+  if (REPORT_STRUCTURE_RE.test(raw)) return false;
+  return SESSION_PLAN_RE.test(raw.slice(0, INTERIM_OPENING_SLICE));
 }
 
 /** PR/Issue references: `#123`, `PR 123`, `PR №123`. */
@@ -107,9 +122,14 @@ export function isCompletionReport(text) {
  * скорректируйте состав волны.», «Если принцип устраивает — скажите, и я
  * стартую реализацию #1478…»), so the last non-empty line is ALSO tested for an
  * imperative-ask marker. Scoped to the LAST line for the same reason the `?`
- * test is — an imperative buried mid-report is not an ask. */
+ * test is — an imperative buried mid-report is not an ask.
+ *
+ * The RU stems carry the file's own `(^|[^а-яa-zё])` boundary idiom (JS `\b` is
+ * ASCII-only, cf. NEGATED_COMPLETION_RE); the «подскажите»/«расскажите» prefixes
+ * are spelled out explicitly so the boundary does not narrow the detector — both
+ * are asks too (#1569 review NIT). */
 export const IMPERATIVE_ASK_RE =
-  /скажите|дайте знать|напишите|let me know|say the word/i;
+  /(^|[^а-яa-zё])(?:(?:под|рас)?скажите|дайте знать|напишите)|let me know|say the word/i;
 
 export function isDecisionRequest(text) {
   const t = String(text || "").trim();
@@ -129,15 +149,27 @@ export function isDecisionRequest(text) {
  * genuine in-flight language (RU+EN, case-insensitive) and never on a settled
  * completion report — so the gate exempts such turns before the report test.
  *
- * #1567 widens the set with four live-observed in-flight phrasings the #855/#990
- * vocabulary missed: «дождусь …» / «дожидаюсь …» (the future-tense sibling of
- * the already-covered «жду вердикт»), «работает в фоне» (a background subagent /
- * CI run), and «по его/их/её возврату …» (the standard hand-off-to-next-dispatch
- * phrasing). All four are unambiguously in-flight — a settled terminal report
- * has nothing left to wait for — so they belong to the full-text set, not the
- * opening-anchored #990 one. */
+ * #1567 widens the set with three live-observed in-flight phrasings the #855/#990
+ * vocabulary missed. Each is OBJECT-SCOPED the way the pre-existing
+ * «жду вердикт|жду CI|жду ревью» markers are — the bare phrasings are ambiguous
+ * and would exempt genuine terminal reports (#1569 review BLOCKER):
+ *   - «дождусь/дожидаюсь <вердикта|возврата|ответа|CI|ревью|прогона>» — the
+ *     future-tense sibling of «жду вердикт». The bare stem is NOT used: a
+ *     genuine report's mandated handoff tail «дождусь вашего Stage-B GO» is
+ *     future-tense yet terminal (the #962 case), and its object is the OWNER,
+ *     not a machine step.
+ *   - «<субагент|ревьюер|агент|прогон|поллер|диспатч|CI> работает в фоне» — a
+ *     background machine step. The bare phrase is NOT used: the mandated
+ *     «🖼 Проверить глазами» section routinely says «стенд работает в фоне».
+ *   - «по его/их/её возврату <: | — | future verb>» — the hand-off-to-next-
+ *     dispatch phrasing, constrained to the FORWARD-LOOKING construct. The
+ *     pronoun is mandatory and a past-tense continuation («по его возврату я
+ *     смержил») is deliberately excluded: #962 closed exactly that shape —
+ *     past-tense narration of a completed sub-step is not in-flight.
+ * The leading `(^|[^а-яa-zё])` stands in for a word boundary — JS `\b` is
+ * ASCII-only and does not fire around Cyrillic (cf. NEGATED_COMPLETION_RE). */
 export const INTERIM_STATUS_RE =
-  /⏳|\bcheckpoint\b|чекпоинт|\bprobe\b|\bWIP\b|в процессе|в работе|жду вердикт|жду CI|жду ревью|дождусь|дожида|работает в фоне|по\s+(?:его|их|е[её])?\s*возврат|ещё не смерж|ещё не заверш|ничего (?:ещё )?не смерж|не финализир|не\s+завершающ|промежуточн[а-яё]*\s+статус|\b0\s*\/\s*\d/i;
+  /⏳|\bcheckpoint\b|чекпоинт|\bprobe\b|\bWIP\b|в процессе|в работе|жду вердикт|жду CI|жду ревью|(?:дожд(?:усь|[её]мся)|дожида(?:юсь|емся|ться))\s+(?:вердикт|возврат|ответ|CI|ревью|прогон|результат)|(?:субагент\w*|ревьюер\w*|агент\w*|прогон\w*|поллер\w*|диспатч\w*|CI)\s+(?:ещ[её]\s+)?работает\s+в\s+фоне|(?:^|[^а-яa-zё])по\s+(?:его|их|е[её])\s+возврату\s*(?:[:—–-]|(?:я\s+)?(?:продолж|запущ|дисп|сдела|старту|проверю|смержу|буд))|ещё не смерж|ещё не заверш|ничего (?:ещё )?не смерж|не финализир|не\s+завершающ|промежуточн[а-яё]*\s+статус|\b0\s*\/\s*\d/i;
 
 /** Opening-anchored interim markers (#990): «интерим»/"interim" and
  * "in flight"/"in-flight" are common words a GENUINE completion report may
@@ -157,9 +189,6 @@ export const INTERIM_STATUS_RE =
  * exempt it, so the opening anchor is the right home. */
 export const INTERIM_OPENING_RE =
   /(^|[^а-яa-zё])(?:интерим|interim\b|in[\s-]flight\b|промежуточн)/i;
-
-/** Size of the opening slice the #990 opening-anchored markers apply to. */
-export const INTERIM_OPENING_SLICE = 200;
 
 /** True when the turn reads as an in-flight checkpoint / status rather than a
  * terminal completion report (#855): an unambiguous full-text interim marker
@@ -385,13 +414,22 @@ export function deferredReleaseMessage() {
 export function decideBlock({ stopHookActive, lastAssistantText }) {
   if (stopHookActive) return { block: false };
   if (!lastAssistantText) return { block: false };
-  if (isDecisionRequest(lastAssistantText)) return { block: false };
+  // #984 DoD-vs-title is evaluated FIRST so the ask exemption cannot excuse a
+  // report that punts its own titled release step behind a polite tail
+  // («Осталось: задеплоить в прод.» + «Скажите, когда деплоить.») — #1569
+  // review. The interim/proposal exemptions still win: an in-flight turn that
+  // lists a pending deploy is not punting anything.
+  const report = isCompletionReport(lastAssistantText);
+  const deferredRelease = report && refusesDeferredRelease(lastAssistantText);
+  if (!deferredRelease && isDecisionRequest(lastAssistantText)) {
+    return { block: false };
+  }
   if (isInterimStatus(lastAssistantText)) return { block: false };
   if (isProposalOrInFlight(lastAssistantText)) return { block: false };
-  if (!isCompletionReport(lastAssistantText)) return { block: false };
+  if (!report) return { block: false };
   // #984 DoD-vs-title: refuse a report that punts its own release/deploy step
   // with no artifact evidence — this fires even when «📈» IS present.
-  if (refusesDeferredRelease(lastAssistantText)) return { block: true };
+  if (deferredRelease) return { block: true };
   if (lastAssistantText.includes(REPORT_MARKER)) return { block: false };
   return { block: true };
 }

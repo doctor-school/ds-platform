@@ -1,3 +1,4 @@
+import Image from "next/image";
 import NextLink from "next/link";
 import { Button } from "@ds/design-system/button";
 import { Link } from "@ds/design-system/link";
@@ -30,13 +31,28 @@ export function StorefrontHeader({ auth }: { auth: ShellAuth }) {
       data-testid="storefront-header"
       className="flex flex-wrap items-center gap-4 bg-header px-4 py-3.5 text-header-foreground layout:px-12"
     >
+      {/*
+        The brand mark is the WHITE VECTOR WORDMARK, not set text: the canvas
+        `d-home · шапка` places `assets/ds-logo-white.svg` directly on the navy
+        band, and it is the same in-repo asset the sibling storefront paints on
+        the same surface (`public/brand/logo-white.svg`). The file is copied into
+        this app rather than imported across the app boundary (ADR-0015 §2 —
+        static assets copy, code never crosses).
+      */}
       <NextLink
         href="/"
         data-testid="storefront-logo"
-        aria-label="Doctor.School — на главную"
-        className="flex-none text-lg font-extrabold tracking-tight text-header-foreground focus-visible:outline-none focus-visible:shadow-focus"
+        className="flex flex-none focus-visible:outline-none focus-visible:shadow-focus"
       >
-        Doctor.School
+        <Image
+          src="/brand/logo-white.svg"
+          alt="Doctor.School — на главную"
+          width={500}
+          height={164}
+          priority
+          unoptimized
+          className="block h-6.5 w-auto"
+        />
       </NextLink>
 
       {/*

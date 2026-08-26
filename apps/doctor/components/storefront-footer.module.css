@@ -1,0 +1,24 @@
+/*
+ * Footer brand-mark theme swap (canvas `d-home · футер`: `logoSrc` is the colour
+ * wordmark on the light page and the white one on the dark page).
+ *
+ * A CSS module rather than a `dark:` utility on purpose: the theme's source of
+ * truth is `<html class="dark">`, while Tailwind's stock `dark:` variant keys off
+ * `prefers-color-scheme` — it would swap the mark against the wrong theme. This is
+ * the same mechanism the sibling storefront footer uses.
+ */
+.logoColor {
+  display: block;
+}
+
+.logoWhite {
+  display: none;
+}
+
+:global(.dark) .logoColor {
+  display: none;
+}
+
+:global(.dark) .logoWhite {
+  display: block;
+}

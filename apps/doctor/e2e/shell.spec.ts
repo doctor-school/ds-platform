@@ -29,10 +29,15 @@ test.describe("017 EARS-1: single storefront shell layout", () => {
 
     const header = page.getByTestId("storefront-header");
     await expect(header).toBeVisible();
-    await expect(header.getByTestId("storefront-logo")).toHaveAttribute(
-      "href",
-      "/",
+    const logo = header.getByTestId("storefront-logo");
+    await expect(logo).toHaveAttribute("href", "/");
+    // The mark itself is the white vector wordmark on the navy band (canvas
+    // `d-home · шапка`) — the link paints an image, not set text.
+    await expect(logo.locator("img")).toHaveAttribute(
+      "src",
+      /\/brand\/logo-white\.svg/,
     );
+    await expect(logo.locator("img")).toBeVisible();
     await expect(header.getByTestId("theme-toggle")).toBeVisible();
     await expect(page.getByTestId("storefront-footer")).toBeVisible();
     await expect(page.locator("main")).toBeVisible();

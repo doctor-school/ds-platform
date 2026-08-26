@@ -60,6 +60,11 @@ describe("017 EARS-1: exactly one action cluster", () => {
     );
 
     expect(html).toContain('data-testid="storefront-logo"');
+    // The mark is the white vector wordmark on the navy band (canvas
+    // `d-home · шапка`), never set text — a text fallback would be a silent
+    // brand substitution.
+    expect(html).toContain("/brand/logo-white.svg");
+    expect(html).toContain('alt="Doctor.School — на главную"');
     expect(html).toContain('data-testid="theme-toggle"');
     // The slot is present and self-closing-empty — no input, no control.
     expect(html).toMatch(
@@ -85,6 +90,19 @@ describe("017 EARS-12: the single Academy crossing lives in the footer", () => {
     const links = html.match(/https:\/\/academy\.doctor\.school\//g) ?? [];
     expect(links).toHaveLength(1);
     expect(html).toContain("Academy.Doctor.School");
+  });
+
+  it("017 EARS-12.4: the footer brand line is the vector wordmark, theme-swapped per the canvas", () => {
+    const html = renderToStaticMarkup(<StorefrontFooter />);
+
+    // Both marks ship; CSS picks one by `<html class="dark">`. Exactly one of
+    // them carries the accessible name — the other is decorative, so the
+    // wordmark is announced once, not twice.
+    expect(html).toContain("/brand/logo.svg");
+    expect(html).toContain("/brand/logo-white.svg");
+    const named = html.match(/alt="Doctor\.School"/g) ?? [];
+    expect(named, "named footer brand marks").toHaveLength(1);
+    expect(html).toContain('aria-hidden="true"');
   });
 
   it("017 EARS-12.2: the footer carries the «Документы и контакты» links with real targets", () => {

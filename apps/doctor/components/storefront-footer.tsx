@@ -1,5 +1,7 @@
+import Image from "next/image";
 import NextLink from "next/link";
 import { Link } from "@ds/design-system/link";
+import styles from "./storefront-footer.module.css";
 
 /**
  * 017 EARS-1 / EARS-12 — the storefront footer, defined ONCE (canvas
@@ -42,9 +44,31 @@ export function StorefrontFooter() {
     >
       <div className="mx-auto grid w-full max-w-container-content gap-8 layout:grid-cols-3 layout:gap-10">
         <div>
-          <div className="text-lg font-extrabold tracking-tight text-foreground">
-            Doctor.School
-          </div>
+          {/*
+            The brand mark is the vector wordmark, not set text (canvas
+            `d-home · футер`). The footer sits on the page surface, not the navy
+            band, so the canvas swaps the asset with the theme: the colour mark on
+            light, the white one on dark. Both are painted and CSS picks one, so
+            the choice needs no client component and cannot flash the wrong mark
+            before hydration; only the visible one carries the accessible name.
+          */}
+          <Image
+            src="/brand/logo.svg"
+            alt="Doctor.School"
+            width={500}
+            height={164}
+            unoptimized
+            className={`${styles.logoColor} h-5.5 w-auto`}
+          />
+          <Image
+            src="/brand/logo-white.svg"
+            alt=""
+            aria-hidden="true"
+            width={500}
+            height={164}
+            unoptimized
+            className={`${styles.logoWhite} h-5.5 w-auto`}
+          />
           <p className="mt-3.5 text-caption font-semibold leading-relaxed text-muted-foreground">
             Бесплатное образование для врачей.
             <br />© Doctor.School, 2026

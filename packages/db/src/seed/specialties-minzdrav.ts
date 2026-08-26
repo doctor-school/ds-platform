@@ -1,4 +1,4 @@
-import { sql } from "drizzle-orm";
+import { isNotNull, sql, type SQL } from "drizzle-orm";
 
 import { specialtiesMinzdrav } from "../schema/specialties.js";
 import {
@@ -109,6 +109,11 @@ type SpecialtySeedExecutor = {
       }) => Promise<unknown>;
     };
   };
+  update: (table: typeof specialtiesMinzdrav) => {
+    set: (values: { frequentRank: null }) => {
+      where: (condition: SQL) => Promise<unknown>;
+    };
+  };
 };
 
 /**
@@ -119,11 +124,27 @@ type SpecialtySeedExecutor = {
  * primary specialty survive a re-seed after an amended order. It never deletes:
  * withdrawing an entry that doctors may already hold is a migration decision,
  * not a seed side effect.
+ *
+ * The frequent ranks are cleared FIRST, in the same transaction as the upsert.
+ * `specialties_minzdrav_frequent_rank_key` is a NON-DEFERRABLE partial unique
+ * index, so Postgres enforces it row-by-row inside the multi-row upsert: a
+ * re-seed that merely REORDERS the frequent set (rank 3 → 1 while the old
+ * holder of 1 has not been rewritten yet) collides mid-statement, the whole
+ * transaction rolls back, and — because the API seeds at boot and rethrows —
+ * the service crash-loops. Nulling the column first makes every rank free
+ * before any is claimed. Still no deletes, still idempotent: the caller must
+ * supply a transaction (the API bootstrap holds an advisory lock on it), so the
+ * cleared state is never visible to a concurrent reader.
  */
 export async function seedSpecialtiesMinzdrav(
   db: SpecialtySeedExecutor,
   rows: SpecialtyBookSeedRow[] = buildSpecialtyBookSeed(),
 ): Promise<number> {
+  await db
+    .update(specialtiesMinzdrav)
+    .set({ frequentRank: null })
+    .where(isNotNull(specialtiesMinzdrav.frequentRank));
+
   await db
     .insert(specialtiesMinzdrav)
     .values(rows)

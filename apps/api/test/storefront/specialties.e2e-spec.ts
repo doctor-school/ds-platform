@@ -5,7 +5,11 @@ import {
 } from "@nestjs/platform-fastify";
 import { Test, type TestingModule } from "@nestjs/testing";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { buildSpecialtyBookSeed } from "@ds/db";
+import {
+  buildSpecialtyBookSeed,
+  type DrizzleHandle,
+  seedSpecialtiesMinzdrav,
+} from "@ds/db";
 import {
   FrequentSpecialtiesSchema,
   isSpecialtyBookMember,
@@ -14,6 +18,7 @@ import {
   SpecialtyRefSchema,
 } from "@ds/schemas";
 import { AppModule } from "../../src/app.module.js";
+import { DRIZZLE_DB } from "../../src/database/database.tokens.js";
 import { SpecialtiesService } from "../../src/storefront/specialties.service.js";
 import { SpecialtyError } from "../../src/storefront/specialties.errors.js";
 
@@ -209,6 +214,65 @@ describe.skipIf(!process.env.DATABASE_URL)(
         // «kind» discriminator — fails here rather than reaching a surface.
         expect(() => SpecialtyRefSchema.parse(entry)).not.toThrow();
       }
+    });
+
+    it("EARS-3.8: re-seeds an already-seeded book when the frequent set is REORDERED", async () => {
+      // `specialties_minzdrav_frequent_rank_key` is a non-deferrable partial
+      // unique index, so a multi-row upsert that merely permutes the existing
+      // ranks collides mid-statement unless the ranks are freed first. The API
+      // seeds at boot and rethrows, so that collision is a crash-loop on the
+      // first deploy after an amended order — this case is the only thing that
+      // exercises the already-seeded path (CI always seeds a fresh database).
+      const db = app.get<DrizzleHandle["db"]>(DRIZZLE_DB);
+
+      const frequentCodes = seed
+        .filter((row) => row.frequentRank !== null)
+        .sort((a, b) => (a.frequentRank ?? 0) - (b.frequentRank ?? 0))
+        .map((row) => row.code);
+      expect(frequentCodes.length).toBeGreaterThan(1);
+
+      // Rotate by one: every frequent row gets a rank another row currently
+      // holds, which is precisely the permutation the index refuses to see
+      // half-applied.
+      const rotated = [...frequentCodes.slice(1), frequentCodes[0]];
+      const rankByCode = new Map(
+        rotated.map((code, index) => [code, index + 1]),
+      );
+      const reordered = seed.map((row) => ({
+        ...row,
+        frequentRank: rankByCode.get(row.code) ?? null,
+      }));
+
+      const readFrequent = async () => {
+        const res = await app.inject({
+          method: "GET",
+          url: "/v1/public/specialties/frequent",
+        });
+        expect(res.statusCode).toBe(200);
+        return FrequentSpecialtiesSchema.parse(res.json()).entries.map(
+          (entry) => entry.code,
+        );
+      };
+
+      const before = await readBook();
+      try {
+        await db.transaction((tx) => seedSpecialtiesMinzdrav(tx, reordered));
+
+        expect(await readFrequent()).toEqual(rotated);
+        const after = await readBook();
+        // A re-seed rewrites, never grows or deletes: same size, same members.
+        expect(after.total).toBe(before.total);
+        expect(after.entries.map((e) => e.code).sort()).toEqual(
+          before.entries.map((e) => e.code).sort(),
+        );
+      } finally {
+        // Restore the committed order so this case leaves the branch database
+        // exactly as it found it — and prove the round trip back is a reorder
+        // the seed survives in the same way.
+        await db.transaction((tx) => seedSpecialtiesMinzdrav(tx, seed));
+      }
+
+      expect(await readFrequent()).toEqual(frequentCodes);
     });
   },
 );

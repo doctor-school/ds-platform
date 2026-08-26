@@ -70,15 +70,16 @@ routes:
     file: apps/portal/app/webinars/[slug]/room/page.tsx
     status: product-ready
 
-  # apps/doctor — the doctor.school storefront SCAFFOLD (#1440, ADR-0015 §2).
-  # `deferred`, not `product-ready`, and honestly so: the root is the app shell
-  # (brand header, one h1, footer) with no product content, because ADR-0015 §2
-  # stage 3 is what migrates the real marketing routes here out of apps/promo.
-  # It also is not publicly reachable — no compose service and no Caddy vhost
-  # point at this app; ADR-0015 §7 makes the host cut-over a release-time step.
+  # apps/doctor — the doctor.school storefront (#1440 scaffold, #1478 017 shell).
+  # The 017 shell layout (header / navigation / footer) is real, but the HOME
+  # PAGE inside it still carries no product content — 017 EARS-2/4/9/10/11 build
+  # its blocks and ADR-0015 §2 stage 3 migrates the marketing routes out of
+  # apps/promo — so the route stays `deferred`, honestly. It also is not publicly
+  # reachable: no compose service and no Caddy vhost point at this app; ADR-0015
+  # §7 makes the host cut-over a release-time step.
   - app: doctor
     route: /
-    file: apps/doctor/app/page.tsx
+    file: apps/doctor/app/(storefront)/page.tsx
     status: deferred
     issue: "#1430"
 

@@ -6,4 +6,7 @@ export {
   SpecialtyError,
 } from "./specialties.errors.js";
 export { SpecialtyProblemFilter } from "./specialties.problem-filter.js";
+export { StatisticsPublicController } from "./statistics.public.controller.js";
+export { StatisticsRepository } from "./statistics.repository.js";
+export { StatisticsService } from "./statistics.service.js";
 export { StorefrontModule } from "./storefront.module.js";

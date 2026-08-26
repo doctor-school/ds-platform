@@ -16,15 +16,47 @@ follow and consume what is here.
   search-first catalog renders beneath its search field.
 - `SpecialtiesService.resolveMember()` — the closed-book membership mechanism
   every specialty-accepting path consumes.
+- `GET /v1/public/statistics` — the ONE computed read behind the home hero's
+  four scale counters (#1480, EARS-2 / LD-3): `doctors`, `specialties`,
+  `lessons`, `eventsPerYear` plus a required `computedAt`.
 
 ## Exported symbols
 
-`StorefrontModule` (exports `SpecialtiesService`), `SpecialtiesService`,
-`SpecialtiesRepository`, `SpecialtiesPublicController`, `SpecialtyError` +
-`SPECIALTY_ERROR_STATUS`, `SpecialtyProblemFilter`. Wire contracts live in
-`@ds/schemas` (`SpecialtyRef`, `SpecialtyBook`, `FrequentSpecialties`,
-`SPECIALTY_ERROR_CODES`, `isSpecialtyBookMember`); the seed and its
+`StorefrontModule` (exports `SpecialtiesService` + `StatisticsService`),
+`SpecialtiesService`, `SpecialtiesRepository`, `SpecialtiesPublicController`,
+`SpecialtyError` + `SPECIALTY_ERROR_STATUS`, `SpecialtyProblemFilter`,
+`StatisticsService`, `StatisticsRepository`, `StatisticsPublicController`. Wire
+contracts live in `@ds/schemas` (`SpecialtyRef`, `SpecialtyBook`,
+`FrequentSpecialties`, `SPECIALTY_ERROR_CODES`, `isSpecialtyBookMember`,
+`ScaleStatistics` + `buildScaleStatistics`); the seed and its
 provenance-stamped data file live in `@ds/db` (`packages/db/src/seed/`).
+
+## The scale statistics (LD-3)
+
+One read, already-computed figures, a bounded staleness window, no counter an
+operator can type in. The refresh mechanism is explicitly NOT spec-level, so it
+is stated here rather than in the spec: an in-process snapshot warmed at boot and
+refreshed on a timer, served from cache on every request, single-flighted on a
+cold start, and still served (with its honest older `computedAt`) when a refresh
+is failing.
+
+Two properties are structural rather than remembered:
+
+- **A counter with no source is OMITTED, never zeroed.** Each counter has its own
+  source resolver and the resolvers settle independently, so one unavailable
+  source drops one key and leaves the neighbours rendering (017-design §6). A `0`
+  on the wire is therefore always a measured zero. `lessons` has no source today
+  — the platform has no lesson table — and is consequently absent from every
+  response rather than stubbed; giving it a source is a one-line change with no
+  contract impact.
+- **The specialties counter is the book total.** It reads
+  `SpecialtyBook.total` through `SpecialtiesService`, so the hero and the
+  catalog's «Показать весь список — N» cannot disagree and no count literal
+  exists (017-design §7).
+
+Nothing commercial can appear here: `ScaleStatisticsSchema` is a strict object of
+four counts and a timestamp, which is EARS-2's «no price, cart, subscription or
+financing statement» enforced by the contract rather than by review.
 
 ## Five properties worth stating
 

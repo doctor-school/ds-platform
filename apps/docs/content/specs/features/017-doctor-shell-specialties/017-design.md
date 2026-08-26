@@ -86,7 +86,7 @@ erDiagram
   }
 ```
 
-- `SPECIALTIES_MINZDRAV` is **closed**: 105 rows plus the `is_other` row. No 017 path writes it.
+- `SPECIALTIES_MINZDRAV` is **closed**: one row per entry of the Минздрав nomenclature order in force at ship time, plus the `is_other` row. The row count is a property of the seed, never a constant in code, spec or copy — the book is re-seeded when the order changes (current provenance: Приказ от 14.05.2026 № 435н, Раздел I, in force from 01.09.2026; it supersedes 700н, which expires 31.08.2026). No 017 path writes it.
 - `DIRECTIONS` is the feature-012 `topics` row family extended per ADR-0016 §5 — not a third axis.
 - `DOCTOR_SPECIALTY` carries `role = primary` (LD-1). One row per doctor today; the shape leaves room to raise the cap additively without a re-model.
 
@@ -101,7 +101,7 @@ stateDiagram-v2
   Filtered --> Open: query cleared
   Filtered --> NoMatch: zero entries match
   NoMatch --> Filtered: query edited
-  Open --> Expanded: «Показать весь список — 105»
+  Open --> Expanded: «Показать весь список — N»
   Expanded --> Filtered: visitor types a fragment
   Open --> Collapsed: specialty chosen
   Filtered --> Collapsed: specialty chosen
@@ -183,13 +183,15 @@ The `loggedIn` × `specialtyChosen` axes multiply this: 4 × 2 × 2 renders per 
 
 | Read                      | Access                                               | Shape                                                                    |
 | ------------------------- | ---------------------------------------------------- | ------------------------------------------------------------------------ |
-| specialty book            | `public`                                             | `SpecialtyBook` — 105 + «Другое», stable ids                             |
+| specialty book            | `public`                                             | `SpecialtyBook` — full book + «Другое», `total`, stable ids              |
 | frequent specialties      | `public`                                             | `FrequentSpecialties`                                                    |
 | specialty search          | `public`                                             | `SpecialtySearchResult` — substring, case- and ё/е-insensitive           |
 | scale statistics          | `public`                                             | `ScaleStatistics` with `computedAt` (LD-3)                               |
 | home events               | `public`                                             | `HomeEvents` — general or targeted                                       |
 | leaderboard               | `public`                                             | `Leaderboard` — consented rows only; `viewerHasConsent` null for a guest |
 | choose / change specialty | `public` (guest session) / `authenticated` (profile) | idempotent; rejects a non-member specialty                               |
+
+`SpecialtyBook` exposes `total` — the actual number of book entries served by the read — and every surface that shows a specialty count (the expand control «Показать весь список — N», the hero scale counter) binds to it; no surface carries a count literal.
 
 Every failure is an RFC 7807 Problem Details document with `traceId` and an exact `errorCode` (ADR-0002).
 

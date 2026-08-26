@@ -70,7 +70,7 @@ This is what makes "one project, all its content, roles, accruals and payments" 
 
 Per OWD-11 the model carries **two** books:
 
-- **`specialties_minzdrav`** — the closed, official list (105 entries + "Other"), used in the doctor profile, for documents and for НМО. Not editorially extendable.
+- **`specialties_minzdrav`** — the closed, official list, seeded from the Минздрав nomenclature order in force at ship time (from 01.09.2026 — Приказ № 435н) plus "Other", and re-seeded when that order changes; its size is the book's actual row count, never a literal in code, spec or copy. Used in the doctor profile, for documents and for НМО. Not editorially extendable.
 - **`directions`** — the open, own book (ortho-biology, rheumatology, …). Schools, courses and subscriptions are built on directions. Directions carry **adjacency** as a self-relation with a kind and a weight, and are linked **many-to-many** to Minzdrav specialties — the link that drives content display (REQ-1).
 
 **`topics` vs `directions` — decided.** The feature-012 `topics` table is defined in `012-design.md` §2 as the open, own, editorially managed classification axis for events (`event_topics`), with no adjacency and no relation to any official list. That is exactly the seed of the directions book. **Decision: `topics` IS the directions book, extended** — the row family is kept and renamed, gaining the adjacency self-relation and the many-to-many link to `specialties_minzdrav`. It is not a second, parallel axis. Content and profile targeting therefore has one open axis (directions) and one regulated axis (Minzdrav specialties), linked; the distinction the glossary draws between the regulated specialty and the product direction lands on those two tables and nowhere else.

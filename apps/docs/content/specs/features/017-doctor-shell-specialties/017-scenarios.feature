@@ -10,7 +10,7 @@ Feature: A doctor arrives at their own storefront, picks a specialty, and the si
 
   Background:
     Given the storefront is apps/doctor serving doctor.school on the shared design system
-    And the specialty book is the closed Минздрав list of 105 entries plus «Другое»
+    And the specialty book is the closed Минздрав list seeded from the nomenclature order in force plus «Другое»
     And adjacency is read from the managed directions-to-specialties link and the direction adjacency relation
     And nothing on the home page requires an account to read
     And no surface states who finances the doctor's learning and none shows a price, cart or subscription
@@ -70,7 +70,8 @@ Feature: A doctor arrives at their own storefront, picks a specialty, and the si
   @EARS-3 @happy
   Scenario: The specialty book is the closed Минздрав list plus «Другое»
     When the public specialty book is read
-    Then it returns 105 entries plus the «Другое» entry
+    Then it returns every seeded book entry plus the «Другое» entry
+    And the reported total equals the number of entries returned
     And each entry carries a stable id
     And specialties, directions and schools are three distinct read models
 
@@ -89,8 +90,8 @@ Feature: A doctor arrives at their own storefront, picks a specialty, and the si
     When they open the storefront home page
     Then the catalog renders a labelled search field over the whole list as its hero element
     And the frequent specialties render beneath it
-    And a «Показать весь список — 105» control reveals the remainder including «Другое»
-    And the list is never presented as a bare 105-item scroll
+    And a «Показать весь список — N» control, N rendered from the actual book size, reveals the remainder including «Другое»
+    And the list is never presented as a bare full-length scroll
 
   @EARS-4 @EARS-6 @happy
   Scenario: Nothing blocks the page before a choice is made

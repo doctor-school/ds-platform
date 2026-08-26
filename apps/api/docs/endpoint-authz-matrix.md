@@ -32,6 +32,8 @@
 | GET /v1/public/events/:idOrSlug/projects                        | public        | —                            | none       | —            | false   | none       | none        | EARS-6, EARS-16                   |
 | GET /v1/public/events/month-counts                              | public        | —                            | none       | —            | false   | none       | none        | EARS-16, EARS-10                  |
 | GET /v1/public/projects/:idOrSlug/events                        | public        | —                            | none       | —            | false   | none       | none        | EARS-6, EARS-16                   |
+| GET /v1/public/specialties                                      | public        | —                            | none       | —            | false   | none       | none        | EARS-3                            |
+| GET /v1/public/specialties/frequent                             | public        | —                            | none       | —            | false   | none       | none        | EARS-3                            |
 | GET /v1/ready                                                   | public        | —                            | none       | —            | false   | none       | none        | EARS-1, EARS-2                    |
 | PATCH /v1/admin/event-experts/:id                               | authenticated | platform_admin               | fast-path  | —            | false   | live       | low-stakes  | EARS-7, EARS-16, EARS-17          |
 | PATCH /v1/admin/events/:eventId/recordings/:recordingId         | authenticated | platform_admin               | fast-path  | —            | false   | live       | low-stakes  | EARS-1, EARS-17                   |

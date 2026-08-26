@@ -1,6 +1,7 @@
 export * from './auth/index.js';
 export * from './events/index.js';
 export * from './taxonomy/index.js';
+export * from './specialties/index.js';
 export * from './recordings/index.js';
 export * from './me/index.js';
 export * from './health/index.js';

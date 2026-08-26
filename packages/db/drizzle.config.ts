@@ -26,6 +26,7 @@ export default defineConfig({
     "../../packages/db/src/schema/taxonomy.ts",
     "../../packages/db/src/schema/media-cleanup-jobs.ts",
     "../../packages/db/src/schema/event-recordings.ts",
+    "../../packages/db/src/schema/specialties.ts",
   ],
   out: "../../apps/api/drizzle",
   dialect: "postgresql",

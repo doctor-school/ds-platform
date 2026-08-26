@@ -296,6 +296,15 @@ const DEFERRED_RELEASE_POLITE_TAIL =
   "📈 % от запланированного: 90%.\n\n" +
   "Осталось: задеплоить в прод.\n\n" +
   "Скажите, когда деплоить.";
+// G-7 — the CLAUDE.md-mandated «⏸ ЖДУ ВАС» blocked-on-owner handback carrying
+// the SAME punted prod deploy as G-6. It must stay ALLOWED: the turn declares
+// itself blocked, not done, and the deploy needs an explicit owner GO
+// (AGENTS.md §6 live-infra rule) — the #984 escalation must not push past it.
+const OWNER_HANDBACK_DEFERRED_RELEASE =
+  "Готово: PR #1569 смержен, CI зелёный.\n\n" +
+  "📈 % от запланированного: 100%.\n\n" +
+  "Осталось: задеплоить в прод — нужен ваш GO.\n\n" +
+  "⏸ ЖДУ ВАС: подтвердите прод-деплой; после него продолжу автономно.";
 
 describe("completion-report-gate hook (spawned end-to-end)", () => {
   it("allows all five #1567 live conversational false fires (exit 0)", () => {
@@ -764,6 +773,8 @@ describe("#1567 conversational-turn discounts", () => {
     expect(isInterimStatus("Ревьюер работает в фоне по #1553.")).toBe(true);
     expect(isInterimStatus("По его возврату — pr:land 1494.")).toBe(true);
     expect(isInterimStatus("Промежуточный итог: #1551 смержен.")).toBe(true);
+    // «ответ» is an OWNER object, deliberately outside the object list (#1569)
+    expect(isInterimStatus("Дальше: дождусь ответа по Stage-B.")).toBe(false);
     // no-regression: a settled report is still not interim
     expect(isInterimStatus(GENUINE_REPORT_PLAIN_MERGED)).toBe(false);
     expect(isInterimStatus(COMPLETION_NO_MARKER)).toBe(false);
@@ -801,6 +812,24 @@ describe("#1567 conversational-turn discounts", () => {
     const r = runHook(stopPayload(transcriptWith(DEFERRED_RELEASE_POLITE_TAIL)));
     expect(r.status).toBe(2);
     expect(r.stderr).toContain("DoD-vs-title");
+  });
+
+  it("#984 refusal NEVER fires past an «⏸ ЖДУ ВАС» handback (#1569 re-review)", () => {
+    // Same punted deploy as G-6, but the turn declares itself BLOCKED on the
+    // owner — the CLAUDE.md-mandated handback shape must stay allowed.
+    expect(refusesDeferredRelease(OWNER_HANDBACK_DEFERRED_RELEASE)).toBe(true);
+    expect(isDecisionRequest(OWNER_HANDBACK_DEFERRED_RELEASE)).toBe(true);
+    expect(
+      decideBlock({
+        stopHookActive: false,
+        lastAssistantText: OWNER_HANDBACK_DEFERRED_RELEASE,
+      }).block,
+    ).toBe(false);
+    const r = runHook(
+      stopPayload(transcriptWith(OWNER_HANDBACK_DEFERRED_RELEASE)),
+    );
+    expect(r.status).toBe(0);
+    expect(r.stderr).toBe("");
   });
 
   it("decideBlock() never blocks the five live turns, and STILL blocks a plain report", () => {

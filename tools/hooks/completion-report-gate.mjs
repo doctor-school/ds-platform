@@ -131,10 +131,15 @@ export function isCompletionReport(text) {
 export const IMPERATIVE_ASK_RE =
   /(^|[^а-яa-zё])(?:(?:под|рас)?скажите|дайте знать|напишите)|let me know|say the word/i;
 
+/** The CLAUDE.md «Blocked-on-owner handback» marker — «⏸ ЖДУ ВАС: <одно
+ * действие>». Unambiguous: the turn declares itself BLOCKED on the owner, so it
+ * is never a completion claim (#1569 re-review). */
+export const OWNER_HANDBACK_RE = /ЖДУ ВАС/i;
+
 export function isDecisionRequest(text) {
   const t = String(text || "").trim();
   if (!t) return false;
-  if (/ЖДУ ВАС/i.test(t)) return true;
+  if (OWNER_HANDBACK_RE.test(t)) return true;
   const lines = t.split(/\r?\n/).filter((l) => l.trim());
   const last = (lines[lines.length - 1] || "").trim();
   if (IMPERATIVE_ASK_RE.test(last)) return true;
@@ -153,7 +158,9 @@ export function isDecisionRequest(text) {
  * vocabulary missed. Each is OBJECT-SCOPED the way the pre-existing
  * «жду вердикт|жду CI|жду ревью» markers are — the bare phrasings are ambiguous
  * and would exempt genuine terminal reports (#1569 review BLOCKER):
- *   - «дождусь/дожидаюсь <вердикта|возврата|ответа|CI|ревью|прогона>» — the
+ *   - «дождусь/дожидаюсь <вердикта|возврата|CI|ревью|прогона|результата>» —
+ *     every object is a MACHINE step; «ответ» is deliberately absent, it is an
+ *     owner object («дождусь ответа по Stage-B» is a terminal tail) — the
  *     future-tense sibling of «жду вердикт». The bare stem is NOT used: a
  *     genuine report's mandated handoff tail «дождусь вашего Stage-B GO» is
  *     future-tense yet terminal (the #962 case), and its object is the OWNER,
@@ -169,7 +176,7 @@ export function isDecisionRequest(text) {
  * The leading `(^|[^а-яa-zё])` stands in for a word boundary — JS `\b` is
  * ASCII-only and does not fire around Cyrillic (cf. NEGATED_COMPLETION_RE). */
 export const INTERIM_STATUS_RE =
-  /⏳|\bcheckpoint\b|чекпоинт|\bprobe\b|\bWIP\b|в процессе|в работе|жду вердикт|жду CI|жду ревью|(?:дожд(?:усь|[её]мся)|дожида(?:юсь|емся|ться))\s+(?:вердикт|возврат|ответ|CI|ревью|прогон|результат)|(?:субагент\w*|ревьюер\w*|агент\w*|прогон\w*|поллер\w*|диспатч\w*|CI)\s+(?:ещ[её]\s+)?работает\s+в\s+фоне|(?:^|[^а-яa-zё])по\s+(?:его|их|е[её])\s+возврату\s*(?:[:—–-]|(?:я\s+)?(?:продолж|запущ|дисп|сдела|старту|проверю|смержу|буд))|ещё не смерж|ещё не заверш|ничего (?:ещё )?не смерж|не финализир|не\s+завершающ|промежуточн[а-яё]*\s+статус|\b0\s*\/\s*\d/i;
+  /⏳|\bcheckpoint\b|чекпоинт|\bprobe\b|\bWIP\b|в процессе|в работе|жду вердикт|жду CI|жду ревью|(?:дожд(?:усь|[её]мся)|дожида(?:юсь|емся|ться))\s+(?:вердикт|возврат|CI|ревью|прогон|результат)|(?:субагент[\wа-яё]*|ревьюер[\wа-яё]*|агент[\wа-яё]*|прогон[\wа-яё]*|поллер[\wа-яё]*|диспатч[\wа-яё]*|CI)\s+(?:ещ[её]\s+)?работает\s+в\s+фоне|(?:^|[^а-яa-zё])по\s+(?:его|их|е[её])\s+возврату\s*(?:[:—–-]|(?:я\s+)?(?:продолж|запущ|дисп|сдела|старту|проверю|смержу|буд))|ещё не смерж|ещё не заверш|ничего (?:ещё )?не смерж|не финализир|не\s+завершающ|промежуточн[а-яё]*\s+статус|\b0\s*\/\s*\d/i;
 
 /** Opening-anchored interim markers (#990): «интерим»/"interim" and
  * "in flight"/"in-flight" are common words a GENUINE completion report may
@@ -414,11 +421,19 @@ export function deferredReleaseMessage() {
 export function decideBlock({ stopHookActive, lastAssistantText }) {
   if (stopHookActive) return { block: false };
   if (!lastAssistantText) return { block: false };
-  // #984 DoD-vs-title is evaluated FIRST so the ask exemption cannot excuse a
-  // report that punts its own titled release step behind a polite tail
-  // («Осталось: задеплоить в прод.» + «Скажите, когда деплоить.») — #1569
-  // review. The interim/proposal exemptions still win: an in-flight turn that
-  // lists a pending deploy is not punting anything.
+  // The CLAUDE.md-mandated «⏸ ЖДУ ВАС: <одно действие>» handback is an
+  // UNCONDITIONAL exemption: it does not claim done, it declares blocked on the
+  // owner — and a punted prod deploy is exactly what that shape exists to
+  // announce (AGENTS.md §6 live-infra rule: an irreversible deploy needs an
+  // explicit owner GO, so the #984 message must never push past it) — #1569
+  // re-review BLOCKER.
+  if (OWNER_HANDBACK_RE.test(lastAssistantText)) return { block: false };
+  // #984 DoD-vs-title is then evaluated ahead of the AMBIGUOUS ask forms
+  // (imperative tail / trailing «?»), so a polite tail cannot excuse a report
+  // that punts its own titled release step («Осталось: задеплоить в прод.» +
+  // «Скажите, когда деплоить.») — #1569 review. The interim/proposal
+  // exemptions still win: an in-flight turn listing a pending deploy is not
+  // punting anything.
   const report = isCompletionReport(lastAssistantText);
   const deferredRelease = report && refusesDeferredRelease(lastAssistantText);
   if (!deferredRelease && isDecisionRequest(lastAssistantText)) {

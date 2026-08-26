@@ -138,10 +138,22 @@ const FP1567_QUOTED_MENTION =
   "верификатор приписал слово «merged» эпику #1430, а мержились PR " +
   "триплетов — эпик открыт.\n\n" +
   "Если принцип устраивает — скажите, и я стартую реализацию #1478.";
+// #1569 re-review mirror: the CLAUDE.md «⏸ ЖДУ ВАС» blocked-on-owner handback
+// carrying a punted prod deploy. It declares itself blocked, not done, so this
+// gate must stay silent on it too (shared `isDecisionRequest` seam).
+const OWNER_HANDBACK_DEFERRED_RELEASE =
+  "Готово: PR #1569 смержен, CI зелёный.\n\n" +
+  "📈 % от запланированного: 100%.\n\n" +
+  "Осталось: задеплоить в прод — нужен ваш GO.\n\n" +
+  "⏸ ЖДУ ВАС: подтвердите прод-деплой; после него продолжу автономно.";
 
 describe("surface-decision-debt-gate hook (spawned end-to-end)", () => {
   it("does not fire on the #1567 conversational false fires (transitive fix)", () => {
-    for (const text of [FP1567_PRIOR_ADJACENCY, FP1567_QUOTED_MENTION]) {
+    for (const text of [
+      FP1567_PRIOR_ADJACENCY,
+      FP1567_QUOTED_MENTION,
+      OWNER_HANDBACK_DEFERRED_RELEASE,
+    ]) {
       const r = runHook(stopPayload(transcriptWith(text)));
       expect(r.status, text).toBe(0);
       expect(r.stderr, text).toBe("");

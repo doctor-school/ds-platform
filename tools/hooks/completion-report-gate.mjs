@@ -40,13 +40,58 @@ export const COMPLETION_VERB_RE = /смерж|выполнен|заверш[её
 export const NEGATED_COMPLETION_RE =
   /(^|[^а-яa-zё])(?:не|not)\s+(?:смерж|выполнен|заверш[её]н|merged)\S*/gi;
 
+/** PRIOR-work completion verbs (#1567): a completion verb carrying an ADJACENCY
+ * marker of work that landed BEFORE this session («уже смержена», «смержен
+ * вчера (PR #1560)», «ранее выполнен») narrates history, not this turn's
+ * outcome — the 2026-08-25/26 live false fires opened with exactly that shape.
+ * Matched occurrences are stripped before the completion-verb test, the same
+ * way NEGATED_COMPLETION_RE is. Deliberately NARROW: only an adjacency-marked
+ * verb is discounted — a bare «PR #N смержен» still reads as a claim, so a
+ * genuine report keeps firing. The leading `(^|[^а-яa-zё])` stands in for a
+ * word boundary (JS `\b` is ASCII-only, cf. NEGATED_COMPLETION_RE). */
+export const PRIOR_COMPLETION_RE =
+  /(^|[^а-яa-zё])(?:(?:уже|вчера|ранее)\s+(?:смерж|выполнен|заверш[её]н|merged)\S*|(?:смерж|выполнен|заверш[её]н|merged)\S*\s+(?:вчера|ранее))/gi;
+
+/** QUOTED mentions of a completion verb (#1567): a verb token fully wrapped in
+ * quotes — «merged» / "merged" / 'merged' / „merged" — is a MENTION of the word
+ * (quoting a verifier's output, a label, a prior message), not a claim that work
+ * is merged. Live case: «верификатор приписал слово «merged» эпику #1430».
+ * Kept tight — a single quoted token (optional affix word chars around the
+ * stem), never crossing a line break — so a quoted SENTENCE that really does
+ * report completion is not silently discounted. Stripped before the verb test.
+ */
+export const QUOTED_MENTION_RE =
+  /[«"'„][^\S\n]*[\wа-яё]*(?:смерж|выполнен|заверш[её]н|merged)[\wа-яё]*[^\S\n]*[»"'“]/gi;
+
+/** Session-plan opening (#1567): CLAUDE.md mandates that the FIRST reply of a
+ * session opens with the owner-facing «План сессии» block. Such a turn routinely
+ * narrates prior state («#1478 смержен вчера (PR #1560)») and thus trips the
+ * verb+ref heuristic, yet it is a session-START orientation block — the exact
+ * opposite of a terminal report. Anchored to the message opening (the same
+ * INTERIM_OPENING_SLICE idiom as #990) so a mid-body mention of the phrase in a
+ * real report does not exempt it. */
+export const SESSION_PLAN_RE = /План\s+сесси/i;
+
+/** True when the turn OPENS with the mandated «План сессии» block (#1567). */
+export function isSessionPlan(text) {
+  return SESSION_PLAN_RE.test(
+    String(text || "").slice(0, INTERIM_OPENING_SLICE),
+  );
+}
+
 /** PR/Issue references: `#123`, `PR 123`, `PR №123`. */
 export const REF_RE = /#\d+|\bPR\s*№?\s*\d+/i;
 
-/** Heuristic from Issue #824 (tuned by #839): completion verbs AND PR/Issue
- * refs, with negated verb forms discounted. */
+/** Heuristic from Issue #824 (tuned by #839, #1567): completion verbs AND
+ * PR/Issue refs, with negated (#839), prior-work and quoted-mention (#1567)
+ * verb forms discounted, and a «План сессии» opening exempted outright. */
 export function isCompletionReport(text) {
-  const t = String(text || "").replace(NEGATED_COMPLETION_RE, "$1");
+  const raw = String(text || "");
+  if (isSessionPlan(raw)) return false;
+  const t = raw
+    .replace(NEGATED_COMPLETION_RE, "$1")
+    .replace(PRIOR_COMPLETION_RE, "$1")
+    .replace(QUOTED_MENTION_RE, " ");
   return COMPLETION_VERB_RE.test(t) && REF_RE.test(t);
 }
 
@@ -55,13 +100,24 @@ export function isCompletionReport(text) {
  * verbs + refs (the observed 2026-07-13 /wrap stage-2 false positive).
  * Signals: the «ЖДУ ВАС» blocked-on-owner marker anywhere, or the last
  * non-empty line ending in a question mark (allowing trailing markdown /
- * closing punctuation). A question buried mid-report does NOT count. */
+ * closing punctuation). A question buried mid-report does NOT count.
+ *
+ * #1567 adds the IMPERATIVE ask: RU/EN owner-asks are routinely phrased as an
+ * imperative with a period, not a question mark («…Скажите «поехали», либо
+ * скорректируйте состав волны.», «Если принцип устраивает — скажите, и я
+ * стартую реализацию #1478…»), so the last non-empty line is ALSO tested for an
+ * imperative-ask marker. Scoped to the LAST line for the same reason the `?`
+ * test is — an imperative buried mid-report is not an ask. */
+export const IMPERATIVE_ASK_RE =
+  /скажите|дайте знать|напишите|let me know|say the word/i;
+
 export function isDecisionRequest(text) {
   const t = String(text || "").trim();
   if (!t) return false;
   if (/ЖДУ ВАС/i.test(t)) return true;
   const lines = t.split(/\r?\n/).filter((l) => l.trim());
   const last = (lines[lines.length - 1] || "").trim();
+  if (IMPERATIVE_ASK_RE.test(last)) return true;
   const stripped = last.replace(/[\s*_`~»"'）)\]]+$/g, "");
   return stripped.endsWith("?");
 }
@@ -71,9 +127,17 @@ export function isDecisionRequest(text) {
  * смержен в ветку, жду CI») and thus trip `isCompletionReport`, even though it
  * is NOT a terminal task-completion report. This marker set fires ONLY on
  * genuine in-flight language (RU+EN, case-insensitive) and never on a settled
- * completion report — so the gate exempts such turns before the report test. */
+ * completion report — so the gate exempts such turns before the report test.
+ *
+ * #1567 widens the set with four live-observed in-flight phrasings the #855/#990
+ * vocabulary missed: «дождусь …» / «дожидаюсь …» (the future-tense sibling of
+ * the already-covered «жду вердикт»), «работает в фоне» (a background subagent /
+ * CI run), and «по его/их/её возврату …» (the standard hand-off-to-next-dispatch
+ * phrasing). All four are unambiguously in-flight — a settled terminal report
+ * has nothing left to wait for — so they belong to the full-text set, not the
+ * opening-anchored #990 one. */
 export const INTERIM_STATUS_RE =
-  /⏳|\bcheckpoint\b|чекпоинт|\bprobe\b|\bWIP\b|в процессе|в работе|жду вердикт|жду CI|жду ревью|ещё не смерж|ещё не заверш|ничего (?:ещё )?не смерж|не финализир|не\s+завершающ|промежуточн[а-яё]*\s+статус|\b0\s*\/\s*\d/i;
+  /⏳|\bcheckpoint\b|чекпоинт|\bprobe\b|\bWIP\b|в процессе|в работе|жду вердикт|жду CI|жду ревью|дождусь|дожида|работает в фоне|по\s+(?:его|их|е[её])?\s*возврат|ещё не смерж|ещё не заверш|ничего (?:ещё )?не смерж|не финализир|не\s+завершающ|промежуточн[а-яё]*\s+статус|\b0\s*\/\s*\d/i;
 
 /** Opening-anchored interim markers (#990): «интерим»/"interim" and
  * "in flight"/"in-flight" are common words a GENUINE completion report may
@@ -84,9 +148,15 @@ export const INTERIM_STATUS_RE =
  * anchoring keeps a mid-body mention from silently exempting a real report.
  * The leading `(^|[^а-яa-zё])` stands in for a word boundary — JS `\b` is
  * ASCII-only and does not fire around Cyrillic letters (cf.
- * NEGATED_COMPLETION_RE). */
+ * NEGATED_COMPLETION_RE).
+ *
+ * #1567 adds the bare stem «промежуточн…» here (not to the full-text set): the
+ * live false fire opened «Промежуточный итог, пока Mode-a ревьюер работает в
+ * фоне…», which the narrower `промежуточн\s+статус` full-text marker missed —
+ * while a mid-body «промежуточный результат» inside a real report must NOT
+ * exempt it, so the opening anchor is the right home. */
 export const INTERIM_OPENING_RE =
-  /(^|[^а-яa-zё])(?:интерим|interim\b|in[\s-]flight\b)/i;
+  /(^|[^а-яa-zё])(?:интерим|interim\b|in[\s-]flight\b|промежуточн)/i;
 
 /** Size of the opening slice the #990 opening-anchored markers apply to. */
 export const INTERIM_OPENING_SLICE = 200;
@@ -304,7 +374,10 @@ export function deferredReleaseMessage() {
  * not already a post-block continuation, the last assistant message reads as a
  * completion report — not a decision-request/approval-ask (#839), not an
  * in-flight checkpoint / interim status (#855), and not a proposal / work-still-
- * in-flight turn (#962). Two escalations then apply: the DoD-vs-title refusal
+ * in-flight turn (#962). `isCompletionReport` itself additionally discounts the
+ * #1567 conversational shapes (prior-work adjacency, quoted verb mentions, a
+ * «План сессии» opening), so both Stop gates inherit them. Two escalations then
+ * apply: the DoD-vs-title refusal
  * (#984 — a report punting its own titled release/deploy step with no artifact
  * evidence, blocked EVEN WITH the «📈» marker present), then the original #824
  * missing-«📈» block.

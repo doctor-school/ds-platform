@@ -18,6 +18,7 @@ import {
   isDecisionRequest,
   isInterimStatus,
   isProposalOrInFlight,
+  isSessionPlan,
   refusesDeferredRelease,
 } from "../../hooks/completion-report-gate.mjs";
 
@@ -210,7 +211,75 @@ const DOD_DEFER_WITH_HEX_NO_EVIDENCE =
   "📈 % от запланированного: 90%.\n\n" +
   "Осталось: задеплоить релиз 447c3c5 в прод — следующим шагом.";
 
+// #1567 / 2026-08-25..26 — five LIVE false fires on ordinary CONVERSATIONAL
+// turns (each blocked by BOTH Stop gates). Every fixture keeps the triggering
+// fragment and the real last line of the observed message.
+//
+// FP-1 — prior-work adjacency: «уже смержена» narrates a PR that landed before
+// this session, and the turn goes on to frame the NEXT task.
+const FP1567_PRIOR_ADJACENCY =
+  "Оболочка (#1478 — шапка, подвал, логотип, тема) уже смержена; " +
+  "«следующая задача каркаса» — один из двух кандидатов ниже.";
+// FP-2 — «План сессии» opening + «смержен вчера» + an imperative ask with no «?».
+const FP1567_SESSION_PLAN =
+  "**План сессии**\n" +
+  "**Тип:** продуктовая\n" +
+  "**Что делаем:** 1. Волна витрины doctor.\n" +
+  "**Зачем:** разблокирует storefront.\n\n" +
+  "#1478 (каркас витрины в `apps/doctor`) смержен вчера (PR #1560). " +
+  "На прод **не** выкачен.\n\n" +
+  "Скажите «поехали», либо скорректируйте состав волны.";
+// FP-3 — a QUOTED mention of "merged" (quoting a verifier) + an imperative ask.
+const FP1567_QUOTED_MENTION =
+  "**План сессии**\n" +
+  "**Тип:** процессная\n" +
+  "**Что делаем:** 1. Разобрать провенанс мега-блокера.\n\n" +
+  "верификатор приписал слово «merged» эпику #1430, а мержились PR " +
+  "триплетов — эпик открыт.\n\n" +
+  "Если принцип устраивает — скажите, и я стартую реализацию #1478.";
+// FP-4 — a mid-wave dispatch status: a SUB-STEP «завершён» plus the standard
+// hand-off-to-next-dispatch phrasing «По его возврату …».
+const FP1567_DISPATCH_RETURN =
+  "Диспатч №1 вернулся успешно, хвост запущен.\n\n" +
+  "**Итог авторинга (агент №1, завершён):** триплет 019 на ветке, PR #1494.\n\n" +
+  "По его возврату: Mode-a ревью (`ds-reviewer`, свежий диспатч) → " +
+  "`pnpm pr:land 1494` из main tree.";
+// FP-5 — an explicitly interim turn: «Промежуточный итог» (the bare stem the
+// pre-#1567 `промежуточн…\s+статус` marker missed) + «работает в фоне» +
+// «дождусь вердикта».
+const FP1567_INTERIM_TOTAL =
+  "Промежуточный итог, пока Mode-a ревьюер работает в фоне: " +
+  "**Деплой — завершён.** release-2026.08.25-1 на проде, PR #1551 смержен.\n\n" +
+  "Дальше: дождусь вердикта ревьюера по #1553 и продолжу автономно.";
+// #1567 regression guard: a genuine terminal report legitimately narrating
+// «PR #N смержен» — no adjacency word, unquoted, no «План сессии» opening —
+// missing «📈». It MUST still block: the discounts are narrow by design.
+const GENUINE_REPORT_PLAIN_MERGED =
+  "Готово: PR #1567 смержен (squash), Issue #1567 закрыта, CI зелёный.\n" +
+  "Ветка удалена, board Status = Done.\n\n" +
+  "🖼 Проверить глазами: `pnpm vitest run tools/lint/guard-tests`.";
+
 describe("completion-report-gate hook (spawned end-to-end)", () => {
+  it("allows all five #1567 live conversational false fires (exit 0)", () => {
+    for (const text of [
+      FP1567_PRIOR_ADJACENCY,
+      FP1567_SESSION_PLAN,
+      FP1567_QUOTED_MENTION,
+      FP1567_DISPATCH_RETURN,
+      FP1567_INTERIM_TOTAL,
+    ]) {
+      const r = runHook(stopPayload(transcriptWith(text)));
+      expect(r.status, text).toBe(0);
+      expect(r.stderr, text).toBe("");
+    }
+  });
+
+  it("STILL blocks a genuine report plainly narrating «PR #N смержен» (#1567 no-weakening)", () => {
+    const r = runHook(stopPayload(transcriptWith(GENUINE_REPORT_PLAIN_MERGED)));
+    expect(r.status).toBe(2);
+    expect(r.stderr).toContain("report-task-outcome");
+  });
+
   it("blocks a Codex Stop payload via last_assistant_message", () => {
     const r = runHook({
       session_id: "codex-824",
@@ -604,6 +673,84 @@ describe("isProposalOrInFlight() (#962)", () => {
       true,
     );
     expect(isProposalOrInFlight("Диспатчирую субагента по #900.")).toBe(true);
+  });
+});
+
+describe("#1567 conversational-turn discounts", () => {
+  it("discounts a completion verb carrying a PRIOR-work adjacency marker", () => {
+    expect(isCompletionReport("Оболочка (#1478) уже смержена.")).toBe(false);
+    expect(isCompletionReport("#1478 смержен вчера (PR #1560).")).toBe(false);
+    expect(isCompletionReport("Задача #900 ранее выполнена.")).toBe(false);
+    expect(isCompletionReport(FP1567_PRIOR_ADJACENCY)).toBe(false);
+  });
+
+  it("does NOT discount a bare, unmarked completion verb (narrow by design)", () => {
+    expect(isCompletionReport("PR #1560 смержен, ветка удалена.")).toBe(true);
+    expect(isCompletionReport(GENUINE_REPORT_PLAIN_MERGED)).toBe(true);
+    expect(isCompletionReport(COMPLETION_NO_MARKER)).toBe(true);
+  });
+
+  it("discounts a QUOTED mention of a completion verb, not an unquoted claim", () => {
+    expect(
+      isCompletionReport("верификатор приписал слово «merged» эпику #1430"),
+    ).toBe(false);
+    expect(isCompletionReport('лейбл "merged" висит на #1430')).toBe(false);
+    expect(isCompletionReport("PR #1430 merged.")).toBe(true);
+  });
+
+  it("exempts a «План сессии» opening block", () => {
+    expect(isSessionPlan(FP1567_SESSION_PLAN)).toBe(true);
+    expect(isSessionPlan(FP1567_QUOTED_MENTION)).toBe(true);
+    expect(isCompletionReport(FP1567_SESSION_PLAN)).toBe(false);
+    // a mid-body mention past the opening slice does NOT exempt a real report
+    expect(isSessionPlan(GENUINE_REPORT_MIDBODY_INTERIM)).toBe(false);
+    expect(isSessionPlan(GENUINE_REPORT_PLAIN_MERGED)).toBe(false);
+  });
+
+  it("reads an imperative last-line ask as a decision request (no «?» needed)", () => {
+    expect(isDecisionRequest(FP1567_SESSION_PLAN)).toBe(true);
+    expect(isDecisionRequest(FP1567_QUOTED_MENTION)).toBe(true);
+    expect(isDecisionRequest("Итог по #812.\n\nНапишите, если ок.")).toBe(true);
+    expect(
+      isDecisionRequest("Wave landed.\n\nLet me know if that works."),
+    ).toBe(true);
+    // a genuine report's tail is not an ask
+    expect(isDecisionRequest(GENUINE_REPORT_PLAIN_MERGED)).toBe(false);
+    expect(isDecisionRequest(GENUINE_REPORT_NO_MARKER)).toBe(false);
+  });
+
+  it("reads the widened in-flight phrasings as interim status", () => {
+    expect(isInterimStatus(FP1567_DISPATCH_RETURN)).toBe(true);
+    expect(isInterimStatus(FP1567_INTERIM_TOTAL)).toBe(true);
+    expect(isInterimStatus("Дождусь вердикта ревьюера по #1553.")).toBe(true);
+    expect(isInterimStatus("Ревьюер работает в фоне по #1553.")).toBe(true);
+    expect(isInterimStatus("По его возврату — pr:land 1494.")).toBe(true);
+    expect(isInterimStatus("Промежуточный итог: #1551 смержен.")).toBe(true);
+    // no-regression: a settled report is still not interim
+    expect(isInterimStatus(GENUINE_REPORT_PLAIN_MERGED)).toBe(false);
+    expect(isInterimStatus(COMPLETION_NO_MARKER)).toBe(false);
+  });
+
+  it("decideBlock() never blocks the five live turns, and STILL blocks a plain report", () => {
+    for (const text of [
+      FP1567_PRIOR_ADJACENCY,
+      FP1567_SESSION_PLAN,
+      FP1567_QUOTED_MENTION,
+      FP1567_DISPATCH_RETURN,
+      FP1567_INTERIM_TOTAL,
+    ]) {
+      expect(
+        decideBlock({ stopHookActive: false, lastAssistantText: text }).block,
+        text,
+      ).toBe(false);
+    }
+    expect(GENUINE_REPORT_PLAIN_MERGED).not.toContain(REPORT_MARKER);
+    expect(
+      decideBlock({
+        stopHookActive: false,
+        lastAssistantText: GENUINE_REPORT_PLAIN_MERGED,
+      }),
+    ).toEqual({ block: true });
   });
 });
 

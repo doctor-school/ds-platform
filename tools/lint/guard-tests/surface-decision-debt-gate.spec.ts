@@ -125,7 +125,53 @@ const GENUINE_REPORT_MIDBODY_INTERIM =
   "Tech appendix: the interim fix shipped in the same PR; % от " +
   "запланированного — весь скоуп, но маркер-эмодзи отсутствует.";
 
+// #1567 mirror: this gate reuses the SAME recognizer, so the live 2026-08-25/26
+// conversational false fires it also blocked must go silent transitively (the
+// gate's own code is unchanged). Cases 1 and 3 of the five.
+const FP1567_PRIOR_ADJACENCY =
+  "Оболочка (#1478 — шапка, подвал, логотип, тема) уже смержена; " +
+  "«следующая задача каркаса» — один из двух кандидатов ниже.";
+const FP1567_QUOTED_MENTION =
+  "**План сессии**\n" +
+  "**Тип:** процессная\n" +
+  "**Что делаем:** 1. Разобрать провенанс мега-блокера.\n\n" +
+  "верификатор приписал слово «merged» эпику #1430, а мержились PR " +
+  "триплетов — эпик открыт.\n\n" +
+  "Если принцип устраивает — скажите, и я стартую реализацию #1478.";
+// #1569 re-review mirror: the CLAUDE.md «⏸ ЖДУ ВАС» blocked-on-owner handback
+// carrying a punted prod deploy. It declares itself blocked, not done, so this
+// gate must stay silent on it too (shared `isDecisionRequest` seam).
+const OWNER_HANDBACK_DEFERRED_RELEASE =
+  "Готово: PR #1569 смержен, CI зелёный.\n\n" +
+  "📈 % от запланированного: 100%.\n\n" +
+  "Осталось: задеплоить в прод — нужен ваш GO.\n\n" +
+  "⏸ ЖДУ ВАС: подтвердите прод-деплой; после него продолжу автономно.";
+
 describe("surface-decision-debt-gate hook (spawned end-to-end)", () => {
+  it("does not fire on the #1567 conversational false fires (transitive fix)", () => {
+    for (const text of [
+      FP1567_PRIOR_ADJACENCY,
+      FP1567_QUOTED_MENTION,
+      OWNER_HANDBACK_DEFERRED_RELEASE,
+    ]) {
+      const r = runHook(stopPayload(transcriptWith(text)));
+      expect(r.status, text).toBe(0);
+      expect(r.stderr, text).toBe("");
+    }
+  });
+
+  it("STILL fires on a plain terminal report with no debt line (#1567 no-weakening)", () => {
+    const r = runHook(
+      stopPayload(
+        transcriptWith(
+          "Готово: PR #1567 смержен (squash), Issue #1567 закрыта, CI зелёный.",
+        ),
+      ),
+    );
+    expect(r.status).toBe(2);
+    expect(r.stderr).toContain("surface-decision-debt");
+  });
+
   it("blocks a Codex Stop payload via last_assistant_message", () => {
     const r = runHook({
       session_id: "codex-970",

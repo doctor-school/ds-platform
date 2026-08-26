@@ -18,6 +18,7 @@ import {
   isDecisionRequest,
   isInterimStatus,
   isProposalOrInFlight,
+  isSessionPlan,
   refusesDeferredRelease,
 } from "../../hooks/completion-report-gate.mjs";
 
@@ -210,7 +211,122 @@ const DOD_DEFER_WITH_HEX_NO_EVIDENCE =
   "📈 % от запланированного: 90%.\n\n" +
   "Осталось: задеплоить релиз 447c3c5 в прод — следующим шагом.";
 
+// #1567 / 2026-08-25..26 — five LIVE false fires on ordinary CONVERSATIONAL
+// turns (each blocked by BOTH Stop gates). Every fixture keeps the triggering
+// fragment and the real last line of the observed message.
+//
+// FP-1 — prior-work adjacency: «уже смержена» narrates a PR that landed before
+// this session, and the turn goes on to frame the NEXT task.
+const FP1567_PRIOR_ADJACENCY =
+  "Оболочка (#1478 — шапка, подвал, логотип, тема) уже смержена; " +
+  "«следующая задача каркаса» — один из двух кандидатов ниже.";
+// FP-2 — «План сессии» opening + «смержен вчера» + an imperative ask with no «?».
+const FP1567_SESSION_PLAN =
+  "**План сессии**\n" +
+  "**Тип:** продуктовая\n" +
+  "**Что делаем:** 1. Волна витрины doctor.\n" +
+  "**Зачем:** разблокирует storefront.\n\n" +
+  "#1478 (каркас витрины в `apps/doctor`) смержен вчера (PR #1560). " +
+  "На прод **не** выкачен.\n\n" +
+  "Скажите «поехали», либо скорректируйте состав волны.";
+// FP-3 — a QUOTED mention of "merged" (quoting a verifier) + an imperative ask.
+const FP1567_QUOTED_MENTION =
+  "**План сессии**\n" +
+  "**Тип:** процессная\n" +
+  "**Что делаем:** 1. Разобрать провенанс мега-блокера.\n\n" +
+  "верификатор приписал слово «merged» эпику #1430, а мержились PR " +
+  "триплетов — эпик открыт.\n\n" +
+  "Если принцип устраивает — скажите, и я стартую реализацию #1478.";
+// FP-4 — a mid-wave dispatch status: a SUB-STEP «завершён» plus the standard
+// hand-off-to-next-dispatch phrasing «По его возврату …».
+const FP1567_DISPATCH_RETURN =
+  "Диспатч №1 вернулся успешно, хвост запущен.\n\n" +
+  "**Итог авторинга (агент №1, завершён):** триплет 019 на ветке, PR #1494.\n\n" +
+  "По его возврату: Mode-a ревью (`ds-reviewer`, свежий диспатч) → " +
+  "`pnpm pr:land 1494` из main tree.";
+// FP-5 — an explicitly interim turn: «Промежуточный итог» (the bare stem the
+// pre-#1567 `промежуточн…\s+статус` marker missed) + «работает в фоне» +
+// «дождусь вердикта».
+const FP1567_INTERIM_TOTAL =
+  "Промежуточный итог, пока Mode-a ревьюер работает в фоне: " +
+  "**Деплой — завершён.** release-2026.08.25-1 на проде, PR #1551 смержен.\n\n" +
+  "Дальше: дождусь вердикта ревьюера по #1553 и продолжу автономно.";
+// #1567 regression guard: a genuine terminal report legitimately narrating
+// «PR #N смержен» — no adjacency word, unquoted, no «План сессии» opening —
+// missing «📈». It MUST still block: the discounts are narrow by design.
+const GENUINE_REPORT_PLAIN_MERGED =
+  "Готово: PR #1567 смержен (squash), Issue #1567 закрыта, CI зелёный.\n" +
+  "Ветка удалена, board Status = Done.\n\n" +
+  "🖼 Проверить глазами: `pnpm vitest run tools/lint/guard-tests`.";
+// #1569 review regression guards — GENUINE terminal reports whose tails carry
+// the phrasings the first #1567 cut put into the full-text interim set. Each
+// blocks on `main` and MUST keep blocking: the markers are object-scoped now.
+//
+// G-1 — the #962 handoff tail in the future tense: awaiting the OWNER's Stage-B
+// GO is the mandated close of a `user-facing` report, not an in-flight step.
+const GENUINE_REPORT_AWAITS_STAGE_B =
+  "Готово: PR #1569 смержен (squash), Issue #1567 закрыта, CI зелёный.\n\n" +
+  "Дальше: дождусь вашего Stage-B GO.";
+// G-2 — the mandated «🖼 Проверить глазами» section routinely leaves the stand
+// running; «стенд работает в фоне» is not a background MACHINE step.
+const GENUINE_REPORT_STAND_IN_BACKGROUND =
+  "Готово: PR #1569 смержен (squash), Issue #1567 закрыта.\n\n" +
+  "🖼 Проверить глазами: стенд работает в фоне на 3001.";
+// G-3 — PAST-tense narration of a completed sub-step (#962 closed this shape).
+const GENUINE_REPORT_PAST_RETURN =
+  "Готово: #1569 смержен, ветка удалена.\n\n" +
+  "Субагент отработал, по его возврату я смержил ветку.";
+// G-4 — the «уже» trade-off (#1569 review SUGGESTION): the adjacency strip is
+// per-occurrence, so a report with a SECOND unmarked verb still fires.
+const GENUINE_REPORT_ALREADY_MERGED_PLUS_VERB =
+  "Готово. PR #1569 уже смержен, ветка удалена, Issue #1567 закрыта — " +
+  "задача выполнена.";
+// G-5 — a «План сессии» opening followed by the full terminal-report structure:
+// the session-plan exemption must not cover it (#1569 review SUGGESTION).
+const GENUINE_REPORT_AFTER_SESSION_PLAN =
+  "**План сессии**\n" +
+  "**Тип:** техническая\n" +
+  "**Что делаем:** 1. Починить stop-гейт.\n\n" +
+  "Готово: PR #1569 смержен, Issue #1567 закрыта.\n\n" +
+  "🖼 Проверить глазами: `pnpm vitest run tools/lint/guard-tests`.";
+// G-6 — the #984 DoD-vs-title punt behind a polite imperative tail: the ask
+// exemption must NOT excuse it (#1569 review SUGGESTION).
+const DEFERRED_RELEASE_POLITE_TAIL =
+  "Готово: PR #1569 смержен (squash), CI зелёный, board Done.\n\n" +
+  "📈 % от запланированного: 90%.\n\n" +
+  "Осталось: задеплоить в прод.\n\n" +
+  "Скажите, когда деплоить.";
+// G-7 — the CLAUDE.md-mandated «⏸ ЖДУ ВАС» blocked-on-owner handback carrying
+// the SAME punted prod deploy as G-6. It must stay ALLOWED: the turn declares
+// itself blocked, not done, and the deploy needs an explicit owner GO
+// (AGENTS.md §6 live-infra rule) — the #984 escalation must not push past it.
+const OWNER_HANDBACK_DEFERRED_RELEASE =
+  "Готово: PR #1569 смержен, CI зелёный.\n\n" +
+  "📈 % от запланированного: 100%.\n\n" +
+  "Осталось: задеплоить в прод — нужен ваш GO.\n\n" +
+  "⏸ ЖДУ ВАС: подтвердите прод-деплой; после него продолжу автономно.";
+
 describe("completion-report-gate hook (spawned end-to-end)", () => {
+  it("allows all five #1567 live conversational false fires (exit 0)", () => {
+    for (const text of [
+      FP1567_PRIOR_ADJACENCY,
+      FP1567_SESSION_PLAN,
+      FP1567_QUOTED_MENTION,
+      FP1567_DISPATCH_RETURN,
+      FP1567_INTERIM_TOTAL,
+    ]) {
+      const r = runHook(stopPayload(transcriptWith(text)));
+      expect(r.status, text).toBe(0);
+      expect(r.stderr, text).toBe("");
+    }
+  });
+
+  it("STILL blocks a genuine report plainly narrating «PR #N смержен» (#1567 no-weakening)", () => {
+    const r = runHook(stopPayload(transcriptWith(GENUINE_REPORT_PLAIN_MERGED)));
+    expect(r.status).toBe(2);
+    expect(r.stderr).toContain("report-task-outcome");
+  });
+
   it("blocks a Codex Stop payload via last_assistant_message", () => {
     const r = runHook({
       session_id: "codex-824",
@@ -604,6 +720,138 @@ describe("isProposalOrInFlight() (#962)", () => {
       true,
     );
     expect(isProposalOrInFlight("Диспатчирую субагента по #900.")).toBe(true);
+  });
+});
+
+describe("#1567 conversational-turn discounts", () => {
+  it("discounts a completion verb carrying a PRIOR-work adjacency marker", () => {
+    expect(isCompletionReport("Оболочка (#1478) уже смержена.")).toBe(false);
+    expect(isCompletionReport("#1478 смержен вчера (PR #1560).")).toBe(false);
+    expect(isCompletionReport("Задача #900 ранее выполнена.")).toBe(false);
+    expect(isCompletionReport(FP1567_PRIOR_ADJACENCY)).toBe(false);
+  });
+
+  it("does NOT discount a bare, unmarked completion verb (narrow by design)", () => {
+    expect(isCompletionReport("PR #1560 смержен, ветка удалена.")).toBe(true);
+    expect(isCompletionReport(GENUINE_REPORT_PLAIN_MERGED)).toBe(true);
+    expect(isCompletionReport(COMPLETION_NO_MARKER)).toBe(true);
+  });
+
+  it("discounts a QUOTED mention of a completion verb, not an unquoted claim", () => {
+    expect(
+      isCompletionReport("верификатор приписал слово «merged» эпику #1430"),
+    ).toBe(false);
+    expect(isCompletionReport('лейбл "merged" висит на #1430')).toBe(false);
+    expect(isCompletionReport("PR #1430 merged.")).toBe(true);
+  });
+
+  it("exempts a «План сессии» opening block", () => {
+    expect(isSessionPlan(FP1567_SESSION_PLAN)).toBe(true);
+    expect(isSessionPlan(FP1567_QUOTED_MENTION)).toBe(true);
+    expect(isCompletionReport(FP1567_SESSION_PLAN)).toBe(false);
+    // a mid-body mention past the opening slice does NOT exempt a real report
+    expect(isSessionPlan(GENUINE_REPORT_MIDBODY_INTERIM)).toBe(false);
+    expect(isSessionPlan(GENUINE_REPORT_PLAIN_MERGED)).toBe(false);
+  });
+
+  it("reads an imperative last-line ask as a decision request (no «?» needed)", () => {
+    expect(isDecisionRequest(FP1567_SESSION_PLAN)).toBe(true);
+    expect(isDecisionRequest(FP1567_QUOTED_MENTION)).toBe(true);
+    expect(isDecisionRequest("Итог по #812.\n\nНапишите, если ок.")).toBe(true);
+    expect(
+      isDecisionRequest("Wave landed.\n\nLet me know if that works."),
+    ).toBe(true);
+    // a genuine report's tail is not an ask
+    expect(isDecisionRequest(GENUINE_REPORT_PLAIN_MERGED)).toBe(false);
+    expect(isDecisionRequest(GENUINE_REPORT_NO_MARKER)).toBe(false);
+  });
+
+  it("reads the widened in-flight phrasings as interim status", () => {
+    expect(isInterimStatus(FP1567_DISPATCH_RETURN)).toBe(true);
+    expect(isInterimStatus(FP1567_INTERIM_TOTAL)).toBe(true);
+    expect(isInterimStatus("Дождусь вердикта ревьюера по #1553.")).toBe(true);
+    expect(isInterimStatus("Ревьюер работает в фоне по #1553.")).toBe(true);
+    expect(isInterimStatus("По его возврату — pr:land 1494.")).toBe(true);
+    expect(isInterimStatus("Промежуточный итог: #1551 смержен.")).toBe(true);
+    // «ответ» is an OWNER object, deliberately outside the object list (#1569)
+    expect(isInterimStatus("Дальше: дождусь ответа по Stage-B.")).toBe(false);
+    // no-regression: a settled report is still not interim
+    expect(isInterimStatus(GENUINE_REPORT_PLAIN_MERGED)).toBe(false);
+    expect(isInterimStatus(COMPLETION_NO_MARKER)).toBe(false);
+  });
+
+  it("STILL blocks genuine reports carrying the object-less phrasings (#1569 review)", () => {
+    for (const text of [
+      GENUINE_REPORT_AWAITS_STAGE_B,
+      GENUINE_REPORT_STAND_IN_BACKGROUND,
+      GENUINE_REPORT_PAST_RETURN,
+      GENUINE_REPORT_ALREADY_MERGED_PLUS_VERB,
+      GENUINE_REPORT_AFTER_SESSION_PLAN,
+    ]) {
+      expect(isInterimStatus(text), text).toBe(false);
+      expect(isCompletionReport(text), text).toBe(true);
+      expect(
+        decideBlock({ stopHookActive: false, lastAssistantText: text }).block,
+        text,
+      ).toBe(true);
+      const r = runHook(stopPayload(transcriptWith(text)));
+      expect(r.status, text).toBe(2);
+      expect(r.stderr, text).toContain("report-task-outcome");
+    }
+  });
+
+  it("#984 DoD refusal survives a polite imperative tail (#1569 review)", () => {
+    expect(isDecisionRequest(DEFERRED_RELEASE_POLITE_TAIL)).toBe(true);
+    expect(refusesDeferredRelease(DEFERRED_RELEASE_POLITE_TAIL)).toBe(true);
+    expect(
+      decideBlock({
+        stopHookActive: false,
+        lastAssistantText: DEFERRED_RELEASE_POLITE_TAIL,
+      }).block,
+    ).toBe(true);
+    const r = runHook(stopPayload(transcriptWith(DEFERRED_RELEASE_POLITE_TAIL)));
+    expect(r.status).toBe(2);
+    expect(r.stderr).toContain("DoD-vs-title");
+  });
+
+  it("#984 refusal NEVER fires past an «⏸ ЖДУ ВАС» handback (#1569 re-review)", () => {
+    // Same punted deploy as G-6, but the turn declares itself BLOCKED on the
+    // owner — the CLAUDE.md-mandated handback shape must stay allowed.
+    expect(refusesDeferredRelease(OWNER_HANDBACK_DEFERRED_RELEASE)).toBe(true);
+    expect(isDecisionRequest(OWNER_HANDBACK_DEFERRED_RELEASE)).toBe(true);
+    expect(
+      decideBlock({
+        stopHookActive: false,
+        lastAssistantText: OWNER_HANDBACK_DEFERRED_RELEASE,
+      }).block,
+    ).toBe(false);
+    const r = runHook(
+      stopPayload(transcriptWith(OWNER_HANDBACK_DEFERRED_RELEASE)),
+    );
+    expect(r.status).toBe(0);
+    expect(r.stderr).toBe("");
+  });
+
+  it("decideBlock() never blocks the five live turns, and STILL blocks a plain report", () => {
+    for (const text of [
+      FP1567_PRIOR_ADJACENCY,
+      FP1567_SESSION_PLAN,
+      FP1567_QUOTED_MENTION,
+      FP1567_DISPATCH_RETURN,
+      FP1567_INTERIM_TOTAL,
+    ]) {
+      expect(
+        decideBlock({ stopHookActive: false, lastAssistantText: text }).block,
+        text,
+      ).toBe(false);
+    }
+    expect(GENUINE_REPORT_PLAIN_MERGED).not.toContain(REPORT_MARKER);
+    expect(
+      decideBlock({
+        stopHookActive: false,
+        lastAssistantText: GENUINE_REPORT_PLAIN_MERGED,
+      }),
+    ).toEqual({ block: true });
   });
 });
 

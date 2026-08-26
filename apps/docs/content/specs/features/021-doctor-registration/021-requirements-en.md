@@ -15,6 +15,30 @@ prior_decisions:
   - ADR-0006 — Documentation & SSOT (§4 feature-spec triplet + flat EARS numbering)
   - ADR-0009 — Per-purpose consent versioning (the record 021 writes and 037 stores)
   - ADR-0013 — Design-token SoT and the design-system-first adoption gate
+issues:
+  [
+    1536,
+    1537,
+    1538,
+    1539,
+    1540,
+    1541,
+    1542,
+    1543,
+    1544,
+    1545,
+    1546,
+    1547,
+    1548,
+    1549,
+    1550,
+    1551,
+    1552,
+    1553,
+    1554,
+    1555,
+    1556,
+  ]
 lang: en
 ---
 
@@ -70,7 +94,7 @@ The canvas **state** props are not forks — they are content-driven obligations
 - **Event registration proper** — what happens once the doctor is back on the эфир is feature **005**.
 - **The doctor's account** — profile completion, document upload, verification statuses, the points balance display: feature **022**, with consent and document storage in **037**.
 - **The points engine** — accrual rules, the append-only ledger, spending and the advance mechanics belong to feature **025**. 021 requests a registration accrual and renders a promise; it owns no ledger.
-- **PRD US-14 — the points barrier in front of an эфир — is deferred out of 021.** «Not enough points before an event a doctor intends to attend» happens on the event page (**020**) against the accrual engine (**025**); the advance-availability flag the owner fixed is a property of an event, not of the registration form, and 021 renders no barrier, no advance affordance and no placeholder for one. Carried forward in the open questions below and flagged for its own tracked Issue.
+- **PRD US-14 — the points barrier in front of an эфир — is deferred out of 021.** «Not enough points before an event a doctor intends to attend» happens on the event page (**020**) against the accrual engine (**025**); the advance-availability flag the owner fixed is a property of an event, not of the registration form, and 021 renders no barrier, no advance affordance and no placeholder for one. Carried forward in the open questions below and tracked as its own Issue **#1556**.
 - **The mailing integration** — the connector feeding the external service is feature **042**; 021 owns only the consent and the attributes that trigger it.
 - **The partner cabinet and per-representative reporting** — feature **035**; 021 attaches the attribution, it does not report on it.
 - **Document verification** and everything OWD-12 leaves open — not asked at the door, not decided here.
@@ -258,7 +282,7 @@ Each records a call the PRD left open. They are lead decisions in the AGENTS.md 
 
 These stay open; each is designed around above rather than resolved here, and each is a product decision the owner still owns.
 
-- **The points barrier in front of an эфир (PRD US-14)** — deferred out of 021 per Scope → Out and flagged for its own tracked Issue. Whether a doctor short of Pul is admitted on advance is a property of an event and of the accrual engine (**025**) rendered on the event page (**020**); the owner has fixed the advance as a per-event configurable flag, and where that barrier is rendered and what it says are decisions those features own. 021 ships no barrier, no advance affordance and no placeholder.
+- **The points barrier in front of an эфир (PRD US-14)** — deferred out of 021 per Scope → Out and tracked as Issue **#1556**. Whether a doctor short of Pul is admitted on advance is a property of an event and of the accrual engine (**025**) rendered on the event page (**020**); the owner has fixed the advance as a per-event configurable flag, and where that barrier is rendered and what it says are decisions those features own. 021 ships no barrier, no advance affordance and no placeholder.
 - **Where a direct registration should land** — LD-4 chooses the specialty feed with a home fallback; the owner may prefer the home outright. Reversing it is changing a destination, not a mechanism.
 - **How long a return context should survive** — LD-8 fixes the behaviour (nearest honest destination with a stated reason), not the window. Whether a target expires after a day, a week or never is an owner call the live funnel will inform.
 - **Whether a doctor ever types a promo code by hand** — LD-7 ships the field the canvas draws; if the field proves unused, removing it is deleting a field, not unwinding attribution.

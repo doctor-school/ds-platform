@@ -1,5 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { and, count, eq, gte, isNull, lte, ne, sql } from "drizzle-orm";
+import { and, count, eq, gte, inArray, isNull, lte, ne, sql } from "drizzle-orm";
 import type { DrizzleHandle } from "@ds/db";
 import { events, users } from "@ds/db";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
@@ -24,6 +24,23 @@ type Db = DrizzleHandle["db"];
  */
 const EVENTS_WINDOW = sql`now() - interval '1 year'`;
 
+/**
+ * The roles the public «врачей уже с нами» figure counts — ENUMERATED, never a
+ * prefix match over the free-text `users.role` column.
+ *
+ * A `like 'doctor%'` predicate would silently enrol any future role whose name
+ * merely starts with «doctor» into a public headline figure, and would silently
+ * drop the count on a rename; neither failure shows up anywhere but on the home
+ * page. Listing the roles makes both changes a deliberate edit here.
+ *
+ * `doctor_guest` is the v1 self-service role granted on self-registration
+ * (glossary `doctor_guest`), so the figure means REGISTERED DOCTOR ACCOUNTS —
+ * a product statement, stated here and in the module README rather than left
+ * implicit in a predicate. `platform_admin` / `pd_officer` are staff and are
+ * not counted.
+ */
+export const DOCTOR_ROLES = ["doctor_guest"] as const;
+
 @Injectable()
 export class StatisticsRepository {
   // Explicit @Inject token — the API boots under `tsx`, which emits no
@@ -47,7 +64,7 @@ export class StatisticsRepository {
         and(
           eq(users.recordStatus, "active"),
           isNull(users.deactivatedAt),
-          sql`${users.role} like 'doctor%'`,
+          inArray(users.role, [...DOCTOR_ROLES]),
         ),
       );
     return row?.value ?? 0;

@@ -111,17 +111,37 @@ export class StatisticsService implements OnModuleDestroy {
     eventsPerYear: () => this.statistics.countEventsPerYear(),
   };
 
+  /**
+   * Refresh on a fire-and-forget path, where nobody is awaiting the result.
+   *
+   * A failure here is a LOGGED non-event, never an unhandled rejection: the
+   * snapshot simply keeps its previous figures (or stays empty on a cold boot),
+   * and the hero omits what it cannot show. `refresh()` re-throws whatever
+   * `compute()` throws — including the `ScaleStatisticsSchema.parse` at the end
+   * of `buildScaleStatistics`, which a source returning a non-integral number
+   * would trip — so without this catch a bad figure could take the whole api
+   * process down through `unhandledRejection` on a background tick.
+   */
+  private refreshInBackground(reason: string): void {
+    this.refresh().catch((error: unknown) => {
+      this.logger.error(
+        `scale-statistics refresh failed (${reason}) — serving the previous snapshot`,
+        error instanceof Error ? error.stack : String(error),
+      );
+    });
+  }
+
   /** Start the background refresh loop. Called by the module on boot. */
   start(): void {
     if (this.timer) return;
     // `unref` so a pending refresh never holds the process (or a test runner)
     // open, and the loop is torn down explicitly in `onModuleDestroy`.
     this.timer = setInterval(() => {
-      void this.refresh();
+      this.refreshInBackground("scheduled tick");
     }, REFRESH_INTERVAL_MS);
     this.timer.unref?.();
     // Warm the snapshot immediately so the first visitor is served from cache.
-    void this.refresh();
+    this.refreshInBackground("boot warm-up");
   }
 
   onModuleDestroy(): void {
@@ -138,9 +158,19 @@ export class StatisticsService implements OnModuleDestroy {
   async read(): Promise<ScaleStatistics> {
     const age = Date.now() - this.snapshotAt;
     if (!this.snapshot) {
-      await this.refresh();
+      // A cold start that cannot compute is an OMISSION, not a 500: LD-3's
+      // contract already has a shape for "this counter has no available source
+      // right now" (the key is absent), and 017-design §6 wants the hero copy
+      // standing either way. Failing the request instead would turn a source
+      // outage into a broken public read.
+      await this.refresh().catch((error: unknown) => {
+        this.logger.error(
+          "scale-statistics cold-start refresh failed — serving an empty snapshot",
+          error instanceof Error ? error.stack : String(error),
+        );
+      });
     } else if (age > MAX_STALENESS_MS) {
-      void this.refresh();
+      this.refreshInBackground("stale snapshot");
     }
     // After a cold refresh whose sources all failed, the snapshot exists and
     // simply carries no counters — hero copy renders, counters are omitted

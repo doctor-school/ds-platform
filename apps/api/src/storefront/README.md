@@ -49,6 +49,20 @@ Two properties are structural rather than remembered:
   — the platform has no lesson table — and is consequently absent from every
   response rather than stubbed; giving it a source is a one-line change with no
   contract impact.
+- **«Врачей уже с нами» counts an ENUMERATED role set.** `DOCTOR_ROLES` in
+  `statistics.repository.ts` lists the roles the figure includes — today the
+  single `doctor_guest`, the v1 self-service role granted on self-registration —
+  so the public figure means **registered doctor accounts** that are active and
+  not deactivated in the identity mirror. That is a product statement, which is
+  why it is written down rather than left implicit: a prefix match over the
+  free-text `users.role` column would enrol a future `doctor*` role into a
+  headline figure, and drop it again on a rename, with nothing but the home page
+  to show for it. Staff roles (`platform_admin`, `pd_officer`) are not counted.
+- **A failing refresh is logged, never fatal.** Every fire-and-forget refresh
+  goes through `refreshInBackground()`, and the cold-start path catches too: a
+  source outage degrades to omitted counters with the previous (or an empty)
+  snapshot served, and can neither 500 the public read nor take the process down
+  through an unhandled rejection.
 - **The specialties counter is the book total.** It reads
   `SpecialtyBook.total` through `SpecialtiesService`, so the hero and the
   catalog's «Показать весь список — N» cannot disagree and no count literal

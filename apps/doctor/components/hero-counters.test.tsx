@@ -102,6 +102,47 @@ describe("017 EARS-2.M: the counters over design §6 row 1", () => {
     expect(html).toContain("событий за год");
   });
 
+  it("017 EARS-2.M6: the band renders exactly N cells for N counters and reserves no fixed tracks", () => {
+    const html = renderToStaticMarkup(
+      <HeroCounters
+        state={{
+          kind: "ready",
+          statistics: {
+            doctors: 12400,
+            specialties: 118,
+            eventsPerYear: 86,
+            computedAt: COMPUTED_AT,
+          },
+        }}
+      />,
+    );
+
+    // Three counters ⇒ three cells. A FIXED four-track grid would keep the
+    // fourth track, and the container's hairline background would paint it as a
+    // pale empty tile beside «событий за год» on every production view — the
+    // canvas collapses it (`auto-fit`), and so must this.
+    expect(html.match(/data-testid="hero-counter-/g)).toHaveLength(3);
+    expect(html).not.toMatch(/grid-cols-\d/);
+    expect(html).toContain("flex-wrap");
+  });
+
+  it("017 EARS-2.M7: each cell is a definition TERM followed by its definition", () => {
+    const html = renderToStaticMarkup(
+      <HeroCounters
+        state={{
+          kind: "ready",
+          statistics: { doctors: 12400, computedAt: COMPUTED_AT },
+        }}
+      />,
+    );
+
+    // Source order is `dt` → `dd` (what axe's `definition-list` rule reads);
+    // the canvas's numeral-above-caption order is a `flex-col-reverse` concern.
+    expect(html.indexOf("<dt")).toBeGreaterThan(-1);
+    expect(html.indexOf("<dt")).toBeLessThan(html.indexOf("<dd"));
+    expect(html).toContain("flex-col-reverse");
+  });
+
   it("017 EARS-2.M4: a real measured zero RENDERS — absence and zero are different states", () => {
     const html = renderToStaticMarkup(
       <HeroCounters

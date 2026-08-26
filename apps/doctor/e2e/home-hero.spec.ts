@@ -126,6 +126,45 @@ test.describe("017 EARS-2: home hero and the four scale counters", () => {
     await expect(page.getByTestId("hero-counter-eventsPerYear")).toBeVisible();
   });
 
+  test("017 EARS-2.7: the band paints NO empty tile when a counter is omitted, at either breakpoint", async ({
+    page,
+  }) => {
+    // The production shape: three counters, because `lessons` has no source.
+    await serveStatistics(page, {
+      doctors: 12400,
+      specialties: 118,
+      eventsPerYear: 86,
+      computedAt: COMPUTED_AT,
+    });
+
+    for (const size of [
+      { width: 1280, height: 900 },
+      { width: 720, height: 900 },
+    ]) {
+      await page.setViewportSize(size);
+      await page.goto("/");
+
+      const band = page.getByTestId("hero-counters");
+      const cells = band.locator("[data-testid^='hero-counter-']");
+      await expect(cells).toHaveCount(3);
+
+      // The cells must COVER the band: any uncovered strip is the container's
+      // hairline background showing through as a pale empty tile on the navy
+      // hero — exactly what a fixed 4-track grid produces with 3 counters.
+      const bandBox = (await band.boundingBox())!;
+      const boxes = await cells.evaluateAll((nodes) =>
+        nodes.map((n) => n.getBoundingClientRect()),
+      );
+      const covered = boxes.reduce((sum, b) => sum + b.width * b.height, 0);
+      const bandArea = bandBox.width * bandBox.height;
+      // Seams (2px gaps) and the 2px border are the only uncovered pixels.
+      expect(
+        covered / bandArea,
+        `cells cover the band at ${size.width}px`,
+      ).toBeGreaterThan(0.95);
+    }
+  });
+
   test("017 EARS-2.4: ошибка — the counters are omitted and the hero copy stays intact", async ({
     page,
   }) => {

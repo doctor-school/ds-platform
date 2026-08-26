@@ -48,9 +48,32 @@ const COUNTER_LABELS: Record<ScaleStatisticsCounter, string> = {
 
 const numberFormat = new Intl.NumberFormat("ru-RU");
 
-const CELL = "bg-hero px-4 py-5 layout:px-6 layout:py-6";
+/**
+ * The band is a WRAPPING FLEX row, not a fixed grid — this is the canvas's
+ * `repeat(auto-fit, minmax(180px, 1fr))` mechanism (`doctor-home.dc.html` L62)
+ * expressed in tokens-only utilities.
+ *
+ * It matters because the number of cells is DATA, not layout: production serves
+ * three counters today (`lessons` has no source), and a fixed 4-track grid would
+ * leave the fourth track empty — the container paints the hairline colour and
+ * the gaps let it through, so an empty track becomes a visible pale tile beside
+ * «событий за год». `auto-fit` collapses such a track; a wrapping flex row goes
+ * one better and has no empty cells to collapse at ANY count or width, because a
+ * short last row grows to fill instead of leaving track remainders. `basis-44`
+ * (11rem) is the canvas's 180px minimum: below it the cells stack, above it they
+ * share the band evenly.
+ */
+const CELL_BASE = "flex flex-1 basis-44 bg-hero px-4 py-5 layout:px-6 layout:py-6";
+/**
+ * `flex-col-reverse` so the `dt` (the label) can come FIRST in source — a
+ * definition list is term-then-definition, and axe-core's `definition-list` rule
+ * evaluates that ordering — while the canvas's visual order (the numeral above
+ * its caption) is preserved.
+ */
+const CELL = `${CELL_BASE} flex-col-reverse`;
+const SKELETON_CELL = `${CELL_BASE} flex-col`;
 const GRID =
-  "mt-10 grid grid-cols-1 gap-0.5 border-2 border-header-hairline bg-header-hairline sm:grid-cols-2 layout:grid-cols-4";
+  "mt-10 flex flex-wrap gap-0.5 border-2 border-header-hairline bg-header-hairline";
 
 export function HeroCounters({ state }: { state: CountersState }) {
   if (state.kind === "error") return null;
@@ -66,11 +89,16 @@ export function HeroCounters({ state }: { state: CountersState }) {
         className={GRID}
       >
         {SCALE_STATISTICS_COUNTERS.map((counter) => (
-          <div key={counter} className={CELL} aria-hidden="true">
+          <div key={counter} className={SKELETON_CELL} aria-hidden="true">
             {/*
               A skeleton bar, not a labelled box with a spinner in it: the cell
-              claims nothing until the read resolves. Sized to the numeral and
-              the caption it will be replaced by, so the hero does not jump.
+              claims nothing until the read resolves. It reserves the band's
+              HEIGHT — the bars are sized to the numeral and caption that replace
+              them — so the copy below does not move when the read lands. The
+              CELL COUNT is the contract's full width and settles to the served
+              counters afterwards: how many counters have a source is not
+              knowable before the read, and a wrapping band re-flows without ever
+              leaving an empty tile behind.
             */}
             <div className="h-10 w-24 animate-pulse bg-header-hairline layout:h-12" />
             <div className="mt-2 h-3 w-32 animate-pulse bg-header-hairline" />
@@ -96,13 +124,18 @@ export function HeroCounters({ state }: { state: CountersState }) {
       className={GRID}
     >
       {present.map((counter) => (
-        <div key={counter} data-testid={`hero-counter-${counter}`} className={CELL}>
-          <dd className="text-4xl font-extrabold leading-none tracking-tight tabular-nums text-hero-foreground layout:text-5xl">
-            {numberFormat.format(state.statistics[counter] as number)}
-          </dd>
+        <div
+          key={counter}
+          data-testid={`hero-counter-${counter}`}
+          className={CELL}
+        >
+          {/* `dt` first in SOURCE, numeral first on SCREEN (`flex-col-reverse`). */}
           <dt className="mt-2 text-xs font-extrabold uppercase tracking-widest text-hero-muted">
             {COUNTER_LABELS[counter]}
           </dt>
+          <dd className="text-4xl font-extrabold leading-none tracking-tight tabular-nums text-hero-foreground layout:text-5xl">
+            {numberFormat.format(state.statistics[counter] as number)}
+          </dd>
         </div>
       ))}
     </dl>

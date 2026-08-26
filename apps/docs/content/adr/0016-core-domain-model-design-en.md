@@ -110,7 +110,7 @@ Every output carries: `project_id`, `type`, `audience` (§4), `direction_id` whe
 
 ### 2.7 Minzdrav specialty — new `specialties_minzdrav`
 
-`id` · `code` · `title` · `is_active`. **Closed** reference book (105 entries + "Other"), not editorially extendable. Used in the doctor profile, on documents and for НМО (OWD-11, REQ-101).
+`id` · `code` · `title` · `is_active`. **Closed** reference book — seeded from the Минздрав nomenclature order in force at ship time (from 01.09.2026 — Приказ № 435н) plus "Other", re-seeded when that order changes, its size being the book's actual row count and never a literal — not editorially extendable. Used in the doctor profile, on documents and for НМО (OWD-11, REQ-101).
 
 ### 2.8 Direction — existing `topics`, renamed and extended
 

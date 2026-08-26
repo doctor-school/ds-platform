@@ -11,6 +11,9 @@ import { SpecialtiesPublicController } from "./specialties.public.controller.js"
 import { SpecialtyProblemFilter } from "./specialties.problem-filter.js";
 import { SpecialtiesRepository } from "./specialties.repository.js";
 import { SpecialtiesService } from "./specialties.service.js";
+import { StatisticsPublicController } from "./statistics.public.controller.js";
+import { StatisticsRepository } from "./statistics.repository.js";
+import { StatisticsService } from "./statistics.service.js";
 
 /**
  * 017 — the doctor-storefront module (#1479 opens it with EARS-3: the closed
@@ -35,30 +38,40 @@ import { SpecialtiesService } from "./specialties.service.js";
  * choose from. So the failure is logged and rethrown.
  */
 @Module({
-  controllers: [SpecialtiesPublicController],
+  controllers: [SpecialtiesPublicController, StatisticsPublicController],
   providers: [
     SpecialtiesRepository,
     SpecialtiesService,
+    StatisticsRepository,
+    StatisticsService,
     // Registered as a provider (not merely referenced in `@UseFilters`) so Nest
     // owns its lifecycle in this module's context.
     SpecialtyProblemFilter,
   ],
   // Exported for the later 017 verticals (#1481/#1482): the choose-specialty
   // handler consumes THIS membership mechanism rather than re-deriving one.
-  exports: [SpecialtiesService],
+  exports: [SpecialtiesService, StatisticsService],
 })
 export class StorefrontModule implements OnModuleInit {
   private readonly logger = new Logger(StorefrontModule.name);
 
   constructor(
     @Inject(DRIZZLE_DB) private readonly db: DrizzleHandle["db"],
+    @Inject(StatisticsService) private readonly statistics: StatisticsService,
   ) {}
 
   async onModuleInit(): Promise<void> {
     // The endpoint-authz completeness gate boots this exact graph to enumerate
     // routes, with placeholder credentials and no database. Seeding there would
-    // make a BLOCK-severity CI gate require a live Postgres.
+    // make a BLOCK-severity CI gate require a live Postgres — and so would
+    // warming the statistics projection, which is why both start below the
+    // guard.
     if (isRouteScan()) return;
+
+    // LD-3: the scale counters are refreshed off the request path. Starting the
+    // loop at boot means the first home-page visitor is served from a warm
+    // snapshot rather than paying for the aggregates.
+    this.statistics.start();
 
     const rows = buildSpecialtyBookSeed();
     try {

@@ -18,7 +18,7 @@ Two routes of `apps/doctor`, both inside feature 017's shell, both over one read
 graph TD
   Shell["017 shell — header / nav / footer"] --> Events["#d-events — /events"]
   Shell --> Cal["dedicated calendar page — /events/calendar (EARS-5)"]
-  Events --> Row["view row: Неделя / Месяц · Будущие / Прошедшие"]
+  Events --> Row["tense row: Будущие / Прошедшие (no Неделя / Месяц switch — F-019-2 Б)"]
   Events --> Live["«Идёт сейчас» block above the feed (F-019-3 А)"]
   Events --> Panel["events-filter — sidebar on desktop (F-019-1 Б)"]
   Events --> Body["body: month grid as navigation + day-grouped feed (F-019-2 Б)"]
@@ -45,7 +45,7 @@ sequenceDiagram
   participant R as Route (apps/doctor)
   participant API as GET /v1/storefront/doctor/events
   D->>R: toggles a facet / picks a day / switches tense
-  R->>R: patch query string (view, tense, facets, horizon)
+  R->>R: patch query string (tense, day, facets, horizon)
   R->>API: read for exactly that query + session
   API-->>R: DoctorEventsFeed (days, live, myEvents, horizon)
   R-->>D: render = f(URL, session)
@@ -65,12 +65,12 @@ One read serves the feed; the month grid and the calendar page project the same 
 
 ```mermaid
 graph LR
-  URL["URL: view · tense · facets · horizon"] --> Q["query resolution"]
+  URL["URL: tense · day · facets · horizon"] --> Q["query resolution"]
   Sess["session (optional)"] --> Q
   T017["017 targeting set (specialty)"] --> Q
   A018["018 managed adjacency"] --> Q
   Q --> Feed["DoctorEventsFeed"]
-  Feed --> Days["DayGroup[] — week body"]
+  Feed --> Days["DayGroup[] — the day feed body"]
   Feed --> Grid["MonthGrid — in-feed navigation AND the calendar page (LD-3)"]
   Feed --> LiveM["LiveStrip | null ← 006 room state (LD-6)"]
   Feed --> MineM["MyEventsCut | null ← 021 registrations (LD-8)"]
@@ -158,18 +158,18 @@ The fill states are a property of the **unit**, not of this screen: 019 mounts `
 
 `GET /v1/storefront/doctor/events` — public, session-optional (ADR-0001: `access: public`; the viewer-dependent parts degrade rather than gate).
 
-| Query       | Values                                                                       | Notes                                                  |
-| ----------- | ---------------------------------------------------------------------------- | ------------------------------------------------------ |
-| `view`      | `week` \| `month`                                                            | desktop renders both; the value selects the body focus |
-| `tense`     | `upcoming` \| `past`                                                         | drives the 014 join                                    |
-| `from/to`   | ISO dates                                                                    | the LD-2 horizon; «показать ещё» widens it             |
-| `format`    | `webinar` \| `online-meeting` \| `offline-meetup` \| `congress` \| `podcast` | repeatable                                             |
-| `kind`      | reference ids                                                                | repeatable                                             |
-| `specialty` | `mine-and-adjacent` \| `all` \| ids                                          | default `mine-and-adjacent`                            |
-| `city`      | reference ids                                                                | offline events only                                    |
-| `nmo`       | boolean                                                                      | badge-backed facet                                     |
-| `free`      | boolean                                                                      | `pulCost = 0`                                          |
-| `q`         | string                                                                       | name search                                            |
+| Query       | Values                                                                       | Notes                                                                                                                                                                                                                                                                                                                                           |
+| ----------- | ---------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `day`       | ISO date                                                                     | the day the feed body is scrolled to; written by a month-grid selection (EARS-4). There is no `view` parameter: under F-019-2 Б the month grid and the day feed render together and the «Неделя / Месяц» switch is not built (owner decision 2026-08-26). The month as a page body is the dedicated calendar route (EARS-5), not a query value. |
+| `tense`     | `upcoming` \| `past`                                                         | drives the 014 join                                                                                                                                                                                                                                                                                                                             |
+| `from/to`   | ISO dates                                                                    | the LD-2 horizon; «показать ещё» widens it                                                                                                                                                                                                                                                                                                      |
+| `format`    | `webinar` \| `online-meeting` \| `offline-meetup` \| `congress` \| `podcast` | repeatable                                                                                                                                                                                                                                                                                                                                      |
+| `kind`      | reference ids                                                                | repeatable                                                                                                                                                                                                                                                                                                                                      |
+| `specialty` | `mine-and-adjacent` \| `all` \| ids                                          | default `mine-and-adjacent`                                                                                                                                                                                                                                                                                                                     |
+| `city`      | reference ids                                                                | offline events only                                                                                                                                                                                                                                                                                                                             |
+| `nmo`       | boolean                                                                      | badge-backed facet                                                                                                                                                                                                                                                                                                                              |
+| `free`      | boolean                                                                      | `pulCost = 0`                                                                                                                                                                                                                                                                                                                                   |
+| `q`         | string                                                                       | name search                                                                                                                                                                                                                                                                                                                                     |
 
 Response shape is the read-model set of the requirements' Event Model. Errors are RFC 7807 Problem Details (ADR-0002) and are rendered per block in Russian with a retry that re-runs only that read.
 

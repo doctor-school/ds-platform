@@ -21,8 +21,9 @@ Feature: A doctor opens one screen and sees what is on now, what is on this week
     When the doctor opens «События»
     Then the header, navigation and footer are rendered by feature 017's shell layout
     And the breadcrumbs read «Травматология и ортопедия › События»
-    And the view row offers Неделя / Месяц and Будущие / Прошедшие
-    And the blocks appear in the order: строка вида, «Идёт сейчас», панель фасетов рядом с телом, лента по дням
+    And the tense row offers Будущие / Прошедшие
+    And no «Неделя / Месяц» view control is rendered anywhere on the route
+    And the blocks appear in the order: строка времени, «Идёт сейчас», панель фасетов рядом с телом, лента по дням
 
   @EARS-1 @failure
   Scenario: An events route defining its own header is a defect
@@ -257,7 +258,7 @@ Feature: A doctor opens one screen and sees what is on now, what is on this week
     Then the scan reports no violations
     And every card is a real labelled link
     And every facet is a real control with a visible state
-    And the view and tense controls are keyboard-operable
+    And the tense control and the month-grid day selection are keyboard-operable
     And the LIVE state is announced to a screen reader rather than conveyed by colour alone
 
   @EARS-14 @failure

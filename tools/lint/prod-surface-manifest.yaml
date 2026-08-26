@@ -70,11 +70,15 @@ routes:
     file: apps/portal/app/webinars/[slug]/room/page.tsx
     status: product-ready
 
-  # apps/doctor — the doctor.school storefront (#1440 scaffold, #1478 017 shell).
-  # The 017 shell layout (header / navigation / footer) is real, but the HOME
-  # PAGE inside it still carries no product content — 017 EARS-2/4/9/10/11 build
-  # its blocks and ADR-0015 §2 stage 3 migrates the marketing routes out of
-  # apps/promo — so the route stays `deferred`, honestly. It also is not publicly
+  # apps/doctor — the doctor.school storefront (#1440 scaffold, #1478 017 shell,
+  # #1480 017 EARS-2 hero). The shell layout and the home hero (kicker, headline,
+  # goal, the four scale counters) are REAL product content — no placeholder copy
+  # and no stubbed number: a counter with no source is omitted, not zeroed. The
+  # PAGE is still incomplete, so the route stays `deferred`: 017 EARS-4/9/10/11
+  # build the specialty catalog, the nearest events, «Что исследовать» and the
+  # leaderboard, and ADR-0015 §2 stage 3 migrates the marketing routes out of
+  # apps/promo. The status flips to `product-ready` when those blocks land and
+  # the page carries its Stage-B verdict. It also is not publicly
   # reachable: no compose service and no Caddy vhost point at this app; ADR-0015
   # §7 makes the host cut-over a release-time step.
   - app: doctor

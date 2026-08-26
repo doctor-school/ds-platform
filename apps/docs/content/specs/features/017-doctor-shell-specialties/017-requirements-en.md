@@ -2,7 +2,7 @@
 title: "017 — Doctor storefront shell and the specialty catalog"
 description: "Requirements for the doctor storefront shell (header by sign-in status, navigation, footer with the single Academy exit), the closed Минздрав specialty reference book of 105 entries plus «Другое» presented as a search-first catalog, the remembered choice in the profile and in the anonymous session, adjacency-driven targeting from a managed reference table, the home page scale statistics, the nearest-events calendar block with its empty, loading and error states, the «Что исследовать» formats block, the voluntary platform leaderboard as its own section, and the arrival of the public marketing routes in apps/doctor."
 slug: 017-doctor-shell-specialties
-status: Draft
+status: In dev
 surface: user-facing
 tracker: https://github.com/doctor-school/ds-platform/milestone/13
 issues:

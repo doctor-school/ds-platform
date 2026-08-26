@@ -3,7 +3,7 @@ title: "Feature 017 — Doctor storefront shell & the specialty catalog (PRD)"
 description: "Product requirements for the first screen of the second site: `doctor.school` as the doctor's storefront — the shell every doctor-facing screen consumes (header by sign-in status, navigation, footer with the single link into the Academy), the Минздрав specialty catalog as the doctor's first action with search over 105 entries plus «Другое», the remembered choice in the profile and in an anonymous session, the announcements calendar, the scale statistics and the voluntary leaderboard. Wave 1 of the two-site IA epic; the shell all of 018–021 build on; source of the 017 EARS triplet (ADR-0014)."
 slug: two-site-ia-017-doctor-shell-specialties-product
 epic: ../../product/two-site-ia/brief.md
-status: Draft
+status: In dev
 surface: user-facing
 lang: en
 ---

@@ -2,6 +2,7 @@ import "./globals.css";
 import type { Metadata } from "next";
 import type { CSSProperties, ReactNode } from "react";
 import { Inter } from "next/font/google";
+import { THEME_FOUC_GUARD } from "@/lib/theme";
 
 export const metadata: Metadata = {
   title: "Doctor.School",
@@ -28,9 +29,14 @@ const inter = Inter({
  * RU-only, and deliberately thinner than the portal's: no `next-intl` provider
  * (there is no client copy to translate yet — a literal `lang="ru"` is honest
  * for a single-locale shell), no `@chrome` parallel route (there are no
- * application routes to wrap), no theme toggle (no interactive surface yet).
- * Each of those is a portal facility this app adopts WHEN it gains the surface
- * that needs it, not before — an unused provider would be scaffolding.
+ * application routes to wrap). Each of those is a portal facility this app
+ * adopts WHEN it gains the surface that needs it, not before — an unused
+ * provider would be scaffolding.
+ *
+ * It DOES carry the pre-paint theme guard (#1478): the 017 shell ships a theme
+ * control, so a remembered dark choice must be applied on `<html>` before first
+ * paint or every load flashes light first. The script is inline and synchronous
+ * for exactly that reason — a component effect runs too late to prevent the flash.
  */
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
@@ -51,6 +57,12 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       }
       suppressHydrationWarning
     >
+      <head>
+        <script
+          // Applies the remembered theme before first paint (see the doc block).
+          dangerouslySetInnerHTML={{ __html: THEME_FOUC_GUARD }}
+        />
+      </head>
       <body className="min-h-screen bg-background text-foreground antialiased">
         {children}
       </body>

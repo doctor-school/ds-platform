@@ -28,15 +28,24 @@ at it; ADR-0015 §7 makes the `doctor.school` cut-over a release-time step. The
 apps/doctor/
   app/
     globals.css      # imports @ds/design-system/globals.css — tokens SSOT
-    layout.tsx       # <html lang="ru">, Inter bound into --font-sans
-    page.tsx         # storefront root: header / main+h1 / footer shell
+    layout.tsx       # <html lang="ru">, Inter bound into --font-sans, pre-paint theme guard
+    (storefront)/
+      layout.tsx     # 017 EARS-1 — THE shell: header / main / footer, defined once
+      page.tsx       # storefront root page (content only; the shell is the layout)
+  components/
+    storefront-header.tsx  # logo, empty search slot (LD-6), theme control, ONE action cluster
+    storefront-footer.tsx  # «Документы и контакты» + the single Academy link (EARS-12)
+    theme-toggle.tsx       # DS Button ghost/icon; <html class="dark"> is the source of truth
   lib/
     session.ts       # server-side BFF session read (host-only cookie, ADR-0001 §6 fingerprint)
     session.test.ts  # vitest units for the above
+    shell-auth.ts    # server-resolved guest/doctor branch feeding the shell header
+    theme.ts         # theme apply/persist + the inline pre-paint FOUC guard
     auth-client.ts   # client-side same-origin session probe
   e2e/
     a11y-axe.e2e.spec.ts   # WCAG 2 A/AA + one-h1 shell scan (CI: playwright-axe-doctor)
     shell-smoke.e2e.spec.ts# landmarks render; /v1/* rewrite is in the built manifest
+    shell.spec.ts          # 017 EARS-1/EARS-12 shell contract in the browser
   Dockerfile         # standalone image, PORT 3004 (not wired into compose yet)
   playwright.ci.config.ts  # backend-free tier, DOCTOR_CI_PORT (default 3211)
 ```

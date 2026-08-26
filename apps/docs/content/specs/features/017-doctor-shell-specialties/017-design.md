@@ -2,7 +2,7 @@
 title: "017 — Doctor storefront shell and the specialty catalog (Design)"
 description: "Design companion to the 017 requirements: the apps/doctor shell composition and its sign-in branch, the specialty reference-book reads, the search-first catalog state machine, the choice-persistence cascade across guest session and profile, the targeting resolution over the managed adjacency books, the home-page block dataState matrix, and the leaderboard consent read."
 slug: 017-doctor-shell-specialties-design
-status: Draft
+status: In dev
 lang: en
 ---
 

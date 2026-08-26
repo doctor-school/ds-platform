@@ -1,5 +1,17 @@
 # @ds/api
 
+## 1.6.0
+
+### Minor Changes
+
+- [#1570](https://github.com/doctor-school/ds-platform/pull/1570) [`f1a6062`](https://github.com/doctor-school/ds-platform/commit/f1a606231c5c3c5ead47465023db479fb4d3b416) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 017 EARS-3 — the platform gains the closed Минздрав specialty reference book. A new `specialties_minzdrav` table is populated by a provenance-stamped seed from Приказ Минздрава России от 14.05.2026 № 435н (Раздел I, in force from 01.09.2026) plus the single «Другое» catch-all, and served by two public reads: `GET /v1/public/specialties` (the whole book with its own `total` — no count literal exists anywhere) and `GET /v1/public/specialties/frequent` (the ordered frequent subset the search-first catalog renders). `@ds/schemas` gains the `SpecialtyRef` / `SpecialtyBook` / `FrequentSpecialties` contracts, the `SPECIALTY_NOT_IN_BOOK` error code and the reusable `isSpecialtyBookMember` predicate; the book has no write path, and any specialty reference outside it is refused fail-closed with RFC 7807.
+
+### Patch Changes
+
+- Updated dependencies [[`f1a6062`](https://github.com/doctor-school/ds-platform/commit/f1a606231c5c3c5ead47465023db479fb4d3b416)]:
+  - @ds/db@0.11.0
+  - @ds/schemas@3.3.0
+
 ## 1.5.0
 
 ### Minor Changes

@@ -1,5 +1,12 @@
 # @ds/academy-demo
 
+## 0.1.5
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @ds/design-system@5.1.2
+
 ## 0.1.4
 
 ### Patch Changes

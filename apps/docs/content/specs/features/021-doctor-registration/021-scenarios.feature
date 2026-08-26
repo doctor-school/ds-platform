@@ -37,10 +37,33 @@ Feature: A doctor stopped by a gate registers in a short honest form and comes b
     And one versioned dated consent record exists for partner-data-sharing
     And no consent record exists for marketing-communications
     When the doctor confirms the email with the code from the letter
-    Then the success state states the credited «+20 Pul»
+    And feature 025 emits PointsCredited for that account
+    Then the success state states the credited «+20 Pul» as the amount carried by that event
     And it names «+30 Pul» for completing the profile and what completing it unlocks
     And the primary action returns to «Артроскопия коленного сустава»
     And «в личный кабинет» is offered only as a secondary action
+
+  @EARS-9 @failure
+  Scenario: With no ledger event the success state promises rather than claims a credit
+    Given feature 025 has emitted no PointsCredited for the account
+    When a doctor confirms their email and reaches the success state
+    Then the success state names the accrual as a pending promise
+    And no credited amount is stated as a fact
+    And no credited amount is derived from the points configuration
+
+  @EARS-19 @failure
+  Scenario: Every public form carries the bot-protection challenge of 003 EARS-17
+    Given the registration screen is open on «doctor.school»
+    Then the bot-protection challenge of the 003 EARS-17 contract is rendered on the form
+    When the doctor submits the form
+    Then the command carries the challenge token
+    When the doctor requests a verification-code resend
+    Then that request carries the challenge token too
+    When a submission is replayed without the token
+    Then the 003 contract rejects it unchanged
+    And no storefront-local challenge logic, provider or threshold exists in apps/doctor
+    When the challenge fails to load
+    Then the failure is stated in Russian with a working retry
 
   @EARS-3 @EARS-6 @happy
   Scenario: A doctor arriving directly registers without the marketing opt-in and lands on their feed

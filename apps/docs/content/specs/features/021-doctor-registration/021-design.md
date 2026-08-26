@@ -1,6 +1,6 @@
 ---
 title: "021 — Design"
-description: "Design companion to the 021 doctor-registration requirements: the route and split composition, the seam between the doctor storefront and feature 003's live authentication engine, the return-target contract that survives the confirmation email, the two-tier consent model and its per-purpose records, the attribution resolution order, the points promise/credit configuration seam, and the build sequence."
+description: "Design companion to the 021 doctor-registration requirements: the route and split composition, the seam between the doctor storefront and feature 003's live authentication engine including the per-app bot-protection client half 021 must re-render, the reuse and extension of the shipped `parseReturnTarget` return-target contract across the confirmation email, the two-tier consent model and its per-purpose records, the attribution resolution order, the split between the configuration-sourced points promise and the ledger-sourced credit, and the build sequence."
 slug: 021-doctor-registration-design
 lang: en
 ---
@@ -36,7 +36,8 @@ sequenceDiagram
   participant C as Consent store (037)
   participant P as Points (025)
 
-  D->>B: RegisterDoctor{email,password,promoCode?,attribution?,consents[],returnTarget?}
+  D->>D: bot-protection challenge (003 EARS-17 client half — EARS-19)
+  D->>B: RegisterDoctor{email,password,promoCode?,attribution?,consents[],returnTarget?,botProtectionToken}
   B->>B: validate consents: both access-condition purposes present
   B->>Z: 003 EARS-1 create user + trigger email code (returnCode, EARS-29)
   B->>C: ConsentGranted × purpose (versioned, dated — ADR-0009)
@@ -50,9 +51,13 @@ sequenceDiagram
 
 Nothing in this diagram creates a second credential path, a second code path or a second consent model. A 021 change request that would move a box from the 003 column into the 021 column is a 003 increment, not a 021 requirement.
 
+**One half of 003 is not inherited by standing on a new app: the bot-protection client (EARS-19).** 003 EARS-17 protects registration and every verification-code resend, and its server side — provider, thresholds, verification, rejection semantics — carries over to `doctor.school` untouched. Its client side does not: the challenge is wired per form out of **portal-local** `apps/portal/components/bot-protection/` (`useBotProtectedAction` + `BotProtectionField`), not a shared package, so `apps/doctor` starts with nothing. 021 therefore re-renders that client half on both of its public forms — the registration submission and the resend action — attaching the challenge token to the command exactly as the portal does. The implementation call is re-render in `apps/doctor` **or** extract the portal component into a package both storefronts consume; what is forbidden is storefront-local challenge logic, a second provider or a threshold of 021's own. A form that reaches a 003 EARS-17-protected endpoint without the token is the untracked-seam failure this clause exists to prevent.
+
 ## 3. The return target (LD-3, LD-8, EARS-10)
 
-The target is an opaque, server-signed token minted by the gate that sent the doctor here, carried as a query parameter, embedded into the verification email's confirmation URL, and resolved back to a route only at confirmation time.
+021 mints **no return-target mechanism**. The contract is the one already running in production for the register → verify → login hop this feature re-renders: `parseReturnTarget` in `packages/schemas/src/events/registration-intent.ts` and the carry helper `withReturnTarget` in `apps/portal/lib/registration-handoff.ts` (004 EARS-3 / 005 EARS-2). The gate passes the target as a `returnTo` query parameter; the guard accepts it only when it resolves to an exact same-origin content path, rejects every cross-origin, protocol-relative, backslash, traversal, encoded-separator or multi-segment form, and hands back a value **reconstructed from validated parts** rather than the raw input. That reconstructed value is what is carried onward, embedded into the verification email's confirmation URL, and re-validated by the same parser server-side at confirmation time.
+
+021 extends the shipped contract in exactly two places: the **accepted target set** widens beyond `/webinars/<slug>` to the doctor-storefront destinations (020's event page, 018's specialty feed) — an increment on the shared `packages/schemas` guard, sequenced before EARS-10 ships — and the guard-reconstructed value must **survive the out-of-band email hop**, which the in-app helper never had to do. Nothing else changes: no signed token of 021's own, no storefront-local copy of the parser, no second `returnTo` vocabulary. A storefront-local guard would be a forked security control and fails review.
 
 ```mermaid
 stateDiagram-v2
@@ -66,7 +71,7 @@ stateDiagram-v2
   Absent --> [*]: specialty feed, home fallback (LD-4)
 ```
 
-Three properties the implementation must preserve: the token is never a raw URL the client can forge; the client never reconstructs the target from a referrer, a `document.referrer` read or a stored breadcrumb; and the degraded branch always renders a plain Russian statement of what happened rather than a silent redirect. This is the same contract 019 LD-7 hands in when a guest acts on a feed card — the feed URL is the target.
+Three properties the implementation must preserve: the value that reaches a navigation is always the guard's reconstruction and never the raw client-supplied string; the client never rebuilds the target from a referrer, a `document.referrer` read or a stored breadcrumb; and the degraded branch always renders a plain Russian statement of what happened rather than a silent redirect. 019 LD-7 hands a card action into 021 through this same guard — the feed URL is the target, so widening the accepted set covers both guest paths at once.
 
 ## 4. The two-tier consent model (F-021-1 Б, LD-5, EARS-5, EARS-7)
 
@@ -97,7 +102,14 @@ A link-borne attribution wins: when both are present the typed code never overwr
 
 ## 6. Points promise and credit (F-021-3, LD-6, EARS-9)
 
-One configuration source feeds both renders: `{ registration: 20, profileCompletion: 30, unit: 'Pul' }` today, per the owner's 2026-08-25 record. The form reads it to render the promise; the success state reads the **credited** fact emitted by 025 after `DoctorRegistered`. 021 writes no ledger row, so a divergence between the promise and the credit can only come from a configuration/ledger mismatch, which the EARS-9 verification pins by changing the configured value and asserting both renders move.
+Two sources, one for each half, and they are not interchangeable.
+
+| Half                            | Source                                    | When 025 is absent                                                            |
+| ------------------------------- | ----------------------------------------- | ----------------------------------------------------------------------------- |
+| The **promise** on the form     | configuration, read at render time        | renders normally — a promise needs no ledger                                  |
+| The **credit** on the success state | 025's `PointsCredited` for that account | **no credited-as-fact statement**; the accrual stays named as a pending promise |
+
+Configuration is `{ registration: 20, profileCompletion: 30, unit: 'Pul' }` today, per the owner's 2026-08-25 record. 021 emits `DoctorRegistered` and writes no ledger row, so it has no way to know an amount was credited except by 025 saying so — and **deriving the credited number from the same configuration would assert a ledger fact that does not exist**, which the spec's own honest-states rule forbids. Feature 025 has no spec and no Issues yet: until it ships, the success state renders the promise branch, and that gap is recorded in prose on Issue #1545 rather than as a `blocked_by` edge, there being no Issue to point at. The EARS-9 verification pins both halves: changing the configured value moves the promise, and suppressing `PointsCredited` must leave no credited-as-fact statement on the screen.
 
 The advance mechanics — the per-event configurable flag the owner fixed — live on the event (020) against the engine (025) and appear nowhere in this feature's tree.
 
@@ -114,7 +126,7 @@ All four use the semantic field primitives tracked in #197 and draw copy from th
 
 ## 8. Sequencing the build
 
-1. **The route and the form** (EARS-1, EARS-11) — the split composition, the three inputs and their field contracts. Everything else composes on top.
+1. **The route and the form** (EARS-1, EARS-11) — the split composition, the three inputs and their field contracts. Everything else composes on top. **EARS-19** lands with the first form that submits: no public form ships to a 003 EARS-17-protected endpoint without the challenge wired.
 2. **The consent tiers and the record** (EARS-4, EARS-5, EARS-6, EARS-7) — the command's precondition and the purpose rows; nothing can be submitted meaningfully before this.
 3. **The return target end to end** (EARS-2, EARS-3, EARS-10) — mint, carry, survive the email, resolve, degrade. Agree the token shape with 019 LD-7 before either ships its guest path.
 4. **Attribution and points** (EARS-8, EARS-9) — both are additive to a working registration and both depend on external consumers (035, 025).

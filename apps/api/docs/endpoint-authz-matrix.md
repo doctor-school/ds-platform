@@ -79,6 +79,7 @@
 | POST /v1/admin/events/:eventId/recordings/:recordingId/:command | authenticated | platform_admin               | fast-path  | —            | false   | live       | low-stakes  | EARS-2, EARS-17                    |
 | POST /v1/admin/events/:id/archive                               | authenticated | platform_admin               | fast-path  | —            | false   | none       | low-stakes  | EARS-6, EARS-8                     |
 | POST /v1/admin/events/:id/close                                 | authenticated | platform_admin               | fast-path  | —            | false   | none       | low-stakes  | EARS-5, EARS-8                     |
+| POST /v1/admin/events/:id/mark-ended                            | authenticated | platform_admin               | fast-path  | —            | false   | live       | low-stakes  | EARS-18, EARS-8                    |
 | POST /v1/admin/events/:id/open                                  | authenticated | platform_admin               | fast-path  | —            | false   | none       | low-stakes  | EARS-5, EARS-8                     |
 | POST /v1/admin/events/:id/publish                               | authenticated | platform_admin               | fast-path  | —            | false   | none       | low-stakes  | EARS-4, EARS-8                     |
 | POST /v1/admin/events/:id/transition                            | authenticated | platform_admin               | fast-path  | —            | false   | none       | low-stakes  | EARS-7, EARS-8                     |

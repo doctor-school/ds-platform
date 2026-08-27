@@ -13,9 +13,13 @@ import { actionsFor } from "@/lib/lifecycle";
  * {@link actionsFor}) — the admin UI offers ONLY the transitions valid from the
  * current state, and it never invents one. A terminal `archived` event yields no
  * buttons. Each fires its named command (`POST /v1/admin/events/:id/{publish|open|
- * close|archive}`); the server is the authority (EARS-7) — an out-of-order call it
- * refuses (409) surfaces as `transitionRefused`, the state untouched. Stock DS
- * buttons (EARS-11), RU copy (EARS-10).
+ * close|archive|mark-ended}`); the server is the authority (EARS-7) — an
+ * out-of-order call it refuses (409) surfaces as `transitionRefused`, the state
+ * untouched. Stock DS buttons (EARS-11), RU copy (EARS-10).
+ *
+ * `detail.state` is passed alongside the transitions because since 014 EARS-18
+ * two commands share the `ended` target — `close` from `live` and `mark-ended`
+ * from `published` — so the ORIGIN is what names the command (`lib/lifecycle`).
  */
 export function LifecycleActions({
   detail,
@@ -27,7 +31,7 @@ export function LifecycleActions({
   const t = useTranslations();
   const { mutate, mutation } = useCustomMutation();
   const [error, setError] = useState<string | null>(null);
-  const actions = actionsFor(detail.validTransitions);
+  const actions = actionsFor(detail.state, detail.validTransitions);
 
   if (actions.length === 0) {
     return (

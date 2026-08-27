@@ -24,18 +24,29 @@ export const EventLifecycleStateSchema = z.enum(EVENT_LIFECYCLE_STATES);
 export type EventLifecycleState = z.infer<typeof EventLifecycleStateSchema>;
 
 /**
- * The closed forward transition set (design §2). The ONLY legal moves are the
- * four forward transitions; every other move is refused server-side (EARS-7).
- * Kept here as the shared SSOT so the admin UI derives its offered actions
- * (`EventAdminDetail.validTransitions`) and the EARS-7 guard enforces refusal
- * from the same map — there is no second source to drift.
+ * The closed forward transition set (design §2, extended by 014-design §3.1).
+ * The ONLY legal moves are the five forward transitions; every other move is
+ * refused server-side (EARS-7). Kept here as the shared SSOT so the admin UI
+ * derives its offered actions (`EventAdminDetail.validTransitions`) and the
+ * EARS-7 guard enforces refusal from the same map — there is no second source
+ * to drift.
+ *
+ * `published → ended` is the 014 EARS-18 `MarkEventEnded` edge: an эфир held
+ * before features 006/007 existed, or run off-platform, never passes through
+ * `live`, so under the pre-014 set it was stuck at `published` and its recording
+ * could never clear the 014 §3 publish gate. The edge is NOT a loosened guard —
+ * the map only makes the move *reachable*; `MarkEventEnded` adds its own two
+ * server-side preconditions on top (the scheduled end is already past AND the
+ * room was never opened), which is what keeps it from becoming a general
+ * "set any state" escape hatch. `published → live` (OpenRoom) is unchanged and
+ * remains the only route for a broadcast the platform actually hosts.
  */
 export const LIFECYCLE_TRANSITIONS: Record<
   EventLifecycleState,
   readonly EventLifecycleState[]
 > = {
   draft: ["published"],
-  published: ["live"],
+  published: ["live", "ended"],
   live: ["ended"],
   ended: ["archived"],
   archived: [],
@@ -50,7 +61,7 @@ export function validTransitions(
 
 /**
  * The closed-set guard predicate (EARS-7). `true` iff moving `from → to` is one
- * of the four legal forward transitions. Every other move — a skip-forward, any
+ * of the five legal forward transitions. Every other move — a skip-forward, any
  * backward move, reopening `archived`, the `published → draft` unpublish the PRD
  * names none, and any self-transition — is `false`. This is the single predicate
  * the server-side guard and the read-side `validTransitions` derive from, so the

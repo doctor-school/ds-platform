@@ -59,9 +59,13 @@ module), only its reference on the aggregate.
 ## EARS-7 — the closed-set lifecycle guard
 
 Lifecycle is one `EventLifecycleState` field with a **closed** transition set —
-`draft→published→live→ended→archived` (the SSOT map `LIFECYCLE_TRANSITIONS` in
-`@ds/schemas`). `POST /v1/admin/events/:id/transition` applies a move **only** if
-it is one of the four legal forward transitions (`canTransition`); every invalid
+`draft→published→live→ended→archived` plus the 014 EARS-18 shortcut
+`published→ended` (the SSOT map `LIFECYCLE_TRANSITIONS` in `@ds/schemas`), so
+`ended` has **two** legal origins and the target alone no longer identifies the
+command that reached it. `POST /v1/admin/events/:id/transition` applies a move
+**only** if it is one of the legal forward transitions (`canTransition`) AND
+passes `assertMarkEndedAllowed`, the shared precondition that stops the bare
+route being a back door into the shortcut; every invalid
 jump — a skip-forward, any backward move, reopening `archived`, the
 `published→draft` unpublish the PRD names none, or a self-transition — is refused
 server-side with a **409** state conflict (`InvalidTransitionError`), and the
@@ -103,8 +107,13 @@ now" signal off the same `EventLifecycleState`. `CloseRoom`
 (`POST /v1/admin/events/:id/close`) applies `live → ended` — **refused with a 409
 unless the event is in `live`** — and appends one terminal `audit_ledger` row
 (`event_type = event.ended`); it closes the 006 room (admission + heartbeat/chat
-acceptance stop) and **bounds the presence window** (006 EARS-7). On refusal the
-state is untouched and no audit row is written. 006's own admission/heartbeat/chat
+acceptance stop) and **bounds the presence window** (006 EARS-7). Since 014
+EARS-18 gave `ended` a second origin, `close` carries an **explicit origin
+guard** (`from !== "live"`) rather than relying on `canTransition`: a past-dated
+`published` event is refused here with `INVALID_TRANSITION` instead of silently
+ending through the room-control command, which would write the `event.ended`
+audit type and bypass the EARS-18 preconditions + `Idempotency-Key`. On refusal
+the state is untouched and no audit row is written. 006's own admission/heartbeat/chat
 refusal logic **consumes** this `live` window — it is out of this handler's scope
 (publish EARS-4 and archive EARS-6 are the sibling transitions). `platform_admin`
 -only (EARS-8). The admin open/close **actions** (stock Refine, each offered only
@@ -175,6 +184,27 @@ exists in this module). `platform_admin`-only (EARS-8). The admin archive
 `EventAdminDetail.validTransitions`) + the browser E2E are the integration slice
 (#595); this handler ships the backend command + its Vitest e2e.
 
+## 014 EARS-18 — the off-platform end (`MarkEventEnded`)
+
+`MarkEventEnded` (`POST /v1/admin/events/:id/mark-ended`) applies the
+`published → ended` shortcut for an эфир the platform never hosted — held before
+features 006/007 existed, or run off-platform. Without it every such event is
+stuck at `published` and its recording can never clear the 014 §3 publish gate.
+It is a **separate route from `:id/close`** even though both land on `ended`:
+they are different operator assertions, and they write **different** audit types
+(`event.marked_ended` here, `event.ended` for close). On top of the EARS-7
+closed-set check it enforces `assertMarkEndedAllowed` — origin `published`, room
+never opened (`live_at IS NULL`), scheduled end already past — so a **409**
+`EVENT_NOT_PAST` (carrying `scheduledEnd`) or `INVALID_TRANSITION` refuses
+anything else, state and ledger untouched. It creates no room record, no presence
+window and no recording: only the state change and exactly one
+`event.marked_ended` `audit_ledger` row, written atomically. The route is
+`Idempotency-Key`-protected on 012's `IdempotencyService` (428 when the header is
+absent, 400 when malformed, 409 on reuse with a different body; a stored refusal
+replays verbatim). Its protocol refusals answer in 007's `{ code, message }`
+envelope, not 014-design §11's RFC 7807 body — the deviation is recorded in
+`DEBT.md`. `platform_admin`-only, `revalidate: "live"` (#1304).
+
 ## EARS-3 — the stream config (`ConfigureStream`)
 
 `ConfigureStream` (`PUT /v1/admin/events/:id/stream`) records the event's stream
@@ -230,7 +260,12 @@ stream-config **form** (stock Refine) + its browser E2E are the integration slic
   row atomically keyed to the acting admin), `openRoom()` / `closeRoom()` (007
   EARS-5: the director's `published → live` / `live → ended` room-control
   commands — the same guarded, audited path as publish via the shared private
-  `namedTransition()` helper, appending `event.went_live` / `event.ended`),
+  `namedTransition()` helper, appending `event.went_live` / `event.ended`;
+  `closeRoom()` carries an explicit `from !== "live"` origin guard now that
+  `ended` has two legal origins), `markEnded()` (014 EARS-18: the
+  `published → ended` shortcut for an off-platform эфир — the same audited path
+  plus the `assertMarkEndedAllowed` preconditions and an idempotency fence,
+  appending `event.marked_ended`),
   `archive()` (007 EARS-6: the operator's manual `ended → archived` command — the
   same guarded, audited path via `namedTransition()`, appending `event.archived`;
   after it the event leaves all public surfaces off the single
@@ -280,19 +315,20 @@ stream-config **form** (stock Refine) + its browser E2E are the integration slic
 
 ## Endpoints
 
-| Route                                          | Access               | Command / read                                                                                                                                 |
-| ---------------------------------------------- | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| `POST /v1/admin/events`                        | `platform_admin`     | `CreateEvent` (multipart: `payload` JSON + optional `programPdf` file)                                                                         |
-| `PATCH /v1/admin/events/:id`                   | `platform_admin`     | `UpdateEvent` (EARS-2 pre-archive edit; multipart: optional `payload` JSON + optional `programPdf`; replace supersedes ref; 409 if `archived`) |
-| `GET /v1/admin/events`                         | `platform_admin`     | `EventAdminList`                                                                                                                               |
-| `GET /v1/admin/events/:id`                     | `platform_admin`     | `EventAdminDetail`                                                                                                                             |
-| `PUT /v1/admin/events/:id/stream`              | `platform_admin`     | `ConfigureStream` (EARS-3 `{ provider ∈ rutube\|youtube, embedRef }`; upsert; 409 past pre-air window)                                         |
-| `POST /v1/admin/events/:id/publish`            | `platform_admin`     | `PublishEvent` (EARS-4 `draft → published`; refused ≠ `draft`; +1 audit row)                                                                   |
-| `POST /v1/admin/events/:id/open`               | `platform_admin`     | `OpenRoom` (EARS-5 `published → live`; refused ≠ `published`; +1 `event.went_live` audit row)                                                  |
-| `POST /v1/admin/events/:id/close`              | `platform_admin`     | `CloseRoom` (EARS-5 `live → ended`; refused ≠ `live`; +1 `event.ended` audit row)                                                              |
-| `POST /v1/admin/events/:id/archive`            | `platform_admin`     | `ArchiveEvent` (EARS-6 `ended → archived`; manual/LD-2; refused ≠ `ended`; +1 `event.archived` audit row)                                      |
-| `POST /v1/admin/events/:id/transition`         | `platform_admin`     | `TransitionEvent` (EARS-7 closed-set guard; body `{ to }`)                                                                                     |
-| `GET /v1/public/events/:idOrSlug`              | **public** (no auth) | `PublicEventPage` (004 EARS-1) — `draft`/unknown → 404                                                                                         |
-| `GET /v1/public/events` (`?upcoming`)          | **public** (no auth) | `UpcomingBroadcastCard[]` (004 EARS-7) — nearest first; empty → `[]`                                                                           |
-| `GET /v1/public/events?month=YYYY-MM`          | **public** (no auth) | `MonthBroadcastEntry[]` (004 EARS-15) — МСК month window incl. the month's past events; malformed month → 400; empty → `[]`                    |
-| `GET /v1/public/events/month-counts?year=YYYY` | **public** (no auth) | `MonthlyEventCount[12]` (004 EARS-16) — publish-visible counts per МСК month, zero months included; malformed year → 400                       |
+| Route                                          | Access               | Command / read                                                                                                                                                               |
+| ---------------------------------------------- | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /v1/admin/events`                        | `platform_admin`     | `CreateEvent` (multipart: `payload` JSON + optional `programPdf` file)                                                                                                       |
+| `PATCH /v1/admin/events/:id`                   | `platform_admin`     | `UpdateEvent` (EARS-2 pre-archive edit; multipart: optional `payload` JSON + optional `programPdf`; replace supersedes ref; 409 if `archived`)                               |
+| `GET /v1/admin/events`                         | `platform_admin`     | `EventAdminList`                                                                                                                                                             |
+| `GET /v1/admin/events/:id`                     | `platform_admin`     | `EventAdminDetail`                                                                                                                                                           |
+| `PUT /v1/admin/events/:id/stream`              | `platform_admin`     | `ConfigureStream` (EARS-3 `{ provider ∈ rutube\|youtube, embedRef }`; upsert; 409 past pre-air window)                                                                       |
+| `POST /v1/admin/events/:id/publish`            | `platform_admin`     | `PublishEvent` (EARS-4 `draft → published`; refused ≠ `draft`; +1 audit row)                                                                                                 |
+| `POST /v1/admin/events/:id/open`               | `platform_admin`     | `OpenRoom` (EARS-5 `published → live`; refused ≠ `published`; +1 `event.went_live` audit row)                                                                                |
+| `POST /v1/admin/events/:id/close`              | `platform_admin`     | `CloseRoom` (EARS-5 `live → ended`; refused ≠ `live`; +1 `event.ended` audit row)                                                                                            |
+| `POST /v1/admin/events/:id/mark-ended`         | `platform_admin`     | `MarkEventEnded` (014 EARS-18 `published → ended` for an off-platform эфир; `Idempotency-Key` required; refused unless past + never live; +1 `event.marked_ended` audit row) |
+| `POST /v1/admin/events/:id/archive`            | `platform_admin`     | `ArchiveEvent` (EARS-6 `ended → archived`; manual/LD-2; refused ≠ `ended`; +1 `event.archived` audit row)                                                                    |
+| `POST /v1/admin/events/:id/transition`         | `platform_admin`     | `TransitionEvent` (EARS-7 closed-set guard; body `{ to }`)                                                                                                                   |
+| `GET /v1/public/events/:idOrSlug`              | **public** (no auth) | `PublicEventPage` (004 EARS-1) — `draft`/unknown → 404                                                                                                                       |
+| `GET /v1/public/events` (`?upcoming`)          | **public** (no auth) | `UpcomingBroadcastCard[]` (004 EARS-7) — nearest first; empty → `[]`                                                                                                         |
+| `GET /v1/public/events?month=YYYY-MM`          | **public** (no auth) | `MonthBroadcastEntry[]` (004 EARS-15) — МСК month window incl. the month's past events; malformed month → 400; empty → `[]`                                                  |
+| `GET /v1/public/events/month-counts?year=YYYY` | **public** (no auth) | `MonthlyEventCount[12]` (004 EARS-16) — publish-visible counts per МСК month, zero months included; malformed year → 400                                                     |

@@ -225,7 +225,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         // The read model offers only the next currently-valid move.
         const expectedNext =
           to === "published"
-            ? ["live"]
+            ? // 014 EARS-18 — this fixture is past-dated and never went live, so
+              // the server also offers the off-platform `ended` edge here.
+              ["live", "ended"]
             : to === "live"
               ? ["ended"]
               : to === "ended"
@@ -257,9 +259,13 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         expect(rows[0]?.state).toBe("draft"); // unchanged
       }
 
-      // From published, a skip to ended/archived is refused.
+      // From published, a skip to archived is refused. `ended` is NO LONGER a
+      // skip: 014 EARS-18 makes `published → ended` a legal edge for an эфир the
+      // platform never hosted (this fixture is past-dated and never went live,
+      // so its preconditions hold). Its own refusals are asserted in
+      // `test/events/mark-ended.e2e-spec.ts`, which owns that edge.
       await forceState(id, "published");
-      for (const to of ["ended", "archived"] as EventLifecycleState[]) {
+      for (const to of ["archived"] as EventLifecycleState[]) {
         const res = await transition(cookie, id, to);
         expect(res.statusCode, `published→${to} must be refused`).toBe(409);
       }

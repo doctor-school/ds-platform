@@ -136,6 +136,12 @@ const FLOOR_ROUTES: {
     payload: {},
   },
   {
+    endpoint: "POST /v1/admin/events/:id/mark-ended",
+    method: "POST",
+    url: `/v1/admin/events/${ABSENT_ID}/mark-ended`,
+    payload: {},
+  },
+  {
     endpoint: "POST /v1/admin/events/:id/archive",
     method: "POST",
     url: `/v1/admin/events/${ABSENT_ID}/archive`,
@@ -832,15 +838,18 @@ describe.skipIf(!process.env.DATABASE_URL)(
     }, 60_000);
 
     it("EARS-11.7: the 007 admin-events commands keep their shape on the raised floor", () => {
-      // The 007 event commands only: 014's recording routes (#1339) hang under
+      // The 007-shaped event commands: 014's recording routes (#1339) hang under
       // the same path prefix but are a different feature with its own EARS
       // coverage, and they are asserted by the floor-table rows above.
+      // 014 EARS-18's `mark-ended` IS counted here — it is a lifecycle-transition
+      // command that deliberately carries the same 007 EARS-8 classification as
+      // its `open`/`close`/`archive` siblings, so it must keep that shape too.
       const events = adminRows().filter(
         (r) =>
           r.endpoint.includes(" /v1/admin/events") &&
           !r.endpoint.includes("/recordings"),
       );
-      expect(events.length).toBe(10);
+      expect(events.length).toBe(11);
       for (const row of events) {
         // 007 EARS-8's classification, unchanged: only the floor beneath it rose.
         expect(row.meta.access, row.endpoint).toBe("authenticated");

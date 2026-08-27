@@ -276,7 +276,14 @@ describe.skipIf(
     expect(body.specialties).toEqual(["cardiology", "therapy"]);
     // …no unpublish: the state stays published (an edit is not a state reversal).
     expect(body.state).toBe("published");
-    expect(body.validTransitions).toEqual(["live"]);
+    // The edited instant (2026-07-17T17:30Z + 120 min) is deliberately pinned —
+    // this case is about the МСК→UTC fold above — so the event's scheduled end
+    // is permanently past and its room was never opened. Since 014 EARS-18 that
+    // is exactly the published event which offers BOTH edges out: `live` (007
+    // EARS-5 OpenRoom) and `ended` (MarkEventEnded, for an эфир held off the
+    // platform). The read model offers the pair; the edit still does not
+    // unpublish.
+    expect(body.validTransitions).toEqual(["live", "ended"]);
 
     // The 004 public event page reflects the edit.
     const pub = await app.inject({

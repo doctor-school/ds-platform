@@ -31,6 +31,8 @@ const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 type Db = DrizzleHandle["db"];
+/** The drizzle transaction handle a repository write runs inside. */
+export type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 
 /**
  * #1278 (ADR-0003 design §3.6 rule 3) — every default read is the ACTIVE
@@ -379,10 +381,18 @@ export class EventsRepository {
    * transition set (the EARS-7 guard). Returns the updated aggregate, or `null`
    * when the id does not exist.
    */
+  /**
+   * @param fence an optional writer enlisted in the SAME transaction as the
+   * state change and the audit row — the 012-design §6 idempotency completion
+   * (EARS-17). It runs after the audit insert and throws to abort: a fenced-out
+   * owner takes the whole transition down with it, so the record and the domain
+   * can never disagree about whether the command applied.
+   */
   async updateStateWithAudit(
     id: string,
     state: Event["state"],
     audit: TransitionAudit,
+    fence?: (tx: Tx, result: EventWithSpeakers) => Promise<void>,
   ): Promise<EventWithSpeakers | null> {
     // 010 EARS-3/EARS-5 — run the state write inside the audit-context wrapper
     // so the generic capture trigger attributes the resulting
@@ -424,7 +434,7 @@ export class EventsRepository {
         .select()
         .from(streamConfig)
         .where(activeStreamOf(id));
-      return {
+      const result: EventWithSpeakers = {
         event: row,
         speakers: speakerRows.map((s) => ({
           name: s.name,
@@ -435,6 +445,12 @@ export class EventsRepository {
           ? { provider: streamRow.provider, embedRef: streamRow.embedRef }
           : null,
       };
+      // Fenced idempotency completion, enlisted in this very transaction and run
+      // LAST so it stores the committed outcome (012-design §6). It throws when a
+      // newer lease owns the record, which rolls the state change and the audit
+      // row back with it — a fenced-out owner cannot double-apply the command.
+      await fence?.(tx, result);
+      return result;
     });
   }
 

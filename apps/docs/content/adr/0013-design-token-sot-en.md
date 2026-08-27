@@ -45,7 +45,7 @@ The JSON source + Style Dictionary **web** emit are built now. A React-Native / 
 
 UI is composed by **adopting ready blocks/components before writing any bespoke UI**. This is a gated step, enforced by the `build-ui-from-design-system` skill (#238): frame the unit → inventory `@ds/design-system` → **search a fixed registry whitelist and report the result** → adopt → re-skin to tokens (owned code in `src/blocks`/`src/primitives`) → wire app glue in the app → live-verify → bespoke only after the search comes up empty (recorded).
 
-**Approved registry whitelist (committable):** ① official **shadcn/ui** blocks + primitives (incl. `input-otp`), Radix variant · ② **Origin UI** · ③ **Intent UI / JollyUI** (React-Aria) · ④ **Kibo UI**. Acceptance bar for an adopted block: permissive license · correct RSC boundaries · accessibility · no superfluous dependencies · maintenance freshness.
+**Approved registry whitelist (committable):** ① official **shadcn/ui** blocks + primitives (incl. `input-otp`), Radix variant · ② **Intent UI / JollyUI** (React-Aria) · ③ **Kibo UI**. Origin UI was removed from the whitelist on 2026-08-27: upstream `origin-space/originui` relicensed to AGPL-3.0 as `cosscom/coss`, which is incompatible with committing its code into this `UNLICENSED` product repo (pattern-only reference remains allowed). Acceptance bar for an adopted block: permissive license · correct RSC boundaries · accessibility · no superfluous dependencies · maintenance freshness.
 
 ### 5. Licensing model — proprietary product, license-governed adoption
 

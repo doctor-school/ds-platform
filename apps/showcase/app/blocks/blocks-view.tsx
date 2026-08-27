@@ -928,15 +928,15 @@ const DIRECTION_EMPTY_NO_RESULTS = {
 };
 
 const DATA_TABLE_PROPS: PropRow[] = [
-  { name: "record", type: "DataTableRecordColumn<Row>", required: true, description: "Primary two-line record column: title (wraps to 2 lines) + muted context + the row-activation accessible name." },
-  { name: "columns", type: "DataTableColumn<Row>[]", required: true, description: "Declared columns — width · align · overflow · render · fullValue (the reachable full value behind an ellipsis)." },
+  { name: "record", type: "DataTableRecordColumn of the row type", required: true, description: "Primary two-line record column: title (wraps to 2 lines) + muted context + the row-activation accessible name." },
+  { name: "columns", type: "DataTableColumn of the row type — array", required: true, description: "Declared columns — width · align · overflow · render · fullValue (the reachable full value behind an ellipsis)." },
   { name: "rows / getRowKey", type: "Row[] / (row) => string", required: true, description: "One server-queried page of rows and their stable keys." },
   { name: "caption", type: "string", required: true, description: "Accessible table name — a visually hidden <caption>." },
   { name: "rowHref / onRowClick", type: "(row) => string / (row) => void", required: false, description: "Single-action list: the whole row opens the record via a real link/button. Omit for inert rows." },
   { name: "actions", type: "(row) => ReactNode", required: false, description: "Renders a trailing actions column — ONLY for rows with ≥2 actions." },
   { name: "isLoading / error", type: "boolean / ReactNode", required: false, description: "Skeleton rows under a drawn header; an error node replaces the body (never an empty state)." },
   { name: "isFiltered", type: "boolean", required: false, description: "Routes WHICH empty state shows — no records at all vs no results for the current filter." },
-  { name: "emptyNoRecords / emptyNoResults", type: "Omit<EmptyStateProps, 'variant'>", required: true, description: "The two empty situations, never collapsed into one string." },
+  { name: "emptyNoRecords / emptyNoResults", type: "EmptyStateProps without variant", required: true, description: "The two empty situations, never collapsed into one string." },
   { name: "pagination", type: "PaginationProps", required: false, description: "Optional paginated footer." },
 ];
 

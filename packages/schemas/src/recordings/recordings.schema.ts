@@ -124,6 +124,47 @@ export type UpdateRecordingRequest = z.infer<
 >;
 
 /**
+ * 014 EARS-3 (#1340) — the three states the public projection can be in
+ * (014-design §4). Not a status: `montage` / `raw-only` / `preparing` describe
+ * what the VISITOR is offered, derived on every read from the published,
+ * non-retired rows alone. `montage` covers both «edited + raw» and «edited
+ * only» — from the visitor's side those render the same primary player, and the
+ * presence of a second cut is carried by `secondaryKind`, not by a fourth state.
+ */
+export const RECORDING_STATES = ["montage", "raw-only", "preparing"] as const;
+export const RecordingStateSchema = z.enum(RECORDING_STATES);
+export type RecordingState = z.infer<typeof RecordingStateSchema>;
+
+/**
+ * `RecordingProjection` — the SOURCE-FREE public read model of 014-design §4,
+ * shared verbatim by all four consumers (#1341 public page, #1344 playback,
+ * #1346 «Мои события», #1347 archive badge). It answers «what does this event
+ * offer» and deliberately carries no `provider` / `embedRef`: the playable
+ * source lives behind the authenticated `PlayableRecording` contract, so the §5
+ * login gate is a response-body fact rather than a rendering rule.
+ *
+ * The edited-over-raw rule is derived, never stored: there is no `is_primary`,
+ * `is_featured` or ordering column on `event_recordings`, and publishing the
+ * edited cut later promotes it with no operator edit at all.
+ */
+export const RecordingProjectionSchema = z.object({
+  state: RecordingStateSchema,
+  /** The cut the player would load. `null` exactly when `preparing`. */
+  primaryKind: RecordingKindSchema.nullable(),
+  /** The alternative cut, `raw` under a montage; `null` when there is none. */
+  secondaryKind: RecordingKindSchema.nullable(),
+  /** The primary cut's poster reference; `null` renders the provider still. */
+  posterUrl: z.string().nullable(),
+  /**
+   * `events.recording_expected_by` — the DAY the plaque promises, as `YYYY-MM-DD`.
+   * Carried only while `preparing`: once something is published the promise has
+   * been kept and repeating it would contradict the player on the same page.
+   */
+  expectedBy: z.string().nullable(),
+});
+export type RecordingProjection = z.infer<typeof RecordingProjectionSchema>;
+
+/**
  * The operator's view of one recording row (014-design §7). Source-bearing on
  * purpose: this is the `platform_admin` surface. The public projection
  * (#1340/#1341) is a different, deliberately source-free contract — the login

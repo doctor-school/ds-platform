@@ -29,14 +29,27 @@ import type { SpecialtyRef } from "@ds/schemas";
  *     2028 г.)»); it is a legal reference book, and shortening an entry would
  *     make the doctor pick something the platform does not call by that name.
  *
- * Choosing a specialty is #1482's deliverable, not this slice's: `onSelect` is
- * the seam it will fill. Until then a chip activation changes NOTHING on screen —
- * deliberately, because a toast or a collapsed row would tell a doctor their
- * choice was remembered when nothing recorded it.
+ * Choosing a specialty (EARS-6/EARS-7) adds ONE further render: `chosen`, the
+ * collapsed row of `doctor-home.dc.html` L82-89. It is a state of this same
+ * section rather than a component beside it, because the catalog and the row are
+ * never both on screen — the row IS what the catalog becomes once the platform
+ * has recorded a choice, and «сменить» turns it back. A chip activation is the
+ * whole command (EARS-7's «no separate save step»), and the row is drawn from
+ * what the command RETURNED, so it can never name a choice nothing recorded: a
+ * refusal keeps the catalog open and says so through `choiceError`.
  */
 export type SpecialtyCatalogState =
   | { kind: "loading" }
   | { kind: "error" }
+  | {
+      kind: "chosen";
+      /**
+       * The remembered entry, as the platform stores it — the verbatim official
+       * name, «Другое» included (LD-5). Nothing here is a local label: an entry
+       * this section could not name is an entry it must not claim to remember.
+       */
+      specialty: SpecialtyRef;
+    }
   | {
       kind: "ready";
       /** `SpecialtyBook.total` — the ONE source of every count on this surface. */
@@ -76,6 +89,16 @@ export interface SpecialtyCatalogViewProps {
   onToggleExpand: () => void;
   onRetry: () => void;
   onSelect: (entry: SpecialtyRef) => void;
+  /** «сменить» — re-open the full variant-Б catalog over the remembered choice. */
+  onChange: () => void;
+  /**
+   * The platform REFUSED to record the last choice. Rendered inside the open
+   * catalog rather than replacing it: the recovery is simply to choose again, so
+   * the entries, the field and both routes to «Другое» must all stay standing.
+   * A boolean, not a message — the copy is this file's, like every other string
+   * on this surface.
+   */
+  choiceFailed: boolean;
 }
 
 /** Canvas copy, transcribed — never re-worded here. */
@@ -90,6 +113,12 @@ const RETRY = "Обновить";
 const SEARCH_ERROR_COPY = "Не удалось выполнить поиск. Повторите попытку или откройте весь список.";
 const SEARCH_RETRY = "Повторить поиск";
 const SEARCHING_COPY = "Ищем совпадения…";
+/** Canvas copy of the collapsed row (`doctor-home.dc.html` L86-87), transcribed. */
+const CHANGE = "сменить";
+const ADJACENCY_NOTE =
+  "Контент подобран по вашей специальности и смежным областям";
+/** A refusal, in the doctor's language, naming what did NOT happen. */
+const CHOICE_ERROR_COPY = "Не удалось запомнить выбор. Попробуйте ещё раз.";
 
 /**
  * The field's accessible name. The canvas gives the input a placeholder and no
@@ -132,7 +161,54 @@ export function SpecialtyCatalogView({
   onToggleExpand,
   onRetry,
   onSelect,
+  onChange,
+  choiceFailed,
 }: SpecialtyCatalogViewProps) {
+  if (state.kind === "chosen") {
+    return (
+      <section
+        data-testid="specialty-catalog"
+        data-state="chosen"
+        className={SECTION}
+      >
+        <div className={INNER}>
+          <Heading />
+          {/* The canvas row (L84-87): tinted bar, the official name, «сменить»,
+              and the adjacency line pushed to the far edge. It is a bar in
+              ordinary page flow — no dialog, no backdrop, nothing the rest of
+              the home page renders inside of (EARS-4 still holds here). */}
+          <div className="flex flex-wrap items-center gap-4 bg-tint px-6 py-5">
+            <span
+              data-testid="specialty-chosen"
+              className="text-lg font-extrabold tracking-tight text-tint-foreground"
+            >
+              {state.specialty.name}
+            </span>
+            <Button
+              type="button"
+              variant="link"
+              size="sm"
+              data-testid="specialty-change"
+              onClick={onChange}
+              className="h-auto p-0 text-xs font-bold text-tint-foreground"
+            >
+              {/* The caret is ornament — it must not end up in the control's
+                  accessible name, which is the verb the canvas gives it. */}
+              <span aria-hidden="true">▾</span>
+              {CHANGE}
+            </Button>
+            <span
+              data-testid="specialty-adjacency-note"
+              className="ml-auto text-xs font-semibold text-muted-foreground"
+            >
+              {ADJACENCY_NOTE}
+            </span>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
   if (state.kind === "loading") {
     return (
       <section
@@ -227,6 +303,20 @@ export function SpecialtyCatalogView({
             // than a form input (L121). Token utilities only.
             className="h-auto py-5 text-center text-base font-semibold layout:text-lg"
           />
+
+          {/* A refusal is announced, not implied by the absence of a collapsed
+              row: `role="alert"` because it is the consequence of an action the
+              doctor just took, and it sits with the field so the next attempt is
+              in the same place as the failed one. */}
+          {choiceFailed ? (
+            <p
+              data-testid="specialty-choice-error"
+              role="alert"
+              className="mt-4 text-sm font-semibold text-destructive"
+            >
+              {CHOICE_ERROR_COPY}
+            </p>
+          ) : null}
 
           {/* The «Частые специальности» caption belongs to the frequent set and
               disappears with it: over a filtered result it would label rows that

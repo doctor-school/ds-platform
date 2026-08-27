@@ -22,6 +22,7 @@ import { test, expect, type Page } from "@playwright/test";
 const BOOK_ROUTE = "**/v1/public/specialties";
 const FREQUENT_ROUTE = "**/v1/public/specialties/frequent";
 const SEARCH_ROUTE = "**/v1/public/specialties/search*";
+const CHOICE_ROUTE = "**/v1/public/specialty-choice";
 const STATISTICS_ROUTE = "**/v1/public/statistics";
 
 function ref(index: number, name: string, isOther = false) {
@@ -59,6 +60,8 @@ async function serveCatalog(
     failBook?: boolean;
     /** Read per request, so a test can fail a search and then let it recover. */
     searchFails?: () => boolean;
+    /** Every reference the storefront submitted as a choice, in order. */
+    onChoice?: (reference: string) => void;
   } = {},
 ) {
   // The hero's own read — unrelated to the catalog, but the page fetches it and
@@ -70,6 +73,33 @@ async function serveCatalog(
       body: JSON.stringify({ doctors: 1, computedAt: "2026-08-27T09:00:00.000Z" }),
     }),
   );
+
+  // The remembered-choice endpoint. This file's subject is the CATALOG, not the
+  // memory (that is `specialty-memory.spec.ts`), so the handler is the minimum
+  // that keeps the section resolvable: the read answers «nothing chosen yet», so
+  // every case below opens on the full variant-Б form, and the write echoes the
+  // entry back exactly as the api's contract does. Leaving it unrouted would
+  // send a real POST at the dev proxy on the first chip activation.
+  await page.route(CHOICE_ROUTE, async (route) => {
+    const request = route.request();
+    if (request.method() !== "POST") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ specialty: null, storedIn: "none" }),
+      });
+      return;
+    }
+    const body = request.postDataJSON() as { specialty?: string };
+    const reference = body?.specialty ?? "";
+    options.onChoice?.(reference);
+    const entry = ENTRIES.find((candidate) => candidate.id === reference);
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ specialty: entry ?? null, storedIn: "session" }),
+    });
+  });
 
   // The three patterns are disjoint by construction — `**/v1/public/specialties`
   // matches that exact path only, so it cannot swallow `/frequent` or `/search`
@@ -421,31 +451,31 @@ test.describe("017 EARS-4/5: the home specialty catalog (variant Б)", () => {
     expect(queries.at(-1)).toBe("кардиолог");
   });
 
-  test("017 EARS-4.6: a chip is a real labelled control, and activating it claims NOTHING was remembered", async ({
+  test("017 EARS-4.6: a chip is a real labelled control — reachable from the keyboard, and its activation IS the command", async ({
     page,
   }) => {
-    await serveCatalog(page);
+    const submitted: string[] = [];
+    await serveCatalog(page, {
+      onChoice: (reference) => submitted.push(reference),
+    });
     await page.goto("/");
 
     // Every entry is a genuine, named interactive element — never a div with a
-    // click handler — which is what makes the catalog keyboard-reachable.
+    // click handler — which is what makes the catalog keyboard-reachable at all.
     const chip = page.getByRole("button", { name: "Кардиология", exact: true });
     await expect(chip).toBeVisible();
     await chip.focus();
     await expect(chip).toBeFocused();
-    await chip.click();
 
-    // Choosing is #1482. Until it ships, the surface must not imply a choice
-    // was recorded: no collapsed row, no toast, no selected state.
-    await expect(page.getByTestId("specialty-catalog")).toHaveAttribute(
-      "data-state",
-      "open",
-    );
-    await expect(page.getByTestId("specialty-entry")).toHaveCount(
-      FREQUENT.length,
-    );
-    await expect(page.getByTestId("specialty-catalog")).not.toContainText(
-      /сменить|сохранен|запомнил/i,
-    );
+    // Activated from the KEYBOARD, and that alone records the choice: there is
+    // no separate save control to tab to afterwards (EARS-7's «no separate save
+    // step» is a keyboard promise too). What the recorded choice then does to
+    // the section is `specialty-memory.spec.ts`'s subject; what this case holds
+    // is that the chip is the control, not decoration in front of one.
+    await page.keyboard.press("Enter");
+
+    await expect(page.getByTestId("specialty-chosen")).toHaveText("Кардиология");
+    // The submitted reference is the entry's own identity, never its label.
+    expect(submitted).toEqual([ENTRIES[0]!.id]);
   });
 });

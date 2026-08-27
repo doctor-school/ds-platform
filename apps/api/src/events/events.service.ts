@@ -26,6 +26,7 @@ import { OBJECT_STORAGE, type ObjectStorage } from "../storage/index.js";
 import {
   type EventWithSpeakers,
   EventsRepository,
+  type Tx,
 } from "./events.repository.js";
 
 /**
@@ -181,6 +182,20 @@ export class EventNotPastError extends Error {
     this.name = "EventNotPastError";
   }
 }
+
+/**
+ * A writer a transition command enlists in its OWN transaction — 014 EARS-18's
+ * fenced `Idempotency-Key` completion (012-design §6). Structurally typed on the
+ * drizzle transaction handle so this module keeps no dependency on 012's
+ * `IdempotencyService`: the controller owns the protocol, the service only
+ * guarantees the write lands atomically with the state change and the audit row.
+ * Throwing aborts the transition — that is what makes a fenced-out owner
+ * incapable of double-applying the command.
+ */
+export type TransitionFence = (
+  tx: Tx,
+  detail: EventAdminDetail,
+) => Promise<void>;
 
 /** The subset of the event row the 014 EARS-18 preconditions read. */
 type MarkEndedSubject = Pick<Event, "state" | "startsAt" | "durationMin"> & {
@@ -661,11 +676,15 @@ export class EventsService {
    * and exactly one {@link EVENT_MARKED_ENDED_AUDIT_TYPE} `audit_ledger` row,
    * written atomically and keyed to the acting `platform_admin`.
    *
+   * @param fence the 012-design §6 idempotency completion, enlisted in the same
+   * transaction as the state change and the audit row (EARS-17): a fenced-out
+   * owner aborts the whole transition rather than double-applying it.
    * @returns the updated `EventAdminDetail`, or `null` when the id does not exist.
    */
   async markEnded(
     id: string,
     actorSub: string | null,
+    fence?: TransitionFence,
   ): Promise<EventAdminDetail | null> {
     return this.namedTransition(
       id,
@@ -679,6 +698,7 @@ export class EventsService {
       (event, from) => {
         if (from !== "published") throw new InvalidTransitionError(from, "ended");
       },
+      fence,
     );
   }
 
@@ -693,6 +713,8 @@ export class EventsService {
    *
    * @param extraGuard a command-specific precondition run after the closed-set
    * guard and before any write; it throws to refuse, leaving the state untouched.
+   * @param fence an optional writer enlisted in the transition's own transaction
+   * (012-design §6 idempotency completion) — see {@link TransitionFence}.
    * @returns the updated `EventAdminDetail`, or `null` when the id does not exist.
    */
   private async namedTransition(
@@ -701,6 +723,7 @@ export class EventsService {
     auditType: string,
     actorSub: string | null,
     extraGuard?: (event: Event, from: EventLifecycleState) => void,
+    fence?: TransitionFence,
   ): Promise<EventAdminDetail | null> {
     const current = await this.repo.findById(id);
     if (!current) return null;
@@ -712,11 +735,15 @@ export class EventsService {
     extraGuard?.(current.event, from);
     assertMarkEndedAllowed(current.event, from, to);
 
-    const updated = await this.repo.updateStateWithAudit(id, to, {
-      eventType: auditType,
-      subjectId: actorSub,
-      from,
-    });
+    const updated = await this.repo.updateStateWithAudit(
+      id,
+      to,
+      { eventType: auditType, subjectId: actorSub, from },
+      // The fence is handed the SAME projection this method returns, so the
+      // completion the record stores and the body the caller receives cannot
+      // differ (012-design §6).
+      fence && (async (tx, row) => fence(tx, await this.toDetail(row))),
+    );
     // The row existed a moment ago; a concurrent delete is the only null path.
     return updated ? this.toDetail(updated) : null;
   }

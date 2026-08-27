@@ -5,21 +5,30 @@ import {
   Controller,
   Get,
   HttpCode,
+  HttpException,
+  Inject,
   NotFoundException,
   Param,
   Patch,
   Post,
   Put,
   Req,
+  Res,
 } from "@nestjs/common";
-import type { FastifyRequest } from "fastify";
+import type { FastifyReply, FastifyRequest } from "fastify";
 import {
   CreateEventRequestSchema,
   type EventAdminDetail,
   type EventAdminList,
+  IDEMPOTENCY_KEY_HEADER,
   UpdateEventRequestSchema,
 } from "@ds/schemas";
 import { Authz } from "../authz/index.js";
+import {
+  type IdempotencyLease,
+  IdempotencyService,
+} from "../taxonomy/idempotency.service.js";
+import { TaxonomyError } from "../taxonomy/taxonomy.errors.js";
 import {
   ConfigureStreamRequestDto,
   TransitionEventRequestDto,
@@ -50,7 +59,13 @@ const MAX_PDF_BYTES = 25 * 1024 * 1024;
  */
 @Controller({ path: "admin/events", version: "1" })
 export class EventsAdminController {
-  constructor(private readonly events: EventsService) {}
+  constructor(
+    private readonly events: EventsService,
+    // 014 EARS-17/EARS-18 — the ONE shared idempotency record (012-design §6),
+    // consumed by `mark-ended` exactly as 014's recordings surface consumes it.
+    @Inject(IdempotencyService)
+    private readonly idempotency: IdempotencyService,
+  ) {}
 
   @Post()
   @HttpCode(201)
@@ -377,6 +392,20 @@ export class EventsAdminController {
    * `EVENT_NOT_PAST` while the scheduled end is still in the future, 409
    * `INVALID_TRANSITION` from any other origin state or when the room was ever
    * opened. It creates no room record, no presence window and no recording.
+   *
+   * **Protocol.** A canonical-UUID `Idempotency-Key` is REQUIRED (014-design
+   * §3.1), over the ONE retained fenced record 012-design §6 owns — the same
+   * `IdempotencyService` 014's recordings surface consumes, not a second
+   * implementation. The order is: auth (guard) → key shape → reserve/replay →
+   * command. The completion is enlisted in the transition's own transaction, so
+   * a fenced-out owner rolls the state change and the audit row back with it,
+   * and a deterministic 409 is fenced-stored so a retry replays that exact
+   * refusal instead of re-deciding it.
+   *
+   * `If-Match` is NOT threaded: the `events` aggregate carries no version column
+   * and the 007 admin reads emit no `ETag`, so there is no validator a client
+   * could send. That foundation is tracked at #1593; adding a bespoke one here
+   * would be the per-route drift 014-design §3.1 warns against.
    */
   @Post(":id/mark-ended")
   @HttpCode(200)
@@ -394,10 +423,82 @@ export class EventsAdminController {
   async markEnded(
     @Param("id") id: string,
     @Req() req: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<EventAdminDetail> {
-    return this.namedTransition(id, req, (eventId, actorSub) =>
-      this.events.markEnded(eventId, actorSub),
-    );
+    const actor = actorSub(req);
+    // The protocol refusals (428 key required, 400 malformed key, 409 reuse /
+    // in-progress) are 012 `TaxonomyError`s. They are re-shaped onto THIS
+    // surface's `{ code, message }` body rather than dragging 012's RFC 7807
+    // filter onto a controller whose four live sibling routes answer the other
+    // shape — one new route is not a licence to reshape `publish`/`open`/
+    // `close`/`archive`.
+    const outcome = await withProtocolRefusalShape(async () => {
+      const key = this.idempotency.requireKey(
+        req.headers[IDEMPOTENCY_KEY_HEADER],
+      );
+      return this.idempotency.begin({
+        key,
+        scope: "events",
+        actorId: actor,
+        method: "POST",
+        route: "/v1/admin/events/:id/mark-ended",
+        // The command has no body, so the concrete path IS the whole bound
+        // input: the same key against a different event is a reuse, not a replay.
+        fingerprint: this.idempotency.fingerprint({
+          method: "POST",
+          path: `/v1/admin/events/${id}/mark-ended`,
+        }),
+      });
+    });
+    if (outcome.kind === "replay") {
+      void reply.status(outcome.replay.status);
+      return outcome.replay.body as EventAdminDetail;
+    }
+
+    try {
+      const updated = await this.events.markEnded(id, actor, (tx, detail) =>
+        // The stored bytes ARE the bytes sent: the record is completed with the
+        // very projection this handler returns, inside the transaction that
+        // applies the transition.
+        this.idempotency.complete(tx, outcome.lease, {
+          status: 200,
+          body: detail,
+        }),
+      );
+      if (!updated) throw new NotFoundException("event not found");
+      return updated;
+    } catch (err) {
+      throw await this.storeTransitionRefusal(outcome.lease, err);
+    }
+  }
+
+  /**
+   * Fenced-store a DETERMINISTIC refusal of `mark-ended` so a retry replays it
+   * verbatim (012-design §6 bullet 3), and return the exception to throw.
+   *
+   * Only the two contracted 409s qualify: both are properties of the bound
+   * request against a row state, so an exact retry gets the same answer forever.
+   * A 404 is deliberately excluded — the row may exist later, so the answer is
+   * not a property of the request — and an unclassified fault is left
+   * takeover-eligible rather than frozen into a verdict. A store failure never
+   * suppresses the response: the record simply stays `processing`.
+   */
+  private async storeTransitionRefusal(
+    lease: IdempotencyLease,
+    err: unknown,
+  ): Promise<unknown> {
+    const refusal = asTransitionRefusal(err);
+    if (refusal instanceof ConflictException) {
+      try {
+        await this.idempotency.storeTerminalOutcome(lease, {
+          status: refusal.getStatus(),
+          body: refusal.getResponse(),
+        });
+      } catch {
+        // Logged by the service; the caller still gets its answer.
+      }
+    }
+    return refusal;
   }
 
   /**
@@ -452,11 +553,8 @@ export class EventsAdminController {
       actorSub: string | null,
     ) => Promise<EventAdminDetail | null>,
   ): Promise<EventAdminDetail> {
-    // The acting admin `sub` keys the audit row (ADR-0003 §6). Null only if
-    // unresolved — the AuthzGuard has already refused any unauthenticated caller.
-    const actorSub = (req as { user?: { sub?: string } }).user?.sub ?? null;
     try {
-      const updated = await run(id, actorSub);
+      const updated = await run(id, actorSub(req));
       if (!updated) throw new NotFoundException("event not found");
       return updated;
     } catch (err) {
@@ -508,6 +606,36 @@ export class EventsAdminController {
  * they are emitted from one place so the bare EARS-7 command and every named
  * command answer the same body for the same domain refusal.
  */
+/**
+ * The acting admin's Zitadel `sub` — the actor half of both the audit row
+ * (ADR-0003 §6) and the idempotency record's identity binding. Null only if
+ * unresolved; the `AuthzGuard` has already refused any unauthenticated caller.
+ */
+function actorSub(req: FastifyRequest): string | null {
+  return (req as { user?: { sub?: string } }).user?.sub ?? null;
+}
+
+/**
+ * Run the 012 idempotency protocol preamble and re-shape its `TaxonomyError`
+ * refusals onto the 007 admin surface's `{ code, message }` body — same status,
+ * same stable code, this controller's envelope. The alternative (applying
+ * `TaxonomyProblemFilter` here) would silently reshape four live sibling routes,
+ * which that filter's own doc rules out.
+ */
+async function withProtocolRefusalShape<T>(run: () => Promise<T>): Promise<T> {
+  try {
+    return await run();
+  } catch (err) {
+    if (err instanceof TaxonomyError) {
+      throw new HttpException(
+        { code: err.errorCode, message: err.detail ?? err.message },
+        err.getStatus(),
+      );
+    }
+    throw err;
+  }
+}
+
 function asTransitionRefusal(err: unknown): unknown {
   if (err instanceof EventNotPastError) {
     return new ConflictException({

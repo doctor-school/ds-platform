@@ -29,3 +29,51 @@ export type {
   MonthPickerCell,
   MonthPickerYear,
 } from "./month-picker";
+
+// #1578 — the operator/admin block tier. Adopted from the whitelisted MIT
+// registries (official shadcn/ui `Table` · `Pagination` · `Field` family ·
+// `DataTableToolbar`; Kibo UI `combobox`) and re-skinned to DS tokens, so an
+// admin screen composes blocks instead of hand-assembling tables and toolbars.
+export {
+  Table,
+  TableHeader,
+  TableBody,
+  TableFooter,
+  TableRow,
+  TableHead,
+  TableCell,
+  TableCaption,
+} from "./table";
+export { DataTable } from "./data-table";
+export type {
+  DataTableProps,
+  DataTableColumn,
+  DataTableRecordColumn,
+  DataTableAlign,
+  DataTableOverflow,
+} from "./data-table";
+export { Pagination, buildPageItems } from "./pagination";
+export type { PaginationProps } from "./pagination";
+export { EmptyState } from "./empty-state";
+export type { EmptyStateProps, EmptyStateVariant } from "./empty-state";
+export { FilterBar } from "./filter-bar";
+export type {
+  FilterBarProps,
+  FilterBarApplyMode,
+  AppliedFilter,
+} from "./filter-bar";
+export { Combobox } from "./combobox";
+export type { ComboboxProps, ComboboxOption } from "./combobox";
+export {
+  FormSection,
+  FormFieldGroup,
+  FormSeparator,
+  FormActions,
+  FormDerivedNote,
+} from "./field-group";
+export type {
+  FormSectionProps,
+  FormFieldGroupProps,
+  FormActionsProps,
+  FormDerivedNoteProps,
+} from "./field-group";

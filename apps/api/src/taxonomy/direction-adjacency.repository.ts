@@ -2,7 +2,10 @@ import { Inject, Injectable } from "@nestjs/common";
 import { aliasedTable, and, asc, count, desc, eq, isNull, sql } from "drizzle-orm";
 import type { Direction, DirectionAdjacency, DrizzleHandle } from "@ds/db";
 import { directionAdjacency, directions } from "@ds/db";
-import type { DirectionAdjacencyAdminListQuery } from "@ds/schemas";
+import type {
+  DirectionAdjacencyAdminListQuery,
+  DirectionAdjacencyKind,
+} from "@ds/schemas";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
 import { withRequestAuditContext } from "../audit/audit-context.tx.js";
 
@@ -36,7 +39,7 @@ export interface EdgeLifecyclePatch {
 
 /** The attribute patch a PATCH applies — the endpoints are never patchable. */
 export interface EdgeAttributePatch {
-  kind?: string | undefined;
+  kind?: DirectionAdjacencyKind | undefined;
   weight?: number | undefined;
 }
 
@@ -95,8 +98,11 @@ export class DirectionAdjacencyRepository {
     values: {
       directionId: string;
       adjacentDirectionId: string;
-      kind: string;
-      weight: number;
+      kind: DirectionAdjacencyKind;
+      // Omitted ⇒ the column's declared default applies: weight is not an
+      // operator decision (017-design §9.3), so the SSOT for its value is the
+      // schema, never a constant re-stated in this layer.
+      weight?: number | undefined;
     },
   ): Promise<DirectionAdjacency> {
     const [row] = await tx.insert(directionAdjacency).values(values).returning();

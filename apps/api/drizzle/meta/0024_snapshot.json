@@ -1036,7 +1036,8 @@
         },
         "kind": {
           "name": "kind",
-          "type": "text",
+          "type": "direction_adjacency_kind",
+          "typeSchema": "public",
           "primaryKey": false,
           "notNull": true
         },
@@ -1044,7 +1045,8 @@
           "name": "weight",
           "type": "integer",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "default": 50
         },
         "status": {
           "name": "status",
@@ -1155,10 +1157,6 @@
         "direction_adjacency_no_self_edge": {
           "name": "direction_adjacency_no_self_edge",
           "value": "\"direction_adjacency\".\"direction_id\" <> \"direction_adjacency\".\"adjacent_direction_id\""
-        },
-        "direction_adjacency_kind_shape": {
-          "name": "direction_adjacency_kind_shape",
-          "value": "\"direction_adjacency\".\"kind\" ~ '^[a-z0-9]+(-[a-z0-9]+)*$' AND char_length(\"direction_adjacency\".\"kind\") <= 64"
         },
         "direction_adjacency_weight_bounds": {
           "name": "direction_adjacency_weight_bounds",
@@ -2832,6 +2830,15 @@
         "draft",
         "published",
         "retired"
+      ]
+    },
+    "public.direction_adjacency_kind": {
+      "name": "direction_adjacency_kind",
+      "schema": "public",
+      "values": [
+        "related",
+        "subdiscipline",
+        "interdisciplinary"
       ]
     }
   },

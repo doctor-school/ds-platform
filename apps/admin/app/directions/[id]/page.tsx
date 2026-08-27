@@ -31,9 +31,9 @@ import type { UpdateDirectionVars } from "@/providers/data-provider";
  * refetched afterwards, so the next edit asserts the version the SERVER holds
  * rather than the one this page was first rendered from.
  *
- * The slug is sent only while it is still editable AND actually changed: `PATCH`
- * omission means «unchanged», and re-sending the identical slug of a row would
- * ask the server to re-validate an identity nobody touched.
+ * There is no slug in the body: the address is derived on create and frozen on
+ * first publish (017-design §9.3), so a retitle never moves the URL a doctor
+ * bookmarked and this page has no identity decision left to send.
  */
 export default function DirectionDetailPage() {
   const t = useTranslations();
@@ -114,11 +114,6 @@ export default function DirectionDetailPage() {
                     setSaved(false);
                     const vars: UpdateDirectionVars = {
                       title: values.title,
-                      ...(detail.slugEditable &&
-                      values.slug &&
-                      values.slug !== detail.slug
-                        ? { slug: values.slug }
-                        : {}),
                       version: detail.version,
                     };
                     update(

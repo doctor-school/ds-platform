@@ -5,6 +5,8 @@ import {
   type CreateDirectionRequest,
   slugifyTaxonomyTitle,
   SlugSchema,
+  TAXONOMY_SLUG_ATTEMPT_LIMIT,
+  taxonomySlugCandidate,
   taxonomyETag,
   type DirectionAdminDetail,
   type DirectionAdminList,
@@ -94,23 +96,15 @@ export class DirectionsService {
   private async createCommand(
     input: CreateDirectionInput,
   ): Promise<DirectionCommandResult> {
-    const slug = this.resolveCreateSlug(input.payload);
-    // Pre-flight the conflict OUTSIDE the transaction so a doomed request never
-    // opens one; the unique index still guards the race.
-    if (await this.repo.slugTakenAnywhere(slug)) {
-      throw new TaxonomyError(
-        "SLUG_CONFLICT",
-        "another direction already holds this slug; restore that record instead of re-creating it",
-      );
-    }
+    const base = this.deriveBaseSlug(input.payload.title);
 
     const row = await this.repo.transaction(async (tx) => {
-      if (await this.repo.slugTaken(tx, slug)) {
-        throw new TaxonomyError(
-          "SLUG_CONFLICT",
-          "another direction already holds this slug; restore that record instead of re-creating it",
-        );
-      }
+      // The address is DERIVED, so a taken candidate is not a refusal the
+      // operator could act on — they never chose it. Walk the deterministic
+      // candidate sequence inside the transaction (the unique index remains the
+      // final race guard) instead of answering a 409 for a decision the server
+      // made on the operator's behalf.
+      const slug = await this.resolveFreeSlug(tx, base);
       const created = await this.repo.insert(tx, {
         slug,
         title: input.payload.title,
@@ -139,26 +133,11 @@ export class DirectionsService {
       );
     }
 
-    // Slug immutability is a ROW-state refusal, not a shape one. Echoing the
-    // current value is not an update: the admin form posts the whole «Основное»
-    // tab, so refusing the echo would block every ordinary edit of a published
-    // direction over an untouched field.
-    const slugChanges =
-      input.payload.slug !== undefined && input.payload.slug !== current.slug;
-    if (slugChanges) {
-      if (current.firstPublishedAt !== null) {
-        throw new TaxonomyError(
-          "SLUG_IMMUTABLE",
-          "the slug was locked by the first publication and cannot change",
-        );
-      }
-      if (await this.repo.slugTakenAnywhere(input.payload.slug!, current.id)) {
-        throw new TaxonomyError(
-          "SLUG_CONFLICT",
-          "another direction already holds this slug",
-        );
-      }
-    }
+    // No slug branch here at all: the address never arrives from the operator
+    // (017-design §9.3), so a PATCH cannot move the public identity of a
+    // direction — published or not. Retitling a direction leaves its address
+    // where it was, which is the point: the URL a doctor bookmarked outlives an
+    // editorial rewording of the title above it.
 
     const row = await this.repo.transaction(async (tx) => {
       // Re-read under the row lock: everything above was optimistic.
@@ -170,23 +149,11 @@ export class DirectionsService {
           "the direction changed since it was read; reload and retry",
         );
       }
-      if (
-        input.payload.slug !== undefined &&
-        input.payload.slug !== locked.slug &&
-        locked.firstPublishedAt !== null
-      ) {
-        throw new TaxonomyError(
-          "SLUG_IMMUTABLE",
-          "the slug was locked by the first publication and cannot change",
-        );
-      }
-
       const updated = await this.repo.updateVersioned(
         tx,
         input.id,
         input.expectedVersion,
         {
-          ...(slugChanges ? { slug: input.payload.slug! } : {}),
           ...(input.payload.title !== undefined
             ? { title: input.payload.title }
             : {}),
@@ -234,21 +201,43 @@ export class DirectionsService {
     };
   }
 
-  /** Resolve the create-time slug: the authored one, or generated from the title. */
-  private resolveCreateSlug(payload: CreateDirectionRequest): string {
-    if (payload.slug) return payload.slug;
-    const generated = slugifyTaxonomyTitle(payload.title);
-    const parsed = SlugSchema.safeParse(generated);
+  /**
+   * Fold the authored Russian title into the base address.
+   *
+   * A title that yields nothing sluggable at all (only emoji, only punctuation)
+   * is refused against `title`, the field the operator actually typed — there is
+   * no `slug` input left to point them at, and inventing an identity for a
+   * permanent public URL is worse than asking for a real title.
+   */
+  private deriveBaseSlug(title: string): string {
+    const parsed = SlugSchema.safeParse(slugifyTaxonomyTitle(title));
     if (!parsed.success) {
-      // The title yields no usable public identity. Refuse and let the operator
-      // supply one — a fabricated slug would become a permanent public URL.
       throw new TaxonomyError(
         "VALIDATION_FAILED",
-        "the title yields no usable slug; supply one explicitly",
-        [{ path: "slug", message: "could not be generated from the title" }],
+        "the title yields no usable page address; use a title with letters or digits",
+        [{ path: "title", message: "yields no usable page address" }],
       );
     }
     return parsed.data;
+  }
+
+  /**
+   * The first candidate in the derived sequence that no retained row holds.
+   * Bounded: fifty directions folding to one address is a data problem, not a
+   * collision, and a create must never become an unbounded scan.
+   */
+  private async resolveFreeSlug(
+    tx: Parameters<Parameters<DirectionsRepository["transaction"]>[0]>[0],
+    base: string,
+  ): Promise<string> {
+    for (let attempt = 1; attempt <= TAXONOMY_SLUG_ATTEMPT_LIMIT; attempt += 1) {
+      const candidate = taxonomySlugCandidate(base, attempt);
+      if (!(await this.repo.slugTaken(tx, candidate))) return candidate;
+    }
+    throw new TaxonomyError(
+      "SLUG_CONFLICT",
+      "too many directions already derive this page address; give this one a more specific title",
+    );
   }
 }
 
@@ -263,7 +252,6 @@ function toDetail(row: Direction): DirectionAdminDetail {
     title: row.title,
     status: row.status,
     firstPublishedAt: row.firstPublishedAt?.toISOString() ?? null,
-    slugEditable: row.firstPublishedAt === null,
     version: row.version,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),

@@ -18,9 +18,10 @@ import type { CreateDirectionVars } from "@/providers/data-provider";
  * the row's `If-Match`. A refusal renders the actionable RU sentence its stable
  * `errorCode` maps to — never a bare status.
  *
- * An empty slug box is OMITTED rather than sent as `""`: an empty box means
- * «сгенерируй адрес», and that decision belongs to the API, which owns the
- * canonical slugification and the uniqueness check.
+ * The body is the title and nothing else: «адрес страницы» is derived by the
+ * API from that title (017-design §9.3), and `CreateDirectionRequestSchema` is
+ * `.strict()`, so the canonical slugification and its uniqueness suffixing have
+ * exactly one implementation and this page cannot opt out of it.
  */
 export default function CreateDirectionPage() {
   const t = useTranslations();
@@ -47,10 +48,7 @@ export default function CreateDirectionPage() {
           submitting={mutation.isPending}
           onSubmit={(values) => {
             setErrorKey(null);
-            const vars: CreateDirectionVars = {
-              title: values.title,
-              ...(values.slug ? { slug: values.slug } : {}),
-            };
+            const vars: CreateDirectionVars = { title: values.title };
             create(
               { resource: "directions", values: vars },
               {

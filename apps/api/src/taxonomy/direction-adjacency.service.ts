@@ -148,7 +148,10 @@ export class DirectionAdjacencyService {
         directionId,
         adjacentDirectionId,
         kind,
-        weight,
+        // `weight` is optional on the wire and absent from the operator
+        // interface; passing `undefined` through lets the column's declared
+        // default decide, instead of this layer inventing a second answer.
+        ...(weight === undefined ? {} : { weight }),
       });
       const hydrated = await this.repo.hydrate(tx, created);
       await this.idempotency.complete(tx, input.lease, {

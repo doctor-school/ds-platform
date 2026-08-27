@@ -8,8 +8,8 @@ import {
   CreateProjectRequestSchema,
   CreateDirectionRequestSchema,
   CreateDirectionSpecialtyRequestSchema,
-  DIRECTION_ADJACENCY_KIND_MAX,
-  DIRECTION_ADJACENCY_KIND_REGEX,
+  type DirectionAdjacencyKind,
+  DirectionAdjacencyKindSchema,
   DIRECTION_ADJACENCY_WEIGHT_MAX,
   DIRECTION_ADJACENCY_WEIGHT_MIN,
   DurationSecSchema,
@@ -243,34 +243,19 @@ export interface ExpertFormFields {
  * entity shape the API refuses (`CreateDirectionRequestSchema` is `.strict()`).
  *
  * `title` reuses the SSOT create-schema validator verbatim (trim + 1…120), and
- * `slug` follows the same "empty box ⇒ the server generates it" rule the project
- * and expert forms established — emptiness is legal, only a non-empty value is
- * checked against the SSOT slug grammar.
+ * it is the ONLY box: «адрес страницы» is derived from the title by the server
+ * and frozen on first publish (017-design §9.3), so there is no slug field to
+ * validate here — `CreateDirectionRequestSchema` is `.strict()` and would refuse
+ * one outright.
  */
 const directionCreate = CreateDirectionRequestSchema.shape;
 
 export const DirectionFormSchema = z.object({
   title: directionCreate.title,
-  slug: z.string().superRefine((value, ctx) => {
-    if (value.trim().length === 0) return; // empty ⇒ server generates it
-    const result = SlugSchema.safeParse(value.trim());
-    if (result.success) return;
-    for (const issue of result.error.issues) {
-      // Same distinction the sibling forms keep: `custom` is the canonical-UUID
-      // refusal, everything else the grammar/length rule. No baked message — an
-      // explicit one would outrank the localized per-parse error map.
-      ctx.addIssue(
-        issue.code === "custom"
-          ? { code: "custom" }
-          : { code: "invalid_format", format: "regex" },
-      );
-    }
-  }),
 });
 
 export interface DirectionFormFields {
   title: string;
-  slug: string;
 }
 
 /**
@@ -526,11 +511,9 @@ export const DirectionAdjacencyFormSchema = z
   .object({
     directionId: z.uuid(),
     adjacentDirectionId: z.uuid(),
-    kind: z
-      .string()
-      .trim()
-      .max(DIRECTION_ADJACENCY_KIND_MAX)
-      .regex(DIRECTION_ADJACENCY_KIND_REGEX),
+    // The SSOT enum verbatim: «вид связи» is a closed vocabulary (017-design
+    // §9.3), so the form validates membership, not a string shape.
+    kind: DirectionAdjacencyKindSchema,
     weightText: z.string(),
   })
   .superRefine((values, ctx) => {
@@ -565,6 +548,12 @@ export const DirectionAdjacencyFormSchema = z
 export interface DirectionAdjacencyFormFields {
   directionId: string;
   adjacentDirectionId: string;
-  kind: string;
+  /**
+   * `""` is «ещё не выбрано» — a state the SCHEMA refuses, which is exactly the
+   * point: a closed vocabulary has no neutral member to pre-select, so an
+   * unpicked kind must fail validation with a sentence rather than be silently
+   * defaulted to whichever option happened to be listed first.
+   */
+  kind: DirectionAdjacencyKind | "";
   weightText: string;
 }

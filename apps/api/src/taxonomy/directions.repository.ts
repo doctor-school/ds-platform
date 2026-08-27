@@ -21,9 +21,12 @@ export interface DirectionInsert {
   title: string;
 }
 
-/** The field patch a PATCH applies. `undefined` means unchanged. */
+/**
+ * The field patch a PATCH applies. `undefined` means unchanged. `slug` is absent
+ * by design: the address is derived at insert and never re-authored
+ * (017-design §9.3), so there is no update path that could move it.
+ */
 export interface DirectionPatch {
-  slug?: string;
   title?: string;
 }
 

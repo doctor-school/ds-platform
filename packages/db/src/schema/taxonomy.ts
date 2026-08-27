@@ -901,20 +901,38 @@ export type DirectionSpecialty = typeof directionSpecialties.$inferSelect;
 export type NewDirectionSpecialty = typeof directionSpecialties.$inferInsert;
 
 /**
- * The adjacency `kind` grammar — lowercase ASCII words joined by single
- * hyphens, the same machine-identifier shape as a slug or a specialty code.
+ * The adjacency `kind` vocabulary — CLOSED, and closed here (017-design §9.3).
  *
- * Deliberately an OPEN vocabulary in a text column rather than a pgEnum:
- * ADR-0016 §2.8 names `kind` without fixing its values, and inventing a closed
- * set here would freeze an editorial taxonomy decision the ADR did not take. The
- * DB owns the SHAPE (machine-readable, bounded, never free prose); which labels
- * exist is an editorial matter.
+ * An operator picking «вид связи» is making a taxonomy decision, so the set of
+ * decisions available has to be enumerable at the point of choice: a `Combobox`
+ * can only offer options that exist, and a shape CHECK over free text offers
+ * none. The enum is therefore the single place the vocabulary lives — the Zod
+ * contract mirrors it, the generated SDK carries it, and the RU labels the
+ * operator reads are presentation over these machine values, never stored.
+ *
+ * The three members are the distinctions the reference book actually draws:
+ * `related` — a neighbouring direction, no hierarchy implied; `subdiscipline` —
+ * the adjacent direction is a narrower part of this one; `interdisciplinary` —
+ * the two meet across fields rather than within one.
  */
-export const DIRECTION_ADJACENCY_KIND_PATTERN = "^[a-z0-9]+(-[a-z0-9]+)*$";
-export const DIRECTION_ADJACENCY_KIND_MAX = 64;
+export const directionAdjacencyKind = pgEnum("direction_adjacency_kind", [
+  "related",
+  "subdiscipline",
+  "interdisciplinary",
+]);
+
 /** The relative-strength scale of an adjacency edge; 1 = weakest, 100 = strongest. */
 export const DIRECTION_ADJACENCY_WEIGHT_MIN = 1;
 export const DIRECTION_ADJACENCY_WEIGHT_MAX = 100;
+/**
+ * The declared weight every authored edge gets (017-design §9.3): weight is a
+ * tuning parameter of targeting resolution, not an editorial decision, so it is
+ * absent from the operator interface and the column supplies it. Mid-scale by
+ * construction — an unweighted edge is neither promoted nor demoted against its
+ * siblings, so the adjacent set falls back to its own ordering rather than to an
+ * accident of the default.
+ */
+export const DIRECTION_ADJACENCY_WEIGHT_DEFAULT = 50;
 
 /**
  * `direction_adjacency` — the direction ↔ direction self-relation carrying
@@ -942,10 +960,15 @@ export const directionAdjacency = pgTable(
     adjacentDirectionId: uuid("adjacent_direction_id")
       .notNull()
       .references(() => directions.id, { onDelete: "restrict" }),
-    /** The authored edge label — machine-readable, bounded, never free prose. */
-    kind: text("kind").notNull(),
-    /** Relative strength of the edge within the source direction's adjacent set. */
-    weight: integer("weight").notNull(),
+    /** The authored edge label — one member of the closed vocabulary above. */
+    kind: directionAdjacencyKind("kind").notNull(),
+    /**
+     * Relative strength of the edge within the source direction's adjacent set.
+     * Server-supplied: the operator never authors it (017-design §9.3).
+     */
+    weight: integer("weight")
+      .notNull()
+      .default(DIRECTION_ADJACENCY_WEIGHT_DEFAULT),
     status: relationshipStatus("status").notNull().default("active"),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
     /** Optimistic-concurrency counter behind the join ETag; starts at 1, `++` per successful write. */
@@ -972,10 +995,8 @@ export const directionAdjacency = pgTable(
       "direction_adjacency_no_self_edge",
       sql`${t.directionId} <> ${t.adjacentDirectionId}`,
     ),
-    check(
-      "direction_adjacency_kind_shape",
-      sql`${t.kind} ~ ${sql.raw(`'${DIRECTION_ADJACENCY_KIND_PATTERN}'`)} AND char_length(${t.kind}) <= ${sql.raw(String(DIRECTION_ADJACENCY_KIND_MAX))}`,
-    ),
+    // No `kind` CHECK: the enum type IS the constraint now, so a shape check
+    // beside it would be a second, weaker statement of the same rule.
     check(
       "direction_adjacency_weight_bounds",
       sql`${t.weight} BETWEEN ${sql.raw(String(DIRECTION_ADJACENCY_WEIGHT_MIN))} AND ${sql.raw(String(DIRECTION_ADJACENCY_WEIGHT_MAX))}`,

@@ -33,19 +33,24 @@ ALTER INDEX "topics_slug_trgm_idx" RENAME TO "directions_slug_trgm_idx";--> stat
 ALTER TRIGGER "topics_first_published_at_set_once" ON "directions" RENAME TO "directions_first_published_at_set_once";--> statement-breakpoint
 
 -- ── ADR-0016 §2.8: the two direction reference relations (new) ───────────────
+--
+-- 017-design §9.3: «вид связи» is a CLOSED vocabulary, so the constraint is an
+-- enum type rather than a shape CHECK over free text. The type is the single
+-- place the vocabulary lives — `packages/db` mirrors it, the Zod contract
+-- mirrors that, and the SDK regenerates from it.
+CREATE TYPE "public"."direction_adjacency_kind" AS ENUM('related', 'subdiscipline', 'interdisciplinary');--> statement-breakpoint
 CREATE TABLE "direction_adjacency" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"direction_id" uuid NOT NULL,
 	"adjacent_direction_id" uuid NOT NULL,
-	"kind" text NOT NULL,
-	"weight" integer NOT NULL,
+	"kind" "direction_adjacency_kind" NOT NULL,
+	"weight" integer DEFAULT 50 NOT NULL,
 	"status" "relationship_status" DEFAULT 'active' NOT NULL,
 	"deleted_at" timestamp with time zone,
 	"version" integer DEFAULT 1 NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "direction_adjacency_no_self_edge" CHECK ("direction_adjacency"."direction_id" <> "direction_adjacency"."adjacent_direction_id"),
-	CONSTRAINT "direction_adjacency_kind_shape" CHECK ("direction_adjacency"."kind" ~ '^[a-z0-9]+(-[a-z0-9]+)*$' AND char_length("direction_adjacency"."kind") <= 64),
 	CONSTRAINT "direction_adjacency_weight_bounds" CHECK ("direction_adjacency"."weight" BETWEEN 1 AND 100),
 	CONSTRAINT "direction_adjacency_retired_iff_deleted" CHECK (("direction_adjacency"."status" = 'retired') = ("direction_adjacency"."deleted_at" IS NOT NULL)),
 	CONSTRAINT "direction_adjacency_version_positive" CHECK ("direction_adjacency"."version" >= 1)

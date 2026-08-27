@@ -16,6 +16,7 @@ import {
   DIRECTION_ADJACENCY_WEIGHT_MAX,
   DIRECTION_ADJACENCY_WEIGHT_MIN,
   type DirectionAdjacencyAdminDetail,
+  type DirectionAdjacencyKind,
 } from "@ds/schemas";
 import {
   DirectionAdjacencyFormSchema,
@@ -48,7 +49,7 @@ import type { DirectionSpecialtyOption } from "@/components/direction-specialty-
 export interface DirectionAdjacencyFormValues {
   directionId: string;
   adjacentDirectionId: string;
-  kind: string;
+  kind: DirectionAdjacencyKind;
   weight: number;
 }
 
@@ -100,7 +101,10 @@ export function DirectionAdjacencyForm({
           onSubmit({
             directionId: fields.directionId,
             adjacentDirectionId: fields.adjacentDirectionId,
-            kind: fields.kind.trim(),
+            // Reached only after the resolver accepted the field, and the
+            // resolver is the SSOT enum — so the `""` placeholder can never get
+            // this far. No trim: an enum member is not typed text.
+            kind: fields.kind as DirectionAdjacencyKind,
             weight: Number(fields.weightText.trim()),
           }),
         )}

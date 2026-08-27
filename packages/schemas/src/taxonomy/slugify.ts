@@ -73,6 +73,34 @@ export function slugifyTaxonomyTitle(title: string): string {
   return folded
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
-    .slice(0, 160)
+    .slice(0, SLUG_MAX)
     .replace(/-+$/g, "");
+}
+
+/** The slug length the taxonomy tables and `SlugSchema` agree on. */
+const SLUG_MAX = 160;
+
+/**
+ * How many derived candidates a caller may try before giving up. Two directions
+ * whose titles fold to the same slug is ordinary («Кардиология» in two books);
+ * fifty is not, and looping forever on a pathological seed would turn a create
+ * into a timeout.
+ */
+export const TAXONOMY_SLUG_ATTEMPT_LIMIT = 50;
+
+/**
+ * The `attempt`-th candidate for one derived base slug: attempt 1 is the base
+ * itself, attempt 2 is `base-2`, and so on — so the first direction to claim a
+ * title gets the clean address and a later collision is visibly a second one.
+ *
+ * The suffix is deterministic, never random: re-running a create with the same
+ * titles in the same order yields the same addresses, which is what makes an
+ * e2e assertion on a derived slug meaningful. Truncation happens on the BASE so
+ * the suffix always survives — a candidate silently trimmed back to its
+ * neighbour's slug would collide forever.
+ */
+export function taxonomySlugCandidate(base: string, attempt: number): string {
+  if (attempt <= 1) return base;
+  const suffix = `-${attempt}`;
+  return `${base.slice(0, SLUG_MAX - suffix.length).replace(/-+$/g, "")}${suffix}`;
 }

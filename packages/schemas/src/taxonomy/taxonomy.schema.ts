@@ -376,11 +376,17 @@ const DirectionTitleSchema = z
  * that posts `description` or `coverRef` is asking for a direction shape this
  * feature deliberately does NOT have — a silently ignored field would let the
  * admin believe it stored something. 400 `VALIDATION_FAILED` instead.
+ *
+ * `slug` is NOT part of this contract (017-design §9.3). «Адрес страницы» is
+ * derived from the Russian title by the server and frozen on first publish; it
+ * is not an editorial decision, and it is rendered nowhere in the admin. Under
+ * `.strict()` a posted `slug` is therefore a 400 rather than a silently honoured
+ * override — the derivation has exactly one implementation, and a client cannot
+ * opt out of it.
  */
 export const CreateDirectionRequestSchema = z
   .object({
     title: DirectionTitleSchema,
-    slug: SlugSchema.optional(),
   })
   .strict();
 export type CreateDirectionRequest = z.infer<typeof CreateDirectionRequestSchema>;
@@ -388,34 +394,36 @@ export type CreateDirectionRequest = z.infer<typeof CreateDirectionRequestSchema
 /**
  * `PATCH /v1/admin/directions/:id` — edit the same row.
  *
- * Omission means unchanged. Neither field accepts `null`: `title` is the row's
- * only descriptive value and NOT NULL in the DB, and `slug` is the permanent
- * identity. `slug` is accepted only while `first_published_at IS NULL` — the
- * refusal depends on row state, so it is a 409 `SLUG_IMMUTABLE` from the
- * service, not a shape rule here.
+ * Omission means unchanged; `title` does not accept `null` (it is the row's only
+ * descriptive value and NOT NULL in the DB). There is no `slug` here either: the
+ * address never arrives from the operator, so the identity of a published
+ * direction cannot move and the old 409 `SLUG_IMMUTABLE` path is unreachable
+ * from this surface by construction rather than by refusal.
  */
 export const UpdateDirectionRequestSchema = z
   .object({
     title: DirectionTitleSchema.optional(),
-    slug: SlugSchema.optional(),
   })
   .strict();
 export type UpdateDirectionRequest = z.infer<typeof UpdateDirectionRequestSchema>;
 
 /**
  * The admin detail projection. `version` backs the ETag the next PATCH must
- * echo; `slugEditable` is the server's answer to "may the operator still change
- * the public URL", which the UI reads rather than re-deriving.
+ * echo.
+ *
+ * `slug` is still READ here — the storefront resolves a direction by it and the
+ * admin needs it to build a preview link — but there is no `slugEditable`
+ * counterpart any more: the address is derived and never authored, so "may the
+ * operator still change the public URL" is a question with one permanent answer
+ * and a boolean stating it would be an affordance the interface does not offer.
  */
 export const DirectionAdminDetailSchema = z.object({
   id: z.string(),
   slug: z.string(),
   title: z.string(),
   status: TaxonomyStatusSchema,
-  /** Null until the first publish; once set, the slug is permanently locked. */
+  /** Null until the first publish; once set, the derived slug is permanently frozen. */
   firstPublishedAt: z.string().nullable(),
-  /** True iff the slug may still be edited — the UI reads this, never re-derives it. */
-  slugEditable: z.boolean(),
   version: z.number().int().positive(),
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -1719,21 +1727,26 @@ export type DirectionSpecialtyAdminListQuery = z.infer<
 >;
 
 /**
- * The adjacency edge label. Mirrors `direction_adjacency_kind_shape` in the DB:
- * the column owns the constraint, this schema owns the wire contract. An OPEN
- * vocabulary by decision — ADR-0016 §2.8 names `kind` without fixing its values,
- * so the contract pins the SHAPE (machine-readable, bounded) and leaves which
- * labels exist an editorial matter.
+ * The adjacency edge label — a CLOSED vocabulary (017-design §9.3), mirroring
+ * the `direction_adjacency_kind` enum in `@ds/db`: the type owns the constraint,
+ * this schema owns the wire contract, and the SDK regenerates from it. A value
+ * outside the set is a 400 with a field path, never a 500 from the type cast.
+ *
+ * The stored values are machine slugs; the RU labels an operator reads
+ * («Смежное направление» / «Поддисциплина» / «Междисциплинарная связь») are
+ * presentation and live with the admin surface, not in the contract.
  */
-export const DIRECTION_ADJACENCY_KIND_MAX = 64;
-export const DIRECTION_ADJACENCY_KIND_REGEX = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+export const DIRECTION_ADJACENCY_KINDS = [
+  "related",
+  "subdiscipline",
+  "interdisciplinary",
+] as const;
+export const DirectionAdjacencyKindSchema = z.enum(DIRECTION_ADJACENCY_KINDS);
+export type DirectionAdjacencyKind = z.infer<typeof DirectionAdjacencyKindSchema>;
+
 export const DIRECTION_ADJACENCY_WEIGHT_MIN = 1;
 export const DIRECTION_ADJACENCY_WEIGHT_MAX = 100;
 
-const DirectionAdjacencyKindSchema = z
-  .string()
-  .max(DIRECTION_ADJACENCY_KIND_MAX)
-  .regex(DIRECTION_ADJACENCY_KIND_REGEX);
 const DirectionAdjacencyWeightSchema = z.coerce
   .number()
   .int()
@@ -1754,7 +1767,10 @@ export const CreateDirectionAdjacencyRequestSchema = z
     directionId: TaxonomyIdSchema,
     adjacentDirectionId: TaxonomyIdSchema,
     kind: DirectionAdjacencyKindSchema,
-    weight: DirectionAdjacencyWeightSchema,
+    // Optional, and absent from the operator interface: weight is a tuning
+    // parameter of targeting resolution, so the column's declared default
+    // applies unless a caller states otherwise (017-design §9.3).
+    weight: DirectionAdjacencyWeightSchema.optional(),
   })
   .strict()
   .refine((v) => v.directionId !== v.adjacentDirectionId, {
@@ -1791,7 +1807,7 @@ export const DirectionAdjacencyAdminDetailSchema = z.object({
   adjacentDirectionId: z.string(),
   adjacentDirectionTitle: z.string(),
   adjacentDirectionSlug: z.string(),
-  kind: z.string(),
+  kind: DirectionAdjacencyKindSchema,
   weight: z.number().int(),
   status: RelationshipStatusSchema,
   version: z.number().int().positive(),

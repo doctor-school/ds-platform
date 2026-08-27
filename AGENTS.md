@@ -65,7 +65,7 @@ Not in the list? Dependency bump → `engineering-task` + the two checks in `rep
 
 ### 3.2 Open with the session plan
 
-First reply opens with the owner-facing «План сессии» block (RU, ≤6 lines; format: CLAUDE.md → Session plan), then: kind, active artifact (Issue #N / spec path / ADR section), skill dispatched.
+First reply opens with the «План сессии» block (format: CLAUDE.md → Session plan), then: kind, track (`track:*`), active artifact (Issue #N / spec path / ADR section), skill dispatched.
 
 ### 3.3 Load the skill
 

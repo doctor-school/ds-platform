@@ -12,12 +12,29 @@ import {
   type DirectionAdminList,
   type UpdateDirectionRequest,
 } from "@ds/schemas";
-import { DirectionsRepository } from "./directions.repository.js";
+import type {
+  LifecycleImpact,
+  LifecycleImpactRow,
+  TaxonomyLifecycleTransition,
+} from "@ds/schemas";
+import {
+  type DirectionIncidentRelation,
+  DirectionsRepository,
+} from "./directions.repository.js";
 import {
   type IdempotencyLease,
   IdempotencyService,
 } from "./idempotency.service.js";
-import { markReplayable, TaxonomyError } from "./taxonomy.errors.js";
+import {
+  type LifecycleImpactBinding,
+  LifecycleImpactService,
+  type LifecycleImpactTuple,
+} from "./lifecycle-impact.service.js";
+import {
+  markReplayable,
+  TaxonomyError,
+  withSerializationAbortMapping,
+} from "./taxonomy.errors.js";
 
 // 012 EARS-3 (#1285) — the curated direction authoring commands. The same §5.1
 // failure ORDER the project and expert verticals established, minus the media
@@ -55,6 +72,25 @@ export interface DirectionCommandResult {
   etag: string;
 }
 
+/** `POST /v1/admin/directions/:id/publish` — no impact envelope (see below). */
+export interface PublishDirectionInput {
+  id: string;
+  expectedVersion: number;
+  lease: IdempotencyLease;
+}
+
+/** `POST /v1/admin/directions/:id/{retire|restore}` — impact-gated (§3.1). */
+export interface DirectionTransitionInput {
+  id: string;
+  transition: TaxonomyLifecycleTransition;
+  expectedVersion: number;
+  impactToken: string;
+  lease: IdempotencyLease;
+}
+
+/** The §3.1 target kind this vertical previews and binds envelopes against. */
+const TARGET_KIND = "direction" as const;
+
 @Injectable()
 export class DirectionsService {
   // Explicit @Inject tokens on every dependency, class ones included — the
@@ -65,7 +101,48 @@ export class DirectionsService {
     @Inject(DirectionsRepository) private readonly repo: DirectionsRepository,
     @Inject(IdempotencyService)
     private readonly idempotency: IdempotencyService,
+    @Inject(LifecycleImpactService)
+    private readonly impact: LifecycleImpactService,
   ) {}
+
+  /** `POST /v1/admin/directions/:id/publish` — put the draft on the public surface. */
+  publish(input: PublishDirectionInput): Promise<DirectionCommandResult> {
+    return this.fenced(input.lease, () => this.publishCommand(input));
+  }
+
+  /** `POST /v1/admin/directions/:id/{retire|restore}` — the §3.1 gated pair. */
+  transition(input: DirectionTransitionInput): Promise<DirectionCommandResult> {
+    return this.fenced(input.lease, () => this.transitionCommand(input));
+  }
+
+  /**
+   * `GET /v1/admin/directions/:id/lifecycle-impact?transition=` (§3.1) — what
+   * the transition would change, plus the signed envelope authorizing exactly
+   * THIS transition against exactly this discovered set.
+   */
+  async lifecycleImpact(
+    id: string,
+    transition: TaxonomyLifecycleTransition,
+  ): Promise<LifecycleImpact> {
+    const target = await this.repo.findById(id);
+    if (!target) throw new TaxonomyError("RESOURCE_NOT_FOUND");
+    assertLifecycleTransitionApplies(target.status, transition);
+
+    const incident = await this.repo.discoverIncidentAnywhere(id);
+
+    return {
+      transition,
+      version: target.version,
+      affected: affectedRows(incident),
+      impactToken: this.impact.issue({
+        transition,
+        targetKind: TARGET_KIND,
+        targetId: target.id,
+        targetVersion: target.version,
+        fingerprint: this.impact.fingerprint(fingerprintTuples(incident)),
+      }),
+    };
+  }
 
   /** `POST /v1/admin/directions` — create one draft direction. */
   create(input: CreateDirectionInput): Promise<DirectionCommandResult> {
@@ -176,6 +253,138 @@ export class DirectionsService {
     return { detail: toDetail(row), etag: taxonomyETag(row.version) };
   }
 
+  /**
+   * `draft → published`, with `first_published_at` stamped ONCE (LD-3).
+   *
+   * Deliberately WITHOUT the §3.1 impact envelope: the preview gate exists so an
+   * operator sees what a transition WITHDRAWS from the public surface, and a
+   * publish withdraws nothing — it only adds. 012 EARS-13/14 scope the gate to
+   * retire and restore for exactly that reason, and a mandatory 428 on a purely
+   * additive move would be ceremony, not a safeguard.
+   *
+   * There is no publish-requirements check to run: `title` is NOT NULL and the
+   * PATCH contract refuses a null one, so a direction is never editable into an
+   * incomplete public projection (§5.2's `PublicDirection` is `{ id, slug, title }`).
+   */
+  private async publishCommand(
+    input: PublishDirectionInput,
+  ): Promise<DirectionCommandResult> {
+    const current = await this.repo.findById(input.id);
+    if (!current) throw new TaxonomyError("RESOURCE_NOT_FOUND");
+
+    const row = await this.repo.transaction(async (tx) => {
+      const locked = await this.repo.lockById(tx, input.id);
+      if (!locked) throw new TaxonomyError("RESOURCE_NOT_FOUND");
+      if (locked.version !== input.expectedVersion) {
+        throw new TaxonomyError(
+          "PRECONDITION_FAILED",
+          "the direction changed since it was read; reload and retry",
+        );
+      }
+      if (locked.status !== "draft") {
+        throw new TaxonomyError(
+          "INVALID_TRANSITION",
+          locked.status === "published"
+            ? "this direction is already published"
+            : "this direction is retired; restore it before publishing it again",
+        );
+      }
+
+      const moved = await this.repo.transitionVersioned(
+        tx,
+        input.id,
+        input.expectedVersion,
+        {
+          status: "published",
+          deletedAt: null,
+          // Set ONCE and never re-stamped: a republished direction keeps the
+          // date it first became public, which is what pins its slug (LD-3).
+          ...(locked.firstPublishedAt ? {} : { firstPublishedAt: new Date() }),
+        },
+      );
+      if (!moved) {
+        throw new TaxonomyError(
+          "PRECONDITION_FAILED",
+          "the direction changed since it was read; reload and retry",
+        );
+      }
+      await this.idempotency.complete(tx, input.lease, {
+        status: 200,
+        body: toDetail(moved),
+        etag: taxonomyETag(moved.version),
+      });
+      return moved;
+    });
+
+    return { detail: toDetail(row), etag: taxonomyETag(row.version) };
+  }
+
+  private async transitionCommand(
+    input: DirectionTransitionInput,
+  ): Promise<DirectionCommandResult> {
+    // Optimistic pre-flight OUTSIDE the transaction: a doomed request never
+    // opens a SERIALIZABLE one. The authoritative checks all repeat inside.
+    const preflight = await this.repo.findById(input.id);
+    if (!preflight) throw new TaxonomyError("RESOURCE_NOT_FOUND");
+
+    // LD-1: a SERIALIZABLE abort is a stale confirmation, not a server fault —
+    // mapped to the same 412 as every other stale mode, never auto-retried.
+    const row = await withSerializationAbortMapping(() =>
+      this.repo.serializableTransaction(async (tx) => {
+        const locked = await this.repo.lockById(tx, input.id);
+        if (!locked) throw new TaxonomyError("RESOURCE_NOT_FOUND");
+        if (locked.version !== input.expectedVersion) {
+          throw new TaxonomyError(
+            "PRECONDITION_FAILED",
+            "the direction changed since it was read; reload and retry",
+          );
+        }
+        assertLifecycleTransitionApplies(locked.status, input.transition);
+
+        // Recompute the fingerprint under the lock and verify the envelope
+        // against it: a join created, retired or restored since the preview, or
+        // a neighbouring direction whose status moved, changes the digest and
+        // makes the confirmation stale. Verification runs BEFORE any write, so
+        // a stale token leaves zero domain and zero audit mutation.
+        const incident = await this.repo.discoverIncident(tx, input.id);
+        const expected: LifecycleImpactBinding = {
+          transition: input.transition,
+          targetKind: TARGET_KIND,
+          targetId: locked.id,
+          targetVersion: locked.version,
+          fingerprint: this.impact.fingerprint(fingerprintTuples(incident)),
+        };
+        this.impact.verify(input.impactToken, expected);
+
+        const moved = await this.repo.transitionVersioned(
+          tx,
+          input.id,
+          input.expectedVersion,
+          input.transition === "retire"
+            ? { status: "retired", deletedAt: new Date() }
+            : // §102: an ordinary restore returns an entity to `draft` — never
+              // straight back to `published`. Re-publishing is a separate,
+              // deliberate act, and `first_published_at` is left untouched.
+              { status: "draft", deletedAt: null },
+        );
+        if (!moved) {
+          throw new TaxonomyError(
+            "PRECONDITION_FAILED",
+            "the direction changed since it was read; reload and retry",
+          );
+        }
+        await this.idempotency.complete(tx, input.lease, {
+          status: 200,
+          body: toDetail(moved),
+          etag: taxonomyETag(moved.version),
+        });
+        return moved;
+      }),
+    );
+
+    return { detail: toDetail(row), etag: taxonomyETag(row.version) };
+  }
+
   /** `GET /v1/admin/directions/:id` — detail by stable id, retired rows included. */
   async detail(id: string): Promise<DirectionCommandResult> {
     const row = await this.repo.findById(id);
@@ -239,6 +448,62 @@ export class DirectionsService {
       "too many directions already derive this page address; give this one a more specific title",
     );
   }
+}
+
+/**
+ * An entity has THREE states, so which transition applies depends on where the
+ * row is: `draft | published → retire`, `retired → restore` (§102). Asking for
+ * the one that does not apply is not a no-op to swallow — the operator is
+ * looking at a stale screen, and 409 `INVALID_TRANSITION` says so.
+ */
+export function assertLifecycleTransitionApplies(
+  status: "draft" | "published" | "retired",
+  transition: TaxonomyLifecycleTransition,
+): void {
+  const applies =
+    transition === "retire" ? status !== "retired" : status === "retired";
+  if (applies) return;
+  throw new TaxonomyError(
+    "INVALID_TRANSITION",
+    transition === "retire"
+      ? "this direction is already retired"
+      : "this direction is not retired, so there is nothing to restore",
+  );
+}
+
+/**
+ * What the operator is SHOWN (§3.1): the joins that resolve today and therefore
+ * stop (or start) resolving because of this transition. A retired join is not
+ * listed — it is already withdrawn, so naming it would overstate the change —
+ * but it IS covered by the fingerprint below, so a join restored between preview
+ * and confirmation still invalidates the envelope.
+ */
+function affectedRows(
+  incident: readonly DirectionIncidentRelation[],
+): LifecycleImpactRow[] {
+  return incident
+    .filter((relation) => relation.status === "active")
+    .map((relation) => ({
+      kind: relation.kind,
+      id: relation.id,
+      title: relation.title,
+      // A join has no address of its own — the dialog renders «не задан».
+      slug: null,
+      status: relation.status,
+    }));
+}
+
+/** The canonical fingerprint input — EVERY incident join, retired ones included. */
+function fingerprintTuples(
+  incident: readonly DirectionIncidentRelation[],
+): LifecycleImpactTuple[] {
+  return incident.map((relation) => ({
+    kind: relation.kind,
+    id: relation.id,
+    version: relation.version,
+    state: relation.status,
+    eligibility: relation.eligibility,
+  }));
 }
 
 /**

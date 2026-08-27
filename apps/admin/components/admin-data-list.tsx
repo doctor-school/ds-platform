@@ -257,7 +257,13 @@ export function AdminDataList<Row, Status extends string = TaxonomyStatus>({
                   ))}
                 </NativeSelect>
               </div>
-              <div className="flex items-center">
+              {/* The row aligns its children on `items-end`, so a bare switch
+                  (26px tall) would sit on the BOTTOM edge of the 44px fields
+                  beside it instead of on their centre line. Giving the wrapper
+                  the shared control height (`h-11`, the `Input`/`NativeSelect`
+                  box) puts the track on that centre line — the same fix, in the
+                  same token, on both shells. */}
+              <div className="flex h-11 items-center">
                 <Switch
                   id={`${testId}-include-retired`}
                   checked={query.includeRetired}

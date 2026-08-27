@@ -177,7 +177,10 @@ export function AdminListShell<Row, Status extends string = TaxonomyStatus>({
             ))}
           </NativeSelect>
         </div>
-        <div className="flex items-center sm:pb-3">
+        {/* `h-11` is the shared control box of `Input`/`NativeSelect`: the row
+            aligns on `items-end`, so without it the 26px track sits on the
+            fields' bottom edge rather than their centre line. */}
+        <div className="flex h-11 items-center">
           {/* The DS Switch wraps its own <label>, so the visible text is its
               child rather than a sibling <Label> — a second label element would
               give the same control two accessible names. */}

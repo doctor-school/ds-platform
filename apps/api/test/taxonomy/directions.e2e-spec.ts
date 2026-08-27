@@ -193,6 +193,17 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     afterEach(async () => {
       for (const id of createdDirectionIds.splice(0)) {
+        // The joins reference `directions` with ON DELETE RESTRICT, so a
+        // fixture edge has to go first — the FK is the production guarantee
+        // that a direction is retired and never deleted.
+        await pool.query(
+          "DELETE FROM direction_adjacency WHERE direction_id = $1 OR adjacent_direction_id = $1",
+          [id],
+        );
+        await pool.query(
+          "DELETE FROM direction_specialties WHERE direction_id = $1",
+          [id],
+        );
         await pool.query("DELETE FROM directions WHERE id = $1", [id]);
       }
       for (const k of usedKeys.splice(0)) {

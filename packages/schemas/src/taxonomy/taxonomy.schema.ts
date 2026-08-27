@@ -990,6 +990,12 @@ export const LIFECYCLE_IMPACT_ROW_KINDS = [
   "event↔direction",
   "project↔expert",
   "project↔partner",
+  // #1483 — the two joins a DIRECTION is an endpoint of. Retiring a direction
+  // withdraws every targeting answer these edges feed (ADR-0016 §5), so a
+  // preview that omitted them would understate the blast radius of the exact
+  // transition 012 EARS-13 exists to make visible.
+  "direction↔specialty",
+  "direction↔direction",
 ] as const;
 export const LifecycleImpactRowKindSchema = z.enum(LIFECYCLE_IMPACT_ROW_KINDS);
 export type LifecycleImpactRowKind = z.infer<

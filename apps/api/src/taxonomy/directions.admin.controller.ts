@@ -18,8 +18,12 @@ import {
   CreateDirectionRequestSchema,
   IDEMPOTENCY_KEY_HEADER,
   IF_MATCH_HEADER,
+  type LifecycleImpact,
+  LIFECYCLE_IMPACT_TOKEN_HEADER,
+  LifecycleImpactQuerySchema,
   parseIfMatchVersion,
   type DirectionAdminList,
+  type TaxonomyLifecycleTransition,
   UpdateDirectionRequestSchema,
 } from "@ds/schemas";
 import { Authz } from "../authz/index.js";
@@ -27,6 +31,7 @@ import {
   type IdempotencyOutcome,
   IdempotencyService,
 } from "./idempotency.service.js";
+import { LifecycleImpactService } from "./lifecycle-impact.service.js";
 import { TaxonomyError } from "./taxonomy.errors.js";
 import { TaxonomyProblemFilter } from "./taxonomy.problem-filter.js";
 import { DirectionsService } from "./directions.service.js";
@@ -44,6 +49,9 @@ import { DirectionsService } from "./directions.service.js";
 // column to land in. Anything that is not JSON is 415, which is why this
 // controller stays a third the size of its sibling without omitting a contract.
 
+/** The idempotency scope every direction command reserves under. */
+const SCOPE = "taxonomy.directions";
+
 @Controller({ path: "admin/directions", version: "1" })
 @UseFilters(TaxonomyProblemFilter)
 export class DirectionsAdminController {
@@ -54,6 +62,8 @@ export class DirectionsAdminController {
     @Inject(DirectionsService) private readonly directions: DirectionsService,
     @Inject(IdempotencyService)
     private readonly idempotency: IdempotencyService,
+    @Inject(LifecycleImpactService)
+    private readonly impact: LifecycleImpactService,
   ) {}
 
   /**
@@ -259,6 +269,232 @@ export class DirectionsAdminController {
     void reply.header("etag", etag);
     return detail;
   }
+
+  /**
+   * EARS-13 / §102 — `POST /v1/admin/directions/:id/publish`. The additive half
+   * of the lifecycle: `draft → published`, target `If-Match` required, no
+   * impact envelope (a publish withdraws nothing — see the service).
+   */
+  @Post(":id/publish")
+  @HttpCode(200)
+  @Authz({
+    access: "authenticated",
+    roles: ["platform_admin"],
+    check: "fast-path",
+    revalidate: "live",
+    audit: "low-stakes",
+    tests: ["EARS-3", "EARS-13", "EARS-16", "EARS-17"],
+  })
+  async publish(
+    @Param("id") id: string,
+    @Req() req: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<unknown> {
+    if (!CANONICAL_UUID_REGEX.test(id)) {
+      throw new TaxonomyError("RESOURCE_NOT_FOUND");
+    }
+    const key = this.idempotency.requireKey(req.headers[IDEMPOTENCY_KEY_HEADER]);
+    const { raw: rawIfMatch, version: expectedVersion } = requireVersion(
+      req,
+      "a publish",
+    );
+
+    const route = "/v1/admin/directions/:id/publish";
+    const outcome = await this.idempotency.begin({
+      key,
+      scope: SCOPE,
+      actorId: actorSub(req),
+      method: "POST",
+      route,
+      fingerprint: this.idempotency.fingerprint({
+        method: "POST",
+        path: `/v1/admin/directions/${id}/publish`,
+        payload: {},
+        ifMatch: rawIfMatch,
+      }),
+    });
+    if (replayed(outcome, reply)) return outcome.replay.body;
+
+    const { detail, etag } = await this.directions.publish({
+      id,
+      expectedVersion,
+      lease: outcome.lease,
+    });
+    void reply.header("etag", etag);
+    return detail;
+  }
+
+  /**
+   * EARS-13/14 / §3.1 — the lifecycle-impact PREVIEW. Answers what retiring (or
+   * restoring) this direction would change, and hands back the signed
+   * `impactToken` that authorizes confirming exactly that transition against
+   * exactly the set discovered here.
+   *
+   * A read, so no idempotency record and no live revalidation: it mutates
+   * nothing, and the confirmation route is where the write posture applies.
+   */
+  @Get(":id/lifecycle-impact")
+  @Authz({
+    access: "authenticated",
+    roles: ["platform_admin"],
+    check: "fast-path",
+    audit: "none",
+    tests: ["EARS-3", "EARS-13", "EARS-14"],
+  })
+  lifecycleImpact(
+    @Param("id") id: string,
+    @Query() rawQuery: Record<string, string>,
+  ): Promise<LifecycleImpact> {
+    if (!CANONICAL_UUID_REGEX.test(id)) {
+      throw new TaxonomyError("RESOURCE_NOT_FOUND");
+    }
+    const parsed = LifecycleImpactQuerySchema.safeParse(rawQuery);
+    if (!parsed.success) {
+      throw new TaxonomyError(
+        "VALIDATION_FAILED",
+        "invalid lifecycle-impact query",
+        parsed.error.issues.map((i) => ({
+          path: i.path.join("."),
+          message: i.message,
+        })),
+      );
+    }
+    return this.directions.lifecycleImpact(id, parsed.data.transition);
+  }
+
+  /**
+   * EARS-13 — withdraw the direction, retaining its row, its id and its slug.
+   * There is no Delete route here and never will be (§3.1).
+   */
+  @Post(":id/retire")
+  @HttpCode(200)
+  @Authz({
+    access: "authenticated",
+    roles: ["platform_admin"],
+    check: "fast-path",
+    revalidate: "live",
+    audit: "low-stakes",
+    tests: ["EARS-3", "EARS-13", "EARS-16", "EARS-17"],
+  })
+  retire(
+    @Param("id") id: string,
+    @Req() req: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<unknown> {
+    return this.confirmTransition("retire", id, req, reply);
+  }
+
+  /**
+   * EARS-14 — put the SAME direction back in hand, as a `draft`. A restore is an
+   * UPDATE of the retained row, never a re-insert: the id an audit trail already
+   * cites, and the slug a doctor bookmarked, keep pointing at this direction.
+   */
+  @Post(":id/restore")
+  @HttpCode(200)
+  @Authz({
+    access: "authenticated",
+    roles: ["platform_admin"],
+    check: "fast-path",
+    revalidate: "live",
+    audit: "low-stakes",
+    tests: ["EARS-3", "EARS-14", "EARS-16", "EARS-17"],
+  })
+  restore(
+    @Param("id") id: string,
+    @Req() req: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<unknown> {
+    return this.confirmTransition("restore", id, req, reply);
+  }
+
+  /**
+   * The §3.1 confirmation contract, identical for both transitions and therefore
+   * written once — the failure ORDER is part of the contract:
+   *
+   *   idempotency key shape → If-Match presence → If-Match usability →
+   *   impact-token presence → fingerprint binding → the SERIALIZABLE command.
+   *
+   * The impact token joins the idempotency fingerprint because two confirmations
+   * quoting the same key but different previews are DIFFERENT requests, and
+   * replaying one under the other's record would confirm a transition against a
+   * set the caller never saw.
+   */
+  private async confirmTransition(
+    transition: TaxonomyLifecycleTransition,
+    id: string,
+    req: FastifyRequest,
+    reply: FastifyReply,
+  ): Promise<unknown> {
+    if (!CANONICAL_UUID_REGEX.test(id)) {
+      throw new TaxonomyError("RESOURCE_NOT_FOUND");
+    }
+    const key = this.idempotency.requireKey(req.headers[IDEMPOTENCY_KEY_HEADER]);
+    const { raw: rawIfMatch, version: expectedVersion } = requireVersion(
+      req,
+      "a lifecycle transition",
+      "previewed",
+    );
+
+    // 428 `LIFECYCLE_IMPACT_REQUIRED` when absent — the operator must have SEEN
+    // the consequences before confirming them (§3.1); a transition is never
+    // available as a one-shot call.
+    const impactToken = this.impact.requireToken(
+      req.headers[LIFECYCLE_IMPACT_TOKEN_HEADER],
+    );
+
+    const route = `/v1/admin/directions/:id/${transition}`;
+    const outcome = await this.idempotency.begin({
+      key,
+      scope: SCOPE,
+      actorId: actorSub(req),
+      method: "POST",
+      route,
+      fingerprint: this.idempotency.fingerprint({
+        method: "POST",
+        path: `/v1/admin/directions/${id}/${transition}`,
+        payload: { impactToken },
+        ifMatch: rawIfMatch,
+      }),
+    });
+    if (replayed(outcome, reply)) return outcome.replay.body;
+
+    const { detail, etag } = await this.directions.transition({
+      id,
+      transition,
+      expectedVersion,
+      impactToken,
+      lease: outcome.lease,
+    });
+    void reply.header("etag", etag);
+    return detail;
+  }
+}
+
+/**
+ * The `If-Match` precondition every lifecycle command carries: absent is 428,
+ * syntactically unusable is 412 — a validator that asserts nothing cannot pass,
+ * and treating it as "no precondition" would silently downgrade the write.
+ */
+function requireVersion(
+  req: FastifyRequest,
+  what: string,
+  read: "read" | "previewed" = "read",
+): { raw: string; version: number } {
+  const raw = req.headers[IF_MATCH_HEADER] as string | undefined;
+  if (!raw || raw.trim().length === 0) {
+    throw new TaxonomyError(
+      "PRECONDITION_REQUIRED",
+      `${what} must carry the If-Match of the version it was ${read} at`,
+    );
+  }
+  const version = parseIfMatchVersion(raw);
+  if (version === null) {
+    throw new TaxonomyError(
+      "PRECONDITION_FAILED",
+      "the If-Match validator is not one this API issued",
+    );
+  }
+  return { raw, version };
 }
 
 /**

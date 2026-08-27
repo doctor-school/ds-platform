@@ -124,6 +124,13 @@ export function FilterBar({
   // its own commit. An unconditional resync deletes in-flight typing: the commit
   // fires 400ms after a pause, and the parent's round trip lands while the
   // operator is already typing the next word, overwriting it under the cursor.
+  // The debounce timer must call the callback of the LATEST render, never the
+  // one captured at keystroke time: the parent rebuilds `onCommit` around its
+  // current query, so a facet flipped inside the 400ms window would otherwise be
+  // rolled back by a commit carrying the pre-toggle query.
+  const commitRef = React.useRef(search?.onCommit);
+  commitRef.current = search?.onCommit;
+
   const committed = search?.value ?? "";
   React.useEffect(() => {
     if (committed === lastCommitted.current) return;
@@ -152,7 +159,7 @@ export function FilterBar({
     timer.current = setTimeout(() => {
       lastCommitted.current = value;
       setIsPending(false);
-      search.onCommit(value);
+      commitRef.current?.(value);
     }, search.debounceMs ?? 400);
   };
 

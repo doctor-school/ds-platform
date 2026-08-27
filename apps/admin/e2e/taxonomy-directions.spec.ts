@@ -247,7 +247,12 @@ test.describe("012 EARS-3 / 017 EARS-16…18 — curated direction authoring in 
       visible(page.getByTestId("directions-table").getByText(title, { exact: true })),
     ).toHaveCount(0);
 
-    await page.getByTestId("directions-include-retired").click();
+    // The DS `Switch` is a real checkbox rendered `sr-only` behind its painted
+    // track, so a user (and this spec) clicks the wrapping label, not the input.
+    await page
+      .getByTestId("directions-include-retired")
+      .locator("xpath=ancestor::label[1]")
+      .click();
     await expect(page.getByTestId("directions-include-retired")).toBeChecked();
     await expect(
       visible(page.getByTestId("directions-table").getByText(title, { exact: true })),

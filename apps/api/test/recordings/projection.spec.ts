@@ -112,7 +112,12 @@ describe("014 EARS-3 edited-over-raw projection (fold)", () => {
   });
 });
 
-describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
+// Gated on `DATABASE_URL` ALONE, like the other 47 DB-backed suites. `IDP_ISSUER`
+// must NOT appear here: `turbo.json` `tasks.test.passThroughEnv` does not forward
+// it, so naming it would skip these cases on CI forever. Nothing below needs it —
+// `IDP_CLIENT` is overridden with `FakeIdpClient` and the var is optional in
+// `env.schema.ts`, so `AppModule` boots without it.
+describe.skipIf(!process.env.DATABASE_URL)(
   "014 EARS-3 edited-over-raw projection (e2e)",
   () => {
     let app: NestFastifyApplication;
@@ -278,6 +283,12 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
       // Count the statements the resolver actually issues. A per-card read would
       // show 5 here; the LEFT JOIN shows 1, whatever the page size.
+      //
+      // This counts only because `projectionRowsByEvents` runs OFF THE POOL:
+      // drizzle's non-transactional session dispatches through `pool.query`, the
+      // very method patched below. Move that read inside `repository.transaction()`
+      // and drizzle takes a dedicated client via `pool.connect()` — the counter
+      // would read 0 and this assertion would pass while asserting nothing.
       const original = pool.query.bind(pool);
       let statements = 0;
       (pool as unknown as { query: typeof pool.query }).query = ((

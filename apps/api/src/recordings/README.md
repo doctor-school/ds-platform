@@ -48,7 +48,12 @@ kind)` slot and leaves the row addressable forever; `restore` is its inverse
    non-retired rows alone, so publishing the montage two weeks after the raw
    capture promotes it with no operator edit and unpublishing it demotes it
    again. Its batch form resolves a whole listing page in ONE statement — a
-   per-card read is the N+1 shape LD-8 refuses.
+   per-card read is the N+1 shape LD-8 refuses. Two obligations ride on every
+   consumer of it: (a) the projection does NOT filter the event's own `deleted_at`
+   or lifecycle state — event visibility is 012's caller-side default-deny, so the
+   caller decides which ids it may ask about; (b) `posterUrl` is a bounded
+   provider-scoped reference, resolved into a src the same way `embedRef` is, never
+   pasted into `<img src>` as-is.
 6. **Explicit `@Inject` on every ctor dep.** The `endpoint-authz` gate boots this
    graph under `tsx`, which emits no `design:paramtypes` — a type-inferred
    injection resolves to `undefined` there. Same rule as `src/taxonomy`.

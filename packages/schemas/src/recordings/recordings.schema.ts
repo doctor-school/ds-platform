@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   EmbedRefSchema,
+  RecordingExpectedBySchema,
   refineEmbedRefForProvider,
   StreamProviderSchema,
 } from "../events/events.schema.js";
@@ -153,14 +154,25 @@ export const RecordingProjectionSchema = z.object({
   primaryKind: RecordingKindSchema.nullable(),
   /** The alternative cut, `raw` under a montage; `null` when there is none. */
   secondaryKind: RecordingKindSchema.nullable(),
-  /** The primary cut's poster reference; `null` renders the provider still. */
-  posterUrl: z.string().nullable(),
+  /**
+   * The primary cut's `event_recordings.poster_ref`; `null` renders the provider
+   * still. Despite the contract name, this is a bounded PROVIDER-SCOPED REFERENCE,
+   * not an absolute URL: 014 stores no media bytes and never fetches what the
+   * reference points at (module README property 4). A consumer resolves it into a
+   * src through the same provider mapping it already uses for `embedRef` — putting
+   * this value straight into `<img src>` is the bug this sentence exists to stop.
+   * Validated by the package's own `PosterRefSchema`, so an empty string can never
+   * reach a consumer as if it were a poster.
+   */
+  posterUrl: PosterRefSchema.nullable(),
   /**
    * `events.recording_expected_by` — the DAY the plaque promises, as `YYYY-MM-DD`.
    * Carried only while `preparing`: once something is published the promise has
    * been kept and repeating it would contradict the player on the same page.
+   * Validated by the SAME `RecordingExpectedBySchema` the write side uses, so a
+   * malformed or non-existent day cannot leave through the read model either.
    */
-  expectedBy: z.string().nullable(),
+  expectedBy: RecordingExpectedBySchema.nullable(),
 });
 export type RecordingProjection = z.infer<typeof RecordingProjectionSchema>;
 

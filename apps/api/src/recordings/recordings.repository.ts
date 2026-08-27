@@ -187,6 +187,11 @@ export class RecordingsRepository {
    * The `deleted_at` of the EVENT is not filtered here: publicly-readable is a
    * caller-side concern (012's default-deny), and this method must stay usable
    * by the admin panel and by an authenticated read alike.
+   *
+   * @param eventIds EVENT UUIDs, never slugs. Several consumer routes are keyed on
+   * `:idOrSlug` (014-design §4); a slug reaching `inArray(events.id, …)` goes to
+   * Postgres raw and comes back as `22P02 invalid input syntax for type uuid` — a
+   * 500, not a 404. Slug-to-id resolution belongs in the consumer, before this call.
    */
   async projectionRowsByEvents(
     eventIds: readonly string[],

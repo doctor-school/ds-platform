@@ -134,6 +134,9 @@ export class RecordingsProjectionService {
     eventId: string,
   ): Promise<RecordingProjection> {
     const map = await this.resolveRecordingProjections([eventId]);
+    // `foldProjectionRows` sets an entry for EVERY requested id, so the fallback
+    // is unreachable — it satisfies `Map.get`'s `| undefined`, and asserts nothing
+    // about the invariant. Read the guarantee off `foldProjectionRows`, not here.
     return map.get(eventId) ?? preparing(null);
   }
 

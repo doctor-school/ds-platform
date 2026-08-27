@@ -12,7 +12,7 @@ All conventions in [`AGENTS.md`](./AGENTS.md) apply (imported above); this file 
 
 ## Wrap cadence
 
-`/wrap` runs on owner request or before a planned long gap — not a mandatory end-of-every-session step. The context-budget hook (200K/250K) is advisory to the operator only, never a directive to the model — the agent keeps working until the owner calls `/wrap`.
+`/wrap` runs on owner request or before a planned long gap — not a mandatory end-of-every-session step. The context-budget hook (200K/250K) is advisory to the operator, never a directive to the model — work continues until the owner calls `/wrap`.
 
 ## Auto-memory (load-on-demand by design)
 
@@ -34,14 +34,15 @@ All conventions in [`AGENTS.md`](./AGENTS.md) apply (imported above); this file 
 
 ## Session plan (первый ответ сессии — canon AGENTS.md §3.2)
 
-The first user-facing reply OPENS with the owner-facing «План сессии» block (RU, ≤6 lines, plain language, no jargon references to prior sessions the owner didn't see):
+The first user-facing reply OPENS with the «План сессии» block (RU, ≤6 lines, plain language, no jargon from prior sessions the owner didn't see):
 
 > **План сессии**
 > **Тип:** продуктовая | техническая | процессная
+> **Трек:** академия | витрина | платформа — из `track:*` активного Issue
 > **Что делаем:** 1–3 нумерованных пункта — деливераблы сессии, не механика
 > **Зачем:** одна строка — что это даёт / разблокирует
 
-Then the §3.2 entry point (kind / artifact / skill). A handoff-resumed session states verified reality (after `pnpm handoff:verify`), never the handoff's claims. Restate once if the owner re-directs or scope changes materially — it exists so the owner catches course drift before work starts.
+Then the §3.2 entry point (kind / artifact / skill). A handoff-resumed session states verified reality (after `pnpm handoff:verify`), never the handoff's claims. Restate once if the owner re-directs or scope changes materially — so the owner catches course drift before work starts.
 
 ## Blocked-on-owner handback
 
@@ -55,10 +56,10 @@ Then the §3.2 entry point (kind / artifact / skill). A handoff-resumed session 
 
 A subagent's final message lands in the lead's context and is re-read until session end — that, not dispatch count, burns the limit.
 
-1. Return contract in every brief: final message = verdict / diff summary / artifact paths, ≤30 lines; heavy content → file or PR comment, never the reply. Scaffold IMPL briefs with `pnpm dispatch:brief <issue-N>` (skeleton seeded from the Issue + worktree diff).
+1. Return contract in every brief: final message = verdict / diff summary / artifact paths, ≤30 lines; heavy content → file or PR comment, never the reply. Scaffold IMPL briefs with `pnpm dispatch:brief <issue-N>`.
 2. Model routing: mechanical fan-out (find/enumerate/collect) → `ds-explorer` (Sonnet, read-only); judgment (Mode-a review, architecture, implementation, spec work) → Opus: `ds-implementer` (impl), `ds-reviewer` (review), or `general-purpose` with EXPLICIT `model: opus` on every dispatch. Inheriting the session model is forbidden — a Fable-led session silently spawns Fable subagents; Fable is never a subagent model.
 3. Browser payloads are dispatched — interactive Playwright runs inside a subagent, not the lead (`.claude/rules/dev-stand.md`).
-4. Lead-only tools are never delegated — a tool absent from the subagent environment (DesignSync, …) the lead runs itself BEFORE dispatch; the subagent gets only the mechanical follow-on. A dispatch that dead-ends on a lead-only tool is a guaranteed block.
+4. Lead-only tools are never delegated — a tool absent from the subagent environment (DesignSync, …) the lead runs itself BEFORE dispatch; the subagent gets only the mechanical follow-on — dead-ending there is a guaranteed block.
 5. Briefs in English; RU only where the RU string is itself the artifact. User-facing replies stay RU.
 6. Background dispatches are checkpointed; report only observed artifacts. Probe after a bounded interval with `pnpm dispatch:probe <N>` (one line `<ALIVE|QUIET|STILL-CLEAN> #<N> age= commits= dirty=`; STILL-CLEAN ≈10 min in ⇒ kill + re-dispatch with a tighter brief) — never "wait for the notification". Rework/re-review via SendMessage only under the AGENTS.md §6 subagent-token thresholds; a `ROTATE:` return = fresh dispatch from the checkpoint. Owner-facing status = observed artifacts only (commit / PR # / verdict); downstream steps are phrased as plan. Every impl brief carries the dispatch-brief checklist heading (memory `feedback_orchestration_brief_full_lint_before_pr`). Same for ANY background waiter, CI pollers included: a bounded FOREGROUND poll, deadline ≈ avg CI + ~2 min, terminal GREEN/RED/TIMEOUT line, parsing the `gh pr checks <N> --json name,state` STATE field, never `grep` (job names contain «pending»). The 5000/hr `gh` token is SHARED — no hand-rolled `gh run view` loops or repeated `gh project item-list --limit 2000` dumps; use `pnpm merge:gate <N>` / `run:wait`.
 7. Context budget hook: subagent ≥150K → ROTATE (checkpoint + fresh dispatch), ≥200K → tools denied except git/checkpoint; dispatch impl via `ds-implementer` (Opus, maxTurns 120).

@@ -19,14 +19,15 @@
  *
  * Usage (thin passthrough — everything after the control flags is forwarded to
  * `gh issue create` verbatim; do not reimplement its flags). Fail-closed field
- * gates run BEFORE any gh call (#1009 + #1137): exactly ONE `source:*`
+ * gates run BEFORE any gh call (#1009 + #1137 + #1583): exactly ONE `source:*`
  * provenance label (see SOURCE_LABELS), exactly ONE kind label (see
- * KIND_LABELS), and a milestone. The org Issue Type is auto-derived from the
+ * KIND_LABELS), exactly ONE `track:*` product-axis label (see TRACK_LABELS),
+ * and a milestone. The org Issue Type is auto-derived from the
  * kind label (bug→Bug, feature→Feature, else Task) and the assignee defaults to
  * `@me` — both overridable via explicit `--type` / `--assignee`:
- *   node tools/gh/create-issue.mjs --title "<t>" --body-file <f> --label source:agent --label tooling --milestone "Platform ops & hardening" [--label <l> …] [gh flags…]
+ *   node tools/gh/create-issue.mjs --title "<t>" --body-file <f> --label source:agent --label tooling --label track:platform --milestone "Platform ops & hardening" [--label <l> …] [gh flags…]
  *   node tools/gh/create-issue.mjs --no-todo  --title "<t>" --body-file <f> …    # add to board, leave Status unset
- *   pnpm issue:create --title "<t>" --body-file <f> --label source:agent --label tooling -m "Platform ops & hardening"   # alias
+ *   pnpm issue:create --title "<t>" --body-file <f> --label source:agent --label tooling --label track:platform -m "Platform ops & hardening"   # alias
  *
  * Control flags (consumed here, NOT forwarded to gh) — put them BEFORE the gh
  * passthrough; a passthrough VALUE equal to a control flag would be consumed too:
@@ -143,10 +144,18 @@ export const KIND_LABELS = [
 ];
 
 /**
+ * The track-label taxonomy (#1583) — the permanent product-axis every new Issue
+ * carries exactly one of. `track:academy` = academy.doctor.school surfaces
+ * (specs 012–016); `track:doctor` = the doctor showcase site `apps/doctor`
+ * (specs 017–021); `track:platform` = shared backend/infra/process/both-sites.
+ */
+export const TRACK_LABELS = ["track:academy", "track:doctor", "track:platform"];
+
+/**
  * Collect every `--label` value out of the gh passthrough, across the forms gh
  * accepts: `--label v`, `--label=v`, `-l v`, and comma-separated lists
- * (`--label a,b`). Shared by the source- and kind-label gates (#1137) — one
- * parser, never duplicated.
+ * (`--label a,b`). Shared by the source-, kind- and track-label gates (#1583) —
+ * one parser, never duplicated.
  * @param {string[]} args
  * @returns {string[]}
  */
@@ -189,6 +198,15 @@ export function collectKindLabels(args) {
 }
 
 /**
+ * Collect every `track:*` label value out of the gh passthrough (#1583).
+ * @param {string[]} args
+ * @returns {string[]}
+ */
+export function collectTrackLabels(args) {
+  return collectLabels(args).filter((l) => l.startsWith("track:"));
+}
+
+/**
  * Validate the provenance-label requirement (#1009): exactly ONE `source:*`
  * label, drawn from the known taxonomy. Returns null when valid, else the
  * error message to die with.
@@ -227,6 +245,30 @@ export function kindLabelError(args) {
     );
   if (found.length > 1)
     return `exactly ONE kind label is allowed, got: ${found.join(", ")} (taxonomy: ${taxonomy}).`;
+  return null;
+}
+
+/**
+ * Validate the track-label requirement (#1583): exactly ONE `track:*` label,
+ * drawn from TRACK_LABELS. The track is the permanent product axis (academy ↔
+ * doctor showcase ↔ shared platform); the milestone is the product theme and
+ * the epic Issue is a closable container — a track never gets an evergreen
+ * epic. Returns null when valid, else the error message to die with.
+ * @param {string[]} args  the gh passthrough
+ * @returns {string|null}
+ */
+export function trackLabelError(args) {
+  const taxonomy = TRACK_LABELS.join(" | ");
+  const found = collectTrackLabels(args);
+  if (found.length === 0)
+    return (
+      `every new Issue needs exactly ONE track label — pass ` +
+      `--label <track>, one of: ${taxonomy}.`
+    );
+  if (found.length > 1)
+    return `exactly ONE track:* label is allowed, got: ${found.join(", ")} (taxonomy: ${taxonomy}).`;
+  if (!TRACK_LABELS.includes(found[0]))
+    return `unknown track label "${found[0]}" — must be one of: ${taxonomy}.`;
   return null;
 }
 
@@ -386,12 +428,13 @@ function main() {
   const argv = process.argv.slice(2);
   if (argv.length === 0 || argv.includes("--help") || argv.includes("-h")) {
     process.stderr.write(
-      "Usage: node tools/gh/create-issue.mjs [--no-todo] --title \"<t>\" --body-file <f> --label <source:*> --label <kind> --milestone <name> [--label <l> …]\n" +
+      "Usage: node tools/gh/create-issue.mjs [--no-todo] --title \"<t>\" --body-file <f> --label <source:*> --label <kind> --label <track:*> --milestone <name> [--label <l> …]\n" +
         "  Thin wrapper over `gh issue create` (flags forwarded verbatim) that also adds the\n" +
         "  new Issue to Projects v2 board #1 (doctor-school), sets Status=Todo, and confirms\n" +
         "  the item via a GraphQL node read. --no-todo adds to the board without setting Status.\n" +
         `  Required (fail-closed, BEFORE any gh call): exactly ONE source label (#1009) — ${SOURCE_LABELS.join(" | ")};\n` +
-        `  exactly ONE kind label (#1137) — ${KIND_LABELS.join(" | ")}; and a --milestone (fallback «${FALLBACK_MILESTONE}»).\n` +
+        `  exactly ONE kind label (#1137) — ${KIND_LABELS.join(" | ")}; exactly ONE track label (#1583) — ${TRACK_LABELS.join(" | ")};\n` +
+        `  and a --milestone (fallback «${FALLBACK_MILESTONE}»).\n` +
         "  Issue Type is auto-derived from the kind label; assignee defaults to @me (both overridable via --type/--assignee).\n",
     );
     process.exit(1);
@@ -411,11 +454,14 @@ function main() {
   // Field gates — all run BEFORE any gh call, so no Issue is created on a
   // violation (fail-closed, the #1009 provenance-gate precedent):
   //   • exactly one source:* provenance label (#1009);
-  //   • exactly one kind label + a milestone (#1137).
+  //   • exactly one kind label + a milestone (#1137);
+  //   • exactly one track:* product-axis label (#1583).
   const sourceError = sourceLabelError(passthrough);
   if (sourceError) die(sourceError);
   const kindError = kindLabelError(passthrough);
   if (kindError) die(kindError);
+  const trackError = trackLabelError(passthrough);
+  if (trackError) die(trackError);
   const milestoneErr = milestoneError(passthrough);
   if (milestoneErr) die(milestoneErr);
 

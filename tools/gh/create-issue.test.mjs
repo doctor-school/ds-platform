@@ -14,6 +14,9 @@ import {
   collectSourceLabels,
   collectKindLabels,
   kindLabelError,
+  TRACK_LABELS,
+  collectTrackLabels,
+  trackLabelError,
   sourceLabelError,
   hasMilestone,
   milestoneError,
@@ -98,6 +101,33 @@ test("kindLabelError requires exactly one kind label", () => {
   // Extra non-kind labels alongside exactly one kind are fine.
   assert.equal(
     kindLabelError(["--label", "tooling", "--label", "source:agent", "--label", "agent-ready"]),
+    null,
+  );
+});
+
+// ── track label (#1583) ─────────────────────────────────────────────────────
+test("collectTrackLabels picks only track:* values", () => {
+  assert.deepEqual(
+    collectTrackLabels(["--label", "docs,track:doctor", "--label", "source:agent"]),
+    ["track:doctor"],
+  );
+  assert.deepEqual(collectTrackLabels(["--label", "docs"]), []);
+});
+
+test("trackLabelError requires exactly one known track label", () => {
+  assert.match(trackLabelError([]), /exactly ONE track label/);
+  assert.match(trackLabelError(["--label", "docs"]), /exactly ONE track label/);
+  assert.match(
+    trackLabelError(["--label", "track:academy", "--label", "track:doctor"]),
+    /exactly ONE track:\* label is allowed/,
+  );
+  assert.match(trackLabelError(["--label", "track:showcase"]), /unknown track label/);
+  for (const t of TRACK_LABELS) {
+    assert.equal(trackLabelError(["--label", t]), null);
+  }
+  // Extra non-track labels alongside exactly one track are fine.
+  assert.equal(
+    trackLabelError(["--label", "track:platform", "--label", "docs", "--label", "source:agent"]),
     null,
   );
 });

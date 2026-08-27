@@ -24,7 +24,7 @@ import { totpCode } from "./support/totp";
  * bootstrap provisions a real `platform_admin` against the stand's Zitadel and
  * throws when `IDP_*` is absent. Run against a booted admin + api:
  *
- *   E2E_ADMIN_URL=http://localhost:3201 IDP_ISSUER=… IDP_SERVICE_TOKEN=… \
+ *   E2E_ADMIN_URL=http://localhost:3200 IDP_ISSUER=… IDP_SERVICE_TOKEN=… \
  *   IDP_PROJECT_ID=… pnpm --filter @ds/admin exec playwright test \
  *     e2e/event-lifecycle.spec.ts --config=playwright.flows.config.ts
  */
@@ -67,6 +67,9 @@ async function createEvent(
   startsAtMsk: string,
 ): Promise<string> {
   await page.goto("/events/create");
+  // Settle on the mounted form before filling — the sibling flow specs do the
+  // same; without it the first `fill` can race the client render.
+  await expect(page.getByTestId("event-form")).toBeVisible();
   await page.locator("#title").fill(title);
   await page.locator("#school").fill("Кардиология");
   await page.locator("#startsAtMsk").fill(startsAtMsk);

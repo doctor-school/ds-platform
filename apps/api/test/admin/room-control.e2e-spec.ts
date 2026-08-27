@@ -138,8 +138,11 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     /** Create a fresh draft event through the EARS-1 create endpoint; return its id + slug. */
     async function createDraft(
       cookie: string,
+      startsAtMsk: string = validPayload.startsAtMsk,
     ): Promise<{ id: string; slug: string }> {
-      const mp = multipartBody({ payload: JSON.stringify(validPayload) });
+      const mp = multipartBody({
+        payload: JSON.stringify({ ...validPayload, startsAtMsk }),
+      });
       const res = await app.inject({
         method: "POST",
         url: "/v1/admin/events",
@@ -308,6 +311,28 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         expect(await currentState(id)).toBe(state); // unchanged
         expect(await auditCount(id, "event.ended")).toBe(0); // no terminal row
       }
+    });
+
+    it("EARS-5.4: close is refused with INVALID_TRANSITION on a PAST-dated published event whose room was never opened — the 014 EARS-18 edge does not become a second close route", async () => {
+      const cookie = await session(uniqueEmail("admin"), "platform_admin");
+      // The one `published` fixture the EARS-18 preconditions would ACCEPT:
+      // scheduled end already past, `live_at IS NULL`. Since 014 EARS-18 the
+      // closed set has two edges into `ended`, so `canTransition` alone no
+      // longer refuses this — only `closeRoom`'s explicit `from !== "live"`
+      // origin guard does. Delete that guard and this close returns 200 and
+      // writes an `event.ended` row, so both assertions below fail: the test
+      // covers the guard, not the closed set.
+      const { id } = await createDraft(cookie, futureMskStart(-30, "19:00"));
+      await forceState(id, "published");
+
+      const res = await command("close", cookie, id);
+      expect(res.statusCode).toBe(409);
+      // INVALID_TRANSITION, not EVENT_NOT_PAST: the origin guard decides before
+      // the shared EARS-18 precondition is consulted, so `close` keeps its own
+      // 007 EARS-5 contract in the error — the room it closes must be open.
+      expect((res.json() as { code: string }).code).toBe("INVALID_TRANSITION");
+      expect(await currentState(id)).toBe("published"); // unchanged
+      expect(await auditCount(id, "event.ended")).toBe(0); // no terminal row
     });
 
     it("EARS-5.5: opening or closing a non-existent event is a 404", async () => {

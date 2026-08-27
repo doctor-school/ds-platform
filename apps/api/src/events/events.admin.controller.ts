@@ -420,6 +420,9 @@ export class EventsAdminController {
     // The domain `audit_ledger` row (`event.marked_ended`) is a separate
     // ADR-0003 §6 obligation written atomically in the service.
     audit: "low-stakes",
+    // #1304 default-deny: a brand-new admin mutation revalidates live, exactly
+    // like the 014 sibling recordings commands.
+    revalidate: "live",
     tests: ["EARS-18", "EARS-8"],
   })
   async markEnded(

@@ -1,0 +1,62 @@
+# PR track-label sync (#1600) — put the `track:*` product-axis label on a PR by
+# DERIVING it from the Issue(s) the body closes, so no author ever types it.
+#
+# Why a DEDICATED workflow and not a step in `pr-body-guards.yml`: this job
+# MUTATES the PR (`pull-requests: write`), while the whole guard family is
+# read-only by design (`contents/pull-requests/issues: read`) and must stay that
+# way — a batch of body parsers should never hold a write token because one of
+# its members grew a mutation.
+#
+# Why not `ci.yml`: the `ci` aggregate treats skipped needs as red (#449), and
+# this job carries an `edited` trigger the heavy matrix must not get.
+#
+# Trigger set:
+#   opened / reopened — the normal path, label lands on PR creation;
+#   edited            — a `Closes #N` added or corrected after the fact;
+#   labeled/unlabeled — a HAND-SET `track:*` that contradicts the Issue is caught
+#                       the moment it is applied, not at merge time. This job's
+#                       own `--add-label` re-fires `labeled`; the re-run reads
+#                       `ok` and exits 0 (and GITHUB_TOKEN-triggered events do
+#                       not start new workflow runs at all).
+#
+# Posture: BLOCK, deliberately. Exit 2 = the PR and its Issue disagree on the
+# track — one of the two is wrong and only a human knows which, so it reds the
+# check-run the merge gate reads (`tools/gh/merge-gate.mjs`, head-SHA-pinned).
+# Every non-conflict outcome — label applied, already correct, or nothing to
+# derive (bot PRs with no `Closes #N`: Version Packages, Dependabot) — exits 0.
+#
+# No `pnpm install`: the script is plain Node + the preinstalled `gh` CLI, zero
+# dependencies. Adding an install here would pay ~40s to run a sub-second decision.
+name: PR track sync
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, labeled, unlabeled]
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  pr-track-sync:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: read # `gh issue view` on each linked Issue — 403s without it here.
+      pull-requests: write # `gh pr edit --add-label`.
+    steps:
+      - uses: actions/checkout@v7
+        with: { fetch-depth: 1 }
+      - uses: actions/setup-node@v7
+        with: { node-version-file: .nvmrc }
+
+      # PR_BODY comes from the event payload, never a fresh `gh pr view`: the
+      # payload is always current for its triggering event, while a REST read
+      # right after PR creation has returned a stale/absent body (#651).
+      - name: Derive track:* from the linked Issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: node tools/gh/sync-pr-track.mjs

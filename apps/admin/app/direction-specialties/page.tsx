@@ -1,10 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { Authenticated, useCustom } from "@refinedev/core";
 import { useTranslations } from "next-intl";
-import { Badge, Button, Label, NativeSelect } from "@ds/design-system";
+import { Label, NativeSelect } from "@ds/design-system";
+import type { DataTableColumn } from "@ds/design-system/blocks";
 import {
   RELATIONSHIP_STATUSES,
   type DirectionSpecialtyAdminList,
@@ -13,20 +13,21 @@ import {
 } from "@ds/schemas";
 import { AppShell } from "@/components/app-shell";
 import {
-  ADMIN_LIST_INITIAL_QUERY,
-  AdminListShell,
-  type AdminListQueryState,
-} from "@/components/admin-list-shell";
+  ADMIN_DATA_LIST_INITIAL_QUERY,
+  AdminDataList,
+  type AdminDataListQueryState,
+} from "@/components/admin-data-list";
+import { StatusChip } from "@/components/status-chip";
 import { directionSpecialtiesUrl } from "@/providers/data-provider";
 import { useDirectionOptions } from "@/lib/direction-relation-options";
 
 /**
- * The direction↔specialty link list (#1483; ADR-0016 §5, 017-design §5) on the
- * SAME shared admin list shell the four 012 entity lists mount — a relation list
- * is still an admin list, and a private copy of the shell is exactly the drift the
- * shell's own header rules out.
+ * The direction↔specialty link list (#1483; ADR-0016 §5, 017-design §9) on the
+ * #1578 block tier — the same `DataTable` / `FilterBar` composition the direction
+ * book mounts, so a relation list reads as the same application rather than as a
+ * per-section arrangement.
  *
- * Two things it asks the shell for that a 012 list does not:
+ * Two things it asks the composition for that the direction book does not:
  *
  *   - `statuses={RELATIONSHIP_STATUSES}` — a link is `active` or `retired`, never
  *     `draft`. Left to the default, the filter would offer a state a link row can
@@ -34,12 +35,13 @@ import { useDirectionOptions } from "@/lib/direction-relation-options";
  *   - `searchable={false}` — `DirectionSpecialtyAdminListQuerySchema` is `.strict()`
  *     and accepts no `q`; it scopes by ENDPOINT instead. Rendering a search box the
  *     API would refuse is the same broken promise a dead field would be, so the
- *     shell renders the direction picker in its place via `extraFilters`.
+ *     direction picker takes its place as a facet — and, being a facet, gets its
+ *     own removable chip.
  */
 export default function DirectionSpecialtiesListPage() {
   const t = useTranslations();
-  const [query, setQuery] = useState<AdminListQueryState<RelationshipStatus>>(
-    ADMIN_LIST_INITIAL_QUERY,
+  const [query, setQuery] = useState<AdminDataListQueryState<RelationshipStatus>>(
+    ADMIN_DATA_LIST_INITIAL_QUERY,
   );
   const [directionId, setDirectionId] = useState("");
   const { directions } = useDirectionOptions();
@@ -60,10 +62,34 @@ export default function DirectionSpecialtiesListPage() {
     retired: t("directionSpecialties.statuses.retired"),
   };
 
+  const columns: DataTableColumn<DirectionSpecialtyAdminDetail>[] = [
+    {
+      key: "specialtyCode",
+      header: t("directionSpecialties.columns.specialtyCode"),
+      width: "20%",
+      render: (row) => row.specialtyCode,
+      fullValue: (row) => row.specialtyCode,
+      hideOnCard: true,
+    },
+    {
+      key: "status",
+      header: t("directionSpecialties.columns.status"),
+      width: "18%",
+      overflow: "wrap",
+      render: (row) => (
+        <StatusChip status={row.status} label={statusLabels[row.status]} />
+      ),
+    },
+  ];
+
+  const selectedDirection = directions.find(
+    (option) => option.id === directionId,
+  );
+
   return (
     <Authenticated key="direction-specialties-list" redirectOnFail="/login">
       <AppShell>
-        <AdminListShell<DirectionSpecialtyAdminDetail, RelationshipStatus>
+        <AdminDataList<DirectionSpecialtyAdminDetail, RelationshipStatus>
           title={t("directionSpecialties.listTitle")}
           description={t("directionSpecialties.listDescription")}
           createHref="/direction-specialties/create"
@@ -71,8 +97,9 @@ export default function DirectionSpecialtiesListPage() {
           statusLabels={statusLabels}
           statuses={RELATIONSHIP_STATUSES}
           searchable={false}
+          caption={t("directionSpecialties.tableCaption")}
           extraFilters={
-            <div className="flex flex-1 flex-col gap-1.5">
+            <div className="flex flex-col gap-1.5 sm:w-64">
               <Label htmlFor="direction-specialties-direction">
                 {t("directionSpecialties.filters.direction")}
               </Label>
@@ -96,17 +123,36 @@ export default function DirectionSpecialtiesListPage() {
               </NativeSelect>
             </div>
           }
-          columns={[
-            { key: "direction", label: t("directionSpecialties.columns.direction") },
-            { key: "specialty", label: t("directionSpecialties.columns.specialty") },
-            {
-              key: "specialtyCode",
-              label: t("directionSpecialties.columns.specialtyCode"),
-            },
-            { key: "status", label: t("directionSpecialties.columns.status") },
-            { key: "actions", label: t("directionSpecialties.columns.actions") },
-          ]}
+          extraApplied={
+            selectedDirection
+              ? [
+                  {
+                    id: "directionId",
+                    label: selectedDirection.label,
+                    onRemove: () => {
+                      setDirectionId("");
+                      setQuery({ ...query, page: 1 });
+                    },
+                  },
+                ]
+              : []
+          }
+          record={{
+            header: t("directionSpecialties.columns.direction"),
+            width: "44%",
+            title: (row) => (
+              <span data-testid={`row-${row.id}`}>{row.directionTitle}</span>
+            ),
+            context: (row) =>
+              t("directionSpecialties.rowContext", {
+                specialty: row.specialtyName,
+                code: row.specialtyCode,
+              }),
+            label: (row) => `${row.directionTitle} — ${row.specialtyName}`,
+          }}
+          columns={columns}
           rows={result.data?.data ?? []}
+          getRowKey={(row) => row.id}
           total={result.data?.total ?? 0}
           isLoading={request.isLoading}
           error={
@@ -114,36 +160,10 @@ export default function DirectionSpecialtiesListPage() {
           }
           query={query}
           onQueryChange={setQuery}
-          emptyLabel={t("directionSpecialties.empty")}
+          rowHref={(row) => `/direction-specialties/${row.id}`}
+          emptyTitle={t("directionSpecialties.empty")}
+          emptyDescription={t("directionSpecialties.emptyDescription")}
           testId="direction-specialties"
-          renderRow={(row) => (
-            <tr
-              key={row.id}
-              className="border-b border-hairline"
-              data-testid={`direction-specialty-row-${row.id}`}
-            >
-              <td className="px-4 py-3 font-semibold">{row.directionTitle}</td>
-              <td className="px-4 py-3">{row.specialtyName}</td>
-              <td className="px-4 py-3 text-muted-foreground">
-                {row.specialtyCode}
-              </td>
-              <td className="px-4 py-3">
-                <Badge variant="label" data-testid={`status-${row.status}`}>
-                  {statusLabels[row.status]}
-                </Badge>
-              </td>
-              <td className="px-4 py-3">
-                <Button asChild variant="outline" size="sm">
-                  <Link
-                    href={`/direction-specialties/${row.id}`}
-                    data-testid={`open-${row.id}`}
-                  >
-                    {t("directionSpecialties.open")}
-                  </Link>
-                </Button>
-              </td>
-            </tr>
-          )}
         />
       </AppShell>
     </Authenticated>

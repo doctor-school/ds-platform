@@ -106,6 +106,14 @@ export function AppShell({ children }: { children: ReactNode }) {
                   {t("app.nav.directionAdjacency")}
                 </Link>
               </DsLink>
+              {/* The Минздрав book (017 EARS-19) closes the row: it is the
+                  vocabulary the specialty links are drawn FROM, read-only, so it
+                  sits after the books that consume it. */}
+              <DsLink asChild variant="standalone">
+                <Link href="/specialties" data-testid="nav-specialties">
+                  {t("app.nav.specialties")}
+                </Link>
+              </DsLink>
             </nav>
           </div>
           <Button

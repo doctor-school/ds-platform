@@ -1,10 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { Authenticated, useCustom } from "@refinedev/core";
 import { useTranslations } from "next-intl";
-import { Badge, Button, Label, NativeSelect } from "@ds/design-system";
+import { Label, NativeSelect } from "@ds/design-system";
+import type { DataTableColumn } from "@ds/design-system/blocks";
 import {
   RELATIONSHIP_STATUSES,
   type DirectionAdjacencyAdminDetail,
@@ -13,18 +13,26 @@ import {
 } from "@ds/schemas";
 import { AppShell } from "@/components/app-shell";
 import {
-  ADMIN_LIST_INITIAL_QUERY,
-  AdminListShell,
-  type AdminListQueryState,
-} from "@/components/admin-list-shell";
+  ADMIN_DATA_LIST_INITIAL_QUERY,
+  AdminDataList,
+  type AdminDataListQueryState,
+} from "@/components/admin-data-list";
+import { StatusChip } from "@/components/status-chip";
 import { directionAdjacencyUrl } from "@/providers/data-provider";
-import { useDirectionOptions } from "@/lib/direction-relation-options";
+import {
+  useDirectionAdjacencyKindLabel,
+  useDirectionOptions,
+} from "@/lib/direction-relation-options";
 
 /**
- * The direction adjacency list (#1483; ADR-0016 §5, 017-design §5) on the shared
- * admin list shell, with the relationship status vocabulary and no search box for
- * the same two reasons the specialty-link list has them: an edge is `active` or
+ * The direction adjacency list (#1483; ADR-0016 §5, 017-design §9) on the #1578
+ * block tier, with the relationship status vocabulary and no search box for the
+ * same two reasons the specialty-link list has them: an edge is `active` or
  * `retired`, and its list query is `.strict()` with no `q`.
+ *
+ * «Вес» has no column: weight is a tuning parameter of the targeting resolution,
+ * absent from the operator interface in every form (017-design §9.3). «Вид связи»
+ * renders its RU label, never the stored slug.
  *
  * The direction filter reads «что рядом с этим направлением» — it scopes by the
  * edge's SOURCE. The reverse question («кто считает это направление смежным») is
@@ -34,11 +42,12 @@ import { useDirectionOptions } from "@/lib/direction-relation-options";
  */
 export default function DirectionAdjacencyListPage() {
   const t = useTranslations();
-  const [query, setQuery] = useState<AdminListQueryState<RelationshipStatus>>(
-    ADMIN_LIST_INITIAL_QUERY,
+  const [query, setQuery] = useState<AdminDataListQueryState<RelationshipStatus>>(
+    ADMIN_DATA_LIST_INITIAL_QUERY,
   );
   const [directionId, setDirectionId] = useState("");
   const { directions } = useDirectionOptions();
+  const kindLabel = useDirectionAdjacencyKindLabel();
 
   const { result, query: request } = useCustom<DirectionAdjacencyAdminList>({
     url: directionAdjacencyUrl.list({
@@ -56,10 +65,34 @@ export default function DirectionAdjacencyListPage() {
     retired: t("directionAdjacency.statuses.retired"),
   };
 
+  const columns: DataTableColumn<DirectionAdjacencyAdminDetail>[] = [
+    {
+      key: "kind",
+      header: t("directionAdjacency.columns.kind"),
+      width: "24%",
+      overflow: "wrap",
+      render: (row) => kindLabel(row.kind),
+      fullValue: (row) => kindLabel(row.kind),
+    },
+    {
+      key: "status",
+      header: t("directionAdjacency.columns.status"),
+      width: "18%",
+      overflow: "wrap",
+      render: (row) => (
+        <StatusChip status={row.status} label={statusLabels[row.status]} />
+      ),
+    },
+  ];
+
+  const selectedDirection = directions.find(
+    (option) => option.id === directionId,
+  );
+
   return (
     <Authenticated key="direction-adjacency-list" redirectOnFail="/login">
       <AppShell>
-        <AdminListShell<DirectionAdjacencyAdminDetail, RelationshipStatus>
+        <AdminDataList<DirectionAdjacencyAdminDetail, RelationshipStatus>
           title={t("directionAdjacency.listTitle")}
           description={t("directionAdjacency.listDescription")}
           createHref="/direction-adjacency/create"
@@ -67,8 +100,9 @@ export default function DirectionAdjacencyListPage() {
           statusLabels={statusLabels}
           statuses={RELATIONSHIP_STATUSES}
           searchable={false}
+          caption={t("directionAdjacency.tableCaption")}
           extraFilters={
-            <div className="flex flex-1 flex-col gap-1.5">
+            <div className="flex flex-col gap-1.5 sm:w-64">
               <Label htmlFor="direction-adjacency-direction">
                 {t("directionAdjacency.filters.direction")}
               </Label>
@@ -92,18 +126,36 @@ export default function DirectionAdjacencyListPage() {
               </NativeSelect>
             </div>
           }
-          columns={[
-            { key: "direction", label: t("directionAdjacency.columns.direction") },
-            {
-              key: "adjacentDirection",
-              label: t("directionAdjacency.columns.adjacentDirection"),
-            },
-            { key: "kind", label: t("directionAdjacency.columns.kind") },
-            { key: "weight", label: t("directionAdjacency.columns.weight") },
-            { key: "status", label: t("directionAdjacency.columns.status") },
-            { key: "actions", label: t("directionAdjacency.columns.actions") },
-          ]}
+          extraApplied={
+            selectedDirection
+              ? [
+                  {
+                    id: "directionId",
+                    label: selectedDirection.label,
+                    onRemove: () => {
+                      setDirectionId("");
+                      setQuery({ ...query, page: 1 });
+                    },
+                  },
+                ]
+              : []
+          }
+          record={{
+            header: t("directionAdjacency.columns.direction"),
+            width: "40%",
+            title: (row) => (
+              <span data-testid={`row-${row.id}`}>{row.directionTitle}</span>
+            ),
+            context: (row) =>
+              t("directionAdjacency.rowContext", {
+                adjacent: row.adjacentDirectionTitle,
+              }),
+            label: (row) =>
+              `${row.directionTitle} — ${row.adjacentDirectionTitle}`,
+          }}
+          columns={columns}
           rows={result.data?.data ?? []}
+          getRowKey={(row) => row.id}
           total={result.data?.total ?? 0}
           isLoading={request.isLoading}
           error={
@@ -111,35 +163,10 @@ export default function DirectionAdjacencyListPage() {
           }
           query={query}
           onQueryChange={setQuery}
-          emptyLabel={t("directionAdjacency.empty")}
+          rowHref={(row) => `/direction-adjacency/${row.id}`}
+          emptyTitle={t("directionAdjacency.empty")}
+          emptyDescription={t("directionAdjacency.emptyDescription")}
           testId="direction-adjacency"
-          renderRow={(row) => (
-            <tr
-              key={row.id}
-              className="border-b border-hairline"
-              data-testid={`direction-adjacency-row-${row.id}`}
-            >
-              <td className="px-4 py-3 font-semibold">{row.directionTitle}</td>
-              <td className="px-4 py-3">{row.adjacentDirectionTitle}</td>
-              <td className="px-4 py-3 text-muted-foreground">{row.kind}</td>
-              <td className="px-4 py-3">{row.weight}</td>
-              <td className="px-4 py-3">
-                <Badge variant="label" data-testid={`status-${row.status}`}>
-                  {statusLabels[row.status]}
-                </Badge>
-              </td>
-              <td className="px-4 py-3">
-                <Button asChild variant="outline" size="sm">
-                  <Link
-                    href={`/direction-adjacency/${row.id}`}
-                    data-testid={`open-${row.id}`}
-                  >
-                    {t("directionAdjacency.open")}
-                  </Link>
-                </Button>
-              </td>
-            </tr>
-          )}
         />
       </AppShell>
     </Authenticated>

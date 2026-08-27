@@ -16,13 +16,17 @@ import { DirectionAdjacencyForm } from "@/components/direction-adjacency-form";
 import { RelationLifecycleActions } from "@/components/relation-lifecycle-actions";
 import { taxonomyErrorKey } from "@/lib/taxonomy-errors";
 import { directionAdjacencyUrl } from "@/providers/data-provider";
-import { useDirectionOptions } from "@/lib/direction-relation-options";
+import {
+  useDirectionAdjacencyKindLabel,
+  useDirectionOptions,
+} from "@/lib/direction-relation-options";
 
 /**
  * The adjacency-edge detail (#1483; ADR-0016 §5). Unlike the specialty link this
- * screen DOES carry an edit form, because the edge carries attributes: `kind` and
- * `weight` are re-labelled and re-weighted in place, on the same row, so the edge's
- * history stays one lineage.
+ * screen DOES carry an edit form, because the edge carries an attribute of its own:
+ * `kind` is re-labelled in place, on the same row, so the edge's history stays one
+ * lineage. `weight` is not on this screen at all — it is a targeting-resolution
+ * tuning parameter with a server default, not an editorial decision (017-design §9.3).
  *
  * The form is rendered only while the edge is ACTIVE. A retired edge answers a
  * PATCH with a 409 — an edit is not a way back into circulation, `restore` is — so
@@ -47,6 +51,7 @@ export default function DirectionAdjacencyDetailPage() {
   const [errorKey, setErrorKey] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const { directions } = useDirectionOptions();
+  const kindLabel = useDirectionAdjacencyKindLabel();
 
   const statusLabels: Record<RelationshipStatus, string> = {
     active: t("directionAdjacency.statuses.active"),
@@ -113,7 +118,6 @@ export default function DirectionAdjacencyDetailPage() {
                     setSaved(false);
                     const payload: UpdateDirectionAdjacencyRequest = {
                       kind: values.kind,
-                      weight: values.weight,
                     };
                     mutate(
                       {
@@ -149,18 +153,7 @@ export default function DirectionAdjacencyDetailPage() {
                     className="text-base font-semibold text-foreground"
                     data-testid="direction-adjacency-kind-value"
                   >
-                    {detail.kind}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-sm text-muted-foreground">
-                    {t("directionAdjacency.columns.weight")}
-                  </dt>
-                  <dd
-                    className="text-base font-semibold text-foreground"
-                    data-testid="direction-adjacency-weight-value"
-                  >
-                    {detail.weight}
+                    {kindLabel(detail.kind)}
                   </dd>
                 </div>
               </dl>

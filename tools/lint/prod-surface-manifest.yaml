@@ -210,6 +210,15 @@ routes:
     route: /direction-adjacency/[id]
     file: apps/admin/app/direction-adjacency/[id]/page.tsx
     status: product-ready
+  # 017 EARS-19 (LD-9, #1483): the Минздрав specialty nomenclature as a READ-ONLY
+  # lookup — the same public projection the doctor-facing surfaces read, with no
+  # create, no row action and no detail route (there is deliberately no admin
+  # specialties resource, #1479). Driven in the manual dev-stand flow tier
+  # (`apps/admin/e2e/taxonomy-specialties.spec.ts`).
+  - app: admin
+    route: /specialties
+    file: apps/admin/app/specialties/page.tsx
+    status: product-ready
   # 012 EARS-4 (#1286): the descriptive-partner authoring vertical — the same
   # shared list shell and tabbed detail, with a logo slot and an https-only
   # website address. Real product deliverables, driven live in

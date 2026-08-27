@@ -4,6 +4,7 @@ import { useForm } from "react-hook-form";
 import { useTranslations } from "next-intl";
 import type { z } from "zod";
 import { Button, Input } from "@ds/design-system";
+import { FormActions, FormSection } from "@ds/design-system/blocks";
 import {
   Form,
   FormControl,
@@ -71,37 +72,48 @@ export function DirectionForm({
   return (
     <Form {...form}>
       <form
-        className="flex flex-col gap-5"
+        className="flex flex-col gap-6 border-2 border-hairline bg-card p-6"
         data-testid="direction-form"
         noValidate
         onSubmit={form.handleSubmit((fields) => {
           onSubmit({ title: fields.title });
         })}
       >
-        <FormField
-          control={form.control}
-          name="title"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel htmlFor="title">{t("directions.fields.title")}</FormLabel>
-              <FormControl>
-                {/* No `maxLength`: a hard cap on the input would silently eat
-                    the 121st character instead of refusing it, which is exactly
-                    the input mask 012-scenarios (lines 72–78) rules out. The
-                    bound is enforced on blur by the SSOT resolver — with a
-                    sentence the operator can act on — and again by the API. */}
-                <Input id="title" data-testid="direction-title" {...field} />
-              </FormControl>
-              <FormMessage>{t("directions.fields.titleHint")}</FormMessage>
-            </FormItem>
-          )}
-        />
+        <FormSection
+          legend={t("directions.sections.main")}
+          description={t("directions.sections.mainDescription")}
+        >
+          <FormField
+            control={form.control}
+            name="title"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel htmlFor="title">
+                  {t("directions.fields.title")}
+                </FormLabel>
+                <FormControl>
+                  {/* No `maxLength`: a hard cap on the input would silently eat
+                      the 121st character instead of refusing it, which is exactly
+                      the input mask 012-scenarios (lines 72–78) rules out. The
+                      bound is enforced on blur by the SSOT resolver — with a
+                      sentence the operator can act on — and again by the API. */}
+                  <Input id="title" data-testid="direction-title" {...field} />
+                </FormControl>
+                <FormMessage>{t("directions.fields.titleHint")}</FormMessage>
+              </FormItem>
+            )}
+          />
+        </FormSection>
 
-        <div>
-          <Button type="submit" loading={submitting} data-testid="submit-direction">
+        <FormActions>
+          <Button
+            type="submit"
+            loading={submitting}
+            data-testid="submit-direction"
+          >
             {submitLabel}
           </Button>
-        </div>
+        </FormActions>
       </form>
     </Form>
   );

@@ -5,6 +5,11 @@ import { useTranslations } from "next-intl";
 import type { z } from "zod";
 import { Button, NativeSelect } from "@ds/design-system";
 import {
+  FormActions,
+  FormFieldGroup,
+  FormSection,
+} from "@ds/design-system/blocks";
+import {
   Form,
   FormControl,
   FormField,
@@ -74,11 +79,16 @@ export function DirectionSpecialtyForm({
   return (
     <Form {...form}>
       <form
-        className="flex flex-col gap-5"
+        className="flex flex-col gap-6 border-2 border-hairline bg-card p-6"
         data-testid="direction-specialty-form"
         noValidate
         onSubmit={form.handleSubmit((fields) => onSubmit(fields))}
       >
+        <FormSection
+          legend={t("directionSpecialties.sections.link")}
+          description={t("directionSpecialties.sections.linkDescription")}
+        >
+        <FormFieldGroup columns="two">
         <FormField
           control={form.control}
           name="directionId"
@@ -143,7 +153,10 @@ export function DirectionSpecialtyForm({
           )}
         />
 
-        <div>
+        </FormFieldGroup>
+        </FormSection>
+
+        <FormActions>
           <Button
             type="submit"
             loading={submitting}
@@ -151,7 +164,7 @@ export function DirectionSpecialtyForm({
           >
             {submitLabel}
           </Button>
-        </div>
+        </FormActions>
       </form>
     </Form>
   );

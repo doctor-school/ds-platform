@@ -3,8 +3,8 @@ import { bootstrapAdminSession } from "./support/admin-session";
 import { totpCode } from "./support/totp";
 
 /**
- * #1483 (ADR-0016 §5), browser half — the REAL Refine → NestJS → Postgres path
- * for the direction↔specialty link.
+ * #1483 (ADR-0016 §5) + 017 EARS-16…17, browser half — the REAL
+ * Refine → NestJS → Postgres path for the direction↔specialty link.
  *
  * `apps/api/test/taxonomy/direction-relations.e2e-spec.ts` proves the contract
  * against the API. This proves the OPERATOR-facing arc, which no API test can:
@@ -14,6 +14,12 @@ import { totpCode } from "./support/totp";
  * field rather than a generic «проверьте значение», that the duplicate pair
  * comes back as one actionable RU sentence, and that retire → restore moves the
  * SAME row rather than inserting a second one.
+ *
+ * On the block tier (#1578) the list half also proves the interaction model the
+ * old submit-driven shell did not have: the direction facet APPLIES ON CHANGE
+ * (there is no «Применить» control to click), the applied set is undoable as a
+ * chip, and the whole ROW opens the link — a single-action list gets no
+ * «Действия» column and no per-row button.
  *
  * Dev-stand-gated + MANUAL like every other `apps/admin/e2e` flow spec — the
  * bootstrap provisions a real `platform_admin` against the stand's Zitadel and
@@ -52,8 +58,8 @@ async function createDirection(page: Page, title: string): Promise<string> {
 
 test.describe.configure({ mode: "serial" });
 
-test.describe("#1483 — direction↔specialty links in the live admin", () => {
-  test("#1483: an operator links a direction to a Минздрав specialty, is refused the duplicate, and retires then restores the same link", async ({
+test.describe("#1483 / 017 EARS-16…17 — direction↔specialty links in the live admin", () => {
+  test("EARS-17: an operator links a direction to a Минздрав specialty, is refused the duplicate, and retires then restores the same link", async ({
     page,
   }) => {
     await signInAsAdmin(page);
@@ -74,10 +80,17 @@ test.describe("#1483 — direction↔specialty links in the live admin", () => {
     await expect(
       page.getByTestId("direction-specialties-include-retired"),
     ).not.toBeChecked();
-    // The list is a link register, not a text corpus: no free-text search box.
-    await expect(page.getByTestId("direction-specialties-search")).toHaveCount(
-      0,
-    );
+    // The list is a link register, not a text corpus: the list route accepts no
+    // `q`, so the bar renders no search box rather than a dead one.
+    await expect(page.getByRole("searchbox")).toHaveCount(0);
+    // EARS-17: the bar applies instantly — no submit control exists on it.
+    await expect(
+      page.getByRole("button", { name: "Применить", exact: true }),
+    ).toHaveCount(0);
+    // EARS-16: single-action list ⇒ the row IS the action.
+    await expect(
+      page.getByRole("columnheader", { name: "Действия" }),
+    ).toHaveCount(0);
 
     // ── Reject branch (client): an unanswered select never leaves the browser ─
     await page.getByTestId("direction-specialties-create").click();
@@ -130,15 +143,25 @@ test.describe("#1483 — direction↔specialty links in the live admin", () => {
     // affordance may exist on the surface either.
     await expect(page.getByRole("button", { name: /удалить/i })).toHaveCount(0);
 
-    // ── The list finds it through the direction filter ────────────────────
+    // ── The list finds it through the direction facet, applied on change ──
+    const linkId = detailUrl.slice(detailUrl.lastIndexOf("/") + 1);
     await page.goto("/direction-specialties");
     await page
       .getByTestId("direction-specialties-direction-filter")
       .selectOption({ label: directionTitle });
-    await page.getByTestId("direction-specialties-apply").click();
+    // No «Применить»: choosing the direction IS the apply.
     await expect(page.getByTestId("direction-specialties-table")).toContainText(
       specialtyLabel,
     );
+    // The applied facet renders as a removable chip the operator can undo.
+    await expect(page.getByText("Выбрано:", { exact: false })).toBeVisible();
+
+    // ── EARS-16: the whole ROW opens the link ─────────────────────────────
+    await page.getByTestId(`row-${linkId}`).click();
+    await page.waitForURL(/\/direction-specialties\/[0-9a-f-]{36}$/, {
+      timeout: 20_000,
+    });
+    expect(page.url()).toBe(detailUrl);
 
     // ── Reject branch (server): the duplicate pair is ONE RU sentence ─────
     await page.goto("/direction-specialties/create");
@@ -169,7 +192,6 @@ test.describe("#1483 — direction↔specialty links in the live admin", () => {
     await page
       .getByTestId("direction-specialties-direction-filter")
       .selectOption({ label: directionTitle });
-    await page.getByTestId("direction-specialties-apply").click();
     await expect(
       page.getByTestId("direction-specialties-table"),
     ).not.toContainText(specialtyLabel);
@@ -179,7 +201,6 @@ test.describe("#1483 — direction↔specialty links in the live admin", () => {
       .getByTestId("direction-specialties-include-retired")
       .locator("xpath=ancestor::label[1]")
       .click();
-    await page.getByTestId("direction-specialties-apply").click();
     await expect(page.getByTestId("direction-specialties-table")).toContainText(
       specialtyLabel,
     );

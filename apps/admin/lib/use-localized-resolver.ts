@@ -150,8 +150,9 @@ export function translateIssue(issue: ZodIssueLike, t: Translator): string {
     return issue.code === "too_big" ? t("positionMax") : t("position");
   }
 
-  // #1483 direction relations. Every box here is a SELECTOR except `kind` and
-  // `weight`, and «обязательное поле» under a dropdown does not say what to do —
+  // #1483 direction relations. Every box here is a SELECTOR (`kind` included —
+  // it is a Combobox over the closed SSOT vocabulary), and «обязательное поле»
+  // under a dropdown does not say what to do —
   // so each endpoint gets its own «выберите … из списка». The two ids arrive as
   // `invalid_format` on an empty string (the SSOT id is a `z.uuid()`), which the
   // generic tail below maps to `fallback`, so the branches are load-bearing
@@ -163,13 +164,6 @@ export function translateIssue(issue: ZodIssueLike, t: Translator): string {
     return issue.code === "custom" ? t("selfEdge") : t("adjacentDirection");
   }
   if (has("directionId")) return t("direction");
-  // The weight box is TEXT holding an integer (see `DirectionAdjacencyFormSchema`):
-  // empty / non-numeric / zero / negative share one fix, an over-cap value has
-  // its own.
-  if (has("weightText")) {
-    return issue.code === "too_big" ? t("weightMax") : t("weight");
-  }
-
   if (has("expectedBy")) return t("expectedBy");
   if (has("posterRef")) return t("maxLength");
   if (has("durationSecText")) {

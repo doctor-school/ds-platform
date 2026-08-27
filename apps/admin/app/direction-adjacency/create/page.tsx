@@ -56,8 +56,10 @@ export default function CreateDirectionAdjacencyPage() {
             const payload: CreateDirectionAdjacencyRequest = {
               directionId: values.directionId,
               adjacentDirectionId: values.adjacentDirectionId,
+              // No `weight`: the server defaults it (017-design §9.3), and a
+              // number the operator was never shown must not be sent as if it
+              // were an editorial choice.
               kind: values.kind,
-              weight: values.weight,
             };
             mutate(
               {

@@ -4,14 +4,7 @@ import { useState } from "react";
 import { useParams } from "next/navigation";
 import { Authenticated, useOne, useUpdate } from "@refinedev/core";
 import { useTranslations } from "next-intl";
-import {
-  Alert,
-  Badge,
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@ds/design-system";
+import { Alert, Badge } from "@ds/design-system";
 import type { DirectionAdminDetail, TaxonomyStatus } from "@ds/schemas";
 import { AppShell } from "@/components/app-shell";
 import { BackToList } from "@/components/back-to-list";
@@ -20,12 +13,11 @@ import { taxonomyErrorKey } from "@/lib/taxonomy-errors";
 import type { UpdateDirectionVars } from "@/providers/data-provider";
 
 /**
- * Direction detail / edit (012 EARS-3) in the Stage-A composition-B tabbed layout
- * (#1282, owner pick 2026-08-17) — the same frame the project and expert details
- * use, so the four taxonomy entities read as one admin rather than four.
- * «Основное» is the only tab this slice ships: «Публикация» (#1287/#1295/#1296)
- * arrives with its own slice, and an empty placeholder tab is deliberately NOT
- * rendered.
+ * Direction detail / edit (012 EARS-3; 017 EARS-18). The record has exactly ONE
+ * section today — «Публикация» (#1287/#1295/#1296) arrives with its own slice —
+ * and a tab strip holding a single tab is chrome that navigates nowhere, so the
+ * strip is not rendered at all (017-design §9.3, owner Stage-A pick 2026-08-27).
+ * It returns with the second section, alongside the project and expert details.
  *
  * Every save carries the row's `version` as `If-Match`, and the detail is
  * refetched afterwards, so the next edit asserts the version the SERVER holds
@@ -98,14 +90,11 @@ export default function DirectionDetailPage() {
               </Alert>
             ) : null}
 
-            <Tabs defaultValue="main">
-              <TabsList>
-                <TabsTrigger value="main" data-testid="tab-main">
-                  {t("directions.tabs.main")}
-                </TabsTrigger>
-              </TabsList>
-              <TabsContent value="main">
-                <DirectionForm
+            {/* No tab bar (017-design §9.3, EARS-18): a tab strip with a single
+                tab is chrome that navigates nowhere. «Публикация»
+                (#1287/#1295/#1296) brings the second tab and the strip back with
+                it; until then the section renders its content directly. */}
+            <DirectionForm
                   detail={detail}
                   submitLabel={t("common.save")}
                   submitting={mutation.isPending}
@@ -134,8 +123,6 @@ export default function DirectionDetailPage() {
                     );
                   }}
                 />
-              </TabsContent>
-            </Tabs>
           </>
         )}
       </AppShell>

@@ -1,8 +1,12 @@
 "use client";
 
 import { useCustom, useList } from "@refinedev/core";
+import { useTranslations } from "next-intl";
+import type { ComboboxOption } from "@ds/design-system/blocks";
 import {
   ADMIN_LIST_PAGE_SIZE_MAX,
+  DIRECTION_ADJACENCY_KINDS,
+  type DirectionAdjacencyKind,
   type DirectionAdminListItem,
   type SpecialtyBook,
 } from "@ds/schemas";
@@ -72,4 +76,31 @@ export function useDirectionRelationOptions(): DirectionRelationOptions {
     isLoading: directions.isLoading || query.isLoading,
     isError: directions.isError || query.isError,
   };
+}
+
+/**
+ * The «Вид связи» vocabulary (017-design §9.3, EARS-18) as `Combobox` options.
+ *
+ * The value set is the SSOT enum `DIRECTION_ADJACENCY_KINDS` — mapping over the
+ * constant rather than re-listing three strings is what keeps the UI closed when
+ * the enum moves. Only the RU label and the per-option explanation live here:
+ * picking an adjacency kind is a taxonomy decision, so each option states what it
+ * means at the point of choice instead of leaving the operator to infer it from a
+ * slug.
+ */
+export function useDirectionAdjacencyKindOptions(): ComboboxOption[] {
+  const t = useTranslations();
+  return DIRECTION_ADJACENCY_KINDS.map((kind: DirectionAdjacencyKind) => ({
+    value: kind,
+    label: t(`directionAdjacency.kinds.${kind}.label`),
+    description: t(`directionAdjacency.kinds.${kind}.description`),
+  }));
+}
+
+/** The RU label alone — the list column and the record heading render this. */
+export function useDirectionAdjacencyKindLabel(): (
+  kind: DirectionAdjacencyKind,
+) => string {
+  const t = useTranslations();
+  return (kind) => t(`directionAdjacency.kinds.${kind}.label`);
 }

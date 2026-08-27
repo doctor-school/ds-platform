@@ -3,16 +3,23 @@ import { bootstrapAdminSession } from "./support/admin-session";
 import { totpCode } from "./support/totp";
 
 /**
- * 012 EARS-3 (#1285), browser half — the REAL Refine → NestJS → Postgres path.
+ * 012 EARS-3 (#1285) + 017 EARS-16…18 (#1483), browser half — the REAL
+ * Refine → NestJS → Postgres path.
  *
  * The API e2e suites (`apps/api/test/taxonomy/directions.e2e-spec.ts`) prove the
  * contract against the API directly. This proves the operator-facing arc on the
- * running admin: sign in, create a direction while watching the generated slug
- * preview, find the row through the shared list shell's search, edit the same
- * row (an If-Match round-trip) and confirm the change survives a reload. Both
- * refusal branches ride along — the client-side reject (a garbage slug never
- * leaves the browser) and the SERVER reject (a duplicate slug comes back as a
- * 400/409 Problem Details rendered as one actionable RU sentence).
+ * running admin: sign in, create a direction, find the row through the block-tier
+ * list (search applies INSTANTLY — there is no «Применить»), open it by clicking
+ * the ROW rather than an action button, edit the same row (an If-Match round-trip)
+ * and confirm the change survives a reload. Both refusal branches ride along — the
+ * client-side reject (an over-long title never leaves the browser) and the SERVER
+ * reject (a second direction whose title derives the same address comes back as a
+ * Problem Details rendered as one actionable RU sentence).
+ *
+ * «Адрес страницы» is asserted ABSENT on every surface (017-design §9.3): the
+ * server derives it from the Russian title and freezes it on first publish, so
+ * there is no box, no preview and no derived-value note for the operator to reason
+ * about. An assertion that it is gone is the deliverable, not an omission.
  *
  * The no-Delete assertion is part of the contract, not a nicety: 012 exposes no
  * DELETE route for any taxonomy entity, so no destructive affordance may exist
@@ -46,8 +53,8 @@ async function signInAsAdmin(page: Page): Promise<void> {
 
 test.describe.configure({ mode: "serial" });
 
-test.describe("012 EARS-3 — curated direction authoring in the live admin", () => {
-  test("012 EARS-3: an operator creates, finds and edits a curated direction through the real admin", async ({
+test.describe("012 EARS-3 / 017 EARS-16…18 — curated direction authoring in the live admin", () => {
+  test("EARS-16: an operator creates, finds and edits a curated direction through the real admin", async ({
     page,
   }) => {
     await signInAsAdmin(page);
@@ -58,38 +65,37 @@ test.describe("012 EARS-3 — curated direction authoring in the live admin", ()
     await expect(page.getByTestId("directions-filters")).toBeVisible();
     // The retired-rows toggle is OFF by default (Stage-A answer 4).
     await expect(page.getByTestId("directions-include-retired")).not.toBeChecked();
+    // EARS-17: the bar applies instantly — no submit control exists on it.
+    await expect(
+      page.getByRole("button", { name: "Применить", exact: true }),
+    ).toHaveCount(0);
+    // EARS-16: single-action list ⇒ the row IS the action; no «Действия» column
+    // and no per-row «Редактировать» button.
+    await expect(
+      page.getByRole("columnheader", { name: "Действия" }),
+    ).toHaveCount(0);
 
     // ── Reject branch (client): garbage input never leaves the browser ─────
     await page.getByTestId("directions-create").click();
     await page.waitForURL(/\/directions\/create$/, { timeout: 20_000 });
+    // The address is derived server-side and rendered nowhere (017-design §9.3).
+    await expect(page.getByTestId("direction-slug")).toHaveCount(0);
+    await expect(page.getByTestId("direction-slug-preview")).toHaveCount(0);
+    await expect(page.getByText("Адрес страницы", { exact: false })).toHaveCount(
+      0,
+    );
     await page.getByTestId("direction-title").fill("х".repeat(121));
-    await page.getByTestId("direction-slug").fill("Not valid");
     await page.getByTestId("submit-direction").click();
-    // RU inline errors, and we are still on the create screen.
+    // RU inline error, and we are still on the create screen.
     await expect(
       page.getByText("Слишком длинное значение", { exact: false }),
     ).toBeVisible();
-    await expect(
-      page.getByText("Только строчные латинские буквы", { exact: false }),
-    ).toBeVisible();
     expect(page.url()).toMatch(/\/directions\/create$/);
 
-    // ── Accept branch: the generated slug preview follows the title ────────
+    // ── Accept branch ─────────────────────────────────────────────────────
     const suffix = Date.now();
     const title = `Кардиология ${suffix}`;
-    const slug = `kardiologiya-${suffix}`;
     await page.getByTestId("direction-title").fill(title);
-    await page.getByTestId("direction-slug").fill("");
-    // The preview is computed by the same `@ds/schemas` slugifier the API uses,
-    // so what the box promises is what the server will store.
-    await expect(page.getByTestId("direction-slug")).toHaveAttribute(
-      "placeholder",
-      /^kardiologiya/,
-    );
-    await expect(page.getByTestId("direction-slug-preview")).toHaveText(
-      new RegExp(`^kardiologiya`),
-    );
-    await page.getByTestId("direction-slug").fill(slug);
     await page.getByTestId("submit-direction").click();
 
     // ── The created row renders on its own detail page ─────────────────────
@@ -97,25 +103,31 @@ test.describe("012 EARS-3 — curated direction authoring in the live admin", ()
     const detailUrl = page.url();
     await expect(page.getByTestId("direction-heading")).toHaveText(title);
     await expect(page.getByTestId("direction-status")).toHaveText("Черновик");
-    // Only «Основное» ships in this slice — no empty placeholder tabs.
-    await expect(page.getByTestId("tab-main")).toBeVisible();
-    await expect(page.getByRole("tab")).toHaveCount(1);
-    // A direction is a title plus its address — and nothing else has a box here.
-    await expect(page.getByTestId("direction-slug")).toHaveValue(slug);
+    // EARS-18: one section ⇒ no tab strip at all until «Публикация» (#1287)
+    // brings the second one.
+    await expect(page.getByRole("tab")).toHaveCount(0);
+    await expect(page.getByTestId("direction-slug")).toHaveCount(0);
 
     // ── No destructive affordance anywhere on the surface (012 §5.1) ───────
     await expect(page.getByRole("button", { name: /удалить/i })).toHaveCount(0);
 
-    // ── The shared list shell finds it by search ───────────────────────────
+    // ── The block-tier list finds it by search, with no «Применить» ────────
     await page.getByTestId("back-to-list").click();
     await page.waitForURL(/\/directions$/, { timeout: 20_000 });
-    await page.getByTestId("directions-search").fill(title);
-    await page.getByTestId("directions-apply").click();
+    // The bar's search box is a block-owned control: it is addressed by its
+    // accessible name, not by a testid the block does not accept.
+    await page.getByRole("searchbox", { name: "Поиск" }).fill(title);
     await expect(page.getByTestId("directions-table")).toContainText(title);
+    // The applied set renders as a removable chip the operator can undo.
+    await expect(page.getByText("Выбрано:", { exact: false })).toBeVisible();
     await expect(page.getByRole("button", { name: /удалить/i })).toHaveCount(0);
 
+    // ── EARS-16: the whole ROW opens the record ───────────────────────────
+    await page.getByText(title, { exact: false }).first().click();
+    await page.waitForURL(/\/directions\/[0-9a-f-]{36}$/, { timeout: 20_000 });
+    expect(page.url()).toBe(detailUrl);
+
     // ── Edit the SAME row (If-Match round-trip), not a second one ──────────
-    await page.goto(detailUrl);
     const editedTitle = `${title} и сосудистая медицина`;
     await page.getByTestId("direction-title").fill(editedTitle);
     await page.getByTestId("submit-direction").click();
@@ -124,12 +136,12 @@ test.describe("012 EARS-3 — curated direction authoring in the live admin", ()
     await expect(page.getByTestId("direction-title")).toHaveValue(editedTitle);
     // The row's identity did not move — an edit is an edit, not a re-create.
     expect(page.url()).toBe(detailUrl);
-    await expect(page.getByTestId("direction-slug")).toHaveValue(slug);
 
-    // ── Reject branch (server): the taken address comes back as one sentence ─
+    // ── Reject branch (server): a title deriving a taken address ──────────
+    // The operator never typed an address, so the refusal must still read as
+    // one sentence about the direction rather than about an internal slug.
     await page.goto("/directions/create");
-    await page.getByTestId("direction-title").fill(`Дубликат ${suffix}`);
-    await page.getByTestId("direction-slug").fill(slug);
+    await page.getByTestId("direction-title").fill(title);
     await page.getByTestId("submit-direction").click();
     await expect(page.getByTestId("create-error")).toHaveText(
       /адрес страницы уже занят/i,
@@ -137,24 +149,6 @@ test.describe("012 EARS-3 — curated direction authoring in the live admin", ()
     // The operator stays on the form with their input intact — a refusal is a
     // correction prompt, not a lost draft.
     expect(page.url()).toMatch(/\/directions\/create$/);
-    await expect(page.getByTestId("direction-slug")).toHaveValue(slug);
-
-    // ── The slug stays editable while the row has never been published ────
-    await page.goto(detailUrl);
-    await expect(page.getByTestId("direction-slug")).not.toHaveAttribute(
-      "readonly",
-      /.*/,
-    );
-    await expect(
-      page.getByText("До первой публикации адрес можно изменить", {
-        exact: false,
-      }),
-    ).toBeVisible();
-    // The LOCKED rendering (read-only box + «адрес зафиксирован…» explanation)
-    // cannot be reached from the browser in this slice: publication is #1287 and
-    // no route here can set `first_published_at`. Its contract half is proven in
-    // `apps/api/test/taxonomy/directions.e2e-spec.ts` (`slugEditable: false` on a
-    // published row plus the 409 `SLUG_IMMUTABLE` refusal); the browser assertion
-    // rides #1287, which introduces the transition that produces the state.
+    await expect(page.getByTestId("direction-title")).toHaveValue(title);
   });
 });

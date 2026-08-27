@@ -10,8 +10,6 @@ import {
   CreateDirectionSpecialtyRequestSchema,
   type DirectionAdjacencyKind,
   DirectionAdjacencyKindSchema,
-  DIRECTION_ADJACENCY_WEIGHT_MAX,
-  DIRECTION_ADJACENCY_WEIGHT_MIN,
   DurationSecSchema,
   EmbedRefSchema,
   EVENT_EXPERT_POSITION_MAX,
@@ -479,29 +477,17 @@ export interface DirectionSpecialtyFormFields {
 }
 
 /**
- * The weight bound, rebuilt from the SSOT CONSTANTS rather than reached out of
- * `CreateDirectionAdjacencyRequestSchema.shape`: that schema carries a `.refine()`
- * at the object level, and a refined object's `.shape` is not reachable through
- * the ZodEffects wrapper. Using the exported bounds keeps the single source intact.
- */
-const DirectionAdjacencyWeightBoundSchema = z
-  .number()
-  .int()
-  .min(DIRECTION_ADJACENCY_WEIGHT_MIN)
-  .max(DIRECTION_ADJACENCY_WEIGHT_MAX);
-
-/**
- * #1483 — the direction adjacency form (ADR-0016 §5; 017-design §5). Unlike the
- * specialty link, an adjacency edge DOES carry attributes (`kind`, `weight`), so
- * this form serves both create and edit — with one deliberate asymmetry the API
- * mirrors: the two ENDPOINTS are the edge's identity and are therefore not
- * patchable, so the edit renders them read-only rather than validating a move the
- * server would refuse.
+ * #1483 — the direction adjacency form (ADR-0016 §5; 017-design §5, EARS-18).
+ * Unlike the specialty link, an adjacency edge DOES carry an attribute of its own
+ * — `kind` — so this form serves both create and edit, with one deliberate
+ * asymmetry the API mirrors: the two ENDPOINTS are the edge's identity and are
+ * therefore not patchable, so the edit renders them read-only rather than
+ * validating a move the server would refuse.
  *
- * `weight` is a TEXT box for the same reason `positionText` above is: an operator
- * types into a box, `<input type="number">` yields `""` for «12abc», and folding
- * the SSOT bound over the typed text is what lets «», «abc» and «0» all resolve to
- * one actionable sentence while an over-cap value keeps its own.
+ * `weight` is NOT a field. It is a tuning parameter of the targeting resolution
+ * with a server default, and 017-design §9.3 rules that a number no operator can
+ * reason about does not earn a box — the API defaults it, so the form neither
+ * collects nor sends it.
  *
  * The self-edge rule is NOT re-implemented here — it is asserted by the SSOT
  * `CreateDirectionAdjacencyRequestSchema` refinement, folded in below, so the
@@ -514,7 +500,6 @@ export const DirectionAdjacencyFormSchema = z
     // The SSOT enum verbatim: «вид связи» is a closed vocabulary (017-design
     // §9.3), so the form validates membership, not a string shape.
     kind: DirectionAdjacencyKindSchema,
-    weightText: z.string(),
   })
   .superRefine((values, ctx) => {
     if (
@@ -523,26 +508,6 @@ export const DirectionAdjacencyFormSchema = z
     ) {
       ctx.addIssue({ code: "custom", path: ["adjacentDirectionId"] });
     }
-
-    const text = values.weightText.trim();
-    // Parsed by hand rather than with `Number()`: `Number(" ")` is 0 and
-    // `Number("1e2")` is 100, so a blank box and an exponent would both slip past
-    // as a weight the operator never typed.
-    const parsed = DirectionAdjacencyWeightBoundSchema.safeParse(
-      /^\d+$/.test(text) ? Number(text) : Number.NaN,
-    );
-    if (parsed.success) return;
-    ctx.addIssue(
-      parsed.error.issues.some((issue) => issue.code === "too_big")
-        ? {
-            code: "too_big",
-            origin: "number",
-            maximum: DIRECTION_ADJACENCY_WEIGHT_MAX,
-            inclusive: true,
-            path: ["weightText"],
-          }
-        : { code: "custom", path: ["weightText"] },
-    );
   });
 
 export interface DirectionAdjacencyFormFields {
@@ -555,5 +520,4 @@ export interface DirectionAdjacencyFormFields {
    * defaulted to whichever option happened to be listed first.
    */
   kind: DirectionAdjacencyKind | "";
-  weightText: string;
 }

@@ -1,4 +1,10 @@
 import { Module } from "@nestjs/common";
+import { DirectionAdjacencyAdminController } from "./direction-adjacency.admin.controller.js";
+import { DirectionAdjacencyRepository } from "./direction-adjacency.repository.js";
+import { DirectionAdjacencyService } from "./direction-adjacency.service.js";
+import { DirectionSpecialtiesAdminController } from "./direction-specialties.admin.controller.js";
+import { DirectionSpecialtiesRepository } from "./direction-specialties.repository.js";
+import { DirectionSpecialtiesService } from "./direction-specialties.service.js";
 import { EventExpertsAdminController } from "./event-experts.admin.controller.js";
 import { EventExpertsRepository } from "./event-experts.repository.js";
 import { EventExpertsService } from "./event-experts.service.js";
@@ -111,6 +117,13 @@ import { DirectionsService } from "./directions.service.js";
     // projection. Same reasoning: the merge policy is the taxonomy's, the
     // event contributes only the parent key.
     EventSpeakersPublicController,
+    // #1483 (ADR-0016 §2.8) — the two direction reference relations: which
+    // Минздрав specialties a direction serves, and which directions are
+    // adjacent to it. They live here because a direction is a taxonomy entity
+    // and both surfaces are the taxonomy relationship contract verbatim; 017's
+    // targeting resolution (#1484) is their consumer, not their owner.
+    DirectionSpecialtiesAdminController,
+    DirectionAdjacencyAdminController,
   ],
   providers: [
     IdempotencyService,
@@ -142,6 +155,10 @@ import { DirectionsService } from "./directions.service.js";
     EventTopicsService,
     SpeakerProjectionRepository,
     SpeakerProjectionService,
+    DirectionSpecialtiesRepository,
+    DirectionSpecialtiesService,
+    DirectionAdjacencyRepository,
+    DirectionAdjacencyService,
     // The §3.1 preview/confirmation seam, authored once for every 012 resource
     // with a retire/restore pair (#1288 is the first adopter, #1295/#1296 next).
     LifecycleImpactService,

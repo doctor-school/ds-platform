@@ -97,7 +97,7 @@ Feature: A doctor arrives at their own storefront, picks a specialty, and the si
   Scenario: Nothing blocks the page before a choice is made
     Given a visitor with no chosen specialty
     When they open the storefront home page and scroll to the footer
-    Then the events block, «Что исследовать» and the leaderboard are all readable
+    Then the events block and the leaderboard are both readable
     And no modal gate, interstitial, scroll lock or empty page appears at any point
 
   @EARS-5 @happy
@@ -236,12 +236,13 @@ Feature: A doctor arrives at their own storefront, picks a specialty, and the si
       | chosen a specialty      | targeted  |
 
   @EARS-10 @happy
-  Scenario: «Что исследовать» explains the formats before any commitment
+  Scenario: «Что исследовать» is deferred until its content exists, not stubbed
     When any visitor opens the storefront home page
-    Then the block renders the school with its lesson count
-    And the lesson of the day with its duration
-    And the clinical-case review with its steps
-    And each of the three carries its own «Все …» link to the corresponding surface
+    Then no «Что исследовать» block renders on the page
+    And no format card, sample lesson count, duration or step figure from the canvas renders
+    And no «Все школы», «Все уроки» or «Все разборы» link renders
+    And no empty box, skeleton or «скоро» marker stands in for the block
+    And the home page reads as complete without it
 
   @EARS-11 @happy
   Scenario: The leaderboard is its own section and lists only consenting doctors
@@ -293,7 +294,6 @@ Feature: A doctor arrives at their own storefront, picks a specialty, and the si
       | the catalog search field and expand control |
       | the collapsed specialty row                 |
       | the events block and its compact calendar   |
-      | «Что исследовать»                           |
       | the leaderboard section                     |
 
   @EARS-14 @happy

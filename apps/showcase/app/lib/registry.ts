@@ -117,6 +117,19 @@ export const SHOWCASE_REGISTRY: ShowcaseEntry[] = [
   // ── 12-month picker (004 EARS-16/17, #1051) — the webinars-month.dc.html
   //    month chooser (year ‹ › stepper + 12-month count grid).
   { id: "MonthPicker", section: "blocks" },
+
+  // ── Admin block tier (#1578, ADR-0013 adopt-before-bespoke) — the shadcn-family
+  //    patterns the admin screens instantiate instead of hand-composing.
+  { id: "DataTable", section: "blocks" },
+  { id: "Pagination", section: "blocks" },
+  { id: "EmptyState", section: "blocks" },
+  { id: "FilterBar", section: "blocks" },
+  { id: "Combobox", section: "blocks" },
+  { id: "FormSection", section: "blocks" },
+  { id: "FormFieldGroup", section: "blocks" },
+  { id: "FormSeparator", section: "blocks" },
+  { id: "FormActions", section: "blocks" },
+  { id: "FormDerivedNote", section: "blocks" },
 ];
 
 /**
@@ -141,4 +154,16 @@ export const NON_CATALOGUED_EXPORTS: string[] = [
   // `./blocks` non-component exports (resend countdown hook + mask helper)
   "useResendCountdown",
   "maskDestination",
+  // `./blocks` adopted shadcn `Table` composition fragments (#1578) — the low-level
+  // parts DataTable is assembled from. The catalogued unit-as-subject is `DataTable`
+  // (a bare `<TableRow>` has no standalone state matrix to show); these are exported
+  // only so a future table pattern can compose them.
+  "Table",
+  "TableHeader",
+  "TableBody",
+  "TableFooter",
+  "TableRow",
+  "TableHead",
+  "TableCell",
+  "TableCaption",
 ];

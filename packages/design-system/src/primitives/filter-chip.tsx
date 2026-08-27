@@ -15,24 +15,37 @@ import { cn } from "../lib/utils";
  *               copy weight 700;
  *   • hover     fills with `tint`, the outline switches to `tint-foreground`;
  *   • selected  the accessible `primary-action` fill + `primary-foreground` copy
- *               weight 800, border in the same action colour;
+ *               weight 800, border in the same action colour; its own hover
+ *               (`primary-hover`) and pressed (`primary-pressed`) steps of the
+ *               action-fill triad (ADR-0013 §7 — every clickable declares the FULL
+ *               state set; a selected chip is still a clickable control, and in
+ *               `FilterBar` it is the REMOVE affordance, so a mouse operator with
+ *               no hover feedback cannot tell it is actionable);
  *   • disabled  `hairline` outline, transparent fill, `muted-2` copy;
  *   • focus     the flush 3px `shadow-focus` ring (source global :focus-visible).
  * Token-only → light + `.dark` flip automatically.
  */
 const filterChipVariants = cva(
   cn(
-    "inline-flex items-center justify-center border-2 px-3.25 py-1.5 text-caption transition-colors",
+    "inline-flex items-center justify-center border-2 px-3.25 py-1.5 text-caption transition-all",
+    // The pressed step is the neo-brutalist press translate the raised `Button`
+    // uses (`primary-hover` and `primary-pressed` resolve to the same fill, so a
+    // colour-only press would be invisible on the selected chip).
+    "active:translate-x-0.5 active:translate-y-0.5",
     "focus-visible:outline-none focus-visible:shadow-focus",
     "disabled:pointer-events-none disabled:border-hairline disabled:bg-transparent disabled:text-muted-2 disabled:font-bold",
   ),
   {
     variants: {
       selected: {
-        true: "border-primary-action bg-primary-action text-primary-foreground font-extrabold",
+        true: cn(
+          "border-primary-action bg-primary-action text-primary-foreground font-extrabold",
+          "hover:bg-primary-hover hover:border-primary-hover",
+        ),
         false: cn(
           "border-chip-border bg-transparent text-tint-foreground font-bold",
           "hover:bg-tint hover:border-tint-foreground",
+          "active:border-primary-action",
         ),
       },
     },

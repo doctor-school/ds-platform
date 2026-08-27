@@ -228,6 +228,68 @@ const FLOOR_ROUTES: {
     url: `/v1/admin/directions/${ABSENT_ID}`,
     payload: {},
   },
+  // ADR-0016 §5 (#1483) — the two managed-relation curation surfaces the 017
+  // targeting reads. Same floor as their taxonomy siblings: the `platform_admin`
+  // guard answers before validation, so an anonymous caller cannot tell an
+  // absent link or edge from a real one.
+  {
+    endpoint: "GET /v1/admin/direction-specialties",
+    method: "GET",
+    url: "/v1/admin/direction-specialties",
+  },
+  {
+    endpoint: "GET /v1/admin/direction-specialties/:id",
+    method: "GET",
+    url: `/v1/admin/direction-specialties/${ABSENT_ID}`,
+  },
+  {
+    endpoint: "POST /v1/admin/direction-specialties",
+    method: "POST",
+    url: "/v1/admin/direction-specialties",
+    payload: {},
+  },
+  {
+    endpoint: "POST /v1/admin/direction-specialties/:id/retire",
+    method: "POST",
+    url: `/v1/admin/direction-specialties/${ABSENT_ID}/retire`,
+  },
+  {
+    endpoint: "POST /v1/admin/direction-specialties/:id/restore",
+    method: "POST",
+    url: `/v1/admin/direction-specialties/${ABSENT_ID}/restore`,
+  },
+  {
+    endpoint: "GET /v1/admin/direction-adjacency",
+    method: "GET",
+    url: "/v1/admin/direction-adjacency",
+  },
+  {
+    endpoint: "GET /v1/admin/direction-adjacency/:id",
+    method: "GET",
+    url: `/v1/admin/direction-adjacency/${ABSENT_ID}`,
+  },
+  {
+    endpoint: "POST /v1/admin/direction-adjacency",
+    method: "POST",
+    url: "/v1/admin/direction-adjacency",
+    payload: {},
+  },
+  {
+    endpoint: "PATCH /v1/admin/direction-adjacency/:id",
+    method: "PATCH",
+    url: `/v1/admin/direction-adjacency/${ABSENT_ID}`,
+    payload: {},
+  },
+  {
+    endpoint: "POST /v1/admin/direction-adjacency/:id/retire",
+    method: "POST",
+    url: `/v1/admin/direction-adjacency/${ABSENT_ID}/retire`,
+  },
+  {
+    endpoint: "POST /v1/admin/direction-adjacency/:id/restore",
+    method: "POST",
+    url: `/v1/admin/direction-adjacency/${ABSENT_ID}/restore`,
+  },
   // 012 EARS-4 (#1286) — the descriptive partner authoring surface. Same floor as
   // its siblings: the `platform_admin` guard refuses before validation,
   // idempotency or the logo upload, so an unfielded request never reaches the

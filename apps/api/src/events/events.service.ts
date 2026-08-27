@@ -16,6 +16,7 @@ import {
   mskMonthRange,
   mskYearRange,
   type PublicEventPage,
+  type PublicEventPageSpeaker,
   type PublicEventState,
   type UpcomingBroadcastCard,
   type UpcomingBroadcastState,
@@ -23,6 +24,7 @@ import {
   validTransitions,
 } from "@ds/schemas";
 import { OBJECT_STORAGE, type ObjectStorage } from "../storage/index.js";
+import { SpeakerProjectionService } from "../taxonomy/speaker-projection.service.js";
 import {
   type EventWithSpeakers,
   EventsRepository,
@@ -189,6 +191,12 @@ export class EventsService {
   constructor(
     @Inject(OBJECT_STORAGE) private readonly storage: ObjectStorage,
     private readonly repo: EventsRepository,
+    // 012 EARS-8 (#1290) — the ONE canonical merged speaker resolver. Both
+    // public projections below read speakers through it; this service no longer
+    // assembles a public speaker list of its own, which is precisely what keeps
+    // the page, the standalone endpoint and the card from disagreeing.
+    @Inject(SpeakerProjectionService)
+    private readonly speakerProjection: SpeakerProjectionService,
   ) {}
 
   /**
@@ -596,7 +604,13 @@ export class EventsService {
   async listUpcoming(now: Date = new Date()): Promise<UpcomingBroadcastCard[]> {
     const cutoff = new Date(now.getTime() - AIR_WINDOW_MS);
     const rows = await this.repo.listUpcoming(cutoff);
-    return rows.map((r) => this.toUpcomingCard(r));
+    // 012 EARS-8: ONE batched resolver call for the whole page — never one per
+    // card. The card's `{ name }` array is a MAPPING of the merged result, not a
+    // second merge (012-design §5.2).
+    const speakers = await this.speakerProjection.resolveMany(
+      rows.map((r) => r.event.id),
+    );
+    return rows.map((r) => this.toUpcomingCard(r, speakers.get(r.event.id) ?? []));
   }
 
   /**
@@ -645,7 +659,10 @@ export class EventsService {
     };
   }
 
-  private toUpcomingCard(a: EventWithSpeakers): UpcomingBroadcastCard {
+  private toUpcomingCard(
+    a: EventWithSpeakers,
+    merged: PublicEventPageSpeaker[],
+  ): UpcomingBroadcastCard {
     const e = a.event;
     return {
       id: e.id,
@@ -655,11 +672,10 @@ export class EventsService {
       startsAt: e.startsAt.toISOString(),
       specialties: e.specialties,
       // Card speakers are name-only — no `regalia`/credentials cross onto the
-      // listing (thinner than the event page, EARS-10).
-      speakers: a.speakers
-        .slice()
-        .sort((x, y) => x.position - y.position)
-        .map((s) => ({ name: s.name })),
+      // listing (thinner than the event page, EARS-10). The ORDER and the
+      // membership are the merged resolver's (012 EARS-8); only the projection
+      // is thinner.
+      speakers: merged.map((s) => ({ name: s.name })),
       // The repo filters to published/live, so the residual is the card subset.
       state: e.state as UpcomingBroadcastState,
     };
@@ -678,10 +694,9 @@ export class EventsService {
       startsAt: e.startsAt.toISOString(),
       durationMin: e.durationMin,
       description: e.description,
-      speakers: a.speakers
-        .slice()
-        .sort((x, y) => x.position - y.position)
-        .map((s) => ({ name: s.name, credentials: s.regalia })),
+      // 012 EARS-8: the merged legacy+expert union from the ONE canonical
+      // resolver — byte-identical to `GET /v1/public/events/:key/speakers`.
+      speakers: await this.speakerProjection.resolve(e.id),
       specialties: e.specialties,
       // `partner_ref` is free text in wave 1; publicly it is a display label
       // only (no commercial terms). Absent ref ⇒ empty list, never a null entry.

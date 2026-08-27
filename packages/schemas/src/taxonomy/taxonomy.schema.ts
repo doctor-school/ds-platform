@@ -39,7 +39,10 @@ export const SlugSchema = z
   .string()
   .min(1)
   .max(SLUG_MAX)
-  .regex(SLUG_REGEX, "slug must be lowercase-ASCII words joined by single hyphens")
+  .regex(
+    SLUG_REGEX,
+    "slug must be lowercase-ASCII words joined by single hyphens",
+  )
   .refine((s) => !CANONICAL_UUID_REGEX.test(s), {
     message: "slug must not be canonical UUID text",
   });
@@ -480,7 +483,10 @@ export const PartnerWebsiteUrlSchema = z
   .trim()
   .min(1)
   .max(PARTNER_WEBSITE_URL_MAX)
-  .regex(PARTNER_WEBSITE_URL_PATTERN, "website must be an absolute https:// URL");
+  .regex(
+    PARTNER_WEBSITE_URL_PATTERN,
+    "website must be an absolute https:// URL",
+  );
 
 /**
  * `POST /v1/admin/partners` — create one draft partner.
@@ -573,6 +579,19 @@ export const RELATIONSHIP_STATUSES = ["active", "retired"] as const;
 export const RelationshipStatusSchema = z.enum(RELATIONSHIP_STATUSES);
 export type RelationshipStatus = z.infer<typeof RelationshipStatusSchema>;
 
+/**
+ * The closed `project_experts.role` set (012-design §2.1, EARS-9). Declared with
+ * the shared join vocabulary rather than inside the `project_experts` DTO block
+ * below, because the §5.2 public item DTOs — which are authored much earlier in
+ * this file — extend `PublicExpertSummary` with exactly this enum.
+ *
+ * `curator` is the accountable owner every published project must have exactly
+ * one of; `member` is every other listed expert.
+ */
+export const PROJECT_EXPERT_ROLES = ["curator", "member"] as const;
+export const ProjectExpertRoleSchema = z.enum(PROJECT_EXPERT_ROLES);
+export type ProjectExpertRole = z.infer<typeof ProjectExpertRoleSchema>;
+
 export const EVENT_EXPERT_ROLE_MIN = 1;
 export const EVENT_EXPERT_ROLE_MAX = 80;
 export const EVENT_EXPERT_POSITION_MIN = 0;
@@ -660,17 +679,19 @@ export type EventExpertAdminDetail = z.infer<
   typeof EventExpertAdminDetailSchema
 >;
 
-export const EventExpertAdminListItemSchema = EventExpertAdminDetailSchema.pick({
-  id: true,
-  eventId: true,
-  expertId: true,
-  role: true,
-  position: true,
-  legacySpeakerId: true,
-  status: true,
-  version: true,
-  updatedAt: true,
-});
+export const EventExpertAdminListItemSchema = EventExpertAdminDetailSchema.pick(
+  {
+    id: true,
+    eventId: true,
+    expertId: true,
+    role: true,
+    position: true,
+    legacySpeakerId: true,
+    status: true,
+    version: true,
+    updatedAt: true,
+  },
+);
 export type EventExpertAdminListItem = z.infer<
   typeof EventExpertAdminListItemSchema
 >;
@@ -827,6 +848,79 @@ export type PublicTopicSummaryPage = z.infer<
   typeof PublicTopicSummaryPageSchema
 >;
 
+// ── §5.2 nested item DTOs of the project joins (EARS-9 #1291, EARS-10 #1292) ──
+//
+// 012-design §5.2 fixes each nested route's item shape rather than inferring it
+// from the opposite full entity: the summary of the far endpoint PLUS the
+// relationship's own attribute, and nothing else. The `.extend()` idiom mirrors
+// `PublicEventExpertItemSchema` above.
+//
+// `PublicExpertSummarySchema` is a plain object rather than `.strict()`, so its
+// extensions inherit that; the two project-side items extend the STRICT
+// `PublicProjectSummarySchema` and stay strict, which is the disclosure boundary
+// §5.2 asks for — an admin field can never reach these bodies by being spread in.
+
+/** `/projects/:key/experts` → `PublicExpertSummary + { role }`. */
+export const PublicProjectExpertItemSchema = PublicExpertSummarySchema.extend({
+  role: ProjectExpertRoleSchema,
+});
+export type PublicProjectExpertItem = z.infer<
+  typeof PublicProjectExpertItemSchema
+>;
+
+/** `/experts/:key/projects` → `PublicProjectSummary + { role }`. */
+export const PublicExpertProjectItemSchema = PublicProjectSummarySchema.extend({
+  role: ProjectExpertRoleSchema,
+});
+export type PublicExpertProjectItem = z.infer<
+  typeof PublicExpertProjectItemSchema
+>;
+
+/** `/projects/:key/partners` → `PublicPartnerSummary + { isPrimary }`. */
+export const PublicProjectPartnerItemSchema = PublicPartnerSummarySchema.extend(
+  {
+    isPrimary: z.boolean(),
+  },
+);
+export type PublicProjectPartnerItem = z.infer<
+  typeof PublicProjectPartnerItemSchema
+>;
+
+/** `/partners/:key/projects` → `PublicProjectSummary + { isPrimary }`. */
+export const PublicPartnerProjectItemSchema = PublicProjectSummarySchema.extend(
+  {
+    isPrimary: z.boolean(),
+  },
+);
+export type PublicPartnerProjectItem = z.infer<
+  typeof PublicPartnerProjectItemSchema
+>;
+
+export const PublicProjectExpertItemPageSchema = publicCursorPageSchema(
+  PublicProjectExpertItemSchema,
+);
+export type PublicProjectExpertItemPage = z.infer<
+  typeof PublicProjectExpertItemPageSchema
+>;
+export const PublicExpertProjectItemPageSchema = publicCursorPageSchema(
+  PublicExpertProjectItemSchema,
+);
+export type PublicExpertProjectItemPage = z.infer<
+  typeof PublicExpertProjectItemPageSchema
+>;
+export const PublicProjectPartnerItemPageSchema = publicCursorPageSchema(
+  PublicProjectPartnerItemSchema,
+);
+export type PublicProjectPartnerItemPage = z.infer<
+  typeof PublicProjectPartnerItemPageSchema
+>;
+export const PublicPartnerProjectItemPageSchema = publicCursorPageSchema(
+  PublicPartnerProjectItemSchema,
+);
+export type PublicPartnerProjectItemPage = z.infer<
+  typeof PublicPartnerProjectItemPageSchema
+>;
+
 /** Bounded page size of every §5.2 growing public read. */
 export const PUBLIC_PAGE_SIZE_DEFAULT = 20;
 export const PUBLIC_PAGE_SIZE_MAX = 50;
@@ -854,8 +948,12 @@ export type PublicCursorQuery = z.infer<typeof PublicCursorQuerySchema>;
 
 /** The two transitions a preview may be issued for. A token binds exactly one. */
 export const TAXONOMY_LIFECYCLE_TRANSITIONS = ["retire", "restore"] as const;
-export const TaxonomyLifecycleTransitionSchema = z.enum(TAXONOMY_LIFECYCLE_TRANSITIONS);
-export type TaxonomyLifecycleTransition = z.infer<typeof TaxonomyLifecycleTransitionSchema>;
+export const TaxonomyLifecycleTransitionSchema = z.enum(
+  TAXONOMY_LIFECYCLE_TRANSITIONS,
+);
+export type TaxonomyLifecycleTransition = z.infer<
+  typeof TaxonomyLifecycleTransitionSchema
+>;
 
 /**
  * The confirmation header carrying the signed envelope back (§3.1). Absent is
@@ -1137,6 +1235,219 @@ export type EventTopicAdminListQuery = z.infer<
   typeof EventTopicAdminListQuerySchema
 >;
 
+// ── project_experts authoring DTOs (012-design §5.1; EARS-9, #1291) ──────────
+
+/**
+ * `POST /v1/admin/project-experts` — list one expert on one project with a role.
+ *
+ * `.strict()` is load-bearing exactly as it is on the event↔project create:
+ * `status`, `version` and `deletedAt` are moved by the retire/restore commands,
+ * never by a create body, so supplying one is 400 `VALIDATION_FAILED` rather
+ * than a silently dropped field.
+ *
+ * Creating a `curator` row on a PUBLISHED project that already has one is
+ * refused by the service with 409 `PUBLISHED_PROJECT_REQUIRES_CURATOR`-adjacent
+ * `RELATIONSHIP_CONFLICT` and, underneath it, by the immediate partial unique
+ * index — the curator SEAT is moved by `replace-curator`, not by a second create.
+ */
+export const CreateProjectExpertRequestSchema = z
+  .object({
+    projectId: TaxonomyIdSchema,
+    expertId: TaxonomyIdSchema,
+    role: ProjectExpertRoleSchema,
+  })
+  .strict();
+export type CreateProjectExpertRequest = z.infer<
+  typeof CreateProjectExpertRequestSchema
+>;
+
+/**
+ * `PATCH /v1/admin/project-experts/:id` — edit the SAME row's role.
+ *
+ * Neither endpoint is patchable: re-pointing a relation would rewrite history
+ * the audit ledger already attributes to the original pair, so a re-point is
+ * retire + a new link. `role` is the only attribute this join has, and moving it
+ * `member → curator` or `curator → member` on a published project runs the §3.2
+ * invariant check — demoting the sole curator is 409
+ * `PUBLISHED_PROJECT_REQUIRES_CURATOR`.
+ */
+export const UpdateProjectExpertRequestSchema = z
+  .object({
+    role: ProjectExpertRoleSchema.optional(),
+  })
+  .strict();
+export type UpdateProjectExpertRequest = z.infer<
+  typeof UpdateProjectExpertRequestSchema
+>;
+
+/**
+ * `POST /v1/admin/projects/:id/replace-curator` (012-design §5.1 / §3.2) — the
+ * ONLY curator-change path while the project is published, and an atomic one:
+ * demote the incumbent to `member`, then create/restore/promote the candidate.
+ * It carries the PROJECT's `If-Match`, not a relation's, because the invariant
+ * it preserves belongs to the project.
+ */
+export const ReplaceProjectCuratorRequestSchema = z
+  .object({ expertId: TaxonomyIdSchema })
+  .strict();
+export type ReplaceProjectCuratorRequest = z.infer<
+  typeof ReplaceProjectCuratorRequestSchema
+>;
+
+/**
+ * The admin projection of one project↔expert relation. Both endpoints' display
+ * forms are inline for the same reason `EventProjectAdminDetail` carries them:
+ * the admin renders a table of LINKS, and two opaque UUIDs per row would force a
+ * follow-up read per row.
+ *
+ * `expertName` is nullable because §2.4's editorial removal nulls `experts.name`
+ * on a retained row; the admin renders the fixed label `[удалён]` for it rather
+ * than the API storing a sentinel string.
+ */
+export const ProjectExpertAdminDetailSchema = z.object({
+  id: z.string(),
+  projectId: z.string(),
+  projectTitle: z.string(),
+  projectSlug: z.string(),
+  expertId: z.string(),
+  expertName: z.string().nullable(),
+  expertSlug: z.string(),
+  role: ProjectExpertRoleSchema,
+  status: RelationshipStatusSchema,
+  version: z.number().int().positive(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type ProjectExpertAdminDetail = z.infer<
+  typeof ProjectExpertAdminDetailSchema
+>;
+
+/** Offset/page admin list envelope (ADR-0002 — admin pagination is offset-based). */
+export const ProjectExpertAdminListSchema = z.object({
+  data: z.array(ProjectExpertAdminDetailSchema),
+  total: z.number().int().nonnegative(),
+  page: z.number().int().positive(),
+  pageSize: z.number().int().positive(),
+});
+export type ProjectExpertAdminList = z.infer<
+  typeof ProjectExpertAdminListSchema
+>;
+
+/** Either endpoint may scope the list — one route serves both panel directions. */
+export const ProjectExpertAdminListQuerySchema = z
+  .object({
+    page: z.coerce.number().int().positive().default(1),
+    pageSize: z.coerce
+      .number()
+      .int()
+      .positive()
+      .max(ADMIN_LIST_PAGE_SIZE_MAX)
+      .default(ADMIN_LIST_PAGE_SIZE_DEFAULT),
+    projectId: TaxonomyIdSchema.optional(),
+    expertId: TaxonomyIdSchema.optional(),
+    role: ProjectExpertRoleSchema.optional(),
+    status: RelationshipStatusSchema.optional(),
+    includeRetired: z
+      .union([z.boolean(), z.enum(["true", "false"])])
+      .transform((v) => v === true || v === "true")
+      .default(false),
+  })
+  .strict();
+export type ProjectExpertAdminListQuery = z.infer<
+  typeof ProjectExpertAdminListQuerySchema
+>;
+
+// ── project_partners authoring DTOs (012-design §5.1; EARS-10, #1292) ────────
+
+/**
+ * `POST /v1/admin/project-partners` — list one partner on one project.
+ *
+ * `isPrimary` defaults to FALSE rather than being required: adding a partner is
+ * the common act, and making it THE primary is the deliberate one. A create that
+ * asks for `isPrimary: true` while an active primary already exists is refused
+ * with 409 `RELATIONSHIP_CONFLICT` and zero mutation — the flag is MOVED by a
+ * PATCH, never won by a race against the index.
+ */
+export const CreateProjectPartnerRequestSchema = z
+  .object({
+    projectId: TaxonomyIdSchema,
+    partnerId: TaxonomyIdSchema,
+    isPrimary: z.boolean().default(false),
+  })
+  .strict();
+export type CreateProjectPartnerRequest = z.infer<
+  typeof CreateProjectPartnerRequestSchema
+>;
+
+/**
+ * `PATCH /v1/admin/project-partners/:id` — edit the SAME row's `isPrimary`.
+ * Omission means unchanged. Setting it true while another ACTIVE row of the same
+ * project holds it is 409 `RELATIONSHIP_CONFLICT`: the operator clears the
+ * incumbent first, so «who is the primary partner» is never decided by whichever
+ * request happened to reach the index first.
+ */
+export const UpdateProjectPartnerRequestSchema = z
+  .object({
+    isPrimary: z.boolean().optional(),
+  })
+  .strict();
+export type UpdateProjectPartnerRequest = z.infer<
+  typeof UpdateProjectPartnerRequestSchema
+>;
+
+/** The admin projection of one project↔partner relation. */
+export const ProjectPartnerAdminDetailSchema = z.object({
+  id: z.string(),
+  projectId: z.string(),
+  projectTitle: z.string(),
+  projectSlug: z.string(),
+  partnerId: z.string(),
+  partnerTitle: z.string(),
+  partnerSlug: z.string(),
+  isPrimary: z.boolean(),
+  status: RelationshipStatusSchema,
+  version: z.number().int().positive(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type ProjectPartnerAdminDetail = z.infer<
+  typeof ProjectPartnerAdminDetailSchema
+>;
+
+/** Offset/page admin list envelope (ADR-0002 — admin pagination is offset-based). */
+export const ProjectPartnerAdminListSchema = z.object({
+  data: z.array(ProjectPartnerAdminDetailSchema),
+  total: z.number().int().nonnegative(),
+  page: z.number().int().positive(),
+  pageSize: z.number().int().positive(),
+});
+export type ProjectPartnerAdminList = z.infer<
+  typeof ProjectPartnerAdminListSchema
+>;
+
+/** Either endpoint may scope the list — one route serves both panel directions. */
+export const ProjectPartnerAdminListQuerySchema = z
+  .object({
+    page: z.coerce.number().int().positive().default(1),
+    pageSize: z.coerce
+      .number()
+      .int()
+      .positive()
+      .max(ADMIN_LIST_PAGE_SIZE_MAX)
+      .default(ADMIN_LIST_PAGE_SIZE_DEFAULT),
+    projectId: TaxonomyIdSchema.optional(),
+    partnerId: TaxonomyIdSchema.optional(),
+    status: RelationshipStatusSchema.optional(),
+    includeRetired: z
+      .union([z.boolean(), z.enum(["true", "false"])])
+      .transform((v) => v === true || v === "true")
+      .default(false),
+  })
+  .strict();
+export type ProjectPartnerAdminListQuery = z.infer<
+  typeof ProjectPartnerAdminListQuerySchema
+>;
+
 // ── Admin list query (012-design §5.1; the shell #1297 later sweeps) ─────────
 
 /**
@@ -1265,7 +1576,9 @@ export const ProblemDetailsSchema = z.object({
   errorCode: TaxonomyErrorCodeSchema,
   traceId: z.string(),
   /** Field-addressed validation/publish-requirement detail, when applicable. */
-  errors: z.array(z.object({ path: z.string(), message: z.string() })).optional(),
+  errors: z
+    .array(z.object({ path: z.string(), message: z.string() }))
+    .optional(),
 });
 export type ProblemDetails = z.infer<typeof ProblemDetailsSchema>;
 

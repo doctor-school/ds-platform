@@ -27,9 +27,27 @@ import { UploadReconcileService } from "./media/upload-reconcile.service.js";
 import { PartnersAdminController } from "./partners.admin.controller.js";
 import { PartnersRepository } from "./partners.repository.js";
 import { PartnersService } from "./partners.service.js";
+import {
+  ProjectCuratorAdminController,
+  ProjectExpertsAdminController,
+} from "./project-experts.admin.controller.js";
+import {
+  ExpertProjectsPublicController,
+  ProjectExpertsPublicController,
+} from "./project-experts.public.controller.js";
+import { ProjectExpertsRepository } from "./project-experts.repository.js";
+import { ProjectExpertsService } from "./project-experts.service.js";
+import { ProjectPartnersAdminController } from "./project-partners.admin.controller.js";
+import {
+  PartnerProjectsPublicController,
+  ProjectPartnersPublicController,
+} from "./project-partners.public.controller.js";
+import { ProjectPartnersRepository } from "./project-partners.repository.js";
+import { ProjectPartnersService } from "./project-partners.service.js";
 import { ProjectsAdminController } from "./projects.admin.controller.js";
 import { ProjectsRepository } from "./projects.repository.js";
 import { ProjectsService } from "./projects.service.js";
+import { PublicProjectSummaryService } from "./public-project-summary.service.js";
 import { EventSpeakersPublicController } from "./speaker-projection.public.controller.js";
 import { SpeakerProjectionRepository } from "./speaker-projection.repository.js";
 import { SpeakerProjectionService } from "./speaker-projection.service.js";
@@ -77,6 +95,16 @@ import { TopicsService } from "./topics.service.js";
     // module, because the relationship is what they read (see the file header).
     EventProjectsPublicController,
     ProjectEventsPublicController,
+    // #1291 EARS-9 — the expert↔project JOIN surface, plus the curator handover
+    // which sits on `admin/projects` because its subject is the PROJECT (§3.2).
+    ProjectExpertsAdminController,
+    ProjectCuratorAdminController,
+    ProjectExpertsPublicController,
+    ExpertProjectsPublicController,
+    // #1292 EARS-10 — the partner↔project JOIN surface and its two §5.2 reads.
+    ProjectPartnersAdminController,
+    ProjectPartnersPublicController,
+    PartnerProjectsPublicController,
     EventTopicsPublicController,
     TopicEventsPublicController,
     // #1290 EARS-8 — the standalone half of the canonical merged speaker
@@ -101,6 +129,15 @@ import { TopicsService } from "./topics.service.js";
     EventExpertsService,
     EventProjectsRepository,
     EventProjectsService,
+    ProjectExpertsRepository,
+    ProjectExpertsService,
+    ProjectPartnersRepository,
+    ProjectPartnersService,
+    // The ONE `PublicProjectSummary` builder (#1292). Module-level rather than
+    // per-vertical because EARS-6, EARS-9 and EARS-10 all emit that DTO, and a
+    // copy per vertical is how `primaryPartner` goes back to being null on one
+    // route while being populated on another.
+    PublicProjectSummaryService,
     EventTopicsRepository,
     EventTopicsService,
     SpeakerProjectionRepository,

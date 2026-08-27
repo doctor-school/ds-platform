@@ -10,6 +10,7 @@
 | GET /v1/admin/direction-specialties/:id                         | authenticated | platform_admin               | fast-path  | —            | false   | none       | none        | EARS-8                            |
 | GET /v1/admin/directions                                        | authenticated | platform_admin               | fast-path  | —            | false   | none       | none        | EARS-3, EARS-15, EARS-16          |
 | GET /v1/admin/directions/:id                                    | authenticated | platform_admin               | fast-path  | —            | false   | none       | none        | EARS-3, EARS-16                   |
+| GET /v1/admin/directions/:id/lifecycle-impact                   | authenticated | platform_admin               | fast-path  | —            | false   | none       | none        | EARS-3, EARS-13, EARS-14          |
 | GET /v1/admin/event-experts                                     | authenticated | platform_admin               | fast-path  | —            | false   | none       | none        | EARS-7, EARS-15, EARS-16          |
 | GET /v1/admin/event-experts/:id                                 | authenticated | platform_admin               | fast-path  | —            | false   | none       | none        | EARS-7, EARS-16                   |
 | GET /v1/admin/event-projects                                    | authenticated | platform_admin               | fast-path  | —            | false   | none       | none        | EARS-6, EARS-15, EARS-16          |
@@ -61,6 +62,9 @@
 | POST /v1/admin/direction-specialties/:id/restore                | authenticated | platform_admin               | fast-path  | —            | false   | live       | low-stakes  | EARS-8                            |
 | POST /v1/admin/direction-specialties/:id/retire                 | authenticated | platform_admin               | fast-path  | —            | false   | live       | low-stakes  | EARS-8                            |
 | POST /v1/admin/directions                                       | authenticated | platform_admin               | fast-path  | —            | false   | live       | low-stakes  | EARS-3, EARS-16, EARS-17          |
+| POST /v1/admin/directions/:id/publish                           | authenticated | platform_admin               | fast-path  | —            | false   | live       | low-stakes  | EARS-3, EARS-13, EARS-16, EARS-17 |
+| POST /v1/admin/directions/:id/restore                           | authenticated | platform_admin               | fast-path  | —            | false   | live       | low-stakes  | EARS-3, EARS-14, EARS-16, EARS-17 |
+| POST /v1/admin/directions/:id/retire                            | authenticated | platform_admin               | fast-path  | —            | false   | live       | low-stakes  | EARS-3, EARS-13, EARS-16, EARS-17 |
 | POST /v1/admin/event-experts                                    | authenticated | platform_admin               | fast-path  | —            | false   | live       | low-stakes  | EARS-7, EARS-16, EARS-17          |
 | POST /v1/admin/event-experts/:id/restore                        | authenticated | platform_admin               | fast-path  | —            | false   | live       | low-stakes  | EARS-7, EARS-14, EARS-16, EARS-17 |
 | POST /v1/admin/event-experts/:id/retire                         | authenticated | platform_admin               | fast-path  | —            | false   | live       | low-stakes  | EARS-7, EARS-14, EARS-16, EARS-17 |

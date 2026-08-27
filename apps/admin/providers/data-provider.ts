@@ -670,6 +670,31 @@ export const projectPartnersUrl = {
 };
 
 /**
+ * The direction ENTITY's lifecycle commands (012 EARS-13/14, §3.1; 017 EARS-18).
+ *
+ * The book itself stays a Refine CRUD resource — the list, the create and the
+ * PATCH all go through `directions` — so this map holds ONLY what CRUD has no
+ * verb for: `draft → published`, and the two impact-gated transitions. That is
+ * the same split `eventProjectsUrl` makes, for the same reason: a command is not
+ * an update of a field, and the `custom` path is what owns the
+ * Idempotency-Key / If-Match / lifecycle-impact-token protocol headers.
+ *
+ * There is no `delete` here and there never will be (§3.1): a direction is
+ * retired, keeping its id and its slug, so an audit trail and a doctor's
+ * bookmark both keep resolving.
+ */
+export const directionsUrl = {
+  row: (id: string) => `${ADMIN_BASE}/directions/${id}`,
+  /** `draft → published`. Carries no impact envelope — a publish withdraws nothing. */
+  publish: (id: string) => `${ADMIN_BASE}/directions/${id}/publish`,
+  /** The §3.1 preview. Transition-specific: a token binds exactly one of them. */
+  impact: (id: string, transition: TaxonomyLifecycleTransition) =>
+    `${ADMIN_BASE}/directions/${id}/lifecycle-impact?transition=${transition}`,
+  transition: (id: string, transition: TaxonomyLifecycleTransition) =>
+    `${ADMIN_BASE}/directions/${id}/${transition}`,
+};
+
+/**
  * The #1483 direction↔specialty link endpoints (ADR-0016 §5; 017-design §5).
  *
  * Built the same way `eventProjectsUrl` is, and NOT registered as a Refine CRUD

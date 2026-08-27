@@ -73,27 +73,34 @@ export function taxonomyErrorKey(error: unknown, fallbackKey: string): string {
     }
   }
 
-  // ── 012 EARS-6 relationship codes (012-design §3.1/§5.3) ─────────────────
-  // Scoped to the relationship namespace for the same reason the recordings
-  // block is: the four entity CRUD surfaces have no lifecycle-impact gate and
-  // no logical-pair uniqueness, so pointing their namespace at an
+  // ── The §3.1 impact-gate codes (012-design §3.1/§5.3) ────────────────────
+  // Scoped to the namespaces that actually HAVE the gate, for the same reason
+  // the recordings block is scoped: a surface without a lifecycle-impact
+  // preview can never receive these codes, and pointing its namespace at an
   // `impactStale` key that does not exist would trade a wrong sentence for a
   // crashed render.
-  if (ns === "eventProjects") {
+  //
+  // `directions` joins `eventProjects` here because the direction ENTITY is
+  // itself impact-gated (012 EARS-13/14): retiring a direction withdraws every
+  // specialty link and adjacency edge hanging off it, so the operator confirms
+  // a set they were shown. `RELATIONSHIP_CONFLICT` stays event-project-only —
+  // there is no logical pair to collide on the entity surface.
+  if (ns === "eventProjects" || ns === "directions") {
     switch (code) {
       case "RELATIONSHIP_CONFLICT":
-        return "eventProjects.errors.duplicatePair";
+        if (ns === "eventProjects") return "eventProjects.errors.duplicatePair";
+        break;
       case "INVALID_TRANSITION":
-        return "eventProjects.errors.invalidTransition";
+        return `${ns}.errors.invalidTransition`;
       // The one undifferentiated refusal of §3.1: the preview the operator
       // read no longer describes what would happen. The dialog RELOADS the
       // preview on this code — it never retries the confirmation.
       case "LIFECYCLE_IMPACT_STALE":
-        return "eventProjects.errors.impactStale";
+        return `${ns}.errors.impactStale`;
       case "LIFECYCLE_IMPACT_REQUIRED":
-        return "eventProjects.errors.impactRequired";
+        return `${ns}.errors.impactRequired`;
       case "RESOURCE_NOT_FOUND":
-        return "eventProjects.errors.notFound";
+        return `${ns}.errors.notFound`;
       default:
         break;
     }

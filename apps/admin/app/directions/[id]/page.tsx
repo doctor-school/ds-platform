@@ -9,6 +9,7 @@ import type { DirectionAdminDetail, TaxonomyStatus } from "@ds/schemas";
 import { AppShell } from "@/components/app-shell";
 import { BackToList } from "@/components/back-to-list";
 import { DirectionForm } from "@/components/direction-form";
+import { DirectionLifecycleActions } from "@/components/direction-lifecycle-actions";
 import { StatusChip } from "@/components/status-chip";
 import { taxonomyErrorKey } from "@/lib/taxonomy-errors";
 import type { UpdateDirectionVars } from "@/providers/data-provider";
@@ -74,6 +75,20 @@ export default function DirectionDetailPage() {
                 testId="direction-status"
               />
             </div>
+
+            {/* The lifecycle bar sits ABOVE the edit form, next to the status
+                chip it moves: publishing or withdrawing a direction is a
+                decision about the whole record, not a field of it. */}
+            <DirectionLifecycleActions
+              id={detail.id}
+              status={detail.status}
+              version={detail.version}
+              onTransition={() => {
+                setErrorKey(null);
+                setSaved(false);
+                void query.refetch();
+              }}
+            />
 
             {errorKey ? (
               <Alert

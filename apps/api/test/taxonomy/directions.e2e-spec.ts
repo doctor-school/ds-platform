@@ -5,6 +5,7 @@ import {
   type NestFastifyApplication,
 } from "@nestjs/platform-fastify";
 import { VersioningType } from "@nestjs/common";
+import { DIRECTION_ADJACENCY_KINDS } from "@ds/schemas";
 import multipart from "@fastify/multipart";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import type pg from "pg";
@@ -512,17 +513,19 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     });
 
     it("EARS-18.5: two directions whose titles fold to the same address shall both be created, the second one deterministically suffixed", async () => {
-      const first = await created(
-        await createJson({ payload: { title: "Детская кардиология" } }),
-      );
-      expect(first.slug).toBe("detskaya-kardiologiya");
+      // The heading carries a per-run marker so the assertion is about the
+      // COLLISION SEQUENCE and not about which rows a shared stand happens to
+      // hold already — an operator-authored `detskaya-kardiologiya` left over
+      // from a live walkthrough must not decide whether this contract holds.
+      const marker = randomUUID().slice(0, 8);
+      const title = `Детская кардиология ${marker}`;
+      const first = await created(await createJson({ payload: { title } }));
+      expect(first.slug).toBe(`detskaya-kardiologiya-${marker}`);
 
-      const second = await created(
-        await createJson({ payload: { title: "Детская кардиология" } }),
-      );
+      const second = await created(await createJson({ payload: { title } }));
       // The operator never chose the address, so a taken candidate is not a
       // refusal they could act on — the server walks the deterministic sequence.
-      expect(second.slug).toBe("detskaya-kardiologiya-2");
+      expect(second.slug).toBe(`detskaya-kardiologiya-${marker}-2`);
       expect(second.id).not.toBe(first.id);
     });
 
@@ -667,7 +670,246 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(rows[0]!.subject_id).not.toBeNull();
     });
 
+    // ── Lifecycle: publish / retire / restore (012 EARS-13/14, §3.1) ──────
+
+    it("012 EARS-13: when a draft direction is published, the system shall stamp first_published_at once and refuse a second publish with INVALID_TRANSITION", async () => {
+      const body = await created(await createJson({ payload: validPayload() }));
+      const res = await publish(body.id, 1);
+      expect(res.statusCode).toBe(200);
+      const published = JSON.parse(res.payload) as {
+        status: string;
+        version: number;
+        firstPublishedAt: string | null;
+      };
+      expect(published).toMatchObject({ status: "published", version: 2 });
+      expect(published.firstPublishedAt).toBeTypeOf("string");
+      expect(res.headers.etag).toBe('W/"2"');
+
+      // A publish withdraws nothing, so it carries NO impact envelope — the
+      // §3.1 gate fences the subtractive half of the lifecycle only.
+      expect(res.headers["lifecycle-impact-token"]).toBeUndefined();
+
+      // Publishing an already-published row is not "already done": the operator
+      // is looking at a stale screen, and 409 says so without touching the row.
+      const again = await publish(body.id, 2);
+      expect(again.statusCode).toBe(409);
+      expect(problem(again).errorCode).toBe("INVALID_TRANSITION");
+      const after = await directionRow(body.id);
+      expect(after.version).toBe(2);
+      expect(after.first_published_at).toEqual(
+        new Date(published.firstPublishedAt!),
+      );
+    });
+
+    it("012 EARS-13: when a retire is confirmed without a lifecycle-impact token, the system shall answer 428 LIFECYCLE_IMPACT_REQUIRED and change nothing", async () => {
+      const body = await created(await createJson({ payload: validPayload() }));
+      const res = await confirm(body.id, "retire", { version: 1, token: null });
+      expect(res.statusCode).toBe(428);
+      expect(problem(res).errorCode).toBe("LIFECYCLE_IMPACT_REQUIRED");
+      const row = await directionRow(body.id);
+      expect(row).toMatchObject({ status: "draft", version: 1 });
+      expect(row.deleted_at).toBeNull();
+    });
+
+    it("012 EARS-13: when a previewed retire is confirmed, the system shall withdraw the SAME row — id and slug retained — and the list shall surface it only with includeRetired", async () => {
+      const marker = randomUUID().slice(0, 8);
+      const body = await created(
+        await createJson({
+          payload: validPayload({ title: `Пульмонология ${marker}` }),
+        }),
+      );
+      const res = await move(body.id, "retire");
+      expect(res.statusCode).toBe(200);
+      expect(JSON.parse(res.payload)).toMatchObject({
+        id: body.id,
+        slug: body.slug,
+        status: "retired",
+        version: 2,
+      });
+      const row = await directionRow(body.id);
+      expect(row.status).toBe("retired");
+      expect(row.deleted_at).not.toBeNull();
+      expect(row.slug).toBe(body.slug);
+
+      // The finding-1 acceptance: the «показывать снятые» switch is only ever
+      // meaningful because a direction CAN now be retired — a retired row is
+      // absent by default and present iff `includeRetired` is on.
+      expect(await listIds(`q=${marker}`)).not.toContain(body.id);
+      expect(await listIds(`q=${marker}&includeRetired=true`)).toContain(
+        body.id,
+      );
+    });
+
+    it("012 EARS-14: when a retired direction is restored, the system shall return the SAME row as a draft, clear deleted_at and keep first_published_at", async () => {
+      const body = await created(await createJson({ payload: validPayload() }));
+      expect((await publish(body.id, 1)).statusCode).toBe(200);
+      const firstPublishedAt = (await directionRow(body.id)).first_published_at;
+      expect((await move(body.id, "retire")).statusCode).toBe(200);
+
+      const res = await move(body.id, "restore");
+      expect(res.statusCode).toBe(200);
+      // §102 — a restore hands the row back to the operator as a DRAFT: coming
+      // back into circulation is a deliberate second act, not a side effect.
+      expect(JSON.parse(res.payload)).toMatchObject({
+        id: body.id,
+        slug: body.slug,
+        status: "draft",
+        version: 4,
+      });
+      const row = await directionRow(body.id);
+      expect(row.deleted_at).toBeNull();
+      expect(row.first_published_at).toEqual(firstPublishedAt);
+    });
+
+    it("012 EARS-13: when an adjacency edge appears between preview and confirmation, the system shall answer 412 LIFECYCLE_IMPACT_STALE and change nothing", async () => {
+      const target = await created(
+        await createJson({ payload: validPayload() }),
+      );
+      const neighbour = await created(
+        await createJson({ payload: validPayload({ title: "Неврология" }) }),
+      );
+      const preview = await previewed(target.id, "retire");
+      expect(preview.impactToken).toBeTypeOf("string");
+
+      // The set the operator SAW is now not the set the confirmation would
+      // withdraw — the edge is discovered by the fingerprint, so the envelope
+      // no longer describes reality.
+      await pool.query(
+        `INSERT INTO direction_adjacency (direction_id, adjacent_direction_id, kind)
+           VALUES ($1, $2, $3)`,
+        [neighbour.id, target.id, DIRECTION_ADJACENCY_KINDS[0]],
+      );
+
+      const res = await confirm(target.id, "retire", {
+        version: preview.version,
+        token: preview.impactToken,
+      });
+      expect(res.statusCode).toBe(412);
+      expect(problem(res).errorCode).toBe("LIFECYCLE_IMPACT_STALE");
+      const row = await directionRow(target.id);
+      expect(row).toMatchObject({ status: "draft", version: 1 });
+      expect(row.deleted_at).toBeNull();
+
+      // Re-previewing after the change confirms cleanly: the operator is shown
+      // the edge, then allowed to act on what they saw.
+      const fresh = await previewed(target.id, "retire");
+      expect(fresh.affected.map((a) => a.kind)).toContain("direction↔direction");
+      const ok = await confirm(target.id, "retire", {
+        version: fresh.version,
+        token: fresh.impactToken,
+      });
+      expect(ok.statusCode).toBe(200);
+    });
+
     // ── helpers ───────────────────────────────────────────────────────────
+
+    interface Preview {
+      transition: string;
+      version: number;
+      affected: { kind: string; id: string; status: string }[];
+      impactToken: string;
+    }
+
+    /** The §3.1 preview — what this transition would change, plus its envelope. */
+    async function previewed(
+      id: string,
+      transition: string,
+    ): Promise<Preview> {
+      const res = await app.inject({
+        method: "GET",
+        url: `/v1/admin/directions/${id}/lifecycle-impact?transition=${transition}`,
+        headers: { ...device, ...adminHeaders(adminSid) },
+      });
+      expect(res.statusCode).toBe(200);
+      return JSON.parse(res.payload) as Preview;
+    }
+
+    /**
+     * Confirm a transition. Every header is individually overridable so a
+     * reject branch can omit exactly one of them and nothing else.
+     */
+    async function confirm(
+      id: string,
+      transition: string,
+      opts: { version?: number; ifMatch?: string | null; token?: string | null },
+    ) {
+      const headers: Record<string, string> = {
+        ...device,
+        ...adminHeaders(adminSid),
+        "content-type": "application/json",
+        "idempotency-key": key(),
+      };
+      const ifMatch =
+        opts.ifMatch === undefined ? `W/"${opts.version}"` : opts.ifMatch;
+      if (ifMatch !== null) headers["if-match"] = ifMatch;
+      if (opts.token !== null && opts.token !== undefined) {
+        headers["lifecycle-impact-token"] = opts.token;
+      }
+      return app.inject({
+        method: "POST",
+        url: `/v1/admin/directions/${id}/${transition}`,
+        headers,
+        payload: {},
+      });
+    }
+
+    /** Preview then immediately confirm — the ordinary operator flow. */
+    async function move(id: string, transition: string) {
+      const p = await previewed(id, transition);
+      return confirm(id, transition, {
+        version: p.version,
+        token: p.impactToken,
+      });
+    }
+
+    /** `POST :id/publish` — the additive half, which carries no envelope. */
+    async function publish(id: string, version: number) {
+      return app.inject({
+        method: "POST",
+        url: `/v1/admin/directions/${id}/publish`,
+        headers: {
+          ...device,
+          ...adminHeaders(adminSid),
+          "content-type": "application/json",
+          "idempotency-key": key(),
+          "if-match": `W/"${version}"`,
+        },
+        payload: {},
+      });
+    }
+
+    async function directionRow(id: string): Promise<{
+      status: string;
+      version: number;
+      slug: string;
+      deleted_at: Date | null;
+      first_published_at: Date | null;
+    }> {
+      const { rows } = await pool.query<{
+        status: string;
+        version: number;
+        slug: string;
+        deleted_at: Date | null;
+        first_published_at: Date | null;
+      }>(
+        "SELECT status, version, slug, deleted_at, first_published_at FROM directions WHERE id = $1",
+        [id],
+      );
+      return rows[0]!;
+    }
+
+    async function listIds(query: string): Promise<string[]> {
+      const res = await app.inject({
+        method: "GET",
+        url: `/v1/admin/directions?${query}`,
+        headers: { ...device, ...adminHeaders(adminSid) },
+      });
+      expect(res.statusCode).toBe(200);
+      return (JSON.parse(res.payload) as { data: { id: string }[] }).data.map(
+        (r) => r.id,
+      );
+    }
+
 
     function problem(res: { payload: string }): {
       errorCode: string;

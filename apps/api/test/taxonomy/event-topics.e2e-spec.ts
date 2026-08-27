@@ -195,7 +195,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         // schema admits, so the fixture writes the pair the publish command
         // would have written, never a half-state the DB would reject.
         await pool.query(
-          "UPDATE topics SET status = 'published', first_published_at = now() WHERE id = $1",
+          "UPDATE directions SET status = 'published', first_published_at = now() WHERE id = $1",
           [body.id],
         );
       }
@@ -386,7 +386,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         await deleteEventFixture(pool, id);
       }
       for (const id of createdTopicIds.splice(0)) {
-        await pool.query("DELETE FROM topics WHERE id = $1", [id]);
+        await pool.query("DELETE FROM directions WHERE id = $1", [id]);
       }
       for (const k of usedKeys.splice(0)) {
         await pool.query("DELETE FROM idempotency_keys WHERE key = $1", [k]);
@@ -480,7 +480,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(p.impactToken).toBeTypeOf("string");
       expect(p.affected).toHaveLength(1);
       expect(p.affected[0]).toMatchObject({
-        kind: "event↔topic",
+        kind: "event↔direction",
         id: rel.id,
         slug: null,
         status: "active",
@@ -744,7 +744,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       // `topics_retired_iff_deleted` — retirement is the status AND the
       // soft-delete stamp together; the fixture may not invent a half-retired row.
       await pool.query(
-        "UPDATE topics SET status = 'retired', deleted_at = now() WHERE id = $1",
+        "UPDATE directions SET status = 'retired', deleted_at = now() WHERE id = $1",
         [topic.id],
       );
       const retiredTopic = await relate(event.id, topic.id);
@@ -760,7 +760,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     it("012 EARS-11: when a create body carries a topic TITLE instead of an id, the system shall refuse it rather than mint a topic inline", async () => {
       const event = await makeEvent(false);
       const before = await pool.query<{ count: string }>(
-        "SELECT count(*)::text AS count FROM topics",
+        "SELECT count(*)::text AS count FROM directions",
       );
 
       for (const payload of [
@@ -790,7 +790,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
       // `.strict()` is only meaningful if nothing was created behind it.
       const after = await pool.query<{ count: string }>(
-        "SELECT count(*)::text AS count FROM topics",
+        "SELECT count(*)::text AS count FROM directions",
       );
       expect(after.rows[0]!.count).toBe(before.rows[0]!.count);
     });

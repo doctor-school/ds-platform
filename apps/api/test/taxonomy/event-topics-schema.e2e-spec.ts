@@ -41,7 +41,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
       }
       for (const id of createdTopics.splice(0)) {
         await pool.query("DELETE FROM event_topics WHERE topic_id = $1", [id]);
-        await pool.query("DELETE FROM topics WHERE id = $1", [id]);
+        await pool.query("DELETE FROM directions WHERE id = $1", [id]);
       }
     });
 
@@ -62,7 +62,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
 
     async function insertTopic(): Promise<string> {
       const { rows } = await pool.query<{ id: string }>(
-        `INSERT INTO topics (slug, title)
+        `INSERT INTO directions (slug, title)
          VALUES ($1, 'Аритмология 1293')
          RETURNING id`,
         [`t-1293-${randomUUID()}`],
@@ -144,7 +144,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
         pool.query("DELETE FROM events WHERE id = $1", [eventId]),
       ).rejects.toThrow(/violates foreign key constraint/i);
       await expect(
-        pool.query("DELETE FROM topics WHERE id = $1", [topicId]),
+        pool.query("DELETE FROM directions WHERE id = $1", [topicId]),
       ).rejects.toThrow(/violates foreign key constraint/i);
     });
 

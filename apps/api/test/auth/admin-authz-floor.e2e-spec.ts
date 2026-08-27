@@ -228,6 +228,33 @@ const FLOOR_ROUTES: {
     url: `/v1/admin/directions/${ABSENT_ID}`,
     payload: {},
   },
+  // 012 EARS-13/14 (§3.1) on the direction entity (#1483) — the publish and the
+  // two impact-gated transitions. The preview is on the floor for the same
+  // reason the transitions are: it names the rows a retirement would withdraw,
+  // so answering it to an anonymous caller would leak the book's shape.
+  {
+    endpoint: "POST /v1/admin/directions/:id/publish",
+    method: "POST",
+    url: `/v1/admin/directions/${ABSENT_ID}/publish`,
+    payload: {},
+  },
+  {
+    endpoint: "GET /v1/admin/directions/:id/lifecycle-impact",
+    method: "GET",
+    url: `/v1/admin/directions/${ABSENT_ID}/lifecycle-impact?transition=retire`,
+  },
+  {
+    endpoint: "POST /v1/admin/directions/:id/retire",
+    method: "POST",
+    url: `/v1/admin/directions/${ABSENT_ID}/retire`,
+    payload: {},
+  },
+  {
+    endpoint: "POST /v1/admin/directions/:id/restore",
+    method: "POST",
+    url: `/v1/admin/directions/${ABSENT_ID}/restore`,
+    payload: {},
+  },
   // ADR-0016 §5 (#1483) — the two managed-relation curation surfaces the 017
   // targeting reads. Same floor as their taxonomy siblings: the `platform_admin`
   // guard answers before validation, so an anonymous caller cannot tell an

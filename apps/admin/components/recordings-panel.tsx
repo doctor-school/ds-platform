@@ -87,15 +87,13 @@ export function RecordingsPanel({
   onEventChanged: () => void;
 }) {
   const t = useTranslations();
-  const { result, query } = useCustom<RecordingAdminList>({
+  const { query } = useCustom<RecordingAdminList>({
     url: recordingsUrl.collection(eventId),
     method: "get",
   });
   const [showRetired, setShowRetired] = useState(false);
   const [errorKey, setErrorKey] = useState<string | null>(null);
   const [noticeKey, setNoticeKey] = useState<string | null>(null);
-
-  const list = result?.data;
 
   function announce(toastKey: string) {
     setErrorKey(null);
@@ -113,6 +111,12 @@ export function RecordingsPanel({
       <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
     );
   }
+
+  // The QUERY is the source of presence, not `result`: Refine's `result.data`
+  // substitutes a frozen `{}` when the query has no answer, so a check against it
+  // reads "loaded" for a failed read and then trips over `list.eventState` /
+  // `list.data`.
+  const list = query.data?.data;
   if (!list) {
     return (
       <Alert variant="danger" data-testid="recordings-error">

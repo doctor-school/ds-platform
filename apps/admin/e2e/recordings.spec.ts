@@ -289,4 +289,37 @@ test.describe("014 EARS-1/EARS-2 — retained recordings in the live admin", () 
       "Слот этого вида уже занят",
     );
   });
+
+  test("014 EARS-1: a failed collection read shall render the RU error state, never a white screen (#1428)", async ({
+    page,
+  }) => {
+    await signInAsAdmin(page);
+    await createEvent(page, `Запись — сбой чтения ${Date.now()}`);
+
+    // Fault injection at the transport: the failure under test is the BROWSER's
+    // rendering of a read that has no answer. Refine's `result.data` substitutes
+    // a frozen `{}` there, so a presence check against it reads "loaded" and the
+    // panel then trips over `list.eventState` — the white screen of #1428. Only
+    // the query's own `data` distinguishes the two states.
+    await page.route("**/v1/admin/events/*/recordings", async (route) => {
+      if (route.request().method() !== "GET") {
+        await route.fallback();
+        return;
+      }
+      await route.fulfill({
+        status: 500,
+        contentType: "application/json",
+        body: JSON.stringify({ message: "injected read failure" }),
+      });
+    });
+
+    await page.getByTestId("tab-recordings").click();
+    await expect(page.getByTestId("recordings-error")).toContainText(
+      "Не удалось загрузить записи эфира",
+    );
+    // The panel body never rendered, and the tab is still a live screen rather
+    // than a blank document — an operator can read WHY and retry.
+    await expect(page.getByTestId("recordings-panel")).toHaveCount(0);
+    await expect(page.getByTestId("tab-recordings")).toBeVisible();
+  });
 });

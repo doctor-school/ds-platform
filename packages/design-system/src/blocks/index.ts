@@ -52,7 +52,7 @@ export type {
   DataTableAlign,
   DataTableOverflow,
 } from "./data-table";
-export { Pagination, buildPageItems } from "./pagination";
+export { Pagination, buildPageItems, buildResponsivePageItems } from "./pagination";
 export type { PaginationProps } from "./pagination";
 export { EmptyState } from "./empty-state";
 export type { EmptyStateProps, EmptyStateVariant } from "./empty-state";

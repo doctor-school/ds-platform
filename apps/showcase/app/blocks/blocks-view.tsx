@@ -102,7 +102,19 @@ function SubRow({ label, children }: { label: string; children: ReactNode }) {
 /** A bordered canvas around a realistic render (the Storybook "preview" convention). */
 function Canvas({ children }: { children: ReactNode }) {
   return (
-    <div className="flex justify-center rounded-lg border border-border bg-muted p-8">
+    // `min-w-0` + `max-w-full`: a grid/flex item defaults to `min-width: auto`, so a wide
+    // specimen grew the cell past a 390px viewport and pushed the PAGE sideways instead of
+    // scrolling inside its own canvas.
+    <div className="flex min-w-0 max-w-full justify-center overflow-x-auto rounded-lg border border-border bg-muted p-8">
+      {children}
+    </div>
+  );
+}
+
+/** The same canvas for a specimen that must fill the row rather than sit centred. */
+function WideCanvas({ children }: { children: ReactNode }) {
+  return (
+    <div className="min-w-0 max-w-full overflow-x-auto rounded-lg border border-border bg-muted p-8">
       {children}
     </div>
   );
@@ -163,7 +175,9 @@ function StateCase({
   children: ReactNode;
 }) {
   return (
-    <div className="flex flex-col gap-2">
+    // `min-w-0`: the matrix cell is a grid item, and its `min-width: auto` default let a
+    // wide specimen grow the cell past the viewport instead of scrolling inside itself.
+    <div className="flex min-w-0 flex-col gap-2">
       <div className="flex flex-col gap-0.5">
         <span className="font-mono text-xs text-muted-foreground">{label}</span>
         {note ? (
@@ -960,7 +974,7 @@ function DataTableSection() {
         is the link.
       </p>
       <SubRow label="Preview — populated, whole row opens the record">
-        <div className="rounded-lg border border-border bg-muted p-8">
+        <WideCanvas>
           <DataTable
             caption="Направления"
             record={DIRECTION_RECORD}
@@ -971,7 +985,7 @@ function DataTableSection() {
             emptyNoRecords={DIRECTION_EMPTY_NO_RECORDS}
             emptyNoResults={DIRECTION_EMPTY_NO_RESULTS}
           />
-        </div>
+        </WideCanvas>
       </SubRow>
       <SubRow label="Slots / props">
         <PropsTable rows={DATA_TABLE_PROPS} />
@@ -979,7 +993,7 @@ function DataTableSection() {
       <SubRow label="State matrix">
         <div className="grid gap-6">
           <StateCase label="isLoading" note="skeleton rows under an already-drawn header">
-            <div className="rounded-lg border border-border bg-muted p-8">
+            <WideCanvas>
               <DataTable
                 caption="Направления"
                 record={DIRECTION_RECORD}
@@ -991,10 +1005,10 @@ function DataTableSection() {
                 emptyNoRecords={DIRECTION_EMPTY_NO_RECORDS}
                 emptyNoResults={DIRECTION_EMPTY_NO_RESULTS}
               />
-            </div>
+            </WideCanvas>
           </StateCase>
           <StateCase label="error" note="an alert replaces the body — never an empty state">
-            <div className="rounded-lg border border-border bg-muted p-8">
+            <WideCanvas>
               <DataTable
                 caption="Направления"
                 record={DIRECTION_RECORD}
@@ -1005,10 +1019,10 @@ function DataTableSection() {
                 emptyNoRecords={DIRECTION_EMPTY_NO_RECORDS}
                 emptyNoResults={DIRECTION_EMPTY_NO_RESULTS}
               />
-            </div>
+            </WideCanvas>
           </StateCase>
           <StateCase label="rows=[] · isFiltered=false" note="no records at all — the create action">
-            <div className="rounded-lg border border-border bg-muted p-8">
+            <WideCanvas>
               <DataTable
                 caption="Направления"
                 record={DIRECTION_RECORD}
@@ -1018,10 +1032,10 @@ function DataTableSection() {
                 emptyNoRecords={DIRECTION_EMPTY_NO_RECORDS}
                 emptyNoResults={DIRECTION_EMPTY_NO_RESULTS}
               />
-            </div>
+            </WideCanvas>
           </StateCase>
           <StateCase label="rows=[] · isFiltered" note="no results for the current filter — reset">
-            <div className="rounded-lg border border-border bg-muted p-8">
+            <WideCanvas>
               <DataTable
                 caption="Направления"
                 record={DIRECTION_RECORD}
@@ -1032,10 +1046,10 @@ function DataTableSection() {
                 emptyNoRecords={DIRECTION_EMPTY_NO_RECORDS}
                 emptyNoResults={DIRECTION_EMPTY_NO_RESULTS}
               />
-            </div>
+            </WideCanvas>
           </StateCase>
           <StateCase label="actions" note="a trailing column ONLY when a row has ≥2 actions">
-            <div className="rounded-lg border border-border bg-muted p-8">
+            <WideCanvas>
               <DataTable
                 caption="Направления"
                 record={DIRECTION_RECORD}
@@ -1056,7 +1070,7 @@ function DataTableSection() {
                 emptyNoRecords={DIRECTION_EMPTY_NO_RECORDS}
                 emptyNoResults={DIRECTION_EMPTY_NO_RESULTS}
               />
-            </div>
+            </WideCanvas>
           </StateCase>
         </div>
       </SubRow>

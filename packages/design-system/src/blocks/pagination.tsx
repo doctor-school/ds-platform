@@ -22,6 +22,12 @@ import { interactiveBase } from "../primitives/interactive-base";
  *   • `<nav aria-label>` + `aria-current="page"` on exactly one number;
  *   • never a focusable disabled-looking control that does nothing.
  * All copy is app-supplied (RU lives in the app), so the block stays i18n-free.
+ *
+ * Narrow viewports are the block's problem too: below `sm` it collapses to the GOV.UK
+ * mobile shape — first / current / last with ellipses — and the list may wrap. The
+ * collapse is CSS on one rendered sequence, never a second nav, so `aria-current` stays
+ * unique, the dropped numbers are `display:none` (out of the tab order), and previous /
+ * next remain reachable at every width.
  */
 
 export interface PaginationProps
@@ -68,6 +74,48 @@ export function buildPageItems(
   return items;
 }
 
+/**
+ * One rendered item plus the widths it is visible at. Page numbers always render at
+ * `sm` and up (`showNarrow` decides the narrow shape); an ellipsis can belong to one
+ * shape only — the narrow collapse skips runs the wide sequence spells out in full.
+ */
+export type PaginationItem =
+  | { kind: "page"; page: number; showNarrow: boolean }
+  | { kind: "ellipsis"; showNarrow: boolean; showWide: boolean };
+
+/**
+ * The wide sequence (current ± siblings) merged with the narrow one (`siblingCount` 0 —
+ * first / current / last), each item flagged with the widths it shows at. The narrow set
+ * is always a subset of the wide one, so a single DOM sequence serves both shapes.
+ */
+export function buildResponsivePageItems(
+  page: number,
+  pageCount: number,
+  siblingCount = 1,
+): PaginationItem[] {
+  const isPage = (p: number | null): p is number => p !== null;
+  const wide = buildPageItems(page, pageCount, siblingCount).filter(isPage);
+  const narrow = buildPageItems(page, pageCount, 0).filter(isPage);
+  const inNarrow = new Set(narrow);
+
+  const items: PaginationItem[] = [];
+  wide.forEach((current, index) => {
+    if (index > 0) {
+      const previous = wide[index - 1]!;
+      const showWide = current - previous > 1;
+      // Exactly one narrow ellipsis per narrow gap: it is emitted at the boundary right
+      // after the narrow item that opens the gap, so a run of dropped numbers collapses
+      // into a single «…» rather than one per hidden number.
+      const nextNarrow = narrow.find((p) => p >= current);
+      const showNarrow =
+        inNarrow.has(previous) && nextNarrow !== undefined && nextNarrow - previous > 1;
+      if (showWide || showNarrow) items.push({ kind: "ellipsis", showNarrow, showWide });
+    }
+    items.push({ kind: "page", page: current, showNarrow: inNarrow.has(current) });
+  });
+  return items;
+}
+
 const stepClasses = cn(
   interactiveBase,
   "inline-flex items-center border-2 border-border bg-background px-3 py-2 text-caption font-bold text-foreground",
@@ -95,7 +143,7 @@ export function Pagination({
   // GOV.UK: "do not show pagination if there's only one page of content".
   if (pageCount <= 1) return null;
 
-  const items = buildPageItems(page, pageCount, siblingCount);
+  const items = buildResponsivePageItems(page, pageCount, siblingCount);
 
   return (
     <div
@@ -110,8 +158,10 @@ export function Pagination({
       ) : (
         <span />
       )}
-      <nav aria-label={navLabel} aria-busy={isLoading || undefined}>
-        <ul className="flex list-none items-center gap-1">
+      <nav aria-label={navLabel} aria-busy={isLoading || undefined} className="min-w-0">
+        {/* `flex-wrap` is the floor under the collapse: even at the narrowest shape the
+            list re-flows onto a second line instead of pushing the page sideways. */}
+        <ul className="flex list-none flex-wrap items-center justify-center gap-1 sm:justify-end">
           {/* No previous control at all on the first page — not a dead one. */}
           {page > 1 ? (
             <li>
@@ -126,26 +176,29 @@ export function Pagination({
             </li>
           ) : null}
           {items.map((item, index) =>
-            item === null ? (
+            item.kind === "ellipsis" ? (
               <li
                 key={`gap-${index}`}
                 aria-hidden="true"
-                className="px-2 text-caption text-muted-foreground"
+                className={cn(
+                  "px-2 text-caption text-muted-foreground",
+                  item.showNarrow ? (item.showWide ? undefined : "sm:hidden") : "hidden sm:block",
+                )}
               >
                 …
               </li>
             ) : (
-              <li key={item}>
+              <li key={item.page} className={item.showNarrow ? undefined : "hidden sm:block"}>
                 <button
                   type="button"
-                  aria-label={pageLabel(item)}
-                  aria-current={item === page ? "page" : undefined}
+                  aria-label={pageLabel(item.page)}
+                  aria-current={item.page === page ? "page" : undefined}
                   disabled={isLoading}
-                  onClick={() => onPageChange(item)}
+                  onClick={() => onPageChange(item.page)}
                   className={cn(
                     interactiveBase,
                     "inline-flex min-w-11 items-center justify-center border-2 px-3 py-2 text-caption focus-visible:shadow-focus",
-                    item === page
+                    item.page === page
                       ? "border-primary-action bg-primary-surface font-extrabold text-primary-surface-foreground"
                       : cn(
                           "border-border bg-background font-bold text-primary-action hover:border-primary hover:bg-tint",
@@ -155,7 +208,7 @@ export function Pagination({
                         ),
                   )}
                 >
-                  {item}
+                  {item.page}
                 </button>
               </li>
             ),

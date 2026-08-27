@@ -169,6 +169,13 @@
       "when": 1787747381831,
       "tag": "0023_last_salo",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1787828069242,
+      "tag": "0024_event_topics",
+      "breakpoints": true
     }
   ]
 }

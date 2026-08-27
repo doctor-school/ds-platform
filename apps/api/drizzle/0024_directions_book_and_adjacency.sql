@@ -27,7 +27,9 @@ ALTER INDEX "topics_title_trgm_idx" RENAME TO "directions_title_trgm_idx";--> st
 ALTER INDEX "topics_slug_trgm_idx" RENAME TO "directions_slug_trgm_idx";--> statement-breakpoint
 -- Both feature-010 / 012-design §2.1 triggers are table-agnostic functions
 -- (`TG_TABLE_NAME`), so only the trigger names move; the attachment survives.
-ALTER TRIGGER "topics_audit" ON "directions" RENAME TO "directions_audit";--> statement-breakpoint
+-- `topics_audit` is re-created as `directions_audit` at the tail of this file
+-- (explicit CREATE for the audit-coverage guard); only the publish-once trigger
+-- is renamed in place.
 ALTER TRIGGER "topics_first_published_at_set_once" ON "directions" RENAME TO "directions_first_published_at_set_once";--> statement-breakpoint
 
 -- ── ADR-0016 §2.8: the two direction reference relations (new) ───────────────

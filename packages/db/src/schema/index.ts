@@ -10,3 +10,4 @@ export * from "./presence-beats.js";
 export * from "./taxonomy.js";
 export * from "./media-cleanup-jobs.js";
 export * from "./specialties.js";
+export * from "./doctor-specialties.js";

@@ -145,6 +145,58 @@ export const SpecialtySearchResultSchema = z.strictObject({
 export type SpecialtySearchResult = z.infer<typeof SpecialtySearchResultSchema>;
 
 /**
+ * A submitted specialty REFERENCE — the `id` or the `code` of a book entry, as
+ * the choose/change command accepts it (017-design §7 row «choose / change
+ * specialty»).
+ *
+ * Deliberately NOT `SpecialtyCodeSchema` and not the id regex: accepting either
+ * spelling is what lets the catalog send whichever identity it holds without a
+ * client-side branch, and the boundary's job here is only to refuse a value that
+ * could not name a book row at all. MEMBERSHIP is decided against the book
+ * itself (`resolveMember`), never by the shape of the string — a syntactically
+ * perfect code that names no row is refused exactly like a malformed one, with
+ * `SPECIALTY_NOT_IN_BOOK`.
+ */
+export const SpecialtyReferenceSchema = z
+  .string()
+  .min(1)
+  .max(SPECIALTY_CODE_MAX_LENGTH);
+
+/**
+ * `ChooseSpecialty` — the single command behind EARS-6, for both actors
+ * (017-design §4). The body carries the reference and nothing else: WHO is
+ * choosing is resolved from the request (an authenticated session, or its
+ * absence), never submitted, so no caller can write another doctor's choice.
+ */
+export const ChooseSpecialtyRequestSchema = z.strictObject({
+  specialty: SpecialtyReferenceSchema,
+});
+export type ChooseSpecialtyRequest = z.infer<
+  typeof ChooseSpecialtyRequestSchema
+>;
+
+/**
+ * `SpecialtyChoice` — what the platform currently remembers for this actor, and
+ * where it is remembered.
+ *
+ * `specialty` is `null` for «nothing chosen yet», which is a first-class answer
+ * and not an error: the storefront renders the full variant-Б catalog for it
+ * (EARS-4) and the collapsed row for anything else.
+ *
+ * `storedIn` is part of the CONTRACT rather than an implementation detail
+ * because LD-2's cascade is observable: a choice held in the anonymous session
+ * is per-device and is adopted or discarded at the first authenticated
+ * navigation, while a choice held on the profile is the cross-device one and
+ * always wins. A client that could not tell them apart could not honestly say
+ * what «remembered» means.
+ */
+export const SpecialtyChoiceSchema = z.strictObject({
+  specialty: SpecialtyRefSchema.nullable(),
+  storedIn: z.enum(["profile", "session", "none"]),
+});
+export type SpecialtyChoice = z.infer<typeof SpecialtyChoiceSchema>;
+
+/**
  * Stable error codes for the closed-book contract (RFC 7807 `errorCode`,
  * ADR-0002). Grouped by HTTP status.
  */

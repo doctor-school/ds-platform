@@ -1,5 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { and, asc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { DrizzleHandle, Event, EventRecording } from "@ds/db";
 import { eventRecordings, events } from "@ds/db";
 import type {
@@ -29,6 +29,18 @@ export interface RecordingInsert {
   embedRef: string;
   posterRef: string | null;
   durationSec: number | null;
+}
+
+/**
+ * One row of the EARS-3 projection read: an event, plus ONE of its published
+ * non-retired recordings, or the event alone with `kind === null` when it has
+ * none (the LEFT JOIN's unmatched side — that is the `preparing` case).
+ */
+export interface ProjectionRow {
+  eventId: string;
+  recordingExpectedBy: string | null;
+  kind: RecordingKind | null;
+  posterRef: string | null;
 }
 
 /** The field patch a PATCH applies. `undefined` means unchanged. */
@@ -157,6 +169,51 @@ export class RecordingsRepository {
       )
       .returning();
     return row ?? null;
+  }
+
+  /**
+   * 014 EARS-3 (#1340) — the ONE statement behind the derived projection
+   * (014-design §4). For every requested event it returns the event's own
+   * `recording_expected_by` plus, via a LEFT JOIN, its published non-retired
+   * recordings — at most two rows per event, one per kind.
+   *
+   * A LEFT JOIN rather than two queries or a per-event call: the listing badge
+   * (#1347) and «Мои события» (#1346) resolve a whole page of cards, and a
+   * per-card read is the N+1 shape LD-8 forbids. The join predicate is
+   * `status = 'published' AND deleted_at IS NULL`, character-for-character the
+   * predicate of the `event_recordings_event_published_idx` partial index, so
+   * the read hits that index instead of filtering the aggregate.
+   *
+   * The `deleted_at` of the EVENT is not filtered here: publicly-readable is a
+   * caller-side concern (012's default-deny), and this method must stay usable
+   * by the admin panel and by an authenticated read alike.
+   *
+   * @param eventIds EVENT UUIDs, never slugs. Several consumer routes are keyed on
+   * `:idOrSlug` (014-design §4); a slug reaching `inArray(events.id, …)` goes to
+   * Postgres raw and comes back as `22P02 invalid input syntax for type uuid` — a
+   * 500, not a 404. Slug-to-id resolution belongs in the consumer, before this call.
+   */
+  async projectionRowsByEvents(
+    eventIds: readonly string[],
+  ): Promise<ProjectionRow[]> {
+    if (eventIds.length === 0) return [];
+    return this.db
+      .select({
+        eventId: events.id,
+        recordingExpectedBy: events.recordingExpectedBy,
+        kind: eventRecordings.kind,
+        posterRef: eventRecordings.posterRef,
+      })
+      .from(events)
+      .leftJoin(
+        eventRecordings,
+        and(
+          eq(eventRecordings.eventId, events.id),
+          eq(eventRecordings.status, "published"),
+          isNull(eventRecordings.deletedAt),
+        ),
+      )
+      .where(inArray(events.id, [...eventIds]));
   }
 
   /**

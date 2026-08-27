@@ -326,6 +326,91 @@ const FLOOR_ROUTES: {
     url: `/v1/admin/event-projects/${ABSENT_ID}/restore`,
     payload: {},
   },
+  // 012 EARS-9 (#1291) — the project↔expert relationship surface, curator seat
+  // included. `replace-curator` hangs off `/projects/:id` rather than off a
+  // relation because the invariant it preserves belongs to the project; that
+  // makes it the one route on this join an anonymous caller could mistake for a
+  // project read, so it is listed explicitly instead of being covered "by the
+  // projects rows". A soft floor here would leak, through the 404/409/412
+  // difference, whether a given project already has a curator.
+  {
+    endpoint: "GET /v1/admin/project-experts",
+    method: "GET",
+    url: "/v1/admin/project-experts",
+  },
+  {
+    endpoint: "GET /v1/admin/project-experts/:id",
+    method: "GET",
+    url: `/v1/admin/project-experts/${ABSENT_ID}`,
+  },
+  {
+    endpoint: "POST /v1/admin/project-experts",
+    method: "POST",
+    url: "/v1/admin/project-experts",
+    payload: {},
+  },
+  {
+    endpoint: "PATCH /v1/admin/project-experts/:id",
+    method: "PATCH",
+    url: `/v1/admin/project-experts/${ABSENT_ID}`,
+    payload: {},
+  },
+  {
+    endpoint: "POST /v1/admin/project-experts/:id/retire",
+    method: "POST",
+    url: `/v1/admin/project-experts/${ABSENT_ID}/retire`,
+    payload: {},
+  },
+  {
+    endpoint: "POST /v1/admin/project-experts/:id/restore",
+    method: "POST",
+    url: `/v1/admin/project-experts/${ABSENT_ID}/restore`,
+    payload: {},
+  },
+  {
+    endpoint: "POST /v1/admin/projects/:id/replace-curator",
+    method: "POST",
+    url: `/v1/admin/projects/${ABSENT_ID}/replace-curator`,
+    payload: {},
+  },
+  // 012 EARS-10 (#1292) — the project↔partner relationship surface. `isPrimary`
+  // is commercially sensitive in a way the other joins are not: which sponsor is
+  // THE primary partner of a project is exactly the fact a soft floor would let
+  // an anonymous caller probe through the 409-vs-404 difference on a PATCH.
+  {
+    endpoint: "GET /v1/admin/project-partners",
+    method: "GET",
+    url: "/v1/admin/project-partners",
+  },
+  {
+    endpoint: "GET /v1/admin/project-partners/:id",
+    method: "GET",
+    url: `/v1/admin/project-partners/${ABSENT_ID}`,
+  },
+  {
+    endpoint: "POST /v1/admin/project-partners",
+    method: "POST",
+    url: "/v1/admin/project-partners",
+    payload: {},
+  },
+  {
+    endpoint: "PATCH /v1/admin/project-partners/:id",
+    method: "PATCH",
+    url: `/v1/admin/project-partners/${ABSENT_ID}`,
+    payload: {},
+  },
+  {
+    endpoint: "POST /v1/admin/project-partners/:id/retire",
+    method: "POST",
+    url: `/v1/admin/project-partners/${ABSENT_ID}/retire`,
+    payload: {},
+  },
+  {
+    endpoint: "POST /v1/admin/project-partners/:id/restore",
+    method: "POST",
+    url: `/v1/admin/project-partners/${ABSENT_ID}/restore`,
+    payload: {},
+  },
   // 014 EARS-1/EARS-2/EARS-17 (#1339) — the recording routes hang under an event
   // path but are their own aggregate, and they sit on the same raised floor: the
   // guard refuses before the Idempotency-Key check, so a keyless anonymous

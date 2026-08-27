@@ -10,6 +10,8 @@ import { AppShell } from "@/components/app-shell";
 import { BackToList } from "@/components/back-to-list";
 import { ProjectForm } from "@/components/project-form";
 import { EventProjectsPanel } from "@/components/event-projects-panel";
+import { ProjectExpertsPanel } from "@/components/project-experts-panel";
+import { ProjectPartnersPanel } from "@/components/project-partners-panel";
 import { taxonomyErrorKey } from "@/lib/taxonomy-errors";
 import type { UpdateProjectVars } from "@/providers/data-provider";
 
@@ -87,6 +89,12 @@ export default function ProjectDetailPage() {
                 <TabsTrigger value="events" data-testid="tab-events">
                   {t("projects.tabs.events")}
                 </TabsTrigger>
+                <TabsTrigger value="experts" data-testid="tab-experts">
+                  {t("projects.tabs.experts")}
+                </TabsTrigger>
+                <TabsTrigger value="partners" data-testid="tab-partners">
+                  {t("projects.tabs.partners")}
+                </TabsTrigger>
               </TabsList>
               <TabsContent value="main">
                 <ProjectForm
@@ -140,6 +148,25 @@ export default function ProjectDetailPage() {
                   through its §3.1 gate without leaving the project. */}
               <TabsContent value="events">
                 <EventProjectsPanel mode="project" entityId={detail.id} />
+              </TabsContent>
+
+              {/* «Эксперты» (012 EARS-9, 012-design §5.1) — the AUTHORING side of
+                  the project↔expert relation, and the only home of the curator
+                  seat. The project's own `version` goes down with it because
+                  `replace-curator` preconditions on the PROJECT, not on a row. */}
+              <TabsContent value="experts">
+                <ProjectExpertsPanel
+                  mode="project"
+                  entityId={detail.id}
+                  projectVersion={detail.version}
+                />
+              </TabsContent>
+
+              {/* «Партнёры» (012 EARS-10, 012-design §5.1) — the AUTHORING side of
+                  the project↔partner relation, including which partner is the
+                  primary one the public project page shows. */}
+              <TabsContent value="partners">
+                <ProjectPartnersPanel mode="project" entityId={detail.id} />
               </TabsContent>
             </Tabs>
           </>

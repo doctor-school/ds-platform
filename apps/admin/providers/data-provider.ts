@@ -566,3 +566,67 @@ export const eventProjectsUrl = {
   transition: (id: string, transition: TaxonomyLifecycleTransition) =>
     `${ADMIN_BASE}/event-projects/${id}/${transition}`,
 };
+
+/**
+ * The `project_experts` relationship endpoints (012-design §5.1, EARS-9 / #1291).
+ *
+ * One flat collection filtered by EITHER endpoint, exactly like `event-projects`:
+ * the same route serves «эксперты этого проекта» on the project detail and
+ * «проекты этого эксперта» on the expert detail, so the panel is one component
+ * with a `mode` rather than two lists that can drift apart.
+ *
+ * `replaceCurator` hangs off `/projects/:id`, not off a relation, because the
+ * invariant it preserves («опубликованный проект имеет ровно одного куратора»)
+ * belongs to the PROJECT — so its `If-Match` is the project's version, and the
+ * caller must pass `meta.version` from the project it rendered, never from a row.
+ */
+export const projectExpertsUrl = {
+  collection: () => `${ADMIN_BASE}/project-experts`,
+  list: (query: {
+    projectId?: string;
+    expertId?: string;
+    includeRetired?: boolean;
+    pageSize?: number;
+  }) => {
+    const params = new URLSearchParams();
+    if (query.projectId) params.set("projectId", query.projectId);
+    if (query.expertId) params.set("expertId", query.expertId);
+    if (query.includeRetired) params.set("includeRetired", "true");
+    params.set("pageSize", String(query.pageSize ?? ADMIN_LIST_PAGE_SIZE_MAX));
+    return `${ADMIN_BASE}/project-experts?${params.toString()}`;
+  },
+  row: (id: string) => `${ADMIN_BASE}/project-experts/${id}`,
+  command: (id: string, command: "retire" | "restore") =>
+    `${ADMIN_BASE}/project-experts/${id}/${command}`,
+  replaceCurator: (projectId: string) =>
+    `${ADMIN_BASE}/projects/${projectId}/replace-curator`,
+};
+
+/**
+ * The `project_partners` relationship endpoints (012-design §5.1, EARS-10 / #1292).
+ *
+ * Same bidirectional shape as `projectExpertsUrl`. There is no «сделать основным»
+ * command URL: `isPrimary` is an ATTRIBUTE of the row and moves through the
+ * ordinary `PATCH`, so the operator clears the incumbent and sets the successor
+ * as two explicit edits rather than one control that silently rewrites another
+ * row (that is what the partial unique refuses with 409 anyway).
+ */
+export const projectPartnersUrl = {
+  collection: () => `${ADMIN_BASE}/project-partners`,
+  list: (query: {
+    projectId?: string;
+    partnerId?: string;
+    includeRetired?: boolean;
+    pageSize?: number;
+  }) => {
+    const params = new URLSearchParams();
+    if (query.projectId) params.set("projectId", query.projectId);
+    if (query.partnerId) params.set("partnerId", query.partnerId);
+    if (query.includeRetired) params.set("includeRetired", "true");
+    params.set("pageSize", String(query.pageSize ?? ADMIN_LIST_PAGE_SIZE_MAX));
+    return `${ADMIN_BASE}/project-partners?${params.toString()}`;
+  },
+  row: (id: string) => `${ADMIN_BASE}/project-partners/${id}`,
+  command: (id: string, command: "retire" | "restore") =>
+    `${ADMIN_BASE}/project-partners/${id}/${command}`,
+};

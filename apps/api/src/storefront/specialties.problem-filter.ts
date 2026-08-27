@@ -2,6 +2,7 @@ import {
   type ArgumentsHost,
   Catch,
   type ExceptionFilter,
+  HttpException,
   Logger,
 } from "@nestjs/common";
 import type { FastifyReply, FastifyRequest } from "fastify";
@@ -18,9 +19,29 @@ import { SpecialtyError } from "./specialties.errors.js";
  * behaviour change. `@UseFilters` on the storefront controllers keeps the blast
  * radius to the routes 017 owns.
  *
- * A non-`SpecialtyError` escapee is logged and returned as an opaque 500 problem
- * — never a stack trace, an ORM message or a table name on the wire.
+ * Three tiers, in order:
+ *
+ *  1. `SpecialtyError` — the slice's own taxonomy, wire body built by the error.
+ *  2. Any other framework `HttpException` below 500 — a DELIBERATE refusal
+ *     (`BadRequestException` on a malformed `q`, EARS-5) that the handler already
+ *     classified. It is re-shaped as RFC-7807 with its OWN status and a stable,
+ *     non-disclosing title; it is NOT logged at ERROR level. Collapsing these
+ *     into the 500 branch would both lie to the client about whose fault it is
+ *     and let any anonymous visitor of a `@Public()` route mint ERROR log lines.
+ *  3. Everything else (and any 5xx `HttpException`) — logged and returned as an
+ *     opaque 500 problem, never a stack trace, an ORM message or a table name.
  */
+/**
+ * Stable titles for the client-error statuses these routes can actually raise.
+ * Deliberately NOT the exception's own message: an English message written at a
+ * throw site is not a contract, and echoing it could carry the submitted value.
+ */
+const CLIENT_ERROR_TITLE: Readonly<Record<number, string>> = {
+  400: "Bad request",
+  404: "Not found",
+  422: "Unprocessable entity",
+};
+
 @Catch()
 export class SpecialtyProblemFilter implements ExceptionFilter {
   private readonly logger = new Logger(SpecialtyProblemFilter.name);
@@ -37,6 +58,22 @@ export class SpecialtyProblemFilter implements ExceptionFilter {
         .status(body.status)
         .header("content-type", "application/problem+json")
         .send(body);
+      return;
+    }
+
+    if (exception instanceof HttpException && exception.getStatus() < 500) {
+      const status = exception.getStatus();
+      const title = CLIENT_ERROR_TITLE[status] ?? "Request cannot be processed";
+      void reply
+        .status(status)
+        .header("content-type", "application/problem+json")
+        .send({
+          type: `${PROBLEM_TYPE_BASE}/${title.toLowerCase().replace(/\s+/g, "-")}`,
+          title,
+          status,
+          traceId,
+          instance: req.url,
+        });
       return;
     }
 

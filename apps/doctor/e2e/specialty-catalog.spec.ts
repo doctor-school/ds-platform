@@ -57,6 +57,8 @@ async function serveCatalog(
     searchDelayMs?: number;
     onSearch?: (query: string) => void;
     failBook?: boolean;
+    /** Read per request, so a test can fail a search and then let it recover. */
+    searchFails?: () => boolean;
   } = {},
 ) {
   // The hero's own read — unrelated to the catalog, but the page fetches it and
@@ -75,6 +77,10 @@ async function serveCatalog(
   await page.route(SEARCH_ROUTE, async (route) => {
     const query = new URL(route.request().url()).searchParams.get("q") ?? "";
     options.onSearch?.(query);
+    if (options.searchFails?.()) {
+      await route.abort("failed");
+      return;
+    }
     if (options.searchDelayMs) {
       await new Promise((resolve) => setTimeout(resolve, options.searchDelayMs));
     }
@@ -365,6 +371,54 @@ test.describe("017 EARS-4/5: the home specialty catalog (variant Б)", () => {
     await serveCatalog(page);
     await page.getByTestId("specialty-catalog-retry").click();
     await expect(catalog).toHaveAttribute("data-state", "open");
+  });
+
+  test("017 EARS-5.12: a failed SEARCH keeps the field, the query and the route to «Другое», and the retry re-runs the SEARCH", async ({
+    page,
+  }) => {
+    let searchFails = true;
+    const queries: string[] = [];
+    await serveCatalog(page, {
+      searchFails: () => searchFails,
+      onSearch: (q) => queries.push(q),
+    });
+    await page.goto("/");
+
+    await typeQuery(page, "кардиолог");
+
+    const catalog = page.getByTestId("specialty-catalog");
+    await expect(catalog).toHaveAttribute("data-state", "searchfailed");
+
+    // The BOOK is fine, so the section is not replaced by the section-wide error
+    // card: the field survives with the typed text still editable.
+    const field = page.getByRole("searchbox", { name: "Поиск специальности" });
+    await expect(field).toHaveValue("кардиолог");
+    await expect(page.getByTestId("specialty-catalog-error")).toHaveCount(0);
+    await expect(page.getByTestId("specialty-search-error")).toBeVisible();
+
+    // The frequent set is NEVER presented as the matches for the query in the
+    // field — a wrong answer is worse than a stated failure.
+    await expect(page.getByTestId("specialty-entry")).toHaveCount(0);
+    for (const entry of FREQUENT) {
+      await expect(catalog).not.toContainText(entry.name);
+    }
+
+    // The second route to every entry, «Другое» included, is still on screen and
+    // still bound to the served book total.
+    await expect(page.getByTestId("specialty-expand")).toHaveText(
+      `Показать весь список — ${BOOK.total}`,
+    );
+
+    // The retry re-issues the SEARCH — not only the book read, which would leave
+    // the narrowing unresolved forever.
+    const before = queries.length;
+    searchFails = false;
+    await page.getByTestId("specialty-search-retry").click();
+
+    await expect(catalog).toHaveAttribute("data-state", "filtered");
+    await expect(page.getByTestId("specialty-entry")).toHaveCount(2);
+    expect(queries.length).toBeGreaterThan(before);
+    expect(queries.at(-1)).toBe("кардиолог");
   });
 
   test("017 EARS-4.6: a chip is a real labelled control, and activating it claims NOTHING was remembered", async ({

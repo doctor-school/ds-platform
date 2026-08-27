@@ -54,7 +54,9 @@ export function SpecialtyCatalog() {
   const [expanded, setExpanded] = useState(false);
   const [matches, setMatches] = useState<SpecialtyRef[] | null>(null);
   const [searching, setSearching] = useState(false);
+  const [searchFailed, setSearchFailed] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  const [searchKey, setSearchKey] = useState(0);
 
   const normalized = normalizeSpecialtyQuery(query);
   const isSearching = normalized.length > 0;
@@ -95,12 +97,14 @@ export function SpecialtyCatalog() {
     if (!isSearching) {
       setMatches(null);
       setSearching(false);
+      setSearchFailed(false);
       return;
     }
 
     const controller = new AbortController();
     const generation = ++latest.current;
     setSearching(true);
+    setSearchFailed(false);
 
     const timer = setTimeout(() => {
       searchSpecialties(query, fetch, controller.signal)
@@ -111,9 +115,13 @@ export function SpecialtyCatalog() {
         })
         .catch(() => {
           if (controller.signal.aborted || generation !== latest.current) return;
-          // A failed search is the section's error surface, not a silent empty
-          // result: «ничего не найдено» would be a lie about the book.
-          setBook({ kind: "error" });
+          // A failed NARROWING is its own state, not the section's error and not
+          // a silent empty result: «ничего не найдено» would be a lie about the
+          // book, and replacing the section would take the field, the typed
+          // query and both routes to «Другое» down with it — which is precisely
+          // what EARS-5 requires to stay standing. The book is untouched here.
+          setMatches(null);
+          setSearchFailed(true);
           setSearching(false);
         });
     }, SEARCH_DEBOUNCE_MS);
@@ -122,7 +130,7 @@ export function SpecialtyCatalog() {
       clearTimeout(timer);
       controller.abort();
     };
-  }, [query, isSearching]);
+  }, [query, isSearching, searchKey]);
 
   const onQueryChange = useCallback((next: string) => {
     setQuery(next);
@@ -139,7 +147,17 @@ export function SpecialtyCatalog() {
     setExpanded((wasExpanded) => (isSearching ? true : !wasExpanded));
   }, [isSearching]);
 
-  const onRetry = useCallback(() => setReloadKey((n) => n + 1), []);
+  /**
+   * Retry re-runs the read that FAILED, not a fixed one: a failed search must
+   * re-issue the search (its effect keys on `searchKey`, and neither `query` nor
+   * `isSearching` changed, so nothing else would re-run it), while a failed book
+   * re-runs the book. Bumping only the book key on a search failure would leave
+   * the match set unresolved and the section rendering an answer nothing asked.
+   */
+  const onRetry = useCallback(() => {
+    if (searchFailed) setSearchKey((n) => n + 1);
+    else setReloadKey((n) => n + 1);
+  }, [searchFailed]);
 
   /**
    * Choosing a specialty is #1482. This seam exists so the chips are real
@@ -153,15 +171,23 @@ export function SpecialtyCatalog() {
     if (book.kind !== "ready") return { kind: book.kind };
 
     if (isSearching) {
-      // Until the first result for this query lands, what is drawn is still the
-      // previous set — marked busy rather than blanked (see the view's `busy`).
-      const entries = matches ?? (expanded ? book.entries : frequent);
-      const resolved = matches !== null && !searching;
+      // A narrowing with no answer yet — in flight or failed — draws NO entries.
+      // The alternative (falling back to the frequent set) would present rows
+      // that are not the matches for the query in the field.
+      if (matches === null) {
+        return {
+          kind: "ready",
+          total: book.total,
+          entries: [],
+          view: searchFailed ? "searchfailed" : "searching",
+          busy: searching,
+        };
+      }
       return {
         kind: "ready",
         total: book.total,
-        entries,
-        view: resolved && entries.length === 0 ? "nomatch" : "filtered",
+        entries: matches,
+        view: !searching && matches.length === 0 ? "nomatch" : "filtered",
         busy: searching,
       };
     }
@@ -173,7 +199,7 @@ export function SpecialtyCatalog() {
       view: expanded ? "expanded" : "open",
       busy: false,
     };
-  }, [book, frequent, matches, searching, isSearching, expanded]);
+  }, [book, frequent, matches, searching, searchFailed, isSearching, expanded]);
 
   return (
     <SpecialtyCatalogView

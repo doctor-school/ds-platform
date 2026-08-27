@@ -13,7 +13,11 @@ anywhere in the name and folding case and ё/е), NoMatch stating so in plain
 Russian with the query still editable and «Другое» still reachable, and Expanded
 revealing the remainder of the book including «Другое». A skeleton stands in
 while the reads are in flight, and a failed read says so in Russian with a
-working retry while the rest of the page renders untouched.
+working retry while the rest of the page renders untouched. A failed SEARCH is
+its own state, distinct from a failed book: the field, the typed query and the
+route to the whole list all stay on screen, the retry re-runs the search itself,
+and the frequent specialties are never shown as if they were the matches for
+what the doctor typed.
 
 No state opens a modal, paints a backdrop or locks scrolling: the page stays
 fully scrollable with no specialty chosen. Choosing and remembering a specialty

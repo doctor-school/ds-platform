@@ -43,8 +43,23 @@ export type SpecialtyCatalogState =
       total: number;
       /** The entries this render shows: frequent, matches, or the whole book. */
       entries: SpecialtyRef[];
-      /** Which §3 state the catalog is in. */
-      view: "open" | "filtered" | "nomatch" | "expanded";
+      /**
+       * Which §3 state the catalog is in.
+       *
+       * `searching` and `searchfailed` are the two renders a narrowing can be in
+       * before it has an answer. They exist because the alternative — falling
+       * back to the frequent set — would present entries that are NOT the
+       * matches for the query still sitting in the field: a confidently wrong
+       * answer, which §6 calls a defect. The book itself is fine in both, so the
+       * field, the typed query and the expand route to «Другое» all stay.
+       */
+      view:
+        | "open"
+        | "filtered"
+        | "nomatch"
+        | "expanded"
+        | "searching"
+        | "searchfailed";
       /**
        * A search read is in flight over what is currently drawn. The entries
        * stay on screen (a wholesale flicker back to a skeleton on every
@@ -70,6 +85,11 @@ const FREQUENT_LABEL = "Частые специальности";
 const NO_MATCH = "Ничего не найдено. Проверьте написание или выберите «Другое».";
 const ERROR_COPY = "Не удалось загрузить список специальностей.";
 const RETRY = "Обновить";
+/** The narrowing failed — the BOOK did not. Says which, and offers both routes
+ * out: repeat the search, or open the whole list below. */
+const SEARCH_ERROR_COPY = "Не удалось выполнить поиск. Повторите попытку или откройте весь список.";
+const SEARCH_RETRY = "Повторить поиск";
+const SEARCHING_COPY = "Ищем совпадения…";
 
 /**
  * The field's accessible name. The canvas gives the input a placeholder and no
@@ -81,7 +101,15 @@ const RETRY = "Обновить";
 const SEARCH_LABEL = "Поиск специальности";
 
 const SECTION = "mt-11 px-4 layout:mt-20 layout:px-12";
-const INNER = "mx-auto max-w-6xl";
+/**
+ * The home container, from the SAME token the hero one section above uses
+ * (`storefront-hero.tsx`): `--container-content` is 69rem = 1104px, which is the
+ * canvas's `max-width:1104px` for both sections (`doctor-home.dc.html` L57, L75).
+ * A Tailwind scale step near it (`max-w-6xl` = 1152px) is token-safe but 48px
+ * wider, which puts this section's heading and rule line visibly outside the
+ * hero's edges at a wide viewport — two sections of one page out of alignment.
+ */
+const INNER = "mx-auto w-full max-w-container-content";
 const CHIP_ROW = "flex flex-wrap justify-center gap-2";
 
 function Heading() {
@@ -217,6 +245,35 @@ export function SpecialtyCatalogView({
             >
               {NO_MATCH}
             </p>
+          ) : view === "searching" ? (
+            /* The narrowing has no answer YET. Showing the frequent set here
+               would label it as the matches for the query in the field. */
+            <p
+              data-testid="specialty-searching"
+              role="status"
+              className="py-6 text-sm font-semibold text-muted-foreground"
+            >
+              {SEARCHING_COPY}
+            </p>
+          ) : view === "searchfailed" ? (
+            <div className="flex flex-col items-center gap-3 py-6">
+              <p
+                data-testid="specialty-search-error"
+                role="status"
+                className="text-sm font-semibold text-muted-foreground"
+              >
+                {SEARCH_ERROR_COPY}
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={onRetry}
+                data-testid="specialty-search-retry"
+              >
+                {SEARCH_RETRY}
+              </Button>
+            </div>
           ) : (
             <ul
               data-testid="specialty-entries"

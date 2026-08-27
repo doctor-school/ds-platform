@@ -23,18 +23,18 @@ import type {
   PartnerAdminListItem,
   ProjectAdminDetail,
   ProjectAdminListItem,
-  CreateTopicRequest,
+  CreateDirectionRequest,
   RecordingCommand,
   TaxonomyStatus,
-  TopicAdminDetail,
-  TopicAdminListItem,
+  DirectionAdminDetail,
+  DirectionAdminListItem,
   UpdateEventExpertRequest,
   UpdateEventRequest,
   UpdateExpertRequest,
   UpdatePartnerRequest,
   UpdateProjectRequest,
   UpdateRecordingRequest,
-  UpdateTopicRequest,
+  UpdateDirectionRequest,
 } from "@ds/schemas";
 
 /**
@@ -69,8 +69,8 @@ import type {
  *   partners (012)  the same four calls against /v1/admin/partners, with `logo`
  *                   as the file part (#1286, EARS-4).
  *
- *   topics   (012)  the same four calls against /v1/admin/topics, with NO file
- *                   part at all — a topic is a title plus its address, so every
+ *   directions   (012)  the same four calls against /v1/admin/directions, with NO file
+ *                   part at all — a direction is a title plus its address, so every
  *                   write is JSON (#1285, EARS-3).
  *
  * `deleteOne` throws for EVERY resource: 012 has no Delete route anywhere in the
@@ -98,11 +98,11 @@ const TAXONOMY_MEDIA_PART = {
   // A partner's image is its LOGO, and the part name is kind-specific by design
   // (012-design §5.1): sending it as `cover`/`photo` is a 400, not a synonym.
   partners: "logo",
-  // A topic carries no image anywhere in the entity (012-design §2.2 / §5.1): it
+  // A direction carries no image anywhere in the entity (012-design §2.2 / §5.1): it
   // is a title plus its permanent address. `null` registers the resource on this
   // map — so list/detail/create/update all dispatch for it — WITHOUT inventing a
   // file part the API has no route for; its writes are always JSON (#1285).
-  topics: null,
+  directions: null,
 } as const;
 type TaxonomyResource = keyof typeof TAXONOMY_MEDIA_PART;
 
@@ -148,27 +148,27 @@ export type UpdatePartnerVars = UpdatePartnerRequest & {
   version: number;
 };
 
-/** Topic create variables: the authored fields, and nothing else — no media part (#1285). */
-export type CreateTopicVars = CreateTopicRequest;
-/** Topic edit variables. `version` becomes the `If-Match` precondition. */
-export type UpdateTopicVars = UpdateTopicRequest & { version: number };
+/** Direction create variables: the authored fields, and nothing else — no media part (#1285). */
+export type CreateDirectionVars = CreateDirectionRequest;
+/** Direction edit variables. `version` becomes the `If-Match` precondition. */
+export type UpdateDirectionVars = UpdateDirectionRequest & { version: number };
 
 /** The taxonomy detail projections this provider can return. */
 type TaxonomyDetail =
   | ProjectAdminDetail
   | ExpertAdminDetail
   | PartnerAdminDetail
-  | TopicAdminDetail;
+  | DirectionAdminDetail;
 /** The taxonomy list rows this provider can return. */
 type TaxonomyListItem =
   | ProjectAdminListItem
   | ExpertAdminListItem
   | PartnerAdminListItem
-  | TopicAdminListItem;
+  | DirectionAdminListItem;
 
 /**
  * The file part of a taxonomy write, resolved off the resource map. A resource
- * registered with `null` (topics) has no file part at all, so no variable of the
+ * registered with `null` (directions) has no file part at all, so no variable of the
  * write can ever be read as one.
  */
 function taxonomyFile(
@@ -345,7 +345,7 @@ export const dataProvider: DataProvider = {
         variables as CreateProjectVars &
           CreateExpertVars &
           CreatePartnerVars &
-          CreateTopicVars;
+          CreateDirectionVars;
       const { body, headers } = taxonomyBody(
         resource,
         payload as Record<string, unknown>,
@@ -384,7 +384,7 @@ export const dataProvider: DataProvider = {
         variables as UpdateProjectVars &
           UpdateExpertVars &
           UpdatePartnerVars &
-          UpdateTopicVars;
+          UpdateDirectionVars;
       const { body, headers } = taxonomyBody(
         resource,
         payload as Record<string, unknown>,

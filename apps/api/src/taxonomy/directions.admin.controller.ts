@@ -15,12 +15,12 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 import {
   AdminTaxonomyListQuerySchema,
   CANONICAL_UUID_REGEX,
-  CreateTopicRequestSchema,
+  CreateDirectionRequestSchema,
   IDEMPOTENCY_KEY_HEADER,
   IF_MATCH_HEADER,
   parseIfMatchVersion,
-  type TopicAdminList,
-  UpdateTopicRequestSchema,
+  type DirectionAdminList,
+  UpdateDirectionRequestSchema,
 } from "@ds/schemas";
 import { Authz } from "../authz/index.js";
 import {
@@ -29,29 +29,29 @@ import {
 } from "./idempotency.service.js";
 import { TaxonomyError } from "./taxonomy.errors.js";
 import { TaxonomyProblemFilter } from "./taxonomy.problem-filter.js";
-import { TopicsService } from "./topics.service.js";
+import { DirectionsService } from "./directions.service.js";
 
-// 012 EARS-3 (#1285) — the curated topic admin surface (012-design §5.1). The
+// 012 EARS-3 (#1285) — the curated direction admin surface (012-design §5.1). The
 // contract is the one the project vertical established, unchanged: authorization
 // is feature 011's dedicated MFA-verified admin session plus CSRF double-submit,
 // and the route guard requires `platform_admin` BEFORE validation, idempotency
 // or handler (EARS-16). There is no per-mutation live IdP revalidation and no
 // step-up in 012 (§5.3).
 //
-// The request shape is the SIMPLE half of §5.1: "topics and every request
-// without a binary use `application/json`". A topic has no media slot at all,
+// The request shape is the SIMPLE half of §5.1: "directions and every request
+// without a binary use `application/json`". A direction has no media slot at all,
 // so there is no multipart branch here to mirror — an upload would have no
 // column to land in. Anything that is not JSON is 415, which is why this
 // controller stays a third the size of its sibling without omitting a contract.
 
-@Controller({ path: "admin/topics", version: "1" })
+@Controller({ path: "admin/directions", version: "1" })
 @UseFilters(TaxonomyProblemFilter)
-export class TopicsAdminController {
-  // Explicit @Inject tokens — see the note in `topics.service.ts`: the
+export class DirectionsAdminController {
+  // Explicit @Inject tokens — see the note in `directions.service.ts`: the
   // root-level authz gate boots this graph under `tsx`, which emits no
   // `design:paramtypes`, so type-inferred injection resolves to `undefined`.
   constructor(
-    @Inject(TopicsService) private readonly topics: TopicsService,
+    @Inject(DirectionsService) private readonly directions: DirectionsService,
     @Inject(IdempotencyService)
     private readonly idempotency: IdempotencyService,
   ) {}
@@ -69,7 +69,7 @@ export class TopicsAdminController {
     audit: "none",
     tests: ["EARS-3", "EARS-15", "EARS-16"],
   })
-  list(@Query() rawQuery: Record<string, string>): Promise<TopicAdminList> {
+  list(@Query() rawQuery: Record<string, string>): Promise<DirectionAdminList> {
     const parsed = AdminTaxonomyListQuerySchema.safeParse(rawQuery);
     if (!parsed.success) {
       throw new TaxonomyError(
@@ -81,15 +81,15 @@ export class TopicsAdminController {
         })),
       );
     }
-    return this.topics.list(parsed.data);
+    return this.directions.list(parsed.data);
   }
 
   /**
-   * EARS-3 — `POST /v1/admin/topics`. Requires a canonical UUID
+   * EARS-3 — `POST /v1/admin/directions`. Requires a canonical UUID
    * `Idempotency-Key`, no `If-Match` (there is no prior version to assert).
    * Answers 201 with the detail body, the row's `ETag` and a `Location`.
    *
-   * This is the ONLY way a topic comes into being: there is no inline creation
+   * This is the ONLY way a direction comes into being: there is no inline creation
    * from an event form, so a subject heading is always the curated row an
    * operator authored here (EARS-3).
    */
@@ -102,9 +102,9 @@ export class TopicsAdminController {
     // #1304 (ADR-0001 §10): a state-changing admin command is high-stakes, so
     // the role is re-established against the LIVE IdP before anything happens —
     // the guard refuses ahead of validation and the idempotency reservation, so
-    // a revoked grant cannot leave a half-written topic behind. Reads keep it
+    // a revoked grant cannot leave a half-written direction behind. Reads keep it
     // absent, by the same cost argument. Identical posture to the sibling
-    // project and expert writes; a topic has no upload stage to fence.
+    // project and expert writes; a direction has no upload stage to fence.
     revalidate: "live",
     // The domain audit row is written by feature 010's capture trigger inside
     // the command transaction (012-design §6), not by an authz-tier emission —
@@ -119,13 +119,13 @@ export class TopicsAdminController {
     // 1. Key shape — before any payload work (§5.1 failure order).
     const key = this.idempotency.requireKey(req.headers[IDEMPOTENCY_KEY_HEADER]);
     // 2. Request shape + payload.
-    const parsed = CreateTopicRequestSchema.safeParse(
+    const parsed = CreateDirectionRequestSchema.safeParse(
       readJsonBody(req, false),
     );
     if (!parsed.success) {
       throw new TaxonomyError(
         "VALIDATION_FAILED",
-        "invalid topic payload",
+        "invalid direction payload",
         parsed.error.issues.map((i) => ({
           path: i.path.join("."),
           message: i.message,
@@ -135,24 +135,24 @@ export class TopicsAdminController {
     // 3. Fingerprint binding.
     const outcome = await this.idempotency.begin({
       key,
-      scope: "taxonomy.topics",
+      scope: "taxonomy.directions",
       actorId: actorSub(req),
       method: "POST",
-      route: "/v1/admin/topics",
+      route: "/v1/admin/directions",
       fingerprint: this.idempotency.fingerprint({
         method: "POST",
-        path: "/v1/admin/topics",
+        path: "/v1/admin/directions",
         payload: parsed.data,
       }),
     });
     if (replayed(outcome, reply)) return outcome.replay.body;
 
-    const { detail, etag } = await this.topics.create({
+    const { detail, etag } = await this.directions.create({
       payload: parsed.data,
       lease: outcome.lease,
     });
     void reply.header("etag", etag);
-    void reply.header("location", `/v1/admin/topics/${detail.id}`);
+    void reply.header("location", `/v1/admin/directions/${detail.id}`);
     return detail;
   }
 
@@ -174,13 +174,13 @@ export class TopicsAdminController {
     if (!CANONICAL_UUID_REGEX.test(id)) {
       throw new TaxonomyError("RESOURCE_NOT_FOUND");
     }
-    const { detail, etag } = await this.topics.detail(id);
+    const { detail, etag } = await this.directions.detail(id);
     void reply.header("etag", etag);
     return detail;
   }
 
   /**
-   * EARS-3 — `PATCH /v1/admin/topics/:id`. Requires the target `If-Match`
+   * EARS-3 — `PATCH /v1/admin/directions/:id`. Requires the target `If-Match`
    * (absent is 428 `PRECONDITION_REQUIRED`, stale is 412 `PRECONDITION_FAILED`)
    * plus a canonical UUID `Idempotency-Key`.
    */
@@ -222,11 +222,11 @@ export class TopicsAdminController {
       );
     }
 
-    const parsed = UpdateTopicRequestSchema.safeParse(readJsonBody(req, true));
+    const parsed = UpdateDirectionRequestSchema.safeParse(readJsonBody(req, true));
     if (!parsed.success) {
       throw new TaxonomyError(
         "VALIDATION_FAILED",
-        "invalid topic payload",
+        "invalid direction payload",
         parsed.error.issues.map((i) => ({
           path: i.path.join("."),
           message: i.message,
@@ -234,23 +234,23 @@ export class TopicsAdminController {
       );
     }
 
-    const route = "/v1/admin/topics/:id";
+    const route = "/v1/admin/directions/:id";
     const outcome = await this.idempotency.begin({
       key,
-      scope: "taxonomy.topics",
+      scope: "taxonomy.directions",
       actorId: actorSub(req),
       method: "PATCH",
       route,
       fingerprint: this.idempotency.fingerprint({
         method: "PATCH",
-        path: `/v1/admin/topics/${id}`,
+        path: `/v1/admin/directions/${id}`,
         payload: parsed.data,
         ifMatch: rawIfMatch,
       }),
     });
     if (replayed(outcome, reply)) return outcome.replay.body;
 
-    const { detail, etag } = await this.topics.update({
+    const { detail, etag } = await this.directions.update({
       id,
       payload: parsed.data,
       expectedVersion,
@@ -266,7 +266,7 @@ export class TopicsAdminController {
  * nothing this API accepts.
  *
  * Multipart is refused with the SAME 415 as any other non-JSON content type —
- * for a topic it is not "an upload in the wrong place", it is a shape that could
+ * for a direction it is not "an upload in the wrong place", it is a shape that could
  * never be satisfied, because there is no file part name to accept.
  */
 function readJsonBody(req: FastifyRequest, bodyOptional: boolean): unknown {
@@ -274,7 +274,7 @@ function readJsonBody(req: FastifyRequest, bodyOptional: boolean): unknown {
   if (contentType && !contentType.includes("application/json")) {
     throw new TaxonomyError(
       "UNSUPPORTED_MEDIA_TYPE",
-      "a topic carries no media; use application/json",
+      "a direction carries no media; use application/json",
     );
   }
   return req.body ?? (bodyOptional ? {} : undefined);

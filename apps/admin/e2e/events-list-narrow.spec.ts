@@ -93,7 +93,7 @@ async function loginAsAdmin(page: Page): Promise<void> {
  * state is a paragraph, and a paragraph cannot clip a column. Seeding is
  * conditional so a repeat run against a populated stand adds nothing: the shared
  * dev database is not this spec's to grow one event per invocation. A realistic
- * title (an event name carries a school and a topic) is what makes the five
+ * title (an event name carries a school and a direction) is what makes the five
  * columns exceed 390px in the first place.
  */
 async function seedEventIfListEmpty(page: Page): Promise<void> {

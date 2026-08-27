@@ -275,7 +275,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       );
       // Registered exactly as production does, so a multipart create is refused
       // by THIS controller with an RFC 7807 body instead of by Fastify's own
-      // bare 415 — the sibling `topics.e2e-spec.ts` registers it for the same
+      // bare 415 — the sibling `directions.e2e-spec.ts` registers it for the same
       // reason.
       await app.register(multipart, {
         limits: { fileSize: 25 * 1024 * 1024 },

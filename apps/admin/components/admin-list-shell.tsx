@@ -12,7 +12,7 @@ import {
 /**
  * The SHARED taxonomy admin list shell (012-design §5.1, §7; Stage A #1282
  * composition B). #1283 builds it once for projects; #1284–#1286 mount the same
- * component for experts / topics / partners, and #1297's cross-resource search
+ * component for experts / directions / partners, and #1297's cross-resource search
  * sweep tightens it in one place rather than in four copies.
  *
  * It owns exactly the four list controls the API exposes — free-text `q`, the

@@ -1,34 +1,34 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { and, asc, count, eq, ilike, isNull, ne, or, sql } from "drizzle-orm";
-import type { DrizzleHandle, Topic } from "@ds/db";
-import { topics } from "@ds/db";
+import type { DrizzleHandle, Direction } from "@ds/db";
+import { directions } from "@ds/db";
 import type { AdminTaxonomyListQuery } from "@ds/schemas";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
 import { withRequestAuditContext } from "../audit/audit-context.tx.js";
 
-// 012 EARS-3 (#1285) — Drizzle data access for the `topics` aggregate, shaped
+// 012 EARS-3 (#1285) — Drizzle data access for the `directions` aggregate, shaped
 // exactly like `ProjectsRepository` / `ExpertsRepository`: every mutating path
 // runs through `withRequestAuditContext`, so feature 010's capture trigger
-// attributes the resulting `data.topics.*` ledger rows to the acting admin
-// without this layer knowing who that is. A topic title is ordinary audited
+// attributes the resulting `data.directions.*` ledger rows to the acting admin
+// without this layer knowing who that is. A direction title is ordinary audited
 // editorial text (012-design §6) — no masked-column registry entry.
 
 type Db = DrizzleHandle["db"];
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 
-export interface TopicInsert {
+export interface DirectionInsert {
   slug: string;
   title: string;
 }
 
 /** The field patch a PATCH applies. `undefined` means unchanged. */
-export interface TopicPatch {
+export interface DirectionPatch {
   slug?: string;
   title?: string;
 }
 
 @Injectable()
-export class TopicsRepository {
+export class DirectionsRepository {
   constructor(@Inject(DRIZZLE_DB) private readonly db: Db) {}
 
   /** Run `fn` in one audit-attributed transaction. */
@@ -36,23 +36,23 @@ export class TopicsRepository {
     return withRequestAuditContext(this.db, fn);
   }
 
-  async insert(tx: Tx, values: TopicInsert): Promise<Topic> {
-    const [row] = await tx.insert(topics).values(values).returning();
-    if (!row) throw new Error("topic insert returned no row");
+  async insert(tx: Tx, values: DirectionInsert): Promise<Direction> {
+    const [row] = await tx.insert(directions).values(values).returning();
+    if (!row) throw new Error("direction insert returned no row");
     return row;
   }
 
-  async findById(id: string): Promise<Topic | null> {
-    const [row] = await this.db.select().from(topics).where(eq(topics.id, id));
+  async findById(id: string): Promise<Direction | null> {
+    const [row] = await this.db.select().from(directions).where(eq(directions.id, id));
     return row ?? null;
   }
 
   /** Read the row FOR UPDATE inside a transaction — the PATCH concurrency boundary. */
-  async lockById(tx: Tx, id: string): Promise<Topic | null> {
+  async lockById(tx: Tx, id: string): Promise<Direction | null> {
     const [row] = await tx
       .select()
-      .from(topics)
-      .where(eq(topics.id, id))
+      .from(directions)
+      .where(eq(directions.id, id))
       .for("update");
     return row ?? null;
   }
@@ -64,18 +64,18 @@ export class TopicsRepository {
 
   /**
    * Whether `slug` is held by any retained row other than `exceptId` — a retired
-   * topic included (012-design §2.1): nothing in 012 is physically deleted, so a
-   * retired topic permanently keeps its slug and the URL can never later resolve
+   * direction included (012-design §2.1): nothing in 012 is physically deleted, so a
+   * retired direction permanently keeps its slug and the URL can never later resolve
    * to a different subject. Checked before the write for a naming 409; the
    * unique index remains the final race guard.
    */
   async slugTaken(tx: Tx | Db, slug: string, exceptId?: string): Promise<boolean> {
     const where = exceptId
-      ? and(eq(topics.slug, slug), ne(topics.id, exceptId))
-      : eq(topics.slug, slug);
+      ? and(eq(directions.slug, slug), ne(directions.id, exceptId))
+      : eq(directions.slug, slug);
     const [row] = await tx
-      .select({ id: topics.id })
-      .from(topics)
+      .select({ id: directions.id })
+      .from(directions)
       .where(where)
       .limit(1);
     return Boolean(row);
@@ -89,16 +89,16 @@ export class TopicsRepository {
     tx: Tx,
     id: string,
     expectedVersion: number,
-    patch: TopicPatch,
-  ): Promise<Topic | null> {
+    patch: DirectionPatch,
+  ): Promise<Direction | null> {
     const [row] = await tx
-      .update(topics)
+      .update(directions)
       .set({
         ...patch,
-        version: sql`${topics.version} + 1`,
+        version: sql`${directions.version} + 1`,
         updatedAt: new Date(),
       })
-      .where(and(eq(topics.id, id), eq(topics.version, expectedVersion)))
+      .where(and(eq(directions.id, id), eq(directions.version, expectedVersion)))
       .returning();
     return row ?? null;
   }
@@ -112,12 +112,12 @@ export class TopicsRepository {
    */
   async list(
     query: AdminTaxonomyListQuery,
-  ): Promise<{ rows: Topic[]; total: number }> {
+  ): Promise<{ rows: Direction[]; total: number }> {
     const filters = [];
     if (query.status) {
-      filters.push(eq(topics.status, query.status));
+      filters.push(eq(directions.status, query.status));
     } else if (!query.includeRetired) {
-      filters.push(isNull(topics.deletedAt));
+      filters.push(isNull(directions.deletedAt));
     }
     if (query.q) {
       // NFKC first: two visually identical inputs (a composed «й» and its
@@ -125,23 +125,23 @@ export class TopicsRepository {
       // too, so normalizing here is what makes the comparison honest rather
       // than a lucky byte match (012-design §2.2 LD-6).
       const pattern = `%${escapeLike(query.q.normalize("NFKC"))}%`;
-      filters.push(or(ilike(topics.title, pattern), ilike(topics.slug, pattern)));
+      filters.push(or(ilike(directions.title, pattern), ilike(directions.slug, pattern)));
     }
     const where = filters.length > 0 ? and(...filters) : undefined;
 
     const rows = await this.db
       .select()
-      .from(topics)
+      .from(directions)
       .where(where)
       // Stable total order ending in id — two rows updated in the same
       // millisecond must not swap places between pages.
-      .orderBy(asc(topics.title), asc(topics.id))
+      .orderBy(asc(directions.title), asc(directions.id))
       .limit(query.pageSize)
       .offset((query.page - 1) * query.pageSize);
 
     const [totals] = await this.db
       .select({ value: count() })
-      .from(topics)
+      .from(directions)
       .where(where);
     return { rows, total: Number(totals?.value ?? 0) };
   }

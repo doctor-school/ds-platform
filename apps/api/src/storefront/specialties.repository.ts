@@ -16,7 +16,7 @@ type Db = DrizzleHandle["db"];
 @Injectable()
 export class SpecialtiesRepository {
   // Explicit @Inject token — the API boots under `tsx`, which emits no
-  // `design:paramtypes` (same reason as `TopicsRepository`).
+  // `design:paramtypes` (same reason as `DirectionsRepository`).
   constructor(@Inject(DRIZZLE_DB) private readonly db: Db) {}
 
   /**

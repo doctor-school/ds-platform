@@ -33,7 +33,7 @@ export function useLocalizedResolver<TFieldValues extends FieldValues, Out>(
     | "projects.validation"
     | "experts.validation"
     | "partners.validation"
-    | "topics.validation"
+    | "directions.validation"
     | "recordings.validation"
     | "eventExperts.validation" = "events.validation",
 ): Resolver<TFieldValues, unknown, Out> {

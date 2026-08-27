@@ -12,16 +12,16 @@ import {
   FormLabel,
   FormMessage,
 } from "@ds/design-system/form";
-import { slugifyTaxonomyTitle, type TopicAdminDetail } from "@ds/schemas";
-import { TopicFormSchema, type TopicFormFields } from "@/lib/form-schemas";
+import { slugifyTaxonomyTitle, type DirectionAdminDetail } from "@ds/schemas";
+import { DirectionFormSchema, type DirectionFormFields } from "@/lib/form-schemas";
 import { useLocalizedResolver } from "@/lib/use-localized-resolver";
 
 /**
- * The topic authoring form (012 EARS-3, #1285) — the twin of `expert-form.tsx`
- * and `project-form.tsx`, reduced to what a curated topic actually is: a title
+ * The direction authoring form (012 EARS-3, #1285) — the twin of `expert-form.tsx`
+ * and `project-form.tsx`, reduced to what a curated direction actually is: a title
  * and the permanent address it will be reachable at. There is no description,
  * no media and no second descriptive field, because the entity has none
- * (012-design §2.2; `CreateTopicRequestSchema` is `.strict()` and would refuse
+ * (012-design §2.2; `CreateDirectionRequestSchema` is `.strict()` and would refuse
  * one). A placeholder box for a field the API rejects is not a courtesy — it is
  * a promise the platform cannot keep.
  *
@@ -30,7 +30,7 @@ import { useLocalizedResolver } from "@/lib/use-localized-resolver";
  * 1. **Slug.** The box shows the generated preview from the TITLE, computed by
  *    the SAME `@ds/schemas` function the API uses, so the preview can never
  *    promise a different address than the one that gets stored. It stays
- *    editable while the topic has never been published; once `firstPublishedAt`
+ *    editable while the direction has never been published; once `firstPublishedAt`
  *    is set the server refuses a change (409 `SLUG_IMMUTABLE`) and the field
  *    renders read-only WITH the reason. `slugEditable` is read off the server
  *    projection, never re-derived here.
@@ -43,36 +43,36 @@ import { useLocalizedResolver } from "@/lib/use-localized-resolver";
  * 012 exposes no DELETE route for any taxonomy entity (012-design §5.1), and the
  * data provider refuses `deleteOne` as the backstop.
  */
-export interface TopicFormValues {
+export interface DirectionFormValues {
   title: string;
   /** Empty string ⇒ let the server generate the slug from the title. */
   slug: string;
 }
 
-function defaults(detail?: TopicAdminDetail): TopicFormFields {
+function defaults(detail?: DirectionAdminDetail): DirectionFormFields {
   return {
     title: detail?.title ?? "",
     slug: detail?.slug ?? "",
   };
 }
 
-export function TopicForm({
+export function DirectionForm({
   detail,
   submitLabel,
   onSubmit,
   submitting,
 }: {
-  detail?: TopicAdminDetail;
+  detail?: DirectionAdminDetail;
   submitLabel: string;
-  onSubmit: (values: TopicFormValues) => void;
+  onSubmit: (values: DirectionFormValues) => void;
   submitting?: boolean;
 }) {
   const t = useTranslations();
-  const form = useForm<TopicFormFields>({
+  const form = useForm<DirectionFormFields>({
     mode: "onTouched",
     resolver: useLocalizedResolver(
-      TopicFormSchema as unknown as z.ZodType<TopicFormFields, TopicFormFields>,
-      "topics.validation",
+      DirectionFormSchema as unknown as z.ZodType<DirectionFormFields, DirectionFormFields>,
+      "directions.validation",
     ),
     defaultValues: defaults(detail),
   });
@@ -86,7 +86,7 @@ export function TopicForm({
     <Form {...form}>
       <form
         className="flex flex-col gap-5"
-        data-testid="topic-form"
+        data-testid="direction-form"
         noValidate
         onSubmit={form.handleSubmit((fields) => {
           onSubmit({ title: fields.title, slug: fields.slug.trim() });
@@ -97,16 +97,16 @@ export function TopicForm({
           name="title"
           render={({ field }) => (
             <FormItem>
-              <FormLabel htmlFor="title">{t("topics.fields.title")}</FormLabel>
+              <FormLabel htmlFor="title">{t("directions.fields.title")}</FormLabel>
               <FormControl>
                 {/* No `maxLength`: a hard cap on the input would silently eat
                     the 121st character instead of refusing it, which is exactly
                     the input mask 012-scenarios (lines 72–78) rules out. The
                     bound is enforced on blur by the SSOT resolver — with a
                     sentence the operator can act on — and again by the API. */}
-                <Input id="title" data-testid="topic-title" {...field} />
+                <Input id="title" data-testid="direction-title" {...field} />
               </FormControl>
-              <FormMessage>{t("topics.fields.titleHint")}</FormMessage>
+              <FormMessage>{t("directions.fields.titleHint")}</FormMessage>
             </FormItem>
           )}
         />
@@ -116,11 +116,11 @@ export function TopicForm({
           name="slug"
           render={({ field }) => (
             <FormItem>
-              <FormLabel htmlFor="slug">{t("topics.fields.slug")}</FormLabel>
+              <FormLabel htmlFor="slug">{t("directions.fields.slug")}</FormLabel>
               <FormControl>
                 <Input
                   id="slug"
-                  data-testid="topic-slug"
+                  data-testid="direction-slug"
                   readOnly={!slugEditable}
                   aria-readonly={!slugEditable || undefined}
                   placeholder={generatedSlug}
@@ -129,13 +129,13 @@ export function TopicForm({
               </FormControl>
               <FormMessage>
                 {slugEditable
-                  ? t("topics.fields.slugPreviewHint")
-                  : t("topics.fields.slugLockedHint")}
+                  ? t("directions.fields.slugPreviewHint")
+                  : t("directions.fields.slugLockedHint")}
               </FormMessage>
               {slugEditable && generatedSlug && !slugValue ? (
                 <p
                   className="text-xs text-muted-foreground"
-                  data-testid="topic-slug-preview"
+                  data-testid="direction-slug-preview"
                 >
                   {generatedSlug}
                 </p>
@@ -145,7 +145,7 @@ export function TopicForm({
         />
 
         <div>
-          <Button type="submit" loading={submitting} data-testid="submit-topic">
+          <Button type="submit" loading={submitting} data-testid="submit-direction">
             {submitLabel}
           </Button>
         </div>

@@ -203,29 +203,29 @@ const FLOOR_ROUTES: {
     url: `/v1/admin/experts/${ABSENT_ID}`,
     payload: {},
   },
-  // 012 EARS-3 (#1285) — the curated topic authoring surface. Same floor as its
+  // 012 EARS-3 (#1285) — the curated direction authoring surface. Same floor as its
   // siblings: the `platform_admin` guard answers before validation, so an
-  // unauthenticated caller cannot tell an absent topic from an existing one.
+  // unauthenticated caller cannot tell an absent direction from an existing one.
   {
-    endpoint: "GET /v1/admin/topics",
+    endpoint: "GET /v1/admin/directions",
     method: "GET",
-    url: "/v1/admin/topics",
+    url: "/v1/admin/directions",
   },
   {
-    endpoint: "GET /v1/admin/topics/:id",
+    endpoint: "GET /v1/admin/directions/:id",
     method: "GET",
-    url: `/v1/admin/topics/${ABSENT_ID}`,
+    url: `/v1/admin/directions/${ABSENT_ID}`,
   },
   {
-    endpoint: "POST /v1/admin/topics",
+    endpoint: "POST /v1/admin/directions",
     method: "POST",
-    url: "/v1/admin/topics",
+    url: "/v1/admin/directions",
     payload: {},
   },
   {
-    endpoint: "PATCH /v1/admin/topics/:id",
+    endpoint: "PATCH /v1/admin/directions/:id",
     method: "PATCH",
-    url: `/v1/admin/topics/${ABSENT_ID}`,
+    url: `/v1/admin/directions/${ABSENT_ID}`,
     payload: {},
   },
   // 012 EARS-4 (#1286) — the descriptive partner authoring surface. Same floor as

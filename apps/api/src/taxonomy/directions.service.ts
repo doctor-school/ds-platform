@@ -1,77 +1,77 @@
 import { Inject, Injectable } from "@nestjs/common";
-import type { Topic } from "@ds/db";
+import type { Direction } from "@ds/db";
 import {
   type AdminTaxonomyListQuery,
-  type CreateTopicRequest,
+  type CreateDirectionRequest,
   slugifyTaxonomyTitle,
   SlugSchema,
   taxonomyETag,
-  type TopicAdminDetail,
-  type TopicAdminList,
-  type UpdateTopicRequest,
+  type DirectionAdminDetail,
+  type DirectionAdminList,
+  type UpdateDirectionRequest,
 } from "@ds/schemas";
-import { TopicsRepository } from "./topics.repository.js";
+import { DirectionsRepository } from "./directions.repository.js";
 import {
   type IdempotencyLease,
   IdempotencyService,
 } from "./idempotency.service.js";
 import { markReplayable, TaxonomyError } from "./taxonomy.errors.js";
 
-// 012 EARS-3 (#1285) — the curated topic authoring commands. The same §5.1
+// 012 EARS-3 (#1285) — the curated direction authoring commands. The same §5.1
 // failure ORDER the project and expert verticals established, minus the media
 // stages this entity has none of:
 //
 //   auth (guard) → key shape → fingerprint binding → domain transaction
 //   (precondition recheck → write → audit → fenced record completion).
 //
-// A topic is a first-class retained record, never a free-form event tag: this
-// service is the ONLY way a `topics` row comes into existence, so there is no
+// A direction is a first-class retained record, never a free-form event tag: this
+// service is the ONLY way a `directions` row comes into existence, so there is no
 // inline creation path from an event form and no per-event string that could
 // become a second spelling of the same subject. Classifying an event is the
-// separate `event_topics` link of #1293.
+// separate `event_directions` link of #1293.
 //
 // There is deliberately no publish-requirement check here as the sibling
 // verticals have: `title` is NOT NULL in the schema and the PATCH contract
-// refuses a null one, so a topic can never be edited into an incomplete public
-// projection — §5.2's `PublicTopic` is exactly `{ id, slug, title }`.
+// refuses a null one, so a direction can never be edited into an incomplete public
+// projection — §5.2's `PublicDirection` is exactly `{ id, slug, title }`.
 
-export interface CreateTopicInput {
-  payload: CreateTopicRequest;
+export interface CreateDirectionInput {
+  payload: CreateDirectionRequest;
   lease: IdempotencyLease;
 }
 
-export interface UpdateTopicInput {
+export interface UpdateDirectionInput {
   id: string;
-  payload: UpdateTopicRequest;
+  payload: UpdateDirectionRequest;
   expectedVersion: number;
   lease: IdempotencyLease;
 }
 
 /** A command result plus the ETag the client must echo on its next write. */
-export interface TopicCommandResult {
-  detail: TopicAdminDetail;
+export interface DirectionCommandResult {
+  detail: DirectionAdminDetail;
   etag: string;
 }
 
 @Injectable()
-export class TopicsService {
+export class DirectionsService {
   // Explicit @Inject tokens on every dependency, class ones included — the
   // root-level `endpoint-authz` gate boots this module graph under `tsx`, whose
   // esbuild transform emits no `design:paramtypes`, so a type-inferred injection
   // resolves to `undefined` there while working fine under `nest build`.
   constructor(
-    @Inject(TopicsRepository) private readonly repo: TopicsRepository,
+    @Inject(DirectionsRepository) private readonly repo: DirectionsRepository,
     @Inject(IdempotencyService)
     private readonly idempotency: IdempotencyService,
   ) {}
 
-  /** `POST /v1/admin/topics` — create one draft topic. */
-  create(input: CreateTopicInput): Promise<TopicCommandResult> {
+  /** `POST /v1/admin/directions` — create one draft direction. */
+  create(input: CreateDirectionInput): Promise<DirectionCommandResult> {
     return this.fenced(input.lease, () => this.createCommand(input));
   }
 
-  /** `PATCH /v1/admin/topics/:id` — edit the SAME row. */
-  update(input: UpdateTopicInput): Promise<TopicCommandResult> {
+  /** `PATCH /v1/admin/directions/:id` — edit the SAME row. */
+  update(input: UpdateDirectionInput): Promise<DirectionCommandResult> {
     return this.fenced(input.lease, () => this.updateCommand(input));
   }
 
@@ -92,15 +92,15 @@ export class TopicsService {
   }
 
   private async createCommand(
-    input: CreateTopicInput,
-  ): Promise<TopicCommandResult> {
+    input: CreateDirectionInput,
+  ): Promise<DirectionCommandResult> {
     const slug = this.resolveCreateSlug(input.payload);
     // Pre-flight the conflict OUTSIDE the transaction so a doomed request never
     // opens one; the unique index still guards the race.
     if (await this.repo.slugTakenAnywhere(slug)) {
       throw new TaxonomyError(
         "SLUG_CONFLICT",
-        "another topic already holds this slug; restore that record instead of re-creating it",
+        "another direction already holds this slug; restore that record instead of re-creating it",
       );
     }
 
@@ -108,7 +108,7 @@ export class TopicsService {
       if (await this.repo.slugTaken(tx, slug)) {
         throw new TaxonomyError(
           "SLUG_CONFLICT",
-          "another topic already holds this slug; restore that record instead of re-creating it",
+          "another direction already holds this slug; restore that record instead of re-creating it",
         );
       }
       const created = await this.repo.insert(tx, {
@@ -119,7 +119,7 @@ export class TopicsService {
         status: 201,
         body: toDetail(created),
         etag: taxonomyETag(created.version),
-        location: `/v1/admin/topics/${created.id}`,
+        location: `/v1/admin/directions/${created.id}`,
       });
       return created;
     });
@@ -128,21 +128,21 @@ export class TopicsService {
   }
 
   private async updateCommand(
-    input: UpdateTopicInput,
-  ): Promise<TopicCommandResult> {
+    input: UpdateDirectionInput,
+  ): Promise<DirectionCommandResult> {
     const current = await this.repo.findById(input.id);
     if (!current) throw new TaxonomyError("RESOURCE_NOT_FOUND");
     if (current.version !== input.expectedVersion) {
       throw new TaxonomyError(
         "PRECONDITION_FAILED",
-        "the topic changed since it was read; reload and retry",
+        "the direction changed since it was read; reload and retry",
       );
     }
 
     // Slug immutability is a ROW-state refusal, not a shape one. Echoing the
     // current value is not an update: the admin form posts the whole «Основное»
     // tab, so refusing the echo would block every ordinary edit of a published
-    // topic over an untouched field.
+    // direction over an untouched field.
     const slugChanges =
       input.payload.slug !== undefined && input.payload.slug !== current.slug;
     if (slugChanges) {
@@ -155,7 +155,7 @@ export class TopicsService {
       if (await this.repo.slugTakenAnywhere(input.payload.slug!, current.id)) {
         throw new TaxonomyError(
           "SLUG_CONFLICT",
-          "another topic already holds this slug",
+          "another direction already holds this slug",
         );
       }
     }
@@ -167,7 +167,7 @@ export class TopicsService {
       if (locked.version !== input.expectedVersion) {
         throw new TaxonomyError(
           "PRECONDITION_FAILED",
-          "the topic changed since it was read; reload and retry",
+          "the direction changed since it was read; reload and retry",
         );
       }
       if (
@@ -195,7 +195,7 @@ export class TopicsService {
       if (!updated) {
         throw new TaxonomyError(
           "PRECONDITION_FAILED",
-          "the topic changed since it was read; reload and retry",
+          "the direction changed since it was read; reload and retry",
         );
       }
       await this.idempotency.complete(tx, input.lease, {
@@ -209,15 +209,15 @@ export class TopicsService {
     return { detail: toDetail(row), etag: taxonomyETag(row.version) };
   }
 
-  /** `GET /v1/admin/topics/:id` — detail by stable id, retired rows included. */
-  async detail(id: string): Promise<TopicCommandResult> {
+  /** `GET /v1/admin/directions/:id` — detail by stable id, retired rows included. */
+  async detail(id: string): Promise<DirectionCommandResult> {
     const row = await this.repo.findById(id);
     if (!row) throw new TaxonomyError("RESOURCE_NOT_FOUND");
     return { detail: toDetail(row), etag: taxonomyETag(row.version) };
   }
 
-  /** `GET /v1/admin/topics` — the shared admin list with LD-6 title search. */
-  async list(query: AdminTaxonomyListQuery): Promise<TopicAdminList> {
+  /** `GET /v1/admin/directions` — the shared admin list with LD-6 title search. */
+  async list(query: AdminTaxonomyListQuery): Promise<DirectionAdminList> {
     const { rows, total } = await this.repo.list(query);
     return {
       data: rows.map((row) => ({
@@ -235,7 +235,7 @@ export class TopicsService {
   }
 
   /** Resolve the create-time slug: the authored one, or generated from the title. */
-  private resolveCreateSlug(payload: CreateTopicRequest): string {
+  private resolveCreateSlug(payload: CreateDirectionRequest): string {
     if (payload.slug) return payload.slug;
     const generated = slugifyTaxonomyTitle(payload.title);
     const parsed = SlugSchema.safeParse(generated);
@@ -254,9 +254,9 @@ export class TopicsService {
 
 /**
  * The admin projection. Synchronous — unlike a project or an expert there is no
- * storage key to resolve into a signed URL, because a topic has no media.
+ * storage key to resolve into a signed URL, because a direction has no media.
  */
-function toDetail(row: Topic): TopicAdminDetail {
+function toDetail(row: Direction): DirectionAdminDetail {
   return {
     id: row.id,
     slug: row.slug,

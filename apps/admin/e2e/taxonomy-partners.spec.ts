@@ -204,7 +204,7 @@ test.describe("012 EARS-4 — partner authoring in the live admin", () => {
     // rides #1287, which introduces the transition that produces the state.
     //
     // Retire/restore is the same story: 012 exposes NO retire/restore route on
-    // the partners controller in this slice (the merged expert and topic
+    // the partners controller in this slice (the merged expert and direction
     // verticals have none either — the transitions arrive with #1287/#1295/#1296),
     // so no control is rendered for them here. Rendering a button with no route
     // behind it would be exactly the untracked scaffold AGENTS.md §6 forbids.

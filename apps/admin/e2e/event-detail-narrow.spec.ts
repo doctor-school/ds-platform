@@ -76,7 +76,7 @@ async function loginAsAdmin(page: Page): Promise<void> {
  * The detail screen needs a real event to render, so the subject is an existing
  * row when the stand has one and a freshly created event otherwise — the shared
  * dev database is not this spec's to grow one event per invocation. A realistic
- * title (an event name carries a school and a topic) is what makes the header
+ * title (an event name carries a school and a direction) is what makes the header
  * exceed 390px in the first place, so a picked row is as good a subject as a
  * seeded one only when it, too, is realistically long — hence the create path
  * uses the same title as the list spec.

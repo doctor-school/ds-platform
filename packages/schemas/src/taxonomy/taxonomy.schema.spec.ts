@@ -7,7 +7,7 @@ import {
   expertInitials,
   ExpertAdminDetailSchema,
   ExpertAdminListItemSchema,
-  CreateTopicRequestSchema,
+  CreateDirectionRequestSchema,
   CreatePartnerRequestSchema,
   PartnerAdminDetailSchema,
   PartnerAdminListItemSchema,
@@ -19,10 +19,10 @@ import {
   slugifyTaxonomyTitle,
   SlugSchema,
   taxonomyETag,
-  TopicAdminDetailSchema,
-  TopicAdminListItemSchema,
+  DirectionAdminDetailSchema,
+  DirectionAdminListItemSchema,
   UpdateExpertRequestSchema,
-  UpdateTopicRequestSchema,
+  UpdateDirectionRequestSchema,
   UpdateProjectRequestSchema,
   CreateEventProjectRequestSchema,
   EventProjectAdminDetailSchema,
@@ -291,76 +291,76 @@ describe("012 taxonomy — expert authoring contract (SSOT)", () => {
     expect(ExpertAdminListItemSchema.parse(detail)).not.toHaveProperty("bio");
   });
 
-  it("012 EARS-3: when a topic create omits the title or exceeds its 120-char bound, the schema shall refuse it", () => {
-    expect(CreateTopicRequestSchema.safeParse({}).success).toBe(false);
-    expect(CreateTopicRequestSchema.safeParse({ title: "" }).success).toBe(
+  it("012 EARS-3: when a direction create omits the title or exceeds its 120-char bound, the schema shall refuse it", () => {
+    expect(CreateDirectionRequestSchema.safeParse({}).success).toBe(false);
+    expect(CreateDirectionRequestSchema.safeParse({ title: "" }).success).toBe(
       false,
     );
     expect(
-      CreateTopicRequestSchema.safeParse({ title: "x".repeat(121) }).success,
+      CreateDirectionRequestSchema.safeParse({ title: "x".repeat(121) }).success,
     ).toBe(false);
-    // 120 is the topic's own bound (012-design §2.2) — deliberately tighter
+    // 120 is the direction's own bound (012-design §2.2) — deliberately tighter
     // than the 160 a project title or an expert name allows.
     expect(
-      CreateTopicRequestSchema.safeParse({ title: "x".repeat(120) }).success,
+      CreateDirectionRequestSchema.safeParse({ title: "x".repeat(120) }).success,
     ).toBe(true);
     expect(
-      CreateTopicRequestSchema.safeParse({ title: "Кардиология" }).success,
+      CreateDirectionRequestSchema.safeParse({ title: "Кардиология" }).success,
     ).toBe(true);
     // An authored slug is optional; the server generates one from the title.
     expect(
-      CreateTopicRequestSchema.parse({
+      CreateDirectionRequestSchema.parse({
         title: "Кардиология",
         slug: "kardiologiya",
       }).slug,
     ).toBe("kardiologiya");
   });
 
-  it("012 EARS-3: when a topic request carries a field the entity does not have, the schema shall refuse it", () => {
-    // A topic has NO description and NO media (012-design §2 ER, §5.2
-    // `PublicTopic { id, slug, title }`). `.strict()` turns an attempt to author
+  it("012 EARS-3: when a direction request carries a field the entity does not have, the schema shall refuse it", () => {
+    // A direction has NO description and NO media (012-design §2 ER, §5.2
+    // `PublicDirection { id, slug, title }`). `.strict()` turns an attempt to author
     // one into a refusal instead of a silently dropped field the operator would
     // believe was stored.
     for (const extra of [
       { description: "Про сердце" },
-      { coverRef: "taxonomy/topics/covers/x.webp" },
+      { coverRef: "taxonomy/directions/covers/x.webp" },
       { mediaAction: "clear" },
       { kind: "school" },
     ]) {
       expect(
-        CreateTopicRequestSchema.safeParse({ title: "Кардиология", ...extra })
+        CreateDirectionRequestSchema.safeParse({ title: "Кардиология", ...extra })
           .success,
       ).toBe(false);
       expect(
-        UpdateTopicRequestSchema.safeParse({ title: "Кардиология", ...extra })
+        UpdateDirectionRequestSchema.safeParse({ title: "Кардиология", ...extra })
           .success,
       ).toBe(false);
     }
   });
 
-  it("012 EARS-3: when a topic PATCH omits a field, the schema shall mean unchanged — and shall refuse a null title or slug", () => {
-    const empty = UpdateTopicRequestSchema.parse({});
+  it("012 EARS-3: when a direction PATCH omits a field, the schema shall mean unchanged — and shall refuse a null title or slug", () => {
+    const empty = UpdateDirectionRequestSchema.parse({});
     expect(Object.keys(empty)).toHaveLength(0);
     expect(
-      UpdateTopicRequestSchema.safeParse({ title: "Кардиология" }).success,
+      UpdateDirectionRequestSchema.safeParse({ title: "Кардиология" }).success,
     ).toBe(true);
-    // `title` is the topic's only descriptive value and NOT NULL in the DB;
+    // `title` is the direction's only descriptive value and NOT NULL in the DB;
     // `slug` is the permanent public identity. Neither is ever cleared.
-    expect(UpdateTopicRequestSchema.safeParse({ title: null }).success).toBe(
+    expect(UpdateDirectionRequestSchema.safeParse({ title: null }).success).toBe(
       false,
     );
-    expect(UpdateTopicRequestSchema.safeParse({ slug: null }).success).toBe(
+    expect(UpdateDirectionRequestSchema.safeParse({ slug: null }).success).toBe(
       false,
     );
     // The slug grammar is the shared one — a canonical UUID is never a slug.
     expect(
-      UpdateTopicRequestSchema.safeParse({
+      UpdateDirectionRequestSchema.safeParse({
         slug: "11111111-1111-4111-8111-111111111111",
       }).success,
     ).toBe(false);
   });
 
-  it("012 EARS-3: when an admin topic detail is projected, it shall carry exactly the curated identity", () => {
+  it("012 EARS-3: when an admin direction detail is projected, it shall carry exactly the curated identity", () => {
     const detail = {
       id: "11111111-1111-4111-8111-111111111111",
       slug: "kardiologiya",
@@ -372,10 +372,10 @@ describe("012 taxonomy — expert authoring contract (SSOT)", () => {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
-    const parsed = TopicAdminDetailSchema.parse(detail);
+    const parsed = DirectionAdminDetailSchema.parse(detail);
     expect(parsed).not.toHaveProperty("description");
     expect(parsed).not.toHaveProperty("coverUrl");
-    expect(TopicAdminListItemSchema.parse(detail)).not.toHaveProperty(
+    expect(DirectionAdminListItemSchema.parse(detail)).not.toHaveProperty(
       "firstPublishedAt",
     );
   });

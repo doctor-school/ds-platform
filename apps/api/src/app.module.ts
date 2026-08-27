@@ -56,7 +56,7 @@ import { StorefrontModule } from "./storefront/storefront.module.js";
     StorageModule,
     // 007 event-admin authoring surface (CreateEvent + admin reads).
     EventsModule,
-    // 012 content taxonomy — the retained project/expert/topic/partner admin
+    // 012 content taxonomy — the retained project/expert/direction/partner admin
     // surface plus the shared idempotency-record, media-normalizer and
     // media-cleanup services (#1283 opens it with the project vertical).
     TaxonomyModule,

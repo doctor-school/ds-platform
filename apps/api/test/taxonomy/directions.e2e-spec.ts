@@ -20,22 +20,22 @@ import {
 } from "../setup/rate-limit.js";
 import { deleteUserFixture } from "../setup/fixture-cleanup.js";
 
-// 012 EARS-3 (#1285) — the curated topic authoring vertical over the REAL
+// 012 EARS-3 (#1285) — the curated direction authoring vertical over the REAL
 // stack: Fastify + the 011 admin session + Postgres. It is the SAME §5.1
 // contract the project and expert verticals proved, so this suite asserts what
-// is genuinely topic-specific — the slug generated from the TITLE, and the
+// is genuinely direction-specific — the slug generated from the TITLE, and the
 // JSON-only request shape of an entity that has no media slot at all — plus the
 // reject branches whose zero-side-effect guarantee has to hold per entity,
 // rather than being assumed from a sibling's suite.
 //
 // The multipart plugin IS registered here, exactly as production registers it
 // for the entities that do carry a binary: that is the only way to prove a
-// multipart POST to `admin/topics` is refused by THIS controller with the
+// multipart POST to `admin/directions` is refused by THIS controller with the
 // documented 415, and not merely dropped by an unconfigured body parser.
 //
 // Skips when the stand is absent, exactly as the 007 admin suites do.
 describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
-  "012 EARS-3 curated topic authoring vertical (e2e)",
+  "012 EARS-3 curated direction authoring vertical (e2e)",
   () => {
     let app: NestFastifyApplication;
     let pool: pg.Pool;
@@ -47,7 +47,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     };
     const consent = [{ purpose: "tos", version: "2026-01" }];
     const createdEmails: string[] = [];
-    const createdTopicIds: string[] = [];
+    const createdDirectionIds: string[] = [];
     const usedKeys: string[] = [];
     let adminSid: string;
     let otherAdminSid: string;
@@ -105,7 +105,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       return res.cookies.find((c) => c.name === SESSION_COOKIE_NAME)!.value;
     }
 
-    /** A minimal multipart envelope — a topic has no file part to offer. */
+    /** A minimal multipart envelope — a direction has no file part to offer. */
     function multipartBody(fields: Record<string, string>): {
       body: Buffer;
       contentType: string;
@@ -135,7 +135,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     async function createJson({ payload, sid, idempotencyKey }: JsonPost) {
       return app.inject({
         method: "POST",
-        url: "/v1/admin/topics",
+        url: "/v1/admin/directions",
         headers: {
           ...device,
           ...adminHeaders(sid ?? adminSid),
@@ -157,10 +157,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       };
     }
 
-    /** Track a created topic for cleanup and return its body. */
+    /** Track a created direction for cleanup and return its body. */
     async function created(res: { payload: string }) {
       const body = JSON.parse(res.payload) as { id: string };
-      createdTopicIds.push(body.id);
+      createdDirectionIds.push(body.id);
       return body as { id: string; slug: string; version: number } & Record<
         string,
         unknown
@@ -192,8 +192,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     });
 
     afterEach(async () => {
-      for (const id of createdTopicIds.splice(0)) {
-        await pool.query("DELETE FROM topics WHERE id = $1", [id]);
+      for (const id of createdDirectionIds.splice(0)) {
+        await pool.query("DELETE FROM directions WHERE id = $1", [id]);
       }
       for (const k of usedKeys.splice(0)) {
         await pool.query("DELETE FROM idempotency_keys WHERE key = $1", [k]);
@@ -209,7 +209,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     // ── Accept branches ────────────────────────────────────────────────────
 
-    it("012 EARS-3: when a platform_admin creates a topic, the system shall persist one retained draft row with a slug generated from the title, version 1 and an ETag", async () => {
+    it("012 EARS-3: when a platform_admin creates a direction, the system shall persist one retained draft row with a slug generated from the title, version 1 and an ETag", async () => {
       const marker = randomUUID().slice(0, 8);
       const res = await createJson({
         payload: validPayload({ title: `Кардиология ${marker}` }),
@@ -223,16 +223,16 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         firstPublishedAt: null,
         slugEditable: true,
       });
-      // The slug is derived from the TITLE — a topic has no name and no
+      // The slug is derived from the TITLE — a direction has no name and no
       // description, so the heading is its whole identity source (§2.2).
       expect(body.slug).toMatch(/^kardiologiya-/);
       expect(res.headers.etag).toBe('W/"1"');
-      expect(res.headers.location).toBe(`/v1/admin/topics/${body.id}`);
+      expect(res.headers.location).toBe(`/v1/admin/directions/${body.id}`);
 
       // The SAME row is what the list and the detail render — no second copy.
       const detail = await app.inject({
         method: "GET",
-        url: `/v1/admin/topics/${body.id}`,
+        url: `/v1/admin/directions/${body.id}`,
         headers: { ...device, ...adminHeaders(adminSid) },
       });
       expect(detail.statusCode).toBe(200);
@@ -243,7 +243,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       });
       const list = await app.inject({
         method: "GET",
-        url: `/v1/admin/topics?q=${encodeURIComponent(marker)}`,
+        url: `/v1/admin/directions?q=${encodeURIComponent(marker)}`,
         headers: { ...device, ...adminHeaders(adminSid) },
       });
       const listBody = JSON.parse(list.payload) as {
@@ -255,11 +255,11 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(listBody.page).toBe(1);
     });
 
-    it("012 EARS-3: when a topic is edited with a matching If-Match, the system shall update the same row and bump its version", async () => {
+    it("012 EARS-3: when a direction is edited with a matching If-Match, the system shall update the same row and bump its version", async () => {
       const body = await created(await createJson({ payload: validPayload() }));
       const res = await app.inject({
         method: "PATCH",
-        url: `/v1/admin/topics/${body.id}`,
+        url: `/v1/admin/directions/${body.id}`,
         headers: {
           ...device,
           ...adminHeaders(adminSid),
@@ -279,7 +279,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       // A retitle does NOT re-point the public URL: the slug is identity, not a
       // rendering of the current heading.
       const { rows } = await pool.query<{ slug: string; count: string }>(
-        "SELECT slug, count(*) OVER () AS count FROM topics WHERE id = $1",
+        "SELECT slug, count(*) OVER () AS count FROM directions WHERE id = $1",
         [body.id],
       );
       expect(rows).toHaveLength(1);
@@ -296,7 +296,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       // LD-6: ordinary case-insensitive substring search over the title.
       const found = await app.inject({
         method: "GET",
-        url: `/v1/admin/topics?q=${encodeURIComponent(marker.toUpperCase())}`,
+        url: `/v1/admin/directions?q=${encodeURIComponent(marker.toUpperCase())}`,
         headers: { ...device, ...adminHeaders(adminSid) },
       });
       expect(
@@ -306,12 +306,12 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       ).toContain(body.id);
 
       await pool.query(
-        "UPDATE topics SET status = 'retired', deleted_at = now() WHERE id = $1",
+        "UPDATE directions SET status = 'retired', deleted_at = now() WHERE id = $1",
         [body.id],
       );
       const def = await app.inject({
         method: "GET",
-        url: `/v1/admin/topics?q=${marker}`,
+        url: `/v1/admin/directions?q=${marker}`,
         headers: { ...device, ...adminHeaders(adminSid) },
       });
       expect(
@@ -322,7 +322,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
       const withRetired = await app.inject({
         method: "GET",
-        url: `/v1/admin/topics?q=${marker}&includeRetired=true`,
+        url: `/v1/admin/directions?q=${marker}&includeRetired=true`,
         headers: { ...device, ...adminHeaders(adminSid) },
       });
       expect(
@@ -334,7 +334,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       // The detail route addresses a retired row directly (restore path input).
       const detail = await app.inject({
         method: "GET",
-        url: `/v1/admin/topics/${body.id}`,
+        url: `/v1/admin/directions/${body.id}`,
         headers: { ...device, ...adminHeaders(adminSid) },
       });
       expect(detail.statusCode).toBe(200);
@@ -344,10 +344,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     // ── Reject branches ───────────────────────────────────────────────────
 
     it("012 EARS-16: when the caller has no admin session, the system shall refuse with a Problem Details body and no row", async () => {
-      const before = await topicCount();
+      const before = await directionCount();
       const anon = await app.inject({
         method: "POST",
-        url: "/v1/admin/topics",
+        url: "/v1/admin/directions",
         headers: { ...device, "content-type": "application/json" },
         payload: validPayload(),
       });
@@ -357,7 +357,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const doctor = await doctorCookie();
       const wrongTier = await app.inject({
         method: "POST",
-        url: "/v1/admin/topics",
+        url: "/v1/admin/directions",
         headers: {
           ...device,
           "content-type": "application/json",
@@ -367,11 +367,11 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         payload: validPayload(),
       });
       expect(wrongTier.statusCode).toBe(401);
-      expect(await topicCount()).toBe(before);
+      expect(await directionCount()).toBe(before);
     });
 
     it("012 EARS-17: when the Idempotency-Key is missing or non-canonical, the system shall refuse before any row is written", async () => {
-      const before = await topicCount();
+      const before = await directionCount();
       const missing = await createJson({
         payload: validPayload(),
         idempotencyKey: "",
@@ -389,7 +389,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       });
       expect(upper.statusCode).toBe(400);
       expect(problem(upper).errorCode).toBe("IDEMPOTENCY_KEY_INVALID");
-      expect(await topicCount()).toBe(before);
+      expect(await directionCount()).toBe(before);
     });
 
     it("012 EARS-17: when the same key is retried with identical input, the system shall replay the stored response instead of creating a second row", async () => {
@@ -404,7 +404,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect((JSON.parse(replay.payload) as { id: string }).id).toBe(body.id);
       expect(replay.headers.etag).toBe('W/"1"');
       const { rows } = await pool.query(
-        "SELECT count(*) FROM topics WHERE slug = $1",
+        "SELECT count(*) FROM directions WHERE slug = $1",
         [body.slug],
       );
       expect(Number(rows[0]!.count)).toBe(1);
@@ -443,15 +443,15 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(problem(clash).errorCode).toBe("SLUG_CONFLICT");
     });
 
-    it("012 EARS-3: when the topic was first published, the system shall refuse a slug change with SLUG_IMMUTABLE and change nothing", async () => {
+    it("012 EARS-3: when the direction was first published, the system shall refuse a slug change with SLUG_IMMUTABLE and change nothing", async () => {
       const body = await created(await createJson({ payload: validPayload() }));
       await pool.query(
-        "UPDATE topics SET status = 'published', first_published_at = now() WHERE id = $1",
+        "UPDATE directions SET status = 'published', first_published_at = now() WHERE id = $1",
         [body.id],
       );
       const res = await app.inject({
         method: "PATCH",
-        url: `/v1/admin/topics/${body.id}`,
+        url: `/v1/admin/directions/${body.id}`,
         headers: {
           ...device,
           ...adminHeaders(adminSid),
@@ -464,14 +464,14 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(res.statusCode).toBe(409);
       expect(problem(res).errorCode).toBe("SLUG_IMMUTABLE");
       const { rows } = await pool.query<{ slug: string; version: number }>(
-        "SELECT slug, version FROM topics WHERE id = $1",
+        "SELECT slug, version FROM directions WHERE id = $1",
         [body.id],
       );
       expect(rows[0]).toMatchObject({ slug: body.slug, version: 1 });
       // The detail read tells the UI the field is locked.
       const detail = await app.inject({
         method: "GET",
-        url: `/v1/admin/topics/${body.id}`,
+        url: `/v1/admin/directions/${body.id}`,
         headers: { ...device, ...adminHeaders(adminSid) },
       });
       expect(JSON.parse(detail.payload)).toMatchObject({ slugEditable: false });
@@ -480,7 +480,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       // form, so refusing the echo would block every ordinary edit.
       const echo = await app.inject({
         method: "PATCH",
-        url: `/v1/admin/topics/${body.id}`,
+        url: `/v1/admin/directions/${body.id}`,
         headers: {
           ...device,
           ...adminHeaders(adminSid),
@@ -502,7 +502,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const body = await created(await createJson({ payload: validPayload() }));
       const absent = await app.inject({
         method: "PATCH",
-        url: `/v1/admin/topics/${body.id}`,
+        url: `/v1/admin/directions/${body.id}`,
         headers: {
           ...device,
           ...adminHeaders(adminSid),
@@ -516,7 +516,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
       const stale = await app.inject({
         method: "PATCH",
-        url: `/v1/admin/topics/${body.id}`,
+        url: `/v1/admin/directions/${body.id}`,
         headers: {
           ...device,
           ...adminHeaders(adminSid),
@@ -529,7 +529,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(stale.statusCode).toBe(412);
       expect(problem(stale).errorCode).toBe("PRECONDITION_FAILED");
       const { rows } = await pool.query<{ title: string; version: number }>(
-        "SELECT title, version FROM topics WHERE id = $1",
+        "SELECT title, version FROM directions WHERE id = $1",
         [body.id],
       );
       expect(rows[0]!.version).toBe(1);
@@ -537,12 +537,12 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     });
 
     it("012 EARS-16: when client JSON supplies a field this feature does not have, the system shall refuse with VALIDATION_FAILED", async () => {
-      const before = await topicCount();
-      // A topic has NO description and NO media. Silently ignoring either would
+      const before = await directionCount();
+      // A direction has NO description and NO media. Silently ignoring either would
       // let an operator believe the platform stored something it never will.
       for (const extra of [
         { description: "Подробное описание темы" },
-        { coverRef: "taxonomy/topics/covers/x.webp" },
+        { coverRef: "taxonomy/directions/covers/x.webp" },
         { mediaAction: "clear" },
       ]) {
         const res = await createJson({ payload: validPayload(extra) });
@@ -555,18 +555,18 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       });
       expect(tooLong.statusCode).toBe(400);
       expect(problem(tooLong).errorCode).toBe("VALIDATION_FAILED");
-      expect(await topicCount()).toBe(before);
+      expect(await directionCount()).toBe(before);
     });
 
     it("012 EARS-16: when the request is not application/json, the system shall refuse with 415 and write no row", async () => {
-      const before = await topicCount();
-      // Multipart is not "an upload in the wrong place" for a topic — it is a
+      const before = await directionCount();
+      // Multipart is not "an upload in the wrong place" for a direction — it is a
       // shape that could never be satisfied, because there is no file part name
       // to accept. The plugin IS registered, so this 415 is the controller's.
       const mp = multipartBody({ payload: JSON.stringify(validPayload()) });
       const multipartRes = await app.inject({
         method: "POST",
-        url: "/v1/admin/topics",
+        url: "/v1/admin/directions",
         headers: {
           ...device,
           ...adminHeaders(adminSid),
@@ -580,7 +580,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
       const textRes = await app.inject({
         method: "POST",
-        url: "/v1/admin/topics",
+        url: "/v1/admin/directions",
         headers: {
           ...device,
           ...adminHeaders(adminSid),
@@ -590,13 +590,13 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         payload: JSON.stringify(validPayload()),
       });
       expect(textRes.statusCode).toBe(415);
-      expect(await topicCount()).toBe(before);
+      expect(await directionCount()).toBe(before);
     });
 
-    it("012 EARS-3: when an unknown topic id is addressed, the system shall answer 404 RESOURCE_NOT_FOUND without disclosing anything", async () => {
+    it("012 EARS-3: when an unknown direction id is addressed, the system shall answer 404 RESOURCE_NOT_FOUND without disclosing anything", async () => {
       const res = await app.inject({
         method: "GET",
-        url: `/v1/admin/topics/${randomUUID()}`,
+        url: `/v1/admin/directions/${randomUUID()}`,
         headers: { ...device, ...adminHeaders(adminSid) },
       });
       expect(res.statusCode).toBe(404);
@@ -604,13 +604,13 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       // A slug is not an admin address — the admin surface is id-only.
       const bySlug = await app.inject({
         method: "GET",
-        url: "/v1/admin/topics/kardiologiya",
+        url: "/v1/admin/directions/kardiologiya",
         headers: { ...device, ...adminHeaders(adminSid) },
       });
       expect(bySlug.statusCode).toBe(404);
     });
 
-    it("012 EARS-3: when a topic mutation commits, feature 010 shall hold an attributed audit row of ordinary columns", async () => {
+    it("012 EARS-3: when a direction mutation commits, feature 010 shall hold an attributed audit row of ordinary columns", async () => {
       const body = await created(await createJson({ payload: validPayload() }));
       const { rows } = await pool.query<{
         event_type: string;
@@ -620,7 +620,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
           WHERE metadata->'pk'->>'id' = $1`,
         [body.id],
       );
-      expect(rows.map((r) => r.event_type)).toContain("data.topics.insert");
+      expect(rows.map((r) => r.event_type)).toContain("data.directions.insert");
       expect(rows[0]!.subject_id).not.toBeNull();
     });
 
@@ -638,8 +638,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       };
     }
 
-    async function topicCount(): Promise<number> {
-      const { rows } = await pool.query("SELECT count(*) FROM topics");
+    async function directionCount(): Promise<number> {
+      const { rows } = await pool.query("SELECT count(*) FROM directions");
       return Number(rows[0]!.count);
     }
   },

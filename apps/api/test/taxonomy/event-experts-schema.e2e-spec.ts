@@ -4,7 +4,7 @@ import pg from "pg";
 
 // 012 EARS-7 (#1289) — the DB half of the explicit expert↔legacy-speaker match
 // (012-design §2, §2.3, §4 LD-2, §6). Talks to Postgres directly via pg.Pool
-// (no Nest boot), the same pattern as `topics-schema.e2e-spec.ts`.
+// (no Nest boot), the same pattern as `directions-schema.e2e-spec.ts`.
 //
 // Every assertion here is about a constraint the DATABASE enforces, not one the
 // service happens to check. That distinction matters more for this table than

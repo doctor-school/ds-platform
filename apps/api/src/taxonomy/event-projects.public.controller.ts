@@ -70,7 +70,7 @@ function parseCursorQuery(raw: Record<string, string>) {
 @UseFilters(TaxonomyProblemFilter)
 export class EventProjectsPublicController {
   // Explicit @Inject token — the root-level authz gate boots this graph under
-  // `tsx`, which emits no `design:paramtypes` (see `topics.service.ts`).
+  // `tsx`, which emits no `design:paramtypes` (see `directions.service.ts`).
   constructor(
     @Inject(EventProjectsService)
     private readonly relations: EventProjectsService,

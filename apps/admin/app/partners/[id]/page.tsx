@@ -22,7 +22,7 @@ import type { UpdatePartnerVars } from "@/providers/data-provider";
 
 /**
  * Partner detail / edit (012 EARS-4) in the Stage-A composition-B tabbed layout
- * (#1282, owner pick 2026-08-17) — the same shell the expert and topic details
+ * (#1282, owner pick 2026-08-17) — the same shell the expert and direction details
  * mount. Only «Основное» ships in this slice; «Публикация» (#1287/#1295/#1296)
  * brings the retire/restore controls with its own routes, and an empty
  * placeholder tab is deliberately NOT rendered for it.

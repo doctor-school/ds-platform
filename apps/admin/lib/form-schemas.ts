@@ -6,7 +6,7 @@ import {
   CreateExpertRequestSchema,
   CreatePartnerRequestSchema,
   CreateProjectRequestSchema,
-  CreateTopicRequestSchema,
+  CreateDirectionRequestSchema,
   DurationSecSchema,
   EmbedRefSchema,
   EVENT_EXPERT_POSITION_MAX,
@@ -230,22 +230,22 @@ export interface ExpertFormFields {
 }
 
 /**
- * The 012 topic create/edit form (#1285, EARS-3) — the thinnest of the four
- * taxonomy forms, and deliberately so: a curated topic IS a title plus the
+ * The 012 direction create/edit form (#1285, EARS-3) — the thinnest of the four
+ * taxonomy forms, and deliberately so: a curated direction IS a title plus the
  * permanent address it will be reachable at (012-requirements EARS-3; §2.2
  * matrix). There is no description, no media and no second descriptive column,
  * so the form has exactly two boxes and adding a third would be inventing an
- * entity shape the API refuses (`CreateTopicRequestSchema` is `.strict()`).
+ * entity shape the API refuses (`CreateDirectionRequestSchema` is `.strict()`).
  *
  * `title` reuses the SSOT create-schema validator verbatim (trim + 1…120), and
  * `slug` follows the same "empty box ⇒ the server generates it" rule the project
  * and expert forms established — emptiness is legal, only a non-empty value is
  * checked against the SSOT slug grammar.
  */
-const topicCreate = CreateTopicRequestSchema.shape;
+const directionCreate = CreateDirectionRequestSchema.shape;
 
-export const TopicFormSchema = z.object({
-  title: topicCreate.title,
+export const DirectionFormSchema = z.object({
+  title: directionCreate.title,
   slug: z.string().superRefine((value, ctx) => {
     if (value.trim().length === 0) return; // empty ⇒ server generates it
     const result = SlugSchema.safeParse(value.trim());
@@ -263,7 +263,7 @@ export const TopicFormSchema = z.object({
   }),
 });
 
-export interface TopicFormFields {
+export interface DirectionFormFields {
   title: string;
   slug: string;
 }

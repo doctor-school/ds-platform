@@ -122,6 +122,24 @@ describe("<DataTable>", () => {
     expect(row?.className).toContain("hover:bg-tint");
   });
 
+  /**
+   * Owner, 2026-08-27: «Заголовок в таблице не нужно подчёркивать при наведении —
+   * покраски строки и поинтера достаточно, иначе только лишний визуальный шум
+   * появляется». The row tint + `cursor-pointer` ARE the affordance, so the record
+   * title deviates from the Link hover-underline contract — scoped to table rows.
+   */
+  it("never underlines the record title on hover (owner rule, #1578)", () => {
+    renderTable({ rowHref: (row) => `/directions/${row.id}` });
+    for (const link of screen.getAllByRole("link")) {
+      expect(link.className).not.toContain("underline");
+    }
+    cleanup();
+    renderTable({ onRowClick: vi.fn() });
+    for (const button of screen.getAllByRole("button")) {
+      expect(button.className).not.toContain("underline");
+    }
+  });
+
   it("calls onRowClick through the row's own control", async () => {
     const onRowClick = vi.fn();
     renderTable({ onRowClick });

@@ -165,6 +165,11 @@ export function DataTable<Row>({
     // the keyboard focus ring are native) with a stretched transparent overlay
     // rendered as its own CHILD — a click anywhere on the row lands on the control.
     // Plain utilities only, no arbitrary values (§5 guard).
+    // NO hover underline on the title — owner, 2026-08-27: «Заголовок в таблице не
+    // нужно подчёркивать при наведении, покраски строки и поинтера достаточно, иначе
+    // только лишний визуальный шум появляется». The row tint + `cursor-pointer` are
+    // the affordance; this is a row-scoped deviation from the Link hover contract
+    // (constitution → Data table / admin list).
     const overlay = (
       <span aria-hidden="true" className="absolute inset-0" />
     );
@@ -173,7 +178,7 @@ export function DataTable<Row>({
         <a
           href={rowHref(row)}
           aria-label={label}
-          className="font-bold text-foreground hover:underline focus-visible:outline-none"
+          className="font-bold text-foreground focus-visible:outline-none"
         >
           {record.title(row)}
           {overlay}
@@ -186,7 +191,7 @@ export function DataTable<Row>({
           type="button"
           aria-label={label}
           onClick={() => onRowClick(row)}
-          className="text-left font-bold text-foreground hover:underline focus-visible:outline-none"
+          className="text-left font-bold text-foreground focus-visible:outline-none"
         >
           {record.title(row)}
           {overlay}

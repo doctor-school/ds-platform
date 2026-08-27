@@ -820,7 +820,15 @@ function MonthPickerSection() {
         a11y-scanned) in place.
       </p>
       <SubRow label="Preview">
-        <div className="rounded-lg border border-border bg-muted p-8 pb-64">
+        {/*
+          The popover is `position: absolute`, so it adds NO height to the canvas: the
+          zone has to RESERVE the room. `pb-64` reserved 256px against a ~380px popover
+          (header + 4 rows of month cells + padding + the 12px offset), so it painted over
+          the next section. `pb-112` (448px) clears it, and `overflow-hidden` frames the
+          zone so nothing can bleed outside it if the popover ever grows again.
+          Catalogue-level only — the block itself is unchanged.
+        */}
+        <div className="overflow-hidden rounded-lg border border-border bg-muted p-8 pb-112">
           <MonthPicker
             triggerLabel="Июль 2026"
             pickerLabel="Выбрать месяц"

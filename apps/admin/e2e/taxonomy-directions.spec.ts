@@ -179,4 +179,98 @@ test.describe("012 EARS-3 / 017 EARS-16…18 — curated direction authoring in 
       ),
     ).toHaveCount(2);
   });
+
+  /**
+   * 012 EARS-13/14 + 017 EARS-17 — the lifecycle arc, and the reason the
+   * «Показывать снятые с публикации» switch exists at all.
+   *
+   * The switch was previously a control with nothing to show: a direction had no
+   * way to leave circulation, so the default predicate excluded nothing and the
+   * toggle could not change the result set. This flow proves the whole loop end
+   * to end in the browser — publish, withdraw through the impact confirmation,
+   * watch the row LEAVE the default list and come back with the switch ON, then
+   * bring the same record back into hand as a draft.
+   *
+   * The row identity is asserted at every step: the URL never moves. A restore is
+   * an UPDATE of the retained row, so the id an audit trail cites and the slug a
+   * doctor bookmarked keep pointing at this direction.
+   */
+  test("EARS-17: an operator publishes, withdraws and restores the same direction, and the retired-rows switch decides whether it is listed", async ({
+    page,
+  }) => {
+    await signInAsAdmin(page);
+
+    // ── A production-representative record (EARS-20: real Russian nouns) ────
+    const suffix = Date.now();
+    const title = `Ревматология ${suffix}`;
+    await page.goto("/directions/create");
+    await page.getByTestId("direction-title").fill(title);
+    await page.getByTestId("submit-direction").click();
+    await page.waitForURL(/\/directions\/[0-9a-f-]{36}$/, { timeout: 20_000 });
+    const detailUrl = page.url();
+    await expect(page.getByTestId("direction-status")).toHaveText("Черновик");
+
+    // ── Publish: a plain command, because it withdraws nothing ─────────────
+    await expect(page.getByTestId("direction-publish")).toBeVisible();
+    await page.getByTestId("direction-publish").click();
+    await expect(page.getByTestId("transition-notice")).toBeVisible();
+    await expect(page.getByTestId("direction-status")).toHaveText("Опубликовано");
+    // A published direction has one move left, and the offered button says so.
+    await expect(page.getByTestId("direction-publish")).toHaveCount(0);
+
+    // ── Withdraw: the §3.1 gate — see the consequences, then confirm them ───
+    await page.getByTestId("direction-retire").click();
+    await expect(page.getByTestId("direction-retire-dialog")).toBeVisible();
+    // The wording is «снять с публикации» everywhere; the platform has no delete.
+    await expect(
+      page.getByTestId("direction-retire-dialog").getByText(/удал/i),
+    ).toHaveCount(0);
+    // The confirm button waits for the preview: without the token the call could
+    // only come back 428, which is a button that lies.
+    await expect(page.getByTestId("direction-retire-submit")).toBeEnabled({
+      timeout: 20_000,
+    });
+    await page.getByTestId("direction-retire-submit").click();
+    await expect(page.getByTestId("direction-retire-dialog")).toHaveCount(0);
+    await expect(page.getByTestId("direction-status")).toHaveText(
+      "Снято с публикации",
+    );
+    expect(page.url()).toBe(detailUrl);
+
+    // ── The switch round-trip: the retired row is hidden, then shown ────────
+    await page.getByTestId("back-to-list").click();
+    await page.waitForURL(/\/directions$/, { timeout: 20_000 });
+    await page.getByRole("searchbox", { name: "Поиск" }).fill(title);
+    // OFF by default (Stage-A answer 4) ⇒ the withdrawn row is not listed.
+    await expect(page.getByTestId("directions-include-retired")).not.toBeChecked();
+    await expect(
+      visible(page.getByTestId("directions-table").getByText(title, { exact: true })),
+    ).toHaveCount(0);
+
+    await page.getByTestId("directions-include-retired").click();
+    await expect(page.getByTestId("directions-include-retired")).toBeChecked();
+    await expect(
+      visible(page.getByTestId("directions-table").getByText(title, { exact: true })),
+    ).toHaveCount(1);
+
+    // ── Restore: the SAME record comes back, as a draft ────────────────────
+    await visible(
+      page.getByTestId("directions-table").getByText(title, { exact: true }),
+    ).click();
+    await page.waitForURL(/\/directions\/[0-9a-f-]{36}$/, { timeout: 20_000 });
+    expect(page.url()).toBe(detailUrl);
+
+    await page.getByTestId("direction-restore").click();
+    await expect(page.getByTestId("direction-restore-dialog")).toBeVisible();
+    await expect(page.getByTestId("direction-restore-submit")).toBeEnabled({
+      timeout: 20_000,
+    });
+    await page.getByTestId("direction-restore-submit").click();
+    await expect(page.getByTestId("direction-restore-dialog")).toHaveCount(0);
+    // §102 — coming back into circulation is a deliberate second act, so the
+    // restored row is a DRAFT and the publish button is on offer again.
+    await expect(page.getByTestId("direction-status")).toHaveText("Черновик");
+    await expect(page.getByTestId("direction-publish")).toBeVisible();
+    expect(page.url()).toBe(detailUrl);
+  });
 });

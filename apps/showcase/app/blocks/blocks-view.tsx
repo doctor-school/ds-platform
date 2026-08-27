@@ -930,8 +930,14 @@ const DIRECTION_COLUMNS: DataTableColumn<DirectionRow>[] = [
     key: "status",
     header: "Статус",
     width: "14%",
+    // The row's `hover:bg-tint` is the same fill as the badge's `label` variant,
+    // so on a hovered row an unbordered chip dissolves into the row. The 2px
+    // structural `border-border` outline (the DS table/panel border) keeps the
+    // chip readable as a chip on both rest and tinted rows.
     render: (row) => (
-      <Badge>{row.status === "published" ? "Опубликовано" : "Черновик"}</Badge>
+      <Badge className="border-2 border-border">
+        {row.status === "published" ? "Опубликовано" : "Черновик"}
+      </Badge>
     ),
   },
 ];

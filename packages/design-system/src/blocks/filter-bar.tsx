@@ -69,6 +69,13 @@ export interface FilterBarProps {
   applied?: AppliedFilter[];
   /** Copy for the applied row («Выбрано:»). */
   appliedLabel?: string;
+  /**
+   * Verb-first prefix for each chip's accessible name («Убрать фильтр» →
+   * "Убрать фильтр: Черновики"). Without it assistive tech announces the bare
+   * value and nothing says the control REMOVES it (the visible ✕ sits inside the
+   * same text node, and `role="button"` name-from-content flattens it away).
+   */
+  removeFilterLabel?: string;
   /** Clear every filter in one action. */
   onResetAll?: () => void;
   /** Copy for the clear-all control («Сбросить всё»). */
@@ -93,6 +100,7 @@ export function FilterBar({
   children,
   applied = [],
   appliedLabel,
+  removeFilterLabel,
   onResetAll,
   resetLabel,
   resultCount,
@@ -105,12 +113,23 @@ export function FilterBar({
   const searchId = React.useId();
   const [draft, setDraft] = React.useState(search?.value ?? "");
   const timer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The last value THIS bar handed to the app. An arriving committed value equal
+  // to it is our own echo, not an external change.
+  const lastCommitted = React.useRef(search?.value ?? "");
+  // A debounce window is open: the field, not the list, owns the newest keystrokes.
+  const [isPending, setIsPending] = React.useState(false);
 
-  // The bar follows the app's committed value when it changes from outside
-  // (reset-all, a URL restore) without fighting the operator mid-typing.
+  // The bar follows the app's committed value when it changes from OUTSIDE
+  // (reset-all, a URL restore, a server-corrected query) — never on the echo of
+  // its own commit. An unconditional resync deletes in-flight typing: the commit
+  // fires 400ms after a pause, and the parent's round trip lands while the
+  // operator is already typing the next word, overwriting it under the cursor.
   const committed = search?.value ?? "";
   React.useEffect(() => {
+    if (committed === lastCommitted.current) return;
+    lastCommitted.current = committed;
     setDraft(committed);
+    setIsPending(false);
   }, [committed]);
 
   React.useEffect(
@@ -124,12 +143,20 @@ export function FilterBar({
     setDraft(value);
     if (applyMode !== "instant" || !search) return;
     // Instant model: the field is its own trigger, but the list must never
-    // re-query per keystroke — one commit after the inactivity window.
+    // re-query per keystroke — one commit after the inactivity window. The bar
+    // owns the cue for that window itself, so the promise the block makes ("a
+    // busy cue in the field") holds for EVERY consumer instead of depending on a
+    // caller remembering to drive `isBusy`.
     if (timer.current) clearTimeout(timer.current);
+    setIsPending(true);
     timer.current = setTimeout(() => {
+      lastCommitted.current = value;
+      setIsPending(false);
       search.onCommit(value);
     }, search.debounceMs ?? 400);
   };
+
+  const showBusy = isBusy || isPending;
 
   const isFiltered = applied.length > 0 || draft.length > 0;
 
@@ -157,10 +184,10 @@ export function FilterBar({
                 type="search"
                 value={draft}
                 placeholder={search.placeholder}
-                aria-busy={isBusy || undefined}
+                aria-busy={showBusy || undefined}
                 onChange={(event) => onSearchChange(event.target.value)}
               />
-              {isBusy ? (
+              {showBusy ? (
                 <span
                   role="status"
                   className="absolute right-3.5 top-1/2 -translate-y-1/2 text-caption text-muted-foreground"
@@ -189,6 +216,8 @@ export function FilterBar({
             variant="ghost"
             onClick={() => {
               if (timer.current) clearTimeout(timer.current);
+              setIsPending(false);
+              lastCommitted.current = "";
               setDraft("");
               onResetAll();
             }}
@@ -210,7 +239,11 @@ export function FilterBar({
               key={item.id}
               selected
               onClick={item.onRemove}
-              aria-label={item.label}
+              aria-label={
+                removeFilterLabel
+                  ? `${removeFilterLabel}: ${item.label}`
+                  : item.label
+              }
             >
               {item.label} ✕
             </FilterChip>

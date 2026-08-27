@@ -82,6 +82,80 @@ describe("<FilterBar>", () => {
       expect(onCommit).toHaveBeenCalledTimes(1);
       expect(onCommit).toHaveBeenCalledWith("карди");
     });
+
+    it("carries the busy cue for its OWN debounce window — the promise does not depend on the caller driving isBusy", () => {
+      renderBar({
+        busyLabel: "Идёт поиск",
+        search: {
+          value: "",
+          onCommit: vi.fn(),
+          label: "Поиск по названию",
+          debounceMs: 400,
+        },
+      });
+      const field = screen.getByLabelText("Поиск по названию");
+      expect(field).not.toHaveAttribute("aria-busy");
+
+      fireEvent.change(field, { target: { value: "карди" } });
+      expect(field).toHaveAttribute("aria-busy", "true");
+      expect(screen.getByText("Идёт поиск")).toBeInTheDocument();
+
+      act(() => {
+        vi.advanceTimersByTime(400);
+      });
+      expect(field).not.toHaveAttribute("aria-busy");
+    });
+
+    it("NEVER overwrites in-flight typing when the parent's committed value lands late", () => {
+      // The data-loss race: the commit fires 400ms after a pause, the parent's
+      // state/URL round trip re-renders the bar with that value, and by then the
+      // operator is already typing the next word. An unconditional resync from
+      // `search.value` deletes those characters under the cursor.
+      const onCommit = vi.fn();
+      const { rerender } = renderBar({
+        search: { value: "", onCommit, label: "Поиск по названию", debounceMs: 400 },
+      });
+      const field = screen.getByLabelText("Поиск по названию");
+
+      fireEvent.change(field, { target: { value: "карди" } });
+      act(() => {
+        vi.advanceTimersByTime(400);
+      });
+      expect(onCommit).toHaveBeenCalledWith("карди");
+
+      // The operator keeps typing while the parent is still round-tripping.
+      fireEvent.change(field, { target: { value: "кардиоло" } });
+
+      // …and the commit echo arrives.
+      rerender(
+        <FilterBar
+          applyMode="instant"
+          label="Фильтры списка"
+          resetLabel="Сбросить всё"
+          search={{ value: "карди", onCommit, label: "Поиск по названию", debounceMs: 400 }}
+        />,
+      );
+      expect(field).toHaveValue("кардиоло");
+    });
+
+    it("still follows an EXTERNAL value change (reset-all, a restored URL)", () => {
+      const onCommit = vi.fn();
+      const { rerender } = renderBar({
+        search: { value: "", onCommit, label: "Поиск по названию" },
+      });
+      const field = screen.getByLabelText("Поиск по названию");
+      fireEvent.change(field, { target: { value: "черновик" } });
+
+      rerender(
+        <FilterBar
+          applyMode="instant"
+          label="Фильтры списка"
+          resetLabel="Сбросить всё"
+          search={{ value: "кардио", onCommit, label: "Поиск по названию" }}
+        />,
+      );
+      expect(field).toHaveValue("кардио");
+    });
   });
 
   describe('applyMode="batch"', () => {
@@ -140,6 +214,18 @@ describe("<FilterBar>", () => {
     await userEvent.click(chip);
     expect(onRemove).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("button", { name: "Показывать снятые" })).toBeInTheDocument();
+  });
+
+  it("names each chip VERB-FIRST so the control says it removes the filter", () => {
+    renderBar({
+      removeFilterLabel: "Убрать фильтр",
+      applied: [{ id: "status", label: "Черновики", onRemove: vi.fn() }],
+    });
+    // The visible ✕ lives inside the chip's own text node, so name-from-content
+    // announces the bare value — the operator hears WHAT, never WHAT HAPPENS.
+    expect(
+      screen.getByRole("button", { name: "Убрать фильтр: Черновики" }),
+    ).toBeInTheDocument();
   });
 
   it("announces the result count in a live region", () => {

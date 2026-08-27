@@ -33,15 +33,30 @@ export interface AdminListColumn {
   align?: "left" | "right";
 }
 
-export interface AdminListQueryState {
+/**
+ * The shell is generic over its STATUS VOCABULARY because the admin now lists two
+ * different lifecycles through it: the three-state taxonomy lifecycle
+ * (`draft`/`published`/`retired`) the 012 entities carry, and the two-state
+ * relationship lifecycle (`active`/`retired`) the #1483 direction relations carry.
+ * The alternative — a second shell for the two-state case — is precisely the drift
+ * the header comment above rules out, and a shell hardcoded to the taxonomy triple
+ * would offer a `draft` filter that a relation row can never be in.
+ */
+export interface AdminListQueryState<Status extends string = TaxonomyStatus> {
   q: string;
-  status: TaxonomyStatus | "";
+  status: Status | "";
   includeRetired: boolean;
   page: number;
   pageSize: number;
 }
 
-export const ADMIN_LIST_INITIAL_QUERY: AdminListQueryState = {
+/**
+ * Typed at `never` so the shared initial state is assignable to ANY status
+ * vocabulary: `never | ""` is `""`, which every `Status | ""` accepts. One
+ * constant therefore seeds a taxonomy list and a relation list alike, instead of
+ * each caller re-typing the same five defaults.
+ */
+export const ADMIN_LIST_INITIAL_QUERY: AdminListQueryState<never> = {
   q: "",
   status: "",
   includeRetired: false,
@@ -49,12 +64,15 @@ export const ADMIN_LIST_INITIAL_QUERY: AdminListQueryState = {
   pageSize: ADMIN_LIST_PAGE_SIZE_DEFAULT,
 };
 
-export function AdminListShell<Row>({
+export function AdminListShell<Row, Status extends string = TaxonomyStatus>({
   title,
   description,
   createHref,
   createLabel,
   statusLabels,
+  statuses,
+  searchable = true,
+  extraFilters,
   columns,
   rows,
   total,
@@ -71,14 +89,25 @@ export function AdminListShell<Row>({
   createHref: string;
   createLabel: string;
   /** RU label per lifecycle state — the shell renders no domain vocabulary itself. */
-  statusLabels: Record<TaxonomyStatus, string>;
+  statusLabels: Record<Status, string>;
+  /** The lifecycle this resource actually has; defaults to the 012 taxonomy triple. */
+  statuses?: readonly Status[];
+  /**
+   * Whether the resource's list route accepts free-text `q`. The direction
+   * relations do not (their list queries are `.strict()` and scope by endpoint id
+   * instead), and rendering a search box the API would reject is the same broken
+   * promise a placeholder field for an unsupported column would be.
+   */
+  searchable?: boolean;
+  /** Resource-specific filter controls rendered alongside the shared ones. */
+  extraFilters?: ReactNode;
   columns: AdminListColumn[];
   rows: Row[];
   total: number;
   isLoading: boolean;
   error?: string | null;
-  query: AdminListQueryState;
-  onQueryChange: (next: AdminListQueryState) => void;
+  query: AdminListQueryState<Status>;
+  onQueryChange: (next: AdminListQueryState<Status>) => void;
   renderRow: (row: Row) => ReactNode;
   emptyLabel: string;
   testId: string;

@@ -7,6 +7,11 @@ import {
   CreatePartnerRequestSchema,
   CreateProjectRequestSchema,
   CreateDirectionRequestSchema,
+  CreateDirectionSpecialtyRequestSchema,
+  DIRECTION_ADJACENCY_KIND_MAX,
+  DIRECTION_ADJACENCY_KIND_REGEX,
+  DIRECTION_ADJACENCY_WEIGHT_MAX,
+  DIRECTION_ADJACENCY_WEIGHT_MIN,
   DurationSecSchema,
   EmbedRefSchema,
   EVENT_EXPERT_POSITION_MAX,
@@ -464,4 +469,102 @@ export interface EventExpertFormFields {
   expertId: string;
   role: string;
   positionText: string;
+}
+
+/**
+ * #1483 — the direction↔specialty link form (ADR-0016 §5). The link carries no
+ * attribute of its own: it IS the pair of endpoints, so the form has exactly two
+ * boxes and there is no edit counterpart anywhere in the admin (the API exposes no
+ * PATCH — re-pointing a link is retiring one and authoring another).
+ *
+ * Both ids reuse the SSOT create-schema validators verbatim rather than a re-typed
+ * `z.uuid()`, so «what counts as a direction id» keeps one answer on both sides of
+ * the wire.
+ */
+const directionSpecialtyCreate = CreateDirectionSpecialtyRequestSchema.shape;
+
+export const DirectionSpecialtyFormSchema = z.object({
+  directionId: directionSpecialtyCreate.directionId,
+  specialtyMinzdravId: directionSpecialtyCreate.specialtyMinzdravId,
+});
+
+export interface DirectionSpecialtyFormFields {
+  directionId: string;
+  specialtyMinzdravId: string;
+}
+
+/**
+ * #1483 — the direction adjacency form (ADR-0016 §5; 017-design §5). Unlike the
+ * specialty link, an adjacency edge DOES carry attributes (`kind`, `weight`), so
+ * this form serves both create and edit — with one deliberate asymmetry the API
+ * mirrors: the two ENDPOINTS are the edge's identity and are therefore not
+ * patchable, so the edit renders them read-only rather than validating a move the
+ * server would refuse.
+ *
+ * `weight` is a TEXT box for the same reason `positionText` above is: an operator
+ * types into a box, `<input type="number">` yields `""` for «12abc», and folding
+ * the SSOT bound over the typed text is what lets «», «abc» and «0» all resolve to
+ * one actionable sentence while an over-cap value keeps its own.
+ *
+ * The self-edge rule is NOT re-implemented here — it is asserted by the SSOT
+ * `CreateDirectionAdjacencyRequestSchema` refinement, folded in below, so the
+ * browser and the API refuse the same thing for the same reason.
+ */
+export const DirectionAdjacencyFormSchema = z
+  .object({
+    directionId: z.uuid(),
+    adjacentDirectionId: z.uuid(),
+    kind: z
+      .string()
+      .trim()
+      .max(DIRECTION_ADJACENCY_KIND_MAX)
+      .regex(DIRECTION_ADJACENCY_KIND_REGEX),
+    weightText: z.string(),
+  })
+  .superRefine((values, ctx) => {
+    if (
+      values.directionId &&
+      values.directionId === values.adjacentDirectionId
+    ) {
+      ctx.addIssue({ code: "custom", path: ["adjacentDirectionId"] });
+    }
+
+    const text = values.weightText.trim();
+    // Parsed by hand rather than with `Number()`: `Number(" ")` is 0 and
+    // `Number("1e2")` is 100, so a blank box and an exponent would both slip past
+    // as a weight the operator never typed.
+    const parsed = DirectionAdjacencyWeightBoundSchema.safeParse(
+      /^\d+$/.test(text) ? Number(text) : Number.NaN,
+    );
+    if (parsed.success) return;
+    ctx.addIssue(
+      parsed.error.issues.some((issue) => issue.code === "too_big")
+        ? {
+            code: "too_big",
+            origin: "number",
+            maximum: DIRECTION_ADJACENCY_WEIGHT_MAX,
+            inclusive: true,
+            path: ["weightText"],
+          }
+        : { code: "custom", path: ["weightText"] },
+    );
+  });
+
+/**
+ * The weight bound, rebuilt from the SSOT CONSTANTS rather than reached out of
+ * `CreateDirectionAdjacencyRequestSchema.shape`: that schema carries a `.refine()`
+ * at the object level, and a refined object's `.shape` is not reachable through
+ * the ZodEffects wrapper. Using the exported bounds keeps the single source intact.
+ */
+const DirectionAdjacencyWeightBoundSchema = z
+  .number()
+  .int()
+  .min(DIRECTION_ADJACENCY_WEIGHT_MIN)
+  .max(DIRECTION_ADJACENCY_WEIGHT_MAX);
+
+export interface DirectionAdjacencyFormFields {
+  directionId: string;
+  adjacentDirectionId: string;
+  kind: string;
+  weightText: string;
 }

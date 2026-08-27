@@ -302,6 +302,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         method: "POST",
         url: `/v1/admin/direction-specialties/${first.id}/retire`,
         headers: { ...adminWrite(), "if-match": 'W/"1"' },
+        payload: {},
       });
       expect(retire.statusCode).toBe(200);
 
@@ -320,6 +321,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         method: "POST",
         url: `/v1/admin/direction-specialties/${created.id}/retire`,
         headers: { ...adminWrite(), "if-match": 'W/"1"' },
+        payload: {},
       });
       expect(retire.statusCode).toBe(200);
       expect(retire.json()).toMatchObject({
@@ -347,6 +349,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         method: "POST",
         url: `/v1/admin/direction-specialties/${created.id}/restore`,
         headers: { ...adminWrite(), "if-match": 'W/"2"' },
+        payload: {},
       });
       expect(restore.statusCode).toBe(200);
       expect(restore.json()).toMatchObject({
@@ -371,6 +374,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         method: "POST",
         url: `/v1/admin/direction-specialties/${created.id}/retire`,
         headers: adminWrite(),
+        payload: {},
       });
       expect(noIfMatch.statusCode).toBe(428);
 
@@ -378,6 +382,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         method: "POST",
         url: `/v1/admin/direction-specialties/${created.id}/retire`,
         headers: { ...adminWrite(), "if-match": 'W/"7"' },
+        payload: {},
       });
       expect(staleIfMatch.statusCode).toBe(412);
 
@@ -545,6 +550,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         method: "POST",
         url: `/v1/admin/direction-adjacency/${created.id}/retire`,
         headers: { ...adminWrite(), "if-match": 'W/"2"' },
+        payload: {},
       });
       expect(retire.statusCode).toBe(200);
       const editRetired = await app.inject({
@@ -595,6 +601,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         method: "POST",
         url: `/v1/admin/direction-adjacency/${withdrawn.id}/retire`,
         headers: { ...adminWrite(), "if-match": 'W/"1"' },
+        payload: {},
       });
       expect(retire.statusCode).toBe(200);
 

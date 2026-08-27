@@ -7,7 +7,11 @@ import {
 import { Test, type TestingModule } from "@nestjs/testing";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import type pg from "pg";
-import { buildSpecialtyBookSeed } from "@ds/db";
+import {
+  buildSpecialtyBookSeed,
+  DIRECTION_ADJACENCY_WEIGHT_DEFAULT,
+} from "@ds/db";
+import { DIRECTION_ADJACENCY_KINDS } from "@ds/schemas";
 import { AppModule } from "../../src/app.module.js";
 import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
 import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
@@ -430,14 +434,14 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const forward = await edged({
         directionId: a.id,
         adjacentDirectionId: b.id,
-        kind: "sibling",
+        kind: "related",
         weight: 60,
       });
 
       const duplicate = await edge({
         directionId: a.id,
         adjacentDirectionId: b.id,
-        kind: "sibling",
+        kind: "related",
         weight: 10,
       });
       expect(duplicate.statusCode).toBe(409);
@@ -448,7 +452,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const reverse = await edged({
         directionId: b.id,
         adjacentDirectionId: a.id,
-        kind: "broader",
+        kind: "subdiscipline",
         weight: 20,
       });
       expect(reverse.id).not.toBe(forward.id);
@@ -472,14 +476,14 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       ).toEqual([reverse.id]);
     });
 
-    it("EARS-8.7: refuses a self-edge, an out-of-range weight and a kind that is not the authored grammar", async () => {
+    it("EARS-8.7: refuses a self-edge, an out-of-range weight and a kind outside the closed vocabulary", async () => {
       const a = await makeDirection("Гематология");
       const b = await makeDirection("Иммунология");
 
       const selfEdge = await edge({
         directionId: a.id,
         adjacentDirectionId: a.id,
-        kind: "sibling",
+        kind: "related",
         weight: 10,
       });
       expect(selfEdge.statusCode).toBe(400);
@@ -488,12 +492,21 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         const res = await edge({
           directionId: a.id,
           adjacentDirectionId: b.id,
-          kind: "sibling",
+          kind: "related",
           weight,
         });
         expect(res.statusCode).toBe(400);
       }
-      for (const kind of ["Sibling", "родственное", "two words", ""]) {
+      // `sibling` / `broader` were the free-text labels this surface used to
+      // accept; under the closed vocabulary they are as invalid as a typo.
+      for (const kind of [
+        "Related",
+        "sibling",
+        "broader",
+        "смежное",
+        "two words",
+        "",
+      ]) {
         const res = await edge({
           directionId: a.id,
           adjacentDirectionId: b.id,
@@ -517,7 +530,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const created = await edged({
         directionId: a.id,
         adjacentDirectionId: b.id,
-        kind: "sibling",
+        kind: "related",
         weight: 30,
       });
 
@@ -525,12 +538,12 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         method: "PATCH",
         url: `/v1/admin/direction-adjacency/${created.id}`,
         headers: { ...adminWrite(), "if-match": 'W/"1"' },
-        payload: { kind: "broader", weight: 90 },
+        payload: { kind: "subdiscipline", weight: 90 },
       });
       expect(patched.statusCode).toBe(200);
       expect(patched.json()).toMatchObject({
         id: created.id,
-        kind: "broader",
+        kind: "subdiscipline",
         weight: 90,
         version: 2,
       });
@@ -564,6 +577,74 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(editRetired.statusCode).toBe(409);
     });
 
+    // ── 017 EARS-18: «Вид связи» is a closed list, «Вес» is not authored ───
+
+    it("EARS-18.1: accepts every member of the closed «Вид связи» vocabulary and stores it verbatim", async () => {
+      const own = await makeDirection("Кардиология");
+      for (const kind of DIRECTION_ADJACENCY_KINDS) {
+        const adjacent = await makeDirection("Детская кардиология");
+        const created = await edged({
+          directionId: own.id,
+          adjacentDirectionId: adjacent.id,
+          kind,
+        });
+        // The wire value is the machine slug; the RU label an operator reads
+        // («Смежное направление» …) is the admin's presentation, never storage.
+        const { rows } = await pool.query<{ kind: string }>(
+          "SELECT kind::text AS kind FROM direction_adjacency WHERE id = $1",
+          [created.id],
+        );
+        expect(rows[0]!.kind).toBe(kind);
+      }
+    });
+
+    it("EARS-18.2: refuses a kind outside the vocabulary with a 400 naming the field, never a 500 from the type cast", async () => {
+      const own = await makeDirection("Гастроэнтерология");
+      const adjacent = await makeDirection("Гепатология");
+      const res = await edge({
+        directionId: own.id,
+        adjacentDirectionId: adjacent.id,
+        kind: "smezhnoe",
+      });
+      expect(res.statusCode).toBe(400);
+      const problem = res.json() as {
+        errors?: { path: string }[];
+      };
+      expect(problem.errors?.map((e) => e.path)).toContain("kind");
+      // A pre-domain refusal writes nothing.
+      const { rows } = await pool.query<{ count: string }>(
+        "SELECT count(*)::text AS count FROM direction_adjacency WHERE direction_id = $1",
+        [own.id],
+      );
+      expect(rows[0]!.count).toBe("0");
+    });
+
+    it("EARS-18.3: an edge authored without «Вес» takes the column default instead of demanding a number from the operator", async () => {
+      const own = await makeDirection("Пульмонология");
+      const adjacent = await makeDirection("Аллергология");
+      const created = await edged({
+        directionId: own.id,
+        adjacentDirectionId: adjacent.id,
+        kind: "interdisciplinary",
+      });
+      // Weight is a tuning parameter of targeting resolution, so the operator
+      // interface never asks for it — but the row is still fully specified.
+      const { rows } = await pool.query<{ weight: number }>(
+        "SELECT weight FROM direction_adjacency WHERE id = $1",
+        [created.id],
+      );
+      expect(rows[0]!.weight).toBe(DIRECTION_ADJACENCY_WEIGHT_DEFAULT);
+
+      const detail = await app.inject({
+        method: "GET",
+        url: `/v1/admin/direction-adjacency?directionId=${own.id}`,
+        headers: adminRead(),
+      });
+      expect(
+        (detail.json() as { data: { weight: number }[] }).data[0]!.weight,
+      ).toBe(DIRECTION_ADJACENCY_WEIGHT_DEFAULT);
+    });
+
     // ── The AC: a TargetingSet resolved from managed rows only ─────────────
 
     it("EARS-8.9: resolves a TargetingSet-shaped traversal — specialty → own directions → adjacent directions with kind and weight — purely from rows authored through the admin API", async () => {
@@ -581,20 +662,20 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const strong = await edged({
         directionId: own.id,
         adjacentDirectionId: near.id,
-        kind: "sibling",
+        kind: "related",
         weight: 80,
       });
       const weak = await edged({
         directionId: own.id,
         adjacentDirectionId: far.id,
-        kind: "broader",
+        kind: "subdiscipline",
         weight: 20,
       });
       // A retired edge is authored and withdrawn: it must NOT be reachable.
       const withdrawn = await edged({
         directionId: own.id,
         adjacentDirectionId: unrelated.id,
-        kind: "sibling",
+        kind: "related",
         weight: 99,
       });
       const retire = await app.inject({
@@ -646,7 +727,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         far.id,
       ]);
       expect(edges.map((e) => e.weight)).toEqual([80, 20]);
-      expect(edges.map((e) => e.kind)).toEqual(["sibling", "broader"]);
+      expect(edges.map((e) => e.kind)).toEqual(["related", "subdiscipline"]);
       // The withdrawn edge is out of the set, and its target with it.
       expect(edges.map((e) => e.adjacentDirectionId)).not.toContain(
         unrelated.id,

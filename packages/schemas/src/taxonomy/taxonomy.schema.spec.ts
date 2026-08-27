@@ -307,13 +307,25 @@ describe("012 taxonomy — expert authoring contract (SSOT)", () => {
     expect(
       CreateDirectionRequestSchema.safeParse({ title: "Кардиология" }).success,
     ).toBe(true);
-    // An authored slug is optional; the server generates one from the title.
+  });
+
+  it("EARS-18.7: when a direction request carries a slug, the schema shall refuse it rather than honour the override", () => {
+    // The address is derived from the title by the server and frozen on first
+    // publish (017-design §9.3). It is not an editorial decision, so `.strict()`
+    // makes a posted `slug` a 400 — the derivation has exactly ONE
+    // implementation and a client cannot opt out of it.
+    for (const slug of ["kardiologiya", "", null]) {
+      expect(
+        CreateDirectionRequestSchema.safeParse({ title: "Кардиология", slug })
+          .success,
+      ).toBe(false);
+      expect(
+        UpdateDirectionRequestSchema.safeParse({ slug }).success,
+      ).toBe(false);
+    }
     expect(
-      CreateDirectionRequestSchema.parse({
-        title: "Кардиология",
-        slug: "kardiologiya",
-      }).slug,
-    ).toBe("kardiologiya");
+      CreateDirectionRequestSchema.parse({ title: "Детская кардиология" }),
+    ).toEqual({ title: "Детская кардиология" });
   });
 
   it("012 EARS-3: when a direction request carries a field the entity does not have, the schema shall refuse it", () => {
@@ -338,26 +350,17 @@ describe("012 taxonomy — expert authoring contract (SSOT)", () => {
     }
   });
 
-  it("012 EARS-3: when a direction PATCH omits a field, the schema shall mean unchanged — and shall refuse a null title or slug", () => {
+  it("012 EARS-3: when a direction PATCH omits a field, the schema shall mean unchanged — and shall refuse a null title", () => {
     const empty = UpdateDirectionRequestSchema.parse({});
     expect(Object.keys(empty)).toHaveLength(0);
     expect(
       UpdateDirectionRequestSchema.safeParse({ title: "Кардиология" }).success,
     ).toBe(true);
-    // `title` is the direction's only descriptive value and NOT NULL in the DB;
-    // `slug` is the permanent public identity. Neither is ever cleared.
+    // `title` is the direction's only descriptive value and NOT NULL in the DB,
+    // so it is never cleared.
     expect(UpdateDirectionRequestSchema.safeParse({ title: null }).success).toBe(
       false,
     );
-    expect(UpdateDirectionRequestSchema.safeParse({ slug: null }).success).toBe(
-      false,
-    );
-    // The slug grammar is the shared one — a canonical UUID is never a slug.
-    expect(
-      UpdateDirectionRequestSchema.safeParse({
-        slug: "11111111-1111-4111-8111-111111111111",
-      }).success,
-    ).toBe(false);
   });
 
   it("012 EARS-3: when an admin direction detail is projected, it shall carry exactly the curated identity", () => {
@@ -367,7 +370,6 @@ describe("012 taxonomy — expert authoring contract (SSOT)", () => {
       title: "Кардиология",
       status: "draft" as const,
       firstPublishedAt: null,
-      slugEditable: true,
       version: 1,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -375,6 +377,10 @@ describe("012 taxonomy — expert authoring contract (SSOT)", () => {
     const parsed = DirectionAdminDetailSchema.parse(detail);
     expect(parsed).not.toHaveProperty("description");
     expect(parsed).not.toHaveProperty("coverUrl");
+    // No `slugEditable` counterpart: "may the operator change the public URL"
+    // has one permanent answer, and a boolean stating it would advertise an
+    // affordance the interface does not offer.
+    expect(parsed).not.toHaveProperty("slugEditable");
     expect(DirectionAdminListItemSchema.parse(detail)).not.toHaveProperty(
       "firstPublishedAt",
     );

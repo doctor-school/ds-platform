@@ -221,8 +221,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         status: "draft",
         version: 1,
         firstPublishedAt: null,
-        slugEditable: true,
       });
+      // The projection carries no `slugEditable`: the address is derived and
+      // never authored, so there is no affordance for the flag to gate.
+      expect(body).not.toHaveProperty("slugEditable");
       // The slug is derived from the TITLE — a direction has no name and no
       // description, so the heading is its whole identity source (§2.2).
       expect(body.slug).toMatch(/^kardiologiya-/);
@@ -434,16 +436,20 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(problem(differentActor).errorCode).toBe("IDEMPOTENCY_KEY_REUSED");
     });
 
-    it("012 EARS-3: when a slug is already held by a retained row, the system shall refuse with SLUG_CONFLICT", async () => {
-      const body = await created(await createJson({ payload: validPayload() }));
-      const clash = await createJson({
-        payload: validPayload({ slug: body.slug }),
+    it("EARS-18.4: the create surface shall refuse an authored slug outright instead of honouring it", async () => {
+      const before = await directionCount();
+      const res = await createJson({
+        payload: validPayload({ slug: "sovsem-drugoy-adres" }),
       });
-      expect(clash.statusCode).toBe(409);
-      expect(problem(clash).errorCode).toBe("SLUG_CONFLICT");
+      // There is exactly one implementation of the derivation and a client
+      // cannot opt out of it: under `.strict()` the extra key is a 400, not a
+      // silently accepted override of a permanent public address.
+      expect(res.statusCode).toBe(400);
+      expect(problem(res).errorCode).toBe("VALIDATION_FAILED");
+      expect(await directionCount()).toBe(before);
     });
 
-    it("012 EARS-3: when the direction was first published, the system shall refuse a slug change with SLUG_IMMUTABLE and change nothing", async () => {
+    it("EARS-18.4: the edit surface shall refuse a slug change with the same 400, published or not", async () => {
       const body = await created(await createJson({ payload: validPayload() }));
       await pool.query(
         "UPDATE directions SET status = 'published', first_published_at = now() WHERE id = $1",
@@ -461,24 +467,20 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         },
         payload: { slug: "sovsem-drugoy-adres" },
       });
-      expect(res.statusCode).toBe(409);
-      expect(problem(res).errorCode).toBe("SLUG_IMMUTABLE");
+      // The old 409 `SLUG_IMMUTABLE` path is unreachable from this surface now:
+      // the address never arrives from the operator at all, so the refusal is
+      // pre-domain and does not depend on whether the row was ever published.
+      expect(res.statusCode).toBe(400);
+      expect(problem(res).errorCode).toBe("VALIDATION_FAILED");
       const { rows } = await pool.query<{ slug: string; version: number }>(
         "SELECT slug, version FROM directions WHERE id = $1",
         [body.id],
       );
       expect(rows[0]).toMatchObject({ slug: body.slug, version: 1 });
-      // The detail read tells the UI the field is locked.
-      const detail = await app.inject({
-        method: "GET",
-        url: `/v1/admin/directions/${body.id}`,
-        headers: { ...device, ...adminHeaders(adminSid) },
-      });
-      expect(JSON.parse(detail.payload)).toMatchObject({ slugEditable: false });
 
-      // Echoing the OWN slug is not a change: the «Основное» tab posts the whole
-      // form, so refusing the echo would block every ordinary edit.
-      const echo = await app.inject({
+      // The address survives an ordinary retitle of a PUBLISHED direction — a
+      // doctor's bookmark outlives an editorial rewording of the heading.
+      const retitle = await app.inject({
         method: "PATCH",
         url: `/v1/admin/directions/${body.id}`,
         headers: {
@@ -488,14 +490,44 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
           "idempotency-key": key(),
           "if-match": 'W/"1"',
         },
-        payload: { slug: body.slug, title: "Кардиология (переименована)" },
+        payload: { title: "Кардиология (переименована)" },
       });
-      expect(echo.statusCode).toBe(200);
-      expect(JSON.parse(echo.payload)).toMatchObject({
+      expect(retitle.statusCode).toBe(200);
+      expect(JSON.parse(retitle.payload)).toMatchObject({
         slug: body.slug,
         title: "Кардиология (переименована)",
         version: 2,
       });
+    });
+
+    it("EARS-18.5: two directions whose titles fold to the same address shall both be created, the second one deterministically suffixed", async () => {
+      const first = await created(
+        await createJson({ payload: { title: "Детская кардиология" } }),
+      );
+      expect(first.slug).toBe("detskaya-kardiologiya");
+
+      const second = await created(
+        await createJson({ payload: { title: "Детская кардиология" } }),
+      );
+      // The operator never chose the address, so a taken candidate is not a
+      // refusal they could act on — the server walks the deterministic sequence.
+      expect(second.slug).toBe("detskaya-kardiologiya-2");
+      expect(second.id).not.toBe(first.id);
+    });
+
+    it("EARS-18.6: a title that folds to nothing sluggable shall be refused against `title`, the field the operator typed", async () => {
+      const before = await directionCount();
+      const res = await createJson({ payload: { title: "🫀🫁" } });
+      expect(res.statusCode).toBe(400);
+      expect(problem(res).errorCode).toBe("VALIDATION_FAILED");
+      // Not against a `slug` field: there is no slug input left to point at, and
+      // inventing an identity for a permanent public URL is worse than asking.
+      expect(
+        (problem(res) as { errors?: { path: string }[] }).errors?.map(
+          (e) => e.path,
+        ),
+      ).toContain("title");
+      expect(await directionCount()).toBe(before);
     });
 
     it("012 EARS-17: when If-Match is absent or stale, the system shall answer 428 then 412 and change nothing", async () => {

@@ -283,28 +283,25 @@ describe("translateIssue — admin form RU error mapping (#665)", () => {
   });
 
   it("EARS-3: every direction-form failing rule maps to a specific key, never fallback", () => {
-    // Empty submit — the title is the direction's only required value; the slug box
-    // may be empty (the server generates it) and must NOT report an error here.
-    expect(keysFor(DirectionFormSchema, { title: "", slug: "" })).toEqual([
-      "required",
-    ]);
+    // Empty submit — «Название» is the direction's ONLY authored value (017
+    // EARS-18): the address is derived server-side and the form has no slug box
+    // at all, so there is no second field left to report against.
+    expect(keysFor(DirectionFormSchema, { title: "" })).toEqual(["required"]);
 
     // The 120-character title bound maps to the length key, not the fallback.
-    expect(
-      keysFor(DirectionFormSchema, { title: "х".repeat(121), slug: "" }),
-    ).toEqual(["maxLength"]);
+    expect(keysFor(DirectionFormSchema, { title: "х".repeat(121) })).toEqual([
+      "maxLength",
+    ]);
 
-    // The slug box distinguishes its two refusals exactly as its siblings do:
-    // wrong grammar vs the forbidden canonical-UUID id namespace.
+    // …and there is nothing for a slug rule to fire on: the form's parsed shape
+    // carries no address at all, so the create request cannot smuggle one past
+    // the `.strict()` wire schema.
     expect(
-      keysFor(DirectionFormSchema, { title: "Кардиология", slug: "Not valid" }),
-    ).toEqual(["slugPattern"]);
-    expect(
-      keysFor(DirectionFormSchema, {
+      DirectionFormSchema.parse({
         title: "Кардиология",
-        slug: "00000000-0000-4000-8000-000000000000",
+        slug: "kardiologiya",
       }),
-    ).toEqual(["slugReserved"]);
+    ).not.toHaveProperty("slug");
   });
 
   it("EARS-4: every partner-form failing rule maps to a specific key, never fallback", () => {

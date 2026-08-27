@@ -177,7 +177,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const title = `Аритмология ${Math.random().toString(36).slice(2, 8)}`;
       const res = await app.inject({
         method: "POST",
-        url: "/v1/admin/topics",
+        url: "/v1/admin/directions",
         headers: {
           ...device,
           ...adminHeaders(adminSid),

@@ -125,7 +125,10 @@ export const projects = pgTable(
       "projects_retired_iff_deleted",
       sql`(${t.status} = 'retired') = (${t.deletedAt} IS NOT NULL)`,
     ),
-    check("projects_slug_pattern", sql`${t.slug} ~ ${sql.raw(`'${SLUG_PATTERN}'`)}`),
+    check(
+      "projects_slug_pattern",
+      sql`${t.slug} ~ ${sql.raw(`'${SLUG_PATTERN}'`)}`,
+    ),
     check(
       "projects_slug_not_uuid",
       sql`${t.slug} !~ ${sql.raw(`'${UUID_TEXT_PATTERN}'`)}`,
@@ -217,7 +220,10 @@ export const experts = pgTable(
       "experts_retired_iff_deleted",
       sql`(${t.status} = 'retired') = (${t.deletedAt} IS NOT NULL)`,
     ),
-    check("experts_slug_pattern", sql`${t.slug} ~ ${sql.raw(`'${SLUG_PATTERN}'`)}`),
+    check(
+      "experts_slug_pattern",
+      sql`${t.slug} ~ ${sql.raw(`'${SLUG_PATTERN}'`)}`,
+    ),
     check(
       "experts_slug_not_uuid",
       sql`${t.slug} !~ ${sql.raw(`'${UUID_TEXT_PATTERN}'`)}`,
@@ -328,7 +334,10 @@ export const directions = pgTable(
       "directions_retired_iff_deleted",
       sql`(${t.status} = 'retired') = (${t.deletedAt} IS NOT NULL)`,
     ),
-    check("directions_slug_pattern", sql`${t.slug} ~ ${sql.raw(`'${SLUG_PATTERN}'`)}`),
+    check(
+      "directions_slug_pattern",
+      sql`${t.slug} ~ ${sql.raw(`'${SLUG_PATTERN}'`)}`,
+    ),
     check(
       "directions_slug_not_uuid",
       sql`${t.slug} !~ ${sql.raw(`'${UUID_TEXT_PATTERN}'`)}`,
@@ -416,7 +425,10 @@ export const partners = pgTable(
       "partners_retired_iff_deleted",
       sql`(${t.status} = 'retired') = (${t.deletedAt} IS NOT NULL)`,
     ),
-    check("partners_slug_pattern", sql`${t.slug} ~ ${sql.raw(`'${SLUG_PATTERN}'`)}`),
+    check(
+      "partners_slug_pattern",
+      sql`${t.slug} ~ ${sql.raw(`'${SLUG_PATTERN}'`)}`,
+    ),
     check(
       "partners_slug_not_uuid",
       sql`${t.slug} !~ ${sql.raw(`'${UUID_TEXT_PATTERN}'`)}`,
@@ -656,7 +668,10 @@ export const eventTopics = pgTable(
       .references(() => events.id, { onDelete: "restrict" }),
     topicId: uuid("topic_id")
       .notNull()
-      .references(() => topics.id, { onDelete: "restrict" }),
+      // #1483 renamed the `topics` book to `directions` (ADR-0016 §5). The
+      // physical column stays `topic_id`: renaming the table does not rename
+      // the columns that point at it, and the 012 EARS-11 link is the same row.
+      .references(() => directions.id, { onDelete: "restrict" }),
     status: relationshipStatus("status").notNull().default("active"),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
     /** Optimistic-concurrency counter behind the join ETag; starts at 1, `++` per successful write. */

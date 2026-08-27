@@ -14,6 +14,11 @@
 -- called `directions` — and the next drizzle diff would then try to "fix" it by
 -- dropping and re-creating the index.
 ALTER TABLE "topics" RENAME TO "directions";--> statement-breakpoint
+-- 0024 (`event_topics`, 012 EARS-11) landed on `main` while this branch was
+-- open, so the rename now has one more dependent object than when it was
+-- written: the link's foreign key still carries the old table in its NAME. The
+-- key itself follows the rename on its own — the constraint name does not.
+ALTER TABLE "event_topics" RENAME CONSTRAINT "event_topics_topic_id_topics_id_fk" TO "event_topics_topic_id_directions_id_fk";--> statement-breakpoint
 ALTER TABLE "directions" RENAME CONSTRAINT "topics_retired_iff_deleted" TO "directions_retired_iff_deleted";--> statement-breakpoint
 ALTER TABLE "directions" RENAME CONSTRAINT "topics_slug_pattern" TO "directions_slug_pattern";--> statement-breakpoint
 ALTER TABLE "directions" RENAME CONSTRAINT "topics_slug_not_uuid" TO "directions_slug_not_uuid";--> statement-breakpoint

@@ -1,6 +1,8 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { z } from "zod";
-import type { Event, Topic } from "@ds/db";
+// #1483 (ADR-0016 §5): the `topics` book is now `directions`; this vertical's
+// own nouns are unchanged, so the rename is bridged at the import.
+import type { Direction as Topic, Event } from "@ds/db";
 import {
   type CreateEventTopicRequest,
   type EventTopicAdminDetail,
@@ -52,8 +54,13 @@ import {
 //    reads or writes `events.specialties[]` — topics and specialties are
 //    different axes and never synchronize (012-requirements EARS-11).
 
-/** The join kind of this vertical, in the endpoint order §3.1 names. */
-const RELATION_KIND = "event↔topic" as const;
+/**
+ * The join kind of this vertical, in the endpoint order §3.1 names. #1483
+ * renamed the book to `directions` (ADR-0016 §5), and the row kind names the
+ * ENTITY on each side of the join, so the impact envelope says `direction`
+ * even though this vertical's own route still speaks «тема».
+ */
+const RELATION_KIND = "event↔direction" as const;
 
 export interface CreateEventTopicInput {
   payload: CreateEventTopicRequest;

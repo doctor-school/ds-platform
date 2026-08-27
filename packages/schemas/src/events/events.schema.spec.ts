@@ -60,9 +60,14 @@ describe("007 events schema", () => {
   });
 
   describe("lifecycle transitions (EARS-7 — the closed forward set)", () => {
-    it("offers only the single forward move from each state", () => {
+    it("offers only the forward moves of the closed set", () => {
       expect(validTransitions("draft")).toEqual(["published"]);
-      expect(validTransitions("published")).toEqual(["live"]);
+      // 014 EARS-18: `published` is the ONE state with two forward moves — the
+      // normal `live` broadcast, and the off-platform `ended` short-circuit for
+      // a broadcast that already happened outside the platform. The map is the
+      // structural set; the per-event preconditions (past end, room never
+      // opened) refine it server-side.
+      expect(validTransitions("published")).toEqual(["live", "ended"]);
       expect(validTransitions("live")).toEqual(["ended"]);
       expect(validTransitions("ended")).toEqual(["archived"]);
       expect(validTransitions("archived")).toEqual([]);
@@ -75,9 +80,11 @@ describe("007 events schema", () => {
   });
 
   describe("canTransition (EARS-7 — the closed-set guard predicate)", () => {
-    it("EARS-7.1: permits exactly the four legal forward moves", () => {
+    it("EARS-7.1: permits exactly the legal forward moves", () => {
       expect(canTransition("draft", "published")).toBe(true);
       expect(canTransition("published", "live")).toBe(true);
+      // 014 EARS-18 — the off-platform short-circuit (see the map test above).
+      expect(canTransition("published", "ended")).toBe(true);
       expect(canTransition("live", "ended")).toBe(true);
       expect(canTransition("ended", "archived")).toBe(true);
     });
@@ -86,7 +93,8 @@ describe("007 events schema", () => {
       expect(canTransition("draft", "live")).toBe(false);
       expect(canTransition("draft", "ended")).toBe(false);
       expect(canTransition("draft", "archived")).toBe(false);
-      expect(canTransition("published", "ended")).toBe(false);
+      // `published → ended` is NOT a skip-forward move since 014 EARS-18 — it is
+      // a first-class edge of the map, asserted true in EARS-7.1 above.
       expect(canTransition("published", "archived")).toBe(false);
       expect(canTransition("live", "archived")).toBe(false);
     });

@@ -446,7 +446,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
       const guest = await session(uniqueEmail("guest"), "doctor_guest");
       const asGuest = await markEnded(guest, id);
-      expect(asGuest.statusCode).toBe(403);
+      // 011 EARS-2: refused 401, not 403 — since the admin tier, a doctor-portal
+      // cookie authenticates NO admin route, so the request never reaches the
+      // role check (identical to the sibling 007 transition command).
+      expect(asGuest.statusCode).toBe(401);
 
       const anonymous = await app.inject({
         method: "POST",

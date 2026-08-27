@@ -6,7 +6,6 @@ import {
   Get,
   HttpCode,
   HttpException,
-  Inject,
   NotFoundException,
   Param,
   Patch,
@@ -63,7 +62,10 @@ export class EventsAdminController {
     private readonly events: EventsService,
     // 014 EARS-17/EARS-18 — the ONE shared idempotency record (012-design §6),
     // consumed by `mark-ended` exactly as 014's recordings surface consumes it.
-    @Inject(IdempotencyService)
+    // Plain constructor injection, deliberately NOT `@Inject(IdempotencyService)`:
+    // a parameter decorator makes the endpoint-authz gate's tsx transform drop
+    // this class's `design:paramtypes`, so Nest then cannot resolve the
+    // undecorated `EventsService` at index 0 and the BLOCK gate fails to boot.
     private readonly idempotency: IdempotencyService,
   ) {}
 

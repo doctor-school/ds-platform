@@ -12,6 +12,7 @@ import { AppModule } from "../../src/app.module.js";
 import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
 import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
 import { FakeIdpClient } from "../../src/auth/idp/idp.fake.js";
+import { futureMskStart } from "../setup/wall-clock.js";
 import { SESSION_COOKIE_NAME } from "../../src/auth/session/session.cookie.js";
 import { authHeaders, establishAdminSession } from "../setup/admin-session.js";
 import {
@@ -126,7 +127,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     const validPayload = {
       title: "ХСН: room control",
       school: "Кардиология",
-      startsAtMsk: "2026-07-17T19:00",
+      // Derived, never pinned: a rotted literal drifts into the past, and a
+      // PAST published event legitimately offers the 014 EARS-18 `ended` edge —
+      // which would turn this suite red with no production change behind it.
+      startsAtMsk: futureMskStart(30, "19:00"),
       durationMin: 90,
       specialties: ["cardiology"],
     };

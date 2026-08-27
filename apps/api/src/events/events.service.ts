@@ -627,7 +627,21 @@ export class EventsService {
     id: string,
     actorSub: string | null,
   ): Promise<EventAdminDetail | null> {
-    return this.namedTransition(id, "ended", EVENT_ENDED_AUDIT_TYPE, actorSub);
+    return this.namedTransition(
+      id,
+      "ended",
+      EVENT_ENDED_AUDIT_TYPE,
+      actorSub,
+      // The mirror of `markEnded`'s guard: since 014 EARS-18 the closed set has
+      // TWO edges into `ended`, so the target alone no longer identifies the
+      // command. `close` keeps its 007 EARS-5 contract — the room it closes must
+      // be open — and a `published` event is refused here rather than silently
+      // ending through the room-control command (which writes the `event.ended`
+      // audit type and bypasses the EARS-18 preconditions + Idempotency-Key).
+      (_event, from) => {
+        if (from !== "live") throw new InvalidTransitionError(from, "ended");
+      },
+    );
   }
 
   /**

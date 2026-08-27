@@ -315,10 +315,13 @@ Feature: A doctor arrives at their own storefront, picks a specialty, and the si
     And the list is not horizontally scrollable
 
     Examples:
-      | section                 | viewport                        | render                |
-      | directions              | above the mobile breakpoint     | a two-line record row |
-      | direction adjacency     | above the mobile breakpoint     | a two-line record row |
-      | specialty links         | below the mobile breakpoint     | a record card         |
+      | section             | viewport                    | render                |
+      | directions          | above the mobile breakpoint | a two-line record row |
+      | directions          | below the mobile breakpoint | a record card         |
+      | direction adjacency | above the mobile breakpoint | a two-line record row |
+      | direction adjacency | below the mobile breakpoint | a record card         |
+      | specialty links     | above the mobile breakpoint | a two-line record row |
+      | specialty links     | below the mobile breakpoint | a record card         |
 
   @EARS-16 @happy
   Scenario: A single-action list has no actions column and opens on the row
@@ -337,7 +340,8 @@ Feature: A doctor arrives at their own storefront, picks a specialty, and the si
   Scenario: Filters apply instantly and state what is applied
     Given an operator opens a reference-book list
     When they type into the text search
-    Then the list narrows after the debounce with no «Применить» control anywhere in the admin application
+    Then the list narrows after the debounce with no «Применить» control on any admin surface already rebuilt on the block tier
+    And once EARS-20 has converted the last section no «Применить» control exists anywhere in the admin application
     And every active filter renders as a removable chip beside the list
     And a «Сбросить всё» control is offered alongside the chips
     When the operator removes the last chip
@@ -358,17 +362,32 @@ Feature: A doctor arrives at their own storefront, picks a specialty, and the si
     And a value outside the vocabulary is refused by the API
 
   @EARS-18 @happy
+  Scenario: A record form is one framed panel of ruled sections
+    Given an operator opens a reference-book record form
+    Then the fields render inside a single framed panel
+    And its sections are separated by hairlines
+    And each section is led by a statement heading with its explanatory line
+    And no section-local form layout is assembled in place of the Field family
+
+  @EARS-18 @happy
   Scenario Outline: Derived and internal fields never reach the operator interface
     Given an operator opens the <surface> of a reference-book record
     Then «Вес» is not rendered
     And the page address is not rendered
-    And the page address of a created record is transliterated from its Russian title and frozen on first publish
+    And no note explaining a derived address is rendered in its place
 
     Examples:
       | surface     |
       | list        |
       | record      |
       | create form |
+
+  @EARS-18 @happy
+  Scenario: The page address is derived on create and frozen on first publish
+    When an operator creates a reference-book record with a Russian title
+    Then its page address is transliterated from that title
+    And the address is frozen on first publish
+    And the operator is never shown or asked for the address
 
   @EARS-18 @happy
   Scenario: Status chips stay readable over the row hover state
@@ -410,10 +429,20 @@ Feature: A doctor arrives at their own storefront, picks a specialty, and the si
   # ------------------------------------------------------------ design gate
 
   @EARS-15 @process
-  Scenario: The design gate runs before implementation and the owner confirms the render
+  Scenario: The storefront design gate runs before implementation and the owner confirms the render
     Given the Stage-A picks variant Б and the leaderboard as a separate section are recorded decisions
-    When a 017 surface is built
+    When a canvas-derived storefront surface is built
     Then it is built from the vendored canvas and @ds/design-system primitives with tokens-only styling
     And all four dataState renders with both sign-in states and both choice states are reviewed at both breakpoints and in both themes
     And the canvas composition switcher is not built
     And the product owner confirms the rendered result on the live stand before merge
+
+  @EARS-15 @process
+  Scenario: The admin design gate derives from the block tier and the owner confirms the render
+    Given the Stage-A picks recorded verbatim on issue 1578 comment 5435209906 are recorded decisions
+    When an admin operator surface is built
+    Then it is built from the @ds/design-system block tier as the composition source of truth
+    And no canvas is used as the source for an operator surface
+    And the product owner confirms the rendered operator surfaces on the live branch stand before merge
+    And the Stage-B verdict is recorded as a Stage-B: GO entry on the delivering pull request 1575
+    And an unanswered Stage-B question blocks the merge

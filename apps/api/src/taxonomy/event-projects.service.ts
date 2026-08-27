@@ -1,6 +1,6 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { z } from "zod";
-import type { Event, Project } from "@ds/db";
+import type { Event } from "@ds/db";
 import {
   type CreateEventProjectRequest,
   type EventProjectAdminDetail,

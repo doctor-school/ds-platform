@@ -26,6 +26,7 @@ import {
 } from "./events.dto.js";
 import {
   EventNotEditableError,
+  EventNotPastError,
   EventsService,
   InvalidTransitionError,
   StreamNotConfigurableError,
@@ -359,6 +360,47 @@ export class EventsAdminController {
   }
 
   /**
+   * 014 EARS-18 — `MarkEventEnded` (`POST /v1/admin/events/:id/mark-ended`): the
+   * named `published → ended` transition for an эфир the platform never hosted —
+   * held before features 006/007 existed, or run off-platform (014-design §3.1,
+   * admin label «Отметить завершённым (трансляция прошла вне платформы)»).
+   * Without it such an event is stuck at `published` and its recording can never
+   * clear the 014 §3 publish gate.
+   *
+   * Deliberately a SEPARATE route from `:id/close` even though both land on
+   * `ended`: they are different operator assertions («I closed the room I was
+   * running» vs «this эфир happened elsewhere»), they carry different
+   * preconditions, and they write different audit ids. One route switching on
+   * the event's state would make the admin's intent unrecoverable from the log.
+   *
+   * Refusals leave the state untouched and write no audit row: 409
+   * `EVENT_NOT_PAST` while the scheduled end is still in the future, 409
+   * `INVALID_TRANSITION` from any other origin state or when the room was ever
+   * opened. It creates no room record, no presence window and no recording.
+   */
+  @Post(":id/mark-ended")
+  @HttpCode(200)
+  @Authz({
+    access: "authenticated",
+    roles: ["platform_admin"],
+    check: "fast-path",
+    // Endpoint-authz AUTH-audit tier (ADR-0001 §2.5/§8): a `platform_admin`
+    // write, not an auth security event — no AuthAuditLog emission (low-stakes).
+    // The domain `audit_ledger` row (`event.marked_ended`) is a separate
+    // ADR-0003 §6 obligation written atomically in the service.
+    audit: "low-stakes",
+    tests: ["EARS-18", "EARS-8"],
+  })
+  async markEnded(
+    @Param("id") id: string,
+    @Req() req: FastifyRequest,
+  ): Promise<EventAdminDetail> {
+    return this.namedTransition(id, req, (eventId, actorSub) =>
+      this.events.markEnded(eventId, actorSub),
+    );
+  }
+
+  /**
    * EARS-6 — `ArchiveEvent` (`POST /v1/admin/events/:id/archive`): the named
    * `ended → archived` transition, the operator's **manual** post-broadcast
    * action (LD-2 — no scheduler, no time-based automation fires it in wave 1).
@@ -394,7 +436,8 @@ export class EventsAdminController {
 
   /**
    * Shared body of the named, audited transition commands (publish / open /
-   * close / archive — EARS-4/5/6): resolve the acting admin `sub` off the request
+   * close / archive / mark-ended — EARS-4/5/6 + 014 EARS-18): resolve the acting
+   * admin `sub` off the request
    * (the 003
    * session hook attaches it; the `AuthzGuard` has already refused any
    * unauthenticated caller — EARS-8), invoke the service command, map a missing
@@ -417,14 +460,7 @@ export class EventsAdminController {
       if (!updated) throw new NotFoundException("event not found");
       return updated;
     } catch (err) {
-      if (err instanceof InvalidTransitionError) {
-        throw new ConflictException({
-          message: "illegal lifecycle transition",
-          from: err.from,
-          to: err.to,
-        });
-      }
-      throw err;
+      throw asTransitionRefusal(err);
     }
   }
 
@@ -459,14 +495,34 @@ export class EventsAdminController {
       if (!updated) throw new NotFoundException("event not found");
       return updated;
     } catch (err) {
-      if (err instanceof InvalidTransitionError) {
-        throw new ConflictException({
-          message: "illegal lifecycle transition",
-          from: err.from,
-          to: err.to,
-        });
-      }
-      throw err;
+      throw asTransitionRefusal(err);
     }
   }
+}
+
+/**
+ * Map a domain transition refusal onto its 409, or return the error untouched
+ * for the global filter. The two refusal CODES are the contract 014-design §3.1
+ * names — `EVENT_NOT_PAST` (the scheduled end is still in the future) and
+ * `INVALID_TRANSITION` (any other origin, or a room that was ever opened) — and
+ * they are emitted from one place so the bare EARS-7 command and every named
+ * command answer the same body for the same domain refusal.
+ */
+function asTransitionRefusal(err: unknown): unknown {
+  if (err instanceof EventNotPastError) {
+    return new ConflictException({
+      code: "EVENT_NOT_PAST",
+      message: "event has not reached its scheduled end",
+      scheduledEnd: err.scheduledEnd.toISOString(),
+    });
+  }
+  if (err instanceof InvalidTransitionError) {
+    return new ConflictException({
+      code: "INVALID_TRANSITION",
+      message: "illegal lifecycle transition",
+      from: err.from,
+      to: err.to,
+    });
+  }
+  return err;
 }

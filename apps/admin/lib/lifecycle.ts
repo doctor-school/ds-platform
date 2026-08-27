@@ -1,21 +1,24 @@
 import type { EventLifecycleState } from "@ds/schemas";
 
 /**
- * The admin lifecycle-action model (007 EARS-5/6/7, design §2, §8). The admin UI
- * offers ONLY the transitions valid from the current state — and it derives that
- * offer from the server's `EventAdminDetail.validTransitions`, the SAME closed
- * map (`@ds/schemas` `LIFECYCLE_TRANSITIONS`) the server-side guard enforces, so
- * the UI offer and the API refusal can never drift. This module maps each legal
- * target state to the named command endpoint + the message-catalog key for its
- * button label; it invents no transition the schema does not permit.
+ * The admin lifecycle-action model (007 EARS-5/6/7, design §2, §8; extended by
+ * 014 EARS-18). The admin UI offers ONLY the transitions valid from the current
+ * state — and it derives that offer from the server's
+ * `EventAdminDetail.validTransitions`, which the server computes from the SAME
+ * closed map (`@ds/schemas` `LIFECYCLE_TRANSITIONS`) its guard enforces, so the
+ * UI offer and the API refusal can never drift. This module maps each legal edge
+ * to the named command endpoint + the message-catalog key for its button label;
+ * it invents no transition the schema does not permit.
  */
 
-/** The named transition command a legal target state fires (design §5, §7). */
+/** The named transition command a legal `(from, to)` edge fires (design §5, §7). */
 export interface LifecycleAction {
+  /** The origin `EventLifecycleState` this action is offered from. */
+  readonly from: EventLifecycleState;
   /** The target `EventLifecycleState` this action moves the event to. */
   readonly to: EventLifecycleState;
   /** The command path segment under `/v1/admin/events/:id/` (design §7). */
-  readonly command: "publish" | "open" | "close" | "archive";
+  readonly command: "publish" | "open" | "close" | "archive" | "mark-ended";
   /** The message-catalog key (under `events.action.*`) for the button label. */
   readonly labelKey: string;
   /** A stable test id / data attribute so the e2e can address the button. */
@@ -23,55 +26,79 @@ export interface LifecycleAction {
 }
 
 /**
- * The single map from a legal forward target to its named command (design §2:
- * `draft→published` = publish, `published→live` = open room, `live→ended` =
- * close room, `ended→archived` = archive). `archived` is terminal and appears as
- * no key's value. This is the ONLY place a target state is turned into a command
- * — there is no second table to drift.
+ * The single table from a legal forward EDGE to its named command (007 design §2
+ * + 014-design §3.1). Keyed on the `(from, to)` PAIR, not on the target alone:
+ * since 014 EARS-18 two different commands land on `ended` — `live → ended` is
+ * `CloseRoom` (the director closing a room this platform ran) and
+ * `published → ended` is `MarkEventEnded` (an эфир that happened off-platform).
+ * They are different operator assertions, with different server preconditions
+ * and different audit ids, so a target-keyed map could only name one of them and
+ * would fire `close` on an event that was never live. The origin state is always
+ * known on the admin surface (`EventAdminDetail.state`), so the pair is the
+ * honest key.
+ *
+ * This is the ONLY place an edge is turned into a command — there is no second
+ * table to drift.
  */
-const ACTION_BY_TARGET: Record<
-  Exclude<EventLifecycleState, "draft">,
-  LifecycleAction
-> = {
-  published: {
+const ACTIONS: readonly LifecycleAction[] = [
+  {
+    from: "draft",
     to: "published",
     command: "publish",
     labelKey: "events.action.publish",
     testId: "action-publish",
   },
-  live: {
+  {
+    from: "published",
     to: "live",
     command: "open",
     labelKey: "events.action.open",
     testId: "action-open",
   },
-  ended: {
+  {
+    from: "published",
+    to: "ended",
+    command: "mark-ended",
+    labelKey: "events.action.markEnded",
+    testId: "action-mark-ended",
+  },
+  {
+    from: "live",
     to: "ended",
     command: "close",
     labelKey: "events.action.close",
     testId: "action-close",
   },
-  archived: {
+  {
+    from: "ended",
     to: "archived",
     command: "archive",
     labelKey: "events.action.archive",
     testId: "action-archive",
   },
-};
+];
 
 /**
- * Derive the lifecycle actions the admin surface offers from the server-supplied
- * `validTransitions` (never from a UI-local guess). An empty list (a terminal
- * `archived` event) yields no actions — the UI presents no transition the current
- * state disallows (EARS-7). Any target outside the four forward moves is simply
- * absent from {@link ACTION_BY_TARGET}, so it can never be offered.
+ * Derive the lifecycle actions the admin surface offers from the event's current
+ * state plus the server-supplied `validTransitions` (never from a UI-local
+ * guess). An empty list (a terminal `archived` event) yields no actions — the UI
+ * presents no transition the current state disallows (EARS-7). An edge absent
+ * from {@link ACTIONS} names no command and is simply never offered.
+ *
+ * The `mark-ended` control needs NO client-side precondition check: the server
+ * already drops `ended` from a `published` event's `validTransitions` unless the
+ * 014 EARS-18 preconditions hold (the scheduled end is already past AND the room
+ * was never opened), and `live_at` is not on the admin projection at all. So the
+ * control appears exactly when the command would succeed — one authority, not a
+ * second copy of the rule in the browser (014-design §3.1).
  */
 export function actionsFor(
+  state: EventLifecycleState,
   validTransitions: readonly EventLifecycleState[],
 ): LifecycleAction[] {
   return validTransitions
-    .filter((to): to is Exclude<EventLifecycleState, "draft"> => to !== "draft")
-    .map((to) => ACTION_BY_TARGET[to]);
+    .map((to) => ACTIONS.find((a) => a.from === state && a.to === to))
+    .filter((a): a is LifecycleAction => a !== undefined);
 }
 
 /** The message-catalog key (under `events.state.*`) for a lifecycle-state badge label. */

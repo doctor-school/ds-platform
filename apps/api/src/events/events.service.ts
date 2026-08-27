@@ -85,7 +85,19 @@ export const EVENT_ENDED_AUDIT_TYPE = "event.ended";
 export const EVENT_ARCHIVED_AUDIT_TYPE = "event.archived";
 
 /**
- * The EARS-7 guard's refusal: the requested move is not one of the four legal
+ * 014 EARS-18 — canonical `audit_ledger` event id for the `published → ended`
+ * transition fired by `MarkEventEnded` (014-design §3.1; ADR-0003 §6). A
+ * DISTINCT type from {@link EVENT_ENDED_AUDIT_TYPE}: `event.ended` records a
+ * broadcast the platform actually hosted and closed (a room was opened, a
+ * presence window was bounded), while `event.marked_ended` records an operator
+ * asserting that an эфир happened OFF the platform. Collapsing the two into one
+ * id would make the ledger unable to answer «did we host this broadcast?» — the
+ * exact question the never-opened-room precondition exists to protect.
+ */
+export const EVENT_MARKED_ENDED_AUDIT_TYPE = "event.marked_ended";
+
+/**
+ * The EARS-7 guard's refusal: the requested move is not one of the five legal
  * forward transitions from the event's current state. HTTP-agnostic — the
  * controller maps it to a 4xx state conflict — so the guard stays a pure domain
  * rule, testable without a transport. `from`/`to` are the offending pair.
@@ -152,6 +164,101 @@ export class EventNotEditableError extends Error {
     super(`event is not editable while ${state}`);
     this.name = "EventNotEditableError";
   }
+}
+
+/**
+ * 014 EARS-18 refusal: `MarkEventEnded` was called while the event's SCHEDULED
+ * end (`starts_at + duration_min`) is still in the future. HTTP-agnostic — the
+ * controller maps it to a 409 `EVENT_NOT_PAST` — so the rule stays a pure domain
+ * rule. Nothing is mutated and no audit row is written: an operator can never
+ * pre-declare a future эфир finished (014-design §3.1).
+ */
+export class EventNotPastError extends Error {
+  constructor(readonly scheduledEnd: Date) {
+    super(
+      `event has not reached its scheduled end (${scheduledEnd.toISOString()})`,
+    );
+    this.name = "EventNotPastError";
+  }
+}
+
+/** The subset of the event row the 014 EARS-18 preconditions read. */
+type MarkEndedSubject = Pick<Event, "state" | "startsAt" | "durationMin"> & {
+  liveAt: Date | null;
+};
+
+/**
+ * 014 EARS-18 — the three server-side preconditions of the `published → ended`
+ * off-platform edge, as ONE pure predicate (014-design §3.1):
+ *
+ * 1. `state = published` — any other origin is not this command's business;
+ * 2. the room was never opened — `live_at` is the server-stamped go-live instant
+ *    (007 `OpenRoom` sets it and nothing else does), so `live_at IS NULL` is the
+ *    structural proof that the platform never hosted this broadcast. A row that
+ *    ever went live can therefore never have its history rewritten by this edge,
+ *    even if some future path returned it to `published`;
+ * 3. the scheduled end is already past — `starts_at + duration_min ≤ now`.
+ *
+ * Returned as a discriminated result rather than a boolean so the ONE evaluation
+ * serves both callers that need a reason (the command, which must answer 409
+ * `EVENT_NOT_PAST` vs 409 `INVALID_TRANSITION`) and the one that needs only a
+ * yes/no (the read-model's `validTransitions`, which offers the control exactly
+ * when the command would succeed — the design's «the control appears only when
+ * the precondition holds»). A second copy of this rule for the read side would
+ * be a second answer to «may this event be marked ended».
+ */
+export function markEndedPrecondition(
+  subject: MarkEndedSubject,
+  now: Date = new Date(),
+): { ok: true } | { ok: false; reason: "invalid-transition" | "not-past" } {
+  if (subject.state !== "published" || subject.liveAt !== null) {
+    return { ok: false, reason: "invalid-transition" };
+  }
+  if (scheduledEnd(subject) > now) return { ok: false, reason: "not-past" };
+  return { ok: true };
+}
+
+/** The event's scheduled end instant — `starts_at + duration_min` (014-design §3.1). */
+export function scheduledEnd(
+  subject: Pick<Event, "startsAt" | "durationMin">,
+): Date {
+  return new Date(subject.startsAt.getTime() + subject.durationMin * 60_000);
+}
+
+/**
+ * Refuse a `published → ended` move whose 014 EARS-18 preconditions do not hold,
+ * with the state untouched and no audit row. A no-op for every other pair, so it
+ * can sit on the shared write path of BOTH the bare EARS-7 command and the named
+ * `MarkEventEnded` — one place decides whether this edge may be taken.
+ */
+function assertMarkEndedAllowed(
+  event: Event,
+  from: EventLifecycleState,
+  to: EventLifecycleState,
+): void {
+  if (!(from === "published" && to === "ended")) return;
+  const verdict = markEndedPrecondition(event);
+  if (verdict.ok) return;
+  if (verdict.reason === "not-past") throw new EventNotPastError(scheduledEnd(event));
+  throw new InvalidTransitionError(from, to);
+}
+
+/**
+ * The transitions the admin surface may offer for a loaded event — the pure
+ * closed-set derivation ({@link validTransitions}) MINUS the 014 EARS-18 edge
+ * when its preconditions do not hold. 014-design §3.1 requires the `mark-ended`
+ * control to appear only when the command would succeed, and it names
+ * `EventAdminDetail.validTransitions` as the derivation — so the refinement
+ * belongs on the read model, not as a second precondition copy in the admin app
+ * (which cannot see `live_at` at all).
+ */
+function offeredTransitions(event: Event): EventLifecycleState[] {
+  const state = event.state as EventLifecycleState;
+  return validTransitions(state).filter(
+    (to) =>
+      !(state === "published" && to === "ended") ||
+      markEndedPrecondition(event).ok,
+  );
 }
 
 /** Slugify a (possibly non-ASCII) title into a URL-safe, collision-resistant handle. */
@@ -425,6 +532,11 @@ export class EventsService {
     if (!canTransition(from, to)) {
       throw new InvalidTransitionError(from, to);
     }
+    // The 014 EARS-18 edge is reachable on the map but NOT unconditional: the
+    // bare EARS-7 command must enforce the same two preconditions the named
+    // `MarkEventEnded` does, or this endpoint would be the "set any state"
+    // escape hatch 014-design §3.1 rules out.
+    assertMarkEndedAllowed(current.event, from, to);
 
     const updated = await this.repo.updateState(id, to);
     // The row existed a moment ago; a concurrent delete is the only null path.
@@ -533,14 +645,54 @@ export class EventsService {
   }
 
   /**
+   * 014 EARS-18 — `MarkEventEnded`: the `published → ended` transition for an
+   * эфир the platform never hosted (held before features 006/007 existed, or run
+   * off-platform). Without it every such event is stuck at `published` and its
+   * recording can never clear the 014 §3 publish gate — that is the launch
+   * content of the archive, not an edge case (014-design §3.1).
+   *
+   * It does NOT loosen the EARS-7 guard. On top of the closed-set check it
+   * enforces {@link markEndedPrecondition}: the origin must be `published`, the
+   * room must never have been opened (`live_at IS NULL`) and the scheduled end
+   * must already be past. So it can neither rewrite the history of a broadcast
+   * the platform actually hosted nor pre-declare a future эфир finished, and a
+   * cancelled event keeps 004's `published → archived` route instead. It creates
+   * NO room record, NO presence window and NO recording — only the state change
+   * and exactly one {@link EVENT_MARKED_ENDED_AUDIT_TYPE} `audit_ledger` row,
+   * written atomically and keyed to the acting `platform_admin`.
+   *
+   * @returns the updated `EventAdminDetail`, or `null` when the id does not exist.
+   */
+  async markEnded(
+    id: string,
+    actorSub: string | null,
+  ): Promise<EventAdminDetail | null> {
+    return this.namedTransition(
+      id,
+      "ended",
+      EVENT_MARKED_ENDED_AUDIT_TYPE,
+      actorSub,
+      // `close` and `mark-ended` share the `ended` target, so the closed-set
+      // guard alone cannot tell them apart: from `live` it would silently let
+      // `mark-ended` act as CloseRoom. The required origin is therefore part of
+      // this command's contract, not an inference from the target.
+      (event, from) => {
+        if (from !== "published") throw new InvalidTransitionError(from, "ended");
+      },
+    );
+  }
+
+  /**
    * The shared body of every named, audited transition command (publish / open /
-   * close / archive — EARS-4/5/6): load the aggregate, run the EARS-7 closed-set
-   * guard
+   * close / archive / mark-ended — EARS-4/5/6 + 014 EARS-18): load the
+   * aggregate, run the EARS-7 closed-set guard
    * ({@link canTransition}) — refusing an invalid jump with
    * {@link InvalidTransitionError}, state untouched — then write the state change
-   * and exactly one terminal `audit_ledger` row atomically. Keeps the four named
+   * and exactly one terminal `audit_ledger` row atomically. Keeps the named
    * commands a single source of truth for the guard + audit obligation.
    *
+   * @param extraGuard a command-specific precondition run after the closed-set
+   * guard and before any write; it throws to refuse, leaving the state untouched.
    * @returns the updated `EventAdminDetail`, or `null` when the id does not exist.
    */
   private async namedTransition(
@@ -548,6 +700,7 @@ export class EventsService {
     to: EventLifecycleState,
     auditType: string,
     actorSub: string | null,
+    extraGuard?: (event: Event, from: EventLifecycleState) => void,
   ): Promise<EventAdminDetail | null> {
     const current = await this.repo.findById(id);
     if (!current) return null;
@@ -556,6 +709,8 @@ export class EventsService {
     if (!canTransition(from, to)) {
       throw new InvalidTransitionError(from, to);
     }
+    extraGuard?.(current.event, from);
+    assertMarkEndedAllowed(current.event, from, to);
 
     const updated = await this.repo.updateStateWithAudit(id, to, {
       eventType: auditType,
@@ -719,7 +874,7 @@ export class EventsService {
         : null,
       streamConfig: a.streamConfig,
       state: e.state as EventLifecycleState,
-      validTransitions: validTransitions(e.state as EventLifecycleState),
+      validTransitions: offeredTransitions(e),
       recordingExpectedBy: e.recordingExpectedBy,
       createdAt: e.createdAt.toISOString(),
       updatedAt: e.updatedAt.toISOString(),
@@ -735,7 +890,7 @@ export class EventsService {
       startsAt: e.startsAt.toISOString(),
       durationMin: e.durationMin,
       state: e.state as EventLifecycleState,
-      validTransitions: validTransitions(e.state as EventLifecycleState),
+      validTransitions: offeredTransitions(e),
     };
   }
 }

@@ -190,7 +190,13 @@ export class EventsService {
 
   constructor(
     @Inject(OBJECT_STORAGE) private readonly storage: ObjectStorage,
-    private readonly repo: EventsRepository,
+    // Explicit token, not type-inferred: the root-level `endpoint-authz` gate
+    // boots this graph under `tsx`, whose esbuild transform emits no
+    // `design:paramtypes`. Nest then derives the dependency array from the
+    // `@Inject` indices alone, so an undecorated parameter that happens to sit
+    // BELOW the highest decorated index resolves to `undefined` and aborts the
+    // boot. Same rule the taxonomy module already follows for every dependency.
+    @Inject(EventsRepository) private readonly repo: EventsRepository,
     // 012 EARS-8 (#1290) — the ONE canonical merged speaker resolver. Both
     // public projections below read speakers through it; this service no longer
     // assembles a public speaker list of its own, which is precisely what keeps

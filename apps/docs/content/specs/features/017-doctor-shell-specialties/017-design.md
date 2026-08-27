@@ -169,15 +169,15 @@ Two rules the review enforces: nothing enters `TargetingSet` without a managed r
 
 Every block resolves to exactly one render per state. An empty labelled box, a bare zero and an unresolving spinner are each defects.
 
-| Block             | `обычно`                                    | `загрузка`           | `пусто`                                                          | `ошибка`                                     |
-| ----------------- | ------------------------------------------- | -------------------- | ---------------------------------------------------------------- | -------------------------------------------- |
-| Hero + statistics | 4 counters + goal verbatim                  | counters as skeleton | a counter with no source is **omitted**, not zeroed              | counters omitted, hero copy intact           |
-| Specialty catalog | variant Б open, or the collapsed chosen row | tile skeletons       | n/a — the book is closed and never empty                         | error with retry; the page stays readable    |
-| Nearest events    | cards + compact month calendar              | card skeletons       | «Пока ничего не запланировано…» + adjacent-areas link            | «Не удалось загрузить события.» + «Обновить» |
-| «Что исследовать» | three format blocks                         | block skeletons      | a format with no content is omitted with its neighbours rendered | error with retry                             |
-| Leaderboard       | consented rows + voluntary note             | row skeletons        | calm explanation instead of rows                                 | error with retry, note still shown           |
+| Block             | `обычно`                                    | `загрузка`           | `пусто`                                               | `ошибка`                                     |
+| ----------------- | ------------------------------------------- | -------------------- | ----------------------------------------------------- | -------------------------------------------- |
+| Hero + statistics | 4 counters + goal verbatim                  | counters as skeleton | a counter with no source is **omitted**, not zeroed   | counters omitted, hero copy intact           |
+| Specialty catalog | variant Б open, or the collapsed chosen row | tile skeletons       | n/a — the book is closed and never empty              | error with retry; the page stays readable    |
+| Nearest events    | cards + compact month calendar              | card skeletons       | «Пока ничего не запланировано…» + adjacent-areas link | «Не удалось загрузить события.» + «Обновить» |
+| «Что исследовать» | **deferred (LD-8)** — nothing renders       | n/a                  | n/a                                                   | n/a                                          |
+| Leaderboard       | consented rows + voluntary note             | row skeletons        | calm explanation instead of rows                      | error with retry, note still shown           |
 
-The `loggedIn` × `specialtyChosen` axes multiply this: 4 × 2 × 2 renders per block are the review surface EARS-15 signs off.
+The `loggedIn` × `specialtyChosen` axes multiply this: 4 × 2 × 2 renders per block are the review surface EARS-15 signs off. «Что исследовать» has no row to multiply — the composition reserves its slot between the events block and the leaderboard and 017 renders nothing in it (LD-8): the block has no read contract in §7, no endpoint and no content entity, and it lands with the features that own school, lesson and clinical-case content.
 
 ## 7. Read contracts
 
@@ -202,6 +202,6 @@ Every failure is an RFC 7807 Problem Details document with `traceId` and an exac
 3. **EARS-2, EARS-4, EARS-5** — hero and the catalog in variant Б.
 4. **EARS-6, EARS-7** — persistence, the collapsed row and re-choice.
 5. **EARS-8** — targeting over the managed books; carries a `blocked_by` edge to the ADR-0016 §5 directions extension where that is not yet in place.
-6. **EARS-9, EARS-10, EARS-11** — the remaining home-page sections; independent of each other.
+6. **EARS-9, EARS-11** — the remaining home-page sections; independent of each other. EARS-10 builds nothing here: its block is deferred per LD-8 and only its reserved slot exists.
 7. **EARS-13** — inventory, owner confirmation, then the route move.
 8. **EARS-14, EARS-15** — the accessibility/mobile bar and the design gate, run against each surface as it lands rather than at the end.

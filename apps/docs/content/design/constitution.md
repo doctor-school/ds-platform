@@ -56,25 +56,25 @@ focus-visible / disabled / loading / invalid / empty …>
 
 ## Element-class taxonomy
 
-| Class                      | Status                    | Primitive(s)                                   | Section                         |
-| -------------------------- | ------------------------- | ---------------------------------------------- | ------------------------------- |
-| Button / action controls   | researched                | `Button`                                       | [↓](#button--action-controls)   |
-| Field / text input         | researched                | `Input`, `FormItem`/`FormControl`              | [↓](#field--text-input)         |
-| Native single-select       | researched                | `NativeSelect`                                 | [↓](#native-single-select)      |
-| Select / combobox (labeled options) | researched       | `Combobox`                                     | [↓](#select--combobox-with-labeled-options) |
-| Data table / admin list    | researched                | `Table`, `DataTable`                           | [↓](#data-table--admin-list)    |
-| Pagination                 | researched                | `Pagination`                                   | [↓](#pagination)                |
-| Empty state                | researched                | `EmptyState`                                   | [↓](#empty-state)               |
-| Filter bar / list filtering | researched               | `FilterBar`                                    | [↓](#filter-bar--list-filtering-model) |
-| Form field group / layout  | researched                | `FormSection`, `FormFieldGroup`, `FormActions` | [↓](#form-field-group--form-layout) |
-| Error & validation display | researched                | `FormMessage`, `FormError`, `FormErrorSummary` | [↓](#error--validation-display) |
-| Tabs / segmented control   | researched                | `Tabs`/`TabsTrigger`                           | [↓](#tabs--segmented-control)   |
-| Link / navigation          | researched                | `Link`                                         | [↓](#link--navigation)          |
-| Menu / dropdown            | on-demand                 | —                                              | populated on first use          |
-| Modal / popover / dialog   | on-demand                 | —                                              | populated on first use          |
-| Image / media              | on-demand                 | —                                              | populated on first use          |
-| Motion / transition        | researched (async-submit) | `Button.loading`                               | [↓](#motion--transition)        |
-| Elevation / shadow         | on-demand                 | —                                              | populated on first use          |
+| Class                               | Status                    | Primitive(s)                                   | Section                                     |
+| ----------------------------------- | ------------------------- | ---------------------------------------------- | ------------------------------------------- |
+| Button / action controls            | researched                | `Button`                                       | [↓](#button--action-controls)               |
+| Field / text input                  | researched                | `Input`, `FormItem`/`FormControl`              | [↓](#field--text-input)                     |
+| Native single-select                | researched                | `NativeSelect`                                 | [↓](#native-single-select)                  |
+| Select / combobox (labeled options) | researched                | `Combobox`                                     | [↓](#select--combobox-with-labeled-options) |
+| Data table / admin list             | researched                | `Table`, `DataTable`                           | [↓](#data-table--admin-list)                |
+| Pagination                          | researched                | `Pagination`                                   | [↓](#pagination)                            |
+| Empty state                         | researched                | `EmptyState`                                   | [↓](#empty-state)                           |
+| Filter bar / list filtering         | researched                | `FilterBar`                                    | [↓](#filter-bar--list-filtering-model)      |
+| Form field group / layout           | researched                | `FormSection`, `FormFieldGroup`, `FormActions` | [↓](#form-field-group--form-layout)         |
+| Error & validation display          | researched                | `FormMessage`, `FormError`, `FormErrorSummary` | [↓](#error--validation-display)             |
+| Tabs / segmented control            | researched                | `Tabs`/`TabsTrigger`                           | [↓](#tabs--segmented-control)               |
+| Link / navigation                   | researched                | `Link`                                         | [↓](#link--navigation)                      |
+| Menu / dropdown                     | on-demand                 | —                                              | populated on first use                      |
+| Modal / popover / dialog            | on-demand                 | —                                              | populated on first use                      |
+| Image / media                       | on-demand                 | —                                              | populated on first use                      |
+| Motion / transition                 | researched (async-submit) | `Button.loading`                               | [↓](#motion--transition)                    |
+| Elevation / shadow                  | on-demand                 | —                                              | populated on first use                      |
 
 ---
 
@@ -190,7 +190,7 @@ the composition; Stage B reconfirms both themes and breakpoints before merge.
 
 **Citations.** [GOV.UK Select](https://design-system.service.gov.uk/components/select/) · [Baymard — custom dropdowns cause issues](https://baymard.com/blog/custom-dropdowns-cause-issues) · [NN/g — drop-down menus](https://www.nngroup.com/articles/drop-down-menus/) · [GitHub Primer — Select guidelines](https://primer.style/product/components/select/guidelines/) · [W3C WAI-ARIA APG — combobox pattern](https://www.w3.org/WAI/ARIA/apg/patterns/combobox/) · [Adobe React Aria ComboBox](https://react-aria.adobe.com/ComboBox) · [IBM Carbon Dropdown usage](https://carbondesignsystem.com/components/dropdown/usage/).
 
-**Adopted from.** **Kibo UI `combobox`** ([haydenbleasel/kibo](https://github.com/haydenbleasel/kibo), MIT — Copyright (c) 2024 Hayden Bleasel, notice reproduced in `combobox.tsx`) — the classic shadcn recipe (Popover + Command over `cmdk`) packaged as a ready block with controlled-state plumbing wired, re-skinned to DS tokens on copy-in. Registry sweep run 2026-08-27 against the real registry payloads: **shadcn/ui** rejected for now (its current official Combobox has moved off Radix onto Base UI, a dependency family we do not have; the Radix route is not a packaged block but a hand assembly of `popover` + `command` — the very thing #1578 exists to stop); **Origin UI** off the whitelist (ADR-0013 §4 — `origin-space/originui` now resolves into `cosscom/coss`, AGPL-3.0 by default with `apps/origin/` carved back to MIT, so every copy needs a per-directory provenance check against a collection that stopped moving); **Intent UI / JollyUI** rejected on availability + weight (the JollyUI registry host answers 402; Intent UI is alive but brings the whole `react-aria-components` runtime — a third a11y stack beside Radix and the native controls). Net new dependencies: `cmdk` and `@radix-ui/react-popover` — both widen the Radix family already installed rather than opening a new one.
+**Adopted from.** **Kibo UI `combobox`** ([shadcnblocks/kibo](https://github.com/shadcnblocks/kibo), MIT — Copyright (c) 2023 — Present shadcnblocks, full notice reproduced verbatim in `combobox.tsx`) — the classic shadcn recipe (Popover + Command over `cmdk`) packaged as a ready block with controlled-state plumbing wired, re-skinned to DS tokens on copy-in. Registry sweep run 2026-08-27 against the real registry payloads: **shadcn/ui** rejected for now (its current official Combobox has moved off Radix onto Base UI, a dependency family we do not have; the Radix route is not a packaged block but a hand assembly of `popover` + `command` — the very thing #1578 exists to stop); **Origin UI** off the whitelist (ADR-0013 §4 — `origin-space/originui` now resolves into `cosscom/coss`, AGPL-3.0 by default with `apps/origin/` carved back to MIT, so every copy needs a per-directory provenance check against a collection that stopped moving); **Intent UI / JollyUI** rejected on availability + weight (the JollyUI registry host answers 402; Intent UI is alive but brings the whole `react-aria-components` runtime — a third a11y stack beside Radix and the native controls). Net new dependencies: `cmdk` and `@radix-ui/react-popover` — both widen the Radix family already installed rather than opening a new one.
 
 **Rendered options + owner pick.** Stage A rendered at 1440 px on real tokens over the #1578 form: **А — native select with RU labels** (zero new deps, but per-option explanations have nowhere to live and the long specialty book gets no filter); **Б — field-shaped trigger with an owned popup** (closed control pixel-identical to `Input`/`NativeSelect`; short vocabulary shows five options each with its explanation line and no search box, a long book grows an in-panel search row with a «Найдено N из M» count and a no-match line; typing happens in the panel, never in the field); **В — editable field, type-to-filter in place** (fastest for a known name, but the resting text is ambiguous between "chosen" and "half-typed" and it invites free text into a closed vocabulary). On 2026-08-27 the Product Lead picked **Б**, on the Kibo UI base ([Issue #1578 comment 5435209906](https://github.com/doctor-school/ds-platform/issues/1578#issuecomment-5435209906)) — the closed vocabulary must stay closed, and the explanation line is the whole reason this is not a native select.
 

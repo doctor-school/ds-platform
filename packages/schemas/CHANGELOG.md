@@ -1,5 +1,43 @@
 # @ds/schemas
 
+## 3.4.0
+
+### Minor Changes
+
+- [#1572](https://github.com/doctor-school/ds-platform/pull/1572) [`efb730f`](https://github.com/doctor-school/ds-platform/commit/efb730f3fce255c9cbd9eee0de7cfd4ac4791d13) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 017 EARS-2 (LD-3): the doctor storefront serves its four home-hero scale
+  counters — doctors, specialties, lessons and events per year — from ONE computed
+  public read, `GET /v1/public/statistics`, carrying a required `computedAt`.
+
+  `@ds/schemas` gains the `ScaleStatistics` contract. Each counter is optional and
+  an ABSENT key means the counter has no available source, so `0` on the wire is
+  always a measured zero and a missing source is never rendered as one. The
+  specialties counter binds to `SpecialtyBook.total`, so no surface carries a count
+  literal. `lessons` has no source on the platform yet and is therefore omitted
+  from every response rather than stubbed.
+
+  Figures are computed off the request path behind a bounded staleness window; no
+  counter is operator-typed and the read counts no rows.
+
+- [#1574](https://github.com/doctor-school/ds-platform/pull/1574) [`d2237c2`](https://github.com/doctor-school/ds-platform/commit/d2237c2f75e308574a7e6f1b01f8b3c1fa265a5c) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 017 EARS-5: the closed Минздрав specialty book gains its search read,
+  `GET /v1/public/specialties/search?q=…` — a public, cacheable, read-only route
+  over the WHOLE book, «Другое» included.
+
+  The matching rule lives in `@ds/schemas` as one shared, DB-free predicate
+  (`normalizeSpecialtyQuery` + `specialtyNameMatchesQuery`): NFC-normalized,
+  lowercased, ё folded to е in BOTH directions, whitespace collapsed, and matched
+  as a substring ANYWHERE in the official name — not a prefix. One rule serves the
+  api and the storefront, so the two can never disagree about what «кардио» finds.
+
+  The response is strict `{ query, entries, total }` where `total` is the size of
+  the MATCH set; `SpecialtyBook.total` remains the single source of the catalog's
+  «Показать весь список — N», so the two totals stay distinct by contract. A query
+  matching nothing returns an empty entry list, not an error; an over-long query is
+  rejected with 400 as RFC-7807 problem+json. The storefront's scoped exception
+  filter now passes a deliberate client-error refusal through with its own status
+  instead of collapsing it into an opaque 500, so a malformed query on a public
+  route is answered as the client error it is and no longer mints an ERROR-level
+  log line. Only `@Get` is declared — there is no write path.
+
 ## 3.3.0
 
 ### Minor Changes

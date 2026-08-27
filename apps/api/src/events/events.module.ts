@@ -20,6 +20,11 @@ import { EventsService } from "./events.service.js";
  * established response shape, and reshaping live routes is not this slice's call.
  */
 @Module({
+  // 012 EARS-8 (#1290): the public event page and the upcoming-broadcast
+  // listing read their speakers from the taxonomy module's
+  // `SpeakerProjectionService` — the ONE canonical merged resolver. The
+  // dependency points events → taxonomy and never back: the taxonomy public
+  // speaker route resolves its own event key, so there is no cycle.
   imports: [TaxonomyModule],
   controllers: [EventsAdminController, EventsPublicController],
   providers: [EventsService, EventsRepository],

@@ -10,6 +10,7 @@ import type {
   EventsRepository,
   EventWithSpeakers,
 } from "./events.repository.js";
+import type { SpeakerProjectionService } from "../taxonomy/speaker-projection.service.js";
 import { EventsService, type UploadedPdf } from "./events.service.js";
 
 // 007 EARS-2 — GC-on-supersede (#627). When a program-PDF replacement commits
@@ -108,8 +109,27 @@ function repoStub(current: EventWithSpeakers, ops: string[]) {
   };
 }
 
+/**
+ * The 012 EARS-8 merged speaker resolver as this admin-side unit sees it: the
+ * suite drives `update()`, which never reads a public speaker projection, so the
+ * double answers an empty projection and records nothing. It is a genuine stub
+ * of a real collaborator, not a stand-in for missing behaviour — the merge
+ * itself is proven end-to-end in `test/taxonomy/speaker-projection.e2e-spec.ts`.
+ */
+function speakerProjectionStub(): SpeakerProjectionService {
+  return {
+    resolve: () => Promise.resolve([]),
+    resolveMany: (ids: string[]) =>
+      Promise.resolve(new Map(ids.map((id) => [id, []]))),
+  } as unknown as SpeakerProjectionService;
+}
+
 function service(storage: RecordingStorage, repo: unknown): EventsService {
-  return new EventsService(storage, repo as EventsRepository);
+  return new EventsService(
+    storage,
+    repo as EventsRepository,
+    speakerProjectionStub(),
+  );
 }
 
 const replacementPdf: UploadedPdf = {

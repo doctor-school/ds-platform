@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { TaxonomyModule } from "../taxonomy/taxonomy.module.js";
 import { RecordingsAdminController } from "./recordings.admin.controller.js";
+import { RecordingsProjectionService } from "./recordings.projection.js";
 import { RecordingsRepository } from "./recordings.repository.js";
 import { RecordingsService } from "./recordings.service.js";
 
@@ -23,6 +24,14 @@ import { RecordingsService } from "./recordings.service.js";
 @Module({
   imports: [TaxonomyModule],
   controllers: [RecordingsAdminController],
-  providers: [RecordingsRepository, RecordingsService],
+  providers: [
+    RecordingsRepository,
+    RecordingsService,
+    RecordingsProjectionService,
+  ],
+  // 014 EARS-3 (#1340): the derived projection is exported so the four §4
+  // consumers (#1341/#1344/#1346/#1347) inject THIS resolver instead of each
+  // re-deriving the edited-over-raw rule in its own module.
+  exports: [RecordingsProjectionService],
 })
 export class RecordingsModule {}

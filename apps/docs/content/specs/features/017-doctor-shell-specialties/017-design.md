@@ -205,3 +205,48 @@ Every failure is an RFC 7807 Problem Details document with `traceId` and an exac
 6. **EARS-9, EARS-11** — the remaining home-page sections; independent of each other. EARS-10 builds nothing here: its block is deferred per LD-8 and only its reserved slot exists.
 7. **EARS-13** — inventory, owner confirmation, then the route move.
 8. **EARS-14, EARS-15** — the accessibility/mobile bar and the design gate, run against each surface as it lands rather than at the end.
+
+The admin clauses (EARS-16…EARS-20) run on their own track: they touch `apps/admin` and `packages/design-system`, not `apps/doctor`, so they neither wait on #1440 nor block the storefront sequence above.
+
+## 9. Admin maintenance surfaces
+
+017 owns the operator side of the two reference books because the storefront reads them and nothing else does: targeting is only as good as the rows an operator can maintain (EARS-8), and a book with no maintenance surface is maintained by hand in SQL — a workaround AGENTS.md §6 forbids. The surfaces live in `apps/admin`, over the same API the storefront reads.
+
+### 9.1 The block tier is the constitution
+
+Every surface here composes the `@ds/design-system` block tier (`packages/design-system/src/blocks/`) — `DataTable`, `FilterBar`, `Combobox`, `EmptyState`, `Pagination` and the `Field`/`FormSection` family — landed under #1578 and documented in the showcase. This design does not restate the token or interaction-state rules: they are the design-system constitution and ADR-0013, and the showcase page for each block is the reference render. What is spec-level is that an admin section composes those blocks and never hand-assembles a table, a toolbar or a chip of its own — a section-local list is a defect, not a variation.
+
+### 9.2 List surfaces (EARS-16)
+
+| Breakpoint | Render                                                                                                       |
+| ---------- | ------------------------------------------------------------------------------------------------------------ |
+| ≥ md       | Two-line record row: title on the first line, wrapping in full; a muted context line beneath. No truncation. |
+| < md       | Record card per row — the same fields stacked. **Never** a horizontally scrolled table.                      |
+
+Truncation and horizontal scroll are both refusals of the same kind: a Russian reference title that does not fit is a title the operator must read in full, so the row grows instead of the text shrinking.
+
+The «Действия» column is conditional on cardinality: **one** action per record ⇒ no column, and the whole row is the affordance (a click anywhere opens the record); **two or more** ⇒ the column, with the row click still opening the record. This is why the column is not a `DataTable` default — the block takes the actions it is given, and a section that passes exactly one is rendering a column of identical buttons beside a row that already opens.
+
+Navigation labels follow the entity the section maintains: the link surface is «Связи специальностей», not «Специальности» — the section maintains the link between the two books, and the closed book itself is a separate, read-only entry (§9.4).
+
+### 9.3 Filters (EARS-17) and record surfaces (EARS-18)
+
+Filters apply on change: text search debounced ≈400 ms, every other control immediately. `FilterBar`'s apply-mode is therefore fixed to instant across the admin application — no «Применить» exists anywhere — and the applied set renders as removable chips with «Сбросить всё» beside them, so the current narrowing is always readable off the screen rather than reconstructed from the controls.
+
+Record surfaces:
+
+- **Tabs are conditional.** One tab ⇒ no tab bar at all. A single-tab bar is chrome that states nothing.
+- **«Вид связи»** is a closed vocabulary rendered through `Combobox`, each option carrying an explanation line — an operator picking an adjacency kind is making a taxonomy decision and needs to know what each kind means at the point of choice. The stored value stays the existing slug; the RU label is presentation. The constraint moves from the `kind` CHECK to an enum in `packages/db` and `packages/schemas` so the vocabulary is closed in one place and the SDK regenerates from it. That is an intended API change, not a compatibility break to route around: the accepted value set is unchanged.
+- **«Вес»** is absent from the operator interface. Weight is a tuning parameter of the targeting resolution, not an editorial decision, and a number an operator cannot reason about is a number they will guess at. The declared default applies server-side; changing the weighting model is a code change with a test, not a field.
+- **«Адрес страницы»** (the slug) is derived, never authored: transliterated from the Russian title on create, frozen on first publish so no live URL moves, and rendered nowhere — list, record and create form alike. `FormDerivedNote` states that the address is derived where a form would otherwise leave the operator wondering where it came from.
+- **Status chips** use the semantic tint tokens (`success-tint` / `warning-tint` with `text-foreground`); a bare `bg-tint` badge sits on the same ground as the row hover state and disappears under the cursor. There is no `warning-text` token, and inventing one is out of scope here.
+
+### 9.4 The closed book, read-only (EARS-19 · LD-9)
+
+`specialties_minzdrav` gets a list surface over the public read of EARS-3 — the same one the storefront calls — with the DataTable patterns of §9.2 and no write affordance in any state. The book is re-seeded from the nomenclature order in force (§2); the admin surface exists so the operator can see the other side of the link they maintain, and API write paths against it stay refused whether or not a UI offers them.
+
+### 9.5 Sequencing and fixtures (EARS-20)
+
+The three reference-book sections are rebuilt on the blocks first, on the #1575 branch under #1483. The remaining admin sections — events, experts, partners, projects and topics, delivered by feature 012 — are converted afterwards as a separate PR under #1578 in the same wave; splitting the conversion keeps the reference-book slice reviewable and lets the pattern settle before it is applied eight times.
+
+Fixtures are production-representative wherever a stand is put in front of the product owner, e2e seeds included: real Russian titles that produce real transliterated addresses. A stand seeded with `x` rows cannot answer the questions Stage B asks — whether a long title wraps, whether a derived address reads sensibly, whether the two-line row is legible with real content — so unrealistic fixtures are a defect of the surface, not of the data.

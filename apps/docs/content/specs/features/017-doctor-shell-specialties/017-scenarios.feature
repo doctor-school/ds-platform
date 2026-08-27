@@ -304,6 +304,109 @@ Feature: A doctor arrives at their own storefront, picks a specialty, and the si
     And every catalog entry and the expand control are real labelled interactive elements
     And the leaderboard is readable by a screen reader
 
+  # ------------------------------------------------- admin operator surfaces
+
+  @EARS-16 @happy
+  Scenario Outline: Reference-book lists render as records, never as a scrolled table
+    Given an operator opens the <section> list in the admin application
+    When the viewport is <viewport>
+    Then each record renders as <render>
+    And no record title or context line is truncated
+    And the list is not horizontally scrollable
+
+    Examples:
+      | section                 | viewport                        | render                |
+      | directions              | above the mobile breakpoint     | a two-line record row |
+      | direction adjacency     | above the mobile breakpoint     | a two-line record row |
+      | specialty links         | below the mobile breakpoint     | a record card         |
+
+  @EARS-16 @happy
+  Scenario: A single-action list has no actions column and opens on the row
+    Given an operator opens a reference-book list whose records carry exactly one action
+    Then the list renders no «Действия» column
+    When the operator clicks anywhere in a record row
+    Then the record opens
+    And the actions column appears only on a list whose records carry two or more actions
+
+  @EARS-16 @happy
+  Scenario: The link surface is named after the link
+    When an operator opens the admin navigation
+    Then the entry for the specialty link surface reads «Связи специальностей»
+
+  @EARS-17 @happy
+  Scenario: Filters apply instantly and state what is applied
+    Given an operator opens a reference-book list
+    When they type into the text search
+    Then the list narrows after the debounce with no «Применить» control anywhere in the admin application
+    And every active filter renders as a removable chip beside the list
+    And a «Сбросить всё» control is offered alongside the chips
+    When the operator removes the last chip
+    Then the unfiltered list is restored without a page reload
+
+  @EARS-18 @happy
+  Scenario: A single-tab record page renders no tab bar
+    Given an operator opens a reference-book record with exactly one tab
+    Then no tab bar is rendered
+    And a record with two or more tabs renders the tab bar
+
+  @EARS-18 @happy
+  Scenario: The adjacency kind is a closed explained vocabulary
+    Given an operator creates a direction adjacency link
+    When they open «Вид связи»
+    Then the options are the closed Russian-labelled vocabulary with an explanation line each
+    And the stored value is the existing slug for the chosen option
+    And a value outside the vocabulary is refused by the API
+
+  @EARS-18 @happy
+  Scenario Outline: Derived and internal fields never reach the operator interface
+    Given an operator opens the <surface> of a reference-book record
+    Then «Вес» is not rendered
+    And the page address is not rendered
+    And the page address of a created record is transliterated from its Russian title and frozen on first publish
+
+    Examples:
+      | surface     |
+      | list        |
+      | record      |
+      | create form |
+
+  @EARS-18 @happy
+  Scenario: Status chips stay readable over the row hover state
+    When a reference-book list renders a record with a status
+    Then the status renders as a chip on the semantic tint tokens
+    And no status renders as a bare badge on bg-tint
+    And the chip stays readable while the row is hovered
+
+  @EARS-19 @happy
+  Scenario: The closed Минздрав book is visible but never editable
+    When an operator opens the Минздрав specialty book in the admin application
+    Then every seeded entry of the book is listed with the same record patterns
+    And no create, edit, delete or import control is present in any state
+    And a write request against the book is refused by the API
+
+  @EARS-20 @happy
+  Scenario Outline: Every admin section reads as one application
+    When an operator opens the <section> section
+    Then its list, filters, record surface and status chips are the shared design-system blocks
+    And no section-local list, filter bar or status chip is assembled in its place
+
+    Examples:
+      | section    |
+      | events     |
+      | experts    |
+      | partners   |
+      | projects   |
+      | topics     |
+      | directions |
+
+  @EARS-20 @happy
+  Scenario: An owner-facing stand carries production-representative data
+    Given a stand is put in front of the product owner
+    When any admin list is opened
+    Then its records carry realistic Russian titles
+    And their page addresses are the real transliterations of those titles
+    And no technical placeholder row is present
+
   # ------------------------------------------------------------ design gate
 
   @EARS-15 @process

@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  boolean,
   check,
   foreignKey,
   index,
@@ -41,6 +42,18 @@ export const projectKind = pgEnum("project_kind", [
   "school",
   "media",
   "program",
+]);
+
+/**
+ * The closed `project_experts.role` set (012-design §2.1). `curator` is the
+ * single accountable owner a published project must have; `member` is every
+ * other listed expert. The distinction is a DB enum rather than a boolean
+ * because the partial unique index below is written against the VALUE — a
+ * boolean would leave "which role is the accountable one" implicit in code.
+ */
+export const projectExpertRole = pgEnum("project_expert_role", [
+  "curator",
+  "member",
 ]);
 
 /**
@@ -673,3 +686,138 @@ export const eventTopics = pgTable(
 export type EventTopic = typeof eventTopics.$inferSelect;
 export type NewEventTopic = typeof eventTopics.$inferInsert;
 export type NewEventProject = typeof eventProjects.$inferInsert;
+
+/**
+ * `project_experts` — the retained project↔expert relationship (012 EARS-9,
+ * #1291), and the table the published-project curator invariant is written on.
+ *
+ * The row carries ONE attribute, `role`, and that attribute is the whole reason
+ * this join is not shaped like `event_projects`: 012-design §3.2 requires every
+ * committed `published` project to have exactly ONE active curator whose expert
+ * is itself published and non-retired. The upper bound of that invariant lives
+ * here as `project_experts_project_curator_active_uniq`, a PARTIAL unique index
+ * over `(project_id) WHERE status = 'active' AND role = 'curator'`. Postgres
+ * evaluates it IMMEDIATELY, not at commit — which is exactly why
+ * `ReplaceProjectCurator` (§3.2) must demote the outgoing curator to `member`
+ * BEFORE promoting the candidate: the two rows would otherwise collide mid-
+ * transaction even though the end state is legal.
+ *
+ * The LOWER bound (at least one, and an eligible one) is not expressible as an
+ * index — it spans this table and `experts.status` — so the publish, curator
+ * and expert-lifecycle services enforce it under the shared §3.2 lock order:
+ * affected experts by stable id → affected projects by stable id →
+ * `project_experts` rows.
+ *
+ * The logical pair is unique across ACTIVE AND RETAINED rows: a retired
+ * relation is RESTORED — same row, same id, `version + 1` — never re-inserted,
+ * so one relationship never accumulates two audit lineages. Both FKs are
+ * `RESTRICT`; nothing in 012 is physically deleted and there is no DELETE route.
+ *
+ * `role` is NOT NULL. §2.4's `RemoveExpertContent` (#1306) clears
+ * `event_experts.role` because that column holds authored editorial text about
+ * the person; `project_experts.role` is a structural enum that says which side
+ * of the curator invariant the row sits on, and a removal RETIRES the row rather
+ * than blanking it.
+ */
+export const projectExperts = pgTable(
+  "project_experts",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "restrict" }),
+    expertId: uuid("expert_id")
+      .notNull()
+      .references(() => experts.id, { onDelete: "restrict" }),
+    /** `curator` (at most one active per project) or `member`. */
+    role: projectExpertRole("role").notNull(),
+    status: relationshipStatus("status").notNull().default("active"),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    /** Optimistic-concurrency counter behind the join ETag; starts at 1, `++` per successful write. */
+    version: integer("version").notNull().default(1),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    // Spans active AND retained rows (012-design §2.1) — restore, never reinsert.
+    uniqueIndex("project_experts_pair_key").on(t.projectId, t.expertId),
+    // The §3.2 upper bound. Partial on the ACTIVE CURATOR pair: a retired
+    // curator row and an active member row both leave the slot free.
+    uniqueIndex("project_experts_project_curator_active_uniq")
+      .on(t.projectId)
+      .where(sql`${t.status} = 'active' AND ${t.role} = 'curator'`),
+    check(
+      "project_experts_retired_iff_deleted",
+      sql`(${t.status} = 'retired') = (${t.deletedAt} IS NOT NULL)`,
+    ),
+    check("project_experts_version_positive", sql`${t.version} >= 1`),
+    // The reverse traversal of §5.2 (`/experts/:key/projects`) is an indexed
+    // read, not a scan; the pair index already serves `project_id`-leading ones.
+    index("project_experts_expert_id_idx").on(t.expertId),
+  ],
+);
+
+export type ProjectExpert = typeof projectExperts.$inferSelect;
+export type NewProjectExpert = typeof projectExperts.$inferInsert;
+
+/**
+ * `project_partners` — the retained project↔partner relationship (012 EARS-10,
+ * #1292).
+ *
+ * Its one attribute is `is_primary`. A project may list many partners; at most
+ * ONE of them is the primary, and that one is what `PublicProjectSummary
+ * .primaryPartner` resolves to (012-design §5.2). The bound is the same shape
+ * as the curator one and for the same reason — a partial unique index over
+ * `(project_id) WHERE status = 'active' AND is_primary`, immediate rather than
+ * deferrable, so a service that wants to MOVE the primary flag must clear the
+ * incumbent before setting the successor inside one transaction.
+ *
+ * Unlike the curator, there is no LOWER bound: a published project with no
+ * primary partner is perfectly legal and its `primaryPartner` is `null`. That is
+ * why this table needs no counterpart to the §3.2 lock protocol — the invariant
+ * is entirely within one project's rows, so the project row lock plus the index
+ * is the whole argument.
+ */
+export const projectPartners = pgTable(
+  "project_partners",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "restrict" }),
+    partnerId: uuid("partner_id")
+      .notNull()
+      .references(() => partners.id, { onDelete: "restrict" }),
+    /** At most one ACTIVE true per project — the index below is the backstop. */
+    isPrimary: boolean("is_primary").notNull().default(false),
+    status: relationshipStatus("status").notNull().default("active"),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    /** Optimistic-concurrency counter behind the join ETag; starts at 1, `++` per successful write. */
+    version: integer("version").notNull().default(1),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("project_partners_pair_key").on(t.projectId, t.partnerId),
+    uniqueIndex("project_partners_project_primary_active_uniq")
+      .on(t.projectId)
+      .where(sql`${t.status} = 'active' AND ${t.isPrimary}`),
+    check(
+      "project_partners_retired_iff_deleted",
+      sql`(${t.status} = 'retired') = (${t.deletedAt} IS NOT NULL)`,
+    ),
+    check("project_partners_version_positive", sql`${t.version} >= 1`),
+    index("project_partners_partner_id_idx").on(t.partnerId),
+  ],
+);
+
+export type ProjectPartner = typeof projectPartners.$inferSelect;
+export type NewProjectPartner = typeof projectPartners.$inferInsert;

@@ -16,6 +16,7 @@ import type { PartnerAdminDetail, TaxonomyStatus } from "@ds/schemas";
 import { AppShell } from "@/components/app-shell";
 import { BackToList } from "@/components/back-to-list";
 import { PartnerForm } from "@/components/partner-form";
+import { ProjectPartnersPanel } from "@/components/project-partners-panel";
 import { taxonomyErrorKey } from "@/lib/taxonomy-errors";
 import type { UpdatePartnerVars } from "@/providers/data-provider";
 
@@ -102,6 +103,9 @@ export default function PartnerDetailPage() {
                 <TabsTrigger value="main" data-testid="tab-main">
                   {t("partners.tabs.main")}
                 </TabsTrigger>
+                <TabsTrigger value="projects" data-testid="tab-projects">
+                  {t("partners.tabs.projects")}
+                </TabsTrigger>
               </TabsList>
               <TabsContent value="main">
                 <PartnerForm
@@ -145,6 +149,14 @@ export default function PartnerDetailPage() {
                     );
                   }}
                 />
+              </TabsContent>
+
+              {/* «Проекты» (012 EARS-10, 012-design §5.1) — the READ direction of
+                  the same relation. Authoring stays on the project detail; here
+                  the operator sees which проекты this partner is listed on and
+                  where it is the основной партнёр. */}
+              <TabsContent value="projects">
+                <ProjectPartnersPanel mode="partner" entityId={detail.id} />
               </TabsContent>
             </Tabs>
           </>

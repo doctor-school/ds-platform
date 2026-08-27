@@ -99,6 +99,56 @@ export function taxonomyErrorKey(error: unknown, fallbackKey: string): string {
     }
   }
 
+  // ── 012 EARS-9 project↔expert link codes (012-design §5.3, #1291) ────────
+  // `PUBLISHED_PROJECT_REQUIRES_CURATOR` is the refusal this surface exists to
+  // explain: the operator did not type anything wrong, they tried to leave a
+  // published project without a curator, and the fix is the REPLACE action, not
+  // a corrected field. The generic sentence would hide the only way forward.
+  if (ns === "projectExperts") {
+    switch (code) {
+      case "PUBLISHED_PROJECT_REQUIRES_CURATOR":
+        return "projectExperts.errors.curatorRequired";
+      case "RELATIONSHIP_CONFLICT":
+        return "projectExperts.errors.relationshipConflict";
+      case "CONTENT_REMOVED":
+        return "projectExperts.errors.contentRemoved";
+      case "INVALID_TRANSITION":
+        return "projectExperts.errors.invalidTransition";
+      case "RESOURCE_NOT_FOUND":
+        return "projectExperts.errors.notFound";
+      case "VALIDATION_FAILED":
+        return "projectExperts.errors.validation";
+      case "IDP_REVALIDATION_UNAVAILABLE":
+        return "projectExperts.errors.authorityUnavailable";
+      default:
+        break;
+    }
+  }
+
+  // ── 012 EARS-10 project↔partner link codes (012-design §5.3, #1292) ──────
+  // `RELATIONSHIP_CONFLICT` is ambiguous here in a way it is not on the other
+  // joins: it answers BOTH «эта пара уже есть» and «основной партнёр уже
+  // назначен». Which one it is depends on WHICH ACTION was sent, not on the
+  // payload, so the panel intercepts the code before this table on the two
+  // primary-flag mutations and this table keeps the duplicate-pair reading — the
+  // only one the plain link/restore actions can produce.
+  if (ns === "projectPartners") {
+    switch (code) {
+      case "RELATIONSHIP_CONFLICT":
+        return "projectPartners.errors.duplicatePair";
+      case "INVALID_TRANSITION":
+        return "projectPartners.errors.invalidTransition";
+      case "RESOURCE_NOT_FOUND":
+        return "projectPartners.errors.notFound";
+      case "VALIDATION_FAILED":
+        return "projectPartners.errors.validation";
+      case "IDP_REVALIDATION_UNAVAILABLE":
+        return "projectPartners.errors.authorityUnavailable";
+      default:
+        break;
+    }
+  }
+
   switch (code) {
     case "SLUG_CONFLICT":
       return `${ns}.errors.slugConflict`;

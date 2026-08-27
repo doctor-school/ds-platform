@@ -78,4 +78,10 @@ CREATE INDEX "direction_specialties_specialty_id_idx" ON "direction_specialties"
 CREATE TRIGGER direction_specialties_audit AFTER INSERT OR UPDATE OR DELETE
   ON "direction_specialties" FOR EACH ROW EXECUTE FUNCTION audit_row_change();--> statement-breakpoint
 CREATE TRIGGER direction_adjacency_audit AFTER INSERT OR UPDATE OR DELETE
-  ON "direction_adjacency" FOR EACH ROW EXECUTE FUNCTION audit_row_change();
+  ON "direction_adjacency" FOR EACH ROW EXECUTE FUNCTION audit_row_change();--> statement-breakpoint
+-- The table rename above carries the old `topics_audit` trigger over to the
+-- renamed table; re-create it under the renamed name so the audit attachment
+-- for `directions` is explicit in the migration text (audit-coverage guard).
+DROP TRIGGER IF EXISTS "topics_audit" ON "directions";--> statement-breakpoint
+CREATE TRIGGER directions_audit AFTER INSERT OR UPDATE OR DELETE
+  ON "directions" FOR EACH ROW EXECUTE FUNCTION audit_row_change();

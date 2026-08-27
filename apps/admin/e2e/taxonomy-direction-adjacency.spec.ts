@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { bootstrapAdminSession } from "./support/admin-session";
 import { totpCode } from "./support/totp";
+import { visible } from "./support/visible";
 
 /**
  * #1483 (ADR-0016 §5; 017 EARS-16…18), browser half — the REAL Refine → NestJS →
@@ -173,9 +174,18 @@ test.describe("#1483 — direction adjacency in the live admin", () => {
     await page
       .getByTestId("direction-adjacency-direction-filter")
       .selectOption({ label: target });
-    await expect(page.getByText("Ничего не найдено")).toBeVisible();
-    // «Сбросить всё» puts the unfiltered book back without a page reload.
-    await page.getByRole("button", { name: "Сбросить всё" }).first().click();
+    // Both DataTable variants carry the empty state (see `support/visible`);
+    // the assertion is about the one the operator is looking at.
+    await expect(visible(page.getByText("Ничего не найдено"))).toBeVisible();
+    // «Сбросить всё» puts the unfiltered book back without a page reload. The
+    // filter bar's reset is the one meant here — the empty state offers a reset
+    // of its own, so the control is addressed inside the bar rather than by
+    // ordinal position in the document.
+    await visible(
+      page
+        .getByTestId("direction-adjacency-filters")
+        .getByRole("button", { name: "Сбросить всё" }),
+    ).click();
     await expect(page.getByTestId("direction-adjacency-table")).toContainText(
       target,
     );
@@ -184,7 +194,9 @@ test.describe("#1483 — direction adjacency in the live admin", () => {
     await expect(
       page.getByRole("columnheader", { name: "Действия" }),
     ).toHaveCount(0);
-    await page.getByTestId(/^row-[0-9a-f-]{36}$/).first().click();
+    await visible(page.getByTestId(/^row-[0-9a-f-]{36}$/))
+      .first()
+      .click();
     await page.waitForURL(/\/direction-adjacency\/[0-9a-f-]{36}$/, {
       timeout: 20_000,
     });

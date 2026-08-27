@@ -4,11 +4,12 @@ import { useState } from "react";
 import { useParams } from "next/navigation";
 import { Authenticated, useOne, useUpdate } from "@refinedev/core";
 import { useTranslations } from "next-intl";
-import { Alert, Badge } from "@ds/design-system";
+import { Alert } from "@ds/design-system";
 import type { DirectionAdminDetail, TaxonomyStatus } from "@ds/schemas";
 import { AppShell } from "@/components/app-shell";
 import { BackToList } from "@/components/back-to-list";
 import { DirectionForm } from "@/components/direction-form";
+import { StatusChip } from "@/components/status-chip";
 import { taxonomyErrorKey } from "@/lib/taxonomy-errors";
 import type { UpdateDirectionVars } from "@/providers/data-provider";
 
@@ -67,9 +68,11 @@ export default function DirectionDetailPage() {
               >
                 {detail.title}
               </h1>
-              <Badge variant="label" data-testid="direction-status">
-                {statusLabels[detail.status]}
-              </Badge>
+              <StatusChip
+                status={detail.status}
+                label={statusLabels[detail.status]}
+                testId="direction-status"
+              />
             </div>
 
             {errorKey ? (

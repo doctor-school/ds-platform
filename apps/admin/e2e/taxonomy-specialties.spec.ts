@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { bootstrapAdminSession } from "./support/admin-session";
 import { totpCode } from "./support/totp";
+import { visible } from "./support/visible";
 
 /**
  * 017 EARS-19 (LD-9), browser half — the Минздрав specialty book in the running
@@ -77,12 +78,14 @@ test.describe("017 EARS-19 — the Минздрав specialty book in the live a
     await expect(page.getByTestId("specialties-include-retired")).toHaveCount(0);
     // EARS-17 readouts still stand — the operator is told how much book there is.
     await expect(page.getByTestId("specialties-total")).toBeVisible();
-    await expect(page.getByTestId("specialties-page")).toBeVisible();
+    // The pagination readout ships with each DataTable variant (see
+    // `support/visible`) — assert the copy the operator reads.
+    await expect(visible(page.getByTestId("specialties-page"))).toBeVisible();
 
     // ── The book carries real rows, and the code rides with each one ───────
     const table = page.getByTestId("specialties-table");
     await expect(table).toBeVisible();
-    const firstRow = page.locator("[data-testid^='row-']").first();
+    const firstRow = visible(page.locator("[data-testid^='row-']")).first();
     await expect(firstRow).toBeVisible();
     // Picked positionally: the nomenclature is the seed's to decide, and a
     // literal specialty name here would assert the seed rather than the screen.
@@ -107,7 +110,7 @@ test.describe("017 EARS-19 — the Минздрав specialty book in the live a
     await expect(page.getByText("Выбрано:", { exact: false })).toHaveCount(0);
 
     // ── Rows are INERT by design — there is no detail route to open ───────
-    await page.locator("[data-testid^='row-']").first().click();
+    await visible(page.locator("[data-testid^='row-']")).first().click();
     await expect(page).toHaveURL(bookUrl);
   });
 });

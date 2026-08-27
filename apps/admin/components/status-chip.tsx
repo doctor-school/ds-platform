@@ -32,12 +32,20 @@ const TONE: Record<string, string> = { ...TAXONOMY_TONE, ...RELATIONSHIP_TONE };
 export function StatusChip({
   status,
   label,
+  testId,
 }: {
   status: TaxonomyStatus | RelationshipStatus;
   label: string;
+  /**
+   * Overrides the default `status-<value>` handle. Record pages carry a
+   * per-resource handle (`direction-status`, …) because a record shows exactly
+   * one chip and the assertion names the RESOURCE, not the value it happens to
+   * hold this run.
+   */
+  testId?: string;
 }) {
   return (
-    <Badge className={TONE[status]} data-testid={`status-${status}`}>
+    <Badge className={TONE[status]} data-testid={testId ?? `status-${status}`}>
       {label}
     </Badge>
   );

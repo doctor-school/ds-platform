@@ -3,7 +3,7 @@
 import { useParams } from "next/navigation";
 import { Authenticated, useCustom } from "@refinedev/core";
 import { useTranslations } from "next-intl";
-import { Alert, Badge } from "@ds/design-system";
+import { Alert } from "@ds/design-system";
 import type {
   DirectionSpecialtyAdminDetail,
   RelationshipStatus,
@@ -11,6 +11,7 @@ import type {
 import { AppShell } from "@/components/app-shell";
 import { BackToList } from "@/components/back-to-list";
 import { RelationLifecycleActions } from "@/components/relation-lifecycle-actions";
+import { StatusChip } from "@/components/status-chip";
 import { directionSpecialtiesUrl } from "@/providers/data-provider";
 
 /**
@@ -62,9 +63,11 @@ export default function DirectionSpecialtyDetailPage() {
               >
                 {t("directionSpecialties.detailTitle")}
               </h1>
-              <Badge variant="label" data-testid="direction-specialty-status">
-                {statusLabels[detail.status]}
-              </Badge>
+              <StatusChip
+                status={detail.status}
+                label={statusLabels[detail.status]}
+                testId="direction-specialty-status"
+              />
             </div>
 
             <dl className="mb-8 grid gap-4 sm:grid-cols-2">

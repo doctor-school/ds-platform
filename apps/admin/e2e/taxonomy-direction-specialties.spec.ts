@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { bootstrapAdminSession } from "./support/admin-session";
 import { totpCode } from "./support/totp";
+import { visible } from "./support/visible";
 
 /**
  * #1483 (ADR-0016 §5) + 017 EARS-16…17, browser half — the REAL
@@ -157,7 +158,9 @@ test.describe("#1483 / 017 EARS-16…17 — direction↔specialty links in the l
     await expect(page.getByText("Выбрано:", { exact: false })).toBeVisible();
 
     // ── EARS-16: the whole ROW opens the link ─────────────────────────────
-    await page.getByTestId(`row-${linkId}`).click();
+    // The DataTable block mounts both responsive variants (see `support/visible`),
+    // so the row handle is scoped to the copy the operator can actually click.
+    await visible(page.getByTestId(`row-${linkId}`)).click();
     await page.waitForURL(/\/direction-specialties\/[0-9a-f-]{36}$/, {
       timeout: 20_000,
     });

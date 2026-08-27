@@ -88,7 +88,11 @@ export default function SpecialtiesListPage() {
           filterable={false}
           caption={t("specialties.tableCaption")}
           record={{
-            header: t("specialties.listTitle"),
+            // The record column names ONE row, so it is the singular noun —
+            // «Специальность», the twin of «Название» / «Направление» on the
+            // other lists. Reusing the page title here made the column header
+            // read as a second page heading in the middle of the table.
+            header: t("specialties.columns.name"),
             width: "76%",
             title: (row) => (
               <span data-testid={`row-${row.id}`}>{row.name}</span>

@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { bootstrapAdminSession } from "./support/admin-session";
 import { totpCode } from "./support/totp";
+import { visible } from "./support/visible";
 
 /**
  * 012 EARS-3 (#1285) + 017 EARS-16…18 (#1483), browser half — the REAL
@@ -11,10 +12,11 @@ import { totpCode } from "./support/totp";
  * running admin: sign in, create a direction, find the row through the block-tier
  * list (search applies INSTANTLY — there is no «Применить»), open it by clicking
  * the ROW rather than an action button, edit the same row (an If-Match round-trip)
- * and confirm the change survives a reload. Both refusal branches ride along — the
- * client-side reject (an over-long title never leaves the browser) and the SERVER
- * reject (a second direction whose title derives the same address comes back as a
- * Problem Details rendered as one actionable RU sentence).
+ * and confirm the change survives a reload. The client-side reject rides along (an
+ * over-long title never leaves the browser), and so does the case that is
+ * deliberately NOT a reject: a second direction carrying an already-used RU title
+ * is created, because the address it derives is the server's own decision and the
+ * server suffixes it rather than refusing the operator over it (EARS-18).
  *
  * «Адрес страницы» is asserted ABSENT on every surface (017-design §9.3): the
  * server derives it from the Russian title and freezes it on first publish, so
@@ -123,7 +125,9 @@ test.describe("012 EARS-3 / 017 EARS-16…18 — curated direction authoring in 
     await expect(page.getByRole("button", { name: /удалить/i })).toHaveCount(0);
 
     // ── EARS-16: the whole ROW opens the record ───────────────────────────
-    await page.getByText(title, { exact: false }).first().click();
+    await visible(
+      page.getByTestId("directions-table").getByText(title, { exact: false }),
+    ).click();
     await page.waitForURL(/\/directions\/[0-9a-f-]{36}$/, { timeout: 20_000 });
     expect(page.url()).toBe(detailUrl);
 
@@ -137,18 +141,42 @@ test.describe("012 EARS-3 / 017 EARS-16…18 — curated direction authoring in 
     // The row's identity did not move — an edit is an edit, not a re-create.
     expect(page.url()).toBe(detailUrl);
 
-    // ── Reject branch (server): a title deriving a taken address ──────────
-    // The operator never typed an address, so the refusal must still read as
-    // one sentence about the direction rather than about an internal slug.
+    // ── EARS-18: a duplicate RU title is NOT a refusal ─────────────────────
+    // The operator never types an address, so a second direction carrying the
+    // same title cannot be refused over one: the server derives the slug and
+    // suffixes it (`…-2`) on its own. Two same-titled directions is a legal
+    // state, and the suffix is internal identity the UI never surfaces — a
+    // refusal here would be the platform blaming the operator for a decision it
+    // took itself.
     await page.goto("/directions/create");
-    await page.getByTestId("direction-title").fill(title);
+    await page.getByTestId("direction-title").fill(editedTitle);
     await page.getByTestId("submit-direction").click();
-    await expect(page.getByTestId("create-error")).toHaveText(
-      /адрес страницы уже занят/i,
+
+    await page.waitForURL(/\/directions\/[0-9a-f-]{36}$/, { timeout: 20_000 });
+    const duplicateUrl = page.url();
+    expect(duplicateUrl).not.toBe(detailUrl);
+    await expect(page.getByTestId("create-error")).toHaveCount(0);
+    await expect(page.getByTestId("direction-heading")).toHaveText(editedTitle);
+    // Neither the address nor the suffix the server just minted reaches the UI.
+    await expect(page.getByTestId("direction-slug")).toHaveCount(0);
+    await expect(page.getByText("Адрес страницы", { exact: false })).toHaveCount(
+      0,
     );
-    // The operator stays on the form with their input intact — a refusal is a
-    // correction prompt, not a lost draft.
-    expect(page.url()).toMatch(/\/directions\/create$/);
-    await expect(page.getByTestId("direction-title")).toHaveValue(title);
+    await expect(page.getByText(/-2\b/)).toHaveCount(0);
+
+    // ── Both records stand in the list, indistinguishable by design ────────
+    await page.getByTestId("back-to-list").click();
+    await page.waitForURL(/\/directions$/, { timeout: 20_000 });
+    await page.getByRole("searchbox", { name: "Поиск" }).fill(editedTitle);
+    // The block-tier DataTable mounts BOTH responsive variants and hides one
+    // with CSS, so every row handle exists twice in the DOM at every width.
+    // Assertions scope to the variant the operator can actually see.
+    await expect(
+      visible(
+        page
+          .getByTestId("directions-table")
+          .getByText(editedTitle, { exact: true }),
+      ),
+    ).toHaveCount(2);
   });
 });

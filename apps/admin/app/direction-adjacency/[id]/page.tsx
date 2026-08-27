@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useParams } from "next/navigation";
 import { Authenticated, useCustom, useCustomMutation } from "@refinedev/core";
 import { useTranslations } from "next-intl";
-import { Alert, Badge } from "@ds/design-system";
+import { Alert } from "@ds/design-system";
 import type {
   DirectionAdjacencyAdminDetail,
   RelationshipStatus,
@@ -14,6 +14,7 @@ import { AppShell } from "@/components/app-shell";
 import { BackToList } from "@/components/back-to-list";
 import { DirectionAdjacencyForm } from "@/components/direction-adjacency-form";
 import { RelationLifecycleActions } from "@/components/relation-lifecycle-actions";
+import { StatusChip } from "@/components/status-chip";
 import { taxonomyErrorKey } from "@/lib/taxonomy-errors";
 import { directionAdjacencyUrl } from "@/providers/data-provider";
 import {
@@ -83,9 +84,11 @@ export default function DirectionAdjacencyDetailPage() {
               >
                 {detail.directionTitle} → {detail.adjacentDirectionTitle}
               </h1>
-              <Badge variant="label" data-testid="direction-adjacency-status">
-                {statusLabels[detail.status]}
-              </Badge>
+              <StatusChip
+                status={detail.status}
+                label={statusLabels[detail.status]}
+                testId="direction-adjacency-status"
+              />
             </div>
 
             {errorKey ? (

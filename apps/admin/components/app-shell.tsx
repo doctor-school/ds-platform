@@ -72,6 +72,25 @@ export function AppShell({ children }: { children: ReactNode }) {
                   {t("app.nav.directions")}
                 </Link>
               </DsLink>
+              {/* The two #1483 relation books sit next to the directions they
+                  relate, because that is the only entity either of them is about
+                  — a link has no meaning apart from its endpoints. */}
+              <DsLink asChild variant="standalone">
+                <Link
+                  href="/direction-specialties"
+                  data-testid="nav-direction-specialties"
+                >
+                  {t("app.nav.directionSpecialties")}
+                </Link>
+              </DsLink>
+              <DsLink asChild variant="standalone">
+                <Link
+                  href="/direction-adjacency"
+                  data-testid="nav-direction-adjacency"
+                >
+                  {t("app.nav.directionAdjacency")}
+                </Link>
+              </DsLink>
             </nav>
           </div>
           <Button

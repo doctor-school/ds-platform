@@ -140,16 +140,19 @@ export function AdminListShell<Row, Status extends string = TaxonomyStatus>({
           onQueryChange({ ...query, q: draftQ.trim(), page: 1 });
         }}
       >
-        <div className="flex flex-1 flex-col gap-1.5">
-          <Label htmlFor={`${testId}-q`}>{t("projects.filters.search")}</Label>
-          <Input
-            id={`${testId}-q`}
-            value={draftQ}
-            placeholder={t("projects.filters.searchPlaceholder")}
-            data-testid={`${testId}-search`}
-            onChange={(event) => setDraftQ(event.target.value)}
-          />
-        </div>
+        {searchable ? (
+          <div className="flex flex-1 flex-col gap-1.5">
+            <Label htmlFor={`${testId}-q`}>{t("projects.filters.search")}</Label>
+            <Input
+              id={`${testId}-q`}
+              value={draftQ}
+              placeholder={t("projects.filters.searchPlaceholder")}
+              data-testid={`${testId}-search`}
+              onChange={(event) => setDraftQ(event.target.value)}
+            />
+          </div>
+        ) : null}
+        {extraFilters}
         <div className="flex flex-col gap-1.5 sm:w-56">
           <Label htmlFor={`${testId}-status`}>
             {t("projects.filters.status")}
@@ -161,13 +164,13 @@ export function AdminListShell<Row, Status extends string = TaxonomyStatus>({
             onChange={(event) =>
               onQueryChange({
                 ...query,
-                status: event.target.value as TaxonomyStatus | "",
+                status: event.target.value as Status | "",
                 page: 1,
               })
             }
           >
             <option value="">{t("projects.filters.statusAny")}</option>
-            {TAXONOMY_STATUSES.map((status) => (
+            {(statuses ?? (TAXONOMY_STATUSES as readonly string[] as readonly Status[])).map((status) => (
               <option key={status} value={status}>
                 {statusLabels[status]}
               </option>

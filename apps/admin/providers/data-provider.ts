@@ -25,6 +25,7 @@ import type {
   ProjectAdminListItem,
   CreateDirectionRequest,
   RecordingCommand,
+  RelationshipStatus,
   TaxonomyStatus,
   DirectionAdminDetail,
   DirectionAdminListItem,
@@ -667,3 +668,74 @@ export const projectPartnersUrl = {
   command: (id: string, command: "retire" | "restore") =>
     `${ADMIN_BASE}/project-partners/${id}/${command}`,
 };
+
+/**
+ * The #1483 direction↔specialty link endpoints (ADR-0016 §5; 017-design §5).
+ *
+ * Built the same way `eventProjectsUrl` is, and NOT registered as a Refine CRUD
+ * resource, for the same three reasons: the collection is always read scoped to an
+ * endpoint rather than as a flat book, the writes are the two named retire/restore
+ * commands rather than a PATCH, and the list query is `.strict()` — it accepts no
+ * `q`, so the generic taxonomy `getList` (which always sets `page`/`pageSize` and
+ * may set `q`) would build a query the API refuses. The `custom` path is also what
+ * owns the Idempotency-Key + If-Match protocol headers, which every write here owes.
+ *
+ * There is no `PATCH` and no `DELETE` in the map because the API exposes neither:
+ * the link is attribute-less, so re-pointing it is retiring one row and authoring
+ * another.
+ */
+export const directionSpecialtiesUrl = {
+  collection: () => `${ADMIN_BASE}/direction-specialties`,
+  list: (query: {
+    directionId?: string;
+    specialtyMinzdravId?: string;
+    status?: RelationshipStatus;
+    includeRetired?: boolean;
+    page?: number;
+    pageSize?: number;
+  }) => `${ADMIN_BASE}/direction-specialties?${relationQuery(query)}`,
+  row: (id: string) => `${ADMIN_BASE}/direction-specialties/${id}`,
+  transition: (id: string, transition: RelationshipTransition) =>
+    `${ADMIN_BASE}/direction-specialties/${id}/${transition}`,
+};
+
+/**
+ * The #1483 direction adjacency endpoints (ADR-0016 §5; 017-design §5). Same
+ * shape as the specialty links above, plus the one route they do not have: an
+ * adjacency edge carries `kind` and `weight`, so `PATCH :id` re-labels or
+ * re-weights the SAME edge. The endpoints are the edge's identity and are not
+ * patchable — moving an edge is retiring one and authoring another — which is why
+ * `row()` is the only path a write ever needs.
+ */
+export const directionAdjacencyUrl = {
+  collection: () => `${ADMIN_BASE}/direction-adjacency`,
+  list: (query: {
+    directionId?: string;
+    adjacentDirectionId?: string;
+    kind?: string;
+    status?: RelationshipStatus;
+    includeRetired?: boolean;
+    page?: number;
+    pageSize?: number;
+  }) => `${ADMIN_BASE}/direction-adjacency?${relationQuery(query)}`,
+  row: (id: string) => `${ADMIN_BASE}/direction-adjacency/${id}`,
+  transition: (id: string, transition: RelationshipTransition) =>
+    `${ADMIN_BASE}/direction-adjacency/${id}/${transition}`,
+};
+
+/** The two named lifecycle commands a relationship row answers to. */
+export type RelationshipTransition = "retire" | "restore";
+
+/**
+ * The query string of a direction-relation list. Both list schemas are
+ * `.strict()`, so an empty-string or `undefined` value is OMITTED rather than
+ * serialized: `?directionId=` is a validation failure, not "no filter".
+ */
+function relationQuery(query: Record<string, unknown>): string {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(query)) {
+    if (value === undefined || value === "" || value === false) continue;
+    params.set(key, String(value));
+  }
+  return params.toString();
+}

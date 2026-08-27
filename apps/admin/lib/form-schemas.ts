@@ -494,6 +494,18 @@ export interface DirectionSpecialtyFormFields {
 }
 
 /**
+ * The weight bound, rebuilt from the SSOT CONSTANTS rather than reached out of
+ * `CreateDirectionAdjacencyRequestSchema.shape`: that schema carries a `.refine()`
+ * at the object level, and a refined object's `.shape` is not reachable through
+ * the ZodEffects wrapper. Using the exported bounds keeps the single source intact.
+ */
+const DirectionAdjacencyWeightBoundSchema = z
+  .number()
+  .int()
+  .min(DIRECTION_ADJACENCY_WEIGHT_MIN)
+  .max(DIRECTION_ADJACENCY_WEIGHT_MAX);
+
+/**
  * #1483 — the direction adjacency form (ADR-0016 §5; 017-design §5). Unlike the
  * specialty link, an adjacency edge DOES carry attributes (`kind`, `weight`), so
  * this form serves both create and edit — with one deliberate asymmetry the API
@@ -549,18 +561,6 @@ export const DirectionAdjacencyFormSchema = z
         : { code: "custom", path: ["weightText"] },
     );
   });
-
-/**
- * The weight bound, rebuilt from the SSOT CONSTANTS rather than reached out of
- * `CreateDirectionAdjacencyRequestSchema.shape`: that schema carries a `.refine()`
- * at the object level, and a refined object's `.shape` is not reachable through
- * the ZodEffects wrapper. Using the exported bounds keeps the single source intact.
- */
-const DirectionAdjacencyWeightBoundSchema = z
-  .number()
-  .int()
-  .min(DIRECTION_ADJACENCY_WEIGHT_MIN)
-  .max(DIRECTION_ADJACENCY_WEIGHT_MAX);
 
 export interface DirectionAdjacencyFormFields {
   directionId: string;

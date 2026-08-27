@@ -34,6 +34,8 @@ export function useLocalizedResolver<TFieldValues extends FieldValues, Out>(
     | "experts.validation"
     | "partners.validation"
     | "directions.validation"
+    | "directionSpecialties.validation"
+    | "directionAdjacency.validation"
     | "recordings.validation"
     | "eventExperts.validation" = "events.validation",
 ): Resolver<TFieldValues, unknown, Out> {
@@ -146,6 +148,26 @@ export function translateIssue(issue: ZodIssueLike, t: Translator): string {
   if (has("expertId")) return t("expert");
   if (has("positionText")) {
     return issue.code === "too_big" ? t("positionMax") : t("position");
+  }
+
+  // #1483 direction relations. Every box here is a SELECTOR except `kind` and
+  // `weight`, and «обязательное поле» under a dropdown does not say what to do —
+  // so each endpoint gets its own «выберите … из списка». The two ids arrive as
+  // `invalid_format` on an empty string (the SSOT id is a `z.uuid()`), which the
+  // generic tail below maps to `fallback`, so the branches are load-bearing
+  // rather than cosmetic. The self-edge refusal is a `custom` issue on the
+  // ADJACENT box and reads as its own sentence: «выберите смежное направление»
+  // would be advice the operator has already followed.
+  if (has("specialtyMinzdravId")) return t("specialty");
+  if (has("adjacentDirectionId")) {
+    return issue.code === "custom" ? t("selfEdge") : t("adjacentDirection");
+  }
+  if (has("directionId")) return t("direction");
+  // The weight box is TEXT holding an integer (see `DirectionAdjacencyFormSchema`):
+  // empty / non-numeric / zero / negative share one fix, an over-cap value has
+  // its own.
+  if (has("weightText")) {
+    return issue.code === "too_big" ? t("weightMax") : t("weight");
   }
 
   if (has("expectedBy")) return t("expectedBy");

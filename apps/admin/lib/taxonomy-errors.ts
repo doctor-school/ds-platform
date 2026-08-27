@@ -149,6 +149,28 @@ export function taxonomyErrorKey(error: unknown, fallbackKey: string): string {
     }
   }
 
+  // ── #1483 direction-relation codes (ADR-0016 §5) ─────────────────────────
+  // Both relations answer the SAME code set, so one block serves both
+  // namespaces — each still says it in its own nouns («такая связь» vs «такая
+  // смежность»), which is the whole reason the namespace is derived rather than
+  // shared. Scoped like the blocks above: `RELATIONSHIP_CONFLICT` reaches only a
+  // relation surface, and pointing an entity namespace at a `duplicate` key that
+  // does not exist would trade a wrong sentence for a crashed render.
+  if (ns === "directionSpecialties" || ns === "directionAdjacency") {
+    switch (code) {
+      case "RELATIONSHIP_CONFLICT":
+        return `${ns}.errors.duplicate`;
+      case "INVALID_TRANSITION":
+        return `${ns}.errors.invalidTransition`;
+      case "RESOURCE_NOT_FOUND":
+        return `${ns}.errors.notFound`;
+      case "VALIDATION_FAILED":
+        return `${ns}.errors.validation`;
+      default:
+        break;
+    }
+  }
+
   switch (code) {
     case "SLUG_CONFLICT":
       return `${ns}.errors.slugConflict`;

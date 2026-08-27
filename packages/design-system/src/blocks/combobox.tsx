@@ -203,7 +203,10 @@ export function Combobox({
                   // cmdk matches on this string — the LABEL, so the operator
                   // searches by what they can read.
                   value={option.label}
-                  disabled={option.disabled}
+                  // cmdk types this as a plain `boolean`, so under
+                  // `exactOptionalPropertyTypes` an absent flag has to become `false`
+                  // rather than `undefined`.
+                  disabled={option.disabled ?? false}
                   onSelect={() => {
                     onValueChange(option.value);
                     setOpen(false);

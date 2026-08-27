@@ -4,19 +4,26 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { Combobox, type ComboboxOption } from "./combobox";
 
-// Radix's focus-scope schedules a restore-focus timer while the panel is open, so a
-// test that ends with the panel still open trips the #441 orphan-timer guard. Close
-// it the way an operator would (Escape) before unmounting.
-afterEach(async () => {
-  const trigger = screen.queryByRole("combobox");
-  if (trigger?.getAttribute("aria-expanded") === "true") {
-    await userEvent.keyboard("{Escape}");
-    await waitFor(() =>
-      expect(trigger).toHaveAttribute("aria-expanded", "false"),
-    );
-  }
-});
 afterEach(cleanup);
+
+/**
+ * Close the open panel and wait for the unmount to settle.
+ *
+ * Not cosmetic: Radix's focus-scope restores focus to the trigger from an unmount
+ * `setTimeout` it schedules with no cleanup, so a test that ends with the panel
+ * still mounted leaves that timer to fire after JSDOM teardown — exactly the class
+ * the #441 orphan-timer guard fails the suite on. `aria-expanded` flips a tick
+ * before the portal actually leaves the tree, so the wait is on the panel element
+ * itself (Radix's popover content carries `role="dialog"`), which is what lets the
+ * restore run while the environment is still alive — the same shape
+ * `dialog.test.tsx` uses for the modal primitives.
+ */
+async function dismiss(): Promise<void> {
+  await userEvent.keyboard("{Escape}");
+  await waitFor(() =>
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+  );
+}
 
 /**
  * `<Combobox>` (#1578, adopted from Kibo UI, MIT). jsdom lacks the two browser APIs
@@ -112,6 +119,7 @@ describe("<Combobox>", () => {
     expect(
       screen.getByText("Частный случай выбранного направления"),
     ).toBeInTheDocument();
+    await dismiss();
   });
 
   it("commits the option's VALUE while never rendering a slug (closed vocabulary)", async () => {
@@ -147,6 +155,7 @@ describe("<Combobox>", () => {
       expect(screen.getByText("Смежная область")).toBeInTheDocument(),
     );
     expect(screen.queryByLabelText("Поиск")).not.toBeInTheDocument();
+    await dismiss();
   });
 
   it("shows the query box for a long book and reports the no-match state", async () => {
@@ -173,6 +182,7 @@ describe("<Combobox>", () => {
       expect(screen.getByText("Ничего не найдено")).toBeInTheDocument(),
     );
     expect(screen.getByText("Найдено 0 из 20")).toBeInTheDocument();
+    await dismiss();
   });
 
   it("never lets typing enter free text into the value", async () => {
@@ -194,6 +204,7 @@ describe("<Combobox>", () => {
     const query = await screen.findByLabelText("Поиск по справочнику");
     await userEvent.type(query, "новая специальность{Enter}");
     expect(onValueChange).not.toHaveBeenCalled();
+    await dismiss();
   });
 
   it("carries invalidity and disabled on the control itself", () => {

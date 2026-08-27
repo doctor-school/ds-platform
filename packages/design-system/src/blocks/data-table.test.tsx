@@ -18,6 +18,18 @@ afterEach(cleanup);
  * distinct empty variants) — never on pixels.
  */
 
+/**
+ * First match, narrowed. The block renders the same record twice — the desktop grid
+ * and the mobile record card are both in the tree, CSS decides which one shows — so
+ * the queries are deliberately `getAll*`; this keeps `noUncheckedIndexedAccess`
+ * honest instead of asserting the index away with `!`.
+ */
+function first<T>(elements: T[]): T {
+  const [element] = elements;
+  if (!element) throw new Error("expected at least one match, got none");
+  return element;
+}
+
 type Row = { id: string; title: string; parent: string; count: number };
 
 const ROWS: Row[] = [
@@ -88,17 +100,17 @@ describe("<DataTable>", () => {
 
   it("aligns a numeric column to the end so figures scan as a column", () => {
     renderTable();
-    const header = screen.getAllByRole("columnheader", {
-      name: "Материалов",
-    })[0];
+    const header = first(
+      screen.getAllByRole("columnheader", { name: "Материалов" }),
+    );
     expect(header.className).toContain("text-right");
   });
 
   it("renders the record title as a real link with an accessible name (row activation)", () => {
     renderTable({ rowHref: (row) => `/directions/${row.id}` });
-    const link = screen.getAllByRole("link", {
-      name: "Открыть «Кардиология»",
-    })[0];
+    const link = first(
+      screen.getAllByRole("link", { name: "Открыть «Кардиология»" }),
+    );
     expect(link).toHaveAttribute("href", "/directions/cardio");
   });
 
@@ -114,7 +126,7 @@ describe("<DataTable>", () => {
     const onRowClick = vi.fn();
     renderTable({ onRowClick });
     await userEvent.click(
-      screen.getAllByRole("button", { name: "Открыть «Кардиология»" })[0],
+      first(screen.getAllByRole("button", { name: "Открыть «Кардиология»" })),
     );
     expect(onRowClick).toHaveBeenCalledWith(ROWS[1]);
   });
@@ -142,7 +154,7 @@ describe("<DataTable>", () => {
 
   it("routes the two empty situations to two DISTINCT variants, never one string", () => {
     const { rerender } = renderTable({ rows: [] });
-    const table = screen.getAllByRole("table")[0];
+    const table = first(screen.getAllByRole("table"));
     expect(
       within(table).getByText("Направлений пока нет"),
     ).toBeInTheDocument();
@@ -166,7 +178,7 @@ describe("<DataTable>", () => {
         emptyNoResults={{ title: "Ничего не найдено" }}
       />,
     );
-    const filtered = screen.getAllByRole("table")[0];
+    const filtered = first(screen.getAllByRole("table"));
     expect(within(filtered).getByText("Ничего не найдено")).toBeInTheDocument();
     expect(
       filtered.querySelector('[data-variant="no-results"]'),

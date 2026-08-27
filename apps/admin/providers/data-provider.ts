@@ -551,7 +551,12 @@ export const eventExpertsUrl = {
  */
 export const eventProjectsUrl = {
   collection: () => `${ADMIN_BASE}/event-projects`,
-  list: (query: { eventId?: string; projectId?: string; includeRetired?: boolean; pageSize?: number }) => {
+  list: (query: {
+    eventId?: string;
+    projectId?: string;
+    includeRetired?: boolean;
+    pageSize?: number;
+  }) => {
     const params = new URLSearchParams();
     if (query.eventId) params.set("eventId", query.eventId);
     if (query.projectId) params.set("projectId", query.projectId);
@@ -565,6 +570,38 @@ export const eventProjectsUrl = {
     `${ADMIN_BASE}/event-projects/${id}/lifecycle-impact?transition=${transition}`,
   transition: (id: string, transition: TaxonomyLifecycleTransition) =>
     `${ADMIN_BASE}/event-projects/${id}/${transition}`,
+};
+
+/**
+ * The `event_topics` relationship endpoints (012-design §5.1, EARS-11 / #1293).
+ *
+ * Same flat-collection shape as `eventProjectsUrl`, filtered by EITHER endpoint,
+ * so one route serves «темы этого эфира» on the event detail and «эфиры этой
+ * темы» from the topic side. No `PATCH` and no `DELETE`: an event↔topic link is
+ * attribute-less, and its lifecycle is the two named commands behind the §3.1
+ * impact gate.
+ */
+export const eventTopicsUrl = {
+  collection: () => `${ADMIN_BASE}/event-topics`,
+  list: (query: {
+    eventId?: string;
+    topicId?: string;
+    includeRetired?: boolean;
+    pageSize?: number;
+  }) => {
+    const params = new URLSearchParams();
+    if (query.eventId) params.set("eventId", query.eventId);
+    if (query.topicId) params.set("topicId", query.topicId);
+    if (query.includeRetired) params.set("includeRetired", "true");
+    params.set("pageSize", String(query.pageSize ?? ADMIN_LIST_PAGE_SIZE_MAX));
+    return `${ADMIN_BASE}/event-topics?${params.toString()}`;
+  },
+  row: (id: string) => `${ADMIN_BASE}/event-topics/${id}`,
+  /** The §3.1 preview. Transition-specific: a token binds exactly one of them. */
+  impact: (id: string, transition: TaxonomyLifecycleTransition) =>
+    `${ADMIN_BASE}/event-topics/${id}/lifecycle-impact?transition=${transition}`,
+  transition: (id: string, transition: TaxonomyLifecycleTransition) =>
+    `${ADMIN_BASE}/event-topics/${id}/${transition}`,
 };
 
 /**

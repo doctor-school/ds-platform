@@ -620,6 +620,71 @@ export const eventProjects = pgTable(
 );
 
 export type EventProject = typeof eventProjects.$inferSelect;
+
+/**
+ * `event_topics` — the retained event↔topic relationship (012 EARS-11, #1293).
+ *
+ * This is the ONLY way an event is classified by subject: the operator LINKS an
+ * existing, non-retired `topics` row, so there is no inline topic creation path
+ * and no per-event string that could drift into a second spelling of the same
+ * subject. The pre-012 `events.specialties[]` text array is a SEPARATE axis and
+ * is neither read nor written by this join (012-requirements EARS-11, §axis
+ * invariant): the two coexist, byte-for-byte untouched by each other.
+ *
+ * Several topics may classify one event and several events may carry one topic;
+ * the row is the relationship itself, never a copy of either endpoint's
+ * editorial values. Creating, retiring or restoring it has NO lifecycle side
+ * effect on the event or the topic (012-design §3): public traversal simply
+ * filters an ineligible endpoint out.
+ *
+ * The logical pair is unique across ACTIVE AND RETAINED rows
+ * (`event_topics_pair_key` is deliberately NOT partial): a retired relation is
+ * RESTORED — same row, same id, `version + 1` — never re-inserted as a second
+ * row, so one relationship keeps one audit lineage.
+ *
+ * Both FKs are `RESTRICT`: nothing in 012 is physically deleted, so a cascade
+ * would have no legitimate trigger and its presence in generated SQL is itself a
+ * 012-design §2.1 violation (`retained-data` CI guard).
+ */
+export const eventTopics = pgTable(
+  "event_topics",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    eventId: uuid("event_id")
+      .notNull()
+      .references(() => events.id, { onDelete: "restrict" }),
+    topicId: uuid("topic_id")
+      .notNull()
+      .references(() => topics.id, { onDelete: "restrict" }),
+    status: relationshipStatus("status").notNull().default("active"),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    /** Optimistic-concurrency counter behind the join ETag; starts at 1, `++` per successful write. */
+    version: integer("version").notNull().default(1),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    // Spans active AND retained rows (012-design §2.1) — the restore-never-
+    // reinsert rule expressed as a constraint rather than as service etiquette.
+    uniqueIndex("event_topics_pair_key").on(t.eventId, t.topicId),
+    check(
+      "event_topics_retired_iff_deleted",
+      sql`(${t.status} = 'retired') = (${t.deletedAt} IS NOT NULL)`,
+    ),
+    check("event_topics_version_positive", sql`${t.version} >= 1`),
+    // Both traversal directions of §5.2 are indexed reads, not scans: the pair
+    // index already serves `event_id`-leading lookups, so only the reverse
+    // direction needs its own.
+    index("event_topics_topic_id_idx").on(t.topicId),
+  ],
+);
+
+export type EventTopic = typeof eventTopics.$inferSelect;
+export type NewEventTopic = typeof eventTopics.$inferInsert;
 export type NewEventProject = typeof eventProjects.$inferInsert;
 
 /**

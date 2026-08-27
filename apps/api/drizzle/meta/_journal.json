@@ -173,8 +173,15 @@
     {
       "idx": 24,
       "version": "7",
-      "when": 1787828326882,
-      "tag": "0024_project_experts_and_partners",
+      "when": 1787828069242,
+      "tag": "0024_event_topics",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1787830838150,
+      "tag": "0025_project_experts_and_partners",
       "breakpoints": true
     }
   ]

@@ -39,7 +39,10 @@ export const SlugSchema = z
   .string()
   .min(1)
   .max(SLUG_MAX)
-  .regex(SLUG_REGEX, "slug must be lowercase-ASCII words joined by single hyphens")
+  .regex(
+    SLUG_REGEX,
+    "slug must be lowercase-ASCII words joined by single hyphens",
+  )
   .refine((s) => !CANONICAL_UUID_REGEX.test(s), {
     message: "slug must not be canonical UUID text",
   });
@@ -480,7 +483,10 @@ export const PartnerWebsiteUrlSchema = z
   .trim()
   .min(1)
   .max(PARTNER_WEBSITE_URL_MAX)
-  .regex(PARTNER_WEBSITE_URL_PATTERN, "website must be an absolute https:// URL");
+  .regex(
+    PARTNER_WEBSITE_URL_PATTERN,
+    "website must be an absolute https:// URL",
+  );
 
 /**
  * `POST /v1/admin/partners` — create one draft partner.
@@ -673,17 +679,19 @@ export type EventExpertAdminDetail = z.infer<
   typeof EventExpertAdminDetailSchema
 >;
 
-export const EventExpertAdminListItemSchema = EventExpertAdminDetailSchema.pick({
-  id: true,
-  eventId: true,
-  expertId: true,
-  role: true,
-  position: true,
-  legacySpeakerId: true,
-  status: true,
-  version: true,
-  updatedAt: true,
-});
+export const EventExpertAdminListItemSchema = EventExpertAdminDetailSchema.pick(
+  {
+    id: true,
+    eventId: true,
+    expertId: true,
+    role: true,
+    position: true,
+    legacySpeakerId: true,
+    status: true,
+    version: true,
+    updatedAt: true,
+  },
+);
 export type EventExpertAdminListItem = z.infer<
   typeof EventExpertAdminListItemSchema
 >;
@@ -790,6 +798,26 @@ export const PublicEventSummarySchema = z
   .strict();
 export type PublicEventSummary = z.infer<typeof PublicEventSummarySchema>;
 
+/**
+ * The exact §5.2 `PublicTopicSummary` — the item DTO of
+ * `GET /v1/public/events/:key/topics` (012 EARS-11, #1293).
+ *
+ * A topic is the THINNEST taxonomy entity, and its summary is identical to its
+ * full `PublicTopic { id, slug, title }`: there is no description, no media and
+ * therefore no field a summary could drop. It is still declared as its own
+ * schema rather than aliased, because §5.2 fixes the nested-route item DTO
+ * INDEPENDENTLY of the opposite full entity — the traversal must not start
+ * inheriting fields the day the entity grows one.
+ */
+export const PublicTopicSummarySchema = z
+  .object({
+    id: z.string(),
+    slug: z.string(),
+    title: z.string(),
+  })
+  .strict();
+export type PublicTopicSummary = z.infer<typeof PublicTopicSummarySchema>;
+
 /** ADR-0002's exact cursor-page envelope (012-design §5.2). */
 export function publicCursorPageSchema<T extends z.ZodTypeAny>(item: T) {
   return z.object({
@@ -812,6 +840,12 @@ export const PublicEventSummaryPageSchema = publicCursorPageSchema(
 );
 export type PublicEventSummaryPage = z.infer<
   typeof PublicEventSummaryPageSchema
+>;
+export const PublicTopicSummaryPageSchema = publicCursorPageSchema(
+  PublicTopicSummarySchema,
+);
+export type PublicTopicSummaryPage = z.infer<
+  typeof PublicTopicSummaryPageSchema
 >;
 
 // ── §5.2 nested item DTOs of the project joins (EARS-9 #1291, EARS-10 #1292) ──
@@ -843,17 +877,21 @@ export type PublicExpertProjectItem = z.infer<
 >;
 
 /** `/projects/:key/partners` → `PublicPartnerSummary + { isPrimary }`. */
-export const PublicProjectPartnerItemSchema = PublicPartnerSummarySchema.extend({
-  isPrimary: z.boolean(),
-});
+export const PublicProjectPartnerItemSchema = PublicPartnerSummarySchema.extend(
+  {
+    isPrimary: z.boolean(),
+  },
+);
 export type PublicProjectPartnerItem = z.infer<
   typeof PublicProjectPartnerItemSchema
 >;
 
 /** `/partners/:key/projects` → `PublicProjectSummary + { isPrimary }`. */
-export const PublicPartnerProjectItemSchema = PublicProjectSummarySchema.extend({
-  isPrimary: z.boolean(),
-});
+export const PublicPartnerProjectItemSchema = PublicProjectSummarySchema.extend(
+  {
+    isPrimary: z.boolean(),
+  },
+);
 export type PublicPartnerProjectItem = z.infer<
   typeof PublicPartnerProjectItemSchema
 >;
@@ -910,8 +948,12 @@ export type PublicCursorQuery = z.infer<typeof PublicCursorQuerySchema>;
 
 /** The two transitions a preview may be issued for. A token binds exactly one. */
 export const TAXONOMY_LIFECYCLE_TRANSITIONS = ["retire", "restore"] as const;
-export const TaxonomyLifecycleTransitionSchema = z.enum(TAXONOMY_LIFECYCLE_TRANSITIONS);
-export type TaxonomyLifecycleTransition = z.infer<typeof TaxonomyLifecycleTransitionSchema>;
+export const TaxonomyLifecycleTransitionSchema = z.enum(
+  TAXONOMY_LIFECYCLE_TRANSITIONS,
+);
+export type TaxonomyLifecycleTransition = z.infer<
+  typeof TaxonomyLifecycleTransitionSchema
+>;
 
 /**
  * The confirmation header carrying the signed envelope back (§3.1). Absent is
@@ -1100,6 +1142,97 @@ export const EventProjectAdminListQuerySchema = z
   .strict();
 export type EventProjectAdminListQuery = z.infer<
   typeof EventProjectAdminListQuerySchema
+>;
+
+// ── event_topics authoring DTOs (012-design §5.1; EARS-11, #1293) ────────────
+
+/**
+ * `POST /v1/admin/event-topics` — classify one event under one existing topic.
+ *
+ * The body is the two endpoint ids and nothing else, and `.strict()` is what
+ * makes «only existing non-retired topics, no inline creation» (EARS-11) a
+ * SHAPE rule rather than a UI convention: there is no `title` or `slug` field a
+ * client could send to have a topic created on the fly, so the only way to
+ * classify an event is to reference a `topics` row that already exists. A
+ * client must equally not be able to supply `status`, `version` or `deletedAt` —
+ * lifecycle is moved by the retire/restore commands behind the §3.1 impact
+ * gate, so an attempt is 400 `VALIDATION_FAILED`, never a silently ignored
+ * field.
+ *
+ * `events.specialties[]` is deliberately absent from this contract in both
+ * directions: it is a SEPARATE axis (012-requirements EARS-11 + the «different
+ * axes and never synchronize» invariant), so no event-topic request reads or
+ * writes it.
+ *
+ * There is no `PATCH` counterpart, for the same reason `event_projects` has
+ * none: an event↔topic relationship carries NO attribute (§2 ER envelope) — its
+ * endpoints are its identity and its lifecycle is the two commands.
+ */
+export const CreateEventTopicRequestSchema = z
+  .object({
+    eventId: TaxonomyIdSchema,
+    topicId: TaxonomyIdSchema,
+  })
+  .strict();
+export type CreateEventTopicRequest = z.infer<
+  typeof CreateEventTopicRequestSchema
+>;
+
+/**
+ * The admin projection of one relationship. It carries both endpoints' display
+ * forms (`eventTitle` / `topicTitle`) because the admin relationship editor
+ * renders a list of LINKS, and a table of two opaque UUIDs would force one
+ * follow-up read per row — the same argument §3.1 makes for its `title`.
+ */
+export const EventTopicAdminDetailSchema = z.object({
+  id: z.string(),
+  eventId: z.string(),
+  eventTitle: z.string(),
+  eventSlug: z.string(),
+  topicId: z.string(),
+  topicTitle: z.string(),
+  topicSlug: z.string(),
+  status: RelationshipStatusSchema,
+  version: z.number().int().positive(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type EventTopicAdminDetail = z.infer<typeof EventTopicAdminDetailSchema>;
+
+/** Offset/page admin list envelope (ADR-0002 — admin pagination is offset-based). */
+export const EventTopicAdminListSchema = z.object({
+  data: z.array(EventTopicAdminDetailSchema),
+  total: z.number().int().nonnegative(),
+  page: z.number().int().positive(),
+  pageSize: z.number().int().positive(),
+});
+export type EventTopicAdminList = z.infer<typeof EventTopicAdminListSchema>;
+
+/**
+ * The filtered join list of §5.1. Either endpoint may scope the list — that is
+ * how the admin renders «темы этого эфира» and «эфиры этой темы» from one
+ * route — and retired rows are excluded unless explicitly asked for.
+ */
+export const EventTopicAdminListQuerySchema = z
+  .object({
+    page: z.coerce.number().int().positive().default(1),
+    pageSize: z.coerce
+      .number()
+      .int()
+      .positive()
+      .max(ADMIN_LIST_PAGE_SIZE_MAX)
+      .default(ADMIN_LIST_PAGE_SIZE_DEFAULT),
+    eventId: TaxonomyIdSchema.optional(),
+    topicId: TaxonomyIdSchema.optional(),
+    status: RelationshipStatusSchema.optional(),
+    includeRetired: z
+      .union([z.boolean(), z.enum(["true", "false"])])
+      .transform((v) => v === true || v === "true")
+      .default(false),
+  })
+  .strict();
+export type EventTopicAdminListQuery = z.infer<
+  typeof EventTopicAdminListQuerySchema
 >;
 
 // ── project_experts authoring DTOs (012-design §5.1; EARS-9, #1291) ──────────
@@ -1443,7 +1576,9 @@ export const ProblemDetailsSchema = z.object({
   errorCode: TaxonomyErrorCodeSchema,
   traceId: z.string(),
   /** Field-addressed validation/publish-requirement detail, when applicable. */
-  errors: z.array(z.object({ path: z.string(), message: z.string() })).optional(),
+  errors: z
+    .array(z.object({ path: z.string(), message: z.string() }))
+    .optional(),
 });
 export type ProblemDetails = z.infer<typeof ProblemDetailsSchema>;
 

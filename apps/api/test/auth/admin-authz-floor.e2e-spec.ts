@@ -326,6 +326,44 @@ const FLOOR_ROUTES: {
     url: `/v1/admin/event-projects/${ABSENT_ID}/restore`,
     payload: {},
   },
+  // 012 EARS-11 (#1293) — the event↔topic curation surface. Same reasoning as
+  // the event↔project block above: the lifecycle routes answer 428 on a missing
+  // `Lifecycle-Impact-Token`, so the guard has to refuse first or an anonymous
+  // caller reads a protocol answer off a relationship it may not know exists.
+  // No PATCH row — the join carries no mutable attribute.
+  {
+    endpoint: "GET /v1/admin/event-topics",
+    method: "GET",
+    url: "/v1/admin/event-topics",
+  },
+  {
+    endpoint: "GET /v1/admin/event-topics/:id",
+    method: "GET",
+    url: `/v1/admin/event-topics/${ABSENT_ID}`,
+  },
+  {
+    endpoint: "GET /v1/admin/event-topics/:id/lifecycle-impact",
+    method: "GET",
+    url: `/v1/admin/event-topics/${ABSENT_ID}/lifecycle-impact?transition=retire`,
+  },
+  {
+    endpoint: "POST /v1/admin/event-topics",
+    method: "POST",
+    url: "/v1/admin/event-topics",
+    payload: {},
+  },
+  {
+    endpoint: "POST /v1/admin/event-topics/:id/retire",
+    method: "POST",
+    url: `/v1/admin/event-topics/${ABSENT_ID}/retire`,
+    payload: {},
+  },
+  {
+    endpoint: "POST /v1/admin/event-topics/:id/restore",
+    method: "POST",
+    url: `/v1/admin/event-topics/${ABSENT_ID}/restore`,
+    payload: {},
+  },
   // 012 EARS-9 (#1291) — the project↔expert relationship surface, curator seat
   // included. `replace-curator` hangs off `/projects/:id` rather than off a
   // relation because the invariant it preserves belongs to the project; that
@@ -787,7 +825,11 @@ describe.skipIf(!process.env.DATABASE_URL)(
           `${route.endpoint} refused an MFA-verified platform_admin (${res.statusCode}) — the raised floor must admit exactly this principal`,
         ).not.toContain(res.statusCode);
       }
-    });
+      // Explicit timeout: this case mints a fresh admin session per route, so its
+      // runtime scales with the floor table, not with anything it asserts. The
+      // 5 s default turns "the table grew" into a timeout that reads like a
+      // guard failure; the assertion here is admission, never latency.
+    }, 60_000);
 
     it("EARS-11.7: the 007 admin-events commands keep their shape on the raised floor", () => {
       // The 007 event commands only: 014's recording routes (#1339) hang under

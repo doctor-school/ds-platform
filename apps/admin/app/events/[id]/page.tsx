@@ -24,6 +24,7 @@ import { StreamConfigForm } from "@/components/stream-config-form";
 import { LifecycleActions } from "@/components/lifecycle-actions";
 import { RecordingsPanel } from "@/components/recordings-panel";
 import { EventProjectsPanel } from "@/components/event-projects-panel";
+import { EventTopicsPanel } from "@/components/event-topics-panel";
 import { StateBadge } from "@/components/state-badge";
 import { formatMskDateTime } from "@/lib/msk";
 import type { UpdateEventVars } from "@/providers/data-provider";
@@ -96,6 +97,9 @@ export default function EventEditPage() {
                 </TabsTrigger>
                 <TabsTrigger value="projects" data-testid="tab-projects">
                   {t("events.tabs.projects")}
+                </TabsTrigger>
+                <TabsTrigger value="topics" data-testid="tab-topics">
+                  {t("events.tabs.topics")}
                 </TabsTrigger>
               </TabsList>
 
@@ -227,6 +231,23 @@ export default function EventEditPage() {
                   </CardHeader>
                   <CardContent>
                     <EventProjectsPanel mode="event" entityId={id} />
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              {/* «Темы» (012 EARS-11, 012-design §5.1/§7) — the event↔topic
+                  editor sits beside the projects tab for the same reason: the
+                  «event form» EARS-11 names is this detail surface, and a topic
+                  is chosen while looking at the event it classifies. Only
+                  already-created, non-retired topics are offerable — the picker
+                  authors links, never taxonomy. */}
+              <TabsContent value="topics">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>{t("eventTopics.title")}</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <EventTopicsPanel mode="event" entityId={id} />
                   </CardContent>
                 </Card>
               </TabsContent>

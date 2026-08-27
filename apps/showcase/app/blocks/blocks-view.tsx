@@ -910,6 +910,28 @@ const DIRECTION_RECORD = {
   label: (row: DirectionRow) => `Открыть направление «${row.title}»`,
 };
 
+/**
+ * Status-chip tone per `constitution.md` → DataTable "Token / primitive mapping":
+ * status chips reuse the `success-tint` / `warning-tint` / `destructive-tint` +
+ * `*-text` pairs, never a raw hex. The semantic fill is also what keeps the chip
+ * readable on a hovered row: the `Badge` `label` variant's `bg-tint` is the SAME
+ * fill as the row's `hover:bg-tint`, so a default chip dissolves into the row —
+ * a semantic tint never collides with it.
+ *
+ * `Черновик` rides `text-foreground` because the token set has `success-text` and
+ * `destructive-text` but NO `warning-text`; `warning-foreground` is the near-black
+ * ink for the `warning` FILL and is unreadable on the dark-theme `warning-tint`
+ * (#332612), so the theme-flipping `foreground` is the AA-correct pair here. The
+ * missing token is recorded in `DEBT.md`.
+ */
+const DIRECTION_STATUS_CHIP: Record<
+  DirectionRow["status"],
+  { label: string; className: string }
+> = {
+  published: { label: "Опубликовано", className: "bg-success-tint text-success-text" },
+  draft: { label: "Черновик", className: "bg-warning-tint text-foreground" },
+};
+
 const DIRECTION_COLUMNS: DataTableColumn<DirectionRow>[] = [
   {
     key: "code",
@@ -930,13 +952,9 @@ const DIRECTION_COLUMNS: DataTableColumn<DirectionRow>[] = [
     key: "status",
     header: "Статус",
     width: "14%",
-    // The row's `hover:bg-tint` is the same fill as the badge's `label` variant,
-    // so on a hovered row an unbordered chip dissolves into the row. The 2px
-    // structural `border-border` outline (the DS table/panel border) keeps the
-    // chip readable as a chip on both rest and tinted rows.
     render: (row) => (
-      <Badge className="border-2 border-border">
-        {row.status === "published" ? "Опубликовано" : "Черновик"}
+      <Badge className={DIRECTION_STATUS_CHIP[row.status].className}>
+        {DIRECTION_STATUS_CHIP[row.status].label}
       </Badge>
     ),
   },

@@ -9,15 +9,26 @@ import { cn } from "../lib/utils";
 /**
  * `<Combobox>` (#1578, owner Stage-A pick Б — field-shaped trigger + owned panel).
  *
- * ADOPTED from Kibo UI's `combobox` block (https://github.com/shadcnblocks/kibo, MIT)
- * — the packaged shadcn recipe (Radix Popover + `cmdk` Command) with the
- * trigger/search/list/empty composition and controlled-value handling already wired —
- * re-skinned to DS tokens on copy-in. Net-new runtime deps: `cmdk` and
+ * ADOPTED from Kibo UI's `combobox` block (https://github.com/haydenbleasel/kibo),
+ * MIT licence:
+ *
+ *   MIT License — Copyright (c) 2024 Hayden Bleasel
+ *   Permission is hereby granted, free of charge, to any person obtaining a copy
+ *   of this software and associated documentation files (the "Software"), to deal
+ *   in the Software without restriction. The above copyright notice and this
+ *   permission notice shall be included in all copies or substantial portions of
+ *   the Software.
+ *
+ * What was adopted: the packaged shadcn recipe (Radix Popover + `cmdk` Command) with
+ * the trigger/search/list/empty composition and controlled-value handling already
+ * wired — re-skinned to DS tokens on copy-in. Net-new runtime deps: `cmdk` and
  * `@radix-ui/react-popover`, both widening the Radix family already installed rather
  * than opening a new one. The official shadcn Combobox was rejected because it has
  * moved onto Base UI (a dependency family we do not have); Intent/Jolly pulls the
- * whole `react-aria-components` runtime; Origin UI is AGPL-3.0 and cannot be copied
- * into an `UNLICENSED` tree.
+ * whole `react-aria-components` runtime; Origin UI is no longer a committable source
+ * (ADR-0013 §4) — its collection was absorbed into the `cosscom/coss` monorepo, whose
+ * default licence is AGPL-3.0 with `apps/origin/` carved back to MIT, so every copy
+ * needs a per-directory provenance check against a collection that stopped moving.
  *
  * WHEN THIS AND NOT `NativeSelect`: the native select stays the default. Rebuild only
  * on one of three triggers — the options need EXPLAINING (a native `<option>` cannot
@@ -78,6 +89,11 @@ export interface ComboboxProps {
   /** Wired by `FormControl` / `Label`. */
   "aria-describedby"?: string;
   "aria-labelledby"?: string;
+  /**
+   * Field name when no visible `Label` is wired. Defaults to `placeholder`, so the
+   * control is NEVER nameless — `role="combobox"` takes no name from its content.
+   */
+  "aria-label"?: string;
   className?: string;
 }
 
@@ -95,11 +111,15 @@ export function Combobox({
   disabled = false,
   invalid = false,
   className,
+  "aria-label": ariaLabel,
+  "aria-labelledby": ariaLabelledBy,
   ...aria
 }: ComboboxProps) {
   const [open, setOpen] = React.useState(false);
   const [query, setQuery] = React.useState("");
   const panelId = React.useId();
+  const fieldNameId = React.useId();
+  const valueId = React.useId();
 
   const selected = options.find((option) => option.value === value) ?? null;
   const withSearch = showSearch ?? options.length > 12;
@@ -111,6 +131,18 @@ export function Combobox({
       option.label.toLocaleLowerCase().includes(needle),
     ).length;
   }, [options, query]);
+
+  // `role="combobox"` takes NO name from its content, so the name is assembled by
+  // reference: the field name (an external `Label`, else an sr-only span carrying
+  // `aria-label ?? placeholder`) plus the chosen value — the value span joins only
+  // once something is selected, otherwise the placeholder would be announced twice.
+  const fieldNameOwnedHere = !ariaLabelledBy;
+  const labelledBy = [
+    ariaLabelledBy ?? fieldNameId,
+    selected ? valueId : null,
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   return (
     <PopoverPrimitive.Root
@@ -127,6 +159,7 @@ export function Combobox({
           role="combobox"
           aria-expanded={open}
           aria-controls={panelId}
+          aria-labelledby={labelledBy}
           aria-invalid={invalid || undefined}
           disabled={disabled}
           {...aria}
@@ -143,7 +176,12 @@ export function Combobox({
             className,
           )}
         >
-          <span className="truncate">
+          {fieldNameOwnedHere ? (
+            <span id={fieldNameId} className="sr-only">
+              {ariaLabel ?? placeholder}
+            </span>
+          ) : null}
+          <span id={valueId} className="truncate">
             {selected ? selected.label : placeholder}
           </span>
           <svg

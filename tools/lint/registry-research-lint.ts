@@ -22,7 +22,7 @@
  * the PR body MUST contain a `registry-research:` marker line (or a
  * `## Registry research` section) whose value is non-empty and is one of the
  * two sanctioned shapes from the skill:
- *   - `adopted <block> from <registry>` (shadcn / Origin UI / Intent·Jolly / Kibo)
+ *   - `adopted <block> from <registry>` (shadcn / Intent·Jolly / Kibo — ADR-0013 §4)
  *   - `bespoke — <why the toolbox search came up empty>`
  * An empty marker, or a marker that names no registry and gives no bespoke
  * rationale, fails — a checkbox the author can leave blank is not evidence.
@@ -195,7 +195,7 @@ async function main(): Promise<void> {
     fail(
       `PR #${pr.number} touches user-facing UI but carries no registry-research artifact. ` +
         `Run the \`build-ui-from-design-system\` gate and add to the PR body either:\n` +
-        `    registry-research: adopted <block> from <shadcn|Origin UI|Intent·Jolly|Kibo>\n` +
+        `    registry-research: adopted <block> from <shadcn|Intent·Jolly|Kibo>\n` +
         `  or, if the toolbox search came up empty:\n` +
         `    registry-research: bespoke — <which registries searched, candidates rejected and why>`,
     );

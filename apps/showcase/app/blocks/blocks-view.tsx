@@ -118,7 +118,10 @@ type PropRow = {
 /** The slots/props contract table — name · type · required · description. */
 function PropsTable({ rows }: { rows: PropRow[] }) {
   return (
-    <div className="overflow-hidden rounded-lg border border-border">
+    // `overflow-x-auto`, not `overflow-hidden`: the doc table's four columns exceed a
+    // 390px viewport, and without its own scroller the widest section pushed the whole
+    // PAGE into horizontal overflow (documentWidth 570 vs innerWidth 390).
+    <div className="overflow-x-auto rounded-lg border border-border">
       <table className="w-full border-collapse text-left text-sm">
         <thead>
           <tr className="border-b border-border bg-muted">
@@ -1198,19 +1201,51 @@ const FILTER_BAR_PROPS: PropRow[] = [
   { name: "search", type: "{ value · onCommit · label · placeholder · debounceMs }", required: false, description: "Free-text search — debounced (~400ms) in instant, submit-gated in batch." },
   { name: "children", type: "ReactNode", required: false, description: "Facet controls — NativeSelect, FilterChip, Switch, Combobox." },
   { name: "applied / appliedLabel", type: "AppliedFilter[] / string", required: false, description: "Everything currently applied, as removable FilterChips." },
+  { name: "removeFilterLabel", type: "string", required: false, description: "Verb prefix for a chip's remove control («Убрать фильтр: Черновики»)." },
   { name: "onResetAll / resetLabel", type: "() => void / string", required: false, description: "«Сбросить всё» — visible only while something is applied." },
   { name: "resultCount", type: "ReactNode", required: false, description: "Result count line, announced politely (role=status)." },
   { name: "isBusy / busyLabel", type: "boolean / string", required: false, description: "A query is in flight — the field carries the busy cue, never a frozen list." },
 ];
 
+/**
+ * The live preview filters a REAL book, not a hardcoded pair of numbers: the readout
+ * «Найдено N из M» has to move when the operator types or drops a chip, otherwise the
+ * preview demonstrates the opposite of the block's contract.
+ */
+type FilterFacet = { id: string; label: string; matches: (row: DirectionBookRow) => boolean };
+type DirectionBookRow = { title: string; parent: string; status: "published" | "draft" };
+
+const DIRECTION_BOOK: DirectionBookRow[] = [
+  ...DIRECTION_ROWS.map(({ title, parent, status }) => ({ title, parent, status })),
+  { title: "Ультразвуковая диагностика", parent: "Диагностика", status: "draft" },
+  { title: "Рентгенология", parent: "Диагностика", status: "published" },
+  { title: "Кардиология", parent: "Терапия", status: "published" },
+  { title: "Детская кардиология", parent: "Педиатрия", status: "draft" },
+  { title: "Эндокринология", parent: "Терапия", status: "published" },
+  { title: "Неонатология", parent: "Педиатрия", status: "published" },
+  { title: "Травматология и ортопедия", parent: "Хирургия", status: "draft" },
+  { title: "Анестезиология и реаниматология", parent: "Хирургия", status: "published" },
+];
+
+const DIRECTION_FACETS: FilterFacet[] = [
+  { id: "draft", label: "Черновики", matches: (row) => row.status === "draft" },
+  { id: "diagnostics", label: "Диагностика", matches: (row) => row.parent === "Диагностика" },
+];
+
 function FilterBarSection() {
   const [query, setQuery] = useState("");
-  const [applied, setApplied] = useState<string[]>(["Черновики", "Диагностика"]);
-  const shown = applied.length === 0 && query === "" ? 231 : 12;
+  const [applied, setApplied] = useState<string[]>(["draft", "diagnostics"]);
+  const facets = DIRECTION_FACETS.filter((facet) => applied.includes(facet.id));
+  const needle = query.trim().toLocaleLowerCase();
+  const found = DIRECTION_BOOK.filter(
+    (row) =>
+      (needle === "" || row.title.toLocaleLowerCase().includes(needle)) &&
+      facets.every((facet) => facet.matches(row)),
+  );
   return (
     <BlockSection
       title="FilterBar"
-      exportsLine="FilterBar — props: applyMode · label · search · children · applied/appliedLabel · onResetAll/resetLabel · resultCount · isBusy/busyLabel · submitLabel/onSubmit (batch only)"
+      exportsLine="FilterBar — props: applyMode · label · search · children · applied/appliedLabel · removeFilterLabel · onResetAll/resetLabel · resultCount · isBusy/busyLabel · submitLabel/onSubmit (batch only)"
     >
       <p className="text-sm text-muted-foreground">
         Instant apply (owner pick): typing narrows the list after a ~400ms pause with a busy cue in
@@ -1232,21 +1267,37 @@ function FilterBarSection() {
               label: "Поиск по названию",
               placeholder: "Например, кардиология",
             }}
-            applied={applied.map((name) => ({
-              id: name,
-              label: name,
+            applied={facets.map((facet) => ({
+              id: facet.id,
+              label: facet.label,
               onRemove: () =>
-                setApplied((prev) => prev.filter((item) => item !== name)),
+                setApplied((prev) => prev.filter((item) => item !== facet.id)),
             }))}
             appliedLabel="Выбрано:"
+            removeFilterLabel="Убрать фильтр"
             onResetAll={() => {
               setApplied([]);
               setQuery("");
             }}
             resetLabel="Сбросить всё"
-            resultCount={`Найдено ${shown} из 231`}
+            resultCount={`Найдено ${found.length} из ${DIRECTION_BOOK.length}`}
             busyLabel="Идёт поиск"
           />
+          <ul className="mt-4 flex flex-col gap-1 text-sm text-foreground">
+            {found.map((row) => (
+              <li key={row.title}>
+                {row.title}
+                <span className="text-muted-foreground">
+                  {" · "}
+                  {row.parent}
+                  {row.status === "draft" ? " · черновик" : ""}
+                </span>
+              </li>
+            ))}
+            {found.length === 0 ? (
+              <li className="text-muted-foreground">Ничего не найдено</li>
+            ) : null}
+          </ul>
         </div>
       </SubRow>
       <SubRow label="Slots / props">

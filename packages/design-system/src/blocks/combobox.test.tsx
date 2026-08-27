@@ -84,6 +84,70 @@ describe("<Combobox>", () => {
     expect(trigger).toHaveTextContent("Выберите вид связи");
   });
 
+  /**
+   * `role="combobox"` forbids name-from-content, so the visible label contributes
+   * NOTHING to the accessible name — the axe `button-name` critical this suite let
+   * through while asserting `toHaveTextContent`. The block owns the name so no call
+   * site can instantiate a nameless combobox.
+   */
+  it("names the closed control for assistive tech, empty and selected", () => {
+    const { rerender } = render(
+      <Combobox
+        options={KINDS}
+        onValueChange={vi.fn()}
+        placeholder="Выберите вид связи"
+        emptyLabel="Ничего не найдено"
+      />,
+    );
+    expect(screen.getByRole("combobox")).toHaveAccessibleName("Выберите вид связи");
+
+    rerender(
+      <Combobox
+        options={KINDS}
+        value="broader"
+        onValueChange={vi.fn()}
+        placeholder="Выберите вид связи"
+        emptyLabel="Ничего не найдено"
+      />,
+    );
+    // Field name first, then the chosen value — «Выберите вид связи, Более широкое направление».
+    expect(screen.getByRole("combobox")).toHaveAccessibleName(
+      "Выберите вид связи Более широкое направление",
+    );
+  });
+
+  it("prefers an explicit aria-label over the placeholder as the field name", () => {
+    render(
+      <Combobox
+        options={KINDS}
+        onValueChange={vi.fn()}
+        aria-label="Вид связи"
+        placeholder="Выберите вид связи"
+        emptyLabel="Ничего не найдено"
+      />,
+    );
+    expect(screen.getByRole("combobox")).toHaveAccessibleName("Вид связи");
+  });
+
+  it("defers to an external aria-labelledby (a `Label` wired by `FormControl`)", () => {
+    render(
+      <>
+        <span id="kind-label">Вид связи</span>
+        <Combobox
+          options={KINDS}
+          value="broader"
+          onValueChange={vi.fn()}
+          aria-labelledby="kind-label"
+          placeholder="Выберите вид связи"
+          emptyLabel="Ничего не найдено"
+        />
+      </>,
+    );
+    expect(screen.getByRole("combobox")).toHaveAccessibleName(
+      "Вид связи Более широкое направление",
+    );
+  });
+
   it("renders the chosen option's LABEL, never its stored slug", () => {
     render(
       <Combobox

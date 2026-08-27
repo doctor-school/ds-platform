@@ -13,8 +13,9 @@ import { cn } from "../lib/utils";
  * ABOVE the `Form*` field wrapper we already run. Renamed to the `Form*` family so it
  * reads as one vocabulary with the existing `FormItem` / `FormLabel` / `FormControl` /
  * `FormMessage`, and re-skinned to DS tokens. No new runtime dependency; composes with
- * react-hook-form exactly as `FormField`/`FormItem` do. Origin UI (AGPL + frozen
- * pre-acquisition collection) and Intent/Jolly (a second React-Aria form-state stack)
+ * react-hook-form exactly as `FormField`/`FormItem` do. Origin UI (off the ADR-0013 §4
+ * whitelist — mixed per-directory licensing inside `cosscom/coss` over a collection
+ * frozen at the absorption) and Intent/Jolly (a second React-Aria form-state stack)
  * were rejected; Kibo has no field-group block at all.
  *
  * The three rules it encodes:
@@ -60,15 +61,18 @@ export function FormSection({
   const descriptionId = React.useId();
   return (
     <SectionContext.Provider value={true}>
+      {/* `{...rest}` goes FIRST: the computed attributes below are the section's
+          contract, and a caller's `disabled={false}` must not be able to un-lock a
+          locked section (nor clobber `aria-describedby` / `data-locked`). */}
       <fieldset
+        {...rest}
         disabled={locked || rest.disabled}
-        aria-describedby={description ? descriptionId : undefined}
+        aria-describedby={description ? descriptionId : rest["aria-describedby"]}
         data-locked={locked ? "true" : undefined}
         className={cn(
           "flex flex-col gap-4 border-t border-hairline pt-6 first:border-t-0 first:pt-0",
           className,
         )}
-        {...rest}
       >
         {/* The `<legend>` must be the fieldset's FIRST child — that adjacency is
             what names the group for assistive tech; wrapping it in a div silently
@@ -119,6 +123,18 @@ export function FormSeparator({
   return <hr className={cn("border-t border-hairline", className)} {...rest} />;
 }
 
+/**
+ * `NODE_ENV` without `@types/node`: the package is browser-targeted and does not carry
+ * node typings, and bundlers statically replace this expression. Absent `process`
+ * entirely (a raw browser ESM load), we fall back to the production behaviour — degrade,
+ * never white-screen.
+ */
+declare const process: { env?: { NODE_ENV?: string } } | undefined;
+
+function isDevelopment(): boolean {
+  return typeof process !== "undefined" && process?.env?.NODE_ENV !== "production";
+}
+
 export interface FormActionsProps extends React.HTMLAttributes<HTMLDivElement> {
   /** Optional secondary/cancel node, rendered after the primary at low prominence. */
   secondary?: React.ReactNode;
@@ -131,7 +147,11 @@ export function FormActions({
   ...rest
 }: FormActionsProps) {
   const insideSection = React.useContext(SectionContext);
-  if (insideSection) {
+  // A DEVELOPMENT invariant: throwing during render is the loudest signal while the
+  // form is being written, but in production the same throw would white-screen the
+  // admin page over a layout mistake the operator can do nothing about — there the
+  // misplaced row still renders (wrong, not fatal).
+  if (insideSection && isDevelopment()) {
     throw new Error(
       "FormActions must be the form's single terminal action row — a per-section " +
         "action row makes «saved» ambiguous. Move it outside FormSection.",

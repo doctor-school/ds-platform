@@ -72,6 +72,10 @@ const stepClasses = cn(
   interactiveBase,
   "inline-flex items-center border-2 border-border bg-background px-3 py-2 text-caption font-bold text-foreground",
   "hover:border-primary hover:bg-tint focus-visible:shadow-focus",
+  // ADR-0013 §7 requires a press distinct from hover. There is no darker step of
+  // `tint` in the token set, so the press is the neo-brutalist nudge already set as
+  // precedent by `FilterChip` — token-free, and legible on a control this small.
+  "active:translate-x-0.5 active:translate-y-0.5 active:border-primary-action",
 );
 
 export function Pagination({
@@ -143,7 +147,12 @@ export function Pagination({
                     "inline-flex min-w-11 items-center justify-center border-2 px-3 py-2 text-caption focus-visible:shadow-focus",
                     item === page
                       ? "border-primary-action bg-primary-surface font-extrabold text-primary-surface-foreground"
-                      : "border-border bg-background font-bold text-primary-action hover:border-primary hover:bg-tint",
+                      : cn(
+                          "border-border bg-background font-bold text-primary-action hover:border-primary hover:bg-tint",
+                          // See `stepClasses`: the press is the FilterChip nudge, since
+                          // the token set has no darker step of `tint` (ADR-0013 §7).
+                          "active:translate-x-0.5 active:translate-y-0.5 active:border-primary-action",
+                        ),
                   )}
                 >
                   {item}

@@ -1114,7 +1114,7 @@ function PaginationSection() {
             previousLabel="Назад"
             nextLabel="Вперёд"
             pageLabel={(n) => `Страница ${n}`}
-            readout={`Показаны ${(page - 1) * 20 + 1}–${page * 20} из 231`}
+            readout={`Показаны ${(page - 1) * 20 + 1}–${Math.min(page * 20, 231)} из 231`}
           />
         </Canvas>
       </SubRow>

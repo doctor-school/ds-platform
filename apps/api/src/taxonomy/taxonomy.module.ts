@@ -9,6 +9,13 @@ import {
 } from "./event-projects.public.controller.js";
 import { EventProjectsRepository } from "./event-projects.repository.js";
 import { EventProjectsService } from "./event-projects.service.js";
+import { EventTopicsAdminController } from "./event-topics.admin.controller.js";
+import {
+  EventTopicsPublicController,
+  TopicEventsPublicController,
+} from "./event-topics.public.controller.js";
+import { EventTopicsRepository } from "./event-topics.repository.js";
+import { EventTopicsService } from "./event-topics.service.js";
 import { ExpertsAdminController } from "./experts.admin.controller.js";
 import { ExpertsRepository } from "./experts.repository.js";
 import { ExpertsService } from "./experts.service.js";
@@ -62,10 +69,16 @@ import { TopicsService } from "./topics.service.js";
     // contributes only the parent row it locks.
     EventExpertsAdminController,
     EventProjectsAdminController,
-    // The two §5.2 public traversals. They mount here, not in the events
+    // #1293 EARS-11 — the topic↔event JOIN surface, same reasoning as the two
+    // above: the relationship contract is the taxonomy's, the event side
+    // contributes only the parent row it locks.
+    EventTopicsAdminController,
+    // The §5.2 public traversals. They mount here, not in the events
     // module, because the relationship is what they read (see the file header).
     EventProjectsPublicController,
     ProjectEventsPublicController,
+    EventTopicsPublicController,
+    TopicEventsPublicController,
     // #1290 EARS-8 — the standalone half of the canonical merged speaker
     // projection. Same reasoning: the merge policy is the taxonomy's, the
     // event contributes only the parent key.
@@ -88,6 +101,8 @@ import { TopicsService } from "./topics.service.js";
     EventExpertsService,
     EventProjectsRepository,
     EventProjectsService,
+    EventTopicsRepository,
+    EventTopicsService,
     SpeakerProjectionRepository,
     SpeakerProjectionService,
     // The §3.1 preview/confirmation seam, authored once for every 012 resource

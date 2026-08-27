@@ -1629,3 +1629,214 @@ export function parseIfMatchVersion(raw: string | undefined): number | null {
   const version = Number(match[1]);
   return Number.isSafeInteger(version) && version > 0 ? version : null;
 }
+
+// ── ADR-0016 §2.8 — the direction reference relations (#1483) ───────────────
+//
+// Two admin-authored link surfaces on top of the renamed `directions` book:
+// which Минздрав specialties a direction serves, and which other directions are
+// adjacent to it. 017 EARS-8 resolves a doctor's `TargetingSet` from exactly
+// these rows, so both bodies are `.strict()` for the same reason the 012 joins
+// are: a client must never be able to post `status`, `version` or `deletedAt` —
+// lifecycle moves through the retire/restore commands, never through a payload.
+
+/**
+ * `POST /v1/admin/direction-specialties` — state that a direction serves one
+ * entry of the closed Минздрав book.
+ *
+ * The body is the two endpoint ids and nothing else: the link carries no
+ * attribute of its own, so, exactly as with `event_projects`, there is no PATCH
+ * counterpart — a PATCH here could only accept an empty body and bump a version.
+ */
+export const CreateDirectionSpecialtyRequestSchema = z
+  .object({
+    directionId: TaxonomyIdSchema,
+    specialtyMinzdravId: TaxonomyIdSchema,
+  })
+  .strict();
+export type CreateDirectionSpecialtyRequest = z.infer<
+  typeof CreateDirectionSpecialtyRequestSchema
+>;
+
+/**
+ * The admin projection of one direction↔specialty link. Both endpoints' display
+ * forms ride along (`directionTitle`, `specialtyName`) because the editor
+ * renders a LIST of links — a table of two opaque UUIDs would force one
+ * follow-up read per row.
+ */
+export const DirectionSpecialtyAdminDetailSchema = z.object({
+  id: z.string(),
+  directionId: z.string(),
+  directionTitle: z.string(),
+  directionSlug: z.string(),
+  specialtyMinzdravId: z.string(),
+  specialtyCode: z.string(),
+  specialtyName: z.string(),
+  status: RelationshipStatusSchema,
+  version: z.number().int().positive(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type DirectionSpecialtyAdminDetail = z.infer<
+  typeof DirectionSpecialtyAdminDetailSchema
+>;
+
+/** Offset/page admin list envelope (ADR-0002 — admin pagination is offset-based). */
+export const DirectionSpecialtyAdminListSchema = z.object({
+  data: z.array(DirectionSpecialtyAdminDetailSchema),
+  total: z.number().int().nonnegative(),
+  page: z.number().int().positive(),
+  pageSize: z.number().int().positive(),
+});
+export type DirectionSpecialtyAdminList = z.infer<
+  typeof DirectionSpecialtyAdminListSchema
+>;
+
+/**
+ * Either endpoint may scope the list — that is how the admin renders
+ * «специальности этого направления» and «направления этой специальности» from
+ * one route — and retired links are excluded unless explicitly asked for.
+ */
+export const DirectionSpecialtyAdminListQuerySchema = z
+  .object({
+    page: z.coerce.number().int().positive().default(1),
+    pageSize: z.coerce
+      .number()
+      .int()
+      .positive()
+      .max(ADMIN_LIST_PAGE_SIZE_MAX)
+      .default(ADMIN_LIST_PAGE_SIZE_DEFAULT),
+    directionId: TaxonomyIdSchema.optional(),
+    specialtyMinzdravId: TaxonomyIdSchema.optional(),
+    status: RelationshipStatusSchema.optional(),
+    includeRetired: z
+      .union([z.boolean(), z.enum(["true", "false"])])
+      .transform((v) => v === true || v === "true")
+      .default(false),
+  })
+  .strict();
+export type DirectionSpecialtyAdminListQuery = z.infer<
+  typeof DirectionSpecialtyAdminListQuerySchema
+>;
+
+/**
+ * The adjacency edge label. Mirrors `direction_adjacency_kind_shape` in the DB:
+ * the column owns the constraint, this schema owns the wire contract. An OPEN
+ * vocabulary by decision — ADR-0016 §2.8 names `kind` without fixing its values,
+ * so the contract pins the SHAPE (machine-readable, bounded) and leaves which
+ * labels exist an editorial matter.
+ */
+export const DIRECTION_ADJACENCY_KIND_MAX = 64;
+export const DIRECTION_ADJACENCY_KIND_REGEX = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+export const DIRECTION_ADJACENCY_WEIGHT_MIN = 1;
+export const DIRECTION_ADJACENCY_WEIGHT_MAX = 100;
+
+const DirectionAdjacencyKindSchema = z
+  .string()
+  .max(DIRECTION_ADJACENCY_KIND_MAX)
+  .regex(DIRECTION_ADJACENCY_KIND_REGEX);
+const DirectionAdjacencyWeightSchema = z.coerce
+  .number()
+  .int()
+  .min(DIRECTION_ADJACENCY_WEIGHT_MIN)
+  .max(DIRECTION_ADJACENCY_WEIGHT_MAX);
+
+/**
+ * `POST /v1/admin/direction-adjacency` — author one DIRECTED adjacency edge.
+ *
+ * The edge is directed by design (see `direction_adjacency` in `@ds/db`): a
+ * mutual relation is two authored rows, never one row read both ways, because
+ * 017 EARS-8 admits nothing into a `TargetingSet` that an operator did not
+ * author. The self-edge refusal is stated here as well as in the DB CHECK so the
+ * operator gets a 400 with a field path rather than a 500 from a constraint.
+ */
+export const CreateDirectionAdjacencyRequestSchema = z
+  .object({
+    directionId: TaxonomyIdSchema,
+    adjacentDirectionId: TaxonomyIdSchema,
+    kind: DirectionAdjacencyKindSchema,
+    weight: DirectionAdjacencyWeightSchema,
+  })
+  .strict()
+  .refine((v) => v.directionId !== v.adjacentDirectionId, {
+    path: ["adjacentDirectionId"],
+    message: "a direction is never adjacent to itself",
+  });
+export type CreateDirectionAdjacencyRequest = z.infer<
+  typeof CreateDirectionAdjacencyRequestSchema
+>;
+
+/**
+ * `PATCH /v1/admin/direction-adjacency/:id` — re-label or re-weight the SAME
+ * edge. Unlike the two joins of 012 this relation DOES carry attributes, so the
+ * PATCH surface is not vacuous; the endpoints themselves are the edge's identity
+ * and are therefore not patchable — moving an edge is retiring one and
+ * authoring another.
+ */
+export const UpdateDirectionAdjacencyRequestSchema = z
+  .object({
+    kind: DirectionAdjacencyKindSchema.optional(),
+    weight: DirectionAdjacencyWeightSchema.optional(),
+  })
+  .strict();
+export type UpdateDirectionAdjacencyRequest = z.infer<
+  typeof UpdateDirectionAdjacencyRequestSchema
+>;
+
+/** The admin projection of one adjacency edge, both endpoints readable. */
+export const DirectionAdjacencyAdminDetailSchema = z.object({
+  id: z.string(),
+  directionId: z.string(),
+  directionTitle: z.string(),
+  directionSlug: z.string(),
+  adjacentDirectionId: z.string(),
+  adjacentDirectionTitle: z.string(),
+  adjacentDirectionSlug: z.string(),
+  kind: z.string(),
+  weight: z.number().int(),
+  status: RelationshipStatusSchema,
+  version: z.number().int().positive(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type DirectionAdjacencyAdminDetail = z.infer<
+  typeof DirectionAdjacencyAdminDetailSchema
+>;
+
+/** Offset/page admin list envelope (ADR-0002 — admin pagination is offset-based). */
+export const DirectionAdjacencyAdminListSchema = z.object({
+  data: z.array(DirectionAdjacencyAdminDetailSchema),
+  total: z.number().int().nonnegative(),
+  page: z.number().int().positive(),
+  pageSize: z.number().int().positive(),
+});
+export type DirectionAdjacencyAdminList = z.infer<
+  typeof DirectionAdjacencyAdminListSchema
+>;
+
+/**
+ * Either END of the edge may scope the list: `directionId` answers «что рядом с
+ * этим направлением», `adjacentDirectionId` answers «кто считает это
+ * направление смежным» — the reverse question a directed edge makes askable.
+ */
+export const DirectionAdjacencyAdminListQuerySchema = z
+  .object({
+    page: z.coerce.number().int().positive().default(1),
+    pageSize: z.coerce
+      .number()
+      .int()
+      .positive()
+      .max(ADMIN_LIST_PAGE_SIZE_MAX)
+      .default(ADMIN_LIST_PAGE_SIZE_DEFAULT),
+    directionId: TaxonomyIdSchema.optional(),
+    adjacentDirectionId: TaxonomyIdSchema.optional(),
+    kind: DirectionAdjacencyKindSchema.optional(),
+    status: RelationshipStatusSchema.optional(),
+    includeRetired: z
+      .union([z.boolean(), z.enum(["true", "false"])])
+      .transform((v) => v === true || v === "true")
+      .default(false),
+  })
+  .strict();
+export type DirectionAdjacencyAdminListQuery = z.infer<
+  typeof DirectionAdjacencyAdminListQuerySchema
+>;

@@ -144,10 +144,20 @@ describe.skipIf(!process.env.DATABASE_URL)(
         // МСК stored as one canonical instant, surfaced as ISO UTC.
         expect(body.startsAt).toBe("2026-07-16T16:00:00.000Z");
         expect(body.specialties).toEqual(["traumatology", "orthopedics"]);
-        // Publish-safe speakers: name + credentials, no contact PII.
+        // Publish-safe speakers: name + credentials, no contact PII. Since 012
+        // EARS-8 the page carries the merged union, so a never-migrated row is
+        // explicitly tagged `source: "legacy"` (#1290).
         expect(body.speakers).toEqual([
-          { name: "Анна Соколова", credentials: "Травматолог-ортопед, к.м.н." },
-          { name: "Михаил Верещагин", credentials: "Хирург, профессор" },
+          {
+            source: "legacy",
+            name: "Анна Соколова",
+            credentials: "Травматолог-ортопед, к.м.н.",
+          },
+          {
+            source: "legacy",
+            name: "Михаил Верещагин",
+            credentials: "Хирург, профессор",
+          },
         ]);
         expect(body.partners).toEqual([{ label: "sponsor:acme-pharma" }]);
         expect(typeof body.programPdfUrl).toBe("string");

@@ -30,6 +30,7 @@
 | GET /v1/public/events                                           | public        | —                            | none       | —            | false   | none       | none        | EARS-7, EARS-10, EARS-15          |
 | GET /v1/public/events/:idOrSlug                                 | public        | —                            | none       | —            | false   | none       | none        | EARS-1, EARS-5, EARS-10           |
 | GET /v1/public/events/:idOrSlug/projects                        | public        | —                            | none       | —            | false   | none       | none        | EARS-6, EARS-16                   |
+| GET /v1/public/events/:idOrSlug/speakers                        | public        | —                            | none       | —            | false   | none       | none        | EARS-8, EARS-16                   |
 | GET /v1/public/events/month-counts                              | public        | —                            | none       | —            | false   | none       | none        | EARS-16, EARS-10                  |
 | GET /v1/public/projects/:idOrSlug/events                        | public        | —                            | none       | —            | false   | none       | none        | EARS-6, EARS-16                   |
 | GET /v1/public/specialties                                      | public        | —                            | none       | —            | false   | none       | none        | EARS-3                            |

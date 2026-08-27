@@ -7,6 +7,8 @@ export {
   toProblemDetails,
 } from "./taxonomy.errors.js";
 export { TaxonomyProblemFilter } from "./taxonomy.problem-filter.js";
+export { SpeakerProjectionService } from "./speaker-projection.service.js";
+export type { PublicEventKey } from "./speaker-projection.repository.js";
 export {
   IdempotencyService,
   IdempotencyFenceError,

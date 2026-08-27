@@ -23,6 +23,9 @@ import { PartnersService } from "./partners.service.js";
 import { ProjectsAdminController } from "./projects.admin.controller.js";
 import { ProjectsRepository } from "./projects.repository.js";
 import { ProjectsService } from "./projects.service.js";
+import { EventSpeakersPublicController } from "./speaker-projection.public.controller.js";
+import { SpeakerProjectionRepository } from "./speaker-projection.repository.js";
+import { SpeakerProjectionService } from "./speaker-projection.service.js";
 import { TaxonomyProblemFilter } from "./taxonomy.problem-filter.js";
 import { TopicsAdminController } from "./topics.admin.controller.js";
 import { TopicsRepository } from "./topics.repository.js";
@@ -63,6 +66,10 @@ import { TopicsService } from "./topics.service.js";
     // module, because the relationship is what they read (see the file header).
     EventProjectsPublicController,
     ProjectEventsPublicController,
+    // #1290 EARS-8 — the standalone half of the canonical merged speaker
+    // projection. Same reasoning: the merge policy is the taxonomy's, the
+    // event contributes only the parent key.
+    EventSpeakersPublicController,
   ],
   providers: [
     IdempotencyService,
@@ -81,6 +88,8 @@ import { TopicsService } from "./topics.service.js";
     EventExpertsService,
     EventProjectsRepository,
     EventProjectsService,
+    SpeakerProjectionRepository,
+    SpeakerProjectionService,
     // The §3.1 preview/confirmation seam, authored once for every 012 resource
     // with a retire/restore pair (#1288 is the first adopter, #1295/#1296 next).
     LifecycleImpactService,
@@ -91,6 +100,10 @@ import { TopicsService } from "./topics.service.js";
   ],
   exports: [
     IdempotencyService,
+    // #1290 EARS-8 — exported so the 004 event page and the upcoming-broadcast
+    // listing (events module) read speakers through THIS resolver. Exporting it
+    // is what makes «one canonical resolver» enforceable rather than aspirational.
+    SpeakerProjectionService,
     // Exported for the sibling relationship verticals (#1295 / #1296): they
     // adopt this exact envelope rather than re-deriving a token format.
     LifecycleImpactService,

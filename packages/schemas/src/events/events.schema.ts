@@ -514,6 +514,75 @@ export const PublicSpeakerSchema = z.object({
 export type PublicSpeaker = z.infer<typeof PublicSpeakerSchema>;
 
 /**
+ * 012 EARS-8 — the LEGACY arm of the merged public speaker projection
+ * (012-design §4 / §5.2). A never-migrated `event_speakers` row carries exactly
+ * the pre-012 publish-safe pair plus its discriminator: no expert-only key ever
+ * appears on a legacy item, so a client cannot mistake an unmigrated row for a
+ * linked expert with missing data.
+ */
+export const PublicLegacySpeakerSchema = z.object({
+  source: z.literal("legacy"),
+  name: z.string(),
+  credentials: z.string(),
+});
+export type PublicLegacySpeaker = z.infer<typeof PublicLegacySpeakerSchema>;
+
+/**
+ * 012 EARS-8 — the EXPERT arm (012-design §5.2). An eligible (published,
+ * non-retired) expert linked to the event through an active `event_experts`
+ * row. `photoUrl` is PRESENT and nullable (an expert without a photo renders
+ * the initials fallback of EARS-2, never a broken image); `role` is the
+ * event-specific role authored on the link, not the expert's standing
+ * professional role.
+ */
+export const PublicExpertSpeakerSchema = z.object({
+  source: z.literal("expert"),
+  expertId: z.uuid(),
+  expertSlug: z.string(),
+  name: z.string(),
+  credentials: z.string(),
+  photoUrl: z.string().nullable(),
+  role: z.string(),
+});
+export type PublicExpertSpeaker = z.infer<typeof PublicExpertSpeakerSchema>;
+
+/**
+ * 012 EARS-8 — the canonical merged page-speaker item: a STRICT discriminated
+ * union on `source` (012-design §5.2). One resolver produces it for
+ * `GET /v1/public/events/:idOrSlug/speakers` and for
+ * {@link PublicEventPageSchema}`.speakers`, and the thinner
+ * {@link UpcomingBroadcastSpeakerSchema} card array is mapped from the SAME
+ * ordered result — so the shipped public surfaces cannot disagree.
+ *
+ * Ordering is LD-2's total order: `position ASC`, then source rank (`expert`
+ * before `legacy`), then stable row id ASC. Suppression is explicit-match only:
+ * an eligible expert supersedes exactly the legacy row its link names through
+ * `legacy_speaker_id`; a draft/retired expert suppresses nothing and its matched
+ * legacy row stays visible as the fallback. Names are never compared.
+ */
+export const PublicEventPageSpeakerSchema = z.discriminatedUnion("source", [
+  PublicLegacySpeakerSchema,
+  PublicExpertSpeakerSchema,
+]);
+export type PublicEventPageSpeaker = z.infer<
+  typeof PublicEventPageSpeakerSchema
+>;
+
+/**
+ * The body of `GET /v1/public/events/:idOrSlug/speakers` — the same ordered
+ * union array the event page embeds. A bare array, not the cursor envelope of
+ * the growing §5.2 base collections: an event's visible speaker set is bounded
+ * by its own slot uniqueness, and the page embeds this exact array, so paging
+ * one surface and not the other is precisely the disagreement EARS-8 forbids.
+ */
+export const PublicEventSpeakerListSchema = z.array(
+  PublicEventPageSpeakerSchema,
+);
+export type PublicEventSpeakerList = z.infer<
+  typeof PublicEventSpeakerListSchema
+>;
+
+/**
  * A backing partner as shown publicly — a display `label` only. No commercial
  * terms, sponsor contract data, or operator notes cross onto the public body
  * (EARS-10).
@@ -546,7 +615,9 @@ export const PublicEventPageSchema = z.object({
   startsAt: z.iso.datetime({ offset: true }),
   durationMin: z.number().int(),
   description: z.string(),
-  speakers: z.array(PublicSpeakerSchema),
+  // 012 EARS-8: the merged legacy+expert union, produced by the ONE canonical
+  // resolver that also feeds `/events/:key/speakers` and the upcoming card.
+  speakers: z.array(PublicEventPageSpeakerSchema),
   specialties: z.array(z.string()),
   partners: z.array(PublicPartnerSchema),
   programPdfUrl: z.string().optional(),

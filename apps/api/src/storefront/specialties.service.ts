@@ -4,7 +4,9 @@ import type {
   FrequentSpecialties,
   SpecialtyBook,
   SpecialtyRef,
+  SpecialtySearchResult,
 } from "@ds/schemas";
+import { specialtyNameMatchesQuery } from "@ds/schemas";
 import { SpecialtyError } from "./specialties.errors.js";
 import { SpecialtiesRepository } from "./specialties.repository.js";
 
@@ -52,6 +54,33 @@ export class SpecialtiesService {
   async frequent(): Promise<FrequentSpecialties> {
     const entries = (await this.specialties.findFrequent()).map(toRef);
     return { entries };
+  }
+
+  /**
+   * The catalog search read (EARS-5): the whole book narrowed by the SHARED
+   * matching rule — substring anywhere in the name, case- and «ё/е»-insensitive.
+   *
+   * It narrows over the WHOLE book, «Другое» included, never over the frequent
+   * subset: the frequent set is a presentation shortcut, and searching it would
+   * make most of a closed legal reference book unreachable by typing.
+   *
+   * The filter is applied HERE, in TypeScript, over the same rows `book()`
+   * serves, rather than pushed into SQL. That is deliberate and not a shortcut:
+   * the fold is one rule shared with the storefront through `@ds/schemas`, and a
+   * `LIKE`/`ILIKE` predicate would re-express it in Postgres collation semantics
+   * that do NOT fold «ё» onto «е» — two rules, drifting, over a book of a
+   * hundred-odd short rows where the scan costs nothing. If the book ever stops
+   * being closed and small, the rule moves into the database WITH the fold, not
+   * the fold into the database's approximation of it.
+   *
+   * A no-match is an empty result, never an error: EARS-5 requires the query to
+   * stay editable and the search recoverable.
+   */
+  async search(query: string): Promise<SpecialtySearchResult> {
+    const entries = (await this.specialties.findAll())
+      .map(toRef)
+      .filter((entry) => specialtyNameMatchesQuery(entry.name, query));
+    return { query, entries, total: entries.length };
   }
 
   /**

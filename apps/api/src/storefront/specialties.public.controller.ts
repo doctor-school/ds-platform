@@ -1,5 +1,18 @@
-import { Controller, Get, Header, Inject, UseFilters } from "@nestjs/common";
-import type { FrequentSpecialties, SpecialtyBook } from "@ds/schemas";
+import {
+  BadRequestException,
+  Controller,
+  Get,
+  Header,
+  Inject,
+  Query,
+  UseFilters,
+} from "@nestjs/common";
+import type {
+  FrequentSpecialties,
+  SpecialtyBook,
+  SpecialtySearchResult,
+} from "@ds/schemas";
+import { SpecialtySearchQuerySchema } from "@ds/schemas";
 import { Authz, Public } from "../authz/index.js";
 import { SpecialtiesService } from "./specialties.service.js";
 import { SpecialtyProblemFilter } from "./specialties.problem-filter.js";
@@ -58,5 +71,33 @@ export class SpecialtiesPublicController {
   })
   frequent(): Promise<FrequentSpecialties> {
     return this.specialties.frequent();
+  }
+
+  /**
+   * `GET /v1/public/specialties/search?q=…` — the whole book narrowed by the
+   * shared matching rule (EARS-5, 017-design §7 row «specialty search»).
+   *
+   * The narrowing happens SERVER-side over the whole book so that the storefront
+   * never has to hold, or re-derive, a second copy of the reference book to
+   * search it — and so that the fold rule has exactly one implementation.
+   *
+   * A missing `q` is the Open state, not a client error: the read then serves
+   * the whole book. An over-long or non-string `q` is refused at the boundary
+   * (400) rather than scanned — the book has no legitimate query longer than
+   * one of its own entries.
+   */
+  @Get("search")
+  @Public()
+  @Header("Cache-Control", "public, max-age=300")
+  @Authz({
+    access: "public",
+    check: "none",
+    audit: "none",
+    tests: ["EARS-5"],
+  })
+  search(@Query("q") q?: unknown): Promise<SpecialtySearchResult> {
+    const parsed = SpecialtySearchQuerySchema.safeParse(q ?? "");
+    if (!parsed.success) throw new BadRequestException("Invalid query");
+    return this.specialties.search(parsed.data);
   }
 }

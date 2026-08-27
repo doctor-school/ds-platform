@@ -73,6 +73,78 @@ export const FrequentSpecialtiesSchema = z.strictObject({
 export type FrequentSpecialties = z.infer<typeof FrequentSpecialtiesSchema>;
 
 /**
+ * The longest query the search read will consider. A reference book of a
+ * hundred-odd short names has no legitimate query longer than one of its
+ * entries; anything past this is refused at the boundary rather than scanned.
+ */
+export const SPECIALTY_SEARCH_QUERY_MAX_LENGTH = 256;
+
+export const SpecialtySearchQuerySchema = z
+  .string()
+  .max(SPECIALTY_SEARCH_QUERY_MAX_LENGTH);
+
+/**
+ * The ONE normalization behind the catalog search (EARS-5): case-folded,
+ * «ё» folded onto «е», trimmed, internal whitespace runs collapsed.
+ *
+ * It lives here, in the shared contract package, rather than in the API or in
+ * the storefront, because both sides must narrow by the SAME rule: a client
+ * that highlighted matches by a different rule than the server filtered by
+ * would show a doctor a hit that is not there, or hide one that is.
+ *
+ * `toLowerCase()` alone is not the fold — it maps «Ё» to «ё», not to «е», so
+ * the replacement runs after it and covers both cases in one pass.
+ */
+export function normalizeSpecialtyQuery(value: string): string {
+  return value
+    .normalize("NFC")
+    .toLowerCase()
+    .replace(/ё/g, "е")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+/**
+ * The matching rule itself: does `name` contain `query` as a SUBSTRING under
+ * that normalization? Substring anywhere in the name, never a prefix match and
+ * never a fuzzy/edit-distance widening — a doctor typing «кардиолог» must find
+ * «Детская кардиология», and must never be offered a specialty that merely
+ * looks like the one they typed (EARS-5, and the no-computed-likeness rule of
+ * EARS-8 applied to the catalog).
+ *
+ * An empty (or whitespace-only) query narrows nothing: the catalog's Open state
+ * is the whole book, not an empty one.
+ */
+export function specialtyNameMatchesQuery(
+  name: string,
+  query: string,
+): boolean {
+  const normalizedQuery = normalizeSpecialtyQuery(query);
+  if (normalizedQuery.length === 0) return true;
+  return normalizeSpecialtyQuery(name).includes(normalizedQuery);
+}
+
+/**
+ * `SpecialtySearchResult` — the public search read (017-design §7).
+ *
+ * `query` echoes back the query the read was given so a storefront can discard
+ * a response that a later keystroke has already superseded, and so a no-match
+ * state can keep the typed text editable without re-deriving it.
+ *
+ * `total` is the number of entries THIS read served — the size of the match
+ * set, NOT the size of the book. The book size has exactly one source, the
+ * `SpecialtyBook.total` of the full read, and it is what «Показать весь список
+ * — N» binds to; a count taken from a search result would shrink as a doctor
+ * typed.
+ */
+export const SpecialtySearchResultSchema = z.strictObject({
+  query: z.string(),
+  entries: z.array(SpecialtyRefSchema),
+  total: z.number().int().nonnegative(),
+});
+export type SpecialtySearchResult = z.infer<typeof SpecialtySearchResultSchema>;
+
+/**
  * Stable error codes for the closed-book contract (RFC 7807 `errorCode`,
  * ADR-0002). Grouped by HTTP status.
  */

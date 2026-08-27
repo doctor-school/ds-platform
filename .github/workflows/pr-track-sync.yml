@@ -17,11 +17,21 @@
 #                       the moment it is applied, not at merge time. This job's
 #                       own `--add-label` re-fires `labeled`; the re-run reads
 #                       `ok` and exits 0 (and GITHUB_TOKEN-triggered events do
-#                       not start new workflow runs at all).
+#                       not start new workflow runs at all);
+#   synchronize       — LOAD-BEARING for the BLOCK posture, not a convenience.
+#                       `merge-gate.mjs` `classifyCheckRuns` evaluates only the
+#                       check-runs registered at the CURRENT head and does not
+#                       require this one to exist. Without `synchronize` a
+#                       conflict reds at SHA A and the next push merges green at
+#                       SHA B, with nothing re-checking at merge time
+#                       (`pr:preflight --pre-merge` never invokes this script).
+#                       `pr-body-guards.yml` carries it for the same reason.
 #
 # Posture: BLOCK, deliberately. Exit 2 = the PR and its Issue disagree on the
 # track — one of the two is wrong and only a human knows which, so it reds the
-# check-run the merge gate reads (`tools/gh/merge-gate.mjs`, head-SHA-pinned).
+# check-run the merge gate reads (`tools/gh/merge-gate.mjs`, head-SHA-pinned) —
+# and, because `synchronize` re-registers the run at every new head, that red is
+# re-earned on each push instead of being left behind on a stale SHA.
 # Every non-conflict outcome — label applied, already correct, or nothing to
 # derive (bot PRs with no `Closes #N`: Version Packages, Dependabot) — exits 0.
 #
@@ -31,7 +41,7 @@ name: PR track sync
 
 on:
   pull_request:
-    types: [opened, edited, reopened, labeled, unlabeled]
+    types: [opened, edited, reopened, synchronize, labeled, unlabeled]
     branches: [main]
 
 concurrency:

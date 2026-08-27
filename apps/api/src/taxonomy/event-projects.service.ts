@@ -11,12 +11,10 @@ import {
   type PublicCursorQuery,
   type PublicEventSummary,
   type PublicEventSummaryPage,
-  type PublicProjectSummary,
   type PublicProjectSummaryPage,
   type TaxonomyLifecycleTransition,
   taxonomyETag,
 } from "@ds/schemas";
-import { OBJECT_STORAGE, type ObjectStorage } from "../storage/index.js";
 import {
   type EventProjectRow,
   EventProjectsRepository,
@@ -31,6 +29,7 @@ import {
   LifecycleImpactService,
   type LifecycleImpactTuple,
 } from "./lifecycle-impact.service.js";
+import { PublicProjectSummaryService } from "./public-project-summary.service.js";
 import {
   markReplayable,
   TaxonomyError,
@@ -86,7 +85,12 @@ export class EventProjectsService {
     private readonly idempotency: IdempotencyService,
     @Inject(LifecycleImpactService)
     private readonly impact: LifecycleImpactService,
-    @Inject(OBJECT_STORAGE) private readonly storage: ObjectStorage,
+    // The ONE `PublicProjectSummary` mapper (#1292). This vertical used to build
+    // the DTO itself with a hardcoded `primaryPartner: null`; now that
+    // `project_partners` exists, three routes emit that DTO and a per-vertical
+    // copy is exactly how one of them would silently keep returning `null`.
+    @Inject(PublicProjectSummaryService)
+    private readonly summaries: PublicProjectSummaryService,
   ) {}
 
   /** `POST /v1/admin/event-projects` — relate one project to one event. */
@@ -322,7 +326,8 @@ export class EventProjectsService {
     const hasMore = rows.length > query.limit;
     const last = page.at(-1);
     return {
-      data: await Promise.all(page.map((row) => this.toProjectSummary(row))),
+      // Batched: ONE primary-partner lookup for the whole page, not one per row.
+      data: await this.summaries.summarize(page),
       pagination: {
         nextCursor:
           hasMore && last
@@ -386,20 +391,6 @@ export class EventProjectsService {
     }
   }
 
-  private async toProjectSummary(row: Project): Promise<PublicProjectSummary> {
-    return {
-      id: row.id,
-      slug: row.slug,
-      kind: row.kind,
-      title: row.title,
-      description: row.description,
-      coverUrl: row.coverRef ? await this.storage.urlFor(row.coverRef) : null,
-      // `project_partners` (#1291) is the relation that will ever make this
-      // non-null; until it exists no project HAS a partner, so `null` is the
-      // truthful value here rather than a placeholder.
-      primaryPartner: null,
-    };
-  }
 }
 
 /** Either half of a §5.2 public key: a canonical UUID id, or a slug. */

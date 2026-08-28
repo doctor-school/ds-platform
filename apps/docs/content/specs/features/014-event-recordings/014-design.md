@@ -91,7 +91,7 @@ erDiagram
 - Read index for the projection and the listing badge:
   `CREATE INDEX event_recordings_event_published_idx ON event_recordings (event_id, kind) WHERE status = 'published' AND deleted_at IS NULL;`
 - `events.recording_expected_by` is a `date`, not a timestamp: the plaque promises a day, and a timezone-bearing instant would invite a false precision the operator never entered.
-- `event_id` is `RESTRICT` / `NO ACTION` per ADR-0003 §4. No 014 path issues `DELETE`.
+- `event_id` is `RESTRICT` / `NO ACTION` per ADR-0003 §3.6. No 014 path issues `DELETE`.
 - The table joins feature 010's generic audit trigger; there is no 014-specific audit table and no technical-table exclusion.
 
 **Migration order.** One migration adds the two enums, the table, both indexes and the `events` column. It is additive and backward-compatible: existing event reads are unaffected until the projection ships, so the schema Issue can land ahead of the API Issue without a partial-deployment hazard.
@@ -240,6 +240,10 @@ Rules the mechanism must satisfy:
 
 ## 7. Operator surface (`wave: core`)
 
+Recording poster and existing Event program-PDF authoring use shared file uploaders. Both support upload, replace and explicit remove, submit bytes rather than storage references, and atomically enqueue retained cleanup for superseded objects. Recording duration is extracted and validated from provider/file metadata after ingestion; it is read-only and never operator-authored.
+
+All recording lists/selectors use the shared paginated combobox/list contract: every filter including text search applies immediately, active values render as chips, one Reset all clears them, and a control with no possible state change is disabled or absent.
+
 The recordings panel is an own **«Записи» tab** of the existing feature-007 event detail in `apps/admin`, which this feature turns into a tabbed detail — not a new Refine resource tree. An operator attaches a recording while looking at the event, which is where they already are; the tab keeps the recording work out of the announcement fields it has nothing to do with.
 
 The tabbed composition is the Product Lead's Stage-A pick — option B, 2026-08-17, recorded in [`014-product.md`](./014-product.md) → Approved mockup — and matches the 012 admin decision ([#1282](https://github.com/doctor-school/ds-platform/issues/1282)) so both admin verticals compose the same way. The surface stays stock Refine plus `@ds/design-system` primitives (admin carries no canvas by design, ADR-0004 §3). The new feature-007 lifecycle command «Отметить завершённым (трансляция прошла вне платформы)» sits with the other lifecycle actions on the event detail, shown only when the transition applies, and every status-changing action — that command and the panel's publish / unpublish / retire / restore alike — confirms in a modal before it fires.
@@ -266,6 +270,8 @@ sequenceDiagram
 Panel contract: inside the «Записи» tab, one row per kind with its status chip, the source and poster fields, the action set from §3 behind modal confirmation, and the event-level readiness-date field beside it. No Delete control exists anywhere in the panel; retire is the terminal action and it is reversible.
 
 ## 8. Portal surfaces (`wave: core`)
+
+The archived-event speaker projection consumes only 012's canonical eligible `event_experts` ordered by relation position after migration. It has no `event_speakers` fallback and performs no name matching.
 
 ### 8.1 `/webinars/[slug]` post-live state
 
@@ -376,10 +382,12 @@ RFC 7807 Problem Details with `traceId` and an exact `errorCode`, per ADR-0002 �
 
 - Every new surface runs the `build-ui-from-design-system` gate first; the vendored canvases are the composition source of truth, read from the files rather than from prose.
 - The recorded canvas defaults are decisions, not questions: `secondaryUi: spoiler`; «Мои события» = two tabs; the `/webinars` past control = tabs mirroring the project and expert pages.
-- Stage A is already recorded in `014-product.md` → «Approved mockup». Stage B is a live-stand owner confirmation per surface before merge.
+- The original portal-surface Stage A is recorded in `014-product.md` → «Approved mockup». Revised admin rework still completes shared Stage A #1605 before implementation; Stage B remains a live-stand owner confirmation per changed surface before merge.
 - `design-source/README.md` carries the note that the canvas's «Сертификаты» tab is out of 014's scope (owner, 2026-08-17, canvas review miss) — the vendored copy is not edited here, since it is a verbatim mirror of the owner's canvas.
 
 ## 13. Sequencing
+
+Revised shared Stage A [#1605](https://github.com/doctor-school/ds-platform/issues/1605) completes before runtime rework. Delivery then stays within three bounded waves: **model/migration** [#1606](https://github.com/doctor-school/ds-platform/issues/1606) → [#1607](https://github.com/doctor-school/ds-platform/issues/1607) → [#1608](https://github.com/doctor-school/ds-platform/issues/1608) (EARS-21; blocked until 012's guarded cutover); **reversible media/relations** [#1609](https://github.com/doctor-school/ds-platform/issues/1609), [#1610](https://github.com/doctor-school/ds-platform/issues/1610), [#1611](https://github.com/doctor-school/ds-platform/issues/1611) (EARS-20); then **shared UX** [#1297](https://github.com/doctor-school/ds-platform/issues/1297) before [#1612](https://github.com/doctor-school/ds-platform/issues/1612) (EARS-22). The first two waves are each at most three PRs.
 
 ```mermaid
 flowchart LR
@@ -393,6 +401,7 @@ flowchart LR
   R --> TB
   R --> ME
   TWELVE["012 relations wave"] --> FA["facet unit + AND filtering (EARS-12/13/14)"]
+  CUTOVER["012 guarded speaker cutover #1607"] --> SP["canonical archived speakers #1608 (EARS-21)"]
   TWELVE --> PT["projects + topics on the page (EARS-19)"]
   PG --> PT
   U --> FA
@@ -401,7 +410,7 @@ flowchart LR
   FA --> AX
 ```
 
-`core` runs end to end without the 012 track. Only the two `facets` boxes wait, and they wait on 012's relations wave rather than on anything inside 014.
+The original `core` runs end to end without the 012 track. The two taxonomy `facets` boxes wait on 012's relations wave, and the revised archived-speaker projection #1608 separately waits on #1607's guarded cutover; it never reads retained source provenance.
 
 **EARS-18 comes first in practice.** Without the backfill command there is no `ended` event outside the platform's own room history, so the admin panel has nothing publishable to attach a recording to and the archive ships empty. It is cheap, it touches one command handler plus the 007 amendment, and it unblocks every downstream demonstration of the feature.
 

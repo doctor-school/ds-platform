@@ -12,7 +12,7 @@ Feature: A finished broadcast keeps its value as a recording, and the archive is
     And every recording mutation carries a canonical Idempotency-Key and the target ETag
     And event_recordings rows are retained with restrictive foreign keys and no Delete route
     And the display rule is derived at read time from published non-retired recordings only
-    And Stage A is recorded in 014-product.md and the vendored canvases are the composition source of truth
+    And Stage A uses vendored canvases for portal composition and the approved Refine decisions plus design-system blocks for admin composition
 
   # ---------------------------------------------------------------- operator
 
@@ -426,7 +426,7 @@ Feature: A finished broadcast keeps its value as a recording, and the archive is
   @EARS-16 @core @happy
   Scenario: Canvas defaults are treated as decisions
     Given the vendored canvases webinar-archive, events-filter and my-events
-    When a 014 surface is designed
+    When a 014 portal surface is designed
     Then secondaryUi is spoiler
     And «Мои события» has two tabs
     And the /webinars past control is tabs mirroring the project and expert pages
@@ -434,7 +434,7 @@ Feature: A finished broadcast keeps its value as a recording, and the archive is
 
   @EARS-16 @core @happy
   Scenario: Stage B precedes merge for every user-facing surface
-    Given a 014 surface built from its canvas
+    Given a 014 surface built from its surface-specific approved source
     When it is ready for merge
     Then the owner has confirmed the rendered result on the live stand
     And that verdict is recorded before the merge

@@ -12,7 +12,7 @@ import {
 /**
  * The SHARED taxonomy admin list shell (012-design §5.1, §7; Stage A #1282
  * composition B). #1283 builds it once for projects; #1284–#1286 mount the same
- * component for experts / topics / partners, and #1297's cross-resource search
+ * component for experts / directions / partners, and #1297's cross-resource search
  * sweep tightens it in one place rather than in four copies.
  *
  * It owns exactly the four list controls the API exposes — free-text `q`, the
@@ -33,15 +33,30 @@ export interface AdminListColumn {
   align?: "left" | "right";
 }
 
-export interface AdminListQueryState {
+/**
+ * The shell is generic over its STATUS VOCABULARY because the admin now lists two
+ * different lifecycles through it: the three-state taxonomy lifecycle
+ * (`draft`/`published`/`retired`) the 012 entities carry, and the two-state
+ * relationship lifecycle (`active`/`retired`) the #1483 direction relations carry.
+ * The alternative — a second shell for the two-state case — is precisely the drift
+ * the header comment above rules out, and a shell hardcoded to the taxonomy triple
+ * would offer a `draft` filter that a relation row can never be in.
+ */
+export interface AdminListQueryState<Status extends string = TaxonomyStatus> {
   q: string;
-  status: TaxonomyStatus | "";
+  status: Status | "";
   includeRetired: boolean;
   page: number;
   pageSize: number;
 }
 
-export const ADMIN_LIST_INITIAL_QUERY: AdminListQueryState = {
+/**
+ * Typed at `never` so the shared initial state is assignable to ANY status
+ * vocabulary: `never | ""` is `""`, which every `Status | ""` accepts. One
+ * constant therefore seeds a taxonomy list and a relation list alike, instead of
+ * each caller re-typing the same five defaults.
+ */
+export const ADMIN_LIST_INITIAL_QUERY: AdminListQueryState<never> = {
   q: "",
   status: "",
   includeRetired: false,
@@ -49,12 +64,15 @@ export const ADMIN_LIST_INITIAL_QUERY: AdminListQueryState = {
   pageSize: ADMIN_LIST_PAGE_SIZE_DEFAULT,
 };
 
-export function AdminListShell<Row>({
+export function AdminListShell<Row, Status extends string = TaxonomyStatus>({
   title,
   description,
   createHref,
   createLabel,
   statusLabels,
+  statuses,
+  searchable = true,
+  extraFilters,
   columns,
   rows,
   total,
@@ -71,14 +89,25 @@ export function AdminListShell<Row>({
   createHref: string;
   createLabel: string;
   /** RU label per lifecycle state — the shell renders no domain vocabulary itself. */
-  statusLabels: Record<TaxonomyStatus, string>;
+  statusLabels: Record<Status, string>;
+  /** The lifecycle this resource actually has; defaults to the 012 taxonomy triple. */
+  statuses?: readonly Status[];
+  /**
+   * Whether the resource's list route accepts free-text `q`. The direction
+   * relations do not (their list queries are `.strict()` and scope by endpoint id
+   * instead), and rendering a search box the API would reject is the same broken
+   * promise a placeholder field for an unsupported column would be.
+   */
+  searchable?: boolean;
+  /** Resource-specific filter controls rendered alongside the shared ones. */
+  extraFilters?: ReactNode;
   columns: AdminListColumn[];
   rows: Row[];
   total: number;
   isLoading: boolean;
   error?: string | null;
-  query: AdminListQueryState;
-  onQueryChange: (next: AdminListQueryState) => void;
+  query: AdminListQueryState<Status>;
+  onQueryChange: (next: AdminListQueryState<Status>) => void;
   renderRow: (row: Row) => ReactNode;
   emptyLabel: string;
   testId: string;
@@ -111,16 +140,19 @@ export function AdminListShell<Row>({
           onQueryChange({ ...query, q: draftQ.trim(), page: 1 });
         }}
       >
-        <div className="flex flex-1 flex-col gap-1.5">
-          <Label htmlFor={`${testId}-q`}>{t("projects.filters.search")}</Label>
-          <Input
-            id={`${testId}-q`}
-            value={draftQ}
-            placeholder={t("projects.filters.searchPlaceholder")}
-            data-testid={`${testId}-search`}
-            onChange={(event) => setDraftQ(event.target.value)}
-          />
-        </div>
+        {searchable ? (
+          <div className="flex flex-1 flex-col gap-1.5">
+            <Label htmlFor={`${testId}-q`}>{t("projects.filters.search")}</Label>
+            <Input
+              id={`${testId}-q`}
+              value={draftQ}
+              placeholder={t("projects.filters.searchPlaceholder")}
+              data-testid={`${testId}-search`}
+              onChange={(event) => setDraftQ(event.target.value)}
+            />
+          </div>
+        ) : null}
+        {extraFilters}
         <div className="flex flex-col gap-1.5 sm:w-56">
           <Label htmlFor={`${testId}-status`}>
             {t("projects.filters.status")}
@@ -132,20 +164,23 @@ export function AdminListShell<Row>({
             onChange={(event) =>
               onQueryChange({
                 ...query,
-                status: event.target.value as TaxonomyStatus | "",
+                status: event.target.value as Status | "",
                 page: 1,
               })
             }
           >
             <option value="">{t("projects.filters.statusAny")}</option>
-            {TAXONOMY_STATUSES.map((status) => (
+            {(statuses ?? (TAXONOMY_STATUSES as readonly string[] as readonly Status[])).map((status) => (
               <option key={status} value={status}>
                 {statusLabels[status]}
               </option>
             ))}
           </NativeSelect>
         </div>
-        <div className="flex items-center sm:pb-3">
+        {/* `h-11` is the shared control box of `Input`/`NativeSelect`: the row
+            aligns on `items-end`, so without it the 26px track sits on the
+            fields' bottom edge rather than their centre line. */}
+        <div className="flex h-11 items-center">
           {/* The DS Switch wraps its own <label>, so the visible text is its
               child rather than a sibling <Label> — a second label element would
               give the same control two accessible names. */}

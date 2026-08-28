@@ -6,7 +6,10 @@ import {
   CreateExpertRequestSchema,
   CreatePartnerRequestSchema,
   CreateProjectRequestSchema,
-  CreateTopicRequestSchema,
+  CreateDirectionRequestSchema,
+  CreateDirectionSpecialtyRequestSchema,
+  type DirectionAdjacencyKind,
+  DirectionAdjacencyKindSchema,
   DurationSecSchema,
   EmbedRefSchema,
   EVENT_EXPERT_POSITION_MAX,
@@ -230,42 +233,27 @@ export interface ExpertFormFields {
 }
 
 /**
- * The 012 topic create/edit form (#1285, EARS-3) — the thinnest of the four
- * taxonomy forms, and deliberately so: a curated topic IS a title plus the
+ * The 012 direction create/edit form (#1285, EARS-3) — the thinnest of the four
+ * taxonomy forms, and deliberately so: a curated direction IS a title plus the
  * permanent address it will be reachable at (012-requirements EARS-3; §2.2
  * matrix). There is no description, no media and no second descriptive column,
  * so the form has exactly two boxes and adding a third would be inventing an
- * entity shape the API refuses (`CreateTopicRequestSchema` is `.strict()`).
+ * entity shape the API refuses (`CreateDirectionRequestSchema` is `.strict()`).
  *
  * `title` reuses the SSOT create-schema validator verbatim (trim + 1…120), and
- * `slug` follows the same "empty box ⇒ the server generates it" rule the project
- * and expert forms established — emptiness is legal, only a non-empty value is
- * checked against the SSOT slug grammar.
+ * it is the ONLY box: «адрес страницы» is derived from the title by the server
+ * and frozen on first publish (017-design §9.3), so there is no slug field to
+ * validate here — `CreateDirectionRequestSchema` is `.strict()` and would refuse
+ * one outright.
  */
-const topicCreate = CreateTopicRequestSchema.shape;
+const directionCreate = CreateDirectionRequestSchema.shape;
 
-export const TopicFormSchema = z.object({
-  title: topicCreate.title,
-  slug: z.string().superRefine((value, ctx) => {
-    if (value.trim().length === 0) return; // empty ⇒ server generates it
-    const result = SlugSchema.safeParse(value.trim());
-    if (result.success) return;
-    for (const issue of result.error.issues) {
-      // Same distinction the sibling forms keep: `custom` is the canonical-UUID
-      // refusal, everything else the grammar/length rule. No baked message — an
-      // explicit one would outrank the localized per-parse error map.
-      ctx.addIssue(
-        issue.code === "custom"
-          ? { code: "custom" }
-          : { code: "invalid_format", format: "regex" },
-      );
-    }
-  }),
+export const DirectionFormSchema = z.object({
+  title: directionCreate.title,
 });
 
-export interface TopicFormFields {
+export interface DirectionFormFields {
   title: string;
-  slug: string;
 }
 
 /**
@@ -464,4 +452,72 @@ export interface EventExpertFormFields {
   expertId: string;
   role: string;
   positionText: string;
+}
+
+/**
+ * #1483 — the direction↔specialty link form (ADR-0016 §5). The link carries no
+ * attribute of its own: it IS the pair of endpoints, so the form has exactly two
+ * boxes and there is no edit counterpart anywhere in the admin (the API exposes no
+ * PATCH — re-pointing a link is retiring one and authoring another).
+ *
+ * Both ids reuse the SSOT create-schema validators verbatim rather than a re-typed
+ * `z.uuid()`, so «what counts as a direction id» keeps one answer on both sides of
+ * the wire.
+ */
+const directionSpecialtyCreate = CreateDirectionSpecialtyRequestSchema.shape;
+
+export const DirectionSpecialtyFormSchema = z.object({
+  directionId: directionSpecialtyCreate.directionId,
+  specialtyMinzdravId: directionSpecialtyCreate.specialtyMinzdravId,
+});
+
+export interface DirectionSpecialtyFormFields {
+  directionId: string;
+  specialtyMinzdravId: string;
+}
+
+/**
+ * #1483 — the direction adjacency form (ADR-0016 §5; 017-design §5, EARS-18).
+ * Unlike the specialty link, an adjacency edge DOES carry an attribute of its own
+ * — `kind` — so this form serves both create and edit, with one deliberate
+ * asymmetry the API mirrors: the two ENDPOINTS are the edge's identity and are
+ * therefore not patchable, so the edit renders them read-only rather than
+ * validating a move the server would refuse.
+ *
+ * `weight` is NOT a field. It is a tuning parameter of the targeting resolution
+ * with a server default, and 017-design §9.3 rules that a number no operator can
+ * reason about does not earn a box — the API defaults it, so the form neither
+ * collects nor sends it.
+ *
+ * The self-edge rule is NOT re-implemented here — it is asserted by the SSOT
+ * `CreateDirectionAdjacencyRequestSchema` refinement, folded in below, so the
+ * browser and the API refuse the same thing for the same reason.
+ */
+export const DirectionAdjacencyFormSchema = z
+  .object({
+    directionId: z.uuid(),
+    adjacentDirectionId: z.uuid(),
+    // The SSOT enum verbatim: «вид связи» is a closed vocabulary (017-design
+    // §9.3), so the form validates membership, not a string shape.
+    kind: DirectionAdjacencyKindSchema,
+  })
+  .superRefine((values, ctx) => {
+    if (
+      values.directionId &&
+      values.directionId === values.adjacentDirectionId
+    ) {
+      ctx.addIssue({ code: "custom", path: ["adjacentDirectionId"] });
+    }
+  });
+
+export interface DirectionAdjacencyFormFields {
+  directionId: string;
+  adjacentDirectionId: string;
+  /**
+   * `""` is «ещё не выбрано» — a state the SCHEMA refuses, which is exactly the
+   * point: a closed vocabulary has no neutral member to pre-select, so an
+   * unpicked kind must fail validation with a sentence rather than be silently
+   * defaulted to whichever option happened to be listed first.
+   */
+  kind: DirectionAdjacencyKind | "";
 }

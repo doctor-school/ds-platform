@@ -16,7 +16,7 @@ import {
 /**
  * The partner list (012-design §5.1, EARS-4/EARS-15) on the SHARED admin list
  * shell — the same search / state filter / «показывать снятые с публикации»
- * toggle / pagination the project, expert and topic lists mount, with no shell
+ * toggle / pagination the project, expert and direction lists mount, with no shell
  * change: a partner list is a taxonomy list, and giving it its own copy would be
  * the drift #1297 later has to sweep.
  *

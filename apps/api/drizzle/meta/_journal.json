@@ -183,6 +183,13 @@
       "when": 1787830838150,
       "tag": "0025_project_experts_and_partners",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1787830839150,
+      "tag": "0026_directions_book_and_adjacency",
+      "breakpoints": true
     }
   ]
 }

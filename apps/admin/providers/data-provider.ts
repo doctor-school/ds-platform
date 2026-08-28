@@ -23,18 +23,19 @@ import type {
   PartnerAdminListItem,
   ProjectAdminDetail,
   ProjectAdminListItem,
-  CreateTopicRequest,
+  CreateDirectionRequest,
   RecordingCommand,
+  RelationshipStatus,
   TaxonomyStatus,
-  TopicAdminDetail,
-  TopicAdminListItem,
+  DirectionAdminDetail,
+  DirectionAdminListItem,
   UpdateEventExpertRequest,
   UpdateEventRequest,
   UpdateExpertRequest,
   UpdatePartnerRequest,
   UpdateProjectRequest,
   UpdateRecordingRequest,
-  UpdateTopicRequest,
+  UpdateDirectionRequest,
 } from "@ds/schemas";
 
 /**
@@ -69,8 +70,8 @@ import type {
  *   partners (012)  the same four calls against /v1/admin/partners, with `logo`
  *                   as the file part (#1286, EARS-4).
  *
- *   topics   (012)  the same four calls against /v1/admin/topics, with NO file
- *                   part at all — a topic is a title plus its address, so every
+ *   directions   (012)  the same four calls against /v1/admin/directions, with NO file
+ *                   part at all — a direction is a title plus its address, so every
  *                   write is JSON (#1285, EARS-3).
  *
  * `deleteOne` throws for EVERY resource: 012 has no Delete route anywhere in the
@@ -98,11 +99,11 @@ const TAXONOMY_MEDIA_PART = {
   // A partner's image is its LOGO, and the part name is kind-specific by design
   // (012-design §5.1): sending it as `cover`/`photo` is a 400, not a synonym.
   partners: "logo",
-  // A topic carries no image anywhere in the entity (012-design §2.2 / §5.1): it
+  // A direction carries no image anywhere in the entity (012-design §2.2 / §5.1): it
   // is a title plus its permanent address. `null` registers the resource on this
   // map — so list/detail/create/update all dispatch for it — WITHOUT inventing a
   // file part the API has no route for; its writes are always JSON (#1285).
-  topics: null,
+  directions: null,
 } as const;
 type TaxonomyResource = keyof typeof TAXONOMY_MEDIA_PART;
 
@@ -148,27 +149,27 @@ export type UpdatePartnerVars = UpdatePartnerRequest & {
   version: number;
 };
 
-/** Topic create variables: the authored fields, and nothing else — no media part (#1285). */
-export type CreateTopicVars = CreateTopicRequest;
-/** Topic edit variables. `version` becomes the `If-Match` precondition. */
-export type UpdateTopicVars = UpdateTopicRequest & { version: number };
+/** Direction create variables: the authored fields, and nothing else — no media part (#1285). */
+export type CreateDirectionVars = CreateDirectionRequest;
+/** Direction edit variables. `version` becomes the `If-Match` precondition. */
+export type UpdateDirectionVars = UpdateDirectionRequest & { version: number };
 
 /** The taxonomy detail projections this provider can return. */
 type TaxonomyDetail =
   | ProjectAdminDetail
   | ExpertAdminDetail
   | PartnerAdminDetail
-  | TopicAdminDetail;
+  | DirectionAdminDetail;
 /** The taxonomy list rows this provider can return. */
 type TaxonomyListItem =
   | ProjectAdminListItem
   | ExpertAdminListItem
   | PartnerAdminListItem
-  | TopicAdminListItem;
+  | DirectionAdminListItem;
 
 /**
  * The file part of a taxonomy write, resolved off the resource map. A resource
- * registered with `null` (topics) has no file part at all, so no variable of the
+ * registered with `null` (directions) has no file part at all, so no variable of the
  * write can ever be read as one.
  */
 function taxonomyFile(
@@ -345,7 +346,7 @@ export const dataProvider: DataProvider = {
         variables as CreateProjectVars &
           CreateExpertVars &
           CreatePartnerVars &
-          CreateTopicVars;
+          CreateDirectionVars;
       const { body, headers } = taxonomyBody(
         resource,
         payload as Record<string, unknown>,
@@ -384,7 +385,7 @@ export const dataProvider: DataProvider = {
         variables as UpdateProjectVars &
           UpdateExpertVars &
           UpdatePartnerVars &
-          UpdateTopicVars;
+          UpdateDirectionVars;
       const { body, headers } = taxonomyBody(
         resource,
         payload as Record<string, unknown>,
@@ -667,3 +668,99 @@ export const projectPartnersUrl = {
   command: (id: string, command: "retire" | "restore") =>
     `${ADMIN_BASE}/project-partners/${id}/${command}`,
 };
+
+/**
+ * The direction ENTITY's lifecycle commands (012 EARS-13/14, §3.1; 017 EARS-18).
+ *
+ * The book itself stays a Refine CRUD resource — the list, the create and the
+ * PATCH all go through `directions` — so this map holds ONLY what CRUD has no
+ * verb for: `draft → published`, and the two impact-gated transitions. That is
+ * the same split `eventProjectsUrl` makes, for the same reason: a command is not
+ * an update of a field, and the `custom` path is what owns the
+ * Idempotency-Key / If-Match / lifecycle-impact-token protocol headers.
+ *
+ * There is no `delete` here and there never will be (§3.1): a direction is
+ * retired, keeping its id and its slug, so an audit trail and a doctor's
+ * bookmark both keep resolving.
+ */
+export const directionsUrl = {
+  row: (id: string) => `${ADMIN_BASE}/directions/${id}`,
+  /** `draft → published`. Carries no impact envelope — a publish withdraws nothing. */
+  publish: (id: string) => `${ADMIN_BASE}/directions/${id}/publish`,
+  /** The §3.1 preview. Transition-specific: a token binds exactly one of them. */
+  impact: (id: string, transition: TaxonomyLifecycleTransition) =>
+    `${ADMIN_BASE}/directions/${id}/lifecycle-impact?transition=${transition}`,
+  transition: (id: string, transition: TaxonomyLifecycleTransition) =>
+    `${ADMIN_BASE}/directions/${id}/${transition}`,
+};
+
+/**
+ * The #1483 direction↔specialty link endpoints (ADR-0016 §5; 017-design §5).
+ *
+ * Built the same way `eventProjectsUrl` is, and NOT registered as a Refine CRUD
+ * resource, for the same three reasons: the collection is always read scoped to an
+ * endpoint rather than as a flat book, the writes are the two named retire/restore
+ * commands rather than a PATCH, and the list query is `.strict()` — it accepts no
+ * `q`, so the generic taxonomy `getList` (which always sets `page`/`pageSize` and
+ * may set `q`) would build a query the API refuses. The `custom` path is also what
+ * owns the Idempotency-Key + If-Match protocol headers, which every write here owes.
+ *
+ * There is no `PATCH` and no `DELETE` in the map because the API exposes neither:
+ * the link is attribute-less, so re-pointing it is retiring one row and authoring
+ * another.
+ */
+export const directionSpecialtiesUrl = {
+  collection: () => `${ADMIN_BASE}/direction-specialties`,
+  list: (query: {
+    directionId?: string;
+    specialtyMinzdravId?: string;
+    status?: RelationshipStatus;
+    includeRetired?: boolean;
+    page?: number;
+    pageSize?: number;
+  }) => `${ADMIN_BASE}/direction-specialties?${relationQuery(query)}`,
+  row: (id: string) => `${ADMIN_BASE}/direction-specialties/${id}`,
+  transition: (id: string, transition: RelationshipTransition) =>
+    `${ADMIN_BASE}/direction-specialties/${id}/${transition}`,
+};
+
+/**
+ * The #1483 direction adjacency endpoints (ADR-0016 §5; 017-design §5). Same
+ * shape as the specialty links above, plus the one route they do not have: an
+ * adjacency edge carries `kind` and `weight`, so `PATCH :id` re-labels or
+ * re-weights the SAME edge. The endpoints are the edge's identity and are not
+ * patchable — moving an edge is retiring one and authoring another — which is why
+ * `row()` is the only path a write ever needs.
+ */
+export const directionAdjacencyUrl = {
+  collection: () => `${ADMIN_BASE}/direction-adjacency`,
+  list: (query: {
+    directionId?: string;
+    adjacentDirectionId?: string;
+    kind?: string;
+    status?: RelationshipStatus;
+    includeRetired?: boolean;
+    page?: number;
+    pageSize?: number;
+  }) => `${ADMIN_BASE}/direction-adjacency?${relationQuery(query)}`,
+  row: (id: string) => `${ADMIN_BASE}/direction-adjacency/${id}`,
+  transition: (id: string, transition: RelationshipTransition) =>
+    `${ADMIN_BASE}/direction-adjacency/${id}/${transition}`,
+};
+
+/** The two named lifecycle commands a relationship row answers to. */
+export type RelationshipTransition = "retire" | "restore";
+
+/**
+ * The query string of a direction-relation list. Both list schemas are
+ * `.strict()`, so an empty-string or `undefined` value is OMITTED rather than
+ * serialized: `?directionId=` is a validation failure, not "no filter".
+ */
+function relationQuery(query: Record<string, unknown>): string {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(query)) {
+    if (value === undefined || value === "" || value === false) continue;
+    params.set(key, String(value));
+  }
+  return params.toString();
+}

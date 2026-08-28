@@ -138,6 +138,36 @@ describe("<FilterBar>", () => {
       expect(field).toHaveValue("кардиоло");
     });
 
+    it("fires the LATEST onCommit, so a facet toggled inside the debounce window is not rolled back", () => {
+      // The operator types a search and — inside the 400ms window — flips a
+      // facet beside it. The parent rebuilds `onCommit` around its NEW query on
+      // that re-render; a timer holding the keystroke-time callback would commit
+      // the PRE-toggle query and silently undo the facet the operator just set.
+      const first = vi.fn();
+      const second = vi.fn();
+      const { rerender } = renderBar({
+        search: { value: "", onCommit: first, label: "Поиск по названию", debounceMs: 400 },
+      });
+      const field = screen.getByLabelText("Поиск по названию");
+
+      fireEvent.change(field, { target: { value: "карди" } });
+      // The facet flips before the window closes: same value, fresh callback.
+      rerender(
+        <FilterBar
+          applyMode="instant"
+          label="Фильтры списка"
+          resetLabel="Сбросить всё"
+          search={{ value: "", onCommit: second, label: "Поиск по названию", debounceMs: 400 }}
+        />,
+      );
+      act(() => {
+        vi.advanceTimersByTime(400);
+      });
+
+      expect(second).toHaveBeenCalledWith("карди");
+      expect(first).not.toHaveBeenCalled();
+    });
+
     it("still follows an EXTERNAL value change (reset-all, a restored URL)", () => {
       const onCommit = vi.fn();
       const { rerender } = renderBar({

@@ -6,15 +6,14 @@ import { CandidatesView } from "./candidates-view";
  * Stage-A options surface of `build-ui-from-design-system` (AGENTS.md §6). The
  * showcase is the single live URL behind both design gates; this section is the
  * seam where research-backed candidates for an element class render beside the
- * adopted entry for the owner's pick. The set shown here is an illustrative
- * demonstration of the seam, not a live decision (real sets come from the
- * research-ui-element subagent — deliverable A, #340).
+ * adopted entry for the owner's pick. The current set is the live #1578 Stage-A
+ * completed decision for the clickable DataTable row's pressed state.
  */
 export default function CandidatesPage() {
   return (
     <SectionShell
-      title="Candidates (Stage-A)"
-      intro="The candidate/adopted seam: 2–3 researched candidate variants of an element class, rendered as the real branded composition beside the adopted entry and clearly role-labelled, for the owner's Stage-A pick on this live URL. The chosen option is then encoded as a standard and the candidates are promoted to adopted or removed. The set below is an illustrative sample wiring the seam — not a live decision."
+      title="Adopted (Stage-A)"
+      intro="Stage-A decision for #1578 is recorded: Variant 1 is now the adopted clickable-row pressed state, rendered through the real @ds/design-system DataTable on desktop and mobile."
     >
       <CandidatesView />
     </SectionShell>

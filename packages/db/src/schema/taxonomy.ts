@@ -13,10 +13,11 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import { events, eventSpeakers } from "./events.js";
+import { specialtiesMinzdrav } from "./specialties.js";
 
 // 012 — Content taxonomy: the retained entity write model (012-design §2, §2.1;
 // ADR-0003 §4 retained-row lifecycle). EARS-1 (#1283) lands the FIRST entity of
-// the four — `projects`. `experts` / `topics` / `partners` are their own W1
+// the four — `projects`. `experts` / `directions` / `partners` are their own W1
 // verticals (#1284–#1286) and land in this same file as siblings; the two enums
 // and the shared constraint vocabulary below are authored once here.
 //
@@ -124,7 +125,10 @@ export const projects = pgTable(
       "projects_retired_iff_deleted",
       sql`(${t.status} = 'retired') = (${t.deletedAt} IS NOT NULL)`,
     ),
-    check("projects_slug_pattern", sql`${t.slug} ~ ${sql.raw(`'${SLUG_PATTERN}'`)}`),
+    check(
+      "projects_slug_pattern",
+      sql`${t.slug} ~ ${sql.raw(`'${SLUG_PATTERN}'`)}`,
+    ),
     check(
       "projects_slug_not_uuid",
       sql`${t.slug} !~ ${sql.raw(`'${UUID_TEXT_PATTERN}'`)}`,
@@ -216,7 +220,10 @@ export const experts = pgTable(
       "experts_retired_iff_deleted",
       sql`(${t.status} = 'retired') = (${t.deletedAt} IS NOT NULL)`,
     ),
-    check("experts_slug_pattern", sql`${t.slug} ~ ${sql.raw(`'${SLUG_PATTERN}'`)}`),
+    check(
+      "experts_slug_pattern",
+      sql`${t.slug} ~ ${sql.raw(`'${SLUG_PATTERN}'`)}`,
+    ),
     check(
       "experts_slug_not_uuid",
       sql`${t.slug} !~ ${sql.raw(`'${UUID_TEXT_PATTERN}'`)}`,
@@ -274,19 +281,19 @@ export const experts = pgTable(
 export type Expert = typeof experts.$inferSelect;
 export type NewExpert = typeof experts.$inferInsert;
 
-export const TOPIC_TITLE_MAX = 120;
+export const DIRECTION_TITLE_MAX = 120;
 
 /**
- * `topics` — the curated editorial topic record (012 EARS-3, #1285).
+ * `directions` — the curated editorial direction record (012 EARS-3, #1285).
  *
- * A topic is a first-class retained row, never a free-form event tag: an event
- * is classified by LINKING it to an existing topic (`event_topics`, #1293), so
+ * A direction is a first-class retained row, never a free-form event tag: an event
+ * is classified by LINKING it to an existing direction (`event_directions`, #1293), so
  * there is no inline creation path and no per-event string that could drift into
  * a second spelling of the same subject. One row feeds the admin list, the admin
- * detail and (from #1294) the public `PublicTopic { id, slug, title }`
+ * detail and (from #1294) the public `PublicDirection { id, slug, title }`
  * projection.
  *
- * The topic is the THINNEST taxonomy entity of the four (§2 ER): a stable id, a
+ * The direction is the THINNEST taxonomy entity of the four (§2 ER): a stable id, a
  * permanent slug, a title and the shared lifecycle. It carries no description
  * and no media — the §5.2 public DTO exposes exactly `id`, `slug`, `title`, so a
  * descriptive column here would be an unreadable field, and its authoring
@@ -295,11 +302,11 @@ export const TOPIC_TITLE_MAX = 120;
  * (`experts`), and a subject heading has nothing to remove.
  *
  * `title` is NOT NULL: unlike a project description or an expert's regalia there
- * is no publish-required-but-draft-incomplete field to model — a topic with no
+ * is no publish-required-but-draft-incomplete field to model — a direction with no
  * title would be an unlabelled row with nothing else to identify it.
  */
-export const topics = pgTable(
-  "topics",
+export const directions = pgTable(
+  "directions",
   {
     id: uuid("id").defaultRandom().primaryKey(),
     /** The permanent public identity. Editable only while `first_published_at IS NULL`. */
@@ -319,33 +326,36 @@ export const topics = pgTable(
       .defaultNow(),
   },
   (t) => [
-    // Spans EVERY retained row (012-design §2.1): a retired topic keeps holding
-    // its slug, so a bookmarked topic URL can never later resolve to a different
+    // Spans EVERY retained row (012-design §2.1): a retired direction keeps holding
+    // its slug, so a bookmarked direction URL can never later resolve to a different
     // subject. Deliberately NOT a partial index.
-    uniqueIndex("topics_slug_key").on(t.slug),
+    uniqueIndex("directions_slug_key").on(t.slug),
     check(
-      "topics_retired_iff_deleted",
+      "directions_retired_iff_deleted",
       sql`(${t.status} = 'retired') = (${t.deletedAt} IS NOT NULL)`,
     ),
-    check("topics_slug_pattern", sql`${t.slug} ~ ${sql.raw(`'${SLUG_PATTERN}'`)}`),
     check(
-      "topics_slug_not_uuid",
+      "directions_slug_pattern",
+      sql`${t.slug} ~ ${sql.raw(`'${SLUG_PATTERN}'`)}`,
+    ),
+    check(
+      "directions_slug_not_uuid",
       sql`${t.slug} !~ ${sql.raw(`'${UUID_TEXT_PATTERN}'`)}`,
     ),
     check(
-      "topics_title_bounds",
-      sql`char_length(${t.title}) BETWEEN 1 AND ${sql.raw(String(TOPIC_TITLE_MAX))}`,
+      "directions_title_bounds",
+      sql`char_length(${t.title}) BETWEEN 1 AND ${sql.raw(String(DIRECTION_TITLE_MAX))}`,
     ),
-    check("topics_version_positive", sql`${t.version} >= 1`),
+    check("directions_version_positive", sql`${t.version} >= 1`),
     check(
-      "topics_published_has_first_published_at",
+      "directions_published_has_first_published_at",
       sql`${t.status} <> 'published' OR ${t.firstPublishedAt} IS NOT NULL`,
     ),
   ],
 );
 
-export type Topic = typeof topics.$inferSelect;
-export type NewTopic = typeof topics.$inferInsert;
+export type Direction = typeof directions.$inferSelect;
+export type NewDirection = typeof directions.$inferInsert;
 
 export const PARTNER_TITLE_MAX = 160;
 export const PARTNER_WEBSITE_URL_MAX = 2048;
@@ -371,7 +381,7 @@ export const HTTPS_URL_PATTERN = "^https://[^\\s/?#]+[^\\s]*$";
  * its at-most-one-active-primary rule. There is no inline creation path.
  *
  * Shape-wise it is the `projects` lifecycle plus ONE media slot and ONE URL:
- * `title` is NOT NULL (like a topic's — a partner with no title would be an
+ * `title` is NOT NULL (like a direction's — a partner with no title would be an
  * unlabelled row with nothing else to identify it), while `logo_ref` and
  * `website_url` are nullable because §5.2 declares both optional and nullable on
  * `PublicPartner`. Neither is therefore publish-required: a published partner
@@ -415,7 +425,10 @@ export const partners = pgTable(
       "partners_retired_iff_deleted",
       sql`(${t.status} = 'retired') = (${t.deletedAt} IS NOT NULL)`,
     ),
-    check("partners_slug_pattern", sql`${t.slug} ~ ${sql.raw(`'${SLUG_PATTERN}'`)}`),
+    check(
+      "partners_slug_pattern",
+      sql`${t.slug} ~ ${sql.raw(`'${SLUG_PATTERN}'`)}`,
+    ),
     check(
       "partners_slug_not_uuid",
       sql`${t.slug} !~ ${sql.raw(`'${UUID_TEXT_PATTERN}'`)}`,
@@ -655,7 +668,10 @@ export const eventTopics = pgTable(
       .references(() => events.id, { onDelete: "restrict" }),
     topicId: uuid("topic_id")
       .notNull()
-      .references(() => topics.id, { onDelete: "restrict" }),
+      // #1483 renamed the `topics` book to `directions` (ADR-0016 §5). The
+      // physical column stays `topic_id`: renaming the table does not rename
+      // the columns that point at it, and the 012 EARS-11 link is the same row.
+      .references(() => directions.id, { onDelete: "restrict" }),
     status: relationshipStatus("status").notNull().default("active"),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
     /** Optimistic-concurrency counter behind the join ETag; starts at 1, `++` per successful write. */
@@ -821,3 +837,195 @@ export const projectPartners = pgTable(
 
 export type ProjectPartner = typeof projectPartners.$inferSelect;
 export type NewProjectPartner = typeof projectPartners.$inferInsert;
+
+// ── ADR-0016 §2.8 / §5 — the direction reference relations ──────────────────
+//
+// `directions` is the feature-012 taxonomy row family renamed (ADR-0016 §5:
+// "the only shipped-surface change is the `topics` → `directions` rename"), and
+// the two tables below are the EXTENSION that makes it the platform's targeting
+// substrate: which official specialties a direction serves, and which other
+// directions are adjacent to it.
+//
+// Both are JOIN rows under the §2.1 two-state `relationshipStatus` lifecycle,
+// not editorial entities: they carry no slug, no title and no publication
+// state — a link is `active` or `retired`, a retired link is RESTORED (same row,
+// same id) rather than re-inserted, and nothing is ever physically deleted
+// (`onDelete: "restrict"` on every endpoint, ADR-0003).
+//
+// 017 EARS-8 reads exactly these two tables: chosen specialty →
+// `direction_specialties` → own directions → `direction_adjacency` → adjacent
+// directions. Nothing enters a `TargetingSet` without a managed row behind it,
+// so neither table has an inference, similarity or fallback path.
+
+/**
+ * `direction_specialties` — the many-to-many link between a direction and an
+ * entry of the closed Минздрав specialty book (ADR-0016 §2.8; 017-design §5).
+ *
+ * This link DRIVES CONTENT DISPLAY (ADR-0016 §2.8, REQ-1): it is the only
+ * managed statement that a direction serves a given specialty. There is no
+ * name-similarity, shared-prefix or computed-likeness path anywhere — 017 EARS-8
+ * forbids one explicitly, and the absence of such a column is the guard.
+ *
+ * The specialty endpoint is `specialties_minzdrav`, whose rows survive a re-seed
+ * by `code` (see `specialties.ts`), so a link authored today keeps pointing at
+ * the same specialty after an amended nomenclature order.
+ */
+export const directionSpecialties = pgTable(
+  "direction_specialties",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    directionId: uuid("direction_id")
+      .notNull()
+      .references(() => directions.id, { onDelete: "restrict" }),
+    specialtyMinzdravId: uuid("specialty_minzdrav_id")
+      .notNull()
+      .references(() => specialtiesMinzdrav.id, { onDelete: "restrict" }),
+    status: relationshipStatus("status").notNull().default("active"),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    /** Optimistic-concurrency counter behind the join ETag; starts at 1, `++` per successful write. */
+    version: integer("version").notNull().default(1),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    // Spans active AND retained rows (012-design §2.1): the pair is the
+    // relationship's identity, so a retired link is restored rather than
+    // duplicated — «эта специальность уже привязана к направлению» stays
+    // answerable and the audit lineage stays single.
+    uniqueIndex("direction_specialties_pair_key").on(
+      t.directionId,
+      t.specialtyMinzdravId,
+    ),
+    check(
+      "direction_specialties_retired_iff_deleted",
+      sql`(${t.status} = 'retired') = (${t.deletedAt} IS NOT NULL)`,
+    ),
+    check("direction_specialties_version_positive", sql`${t.version} >= 1`),
+    // The 017 EARS-8 read enters from the SPECIALTY side (chosen specialty →
+    // own directions); the pair index already serves the direction-leading
+    // admin read, so only the reverse direction needs its own.
+    index("direction_specialties_specialty_id_idx").on(t.specialtyMinzdravId),
+  ],
+);
+
+export type DirectionSpecialty = typeof directionSpecialties.$inferSelect;
+export type NewDirectionSpecialty = typeof directionSpecialties.$inferInsert;
+
+/**
+ * The adjacency `kind` vocabulary — CLOSED, and closed here (017-design §9.3).
+ *
+ * An operator picking «вид связи» is making a taxonomy decision, so the set of
+ * decisions available has to be enumerable at the point of choice: a `Combobox`
+ * can only offer options that exist, and a shape CHECK over free text offers
+ * none. The enum is therefore the single place the vocabulary lives — the Zod
+ * contract mirrors it, the generated SDK carries it, and the RU labels the
+ * operator reads are presentation over these machine values, never stored.
+ *
+ * The three members are the distinctions the reference book actually draws:
+ * `related` — a neighbouring direction, no hierarchy implied; `subdiscipline` —
+ * the adjacent direction is a narrower part of this one; `interdisciplinary` —
+ * the two meet across fields rather than within one.
+ */
+export const directionAdjacencyKind = pgEnum("direction_adjacency_kind", [
+  "related",
+  "subdiscipline",
+  "interdisciplinary",
+]);
+
+/** The relative-strength scale of an adjacency edge; 1 = weakest, 100 = strongest. */
+export const DIRECTION_ADJACENCY_WEIGHT_MIN = 1;
+export const DIRECTION_ADJACENCY_WEIGHT_MAX = 100;
+/**
+ * The declared weight every authored edge gets (017-design §9.3): weight is a
+ * tuning parameter of targeting resolution, not an editorial decision, so it is
+ * absent from the operator interface and the column supplies it. Mid-scale by
+ * construction — an unweighted edge is neither promoted nor demoted against its
+ * siblings, so the adjacent set falls back to its own ordering rather than to an
+ * accident of the default.
+ */
+export const DIRECTION_ADJACENCY_WEIGHT_DEFAULT = 50;
+
+/**
+ * `direction_adjacency` — the direction ↔ direction self-relation carrying
+ * `kind` and `weight` (ADR-0016 §2.8; 017-design §5 `DIRECTION_ADJACENCY`).
+ *
+ * The edge is DIRECTED: one row states that, reading FROM `direction_id`,
+ * `adjacent_direction_id` is adjacent with this kind and this weight. Adjacency
+ * in practice is not symmetric — a narrow direction may sit adjacent to a broad
+ * one without the broad one wanting the narrow one's content in its own targeted
+ * selection — so a mutual relation is TWO authored rows, each with its own kind
+ * and weight, rather than one row read in both directions. Making it implicitly
+ * symmetric would publish an edge no operator ever authored, which 017 EARS-8's
+ * "nothing enters TargetingSet without a managed row behind it" forbids.
+ *
+ * `weight` orders the adjacent set when a targeted block has more candidates
+ * than slots; it is never a similarity score and is never computed.
+ */
+export const directionAdjacency = pgTable(
+  "direction_adjacency",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    directionId: uuid("direction_id")
+      .notNull()
+      .references(() => directions.id, { onDelete: "restrict" }),
+    adjacentDirectionId: uuid("adjacent_direction_id")
+      .notNull()
+      .references(() => directions.id, { onDelete: "restrict" }),
+    /** The authored edge label — one member of the closed vocabulary above. */
+    kind: directionAdjacencyKind("kind").notNull(),
+    /**
+     * Relative strength of the edge within the source direction's adjacent set.
+     * Server-supplied: the operator never authors it (017-design §9.3).
+     */
+    weight: integer("weight")
+      .notNull()
+      .default(DIRECTION_ADJACENCY_WEIGHT_DEFAULT),
+    status: relationshipStatus("status").notNull().default("active"),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    /** Optimistic-concurrency counter behind the join ETag; starts at 1, `++` per successful write. */
+    version: integer("version").notNull().default(1),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    // One edge per ordered pair, across active AND retained rows: a retired
+    // edge is restored, never re-inserted as a second row with a different
+    // weight.
+    uniqueIndex("direction_adjacency_pair_key").on(
+      t.directionId,
+      t.adjacentDirectionId,
+    ),
+    // A direction is not adjacent to itself: the 017 EARS-8 read labels
+    // everything reached through this table as ADJACENT, so a self-edge would
+    // render the doctor's own direction as someone else's.
+    check(
+      "direction_adjacency_no_self_edge",
+      sql`${t.directionId} <> ${t.adjacentDirectionId}`,
+    ),
+    // No `kind` CHECK: the enum type IS the constraint now, so a shape check
+    // beside it would be a second, weaker statement of the same rule.
+    check(
+      "direction_adjacency_weight_bounds",
+      sql`${t.weight} BETWEEN ${sql.raw(String(DIRECTION_ADJACENCY_WEIGHT_MIN))} AND ${sql.raw(String(DIRECTION_ADJACENCY_WEIGHT_MAX))}`,
+    ),
+    check(
+      "direction_adjacency_retired_iff_deleted",
+      sql`(${t.status} = 'retired') = (${t.deletedAt} IS NOT NULL)`,
+    ),
+    check("direction_adjacency_version_positive", sql`${t.version} >= 1`),
+    // The reverse traversal ("which directions point at this one") is an
+    // indexed read, not a scan; the pair index already serves the forward one.
+    index("direction_adjacency_adjacent_id_idx").on(t.adjacentDirectionId),
+  ],
+);
+
+export type DirectionAdjacency = typeof directionAdjacency.$inferSelect;
+export type NewDirectionAdjacency = typeof directionAdjacency.$inferInsert;

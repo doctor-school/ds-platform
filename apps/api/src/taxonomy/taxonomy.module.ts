@@ -1,4 +1,10 @@
 import { Module } from "@nestjs/common";
+import { DirectionAdjacencyAdminController } from "./direction-adjacency.admin.controller.js";
+import { DirectionAdjacencyRepository } from "./direction-adjacency.repository.js";
+import { DirectionAdjacencyService } from "./direction-adjacency.service.js";
+import { DirectionSpecialtiesAdminController } from "./direction-specialties.admin.controller.js";
+import { DirectionSpecialtiesRepository } from "./direction-specialties.repository.js";
+import { DirectionSpecialtiesService } from "./direction-specialties.service.js";
 import { EventExpertsAdminController } from "./event-experts.admin.controller.js";
 import { EventExpertsRepository } from "./event-experts.repository.js";
 import { EventExpertsService } from "./event-experts.service.js";
@@ -52,9 +58,9 @@ import { EventSpeakersPublicController } from "./speaker-projection.public.contr
 import { SpeakerProjectionRepository } from "./speaker-projection.repository.js";
 import { SpeakerProjectionService } from "./speaker-projection.service.js";
 import { TaxonomyProblemFilter } from "./taxonomy.problem-filter.js";
-import { TopicsAdminController } from "./topics.admin.controller.js";
-import { TopicsRepository } from "./topics.repository.js";
-import { TopicsService } from "./topics.service.js";
+import { DirectionsAdminController } from "./directions.admin.controller.js";
+import { DirectionsRepository } from "./directions.repository.js";
+import { DirectionsService } from "./directions.service.js";
 
 /**
  * 012 — Content taxonomy (#1283 EARS-1 opens it with the project vertical).
@@ -63,9 +69,9 @@ import { TopicsService } from "./topics.service.js";
  * `IdempotencyService` is the §6 retained-record contract, `StillImageNormalizer`
  * the §2.2 shared media component, `MediaCleanupService` the §5.1 durable cleanup
  * obligation and `UploadReconcileService` its §6 counterpart for objects a
- * never-committed request uploaded. #1284 (experts) and #1285 (topics) are wired here alongside
+ * never-committed request uploaded. #1284 (experts) and #1285 (directions) are wired here alongside
  * them; #1286 follows and consumes them unchanged — there is no second
- * normalizer and no second record shape. A topic touches only the idempotency
+ * normalizer and no second record shape. A direction touches only the idempotency
  * record: it has no media slot at all (012-design §2 ER), so the three media
  * services are simply not among its dependencies.
  *
@@ -79,7 +85,7 @@ import { TopicsService } from "./topics.service.js";
   controllers: [
     ProjectsAdminController,
     ExpertsAdminController,
-    TopicsAdminController,
+    DirectionsAdminController,
     PartnersAdminController,
     // #1289 EARS-7 — the expert↔event JOIN surface. It lives in this module
     // rather than in `events` because its whole contract (retained lifecycle,
@@ -111,6 +117,13 @@ import { TopicsService } from "./topics.service.js";
     // projection. Same reasoning: the merge policy is the taxonomy's, the
     // event contributes only the parent key.
     EventSpeakersPublicController,
+    // #1483 (ADR-0016 §2.8) — the two direction reference relations: which
+    // Минздрав specialties a direction serves, and which directions are
+    // adjacent to it. They live here because a direction is a taxonomy entity
+    // and both surfaces are the taxonomy relationship contract verbatim; 017's
+    // targeting resolution (#1484) is their consumer, not their owner.
+    DirectionSpecialtiesAdminController,
+    DirectionAdjacencyAdminController,
   ],
   providers: [
     IdempotencyService,
@@ -121,8 +134,8 @@ import { TopicsService } from "./topics.service.js";
     ProjectsService,
     ExpertsRepository,
     ExpertsService,
-    TopicsRepository,
-    TopicsService,
+    DirectionsRepository,
+    DirectionsService,
     PartnersRepository,
     PartnersService,
     EventExpertsRepository,
@@ -142,6 +155,10 @@ import { TopicsService } from "./topics.service.js";
     EventTopicsService,
     SpeakerProjectionRepository,
     SpeakerProjectionService,
+    DirectionSpecialtiesRepository,
+    DirectionSpecialtiesService,
+    DirectionAdjacencyRepository,
+    DirectionAdjacencyService,
     // The §3.1 preview/confirmation seam, authored once for every 012 resource
     // with a retire/restore pair (#1288 is the first adopter, #1295/#1296 next).
     LifecycleImpactService,

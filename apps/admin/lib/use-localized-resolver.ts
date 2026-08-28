@@ -33,7 +33,9 @@ export function useLocalizedResolver<TFieldValues extends FieldValues, Out>(
     | "projects.validation"
     | "experts.validation"
     | "partners.validation"
-    | "topics.validation"
+    | "directions.validation"
+    | "directionSpecialties.validation"
+    | "directionAdjacency.validation"
     | "recordings.validation"
     | "eventExperts.validation" = "events.validation",
 ): Resolver<TFieldValues, unknown, Out> {
@@ -148,6 +150,20 @@ export function translateIssue(issue: ZodIssueLike, t: Translator): string {
     return issue.code === "too_big" ? t("positionMax") : t("position");
   }
 
+  // #1483 direction relations. Every box here is a SELECTOR (`kind` included —
+  // it is a Combobox over the closed SSOT vocabulary), and «обязательное поле»
+  // under a dropdown does not say what to do —
+  // so each endpoint gets its own «выберите … из списка». The two ids arrive as
+  // `invalid_format` on an empty string (the SSOT id is a `z.uuid()`), which the
+  // generic tail below maps to `fallback`, so the branches are load-bearing
+  // rather than cosmetic. The self-edge refusal is a `custom` issue on the
+  // ADJACENT box and reads as its own sentence: «выберите смежное направление»
+  // would be advice the operator has already followed.
+  if (has("specialtyMinzdravId")) return t("specialty");
+  if (has("adjacentDirectionId")) {
+    return issue.code === "custom" ? t("selfEdge") : t("adjacentDirection");
+  }
+  if (has("directionId")) return t("direction");
   if (has("expectedBy")) return t("expectedBy");
   if (has("posterRef")) return t("maxLength");
   if (has("durationSecText")) {

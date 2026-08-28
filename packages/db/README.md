@@ -58,25 +58,38 @@ removal. A table's DOMAIN state machine is a separate axis again: `events.state`
 life, `events.record_status` says whether the row is part of the live domain at
 all — an `archived` event is a present, readable row.
 
-| Table                | Class                     | Lifecycle columns                           | Why                                                                                                                                                        |
-| -------------------- | ------------------------- | ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `users`              | soft-removable            | `record_status` + `deleted_at`              | The identity mirror is referenced by audit, consent, registrations and beats; PD erasure (ADR-0009) empties values on the retained row, it never drops it. |
-| `events`             | soft-removable            | `record_status` + `deleted_at`              | A withdrawn broadcast keeps its id and slug so a bookmarked URL can never resolve to a different event (§3.6 rule 5).                                      |
-| `event_speakers`     | soft-removable            | `record_status` + `deleted_at`              | Relationship-shaped record (§3.6 rule 4): dropping a speaker from the list retires the row, preserving that this person was announced for this broadcast.  |
-| `stream_config`      | soft-removable            | `record_status` + `deleted_at`              | One retained row per event: "no stream any more" is a retirement, and re-configuring is the explicit restore of the same row, never a delete-then-insert.  |
-| `registrations`      | soft-removable            | `record_status` + `deleted_at`              | Wave 1 has no cancel command, so every row is `active`; the columns exist so cancellation lands as an ordinary transition instead of a future reshape.     |
-| `event_recordings`   | soft-removable            | `recording_status` + `deleted_at`           | Editorial publication workflow (014) — already conforming.                                                                                                 |
-| `projects`           | soft-removable            | `taxonomy_status` + `deleted_at`            | Editorial publication workflow (012) — already conforming.                                                                                                 |
-| `experts`            | soft-removable            | `taxonomy_status` + `deleted_at`            | Editorial publication workflow (012), plus `content_removed_at` for §2.4 editorial removal — already conforming.                                           |
-| `topics`             | soft-removable            | `taxonomy_status` + `deleted_at`            | Editorial publication workflow (012) — already conforming.                                                                                                 |
-| `idempotency_keys`   | expiring (retained key)   | `status` (`active\|expired`) + `deleted_at` | Expiry CLEARS the payload and keeps the key forever, so a second actor can never re-use a UUID to replay someone else's command — already conforming.      |
-| `media_cleanup_jobs` | expiring (retained job)   | `status` (`active\|expired`) + `deleted_at` | Terminal jobs are cleared to id + kind + outcome + timestamps and retained as the record that the obligation was discharged — already conforming.          |
-| `presence_beats`     | **immutable/append-only** | none — by contract                          | Telemetry stream (§3.6 rule 4). A beat is a measurement of a moment that happened; a removal path would be a way to make sponsor minutes vanish unaudited. |
-| `consent_records`    | **immutable/append-only** | none — by contract                          | Legal evidence. Withdrawal appends a NEW record (ADR-0009); the old one must stay readable to answer whether past processing was lawful at the time.       |
-| `audit_ledger`       | **immutable/append-only** | none — by contract                          | Evidentiary ledger (ADR-0003 §2.7): `INSERT`-only, enforced by a DB trigger on the partitioned parent; corrections are compensating records.               |
+| Table                   | Class                     | Lifecycle columns                           | Why                                                                                                                                                        |
+| ----------------------- | ------------------------- | ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `users`                 | soft-removable            | `record_status` + `deleted_at`              | The identity mirror is referenced by audit, consent, registrations and beats; PD erasure (ADR-0009) empties values on the retained row, it never drops it. |
+| `events`                | soft-removable            | `record_status` + `deleted_at`              | A withdrawn broadcast keeps its id and slug so a bookmarked URL can never resolve to a different event (§3.6 rule 5).                                      |
+| `event_speakers`        | soft-removable            | `record_status` + `deleted_at`              | Relationship-shaped record (§3.6 rule 4): dropping a speaker from the list retires the row, preserving that this person was announced for this broadcast.  |
+| `stream_config`         | soft-removable            | `record_status` + `deleted_at`              | One retained row per event: "no stream any more" is a retirement, and re-configuring is the explicit restore of the same row, never a delete-then-insert.  |
+| `registrations`         | soft-removable            | `record_status` + `deleted_at`              | Wave 1 has no cancel command, so every row is `active`; the columns exist so cancellation lands as an ordinary transition instead of a future reshape.     |
+| `event_recordings`      | soft-removable            | `recording_status` + `deleted_at`           | Editorial publication workflow (014) — already conforming.                                                                                                 |
+| `projects`              | soft-removable            | `taxonomy_status` + `deleted_at`            | Editorial publication workflow (012) — already conforming.                                                                                                 |
+| `experts`               | soft-removable            | `taxonomy_status` + `deleted_at`            | Editorial publication workflow (012), plus `content_removed_at` for §2.4 editorial removal — already conforming.                                           |
+| `directions`            | soft-removable            | `taxonomy_status` + `deleted_at`            | The former `topics` row family, renamed in place so id, slug and publication history survive; restore returns the retained row to `draft`.                 |
+| `direction_specialties` | soft-removable            | `record_status` + `deleted_at`              | Managed direction↔Minzdrav-specialty link; the pair stays unique across retirement and restore updates the same row.                                       |
+| `direction_adjacency`   | soft-removable            | `record_status` + `deleted_at`              | Managed directed edge between two directions; pair identity, kind and audit history survive retirement.                                                    |
+| `idempotency_keys`      | expiring (retained key)   | `status` (`active\|expired`) + `deleted_at` | Expiry CLEARS the payload and keeps the key forever, so a second actor can never re-use a UUID to replay someone else's command — already conforming.      |
+| `media_cleanup_jobs`    | expiring (retained job)   | `status` (`active\|expired`) + `deleted_at` | Terminal jobs are cleared to id + kind + outcome + timestamps and retained as the record that the obligation was discharged — already conforming.          |
+| `presence_beats`        | **immutable/append-only** | none — by contract                          | Telemetry stream (§3.6 rule 4). A beat is a measurement of a moment that happened; a removal path would be a way to make sponsor minutes vanish unaudited. |
+| `consent_records`       | **immutable/append-only** | none — by contract                          | Legal evidence. Withdrawal appends a NEW record (ADR-0009); the old one must stay readable to answer whether past processing was lawful at the time.       |
+| `audit_ledger`          | **immutable/append-only** | none — by contract                          | Evidentiary ledger (ADR-0003 §2.7): `INSERT`-only, enforced by a DB trigger on the partitioned parent; corrections are compensating records.               |
 
 Adding a table means adding a row here and picking a class — there is no third
 option, and "no lifecycle yet" is not one of them.
+
+## Seed-maintained reference book
+
+`specialties_minzdrav` is the closed, externally governed reference-book
+projection, not an operator-authored domain row. It has no application write
+route, editorial lifecycle, `deleted_at`, or optimistic-concurrency version.
+The provenance-stamped seed is its only writer: it upserts by stable `code`,
+updates wording and frequent rank in place, preserves every referenced `id`, and
+never deletes an entry as a seed side effect. The admin application therefore
+exposes the book as a read-only list; operators edit the open `directions` book
+and the retained `direction_specialties` links between the two books.
 
 ## Build / test
 

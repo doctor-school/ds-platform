@@ -98,6 +98,18 @@ describe("<DataTable>", () => {
     expect(truncated?.className).toContain("truncate");
   });
 
+  it("wraps the desktop record title in full without a line clamp", () => {
+    const { container } = renderTable({
+      rowHref: (row) => `/directions/${row.id}`,
+    });
+    const desktopTitle = container.querySelector(
+      ".md\\:block tbody td:first-child > span:first-child",
+    );
+    expect(desktopTitle).not.toBeNull();
+    expect(desktopTitle?.className).not.toContain("line-clamp");
+    expect(desktopTitle?.className).not.toContain("truncate");
+  });
+
   it("aligns a numeric column to the end so figures scan as a column", () => {
     renderTable();
     const header = first(
@@ -114,12 +126,30 @@ describe("<DataTable>", () => {
     expect(link).toHaveAttribute("href", "/directions/cardio");
   });
 
-  it("marks the whole row clickable (cursor + hover) when activation is supplied", () => {
+  it("gives the clickable desktop row and mobile card distinct hover and pressed states", () => {
     const { container } = renderTable({ onRowClick: vi.fn() });
     const row = container.querySelector('tr[data-clickable="true"]');
+    const card = container.querySelector('div[data-clickable="true"]');
     expect(row).not.toBeNull();
+    expect(card).not.toBeNull();
     expect(row?.className).toContain("cursor-pointer");
     expect(row?.className).toContain("hover:bg-tint");
+    expect(row?.className).toContain("has-[:active]:bg-tint-pressed");
+    expect(card?.className).toContain("hover:bg-tint");
+    expect(card?.className).toContain("has-[:active]:bg-tint-pressed");
+  });
+
+  it("raises muted context to foreground during dark-theme press", () => {
+    const { container } = renderTable({
+      rowHref: (row) => `/directions/${row.id}`,
+    });
+    for (const context of container.querySelectorAll(
+      '[data-clickable="true"] span.mt-1.text-muted-foreground',
+    )) {
+      expect(context.className).toContain(
+        "group-has-[:active]/row:text-foreground",
+      );
+    }
   });
 
   /**
@@ -151,7 +181,9 @@ describe("<DataTable>", () => {
 
   it("renders NO actions column for a single-action list (owner rule, #1578)", () => {
     renderTable({ rowHref: (row) => `/directions/${row.id}` });
-    const headers = screen.getAllByRole("columnheader").map((h) => h.textContent);
+    const headers = screen
+      .getAllByRole("columnheader")
+      .map((h) => h.textContent);
     expect(headers).toHaveLength(3);
     expect(headers.join(" ")).not.toContain("Действия");
   });
@@ -173,12 +205,8 @@ describe("<DataTable>", () => {
   it("routes the two empty situations to two DISTINCT variants, never one string", () => {
     const { rerender } = renderTable({ rows: [] });
     const table = first(screen.getAllByRole("table"));
-    expect(
-      within(table).getByText("Направлений пока нет"),
-    ).toBeInTheDocument();
-    expect(
-      table.querySelector('[data-variant="no-records"]'),
-    ).not.toBeNull();
+    expect(within(table).getByText("Направлений пока нет")).toBeInTheDocument();
+    expect(table.querySelector('[data-variant="no-records"]')).not.toBeNull();
 
     rerender(
       <DataTable<Row>

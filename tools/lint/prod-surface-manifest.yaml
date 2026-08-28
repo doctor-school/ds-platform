@@ -163,23 +163,61 @@ routes:
     route: /experts/[id]
     file: apps/admin/app/experts/[id]/page.tsx
     status: product-ready
-  # 012 EARS-3 (#1285): the curated-topic authoring vertical — the same shared
-  # list shell, the same tabbed detail, the thinnest form of the three (a title
-  # plus its permanent address; the entity has no description and no media).
-  # Real product deliverables, driven live in
-  # `apps/admin/e2e/taxonomy-topics.spec.ts`. Same one-tab rule: no empty
+  # 012 EARS-3 (#1285), renamed per ADR-0016 §5 (#1483): the curated-direction
+  # authoring vertical — the same shared list shell, the same tabbed detail, the
+  # thinnest form of the three (a title plus its permanent address; the entity
+  # has no description and no media). Real product deliverables, driven live in
+  # `apps/admin/e2e/taxonomy-directions.spec.ts`. Same one-tab rule: no empty
   # «Публикация» placeholder ships ahead of the slice that fills it.
   - app: admin
-    route: /topics
-    file: apps/admin/app/topics/page.tsx
+    route: /directions
+    file: apps/admin/app/directions/page.tsx
     status: product-ready
   - app: admin
-    route: /topics/create
-    file: apps/admin/app/topics/create/page.tsx
+    route: /directions/create
+    file: apps/admin/app/directions/create/page.tsx
     status: product-ready
   - app: admin
-    route: /topics/[id]
-    file: apps/admin/app/topics/[id]/page.tsx
+    route: /directions/[id]
+    file: apps/admin/app/directions/[id]/page.tsx
+    status: product-ready
+  # ADR-0016 §5 (#1483): the two managed-relation curation verticals the 017
+  # targeting reads — specialty↔direction link and direction adjacency
+  # (kind + weight). Same shared list shell; driven in the manual dev-stand flow
+  # tier (`apps/admin/e2e/taxonomy-direction-specialties.spec.ts`,
+  # `apps/admin/e2e/taxonomy-direction-adjacency.spec.ts`).
+  - app: admin
+    route: /direction-specialties
+    file: apps/admin/app/direction-specialties/page.tsx
+    status: product-ready
+  - app: admin
+    route: /direction-specialties/create
+    file: apps/admin/app/direction-specialties/create/page.tsx
+    status: product-ready
+  - app: admin
+    route: /direction-specialties/[id]
+    file: apps/admin/app/direction-specialties/[id]/page.tsx
+    status: product-ready
+  - app: admin
+    route: /direction-adjacency
+    file: apps/admin/app/direction-adjacency/page.tsx
+    status: product-ready
+  - app: admin
+    route: /direction-adjacency/create
+    file: apps/admin/app/direction-adjacency/create/page.tsx
+    status: product-ready
+  - app: admin
+    route: /direction-adjacency/[id]
+    file: apps/admin/app/direction-adjacency/[id]/page.tsx
+    status: product-ready
+  # 017 EARS-19 (LD-9, #1483): the Минздрав specialty nomenclature as a READ-ONLY
+  # lookup — the same public projection the doctor-facing surfaces read, with no
+  # create, no row action and no detail route (there is deliberately no admin
+  # specialties resource, #1479). Driven in the manual dev-stand flow tier
+  # (`apps/admin/e2e/taxonomy-specialties.spec.ts`).
+  - app: admin
+    route: /specialties
+    file: apps/admin/app/specialties/page.tsx
     status: product-ready
   # 012 EARS-4 (#1286): the descriptive-partner authoring vertical — the same
   # shared list shell and tabbed detail, with a logo slot and an https-only

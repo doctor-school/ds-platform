@@ -1,7 +1,17 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { and, asc, count, eq, gt, inArray, isNull, or, sql } from "drizzle-orm";
-import type { DrizzleHandle, Event, EventTopic, Topic } from "@ds/db";
-import { eventTopics, events, topics } from "@ds/db";
+// #1483 (ADR-0016 §5) renamed the `topics` book to `directions`. The 012
+// EARS-11 join keeps its own nouns — the table is still `event_topics`, the
+// column is still `topic_id` and the public route still answers «темы этого
+// эфира» — so the rename is bridged at this import instead of being rewritten
+// through a vertical whose API surface did not change.
+import type {
+  Direction as Topic,
+  DrizzleHandle,
+  Event,
+  EventTopic,
+} from "@ds/db";
+import { directions as topics, eventTopics, events } from "@ds/db";
 import type { EventTopicAdminListQuery } from "@ds/schemas";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
 import { withRequestAuditContext } from "../audit/audit-context.tx.js";

@@ -6,9 +6,9 @@ import { useTranslations } from "next-intl";
 import { Alert, Badge, Button, Input, Switch } from "@ds/design-system";
 import type {
   CreateEventTopicRequest,
+  DirectionAdminList,
   EventTopicAdminDetail,
   EventTopicAdminList,
-  TopicAdminList,
 } from "@ds/schemas";
 import { TokenSelect } from "@/components/fields";
 import { taxonomyErrorKey } from "@/lib/taxonomy-errors";
@@ -71,7 +71,9 @@ export function EventTopicsPanel({
   }
 
   if (query.isLoading) {
-    return <p className="text-sm text-muted-foreground">{t("common.loading")}</p>;
+    return (
+      <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
+    );
   }
 
   // The QUERY is the source of presence, not `result`: Refine's `result.data`
@@ -150,7 +152,10 @@ export function EventTopicsPanel({
           {t("eventTopics.showRetired")}
         </Switch>
         {showRetired ? (
-          <div className="flex flex-col gap-3" data-testid="event-topics-retired">
+          <div
+            className="flex flex-col gap-3"
+            data-testid="event-topics-retired"
+          >
             {retired.length === 0 ? (
               <p className="text-sm text-muted-foreground">
                 {t("eventTopics.retiredEmpty")}
@@ -263,8 +268,8 @@ function LinkForm({
 
   const query = new URLSearchParams({ page: "1", pageSize: "50" });
   if (search.trim().length > 0) query.set("q", search.trim());
-  const { query: topicsQuery } = useCustom<TopicAdminList>({
-    url: `/v1/admin/topics?${query.toString()}`,
+  const { query: topicsQuery } = useCustom<DirectionAdminList>({
+    url: `/v1/admin/directions?${query.toString()}`,
     method: "get",
   });
 
@@ -342,7 +347,11 @@ function LinkForm({
           onClick={() => {
             const body: CreateEventTopicRequest = { eventId, topicId };
             mutate(
-              { url: eventTopicsUrl.collection(), method: "post", values: body },
+              {
+                url: eventTopicsUrl.collection(),
+                method: "post",
+                values: body,
+              },
               {
                 onSuccess: () => {
                   setTopicId("");

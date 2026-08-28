@@ -32,9 +32,24 @@ export function AppShell({ children }: { children: ReactNode }) {
             table, which defeated that table's own `overflow-x-auto` and made its
             trailing columns effectively unreachable. Killing the page-level
             overflow is what hands the table back its scroll. Wherever the row
-            fits, it renders exactly as before. */}
-        <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-x-6 gap-y-3 px-6 py-4">
-          <div className="flex flex-wrap items-center gap-x-8 gap-y-2">
+            fits, it renders exactly as before.
+
+            The shell is `max-w-7xl` because the nav is a seven-section book list
+            (#1483 added «Специальности» + «Смежность»): inside the former
+            `max-w-5xl` the nav alone measured ~888px of a 976px content box, so
+            the brand + nav group no longer left room for «Выйти» and the button
+            wrapped onto a second row under the logo on EVERY admin page. `main`
+            widens with it so the brand still sits on the page's own left edge.
+
+            «Выйти» is what must never leave the first row, so the brand + nav
+            group is the item that gives: `min-w-0 flex-1` lets it shrink below
+            its content width, which pushes the overflow into the nav's own
+            `flex-wrap` (a second line of links) instead of into the outer row.
+            Below ~1280px that is the graceful degrade — nav on two lines, the
+            sign-out affordance still top-right where the operator reaches for
+            it; at 1280px and up everything is one row again. */}
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-x-6 gap-y-3 px-6 py-4">
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-8 gap-y-2">
             <div>
               <p className="text-sm font-semibold text-primary-action">
                 {t("app.brand")}
@@ -46,7 +61,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             {/* Resource navigation. Added with the second resource (#1283): with
                 only events there was nowhere to navigate TO, and a one-item nav
                 would have been chrome without a function. */}
-            <nav className="flex items-center gap-5 text-sm">
+            <nav className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
               <DsLink asChild variant="standalone">
                 <Link href="/events" data-testid="nav-events">
                   {t("app.nav.events")}
@@ -68,8 +83,35 @@ export function AppShell({ children }: { children: ReactNode }) {
                 </Link>
               </DsLink>
               <DsLink asChild variant="standalone">
-                <Link href="/topics" data-testid="nav-topics">
-                  {t("app.nav.topics")}
+                <Link href="/directions" data-testid="nav-directions">
+                  {t("app.nav.directions")}
+                </Link>
+              </DsLink>
+              {/* The two #1483 relation books sit next to the directions they
+                  relate, because that is the only entity either of them is about
+                  — a link has no meaning apart from its endpoints. */}
+              <DsLink asChild variant="standalone">
+                <Link
+                  href="/direction-specialties"
+                  data-testid="nav-direction-specialties"
+                >
+                  {t("app.nav.directionSpecialties")}
+                </Link>
+              </DsLink>
+              <DsLink asChild variant="standalone">
+                <Link
+                  href="/direction-adjacency"
+                  data-testid="nav-direction-adjacency"
+                >
+                  {t("app.nav.directionAdjacency")}
+                </Link>
+              </DsLink>
+              {/* The Минздрав book (017 EARS-19) closes the row: it is the
+                  vocabulary the specialty links are drawn FROM, read-only, so it
+                  sits after the books that consume it. */}
+              <DsLink asChild variant="standalone">
+                <Link href="/specialties" data-testid="nav-specialties">
+                  {t("app.nav.specialties")}
                 </Link>
               </DsLink>
             </nav>
@@ -85,7 +127,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </Button>
         </div>
       </header>
-      <main className="mx-auto max-w-5xl px-6 py-8">{children}</main>
+      <main className="mx-auto max-w-7xl px-6 py-8">{children}</main>
     </div>
   );
 }

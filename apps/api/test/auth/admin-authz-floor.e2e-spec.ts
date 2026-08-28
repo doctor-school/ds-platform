@@ -203,30 +203,119 @@ const FLOOR_ROUTES: {
     url: `/v1/admin/experts/${ABSENT_ID}`,
     payload: {},
   },
-  // 012 EARS-3 (#1285) — the curated topic authoring surface. Same floor as its
+  // 012 EARS-3 (#1285) — the curated direction authoring surface. Same floor as its
   // siblings: the `platform_admin` guard answers before validation, so an
-  // unauthenticated caller cannot tell an absent topic from an existing one.
+  // unauthenticated caller cannot tell an absent direction from an existing one.
   {
-    endpoint: "GET /v1/admin/topics",
+    endpoint: "GET /v1/admin/directions",
     method: "GET",
-    url: "/v1/admin/topics",
+    url: "/v1/admin/directions",
   },
   {
-    endpoint: "GET /v1/admin/topics/:id",
+    endpoint: "GET /v1/admin/directions/:id",
     method: "GET",
-    url: `/v1/admin/topics/${ABSENT_ID}`,
+    url: `/v1/admin/directions/${ABSENT_ID}`,
   },
   {
-    endpoint: "POST /v1/admin/topics",
+    endpoint: "POST /v1/admin/directions",
     method: "POST",
-    url: "/v1/admin/topics",
+    url: "/v1/admin/directions",
     payload: {},
   },
   {
-    endpoint: "PATCH /v1/admin/topics/:id",
+    endpoint: "PATCH /v1/admin/directions/:id",
     method: "PATCH",
-    url: `/v1/admin/topics/${ABSENT_ID}`,
+    url: `/v1/admin/directions/${ABSENT_ID}`,
     payload: {},
+  },
+  // 012 EARS-13/14 (§3.1) on the direction entity (#1483) — the publish and the
+  // two impact-gated transitions. The preview is on the floor for the same
+  // reason the transitions are: it names the rows a retirement would withdraw,
+  // so answering it to an anonymous caller would leak the book's shape.
+  {
+    endpoint: "POST /v1/admin/directions/:id/publish",
+    method: "POST",
+    url: `/v1/admin/directions/${ABSENT_ID}/publish`,
+    payload: {},
+  },
+  {
+    endpoint: "GET /v1/admin/directions/:id/lifecycle-impact",
+    method: "GET",
+    url: `/v1/admin/directions/${ABSENT_ID}/lifecycle-impact?transition=retire`,
+  },
+  {
+    endpoint: "POST /v1/admin/directions/:id/retire",
+    method: "POST",
+    url: `/v1/admin/directions/${ABSENT_ID}/retire`,
+    payload: {},
+  },
+  {
+    endpoint: "POST /v1/admin/directions/:id/restore",
+    method: "POST",
+    url: `/v1/admin/directions/${ABSENT_ID}/restore`,
+    payload: {},
+  },
+  // ADR-0016 §5 (#1483) — the two managed-relation curation surfaces the 017
+  // targeting reads. Same floor as their taxonomy siblings: the `platform_admin`
+  // guard answers before validation, so an anonymous caller cannot tell an
+  // absent link or edge from a real one.
+  {
+    endpoint: "GET /v1/admin/direction-specialties",
+    method: "GET",
+    url: "/v1/admin/direction-specialties",
+  },
+  {
+    endpoint: "GET /v1/admin/direction-specialties/:id",
+    method: "GET",
+    url: `/v1/admin/direction-specialties/${ABSENT_ID}`,
+  },
+  {
+    endpoint: "POST /v1/admin/direction-specialties",
+    method: "POST",
+    url: "/v1/admin/direction-specialties",
+    payload: {},
+  },
+  {
+    endpoint: "POST /v1/admin/direction-specialties/:id/retire",
+    method: "POST",
+    url: `/v1/admin/direction-specialties/${ABSENT_ID}/retire`,
+  },
+  {
+    endpoint: "POST /v1/admin/direction-specialties/:id/restore",
+    method: "POST",
+    url: `/v1/admin/direction-specialties/${ABSENT_ID}/restore`,
+  },
+  {
+    endpoint: "GET /v1/admin/direction-adjacency",
+    method: "GET",
+    url: "/v1/admin/direction-adjacency",
+  },
+  {
+    endpoint: "GET /v1/admin/direction-adjacency/:id",
+    method: "GET",
+    url: `/v1/admin/direction-adjacency/${ABSENT_ID}`,
+  },
+  {
+    endpoint: "POST /v1/admin/direction-adjacency",
+    method: "POST",
+    url: "/v1/admin/direction-adjacency",
+    payload: {},
+  },
+  {
+    endpoint: "PATCH /v1/admin/direction-adjacency/:id",
+    method: "PATCH",
+    url: `/v1/admin/direction-adjacency/${ABSENT_ID}`,
+    payload: {},
+  },
+  {
+    endpoint: "POST /v1/admin/direction-adjacency/:id/retire",
+    method: "POST",
+    url: `/v1/admin/direction-adjacency/${ABSENT_ID}/retire`,
+  },
+  {
+    endpoint: "POST /v1/admin/direction-adjacency/:id/restore",
+    method: "POST",
+    url: `/v1/admin/direction-adjacency/${ABSENT_ID}/restore`,
   },
   // 012 EARS-4 (#1286) — the descriptive partner authoring surface. Same floor as
   // its siblings: the `platform_admin` guard refuses before validation,

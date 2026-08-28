@@ -4,43 +4,37 @@ import { useState } from "react";
 import { useParams } from "next/navigation";
 import { Authenticated, useOne, useUpdate } from "@refinedev/core";
 import { useTranslations } from "next-intl";
-import {
-  Alert,
-  Badge,
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@ds/design-system";
-import type { TopicAdminDetail, TaxonomyStatus } from "@ds/schemas";
+import { Alert } from "@ds/design-system";
+import type { DirectionAdminDetail, TaxonomyStatus } from "@ds/schemas";
 import { AppShell } from "@/components/app-shell";
 import { BackToList } from "@/components/back-to-list";
-import { TopicForm } from "@/components/topic-form";
+import { DirectionForm } from "@/components/direction-form";
+import { DirectionLifecycleActions } from "@/components/direction-lifecycle-actions";
+import { StatusChip } from "@/components/status-chip";
 import { taxonomyErrorKey } from "@/lib/taxonomy-errors";
-import type { UpdateTopicVars } from "@/providers/data-provider";
+import type { UpdateDirectionVars } from "@/providers/data-provider";
 
 /**
- * Topic detail / edit (012 EARS-3) in the Stage-A composition-B tabbed layout
- * (#1282, owner pick 2026-08-17) — the same frame the project and expert details
- * use, so the four taxonomy entities read as one admin rather than four.
- * «Основное» is the only tab this slice ships: «Публикация» (#1287/#1295/#1296)
- * arrives with its own slice, and an empty placeholder tab is deliberately NOT
- * rendered.
+ * Direction detail / edit (012 EARS-3; 017 EARS-18). The record has exactly ONE
+ * section today — «Публикация» (#1287/#1295/#1296) arrives with its own slice —
+ * and a tab strip holding a single tab is chrome that navigates nowhere, so the
+ * strip is not rendered at all (017-design §9.3, owner Stage-A pick 2026-08-27).
+ * It returns with the second section, alongside the project and expert details.
  *
  * Every save carries the row's `version` as `If-Match`, and the detail is
  * refetched afterwards, so the next edit asserts the version the SERVER holds
  * rather than the one this page was first rendered from.
  *
- * The slug is sent only while it is still editable AND actually changed: `PATCH`
- * omission means «unchanged», and re-sending the identical slug of a row would
- * ask the server to re-validate an identity nobody touched.
+ * There is no slug in the body: the address is derived on create and frozen on
+ * first publish (017-design §9.3), so a retitle never moves the URL a doctor
+ * bookmarked and this page has no identity decision left to send.
  */
-export default function TopicDetailPage() {
+export default function DirectionDetailPage() {
   const t = useTranslations();
   const params = useParams<{ id: string }>();
   const id = params?.id ?? "";
-  const { result: detail, query } = useOne<TopicAdminDetail>({
-    resource: "topics",
+  const { result: detail, query } = useOne<DirectionAdminDetail>({
+    resource: "directions",
     id,
   });
   const { mutate: update, mutation } = useUpdate();
@@ -48,37 +42,53 @@ export default function TopicDetailPage() {
   const [saved, setSaved] = useState(false);
 
   const statusLabels: Record<TaxonomyStatus, string> = {
-    draft: t("topics.statuses.draft"),
-    published: t("topics.statuses.published"),
-    retired: t("topics.statuses.retired"),
+    draft: t("directions.statuses.draft"),
+    published: t("directions.statuses.published"),
+    retired: t("directions.statuses.retired"),
   };
 
   return (
-    <Authenticated key="topics-detail" redirectOnFail="/login">
+    <Authenticated key="directions-detail" redirectOnFail="/login">
       <AppShell>
         <div className="mb-4">
-          <BackToList href="/topics" label={t("topics.backToList")} />
+          <BackToList href="/directions" label={t("directions.backToList")} />
         </div>
 
         {query.isLoading ? (
           <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
         ) : !detail ? (
           <Alert variant="danger" data-testid="detail-error">
-            {t("topics.errors.loadFailed")}
+            {t("directions.errors.loadFailed")}
           </Alert>
         ) : (
           <>
             <div className="mb-6 flex items-center gap-3">
               <h1
                 className="text-xl font-extrabold text-foreground"
-                data-testid="topic-heading"
+                data-testid="direction-heading"
               >
                 {detail.title}
               </h1>
-              <Badge variant="label" data-testid="topic-status">
-                {statusLabels[detail.status]}
-              </Badge>
+              <StatusChip
+                status={detail.status}
+                label={statusLabels[detail.status]}
+                testId="direction-status"
+              />
             </div>
+
+            {/* The lifecycle bar sits ABOVE the edit form, next to the status
+                chip it moves: publishing or withdrawing a direction is a
+                decision about the whole record, not a field of it. */}
+            <DirectionLifecycleActions
+              id={detail.id}
+              status={detail.status}
+              version={detail.version}
+              onTransition={() => {
+                setErrorKey(null);
+                setSaved(false);
+                void query.refetch();
+              }}
+            />
 
             {errorKey ? (
               <Alert
@@ -94,35 +104,27 @@ export default function TopicDetailPage() {
                 className="mb-4"
                 data-testid="update-saved"
               >
-                {t("topics.savedNotice")}
+                {t("directions.savedNotice")}
               </Alert>
             ) : null}
 
-            <Tabs defaultValue="main">
-              <TabsList>
-                <TabsTrigger value="main" data-testid="tab-main">
-                  {t("topics.tabs.main")}
-                </TabsTrigger>
-              </TabsList>
-              <TabsContent value="main">
-                <TopicForm
+            {/* No tab bar (017-design §9.3, EARS-18): a tab strip with a single
+                tab is chrome that navigates nowhere. «Публикация»
+                (#1287/#1295/#1296) brings the second tab and the strip back with
+                it; until then the section renders its content directly. */}
+            <DirectionForm
                   detail={detail}
                   submitLabel={t("common.save")}
                   submitting={mutation.isPending}
                   onSubmit={(values) => {
                     setErrorKey(null);
                     setSaved(false);
-                    const vars: UpdateTopicVars = {
+                    const vars: UpdateDirectionVars = {
                       title: values.title,
-                      ...(detail.slugEditable &&
-                      values.slug &&
-                      values.slug !== detail.slug
-                        ? { slug: values.slug }
-                        : {}),
                       version: detail.version,
                     };
                     update(
-                      { resource: "topics", id: detail.id, values: vars },
+                      { resource: "directions", id: detail.id, values: vars },
                       {
                         onSuccess: () => {
                           setSaved(true);
@@ -132,15 +134,13 @@ export default function TopicDetailPage() {
                           setErrorKey(
                             taxonomyErrorKey(
                               error,
-                              "topics.errors.updateFailed",
+                              "directions.errors.updateFailed",
                             ),
                           ),
                       },
                     );
                   }}
                 />
-              </TabsContent>
-            </Tabs>
           </>
         )}
       </AppShell>

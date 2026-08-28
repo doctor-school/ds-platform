@@ -21,6 +21,7 @@
     "accent": { "$value": "{color.neutral.700}" },
     "accent-foreground": { "$value": "{color.neutral.50}" },
     "tint": { "$value": "{color.blue.800}" },
+    "tint-pressed": { "$value": "{color.blue.700}" },
     "tint-foreground": { "$value": "{color.blue.200}" },
     "info": { "$value": "{color.blue.300}" },
     "chip-border": { "$value": "rgba(107, 177, 247, 0.45)" },

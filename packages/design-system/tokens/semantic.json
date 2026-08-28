@@ -94,6 +94,10 @@
       "$value": "{color.blue.100}",
       "$description": "Pale-blue informational surface (tint chips, callouts). Pair with `tint-foreground`."
     },
+    "tint-pressed": {
+      "$value": "{color.blue.200}",
+      "$description": "Pressed/active background for a clickable DataTable row or mobile record card. Owner Stage-A pick #1578: one blue-ramp step beyond the `tint` hover, with no boundary, movement, or focus-ring reuse."
+    },
     "tint-foreground": {
       "$value": "{color.blue.700}",
       "$description": "Text and icon colour on a `tint` surface (blue.700 on blue.100, 6.49:1 AA)."

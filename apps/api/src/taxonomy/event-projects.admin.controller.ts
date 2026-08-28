@@ -59,7 +59,7 @@ const SCOPE = "taxonomy.event-projects";
 @Controller({ path: "admin/event-projects", version: "1" })
 @UseFilters(TaxonomyProblemFilter)
 export class EventProjectsAdminController {
-  // Explicit @Inject tokens — see the note in `topics.service.ts`: the
+  // Explicit @Inject tokens — see the note in `directions.service.ts`: the
   // root-level authz gate boots this graph under `tsx`, which emits no
   // `design:paramtypes`, so type-inferred injection resolves to `undefined`.
   constructor(

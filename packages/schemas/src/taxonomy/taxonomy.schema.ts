@@ -352,78 +352,86 @@ export const ExpertAdminListSchema = z.object({
 });
 export type ExpertAdminList = z.infer<typeof ExpertAdminListSchema>;
 
-// ── Topic authoring DTOs (012-design §2.2 matrix; EARS-3, #1285) ────────────
+// ── Direction authoring DTOs (012-design §2.2 matrix; EARS-3, #1285) ────────────
 
-export const TOPIC_TITLE_MIN = 1;
-export const TOPIC_TITLE_MAX = 120;
+export const DIRECTION_TITLE_MIN = 1;
+export const DIRECTION_TITLE_MAX = 120;
 
-const TopicTitleSchema = z
+const DirectionTitleSchema = z
   .string()
   .trim()
-  .min(TOPIC_TITLE_MIN)
-  .max(TOPIC_TITLE_MAX);
+  .min(DIRECTION_TITLE_MIN)
+  .max(DIRECTION_TITLE_MAX);
 
 /**
- * `POST /v1/admin/topics` — create one draft topic.
+ * `POST /v1/admin/directions` — create one draft direction.
  *
- * The thinnest create body of the four entities: a topic is a title plus its
- * permanent public identity (§2 ER; §5.2 `PublicTopic { id, slug, title }`).
+ * The thinnest create body of the four entities: a direction is a title plus its
+ * permanent public identity (§2 ER; §5.2 `PublicDirection { id, slug, title }`).
  * There is no description and no media, so this request is always
  * `application/json` (§5.1) and carries no `mediaAction`.
  *
  * `.strict()` is load-bearing here for a different reason than it is for a
  * project or an expert: there is no media reference to smuggle in, but a client
- * that posts `description` or `coverRef` is asking for a topic shape this
+ * that posts `description` or `coverRef` is asking for a direction shape this
  * feature deliberately does NOT have — a silently ignored field would let the
  * admin believe it stored something. 400 `VALIDATION_FAILED` instead.
+ *
+ * `slug` is NOT part of this contract (017-design §9.3). «Адрес страницы» is
+ * derived from the Russian title by the server and frozen on first publish; it
+ * is not an editorial decision, and it is rendered nowhere in the admin. Under
+ * `.strict()` a posted `slug` is therefore a 400 rather than a silently honoured
+ * override — the derivation has exactly one implementation, and a client cannot
+ * opt out of it.
  */
-export const CreateTopicRequestSchema = z
+export const CreateDirectionRequestSchema = z
   .object({
-    title: TopicTitleSchema,
-    slug: SlugSchema.optional(),
+    title: DirectionTitleSchema,
   })
   .strict();
-export type CreateTopicRequest = z.infer<typeof CreateTopicRequestSchema>;
+export type CreateDirectionRequest = z.infer<typeof CreateDirectionRequestSchema>;
 
 /**
- * `PATCH /v1/admin/topics/:id` — edit the same row.
+ * `PATCH /v1/admin/directions/:id` — edit the same row.
  *
- * Omission means unchanged. Neither field accepts `null`: `title` is the row's
- * only descriptive value and NOT NULL in the DB, and `slug` is the permanent
- * identity. `slug` is accepted only while `first_published_at IS NULL` — the
- * refusal depends on row state, so it is a 409 `SLUG_IMMUTABLE` from the
- * service, not a shape rule here.
+ * Omission means unchanged; `title` does not accept `null` (it is the row's only
+ * descriptive value and NOT NULL in the DB). There is no `slug` here either: the
+ * address never arrives from the operator, so the identity of a published
+ * direction cannot move and the old 409 `SLUG_IMMUTABLE` path is unreachable
+ * from this surface by construction rather than by refusal.
  */
-export const UpdateTopicRequestSchema = z
+export const UpdateDirectionRequestSchema = z
   .object({
-    title: TopicTitleSchema.optional(),
-    slug: SlugSchema.optional(),
+    title: DirectionTitleSchema.optional(),
   })
   .strict();
-export type UpdateTopicRequest = z.infer<typeof UpdateTopicRequestSchema>;
+export type UpdateDirectionRequest = z.infer<typeof UpdateDirectionRequestSchema>;
 
 /**
  * The admin detail projection. `version` backs the ETag the next PATCH must
- * echo; `slugEditable` is the server's answer to "may the operator still change
- * the public URL", which the UI reads rather than re-deriving.
+ * echo.
+ *
+ * `slug` is still READ here — the storefront resolves a direction by it and the
+ * admin needs it to build a preview link — but there is no `slugEditable`
+ * counterpart any more: the address is derived and never authored, so "may the
+ * operator still change the public URL" is a question with one permanent answer
+ * and a boolean stating it would be an affordance the interface does not offer.
  */
-export const TopicAdminDetailSchema = z.object({
+export const DirectionAdminDetailSchema = z.object({
   id: z.string(),
   slug: z.string(),
   title: z.string(),
   status: TaxonomyStatusSchema,
-  /** Null until the first publish; once set, the slug is permanently locked. */
+  /** Null until the first publish; once set, the derived slug is permanently frozen. */
   firstPublishedAt: z.string().nullable(),
-  /** True iff the slug may still be edited — the UI reads this, never re-derives it. */
-  slugEditable: z.boolean(),
   version: z.number().int().positive(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
-export type TopicAdminDetail = z.infer<typeof TopicAdminDetailSchema>;
+export type DirectionAdminDetail = z.infer<typeof DirectionAdminDetailSchema>;
 
 /** One row of the admin list — the columns the table renders, nothing more. */
-export const TopicAdminListItemSchema = TopicAdminDetailSchema.pick({
+export const DirectionAdminListItemSchema = DirectionAdminDetailSchema.pick({
   id: true,
   slug: true,
   title: true,
@@ -431,16 +439,16 @@ export const TopicAdminListItemSchema = TopicAdminDetailSchema.pick({
   version: true,
   updatedAt: true,
 });
-export type TopicAdminListItem = z.infer<typeof TopicAdminListItemSchema>;
+export type DirectionAdminListItem = z.infer<typeof DirectionAdminListItemSchema>;
 
 /** Offset/page admin list envelope (ADR-0002 — admin pagination is offset-based). */
-export const TopicAdminListSchema = z.object({
-  data: z.array(TopicAdminListItemSchema),
+export const DirectionAdminListSchema = z.object({
+  data: z.array(DirectionAdminListItemSchema),
   total: z.number().int().nonnegative(),
   page: z.number().int().positive(),
   pageSize: z.number().int().positive(),
 });
-export type TopicAdminList = z.infer<typeof TopicAdminListSchema>;
+export type DirectionAdminList = z.infer<typeof DirectionAdminListSchema>;
 
 // ── Partner authoring DTOs (012-design §2.2 matrix; EARS-4, #1286) ──────────
 
@@ -975,13 +983,19 @@ export const LIFECYCLE_IMPACT_ROW_KINDS = [
   "event",
   "project",
   "expert",
-  "topic",
+  "direction",
   "partner",
   "event↔project",
   "event↔expert",
-  "event↔topic",
+  "event↔direction",
   "project↔expert",
   "project↔partner",
+  // #1483 — the two joins a DIRECTION is an endpoint of. Retiring a direction
+  // withdraws every targeting answer these edges feed (ADR-0016 §5), so a
+  // preview that omitted them would understate the blast radius of the exact
+  // transition 012 EARS-13 exists to make visible.
+  "direction↔specialty",
+  "direction↔direction",
 ] as const;
 export const LifecycleImpactRowKindSchema = z.enum(LIFECYCLE_IMPACT_ROW_KINDS);
 export type LifecycleImpactRowKind = z.infer<
@@ -1629,3 +1643,222 @@ export function parseIfMatchVersion(raw: string | undefined): number | null {
   const version = Number(match[1]);
   return Number.isSafeInteger(version) && version > 0 ? version : null;
 }
+
+// ── ADR-0016 §2.8 — the direction reference relations (#1483) ───────────────
+//
+// Two admin-authored link surfaces on top of the renamed `directions` book:
+// which Минздрав specialties a direction serves, and which other directions are
+// adjacent to it. 017 EARS-8 resolves a doctor's `TargetingSet` from exactly
+// these rows, so both bodies are `.strict()` for the same reason the 012 joins
+// are: a client must never be able to post `status`, `version` or `deletedAt` —
+// lifecycle moves through the retire/restore commands, never through a payload.
+
+/**
+ * `POST /v1/admin/direction-specialties` — state that a direction serves one
+ * entry of the closed Минздрав book.
+ *
+ * The body is the two endpoint ids and nothing else: the link carries no
+ * attribute of its own, so, exactly as with `event_projects`, there is no PATCH
+ * counterpart — a PATCH here could only accept an empty body and bump a version.
+ */
+export const CreateDirectionSpecialtyRequestSchema = z
+  .object({
+    directionId: TaxonomyIdSchema,
+    specialtyMinzdravId: TaxonomyIdSchema,
+  })
+  .strict();
+export type CreateDirectionSpecialtyRequest = z.infer<
+  typeof CreateDirectionSpecialtyRequestSchema
+>;
+
+/**
+ * The admin projection of one direction↔specialty link. Both endpoints' display
+ * forms ride along (`directionTitle`, `specialtyName`) because the editor
+ * renders a LIST of links — a table of two opaque UUIDs would force one
+ * follow-up read per row.
+ */
+export const DirectionSpecialtyAdminDetailSchema = z.object({
+  id: z.string(),
+  directionId: z.string(),
+  directionTitle: z.string(),
+  directionSlug: z.string(),
+  specialtyMinzdravId: z.string(),
+  specialtyCode: z.string(),
+  specialtyName: z.string(),
+  status: RelationshipStatusSchema,
+  version: z.number().int().positive(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type DirectionSpecialtyAdminDetail = z.infer<
+  typeof DirectionSpecialtyAdminDetailSchema
+>;
+
+/** Offset/page admin list envelope (ADR-0002 — admin pagination is offset-based). */
+export const DirectionSpecialtyAdminListSchema = z.object({
+  data: z.array(DirectionSpecialtyAdminDetailSchema),
+  total: z.number().int().nonnegative(),
+  page: z.number().int().positive(),
+  pageSize: z.number().int().positive(),
+});
+export type DirectionSpecialtyAdminList = z.infer<
+  typeof DirectionSpecialtyAdminListSchema
+>;
+
+/**
+ * Either endpoint may scope the list — that is how the admin renders
+ * «специальности этого направления» and «направления этой специальности» from
+ * one route — and retired links are excluded unless explicitly asked for.
+ */
+export const DirectionSpecialtyAdminListQuerySchema = z
+  .object({
+    page: z.coerce.number().int().positive().default(1),
+    pageSize: z.coerce
+      .number()
+      .int()
+      .positive()
+      .max(ADMIN_LIST_PAGE_SIZE_MAX)
+      .default(ADMIN_LIST_PAGE_SIZE_DEFAULT),
+    directionId: TaxonomyIdSchema.optional(),
+    specialtyMinzdravId: TaxonomyIdSchema.optional(),
+    status: RelationshipStatusSchema.optional(),
+    includeRetired: z
+      .union([z.boolean(), z.enum(["true", "false"])])
+      .transform((v) => v === true || v === "true")
+      .default(false),
+  })
+  .strict();
+export type DirectionSpecialtyAdminListQuery = z.infer<
+  typeof DirectionSpecialtyAdminListQuerySchema
+>;
+
+/**
+ * The adjacency edge label — a CLOSED vocabulary (017-design §9.3), mirroring
+ * the `direction_adjacency_kind` enum in `@ds/db`: the type owns the constraint,
+ * this schema owns the wire contract, and the SDK regenerates from it. A value
+ * outside the set is a 400 with a field path, never a 500 from the type cast.
+ *
+ * The stored values are machine slugs; the RU labels an operator reads
+ * («Смежное направление» / «Поддисциплина» / «Междисциплинарная связь») are
+ * presentation and live with the admin surface, not in the contract.
+ */
+export const DIRECTION_ADJACENCY_KINDS = [
+  "related",
+  "subdiscipline",
+  "interdisciplinary",
+] as const;
+export const DirectionAdjacencyKindSchema = z.enum(DIRECTION_ADJACENCY_KINDS);
+export type DirectionAdjacencyKind = z.infer<typeof DirectionAdjacencyKindSchema>;
+
+export const DIRECTION_ADJACENCY_WEIGHT_MIN = 1;
+export const DIRECTION_ADJACENCY_WEIGHT_MAX = 100;
+
+const DirectionAdjacencyWeightSchema = z.coerce
+  .number()
+  .int()
+  .min(DIRECTION_ADJACENCY_WEIGHT_MIN)
+  .max(DIRECTION_ADJACENCY_WEIGHT_MAX);
+
+/**
+ * `POST /v1/admin/direction-adjacency` — author one DIRECTED adjacency edge.
+ *
+ * The edge is directed by design (see `direction_adjacency` in `@ds/db`): a
+ * mutual relation is two authored rows, never one row read both ways, because
+ * 017 EARS-8 admits nothing into a `TargetingSet` that an operator did not
+ * author. The self-edge refusal is stated here as well as in the DB CHECK so the
+ * operator gets a 400 with a field path rather than a 500 from a constraint.
+ */
+export const CreateDirectionAdjacencyRequestSchema = z
+  .object({
+    directionId: TaxonomyIdSchema,
+    adjacentDirectionId: TaxonomyIdSchema,
+    kind: DirectionAdjacencyKindSchema,
+    // Optional, and absent from the operator interface: weight is a tuning
+    // parameter of targeting resolution, so the column's declared default
+    // applies unless a caller states otherwise (017-design §9.3).
+    weight: DirectionAdjacencyWeightSchema.optional(),
+  })
+  .strict()
+  .refine((v) => v.directionId !== v.adjacentDirectionId, {
+    path: ["adjacentDirectionId"],
+    message: "a direction is never adjacent to itself",
+  });
+export type CreateDirectionAdjacencyRequest = z.infer<
+  typeof CreateDirectionAdjacencyRequestSchema
+>;
+
+/**
+ * `PATCH /v1/admin/direction-adjacency/:id` — re-label or re-weight the SAME
+ * edge. Unlike the two joins of 012 this relation DOES carry attributes, so the
+ * PATCH surface is not vacuous; the endpoints themselves are the edge's identity
+ * and are therefore not patchable — moving an edge is retiring one and
+ * authoring another.
+ */
+export const UpdateDirectionAdjacencyRequestSchema = z
+  .object({
+    kind: DirectionAdjacencyKindSchema.optional(),
+    weight: DirectionAdjacencyWeightSchema.optional(),
+  })
+  .strict();
+export type UpdateDirectionAdjacencyRequest = z.infer<
+  typeof UpdateDirectionAdjacencyRequestSchema
+>;
+
+/** The admin projection of one adjacency edge, both endpoints readable. */
+export const DirectionAdjacencyAdminDetailSchema = z.object({
+  id: z.string(),
+  directionId: z.string(),
+  directionTitle: z.string(),
+  directionSlug: z.string(),
+  adjacentDirectionId: z.string(),
+  adjacentDirectionTitle: z.string(),
+  adjacentDirectionSlug: z.string(),
+  kind: DirectionAdjacencyKindSchema,
+  weight: z.number().int(),
+  status: RelationshipStatusSchema,
+  version: z.number().int().positive(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type DirectionAdjacencyAdminDetail = z.infer<
+  typeof DirectionAdjacencyAdminDetailSchema
+>;
+
+/** Offset/page admin list envelope (ADR-0002 — admin pagination is offset-based). */
+export const DirectionAdjacencyAdminListSchema = z.object({
+  data: z.array(DirectionAdjacencyAdminDetailSchema),
+  total: z.number().int().nonnegative(),
+  page: z.number().int().positive(),
+  pageSize: z.number().int().positive(),
+});
+export type DirectionAdjacencyAdminList = z.infer<
+  typeof DirectionAdjacencyAdminListSchema
+>;
+
+/**
+ * Either END of the edge may scope the list: `directionId` answers «что рядом с
+ * этим направлением», `adjacentDirectionId` answers «кто считает это
+ * направление смежным» — the reverse question a directed edge makes askable.
+ */
+export const DirectionAdjacencyAdminListQuerySchema = z
+  .object({
+    page: z.coerce.number().int().positive().default(1),
+    pageSize: z.coerce
+      .number()
+      .int()
+      .positive()
+      .max(ADMIN_LIST_PAGE_SIZE_MAX)
+      .default(ADMIN_LIST_PAGE_SIZE_DEFAULT),
+    directionId: TaxonomyIdSchema.optional(),
+    adjacentDirectionId: TaxonomyIdSchema.optional(),
+    kind: DirectionAdjacencyKindSchema.optional(),
+    status: RelationshipStatusSchema.optional(),
+    includeRetired: z
+      .union([z.boolean(), z.enum(["true", "false"])])
+      .transform((v) => v === true || v === "true")
+      .default(false),
+  })
+  .strict();
+export type DirectionAdjacencyAdminListQuery = z.infer<
+  typeof DirectionAdjacencyAdminListQuerySchema
+>;

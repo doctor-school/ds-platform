@@ -178,9 +178,10 @@ export class DirectionsService {
     const row = await this.repo.transaction(async (tx) => {
       // The address is DERIVED, so a taken candidate is not a refusal the
       // operator could act on — they never chose it. Walk the deterministic
-      // candidate sequence inside the transaction (the unique index remains the
-      // final race guard) instead of answering a 409 for a decision the server
-      // made on the operator's behalf.
+      // candidate sequence inside the transaction. The sequence lock makes
+      // concurrent allocators wait, and the unique index remains the final
+      // integrity guard, instead of leaking a race as an opaque 500.
+      await this.repo.lockSlugSequence(tx, base);
       const slug = await this.resolveFreeSlug(tx, base);
       const created = await this.repo.insert(tx, {
         slug,
@@ -210,12 +211,6 @@ export class DirectionsService {
       );
     }
 
-    // No slug branch here at all: the address never arrives from the operator
-    // (017-design §9.3), so a PATCH cannot move the public identity of a
-    // direction — published or not. Retitling a direction leaves its address
-    // where it was, which is the point: the URL a doctor bookmarked outlives an
-    // editorial rewording of the title above it.
-
     const row = await this.repo.transaction(async (tx) => {
       // Re-read under the row lock: everything above was optimistic.
       const locked = await this.repo.lockById(tx, input.id);
@@ -226,6 +221,15 @@ export class DirectionsService {
           "the direction changed since it was read; reload and retry",
         );
       }
+      let derivedSlug: string | undefined;
+      if (
+        input.payload.title !== undefined &&
+        locked.firstPublishedAt === null
+      ) {
+        const base = this.deriveBaseSlug(input.payload.title);
+        await this.repo.lockSlugSequence(tx, base);
+        derivedSlug = await this.resolveFreeSlug(tx, base, locked.id);
+      }
       const updated = await this.repo.updateVersioned(
         tx,
         input.id,
@@ -234,6 +238,7 @@ export class DirectionsService {
           ...(input.payload.title !== undefined
             ? { title: input.payload.title }
             : {}),
+          ...(derivedSlug !== undefined ? { slug: derivedSlug } : {}),
         },
       );
       if (!updated) {
@@ -438,10 +443,16 @@ export class DirectionsService {
   private async resolveFreeSlug(
     tx: Parameters<Parameters<DirectionsRepository["transaction"]>[0]>[0],
     base: string,
+    exceptId?: string,
   ): Promise<string> {
-    for (let attempt = 1; attempt <= TAXONOMY_SLUG_ATTEMPT_LIMIT; attempt += 1) {
+    for (
+      let attempt = 1;
+      attempt <= TAXONOMY_SLUG_ATTEMPT_LIMIT;
+      attempt += 1
+    ) {
       const candidate = taxonomySlugCandidate(base, attempt);
-      if (!(await this.repo.slugTaken(tx, candidate))) return candidate;
+      if (!(await this.repo.slugTaken(tx, candidate, exceptId)))
+        return candidate;
     }
     throw new TaxonomyError(
       "SLUG_CONFLICT",

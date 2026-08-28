@@ -271,6 +271,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     it("012 EARS-3: when a direction is edited with a matching If-Match, the system shall update the same row and bump its version", async () => {
       const body = await created(await createJson({ payload: validPayload() }));
+      const marker = randomUUID().slice(0, 8);
+      const editedTitle = `Edited draft ${marker}`;
       const res = await app.inject({
         method: "PATCH",
         url: `/v1/admin/directions/${body.id}`,
@@ -281,23 +283,23 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
           "idempotency-key": key(),
           "if-match": 'W/"1"',
         },
-        payload: { title: "Аритмология" },
+        payload: { title: editedTitle },
       });
       expect(res.statusCode).toBe(200);
       expect(JSON.parse(res.payload)).toMatchObject({
         id: body.id,
-        title: "Аритмология",
+        title: editedTitle,
         version: 2,
       });
       expect(res.headers.etag).toBe('W/"2"');
-      // A retitle does NOT re-point the public URL: the slug is identity, not a
-      // rendering of the current heading.
+      // Before first publication the address follows the current title; the
+      // operator still never authors or sees that derived value.
       const { rows } = await pool.query<{ slug: string; count: string }>(
         "SELECT slug, count(*) OVER () AS count FROM directions WHERE id = $1",
         [body.id],
       );
       expect(rows).toHaveLength(1);
-      expect(rows[0]!.slug).toBe(body.slug);
+      expect(rows[0]!.slug).toBe(`edited-draft-${marker}`);
     });
 
     it("012 EARS-15: the list shall search titles case-insensitively and exclude retired rows by default", async () => {
@@ -527,6 +529,82 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       // refusal they could act on — the server walks the deterministic sequence.
       expect(second.slug).toBe(`detskaya-kardiologiya-${marker}-2`);
       expect(second.id).not.toBe(first.id);
+    });
+
+    it("EARS-18.4: a draft retitle shall re-derive its hidden address, while the first publication freezes it", async () => {
+      const marker = randomUUID().slice(0, 8);
+      const body = await created(
+        await createJson({ payload: { title: `Draft cardiology ${marker}` } }),
+      );
+      const renamedTitle = `Pediatric cardiology ${marker}`;
+      await created(await createJson({ payload: { title: renamedTitle } }));
+      const renamed = await app.inject({
+        method: "PATCH",
+        url: `/v1/admin/directions/${body.id}`,
+        headers: {
+          ...device,
+          ...adminHeaders(adminSid),
+          "content-type": "application/json",
+          "idempotency-key": key(),
+          "if-match": 'W/"1"',
+        },
+        payload: { title: renamedTitle },
+      });
+      expect(renamed.statusCode).toBe(200);
+      expect(JSON.parse(renamed.payload)).toMatchObject({
+        title: renamedTitle,
+        slug: `pediatric-cardiology-${marker}-2`,
+        version: 2,
+      });
+
+      const published = await app.inject({
+        method: "POST",
+        url: `/v1/admin/directions/${body.id}/publish`,
+        headers: {
+          ...device,
+          ...adminHeaders(adminSid),
+          "idempotency-key": key(),
+          "if-match": 'W/"2"',
+        },
+      });
+      expect(published.statusCode).toBe(200);
+
+      const afterPublish = await app.inject({
+        method: "PATCH",
+        url: `/v1/admin/directions/${body.id}`,
+        headers: {
+          ...device,
+          ...adminHeaders(adminSid),
+          "content-type": "application/json",
+          "idempotency-key": key(),
+          "if-match": 'W/"3"',
+        },
+        payload: { title: `Arrhythmology ${marker}` },
+      });
+      expect(afterPublish.statusCode).toBe(200);
+      expect(JSON.parse(afterPublish.payload)).toMatchObject({
+        slug: `pediatric-cardiology-${marker}-2`,
+        version: 4,
+      });
+    });
+
+    it("EARS-18.5: concurrent same-title creates shall serialize the derived sequence instead of leaking a unique-index 500", async () => {
+      const marker = randomUUID().slice(0, 8);
+      const title = `Concurrent neurology ${marker}`;
+      const responses = await Promise.all([
+        createJson({ payload: { title } }),
+        createJson({ payload: { title } }),
+      ]);
+      expect(responses.map((response) => response.statusCode).sort()).toEqual([
+        201, 201,
+      ]);
+      const bodies = await Promise.all(responses.map(created));
+      expect(bodies.map((body) => body.slug).sort()).toEqual(
+        [
+          `concurrent-neurology-${marker}`,
+          `concurrent-neurology-${marker}-2`,
+        ].sort(),
+      );
     });
 
     it("EARS-18.6: a title that folds to nothing sluggable shall be refused against `title`, the field the operator typed", async () => {
@@ -793,7 +871,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       // Re-previewing after the change confirms cleanly: the operator is shown
       // the edge, then allowed to act on what they saw.
       const fresh = await previewed(target.id, "retire");
-      expect(fresh.affected.map((a) => a.kind)).toContain("direction↔direction");
+      expect(fresh.affected.map((a) => a.kind)).toContain(
+        "direction↔direction",
+      );
       const ok = await confirm(target.id, "retire", {
         version: fresh.version,
         token: fresh.impactToken,
@@ -811,10 +891,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     }
 
     /** The §3.1 preview — what this transition would change, plus its envelope. */
-    async function previewed(
-      id: string,
-      transition: string,
-    ): Promise<Preview> {
+    async function previewed(id: string, transition: string): Promise<Preview> {
       const res = await app.inject({
         method: "GET",
         url: `/v1/admin/directions/${id}/lifecycle-impact?transition=${transition}`,
@@ -831,7 +908,11 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     async function confirm(
       id: string,
       transition: string,
-      opts: { version?: number; ifMatch?: string | null; token?: string | null },
+      opts: {
+        version?: number;
+        ifMatch?: string | null;
+        token?: string | null;
+      },
     ) {
       const headers: Record<string, string> = {
         ...device,
@@ -909,7 +990,6 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         (r) => r.id,
       );
     }
-
 
     function problem(res: { payload: string }): {
       errorCode: string;

@@ -98,6 +98,18 @@ describe("<DataTable>", () => {
     expect(truncated?.className).toContain("truncate");
   });
 
+  it("wraps the desktop record title in full without a line clamp", () => {
+    const { container } = renderTable({
+      rowHref: (row) => `/directions/${row.id}`,
+    });
+    const desktopTitle = container.querySelector(
+      ".md\\:block tbody td:first-child > span:first-child",
+    );
+    expect(desktopTitle).not.toBeNull();
+    expect(desktopTitle?.className).not.toContain("line-clamp");
+    expect(desktopTitle?.className).not.toContain("truncate");
+  });
+
   it("aligns a numeric column to the end so figures scan as a column", () => {
     renderTable();
     const header = first(

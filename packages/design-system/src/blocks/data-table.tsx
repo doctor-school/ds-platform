@@ -29,9 +29,9 @@ import {
  *    AND keeps the full value reachable through the native `title` attribute — a cut
  *    string with no way back to the full value is the defect, not the ellipsis
  *    (Carbon; React Aria's resizable-table CSS).
- * 2. THE RECORD ROW. The primary column is a two-line record cell (Carbon's xl row):
- *    the title WRAPS to at most two lines and a muted context line sits under it, so a
- *    long RU taxonomy name is never cut mid-glance. Below `md` (768px) the grid is
+ * 2. THE RECORD ROW. The primary column is a two-part record cell (Carbon's xl row):
+ *    the title WRAPS in full and a muted context line sits under it, so a long RU
+ *    taxonomy name is never truncated. Below `md` (768px) the grid is
  *    replaced by stacked record CARDS — the same data, labelled — so a phone NEVER
  *    scrolls horizontally and no column silently leaves the screen.
  * 3. THE STATE SET. `loading` (skeleton rows under an already-drawn header) / `error` /
@@ -91,7 +91,7 @@ export interface DataTableRecordColumn<Row> {
   header: string;
   /** Declared width for the record column. */
   width?: string;
-  /** Line 1 — the human-readable record identifier, wrapping to at most 2 lines. */
+  /** Line 1 — the human-readable record identifier, wrapping in full. */
   title: (row: Row) => React.ReactNode;
   /** Line 2 — muted context (parent, code, owner). Optional. */
   context?: (row: Row) => React.ReactNode;
@@ -100,7 +100,7 @@ export interface DataTableRecordColumn<Row> {
 }
 
 export interface DataTableProps<Row> {
-  /** The primary two-line record column (always first, always present). */
+  /** The primary title-plus-context record column (always first, always present). */
   record: DataTableRecordColumn<Row>;
   /** The remaining declared columns, in operator-importance order. */
   columns: DataTableColumn<Row>[];
@@ -130,12 +130,6 @@ export interface DataTableProps<Row> {
 
 const alignClass = (align: DataTableAlign | undefined) =>
   align === "end" ? "text-right tabular-nums" : "text-left";
-
-/**
- * The at-most-two-lines record title. `line-clamp-2` is a first-class Tailwind
- * utility — no arbitrary value, so the §5 arbitrary-value guard stays green.
- */
-const CLAMP_2 = "line-clamp-2";
 
 export function DataTable<Row>({
   record,
@@ -243,7 +237,7 @@ export function DataTable<Row>({
         )}
       >
         <TableCell className="py-3.5">
-          <span className={cn("block", CLAMP_2)}>{activation(row)}</span>
+          <span className="block">{activation(row)}</span>
           {record.context ? (
             <span
               className={cn(

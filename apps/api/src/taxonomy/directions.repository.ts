@@ -38,12 +38,13 @@ export interface DirectionInsert {
 }
 
 /**
- * The field patch a PATCH applies. `undefined` means unchanged. `slug` is absent
- * by design: the address is derived at insert and never re-authored
- * (017-design §9.3), so there is no update path that could move it.
+ * The field patch a PATCH applies. `undefined` means unchanged. `slug` remains
+ * server-owned: the service may re-derive it before first publication, but no
+ * request contract accepts an authored address (017-design §9.3).
  */
 export interface DirectionPatch {
   title?: string;
+  slug?: string;
 }
 
 /**
@@ -149,6 +150,16 @@ export class DirectionsRepository {
       .where(eq(directions.id, id))
       .for("update");
     return row ?? null;
+  }
+
+  /**
+   * Serialize allocation of one derived slug sequence (`base`, `base-2`, ...).
+   * Hash collisions only serialize unrelated names; they cannot corrupt identity.
+   */
+  async lockSlugSequence(tx: Tx, base: string): Promise<void> {
+    await tx.execute(
+      sql`select pg_advisory_xact_lock(hashtextextended(${base}, 0))`,
+    );
   }
 
   /** {@link slugTaken} against the pool — the optimistic pre-flight read. */

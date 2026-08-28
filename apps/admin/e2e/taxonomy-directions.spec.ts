@@ -66,7 +66,9 @@ test.describe("012 EARS-3 / 017 EARS-16…18 — curated direction authoring in 
     await page.waitForURL(/\/directions$/, { timeout: 20_000 });
     await expect(page.getByTestId("directions-filters")).toBeVisible();
     // The retired-rows toggle is OFF by default (Stage-A answer 4).
-    await expect(page.getByTestId("directions-include-retired")).not.toBeChecked();
+    await expect(
+      page.getByTestId("directions-include-retired"),
+    ).not.toBeChecked();
     // EARS-17: the bar applies instantly — no submit control exists on it.
     await expect(
       page.getByRole("button", { name: "Применить", exact: true }),
@@ -83,9 +85,9 @@ test.describe("012 EARS-3 / 017 EARS-16…18 — curated direction authoring in 
     // The address is derived server-side and rendered nowhere (017-design §9.3).
     await expect(page.getByTestId("direction-slug")).toHaveCount(0);
     await expect(page.getByTestId("direction-slug-preview")).toHaveCount(0);
-    await expect(page.getByText("Адрес страницы", { exact: false })).toHaveCount(
-      0,
-    );
+    await expect(
+      page.getByText("Адрес страницы", { exact: false }),
+    ).toHaveCount(0);
     await page.getByTestId("direction-title").fill("х".repeat(121));
     await page.getByTestId("submit-direction").click();
     // RU inline error, and we are still on the create screen.
@@ -159,9 +161,9 @@ test.describe("012 EARS-3 / 017 EARS-16…18 — curated direction authoring in 
     await expect(page.getByTestId("direction-heading")).toHaveText(editedTitle);
     // Neither the address nor the suffix the server just minted reaches the UI.
     await expect(page.getByTestId("direction-slug")).toHaveCount(0);
-    await expect(page.getByText("Адрес страницы", { exact: false })).toHaveCount(
-      0,
-    );
+    await expect(
+      page.getByText("Адрес страницы", { exact: false }),
+    ).toHaveCount(0);
     await expect(page.getByText(/-2\b/)).toHaveCount(0);
 
     // ── Both records stand in the list, indistinguishable by design ────────
@@ -178,6 +180,42 @@ test.describe("012 EARS-3 / 017 EARS-16…18 — curated direction authoring in 
           .getByText(editedTitle, { exact: true }),
       ),
     ).toHaveCount(2);
+
+    // EARS-16: a maximum-length Russian title must grow beyond two desktop
+    // lines instead of being clipped by the reusable record cell.
+    const longTitle =
+      `${"\u0414\u0435\u0442\u0441\u043a\u0430\u044f \u043a\u0430\u0440\u0434\u0438\u043e\u043b\u043e\u0433\u0438\u044f, \u043a\u0430\u0440\u0434\u0438\u043e\u0445\u0438\u0440\u0443\u0440\u0433\u0438\u044f \u0438 \u043a\u043b\u0438\u043d\u0438\u0447\u0435\u0441\u043a\u0430\u044f \u044d\u043b\u0435\u043a\u0442\u0440\u043e\u0444\u0438\u0437\u0438\u043e\u043b\u043e\u0433\u0438\u044f \u0441\u0435\u0440\u0434\u0446\u0430"} ${suffix}`.slice(
+        0,
+        120,
+      );
+    await page.setViewportSize({ width: 900, height: 900 });
+    await page.goto("/directions/create");
+    await page.getByTestId("direction-title").fill(longTitle);
+    await page.getByTestId("submit-direction").click();
+    await page.waitForURL(/\/directions\/[0-9a-f-]{36}$/, { timeout: 20_000 });
+    await page.getByTestId("back-to-list").click();
+    await page
+      .getByRole("searchbox", { name: "\u041f\u043e\u0438\u0441\u043a" })
+      .fill(longTitle);
+    const longDesktopTitle = visible(
+      page
+        .getByTestId("directions-table")
+        .getByText(longTitle, { exact: true }),
+    );
+    await expect(longDesktopTitle).toHaveCount(1);
+    const titleMetrics = await longDesktopTitle.evaluate((element) => {
+      const style = getComputedStyle(element);
+      const lineHeight = Number.parseFloat(style.lineHeight);
+      return {
+        height: element.getBoundingClientRect().height,
+        lineHeight,
+        overflow: style.overflow,
+        webkitLineClamp: style.webkitLineClamp,
+      };
+    });
+    expect(titleMetrics.webkitLineClamp).toBe("none");
+    expect(titleMetrics.overflow).not.toBe("hidden");
+    expect(titleMetrics.height).toBeGreaterThan(titleMetrics.lineHeight * 2);
   });
 
   /**
@@ -214,7 +252,9 @@ test.describe("012 EARS-3 / 017 EARS-16…18 — curated direction authoring in 
     await expect(page.getByTestId("direction-publish")).toBeVisible();
     await page.getByTestId("direction-publish").click();
     await expect(page.getByTestId("transition-notice")).toBeVisible();
-    await expect(page.getByTestId("direction-status")).toHaveText("Опубликовано");
+    await expect(page.getByTestId("direction-status")).toHaveText(
+      "Опубликовано",
+    );
     // A published direction has one move left, and the offered button says so.
     await expect(page.getByTestId("direction-publish")).toHaveCount(0);
 
@@ -242,9 +282,13 @@ test.describe("012 EARS-3 / 017 EARS-16…18 — curated direction authoring in 
     await page.waitForURL(/\/directions$/, { timeout: 20_000 });
     await page.getByRole("searchbox", { name: "Поиск" }).fill(title);
     // OFF by default (Stage-A answer 4) ⇒ the withdrawn row is not listed.
-    await expect(page.getByTestId("directions-include-retired")).not.toBeChecked();
     await expect(
-      visible(page.getByTestId("directions-table").getByText(title, { exact: true })),
+      page.getByTestId("directions-include-retired"),
+    ).not.toBeChecked();
+    await expect(
+      visible(
+        page.getByTestId("directions-table").getByText(title, { exact: true }),
+      ),
     ).toHaveCount(0);
 
     // The DS `Switch` is a real checkbox rendered `sr-only` behind its painted
@@ -255,7 +299,9 @@ test.describe("012 EARS-3 / 017 EARS-16…18 — curated direction authoring in 
       .click();
     await expect(page.getByTestId("directions-include-retired")).toBeChecked();
     await expect(
-      visible(page.getByTestId("directions-table").getByText(title, { exact: true })),
+      visible(
+        page.getByTestId("directions-table").getByText(title, { exact: true }),
+      ),
     ).toHaveCount(1);
 
     // ── Restore: the SAME record comes back, as a draft ────────────────────

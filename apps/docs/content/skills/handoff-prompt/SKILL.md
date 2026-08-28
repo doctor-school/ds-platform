@@ -16,6 +16,7 @@ Produce one copy-pasteable handoff for a fresh DS Platform agent. Do not ask cla
 - Where stopped: the last substantive work action and why it paused.
 - Next steps: concrete continuation, chunked into waves of at most three full PR cycles.
 - Decisions/gotchas and context paths: include only what the next agent needs; paths must exist. Never inline instruction files.
+- Source session logs: when relevant logs exist, identify the latest log path(s) for the task and list them under `## Context references`; no log entry is required when none exists.
 - Open questions: only unresolved owner decisions.
 
 ## Output

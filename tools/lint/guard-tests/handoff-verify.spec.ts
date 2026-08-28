@@ -127,6 +127,22 @@ describe("handoff-verify extractRefs()", () => {
     expect(refs.map((r) => [r.kind, r.value])).toEqual([["sha", "4a89d2b"]]);
   });
 
+  it("does not treat HTTP URLs or slash-prefixed prose as local .jsonl paths", () => {
+    const refs = extractRefs(
+      [
+        "URL https://example.test/logs/4a89d2b.jsonl",
+        "prose /not a local path containing 5bc90ae before trace.jsonl",
+        "C:\\logs\\e995f3c3-17ea-4544-9f0e-1bad987e7aca.jsonl then commit 6cd81bf",
+      ].join("\n"),
+    );
+
+    expect(refs.map((r) => [r.kind, r.value])).toEqual([
+      ["sha", "4a89d2b"],
+      ["sha", "5bc90ae"],
+      ["sha", "6cd81bf"],
+    ]);
+  });
+
   it("carries the line so claims can be parsed per-occurrence", () => {
     const refs = extractRefs("line1 #10 merged\nline2 #10");
     expect(refs.map((r) => r.lineNo)).toEqual([1, 2]);

@@ -789,7 +789,7 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
   @EARS-18 @happy
   Scenario: The approved Refine composition is implemented and re-confirmed live
     Given the design-system inventory and approved-registry research are recorded
-    And the product owner selected one of 2 to 3 Stage-A Refine composition options
+    And the product owner confirmed the vendored canvases, approved tabbed Refine compositions and researched design-system blocks as the Stage-A baseline
     When the taxonomy admin journey is driven on the live stand
     Then it uses design-system primitives with complete hover, active, focus, disabled and loading states
     And no Delete action or hand-built replacement control exists

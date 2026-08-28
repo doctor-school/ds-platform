@@ -336,11 +336,11 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
     And the losing command writes no domain or audit mutation
 
     Examples:
-      | visibility_setup                                                    | visibility_change                    | competing_write                                  |
-      | an eligible unpaired expert is not yet linked                       | link that expert at position 3       | legacy reconciliation moves a row to position 3 |
-      | a draft expert is unlinked while legacy occupies position 3        | publish that expert                  | create its unpaired link at position 3          |
-      | a draft unpaired expert is linked at position 3                     | publish that expert                  | legacy reconciliation moves a row to position 3 |
-      | an eligible expert suppresses a legacy row at position 3            | retire that mapped expert            | link an unpaired expert at position 3            |
+      | visibility_setup                                               | visibility_change                       | competing_write                           |
+      | two eligible unpaired experts are not yet linked               | link the first expert at position 3     | link the second expert at position 3      |
+      | one eligible expert is linked at position 3                     | move that relation to position 4        | link another expert at position 4         |
+      | one retired event_experts relation retains position 3           | restore that relation                   | link another expert at position 3         |
+      | a draft expert is linked at position 3 and another is unpaired  | publish the linked expert               | link the other expert at position 3       |
 
   @EARS-9 @happy
   Scenario: Project experts carry curator or member roles in both directions

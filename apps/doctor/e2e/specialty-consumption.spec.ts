@@ -1,6 +1,6 @@
 import { expect, test, type BrowserContext, type Page } from "@playwright/test";
 
-const ORIGIN = "http://127.0.0.1:3211";
+const ORIGIN = "http://localhost:3211";
 const SESSION = "__Host-ds_session";
 const GUEST_CHOICE = "__Host-ds_specialty";
 const CARDIOLOGY = "00000000-0000-4000-8000-000000000001";
@@ -15,7 +15,8 @@ async function authenticateWithGuestChoice(
     {
       name: SESSION,
       value: session,
-      url: ORIGIN,
+      domain: "localhost",
+      path: "/",
       httpOnly: true,
       secure: true,
       sameSite: "Lax",
@@ -23,7 +24,8 @@ async function authenticateWithGuestChoice(
     {
       name: GUEST_CHOICE,
       value: specialty,
-      url: ORIGIN,
+      domain: "localhost",
+      path: "/",
       httpOnly: true,
       secure: true,
       sameSite: "Lax",
@@ -68,7 +70,8 @@ test.describe("017 EARS-6: durable guest-choice consumption", () => {
       {
         name: SESSION,
         value: "profile-empty-second",
-        url: ORIGIN,
+        domain: "localhost",
+        path: "/",
         httpOnly: true,
         secure: true,
         sameSite: "Lax",

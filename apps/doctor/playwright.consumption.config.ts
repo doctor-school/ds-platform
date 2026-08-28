@@ -1,7 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
 const PORT = Number(process.env.DOCTOR_CONSUMPTION_CI_PORT ?? 3211);
-const BASE = `http://127.0.0.1:${PORT}`;
+const BASE = `http://localhost:${PORT}`;
 const API_PORT = Number(process.env.DOCTOR_FAKE_API_PORT ?? 3212);
 const API = `http://127.0.0.1:${API_PORT}`;
 

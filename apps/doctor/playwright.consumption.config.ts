@@ -28,7 +28,7 @@ export default defineConfig({
       reuseExistingServer: false,
     },
     {
-      command: `pnpm --filter @ds/doctor exec next start -p ${PORT}`,
+      command: `pnpm --filter @ds/doctor build && pnpm --filter @ds/doctor exec next start -p ${PORT}`,
       url: BASE,
       env: { API_PROXY_TARGET: API },
       timeout: 120_000,

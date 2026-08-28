@@ -380,9 +380,9 @@ RFC 7807 Problem Details with `traceId` and an exact `errorCode`, per ADR-0002 �
 
 ## 12. Design-system and Stage gates
 
-- Every new surface runs the `build-ui-from-design-system` gate first; the vendored canvases are the composition source of truth, read from the files rather than from prose.
+- Every new surface runs the `build-ui-from-design-system` gate first. Portal composition comes from the vendored canvases, read from the files rather than from prose; admin composition comes from the #1282/#1337 tabbed Refine decisions plus #1578 blocks/state matrices.
 - The recorded canvas defaults are decisions, not questions: `secondaryUi: spoiler`; «Мои события» = two tabs; the `/webinars` past control = tabs mirroring the project and expert pages.
-- The original portal-surface Stage A is recorded in `014-product.md` → «Approved mockup». Revised admin rework still completes shared Stage A #1605 before implementation; Stage B remains a live-stand owner confirmation per changed surface before merge.
+- The original portal-surface Stage A is recorded in `014-product.md` → «Approved mockup», and those portal surfaces continue to use the vendored canvases. Shared Stage A #1605 separately confirms that #1282/#1337 tabbed Refine compositions and #1578 design-system blocks are the baseline for the revised admin rework; Stage B remains a live-stand owner confirmation per changed surface before merge.
 - `design-source/README.md` carries the note that the canvas's «Сертификаты» tab is out of 014's scope (owner, 2026-08-17, canvas review miss) — the vendored copy is not edited here, since it is a verbatim mirror of the owner's canvas.
 
 ## 13. Sequencing

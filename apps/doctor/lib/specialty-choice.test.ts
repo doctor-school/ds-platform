@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   chooseSpecialty,
+  NO_SPECIALTY_CHOICE,
   resolveRememberedSpecialty,
+  SPECIALTY_CONSUMPTION_DEFERRED_HEADER,
 } from "./specialty-choice";
 
 const choice = {
@@ -15,25 +17,18 @@ const choice = {
 };
 
 describe("017 EARS-6 specialty choice transport", () => {
-  it("EARS-6.14: an authenticated SSR resolve with an anonymous choice shall request browser-side session consumption", async () => {
-    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
-      new Response(JSON.stringify(choice), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      }),
-    );
+  it("EARS-6.25: a deferred server cascade shall not fall through to a lossy browser adoption after an API failure", async () => {
     const headers = new Headers({
-      cookie:
-        "__Host-ds_session=session; __Host-ds_specialty=22222222-2222-4222-8222-222222222222",
+      cookie: "__Host-ds_session=profile-a",
+      [SPECIALTY_CONSUMPTION_DEFERRED_HEADER]: "1",
     });
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockRejectedValue(new Error("down"));
 
     await expect(
       resolveRememberedSpecialty(headers, fetchImpl),
-    ).resolves.toMatchObject({
-      actor: "doctor",
-      choice,
-      consumeSession: true,
-    });
+    ).resolves.toEqual({ actor: "doctor", choice: NO_SPECIALTY_CHOICE });
   });
 
   it("EARS-6.15: each guest and doctor choice mutation shall carry a fresh canonical Idempotency-Key", async () => {

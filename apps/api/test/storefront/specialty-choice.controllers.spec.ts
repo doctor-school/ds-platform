@@ -21,6 +21,63 @@ function reply() {
 }
 
 describe("017 EARS-6 specialty choice controller transport", () => {
+  it("EARS-6.20: a deterministic 422 refusal replay shall restore status and body on both mutation routes", async () => {
+    const problem = {
+      type: "https://docs.doctor.school/errors/specialty-not-in-book",
+      title: "Specialty is not in the reference book",
+      status: 422,
+      errorCode: "SPECIALTY_NOT_IN_BOOK",
+      traceId: "trace-a",
+    };
+    const choices = { chooseAsGuest: vi.fn(), chooseAsDoctor: vi.fn() };
+    const idempotency = {
+      requireKey: vi.fn(() => "11111111-1111-4111-8111-111111111111"),
+      fingerprint: vi.fn(() => "fingerprint"),
+      begin: vi.fn().mockResolvedValue({
+        kind: "replay",
+        replay: { status: 422, body: problem, etag: null, location: null },
+      }),
+    };
+    const publicController = new SpecialtyChoicePublicController(
+      choices as never,
+      idempotency as never,
+      {} as never,
+    );
+    const meController = new SpecialtyChoiceMeController(
+      choices as never,
+      idempotency as never,
+    );
+    const request = {
+      headers: { "idempotency-key": "11111111-1111-4111-8111-111111111111" },
+      user: { sub: "doctor-a" },
+    };
+
+    for (const run of [
+      (response: ReturnType<typeof reply>) =>
+        publicController.choose(
+          { specialty: "absent" },
+          request as never,
+          response as never,
+        ),
+      (response: ReturnType<typeof reply>) =>
+        meController.choose(
+          { specialty: "absent" },
+          request as never,
+          response as never,
+        ),
+    ]) {
+      const response = reply();
+      await expect(run(response)).resolves.toEqual(problem);
+      expect(response.status).toHaveBeenCalledWith(422);
+      expect(response.header).not.toHaveBeenCalledWith(
+        "set-cookie",
+        expect.anything(),
+      );
+    }
+    expect(choices.chooseAsGuest).not.toHaveBeenCalled();
+    expect(choices.chooseAsDoctor).not.toHaveBeenCalled();
+  });
+
   it("EARS-6.18: adoption and profile-wins discard shall both emit a durable guest-cookie deletion", async () => {
     for (const consumedSession of [true, false]) {
       const choices = {

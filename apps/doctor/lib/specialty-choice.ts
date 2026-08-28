@@ -26,6 +26,9 @@ import { API_BASE, forwardedSessionFrom } from "@/lib/session";
  */
 export const SPECIALTY_CHOICE_PUBLIC_PATH = "/v1/public/specialty-choice";
 export const SPECIALTY_CHOICE_ME_PATH = "/v1/me/specialty";
+export const SPECIALTY_CHOICE_COOKIE_NAME = "__Host-ds_specialty";
+export const SPECIALTY_CONSUMPTION_DEFERRED_HEADER =
+  "x-ds-specialty-consumption-deferred";
 
 /** Which store this visitor's choice belongs in — the LD-2 branch, resolved. */
 export type SpecialtyActor = "guest" | "doctor";
@@ -43,8 +46,6 @@ export type SpecialtyActor = "guest" | "doctor";
 export interface RememberedSpecialty {
   actor: SpecialtyActor;
   choice: SpecialtyChoice | null;
-  /** The SSR cascade saw an anonymous choice that the browser must consume. */
-  consumeSession: boolean;
 }
 
 /** The nothing-chosen-yet answer, as the contract spells it. */
@@ -165,7 +166,8 @@ export async function resolveRememberedSpecialty(
 ): Promise<RememberedSpecialty> {
   const session = forwardedSessionFrom(headers);
   const cookie = headers.get("cookie") ?? "";
-  const consumeSession = hasCookie(cookie, "__Host-ds_specialty");
+  const consumptionDeferred =
+    headers.get(SPECIALTY_CONSUMPTION_DEFERRED_HEADER) === "1";
   const upstream = {
     accept: "application/json",
     cookie,
@@ -180,37 +182,19 @@ export async function resolveRememberedSpecialty(
     if (session) {
       const res = await read(SPECIALTY_CHOICE_ME_PATH);
       if (res.ok) {
-        return {
-          actor: "doctor",
-          choice: parseChoice(await res.json()),
-          consumeSession,
-        };
+        return { actor: "doctor", choice: parseChoice(await res.json()) };
       }
-      if (res.status !== 401) {
-        return { actor: "doctor", choice: null, consumeSession };
-      }
+      if (res.status !== 401) return { actor: "doctor", choice: null };
       // Stale session — fall through to the guest store below.
     }
 
     const res = await read(SPECIALTY_CHOICE_PUBLIC_PATH);
-    if (!res.ok) return { actor: "guest", choice: null, consumeSession: false };
-    return {
-      actor: "guest",
-      choice: parseChoice(await res.json()),
-      consumeSession: false,
-    };
+    if (!res.ok) return { actor: "guest", choice: null };
+    return { actor: "guest", choice: parseChoice(await res.json()) };
   } catch {
     return {
       actor: session ? "doctor" : "guest",
-      choice: null,
-      consumeSession: session ? consumeSession : false,
+      choice: session && consumptionDeferred ? NO_SPECIALTY_CHOICE : null,
     };
   }
-}
-
-function hasCookie(header: string, name: string): boolean {
-  return header.split(";").some((part) => {
-    const separator = part.indexOf("=");
-    return separator >= 0 && part.slice(0, separator).trim() === name;
-  });
 }

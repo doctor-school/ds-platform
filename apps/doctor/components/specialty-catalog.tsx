@@ -71,14 +71,11 @@ export interface SpecialtyCatalogProps {
   actor: SpecialtyActor;
   /** The server's answer, or `null` when it could not resolve one. */
   initialChoice: SpecialtyChoice | null;
-  /** Whether the browser must relay the API's SSR cookie deletion. */
-  consumeSession?: boolean;
 }
 
 export function SpecialtyCatalog({
   actor,
   initialChoice,
-  consumeSession = false,
 }: SpecialtyCatalogProps) {
   const [book, setBook] = useState<BookState>({ kind: "loading" });
   const [frequent, setFrequent] = useState<SpecialtyRef[]>([]);
@@ -204,20 +201,6 @@ export function SpecialtyCatalog({
 
     return () => controller.abort();
   }, [actor, initialChoice]);
-
-  // A server component cannot relay the API's Set-Cookie. Repeat the
-  // idempotent authenticated read through the browser's same-origin proxy so
-  // its deletion reaches the user agent; keep the SSR profile choice rendered.
-  useEffect(() => {
-    // When SSR could not resolve, the regular client fallback above is already
-    // this response-capable read; issuing another would race two cascades.
-    if (actor !== "doctor" || !consumeSession || initialChoice === null) return;
-    const controller = new AbortController();
-    void fetchSpecialtyChoice("doctor", fetch, controller.signal).catch(() => {
-      // A later authenticated navigation retries the same safe consumption.
-    });
-    return () => controller.abort();
-  }, [actor, consumeSession, initialChoice]);
 
   const onQueryChange = useCallback((next: string) => {
     setQuery(next);

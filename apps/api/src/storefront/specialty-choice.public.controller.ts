@@ -16,6 +16,7 @@ import type { SpecialtyChoice } from "@ds/schemas";
 import {
   ChooseSpecialtyRequestSchema,
   IDEMPOTENCY_KEY_HEADER,
+  SpecialtyChoiceSchema,
 } from "@ds/schemas";
 import type { DrizzleHandle } from "@ds/db";
 import { Authz, Public } from "../authz/index.js";
@@ -27,6 +28,10 @@ import {
   serializeSpecialtyChoiceCookie,
 } from "./specialty-choice.cookie.js";
 import { SpecialtyChoiceService } from "./specialty-choice.service.js";
+import {
+  applySpecialtyChoiceReplay,
+  isSuccessfulReplay,
+} from "./specialty-choice.replay.js";
 
 /**
  * 017 EARS-6 (#1482) — the GUEST half of the choose/change contract
@@ -115,7 +120,7 @@ export class SpecialtyChoicePublicController {
     @Body() body: unknown,
     @Req() req: FastifyRequest,
     @Res({ passthrough: true }) reply: FastifyReply,
-  ): Promise<SpecialtyChoice> {
+  ): Promise<unknown> {
     const key = this.idempotency.requireKey(
       req.headers[IDEMPOTENCY_KEY_HEADER],
     );
@@ -134,10 +139,14 @@ export class SpecialtyChoicePublicController {
         payload: parsed.data,
       }),
     });
-    if (outcome.kind === "replay") {
-      const choice = outcome.replay.body as SpecialtyChoice;
-      setChoiceCookie(reply, choice);
-      return choice;
+    if (applySpecialtyChoiceReplay(outcome, reply)) {
+      if (isSuccessfulReplay(outcome)) {
+        setChoiceCookie(
+          reply,
+          SpecialtyChoiceSchema.parse(outcome.replay.body),
+        );
+      }
+      return outcome.replay.body;
     }
 
     const choice = await this.choices.chooseAsGuest(

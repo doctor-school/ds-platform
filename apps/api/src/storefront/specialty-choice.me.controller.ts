@@ -30,6 +30,10 @@ import {
   SpecialtyChoiceService,
   UnknownDoctorError,
 } from "./specialty-choice.service.js";
+import {
+  applySpecialtyChoiceReplay,
+  isSuccessfulReplay,
+} from "./specialty-choice.replay.js";
 
 /**
  * 017 EARS-6 (#1482) — the AUTHENTICATED half of the choose/change contract
@@ -140,7 +144,7 @@ export class SpecialtyChoiceMeController {
     @Body() body: unknown,
     @Req() req: FastifyRequest,
     @Res({ passthrough: true }) reply: FastifyReply,
-  ): Promise<SpecialtyChoice> {
+  ): Promise<unknown> {
     const key = this.idempotency.requireKey(
       req.headers[IDEMPOTENCY_KEY_HEADER],
     );
@@ -160,9 +164,11 @@ export class SpecialtyChoiceMeController {
         payload: parsed.data,
       }),
     });
-    if (outcome.kind === "replay") {
-      reply.header("set-cookie", clearSpecialtyChoiceCookie());
-      return outcome.replay.body as SpecialtyChoice;
+    if (applySpecialtyChoiceReplay(outcome, reply)) {
+      if (isSuccessfulReplay(outcome)) {
+        reply.header("set-cookie", clearSpecialtyChoiceCookie());
+      }
+      return outcome.replay.body;
     }
     const choice = await run(() =>
       this.choices.chooseAsDoctor(sub, parsed.data.specialty, outcome.lease),

@@ -18,9 +18,9 @@ The substrate of the whole epic. Today the academy's structure lives as free tex
 
 Two deliverables sit in the same slice. The **operator CRUD surface** lands in the existing `admin` app (Refine, consistent with events in feature 007): the screens where a content editor creates a project, adds an expert, tags an event with topics and attaches a partner. The **public read API** exposes the same data to the portal so the landing feed, the projects and experts catalogs, the archived-event page and the `/webinars` filters all read one taxonomy instead of each inventing its own.
 
-Free-text speakers do not break on the way. The existing `event_speakers` rows stay and keep rendering; an event gains linked `experts` gradually as the operator migrates it, and a partially migrated event is a normal state, not a defect. Linking a real expert records which legacy speaker entry it supersedes in the current projection; it neither overwrites nor retires that legacy row.
+The corrected person model has one canonical speaker source. An Expert may exist without an account, or may be created from or explicitly linked to an existing User; one User can own at most one Expert. A speaker is only an ordered `event_experts` relationship carrying the event-specific role and position. Existing `event_speakers` rows are migration input, never a second authoring or public-projection path: an executable migration preserves provenance, never matches by name, and emits an audit for every ambiguous, duplicate or unmatched row before the legacy path is disabled.
 
-Every entity and relationship in this feature follows the retained-row lifecycle fixed by ADR-0003 §4. Domain rows are never physically deleted and no relationship cascades away: entities move through `draft | published | retired` with `deleted_at`, joins through `active | retired` with `deleted_at`, and a restore is an explicit transition. Normal public reads serve only published, non-retired records; history and restore flows opt into retained rows deliberately.
+Every entity and relationship in this feature follows the retained-row lifecycle fixed by ADR-0003 §3.6. Domain rows are never physically deleted and no relationship cascades away: entities move through `draft | published | retired` with `deleted_at`, joins through `active | retired` with `deleted_at`, and a restore is an explicit transition. Normal public reads serve only published, non-retired records; history and restore flows opt into retained rows deliberately.
 
 ## Current platform → replacement delta
 
@@ -42,17 +42,23 @@ Two consequences the downstream EARS spec inherits:
 ## User stories
 
 - **US-1** — As a **content operator**, I create a project once — kind (`school | media | program`), title, description, optional cover and curator — and reuse it across every event that belongs to it, instead of re-typing its name per broadcast.
-- **US-2** — As a **content operator**, I maintain an expert as a real person — name, professional role, credentials, affiliation, bio and optional photo — so the same expert card appears identically on every event, project and catalog page where they show up.
+- **US-2** — As a **content operator**, I maintain an Expert with separate family, given and optional patronymic names plus professional details and optional photo, so one derived display name/card appears consistently everywhere.
 - **US-3** — As a **content operator**, I attach several experts to an event and state **each one's role on that event** (speaker, moderator, …), because the same person is a speaker at one broadcast and a moderator at the next.
 - **US-4** — As a **content operator**, I link an event to one or more projects, because a broadcast genuinely can belong to two programs at once.
 - **US-5** — As a **content operator**, I tag events with topics from a maintained list, so a doctor can browse the academy by subject rather than by date.
 - **US-6** — As a **content operator**, I describe a partner once — title, logo, website — and attach it to the projects it sponsors, so the partner block on a project page is data, not hand-made markup.
 - **US-7** — As a **content operator**, I retire or restore any of these entities without deleting its record or historical relationships, and I see the affected current public surfaces before I confirm the lifecycle transition.
-- **US-8** — As a **content operator**, the events whose speakers are still free text keep working exactly as before, and I can migrate them to real experts one at a time, on my own schedule.
+- **US-8** — As a **content operator**, every legacy speaker row is reconciled in one controlled migration into an ordered event-to-expert relationship, with provenance and unresolved cases audited rather than guessed.
 - **US-9** — As a **content operator**, I find the entity I need quickly — a searchable, paginated list per entity kind — because the expert bench and the event archive both keep growing.
 - **US-10** — As a **doctor**, the projects, experts and topics I see on the public pages are the same ones the operator maintains — there is no second, stale copy of the academy's structure.
 - **US-11** — As a **product owner**, the platform can answer "which events belong to this project / this expert / this topic" and the reverse, so the catalogs and the `/webinars` filters of the later features are a query, not a new data model.
 - **US-12** — As a **visitor**, nothing in the taxonomy leaks data that is not meant to be public — the public read API exposes published content only, while drafts and internal partner details stay in the admin.
+- **US-13** — As a **content operator**, I can create an Expert without an account or create/link one from an existing User, while the system prevents one User from owning duplicate Experts.
+- **US-14** — As a **content operator**, I edit family, given and patronymic names separately, never edit a system-owned slug, and copy the generated public link in one action.
+- **US-15** — As a **content operator**, I can upload, replace and remove every authored entity image or file so an accidental or outdated value is reversible.
+- **US-16** — As a **content operator**, I can attach every cross-link from either endpoint page, while one canonical relationship row remains the storage owner.
+- **US-17** — As a **content operator**, every list is paginated and every search/filter applies immediately, with active chips and one Reset all action; controls with no possible effect are not actionable.
+- **US-18** — As a **product owner**, migration from `event_speakers` is executable, provenance-preserving and auditable, with no automatic name merge and no indefinite merged projection.
 
 ## Flows
 
@@ -66,13 +72,19 @@ Two consequences the downstream EARS spec inherits:
 **Maintain the expert bench (US-2, US-8, US-9):**
 
 1. Operator opens Experts → searches the list → creates or edits an expert.
-2. On an event that still carries free-text speakers, the operator links the matching expert to the specific legacy speaker entry. The public speaker projection merges linked experts with the remaining unmatched legacy entries in one ordered list; it does not name-dedupe automatically, overwrite the legacy row, or wait for the whole event to be migrated.
-3. Migrated and unmigrated events coexist in the same listing, and the doctor sees no difference in quality on the public page.
+2. The operator may create the Expert without a User, select an existing User while creating it, or explicitly link an unlinked Expert and User later; duplicate User→Expert ownership is refused.
+3. The operator maintains structured family/given/patronymic fields, uploads/replaces/removes the photo, and copies the generated public link without editing the slug.
 
 **Topic tagging (US-5, US-11):**
 
 1. Operator maintains a closed, curated topics list on its own admin surface; the event form selects existing topics and does not create them inline.
 2. Operator tags events with topics; `specialties[]` on the event is untouched — it is the **audience** axis, a different dimension from topic, and the two are never merged.
+
+**Review and cut over legacy speakers (US-8, US-18):**
+
+1. Every retained source row appears once in a paginated review queue with immutable provenance and its original unmatched, ambiguous or duplicate classification; the UI never suggests identity from a name.
+2. Operator explicitly selects an existing Expert or creates one with structured names, sets event role/order, or marks the source content-removed. Reviewer and resolution are audited without overwriting the original classification.
+3. Cutover is allowed only after every eligible row is resolved; then free-text writes and reads are disabled and only ordered `event_experts` remain current.
 
 **Branches:**
 
@@ -82,12 +94,15 @@ Two consequences the downstream EARS spec inherits:
 ## Product acceptance criteria
 
 - `projects`, `experts`, `topics` and `partners` exist as **first-class entities with their own identity and their own admin screens** — never as string tags on an event.
-- The authoring contract is explicit: a project has kind `school | media | program`, title, slug and description plus optional cover; an expert has name, slug, professional role, credentials, affiliation and bio plus optional photo; a topic has title and slug; a partner has title and slug plus optional logo and HTTPS website.
-- Slugs are generated from the display name on create, may be edited until first publication, and become permanently immutable after that first publication, including after retirement and restore.
+- The authoring contract is explicit: Project has kind/title/description/optional cover; Expert has family/given/optional patronymic names, professional fields, optional User and photo; Topic and Partner have titles plus Partner optional logo/HTTPS website. Every slug is generated, never authored.
+- Slugs are generated and owned by the system. No create/edit form or API accepts an operator-authored slug; admin detail provides **Copy public link**.
 - The relationships are **m2m joins**: `event_projects`, `event_experts` (with per-event role and ordering), `project_experts` (with `curator | member` role), `project_partners` (many links, at most one active primary display partner per project), and `event_topics`.
 - An event can belong to **several** projects, and an expert to **many** events — both directions are queryable.
 - `specialties[]` on the event **stays untouched** as the audience axis; topics are a separate dimension and no data is moved between them.
-- The existing free-text `event_speakers` keeps rendering as before, and **an event may be partially migrated** to linked experts without any visible degradation to the doctor. A linked expert supersedes only its explicitly matched legacy entry in the current projection; the retained legacy row remains available to history/restore flows.
+- Speaker output is the ordered `event_experts` relation only. New free-text authoring is removed; a one-time migration preserves each source row's provenance and records ambiguous, duplicate and unmatched rows for explicit resolution without name merging.
+- Expert names are structured as family, given and optional patronymic fields. An Expert optionally links one User, and a unique User→Expert constraint prevents duplicate Expert ownership.
+- Project cover, Expert photo and Partner logo controls support upload, replace and remove. Every cross-link is authored from either endpoint page while persisting one retained join row.
+- Every admin list is paginated; text search and all filters apply immediately, active values render as chips, one Reset all clears them, and a no-op action is disabled or absent.
 - Every entity has complete lifecycle management in the `admin` app: create, read, list with search and pagination, edit, retire, and restore. There is **no hard-delete action** and no cascade; retire and restore each surface the affected current public projections, and confirmation must be refreshed if that footprint changes before the transition commits.
 - Every top-level taxonomy row carries `status: draft | published | retired` plus nullable `deleted_at`; every relationship that can be retired carries `status: active | retired` plus nullable `deleted_at`. Restoring an ordinarily retired entity returns it to `draft`, so public re-publication is always deliberate. A separately approved legal PD-erasure process is irreversible and leaves the retained row non-restorable; it is not an ordinary lifecycle transition.
 - Publication validates the kind-specific required fields. Only a project has a relationship prerequisite: exactly one active curator whose expert is published and non-retired. Projects need no events or partners; experts, topics and partners need no relationships. Optional media and partner website never block publication, and an expert without a photo uses an initials fallback.
@@ -103,22 +118,21 @@ Two consequences the downstream EARS spec inherits:
 - The public pages that consume the taxonomy — the landing (013), the archived-event state (014), `/projects` (015), `/experts` (016). 012 delivers the entities, the admin and the API only.
 - `event_recordings` and the `leads` table — they belong to 014 and 013 respectively, though they sit in the same epic data model.
 - Partner **commercial** mechanics from the legacy system — sponsorship sums, contracts, paid flags, promo codes. The partner entity here is descriptive (title, logo, website, link to sponsored projects); the sponsor-package machinery is not in this epic.
-- A bulk migration of every historical event's free-text speakers into `experts` — the migration is operator-driven and gradual by owner decision.
 - Payload CMS (`apps/cms`) as the editing surface — a reserved slot for a future vertical (epic decision #11).
 - Public-facing search across the taxonomy, and any recommendation or ranking logic.
 - Access control beyond the platform's existing admin roles — 012 introduces no new role model.
-- Turning an expert into a login identity or adding an expert self-service cabinet. An `expert` is an editorial domain record in 012; a future optional link to a platform user is additive and must not create a second expert type.
+- Expert self-service cabinet or account provisioning. The optional User↔Expert link is in scope, but it neither creates an account nor changes authentication roles.
 
 ## Confirmed product decisions
 
 The Product Lead approved the base package in [#1240](https://github.com/doctor-school/ds-platform/issues/1240#issuecomment-5305116379) and separately approved the primary-partner addendum in [#1240](https://github.com/doctor-school/ds-platform/issues/1240#issuecomment-5307268480) on 2026-08-16. The retained-row lifecycle was approved on 2026-08-15. These are implementation inputs, not open questions:
 
-- **Expert identity:** one standalone editorial `expert` record. A future optional platform-user link is additive and out of scope; there is never a parallel supplier/person type.
+- **Expert identity:** one editorial `expert` record may stand alone or optionally link one existing User; both creation paths converge on that record and one User cannot own duplicate Experts.
 - **Lifecycle:** no domain row or relationship is physically deleted. Retire/restore uses lifecycle status + `deleted_at`; FKs are restrictive/no-action and cascades are forbidden.
 - **Topics:** a closed operator-curated entity list; event authoring selects existing topics rather than creating strings inline.
-- **Speaker migration:** the legacy rows stay indefinitely as retained source data. The current projection merges linked experts with unmatched legacy entries; no bulk replacement, implicit dedupe or automatic end-state is required.
+- **Speaker migration:** `event_speakers` is retained migration input only. One executable migration creates canonical ordered `event_experts`, preserves provenance, never name-merges, and audits ambiguous/duplicate/unmatched rows; public and admin speaker authoring then use only `event_experts`.
 - **Project curator:** an expert linked through `project_experts` with role `curator`; other linked experts use `member`. A published project has exactly one eligible curator and replaces that curator atomically.
-- **Fields and optionality:** project = kind/title/slug/description + optional cover; expert = name/slug/professional role/credentials/affiliation/bio + optional photo; topic = title/slug; partner = title/slug + optional logo/website.
-- **Slugs and publication:** slugs are generated on create, editable until first publication and immutable thereafter. A project may publish without events or partners when its fields and curator are complete; an expert may publish without events or projects.
+- **Fields and optionality:** Expert stores structured person fields and derives public `name`/initials; all four kinds have system-owned slugs; media remains optional and reversible.
+- **Slugs and publication:** slugs are system-owned and never operator-editable; admin offers Copy public link. A project may publish without events or partners when its fields and curator are complete; an expert may publish without events or projects.
 - **Partners on projects:** a project may have many partner links, but at most one active link is the primary display partner; public project entity/summary data exposes that partner or `null`, while relationship reads expose every eligible link.
 - **API and access:** REST/OpenAPI under `/v1`; cursor pagination on public growing lists, explicit page/offset pagination for admin tables, bidirectional relationship reads, zero-auth published-only public reads, and existing `platform_admin` authorization for ordinary taxonomy admin routes. ADR-0009 erasure approval is a separate compliance workflow, not a taxonomy Delete action.

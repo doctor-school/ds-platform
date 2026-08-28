@@ -7,8 +7,7 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
 
   Background:
     Given every 012 mutation records one globally reserved retained idempotency row
-    And legacy-speaker scenarios additionally assume #1278 has made event_speakers stably retained with UUID row identity
-    And every taxonomy and speaker value is an ordinary retained text column
+    And pre-cutover migration scenarios have retained event_speakers source ids and a real speaker_migration_reviews queue
     And the admin app is running with an MFA-verified platform_admin session
     And projects, experts, topics, partners and all five joins use restrictive foreign keys
     And public reads default to published entities and active non-deleted joins
@@ -16,7 +15,7 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
 
   @EARS-1 @EARS-2 @EARS-3 @EARS-4 @happy
   Scenario Outline: Each entity kind is authored as its own retained draft resource
-    When the operator creates a <kind> with its required display label and omits slug
+    When the operator creates a <kind> with its required display fields and no slug input
     Then one <table> row is created in draft with stable id, canonical generated slug and version 1
     And the same row appears in that Refine resource list and detail
     And editing it updates that row rather than creating a content copy
@@ -29,8 +28,8 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
       | partner | partners |
 
   @EARS-2 @happy
-  Scenario: An expert remains a standalone editorial record
-    Given a draft expert with name, professional role, credentials, affiliation and bio but no photo
+  Scenario: An Expert may exist without a User
+    Given a draft Expert with family name given name professional role credentials affiliation and bio but no photo
     When the operator saves the expert without selecting a platform user
     Then the expert is saved successfully
     And its admin preview uses deterministic initials instead of fabricating a photo
@@ -74,7 +73,7 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
     When the operator opens each taxonomy form and the event expert editor
     Then every input-mask declaration is none because no field is a fixed-format identifier
     And text and textarea fields trim input and show their character limits
-    And slug shows the canonical generated preview plus pattern and length feedback
+    And no form exposes a slug input while detail exposes Copy public link
     And partner website uses a URL control that accepts only absolute HTTPS input
     And event expert position is an integer control from 0 through 32767 with step 1
     And media controls declare JPEG, PNG and WebP plus size and decoded-dimension limits
@@ -90,8 +89,8 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
       | kind    | invalid_input                                  | error_code        |
       | project | a missing title                                | VALIDATION_FAILED |
       | project | a title longer than 160 characters             | VALIDATION_FAILED |
-      | project | slug "Not valid"                              | VALIDATION_FAILED |
-      | expert  | a blank name                                   | VALIDATION_FAILED |
+      | project | any client-supplied slug                       | VALIDATION_FAILED |
+      | expert  | a blank family or given name                   | VALIDATION_FAILED |
       | expert  | a bio longer than 4000 characters              | VALIDATION_FAILED |
       | topic   | a missing title                                | VALIDATION_FAILED |
       | partner | a blank title                                  | VALIDATION_FAILED |
@@ -141,19 +140,16 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
     Given a valid media upload owns a fresh idempotency record
     When object storage refuses the PUT
     Then the server returns 503 MEDIA_STORAGE_UNAVAILABLE Problem Details
-    And no taxonomy entity, speaker-domain or domain audit row changes
+    And no taxonomy entity relationship migration-review or domain audit row changes
     And the same key and fingerprint replay that 503 outcome without another PUT
 
-  @EARS-1 @EARS-2 @EARS-3 @EARS-4 @EARS-5 @EARS-16 @failure
-  Scenario Outline: Ordinary first publication permanently locks the slug
-    Given a draft <kind> whose generated slug the operator edits successfully
-    When the operator completes and publishes the <kind>
-    Then first_published_at is set once in the publication transaction
-    When the operator retires and restores the same <kind> after each transition-specific impact preview and confirmation
-    And attempts to change its slug with the current If-Match
-    Then the request is refused with 409 SLUG_IMMUTABLE Problem Details
-    And the original slug and first_published_at remain unchanged
-
+  @EARS-1 @EARS-2 @EARS-3 @EARS-4 @EARS-20 @failure
+  Scenario Outline: Every taxonomy slug is system-owned
+    Given the operator authors a <kind>
+    When create or update includes any client slug
+    Then it returns 400 VALIDATION_FAILED with no mutation
+    And normal authoring generates a stable collision-safe non-UUID slug
+    And detail exposes Copy public link rather than a slug editor
     Examples:
       | kind    |
       | project |
@@ -161,70 +157,33 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
       | topic   |
       | partner |
 
-  @EARS-1 @EARS-2 @EARS-3 @EARS-4 @EARS-16 @failure
-  Scenario Outline: Authored slugs cannot enter the id namespace
-    Given the operator authors a <kind> with <slug_case>
-    When the create request validates its public identity
-    Then it returns 400 VALIDATION_FAILED Problem Details before any row or audit write
-    And a canonical UUID detail token remains id-only while every non-UUID token remains slug-only
-
-    Examples:
-      | kind    | slug_case                       |
-      | project | a canonical UUID slug           |
-      | expert  | a canonical UUID slug           |
-      | topic   | a canonical UUID slug           |
-      | partner | a canonical UUID slug           |
-
   @EARS-2 @EARS-16 @failure
   Scenario: A removed expert keeps its slug so the old public URL cannot resolve to someone else
     Given a published-history expert owns slug alpha
-    When an editorial removal races another expert create that requests slug alpha
-    Then the removal keeps the retained row and its slug alpha while clearing every descriptive value
-    And the create returns 409 SLUG_CONFLICT because the per-table unique index still covers the retained row
-    And no authored slug can equal another row id
+    When editorial removal commits
+    Then the retained row keeps slug alpha while clearing descriptive values
+    And no later generated slug may reuse alpha
 
   @EARS-2 @EARS-16 @happy
-  Scenario: Expert and speaker values are ordinary audited columns
-    Given historical audit_ledger data.event_speakers insert and update diffs contain plain name and regalia text
-    When an expert or speaker mutation reaches the feature-010 trigger
-    Then the diff is recorded exactly like any other editorial column with no separate classification workflow
-    And an editorial-removal UPDATE is recorded as a diff that does not re-publish the cleared values
+  Scenario: Structured Expert and migration review values are audited
+    When Expert fields or a speaker_migration_reviews resolution changes
+    Then structured names and immutable provenance original classification reviewer and resolution are audited
     And only idempotency_keys and media_cleanup_jobs are parity-tested technical audit exclusions
 
   @EARS-2 @EARS-8 @EARS-14 @EARS-16 @EARS-17 @failure
   Scenario: Editorial removal clears an expert without deleting the row and cannot be undone
-    Given a published expert has name professional role credentials affiliation bio a photo and one explicitly mapped legacy speaker
+    Given a published Expert has family name given name patronymic professional role credentials affiliation bio and photo
     And the operator confirms the removal action with the expert If-Match and a canonical UUID Idempotency-Key
     When the removal transaction commits
     Then the experts row keeps its stable id slug and first_published_at with status retired and non-null deleted_at and content_removed_at
-    And name professional_role credentials affiliation bio and photo_ref are null rather than sentinel person text
+    And family_name given_name patronymic professional_role credentials affiliation bio and photo_ref are null rather than sentinel text
     And the admin renders the fixed label instead of a stored placeholder
     And every incident event_experts and project_experts row is retired and event_experts role is cleared
     And one active pending media_cleanup_jobs row releases the old photo object and CDN key
     And ordinary feature-010 audit rows record each affected table
-    And the explicitly mapped legacy speaker row is untouched unless it is removed in its own right
     And the admin exposes no restore control for the removed expert
     When the operator attempts restore with current headers
     Then the server returns 409 CONTENT_REMOVED Problem Details without changing a row media object or audit record
-
-  @EARS-2 @EARS-8 @EARS-14 @EARS-16 @failure
-  Scenario: A never-migrated legacy speaker has its own editorial removal path
-    Given one event_speakers row identifies a person but has no expert link
-    When the operator removes that stable speaker id with its If-Match
-    Then that row remains retained and retired with non-null deleted_at and content_removed_at and null name and regalia
-    And no other same-name speaker row is selected or changed
-    And the parent event lifecycle and every other speaker slot are unchanged
-    And the event editor exposes no restore control for that row
-    When the event editor attempts to restore or repopulate that stable row
-    Then the request returns 409 CONTENT_REMOVED with no row or audit mutation
-
-  @EARS-2 @EARS-7 @EARS-16 @failure
-  Scenario: A mapped legacy speaker is removed through its expert, not the legacy path
-    Given an active event_experts row explicitly maps one legacy speaker to a published expert
-    When the operator invokes the legacy-speaker removal route for that stable speaker id
-    Then the request is refused with 409 LEGACY_SPEAKER_CONFLICT Problem Details
-    And the admin directs the operator to the expert removal action instead
-    And no row media object or audit record changes
 
   @EARS-2 @EARS-5 @EARS-9 @EARS-16 @EARS-17 @failure
   Scenario Outline: Editorial removal resolves every published sole-curator project atomically
@@ -336,22 +295,12 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
     And no event or project lifecycle state changes
 
   @EARS-7 @EARS-8 @happy
-  Scenario: One legacy speaker is migrated explicitly without mutating the source row
-    Given an event has active legacy speakers at positions 1 and 2
-    And a published expert has the same name as both legacy rows
-    When the operator links the expert with a role and position 1 and explicitly selects the first legacy speaker id
-    Then one active event_experts row records that exact legacy speaker id
-    And the first legacy row remains byte-for-byte active and retained
-    And the merged projection emits the expert for the first row and the second legacy row unchanged
-    And no name-based deduplication occurs
-
-  @EARS-7 @failure
-  Scenario: A cross-event or already-matched legacy speaker cannot be selected
-    Given a legacy speaker belongs to another event or is already referenced by a retained event_experts row
-    When the operator submits it as legacySpeakerId
-    Then the link is refused with 409 LEGACY_SPEAKER_CONFLICT Problem Details
-    And event_speakers uses UUID id as row identity plus a partial active event_id-position unique explicit event_id-id composite FK target and the content_removed_at CHECK
-    And no inferred or partial mapping is stored
+  Scenario: Speaker authoring and projection use only event_experts
+    Given the legacy migration has cut over
+    When the operator links an Expert with an event-specific role and position
+    Then one active event_experts row stores that relation
+    And every public speaker surface reads the same ordered eligible event_experts
+    And no free-text speaker or legacy fallback is accepted
 
   @EARS-7 @failure
   Scenario Outline: An expert link requires a role and a non-negative integer position
@@ -368,13 +317,11 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
       | a fractional position |
 
   @EARS-8 @happy
-  Scenario: Speaker fallback and total ordering stay deterministic during partial migration
-    Given active linked experts, unmatched active legacy speakers and equal display names
-    And one mapped expert is draft and another mapped expert is published
+  Scenario: Canonical speaker ordering is deterministic
+    Given active event_experts include published and draft Experts
     When the public speaker projection is read repeatedly
-    Then the draft expert's matched legacy row remains as fallback
-    And the published expert replaces only its explicit legacy row
-    And all rows sort by position ascending, expert before legacy, then stable row id
+    Then only published non-retired Experts render
+    And rows sort by position and stable relation id
     And repeated reads return the same order
 
   @EARS-5 @EARS-7 @EARS-8 @EARS-13 @EARS-16 @EARS-17 @failure
@@ -515,12 +462,12 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
     And optional URLs are present with null while lifecycle storage and admin fields are absent
 
   @EARS-8 @EARS-12 @happy
-  Scenario: One merged-speaker resolver feeds the event endpoint, page and upcoming card
-    Given an eligible event has mapped experts, an unmatched legacy row and a draft-expert fallback
+  Scenario: One canonical event-expert resolver feeds the event endpoint page and upcoming card
+    Given an eligible event has ordered event_experts
     When its speakers endpoint, PublicEventPage and UpcomingBroadcastCard are read
-    Then the endpoint and page return the same ordered exact legacy-or-expert discriminated union
+    Then the endpoint and page return the same ordered Expert projection
     And the card returns the same order mapped to exactly name-only items
-    And no surface runs a second merge policy or returns an optional expert field ambiguously
+    And no surface reads legacy speakers or runs a second projection policy
 
   @EARS-12 @failure
   Scenario Outline: A non-public endpoint or retired join cannot leak through traversal
@@ -581,13 +528,13 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
 
   @EARS-2 @EARS-15 @happy
   Scenario: Expert-name search is trigram indexed rather than a full-roster scan
-    Given expert names are ordinary text columns and a pg_trgm GIN index covers experts.name
+    Given pg_trgm indexes cover family_name given_name patronymic and system slug
     And the handler trims and NFKC-normalizes the query before matching
     When admin search requests a partial case-insensitive name
     Then the ILIKE predicate uses that index and returns the bounded matching page and total
     And no route loads the full expert roster into application code to filter it
     When an expert is editorially removed
-    Then its cleared name is absent from every search result while the retained row stays addressable by id
+    Then its cleared structured names are absent from every search result while the retained row stays addressable by id
 
   @EARS-16 @failure
   Scenario Outline: Authorization and protocol failures are exact Problem Details
@@ -616,10 +563,8 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
       | unsupported media request content type                | 415    | UNSUPPORTED_MEDIA_TYPE                |
       | unavailable object storage                            | 503    | MEDIA_STORAGE_UNAVAILABLE             |
       | incomplete publish projection                         | 409    | PUBLISH_REQUIREMENTS_NOT_MET          |
-      | immutable slug change                                 | 409    | SLUG_IMMUTABLE                        |
       | restore of an editorially removed expert              | 409    | CONTENT_REMOVED                       |
       | published curator invalidation                        | 409    | PUBLISHED_PROJECT_REQUIRES_CURATOR    |
-      | conflicting legacy speaker match                      | 409    | LEGACY_SPEAKER_CONFLICT               |
       | occupied combined speaker slot                        | 409    | SPEAKER_POSITION_OCCUPIED             |
       | live idempotency owner exceeded bounded waiter time   | 409    | IDEMPOTENCY_REQUEST_IN_PROGRESS       |
       | missing If-Match on a conditional method              | 428    | PRECONDITION_REQUIRED                 |
@@ -850,3 +795,82 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
     And no Delete action or hand-built replacement control exists
     And create, link, reject, retire and restore states pass Playwright and axe at both breakpoints and themes
     And merge remains blocked until the product owner records the Stage-B confirmation
+
+  @EARS-19 @happy
+  Scenario: Both Expert entry paths converge without duplicate User ownership
+    Given one existing User is unlinked
+    When CreateExpert is called without a User
+    Then one standalone Expert is created
+    When CreateExpert or LinkExpertUser is called with that unlinked User
+    Then one Expert references that User through the same command model
+    And a second ownership attempt is refused with 409 USER_EXPERT_CONFLICT
+
+  @EARS-20 @happy
+  Scenario: Structured names and system-owned public links
+    When the operator saves family name given name and optional patronymic
+    Then the Expert display name is derived from those fields
+    And no slug input is present or accepted by the API
+    And Copy public link copies the generated canonical URL
+
+  @EARS-21 @happy
+  Scenario: Entity media changes are reversible
+    Given an entity has an uploaded image
+    When the operator replaces and then removes it
+    Then each committed change updates the media reference atomically
+    And cleanup is retained for each superseded object
+
+  @EARS-22 @happy
+  Scenario Outline: Every cross-link direction uses one idempotent command and row
+    When the operator attaches a <relation> from the <endpoint> detail
+    Then exactly one canonical retained join row exists
+    And retrying from the opposite endpoint invokes the same idempotent relationship command
+    And no duplicate row is created
+    Examples:
+      | relation        | endpoint |
+      | event-project   | event    |
+      | event-project   | project  |
+      | event-expert    | event    |
+      | event-expert    | expert   |
+      | event-topic     | event    |
+      | event-topic     | topic    |
+      | project-expert  | project  |
+      | project-expert  | expert   |
+      | project-partner | project  |
+      | project-partner | partner  |
+
+  @EARS-23 @happy
+  Scenario: Shared list and selector interaction applies immediately
+    When the operator types search and selects two filters
+    Then results update without Enter or Apply
+    And pagination remains available
+    And both active values render as chips
+    And Reset all clears them
+    And no action with no possible effect is enabled
+
+  @EARS-24 @happy
+  Scenario Outline: Operator resolves every migration classification explicitly
+    Given a queued source row has immutable provenance and original <classification>
+    When the operator <resolution>
+    Then the resolution is idempotent
+    And original classification provenance reviewer reviewed-at and resolution are audited
+    And no automatic or suggested name match supplies identity
+    Examples:
+      | classification | resolution                                                   |
+      | unmatched      | selects an existing Expert and sets role and order           |
+      | ambiguous      | creates an Expert with family given and patronymic names     |
+      | duplicate      | selects the canonical existing Expert and sets role and order |
+      | unmatched      | explicitly marks the source content-removed                  |
+
+  @EARS-24 @failure
+  Scenario: Migration cutover refuses unresolved source rows
+    Given every eligible retained source row is queued exactly once
+    And one review remains unresolved
+    When the operator requests cutover
+    Then cutover fails with no free-text route or projection change
+
+  @EARS-24 @happy
+  Scenario: Completed migration cuts over to canonical speakers
+    Given every eligible source is resolved to event_experts or content-removed
+    When the guarded cutover commits
+    Then free-text speaker write schemas and routes are disabled
+    And public and admin speaker reads use only ordered event_experts

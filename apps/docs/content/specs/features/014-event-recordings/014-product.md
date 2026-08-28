@@ -42,6 +42,9 @@ An archive nobody can browse is not an archive, so this feature also gives it a 
 - **US-14** — As a **doctor or a guest**, I narrow the listing by project, expert and topic, so an archive of dozens of broadcasts leads me to the ones about my subject instead of making me scroll through everything.
 - **US-15** — As a **guest browsing the archive**, an entry I pick from the «Прошедшие» listing takes me to a page I can read in full, where the invitation to sign in for playback is the natural next step — browsing and the registration driver are one continuous path.
 - **US-16** — As a **product owner**, the filter capability lives in the shared event-list unit, so the project, expert and «Мои события» listings gain the same behavior without anyone rebuilding it.
+- **US-17** — As a **content operator**, I upload/replace/remove the recording poster and the Event program PDF through file controls; I never type storage references, and recording duration is derived from video metadata rather than manual seconds.
+- **US-18** — As a **visitor**, every archived-event speaker comes from the canonical ordered event-to-expert list after migration, with no legacy/free-text fallback.
+- **US-19** — As a **content operator**, recording lists/selectors use pagination, immediate search/filtering, active chips, one Reset all and no actionable no-op controls.
 
 ## Flows
 
@@ -102,7 +105,8 @@ An archive nobody can browse is not an archive, so this feature also gives it a 
 - The tab, the facets and the pagination are delivered **inside the shared event-list unit**, not as a `/webinars`-only implementation: the same filter capability is available to the project, expert and «Мои события» listings that consume the unit afterwards.
 - An entry opened from the «Прошедшие» listing lands on the event's post-live state, so **browsing the archive and the login-gated player are one continuous path** for a guest.
 - The existing `/webinars` listing is **refined, not redesigned** — upcoming discovery keeps working exactly as it does today.
-- Speakers, project and topics on the archived page come from the **012 taxonomy** — this feature reads that data, it does not re-model it.
+- Speakers, project and topics on the archived page come from the **012 taxonomy** — this feature reads that data, it does not re-model it. After migration, speakers come only from canonical ordered `event_experts`.
+- Recording poster and existing Event program PDF authoring each use file upload with replace and explicit remove plus retained cleanup; storage references are never operator input. Recording duration is derived from validated video metadata and is never a manual seconds field.
 - The whole archived state works on mobile — the player, the secondary recording affordance, and the login invitation alike.
 - The archived page meets the platform's accessibility bar for a public surface — the same `playwright-axe` gate every user-facing surface passes, including the player's controls being keyboard-reachable and the login invitation being a real, labelled action.
 - Nothing about the pre-live event page (announcement + registration, features 004/005) regresses — 014 adds a state, it does not redesign the page.

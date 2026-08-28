@@ -463,3 +463,28 @@ Feature: A finished broadcast keeps its value as a recording, and the archive is
     When a recording is attached, published, unpublished, retired or restored
     Then one attributed audit row is appended per committed mutation
     And no 014-specific audit table was introduced
+
+  @EARS-20 @core @happy
+  Scenario: Poster and program file are reversible while duration is derived
+    Given an operator is attaching a recording
+    When the operator uploads a poster file and selects the video source
+    Then no storage reference or duration-seconds input is present
+    And the normalized poster may later be replaced or removed
+    And the existing Event program PDF may be uploaded replaced and explicitly removed
+    And each replace or remove enqueues retained cleanup
+    And duration is read from validated video metadata
+
+  @EARS-21 @facets @happy
+  Scenario: Archived speakers use the canonical relation
+    Given the 012 speaker migration has cut over
+    When the archived event page is read
+    Then speakers are eligible event_experts in relation order
+    And no event_speakers fallback or name matching occurs
+
+  @EARS-22 @core @happy
+  Scenario: Recording filters share the instant list contract
+    When the operator types search and changes a filter
+    Then results update without Enter or Apply
+    And active filters are chips with one Reset all
+    And the list is paginated
+    And an action with no possible effect is absent or disabled

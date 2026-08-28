@@ -17,16 +17,16 @@ The DS Platform admin app (Next.js 16 + **Refine** CSR shell, ADR-0004 §3/§5).
 
 ## The 012 taxonomy surface
 
-`projects` (#1283), `experts` (#1284) and `topics` (#1285) are three of the four 012 content-taxonomy resources. They share, deliberately, one implementation:
+`projects` (#1283), `experts` (#1284) and the open curated `directions` book (#1483) are the shipped 012/017 content-taxonomy resources. They share, deliberately, one implementation:
 
 - **One list shell** — `components/admin-list-shell.tsx` owns the four controls the API exposes (free-text `q`, state filter, «показывать снятые с публикации» off by default, pagination) plus the loading / empty / error states. A resource passes its columns and a row renderer and owns nothing else; #1297's cross-resource search sweep then has one place to touch.
-- **One data provider path** — `providers/data-provider.ts` dispatches every taxonomy call off `TAXONOMY_MEDIA_PART`, the map from resource name to its multipart file part (`projects → cover`, `experts → photo`, `topics → null` — a topic has no media, so its writes are always JSON and no variable of one can be read as a file). Writes carry a fresh `Idempotency-Key`; edits carry `If-Match: W/"<version>"`; `deleteOne` throws — 012 exposes no DELETE route anywhere.
+- **One data provider path** — `providers/data-provider.ts` dispatches every taxonomy call off `TAXONOMY_MEDIA_PART`, the map from resource name to its multipart file part (`projects → cover`, `experts → photo`, `directions → null` — a direction has no media, so its writes are always JSON and no variable of one can be read as a file). Writes carry a fresh `Idempotency-Key`; edits carry `If-Match: W/"<version>"`; `deleteOne` throws — the taxonomy exposes no DELETE route anywhere.
 - **One error mapping** — `lib/taxonomy-errors.ts` maps the §5.3 `errorCode` to the RU sentence, reading the resource namespace off the caller's fallback key so each vertical says the refusal in its own nouns.
 - **Tabbed detail, «Основное» only** — Stage-A composition B (#1282). Publication and relationship tabs arrive with their own slices; an empty placeholder tab is never rendered.
 
 The expert form adds two things the project form does not have: only the display **name** is required (the API accepts a draft carrying nothing else, so the four publish-required fields say so under the box instead of blocking the save), and the no-photo avatar renders the **server-computed** `initials` — the admin never re-derives them, so this avatar, the public projection (#1294) and the speaker projection (#1290) cannot disagree about the same person.
 
-The topic form goes the other way: it is the thinnest of the three — a title and the address it will live at, and nothing else. There is no description box and no dropzone because the entity has neither (`CreateTopicRequestSchema` is `.strict()` and refuses both), and a box for a field the API rejects would be a promise the platform cannot keep.
+The direction form is the thinnest of the three — the operator authors a title, while the retained slug/address is derived once by the API. There is no description box or dropzone because a direction has neither; event classification selects an existing, non-retired direction from `/directions`, never an inline-created value.
 
 ## Develop
 

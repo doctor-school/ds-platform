@@ -4,16 +4,16 @@ import { totpCode } from "./support/totp";
 
 /**
  * 012 EARS-11 (#1293), browser half — the REAL Refine → NestJS → Postgres path
- * for the event↔topic relationship editor and the §3.1 preview→confirm gate.
+ * for the event↔direction relationship editor and the §3.1 preview→confirm gate.
  *
  * `apps/api/test/taxonomy/event-topics.e2e-spec.ts` proves the contract against
  * the API. This proves the OPERATOR-facing arc, which no API test can: that the
- * picker offers only topics the catalogue ALREADY holds (no inline creation),
+ * picker offers only directions the catalogue ALREADY holds (no inline creation),
  * that the confirmation dialog shows the affected rows BEFORE the transition
  * fires, that a stale envelope RELOADS the preview instead of retrying behind
  * the operator's back, that a retired link comes back as the SAME row — and
  * that the event's own `specialties` field is byte-for-byte untouched by the
- * whole arc (the EARS-11 axis fence: topics and specialties are two axes, and
+ * whole arc (the EARS-11 axis fence: directions and specialties are two axes, and
  * the relationship editor must never write the other one).
  *
  * Dev-stand-gated + MANUAL like every other `apps/admin/e2e` flow spec. Run
@@ -41,13 +41,13 @@ async function signInAsAdmin(page: Page): Promise<void> {
   await page.waitForURL(/\/events/, { timeout: 20_000 });
 }
 
-/** A real published-shaped topic row; returns its title. */
-async function createTopic(page: Page, title: string): Promise<string> {
-  await page.goto("/topics/create");
-  await page.getByTestId("topic-form").waitFor({ state: "visible" });
-  await page.getByTestId("topic-title").fill(title);
-  await page.getByTestId("submit-topic").click();
-  await page.waitForURL(/\/topics\/[0-9a-f-]{36}$/, { timeout: 20_000 });
+/** A real direction row authored through the current catalogue; returns its title. */
+async function createDirection(page: Page, title: string): Promise<string> {
+  await page.goto("/directions/create");
+  await page.getByTestId("direction-form").waitFor({ state: "visible" });
+  await page.getByTestId("direction-title").fill(title);
+  await page.getByTestId("submit-direction").click();
+  await page.waitForURL(/\/directions\/[0-9a-f-]{36}$/, { timeout: 20_000 });
   return title;
 }
 
@@ -72,7 +72,7 @@ async function createEvent(page: Page, title: string): Promise<string> {
   return page.url();
 }
 
-/** Open the «Темы» tab of an event detail and wait for the panel. */
+/** Open the «Направления» tab of an event detail and wait for the panel. */
 async function openTopicsTab(page: Page, eventUrl: string): Promise<void> {
   await page.goto(eventUrl);
   await page.getByTestId("tab-topics").click();
@@ -81,16 +81,22 @@ async function openTopicsTab(page: Page, eventUrl: string): Promise<void> {
 
 test.describe.configure({ mode: "serial" });
 
-test.describe("012 EARS-11 — event↔topic relationships in the live admin", () => {
-  test("012 EARS-11: an operator files an event under an existing topic, retires the link through the impact preview and restores it", async ({
+test.describe("012 EARS-11 — event↔direction relationships in the live admin", () => {
+  test("012 EARS-11: an operator files an event under an existing direction, retires the link through the impact preview and restores it", async ({
     page,
   }) => {
     await signInAsAdmin(page);
 
     const stamp = Date.now();
-    const topicA = await createTopic(page, `Связи тема A ${stamp}`);
-    const topicB = await createTopic(page, `Связи тема B ${stamp}`);
-    const eventUrl = await createEvent(page, `Связи тем эфир ${stamp}`);
+    const directionA = await createDirection(
+      page,
+      `Связи направление A ${stamp}`,
+    );
+    const directionB = await createDirection(
+      page,
+      `Связи направление B ${stamp}`,
+    );
+    const eventUrl = await createEvent(page, `Связи направлений эфир ${stamp}`);
 
     // ── The tab starts empty and says so ───────────────────────────────────
     await openTopicsTab(page, eventUrl);
@@ -99,13 +105,13 @@ test.describe("012 EARS-11 — event↔topic relationships in the live admin", (
       "Связи не удаляются",
     );
 
-    // ── EARS-11: the picker offers EXISTING topics only ────────────────────
+    // ── EARS-11: the picker offers EXISTING directions only ────────────────
     // A title that names no catalogue row yields no options and no way to
-    // create one from here — a topic invented mid-link would enter the
-    // taxonomy without ever passing the topic form.
+    // create one from here — a direction invented mid-link would enter the
+    // taxonomy without ever passing the direction form.
     await page
       .getByTestId("event-topic-link-search")
-      .fill(`Несуществующая тема ${stamp}`);
+      .fill(`Несуществующее направление ${stamp}`);
     await expect(page.getByTestId("event-topic-link-no-options")).toBeVisible();
     await expect(page.getByTestId("event-topic-link-form")).not.toContainText(
       "Создать",
@@ -114,38 +120,40 @@ test.describe("012 EARS-11 — event↔topic relationships in the live admin", (
     // ── Add a link through the searchable selector ─────────────────────────
     // The search narrows SERVER-SIDE (`?q=`), so the option list is the API's
     // answer, not a client-side filter over one page of rows.
-    await page.getByTestId("event-topic-link-search").fill(topicA);
+    await page.getByTestId("event-topic-link-search").fill(directionA);
     await expect(
       page.getByTestId("event-topic-link-select").locator("option"),
     ).toHaveCount(2); // the placeholder + the one match
     await page
       .getByTestId("event-topic-link-select")
-      .selectOption({ label: topicA });
+      .selectOption({ label: directionA });
     await page.getByTestId("event-topic-link-submit").click();
     await expect(page.getByTestId("event-topics-notice")).toContainText(
       "Связь добавлена.",
     );
-    await expect(page.getByTestId("event-topics-panel")).toContainText(topicA);
-    // An already-linked topic is no longer offerable: a choice that could only
+    await expect(page.getByTestId("event-topics-panel")).toContainText(
+      directionA,
+    );
+    // An already-linked direction is no longer offerable: a choice that could only
     // ever come back 409 is not a choice.
-    await page.getByTestId("event-topic-link-search").fill(topicA);
+    await page.getByTestId("event-topic-link-search").fill(directionA);
     await expect(page.getByTestId("event-topic-link-no-options")).toBeVisible();
 
     // ── The duplicate-pair refusal, reached the way it really happens ───────
-    // Two operators on the same event: this tab's picker still offers topic B
+    // Two operators on the same event: this tab's picker still offers direction B
     // while the other tab links it. The stale choice must produce the RU
     // sentence that names the retained-row remedy, not a generic failure.
-    await page.getByTestId("event-topic-link-search").fill(topicB);
+    await page.getByTestId("event-topic-link-search").fill(directionB);
     await page
       .getByTestId("event-topic-link-select")
-      .selectOption({ label: topicB });
+      .selectOption({ label: directionB });
 
     const otherTab = await page.context().newPage();
     await openTopicsTab(otherTab, eventUrl);
-    await otherTab.getByTestId("event-topic-link-search").fill(topicB);
+    await otherTab.getByTestId("event-topic-link-search").fill(directionB);
     await otherTab
       .getByTestId("event-topic-link-select")
-      .selectOption({ label: topicB });
+      .selectOption({ label: directionB });
     await otherTab.getByTestId("event-topic-link-submit").click();
     await expect(otherTab.getByTestId("event-topics-notice")).toBeVisible();
     await otherTab.close();
@@ -157,7 +165,7 @@ test.describe("012 EARS-11 — event↔topic relationships in the live admin", (
 
     // ── Retire: the preview is READ, its rows are RENDERED, then it confirms ─
     await openTopicsTab(page, eventUrl);
-    // BOTH topics are linked by now (the duplicate arc above linked B from the
+    // BOTH directions are linked by now (the duplicate arc above linked B from the
     // other tab), so the retired one is named from the row itself rather than
     // assumed — the list order is the API's to decide, not this spec's.
     const retiredTitle = (
@@ -168,7 +176,7 @@ test.describe("012 EARS-11 — event↔topic relationships in the live admin", (
     ).trim();
     await page.locator('[data-testid^="event-topic-retire-"]').first().click();
     const dialog = page.getByRole("dialog");
-    await expect(dialog).toContainText("Снять связь с темой?");
+    await expect(dialog).toContainText("Снять связь с направлением?");
     // NO DELETE WORDING anywhere on the confirmation (§3.1 / EARS-14).
     await expect(dialog).not.toContainText("Удалить");
     // The affected list is the whole point of the gate: either concrete rows the
@@ -247,7 +255,7 @@ test.describe("012 EARS-11 — event↔topic relationships in the live admin", (
       .first()
       .click();
     await expect(page.getByRole("dialog")).toContainText(
-      "Вернуть связь с темой?",
+      "Вернуть связь с направлением?",
     );
     await page.getByRole("dialog").locator('[data-testid$="-submit"]').click();
     await expect(page.getByTestId("event-topics-notice")).toContainText(
@@ -260,7 +268,7 @@ test.describe("012 EARS-11 — event↔topic relationships in the live admin", (
     );
 
     // ── The axis fence: `specialties` survived the whole arc untouched ──────
-    // EARS-11 keeps topics and specialties as two independent axes. After
+    // EARS-11 keeps directions and specialties as two independent axes. After
     // link → duplicate-refusal → retire → restore, the event's own free-text
     // specialties field must read exactly what it was created with.
     await page.goto(eventUrl);

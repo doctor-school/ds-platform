@@ -1,5 +1,16 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { aliasedTable, and, asc, count, eq, ilike, isNull, ne, or, sql } from "drizzle-orm";
+import {
+  aliasedTable,
+  and,
+  asc,
+  count,
+  eq,
+  ilike,
+  isNull,
+  ne,
+  or,
+  sql,
+} from "drizzle-orm";
 import type { DrizzleHandle, Direction } from "@ds/db";
 import {
   directionAdjacency,
@@ -70,6 +81,31 @@ export interface DirectionIncidentRelation {
   eligibility: string;
 }
 
+export interface DirectionAdjacencyFingerprintRow {
+  sourceId: string;
+  sourceStatus: Direction["status"];
+  adjacentDirectionId: string;
+  adjacentStatus: Direction["status"];
+}
+
+/**
+ * Resolve the lifecycle input of the endpoint opposite the direction whose
+ * impact is being reviewed. An inbound A→B edge reviewed from B must fingerprint
+ * A, just as an outbound B→C edge reviewed from B fingerprints C.
+ */
+export function oppositeDirectionStatus(
+  reviewedDirectionId: string,
+  edge: DirectionAdjacencyFingerprintRow,
+): Direction["status"] {
+  if (edge.sourceId === reviewedDirectionId) return edge.adjacentStatus;
+  if (edge.adjacentDirectionId === reviewedDirectionId) {
+    return edge.sourceStatus;
+  }
+  throw new Error(
+    "reviewed direction is not an endpoint of the adjacency edge",
+  );
+}
+
 @Injectable()
 export class DirectionsRepository {
   constructor(@Inject(DRIZZLE_DB) private readonly db: Db) {}
@@ -98,7 +134,10 @@ export class DirectionsRepository {
   }
 
   async findById(id: string): Promise<Direction | null> {
-    const [row] = await this.db.select().from(directions).where(eq(directions.id, id));
+    const [row] = await this.db
+      .select()
+      .from(directions)
+      .where(eq(directions.id, id));
     return row ?? null;
   }
 
@@ -124,7 +163,11 @@ export class DirectionsRepository {
    * to a different subject. Checked before the write for a naming 409; the
    * unique index remains the final race guard.
    */
-  async slugTaken(tx: Tx | Db, slug: string, exceptId?: string): Promise<boolean> {
+  async slugTaken(
+    tx: Tx | Db,
+    slug: string,
+    exceptId?: string,
+  ): Promise<boolean> {
     const where = exceptId
       ? and(eq(directions.slug, slug), ne(directions.id, exceptId))
       : eq(directions.slug, slug);
@@ -153,7 +196,9 @@ export class DirectionsRepository {
         version: sql`${directions.version} + 1`,
         updatedAt: new Date(),
       })
-      .where(and(eq(directions.id, id), eq(directions.version, expectedVersion)))
+      .where(
+        and(eq(directions.id, id), eq(directions.version, expectedVersion)),
+      )
       .returning();
     return row ?? null;
   }
@@ -178,7 +223,9 @@ export class DirectionsRepository {
         version: sql`${directions.version} + 1`,
         updatedAt: new Date(),
       })
-      .where(and(eq(directions.id, id), eq(directions.version, expectedVersion)))
+      .where(
+        and(eq(directions.id, id), eq(directions.version, expectedVersion)),
+      )
       .returning();
     return row ?? null;
   }
@@ -227,7 +274,10 @@ export class DirectionsRepository {
         id: directionAdjacency.id,
         version: directionAdjacency.version,
         status: directionAdjacency.status,
+        sourceId: directionAdjacency.directionId,
         sourceTitle: self.title,
+        sourceStatus: self.status,
+        adjacentDirectionId: directionAdjacency.adjacentDirectionId,
         adjacentTitle: other.title,
         adjacentStatus: other.status,
       })
@@ -256,7 +306,7 @@ export class DirectionsRepository {
         version: row.version,
         status: row.status,
         title: `${row.sourceTitle} — ${row.adjacentTitle}`,
-        eligibility: row.adjacentStatus,
+        eligibility: oppositeDirectionStatus(directionId, row),
       })),
       // Stable order so two reads of an unchanged world fingerprint identically
       // — an unordered set would make the digest depend on the planner.
@@ -285,7 +335,9 @@ export class DirectionsRepository {
       // too, so normalizing here is what makes the comparison honest rather
       // than a lucky byte match (012-design §2.2 LD-6).
       const pattern = `%${escapeLike(query.q.normalize("NFKC"))}%`;
-      filters.push(or(ilike(directions.title, pattern), ilike(directions.slug, pattern)));
+      filters.push(
+        or(ilike(directions.title, pattern), ilike(directions.slug, pattern)),
+      );
     }
     const where = filters.length > 0 ? and(...filters) : undefined;
 

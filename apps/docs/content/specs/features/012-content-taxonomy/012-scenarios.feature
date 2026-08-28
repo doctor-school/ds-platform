@@ -863,14 +863,14 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
 
   @EARS-24 @failure
   Scenario: Migration cutover refuses unresolved source rows
-    Given every eligible retained source row is queued exactly once
+    Given every retained event_speakers source row is queued exactly once
     And one review remains unresolved
     When the operator requests cutover
     Then cutover fails with no free-text route or projection change
 
   @EARS-24 @happy
   Scenario: Completed migration cuts over to canonical speakers
-    Given every eligible source is resolved to event_experts or content-removed
+    Given every retained event_speakers source row is resolved to event_experts or content-removed
     When the guarded cutover commits
     Then free-text speaker write schemas and routes are disabled
     And public and admin speaker reads use only ordered event_experts

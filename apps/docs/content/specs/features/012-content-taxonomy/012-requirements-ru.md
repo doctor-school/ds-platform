@@ -67,7 +67,7 @@ lang: ru
 
 - Верхнеуровневые сохраняемые сущности:
   - `projects`: стабильные id + slug, тип `school | media | program`, название, описание, опциональная ссылка на медиа обложки;
-  - `experts`: стабильные id + slug, имя, профессиональная роль, регалии, аффилиация, био, опциональная ссылка на фото; FK на пользователя платформы в 012 нет;
+  - `experts`: стабильные id + системный slug, раздельные фамилия/имя/опциональное отчество, профессиональная роль, регалии, аффилиация, био, опциональная ссылка на фото и опциональный уникальный `user_id`;
   - `topics`: стабильные id + slug и название, поддерживаемый курируемый список;
   - `partners`: стабильные id + slug, название, опциональные ссылка на логотип и URL сайта.
 - Каждое значение таксономии — обычная редакционная текстовая колонка. Имя и регалии эксперта — те же публичные профессиональные данные, которые эксперты и так публикуют о себе; они хранятся, ищутся и аудируются как любой другой редакционный контент, без шифрования, управления ключами и отдельного compliance-процесса.
@@ -80,7 +80,7 @@ lang: ru
 **Не входит:**
 
 - Врачебный рендеринг: `/`, фасеты/архив `/webinars`, `/projects`, `/experts` и их страницы относятся к 013–016.
-- `event_recordings`, `leads`, Payload CMS, коммерческие условия/договоры партнёров, публичный поиск по таксономии, рекомендации/ранжирование, массовая миграция спикеров, самообслуживание эксперта или связь user↔expert.
+- `event_recordings`, `leads`, Payload CMS, коммерческие условия/договоры партнёров, публичный поиск по таксономии, рекомендации/ранжирование, самообслуживание эксперта или создание аккаунта пользователя из Expert; явная опциональная связь существующего User↔Expert входит в EARS-19.
 - Новые роли для редактирования таксономии; оно переиспользует `platform_admin`. Второй роли, step-up-подтверждения и per-mutation обращения к провайдеру идентичности не вводится.
 - Универсальный интерфейс просмотра аудита. Фича 010 уже пишет мутации в `audit_ledger`; 012 лишь сохраняет строки адресуемыми для просмотра/восстановления.
 
@@ -205,7 +205,7 @@ lang: ru
 - **EARS-21** _(realizes: US-15)_ — Когда оператор редактирует медиа сущности, каждый применимый слот поддерживает upload, replace и remove; replace/remove атомарно меняет ссылку и ставит retained cleanup job, а storage key или URL input не показывается.
 - **EARS-22** _(realizes: US-16)_ — Когда оператор создаёт event↔project, event↔expert, event↔topic, project↔expert или project↔partner с любой endpoint-страницы, обе поверхности вызывают одну relationship-команду и сохраняют ровно одну retained join-строку с одним владельцем хранения.
 - **EARS-23** _(realizes: US-17)_ — Когда оператор использует taxonomy list или selector, система даёт пагинацию; применяет text search и каждый filter сразу без Enter или Apply; показывает каждое active value чипом; даёт одно «Сбросить всё»; использует общий search/select combobox; скрывает или disables control без возможного эффекта.
-- **EARS-24** _(realizes: US-8, US-18)_ — Когда открывается migration review, каждая eligible retained source row один раз появляется в paginated admin queue с immutable provenance и original `unmatched | ambiguous | duplicate` classification, без automatic/suggested name identity. Оператор явно выбирает existing Expert или создаёт нового со structured names, задаёт role/order либо marks content-removed. Idempotent resolution создаёт canonical `event_experts` и аудирует original classification, reviewer, time и resolution. Cutover fail closed при unresolved rows, затем отключает все free-text writes/reads.
+- **EARS-24** _(realizes: US-8, US-18)_ — Когда открывается migration review, каждая retained source row из `event_speakers` один раз появляется в paginated admin queue с immutable provenance и original `unmatched | ambiguous | duplicate` classification, без automatic/suggested name identity. Оператор явно выбирает existing Expert или создаёт нового со structured names, задаёт role/order либо marks content-removed. Idempotent resolution создаёт canonical `event_experts` и аудирует original classification, reviewer, time и resolution. Cutover fail closed при любой unresolved source row, затем отключает все free-text writes/reads.
 
 ## Инварианты
 

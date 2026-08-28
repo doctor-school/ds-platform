@@ -152,11 +152,11 @@ Expert search NFKC-normalizes the query and uses trigram indexes over `family_na
 
 ### 2.3 Legacy-speaker migration review queue
 
-`speaker_migration_reviews` is a real retained admin queue keyed by stable source `event_speakers.id`. Every eligible source row is imported once with immutable source provenance (event id, source id, original position and content fingerprint) and an original classification `unmatched | ambiguous | duplicate`. No automatic or suggested name match is stored or displayed.
+`speaker_migration_reviews` is a real retained admin queue keyed by stable source `event_speakers.id`. Every retained `event_speakers` row is imported once with immutable source provenance (event id, source id, original position and content fingerprint) and an original classification `unmatched | ambiguous | duplicate`. There is no eligibility filter: the closed source set is all retained rows in that table. No automatic or suggested name match is stored or displayed.
 
 For each queue item, the operator explicitly selects an existing unlinked Expert or creates a new Expert with structured names, then confirms role and order; alternatively the operator explicitly marks the source content-removed. Resolution is idempotent and writes canonical `event_experts`, reviewer identity, reviewed-at, selected/created Expert id, disposition and original classification to audit. The original classification/provenance never changes.
 
-Cutover is an executable guarded command: it succeeds only when every eligible source row is resolved to one canonical `event_experts` relation or content-removed. It then disables all free-text speaker mutation schemas/routes and switches every public/admin speaker read to `event_experts`. Retained `event_speakers` remains provenance only. Reject and accept paths run against real Postgres rows; no manual SQL, name merge, seed or one-off script satisfies EARS-24.
+Cutover is an executable guarded command: it succeeds only when every retained `event_speakers` source row is resolved to one canonical `event_experts` relation or content-removed. It then disables all free-text speaker mutation schemas/routes and switches every public/admin speaker read to `event_experts`. Retained `event_speakers` remains provenance only. Reject and accept paths run against real Postgres rows; no manual SQL, name merge, seed or one-off script satisfies EARS-24.
 
 ### 2.4 Editorial removal of an Expert
 
@@ -348,7 +348,7 @@ There is no legacy matching prerequisite or dual runtime projection: #1607 resol
 
 1. Merge this accepted SDD artifact and open/wire its bounded EARS Issues.
 2. Complete revised Stage A #1605 before any reworked runtime UI.
-3. Run the model/migration wave in strict order #1606 → #1607 → feature-014 #1608; #1607 cuts over only after every eligible retained source row is resolved or content-removed, and #1608 cannot project speakers earlier.
+3. Run the model/migration wave in strict order #1606 → #1607 → feature-014 #1608; #1607 cuts over only after every retained `event_speakers` source row is resolved or content-removed, and #1608 cannot project speakers earlier.
 4. Run at most three PRs for reversible media/relations (#1609, #1610, feature-014 #1611), then land shared taxonomy UX #1297 before feature-014 #1612 consumes it.
 5. Only after the complete 012 parent closes may 013–016 consume base relationships; 015/016 then own their declared batched surface projections instead of N+1 composition.
 

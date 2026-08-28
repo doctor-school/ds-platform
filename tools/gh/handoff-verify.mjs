@@ -140,9 +140,19 @@ export function extractRefs(text) {
       refs.push({ kind: "branch", value: m[0], line, lineNo });
     }
 
+    // Absolute local .jsonl paths can carry UUID filenames whose hex
+    // segments look exactly like abbreviated SHAs. The path is context, not a
+    // Git ref, so exclude only tokens contained by that path. The POSIX form
+    // rejects URL slashes while still accepting `/...` and `(/C:/...)`.
+    const jsonlPathRe = /(?:[a-z]:[\\/]|(?<![:/])\/)[^`"'<>|\r\n]*?\.jsonl\b/gi;
+    const jsonlPathRanges = [...line.matchAll(jsonlPathRe)].map((m) => [
+      m.index,
+      m.index + m[0].length,
+    ]);
+
     // Commit SHAs: 7–40 hex, must contain a digit AND an a-f letter
     // (heuristic — rejects plain numbers like 1234567 and words like
-    // "decade"), and must not sit inside an already-captured branch token.
+    // "decade"), and must not sit inside a captured branch or .jsonl path.
     const shaRe = /\b[0-9a-f]{7,40}\b/g;
     for (const m of line.matchAll(shaRe)) {
       const tok = m[0];
@@ -150,7 +160,10 @@ export function extractRefs(text) {
       const inBranch = branchRanges.some(
         ([s, e]) => m.index >= s && m.index + tok.length <= e,
       );
-      if (inBranch) continue;
+      const inJsonlPath = jsonlPathRanges.some(
+        ([s, e]) => m.index >= s && m.index + tok.length <= e,
+      );
+      if (inBranch || inJsonlPath) continue;
       refs.push({ kind: "sha", value: tok, line, lineNo });
     }
   });

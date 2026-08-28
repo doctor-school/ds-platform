@@ -115,6 +115,18 @@ describe("handoff-verify extractRefs()", () => {
     ]);
   });
 
+  it("ignores SHA-like UUID segments inside absolute Claude .jsonl log paths", () => {
+    const refs = extractRefs(
+      [
+        "Academy log: C:\\Users\\sidor\\.claude\\projects\\ds-platform\\e995f3c3-17ea-4544-9f0e-1bad987e7aca.jsonl",
+        "Doctor log: C:/Users/sidor/.claude/projects/ds-platform/9b5baf8d-4da5-4cd2-a8bd-b0f4f6920750.jsonl",
+        "real commit 4a89d2b remains verifiable",
+      ].join("\n"),
+    );
+
+    expect(refs.map((r) => [r.kind, r.value])).toEqual([["sha", "4a89d2b"]]);
+  });
+
   it("carries the line so claims can be parsed per-occurrence", () => {
     const refs = extractRefs("line1 #10 merged\nline2 #10");
     expect(refs.map((r) => r.lineNo)).toEqual([1, 2]);

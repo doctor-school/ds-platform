@@ -132,15 +132,21 @@ describe("handoff-verify extractRefs()", () => {
       [
         "URL https://example.test/logs/4a89d2b.jsonl",
         "query https://example.test/view?log=/logs/7de92ac.jsonl",
+        "query https://example.test/view?log=(/logs/8fa31ce.jsonl)",
+        "query https://example.test/view?log=(C:/logs/9ab42df.jsonl)",
         "prose /not a local path containing 5bc90ae before trace.jsonl",
-        "C:\\logs\\e995f3c3-17ea-4544-9f0e-1bad987e7aca.jsonl then commit 6cd81bf",
+        "C:\\logs\\1ac53ef.jsonl is not a Claude session path",
+        "C:\\Users\\sidor\\.claude\\projects\\ds-platform\\e995f3c3-17ea-4544-9f0e-1bad987e7aca.jsonl then commit 6cd81bf",
       ].join("\n"),
     );
 
     expect(refs.map((r) => [r.kind, r.value])).toEqual([
       ["sha", "4a89d2b"],
       ["sha", "7de92ac"],
+      ["sha", "8fa31ce"],
+      ["sha", "9ab42df"],
       ["sha", "5bc90ae"],
+      ["sha", "1ac53ef"],
       ["sha", "6cd81bf"],
     ]);
   });

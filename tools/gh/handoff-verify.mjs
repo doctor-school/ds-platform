@@ -140,18 +140,23 @@ export function extractRefs(text) {
       refs.push({ kind: "branch", value: m[0], line, lineNo });
     }
 
-    // Absolute local .jsonl path TOKENS can carry UUID filenames whose hex
-    // segments look exactly like abbreviated SHAs. The path is context, not a
-    // Git ref, so exclude only tokens contained by that path. Whitespace ends
-    // an unquoted token. A local path starts at the line boundary or after an
-    // explicit prose/Markdown delimiter; this rejects URL/query fragments
-    // while still accepting `/...`, backtick-wrapped paths and `(/C:/...)`.
-    const jsonlPathRe =
-      /(?:^|[\s`"'(<])(?:[a-z]:[\\/]|\/(?!\/))[^\s`"'<>|\r\n]*?\.jsonl\b/gi;
-    const jsonlPathRanges = [...line.matchAll(jsonlPathRe)].map((m) => [
-      m.index,
-      m.index + m[0].length,
-    ]);
+    // Claude transcript paths under `.claude/projects/` carry UUID filenames
+    // whose hex segments look like abbreviated SHAs. Exclude only that known
+    // local-session shape, never arbitrary .jsonl paths, and reject every
+    // candidate contained by an HTTP(S) URL token (including query values).
+    const httpUrlRanges = [
+      ...line.matchAll(/https?:\/\/[^\s`"'<>|\r\n]+/gi),
+    ].map((m) => [m.index, m.index + m[0].length]);
+    const sessionLogPathRe =
+      /(?:^|[\s`"'(<])(?:[a-z]:[\\/]|\/(?!\/))(?=[^\s`"'<>|\r\n]*[\\/]\.claude[\\/]projects[\\/])[^\s`"'<>|\r\n]*?\.jsonl\b/gi;
+    const jsonlPathRanges = [...line.matchAll(sessionLogPathRe)]
+      .filter(
+        (m) =>
+          !httpUrlRanges.some(
+            ([s, e]) => m.index >= s && m.index + m[0].length <= e,
+          ),
+      )
+      .map((m) => [m.index, m.index + m[0].length]);
 
     // Commit SHAs: 7–40 hex, must contain a digit AND an a-f letter
     // (heuristic — rejects plain numbers like 1234567 and words like

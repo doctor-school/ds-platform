@@ -61,6 +61,7 @@
   --color-muted-2: oklch(0.704 0.01 250);
   --color-accent-foreground: oklch(0.21 0.02 250);
   --color-tint: #d3e8fd;
+  --color-tint-pressed: #aed4fb;
   --color-tint-foreground: #114d9e;
   --color-info: #2d84f2;
   --color-chip-border: #aed4fb;
@@ -241,6 +242,7 @@
   --color-muted-2: oklch(0.704 0.01 250);
   --color-accent-foreground: oklch(0.985 0.002 250);
   --color-tint: #0d3a77;
+  --color-tint-pressed: #114d9e;
   --color-tint-foreground: #aed4fb;
   --color-info: #6bb1f7;
   --color-chip-border: rgba(107, 177, 247, 0.45);
@@ -297,6 +299,7 @@
   --color-muted-2: oklch(0.704 0.01 250);
   --color-accent-foreground: oklch(0.21 0.02 250);
   --color-tint: #d3e8fd;
+  --color-tint-pressed: #aed4fb;
   --color-tint-foreground: #114d9e;
   --color-info: #2d84f2;
   --color-chip-border: #aed4fb;
@@ -353,6 +356,7 @@
   --color-muted-2: var(--color-muted-2);
   --color-accent-foreground: var(--color-accent-foreground);
   --color-tint: var(--color-tint);
+  --color-tint-pressed: var(--color-tint-pressed);
   --color-tint-foreground: var(--color-tint-foreground);
   --color-info: var(--color-info);
   --color-chip-border: var(--color-chip-border);

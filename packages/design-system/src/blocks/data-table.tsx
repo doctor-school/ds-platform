@@ -170,9 +170,7 @@ export function DataTable<Row>({
     // только лишний визуальный шум появляется». The row tint + `cursor-pointer` are
     // the affordance; this is a row-scoped deviation from the Link hover contract
     // (constitution → Data table / admin list).
-    const overlay = (
-      <span aria-hidden="true" className="absolute inset-0" />
-    );
+    const overlay = <span aria-hidden="true" className="absolute inset-0" />;
     if (rowHref) {
       return (
         <a
@@ -239,15 +237,20 @@ export function DataTable<Row>({
         key={getRowKey(row)}
         data-clickable={clickable ? "true" : undefined}
         className={cn(
-          "relative",
+          "group/row relative",
           clickable &&
-            "cursor-pointer hover:bg-tint focus-within:bg-tint focus-within:shadow-focus",
+            "cursor-pointer hover:bg-tint has-[:active]:bg-tint-pressed focus-within:bg-tint focus-within:shadow-focus",
         )}
       >
         <TableCell className="py-3.5">
           <span className={cn("block", CLAMP_2)}>{activation(row)}</span>
           {record.context ? (
-            <span className="mt-1 block text-caption text-muted-foreground">
+            <span
+              className={cn(
+                "mt-1 block text-caption text-muted-foreground",
+                clickable && "group-has-[:active]/row:text-foreground",
+              )}
+            >
               {record.context(row)}
             </span>
           ) : null}
@@ -258,10 +261,7 @@ export function DataTable<Row>({
             <TableCell
               key={column.key}
               title={column.fullValue?.(row)}
-              className={cn(
-                alignClass(column.align),
-                ellipsis && "truncate",
-              )}
+              className={cn(alignClass(column.align), ellipsis && "truncate")}
               style={column.width ? { maxWidth: column.width } : undefined}
             >
               {column.render(row)}
@@ -305,14 +305,20 @@ export function DataTable<Row>({
         key={getRowKey(row)}
         data-clickable={clickable ? "true" : undefined}
         className={cn(
-          "relative flex flex-col gap-2 border-2 border-border bg-card p-3.5",
-          clickable && "cursor-pointer hover:bg-tint focus-within:shadow-focus",
+          "group/row relative flex flex-col gap-2 border-2 border-border bg-card p-3.5",
+          clickable &&
+            "cursor-pointer hover:bg-tint has-[:active]:bg-tint-pressed focus-within:shadow-focus",
         )}
       >
         <div>
           {activation(row)}
           {record.context ? (
-            <span className="mt-1 block text-caption text-muted-foreground">
+            <span
+              className={cn(
+                "mt-1 block text-caption text-muted-foreground",
+                clickable && "group-has-[:active]/row:text-foreground",
+              )}
+            >
               {record.context(row)}
             </span>
           ) : null}

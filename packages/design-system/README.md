@@ -226,6 +226,7 @@ defects — a `min-h-*` reserved blank line on a message (K-1), a duplicate
 | `Link` / `link`      | `text-primary-action` (blue.700, AA on white; no underline)                                        | `hover:underline underline-offset-4`                                                       | `active:text-primary-action/80` | `disabled:opacity-50` + L1 `not-allowed`                              |
 | `TabsTrigger`        | inactive `text-foreground/60` `px-3 py-1`; `TabsList` **`gap-2` track**                            | `data-[state=inactive]:hover:bg-background/50 data-[state=inactive]:hover:text-foreground` | —                               | `disabled:opacity-50`                                                 |
 | `TabsTrigger` active | `data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow` | —                                                                                          | —                               | —                                                                     |
+| `DataTable` row/card | `bg-card text-foreground`                                                                          | `hover:bg-tint`                                                                            | `has-[:active]:bg-tint-pressed` | —                                                                     |
 
 - **Disabled vs secondary (#2):** secondary is told apart from disabled by a
   **`border border-input` + pointer cursor + live hover**, never by fill depth.
@@ -241,6 +242,13 @@ defects — a `min-h-*` reserved blank line on a message (K-1), a duplicate
   between segments so an inactive segment's `hover:bg-background/50` never butts
   flush against the active segment (the slice-B hover-gluing defect, K-2). The
   transparent-border-only inset was not enough — the gap is the fix.
+- **DataTable row/card (#1578):** whole-record activation remains a real stretched
+  link/button. The containing desktop row and mobile card react to that target's
+  live `:active` state through `has-[:active]:bg-tint-pressed`: light blue.200 and
+  dark blue.700, the owner-picked one-step continuation after `hover:bg-tint`.
+  Press adds no boundary, movement, or focus shadow. In dark mode, the muted
+  context lifts to `foreground` while pressed so normal-size copy remains AA-safe;
+  keyboard focus keeps its separate `focus-within:shadow-focus` contract.
 
 ## Layout & spatial rhythm (source §09)
 

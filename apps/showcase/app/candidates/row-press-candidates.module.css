@@ -1,0 +1,53 @@
+.option {
+  min-width: 0;
+  width: 100%;
+}
+
+/* A DataTable needs the board width to be judged as a table, not a thumbnail. */
+.group :global(section > div.grid) {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.forceDesktop,
+.forceMobile {
+  min-width: 0;
+  overflow: hidden;
+  border: var(--border-width-1) solid var(--color-hairline);
+  background: var(--color-card);
+}
+
+.forceDesktop [class~="md:block"] {
+  display: block !important;
+}
+
+.forceDesktop [class~="md:hidden"] {
+  display: none !important;
+}
+
+.forceMobile [class~="md:block"] {
+  display: none !important;
+}
+
+.forceMobile [class~="md:hidden"] {
+  display: flex !important;
+}
+
+.option [data-row-press-state="rest"] [data-clickable="true"] {
+  background: var(--color-card);
+}
+
+.option [data-row-press-state="hover"] [data-clickable="true"] {
+  background: var(--color-tint);
+}
+
+.option [data-row-press-state="pressed"] [data-clickable="true"] {
+  background: var(--color-tint-pressed);
+}
+
+:global(.dark)
+  .option
+  [data-row-press-state="pressed"]
+  [data-clickable="true"]
+  :global(.text-muted-foreground) {
+  color: var(--color-foreground);
+}

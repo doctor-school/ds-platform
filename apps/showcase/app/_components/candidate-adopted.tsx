@@ -56,26 +56,41 @@ export type SeamOption = {
 };
 
 /**
- * A Stage-A option-set for one element class: 2–3 researched candidates beside
- * the current adopted entry (absent when the class has no adopted standard yet —
- * the "brand-new element class" path). The 2-or-3 candidate count is enforced at
- * the type level so a malformed set is a compile error, keeping the seam honest
- * without a runtime guard.
+ * A Stage-A option-set for one element class. An open decision carries 2–3
+ * researched candidates, optionally beside a current adopted entry. A completed
+ * decision carries its promoted adopted option and no stale candidates.
  */
-export type CandidateAdoptedGroup = {
+type CandidateAdoptedGroupBase = {
   /** The element class under research, e.g. "submit-pending affordance". */
   elementClass: string;
   /** One-line framing of the decision the owner is making. */
   question: string;
   /** Cross-option research framing shown above the options (optional). */
   notes?: string;
-  /** The current adopted standard — absent for a not-yet-adopted class. */
-  adopted?: SeamOption;
-  /** The researched candidates — exactly 2 or 3, per the Stage-A convention. */
-  candidates:
-    | readonly [SeamOption, SeamOption]
-    | readonly [SeamOption, SeamOption, SeamOption];
 };
+
+/**
+ * An open Stage-A board has exactly 2–3 candidates. Once the owner chooses, the
+ * chosen option is promoted to `adopted` and the rejected candidates are removed;
+ * the empty tuple makes that completed packaging explicit instead of leaving a
+ * stale choice live in the showcase.
+ */
+export type CandidateAdoptedGroup = CandidateAdoptedGroupBase &
+  (
+    | {
+        adopted?: never;
+        candidates:
+          | readonly [SeamOption, SeamOption]
+          | readonly [SeamOption, SeamOption, SeamOption];
+      }
+    | {
+        adopted: SeamOption;
+        candidates:
+          | readonly []
+          | readonly [SeamOption, SeamOption]
+          | readonly [SeamOption, SeamOption, SeamOption];
+      }
+  );
 
 /** Token-only role pill — the visible ADOPTED / CANDIDATE label. */
 function RolePill({
@@ -169,7 +184,11 @@ function OptionCard({
  * Pure presentation over the typed contract — the single seam deliverable A
  * targets.
  */
-export function CandidateAdoptedBoard({ group }: { group: CandidateAdoptedGroup }) {
+export function CandidateAdoptedBoard({
+  group,
+}: {
+  group: CandidateAdoptedGroup;
+}) {
   const { elementClass, question, notes, adopted, candidates } = group;
   return (
     <section className="flex flex-col gap-5 border-t border-border pt-8">
@@ -186,9 +205,7 @@ export function CandidateAdoptedBoard({ group }: { group: CandidateAdoptedGroup 
       </div>
 
       <div className="grid grid-cols-1 items-stretch gap-5 md:grid-cols-2 lg:grid-cols-3">
-        {adopted ? (
-          <OptionCard option={adopted} role="adopted" />
-        ) : null}
+        {adopted ? <OptionCard option={adopted} role="adopted" /> : null}
         {candidates.map((candidate, i) => (
           <OptionCard
             key={candidate.id}

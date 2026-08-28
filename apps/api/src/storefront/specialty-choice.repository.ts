@@ -1,9 +1,18 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { and, eq, sql } from "drizzle-orm";
 import type { DrizzleHandle } from "@ds/db";
-import { doctorSpecialties, specialtiesMinzdrav, users, withAuditContext } from "@ds/db";
+import {
+  doctorSpecialties,
+  specialtiesMinzdrav,
+  users,
+  withAuditContext,
+} from "@ds/db";
 import type { SpecialtyRef } from "@ds/schemas";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
+import {
+  type IdempotencyLease,
+  IdempotencyService,
+} from "../taxonomy/idempotency.service.js";
 
 // 017 EARS-6 / LD-1 (#1482) — Drizzle data access for the doctor ↔ specialty
 // link row. Unlike its read-only `SpecialtiesRepository` sibling this repository
@@ -13,12 +22,17 @@ import { DRIZZLE_DB } from "../database/database.tokens.js";
 // `db-direct`/actor-NULL — i.e. an unattributed change to a doctor's targeting.
 
 type Db = DrizzleHandle["db"];
+type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 
 @Injectable()
 export class SpecialtyChoiceRepository {
   // Explicit @Inject token — the API boots under `tsx`, which emits no
   // `design:paramtypes`.
-  constructor(@Inject(DRIZZLE_DB) private readonly db: Db) {}
+  constructor(
+    @Inject(DRIZZLE_DB) private readonly db: Db,
+    @Inject(IdempotencyService)
+    private readonly idempotency: IdempotencyService,
+  ) {}
 
   /**
    * Resolve the authenticated Zitadel `sub` to the local `users.id` the link row
@@ -45,7 +59,14 @@ export class SpecialtyChoiceRepository {
    * against an amended nomenclature order could have moved on from.
    */
   async findPrimary(doctorId: string): Promise<SpecialtyRef | null> {
-    const [row] = await this.db
+    return this.findPrimaryIn(this.db, doctorId);
+  }
+
+  private async findPrimaryIn(
+    client: Db | Tx,
+    doctorId: string,
+  ): Promise<SpecialtyRef | null> {
+    const [row] = await client
       .select({
         id: specialtiesMinzdrav.id,
         code: specialtiesMinzdrav.code,
@@ -88,37 +109,63 @@ export class SpecialtyChoiceRepository {
   async setPrimary(
     actorSub: string,
     doctorId: string,
-    specialtyId: string,
-  ): Promise<void> {
-    const standing = await this.findPrimary(doctorId);
-    if (standing?.id === specialtyId) return;
-
-    await withAuditContext(
+    specialty: SpecialtyRef,
+    options: {
+      replaceExisting: boolean;
+      lease?: IdempotencyLease;
+    },
+  ): Promise<SpecialtyRef> {
+    return withAuditContext(
       this.db,
       { actorSub, source: "portal-api" },
       async (tx) => {
+        // Lock the parent even when no link row exists. This gives every write
+        // for one doctor the same lock target, so two first choices cannot both
+        // observe an empty slot and race into the partial unique index.
         await tx
-          .update(doctorSpecialties)
-          .set({
-            status: "retired",
-            deletedAt: sql`now()`,
-            version: sql`${doctorSpecialties.version} + 1`,
-            updatedAt: sql`now()`,
-          })
-          .where(
-            and(
-              eq(doctorSpecialties.doctorId, doctorId),
-              eq(doctorSpecialties.role, "primary"),
-              eq(doctorSpecialties.status, "active"),
-            ),
-          );
+          .select({ id: users.id })
+          .from(users)
+          .where(eq(users.id, doctorId))
+          .for("update");
 
-        await tx.insert(doctorSpecialties).values({
-          doctorId,
-          specialtyId,
-          role: "primary",
-          status: "active",
-        });
+        const standing = await this.findPrimaryIn(tx, doctorId);
+        const selected =
+          standing && (!options.replaceExisting || standing.id === specialty.id)
+            ? standing
+            : specialty;
+
+        if (!standing || standing.id !== selected.id) {
+          await tx
+            .update(doctorSpecialties)
+            .set({
+              status: "retired",
+              deletedAt: sql`now()`,
+              version: sql`${doctorSpecialties.version} + 1`,
+              updatedAt: sql`now()`,
+            })
+            .where(
+              and(
+                eq(doctorSpecialties.doctorId, doctorId),
+                eq(doctorSpecialties.role, "primary"),
+                eq(doctorSpecialties.status, "active"),
+              ),
+            );
+
+          await tx.insert(doctorSpecialties).values({
+            doctorId,
+            specialtyId: selected.id,
+            role: "primary",
+            status: "active",
+          });
+        }
+
+        if (options.lease) {
+          await this.idempotency.complete(tx, options.lease, {
+            status: 200,
+            body: { specialty: selected, storedIn: "profile" },
+          });
+        }
+        return selected;
       },
     );
   }

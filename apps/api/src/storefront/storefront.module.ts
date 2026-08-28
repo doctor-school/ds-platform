@@ -7,6 +7,7 @@ import {
 } from "@ds/db";
 import { isRouteScan } from "../authz/route-scan.js";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
+import { TaxonomyModule } from "../taxonomy/taxonomy.module.js";
 import { SpecialtiesPublicController } from "./specialties.public.controller.js";
 import { SpecialtyProblemFilter } from "./specialties.problem-filter.js";
 import { SpecialtiesRepository } from "./specialties.repository.js";
@@ -42,6 +43,7 @@ import { StatisticsService } from "./statistics.service.js";
  * choose from. So the failure is logged and rethrown.
  */
 @Module({
+  imports: [TaxonomyModule],
   controllers: [
     SpecialtiesPublicController,
     SpecialtyChoicePublicController,

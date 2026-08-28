@@ -8,7 +8,7 @@ import { Test, type TestingModule } from "@nestjs/testing";
 import { and, eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { DrizzleHandle } from "@ds/db";
-import { doctorSpecialties, users } from "@ds/db";
+import { doctorSpecialties, idempotencyKeys, users } from "@ds/db";
 import { SPECIALTY_OTHER_CODE, SpecialtyChoiceSchema } from "@ds/schemas";
 import { AppModule } from "../../src/app.module.js";
 import { DRIZZLE_DB } from "../../src/database/database.tokens.js";
@@ -18,6 +18,7 @@ import {
   readSpecialtyChoiceCookie,
 } from "../../src/storefront/specialty-choice.cookie.js";
 import { SpecialtyChoiceService } from "../../src/storefront/specialty-choice.service.js";
+import { IdempotencyService } from "../../src/taxonomy/idempotency.service.js";
 
 // 017 EARS-6 (#1482) — choice persistence and the sign-in cascade, over the REAL
 // stack: Fastify + Postgres + the boot-time book seed + the 010 audit trigger.
@@ -45,7 +46,9 @@ describe.skipIf(!process.env.DATABASE_URL)(
     let db: DrizzleHandle["db"];
     let choices: SpecialtyChoiceService;
     let specialties: SpecialtiesService;
+    let idempotency: IdempotencyService;
     const seededDoctorIds: string[] = [];
+    const usedKeys: string[] = [];
 
     beforeAll(async () => {
       const moduleRef: TestingModule = await Test.createTestingModule({
@@ -61,9 +64,13 @@ describe.skipIf(!process.env.DATABASE_URL)(
       db = app.get<DrizzleHandle["db"]>(DRIZZLE_DB);
       choices = app.get(SpecialtyChoiceService);
       specialties = app.get(SpecialtiesService);
+      idempotency = app.get(IdempotencyService);
     }, 60_000);
 
     afterAll(async () => {
+      for (const key of usedKeys) {
+        await db.delete(idempotencyKeys).where(eq(idempotencyKeys.key, key));
+      }
       // Test-owned rows only, by id. The link rows go first: the FK is
       // `RESTRICT`, which is the production invariant and not something a test
       // may work around.
@@ -83,7 +90,11 @@ describe.skipIf(!process.env.DATABASE_URL)(
       const nomenclature = book.entries.filter((e) => !e.isOther);
       expect(other).toBeDefined();
       expect(nomenclature.length).toBeGreaterThan(1);
-      return { first: nomenclature[0]!, second: nomenclature[1]!, other: other! };
+      return {
+        first: nomenclature[0]!,
+        second: nomenclature[1]!,
+        other: other!,
+      };
     }
 
     async function seedDoctor(): Promise<{ id: string; sub: string }> {
@@ -108,12 +119,25 @@ describe.skipIf(!process.env.DATABASE_URL)(
         );
     }
 
-    function chooseAsGuest(specialty: string, cookie?: string) {
+    function key(): string {
+      const value = randomUUID();
+      usedKeys.push(value);
+      return value;
+    }
+
+    function chooseAsGuest(
+      specialty: string,
+      cookie?: string,
+      idempotencyKey: string | null = key(),
+    ) {
       return app.inject({
         method: "POST",
         url: "/v1/public/specialty-choice",
         payload: { specialty },
-        ...(cookie ? { headers: { cookie } } : {}),
+        headers: {
+          ...(cookie ? { cookie } : {}),
+          ...(idempotencyKey ? { "idempotency-key": idempotencyKey } : {}),
+        },
       });
     }
 
@@ -173,9 +197,14 @@ describe.skipIf(!process.env.DATABASE_URL)(
     it("EARS-6.3: re-choosing is idempotent and a re-choice re-targets", async () => {
       const { first, second } = await bookEntries();
 
-      const again = await chooseAsGuest(first.id, `${SPECIALTY_CHOICE_COOKIE_NAME}=${first.id}`);
+      const again = await chooseAsGuest(
+        first.id,
+        `${SPECIALTY_CHOICE_COOKIE_NAME}=${first.id}`,
+      );
       expect(again.statusCode).toBe(200);
-      expect(SpecialtyChoiceSchema.parse(again.json()).specialty).toEqual(first);
+      expect(SpecialtyChoiceSchema.parse(again.json()).specialty).toEqual(
+        first,
+      );
 
       const changed = await chooseAsGuest(second.id, cookieFrom(again));
       expect(changed.statusCode).toBe(200);
@@ -209,6 +238,29 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(problem.traceId).toBeTruthy();
       // Nothing was remembered — a refused choice writes no anonymous session.
       expect(refused.headers["set-cookie"]).toBeUndefined();
+    });
+
+    it("EARS-6.15: a guest mutation without Idempotency-Key is refused before a cookie is written", async () => {
+      const { first } = await bookEntries();
+      const refused = await chooseAsGuest(first.id, undefined, null);
+      expect(refused.statusCode).toBe(428);
+      expect(refused.json()).toMatchObject({
+        errorCode: "IDEMPOTENCY_KEY_REQUIRED",
+      });
+      expect(refused.headers["set-cookie"]).toBeUndefined();
+    });
+
+    it("EARS-6.16: replaying a guest mutation returns the stored choice and re-emits its cookie", async () => {
+      const { first } = await bookEntries();
+      const replayKey = key();
+      const firstResponse = await chooseAsGuest(first.id, undefined, replayKey);
+      const replay = await chooseAsGuest(first.id, undefined, replayKey);
+      expect(firstResponse.statusCode).toBe(200);
+      expect(replay.statusCode).toBe(200);
+      expect(replay.json()).toEqual(firstResponse.json());
+      expect(
+        readSpecialtyChoiceCookie(String(replay.headers["set-cookie"])),
+      ).toBe(first.id);
     });
 
     it("EARS-6.6: a doctor's choice is recorded on the profile as ONE primary link row", async () => {
@@ -289,6 +341,51 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(resolved.choice).toEqual({ specialty: null, storedIn: "none" });
       // Fail-closed: a non-member can be neither shown nor written to a profile.
       expect(await activeLinkRows(doctor.id)).toHaveLength(0);
+    });
+
+    it("EARS-6.17: concurrent duplicate profile mutations serialize without false history or a uniqueness leak", async () => {
+      const doctor = await seedDoctor();
+      const { first } = await bookEntries();
+      const route = "/v1/me/specialty";
+      const leases = await Promise.all(
+        [key(), key()].map(async (idempotencyKey) => {
+          const outcome = await idempotency.begin({
+            key: idempotencyKey,
+            scope: "storefront.specialty-choice",
+            actorId: doctor.sub,
+            method: "PUT",
+            route,
+            fingerprint: idempotency.fingerprint({
+              method: "PUT",
+              path: route,
+              payload: { specialty: first.id },
+            }),
+          });
+          expect(outcome.kind).toBe("owned");
+          if (outcome.kind !== "owned") throw new Error("expected owned lease");
+          return outcome.lease;
+        }),
+      );
+
+      const results = await Promise.all(
+        leases.map((lease) =>
+          choices.chooseAsDoctor(doctor.sub, first.id, lease),
+        ),
+      );
+      expect(results).toEqual([
+        { specialty: first, storedIn: "profile" },
+        { specialty: first, storedIn: "profile" },
+      ]);
+
+      const all = await db
+        .select()
+        .from(doctorSpecialties)
+        .where(eq(doctorSpecialties.doctorId, doctor.id));
+      expect(all).toHaveLength(1);
+      expect(all[0]).toMatchObject({
+        specialtyId: first.id,
+        status: "active",
+      });
     });
   },
 );

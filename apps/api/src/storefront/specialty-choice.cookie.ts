@@ -112,3 +112,15 @@ export function readSpecialtyChoiceCookie(
   }
   return null;
 }
+
+/** Whether the cookie name is present, even when its value is empty/malformed. */
+export function hasSpecialtyChoiceCookie(header: string | undefined): boolean {
+  if (!header) return false;
+  return header.split(";").some((part) => {
+    const separator = part.indexOf("=");
+    return (
+      separator >= 0 &&
+      part.slice(0, separator).trim() === SPECIALTY_CHOICE_COOKIE_NAME
+    );
+  });
+}

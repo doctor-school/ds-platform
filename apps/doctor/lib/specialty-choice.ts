@@ -43,6 +43,8 @@ export type SpecialtyActor = "guest" | "doctor";
 export interface RememberedSpecialty {
   actor: SpecialtyActor;
   choice: SpecialtyChoice | null;
+  /** The SSR cascade saw an anonymous choice that the browser must consume. */
+  consumeSession: boolean;
 }
 
 /** The nothing-chosen-yet answer, as the contract spells it. */
@@ -69,7 +71,9 @@ export async function fetchSpecialtyChoice(
   signal?: AbortSignal,
 ): Promise<SpecialtyChoice> {
   const path =
-    actor === "doctor" ? SPECIALTY_CHOICE_ME_PATH : SPECIALTY_CHOICE_PUBLIC_PATH;
+    actor === "doctor"
+      ? SPECIALTY_CHOICE_ME_PATH
+      : SPECIALTY_CHOICE_PUBLIC_PATH;
 
   const res = await fetchImpl(path, {
     headers: { accept: "application/json" },
@@ -110,6 +114,7 @@ export async function chooseSpecialty(
       headers: {
         accept: "application/json",
         "content-type": "application/json",
+        "idempotency-key": crypto.randomUUID(),
       },
       credentials: "include",
       body: JSON.stringify({ specialty: reference }),
@@ -160,6 +165,7 @@ export async function resolveRememberedSpecialty(
 ): Promise<RememberedSpecialty> {
   const session = forwardedSessionFrom(headers);
   const cookie = headers.get("cookie") ?? "";
+  const consumeSession = hasCookie(cookie, "__Host-ds_specialty");
   const upstream = {
     accept: "application/json",
     cookie,
@@ -174,16 +180,37 @@ export async function resolveRememberedSpecialty(
     if (session) {
       const res = await read(SPECIALTY_CHOICE_ME_PATH);
       if (res.ok) {
-        return { actor: "doctor", choice: parseChoice(await res.json()) };
+        return {
+          actor: "doctor",
+          choice: parseChoice(await res.json()),
+          consumeSession,
+        };
       }
-      if (res.status !== 401) return { actor: "doctor", choice: null };
+      if (res.status !== 401) {
+        return { actor: "doctor", choice: null, consumeSession };
+      }
       // Stale session — fall through to the guest store below.
     }
 
     const res = await read(SPECIALTY_CHOICE_PUBLIC_PATH);
-    if (!res.ok) return { actor: "guest", choice: null };
-    return { actor: "guest", choice: parseChoice(await res.json()) };
+    if (!res.ok) return { actor: "guest", choice: null, consumeSession: false };
+    return {
+      actor: "guest",
+      choice: parseChoice(await res.json()),
+      consumeSession: false,
+    };
   } catch {
-    return { actor: session ? "doctor" : "guest", choice: null };
+    return {
+      actor: session ? "doctor" : "guest",
+      choice: null,
+      consumeSession: session ? consumeSession : false,
+    };
   }
+}
+
+function hasCookie(header: string, name: string): boolean {
+  return header.split(";").some((part) => {
+    const separator = part.indexOf("=");
+    return separator >= 0 && part.slice(0, separator).trim() === name;
+  });
 }

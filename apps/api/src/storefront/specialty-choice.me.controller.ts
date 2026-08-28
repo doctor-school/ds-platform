@@ -14,11 +14,16 @@ import {
 } from "@nestjs/common";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import type { SpecialtyChoice } from "@ds/schemas";
-import { ChooseSpecialtyRequestSchema } from "@ds/schemas";
+import {
+  ChooseSpecialtyRequestSchema,
+  IDEMPOTENCY_KEY_HEADER,
+} from "@ds/schemas";
 import { Authz } from "../authz/index.js";
+import { IdempotencyService } from "../taxonomy/idempotency.service.js";
 import { SpecialtyProblemFilter } from "./specialties.problem-filter.js";
 import {
   clearSpecialtyChoiceCookie,
+  hasSpecialtyChoiceCookie,
   readSpecialtyChoiceCookie,
 } from "./specialty-choice.cookie.js";
 import {
@@ -49,6 +54,8 @@ export class SpecialtyChoiceMeController {
   constructor(
     @Inject(SpecialtyChoiceService)
     private readonly choices: SpecialtyChoiceService,
+    @Inject(IdempotencyService)
+    private readonly idempotency: IdempotencyService,
   ) {}
 
   /**
@@ -84,6 +91,7 @@ export class SpecialtyChoiceMeController {
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<SpecialtyChoice> {
     const sub = subjectOf(req);
+    const sessionCookiePresent = hasSpecialtyChoiceCookie(req.headers.cookie);
     const sessionReference = readSpecialtyChoiceCookie(req.headers.cookie);
 
     const { choice, consumedSession } = await run(() =>
@@ -93,7 +101,10 @@ export class SpecialtyChoiceMeController {
     // The discard half of LD-2 — on BOTH branches. Adopted or overruled, the
     // anonymous-session value is gone afterwards, so a later sign-out and
     // sign-in cannot re-adopt a value from before this doctor had a profile.
-    if (consumedSession) {
+    if (
+      consumedSession ||
+      (sessionCookiePresent && sessionReference === null)
+    ) {
       reply.header("set-cookie", clearSpecialtyChoiceCookie());
     }
     return choice;
@@ -130,12 +141,31 @@ export class SpecialtyChoiceMeController {
     @Req() req: FastifyRequest,
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<SpecialtyChoice> {
+    const key = this.idempotency.requireKey(
+      req.headers[IDEMPOTENCY_KEY_HEADER],
+    );
     const parsed = ChooseSpecialtyRequestSchema.safeParse(body);
     if (!parsed.success) throw new BadRequestException("Invalid body");
 
     const sub = subjectOf(req);
+    const outcome = await this.idempotency.begin({
+      key,
+      scope: "storefront.specialty-choice",
+      actorId: sub,
+      method: "PUT",
+      route: "/v1/me/specialty",
+      fingerprint: this.idempotency.fingerprint({
+        method: "PUT",
+        path: "/v1/me/specialty",
+        payload: parsed.data,
+      }),
+    });
+    if (outcome.kind === "replay") {
+      reply.header("set-cookie", clearSpecialtyChoiceCookie());
+      return outcome.replay.body as SpecialtyChoice;
+    }
     const choice = await run(() =>
-      this.choices.chooseAsDoctor(sub, parsed.data.specialty),
+      this.choices.chooseAsDoctor(sub, parsed.data.specialty, outcome.lease),
     );
     reply.header("set-cookie", clearSpecialtyChoiceCookie());
     return choice;

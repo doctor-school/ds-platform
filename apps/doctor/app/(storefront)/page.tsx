@@ -52,6 +52,7 @@ export default async function DoctorHomePage() {
       <SpecialtyCatalog
         actor={remembered.actor}
         initialChoice={remembered.choice}
+        consumeSession={remembered.consumeSession}
       />
     </>
   );

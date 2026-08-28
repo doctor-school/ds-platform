@@ -13,8 +13,14 @@ import {
 } from "@nestjs/common";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import type { SpecialtyChoice } from "@ds/schemas";
-import { ChooseSpecialtyRequestSchema } from "@ds/schemas";
+import {
+  ChooseSpecialtyRequestSchema,
+  IDEMPOTENCY_KEY_HEADER,
+} from "@ds/schemas";
+import type { DrizzleHandle } from "@ds/db";
 import { Authz, Public } from "../authz/index.js";
+import { DRIZZLE_DB } from "../database/database.tokens.js";
+import { IdempotencyService } from "../taxonomy/idempotency.service.js";
 import { SpecialtyProblemFilter } from "./specialties.problem-filter.js";
 import {
   readSpecialtyChoiceCookie,
@@ -50,6 +56,10 @@ export class SpecialtyChoicePublicController {
   constructor(
     @Inject(SpecialtyChoiceService)
     private readonly choices: SpecialtyChoiceService,
+    @Inject(IdempotencyService)
+    private readonly idempotency: IdempotencyService,
+    @Inject(DRIZZLE_DB)
+    private readonly db: DrizzleHandle["db"],
   ) {}
 
   /**
@@ -103,18 +113,50 @@ export class SpecialtyChoicePublicController {
   })
   async choose(
     @Body() body: unknown,
+    @Req() req: FastifyRequest,
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<SpecialtyChoice> {
+    const key = this.idempotency.requireKey(
+      req.headers[IDEMPOTENCY_KEY_HEADER],
+    );
     const parsed = ChooseSpecialtyRequestSchema.safeParse(body);
     if (!parsed.success) throw new BadRequestException("Invalid body");
 
-    const choice = await this.choices.chooseAsGuest(parsed.data.specialty);
-    // The RESOLVED entry's id, never the submitted spelling: what the anonymous
-    // session holds is then always a reference the book actually served.
-    reply.header(
-      "set-cookie",
-      serializeSpecialtyChoiceCookie(choice.specialty.id),
+    const outcome = await this.idempotency.begin({
+      key,
+      scope: "storefront.specialty-choice",
+      actorId: null,
+      method: "POST",
+      route: "/v1/public/specialty-choice",
+      fingerprint: this.idempotency.fingerprint({
+        method: "POST",
+        path: "/v1/public/specialty-choice",
+        payload: parsed.data,
+      }),
+    });
+    if (outcome.kind === "replay") {
+      const choice = outcome.replay.body as SpecialtyChoice;
+      setChoiceCookie(reply, choice);
+      return choice;
+    }
+
+    const choice = await this.choices.chooseAsGuest(
+      parsed.data.specialty,
+      outcome.lease,
     );
+    await this.idempotency.complete(this.db, outcome.lease, {
+      status: 200,
+      body: choice,
+    });
+    setChoiceCookie(reply, choice);
     return choice;
   }
+}
+
+function setChoiceCookie(reply: FastifyReply, choice: SpecialtyChoice): void {
+  if (!choice.specialty) return;
+  reply.header(
+    "set-cookie",
+    serializeSpecialtyChoiceCookie(choice.specialty.id),
+  );
 }

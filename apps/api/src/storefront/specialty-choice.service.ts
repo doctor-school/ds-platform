@@ -1,5 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 import type { SpecialtyChoice, SpecialtyRef } from "@ds/schemas";
+import type { IdempotencyLease } from "../taxonomy/idempotency.service.js";
+import { SpecialtyError } from "./specialties.errors.js";
 import { SpecialtiesService } from "./specialties.service.js";
 import { SpecialtyChoiceRepository } from "./specialty-choice.repository.js";
 
@@ -50,9 +52,15 @@ export class SpecialtyChoiceService {
    */
   async chooseAsGuest(
     reference: string,
+    lease?: IdempotencyLease,
   ): Promise<SpecialtyChoice & { specialty: SpecialtyRef }> {
-    const specialty = await this.specialties.resolveMember(reference);
-    return { specialty, storedIn: "session" };
+    try {
+      const specialty = await this.specialties.resolveMember(reference);
+      return { specialty, storedIn: "session" };
+    } catch (error) {
+      if (lease && error instanceof SpecialtyError) error.replayLease = lease;
+      throw error;
+    }
   }
 
   /**
@@ -65,11 +73,21 @@ export class SpecialtyChoiceService {
   async chooseAsDoctor(
     sub: string,
     reference: string,
+    lease?: IdempotencyLease,
   ): Promise<SpecialtyChoice> {
-    const specialty = await this.specialties.resolveMember(reference);
+    let specialty: SpecialtyRef;
+    try {
+      specialty = await this.specialties.resolveMember(reference);
+    } catch (error) {
+      if (lease && error instanceof SpecialtyError) error.replayLease = lease;
+      throw error;
+    }
     const doctorId = await this.requireDoctorId(sub);
-    await this.choices.setPrimary(sub, doctorId, specialty.id);
-    return { specialty, storedIn: "profile" };
+    const selected = await this.choices.setPrimary(sub, doctorId, specialty, {
+      replaceExisting: true,
+      ...(lease ? { lease } : {}),
+    });
+    return { specialty: selected, storedIn: "profile" };
   }
 
   /**
@@ -129,9 +147,11 @@ export class SpecialtyChoiceService {
       };
     }
 
-    await this.choices.setPrimary(sub, doctorId, fromSession.id);
+    const selected = await this.choices.setPrimary(sub, doctorId, fromSession, {
+      replaceExisting: false,
+    });
     return {
-      choice: { specialty: fromSession, storedIn: "profile" },
+      choice: { specialty: selected, storedIn: "profile" },
       consumedSession: true,
     };
   }

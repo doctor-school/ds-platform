@@ -3,14 +3,18 @@ import {
   Catch,
   type ExceptionFilter,
   HttpException,
+  Inject,
   Logger,
 } from "@nestjs/common";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import {
   PROBLEM_TYPE_BASE,
   resolveTraceId,
+  TaxonomyError,
+  toProblemDetails,
 } from "../taxonomy/taxonomy.errors.js";
 import { SpecialtyError } from "./specialties.errors.js";
+import { IdempotencyService } from "../taxonomy/idempotency.service.js";
 
 /**
  * Scoped exception filter for the 017 storefront controllers (017-design §7).
@@ -46,7 +50,12 @@ const CLIENT_ERROR_TITLE: Readonly<Record<number, string>> = {
 export class SpecialtyProblemFilter implements ExceptionFilter {
   private readonly logger = new Logger(SpecialtyProblemFilter.name);
 
-  catch(exception: unknown, host: ArgumentsHost): void {
+  constructor(
+    @Inject(IdempotencyService)
+    private readonly idempotency: IdempotencyService,
+  ) {}
+
+  async catch(exception: unknown, host: ArgumentsHost): Promise<void> {
     const http = host.switchToHttp();
     const req = http.getRequest<FastifyRequest>();
     const reply = http.getResponse<FastifyReply>();
@@ -54,6 +63,32 @@ export class SpecialtyProblemFilter implements ExceptionFilter {
 
     if (exception instanceof SpecialtyError) {
       const body = exception.toProblemDetails(traceId, req.url);
+      if (exception.replayLease) {
+        try {
+          await this.idempotency.storeTerminalOutcome(exception.replayLease, {
+            status: body.status,
+            body,
+          });
+        } catch (error) {
+          this.logger.error(
+            `could not fence-store specialty refusal for idempotency record ${exception.replayLease.key}`,
+            error instanceof Error ? error.stack : String(error),
+          );
+        }
+      }
+      void reply
+        .status(body.status)
+        .header("content-type", "application/problem+json")
+        .send(body);
+      return;
+    }
+
+    if (exception instanceof TaxonomyError) {
+      const body = toProblemDetails(exception.errorCode, traceId, {
+        detail: exception.detail,
+        instance: req.url,
+        errors: exception.fieldErrors,
+      });
       void reply
         .status(body.status)
         .header("content-type", "application/problem+json")

@@ -84,7 +84,7 @@ Two consequences the downstream EARS spec inherits:
 
 1. Every retained source row appears once in a paginated review queue with immutable provenance and its original unmatched, ambiguous or duplicate classification; the UI never suggests identity from a name.
 2. Operator explicitly selects an existing Expert or creates one with structured names, sets event role/order, or marks the source content-removed. Reviewer and resolution are audited without overwriting the original classification.
-3. Cutover is allowed only after every eligible row is resolved; then free-text writes and reads are disabled and only ordered `event_experts` remain current.
+3. Cutover is allowed only after every retained `event_speakers` source row is resolved; then free-text writes and reads are disabled and only ordered `event_experts` remain current.
 
 **Branches:**
 

@@ -84,7 +84,7 @@ lang: ru
 
 1. Каждая retained source row один раз появляется в paginated review queue с immutable provenance и original classification unmatched, ambiguous или duplicate; UI никогда не предлагает identity по имени.
 2. Оператор явно выбирает existing Expert либо создаёт его со structured names, задаёт event role/order либо marks source content-removed. Reviewer/resolution аудируются без перезаписи original classification.
-3. Cutover разрешён только после resolution всех eligible rows; затем free-text writes/reads отключаются и current остаются только ordered `event_experts`.
+3. Cutover разрешён только после resolution каждой retained source row из `event_speakers`; затем free-text writes/reads отключаются и current остаются только ordered `event_experts`.
 
 **Ветки:**
 

@@ -143,10 +143,11 @@ export function extractRefs(text) {
     // Absolute local .jsonl path TOKENS can carry UUID filenames whose hex
     // segments look exactly like abbreviated SHAs. The path is context, not a
     // Git ref, so exclude only tokens contained by that path. Whitespace ends
-    // an unquoted token; the POSIX boundary rejects both URL slashes and a
-    // slash embedded in prose while still accepting `/...` and `(/C:/...)`.
+    // an unquoted token. A local path starts at the line boundary or after an
+    // explicit prose/Markdown delimiter; this rejects URL/query fragments
+    // while still accepting `/...`, backtick-wrapped paths and `(/C:/...)`.
     const jsonlPathRe =
-      /(?:(?<![\w])[a-z]:[\\/]|(?<![\w:/])\/(?!\/))[^\s`"'<>|\r\n]*?\.jsonl\b/gi;
+      /(?:^|[\s`"'(<])(?:[a-z]:[\\/]|\/(?!\/))[^\s`"'<>|\r\n]*?\.jsonl\b/gi;
     const jsonlPathRanges = [...line.matchAll(jsonlPathRe)].map((m) => [
       m.index,
       m.index + m[0].length,

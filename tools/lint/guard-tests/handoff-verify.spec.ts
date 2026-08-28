@@ -131,6 +131,7 @@ describe("handoff-verify extractRefs()", () => {
     const refs = extractRefs(
       [
         "URL https://example.test/logs/4a89d2b.jsonl",
+        "query https://example.test/view?log=/logs/7de92ac.jsonl",
         "prose /not a local path containing 5bc90ae before trace.jsonl",
         "C:\\logs\\e995f3c3-17ea-4544-9f0e-1bad987e7aca.jsonl then commit 6cd81bf",
       ].join("\n"),
@@ -138,6 +139,7 @@ describe("handoff-verify extractRefs()", () => {
 
     expect(refs.map((r) => [r.kind, r.value])).toEqual([
       ["sha", "4a89d2b"],
+      ["sha", "7de92ac"],
       ["sha", "5bc90ae"],
       ["sha", "6cd81bf"],
     ]);

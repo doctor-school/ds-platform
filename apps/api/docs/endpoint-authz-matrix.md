@@ -39,6 +39,7 @@
 | GET /v1/me/display-name                                         | authenticated | doctor_guest                 | fast-path  | —            | false   | none       | none        | EARS-16                            |
 | GET /v1/me/events                                               | authenticated | doctor_guest                 | fast-path  | —            | false   | none       | none        | EARS-6, EARS-7, EARS-10            |
 | GET /v1/me/profile                                              | authenticated | doctor_guest                 | fast-path  | —            | false   | none       | none        | EARS-27                            |
+| GET /v1/me/specialty                                            | authenticated | doctor_guest                 | fast-path  | —            | false   | none       | low-stakes  | EARS-6                             |
 | GET /v1/public/events                                           | public        | —                            | none       | —            | false   | none       | none        | EARS-7, EARS-10, EARS-15           |
 | GET /v1/public/events/:idOrSlug                                 | public        | —                            | none       | —            | false   | none       | none        | EARS-1, EARS-5, EARS-10            |
 | GET /v1/public/events/:idOrSlug/projects                        | public        | —                            | none       | —            | false   | none       | none        | EARS-6, EARS-16                    |
@@ -53,6 +54,7 @@
 | GET /v1/public/specialties                                      | public        | —                            | none       | —            | false   | none       | none        | EARS-3                             |
 | GET /v1/public/specialties/frequent                             | public        | —                            | none       | —            | false   | none       | none        | EARS-3                             |
 | GET /v1/public/specialties/search                               | public        | —                            | none       | —            | false   | none       | none        | EARS-5                             |
+| GET /v1/public/specialty-choice                                 | public        | —                            | none       | —            | false   | none       | none        | EARS-6                             |
 | GET /v1/public/statistics                                       | public        | —                            | none       | —            | false   | none       | none        | EARS-2                             |
 | GET /v1/public/topics/:idOrSlug/events                          | public        | —                            | none       | —            | false   | none       | none        | EARS-11, EARS-16                   |
 | GET /v1/ready                                                   | public        | —                            | none       | —            | false   | none       | none        | EARS-1, EARS-2                     |
@@ -123,5 +125,7 @@
 | POST /v1/events/:idOrSlug/chat                                  | authenticated | doctor_guest                 | policy     | —            | false   | none       | none        | EARS-3, EARS-8                     |
 | POST /v1/events/:idOrSlug/heartbeat                             | authenticated | doctor_guest                 | policy     | —            | false   | none       | none        | EARS-4, EARS-8                     |
 | POST /v1/events/:idOrSlug/registration                          | authenticated | doctor_guest                 | fast-path  | —            | false   | none       | low-stakes  | EARS-1, EARS-3, EARS-7, EARS-10    |
+| POST /v1/public/specialty-choice                                | public        | —                            | none       | —            | false   | none       | none        | EARS-6                             |
 | PUT /v1/admin/events/:id/stream                                 | authenticated | platform_admin               | fast-path  | —            | false   | none       | low-stakes  | EARS-3, EARS-8                     |
 | PUT /v1/me/display-name                                         | authenticated | doctor_guest                 | fast-path  | —            | false   | none       | low-stakes  | EARS-14, EARS-16                   |
+| PUT /v1/me/specialty                                            | authenticated | doctor_guest                 | fast-path  | —            | false   | none       | low-stakes  | EARS-6, EARS-7                     |

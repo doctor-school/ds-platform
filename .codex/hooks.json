@@ -78,13 +78,13 @@
           {
             "type": "command",
             "command": "node \"$(git rev-parse --show-toplevel)/tools/hooks/completion-report-gate.mjs\"",
-            "commandWindows": "powershell -NoProfile -Command \"node ((git rev-parse --show-toplevel) + '/tools/hooks/completion-report-gate.mjs')\"",
+            "commandWindows": "powershell -NoProfile -Command \"node ((git rev-parse --show-toplevel) + '/tools/hooks/completion-report-gate.mjs'); exit $LASTEXITCODE\"",
             "timeout": 10
           },
           {
             "type": "command",
             "command": "node \"$(git rev-parse --show-toplevel)/tools/hooks/surface-decision-debt-gate.mjs\"",
-            "commandWindows": "powershell -NoProfile -Command \"node ((git rev-parse --show-toplevel) + '/tools/hooks/surface-decision-debt-gate.mjs')\"",
+            "commandWindows": "powershell -NoProfile -Command \"node ((git rev-parse --show-toplevel) + '/tools/hooks/surface-decision-debt-gate.mjs'); exit $LASTEXITCODE\"",
             "timeout": 10
           }
         ]

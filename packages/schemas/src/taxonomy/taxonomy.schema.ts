@@ -191,8 +191,8 @@ export type ProjectAdminList = z.infer<typeof ProjectAdminListSchema>;
 
 // ── Expert authoring DTOs (012-design §2.2 matrix; EARS-2, #1284) ───────────
 
-export const EXPERT_NAME_MIN = 1;
-export const EXPERT_NAME_MAX = 160;
+export const EXPERT_PERSON_NAME_MIN = 1;
+export const EXPERT_PERSON_NAME_MAX = 80;
 export const EXPERT_PROFESSIONAL_ROLE_MIN = 1;
 export const EXPERT_PROFESSIONAL_ROLE_MAX = 160;
 export const EXPERT_CREDENTIALS_MIN = 1;
@@ -202,11 +202,11 @@ export const EXPERT_AFFILIATION_MAX = 240;
 export const EXPERT_BIO_MIN = 1;
 export const EXPERT_BIO_MAX = 4000;
 
-const ExpertNameSchema = z
+const ExpertPersonNameSchema = z
   .string()
   .trim()
-  .min(EXPERT_NAME_MIN)
-  .max(EXPERT_NAME_MAX);
+  .min(EXPERT_PERSON_NAME_MIN)
+  .max(EXPERT_PERSON_NAME_MAX);
 const ExpertProfessionalRoleSchema = z
   .string()
   .trim()
@@ -236,19 +236,20 @@ const ExpertBioSchema = z
  * an attempt to supply storage authority is 400 `VALIDATION_FAILED` rather than
  * a silently ignored field. `mediaAction` is PATCH-only and absent here.
  *
- * `name` is the required display identity (§2.2 — display labels are required
- * on create); every other public field is publish-required and may stay null
- * while the row is a draft. An expert has NO required platform-user link: there
- * is no `userId` field to supply, by design (EARS-2).
+ * Structured family/given names are required on create; `patronymic` and the
+ * one-to-one `userId` convergence link are optional. The system derives both
+ * display name and slug; mutation input cannot author either one (EARS-19/20).
  */
 export const CreateExpertRequestSchema = z
   .object({
-    name: ExpertNameSchema,
+    familyName: ExpertPersonNameSchema,
+    givenName: ExpertPersonNameSchema,
+    patronymic: ExpertPersonNameSchema.nullish(),
+    userId: z.uuid().optional(),
     professionalRole: ExpertProfessionalRoleSchema.nullish(),
     credentials: ExpertCredentialsSchema.nullish(),
     affiliation: ExpertAffiliationSchema.nullish(),
     bio: ExpertBioSchema.nullish(),
-    slug: SlugSchema.optional(),
   })
   .strict();
 export type CreateExpertRequest = z.infer<typeof CreateExpertRequestSchema>;
@@ -257,20 +258,21 @@ export type CreateExpertRequest = z.infer<typeof CreateExpertRequestSchema>;
  * `PATCH /v1/admin/experts/:id` — edit the same row.
  *
  * Omission means unchanged; an explicit `null` clears an optional or
- * still-incomplete draft field (012-design §2.2). `name` accepts no null: the
- * display label is only ever removed by §2.4's editorial removal (#1306), never
- * by an ordinary edit. `slug` is accepted only while `first_published_at IS
- * NULL` — the refusal depends on row state, so it is a 409 `SLUG_IMMUTABLE`
- * from the service, not a shape rule here.
+ * still-incomplete draft field (012-design §2.2). Family/given names accept no
+ * null: only §2.4 editorial removal may clear them. `userId: null` is the one
+ * explicit unlink command; omission keeps the current link. Slug stays absent.
  */
 export const UpdateExpertRequestSchema = z
   .object({
-    name: ExpertNameSchema.optional(),
+    familyName: ExpertPersonNameSchema.optional(),
+    givenName: ExpertPersonNameSchema.optional(),
+    patronymic: ExpertPersonNameSchema.nullish(),
+    /** Omission leaves the link unchanged; null explicitly unlinks. */
+    userId: z.uuid().nullable().optional(),
     professionalRole: ExpertProfessionalRoleSchema.nullish(),
     credentials: ExpertCredentialsSchema.nullish(),
     affiliation: ExpertAffiliationSchema.nullish(),
     bio: ExpertBioSchema.nullish(),
-    slug: SlugSchema.optional(),
     mediaAction: MediaActionSchema.optional(),
   })
   .strict();
@@ -298,6 +300,18 @@ export function expertInitials(name: string | null): string {
   return letters.join("").toLocaleUpperCase("ru-RU");
 }
 
+/** Derived display identity; never persisted in `experts`. */
+export function expertDisplayName(input: {
+  familyName: string | null;
+  givenName: string | null;
+  patronymic: string | null;
+}): string | null {
+  if (!input.familyName || !input.givenName) return null;
+  return [input.familyName, input.givenName, input.patronymic]
+    .filter((part): part is string => Boolean(part))
+    .join(" ");
+}
+
 /**
  * The admin detail projection. `photoUrl` is a server-issued signed/CDN URL
  * derived from the stored key at read time — the key itself never crosses the
@@ -311,6 +325,10 @@ export const ExpertAdminDetailSchema = z.object({
   slug: z.string(),
   /** Null only on an editorially removed row (#1306); the admin then labels it «[удалён]». */
   name: z.string().nullable(),
+  familyName: z.string().nullable(),
+  givenName: z.string().nullable(),
+  patronymic: z.string().nullable(),
+  userId: z.uuid().nullable(),
   professionalRole: z.string().nullable(),
   credentials: z.string().nullable(),
   affiliation: z.string().nullable(),
@@ -321,8 +339,6 @@ export const ExpertAdminDetailSchema = z.object({
   status: TaxonomyStatusSchema,
   /** Null until the first publish; once set, the slug is permanently locked. */
   firstPublishedAt: z.string().nullable(),
-  /** True iff the slug may still be edited — the UI reads this, never re-derives it. */
-  slugEditable: z.boolean(),
   /** Non-null only after #1306's irreversible editorial removal. */
   contentRemovedAt: z.string().nullable(),
   version: z.number().int().positive(),
@@ -1547,6 +1563,7 @@ export const TAXONOMY_ERROR_CODES = [
   "RESOURCE_NOT_FOUND",
   // 409
   "RELATIONSHIP_CONFLICT",
+  "USER_EXPERT_CONFLICT",
   "SLUG_CONFLICT",
   "SLUG_IMMUTABLE",
   "PUBLISH_REQUIREMENTS_NOT_MET",

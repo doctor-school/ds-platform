@@ -1639,6 +1639,54 @@ export interface components {
             /** @enum {string} */
             provider: "rutube" | "youtube" | "vk" | "cdnvideo";
         };
+        CreateExpertRequestDto: {
+            affiliation?: string | null;
+            bio?: string | null;
+            credentials?: string | null;
+            familyName: string;
+            givenName: string;
+            patronymic?: string | null;
+            professionalRole?: string | null;
+            /** Format: uuid */
+            userId?: string;
+        };
+        ExpertAdminDetailDto: {
+            affiliation: string | null;
+            bio: string | null;
+            contentRemovedAt: string | null;
+            createdAt: string;
+            credentials: string | null;
+            familyName: string | null;
+            firstPublishedAt: string | null;
+            givenName: string | null;
+            id: string;
+            initials: string;
+            name: string | null;
+            patronymic: string | null;
+            photoUrl: string | null;
+            professionalRole: string | null;
+            slug: string;
+            /** @enum {string} */
+            status: "draft" | "published" | "retired";
+            updatedAt: string;
+            userId: string | null;
+            version: number;
+        };
+        ExpertAdminListDto: {
+            data: {
+                id: string;
+                name: string | null;
+                professionalRole: string | null;
+                slug: string;
+                /** @enum {string} */
+                status: "draft" | "published" | "retired";
+                updatedAt: string;
+                version: number;
+            }[];
+            page: number;
+            pageSize: number;
+            total: number;
+        };
         LoginRequestDto: {
             captchaToken?: string;
             identifier: string;
@@ -1684,6 +1732,18 @@ export interface components {
         TransitionEventRequestDto: {
             /** @enum {string} */
             to: "draft" | "published" | "live" | "ended" | "archived";
+        };
+        UpdateExpertRequestDto: {
+            affiliation?: string | null;
+            bio?: string | null;
+            credentials?: string | null;
+            familyName?: string;
+            givenName?: string;
+            /** @constant */
+            mediaAction?: "clear";
+            patronymic?: string | null;
+            professionalRole?: string | null;
+            userId?: string | null;
         };
         VerifyRequestDto: {
             code: string;
@@ -2809,7 +2869,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["ExpertAdminListDto"];
+                };
             };
         };
     };
@@ -2820,13 +2882,19 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateExpertRequestDto"];
+            };
+        };
         responses: {
             201: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["ExpertAdminDetailDto"];
+                };
             };
         };
     };
@@ -2845,7 +2913,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["ExpertAdminDetailDto"];
+                };
             };
         };
     };
@@ -2858,13 +2928,19 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateExpertRequestDto"];
+            };
+        };
         responses: {
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["ExpertAdminDetailDto"];
+                };
             };
         };
     };

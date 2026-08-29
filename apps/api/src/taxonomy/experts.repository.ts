@@ -1,7 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { and, asc, count, eq, ilike, isNull, ne, or, sql } from "drizzle-orm";
 import type { DrizzleHandle, Expert } from "@ds/db";
-import { experts } from "@ds/db";
+import { experts, users } from "@ds/db";
 import type { AdminTaxonomyListQuery } from "@ds/schemas";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
 import { withRequestAuditContext } from "../audit/audit-context.tx.js";
@@ -18,7 +18,10 @@ type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 
 export interface ExpertInsert {
   slug: string;
-  name: string;
+  familyName: string;
+  givenName: string;
+  patronymic: string | null;
+  userId: string | null;
   professionalRole: string | null;
   credentials: string | null;
   affiliation: string | null;
@@ -29,7 +32,10 @@ export interface ExpertInsert {
 /** The field patch a PATCH applies. `undefined` means unchanged. */
 export interface ExpertPatch {
   slug?: string;
-  name?: string;
+  familyName?: string;
+  givenName?: string;
+  patronymic?: string | null;
+  userId?: string | null;
   professionalRole?: string | null;
   credentials?: string | null;
   affiliation?: string | null;
@@ -66,6 +72,52 @@ export class ExpertsRepository {
       .where(eq(experts.id, id))
       .for("update");
     return row ?? null;
+  }
+
+  /** Lock the requested User and return whether another Expert already owns it. */
+  async lockUserAndFindOwner(
+    tx: Tx,
+    userId: string,
+    exceptExpertId?: string,
+  ): Promise<{ exists: boolean; owned: boolean }> {
+    const [user] = await tx
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.id, userId))
+      .for("update");
+    if (!user) return { exists: false, owned: false };
+
+    const ownerWhere = exceptExpertId
+      ? and(eq(experts.userId, userId), ne(experts.id, exceptExpertId))
+      : eq(experts.userId, userId);
+    const [owner] = await tx
+      .select({ id: experts.id })
+      .from(experts)
+      .where(ownerWhere)
+      .limit(1);
+    return { exists: true, owned: Boolean(owner) };
+  }
+
+  /** Optimistic pre-flight used before media normalization/upload. */
+  async userLinkStateAnywhere(
+    userId: string,
+    exceptExpertId?: string,
+  ): Promise<{ exists: boolean; owned: boolean }> {
+    const [user] = await this.db
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+    if (!user) return { exists: false, owned: false };
+    const ownerWhere = exceptExpertId
+      ? and(eq(experts.userId, userId), ne(experts.id, exceptExpertId))
+      : eq(experts.userId, userId);
+    const [owner] = await this.db
+      .select({ id: experts.id })
+      .from(experts)
+      .where(ownerWhere)
+      .limit(1);
+    return { exists: true, owned: Boolean(owner) };
   }
 
   /** {@link slugTaken} against the pool — the optimistic pre-flight read. */
@@ -116,8 +168,8 @@ export class ExpertsRepository {
 
   /**
    * The shared admin list read (012-design §5.1) with LD-6's search: offset
-   * pagination, `ILIKE '%q%'` over `name` and `slug` served by the pg_trgm GIN
-   * indexes from migration 0016, explicit status filter, retired rows excluded
+   * pagination, `ILIKE '%q%'` over structured names and `slug` served by pg_trgm
+   * GIN indexes, explicit status filter, retired rows excluded
    * unless asked for. The predicate is SQL, never a full-roster scan filtered in
    * application code (EARS-15).
    */
@@ -136,7 +188,14 @@ export class ExpertsRepository {
       // too, so normalizing here is what makes the comparison honest rather
       // than a lucky byte match (012-design §2.2 LD-6).
       const pattern = `%${escapeLike(query.q.normalize("NFKC"))}%`;
-      filters.push(or(ilike(experts.name, pattern), ilike(experts.slug, pattern)));
+      filters.push(
+        or(
+          ilike(experts.familyName, pattern),
+          ilike(experts.givenName, pattern),
+          ilike(experts.patronymic, pattern),
+          ilike(experts.slug, pattern),
+        ),
+      );
     }
     const where = filters.length > 0 ? and(...filters) : undefined;
 
@@ -146,7 +205,12 @@ export class ExpertsRepository {
       .where(where)
       // Stable total order ending in id — two rows updated in the same
       // millisecond must not swap places between pages.
-      .orderBy(asc(experts.name), asc(experts.id))
+      .orderBy(
+        asc(experts.familyName),
+        asc(experts.givenName),
+        asc(experts.patronymic),
+        asc(experts.id),
+      )
       .limit(query.pageSize)
       .offset((query.page - 1) * query.pageSize);
 

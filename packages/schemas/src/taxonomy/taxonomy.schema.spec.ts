@@ -4,6 +4,7 @@ import {
   AdminTaxonomyListQuerySchema,
   CreateExpertRequestSchema,
   CreateProjectRequestSchema,
+  expertDisplayName,
   expertInitials,
   ExpertAdminDetailSchema,
   ExpertAdminListItemSchema,
@@ -178,11 +179,60 @@ describe("012 taxonomy — authoring contract (SSOT)", () => {
 // asserted here is the bound the Refine form shows the operator BEFORE the
 // round-trip and the one the server enforces after.
 describe("012 taxonomy — expert authoring contract (SSOT)", () => {
-  it("012 EARS-2: when an expert create omits the name or exceeds a field bound, the schema shall refuse it", () => {
-    expect(CreateExpertRequestSchema.safeParse({}).success).toBe(false);
-    expect(CreateExpertRequestSchema.safeParse({ name: "" }).success).toBe(false);
+  it("EARS-19: when an Expert is authored, the system shall accept an optional User link and explicit unlink", () => {
+    const userId = "11111111-1111-4111-8111-111111111111";
+
     expect(
-      CreateExpertRequestSchema.safeParse({ name: "x".repeat(161) }).success,
+      CreateExpertRequestSchema.safeParse({
+        familyName: "Иванов",
+        givenName: "Иван",
+        patronymic: "Иванович",
+        userId,
+      }).success,
+    ).toBe(true);
+    expect(UpdateExpertRequestSchema.safeParse({ userId }).success).toBe(true);
+    expect(UpdateExpertRequestSchema.safeParse({ userId: null }).success).toBe(
+      true,
+    );
+  });
+
+  it("EARS-20: when an Expert is authored, the system shall require structured names and derive its display name", () => {
+    expect(
+      CreateExpertRequestSchema.safeParse({
+        familyName: "Иванов",
+        givenName: "Иван",
+        patronymic: "Иванович",
+      }).success,
+    ).toBe(true);
+    expect(
+      CreateExpertRequestSchema.safeParse({
+        familyName: "Иванов",
+        givenName: "Иван",
+      }).success,
+    ).toBe(true);
+    expect(CreateExpertRequestSchema.safeParse({ name: "Иванов Иван" }).success).toBe(
+      false,
+    );
+    expect(
+      expertDisplayName({
+        familyName: "Иванов",
+        givenName: "Иван",
+        patronymic: "Иванович",
+      }),
+    ).toBe("Иванов Иван Иванович");
+  });
+
+  it("012 EARS-2: when an expert create omits a required structured name or exceeds a field bound, the schema shall refuse it", () => {
+    expect(CreateExpertRequestSchema.safeParse({}).success).toBe(false);
+    expect(
+      CreateExpertRequestSchema.safeParse({ familyName: "", givenName: "Иван" })
+        .success,
+    ).toBe(false);
+    expect(
+      CreateExpertRequestSchema.safeParse({
+        familyName: "x".repeat(81),
+        givenName: "Иван",
+      }).success,
     ).toBe(false);
     // Every §2.2 bound, at its exact edge.
     for (const [field, max] of [
@@ -193,19 +243,24 @@ describe("012 taxonomy — expert authoring contract (SSOT)", () => {
     ] as const) {
       expect(
         CreateExpertRequestSchema.safeParse({
-          name: "Иванов Иван",
+          familyName: "Иванов",
+          givenName: "Иван",
           [field]: "x".repeat(max + 1),
         }).success,
       ).toBe(false);
       expect(
         CreateExpertRequestSchema.safeParse({
-          name: "Иванов Иван",
+          familyName: "Иванов",
+          givenName: "Иван",
           [field]: "x".repeat(max),
         }).success,
       ).toBe(true);
     }
     expect(
-      CreateExpertRequestSchema.safeParse({ name: "Иванов Иван" }).success,
+      CreateExpertRequestSchema.safeParse({
+        familyName: "Иванов",
+        givenName: "Иван",
+      }).success,
     ).toBe(true);
   });
 
@@ -214,30 +269,36 @@ describe("012 taxonomy — expert authoring contract (SSOT)", () => {
     // an ignored field (012-design §5.1).
     expect(
       CreateExpertRequestSchema.safeParse({
-        name: "Иванов Иван",
+        familyName: "Иванов",
+        givenName: "Иван",
         photoRef: "taxonomy/experts/photos/x.webp",
       }).success,
     ).toBe(false);
     expect(
       CreateExpertRequestSchema.safeParse({
-        name: "Иванов Иван",
+        familyName: "Иванов",
+        givenName: "Иван",
         photoUrl: "https://cdn.example/x.webp",
       }).success,
     ).toBe(false);
     // `mediaAction` is a PATCH-only verb: there is nothing to clear on create.
     expect(
       CreateExpertRequestSchema.safeParse({
-        name: "Иванов Иван",
+        familyName: "Иванов",
+        givenName: "Иван",
         mediaAction: "clear",
       }).success,
     ).toBe(false);
     expect(
       UpdateExpertRequestSchema.safeParse({ mediaAction: "clear" }).success,
     ).toBe(true);
-    // There is NO required platform-user link, so no such field is accepted.
+    // The optional User link must be a canonical UUID.
     expect(
-      CreateExpertRequestSchema.safeParse({ name: "Иванов Иван", userId: "u1" })
-        .success,
+      CreateExpertRequestSchema.safeParse({
+        familyName: "Иванов",
+        givenName: "Иван",
+        userId: "u1",
+      }).success,
     ).toBe(false);
   });
 
@@ -249,8 +310,8 @@ describe("012 taxonomy — expert authoring contract (SSOT)", () => {
       UpdateExpertRequestSchema.safeParse({ affiliation: null, bio: null })
         .success,
     ).toBe(true);
-    // …but the display label is only ever removed by #1306's editorial removal.
-    expect(UpdateExpertRequestSchema.safeParse({ name: null }).success).toBe(
+    // …but required structured names are only removed by editorial removal.
+    expect(UpdateExpertRequestSchema.safeParse({ familyName: null }).success).toBe(
       false,
     );
   });
@@ -272,6 +333,10 @@ describe("012 taxonomy — expert authoring contract (SSOT)", () => {
       id: "11111111-1111-4111-8111-111111111111",
       slug: "ivanov-ivan",
       name: "Иванов Иван",
+      familyName: "Иванов",
+      givenName: "Иван",
+      patronymic: null,
+      userId: null,
       professionalRole: "Кардиолог",
       credentials: "д.м.н.",
       affiliation: "НМИЦ кардиологии",
@@ -280,7 +345,6 @@ describe("012 taxonomy — expert authoring contract (SSOT)", () => {
       initials: "ИИ",
       status: "draft" as const,
       firstPublishedAt: null,
-      slugEditable: true,
       contentRemovedAt: null,
       version: 1,
       createdAt: new Date().toISOString(),

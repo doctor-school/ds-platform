@@ -14,6 +14,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { events, eventSpeakers } from "./events.js";
 import { specialtiesMinzdrav } from "./specialties.js";
+import { users } from "./users.js";
 
 // 012 — Content taxonomy: the retained entity write model (012-design §2, §2.1;
 // ADR-0003 §4 retained-row lifecycle). EARS-1 (#1283) lands the FIRST entity of
@@ -154,7 +155,7 @@ export const projects = pgTable(
 export type Project = typeof projects.$inferSelect;
 export type NewProject = typeof projects.$inferInsert;
 
-export const EXPERT_NAME_MAX = 160;
+export const EXPERT_PERSON_NAME_MAX = 80;
 export const EXPERT_PROFESSIONAL_ROLE_MAX = 160;
 export const EXPERT_CREDENTIALS_MAX = 500;
 export const EXPERT_AFFILIATION_MAX = 240;
@@ -173,13 +174,13 @@ export const EXPERT_BIO_MAX = 4000;
  * regalia the person already publishes on conference sites. 012 adds no
  * encryption, no key management and no compliance workflow of its own.
  *
- * The descriptive columns are NULLABLE — not because a draft may be sloppy, but
+ * The person/descriptive columns are NULLABLE — not because a draft may be sloppy, but
  * because §2.4's editorial removal (`RemoveExpertContent`, #1306) NULLs them
  * while keeping the row, its id and its slug forever. `content_removed_at`
  * exists here from day one so that lifecycle is expressible in schema terms;
  * this slice ships NO removal route. `experts_content_removed_shape` pins the
- * exact removed shape, and `experts_name_present_unless_removed` keeps the
- * display label mandatory for every row that has not been removed.
+ * exact removed shape, and `experts_structured_name_present_unless_removed`
+ * keeps family/given names mandatory for every row that has not been removed.
  */
 export const experts = pgTable(
   "experts",
@@ -187,8 +188,12 @@ export const experts = pgTable(
     id: uuid("id").defaultRandom().primaryKey(),
     /** The permanent public identity. Editable only while `first_published_at IS NULL`. */
     slug: text("slug").notNull(),
-    /** The display label. Null ONLY on an editorially removed row (§2.4). */
-    name: text("name"),
+    /** Structured person identity. Family/given are null only after editorial removal. */
+    familyName: text("family_name"),
+    givenName: text("given_name"),
+    patronymic: text("patronymic"),
+    /** Optional one-to-one convergence with the retained platform User. */
+    userId: uuid("user_id"),
     /** Server-generated object-storage key of the normalized WebP photo. */
     photoRef: text("photo_ref"),
     /** Publish-required; null on an incomplete draft or a removed row. */
@@ -216,6 +221,12 @@ export const experts = pgTable(
     // a removed expert keeps holding its slug, so the URL a doctor bookmarked
     // can never later resolve to a different person.
     uniqueIndex("experts_slug_key").on(t.slug),
+    uniqueIndex("experts_user_id_key").on(t.userId),
+    foreignKey({
+      columns: [t.userId],
+      foreignColumns: [users.id],
+      name: "experts_user_id_users_id_fk",
+    }).onDelete("restrict"),
     check(
       "experts_retired_iff_deleted",
       sql`(${t.status} = 'retired') = (${t.deletedAt} IS NOT NULL)`,
@@ -229,8 +240,16 @@ export const experts = pgTable(
       sql`${t.slug} !~ ${sql.raw(`'${UUID_TEXT_PATTERN}'`)}`,
     ),
     check(
-      "experts_name_bounds",
-      sql`${t.name} IS NULL OR char_length(${t.name}) BETWEEN 1 AND ${sql.raw(String(EXPERT_NAME_MAX))}`,
+      "experts_family_name_bounds",
+      sql`${t.familyName} IS NULL OR char_length(${t.familyName}) BETWEEN 1 AND ${sql.raw(String(EXPERT_PERSON_NAME_MAX))}`,
+    ),
+    check(
+      "experts_given_name_bounds",
+      sql`${t.givenName} IS NULL OR char_length(${t.givenName}) BETWEEN 1 AND ${sql.raw(String(EXPERT_PERSON_NAME_MAX))}`,
+    ),
+    check(
+      "experts_patronymic_bounds",
+      sql`${t.patronymic} IS NULL OR char_length(${t.patronymic}) BETWEEN 1 AND ${sql.raw(String(EXPERT_PERSON_NAME_MAX))}`,
     ),
     check(
       "experts_professional_role_bounds",
@@ -253,11 +272,11 @@ export const experts = pgTable(
       "experts_published_has_first_published_at",
       sql`${t.status} <> 'published' OR ${t.firstPublishedAt} IS NOT NULL`,
     ),
-    // The display label is mandatory for every row that still describes a
-    // person; only §2.4's removal is allowed to take it away.
+    // Family and given names are mandatory for every row that still describes a
+    // person; only §2.4's removal is allowed to take them away.
     check(
-      "experts_name_present_unless_removed",
-      sql`${t.contentRemovedAt} IS NOT NULL OR ${t.name} IS NOT NULL`,
+      "experts_structured_name_present_unless_removed",
+      sql`${t.contentRemovedAt} IS NOT NULL OR (${t.familyName} IS NOT NULL AND ${t.givenName} IS NOT NULL)`,
     ),
     // §2.4 exact removed shape: retired, deleted, and every descriptive value
     // NULL — never sentinel person text. Pinned in the DB so no future writer
@@ -267,7 +286,9 @@ export const experts = pgTable(
       sql`${t.contentRemovedAt} IS NULL OR (
         ${t.status} = 'retired'
         AND ${t.deletedAt} IS NOT NULL
-        AND ${t.name} IS NULL
+        AND ${t.familyName} IS NULL
+        AND ${t.givenName} IS NULL
+        AND ${t.patronymic} IS NULL
         AND ${t.photoRef} IS NULL
         AND ${t.professionalRole} IS NULL
         AND ${t.credentials} IS NULL

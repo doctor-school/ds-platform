@@ -122,7 +122,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     ): Promise<string> {
       const row = {
         slug: `x-1291-${randomUUID()}`,
-        name: "Иванова И. И.",
+        family_name: "Иванова",
+        given_name: "И. И.",
         professional_role: "Кардиолог",
         credentials: "д.м.н.",
         affiliation: "НМИЦ",
@@ -784,8 +785,14 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     it("012 EARS-9: the public project→experts read shall answer exactly PublicExpertSummary + role, in a stable cursor-paged name order", async () => {
       const projectId = await insertProject();
-      const first = await insertExpert({ name: "Аронов А. А." });
-      const second = await insertExpert({ name: "Яковлев Я. Я." });
+      const first = await insertExpert({
+        family_name: "Аронов",
+        given_name: "А. А.",
+      });
+      const second = await insertExpert({
+        family_name: "Яковлев",
+        given_name: "Я. Я.",
+      });
       await seedRelation(projectId, first, "curator");
       await seedRelation(projectId, second, "member");
       await publishProject(projectId);

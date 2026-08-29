@@ -5,6 +5,7 @@ import {
   type CreateExpertRequest,
   type ExpertAdminDetail,
   type ExpertAdminList,
+  expertDisplayName,
   expertInitials,
   slugifyTaxonomyTitle,
   SlugSchema,
@@ -119,6 +120,9 @@ export class ExpertsService {
         "another expert already holds this slug; restore that record instead of re-creating it",
       );
     }
+    if (input.payload.userId) {
+      await this.assertUserLinkAvailable(input.payload.userId);
+    }
 
     const uploaded = input.photo
       ? await this.normalizeAndUpload(input.photo, input.lease)
@@ -131,9 +135,19 @@ export class ExpertsService {
           "another expert already holds this slug; restore that record instead of re-creating it",
         );
       }
+      if (input.payload.userId) {
+        const link = await this.repo.lockUserAndFindOwner(
+          tx,
+          input.payload.userId,
+        );
+        this.assertUserLinkState(link);
+      }
       const created = await this.repo.insert(tx, {
         slug,
-        name: input.payload.name,
+        familyName: input.payload.familyName,
+        givenName: input.payload.givenName,
+        patronymic: input.payload.patronymic ?? null,
+        userId: input.payload.userId ?? null,
         professionalRole: input.payload.professionalRole ?? null,
         credentials: input.payload.credentials ?? null,
         affiliation: input.payload.affiliation ?? null,
@@ -174,25 +188,8 @@ export class ExpertsService {
       );
     }
 
-    // Slug immutability is a ROW-state refusal, not a shape one, and it is
-    // checked before any upload. Echoing the current value is not an update:
-    // the admin form posts the whole «Основное» tab, so refusing the echo would
-    // block every ordinary edit of a published expert over an untouched field.
-    const slugChanges =
-      input.payload.slug !== undefined && input.payload.slug !== current.slug;
-    if (slugChanges) {
-      if (current.firstPublishedAt !== null) {
-        throw new TaxonomyError(
-          "SLUG_IMMUTABLE",
-          "the slug was locked by the first publication and cannot change",
-        );
-      }
-      if (await this.repo.slugTakenAnywhere(input.payload.slug!, current.id)) {
-        throw new TaxonomyError(
-          "SLUG_CONFLICT",
-          "another expert already holds this slug",
-        );
-      }
+    if (typeof input.payload.userId === "string") {
+      await this.assertUserLinkAvailable(input.payload.userId, current.id);
     }
 
     const publishBlockers = publishRequirementBlockers(current, input.payload);
@@ -227,15 +224,13 @@ export class ExpertsService {
           "this expert record was editorially removed and cannot be repopulated",
         );
       }
-      if (
-        input.payload.slug !== undefined &&
-        input.payload.slug !== locked.slug &&
-        locked.firstPublishedAt !== null
-      ) {
-        throw new TaxonomyError(
-          "SLUG_IMMUTABLE",
-          "the slug was locked by the first publication and cannot change",
+      if (typeof input.payload.userId === "string") {
+        const link = await this.repo.lockUserAndFindOwner(
+          tx,
+          input.payload.userId,
+          locked.id,
         );
+        this.assertUserLinkState(link);
       }
       const postLockBlockers = publishRequirementBlockers(locked, input.payload);
       if (locked.status === "published" && postLockBlockers.length > 0) {
@@ -251,9 +246,17 @@ export class ExpertsService {
         input.id,
         input.expectedVersion,
         {
-          ...(slugChanges ? { slug: input.payload.slug! } : {}),
-          ...(input.payload.name !== undefined
-            ? { name: input.payload.name }
+          ...(input.payload.familyName !== undefined
+            ? { familyName: input.payload.familyName }
+            : {}),
+          ...(input.payload.givenName !== undefined
+            ? { givenName: input.payload.givenName }
+            : {}),
+          ...(input.payload.patronymic !== undefined
+            ? { patronymic: input.payload.patronymic ?? null }
+            : {}),
+          ...(input.payload.userId !== undefined
+            ? { userId: input.payload.userId }
             : {}),
           ...(input.payload.professionalRole !== undefined
             ? { professionalRole: input.payload.professionalRole ?? null }
@@ -314,7 +317,7 @@ export class ExpertsService {
       data: rows.map((row) => ({
         id: row.id,
         slug: row.slug,
-        name: row.name,
+        name: expertDisplayName(row),
         professionalRole: row.professionalRole,
         status: row.status,
         version: row.version,
@@ -370,28 +373,37 @@ export class ExpertsService {
     return { key, normalized };
   }
 
-  /** Resolve the create-time slug: the authored one, or generated from the name. */
+  /** Resolve the system-owned create-time slug from the structured display name. */
   private resolveCreateSlug(payload: CreateExpertRequest): string {
-    if (payload.slug) return payload.slug;
-    const generated = slugifyTaxonomyTitle(payload.name);
+    const name = expertDisplayName({
+      familyName: payload.familyName,
+      givenName: payload.givenName,
+      patronymic: payload.patronymic ?? null,
+    })!;
+    const generated = slugifyTaxonomyTitle(name);
     const parsed = SlugSchema.safeParse(generated);
     if (!parsed.success) {
       // The name yields no usable public identity. Refuse and let the operator
       // supply one — a fabricated slug would become a permanent public URL.
       throw new TaxonomyError(
         "VALIDATION_FAILED",
-        "the name yields no usable slug; supply one explicitly",
-        [{ path: "slug", message: "could not be generated from the name" }],
+        "the structured name yields no usable system slug",
+        [{ path: "familyName", message: "could not generate a public slug" }],
       );
     }
     return parsed.data;
   }
 
   private async toDetail(row: Expert): Promise<ExpertAdminDetail> {
+    const name = expertDisplayName(row);
     return {
       id: row.id,
       slug: row.slug,
-      name: row.name,
+      name,
+      familyName: row.familyName,
+      givenName: row.givenName,
+      patronymic: row.patronymic,
+      userId: row.userId,
       professionalRole: row.professionalRole,
       credentials: row.credentials,
       affiliation: row.affiliation,
@@ -400,15 +412,36 @@ export class ExpertsService {
       // Computed ONCE, server-side: the admin avatar, the public projection
       // (#1294) and the merged speaker projection (#1290) all render the same
       // fallback for the same person (012-design §2.2).
-      initials: expertInitials(row.name),
+      initials: expertInitials(name),
       status: row.status,
       firstPublishedAt: row.firstPublishedAt?.toISOString() ?? null,
-      slugEditable: row.firstPublishedAt === null,
       contentRemovedAt: row.contentRemovedAt?.toISOString() ?? null,
       version: row.version,
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
     };
+  }
+
+  private async assertUserLinkAvailable(
+    userId: string,
+    exceptExpertId?: string,
+  ): Promise<void> {
+    this.assertUserLinkState(
+      await this.repo.userLinkStateAnywhere(userId, exceptExpertId),
+    );
+  }
+
+  private assertUserLinkState(link: {
+    exists: boolean;
+    owned: boolean;
+  }): void {
+    if (!link.exists) throw new TaxonomyError("RESOURCE_NOT_FOUND");
+    if (link.owned) {
+      throw new TaxonomyError(
+        "USER_EXPERT_CONFLICT",
+        "the selected User already owns another Expert",
+      );
+    }
   }
 }
 
@@ -428,7 +461,8 @@ function publishRequirementBlockers(
   patch: UpdateExpertRequest,
 ): { path: string; message: string }[] {
   const required = [
-    ["name", "a published expert requires a name"],
+    ["familyName", "a published expert requires a family name"],
+    ["givenName", "a published expert requires a given name"],
     ["professionalRole", "a published expert requires a professional role"],
     ["credentials", "a published expert requires credentials"],
     ["affiliation", "a published expert requires an affiliation"],

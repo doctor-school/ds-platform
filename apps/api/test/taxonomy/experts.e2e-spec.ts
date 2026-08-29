@@ -21,6 +21,11 @@ import {
   RELAXED_RATE_LIMIT,
 } from "../setup/rate-limit.js";
 import { deleteUserFixture } from "../setup/fixture-cleanup.js";
+import {
+  BOT_PROTECTION,
+  type BotProtection,
+  type BotProtectionResult,
+} from "../../src/bot-protection/index.js";
 
 // 012 EARS-2 (#1284) — the expert authoring vertical over the REAL stack:
 // Fastify + the 011 admin session + Postgres + object storage. It is the SAME
@@ -72,7 +77,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         url: "/v1/auth/register",
         payload: { email, password, consent },
       });
-      expect(reg.statusCode).toBe(200);
+      expect(reg.statusCode, reg.payload).toBe(200);
       const { rows } = await pool.query<{ zitadel_sub: string }>(
         "SELECT zitadel_sub FROM users WHERE email = $1",
         [email],
@@ -101,6 +106,21 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         payload: { identifier: email, password },
       });
       return res.cookies.find((c) => c.name === SESSION_COOKIE_NAME)!.value;
+    }
+
+    async function unlinkedUserId(): Promise<string> {
+      const email = uniqueEmail("exp-link");
+      const reg = await app.inject({
+        method: "POST",
+        url: "/v1/auth/register",
+        payload: { email, password, consent },
+      });
+      expect(reg.statusCode).toBe(200);
+      const { rows } = await pool.query<{ id: string }>(
+        "SELECT id FROM users WHERE email = $1",
+        [email],
+      );
+      return rows[0]!.id;
     }
 
     function multipartBody(
@@ -175,7 +195,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     function validPayload(overrides: Record<string, unknown> = {}) {
       return {
-        name: `Иванова Мария ${Math.random().toString(36).slice(2, 8)}`,
+        familyName: `Иванова-${Math.random().toString(36).slice(2, 8)}`,
+        givenName: "Мария",
+        patronymic: "Ивановна",
         professionalRole: "Кардиолог",
         credentials: "Д.м.н., профессор",
         affiliation: "НМИЦ кардиологии",
@@ -202,6 +224,11 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         .useValue(fake)
         .overrideProvider(RATE_LIMIT_THRESHOLDS)
         .useValue(RELAXED_RATE_LIMIT)
+        .overrideProvider(BOT_PROTECTION)
+        .useValue({
+          verify: (): Promise<BotProtectionResult> =>
+            Promise.resolve({ ok: true }),
+        } satisfies BotProtection)
         .compile();
 
       app = moduleRef.createNestApplication<NestFastifyApplication>(
@@ -242,24 +269,27 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     // ── Accept branches ────────────────────────────────────────────────────
 
     it("012 EARS-2: when a platform_admin creates an expert, the system shall persist one retained draft row with a slug generated from the name, version 1 and an ETag", async () => {
-      const uniqueName = `Иванова Мария ${randomUUID().slice(0, 8)}`;
+      const uniqueFamilyName = `Иванова-${randomUUID().slice(0, 8)}`;
       const res = await createJson({
-        payload: validPayload({ name: uniqueName }),
+        payload: validPayload({ familyName: uniqueFamilyName }),
       });
       expect(res.statusCode).toBe(201);
       const body = await created(res);
       expect(body).toMatchObject({
-        name: uniqueName,
+        name: `${uniqueFamilyName} Мария Ивановна`,
+        familyName: uniqueFamilyName,
+        givenName: "Мария",
+        patronymic: "Ивановна",
+        userId: null,
         professionalRole: "Кардиолог",
         status: "draft",
         version: 1,
         photoUrl: null,
         firstPublishedAt: null,
-        slugEditable: true,
         contentRemovedAt: null,
       });
       // The slug is derived from the NAME — an expert has no title.
-      expect(body.slug).toMatch(/^ivanova-mariya/);
+      expect(body.slug).toMatch(/^ivanova-[a-z0-9]+-mariya-ivanovna$/);
       expect(res.headers.etag).toBe('W/"1"');
       expect(res.headers.location).toBe(`/v1/admin/experts/${body.id}`);
 
@@ -276,7 +306,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       });
       const list = await app.inject({
         method: "GET",
-        url: `/v1/admin/experts?q=${encodeURIComponent(uniqueName)}`,
+        url: `/v1/admin/experts?q=${encodeURIComponent(uniqueFamilyName)}`,
         headers: { ...device, ...adminHeaders(adminSid) },
       });
       const listBody = JSON.parse(list.payload) as {
@@ -288,9 +318,90 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(listBody.page).toBe(1);
     });
 
+    it("EARS-19: when an Expert is created or edited, the system shall link one unlinked User and explicitly unlink later", async () => {
+      const createUserId = await unlinkedUserId();
+      const linkedAtCreate = await created(
+        await createJson({ payload: validPayload({ userId: createUserId }) }),
+      );
+      expect(linkedAtCreate).toMatchObject({ userId: createUserId, version: 1 });
+
+      const standalone = await created(
+        await createJson({ payload: validPayload() }),
+      );
+      const laterUserId = await unlinkedUserId();
+      const linkedLater = await app.inject({
+        method: "PATCH",
+        url: `/v1/admin/experts/${standalone.id}`,
+        headers: {
+          ...device,
+          ...adminHeaders(adminSid),
+          "content-type": "application/json",
+          "idempotency-key": key(),
+          "if-match": 'W/"1"',
+        },
+        payload: { userId: laterUserId },
+      });
+      expect(linkedLater.statusCode).toBe(200);
+      expect(JSON.parse(linkedLater.payload)).toMatchObject({
+        userId: laterUserId,
+        version: 2,
+      });
+
+      const unlinked = await app.inject({
+        method: "PATCH",
+        url: `/v1/admin/experts/${standalone.id}`,
+        headers: {
+          ...device,
+          ...adminHeaders(adminSid),
+          "content-type": "application/json",
+          "idempotency-key": key(),
+          "if-match": 'W/"2"',
+        },
+        payload: { userId: null },
+      });
+      expect(unlinked.statusCode).toBe(200);
+      expect(JSON.parse(unlinked.payload)).toMatchObject({
+        userId: null,
+        version: 3,
+      });
+    });
+
+    it("012 EARS-19: duplicate User ownership returns USER_EXPERT_CONFLICT with zero Expert mutation", async () => {
+      const userId = await unlinkedUserId();
+      await created(await createJson({ payload: validPayload({ userId }) }));
+      const standalone = await created(
+        await createJson({ payload: validPayload() }),
+      );
+      const conflict = await app.inject({
+        method: "PATCH",
+        url: `/v1/admin/experts/${standalone.id}`,
+        headers: {
+          ...device,
+          ...adminHeaders(adminSid),
+          "content-type": "application/json",
+          "idempotency-key": key(),
+          "if-match": 'W/"1"',
+        },
+        payload: { userId },
+      });
+      expect(conflict.statusCode).toBe(409);
+      expect(problem(conflict).errorCode).toBe("USER_EXPERT_CONFLICT");
+      const { rows } = await pool.query<{ user_id: string | null; version: number }>(
+        "SELECT user_id, version FROM experts WHERE id = $1",
+        [standalone.id],
+      );
+      expect(rows[0]).toEqual({ user_id: null, version: 1 });
+    });
+
     it("012 EARS-2: when an expert has no photo, the system shall answer deterministic initials derived from the name", async () => {
       const withoutPhoto = await created(
-        await createJson({ payload: validPayload({ name: "Иванова Мария" }) }),
+        await createJson({
+          payload: validPayload({
+            familyName: `Иванова-${randomUUID().slice(0, 8)}`,
+            givenName: "Мария",
+            patronymic: null,
+          }),
+        }),
       );
       expect(withoutPhoto).toMatchObject({ photoUrl: null, initials: "ИМ" });
 
@@ -491,7 +602,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const marker = randomUUID().slice(0, 8);
       const body = await created(
         await createJson({
-          payload: validPayload({ name: `Петров ${marker}` }),
+          payload: validPayload({ familyName: `Петров-${marker}` }),
         }),
       );
       // LD-6: ordinary case-insensitive substring search over the name.
@@ -620,7 +731,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       await created(first);
 
       const differentInput = await createJson({
-        payload: validPayload({ name: "Совсем другой эксперт" }),
+        payload: validPayload({ familyName: "Совсем-другой-эксперт" }),
         idempotencyKey: k,
       });
       expect(differentInput.statusCode).toBe(409);
@@ -635,21 +746,17 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(problem(differentActor).errorCode).toBe("IDEMPOTENCY_KEY_REUSED");
     });
 
-    it("012 EARS-2: when a slug is already held by a retained row, the system shall refuse with SLUG_CONFLICT", async () => {
+    it("EARS-20: when create input carries a slug, the system shall reject the client-owned identity", async () => {
       const body = await created(await createJson({ payload: validPayload() }));
       const clash = await createJson({
         payload: validPayload({ slug: body.slug }),
       });
-      expect(clash.statusCode).toBe(409);
-      expect(problem(clash).errorCode).toBe("SLUG_CONFLICT");
+      expect(clash.statusCode).toBe(400);
+      expect(problem(clash).errorCode).toBe("VALIDATION_FAILED");
     });
 
-    it("012 EARS-2: when the expert was first published, the system shall refuse a slug change with SLUG_IMMUTABLE and change nothing", async () => {
+    it("EARS-20: when PATCH input carries a slug, the system shall reject it and change nothing", async () => {
       const body = await created(await createJson({ payload: validPayload() }));
-      await pool.query(
-        "UPDATE experts SET status = 'published', first_published_at = now() WHERE id = $1",
-        [body.id],
-      );
       const res = await app.inject({
         method: "PATCH",
         url: `/v1/admin/experts/${body.id}`,
@@ -662,41 +769,13 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         },
         payload: { slug: "sovsem-drugoy-adres" },
       });
-      expect(res.statusCode).toBe(409);
-      expect(problem(res).errorCode).toBe("SLUG_IMMUTABLE");
+      expect(res.statusCode).toBe(400);
+      expect(problem(res).errorCode).toBe("VALIDATION_FAILED");
       const { rows } = await pool.query<{ slug: string; version: number }>(
         "SELECT slug, version FROM experts WHERE id = $1",
         [body.id],
       );
       expect(rows[0]).toMatchObject({ slug: body.slug, version: 1 });
-      // The detail read tells the UI the field is locked.
-      const detail = await app.inject({
-        method: "GET",
-        url: `/v1/admin/experts/${body.id}`,
-        headers: { ...device, ...adminHeaders(adminSid) },
-      });
-      expect(JSON.parse(detail.payload)).toMatchObject({ slugEditable: false });
-
-      // Echoing the OWN slug is not a change: the «Основное» tab posts the whole
-      // form, so refusing the echo would block every ordinary edit.
-      const echo = await app.inject({
-        method: "PATCH",
-        url: `/v1/admin/experts/${body.id}`,
-        headers: {
-          ...device,
-          ...adminHeaders(adminSid),
-          "content-type": "application/json",
-          "idempotency-key": key(),
-          "if-match": 'W/"1"',
-        },
-        payload: { slug: body.slug, professionalRole: "Терапевт" },
-      });
-      expect(echo.statusCode).toBe(200);
-      expect(JSON.parse(echo.payload)).toMatchObject({
-        slug: body.slug,
-        professionalRole: "Терапевт",
-        version: 2,
-      });
     });
 
     it("012 EARS-5: when a PATCH would leave a published projection incomplete, the system shall refuse with a field-addressed PUBLISH_REQUIREMENTS_NOT_MET", async () => {
@@ -738,7 +817,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       await pool.query(
         `UPDATE experts
             SET content_removed_at = now(), status = 'retired', deleted_at = now(),
-                name = NULL, photo_ref = NULL, professional_role = NULL,
+                family_name = NULL, given_name = NULL, patronymic = NULL,
+                photo_ref = NULL, professional_role = NULL,
                 credentials = NULL, affiliation = NULL, bio = NULL
           WHERE id = $1`,
         [body.id],
@@ -753,15 +833,15 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
           "idempotency-key": key(),
           "if-match": 'W/"1"',
         },
-        payload: { name: "Возвращённое имя" },
+        payload: { familyName: "Возвращённая" },
       });
       expect(res.statusCode).toBe(409);
       expect(problem(res).errorCode).toBe("CONTENT_REMOVED");
-      const { rows } = await pool.query<{ name: string | null }>(
-        "SELECT name FROM experts WHERE id = $1",
+      const { rows } = await pool.query<{ family_name: string | null }>(
+        "SELECT family_name FROM experts WHERE id = $1",
         [body.id],
       );
-      expect(rows[0]!.name).toBeNull();
+      expect(rows[0]!.family_name).toBeNull();
     });
 
     it("012 EARS-17: when If-Match is absent or stale, the system shall answer 428 then 412 and change nothing", async () => {

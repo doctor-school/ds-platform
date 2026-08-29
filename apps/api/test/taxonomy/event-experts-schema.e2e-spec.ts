@@ -66,7 +66,8 @@ describe.skipIf(!process.env.DATABASE_URL)(
     ): Promise<string> {
       const row = {
         slug: `x-1289-${randomUUID()}`,
-        name: "Иванова И. И.",
+        family_name: "Иванова",
+        given_name: "И. И.",
         status: "published",
         first_published_at: new Date(),
         ...overrides,

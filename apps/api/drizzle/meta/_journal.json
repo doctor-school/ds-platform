@@ -197,6 +197,13 @@
       "when": 1787920538521,
       "tag": "0027_doctor_specialties",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1787987339514,
+      "tag": "0028_cultured_princess_powerful",
+      "breakpoints": true
     }
   ]
 }

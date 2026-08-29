@@ -9,7 +9,7 @@ import pg from "pg";
 // Every assertion is about a constraint the DATABASE enforces, not one the
 // service happens to check. The expert-specific ones are three: the removal
 // shape §2.4 pins (`content_removed_at` ⇒ retired + deleted + every descriptive
-// column NULL), the display label being mandatory for every NON-removed row,
+// column NULL), structured names being mandatory for every NON-removed row,
 // and the LD-6 trigram index that keeps admin search off a full-roster scan.
 
 const UUID_TEXT = "00000000-0000-4000-8000-000000000000";
@@ -37,7 +37,8 @@ describe.skipIf(!process.env.DATABASE_URL)(
     ): Promise<string> {
       const row = {
         slug: slug(),
-        name: "Эксперт 1284",
+        family_name: "Эксперт",
+        given_name: "Тестовый",
         ...overrides,
       } as Record<string, unknown>;
       const cols = Object.keys(row);
@@ -54,7 +55,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
       const s = slug();
       const id = await insertExpert({ slug: s });
       const { rows } = await pool.query(
-        `SELECT slug, name, status, version, deleted_at, first_published_at,
+        `SELECT slug, family_name, given_name, patronymic, user_id, status, version, deleted_at, first_published_at,
                 photo_ref, professional_role, credentials, affiliation, bio,
                 content_removed_at
            FROM experts WHERE id = $1`,
@@ -62,7 +63,10 @@ describe.skipIf(!process.env.DATABASE_URL)(
       );
       expect(rows[0]).toMatchObject({
         slug: s,
-        name: "Эксперт 1284",
+        family_name: "Эксперт",
+        given_name: "Тестовый",
+        patronymic: null,
+        user_id: null,
         status: "draft",
         version: 1,
         deleted_at: null,
@@ -118,7 +122,9 @@ describe.skipIf(!process.env.DATABASE_URL)(
 
     it("012 EARS-2: when a descriptive field exceeds the §2.2 authoring matrix, the system shall reject the row", async () => {
       const cases: [string, string, number][] = [
-        ["name", "experts_name_bounds", 160],
+        ["family_name", "experts_family_name_bounds", 80],
+        ["given_name", "experts_given_name_bounds", 80],
+        ["patronymic", "experts_patronymic_bounds", 80],
         ["professional_role", "experts_professional_role_bounds", 160],
         ["credentials", "experts_credentials_bounds", 500],
         ["affiliation", "experts_affiliation_bounds", 240],
@@ -134,10 +140,14 @@ describe.skipIf(!process.env.DATABASE_URL)(
       }
     });
 
-    it("012 EARS-2: when a row is not editorially removed, the system shall require its display label", async () => {
-      await expect(insertExpert({ name: null })).rejects.toThrow(
-        /experts_name_present_unless_removed/,
+    it("EARS-20: when a row is not editorially removed, the system shall require family and given names without a stored display name", async () => {
+      await expect(insertExpert({ family_name: null })).rejects.toThrow(
+        /experts_structured_name_present_unless_removed/,
       );
+      const { rows } = await pool.query<{ column_name: string }>(
+        `SELECT column_name FROM information_schema.columns WHERE table_name = 'experts'`,
+      );
+      expect(rows.map((row) => row.column_name)).not.toContain("name");
     });
 
     it("012 EARS-14: when content_removed_at is set, the system shall accept only the fully removed shape and keep id and slug", async () => {
@@ -159,18 +169,26 @@ describe.skipIf(!process.env.DATABASE_URL)(
       await pool.query(
         `UPDATE experts
             SET content_removed_at = now(), status = 'retired', deleted_at = now(),
-                name = NULL, photo_ref = NULL, professional_role = NULL,
+                family_name = NULL, given_name = NULL, patronymic = NULL,
+                photo_ref = NULL, professional_role = NULL,
                 credentials = NULL, affiliation = NULL, bio = NULL
           WHERE id = $1`,
         [id],
       );
       const { rows } = await pool.query<{ id: string; slug: string }>(
-        `SELECT id, slug, name, status FROM experts WHERE id = $1`,
+        `SELECT id, slug, family_name, given_name, patronymic, status FROM experts WHERE id = $1`,
         [id],
       );
       // The row, its id and its slug survive the removal — «[удалён]» is a
       // render-time label, never a stored value.
-      expect(rows[0]).toMatchObject({ id, slug: s, name: null, status: "retired" });
+      expect(rows[0]).toMatchObject({
+        id,
+        slug: s,
+        family_name: null,
+        given_name: null,
+        patronymic: null,
+        status: "retired",
+      });
       await expect(insertExpert({ slug: s })).rejects.toThrow(
         /experts_slug_key/,
       );
@@ -195,8 +213,8 @@ describe.skipIf(!process.env.DATABASE_URL)(
       // Re-writing the SAME instant is not a change: an ordinary full-row UPDATE
       // of an already-published expert still works.
       await pool.query(
-        `UPDATE experts SET name = $2, first_published_at = $3 WHERE id = $1`,
-        [id, "Эксперт 1284 (правка)", published],
+        `UPDATE experts SET family_name = $2, first_published_at = $3 WHERE id = $1`,
+        [id, "Эксперт-правка", published],
       );
       const { rows } = await pool.query(
         `SELECT first_published_at FROM experts WHERE id = $1`,
@@ -237,9 +255,11 @@ describe.skipIf(!process.env.DATABASE_URL)(
         `SELECT indexname, indexdef FROM pg_indexes WHERE tablename = 'experts'`,
       );
       const byName = new Map(rows.map((r) => [r.indexname, r.indexdef]));
-      expect(byName.get("experts_name_trgm_idx")).toMatch(
-        /USING gin \(name gin_trgm_ops\)/,
-      );
+      for (const column of ["family_name", "given_name", "patronymic"]) {
+        expect(byName.get(`experts_${column}_trgm_idx`)).toMatch(
+          new RegExp(`USING gin \\(${column} gin_trgm_ops\\)`),
+        );
+      }
       expect(byName.get("experts_slug_trgm_idx")).toMatch(
         /USING gin \(slug gin_trgm_ops\)/,
       );
@@ -257,6 +277,24 @@ describe.skipIf(!process.env.DATABASE_URL)(
       for (const fk of rows) {
         expect(fk.confdeltype, `${fk.conname} must not cascade`).not.toBe("c");
       }
+    });
+
+    it("EARS-19: when two Experts reference one User, the database shall reject duplicate ownership and preserve the first link", async () => {
+      const { rows: users } = await pool.query<{ id: string }>(
+        `INSERT INTO users (zitadel_sub, email)
+         VALUES ($1, $2) RETURNING id`,
+        [`expert-link-${randomUUID()}`, `expert-link-${randomUUID()}@example.test`],
+      );
+      const userId = users[0]!.id;
+      const firstId = await insertExpert({ user_id: userId });
+      await expect(insertExpert({ user_id: userId })).rejects.toThrow(
+        /experts_user_id_key/,
+      );
+      const { rows: linked } = await pool.query<{ id: string }>(
+        `SELECT id FROM experts WHERE user_id = $1`,
+        [userId],
+      );
+      expect(linked).toEqual([{ id: firstId }]);
     });
   },
 );

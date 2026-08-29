@@ -150,6 +150,8 @@ Input-mask declaration is `none`. Refine uses text/textarea controls for structu
 
 Expert search NFKC-normalizes the query and uses trigram indexes over `family_name`, `given_name`, `patronymic` plus the system slug. The derived display `name` is returned by DTOs but is not a searched storage column.
 
+The legacy `experts.name` column is removed by one exact expand/backfill/contract migration, not by a parsing algorithm. Before changing any row or constraint, the migration checks the complete retained non-content-removed source set against a reviewed mapping keyed by stable Expert id. The production inventory read on 2026-08-29 contained zero Expert rows, so the approved mapping is empty and the migration asserts that the source set remains empty; a row created before deployment aborts the migration for explicit per-row review. No name splitting, heuristic, User matching or Expert-name review queue is introduced. Content-removed rows remain the structured-name-null exception.
+
 ### 2.3 Legacy-speaker migration review queue
 
 `speaker_migration_reviews` is a real retained admin queue keyed by stable source `event_speakers.id`. Every retained `event_speakers` row is imported once with immutable source provenance (event id, source id, original position and content fingerprint) and an original classification `unmatched | ambiguous | duplicate`. There is no eligibility filter: the closed source set is all retained rows in that table. No automatic or suggested name match is stored or displayed.

@@ -11,6 +11,7 @@ import {
   Res,
   UseFilters,
 } from "@nestjs/common";
+import { ApiBody, ApiCreatedResponse, ApiOkResponse } from "@nestjs/swagger";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import {
   AdminTaxonomyListQuerySchema,
@@ -25,6 +26,12 @@ import {
 } from "@ds/schemas";
 import { Authz } from "../authz/index.js";
 import { ExpertsService } from "./experts.service.js";
+import {
+  CreateExpertRequestDto,
+  ExpertAdminDetailDto,
+  ExpertAdminListDto,
+  UpdateExpertRequestDto,
+} from "./experts.dto.js";
 import {
   type IdempotencyOutcome,
   IdempotencyService,
@@ -69,6 +76,7 @@ export class ExpertsAdminController {
    * `status`, and retired rows excluded by default.
    */
   @Get()
+  @ApiOkResponse({ type: ExpertAdminListDto })
   @Authz({
     access: "authenticated",
     roles: ["platform_admin"],
@@ -98,6 +106,8 @@ export class ExpertsAdminController {
    */
   @Post()
   @HttpCode(201)
+  @ApiBody({ type: CreateExpertRequestDto })
+  @ApiCreatedResponse({ type: ExpertAdminDetailDto })
   @Authz({
     access: "authenticated",
     roles: ["platform_admin"],
@@ -119,7 +129,9 @@ export class ExpertsAdminController {
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<unknown> {
     // 1. Key shape — before a single file byte is read (§5.1 failure order).
-    const key = this.idempotency.requireKey(req.headers[IDEMPOTENCY_KEY_HEADER]);
+    const key = this.idempotency.requireKey(
+      req.headers[IDEMPOTENCY_KEY_HEADER],
+    );
     // 2. Request shape + payload; the file is buffered but nothing is stored yet.
     const { payload, file } = await this.readAuthoringRequest(req, false);
     const parsed = CreateExpertRequestSchema.safeParse(payload);
@@ -162,6 +174,7 @@ export class ExpertsAdminController {
 
   /** EARS-2 — detail by stable id, retired rows included (§5.1). */
   @Get(":id")
+  @ApiOkResponse({ type: ExpertAdminDetailDto })
   @Authz({
     access: "authenticated",
     roles: ["platform_admin"],
@@ -190,6 +203,8 @@ export class ExpertsAdminController {
    */
   @Patch(":id")
   @HttpCode(200)
+  @ApiBody({ type: UpdateExpertRequestDto })
+  @ApiOkResponse({ type: ExpertAdminDetailDto })
   @Authz({
     access: "authenticated",
     roles: ["platform_admin"],
@@ -207,7 +222,9 @@ export class ExpertsAdminController {
     if (!CANONICAL_UUID_REGEX.test(id)) {
       throw new TaxonomyError("RESOURCE_NOT_FOUND");
     }
-    const key = this.idempotency.requireKey(req.headers[IDEMPOTENCY_KEY_HEADER]);
+    const key = this.idempotency.requireKey(
+      req.headers[IDEMPOTENCY_KEY_HEADER],
+    );
     const rawIfMatch = req.headers[IF_MATCH_HEADER] as string | undefined;
     if (!rawIfMatch || rawIfMatch.trim().length === 0) {
       throw new TaxonomyError(
@@ -358,9 +375,11 @@ export class ExpertsAdminController {
     try {
       return { payload: JSON.parse(payloadRaw), file };
     } catch {
-      throw new TaxonomyError("VALIDATION_FAILED", "payload is not valid JSON", [
-        { path: "payload", message: "must be valid JSON" },
-      ]);
+      throw new TaxonomyError(
+        "VALIDATION_FAILED",
+        "payload is not valid JSON",
+        [{ path: "payload", message: "must be valid JSON" }],
+      );
     }
   }
 }

@@ -368,11 +368,12 @@ export class ProjectExpertsRepository {
       isNull(experts.deletedAt),
       isNull(experts.contentRemovedAt),
     ];
+    const displayName = sql<string>`concat_ws(' ', ${experts.familyName}, ${experts.givenName}, ${experts.patronymic})`;
     if (after) {
       filters.push(
         or(
-          gt(experts.name, after.name),
-          and(eq(experts.name, after.name), gt(experts.id, after.id)),
+          gt(displayName, after.name),
+          and(eq(displayName, after.name), gt(experts.id, after.id)),
         )!,
       );
     }
@@ -381,7 +382,7 @@ export class ProjectExpertsRepository {
       .from(projectExperts)
       .innerJoin(experts, eq(experts.id, projectExperts.expertId))
       .where(and(...filters))
-      .orderBy(asc(experts.name), asc(experts.id))
+      .orderBy(asc(displayName), asc(experts.id))
       .limit(limit);
     return rows.map((row) => ({ role: row.role, expert: row.expert }));
   }
@@ -431,7 +432,7 @@ export class ProjectExpertsRepository {
         projectTitle: projects.title,
         expertId: experts.id,
         expertSlug: experts.slug,
-        expertName: experts.name,
+        expertName: sql<string | null>`CASE WHEN ${experts.familyName} IS NULL OR ${experts.givenName} IS NULL THEN NULL ELSE concat_ws(' ', ${experts.familyName}, ${experts.givenName}, ${experts.patronymic}) END`,
       })
       .from(projectExperts)
       .innerJoin(projects, eq(projects.id, projectExperts.projectId))

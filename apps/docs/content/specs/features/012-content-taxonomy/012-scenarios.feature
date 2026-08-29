@@ -812,6 +812,15 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
     And no slug input is present or accepted by the API
     And Copy public link copies the generated canonical URL
 
+  @EARS-20 @migration @failure
+  Scenario: Existing Expert names are never inferred during structured-name migration
+    Given the complete reviewed stable-id mapping covers every retained non-content-removed Expert
+    When the structured-name migration runs
+    Then each covered row keeps its id slug lifecycle state and relationships and receives only its reviewed family given and patronymic values
+    And user_id remains null unless it was separately explicitly linked
+    And an unexpected uncovered Expert aborts before any schema or row mutation
+    And no whitespace split heuristic User match or second review queue is used
+
   @EARS-21 @happy
   Scenario: Entity media changes are reversible
     Given an entity has an uploaded image

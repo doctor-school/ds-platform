@@ -48,7 +48,10 @@ export default function CreateExpertPage() {
           onSubmit={(values) => {
             setErrorKey(null);
             const vars: CreateExpertVars = {
-              name: values.name,
+              familyName: values.familyName,
+              givenName: values.givenName,
+              ...(values.patronymic ? { patronymic: values.patronymic } : {}),
+              ...(values.userId ? { userId: values.userId } : {}),
               ...(values.professionalRole
                 ? { professionalRole: values.professionalRole }
                 : {}),
@@ -59,9 +62,6 @@ export default function CreateExpertPage() {
                 ? { affiliation: values.affiliation }
                 : {}),
               ...(values.bio ? { bio: values.bio } : {}),
-              // An empty box means "generate it" — the API owns that decision, so
-              // the field is omitted rather than sent as "".
-              ...(values.slug ? { slug: values.slug } : {}),
               photo: values.photo,
             };
             create(

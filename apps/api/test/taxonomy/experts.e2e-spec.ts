@@ -50,6 +50,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     };
     const consent = [{ purpose: "tos", version: "2026-01" }];
     const createdEmails: string[] = [];
+    const createdPhones: string[] = [];
     const createdExpertIds: string[] = [];
     const usedKeys: string[] = [];
     let adminSid: string;
@@ -125,7 +126,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     async function selectorUser(displayName: string): Promise<{
       id: string;
-      email: string;
+      identifier: string;
       displayName: string;
     }> {
       const email = uniqueEmail("exp-selector");
@@ -142,7 +143,23 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
           RETURNING id`,
         [email, displayName],
       );
-      return { id: rows[0]!.id, email, displayName };
+      return { id: rows[0]!.id, identifier: email, displayName };
+    }
+
+    async function phoneOnlySelectorUser(): Promise<{
+      id: string;
+      identifier: string;
+      displayName: null;
+    }> {
+      const phone = `+7${Math.floor(1_000_000_000 + Math.random() * 9_000_000_000)}`;
+      createdPhones.push(phone);
+      const { rows } = await pool.query<{ id: string }>(
+        `INSERT INTO users (zitadel_sub, phone)
+         VALUES ($1, $2)
+         RETURNING id`,
+        [`selector-phone-${randomUUID()}`, phone],
+      );
+      return { id: rows[0]!.id, identifier: phone, displayName: null };
     }
 
     function multipartBody(
@@ -285,6 +302,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       for (const email of createdEmails.splice(0)) {
         await deleteUserFixture(pool, "email", email);
       }
+      for (const phone of createdPhones.splice(0)) {
+        await deleteUserFixture(pool, "phone", phone);
+      }
       await app.close();
     });
 
@@ -423,7 +443,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const current = await selectorUser(`A ${marker}`);
       const availableFirst = await selectorUser(`B ${marker}`);
       const occupied = await selectorUser(`C ${marker}`);
-      const availableLast = await selectorUser(`D ${marker}`);
+      const availableLast = await selectorUser(`B ${marker}`);
+      const expectedAvailable = [availableFirst, availableLast].sort((a, b) =>
+        a.identifier.localeCompare(b.identifier),
+      );
       const currentExpert = await created(
         await createJson({ payload: validPayload({ userId: current.id }) }),
       );
@@ -438,7 +461,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       });
       expect(withoutCurrent.statusCode, withoutCurrent.payload).toBe(200);
       expect(JSON.parse(withoutCurrent.payload)).toEqual({
-        data: [availableFirst, availableLast],
+        data: expectedAvailable,
         total: 2,
         page: 1,
         pageSize: 20,
@@ -451,7 +474,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       });
       expect(firstPageWithCurrent.statusCode).toBe(200);
       expect(JSON.parse(firstPageWithCurrent.payload)).toEqual({
-        data: [current, availableFirst],
+        data: [current, expectedAvailable[0]],
         total: 3,
         page: 1,
         pageSize: 2,
@@ -463,7 +486,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         headers: { ...device, ...adminHeaders(adminSid) },
       });
       expect(JSON.parse(secondPageWithCurrent.payload)).toEqual({
-        data: [availableLast],
+        data: [expectedAvailable[1]],
         total: 3,
         page: 2,
         pageSize: 2,
@@ -478,6 +501,20 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         expect(empty.statusCode).toBe(200);
         expect(JSON.parse(empty.payload)).toMatchObject({ data: [], total: 0 });
       }
+
+      const phoneOnly = await phoneOnlySelectorUser();
+      const byPhone = await app.inject({
+        method: "GET",
+        url: `/v1/admin/experts/eligible-users?q=${encodeURIComponent(phoneOnly.identifier)}`,
+        headers: { ...device, ...adminHeaders(adminSid) },
+      });
+      expect(byPhone.statusCode).toBe(200);
+      expect(JSON.parse(byPhone.payload)).toEqual({
+        data: [phoneOnly],
+        total: 1,
+        page: 1,
+        pageSize: 20,
+      });
     });
 
     it("012 EARS-19: when two Expert links race for one eligible User, the system shall commit one owner and reject the other with USER_EXPERT_CONFLICT", async () => {

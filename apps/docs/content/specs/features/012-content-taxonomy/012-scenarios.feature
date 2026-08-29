@@ -810,9 +810,10 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
     Given active Users include unlinked rows and rows linked to other retained Experts
     And the current Expert already links one User
     When the operator searches GET /v1/admin/experts/eligible-users with bounded paging and the current Expert id
-    Then results are filtered by trimmed display name or email in stable display-name email and User-id order
+    Then results are filtered by trimmed display name email or phone in stable display-name identifier and User-id order
     And another Expert's User is absent while the current Expert's linked User remains selectable
-    And each option contains only User id nullable display name and nullable email
+    And each option contains only User id nullable display name and a non-null identifier equal to email or otherwise phone
+    And a phone-only User with no display name is searchable by phone and still has a readable identifier
     And an unmatched or escaped-wildcard search returns a successful empty page
     And a later ownership race is still decided by one committed link and one 409 USER_EXPERT_CONFLICT without name matching
 

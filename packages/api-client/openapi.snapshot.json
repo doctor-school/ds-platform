@@ -151,25 +151,17 @@
                     }
                   ]
                 },
-                "email": {
-                  "anyOf": [
-                    {
-                      "format": "email",
-                      "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$",
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
-                },
                 "id": {
                   "format": "uuid",
                   "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
                   "type": "string"
+                },
+                "identifier": {
+                  "minLength": 1,
+                  "type": "string"
                 }
               },
-              "required": ["id", "displayName", "email"],
+              "required": ["id", "displayName", "identifier"],
               "type": "object"
             },
             "type": "array"

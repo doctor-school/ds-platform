@@ -396,12 +396,13 @@ export type EligibleExpertUserQuery = z.infer<
   typeof EligibleExpertUserQuerySchema
 >;
 
-/** Minimal platform-admin option label; excludes phone, IdP subject and roles. */
+/** Minimal platform-admin option label; excludes separate contact fields, IdP subject and roles. */
 export const EligibleExpertUserOptionSchema = z
   .object({
     id: z.uuid(),
     displayName: z.string().nullable(),
-    email: z.email().nullable(),
+    /** Guaranteed by `users_email_or_phone`: email when present, otherwise phone. */
+    identifier: z.string().min(1),
   })
   .strict();
 export type EligibleExpertUserOption = z.infer<

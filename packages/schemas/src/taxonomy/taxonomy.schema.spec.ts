@@ -206,11 +206,11 @@ describe("012 taxonomy — expert authoring contract (SSOT)", () => {
     ).toBe(false);
   });
 
-  it("012 EARS-19: when eligible User options cross the wire, the schema shall expose only stable id, display name and email", () => {
+  it("012 EARS-19: when eligible User options cross the wire, the schema shall expose stable id, nullable display name and a required operator-readable identifier", () => {
     const option = {
       id: "11111111-1111-4111-8111-111111111111",
-      displayName: "Иван Иванов",
-      email: "doctor@example.test",
+      displayName: null,
+      identifier: "doctor@example.test",
     };
     expect(
       EligibleExpertUserListSchema.parse({
@@ -222,7 +222,15 @@ describe("012 taxonomy — expert authoring contract (SSOT)", () => {
     ).toEqual({ data: [option], total: 1, page: 1, pageSize: 20 });
     expect(
       EligibleExpertUserListSchema.safeParse({
-        data: [{ ...option, phone: "+79990000000" }],
+        data: [{ ...option, email: "doctor@example.test" }],
+        total: 1,
+        page: 1,
+        pageSize: 20,
+      }).success,
+    ).toBe(false);
+    expect(
+      EligibleExpertUserListSchema.safeParse({
+        data: [{ id: option.id, displayName: null, identifier: null }],
         total: 1,
         page: 1,
         pageSize: 20,

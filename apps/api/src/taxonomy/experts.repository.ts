@@ -252,21 +252,28 @@ export class ExpertsRepository {
     if (query.q) {
       const pattern = `%${escapeLike(query.q.normalize("NFKC"))}%`;
       filters.push(
-        or(ilike(users.displayName, pattern), ilike(users.email, pattern))!,
+        or(
+          ilike(users.displayName, pattern),
+          ilike(users.email, pattern),
+          ilike(users.phone, pattern),
+        )!,
       );
     }
     const where = and(...filters);
+    // `users_email_or_phone` guarantees this expression is non-null. Expose one
+    // operator label rather than ambiguous nullable contact fields.
+    const identifier = sql<string>`coalesce(${users.email}::text, ${users.phone})`;
     const selection = {
       id: users.id,
       displayName: users.displayName,
-      email: users.email,
+      identifier,
     };
     const rows = await this.db
       .select(selection)
       .from(users)
       .leftJoin(experts, eq(experts.userId, users.id))
       .where(where)
-      .orderBy(asc(users.displayName), asc(users.email), asc(users.id))
+      .orderBy(asc(users.displayName), asc(identifier), asc(users.id))
       .limit(query.pageSize)
       .offset((query.page - 1) * query.pageSize);
     const [totals] = await this.db

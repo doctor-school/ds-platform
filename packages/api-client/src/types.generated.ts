@@ -1669,9 +1669,9 @@ export interface components {
         EligibleExpertUserListDto: {
             data: {
                 displayName: string | null;
-                email: string | null;
                 /** Format: uuid */
                 id: string;
+                identifier: string;
             }[];
             page: number;
             pageSize: number;

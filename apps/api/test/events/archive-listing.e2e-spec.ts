@@ -27,7 +27,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
       overrides: { id?: string; startsAt?: string } = {},
     ) {
       const id = overrides.id ?? randomUUID();
-      const slug = `archive-${state}-${id.slice(0, 8)}`;
+      const slug = `archive-${state}-${id}`;
       const startsAt =
         overrides.startsAt ??
         new Date(Date.now() - hoursAgo * 60 * 60 * 1000).toISOString();

@@ -18,7 +18,15 @@ test("EARS-11: week to month paging to week preserves tab and facet state", asyn
   await expect(page).toHaveURL(/specialty=cardiology/);
 
   const firstMonth = new URL(page.url()).searchParams.get("month");
-  await page.getByRole("link", { name: /Следующий месяц/ }).click();
+  const nextMonthLink = page.getByRole("link", { name: /Следующий месяц/ });
+  const nextMonthHref = await nextMonthLink.getAttribute("href");
+  const targetMonth = new URL(nextMonthHref!, BASE).searchParams.get("month");
+  expect(targetMonth).toBeTruthy();
+  expect(targetMonth).not.toBe(firstMonth);
+  await nextMonthLink.click();
+  await expect
+    .poll(() => new URL(page.url()).searchParams.get("month"))
+    .toBe(targetMonth);
   const pagedMonth = new URL(page.url()).searchParams.get("month");
   expect(pagedMonth).not.toBe(firstMonth);
   await expect(page).toHaveURL(/tab=past/);

@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { TaxonomyModule } from "../taxonomy/taxonomy.module.js";
+import { RecordingsModule } from "../recordings/recordings.module.js";
 import { EventsAdminController } from "./events.admin.controller.js";
 import { EventsPublicController } from "./events.public.controller.js";
 import { EventsRepository } from "./events.repository.js";
@@ -25,7 +26,7 @@ import { EventsService } from "./events.service.js";
   // `SpeakerProjectionService` — the ONE canonical merged resolver. The
   // dependency points events → taxonomy and never back: the taxonomy public
   // speaker route resolves its own event key, so there is no cycle.
-  imports: [TaxonomyModule],
+  imports: [TaxonomyModule, RecordingsModule],
   controllers: [EventsAdminController, EventsPublicController],
   providers: [EventsService, EventsRepository],
   exports: [EventsService],

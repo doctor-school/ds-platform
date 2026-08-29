@@ -123,6 +123,8 @@ export const SHOWCASE_REGISTRY: ShowcaseEntry[] = [
   { id: "DataTable", section: "blocks" },
   { id: "Pagination", section: "blocks" },
   { id: "EmptyState", section: "blocks" },
+  // 014 EARS-10/11 — the controlled cross-front event feed.
+  { id: "EventList", section: "blocks" },
   { id: "FilterBar", section: "blocks" },
   { id: "Combobox", section: "blocks" },
   { id: "FormSection", section: "blocks" },

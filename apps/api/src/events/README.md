@@ -26,6 +26,10 @@ The webinar event module. It hosts two surfaces over one aggregate:
   projections: the event-page endpoint (`GET /v1/public/events/:idOrSlug` →
   `PublicEventPage`, 004 EARS-1), the upcoming-broadcasts listing
   (`GET /v1/public/events` → `UpcomingBroadcastCard[]`, 004 EARS-7), the
+  cursor-paged upcoming/archive feed
+  (`GET /v1/public/events?timeframe=upcoming|past` →
+  `PublicEventListingPage`, 014 EARS-11: tab counts, ended-only newest-first
+  archive and one batch-resolved `RecordingProjection` per past card), the
   month-range read (`GET /v1/public/events?month=YYYY-MM` →
   `MonthBroadcastEntry[]`, 004 EARS-15: every `published`/`live`/`ended` event
   whose start instant falls in the requested month — МСК month boundaries via the
@@ -330,5 +334,6 @@ stream-config **form** (stock Refine) + its browser E2E are the integration slic
 | `POST /v1/admin/events/:id/transition`         | `platform_admin`     | `TransitionEvent` (EARS-7 closed-set guard; body `{ to }`)                                                                                                                   |
 | `GET /v1/public/events/:idOrSlug`              | **public** (no auth) | `PublicEventPage` (004 EARS-1) — `draft`/unknown → 404                                                                                                                       |
 | `GET /v1/public/events` (`?upcoming`)          | **public** (no auth) | `UpcomingBroadcastCard[]` (004 EARS-7) — nearest first; empty → `[]`                                                                                                         |
+| `GET /v1/public/events?timeframe=upcoming      | past`                | **public** (no auth)                                                                                                                                                         | `PublicEventListingPage` (014 EARS-11) — opaque cursor, both tab counts; past is ended-only newest-first with canonical recording state |
 | `GET /v1/public/events?month=YYYY-MM`          | **public** (no auth) | `MonthBroadcastEntry[]` (004 EARS-15) — МСК month window incl. the month's past events; malformed month → 400; empty → `[]`                                                  |
 | `GET /v1/public/events/month-counts?year=YYYY` | **public** (no auth) | `MonthlyEventCount[12]` (004 EARS-16) — publish-visible counts per МСК month, zero months included; malformed year → 400                                                     |

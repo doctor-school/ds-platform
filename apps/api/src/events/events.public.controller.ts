@@ -7,16 +7,20 @@ import {
   Param,
   Query,
 } from "@nestjs/common";
+import { ApiQuery } from "@nestjs/swagger";
 import {
   MONTH_PARAM,
   type MonthBroadcastEntry,
   type MonthlyEventCount,
   type PublicEventPage,
+  type PublicEventListingPage,
+  PublicEventListingQuerySchema,
   type UpcomingBroadcastCard,
   YEAR_PARAM,
 } from "@ds/schemas";
 import { Authz, Public } from "../authz/index.js";
 import { EventsService } from "./events.service.js";
+import { InvalidEventListingCursorError } from "./events.service.js";
 
 /**
  * 004 public event read surface — the read side of the webinar aggregate (004
@@ -60,17 +64,44 @@ export class EventsPublicController {
    * before `:idOrSlug` so the bare-path reads are unambiguous.
    */
   @Get()
+  @ApiQuery({ name: "month", required: false })
+  @ApiQuery({ name: "timeframe", required: false, enum: ["upcoming", "past"] })
+  @ApiQuery({ name: "limit", required: false, type: Number })
+  @ApiQuery({ name: "cursor", required: false, type: String })
   @Public()
   @Header("Cache-Control", "public, max-age=30")
   @Authz({
     access: "public",
     check: "none",
     audit: "none",
-    tests: ["EARS-7", "EARS-10", "EARS-15"],
+    tests: ["EARS-7", "EARS-10", "EARS-11", "EARS-15"],
   })
   list(
     @Query("month") month?: string,
-  ): Promise<UpcomingBroadcastCard[] | MonthBroadcastEntry[]> {
+    @Query("timeframe") timeframe?: string,
+    @Query("limit") limit?: string,
+    @Query("cursor") cursor?: string,
+  ): Promise<
+    UpcomingBroadcastCard[] | MonthBroadcastEntry[] | PublicEventListingPage
+  > {
+    if (timeframe !== undefined) {
+      const parsed = PublicEventListingQuerySchema.safeParse({
+        timeframe,
+        limit,
+        cursor,
+      });
+      if (!parsed.success) {
+        throw new BadRequestException("invalid public event listing query");
+      }
+      return this.events
+        .listPublicEvents(parsed.data)
+        .catch((error: unknown) => {
+          if (error instanceof InvalidEventListingCursorError) {
+            throw new BadRequestException(error.message);
+          }
+          throw error;
+        });
+    }
     if (month === undefined) return this.events.listUpcoming();
     // EARS-15: the boundary rejects a malformed month structurally (400) before
     // any read — the shape SSOT is `MONTH_PARAM` (@ds/schemas).

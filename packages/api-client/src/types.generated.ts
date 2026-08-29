@@ -3865,8 +3865,11 @@ export interface operations {
     };
     EventsPublicController_list: {
         parameters: {
-            query: {
-                month: string;
+            query?: {
+                cursor?: string;
+                limit?: number;
+                month?: string;
+                timeframe?: "upcoming" | "past";
             };
             header?: never;
             path?: never;

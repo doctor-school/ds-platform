@@ -9,7 +9,7 @@ import {
   type StreamConfig,
   UPCOMING_BROADCAST_STATES,
 } from "@ds/schemas";
-import { and, asc, desc, eq, gte, inArray, lt, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, inArray, lt, or, sql } from "drizzle-orm";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
 import { reconcileEventSpeakers } from "./event-speakers.reconcile.js";
 
@@ -68,6 +68,11 @@ export interface EventWithSpeakers {
   speakers: { name: string; regalia: string; position: number }[];
   /** The `{ provider, embedRef }` the 006 room consumes (EARS-3); `null` until configured. */
   streamConfig: StreamConfig | null;
+}
+
+export interface EventListingCursor {
+  startsAt: Date;
+  id: string;
 }
 
 /**
@@ -242,8 +247,18 @@ export class EventsRepository {
    * back by event in `position` order. An empty match is a valid empty list
    * (EARS-11).
    */
-  async listUpcoming(cutoff: Date): Promise<EventWithSpeakers[]> {
-    const rows = await this.db
+  async listUpcoming(
+    cutoff: Date,
+    limit?: number,
+    after: EventListingCursor | null = null,
+  ): Promise<EventWithSpeakers[]> {
+    const cursor = after
+      ? or(
+          gt(events.startsAt, after.startsAt),
+          and(eq(events.startsAt, after.startsAt), gt(events.id, after.id)),
+        )
+      : undefined;
+    const query = this.db
       .select()
       .from(events)
       .where(
@@ -251,9 +266,11 @@ export class EventsRepository {
           ACTIVE_EVENT,
           inArray(events.state, [...UPCOMING_BROADCAST_STATES]),
           gte(events.startsAt, cutoff),
+          cursor,
         ),
       )
       .orderBy(asc(events.startsAt));
+    const rows = limit === undefined ? await query : await query.limit(limit);
     if (rows.length === 0) return [];
 
     const ids = rows.map((r) => r.id);
@@ -280,6 +297,81 @@ export class EventsRepository {
       // The upcoming-listing card (004) does not read the stream config.
       streamConfig: null,
     }));
+  }
+
+  /** 014 EARS-11 ended-only archive, newest first, with a stable tuple cursor. */
+  async listPast(
+    limit: number,
+    after: EventListingCursor | null,
+  ): Promise<EventWithSpeakers[]> {
+    const cursor = after
+      ? or(
+          lt(events.startsAt, after.startsAt),
+          and(eq(events.startsAt, after.startsAt), lt(events.id, after.id)),
+        )
+      : undefined;
+    const rows = await this.db
+      .select()
+      .from(events)
+      .where(and(ACTIVE_EVENT, eq(events.state, "ended"), cursor))
+      .orderBy(desc(events.startsAt), desc(events.id))
+      .limit(limit);
+    if (rows.length === 0) return [];
+
+    const speakerRows = await this.db
+      .select()
+      .from(eventSpeakers)
+      .where(
+        and(
+          inArray(
+            eventSpeakers.eventId,
+            rows.map((row) => row.id),
+          ),
+          eq(eventSpeakers.recordStatus, "active"),
+        ),
+      )
+      .orderBy(asc(eventSpeakers.position));
+    const byEvent = new Map<string, EventWithSpeakers["speakers"]>();
+    for (const speaker of speakerRows) {
+      const list = byEvent.get(speaker.eventId) ?? [];
+      list.push({
+        name: speaker.name,
+        regalia: speaker.regalia,
+        position: speaker.position,
+      });
+      byEvent.set(speaker.eventId, list);
+    }
+    return rows.map((event) => ({
+      event,
+      speakers: byEvent.get(event.id) ?? [],
+      streamConfig: null,
+    }));
+  }
+
+  /** Counts backing the two controlled `/webinars` tabs. */
+  async publicListingCounts(
+    cutoff: Date,
+  ): Promise<{ upcoming: number; past: number }> {
+    const [upcomingRow, pastRow] = await Promise.all([
+      this.db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(events)
+        .where(
+          and(
+            ACTIVE_EVENT,
+            inArray(events.state, [...UPCOMING_BROADCAST_STATES]),
+            gte(events.startsAt, cutoff),
+          ),
+        ),
+      this.db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(events)
+        .where(and(ACTIVE_EVENT, eq(events.state, "ended"))),
+    ]);
+    return {
+      upcoming: upcomingRow[0]?.count ?? 0,
+      past: pastRow[0]?.count ?? 0,
+    };
   }
 
   /**

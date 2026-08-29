@@ -11,6 +11,7 @@ import type {
   EventWithSpeakers,
 } from "./events.repository.js";
 import type { SpeakerProjectionService } from "../taxonomy/speaker-projection.service.js";
+import type { RecordingsProjectionService } from "../recordings/recordings.projection.js";
 import { EventsService, type UploadedPdf } from "./events.service.js";
 
 // 007 EARS-2 — GC-on-supersede (#627). When a program-PDF replacement commits
@@ -129,6 +130,23 @@ function service(storage: RecordingStorage, repo: unknown): EventsService {
     storage,
     repo as EventsRepository,
     speakerProjectionStub(),
+    {
+      resolveRecordingProjections: (ids: string[]) =>
+        Promise.resolve(
+          new Map(
+            ids.map((id) => [
+              id,
+              {
+                state: "preparing" as const,
+                primaryKind: null,
+                secondaryKind: null,
+                posterUrl: null,
+                expectedBy: null,
+              },
+            ]),
+          ),
+        ),
+    } as unknown as RecordingsProjectionService,
   );
 }
 

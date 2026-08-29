@@ -19,26 +19,48 @@ export const dynamic = "force-dynamic";
 export default async function WebinarsListingPage({
   searchParams,
 }: {
-  searchParams: Promise<{ view?: string; month?: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const { view, month } = await searchParams;
+  const params = await searchParams;
+  const value = (key: string) => {
+    const found = params[key];
+    return Array.isArray(found) ? found[0] : found;
+  };
+  const view = value("view");
+  const month = value("month");
+  const tab = value("tab") === "past" ? "past" : "upcoming";
+  const cursor = value("cursor");
+  const rawPage = Number(value("page") ?? "1");
+  const page = Number.isSafeInteger(rawPage) && rawPage > 0 ? rawPage : 1;
   // Validate `month` at the boundary (EARS-17): an absent/malformed value falls
   // back to the current МСК month, so the page never emits a malformed API param.
-  const selectedMonth =
-    month && MONTH_PARAM.test(month) ? month : undefined;
+  const selectedMonth = month && MONTH_PARAM.test(month) ? month : undefined;
 
   if (view === "month") {
     return <MonthCalendarView month={selectedMonth} />;
   }
+  const buildHref = (targetView: "week" | "month") => {
+    const query = new URLSearchParams();
+    for (const [key, raw] of Object.entries(params)) {
+      const values = Array.isArray(raw) ? raw : raw === undefined ? [] : [raw];
+      for (const entry of values) query.append(key, entry);
+    }
+    if (selectedMonth) query.set("month", selectedMonth);
+    else query.delete("month");
+    if (targetView === "month") query.set("view", "month");
+    else query.delete("view");
+    const serialized = query.toString();
+    return serialized ? `/webinars?${serialized}` : "/webinars";
+  };
   // Week pane: carry the month so the «Месяц» switcher restores it (loss-free
   // round-trip, EARS-18).
   return (
     <DiscoveryListing
-      monthViewHref={
-        selectedMonth
-          ? `/webinars?view=month&month=${selectedMonth}`
-          : "/webinars?view=month"
-      }
+      monthViewHref={buildHref("month")}
+      weekViewHref={buildHref("week")}
+      timeframe={tab}
+      cursor={cursor}
+      page={page}
     />
   );
 }

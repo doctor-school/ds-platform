@@ -12,6 +12,9 @@ import {
   type MonthBroadcastEntry,
   type MonthBroadcastState,
   type MonthlyEventCount,
+  type PastBroadcastCard,
+  type PublicEventListingPage,
+  type PublicEventListingQuery,
   mskLocalToInstant,
   mskMonthRange,
   mskYearRange,
@@ -24,6 +27,7 @@ import {
   validTransitions,
 } from "@ds/schemas";
 import { OBJECT_STORAGE, type ObjectStorage } from "../storage/index.js";
+import { RecordingsProjectionService } from "../recordings/recordings.projection.js";
 import { SpeakerProjectionService } from "../taxonomy/speaker-projection.service.js";
 import {
   type EventWithSpeakers,
@@ -43,6 +47,45 @@ import {
  * before 007 ends it, while a long-past not-yet-ended event still ages out.
  */
 export const AIR_WINDOW_MS = 6 * 60 * 60 * 1000;
+
+export class InvalidEventListingCursorError extends Error {
+  constructor() {
+    super("this cursor was not issued by this API; start from the first page");
+    this.name = "InvalidEventListingCursorError";
+  }
+}
+
+function encodeEventListingCursor(startsAt: Date, id: string): string {
+  return Buffer.from(
+    JSON.stringify([startsAt.toISOString(), id]),
+    "utf8",
+  ).toString("base64url");
+}
+
+function decodeEventListingCursor(
+  cursor?: string,
+): { startsAt: Date; id: string } | null {
+  if (cursor === undefined) return null;
+  try {
+    const decoded: unknown = JSON.parse(
+      Buffer.from(cursor, "base64url").toString("utf8"),
+    );
+    if (
+      !Array.isArray(decoded) ||
+      decoded.length !== 2 ||
+      typeof decoded[0] !== "string" ||
+      Number.isNaN(Date.parse(decoded[0])) ||
+      typeof decoded[1] !== "string" ||
+      !/^[0-9a-f-]{36}$/i.test(decoded[1])
+    ) {
+      throw new InvalidEventListingCursorError();
+    }
+    return { startsAt: new Date(decoded[0]), id: decoded[1] };
+  } catch (error) {
+    if (error instanceof InvalidEventListingCursorError) throw error;
+    throw new InvalidEventListingCursorError();
+  }
+}
 
 /** A program PDF extracted from the multipart request. */
 export interface UploadedPdf {
@@ -256,7 +299,8 @@ function assertMarkEndedAllowed(
   if (!(from === "published" && to === "ended")) return;
   const verdict = markEndedPrecondition(event);
   if (verdict.ok) return;
-  if (verdict.reason === "not-past") throw new EventNotPastError(scheduledEnd(event));
+  if (verdict.reason === "not-past")
+    throw new EventNotPastError(scheduledEnd(event));
   throw new InvalidTransitionError(from, to);
 }
 
@@ -325,6 +369,8 @@ export class EventsService {
     // the page, the standalone endpoint and the card from disagreeing.
     @Inject(SpeakerProjectionService)
     private readonly speakerProjection: SpeakerProjectionService,
+    @Inject(RecordingsProjectionService)
+    private readonly recordingsProjection: RecordingsProjectionService,
   ) {}
 
   /**
@@ -724,7 +770,8 @@ export class EventsService {
       // `mark-ended` act as CloseRoom. The required origin is therefore part of
       // this command's contract, not an inference from the target.
       (event, from) => {
-        if (from !== "published") throw new InvalidTransitionError(from, "ended");
+        if (from !== "published")
+          throw new InvalidTransitionError(from, "ended");
       },
       fence,
     );
@@ -812,7 +859,64 @@ export class EventsService {
     const speakers = await this.speakerProjection.resolveMany(
       rows.map((r) => r.event.id),
     );
-    return rows.map((r) => this.toUpcomingCard(r, speakers.get(r.event.id) ?? []));
+    return rows.map((r) =>
+      this.toUpcomingCard(r, speakers.get(r.event.id) ?? []),
+    );
+  }
+
+  /** 014 EARS-11 cursor-paged public list used by the controlled `/webinars` tabs. */
+  async listPublicEvents(
+    query: PublicEventListingQuery,
+    now: Date = new Date(),
+  ): Promise<PublicEventListingPage> {
+    const cutoff = new Date(now.getTime() - AIR_WINDOW_MS);
+    const after = decodeEventListingCursor(query.cursor);
+    const counts = await this.repo.publicListingCounts(cutoff);
+    const rows =
+      query.timeframe === "past"
+        ? await this.repo.listPast(query.limit + 1, after)
+        : await this.repo.listUpcoming(cutoff, query.limit + 1, after);
+    const hasMore = rows.length > query.limit;
+    const pageRows = rows.slice(0, query.limit);
+    const next = hasMore ? pageRows.at(-1)?.event : undefined;
+    const speakers = await this.speakerProjection.resolveMany(
+      pageRows.map((row) => row.event.id),
+    );
+
+    if (query.timeframe === "past") {
+      const recordings =
+        await this.recordingsProjection.resolveRecordingProjections(
+          pageRows.map((row) => row.event.id),
+        );
+      const data: PastBroadcastCard[] = pageRows.map((row) => ({
+        ...this.toUpcomingCard(row, speakers.get(row.event.id) ?? []),
+        state: "ended",
+        recording: recordings.get(row.event.id)!,
+      }));
+      return {
+        data,
+        counts,
+        pagination: {
+          hasMore,
+          nextCursor: next
+            ? encodeEventListingCursor(next.startsAt, next.id)
+            : null,
+        },
+      };
+    }
+
+    return {
+      data: pageRows.map((row) =>
+        this.toUpcomingCard(row, speakers.get(row.event.id) ?? []),
+      ),
+      counts,
+      pagination: {
+        hasMore,
+        nextCursor: next
+          ? encodeEventListingCursor(next.startsAt, next.id)
+          : null,
+      },
+    };
   }
 
   /**

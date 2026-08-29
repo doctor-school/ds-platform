@@ -2,6 +2,7 @@ import * as React from "react";
 
 import { cn } from "../lib/utils";
 import { Button } from "./button";
+import { Badge } from "./badge";
 
 /**
  * Neo-brutalist webinar listing card (004 EARS-8, source
@@ -43,8 +44,10 @@ export interface WebinarCardSpeaker {
   org?: string;
 }
 
-export interface WebinarCardProps
-  extends Omit<React.ComponentPropsWithoutRef<"div">, "title" | "children"> {
+export interface WebinarCardProps extends Omit<
+  React.ComponentPropsWithoutRef<"div">,
+  "title" | "children"
+> {
   /** The event page URL the card's stretched title link points to (`/webinars/:slug`, EARS-8). */
   href: string;
   /** Start time already formatted in Europe/Moscow, e.g. `19:00` (EARS-12). */
@@ -65,6 +68,8 @@ export interface WebinarCardProps
   live?: boolean;
   /** Live-signal copy — «В эфире» (from the catalog); required visually when `live`. */
   liveLabel?: string;
+  /** Source-free recording-state badge supplied by the host for an ended event. */
+  recordingLabel?: string;
   /**
    * Whether the VIEWER is registered for this event — surfaces the canvas
    * `registered` variant's «вы записаны» marker (the green `✓` line, semantic
@@ -115,6 +120,7 @@ const WebinarCard = React.forwardRef<HTMLDivElement, WebinarCardProps>(
       speakers = [],
       live = false,
       liveLabel,
+      recordingLabel,
       registered = false,
       registeredLabel,
       ctaHref,
@@ -160,6 +166,7 @@ const WebinarCard = React.forwardRef<HTMLDivElement, WebinarCardProps>(
             {liveLabel}
           </span>
         ) : null}
+        {recordingLabel ? <Badge>{recordingLabel}</Badge> : null}
 
         {/* `display:contents` on desktop lets the time + meta lay out directly in
             the time-column flex; on mobile they stack inside their own column. */}

@@ -86,6 +86,11 @@ export interface ComboboxProps {
   /** Accessible name for the panel's own query box. */
   searchLabel?: string;
   searchPlaceholder?: string;
+  /**
+   * Optional server-search bridge. When present, the app owns filtering and the
+   * options are rendered exactly as returned by its bounded query.
+   */
+  onSearchChange?: (query: string) => void;
   /** The no-match line («Ничего не найдено»). */
   emptyLabel: string;
   /**
@@ -117,6 +122,7 @@ export function Combobox({
   placeholder,
   searchLabel,
   searchPlaceholder,
+  onSearchChange,
   emptyLabel,
   showSearch,
   countLabel,
@@ -150,10 +156,7 @@ export function Combobox({
   // `aria-label ?? placeholder`) plus the chosen value — the value span joins only
   // once something is selected, otherwise the placeholder would be announced twice.
   const fieldNameOwnedHere = !ariaLabelledBy;
-  const labelledBy = [
-    ariaLabelledBy ?? fieldNameId,
-    selected ? valueId : null,
-  ]
+  const labelledBy = [ariaLabelledBy ?? fieldNameId, selected ? valueId : null]
     .filter(Boolean)
     .join(" ");
 
@@ -162,7 +165,10 @@ export function Combobox({
       open={open}
       onOpenChange={(next) => {
         setOpen(next);
-        if (!next) setQuery("");
+        if (!next) {
+          setQuery("");
+          onSearchChange?.("");
+        }
       }}
     >
       <PopoverPrimitive.Trigger asChild>
@@ -226,6 +232,7 @@ export function Combobox({
           className="z-50 border-2 border-border bg-card shadow-ghost"
         >
           <CommandPrimitive
+            shouldFilter={!onSearchChange}
             // Filtering is over the LABEL, never the stored value.
             filter={(itemValue, search) =>
               itemValue.toLocaleLowerCase().includes(search.toLocaleLowerCase())
@@ -237,7 +244,10 @@ export function Combobox({
               <div className="border-b-2 border-border">
                 <CommandPrimitive.Input
                   value={query}
-                  onValueChange={setQuery}
+                  onValueChange={(next) => {
+                    setQuery(next);
+                    onSearchChange?.(next);
+                  }}
                   aria-label={searchLabel}
                   placeholder={searchPlaceholder}
                   className="h-11 w-full bg-background px-3.5 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none"

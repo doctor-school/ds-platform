@@ -6,12 +6,10 @@ import { totpCode } from "./support/totp";
  * 012 EARS-1 (#1283), browser half — the REAL Refine → NestJS → Postgres path.
  *
  * The API e2e suites prove the contract against the API directly. This proves the
- * operator-facing arc on the running admin: sign in, create a project (watching
- * the generated slug preview and the description counter), find it through the
- * shared list shell's search, edit it, upload and then remove a cover, and see
- * the slug lock explain itself once the row has been published. Reject branches
- * ride along: a garbage slug and an over-long title must surface RU inline errors
- * BEFORE any request leaves the browser.
+ * operator-facing arc on the running admin: sign in, create a project, copy its
+ * server-derived public link, find it through the shared list shell's search,
+ * edit it, then upload and remove a cover. An over-long title is refused before
+ * any request leaves the browser; no slug authoring control exists.
  *
  * Dev-stand-gated + MANUAL like every other `apps/admin/e2e` flow spec — the
  * bootstrap provisions a real `platform_admin` against the stand's Zitadel and
@@ -50,6 +48,7 @@ test.describe.configure({ mode: "serial" });
 test.describe("012 EARS-1 — project authoring in the live admin", () => {
   test("012 EARS-1: an operator creates, finds, edits and covers a project through the real admin", async ({
     page,
+    context,
   }) => {
     await signInAsAdmin(page);
 
@@ -58,29 +57,28 @@ test.describe("012 EARS-1 — project authoring in the live admin", () => {
     await page.waitForURL(/\/projects$/, { timeout: 20_000 });
     await expect(page.getByTestId("projects-filters")).toBeVisible();
     // The retired-rows toggle is OFF by default (Stage-A answer 4).
-    await expect(page.getByTestId("projects-include-retired")).not.toBeChecked();
+    await expect(
+      page.getByTestId("projects-include-retired"),
+    ).not.toBeChecked();
 
     // ── Reject branch: garbage input never leaves the browser ──────────────
     await page.getByTestId("projects-create").click();
     await page.waitForURL(/\/projects\/create$/, { timeout: 20_000 });
     await page.getByTestId("project-title").fill("x".repeat(161));
-    await page.getByTestId("project-slug").fill("Not valid");
     await page.getByTestId("project-description").fill("");
     await page.getByTestId("submit-project").click();
     // RU inline errors, and we are still on the create screen.
-    await expect(page.getByText("Слишком длинное значение", { exact: false })).toBeVisible();
     await expect(
-      page.getByText("Только строчные латинские буквы", { exact: false }),
+      page.getByText("Слишком длинное значение", { exact: false }),
     ).toBeVisible();
+    await expect(page.getByTestId("project-slug")).toHaveCount(0);
     expect(page.url()).toMatch(/\/projects\/create$/);
 
-    // ── Accept branch: the generated slug preview and the counter ──────────
+    // ── Accept branch: server-owned address and the counter ────────────────
     const title = `Школа кардиологии ${Date.now()}`;
     await page.getByTestId("project-title").fill(title);
-    await page.getByTestId("project-slug").fill("");
-    await expect(page.getByTestId("project-slug")).toHaveAttribute(
-      "placeholder",
-      /^shkola-kardiologii/,
+    await expect(page.getByTestId("project-public-link-note")).toContainText(
+      "Адрес сгенерирует сервер",
     );
     await page
       .getByTestId("project-description")
@@ -94,12 +92,26 @@ test.describe("012 EARS-1 — project authoring in the live admin", () => {
     const detailUrl = page.url();
     await expect(page.getByTestId("project-heading")).toHaveText(title);
     await expect(page.getByTestId("project-status")).toHaveText("Черновик");
+    const publicUrl = await page.getByTestId("project-public-link").innerText();
+    expect(publicUrl).toMatch(
+      /^https:\/\/academy\.doctor\.school\/projects\/shkola-kardiologii/,
+    );
+    await context.grantPermissions(["clipboard-read", "clipboard-write"], {
+      origin: ORIGIN,
+    });
+    await page.getByTestId("project-copy-public-link").click();
+    await expect(page.getByTestId("project-copy-public-link")).toHaveText(
+      "Ссылка скопирована",
+    );
+    await expect
+      .poll(() => page.evaluate(() => navigator.clipboard.readText()))
+      .toBe(publicUrl);
     // «Основное» plus the «События» read direction EARS-6 added (#1288). Still no
     // empty placeholder tab: «Публикация» (#1287/#1295/#1296) arrives with the
     // transitions that give it something to show.
     await expect(page.getByTestId("tab-main")).toBeVisible();
     await expect(page.getByTestId("tab-events")).toBeVisible();
-    await expect(page.getByRole("tab")).toHaveCount(2);
+    await expect(page.getByRole("tab")).toHaveCount(4);
 
     // ── The shared list shell finds it by search ───────────────────────────
     await page.getByTestId("back-to-list").click();
@@ -144,21 +156,8 @@ test.describe("012 EARS-1 — project authoring in the live admin", () => {
     });
     await expect(page.getByTestId("project-cover-error")).toBeVisible();
 
-    // ── The slug stays editable while the row has never been published ────
-    await expect(page.getByTestId("project-slug")).not.toHaveAttribute(
-      "readonly",
-      /.*/,
-    );
-    await expect(
-      page.getByText("До первой публикации адрес можно изменить", {
-        exact: false,
-      }),
-    ).toBeVisible();
-    // The LOCKED rendering (read-only box + «адрес зафиксирован…» explanation)
-    // cannot be reached from the browser in this slice: publication is #1287 and
-    // no route here can set `first_published_at`. Its contract half is proven in
-    // `apps/api/test/taxonomy/projects.e2e-spec.ts` (`slugEditable: false` on a
-    // published row plus the 409 `SLUG_IMMUTABLE` refusal); the browser assertion
-    // rides #1287, which introduces the transition that produces the state.
+    // The address remains visible but never becomes an authored mutation field.
+    await expect(page.getByTestId("project-slug")).toHaveCount(0);
+    await expect(page.getByTestId("project-public-link")).toHaveText(publicUrl);
   });
 });

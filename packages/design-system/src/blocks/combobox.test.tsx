@@ -99,7 +99,9 @@ describe("<Combobox>", () => {
         emptyLabel="Ничего не найдено"
       />,
     );
-    expect(screen.getByRole("combobox")).toHaveAccessibleName("Выберите вид связи");
+    expect(screen.getByRole("combobox")).toHaveAccessibleName(
+      "Выберите вид связи",
+    );
 
     rerender(
       <Combobox
@@ -249,6 +251,30 @@ describe("<Combobox>", () => {
     await dismiss();
   });
 
+  it("delegates filtering to a remote option source when search is controlled by the app", async () => {
+    const onSearchChange = vi.fn();
+    render(
+      <Combobox
+        options={[{ value: "user-1", label: "Иван Петров" }]}
+        onValueChange={vi.fn()}
+        onSearchChange={onSearchChange}
+        placeholder="Выберите пользователя"
+        searchLabel="Поиск пользователя"
+        emptyLabel="Ничего не найдено"
+        showSearch
+      />,
+    );
+    await userEvent.click(screen.getByRole("combobox"));
+    const query = await screen.findByLabelText("Поиск пользователя");
+    await userEvent.type(query, "Сидоров");
+
+    expect(onSearchChange).toHaveBeenLastCalledWith("Сидоров");
+    // The returned server page remains visible even when its label does not
+    // contain the query; cmdk must not apply a second, local filter.
+    expect(screen.getByText("Иван Петров")).toBeInTheDocument();
+    await dismiss();
+  });
+
   it("never lets typing enter free text into the value", async () => {
     const onValueChange = vi.fn();
     const book: ComboboxOption[] = Array.from({ length: 20 }, (_, index) => ({
@@ -281,7 +307,10 @@ describe("<Combobox>", () => {
         invalid
       />,
     );
-    expect(screen.getByRole("combobox")).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByRole("combobox")).toHaveAttribute(
+      "aria-invalid",
+      "true",
+    );
     rerender(
       <Combobox
         options={KINDS}

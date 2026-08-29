@@ -226,38 +226,30 @@ async function toHttpError(res: Response): Promise<TaxonomyHttpError> {
   };
 }
 
-/**
- * EARS-19 selector source. It exhausts the server-paged eligible set so the owned
- * Combobox can search every eligible User locally; no UUID/free-text fallback is
- * exposed when the directory grows beyond one page.
- */
-export async function fetchEligibleExpertUsers(
-  currentExpertId?: string,
-): Promise<EligibleExpertUserOption[]> {
-  const pageSize = 100;
-  const rows: EligibleExpertUserOption[] = [];
-  let page = 1;
-  let total = Number.POSITIVE_INFINITY;
-
-  while (rows.length < total) {
-    const params = new URLSearchParams({
-      page: String(page),
-      pageSize: String(pageSize),
-    });
-    if (currentExpertId) params.set("currentExpertId", currentExpertId);
-    const res = await fetch(
-      `${ADMIN_BASE}/experts/eligible-users?${params.toString()}`,
-      { credentials: "include", headers: { accept: "application/json" } },
-    );
-    if (!res.ok) throw await toHttpError(res);
-    const body = (await res.json()) as EligibleExpertUserList;
-    rows.push(...body.data);
-    total = body.total;
-    if (body.data.length === 0) break;
-    page += 1;
-  }
-
-  return rows;
+/** One bounded server page for the EARS-19 User selector. */
+export async function fetchEligibleExpertUsers({
+  currentExpertId,
+  q = "",
+  page = 1,
+  pageSize = 25,
+}: {
+  currentExpertId?: string;
+  q?: string;
+  page?: number;
+  pageSize?: number;
+} = {}): Promise<EligibleExpertUserList> {
+  const params = new URLSearchParams({
+    page: String(page),
+    pageSize: String(pageSize),
+  });
+  if (q.trim()) params.set("q", q.trim());
+  if (currentExpertId) params.set("currentExpertId", currentExpertId);
+  const res = await fetch(
+    `${ADMIN_BASE}/experts/eligible-users?${params.toString()}`,
+    { credentials: "include", headers: { accept: "application/json" } },
+  );
+  if (!res.ok) throw await toHttpError(res);
+  return (await res.json()) as EligibleExpertUserList;
 }
 
 /** Split the authoring variables into the JSON payload and the file part. */

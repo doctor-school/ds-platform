@@ -97,37 +97,58 @@ export function ExpertForm({
   const [removePhoto, setRemovePhoto] = useState(false);
   const [photoError, setPhotoError] = useState<string | null>(null);
   const [users, setUsers] = useState<EligibleExpertUserOption[]>([]);
+  const [selectedUser, setSelectedUser] =
+    useState<EligibleExpertUserOption | null>(null);
+  const [userQuery, setUserQuery] = useState("");
   const [usersLoading, setUsersLoading] = useState(true);
   const [usersError, setUsersError] = useState(false);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     let active = true;
-    setUsersLoading(true);
-    setUsersError(false);
-    void fetchEligibleExpertUsers(detail?.id)
-      .then((rows) => {
-        if (active) setUsers(rows);
+    const timer = window.setTimeout(() => {
+      setUsersLoading(true);
+      setUsersError(false);
+      void fetchEligibleExpertUsers({
+        ...(detail?.id ? { currentExpertId: detail.id } : {}),
+        q: userQuery,
+        page: 1,
+        pageSize: 25,
       })
-      .catch(() => {
-        if (active) setUsersError(true);
-      })
-      .finally(() => {
-        if (active) setUsersLoading(false);
-      });
+        .then((result) => {
+          if (!active) return;
+          setUsers(result.data);
+          const current = result.data.find(
+            (user) => user.id === detail?.userId,
+          );
+          if (current) setSelectedUser(current);
+        })
+        .catch(() => {
+          if (active) setUsersError(true);
+        })
+        .finally(() => {
+          if (active) setUsersLoading(false);
+        });
+    }, 250);
     return () => {
       active = false;
+      window.clearTimeout(timer);
     };
-  }, [detail?.id]);
+  }, [detail?.id, detail?.userId, userQuery]);
 
   const userOptions = useMemo(
     () =>
-      users.map((user) => ({
+      [
+        ...(selectedUser && !users.some((user) => user.id === selectedUser.id)
+          ? [selectedUser]
+          : []),
+        ...users,
+      ].map((user) => ({
         value: user.id,
         label: user.displayName ?? user.identifier,
         ...(user.displayName ? { description: user.identifier } : {}),
       })),
-    [users],
+    [selectedUser, users],
   );
   const selectedUserId = form.watch("userId");
   const publicUrl = detail?.slug
@@ -232,7 +253,13 @@ export function ExpertForm({
                     id="expert-user"
                     options={userOptions}
                     value={field.value || null}
-                    onValueChange={field.onChange}
+                    onValueChange={(next) => {
+                      field.onChange(next);
+                      setSelectedUser(
+                        users.find((user) => user.id === next) ?? selectedUser,
+                      );
+                    }}
+                    onSearchChange={setUserQuery}
                     placeholder={
                       usersLoading
                         ? t("common.loading")
@@ -244,7 +271,7 @@ export function ExpertForm({
                     )}
                     emptyLabel={t("experts.fields.userEmpty")}
                     showSearch
-                    disabled={usersLoading || usersError}
+                    disabled={usersLoading && users.length === 0}
                     invalid={fieldState.invalid}
                     aria-label={t("experts.fields.user")}
                   />

@@ -4,12 +4,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { useTranslations } from "next-intl";
 import type { z } from "zod";
-import {
-  Button,
-  Input,
-  Label,
-  MediaDropzone,
-} from "@ds/design-system";
+import { Button, Input, Label, MediaDropzone } from "@ds/design-system";
 import {
   Form,
   FormControl,
@@ -19,11 +14,11 @@ import {
   FormLabel,
   FormMessage,
 } from "@ds/design-system/form";
+import { FormDerivedNote } from "@ds/design-system/blocks";
 import {
   ACCEPTED_IMAGE_MIME_TYPES,
   MAX_IMAGE_BYTES,
   type PartnerAdminDetail,
-  slugifyTaxonomyTitle,
 } from "@ds/schemas";
 import { PartnerFormSchema, type PartnerFormFields } from "@/lib/form-schemas";
 import { useLocalizedResolver } from "@/lib/use-localized-resolver";
@@ -45,10 +40,8 @@ import { useLocalizedResolver } from "@/lib/use-localized-resolver";
  *    `PartnerWebsiteUrlSchema` in, which is the exact twin of the DB CHECK, so
  *    the refusal the operator reads on blur is the rule the column enforces.
  *
- * Slug: the box shows the generated preview from the TITLE and stays editable
- * while the partner has never been published; once `firstPublishedAt` is set the
- * server refuses a change (409 `SLUG_IMMUTABLE`), so `slugEditable: false` makes
- * the field read-only with the reason. The SERVER, not this form, owns that call.
+ * Slug: the server owns it; the form only exposes the resulting public link for
+ * copying after the first save.
  *
  * Logo: the dropzone's checks are preflight only; the API normalizer (canonical
  * WebP, #1283) is authoritative. Picking a file and asking to remove the stored
@@ -57,8 +50,6 @@ import { useLocalizedResolver } from "@/lib/use-localized-resolver";
 export interface PartnerFormValues {
   title: string;
   websiteUrl: string;
-  /** Empty string ⇒ let the server generate the slug from the title. */
-  slug: string;
   logo: File | null;
   /** True when the operator asked to drop the STORED logo (`mediaAction: "clear"`). */
   removeLogo: boolean;
@@ -68,7 +59,6 @@ function defaults(detail?: PartnerAdminDetail): PartnerFormFields {
   return {
     title: detail?.title ?? "",
     websiteUrl: detail?.websiteUrl ?? "",
-    slug: detail?.slug ?? "",
   };
 }
 
@@ -98,13 +88,10 @@ export function PartnerForm({
   const [logo, setLogo] = useState<File | null>(null);
   const [removeLogo, setRemoveLogo] = useState(false);
   const [logoError, setLogoError] = useState<string | null>(null);
-
-  const slugEditable = detail ? detail.slugEditable : true;
-  const title = form.watch("title");
-  const slugValue = form.watch("slug");
-  // Live preview of what the server would generate — the SAME function the API
-  // uses (`@ds/schemas`), so the preview cannot promise a different address.
-  const generatedSlug = slugifyTaxonomyTitle(title ?? "");
+  const [copied, setCopied] = useState(false);
+  const publicUrl = detail?.slug
+    ? `https://academy.doctor.school/partners/${detail.slug}`
+    : null;
 
   return (
     <Form {...form}>
@@ -117,7 +104,6 @@ export function PartnerForm({
           onSubmit({
             title: fields.title,
             websiteUrl: fields.websiteUrl.trim(),
-            slug: fields.slug.trim(),
             logo,
             removeLogo,
           });
@@ -128,7 +114,9 @@ export function PartnerForm({
           name="title"
           render={({ field }) => (
             <FormItem>
-              <FormLabel htmlFor="title">{t("partners.fields.title")}</FormLabel>
+              <FormLabel htmlFor="title">
+                {t("partners.fields.title")}
+              </FormLabel>
               <FormControl>
                 <Input id="title" data-testid="partner-title" {...field} />
               </FormControl>
@@ -159,38 +147,31 @@ export function PartnerForm({
           )}
         />
 
-        <FormField
-          control={form.control}
-          name="slug"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel htmlFor="slug">{t("partners.fields.slug")}</FormLabel>
-              <FormControl>
-                <Input
-                  id="slug"
-                  data-testid="partner-slug"
-                  readOnly={!slugEditable}
-                  aria-readonly={!slugEditable || undefined}
-                  placeholder={generatedSlug}
-                  {...field}
-                />
-              </FormControl>
-              <FormMessage>
-                {slugEditable
-                  ? t("partners.fields.slugPreviewHint")
-                  : t("partners.fields.slugLockedHint")}
-              </FormMessage>
-              {slugEditable && generatedSlug && !slugValue ? (
-                <p
-                  className="text-xs text-muted-foreground"
-                  data-testid="partner-slug-preview"
-                >
-                  {generatedSlug}
-                </p>
-              ) : null}
-            </FormItem>
-          )}
-        />
+        <FormDerivedNote
+          title={t("partners.fields.publicLink")}
+          data-testid="partner-public-link-note"
+        >
+          <span data-testid="partner-public-link">
+            {publicUrl ?? t("partners.fields.publicLinkPending")}
+          </span>
+          {publicUrl ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              data-testid="partner-copy-public-link"
+              onClick={() => {
+                void navigator.clipboard
+                  .writeText(publicUrl)
+                  .then(() => setCopied(true));
+              }}
+            >
+              {copied
+                ? t("partners.actions.linkCopied")
+                : t("partners.actions.copyPublicLink")}
+            </Button>
+          ) : null}
+        </FormDerivedNote>
 
         {/* Logo — a File part, not an RHF field, so it is a plain labelled block
             (FormItem/FormLabel require a <FormField> context and throw outside

@@ -4,7 +4,14 @@ import { useState } from "react";
 import { useParams } from "next/navigation";
 import { Authenticated, useOne, useUpdate } from "@refinedev/core";
 import { useTranslations } from "next-intl";
-import { Alert, Badge, Tabs, TabsContent, TabsList, TabsTrigger } from "@ds/design-system";
+import {
+  Alert,
+  Badge,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@ds/design-system";
 import type { ProjectAdminDetail, TaxonomyStatus } from "@ds/schemas";
 import { AppShell } from "@/components/app-shell";
 import { BackToList } from "@/components/back-to-list";
@@ -72,11 +79,19 @@ export default function ProjectDetailPage() {
             </div>
 
             {errorKey ? (
-              <Alert variant="danger" className="mb-4" data-testid="update-error">
+              <Alert
+                variant="danger"
+                className="mb-4"
+                data-testid="update-error"
+              >
                 {t(errorKey)}
               </Alert>
             ) : saved ? (
-              <Alert variant="success" className="mb-4" data-testid="update-saved">
+              <Alert
+                variant="success"
+                className="mb-4"
+                data-testid="update-saved"
+              >
                 {t("projects.savedNotice")}
               </Alert>
             ) : null}
@@ -108,13 +123,6 @@ export default function ProjectDetailPage() {
                       kind: values.kind,
                       title: values.title,
                       description: values.description,
-                      // The slug field is read-only once published, so it is only
-                      // sent while it is still editable AND actually changed.
-                      ...(detail.slugEditable &&
-                      values.slug &&
-                      values.slug !== detail.slug
-                        ? { slug: values.slug }
-                        : {}),
                       ...(values.removeCover && !values.cover
                         ? { mediaAction: "clear" as const }
                         : {}),

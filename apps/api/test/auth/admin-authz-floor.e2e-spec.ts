@@ -877,7 +877,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
         });
         expectRefused(anonymous.statusCode, `${route.endpoint} (anonymous)`);
       }
-    });
+    }, 15_000); // Two injections per floor route intentionally exceed Vitest's generic 5 s limit.
 
     it("EARS-11.6: a platform_admin session WITH a verified second factor passes the floor on every admin route", async () => {
       for (const route of FLOOR_ROUTES) {

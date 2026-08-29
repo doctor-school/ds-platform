@@ -75,6 +75,7 @@ export const SLUG_PATTERN = "^[a-z0-9]+(-[a-z0-9]+)*$";
  */
 export const UUID_TEXT_PATTERN =
   "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$";
+export const TAXONOMY_SLUG_MAX = 80;
 
 export const PROJECT_TITLE_MAX = 160;
 export const PROJECT_DESCRIPTION_MAX = 2000;
@@ -133,6 +134,10 @@ export const projects = pgTable(
     check(
       "projects_slug_not_uuid",
       sql`${t.slug} !~ ${sql.raw(`'${UUID_TEXT_PATTERN}'`)}`,
+    ),
+    check(
+      "projects_slug_bounds",
+      sql`char_length(${t.slug}) BETWEEN 1 AND ${sql.raw(String(TAXONOMY_SLUG_MAX))}`,
     ),
     check(
       "projects_title_bounds",
@@ -238,6 +243,10 @@ export const experts = pgTable(
     check(
       "experts_slug_not_uuid",
       sql`${t.slug} !~ ${sql.raw(`'${UUID_TEXT_PATTERN}'`)}`,
+    ),
+    check(
+      "experts_slug_bounds",
+      sql`char_length(${t.slug}) BETWEEN 1 AND ${sql.raw(String(TAXONOMY_SLUG_MAX))}`,
     ),
     check(
       "experts_family_name_bounds",
@@ -364,6 +373,10 @@ export const directions = pgTable(
       sql`${t.slug} !~ ${sql.raw(`'${UUID_TEXT_PATTERN}'`)}`,
     ),
     check(
+      "directions_slug_bounds",
+      sql`char_length(${t.slug}) BETWEEN 1 AND ${sql.raw(String(TAXONOMY_SLUG_MAX))}`,
+    ),
+    check(
       "directions_title_bounds",
       sql`char_length(${t.title}) BETWEEN 1 AND ${sql.raw(String(DIRECTION_TITLE_MAX))}`,
     ),
@@ -453,6 +466,10 @@ export const partners = pgTable(
     check(
       "partners_slug_not_uuid",
       sql`${t.slug} !~ ${sql.raw(`'${UUID_TEXT_PATTERN}'`)}`,
+    ),
+    check(
+      "partners_slug_bounds",
+      sql`char_length(${t.slug}) BETWEEN 1 AND ${sql.raw(String(TAXONOMY_SLUG_MAX))}`,
     ),
     check(
       "partners_title_bounds",

@@ -204,6 +204,13 @@
       "when": 1787987339514,
       "tag": "0028_cultured_princess_powerful",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1788014843907,
+      "tag": "0029_silly_rumiko_fujikawa",
+      "breakpoints": true
     }
   ]
 }

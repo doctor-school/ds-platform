@@ -72,7 +72,9 @@ describe.skipIf(!process.env.DATABASE_URL)(
     it("012 EARS-3: when a slug repeats any retained row, the system shall reject the insert so a public URL can never resolve to a different direction", async () => {
       const s = slug();
       await insertDirection({ slug: s });
-      await expect(insertDirection({ slug: s })).rejects.toThrow(/directions_slug_key/);
+      await expect(insertDirection({ slug: s })).rejects.toThrow(
+        /directions_slug_key/,
+      );
       // …including against a RETIRED holder: retirement never releases identity,
       // so a bookmarked subject URL can never later name a different subject.
       const retiredSlug = slug();
@@ -95,6 +97,19 @@ describe.skipIf(!process.env.DATABASE_URL)(
       await expect(insertDirection({ slug: UUID_TEXT })).rejects.toThrow(
         /directions_slug_not_uuid/,
       );
+    });
+
+    it("EARS-20: the database shall reject direction slugs longer than 80 characters", async () => {
+      await expect(insertDirection({ slug: "a".repeat(81) })).rejects.toThrow(
+        /directions_slug_bounds/,
+      );
+      const id = await insertDirection();
+      await expect(
+        pool.query("UPDATE directions SET slug = $1 WHERE id = $2", [
+          "a".repeat(81),
+          id,
+        ]),
+      ).rejects.toThrow(/directions_slug_bounds/);
     });
 
     it("012 EARS-3: when status and deleted_at disagree, the system shall reject the row so retired ⇔ deleted_at holds", async () => {
@@ -120,7 +135,9 @@ describe.skipIf(!process.env.DATABASE_URL)(
         /directions_title_bounds/,
       );
       // The bounds are inclusive at both ends.
-      await expect(insertDirection({ title: "x" })).resolves.toBeTypeOf("string");
+      await expect(insertDirection({ title: "x" })).resolves.toBeTypeOf(
+        "string",
+      );
       await expect(
         insertDirection({ title: "x".repeat(120) }),
       ).resolves.toBeTypeOf("string");
@@ -139,14 +156,16 @@ describe.skipIf(!process.env.DATABASE_URL)(
         first_published_at: published,
       });
       await expect(
-        pool.query(`UPDATE directions SET first_published_at = NULL WHERE id = $1`, [
-          id,
-        ]),
+        pool.query(
+          `UPDATE directions SET first_published_at = NULL WHERE id = $1`,
+          [id],
+        ),
       ).rejects.toThrow(/set once/);
       await expect(
-        pool.query(`UPDATE directions SET first_published_at = now() WHERE id = $1`, [
-          id,
-        ]),
+        pool.query(
+          `UPDATE directions SET first_published_at = now() WHERE id = $1`,
+          [id],
+        ),
       ).rejects.toThrow(/set once/);
       // Re-writing the SAME instant is not a change: an ordinary full-row UPDATE
       // of an already-published direction still works.
@@ -180,7 +199,9 @@ describe.skipIf(!process.env.DATABASE_URL)(
           WHERE metadata->'pk'->>'id' = $1 ORDER BY created_at`,
         [id],
       );
-      expect(ledger.map((r) => r.event_type)).toContain("data.directions.insert");
+      expect(ledger.map((r) => r.event_type)).toContain(
+        "data.directions.insert",
+      );
     });
 
     it("012 EARS-3: admin title search shall be served by a trigram index rather than a full-taxonomy scan", async () => {
@@ -189,7 +210,10 @@ describe.skipIf(!process.env.DATABASE_URL)(
       // on a handful of rows, so asserting the plan would test the table size,
       // not the decision. What must hold forever is that the `ILIKE '%…%'`
       // predicate HAS a GIN trigram index available to it.
-      const { rows } = await pool.query<{ indexname: string; indexdef: string }>(
+      const { rows } = await pool.query<{
+        indexname: string;
+        indexdef: string;
+      }>(
         `SELECT indexname, indexdef FROM pg_indexes WHERE tablename = 'directions'`,
       );
       const byName = new Map(rows.map((r) => [r.indexname, r.indexdef]));
@@ -206,7 +230,10 @@ describe.skipIf(!process.env.DATABASE_URL)(
     });
 
     it("012 EARS-3: no direction foreign key shall cascade", async () => {
-      const { rows } = await pool.query<{ conname: string; confdeltype: string }>(
+      const { rows } = await pool.query<{
+        conname: string;
+        confdeltype: string;
+      }>(
         `SELECT conname, confdeltype FROM pg_constraint
           WHERE contype = 'f' AND conrelid = 'directions'::regclass`,
       );

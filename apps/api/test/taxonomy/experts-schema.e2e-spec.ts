@@ -111,6 +111,19 @@ describe.skipIf(!process.env.DATABASE_URL)(
       );
     });
 
+    it("EARS-20: the database shall reject expert slugs longer than 80 characters", async () => {
+      await expect(insertExpert({ slug: "a".repeat(81) })).rejects.toThrow(
+        /experts_slug_bounds/,
+      );
+      const id = await insertExpert();
+      await expect(
+        pool.query("UPDATE experts SET slug = $1 WHERE id = $2", [
+          "a".repeat(81),
+          id,
+        ]),
+      ).rejects.toThrow(/experts_slug_bounds/);
+    });
+
     it("012 EARS-2: when status and deleted_at disagree, the system shall reject the row so retired ⇔ deleted_at holds", async () => {
       await expect(insertExpert({ status: "retired" })).rejects.toThrow(
         /experts_retired_iff_deleted/,
@@ -161,9 +174,10 @@ describe.skipIf(!process.env.DATABASE_URL)(
       // columns — must be impossible, so no window can leave a person's data
       // live under a "removed" flag.
       await expect(
-        pool.query(`UPDATE experts SET content_removed_at = now() WHERE id = $1`, [
-          id,
-        ]),
+        pool.query(
+          `UPDATE experts SET content_removed_at = now() WHERE id = $1`,
+          [id],
+        ),
       ).rejects.toThrow(/experts_content_removed_shape/);
 
       await pool.query(
@@ -201,14 +215,16 @@ describe.skipIf(!process.env.DATABASE_URL)(
         first_published_at: published,
       });
       await expect(
-        pool.query(`UPDATE experts SET first_published_at = NULL WHERE id = $1`, [
-          id,
-        ]),
+        pool.query(
+          `UPDATE experts SET first_published_at = NULL WHERE id = $1`,
+          [id],
+        ),
       ).rejects.toThrow(/set once/);
       await expect(
-        pool.query(`UPDATE experts SET first_published_at = now() WHERE id = $1`, [
-          id,
-        ]),
+        pool.query(
+          `UPDATE experts SET first_published_at = now() WHERE id = $1`,
+          [id],
+        ),
       ).rejects.toThrow(/set once/);
       // Re-writing the SAME instant is not a change: an ordinary full-row UPDATE
       // of an already-published expert still works.
@@ -251,7 +267,10 @@ describe.skipIf(!process.env.DATABASE_URL)(
       // on a handful of rows, so asserting the plan would test the table size,
       // not the decision. What must hold forever is that the `ILIKE '%…%'`
       // predicate HAS a GIN trigram index available to it.
-      const { rows } = await pool.query<{ indexname: string; indexdef: string }>(
+      const { rows } = await pool.query<{
+        indexname: string;
+        indexdef: string;
+      }>(
         `SELECT indexname, indexdef FROM pg_indexes WHERE tablename = 'experts'`,
       );
       const byName = new Map(rows.map((r) => [r.indexname, r.indexdef]));
@@ -270,7 +289,10 @@ describe.skipIf(!process.env.DATABASE_URL)(
     });
 
     it("012 EARS-2: no expert foreign key shall cascade", async () => {
-      const { rows } = await pool.query<{ conname: string; confdeltype: string }>(
+      const { rows } = await pool.query<{
+        conname: string;
+        confdeltype: string;
+      }>(
         `SELECT conname, confdeltype FROM pg_constraint
           WHERE contype = 'f' AND conrelid = 'experts'::regclass`,
       );
@@ -283,7 +305,10 @@ describe.skipIf(!process.env.DATABASE_URL)(
       const { rows: users } = await pool.query<{ id: string }>(
         `INSERT INTO users (zitadel_sub, email)
          VALUES ($1, $2) RETURNING id`,
-        [`expert-link-${randomUUID()}`, `expert-link-${randomUUID()}@example.test`],
+        [
+          `expert-link-${randomUUID()}`,
+          `expert-link-${randomUUID()}@example.test`,
+        ],
       );
       const userId = users[0]!.id;
       const firstId = await insertExpert({ user_id: userId });

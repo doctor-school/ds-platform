@@ -105,6 +105,19 @@ describe.skipIf(!process.env.DATABASE_URL)(
       );
     });
 
+    it("EARS-20: the database shall reject project slugs longer than 80 characters", async () => {
+      await expect(insertProject({ slug: "a".repeat(81) })).rejects.toThrow(
+        /projects_slug_bounds/,
+      );
+      const id = await insertProject();
+      await expect(
+        pool.query("UPDATE projects SET slug = $1 WHERE id = $2", [
+          "a".repeat(81),
+          id,
+        ]),
+      ).rejects.toThrow(/projects_slug_bounds/);
+    });
+
     it("012 EARS-1: when status and deleted_at disagree, the system shall reject the row so retired ⇔ deleted_at holds", async () => {
       await expect(insertProject({ status: "retired" })).rejects.toThrow(
         /projects_retired_iff_deleted/,
@@ -134,9 +147,10 @@ describe.skipIf(!process.env.DATABASE_URL)(
         first_published_at: published,
       });
       await expect(
-        pool.query(`UPDATE projects SET first_published_at = NULL WHERE id = $1`, [
-          id,
-        ]),
+        pool.query(
+          `UPDATE projects SET first_published_at = NULL WHERE id = $1`,
+          [id],
+        ),
       ).rejects.toThrow(/set once/);
       await expect(
         pool.query(
@@ -296,7 +310,10 @@ describe.skipIf(!process.env.DATABASE_URL)(
     });
 
     it("012 EARS-1: no taxonomy foreign key shall cascade", async () => {
-      const { rows } = await pool.query<{ conname: string; confdeltype: string }>(
+      const { rows } = await pool.query<{
+        conname: string;
+        confdeltype: string;
+      }>(
         `SELECT conname, confdeltype FROM pg_constraint
           WHERE contype = 'f'
             AND conrelid IN ('projects'::regclass, 'media_cleanup_jobs'::regclass)`,

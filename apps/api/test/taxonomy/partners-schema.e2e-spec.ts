@@ -101,6 +101,19 @@ describe.skipIf(!process.env.DATABASE_URL)(
       );
     });
 
+    it("EARS-20: the database shall reject partner slugs longer than 80 characters", async () => {
+      await expect(insertPartner({ slug: "a".repeat(81) })).rejects.toThrow(
+        /partners_slug_bounds/,
+      );
+      const id = await insertPartner();
+      await expect(
+        pool.query("UPDATE partners SET slug = $1 WHERE id = $2", [
+          "a".repeat(81),
+          id,
+        ]),
+      ).rejects.toThrow(/partners_slug_bounds/);
+    });
+
     it("012 EARS-4: when status and deleted_at disagree, the system shall reject the row so retired ⇔ deleted_at holds", async () => {
       await expect(insertPartner({ status: "retired" })).rejects.toThrow(
         /partners_retired_iff_deleted/,
@@ -111,9 +124,9 @@ describe.skipIf(!process.env.DATABASE_URL)(
     });
 
     it("012 EARS-4: when the title or the website URL exceeds the §2.2 authoring matrix, the system shall reject the row", async () => {
-      await expect(
-        insertPartner({ title: "x".repeat(161) }),
-      ).rejects.toThrow(/partners_title_bounds/);
+      await expect(insertPartner({ title: "x".repeat(161) })).rejects.toThrow(
+        /partners_title_bounds/,
+      );
       await expect(insertPartner({ title: "" })).rejects.toThrow(
         /partners_title_bounds/,
       );
@@ -158,14 +171,16 @@ describe.skipIf(!process.env.DATABASE_URL)(
         first_published_at: published,
       });
       await expect(
-        pool.query(`UPDATE partners SET first_published_at = NULL WHERE id = $1`, [
-          id,
-        ]),
+        pool.query(
+          `UPDATE partners SET first_published_at = NULL WHERE id = $1`,
+          [id],
+        ),
       ).rejects.toThrow(/set once/);
       await expect(
-        pool.query(`UPDATE partners SET first_published_at = now() WHERE id = $1`, [
-          id,
-        ]),
+        pool.query(
+          `UPDATE partners SET first_published_at = now() WHERE id = $1`,
+          [id],
+        ),
       ).rejects.toThrow(/set once/);
       // Re-writing the SAME instant is not a change: an ordinary full-row UPDATE
       // of an already-published partner still works.
@@ -207,7 +222,10 @@ describe.skipIf(!process.env.DATABASE_URL)(
       // INDEX DEFINITION, not the plan: Postgres legitimately prefers a seq scan
       // on a handful of rows, so asserting the plan would test the table size,
       // not the decision.
-      const { rows } = await pool.query<{ indexname: string; indexdef: string }>(
+      const { rows } = await pool.query<{
+        indexname: string;
+        indexdef: string;
+      }>(
         `SELECT indexname, indexdef FROM pg_indexes WHERE tablename = 'partners'`,
       );
       const byName = new Map(rows.map((r) => [r.indexname, r.indexdef]));
@@ -224,7 +242,10 @@ describe.skipIf(!process.env.DATABASE_URL)(
     });
 
     it("012 EARS-4: no partner foreign key shall cascade", async () => {
-      const { rows } = await pool.query<{ conname: string; confdeltype: string }>(
+      const { rows } = await pool.query<{
+        conname: string;
+        confdeltype: string;
+      }>(
         `SELECT conname, confdeltype FROM pg_constraint
           WHERE contype = 'f' AND conrelid = 'partners'::regclass`,
       );

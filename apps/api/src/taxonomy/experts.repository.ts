@@ -257,6 +257,22 @@ export class ExpertsRepository {
     // `users_email_or_phone` guarantees this expression is non-null. Expose one
     // operator label rather than ambiguous nullable contact fields.
     const identifier = sql<string>`coalesce(${users.email}::text, ${users.phone})`;
+    // An edit must never page away its already-selected option. Pin only the
+    // current Expert's linked User; every other eligible row keeps the ordinary
+    // displayName → identifier → id order and therefore stable offset paging.
+    const stableOrder = [
+      asc(users.displayName),
+      asc(identifier),
+      asc(users.id),
+    ];
+    const order = query.currentExpertId
+      ? [
+          asc(
+            sql<number>`case when ${experts.id} = ${query.currentExpertId} then 0 else 1 end`,
+          ),
+          ...stableOrder,
+        ]
+      : stableOrder;
     const selection = {
       id: users.id,
       displayName: users.displayName,
@@ -267,7 +283,7 @@ export class ExpertsRepository {
       .from(users)
       .leftJoin(experts, eq(experts.userId, users.id))
       .where(where)
-      .orderBy(asc(users.displayName), asc(identifier), asc(users.id))
+      .orderBy(...order)
       .limit(query.pageSize)
       .offset((query.page - 1) * query.pageSize);
     const [totals] = await this.db

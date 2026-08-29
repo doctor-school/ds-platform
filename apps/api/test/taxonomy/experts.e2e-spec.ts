@@ -516,6 +516,49 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       });
     });
 
+    it("EARS-19: when more than one page is eligible, currentExpertId shall pin the current User first and preserve stable ordering for every other option", async () => {
+      const marker = `Pinned-${randomUUID().slice(0, 8)}`;
+      const current = await selectorUser(`Z ${marker}`);
+      const currentExpert = await created(
+        await createJson({ payload: validPayload({ userId: current.id }) }),
+      );
+      const candidates = await Promise.all(
+        Array.from({ length: 26 }, (_, index) =>
+          selectorUser(`A ${String(index).padStart(2, "0")} ${marker}`),
+        ),
+      );
+      const orderedCandidates = candidates.sort((a, b) =>
+        a.displayName.localeCompare(b.displayName) ||
+        a.identifier.localeCompare(b.identifier) ||
+        a.id.localeCompare(b.id),
+      );
+
+      const firstPage = await app.inject({
+        method: "GET",
+        url: `/v1/admin/experts/eligible-users?q=${encodeURIComponent(marker)}&page=1&pageSize=25&currentExpertId=${currentExpert.id}`,
+        headers: { ...device, ...adminHeaders(adminSid) },
+      });
+      expect(firstPage.statusCode, firstPage.payload).toBe(200);
+      expect(JSON.parse(firstPage.payload)).toEqual({
+        data: [current, ...orderedCandidates.slice(0, 24)],
+        total: 27,
+        page: 1,
+        pageSize: 25,
+      });
+
+      const secondPage = await app.inject({
+        method: "GET",
+        url: `/v1/admin/experts/eligible-users?q=${encodeURIComponent(marker)}&page=2&pageSize=25&currentExpertId=${currentExpert.id}`,
+        headers: { ...device, ...adminHeaders(adminSid) },
+      });
+      expect(JSON.parse(secondPage.payload)).toEqual({
+        data: orderedCandidates.slice(24),
+        total: 27,
+        page: 2,
+        pageSize: 25,
+      });
+    });
+
     it("012 EARS-19: when two Expert links race for one eligible User, the system shall commit one owner and reject the other with USER_EXPERT_CONFLICT", async () => {
       const userId = await unlinkedUserId();
       const candidates = await Promise.all([

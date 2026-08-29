@@ -33,7 +33,7 @@ graph TD
   Mine --> Cabinet["022 — #d-lk"]
 ```
 
-`019` owns the composition and nothing beneath it: `webinars-listing`, `webinars-month` — implemented by the shipped Feature 004 / #1050 `MonthCalendarGrid` and `MonthDotGrid` units — `webinar-archive`, Feature 004's `WebinarCard`, and `events-filter` are consumed as shared units (REQ-137). The only new UI artefacts of this feature are the two route compositions and the widened format vocabulary the existing card already has a slot for. Managed specialty targeting and directed adjacency come from the landed 017 artifact #1484; 018's doctor content card and rendered adjacent-areas block are not substrates here.
+`019` owns the composition and nothing beneath it: `webinars-listing`, `webinars-month` — implemented by the shipped Feature 004 / #1050 `MonthCalendarGrid` and `MonthDotGrid` units — `webinar-archive`, Feature 004's `WebinarCard`, and `events-filter` are consumed as shared units (REQ-137). The shared boundary also includes the listing/read state, live-state resolution and room-entry lifecycle already shipped for Academy (D-3, ADR-0013 A1): any still-app-local implementation is extracted to its canonical shared owner before `apps/doctor` consumes it; app-to-app imports and parallel Doctor state machines are forbidden. The only new UI artefacts of this feature are the two route compositions and the widened format vocabulary the existing card already has a slot for. Managed specialty targeting and directed adjacency come from the landed 017 artifact #1484; 018's doctor content card and rendered adjacent-areas block are not substrates here.
 
 ## 2. The URL is the state (LD-1)
 
@@ -114,7 +114,7 @@ sequenceDiagram
   end
 ```
 
-The client never derives liveness from `startsAt`. A stale LIVE badge is a defect, and so is a rendered-but-empty live container — the grid must close over the absent block.
+The client never derives liveness from `startsAt`. A stale LIVE badge is a defect, and so is a rendered-but-empty live container — the grid must close over the absent block. This resolver and entry policy are the same canonical capability used by Academy; `apps/doctor` supplies route composition, not a second lifecycle implementation.
 
 ## 5. Tense switch and the past reading (EARS-10)
 
@@ -177,7 +177,7 @@ Response shape is the read-model set of the requirements' Event Model. Errors ar
 
 ## 8. Sequencing the build
 
-1. **Route-independent substrates:** EARS-2 / #1517 widens Feature 004's `WebinarCard` and proves it only as a design-system component/showcase; EARS-7 / #1522 builds and proves the shared `events-filter` component/showcase with all fill states. Neither mounts or publishes `/events`.
+1. **Cross-front inventory and route-independent substrates:** before code, record the Academy event/listing/live owners and extract any still-app-local reusable implementation to shared packages (ADR-0013 A1). EARS-2 / #1517 then widens Feature 004's `WebinarCard` at its canonical owner and proves it only as a design-system component/showcase; EARS-7 / #1522 builds and proves the shared `events-filter` component/showcase with all fill states. Neither mounts or publishes `/events`.
 2. **Read contract:** EARS-3 / #1518 consumes #1517, #1522, and landed targeting/adjacency #1484, and proves only the API/read contract with e2e tests. Rendered-feed Playwright waits for #1516; #1518 exposes no partial route.
 3. **Route-independent presentation and state:** EARS-4 / #1519 proves the shared Feature 004 / #1050 `MonthCalendarGrid` and `MonthDotGrid` components — it does not first create the calendar — while EARS-8 / #1523 proves pure URL/query-state units and EARS-9 / #1524 proves a component/state matrix. Each consumes #1518; none requires a browser route.
 4. **First published integration:** EARS-1 / #1516 consumes shell #1478, #1519, #1523, #1524, and sequencing correction #1620. Before first publication it integrates every route-level Playwright obligation of EARS-2, EARS-3, EARS-4, EARS-7, EARS-8, and EARS-9: card/filter mounting and interactions, rendered API feed, calendar/feed navigation, URL/back/shared-link behaviour, and loading/empty/error/retry states. Only then does it publish product-complete `/events` in the declared canvas order. This is the explicit same-WBS deferral: before #1516 there is no public partial route; at #1516, later-handler content regions are absent rather than empty labelled boxes, stubs, placeholders, or «скоро» markers.

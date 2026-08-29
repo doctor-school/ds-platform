@@ -1,6 +1,6 @@
 ---
 title: "ADR-0013 — Design-Token SoT, Theming & Block-Adoption Methodology for DS Platform [EN]"
-description: "Tokens are the single source of truth (DTCG → Style Dictionary → Tailwind v4 @theme); UI is composed by adopting ready blocks from a fixed registry whitelist before any bespoke work; our product code is proprietary (UNLICENSED) at any repo visibility while third-party adoption is governed by the third party's license."
+description: "Tokens are the single source of truth (DTCG → Style Dictionary → Tailwind v4 @theme); UI adopts ready blocks before bespoke work; cross-front capabilities have one canonical implementation; product code remains proprietary (UNLICENSED) while third-party adoption follows its license."
 lang: en
 ---
 
@@ -96,6 +96,20 @@ The per-element-class **standards, best-practice citations, and rendered-option 
 Product assets are **vector-first**: logos and icons ship as **SVG** (lightweight, resolution-independent, version-controllable, themeable via `currentColor`). Raster assets (photography, screenshots) ship as **WEBP** at minimum. **PNG / JPG are disallowed** for product assets — a PNG wordmark or a raster icon is an asset-hygiene defect, not an acceptable shortcut.
 
 A coloured surface uses the **clean white or mono brand variant directly**; a CSS colour-inversion filter or a `bg-card` token chip standing in for a missing variant is a workaround, not a treatment — confirm the variant's absence by opening the brandbook before reaching for a fallback, and if it is genuinely absent, request it rather than shipping the hack. Enforcement: an optional CI guard flagging committed `*.png` / `*.jpg` under `apps/*/public` and the design system (tech-spec).
+
+### A1 — Cross-front capability ownership
+
+**Context.** Academy and Doctor are different storefront compositions over overlapping product capabilities. The design-system-first rule prevented many duplicate primitives, but it did not explicitly prevent a second frontend from copying a whole shipped capability — its list/read contract, state machine, realtime behaviour and UI blocks — into its own app. The Doctor events plan exposed that gap: Academy already owns the event listing, calendar, card and live-room lifecycle.
+
+**Decision.** A capability used by more than one frontend has **one canonical implementation**. Before new frontend work, the team inventories sibling apps and shared packages for the same capability. A shipped app-local precedent is extracted into the appropriate shared package/module before a second app consumes it; frontends never import from each other and never maintain copy/fork implementations. Shared ownership covers presentation blocks, read models, state machines, action/entry policy and realtime/live lifecycle. A consuming app may own only its route, copy, composition and explicitly different product behaviour. Any deliberate divergence requires an ADR-backed product or technical reason recorded before implementation.
+
+**Consequences.** Doctor's events surface consumes Academy's event-feed, calendar, `WebinarCard`, live-state resolution and room-entry lifecycle as shared capabilities. It may widen a shared contract additively for doctor-specific formats, but the widening lands at the canonical owner and remains available to every consumer. Review rejects a visually identical component backed by different app-local behaviour just as it rejects copied JSX.
+
+**Why now.** The product owner explicitly required the event feed and all live-broadcast functionality to be reused across the two storefronts and made that principle universal (#1623).
+
+**Open follow-up.** Existing app-local capabilities become shared when the next cross-front consumer arrives; this ADR does not require a speculative bulk extraction of single-consumer code.
+
+**Affects.** `AGENTS.md` cross-front reuse gate, `build-ui-from-design-system`, Feature 019 and every future multi-front feature specification.
 
 ---
 

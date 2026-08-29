@@ -18,6 +18,8 @@ Doctors come to `doctor.school` **first of all for events** — online and offli
 
 The screen is a composition, not a new engine. The day-grouped feed, the month/week calendar, Feature 004's `WebinarCard`, and the archive slice are the units already shipped for the Academy (`webinars-listing`, `webinars-month`, `webinar-card`, `webinar-archive`); 019 assembles them inside the doctor shell (017) and widens the existing card's format vocabulary — an **offline colleagues' meet-up (Doctor Club)**, a **congress** and a **podcast broadcast** are first-class formats in the same feed, not sub-kinds of a webinar (REQ-15, REQ-2).
 
+Owner decision **D-3** makes that reuse capability-wide, not merely visual: the Academy event listing, read/state model, calendar, card, live-state resolution and room-entry lifecycle remain one canonical implementation for both storefronts. If any part is still app-local in `apps/portal`, the 019 implementation extracts it into the owning shared package/module before `apps/doctor` consumes it; Doctor owns only its route, copy, specialty targeting and composition. A second Doctor-specific feed or live-state machine is not an acceptable implementation.
+
 019 also carries one **platform-wide responsibility**: the shared facet panel `events-filter` grows here from wave-1's two toggles to the **full REQ-138 facet set**, and the Academy catalogs later reuse that same panel. A panel with two buttons and a panel with seven facets behave differently, so by owner decision **D-1** the panel is designed at full strength _and_ in its intermediate fill states — the grid must not break as facets land wave by wave.
 
 The feed is **fully readable by a guest** (REQ-20): the value is visible before registration, and only the act of taking part routes through sign-up with a return to this exact place. «Мои события» appears here as a **short cut with a link into the doctor's personal cabinet** (`#d-lk`), never as a second full section (owner decision D-2).
@@ -37,7 +39,7 @@ The feed is **fully readable by a guest** (REQ-20): the value is visible before 
 - **US-11** — As a **doctor**, I switch to «Прошедшие» and reach the **recording and the materials** of something I missed, and can take the discussion into the community.
 - **US-12** — As a **signed-in doctor**, a short «Мои события» block reminds me what I am signed up for — including a congress ticket — and links me into my personal cabinet for the full list.
 - **US-13** — As a **guest doctor**, I browse the whole feed without an account, and the action on a card takes me through registration and **back to this screen**.
-- **US-14** — As a **product owner**, the feed, the calendar, the card and the facet panel are **shared design-system units** — the doctor storefront and the Academy show an event the same way and change it in one place.
+- **US-14** — As a **product owner**, the feed, calendar, card, facet panel and live-broadcast behaviour are **one cross-front capability** — the doctor storefront and the Academy show and operate an event from the same implementation and change it in one place (D-3).
 - **US-15** — As a **product owner**, the facet panel is designed for the whole REQ-138 set **and** for the states it passes through while facets ship one by one, so no wave forces a redesign of the screen (D-1).
 
 ## Flows
@@ -82,7 +84,7 @@ The feed is **fully readable by a guest** (REQ-20): the value is visible before 
 - «Мои события» is a **short cut with a link to `#d-lk`** and is absent for a guest (**D-2**).
 - Cost is expressed **only in Pul attention points**, never in roubles, and zero cost reads as «бесплатно для врача»; there is no subscription and no cart (REQ-48, NG-5 / CON-16). Partner-funded content carries only its **legal advertising marking** — who funds an event is never surfaced as interface copy.
 - НМО is a **badge and a facet**, never the screen's headline or its primary filter (NG-1); Academy media noise — podcasts, Academy news — does not enter this feed (NG-2).
-- The feed, calendar, card, archive slice and facet panel are **shared units**; 019 adds no private copies and no listing mechanics of its own (REQ-137).
+- The feed, calendar, card, archive slice, facet panel, live-state resolution and room-entry policy are **one shared cross-front capability**; 019 adds no private copies, no listing mechanics and no live-state machine of its own (D-3, REQ-137).
 - The screen works at 1440 and 390 in both themes, and meets the platform accessibility bar for a public surface — facets are real controls with visible state, cards are real links, the view switch is keyboard-operable.
 
 ## Out of scope

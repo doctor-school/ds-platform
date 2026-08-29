@@ -1,5 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { and, asc, count, eq, ilike, isNull, ne, or, sql } from "drizzle-orm";
+import { and, asc, count, eq, ilike, isNull, or, sql } from "drizzle-orm";
 import type { DrizzleHandle, Project } from "@ds/db";
 import { projects } from "@ds/db";
 import type { AdminTaxonomyListQuery, ProjectKind } from "@ds/schemas";
@@ -24,7 +24,6 @@ export interface ProjectInsert {
 
 /** The field patch a PATCH applies. `undefined` means unchanged. */
 export interface ProjectPatch {
-  slug?: string;
   kind?: ProjectKind;
   title?: string;
   description?: string | null;
@@ -39,6 +38,13 @@ export class ProjectsRepository {
   /** Run `fn` in one audit-attributed transaction. */
   transaction<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
     return withRequestAuditContext(this.db, fn);
+  }
+
+  /** Serialize allocation of one derived retained slug sequence. */
+  async lockSlugSequence(tx: Tx, base: string): Promise<void> {
+    await tx.execute(
+      sql`select pg_advisory_xact_lock(hashtextextended(${base}, 0))`,
+    );
   }
 
   async insert(tx: Tx, values: ProjectInsert): Promise<Project> {
@@ -65,25 +71,12 @@ export class ProjectsRepository {
     return row ?? null;
   }
 
-  /** {@link slugTaken} against the pool — the optimistic pre-flight read. */
-  slugTakenAnywhere(slug: string, exceptId?: string): Promise<boolean> {
-    return this.slugTaken(this.db, slug, exceptId);
-  }
-
-  /**
-   * Whether `slug` is held by any retained row other than `exceptId`. Checked
-   * before the write so the operator gets 409 `SLUG_CONFLICT` naming the
-   * conflict, rather than an opaque unique-violation; the unique index remains
-   * the final race guard.
-   */
-  async slugTaken(tx: Tx | Db, slug: string, exceptId?: string): Promise<boolean> {
-    const where = exceptId
-      ? and(eq(projects.slug, slug), ne(projects.id, exceptId))
-      : eq(projects.slug, slug);
+  /** Whether a retained row already reserves this allocation candidate. */
+  async slugTaken(tx: Tx | Db, slug: string): Promise<boolean> {
     const [row] = await tx
       .select({ id: projects.id })
       .from(projects)
-      .where(where)
+      .where(eq(projects.slug, slug))
       .limit(1);
     return Boolean(row);
   }

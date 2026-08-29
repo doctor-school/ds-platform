@@ -13,16 +13,15 @@ import { AppModule } from "../../src/app.module.js";
 import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
 import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
 import { FakeIdpClient } from "../../src/auth/idp/idp.fake.js";
-import {
-  OBJECT_STORAGE,
-  type ObjectStorage,
-} from "../../src/storage/index.js";
+import { OBJECT_STORAGE, type ObjectStorage } from "../../src/storage/index.js";
 import { SESSION_COOKIE_NAME } from "../../src/auth/session/session.cookie.js";
 import { adminHeaders, establishAdminSession } from "../setup/admin-session.js";
 import {
   RATE_LIMIT_THRESHOLDS,
   RELAXED_RATE_LIMIT,
 } from "../setup/rate-limit.js";
+import { deleteUserFixture } from "../setup/fixture-cleanup.js";
+import { registerUniqueFakeUserFixture } from "../setup/fixture-registration.js";
 
 // 012 EARS-4 (#1286) — the partner authoring vertical over the REAL stack:
 // Fastify + the 011 admin session + Postgres + object storage. It is the SAME
@@ -41,7 +40,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     let storage: ObjectStorage;
     const fake = new FakeIdpClient();
     const password = "Aa1!ufficiently-long-pw";
-    const device = { "user-agent": "AdminTest/1.0", "accept-language": "en-US" };
+    const device = {
+      "user-agent": "AdminTest/1.0",
+      "accept-language": "en-US",
+    };
     const consent = [{ purpose: "tos", version: "2026-01" }];
     const createdEmails: string[] = [];
     const createdPartnerIds: string[] = [];
@@ -65,24 +67,22 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     /** Register + grant + establish an ADMIN session; returns its sid. */
     async function adminSession(): Promise<string> {
-      const email = uniqueEmail("prt-admin");
-      const reg = await app.inject({
-        method: "POST",
-        url: "/v1/auth/register",
-        payload: { email, password, consent },
-      });
-      expect(reg.statusCode).toBe(200);
-      const { rows } = await pool.query<{ zitadel_sub: string }>(
-        "SELECT zitadel_sub FROM users WHERE email = $1",
-        [email],
-      );
-      await fake.grantProjectRole(rows[0]!.zitadel_sub, "platform_admin");
-      const admin = await establishAdminSession(app, {
-        identifier: email,
+      const { email, sub } = await registerUniqueFakeUserFixture({
+        app,
+        pool,
+        fake,
+        nextEmail: () => uniqueEmail("prt-admin"),
         password,
-        device,
+        consent,
       });
-      return admin.sid;
+      await fake.grantProjectRole(sub, "platform_admin");
+      return (
+        await establishAdminSession(app, {
+          identifier: email,
+          password,
+          device,
+        })
+      ).sid;
     }
 
     /** A doctor-portal (non-admin) session cookie — the 401 probe. */
@@ -217,9 +217,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     afterEach(async () => {
       for (const id of createdPartnerIds.splice(0)) {
-        await pool.query("DELETE FROM media_cleanup_jobs WHERE entity_id = $1", [
-          id,
-        ]);
+        await pool.query(
+          "DELETE FROM media_cleanup_jobs WHERE entity_id = $1",
+          [id],
+        );
         await pool.query("DELETE FROM partners WHERE id = $1", [id]);
       }
       for (const k of usedKeys.splice(0)) {
@@ -229,7 +230,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     afterAll(async () => {
       for (const email of createdEmails.splice(0)) {
-        await pool.query("DELETE FROM users WHERE email = $1", [email]);
+        await deleteUserFixture(pool, "email", email);
       }
       await app.close();
     });
@@ -250,8 +251,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         version: 1,
         logoUrl: null,
         firstPublishedAt: null,
-        slugEditable: true,
       });
+      expect(body).not.toHaveProperty("slugEditable");
       // The slug is derived from the TITLE — a partner has no personal name.
       expect(body.slug).toMatch(/^romashka-/);
       expect(res.headers.etag).toBe('W/"1"');
@@ -478,7 +479,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     it("012 EARS-15: the list shall search titles case-insensitively and exclude retired rows by default", async () => {
       const marker = randomUUID().slice(0, 8);
       const body = await created(
-        await createJson({ payload: validPayload({ title: `Ромашка ${marker}` }) }),
+        await createJson({
+          payload: validPayload({ title: `Ромашка ${marker}` }),
+        }),
       );
       // LD-6: ordinary case-insensitive substring search over the title.
       const found = await app.inject({
@@ -513,9 +516,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         headers: { ...device, ...adminHeaders(adminSid) },
       });
       expect(
-        (JSON.parse(withRetired.payload) as { data: { id: string }[] }).data.map(
-          (r) => r.id,
-        ),
+        (
+          JSON.parse(withRetired.payload) as { data: { id: string }[] }
+        ).data.map((r) => r.id),
       ).toContain(body.id);
 
       // The detail route addresses a retired row directly (restore path input).
@@ -621,21 +624,60 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(problem(differentActor).errorCode).toBe("IDEMPOTENCY_KEY_REUSED");
     });
 
-    it("012 EARS-4: when a slug is already held by a retained row, the system shall refuse with SLUG_CONFLICT", async () => {
+    it("EARS-20: when partner create carries a slug, the system shall reject it without mutation", async () => {
+      const before = await partnerCount();
       const body = await created(await createJson({ payload: validPayload() }));
       const clash = await createJson({
         payload: validPayload({ slug: body.slug }),
       });
-      expect(clash.statusCode).toBe(409);
-      expect(problem(clash).errorCode).toBe("SLUG_CONFLICT");
+      expect(clash.statusCode).toBe(400);
+      expect(problem(clash).errorCode).toBe("VALIDATION_FAILED");
+      expect(await partnerCount()).toBe(before + 1);
     });
 
-    it("012 EARS-4: when the partner was first published, the system shall refuse a slug change with SLUG_IMMUTABLE and change nothing", async () => {
-      const body = await created(await createJson({ payload: validPayload() }));
-      await pool.query(
-        "UPDATE partners SET status = 'published', first_published_at = now() WHERE id = $1",
-        [body.id],
+    it("EARS-20: same-title, retained and concurrent partner collisions shall allocate distinct stable slugs", async () => {
+      const marker = randomUUID().slice(0, 8);
+      const title = `Stable partner ${marker}`;
+      const first = await created(
+        await createJson({ payload: validPayload({ title }) }),
       );
+      await pool.query(
+        "UPDATE partners SET status = 'retired', deleted_at = now() WHERE id = $1",
+        [first.id],
+      );
+      const second = await created(
+        await createJson({ payload: validPayload({ title }) }),
+      );
+      expect(second.slug).toBe(`stable-partner-${marker}-2`);
+
+      const concurrentTitle = `Concurrent partner ${marker}`;
+      const responses = await Promise.all([
+        createJson({ payload: validPayload({ title: concurrentTitle }) }),
+        createJson({ payload: validPayload({ title: concurrentTitle }) }),
+      ]);
+      expect(responses.map((response) => response.statusCode).sort()).toEqual([
+        201, 201,
+      ]);
+      const bodies = responses.map(
+        (response) => JSON.parse(response.payload) as { slug: string },
+      );
+      expect(bodies.map(({ slug }) => slug).sort()).toEqual(
+        [
+          `concurrent-partner-${marker}`,
+          `concurrent-partner-${marker}-2`,
+        ].sort(),
+      );
+    });
+
+    it("EARS-20: a partner title with no transliterable base shall receive a system fallback", async () => {
+      const body = await created(
+        await createJson({ payload: validPayload({ title: "🫀🧠" }) }),
+      );
+      expect(body.slug).toMatch(/^partner(?:-\d+)?$/);
+    });
+
+    it("EARS-20: when partner PATCH carries a slug, the system shall reject it and change nothing", async () => {
+      const body = await created(await createJson({ payload: validPayload() }));
       const res = await app.inject({
         method: "PATCH",
         url: `/v1/admin/partners/${body.id}`,
@@ -648,23 +690,21 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         },
         payload: { slug: "sovsem-drugoy-adres" },
       });
-      expect(res.statusCode).toBe(409);
-      expect(problem(res).errorCode).toBe("SLUG_IMMUTABLE");
+      expect(res.statusCode).toBe(400);
+      expect(problem(res).errorCode).toBe("VALIDATION_FAILED");
       const { rows } = await pool.query<{ slug: string; version: number }>(
         "SELECT slug, version FROM partners WHERE id = $1",
         [body.id],
       );
       expect(rows[0]).toMatchObject({ slug: body.slug, version: 1 });
-      // The detail read tells the UI the field is locked.
       const detail = await app.inject({
         method: "GET",
         url: `/v1/admin/partners/${body.id}`,
         headers: { ...device, ...adminHeaders(adminSid) },
       });
-      expect(JSON.parse(detail.payload)).toMatchObject({ slugEditable: false });
+      expect(JSON.parse(detail.payload)).not.toHaveProperty("slugEditable");
 
-      // Echoing the OWN slug is not a change: the «Основное» tab posts the whole
-      // form, so refusing the echo would block every ordinary edit.
+      // A normal title edit retains the system-owned address.
       const echo = await app.inject({
         method: "PATCH",
         url: `/v1/admin/partners/${body.id}`,
@@ -675,7 +715,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
           "idempotency-key": key(),
           "if-match": 'W/"1"',
         },
-        payload: { slug: body.slug, title: "Ромашка (правка)" },
+        payload: { title: "Ромашка (правка)" },
       });
       expect(echo.statusCode).toBe(200);
       expect(JSON.parse(echo.payload)).toMatchObject({
@@ -741,7 +781,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         "javascript:alert(1)",
         "romashka.example",
       ]) {
-        const res = await createJson({ payload: validPayload({ websiteUrl: bad }) });
+        const res = await createJson({
+          payload: validPayload({ websiteUrl: bad }),
+        });
         expect(res.statusCode, `websiteUrl ${bad} must be refused`).toBe(400);
         expect(problem(res).errorCode).toBe("VALIDATION_FAILED");
       }

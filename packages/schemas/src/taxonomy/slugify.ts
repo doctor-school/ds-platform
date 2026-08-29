@@ -56,8 +56,7 @@ const CYRILLIC_TO_LATIN: Readonly<Record<string, string>> = {
  * `SLUG_REGEX` — NFKC-normalize, transliterate Cyrillic, strip combining marks,
  * lowercase, replace every other run of characters with a single hyphen and trim
  * hyphens. Returns `""` when the title carries no sluggable character at all
- * (e.g. only emoji): the caller then refuses rather than inventing an identity,
- * because a slug is a permanent public URL, not a cosmetic default.
+ * (e.g. only emoji): the server-owned allocator then uses its kind fallback.
  */
 export function slugifyTaxonomyTitle(title: string): string {
   const folded = title

@@ -33,6 +33,7 @@ import {
   LifecycleImpactSchema,
   PublicCursorQuerySchema,
   PublicEventSummarySchema,
+  ProjectAdminDetailSchema,
   PublicProjectSummarySchema,
   PUBLIC_PAGE_SIZE_MAX,
 } from "./index.js";
@@ -91,6 +92,39 @@ describe("012 taxonomy — authoring contract (SSOT)", () => {
     expect(withUrl.success).toBe(false);
   });
 
+  it("EARS-20: when project create or update carries a slug, the schema shall reject the client-owned identity", () => {
+    expect(
+      CreateProjectRequestSchema.safeParse({
+        kind: "school",
+        title: "System-owned address",
+        slug: "client-owned-address",
+      }).success,
+    ).toBe(false);
+    expect(
+      UpdateProjectRequestSchema.safeParse({
+        slug: "client-owned-address",
+      }).success,
+    ).toBe(false);
+  });
+
+  it("EARS-20: when project admin detail is projected, the schema shall not advertise slug editability", () => {
+    const parsed = ProjectAdminDetailSchema.parse({
+      id: "11111111-1111-4111-8111-111111111111",
+      slug: "system-owned-address",
+      kind: "school",
+      title: "System-owned address",
+      description: null,
+      coverUrl: null,
+      status: "draft",
+      firstPublishedAt: null,
+      slugEditable: true,
+      version: 1,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    expect(parsed).not.toHaveProperty("slugEditable");
+  });
+
   it("012 EARS-1: mediaAction shall be a PATCH-only verb", () => {
     expect(
       CreateProjectRequestSchema.safeParse({
@@ -129,7 +163,7 @@ describe("012 taxonomy — authoring contract (SSOT)", () => {
       "shchi-elka-2026",
     );
     expect(slugifyTaxonomyTitle("Café Zürich")).toBe("cafe-zurich");
-    // No sluggable character at all — the caller must refuse, never invent one.
+    // No sluggable character at all — the allocator supplies a kind fallback.
     expect(slugifyTaxonomyTitle("🙂🙂")).toBe("");
     // Every produced value satisfies the wire schema.
     for (const title of ["Школа кардиологии", "Медиа-проект №3", "ABC"]) {
@@ -520,7 +554,7 @@ describe("012 taxonomy — expert authoring contract (SSOT)", () => {
 // the matrix is the optional absolute-HTTPS website: everything else is the
 // shared §2.2 vocabulary the sibling entities already prove.
 describe("012 taxonomy — partner authoring contract (SSOT)", () => {
-  it("012 EARS-4: when a partner create carries a title, the system shall accept it with an optional website and slug", () => {
+  it("012 EARS-4: when a partner create carries a title, the system shall accept it with an optional website", () => {
     expect(
       CreatePartnerRequestSchema.parse({ title: "  Фармкомпания  " }),
     ).toEqual({ title: "Фармкомпания" });
@@ -528,11 +562,24 @@ describe("012 taxonomy — partner authoring contract (SSOT)", () => {
       CreatePartnerRequestSchema.parse({
         title: "Фармкомпания",
         websiteUrl: "https://example.org/ru/about?x=1#top",
-        slug: "farmkompaniya",
       }).websiteUrl,
       // Stored VERBATIM — path, query and fragment survive, because a sponsor's
       // URL is their identity and a "tidied" one may point elsewhere.
     ).toBe("https://example.org/ru/about?x=1#top");
+  });
+
+  it("EARS-20: when partner create or update carries a slug, the schema shall reject the client-owned identity", () => {
+    expect(
+      CreatePartnerRequestSchema.safeParse({
+        title: "System-owned address",
+        slug: "client-owned-address",
+      }).success,
+    ).toBe(false);
+    expect(
+      UpdatePartnerRequestSchema.safeParse({
+        slug: "client-owned-address",
+      }).success,
+    ).toBe(false);
   });
 
   it("012 EARS-4: when the website is not an absolute https URL, the system shall reject it", () => {
@@ -620,13 +667,13 @@ describe("012 taxonomy — partner authoring contract (SSOT)", () => {
       websiteUrl: null,
       status: "draft" as const,
       firstPublishedAt: null,
-      slugEditable: true,
       version: 1,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
     const parsed = PartnerAdminDetailSchema.parse(detail);
     expect(parsed).not.toHaveProperty("logoRef");
+    expect(parsed).not.toHaveProperty("slugEditable");
     expect(PartnerAdminListItemSchema.parse(detail)).not.toHaveProperty(
       "logoUrl",
     );

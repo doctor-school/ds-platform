@@ -21,6 +21,7 @@ import {
   RELAXED_RATE_LIMIT,
 } from "../setup/rate-limit.js";
 import { deleteUserFixture } from "../setup/fixture-cleanup.js";
+import { registerUniqueFakeUserFixture } from "../setup/fixture-registration.js";
 import {
   BOT_PROTECTION,
   type BotProtection,
@@ -72,24 +73,22 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     /** Register + grant + establish an ADMIN session; returns its sid. */
     async function adminSession(): Promise<string> {
-      const email = uniqueEmail("exp-admin");
-      const reg = await app.inject({
-        method: "POST",
-        url: "/v1/auth/register",
-        payload: { email, password, consent },
-      });
-      expect(reg.statusCode, reg.payload).toBe(200);
-      const { rows } = await pool.query<{ zitadel_sub: string }>(
-        "SELECT zitadel_sub FROM users WHERE email = $1",
-        [email],
-      );
-      await fake.grantProjectRole(rows[0]!.zitadel_sub, "platform_admin");
-      const admin = await establishAdminSession(app, {
-        identifier: email,
+      const { email, sub } = await registerUniqueFakeUserFixture({
+        app,
+        pool,
+        fake,
+        nextEmail: () => uniqueEmail("exp-admin"),
         password,
-        device,
+        consent,
       });
-      return admin.sid;
+      await fake.grantProjectRole(sub, "platform_admin");
+      return (
+        await establishAdminSession(app, {
+          identifier: email,
+          password,
+          device,
+        })
+      ).sid;
     }
 
     /** A doctor-portal (non-admin) session cookie — the 401 probe. */
@@ -633,6 +632,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(res.statusCode).toBe(200);
       expect(JSON.parse(res.payload)).toMatchObject({
         id: body.id,
+        slug: body.slug,
         professionalRole: "Кардиолог, аритмолог",
         affiliation: "НМИЦ терапии",
         version: 2,
@@ -933,6 +933,58 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         [body.id],
       );
       expect(rows[0]).toMatchObject({ slug: body.slug, version: 1 });
+    });
+
+    it("EARS-20: same-name, retained and concurrent Expert collisions shall allocate distinct stable slugs", async () => {
+      const marker = randomUUID().slice(0, 8);
+      const names = {
+        familyName: `Stable-${marker}`,
+        givenName: "Expert",
+        patronymic: null,
+      };
+      const first = await created(
+        await createJson({ payload: validPayload(names) }),
+      );
+      await pool.query(
+        "UPDATE experts SET status = 'retired', deleted_at = now() WHERE id = $1",
+        [first.id],
+      );
+      const second = await created(
+        await createJson({ payload: validPayload(names) }),
+      );
+      expect(second.slug).toBe(`stable-${marker}-expert-2`);
+
+      const concurrentNames = {
+        familyName: `Concurrent-${marker}`,
+        givenName: "Expert",
+        patronymic: null,
+      };
+      const responses = await Promise.all([
+        createJson({ payload: validPayload(concurrentNames) }),
+        createJson({ payload: validPayload(concurrentNames) }),
+      ]);
+      expect(responses.map((response) => response.statusCode).sort()).toEqual([
+        201, 201,
+      ]);
+      const bodies = responses.map(
+        (response) => JSON.parse(response.payload) as { slug: string },
+      );
+      expect(bodies.map(({ slug }) => slug).sort()).toEqual(
+        [`concurrent-${marker}-expert`, `concurrent-${marker}-expert-2`].sort(),
+      );
+    });
+
+    it("EARS-20: an Expert name with no transliterable base shall receive a system fallback", async () => {
+      const body = await created(
+        await createJson({
+          payload: validPayload({
+            familyName: "🫀",
+            givenName: "🧠",
+            patronymic: null,
+          }),
+        }),
+      );
+      expect(body.slug).toMatch(/^expert(?:-\d+)?$/);
     });
 
     it("012 EARS-5: when a PATCH would leave a published projection incomplete, the system shall refuse with a field-addressed PUBLISH_REQUIREMENTS_NOT_MET", async () => {

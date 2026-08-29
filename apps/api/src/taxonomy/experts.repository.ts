@@ -57,6 +57,13 @@ export class ExpertsRepository {
     return withRequestAuditContext(this.db, fn);
   }
 
+  /** Serialize allocation of one derived retained slug sequence. */
+  async lockSlugSequence(tx: Tx, base: string): Promise<void> {
+    await tx.execute(
+      sql`select pg_advisory_xact_lock(hashtextextended(${base}, 0))`,
+    );
+  }
+
   async insert(tx: Tx, values: ExpertInsert): Promise<Expert> {
     const [row] = await tx.insert(experts).values(values).returning();
     if (!row) throw new Error("expert insert returned no row");
@@ -127,30 +134,17 @@ export class ExpertsRepository {
     return { exists: true, owned: Boolean(owner) };
   }
 
-  /** {@link slugTaken} against the pool — the optimistic pre-flight read. */
-  slugTakenAnywhere(slug: string, exceptId?: string): Promise<boolean> {
-    return this.slugTaken(this.db, slug, exceptId);
-  }
-
   /**
-   * Whether `slug` is held by any retained row other than `exceptId` — including
+   * Whether `slug` is held by any retained row — including
    * an editorially removed one (012-design §2.4): a removed expert permanently
    * keeps its slug, so the public URL can never later resolve to a different
-   * person. Checked before the write for a naming 409; the unique index remains
-   * the final race guard.
+   * person.
    */
-  async slugTaken(
-    tx: Tx | Db,
-    slug: string,
-    exceptId?: string,
-  ): Promise<boolean> {
-    const where = exceptId
-      ? and(eq(experts.slug, slug), ne(experts.id, exceptId))
-      : eq(experts.slug, slug);
+  async slugTaken(tx: Tx | Db, slug: string): Promise<boolean> {
     const [row] = await tx
       .select({ id: experts.id })
       .from(experts)
-      .where(where)
+      .where(eq(experts.slug, slug))
       .limit(1);
     return Boolean(row);
   }

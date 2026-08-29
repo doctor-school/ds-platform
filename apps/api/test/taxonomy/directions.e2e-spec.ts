@@ -20,6 +20,7 @@ import {
   RELAXED_RATE_LIMIT,
 } from "../setup/rate-limit.js";
 import { deleteUserFixture } from "../setup/fixture-cleanup.js";
+import { registerUniqueFakeUserFixture } from "../setup/fixture-registration.js";
 
 // 012 EARS-3 (#1285) — the curated direction authoring vertical over the REAL
 // stack: Fastify + the 011 admin session + Postgres. It is the SAME §5.1
@@ -69,24 +70,22 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     /** Register + grant + establish an ADMIN session; returns its sid. */
     async function adminSession(): Promise<string> {
-      const email = uniqueEmail("top-admin");
-      const reg = await app.inject({
-        method: "POST",
-        url: "/v1/auth/register",
-        payload: { email, password, consent },
-      });
-      expect(reg.statusCode).toBe(200);
-      const { rows } = await pool.query<{ zitadel_sub: string }>(
-        "SELECT zitadel_sub FROM users WHERE email = $1",
-        [email],
-      );
-      await fake.grantProjectRole(rows[0]!.zitadel_sub, "platform_admin");
-      const admin = await establishAdminSession(app, {
-        identifier: email,
+      const { email, sub } = await registerUniqueFakeUserFixture({
+        app,
+        pool,
+        fake,
+        nextEmail: () => uniqueEmail("top-admin"),
         password,
-        device,
+        consent,
       });
-      return admin.sid;
+      await fake.grantProjectRole(sub, "platform_admin");
+      return (
+        await establishAdminSession(app, {
+          identifier: email,
+          password,
+          device,
+        })
+      ).sid;
     }
 
     /** A doctor-portal (non-admin) session cookie — the 401 probe. */
@@ -292,14 +291,13 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         version: 2,
       });
       expect(res.headers.etag).toBe('W/"2"');
-      // Before first publication the address follows the current title; the
-      // operator still never authors or sees that derived value.
+      // Public identity is generated once and survives every later edit.
       const { rows } = await pool.query<{ slug: string; count: string }>(
         "SELECT slug, count(*) OVER () AS count FROM directions WHERE id = $1",
         [body.id],
       );
       expect(rows).toHaveLength(1);
-      expect(rows[0]!.slug).toBe(`edited-draft-${marker}`);
+      expect(rows[0]!.slug).toBe(body.slug);
     });
 
     it("012 EARS-15: the list shall search titles case-insensitively and exclude retired rows by default", async () => {
@@ -531,13 +529,12 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(second.id).not.toBe(first.id);
     });
 
-    it("EARS-18.4: a draft retitle shall re-derive its hidden address, while the first publication freezes it", async () => {
+    it("EARS-20: a direction retitle shall preserve its generated address for the row lifetime", async () => {
       const marker = randomUUID().slice(0, 8);
       const body = await created(
         await createJson({ payload: { title: `Draft cardiology ${marker}` } }),
       );
       const renamedTitle = `Pediatric cardiology ${marker}`;
-      await created(await createJson({ payload: { title: renamedTitle } }));
       const renamed = await app.inject({
         method: "PATCH",
         url: `/v1/admin/directions/${body.id}`,
@@ -553,7 +550,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(renamed.statusCode).toBe(200);
       expect(JSON.parse(renamed.payload)).toMatchObject({
         title: renamedTitle,
-        slug: `pediatric-cardiology-${marker}-2`,
+        slug: body.slug,
         version: 2,
       });
 
@@ -583,7 +580,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       });
       expect(afterPublish.statusCode).toBe(200);
       expect(JSON.parse(afterPublish.payload)).toMatchObject({
-        slug: `pediatric-cardiology-${marker}-2`,
+        slug: body.slug,
         version: 4,
       });
     });
@@ -607,19 +604,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       );
     });
 
-    it("EARS-18.6: a title that folds to nothing sluggable shall be refused against `title`, the field the operator typed", async () => {
-      const before = await directionCount();
+    it("EARS-20: a direction title with no transliterable base shall receive a system fallback", async () => {
       const res = await createJson({ payload: { title: "🫀🫁" } });
-      expect(res.statusCode).toBe(400);
-      expect(problem(res).errorCode).toBe("VALIDATION_FAILED");
-      // Not against a `slug` field: there is no slug input left to point at, and
-      // inventing an identity for a permanent public URL is worse than asking.
-      expect(
-        (problem(res) as { errors?: { path: string }[] }).errors?.map(
-          (e) => e.path,
-        ),
-      ).toContain("title");
-      expect(await directionCount()).toBe(before);
+      expect(res.statusCode).toBe(201);
+      expect((await created(res)).slug).toMatch(/^direction(?:-\d+)?$/);
     });
 
     it("012 EARS-17: when If-Match is absent or stale, the system shall answer 428 then 412 and change nothing", async () => {

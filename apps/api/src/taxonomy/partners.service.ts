@@ -5,8 +5,6 @@ import {
   type CreatePartnerRequest,
   type PartnerAdminDetail,
   type PartnerAdminList,
-  slugifyTaxonomyTitle,
-  SlugSchema,
   taxonomyETag,
   type UpdatePartnerRequest,
 } from "@ds/schemas";
@@ -27,6 +25,7 @@ import {
 } from "./media/still-image-normalizer.js";
 import { PartnersRepository } from "./partners.repository.js";
 import { markReplayable, TaxonomyError } from "./taxonomy.errors.js";
+import { allocateTaxonomySlug, taxonomySlugBase } from "./taxonomy-slug.js";
 
 // 012 EARS-4 (#1286) — the partner authoring commands. Same §5.1 failure ORDER
 // the project and expert verticals established, against the SAME shared
@@ -113,27 +112,17 @@ export class PartnersService {
   private async createCommand(
     input: CreatePartnerInput,
   ): Promise<PartnerCommandResult> {
-    const slug = this.resolveCreateSlug(input.payload);
-    // Pre-flight the conflict OUTSIDE the transaction so a doomed request never
-    // normalizes or uploads; the unique index still guards the race.
-    if (await this.repo.slugTakenAnywhere(slug)) {
-      throw new TaxonomyError(
-        "SLUG_CONFLICT",
-        "another partner already holds this slug; restore that record instead of re-creating it",
-      );
-    }
+    const base = taxonomySlugBase(input.payload.title, "partner");
 
     const uploaded = input.logo
       ? await this.normalizeAndUpload(input.logo, input.lease)
       : null;
 
     const row = await this.repo.transaction(async (tx) => {
-      if (await this.repo.slugTaken(tx, slug)) {
-        throw new TaxonomyError(
-          "SLUG_CONFLICT",
-          "another partner already holds this slug; restore that record instead of re-creating it",
-        );
-      }
+      await this.repo.lockSlugSequence(tx, base);
+      const slug = await allocateTaxonomySlug(base, "partner", (candidate) =>
+        this.repo.slugTaken(tx, candidate),
+      );
       const created = await this.repo.insert(tx, {
         slug,
         title: input.payload.title,
@@ -150,7 +139,10 @@ export class PartnersService {
       return created;
     });
 
-    return { detail: await this.toDetail(row), etag: taxonomyETag(row.version) };
+    return {
+      detail: await this.toDetail(row),
+      etag: taxonomyETag(row.version),
+    };
   }
 
   private async updateCommand(
@@ -163,27 +155,6 @@ export class PartnersService {
         "PRECONDITION_FAILED",
         "the partner changed since it was read; reload and retry",
       );
-    }
-
-    // Slug immutability is a ROW-state refusal, not a shape one, and it is
-    // checked before any upload. Echoing the current value is not an update:
-    // the admin form posts the whole «Основное» tab, so refusing the echo would
-    // block every ordinary edit of a published partner over an untouched field.
-    const slugChanges =
-      input.payload.slug !== undefined && input.payload.slug !== current.slug;
-    if (slugChanges) {
-      if (current.firstPublishedAt !== null) {
-        throw new TaxonomyError(
-          "SLUG_IMMUTABLE",
-          "the slug was locked by the first publication and cannot change",
-        );
-      }
-      if (await this.repo.slugTakenAnywhere(input.payload.slug!, current.id)) {
-        throw new TaxonomyError(
-          "SLUG_CONFLICT",
-          "another partner already holds this slug",
-        );
-      }
     }
 
     const uploaded = input.logo
@@ -203,23 +174,11 @@ export class PartnersService {
           "the partner changed since it was read; reload and retry",
         );
       }
-      if (
-        input.payload.slug !== undefined &&
-        input.payload.slug !== locked.slug &&
-        locked.firstPublishedAt !== null
-      ) {
-        throw new TaxonomyError(
-          "SLUG_IMMUTABLE",
-          "the slug was locked by the first publication and cannot change",
-        );
-      }
-
       const updated = await this.repo.updateVersioned(
         tx,
         input.id,
         input.expectedVersion,
         {
-          ...(slugChanges ? { slug: input.payload.slug! } : {}),
           ...(input.payload.title !== undefined
             ? { title: input.payload.title }
             : {}),
@@ -256,14 +215,20 @@ export class PartnersService {
       return updated;
     });
 
-    return { detail: await this.toDetail(row), etag: taxonomyETag(row.version) };
+    return {
+      detail: await this.toDetail(row),
+      etag: taxonomyETag(row.version),
+    };
   }
 
   /** `GET /v1/admin/partners/:id` — detail by stable id, retired rows included. */
   async detail(id: string): Promise<PartnerCommandResult> {
     const row = await this.repo.findById(id);
     if (!row) throw new TaxonomyError("RESOURCE_NOT_FOUND");
-    return { detail: await this.toDetail(row), etag: taxonomyETag(row.version) };
+    return {
+      detail: await this.toDetail(row),
+      etag: taxonomyETag(row.version),
+    };
   }
 
   /** `GET /v1/admin/partners` — the shared admin list with LD-6 title search. */
@@ -330,23 +295,6 @@ export class PartnersService {
     return { key, normalized };
   }
 
-  /** Resolve the create-time slug: the authored one, or generated from the title. */
-  private resolveCreateSlug(payload: CreatePartnerRequest): string {
-    if (payload.slug) return payload.slug;
-    const generated = slugifyTaxonomyTitle(payload.title);
-    const parsed = SlugSchema.safeParse(generated);
-    if (!parsed.success) {
-      // The title yields no usable public identity. Refuse and let the operator
-      // supply one — a fabricated slug would become a permanent public URL.
-      throw new TaxonomyError(
-        "VALIDATION_FAILED",
-        "the title yields no usable slug; supply one explicitly",
-        [{ path: "slug", message: "could not be generated from the title" }],
-      );
-    }
-    return parsed.data;
-  }
-
   private async toDetail(row: Partner): Promise<PartnerAdminDetail> {
     return {
       id: row.id,
@@ -356,7 +304,6 @@ export class PartnersService {
       websiteUrl: row.websiteUrl,
       status: row.status,
       firstPublishedAt: row.firstPublishedAt?.toISOString() ?? null,
-      slugEditable: row.firstPublishedAt === null,
       version: row.version,
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),

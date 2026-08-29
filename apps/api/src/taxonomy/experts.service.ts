@@ -9,8 +9,6 @@ import {
   type ExpertAdminList,
   expertDisplayName,
   expertInitials,
-  slugifyTaxonomyTitle,
-  SlugSchema,
   taxonomyETag,
   type UpdateExpertRequest,
 } from "@ds/schemas";
@@ -31,6 +29,7 @@ import {
   type UploadedImage,
 } from "./media/still-image-normalizer.js";
 import { markReplayable, TaxonomyError } from "./taxonomy.errors.js";
+import { allocateTaxonomySlug, taxonomySlugBase } from "./taxonomy-slug.js";
 
 // 012 EARS-2 (#1284) — the expert authoring commands. Same §5.1 failure ORDER
 // the project vertical established, against the SAME three shared services:
@@ -113,15 +112,12 @@ export class ExpertsService {
   private async createCommand(
     input: CreateExpertInput,
   ): Promise<ExpertCommandResult> {
-    const slug = this.resolveCreateSlug(input.payload);
-    // Pre-flight the conflict OUTSIDE the transaction so a doomed request never
-    // normalizes or uploads; the unique index still guards the race.
-    if (await this.repo.slugTakenAnywhere(slug)) {
-      throw new TaxonomyError(
-        "SLUG_CONFLICT",
-        "another expert already holds this slug; restore that record instead of re-creating it",
-      );
-    }
+    const name = expertDisplayName({
+      familyName: input.payload.familyName,
+      givenName: input.payload.givenName,
+      patronymic: input.payload.patronymic ?? null,
+    })!;
+    const base = taxonomySlugBase(name, "expert");
     if (input.payload.userId) {
       await this.assertUserLinkAvailable(input.payload.userId);
     }
@@ -131,12 +127,10 @@ export class ExpertsService {
       : null;
 
     const row = await this.repo.transaction(async (tx) => {
-      if (await this.repo.slugTaken(tx, slug)) {
-        throw new TaxonomyError(
-          "SLUG_CONFLICT",
-          "another expert already holds this slug; restore that record instead of re-creating it",
-        );
-      }
+      await this.repo.lockSlugSequence(tx, base);
+      const slug = await allocateTaxonomySlug(base, "expert", (candidate) =>
+        this.repo.slugTaken(tx, candidate),
+      );
       if (input.payload.userId) {
         const link = await this.repo.lockUserAndFindOwner(
           tx,
@@ -400,27 +394,6 @@ export class ExpertsService {
       );
     }
     return { key, normalized };
-  }
-
-  /** Resolve the system-owned create-time slug from the structured display name. */
-  private resolveCreateSlug(payload: CreateExpertRequest): string {
-    const name = expertDisplayName({
-      familyName: payload.familyName,
-      givenName: payload.givenName,
-      patronymic: payload.patronymic ?? null,
-    })!;
-    const generated = slugifyTaxonomyTitle(name);
-    const parsed = SlugSchema.safeParse(generated);
-    if (!parsed.success) {
-      // The name yields no usable public identity. Refuse and let the operator
-      // supply one — a fabricated slug would become a permanent public URL.
-      throw new TaxonomyError(
-        "VALIDATION_FAILED",
-        "the structured name yields no usable system slug",
-        [{ path: "familyName", message: "could not generate a public slug" }],
-      );
-    }
-    return parsed.data;
   }
 
   private async toDetail(row: Expert): Promise<ExpertAdminDetail> {

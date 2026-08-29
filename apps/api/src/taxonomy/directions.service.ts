@@ -3,10 +3,6 @@ import type { Direction } from "@ds/db";
 import {
   type AdminTaxonomyListQuery,
   type CreateDirectionRequest,
-  slugifyTaxonomyTitle,
-  SlugSchema,
-  TAXONOMY_SLUG_ATTEMPT_LIMIT,
-  taxonomySlugCandidate,
   taxonomyETag,
   type DirectionAdminDetail,
   type DirectionAdminList,
@@ -35,6 +31,7 @@ import {
   TaxonomyError,
   withSerializationAbortMapping,
 } from "./taxonomy.errors.js";
+import { allocateTaxonomySlug, taxonomySlugBase } from "./taxonomy-slug.js";
 
 // 012 EARS-3 (#1285) — the curated direction authoring commands. The same §5.1
 // failure ORDER the project and expert verticals established, minus the media
@@ -173,7 +170,7 @@ export class DirectionsService {
   private async createCommand(
     input: CreateDirectionInput,
   ): Promise<DirectionCommandResult> {
-    const base = this.deriveBaseSlug(input.payload.title);
+    const base = taxonomySlugBase(input.payload.title, "direction");
 
     const row = await this.repo.transaction(async (tx) => {
       // The address is DERIVED, so a taken candidate is not a refusal the
@@ -182,7 +179,9 @@ export class DirectionsService {
       // concurrent allocators wait, and the unique index remains the final
       // integrity guard, instead of leaking a race as an opaque 500.
       await this.repo.lockSlugSequence(tx, base);
-      const slug = await this.resolveFreeSlug(tx, base);
+      const slug = await allocateTaxonomySlug(base, "direction", (candidate) =>
+        this.repo.slugTaken(tx, candidate),
+      );
       const created = await this.repo.insert(tx, {
         slug,
         title: input.payload.title,
@@ -221,15 +220,6 @@ export class DirectionsService {
           "the direction changed since it was read; reload and retry",
         );
       }
-      let derivedSlug: string | undefined;
-      if (
-        input.payload.title !== undefined &&
-        locked.firstPublishedAt === null
-      ) {
-        const base = this.deriveBaseSlug(input.payload.title);
-        await this.repo.lockSlugSequence(tx, base);
-        derivedSlug = await this.resolveFreeSlug(tx, base, locked.id);
-      }
       const updated = await this.repo.updateVersioned(
         tx,
         input.id,
@@ -238,7 +228,6 @@ export class DirectionsService {
           ...(input.payload.title !== undefined
             ? { title: input.payload.title }
             : {}),
-          ...(derivedSlug !== undefined ? { slug: derivedSlug } : {}),
         },
       );
       if (!updated) {
@@ -413,51 +402,6 @@ export class DirectionsService {
       page: query.page,
       pageSize: query.pageSize,
     };
-  }
-
-  /**
-   * Fold the authored Russian title into the base address.
-   *
-   * A title that yields nothing sluggable at all (only emoji, only punctuation)
-   * is refused against `title`, the field the operator actually typed — there is
-   * no `slug` input left to point them at, and inventing an identity for a
-   * permanent public URL is worse than asking for a real title.
-   */
-  private deriveBaseSlug(title: string): string {
-    const parsed = SlugSchema.safeParse(slugifyTaxonomyTitle(title));
-    if (!parsed.success) {
-      throw new TaxonomyError(
-        "VALIDATION_FAILED",
-        "the title yields no usable page address; use a title with letters or digits",
-        [{ path: "title", message: "yields no usable page address" }],
-      );
-    }
-    return parsed.data;
-  }
-
-  /**
-   * The first candidate in the derived sequence that no retained row holds.
-   * Bounded: fifty directions folding to one address is a data problem, not a
-   * collision, and a create must never become an unbounded scan.
-   */
-  private async resolveFreeSlug(
-    tx: Parameters<Parameters<DirectionsRepository["transaction"]>[0]>[0],
-    base: string,
-    exceptId?: string,
-  ): Promise<string> {
-    for (
-      let attempt = 1;
-      attempt <= TAXONOMY_SLUG_ATTEMPT_LIMIT;
-      attempt += 1
-    ) {
-      const candidate = taxonomySlugCandidate(base, attempt);
-      if (!(await this.repo.slugTaken(tx, candidate, exceptId)))
-        return candidate;
-    }
-    throw new TaxonomyError(
-      "SLUG_CONFLICT",
-      "too many directions already derive this page address; give this one a more specific title",
-    );
   }
 }
 

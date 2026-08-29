@@ -112,15 +112,13 @@ const ProjectDescriptionSchema = z
  * PATCH-only verb.
  *
  * `title` and `kind` are the required display identity; `description` is
- * publish-required and may stay null on a draft; `slug` is optional and
- * server-generated from the title when omitted.
+ * publish-required and may stay null on a draft. Slug is always server-owned.
  */
 export const CreateProjectRequestSchema = z
   .object({
     kind: ProjectKindSchema,
     title: ProjectTitleSchema,
     description: ProjectDescriptionSchema.nullish(),
-    slug: SlugSchema.optional(),
   })
   .strict();
 export type CreateProjectRequest = z.infer<typeof CreateProjectRequestSchema>;
@@ -129,17 +127,14 @@ export type CreateProjectRequest = z.infer<typeof CreateProjectRequestSchema>;
  * `PATCH /v1/admin/projects/:id` — edit the same row.
  *
  * Omission means unchanged; an explicit `null` clears an optional or
- * still-incomplete draft field (012-design §2.2). `slug` is accepted only while
- * `first_published_at IS NULL` — the server refuses a later change with 409
- * `SLUG_IMMUTABLE` rather than validating it away here, because the refusal
- * depends on row state, not on request shape.
+ * still-incomplete draft field (012-design §2.2). Slug is absent because its
+ * stable public identity is generated and retained by the server.
  */
 export const UpdateProjectRequestSchema = z
   .object({
     kind: ProjectKindSchema.optional(),
     title: ProjectTitleSchema.optional(),
     description: ProjectDescriptionSchema.nullish(),
-    slug: SlugSchema.optional(),
     mediaAction: MediaActionSchema.optional(),
   })
   .strict();
@@ -160,8 +155,6 @@ export const ProjectAdminDetailSchema = z.object({
   status: TaxonomyStatusSchema,
   /** Null until the first publish; once set, the slug is permanently locked. */
   firstPublishedAt: z.string().nullable(),
-  /** True iff the slug may still be edited — the UI reads this, never re-derives it. */
-  slugEditable: z.boolean(),
   version: z.number().int().positive(),
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -448,8 +441,8 @@ const DirectionTitleSchema = z
  * admin believe it stored something. 400 `VALIDATION_FAILED` instead.
  *
  * `slug` is NOT part of this contract (017-design §9.3). «Адрес страницы» is
- * derived from the Russian title by the server and frozen on first publish; it
- * is not an editorial decision, and it is rendered nowhere in the admin. Under
+ * derived from the Russian title by the server and retained for the row's
+ * lifetime; it is not an editorial decision. Under
  * `.strict()` a posted `slug` is therefore a 400 rather than a silently honoured
  * override — the derivation has exactly one implementation, and a client cannot
  * opt out of it.
@@ -468,9 +461,8 @@ export type CreateDirectionRequest = z.infer<
  *
  * Omission means unchanged; `title` does not accept `null` (it is the row's only
  * descriptive value and NOT NULL in the DB). There is no `slug` here either: the
- * address never arrives from the operator, so the identity of a published
- * direction cannot move and the old 409 `SLUG_IMMUTABLE` path is unreachable
- * from this surface by construction rather than by refusal.
+ * address never arrives from the operator, so row identity stays stable by
+ * construction rather than by a publication-state refusal.
  */
 export const UpdateDirectionRequestSchema = z
   .object({
@@ -589,7 +581,6 @@ export const CreatePartnerRequestSchema = z
   .object({
     title: PartnerTitleSchema,
     websiteUrl: PartnerWebsiteUrlSchema.nullish(),
-    slug: SlugSchema.optional(),
   })
   .strict();
 export type CreatePartnerRequest = z.infer<typeof CreatePartnerRequestSchema>;
@@ -599,15 +590,13 @@ export type CreatePartnerRequest = z.infer<typeof CreatePartnerRequestSchema>;
  *
  * Omission means unchanged; an explicit `null` clears the optional website.
  * `title` accepts no null: it is the row's display identity and NOT NULL in the
- * DB. `slug` is accepted only while `first_published_at IS NULL` — the refusal
- * depends on row state, so it is a 409 `SLUG_IMMUTABLE` from the service, not a
- * shape rule here. `mediaAction: "clear"` drops the logo.
+ * DB. Slug is absent because its stable public identity is generated and
+ * retained by the server. `mediaAction: "clear"` drops the logo.
  */
 export const UpdatePartnerRequestSchema = z
   .object({
     title: PartnerTitleSchema.optional(),
     websiteUrl: PartnerWebsiteUrlSchema.nullish(),
-    slug: SlugSchema.optional(),
     mediaAction: MediaActionSchema.optional(),
   })
   .strict();
@@ -627,8 +616,6 @@ export const PartnerAdminDetailSchema = z.object({
   status: TaxonomyStatusSchema,
   /** Null until the first publish; once set, the slug is permanently locked. */
   firstPublishedAt: z.string().nullable(),
-  /** True iff the slug may still be edited — the UI reads this, never re-derives it. */
-  slugEditable: z.boolean(),
   version: z.number().int().positive(),
   createdAt: z.string(),
   updatedAt: z.string(),

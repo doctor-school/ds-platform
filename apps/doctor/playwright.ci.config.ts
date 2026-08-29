@@ -6,12 +6,16 @@ import { defineConfig, devices } from "@playwright/test";
  *
  * It owns a `webServer` that boots the already-BUILT app with `next start`, so
  * the CI job must run the build first. No api / Postgres / Zitadel / Mailpit and
- * no special build env: the storefront shell renders no server-side api fetch,
- * and the `/v1/*` BFF is reached through a rewrite at REQUEST time.
+ * no special build env: the `/v1/*` BFF is reached through a rewrite at REQUEST
+ * time, and every server-side api read on these routes is written to DEGRADE
+ * rather than throw when there is nothing to read from.
  *
- * Unlike the portal's, the readiness probe IS `/`: this app's root does not
- * server-render an api fetch, so it answers 200 with no backend. When a future
- * route here does SSR an api read, that route — not the probe — is what changes.
+ * Unlike the portal's, the readiness probe IS `/`. The root now does server-side
+ * reads (`lib/shell-auth.ts` for the header, `lib/specialty-choice.ts` for the
+ * remembered specialty, #1482), but both resolve «unknown» on an unreachable api
+ * instead of failing the render, so the route still answers 200 with no backend
+ * and the storefront falls back to its client-side read. A future route that
+ * CANNOT degrade that way is what would change the probe — not this one.
  *
  * Run locally (after `pnpm --filter @ds/doctor build`):
  *   pnpm --filter @ds/doctor test:e2e:ci
@@ -21,6 +25,7 @@ const BASE = `http://127.0.0.1:${PORT}`;
 
 export default defineConfig({
   testDir: "./e2e",
+  testIgnore: "specialty-consumption.spec.ts",
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,

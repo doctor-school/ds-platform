@@ -7,10 +7,15 @@ import {
 } from "@ds/db";
 import { isRouteScan } from "../authz/route-scan.js";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
+import { TaxonomyModule } from "../taxonomy/taxonomy.module.js";
 import { SpecialtiesPublicController } from "./specialties.public.controller.js";
 import { SpecialtyProblemFilter } from "./specialties.problem-filter.js";
 import { SpecialtiesRepository } from "./specialties.repository.js";
 import { SpecialtiesService } from "./specialties.service.js";
+import { SpecialtyChoiceMeController } from "./specialty-choice.me.controller.js";
+import { SpecialtyChoicePublicController } from "./specialty-choice.public.controller.js";
+import { SpecialtyChoiceRepository } from "./specialty-choice.repository.js";
+import { SpecialtyChoiceService } from "./specialty-choice.service.js";
 import { StatisticsPublicController } from "./statistics.public.controller.js";
 import { StatisticsRepository } from "./statistics.repository.js";
 import { StatisticsService } from "./statistics.service.js";
@@ -38,19 +43,28 @@ import { StatisticsService } from "./statistics.service.js";
  * choose from. So the failure is logged and rethrown.
  */
 @Module({
-  controllers: [SpecialtiesPublicController, StatisticsPublicController],
+  imports: [TaxonomyModule],
+  controllers: [
+    SpecialtiesPublicController,
+    SpecialtyChoicePublicController,
+    SpecialtyChoiceMeController,
+    StatisticsPublicController,
+  ],
   providers: [
     SpecialtiesRepository,
     SpecialtiesService,
+    SpecialtyChoiceRepository,
+    SpecialtyChoiceService,
     StatisticsRepository,
     StatisticsService,
     // Registered as a provider (not merely referenced in `@UseFilters`) so Nest
     // owns its lifecycle in this module's context.
     SpecialtyProblemFilter,
   ],
-  // Exported for the later 017 verticals (#1481/#1482): the choose-specialty
-  // handler consumes THIS membership mechanism rather than re-deriving one.
-  exports: [SpecialtiesService, StatisticsService],
+  // Exported for the later 017 verticals: the targeting reads (EARS-8) consume
+  // THIS membership mechanism and THIS remembered choice rather than re-deriving
+  // either one.
+  exports: [SpecialtiesService, SpecialtyChoiceService, StatisticsService],
 })
 export class StorefrontModule implements OnModuleInit {
   private readonly logger = new Logger(StorefrontModule.name);

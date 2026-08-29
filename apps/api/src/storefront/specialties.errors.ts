@@ -1,8 +1,5 @@
 import { HttpException } from "@nestjs/common";
-import type {
-  SpecialtyErrorCode,
-  SpecialtyProblemDetails,
-} from "@ds/schemas";
+import type { SpecialtyErrorCode, SpecialtyProblemDetails } from "@ds/schemas";
 // `PROBLEM_TYPE_BASE` and `resolveTraceId` are transport-level, not
 // taxonomy-specific: the `type` URI namespace and the W3C `traceparent`
 // preference are platform contracts (ADR-0002), and a second copy here would be
@@ -11,6 +8,7 @@ import type {
 // is recorded as a DEBT.md line rather than done inside this slice.
 import {
   PROBLEM_TYPE_BASE,
+  type ReplayLeaseRef,
   resolveTraceId,
 } from "../taxonomy/taxonomy.errors.js";
 
@@ -44,6 +42,8 @@ const SPECIALTY_ERROR_TITLE: Readonly<Record<SpecialtyErrorCode, string>> = {
  * one place.
  */
 export class SpecialtyError extends HttpException {
+  replayLease?: ReplayLeaseRef;
+
   constructor(
     readonly errorCode: SpecialtyErrorCode,
     readonly detail?: string,
@@ -51,7 +51,10 @@ export class SpecialtyError extends HttpException {
     super(SPECIALTY_ERROR_TITLE[errorCode], SPECIALTY_ERROR_STATUS[errorCode]);
   }
 
-  toProblemDetails(traceId: string, instance?: string): SpecialtyProblemDetails {
+  toProblemDetails(
+    traceId: string,
+    instance?: string,
+  ): SpecialtyProblemDetails {
     return {
       type: `${PROBLEM_TYPE_BASE}/${this.errorCode.toLowerCase().replace(/_/g, "-")}`,
       title: SPECIALTY_ERROR_TITLE[this.errorCode],

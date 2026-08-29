@@ -1,7 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { normalizeSpecialtyQuery, type SpecialtyRef } from "@ds/schemas";
+import {
+  normalizeSpecialtyQuery,
+  type SpecialtyChoice,
+  type SpecialtyRef,
+} from "@ds/schemas";
 import {
   SpecialtyCatalogView,
   type SpecialtyCatalogState,
@@ -11,6 +15,11 @@ import {
   fetchSpecialtyBook,
   searchSpecialties,
 } from "@/lib/specialties";
+import {
+  chooseSpecialty,
+  fetchSpecialtyChoice,
+  type SpecialtyActor,
+} from "@/lib/specialty-choice";
 
 /**
  * 017 EARS-4 / EARS-5 — the reads and the §3 state machine behind the home-page
@@ -36,6 +45,16 @@ import {
  * cancels the one before it, so a slow earlier response can never overwrite a
  * newer one — the classic search race, closed by construction rather than by
  * comparing timestamps.
+ *
+ * 017 EARS-6 / EARS-7 (#1482) add the remembered choice on top of that. The
+ * choice normally arrives ALREADY RESOLVED from the server (`initialChoice`,
+ * resolved in `app/(storefront)/page.tsx`), so a return visit's first byte of
+ * HTML is the collapsed row — EARS-6's «opens directly in the targeted view»
+ * cannot be met by a client effect that paints the catalog and then folds it
+ * away. `initialChoice === null` means the server could not resolve it, which is
+ * NOT «nothing chosen»: the section then re-issues the same read from the
+ * browser and shows its loading render meanwhile, rather than guessing that a
+ * doctor with a remembered specialty has none and re-asking the question.
  */
 
 type BookState =
@@ -47,7 +66,17 @@ type BookState =
  * short enough that the result feels like a consequence of the keystroke. */
 const SEARCH_DEBOUNCE_MS = 150;
 
-export function SpecialtyCatalog() {
+export interface SpecialtyCatalogProps {
+  /** Which store this visitor's choice belongs in — resolved server-side (LD-2). */
+  actor: SpecialtyActor;
+  /** The server's answer, or `null` when it could not resolve one. */
+  initialChoice: SpecialtyChoice | null;
+}
+
+export function SpecialtyCatalog({
+  actor,
+  initialChoice,
+}: SpecialtyCatalogProps) {
   const [book, setBook] = useState<BookState>({ kind: "loading" });
   const [frequent, setFrequent] = useState<SpecialtyRef[]>([]);
   const [query, setQuery] = useState("");
@@ -57,6 +86,19 @@ export function SpecialtyCatalog() {
   const [searchFailed, setSearchFailed] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const [searchKey, setSearchKey] = useState(0);
+
+  // The remembered choice. `chosen === undefined` is «not resolved yet» and is
+  // deliberately distinct from `null` («resolved: nothing chosen») — the two
+  // draw different things, and collapsing them would re-ask a question the
+  // doctor already answered every time the server read did not land.
+  const [chosen, setChosen] = useState<SpecialtyRef | null | undefined>(
+    initialChoice ? initialChoice.specialty : undefined,
+  );
+  // «сменить» — the catalog is open OVER a remembered choice. Kept apart from
+  // `chosen` so cancelling out of it (a re-choice, or a failed one) never has to
+  // reconstruct what was already recorded.
+  const [changing, setChanging] = useState(false);
+  const [choiceFailed, setChoiceFailed] = useState(false);
 
   const normalized = normalizeSpecialtyQuery(query);
   const isSearching = normalized.length > 0;
@@ -109,12 +151,14 @@ export function SpecialtyCatalog() {
     const timer = setTimeout(() => {
       searchSpecialties(query, fetch, controller.signal)
         .then((result) => {
-          if (controller.signal.aborted || generation !== latest.current) return;
+          if (controller.signal.aborted || generation !== latest.current)
+            return;
           setMatches(result.entries);
           setSearching(false);
         })
         .catch(() => {
-          if (controller.signal.aborted || generation !== latest.current) return;
+          if (controller.signal.aborted || generation !== latest.current)
+            return;
           // A failed NARROWING is its own state, not the section's error and not
           // a silent empty result: «ничего не найдено» would be a lie about the
           // book, and replacing the section would take the field, the typed
@@ -131,6 +175,32 @@ export function SpecialtyCatalog() {
       controller.abort();
     };
   }, [query, isSearching, searchKey]);
+
+  /**
+   * The client-side resolve of the remembered choice — the degradation path of
+   * the server one in `app/(storefront)/page.tsx`, not a second mechanism: same
+   * two routes, same contract, same validation. It runs ONLY when the server
+   * could not answer (`initialChoice === null`), so an ordinary visit issues no
+   * extra request at all.
+   *
+   * A failure resolves to «nothing chosen». The catalog is the surface that lets
+   * a visitor choose; withholding it behind an error about a read would cost the
+   * doctor more than simply offering the question again.
+   */
+  useEffect(() => {
+    if (initialChoice !== null) return;
+
+    const controller = new AbortController();
+    fetchSpecialtyChoice(actor, fetch, controller.signal)
+      .then((choice) => {
+        if (!controller.signal.aborted) setChosen(choice.specialty);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setChosen(null);
+      });
+
+    return () => controller.abort();
+  }, [actor, initialChoice]);
 
   const onQueryChange = useCallback((next: string) => {
     setQuery(next);
@@ -160,14 +230,58 @@ export function SpecialtyCatalog() {
   }, [searchFailed]);
 
   /**
-   * Choosing a specialty is #1482. This seam exists so the chips are real
-   * controls rather than decoration, and it deliberately changes NOTHING on
-   * screen: a toast or a collapsed row here would tell a doctor the platform
-   * remembered a choice that nothing recorded.
+   * EARS-7, «no separate save step»: activating an entry IS the command. What
+   * the command returns — never the entry that was clicked — becomes the
+   * collapsed row, so the row cannot name a specialty the platform did not
+   * record. A refusal leaves the catalog exactly as it was and says so.
+   *
+   * The submitted reference is `entry.id`, the book's own identity for the
+   * entry, so a re-worded official name never silently re-targets a doctor.
+   *
+   * A second activation while the first is still in flight is DROPPED rather
+   * than queued: two writes racing would leave the row naming whichever answer
+   * landed last, which need not be the entry chosen last.
    */
-  const onSelect = useCallback((_entry: SpecialtyRef) => {}, []);
+  const saving = useRef(false);
+  const onSelect = useCallback(
+    (entry: SpecialtyRef) => {
+      if (saving.current) return;
+      saving.current = true;
+      setChoiceFailed(false);
+      void chooseSpecialty(entry.id, actor)
+        .then((choice) => {
+          saving.current = false;
+          setChosen(choice.specialty);
+          setChanging(false);
+          // The catalog is put back in its Open form for the NEXT «сменить»: a
+          // query or an expanded list left over from this pass would otherwise
+          // greet the doctor as the state of a question they just closed.
+          setQuery("");
+          setExpanded(false);
+        })
+        .catch(() => {
+          saving.current = false;
+          setChoiceFailed(true);
+        });
+    },
+    [actor],
+  );
+
+  /** «сменить» — re-open the full catalog without forgetting what is recorded. */
+  const onChange = useCallback(() => {
+    setChanging(true);
+    setChoiceFailed(false);
+  }, []);
 
   const state = useMemo<SpecialtyCatalogState>(() => {
+    // The remembered choice outranks every catalog state: while a specialty is
+    // recorded and «сменить» has not been pressed, there is nothing to choose
+    // from on screen — not a filtered list, not an error about the book.
+    if (chosen && !changing) return { kind: "chosen", specialty: chosen };
+    // Still resolving whether there IS one. Drawing the open catalog here is the
+    // flash EARS-6 forbids, so the section waits in its own loading render.
+    if (chosen === undefined) return { kind: "loading" };
+
     if (book.kind !== "ready") return { kind: book.kind };
 
     if (isSearching) {
@@ -199,7 +313,17 @@ export function SpecialtyCatalog() {
       view: expanded ? "expanded" : "open",
       busy: false,
     };
-  }, [book, frequent, matches, searching, searchFailed, isSearching, expanded]);
+  }, [
+    book,
+    frequent,
+    matches,
+    searching,
+    searchFailed,
+    isSearching,
+    expanded,
+    chosen,
+    changing,
+  ]);
 
   return (
     <SpecialtyCatalogView
@@ -209,6 +333,8 @@ export function SpecialtyCatalog() {
       onToggleExpand={onToggleExpand}
       onRetry={onRetry}
       onSelect={onSelect}
+      onChange={onChange}
+      choiceFailed={choiceFailed}
     />
   );
 }

@@ -31,8 +31,15 @@ export interface ForwardedSession {
   acceptLanguage: string;
 }
 
-/** Same-origin BFF upstream (Next rewrites `/v1/*` here — see next.config.ts). */
-const API_BASE = (
+/**
+ * Same-origin BFF upstream (Next rewrites `/v1/*` here — see next.config.ts).
+ *
+ * Exported because every SERVER-side read of this app must address the api by
+ * the same base: a second copy of this expression elsewhere in `lib/` would be a
+ * second place to change when the upstream moves, and the two could disagree.
+ * Browser-side reads stay RELATIVE and go through the rewrite instead.
+ */
+export const API_BASE = (
   process.env.API_PROXY_TARGET ?? "http://localhost:3000"
 ).replace(/\/$/, "");
 

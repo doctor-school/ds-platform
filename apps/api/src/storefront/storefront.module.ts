@@ -19,6 +19,8 @@ import { SpecialtyChoiceService } from "./specialty-choice.service.js";
 import { StatisticsPublicController } from "./statistics.public.controller.js";
 import { StatisticsRepository } from "./statistics.repository.js";
 import { StatisticsService } from "./statistics.service.js";
+import { TargetingRepository } from "./targeting.repository.js";
+import { TargetingService } from "./targeting.service.js";
 
 /**
  * 017 — the doctor-storefront module (#1479 opens it with EARS-3: the closed
@@ -57,6 +59,8 @@ import { StatisticsService } from "./statistics.service.js";
     SpecialtyChoiceService,
     StatisticsRepository,
     StatisticsService,
+    TargetingRepository,
+    TargetingService,
     // Registered as a provider (not merely referenced in `@UseFilters`) so Nest
     // owns its lifecycle in this module's context.
     SpecialtyProblemFilter,
@@ -64,7 +68,12 @@ import { StatisticsService } from "./statistics.service.js";
   // Exported for the later 017 verticals: the targeting reads (EARS-8) consume
   // THIS membership mechanism and THIS remembered choice rather than re-deriving
   // either one.
-  exports: [SpecialtiesService, SpecialtyChoiceService, StatisticsService],
+  exports: [
+    SpecialtiesService,
+    SpecialtyChoiceService,
+    StatisticsService,
+    TargetingService,
+  ],
 })
 export class StorefrontModule implements OnModuleInit {
   private readonly logger = new Logger(StorefrontModule.name);

@@ -20,9 +20,24 @@ follow and consume what is here.
   four scale counters (#1480, EARS-2 / LD-3): `doctors`, `specialties`,
   `lessons`, `eventsPerYear` plus a required `computedAt`.
 
+## EARS-8 targeting resolver
+
+`TargetingService.resolve()` is the read-through resolver from one remembered
+specialty through active `direction_specialties` and directed
+`direction_adjacency` rows. It is exported for #1485/#1487 and has no separate
+public route, cache or per-page configuration.
+
+An own direction enters only through an active specialty link; an adjacent
+direction enters only through an active edge whose source is one of those own
+directions. Edges are ordered by authored weight and stable id, de-duplicated
+strongest-first, and never read in reverse. An own direction cannot be
+re-labelled adjacent. «Другое» returns the explicit general-selection statement
+under `mode: general`, never an empty `targeted` answer.
+
 ## Exported symbols
 
-`StorefrontModule` (exports `SpecialtiesService` + `StatisticsService`),
+`StorefrontModule` (exports `SpecialtiesService` + `StatisticsService` +
+`TargetingService`),
 `SpecialtiesService`, `SpecialtiesRepository`, `SpecialtiesPublicController`,
 `SpecialtyError` + `SPECIALTY_ERROR_STATUS`, `SpecialtyProblemFilter`,
 `StatisticsService`, `StatisticsRepository`, `StatisticsPublicController`. Wire

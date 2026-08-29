@@ -24,14 +24,18 @@ describe.skipIf(!process.env.DATABASE_URL)(
     async function seed(
       state: "draft" | "published" | "live" | "ended" | "archived",
       hoursAgo: number,
+      overrides: { id?: string; startsAt?: string } = {},
     ) {
-      const id = randomUUID();
+      const id = overrides.id ?? randomUUID();
       const slug = `archive-${state}-${id.slice(0, 8)}`;
+      const startsAt =
+        overrides.startsAt ??
+        new Date(Date.now() - hoursAgo * 60 * 60 * 1000).toISOString();
       await pool.query(
         `INSERT INTO events
        (id, slug, title, school, starts_at, duration_min, description, specialties, state)
-       VALUES ($1,$2,$3,'Школа',now() - ($4 * interval '1 hour'),60,'Описание',ARRAY['Кардиология'],$5)`,
-        [id, slug, `Event ${state} ${hoursAgo}`, hoursAgo, state],
+       VALUES ($1,$2,$3,'Школа',$4,60,'Описание',ARRAY['Кардиология'],$5)`,
+        [id, slug, `Event ${state} ${hoursAgo}`, startsAt, state],
       );
       await pool.query(
         `INSERT INTO event_speakers (event_id, position, name, regalia) VALUES ($1,0,'Доктор','')`,
@@ -118,6 +122,48 @@ describe.skipIf(!process.env.DATABASE_URL)(
         url: "/v1/public/events?timeframe=past&cursor=not-issued",
       });
       expect(malformed.statusCode).toBe(400);
+    });
+
+    it("EARS-11: when upcoming events share a start instant, the cursor shall follow the id ASC tie-breaker without skips", async () => {
+      const prefix = randomUUID().slice(0, -1);
+      const lowerId = `${prefix}1`;
+      const higherId = `${prefix}2`;
+      const startsAt = new Date(
+        Date.now() - (6 * 60 - 2) * 60_000,
+      ).toISOString();
+      await seed("live", 0, { id: higherId, startsAt });
+      await seed("live", 0, { id: lowerId, startsAt });
+
+      const listing = await app.inject({
+        method: "GET",
+        url: "/v1/public/events?timeframe=upcoming&limit=50",
+      });
+      expect(listing.statusCode).toBe(200);
+      const full = listing.json() as {
+        data: Array<{ id: string }>;
+        pagination: { nextCursor: string | null };
+      };
+      const lowerIndex = full.data.findIndex((event) => event.id === lowerId);
+      expect(lowerIndex).toBeGreaterThanOrEqual(0);
+      expect(
+        full.data.slice(lowerIndex, lowerIndex + 2).map((event) => event.id),
+      ).toEqual([lowerId, higherId]);
+
+      const boundary = await app.inject({
+        method: "GET",
+        url: `/v1/public/events?timeframe=upcoming&limit=${lowerIndex + 1}`,
+      });
+      const boundaryBody = boundary.json() as typeof full;
+      expect(boundaryBody.data.at(-1)?.id).toBe(lowerId);
+      expect(boundaryBody.pagination.nextCursor).toEqual(expect.any(String));
+
+      const next = await app.inject({
+        method: "GET",
+        url: `/v1/public/events?timeframe=upcoming&limit=1&cursor=${encodeURIComponent(boundaryBody.pagination.nextCursor!)}`,
+      });
+      expect(
+        (next.json() as typeof full).data.map((event) => event.id),
+      ).toEqual([higherId]);
     });
   },
 );

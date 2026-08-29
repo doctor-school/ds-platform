@@ -27,11 +27,7 @@ import {
 import { CalendarShell } from "./calendar-shell";
 import { MonthCalendarMobile, type AgendaDay } from "./month-calendar-mobile";
 import { ViewSwitcher } from "./view-switcher";
-
-/** The month-view URL for a `YYYY-MM` month (the ‹ › pager + picker link target). */
-function monthViewHref(month: string): string {
-  return `/webinars?view=month&month=${month}`;
-}
+import { buildWebinarsHref, type WebinarsQueryInput } from "@/lib/webinars-url";
 
 /**
  * The picker's in-place year-paging window (004 owner verdicts #4/#6 on #1052):
@@ -77,10 +73,24 @@ const PICKER_YEAR_RADIUS = 3;
  * precedent), every fixed LABEL comes from the typed catalog (`webinars.month`,
  * EARS-13) — no hardcoded RU in this component.
  */
-export async function MonthCalendarView({ month }: { month?: string }) {
+export async function MonthCalendarView({
+  month,
+  queryParams = {},
+}: {
+  month?: string;
+  queryParams?: WebinarsQueryInput;
+}) {
   const t = await getTranslations("webinars.month");
 
   const displayedMonth = month ?? currentMskMonth();
+  const monthViewHref = (targetMonth: string) =>
+    buildWebinarsHref(queryParams, { view: "month", month: targetMonth });
+  const weekViewHref = (targetMonth: string, hash?: string) =>
+    buildWebinarsHref(queryParams, {
+      view: "week",
+      month: targetMonth,
+      hash,
+    });
   const year = displayedMonth.slice(0, 4);
   const monthNum = Number(displayedMonth.slice(5, 7));
 
@@ -178,7 +188,9 @@ export async function MonthCalendarView({ month }: { month?: string }) {
       // the loss-free switcher round-trip param preserved).
       const { visible, overflow } = capDayEntries(cell.entries);
       return {
-        dateLabel: cell.isToday ? `${cell.day}${t("todaySuffix")}` : String(cell.day),
+        dateLabel: cell.isToday
+          ? `${cell.day}${t("todaySuffix")}`
+          : String(cell.day),
         today: cell.isToday,
         // Owner rule (#1052 verdict #2): the muted BACKGROUND marks weekends
         // (and out-of-month filler above) ONLY — an empty weekday keeps the
@@ -196,7 +208,7 @@ export async function MonthCalendarView({ month }: { month?: string }) {
         more:
           overflow > 0 && cell.isoDay
             ? {
-                href: `/webinars?month=${displayedMonth}#day-${cell.isoDay}`,
+                href: weekViewHref(displayedMonth, `day-${cell.isoDay}`),
                 label: t("moreLink", { count: overflow }),
               }
             : undefined,
@@ -222,7 +234,9 @@ export async function MonthCalendarView({ month }: { month?: string }) {
         cell.inMonth && cell.isoDay
           ? [
               formatAgendaDayTitle(cell.isoDay),
-              hasEvents ? t("dayEventsLabel", { count: cell.entries.length }) : null,
+              hasEvents
+                ? t("dayEventsLabel", { count: cell.entries.length })
+                : null,
               hasLive ? t("dayLiveLabel") : null,
             ]
               .filter(Boolean)
@@ -255,7 +269,8 @@ export async function MonthCalendarView({ month }: { month?: string }) {
     };
   }
 
-  const defaultDay = grid.todayDom ?? grid.weeks.flat().find((c) => c.inMonth)?.day ?? 1;
+  const defaultDay =
+    grid.todayDom ?? grid.weeks.flat().find((c) => c.inMonth)?.day ?? 1;
 
   const tw = await getTranslations("webinars");
 
@@ -291,12 +306,20 @@ export async function MonthCalendarView({ month }: { month?: string }) {
           nextYearLabel={t("nextYear")}
         />
 
-        <Button asChild variant="outline" className="px-4 text-base font-extrabold">
+        <Button
+          asChild
+          variant="outline"
+          className="px-4 text-base font-extrabold"
+        >
           <Link href={monthViewHref(prevMonth)} aria-label={t("prevMonth")}>
             <span aria-hidden="true">‹</span>
           </Link>
         </Button>
-        <Button asChild variant="outline" className="px-4 text-base font-extrabold">
+        <Button
+          asChild
+          variant="outline"
+          className="px-4 text-base font-extrabold"
+        >
           <Link href={monthViewHref(nextMonth)} aria-label={t("nextMonth")}>
             <span aria-hidden="true">›</span>
           </Link>
@@ -307,7 +330,14 @@ export async function MonthCalendarView({ month }: { month?: string }) {
           variant="outline"
           className="hidden px-5 text-caption text-tint-foreground layout:inline-flex"
         >
-          <Link href="/webinars?view=month">{t("todayButton")}</Link>
+          <Link
+            href={buildWebinarsHref(queryParams, {
+              view: "month",
+              month: null,
+            })}
+          >
+            {t("todayButton")}
+          </Link>
         </Button>
 
         <span className="hidden flex-1 layout:block" />
@@ -315,7 +345,7 @@ export async function MonthCalendarView({ month }: { month?: string }) {
         <div className="hidden layout:block">
           <ViewSwitcher
             active="month"
-            weekHref={`/webinars?month=${displayedMonth}`}
+            weekHref={weekViewHref(displayedMonth)}
             monthHref={monthViewHref(displayedMonth)}
             weekLabel={t("viewWeek")}
             monthLabel={t("viewMonth")}
@@ -331,7 +361,7 @@ export async function MonthCalendarView({ month }: { month?: string }) {
           variant="inline"
           className="text-caption font-bold text-tint-foreground"
         >
-          <Link href={`/webinars?month=${displayedMonth}`}>
+          <Link href={weekViewHref(displayedMonth)}>
             <span aria-hidden="true">← </span>
             {t("viewWeek")}
           </Link>

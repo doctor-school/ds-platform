@@ -1,6 +1,7 @@
 import { MONTH_PARAM } from "@ds/schemas";
 import DiscoveryListing from "@/components/discovery-listing";
 import { MonthCalendarView } from "@/components/month-calendar-view";
+import { buildWebinarsHref } from "@/lib/webinars-url";
 
 /**
  * 004 EARS-7 / EARS-19 — the public listing at `/webinars`. The default («Неделя»)
@@ -37,27 +38,20 @@ export default async function WebinarsListingPage({
   const selectedMonth = month && MONTH_PARAM.test(month) ? month : undefined;
 
   if (view === "month") {
-    return <MonthCalendarView month={selectedMonth} />;
+    return <MonthCalendarView month={selectedMonth} queryParams={params} />;
   }
-  const buildHref = (targetView: "week" | "month") => {
-    const query = new URLSearchParams();
-    for (const [key, raw] of Object.entries(params)) {
-      const values = Array.isArray(raw) ? raw : raw === undefined ? [] : [raw];
-      for (const entry of values) query.append(key, entry);
-    }
-    if (selectedMonth) query.set("month", selectedMonth);
-    else query.delete("month");
-    if (targetView === "month") query.set("view", "month");
-    else query.delete("view");
-    const serialized = query.toString();
-    return serialized ? `/webinars?${serialized}` : "/webinars";
-  };
   // Week pane: carry the month so the «Месяц» switcher restores it (loss-free
   // round-trip, EARS-18).
   return (
     <DiscoveryListing
-      monthViewHref={buildHref("month")}
-      weekViewHref={buildHref("week")}
+      monthViewHref={buildWebinarsHref(params, {
+        view: "month",
+        month: selectedMonth ?? null,
+      })}
+      weekViewHref={buildWebinarsHref(params, {
+        view: "week",
+        month: selectedMonth ?? null,
+      })}
       timeframe={tab}
       cursor={cursor}
       page={page}

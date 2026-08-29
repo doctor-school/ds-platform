@@ -269,7 +269,7 @@ export class EventsRepository {
           cursor,
         ),
       )
-      .orderBy(asc(events.startsAt));
+      .orderBy(asc(events.startsAt), asc(events.id));
     const rows = limit === undefined ? await query : await query.limit(limit);
     if (rows.length === 0) return [];
 

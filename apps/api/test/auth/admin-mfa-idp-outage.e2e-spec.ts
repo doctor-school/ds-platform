@@ -25,6 +25,7 @@ import {
 } from "../../src/auth/admin-session/admin-session.cookie.js";
 import { ADMIN_DEVICE } from "../setup/admin-session.js";
 import { deleteUserFixture } from "../setup/fixture-cleanup.js";
+import { registerUniqueFakeUserFixture } from "../setup/fixture-registration.js";
 
 const LOGIN_URL = "/v1/admin/auth/login";
 const ENROLL_START_URL = "/v1/admin/auth/mfa/enroll/start";
@@ -122,20 +123,17 @@ describe.skipIf(!process.env.DATABASE_URL)(
       return { ...ADMIN_DEVICE, cookie: `${ADMIN_PENDING_COOKIE_NAME}=${ref}` };
     }
 
-    async function registerAdmin(email: string): Promise<string> {
-      const reg = await app.inject({
-        method: "POST",
-        url: "/v1/auth/register",
-        payload: { email, password, consent },
+    async function registerAdmin(): Promise<{ email: string; sub: string }> {
+      const identity = await registerUniqueFakeUserFixture({
+        app,
+        pool,
+        fake,
+        nextEmail: uniqueEmail,
+        password,
+        consent,
       });
-      expect(reg.statusCode).toBe(200);
-      const { rows } = await pool.query<{ zitadel_sub: string }>(
-        "SELECT zitadel_sub FROM users WHERE email = $1",
-        [email],
-      );
-      const sub = rows[0]!.zitadel_sub;
-      await fake.grantProjectRole(sub, "platform_admin");
-      return sub;
+      await fake.grantProjectRole(identity.sub, "platform_admin");
+      return identity;
     }
 
     /** Primary auth; resolves the pending reference and the state it reports. */
@@ -157,20 +155,25 @@ describe.skipIf(!process.env.DATABASE_URL)(
     }
 
     /** Registered admin sitting on the enrollment step, no offer served yet. */
-    async function pendingBeforeOffer(
-      email: string,
-    ): Promise<{ sub: string; ref: string }> {
-      const sub = await registerAdmin(email);
+    async function pendingBeforeOffer(): Promise<{
+      email: string;
+      sub: string;
+      ref: string;
+    }> {
+      const { email, sub } = await registerAdmin();
       const { ref, state } = await login(email);
       expect(state).toBe("mfa_pending_enrollment");
-      return { sub, ref };
+      return { email, sub, ref };
     }
 
     /** Registered admin sitting on the enrollment step, offer already served. */
-    async function pendingEnrollment(
-      email: string,
-    ): Promise<{ sub: string; ref: string; secret: string }> {
-      const { sub, ref } = await pendingBeforeOffer(email);
+    async function pendingEnrollment(): Promise<{
+      email: string;
+      sub: string;
+      ref: string;
+      secret: string;
+    }> {
+      const { email, sub, ref } = await pendingBeforeOffer();
       const start = await app.inject({
         method: "POST",
         url: ENROLL_START_URL,
@@ -178,14 +181,22 @@ describe.skipIf(!process.env.DATABASE_URL)(
         payload: {},
       });
       expect(start.statusCode).toBe(200);
-      return { sub, ref, secret: (start.json() as { secret: string }).secret };
+      return {
+        email,
+        sub,
+        ref,
+        secret: (start.json() as { secret: string }).secret,
+      };
     }
 
     /** Enrolled admin sitting on the challenge step of a SECOND login. */
-    async function pendingChallenge(
-      email: string,
-    ): Promise<{ sub: string; ref: string; secret: string }> {
-      const { sub, ref, secret } = await pendingEnrollment(email);
+    async function pendingChallenge(): Promise<{
+      email: string;
+      sub: string;
+      ref: string;
+      secret: string;
+    }> {
+      const { email, sub, ref, secret } = await pendingEnrollment();
       const enrolled = await app.inject({
         method: "POST",
         url: ENROLL_VERIFY_URL,
@@ -195,7 +206,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(enrolled.statusCode).toBe(200);
       const second = await login(email);
       expect(second.state).toBe("mfa_pending_challenge");
-      return { sub, ref: second.ref, secret };
+      return { email, sub, ref: second.ref, secret };
     }
 
     /** A six-digit code that is NOT the live one for this secret. */
@@ -266,8 +277,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
     });
 
     it("EARS-5: an IdP fault during the enrollment verify yields a 503, NEVER a 500 (#1211)", async () => {
-      const email = uniqueEmail();
-      const { ref, secret } = await pendingEnrollment(email);
+      const { email, ref, secret } = await pendingEnrollment();
 
       fake.outage = true;
       const res = await app.inject({
@@ -294,8 +304,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
     });
 
     it("EARS-5: an IdP fault while registering the provisional factor yields a 503, NEVER a 500 (#1211)", async () => {
-      const email = uniqueEmail();
-      const { ref } = await pendingBeforeOffer(email);
+      const { ref } = await pendingBeforeOffer();
 
       fake.outage = true;
       const res = await app.inject({
@@ -314,8 +323,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
     });
 
     it("EARS-6: an IdP fault during the challenge verify yields a 503, NEVER a 500 (#1211)", async () => {
-      const email = uniqueEmail();
-      const { ref, secret } = await pendingChallenge(email);
+      const { email, ref, secret } = await pendingChallenge();
 
       fake.outage = true;
       const res = await app.inject({
@@ -338,8 +346,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
     });
 
     it("EARS-7: an outage is not a failed attempt — no auth.mfa.failure row, no lockout unit, and the correct code still verifies once the IdP recovers", async () => {
-      const email = uniqueEmail();
-      const { sub, ref, secret } = await pendingEnrollment(email);
+      const { sub, ref, secret } = await pendingEnrollment();
       const since = await dbNow();
 
       fake.outage = true;
@@ -371,8 +378,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
     });
 
     it("EARS-7: the refusal taxonomy is unchanged — with the IdP healthy a wrong code is still the uniform 401 with its failure row", async () => {
-      const email = uniqueEmail();
-      const { sub, ref, secret } = await pendingEnrollment(email);
+      const { sub, ref, secret } = await pendingEnrollment();
       const since = await dbNow();
 
       const res = await app.inject({

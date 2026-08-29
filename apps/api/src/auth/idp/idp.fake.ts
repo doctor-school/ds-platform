@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { Mailer } from "../../mailer/mailer.types.js";
 import {
   IdpInvalidArgumentError,
@@ -148,6 +149,12 @@ export class FakeIdpClient implements IdpClient {
   private readonly smsOtpChallenges = new Set<string>();
   /** How many times the BFF asked the (native) provider to send an SMS login code — the EARS-14 assertion hinge: a budget-refused send never reaches here. */
   private smsSends = 0;
+  /**
+   * A process-independent namespace keeps fresh fake instances from reusing a
+   * retained Postgres mirror's subject on persistent e2e stands. The numeric
+   * suffix remains useful for reading one instance's sequence in diagnostics.
+   */
+  private readonly subjectNamespace = randomUUID();
   private seq = 0;
   /**
    * #1128: whether {@link createUser} echoes a create-time verification code
@@ -191,7 +198,7 @@ export class FakeIdpClient implements IdpClient {
       return Promise.resolve({ sub: existing.sub, alreadyExisted: true });
     }
 
-    const sub = `fake-sub-${++this.seq}`;
+    const sub = `fake-sub-${this.subjectNamespace}-${++this.seq}`;
     const record: FakeRecord = {
       sub,
       email,

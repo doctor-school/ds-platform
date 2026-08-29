@@ -36,6 +36,7 @@ import {
 } from "../setup/rate-limit.js";
 import { ADMIN_DEVICE, establishAdminSession } from "../setup/admin-session.js";
 import { deleteUserFixture } from "../setup/fixture-cleanup.js";
+import { registerUniqueFakeUserFixture } from "../setup/fixture-registration.js";
 
 /** Fastify's `inject` always reports this client IP; the fingerprint must match it. */
 const INJECT_IP = "127.0.0.1";
@@ -625,24 +626,27 @@ describe.skipIf(!process.env.DATABASE_URL)(
       return email;
     }
 
-    async function registerUser(email: string): Promise<string> {
-      const reg = await app.inject({
-        method: "POST",
-        url: "/v1/auth/register",
-        payload: { email, password, consent },
+    async function registerUser(prefix: string): Promise<{
+      email: string;
+      sub: string;
+    }> {
+      return registerUniqueFakeUserFixture({
+        app,
+        pool,
+        fake,
+        nextEmail: () => uniqueEmail(prefix),
+        password,
+        consent,
       });
-      expect(reg.statusCode).toBe(200);
-      const { rows } = await pool.query<{ zitadel_sub: string }>(
-        "SELECT zitadel_sub FROM users WHERE email = $1",
-        [email],
-      );
-      return rows[0]!.zitadel_sub;
     }
 
-    async function registerAdmin(email: string): Promise<string> {
-      const sub = await registerUser(email);
-      await fake.grantProjectRole(sub, "platform_admin");
-      return sub;
+    async function registerAdmin(prefix: string): Promise<{
+      email: string;
+      sub: string;
+    }> {
+      const identity = await registerUser(prefix);
+      await fake.grantProjectRole(identity.sub, "platform_admin");
+      return identity;
     }
 
     /** Headers for an established, MFA-verified admin session (the allowed principal). */
@@ -650,8 +654,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
       headers: Record<string, string>;
       sub: string;
     }> {
-      const email = uniqueEmail(prefix);
-      const sub = await registerAdmin(email);
+      const { email, sub } = await registerAdmin(prefix);
       const handle = await establishAdminSession(app, {
         identifier: email,
         password,
@@ -670,8 +673,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
       headers: Record<string, string>;
       secret: string;
     }> {
-      const email = uniqueEmail("enrolled");
-      await registerAdmin(email);
+      const { email } = await registerAdmin("enrolled");
       const login = await app.inject({
         method: "POST",
         url: "/v1/admin/auth/login",
@@ -729,8 +731,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
     async function roleWithoutMfaHeaders(
       prefix: string,
     ): Promise<Record<string, string>> {
-      const email = uniqueEmail(prefix);
-      const sub = await registerAdmin(email);
+      const { email, sub } = await registerAdmin(prefix);
       const sid = randomUUID();
       const csrfToken = randomUUID();
       const record = {
@@ -840,8 +841,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
     });
 
     it("EARS-11.5: a doctor_guest session and an anonymous caller are refused on every admin route", async () => {
-      const portalEmail = uniqueEmail("doctor");
-      await registerUser(portalEmail);
+      const { email: portalEmail } = await registerUser("doctor");
       const portal = await app.inject({
         method: "POST",
         url: "/v1/auth/login",
@@ -886,7 +886,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
           // an authz refusal is (EARS-13: "no distinct error") — so admission
           // here is proven by a real removal, not by the absence of a status.
           const operator = await enrolledOperator();
-          const targetSub = await registerAdmin(uniqueEmail("floortarget"));
+          const { sub: targetSub } = await registerAdmin("floortarget");
           fake.setTotpFactor(targetSub, true);
           const removed = await app.inject({
             method: "DELETE",

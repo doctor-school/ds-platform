@@ -87,6 +87,27 @@ describe("003 fake-IdP test seam", () => {
     }
   });
 
+  it("independent fake instances allocate collision-resistant subjects while preserving the fake-sub prefix and per-instance uniqueness", async () => {
+    const first = new FakeIdpClient();
+    const second = new FakeIdpClient();
+    const input = {
+      email: "subject-namespace@ds.test",
+      password: "Aa1!ufficiently-long-pw",
+    };
+
+    const firstSubject = (await first.createUser(input)).sub;
+    const secondSubject = (await second.createUser(input)).sub;
+    const nextFirstSubject = (
+      await first.createUser({ ...input, email: "subject-next@ds.test" })
+    ).sub;
+
+    expect(firstSubject).toMatch(/^fake-sub-/);
+    expect(secondSubject).toMatch(/^fake-sub-/);
+    expect(new Set([firstSubject, secondSubject, nextFirstSubject]).size).toBe(
+      3,
+    );
+  });
+
   it("no suite reads its fake IdP back off the container instead of binding it", () => {
     const testRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
     const specs: string[] = [];

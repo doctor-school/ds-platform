@@ -27,6 +27,7 @@ import {
 } from "../setup/rate-limit.js";
 import { ADMIN_DEVICE } from "../setup/admin-session.js";
 import { deleteUserFixture } from "../setup/fixture-cleanup.js";
+import { registerUniqueFakeUserFixture } from "../setup/fixture-registration.js";
 
 const LOGIN_URL = "/v1/admin/auth/login";
 const ENROLL_START_URL = "/v1/admin/auth/mfa/enroll/start";
@@ -247,20 +248,27 @@ describe.skipIf(!process.env.DATABASE_URL)(
       return rows.filter((r) => r.event_type === eventType);
     }
 
-    async function registerAdmin(email: string): Promise<string> {
-      const reg = await app.inject({
-        method: "POST",
-        url: "/v1/auth/register",
-        payload: { email, password, consent },
+    async function registerUser(prefix: string): Promise<{
+      email: string;
+      sub: string;
+    }> {
+      return registerUniqueFakeUserFixture({
+        app,
+        pool,
+        fake,
+        nextEmail: () => uniqueEmail(prefix),
+        password,
+        consent,
       });
-      expect(reg.statusCode).toBe(200);
-      const { rows } = await pool.query<{ zitadel_sub: string }>(
-        "SELECT zitadel_sub FROM users WHERE email = $1",
-        [email],
-      );
-      const sub = rows[0]!.zitadel_sub;
-      await fake.grantProjectRole(sub, "platform_admin");
-      return sub;
+    }
+
+    async function registerAdmin(prefix: string): Promise<{
+      email: string;
+      sub: string;
+    }> {
+      const identity = await registerUser(prefix);
+      await fake.grantProjectRole(identity.sub, "platform_admin");
+      return identity;
     }
 
     function pendingHeaders(ref: string): Record<string, string> {
@@ -304,8 +312,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
 
     /** The production enrollment arc, end to end: login → offer → correct first code → session (LD-1). */
     async function enrol(prefix: string): Promise<EnrolledAdmin> {
-      const email = uniqueEmail(prefix);
-      const sub = await registerAdmin(email);
+      const { email, sub } = await registerAdmin(prefix);
       const { ref, state } = await primaryAuth(email);
       expect(state).toBe("mfa_pending_enrollment");
 
@@ -472,8 +479,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
     });
 
     it("EARS-9.4: a refused admin primary auth appends exactly one auth.login.failure carrying tier: admin and a masked identifier — never the raw one", async () => {
-      const email = uniqueEmail("badpw");
-      await registerAdmin(email);
+      const { email } = await registerAdmin("badpw");
       const since = await dbNow();
 
       const res = await app.inject({
@@ -541,13 +547,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
     });
 
     it("EARS-9.6: an admin route refusing a portal cookie appends exactly one auth.session.rejected carrying its reason and tier: admin", async () => {
-      const portalEmail = uniqueEmail("portal");
-      const reg = await app.inject({
-        method: "POST",
-        url: "/v1/auth/register",
-        payload: { email: portalEmail, password, consent },
-      });
-      expect(reg.statusCode).toBe(200);
+      const { email: portalEmail } = await registerUser("portal");
       const portal = await app.inject({
         method: "POST",
         url: "/v1/auth/login",
@@ -582,8 +582,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
 
     it("EARS-9.7: operator factor removal appends exactly one auth.mfa.reset naming the acting operator in by_admin", async () => {
       const operator = await enrol("operator");
-      const targetEmail = uniqueEmail("target");
-      const targetSub = await registerAdmin(targetEmail);
+      const { sub: targetSub } = await registerAdmin("target");
       fake.setTotpFactor(targetSub, true);
 
       const since = await dbNow();
@@ -610,12 +609,8 @@ describe.skipIf(!process.env.DATABASE_URL)(
       const since = await dbNow();
       const admin = await enrol("tier");
 
-      const portalEmail = uniqueEmail("tierportal");
-      await app.inject({
-        method: "POST",
-        url: "/v1/auth/register",
-        payload: { email: portalEmail, password, consent },
-      });
+      const { email: portalEmail, sub: portalSub } =
+        await registerUser("tierportal");
       const portalLogin = await app.inject({
         method: "POST",
         url: "/v1/auth/login",
@@ -623,12 +618,6 @@ describe.skipIf(!process.env.DATABASE_URL)(
         payload: { identifier: portalEmail, password },
       });
       expect(portalLogin.statusCode).toBe(200);
-      const { rows: mirror } = await pool.query<{ zitadel_sub: string }>(
-        "SELECT zitadel_sub FROM users WHERE email = $1",
-        [portalEmail],
-      );
-      const portalSub = mirror[0]!.zitadel_sub;
-
       const adminRows = await rowsFor(admin.sub, since);
       const portalRows = await rowsFor(portalSub, since);
 

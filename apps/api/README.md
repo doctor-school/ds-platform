@@ -13,6 +13,7 @@ controllers, providers, and a per-module `README.md` (the `module-readme` guard)
 ```
 src/
 ├── main.ts            # Fastify bootstrap
+├── api-application.ts # shared full-AppModule application configuration
 ├── app.module.ts      # root module wiring
 ├── auth/              # sessions, OIDC, OTP login
 ├── authz/             # Cerbos policy enforcement
@@ -37,12 +38,21 @@ pnpm --filter @ds/api build            # nest build → dist/
 pnpm --filter @ds/api start            # node dist/main.js
 pnpm --filter @ds/api test             # vitest run (api e2e uses real Postgres)
 pnpm --filter @ds/api typecheck        # tsc --noEmit
+pnpm generate:api-client               # OpenAPI snapshot + typed client
+pnpm generate:api-client:check         # fail on stale output, write nothing
 pnpm --filter @ds/api drizzle:generate # drizzle-kit generate (schema in @ds/db)
 pnpm --filter @ds/api drizzle:migrate  # snapshot + drizzle-kit migrate
 ```
 
 `@ds/api` tests run only in the `api-e2e` CI job (real Postgres), not the shared
 unit job — see the CI test topology.
+
+API generation builds the production compiler output, creates the same full
+Fastify `AppModule` configured by `api-application.ts`, and scans it without
+`app.init()` or `listen()`. The generator supplies non-routable generation-only
+database/config values, so it neither connects to Postgres nor starts lifecycle
+hooks. Both the committed OpenAPI snapshot and `@ds/api-client` are compared in
+memory by the blocking `generated-artifacts` CI job.
 
 Running the e2e suites locally against the dev stand needs two env facts beyond
 the endpoints in `~/.ds-platform/.env.local`:

@@ -1,0 +1,2588 @@
+{
+  "components": {
+    "schemas": {
+      "AdminFactorRemovalRequestDto": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "pattern": "^\\d{6}$",
+            "type": "string"
+          }
+        },
+        "required": ["code"],
+        "type": "object"
+      },
+      "AdminLoginRequestDto": {
+        "properties": {
+          "identifier": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "password": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": ["identifier", "password"],
+        "type": "object"
+      },
+      "AdminMfaCodeRequestDto": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "pattern": "^\\d{6}$",
+            "type": "string"
+          }
+        },
+        "required": ["code"],
+        "type": "object"
+      },
+      "ConfigureStreamRequestDto": {
+        "properties": {
+          "embedRef": {
+            "maxLength": 300,
+            "minLength": 1,
+            "type": "string"
+          },
+          "provider": {
+            "enum": ["rutube", "youtube", "vk", "cdnvideo"],
+            "type": "string"
+          }
+        },
+        "required": ["provider", "embedRef"],
+        "type": "object"
+      },
+      "LoginRequestDto": {
+        "properties": {
+          "captchaToken": {
+            "type": "string"
+          },
+          "identifier": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "password": {
+            "maxLength": 256,
+            "minLength": 8,
+            "type": "string"
+          }
+        },
+        "required": ["identifier", "password"],
+        "type": "object"
+      },
+      "OtpRequestDto": {
+        "properties": {
+          "captchaToken": {
+            "type": "string"
+          },
+          "channel": {
+            "enum": ["email", "sms"],
+            "type": "string"
+          },
+          "identifier": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": ["identifier", "channel"],
+        "type": "object"
+      },
+      "OtpVerifyDto": {
+        "properties": {
+          "channel": {
+            "enum": ["email", "sms"],
+            "type": "string"
+          },
+          "code": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "identifier": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": ["identifier", "code", "channel"],
+        "type": "object"
+      },
+      "PasswordResetCompleteRequestDto": {
+        "properties": {
+          "code": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "identifier": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "newPassword": {
+            "maxLength": 256,
+            "minLength": 8,
+            "type": "string"
+          }
+        },
+        "required": ["identifier", "code", "newPassword"],
+        "type": "object"
+      },
+      "PasswordResetRequestDto": {
+        "properties": {
+          "captchaToken": {
+            "type": "string"
+          },
+          "identifier": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": ["identifier"],
+        "type": "object"
+      },
+      "PostChatMessageRequestDto": {
+        "properties": {
+          "text": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": ["text"],
+        "type": "object"
+      },
+      "RegisterRequestDto": {
+        "properties": {
+          "captchaToken": {
+            "type": "string"
+          },
+          "consent": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "purpose": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "version": {
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": ["purpose", "version"],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "email": {
+            "format": "email",
+            "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$",
+            "type": "string"
+          },
+          "password": {
+            "maxLength": 256,
+            "minLength": 8,
+            "type": "string"
+          }
+        },
+        "required": ["email", "password", "consent"],
+        "type": "object"
+      },
+      "SetDisplayNameRequestDto": {
+        "properties": {
+          "displayName": {
+            "maxLength": 100,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": ["displayName"],
+        "type": "object"
+      },
+      "TransitionEventRequestDto": {
+        "properties": {
+          "to": {
+            "enum": ["draft", "published", "live", "ended", "archived"],
+            "type": "string"
+          }
+        },
+        "required": ["to"],
+        "type": "object"
+      },
+      "VerifyRequestDto": {
+        "properties": {
+          "code": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "email": {
+            "format": "email",
+            "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$",
+            "type": "string"
+          }
+        },
+        "required": ["email", "code"],
+        "type": "object"
+      },
+      "VerifyResendRequestDto": {
+        "properties": {
+          "captchaToken": {
+            "type": "string"
+          },
+          "identifier": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": ["identifier"],
+        "type": "object"
+      },
+      "ZitadelWebhookDto": {
+        "properties": {
+          "email": {
+            "format": "email",
+            "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$",
+            "type": "string"
+          },
+          "emailVerified": {
+            "type": "boolean"
+          },
+          "phone": {
+            "pattern": "^\\+[1-9]\\d{6,14}$",
+            "type": "string"
+          },
+          "phoneVerified": {
+            "type": "boolean"
+          },
+          "zitadelSub": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": ["zitadelSub"],
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "bearerFormat": "JWT",
+        "scheme": "bearer",
+        "type": "http"
+      }
+    }
+  },
+  "info": {
+    "contact": {},
+    "description": "",
+    "title": "DS Platform API",
+    "version": "1.0.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/v1/admin/auth/login": {
+      "post": {
+        "operationId": "AdminAuthController_login",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminLoginRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["AdminAuth"]
+      }
+    },
+    "/v1/admin/auth/logout": {
+      "post": {
+        "operationId": "AdminAuthController_logout",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["AdminAuth"]
+      }
+    },
+    "/v1/admin/auth/mfa/enroll/start": {
+      "post": {
+        "operationId": "AdminAuthController_startMfaEnrollment",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["AdminAuth"]
+      }
+    },
+    "/v1/admin/auth/mfa/enroll/verify": {
+      "post": {
+        "operationId": "AdminAuthController_verifyMfaEnrollment",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminMfaCodeRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["AdminAuth"]
+      }
+    },
+    "/v1/admin/auth/mfa/verify": {
+      "post": {
+        "operationId": "AdminAuthController_verifyMfaChallenge",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminMfaCodeRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["AdminAuth"]
+      }
+    },
+    "/v1/admin/auth/state": {
+      "get": {
+        "operationId": "AdminAuthController_readAuthState",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["AdminAuth"]
+      }
+    },
+    "/v1/admin/direction-adjacency": {
+      "get": {
+        "operationId": "DirectionAdjacencyAdminController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["DirectionAdjacencyAdmin"]
+      },
+      "post": {
+        "operationId": "DirectionAdjacencyAdminController_create",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": ["DirectionAdjacencyAdmin"]
+      }
+    },
+    "/v1/admin/direction-adjacency/{id}": {
+      "get": {
+        "operationId": "DirectionAdjacencyAdminController_detail",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["DirectionAdjacencyAdmin"]
+      },
+      "patch": {
+        "operationId": "DirectionAdjacencyAdminController_update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["DirectionAdjacencyAdmin"]
+      }
+    },
+    "/v1/admin/direction-adjacency/{id}/restore": {
+      "post": {
+        "operationId": "DirectionAdjacencyAdminController_restore",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["DirectionAdjacencyAdmin"]
+      }
+    },
+    "/v1/admin/direction-adjacency/{id}/retire": {
+      "post": {
+        "operationId": "DirectionAdjacencyAdminController_retire",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["DirectionAdjacencyAdmin"]
+      }
+    },
+    "/v1/admin/direction-specialties": {
+      "get": {
+        "operationId": "DirectionSpecialtiesAdminController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["DirectionSpecialtiesAdmin"]
+      },
+      "post": {
+        "operationId": "DirectionSpecialtiesAdminController_create",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": ["DirectionSpecialtiesAdmin"]
+      }
+    },
+    "/v1/admin/direction-specialties/{id}": {
+      "get": {
+        "operationId": "DirectionSpecialtiesAdminController_detail",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["DirectionSpecialtiesAdmin"]
+      }
+    },
+    "/v1/admin/direction-specialties/{id}/restore": {
+      "post": {
+        "operationId": "DirectionSpecialtiesAdminController_restore",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["DirectionSpecialtiesAdmin"]
+      }
+    },
+    "/v1/admin/direction-specialties/{id}/retire": {
+      "post": {
+        "operationId": "DirectionSpecialtiesAdminController_retire",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["DirectionSpecialtiesAdmin"]
+      }
+    },
+    "/v1/admin/directions": {
+      "get": {
+        "operationId": "DirectionsAdminController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["DirectionsAdmin"]
+      },
+      "post": {
+        "operationId": "DirectionsAdminController_create",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": ["DirectionsAdmin"]
+      }
+    },
+    "/v1/admin/directions/{id}": {
+      "get": {
+        "operationId": "DirectionsAdminController_detail",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["DirectionsAdmin"]
+      },
+      "patch": {
+        "operationId": "DirectionsAdminController_update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["DirectionsAdmin"]
+      }
+    },
+    "/v1/admin/directions/{id}/lifecycle-impact": {
+      "get": {
+        "operationId": "DirectionsAdminController_lifecycleImpact",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["DirectionsAdmin"]
+      }
+    },
+    "/v1/admin/directions/{id}/publish": {
+      "post": {
+        "operationId": "DirectionsAdminController_publish",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["DirectionsAdmin"]
+      }
+    },
+    "/v1/admin/directions/{id}/restore": {
+      "post": {
+        "operationId": "DirectionsAdminController_restore",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["DirectionsAdmin"]
+      }
+    },
+    "/v1/admin/directions/{id}/retire": {
+      "post": {
+        "operationId": "DirectionsAdminController_retire",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["DirectionsAdmin"]
+      }
+    },
+    "/v1/admin/event-experts": {
+      "get": {
+        "operationId": "EventExpertsAdminController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["EventExpertsAdmin"]
+      },
+      "post": {
+        "operationId": "EventExpertsAdminController_create",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": ["EventExpertsAdmin"]
+      }
+    },
+    "/v1/admin/event-experts/{id}": {
+      "get": {
+        "operationId": "EventExpertsAdminController_detail",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["EventExpertsAdmin"]
+      },
+      "patch": {
+        "operationId": "EventExpertsAdminController_update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["EventExpertsAdmin"]
+      }
+    },
+    "/v1/admin/event-experts/{id}/restore": {
+      "post": {
+        "operationId": "EventExpertsAdminController_restore",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["EventExpertsAdmin"]
+      }
+    },
+    "/v1/admin/event-experts/{id}/retire": {
+      "post": {
+        "operationId": "EventExpertsAdminController_retire",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["EventExpertsAdmin"]
+      }
+    },
+    "/v1/admin/event-projects": {
+      "get": {
+        "operationId": "EventProjectsAdminController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["EventProjectsAdmin"]
+      },
+      "post": {
+        "operationId": "EventProjectsAdminController_create",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": ["EventProjectsAdmin"]
+      }
+    },
+    "/v1/admin/event-projects/{id}": {
+      "get": {
+        "operationId": "EventProjectsAdminController_detail",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["EventProjectsAdmin"]
+      }
+    },
+    "/v1/admin/event-projects/{id}/lifecycle-impact": {
+      "get": {
+        "operationId": "EventProjectsAdminController_lifecycleImpact",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["EventProjectsAdmin"]
+      }
+    },
+    "/v1/admin/event-projects/{id}/restore": {
+      "post": {
+        "operationId": "EventProjectsAdminController_restore",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["EventProjectsAdmin"]
+      }
+    },
+    "/v1/admin/event-projects/{id}/retire": {
+      "post": {
+        "operationId": "EventProjectsAdminController_retire",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["EventProjectsAdmin"]
+      }
+    },
+    "/v1/admin/event-topics": {
+      "get": {
+        "operationId": "EventTopicsAdminController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["EventTopicsAdmin"]
+      },
+      "post": {
+        "operationId": "EventTopicsAdminController_create",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": ["EventTopicsAdmin"]
+      }
+    },
+    "/v1/admin/event-topics/{id}": {
+      "get": {
+        "operationId": "EventTopicsAdminController_detail",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["EventTopicsAdmin"]
+      }
+    },
+    "/v1/admin/event-topics/{id}/lifecycle-impact": {
+      "get": {
+        "operationId": "EventTopicsAdminController_lifecycleImpact",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["EventTopicsAdmin"]
+      }
+    },
+    "/v1/admin/event-topics/{id}/restore": {
+      "post": {
+        "operationId": "EventTopicsAdminController_restore",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["EventTopicsAdmin"]
+      }
+    },
+    "/v1/admin/event-topics/{id}/retire": {
+      "post": {
+        "operationId": "EventTopicsAdminController_retire",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["EventTopicsAdmin"]
+      }
+    },
+    "/v1/admin/events": {
+      "get": {
+        "operationId": "EventsAdminController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["EventsAdmin"]
+      },
+      "post": {
+        "operationId": "EventsAdminController_create",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": ["EventsAdmin"]
+      }
+    },
+    "/v1/admin/events/{eventId}/recordings": {
+      "get": {
+        "operationId": "RecordingsAdminController_list",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "eventId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["RecordingsAdmin"]
+      },
+      "post": {
+        "operationId": "RecordingsAdminController_attach",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "eventId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": ["RecordingsAdmin"]
+      }
+    },
+    "/v1/admin/events/{eventId}/recordings/{recordingId}": {
+      "patch": {
+        "operationId": "RecordingsAdminController_update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "eventId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "recordingId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["RecordingsAdmin"]
+      }
+    },
+    "/v1/admin/events/{eventId}/recordings/{recordingId}/{command}": {
+      "post": {
+        "operationId": "RecordingsAdminController_command",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "eventId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "recordingId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "command",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["RecordingsAdmin"]
+      }
+    },
+    "/v1/admin/events/{id}": {
+      "get": {
+        "operationId": "EventsAdminController_detail",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["EventsAdmin"]
+      },
+      "patch": {
+        "operationId": "EventsAdminController_update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["EventsAdmin"]
+      }
+    },
+    "/v1/admin/events/{id}/archive": {
+      "post": {
+        "operationId": "EventsAdminController_archive",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["EventsAdmin"]
+      }
+    },
+    "/v1/admin/events/{id}/close": {
+      "post": {
+        "operationId": "EventsAdminController_close",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["EventsAdmin"]
+      }
+    },
+    "/v1/admin/events/{id}/mark-ended": {
+      "post": {
+        "operationId": "EventsAdminController_markEnded",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["EventsAdmin"]
+      }
+    },
+    "/v1/admin/events/{id}/open": {
+      "post": {
+        "operationId": "EventsAdminController_open",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["EventsAdmin"]
+      }
+    },
+    "/v1/admin/events/{id}/publish": {
+      "post": {
+        "operationId": "EventsAdminController_publish",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["EventsAdmin"]
+      }
+    },
+    "/v1/admin/events/{id}/stream": {
+      "put": {
+        "operationId": "EventsAdminController_configureStream",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfigureStreamRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["EventsAdmin"]
+      }
+    },
+    "/v1/admin/events/{id}/transition": {
+      "post": {
+        "operationId": "EventsAdminController_transition",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TransitionEventRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["EventsAdmin"]
+      }
+    },
+    "/v1/admin/experts": {
+      "get": {
+        "operationId": "ExpertsAdminController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["ExpertsAdmin"]
+      },
+      "post": {
+        "operationId": "ExpertsAdminController_create",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": ["ExpertsAdmin"]
+      }
+    },
+    "/v1/admin/experts/{id}": {
+      "get": {
+        "operationId": "ExpertsAdminController_detail",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["ExpertsAdmin"]
+      },
+      "patch": {
+        "operationId": "ExpertsAdminController_update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["ExpertsAdmin"]
+      }
+    },
+    "/v1/admin/partners": {
+      "get": {
+        "operationId": "PartnersAdminController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["PartnersAdmin"]
+      },
+      "post": {
+        "operationId": "PartnersAdminController_create",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": ["PartnersAdmin"]
+      }
+    },
+    "/v1/admin/partners/{id}": {
+      "get": {
+        "operationId": "PartnersAdminController_detail",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["PartnersAdmin"]
+      },
+      "patch": {
+        "operationId": "PartnersAdminController_update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["PartnersAdmin"]
+      }
+    },
+    "/v1/admin/project-experts": {
+      "get": {
+        "operationId": "ProjectExpertsAdminController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["ProjectExpertsAdmin"]
+      },
+      "post": {
+        "operationId": "ProjectExpertsAdminController_create",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": ["ProjectExpertsAdmin"]
+      }
+    },
+    "/v1/admin/project-experts/{id}": {
+      "get": {
+        "operationId": "ProjectExpertsAdminController_detail",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["ProjectExpertsAdmin"]
+      },
+      "patch": {
+        "operationId": "ProjectExpertsAdminController_update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["ProjectExpertsAdmin"]
+      }
+    },
+    "/v1/admin/project-experts/{id}/restore": {
+      "post": {
+        "operationId": "ProjectExpertsAdminController_restore",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["ProjectExpertsAdmin"]
+      }
+    },
+    "/v1/admin/project-experts/{id}/retire": {
+      "post": {
+        "operationId": "ProjectExpertsAdminController_retire",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["ProjectExpertsAdmin"]
+      }
+    },
+    "/v1/admin/project-partners": {
+      "get": {
+        "operationId": "ProjectPartnersAdminController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["ProjectPartnersAdmin"]
+      },
+      "post": {
+        "operationId": "ProjectPartnersAdminController_create",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": ["ProjectPartnersAdmin"]
+      }
+    },
+    "/v1/admin/project-partners/{id}": {
+      "get": {
+        "operationId": "ProjectPartnersAdminController_detail",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["ProjectPartnersAdmin"]
+      },
+      "patch": {
+        "operationId": "ProjectPartnersAdminController_update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["ProjectPartnersAdmin"]
+      }
+    },
+    "/v1/admin/project-partners/{id}/restore": {
+      "post": {
+        "operationId": "ProjectPartnersAdminController_restore",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["ProjectPartnersAdmin"]
+      }
+    },
+    "/v1/admin/project-partners/{id}/retire": {
+      "post": {
+        "operationId": "ProjectPartnersAdminController_retire",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["ProjectPartnersAdmin"]
+      }
+    },
+    "/v1/admin/projects": {
+      "get": {
+        "operationId": "ProjectsAdminController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["ProjectsAdmin"]
+      },
+      "post": {
+        "operationId": "ProjectsAdminController_create",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": ["ProjectsAdmin"]
+      }
+    },
+    "/v1/admin/projects/{id}": {
+      "get": {
+        "operationId": "ProjectsAdminController_detail",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["ProjectsAdmin"]
+      },
+      "patch": {
+        "operationId": "ProjectsAdminController_update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["ProjectsAdmin"]
+      }
+    },
+    "/v1/admin/projects/{id}/replace-curator": {
+      "post": {
+        "operationId": "ProjectCuratorAdminController_replaceCurator",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["ProjectCuratorAdmin"]
+      }
+    },
+    "/v1/admin/users/{id}/mfa": {
+      "delete": {
+        "operationId": "AdminUsersController_removeMfaFactor",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminFactorRemovalRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["AdminUsers"]
+      }
+    },
+    "/v1/auth/login": {
+      "post": {
+        "operationId": "AuthController_login",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["Auth"]
+      }
+    },
+    "/v1/auth/login/otp": {
+      "post": {
+        "operationId": "AuthController_loginWithOtp",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OtpVerifyDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["Auth"]
+      }
+    },
+    "/v1/auth/login/otp/request": {
+      "post": {
+        "operationId": "AuthController_requestLoginOtp",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OtpRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["Auth"]
+      }
+    },
+    "/v1/auth/logout": {
+      "post": {
+        "operationId": "AuthController_logout",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["Auth"]
+      }
+    },
+    "/v1/auth/password/reset": {
+      "post": {
+        "operationId": "AuthController_requestPasswordReset",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasswordResetRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["Auth"]
+      }
+    },
+    "/v1/auth/password/reset/complete": {
+      "post": {
+        "operationId": "AuthController_completePasswordReset",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasswordResetCompleteRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["Auth"]
+      }
+    },
+    "/v1/auth/refresh": {
+      "post": {
+        "operationId": "AuthController_refresh",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["Auth"]
+      }
+    },
+    "/v1/auth/register": {
+      "post": {
+        "operationId": "AuthController_register",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["Auth"]
+      }
+    },
+    "/v1/auth/session": {
+      "get": {
+        "operationId": "AuthController_session",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["Auth"]
+      }
+    },
+    "/v1/auth/verify": {
+      "post": {
+        "operationId": "AuthController_verify",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifyRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["Auth"]
+      }
+    },
+    "/v1/auth/verify/resend": {
+      "post": {
+        "operationId": "AuthController_resendVerification",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifyResendRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["Auth"]
+      }
+    },
+    "/v1/auth/zitadel/webhook": {
+      "post": {
+        "operationId": "AuthController_webhook",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ZitadelWebhookDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["Auth"]
+      }
+    },
+    "/v1/events/{idOrSlug}/chat": {
+      "post": {
+        "operationId": "RoomController_chat",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "idOrSlug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PostChatMessageRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["Room"]
+      }
+    },
+    "/v1/events/{idOrSlug}/heartbeat": {
+      "post": {
+        "operationId": "RoomController_heartbeat",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "idOrSlug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["Room"]
+      }
+    },
+    "/v1/events/{idOrSlug}/registration": {
+      "get": {
+        "operationId": "RegistrationController_state",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "idOrSlug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["Registration"]
+      },
+      "post": {
+        "operationId": "RegistrationController_register",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "idOrSlug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["Registration"]
+      }
+    },
+    "/v1/events/{idOrSlug}/room": {
+      "get": {
+        "operationId": "RoomController_config",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "idOrSlug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["Room"]
+      }
+    },
+    "/v1/health": {
+      "get": {
+        "operationId": "HealthController_get",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["Health"]
+      }
+    },
+    "/v1/me/display-name": {
+      "get": {
+        "operationId": "MeController_read",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["Me"]
+      },
+      "put": {
+        "operationId": "MeController_set",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetDisplayNameRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["Me"]
+      }
+    },
+    "/v1/me/events": {
+      "get": {
+        "operationId": "MyEventsController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["MyEvents"]
+      }
+    },
+    "/v1/me/profile": {
+      "get": {
+        "operationId": "MeController_profile",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["Me"]
+      }
+    },
+    "/v1/me/specialty": {
+      "get": {
+        "operationId": "SpecialtyChoiceMeController_read",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["SpecialtyChoiceMe"]
+      },
+      "put": {
+        "operationId": "SpecialtyChoiceMeController_choose",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["SpecialtyChoiceMe"]
+      }
+    },
+    "/v1/public/events": {
+      "get": {
+        "operationId": "EventsPublicController_list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "month",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["EventsPublic"]
+      }
+    },
+    "/v1/public/events/{idOrSlug}": {
+      "get": {
+        "operationId": "EventsPublicController_page",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "idOrSlug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["EventsPublic"]
+      }
+    },
+    "/v1/public/events/{idOrSlug}/projects": {
+      "get": {
+        "operationId": "EventProjectsPublicController_projects",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "idOrSlug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["EventProjectsPublic"]
+      }
+    },
+    "/v1/public/events/{idOrSlug}/speakers": {
+      "get": {
+        "operationId": "EventSpeakersPublicController_list",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "idOrSlug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["EventSpeakersPublic"]
+      }
+    },
+    "/v1/public/events/{idOrSlug}/topics": {
+      "get": {
+        "operationId": "EventTopicsPublicController_topics",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "idOrSlug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["EventTopicsPublic"]
+      }
+    },
+    "/v1/public/events/month-counts": {
+      "get": {
+        "operationId": "EventsPublicController_monthCounts",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "year",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["EventsPublic"]
+      }
+    },
+    "/v1/public/experts/{idOrSlug}/projects": {
+      "get": {
+        "operationId": "ExpertProjectsPublicController_projects",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "idOrSlug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["ExpertProjectsPublic"]
+      }
+    },
+    "/v1/public/partners/{idOrSlug}/projects": {
+      "get": {
+        "operationId": "PartnerProjectsPublicController_projects",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "idOrSlug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["PartnerProjectsPublic"]
+      }
+    },
+    "/v1/public/projects/{idOrSlug}/events": {
+      "get": {
+        "operationId": "ProjectEventsPublicController_events",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "idOrSlug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["ProjectEventsPublic"]
+      }
+    },
+    "/v1/public/projects/{idOrSlug}/experts": {
+      "get": {
+        "operationId": "ProjectExpertsPublicController_experts",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "idOrSlug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["ProjectExpertsPublic"]
+      }
+    },
+    "/v1/public/projects/{idOrSlug}/partners": {
+      "get": {
+        "operationId": "ProjectPartnersPublicController_partners",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "idOrSlug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["ProjectPartnersPublic"]
+      }
+    },
+    "/v1/public/specialties": {
+      "get": {
+        "operationId": "SpecialtiesPublicController_book",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["SpecialtiesPublic"]
+      }
+    },
+    "/v1/public/specialties/frequent": {
+      "get": {
+        "operationId": "SpecialtiesPublicController_frequent",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["SpecialtiesPublic"]
+      }
+    },
+    "/v1/public/specialties/search": {
+      "get": {
+        "operationId": "SpecialtiesPublicController_search",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["SpecialtiesPublic"]
+      }
+    },
+    "/v1/public/specialty-choice": {
+      "get": {
+        "operationId": "SpecialtyChoicePublicController_read",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["SpecialtyChoicePublic"]
+      },
+      "post": {
+        "operationId": "SpecialtyChoicePublicController_choose",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["SpecialtyChoicePublic"]
+      }
+    },
+    "/v1/public/statistics": {
+      "get": {
+        "operationId": "StatisticsPublicController_read",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["StatisticsPublic"]
+      }
+    },
+    "/v1/public/topics/{idOrSlug}/events": {
+      "get": {
+        "operationId": "TopicEventsPublicController_events",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "idOrSlug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["TopicEventsPublic"]
+      }
+    },
+    "/v1/ready": {
+      "get": {
+        "operationId": "ReadinessController_get",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["Readiness"]
+      }
+    }
+  },
+  "servers": [],
+  "tags": [],
+  "x-generated-by": "pnpm generate:api-client (check: pnpm generate:api-client --check)"
+}

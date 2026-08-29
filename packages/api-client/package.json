@@ -1,5 +1,30 @@
 {
   "name": "@ds/api-client",
   "version": "0.0.0",
-  "private": true
+  "private": true,
+  "type": "module",
+  "description": "Generated OpenAPI types for the DS Platform API.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "src",
+    "openapi.snapshot.json"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc --noEmit",
+    "generate": "pnpm -w generate:api-client",
+    "check:generated": "pnpm -w generate:api-client:check",
+    "clean": "rm -rf dist .tsbuildinfo"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.3"
+  }
 }

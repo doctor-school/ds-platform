@@ -33,7 +33,7 @@ graph TD
   Mine --> Cabinet["022 — #d-lk"]
 ```
 
-`019` owns the composition and nothing beneath it: `webinars-listing`, `webinars-month`, `webinar-archive`, Feature 004's `WebinarCard`, and `events-filter` are consumed as shared units (REQ-137). The only new UI artefacts of this feature are the two route compositions and the widened format vocabulary the existing card already has a slot for. Managed specialty targeting and directed adjacency come from the landed 017 artifact #1484; 018's doctor content card and rendered adjacent-areas block are not substrates here.
+`019` owns the composition and nothing beneath it: `webinars-listing`, `webinars-month` — implemented by the shipped Feature 004 / #1050 `MonthCalendarGrid` and `MonthDotGrid` units — `webinar-archive`, Feature 004's `WebinarCard`, and `events-filter` are consumed as shared units (REQ-137). The only new UI artefacts of this feature are the two route compositions and the widened format vocabulary the existing card already has a slot for. Managed specialty targeting and directed adjacency come from the landed 017 artifact #1484; 018's doctor content card and rendered adjacent-areas block are not substrates here.
 
 ## 2. The URL is the state (LD-1)
 
@@ -177,10 +177,10 @@ Response shape is the read-model set of the requirements' Event Model. Errors ar
 
 ## 8. Sequencing the build
 
-1. **Route-independent substrates:** widen Feature 004's `WebinarCard` format vocabulary under EARS-2 / #1517 and build the shared `events-filter` with all fill states under EARS-7 / #1522. Neither publishes `/events`.
-2. **Read contract:** EARS-3 / #1518 consumes #1517, #1522, and landed targeting/adjacency #1484. It exposes no partial route.
-3. **Presentation and state:** month/feed projection EARS-4 / #1519, URL state EARS-8 / #1523, and honest states EARS-9 / #1524 each consume #1518.
-4. **First published integration:** EARS-1 / #1516 consumes shell #1478, #1519, #1523, #1524, and sequencing correction #1620, then publishes product-complete `/events` in the declared canvas order. This is the explicit same-WBS deferral: before #1516 there is no public partial route; at #1516, later-handler content regions are absent rather than empty labelled boxes, stubs, placeholders, or «скоро» markers.
+1. **Route-independent substrates:** EARS-2 / #1517 widens Feature 004's `WebinarCard` and proves it only as a design-system component/showcase; EARS-7 / #1522 builds and proves the shared `events-filter` component/showcase with all fill states. Neither mounts or publishes `/events`.
+2. **Read contract:** EARS-3 / #1518 consumes #1517, #1522, and landed targeting/adjacency #1484, and proves only the API/read contract with e2e tests. Rendered-feed Playwright waits for #1516; #1518 exposes no partial route.
+3. **Route-independent presentation and state:** EARS-4 / #1519 proves the shared Feature 004 / #1050 `MonthCalendarGrid` and `MonthDotGrid` components — it does not first create the calendar — while EARS-8 / #1523 proves pure URL/query-state units and EARS-9 / #1524 proves a component/state matrix. Each consumes #1518; none requires a browser route.
+4. **First published integration:** EARS-1 / #1516 consumes shell #1478, #1519, #1523, #1524, and sequencing correction #1620. Before first publication it integrates every route-level Playwright obligation of EARS-2, EARS-3, EARS-4, EARS-7, EARS-8, and EARS-9: card/filter mounting and interactions, rendered API feed, calendar/feed navigation, URL/back/shared-link behaviour, and loading/empty/error/retry states. Only then does it publish product-complete `/events` in the declared canvas order. This is the explicit same-WBS deferral: before #1516 there is no public partial route; at #1516, later-handler content regions are absent rather than empty labelled boxes, stubs, placeholders, or «скоро» markers.
 5. **Dedicated calendar page (EARS-5)** over the same projection.
 6. **Live block (EARS-6)** once 006's room state is readable.
 7. **Past tense (EARS-10)** once 014's recordings are readable.

@@ -6,12 +6,16 @@
 # Stage-A picks in force: F-019-1 = Б (facet sidebar / mobile sheet), F-019-2 = Б
 # (month beside the feed) with its dedicated calendar page, F-019-3 = А (live block
 # above the feed).
+# Route-level scenarios tagged EARS-2/3/4/7/8/9 are integration obligations of
+# EARS-1 / #1516. Their predecessor Issues prove route-independent components,
+# the API contract, query state, or state matrix and do not publish `/events`.
 
 Feature: A doctor opens one screen and sees what is on now, what is on this week and what they missed
 
   Background:
     Given feature 017's storefront shell, specialty choice and managed targeting/adjacency from #1484 are in place
     And Feature 004's shared WebinarCard unit is in place
+    And Feature 004 / #1050's shared MonthCalendarGrid and MonthDotGrid units are in place
     And the specialty «Травматология и ортопедия» exists in specialties_minzdrav
     And that specialty has upcoming and past events of every format
 

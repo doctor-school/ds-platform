@@ -63,6 +63,7 @@ the consuming app's CSS even though they live outside the app tree.
 | `Card` (`./card`)                  | `Card` + `Header`/`Title`/`Description`/`Content`/`Footer` — the auth-form shell                                                                               |
 | `Form` (`./form`)                  | RHF binding — field primitives, `FormError` (submit error), and focusable linked `FormErrorSummary` for long forms (>3 fields) (ADR-0004 §9; ADR-0013 §7)      |
 | `InputOTP` (`./input-otp`)         | One-time-code field for email-OTP / SMS-OTP (EARS-6/7)                                                                                                         |
+| `EventList` (`./blocks`)           | Controlled, fetch-free cross-front event feed — tabs, grouped webinar cards, empty state, and cursor-aware pagination; host apps own data and URL state        |
 
 Forms follow the ADR-0004 §9 pattern: **RHF + `@hookform/resolvers/zod` + shadcn
 `<Form>`**, with the Zod schema imported from the SSOT (`@ds/schemas`, once the

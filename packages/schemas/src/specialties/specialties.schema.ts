@@ -1,4 +1,9 @@
 import { z } from "zod";
+import {
+  DirectionAdjacencyKindSchema,
+  DIRECTION_ADJACENCY_WEIGHT_MAX,
+  DIRECTION_ADJACENCY_WEIGHT_MIN,
+} from "../taxonomy/taxonomy.schema.js";
 
 // 017 — Минздрав specialty reference-book contracts (API SSOT, ADR-0002 §3,
 // ADR-0016 §5; 017-requirements EARS-3, 017-design §2 + §7). Framework-agnostic:
@@ -195,6 +200,84 @@ export const SpecialtyChoiceSchema = z.strictObject({
   storedIn: z.enum(["profile", "session", "none"]),
 });
 export type SpecialtyChoice = z.infer<typeof SpecialtyChoiceSchema>;
+
+/**
+ * The honest copy shown by every block when the remembered book entry is
+ * «Другое»: the choice is real, but it supplies no targeting relation, so the
+ * block serves its general selection instead of pretending an empty targeted
+ * selection exists (017 LD-5 / EARS-8).
+ */
+export const TARGETING_GENERAL_FALLBACK_STATEMENT_RU =
+  "Показываем общую подборку: специальность «Другое» не задаёт целевое направление.";
+
+/** A managed direction reached directly from the chosen specialty. */
+export const TargetingDirectionRefSchema = z.strictObject({
+  id: z.string().regex(SPECIALTY_ID_REGEX),
+  slug: z.string().min(1),
+  title: z.string().min(1),
+  role: z.literal("own"),
+});
+export type TargetingDirectionRef = z.infer<typeof TargetingDirectionRefSchema>;
+
+/**
+ * A direction reached through one authored directed adjacency edge. `role` is
+ * explicit so a consumer cannot render it as the doctor's own direction; kind
+ * and weight are the operator-authored targeting inputs carried by that edge.
+ */
+export const TargetingAdjacentDirectionRefSchema = z.strictObject({
+  id: z.string().regex(SPECIALTY_ID_REGEX),
+  slug: z.string().min(1),
+  title: z.string().min(1),
+  role: z.literal("adjacent"),
+  kind: DirectionAdjacencyKindSchema,
+  weight: z
+    .number()
+    .int()
+    .min(DIRECTION_ADJACENCY_WEIGHT_MIN)
+    .max(DIRECTION_ADJACENCY_WEIGHT_MAX),
+});
+export type TargetingAdjacentDirectionRef = z.infer<
+  typeof TargetingAdjacentDirectionRefSchema
+>;
+
+/**
+ * EARS-8's single targeting read model. Ordinary specialties are `targeted`
+ * even when no managed rows exist (the empty arrays are honest); «Другое» is
+ * always `general`, carries the explicit Russian explanation and can never be
+ * mistaken for either no choice or an empty targeted result.
+ */
+export const TargetingSetSchema = z
+  .strictObject({
+    primary: SpecialtyRefSchema,
+    mode: z.enum(["targeted", "general"]),
+    statement: z.string().min(1).nullable(),
+    directions: z.array(TargetingDirectionRefSchema),
+    adjacentDirections: z.array(TargetingAdjacentDirectionRefSchema),
+  })
+  .superRefine((value, ctx) => {
+    if (value.primary.isOther) {
+      if (
+        value.mode !== "general" ||
+        value.statement !== TARGETING_GENERAL_FALLBACK_STATEMENT_RU ||
+        value.directions.length > 0 ||
+        value.adjacentDirections.length > 0
+      ) {
+        ctx.addIssue({
+          code: "custom",
+          message: "«Другое» must be the explicit empty general fallback",
+        });
+      }
+      return;
+    }
+
+    if (value.mode !== "targeted" || value.statement !== null) {
+      ctx.addIssue({
+        code: "custom",
+        message: "an ordinary specialty must use targeted mode",
+      });
+    }
+  });
+export type TargetingSet = z.infer<typeof TargetingSetSchema>;
 
 /**
  * Stable error codes for the closed-book contract (RFC 7807 `errorCode`,

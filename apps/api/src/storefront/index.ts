@@ -10,3 +10,5 @@ export { StatisticsPublicController } from "./statistics.public.controller.js";
 export { StatisticsRepository } from "./statistics.repository.js";
 export { StatisticsService } from "./statistics.service.js";
 export { StorefrontModule } from "./storefront.module.js";
+export { TargetingRepository } from "./targeting.repository.js";
+export { TargetingService } from "./targeting.service.js";

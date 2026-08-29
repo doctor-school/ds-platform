@@ -19,6 +19,10 @@ export {
   SpecialtyRefSchema,
   SpecialtySearchQuerySchema,
   SpecialtySearchResultSchema,
+  TARGETING_GENERAL_FALLBACK_STATEMENT_RU,
+  TargetingAdjacentDirectionRefSchema,
+  TargetingDirectionRefSchema,
+  TargetingSetSchema,
   type ChooseSpecialtyRequest,
   type FrequentSpecialties,
   type SpecialtyBook,
@@ -27,4 +31,7 @@ export {
   type SpecialtyProblemDetails,
   type SpecialtyRef,
   type SpecialtySearchResult,
-} from './specialties.schema.js';
+  type TargetingAdjacentDirectionRef,
+  type TargetingDirectionRef,
+  type TargetingSet,
+} from "./specialties.schema.js";

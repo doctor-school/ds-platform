@@ -33,9 +33,11 @@ import {
   LifecycleImpactSchema,
   PublicCursorQuerySchema,
   PublicEventSummarySchema,
+  PublicPartnerSummarySchema,
   ProjectAdminDetailSchema,
   PublicProjectSummarySchema,
   PUBLIC_PAGE_SIZE_MAX,
+  SLUG_MAX,
 } from "./index.js";
 
 // 012 EARS-1 (#1283) — the wire-contract half. These are the bounds the Refine
@@ -43,6 +45,29 @@ import {
 // bound the operator sees BEFORE the round-trip and the server enforces after.
 
 describe("012 taxonomy — authoring contract (SSOT)", () => {
+  it("EARS-20: every taxonomy DTO slug shall be 1..80 characters and non-UUID", () => {
+    expect(SLUG_MAX).toBe(80);
+    expect(SlugSchema.safeParse("a".repeat(80)).success).toBe(true);
+    expect(SlugSchema.safeParse("a".repeat(81)).success).toBe(false);
+    expect(
+      SlugSchema.safeParse("123e4567-e89b-12d3-a456-426614174000").success,
+    ).toBe(false);
+
+    for (const schema of [
+      ProjectAdminDetailSchema.shape.slug,
+      ExpertAdminDetailSchema.shape.slug,
+      DirectionAdminDetailSchema.shape.slug,
+      PartnerAdminDetailSchema.shape.slug,
+      PublicProjectSummarySchema.shape.slug,
+      PublicPartnerSummarySchema.shape.slug,
+    ]) {
+      expect(schema.safeParse("a".repeat(81)).success).toBe(false);
+      expect(
+        schema.safeParse("123e4567-e89b-12d3-a456-426614174000").success,
+      ).toBe(false);
+    }
+  });
+
   it("012 EARS-1: when a project create omits the title or exceeds its bound, the schema shall refuse it", () => {
     expect(
       CreateProjectRequestSchema.safeParse({ kind: "school" }).success,

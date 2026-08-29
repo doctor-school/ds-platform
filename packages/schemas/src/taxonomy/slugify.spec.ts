@@ -55,16 +55,17 @@ describe("017 taxonomy — derived slug folding (SSOT)", () => {
     );
   });
 
-  it("EARS-18.11: truncation shall fall on the BASE so the collision suffix always survives the 160-char bound", () => {
-    const long = "a".repeat(160);
-    expect(slugifyTaxonomyTitle(long)).toHaveLength(160);
+  it("EARS-20: truncation shall fall on the base so collision suffixes survive the 80-char bound", () => {
+    const long = "a".repeat(161);
+    const base = slugifyTaxonomyTitle(long);
+    expect(base).toHaveLength(80);
 
-    const suffixed = taxonomySlugCandidate(long, 12);
-    expect(suffixed).toHaveLength(160);
+    const suffixed = taxonomySlugCandidate(base, 12);
+    expect(suffixed).toHaveLength(80);
     expect(suffixed.endsWith("-12")).toBe(true);
     // A candidate silently trimmed back to its neighbour's slug would collide
     // forever, so the suffixed candidate is never equal to the base.
-    expect(suffixed).not.toBe(long);
+    expect(suffixed).not.toBe(base);
     expect(TAXONOMY_SLUG_ATTEMPT_LIMIT).toBe(50);
   });
 });

@@ -27,13 +27,12 @@ export const SLUG_REGEX = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 /** Canonical UUID text, forbidden as a slug so `/:idOrSlug` stays unambiguous. */
 export const CANONICAL_UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-export const SLUG_MAX = 160;
+export const SLUG_MAX = 80;
 
 /**
- * A client-authored slug. Rejects both the wrong grammar and the id namespace
- * (012-design §2.1): a slug that parses as a canonical UUID would make
- * `/:idOrSlug` ambiguous, so it is a 400 before any row is written — never
- * silently rewritten into something else.
+ * A system-owned slug. The shared response contract rejects both the wrong
+ * grammar and the id namespace (012-design §2.1): a canonical UUID would make
+ * `/:idOrSlug` ambiguous, while mutation inputs expose no slug field at all.
  */
 export const SlugSchema = z
   .string()
@@ -147,7 +146,7 @@ export type UpdateProjectRequest = z.infer<typeof UpdateProjectRequestSchema>;
  */
 export const ProjectAdminDetailSchema = z.object({
   id: z.string(),
-  slug: z.string(),
+  slug: SlugSchema,
   kind: ProjectKindSchema,
   title: z.string(),
   description: z.string().nullable(),
@@ -315,7 +314,7 @@ export function expertDisplayName(input: {
  */
 export const ExpertAdminDetailSchema = z.object({
   id: z.string(),
-  slug: z.string(),
+  slug: SlugSchema,
   /** Null only on an editorially removed row (#1306); the admin then labels it «[удалён]». */
   name: z.string().nullable(),
   familyName: z.string().nullable(),
@@ -485,7 +484,7 @@ export type UpdateDirectionRequest = z.infer<
  */
 export const DirectionAdminDetailSchema = z.object({
   id: z.string(),
-  slug: z.string(),
+  slug: SlugSchema,
   title: z.string(),
   status: TaxonomyStatusSchema,
   /** Null until the first publish; once set, the derived slug is permanently frozen. */
@@ -609,7 +608,7 @@ export type UpdatePartnerRequest = z.infer<typeof UpdatePartnerRequestSchema>;
  */
 export const PartnerAdminDetailSchema = z.object({
   id: z.string(),
-  slug: z.string(),
+  slug: SlugSchema,
   title: z.string(),
   logoUrl: z.string().nullable(),
   websiteUrl: z.string().nullable(),
@@ -821,7 +820,7 @@ export const ADMIN_LIST_PAGE_SIZE_MAX = 100;
 export const PublicPartnerSummarySchema = z
   .object({
     id: z.string(),
-    slug: z.string(),
+    slug: SlugSchema,
     title: z.string(),
     logoUrl: z.string().nullable(),
     websiteUrl: z.string().nullable(),
@@ -842,7 +841,7 @@ export type PublicPartnerSummary = z.infer<typeof PublicPartnerSummarySchema>;
 export const PublicProjectSummarySchema = z
   .object({
     id: z.string(),
-    slug: z.string(),
+    slug: SlugSchema,
     kind: ProjectKindSchema,
     title: z.string(),
     description: z.string().nullable(),

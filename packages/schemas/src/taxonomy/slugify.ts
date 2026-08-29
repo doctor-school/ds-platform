@@ -9,6 +9,8 @@
 // кардиологии» must become `shkola-kardiologii`, not an empty string. The table
 // is the practical BGN/PCGN-style mapping already familiar from RU URL slugs.
 
+import { SLUG_MAX } from "./taxonomy.schema.js";
+
 const CYRILLIC_TO_LATIN: Readonly<Record<string, string>> = {
   а: "a",
   б: "b",
@@ -75,9 +77,6 @@ export function slugifyTaxonomyTitle(title: string): string {
     .slice(0, SLUG_MAX)
     .replace(/-+$/g, "");
 }
-
-/** The slug length the taxonomy tables and `SlugSchema` agree on. */
-const SLUG_MAX = 160;
 
 /**
  * How many derived candidates a caller may try before giving up. Two directions

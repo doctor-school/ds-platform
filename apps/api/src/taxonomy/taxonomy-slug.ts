@@ -14,7 +14,13 @@ export function taxonomySlugBase(
   kind: TaxonomySlugKind,
 ): string {
   const generated = slugifyTaxonomyTitle(authoredIdentity);
-  return SlugSchema.parse(generated || kind);
+  if (!generated) return kind;
+  if (SlugSchema.safeParse(generated).success) return generated;
+
+  // Slugification already guarantees grammar and length, so only the UUID
+  // namespace can fail. The kind prefix makes route resolution unambiguous;
+  // slugifying again preserves the shared 80-character ceiling.
+  return SlugSchema.parse(slugifyTaxonomyTitle(`${kind}-${generated}`));
 }
 
 /** Allocate the first retained-row-safe candidate in `base`, `base-2`, ... order. */

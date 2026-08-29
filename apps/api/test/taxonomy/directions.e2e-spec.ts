@@ -610,6 +610,26 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect((await created(res)).slug).toMatch(/^direction(?:-\d+)?$/);
     });
 
+    it("EARS-20: long and UUID-shaped direction titles shall allocate bounded non-UUID slugs", async () => {
+      const longTitle = `Long ${randomUUID()} ${"a".repeat(75)}`;
+      const first = await created(
+        await createJson({ payload: { title: longTitle } }),
+      );
+      const second = await created(
+        await createJson({ payload: { title: longTitle } }),
+      );
+      expect(first.slug).toHaveLength(80);
+      expect(second.slug).toHaveLength(80);
+      expect(second.slug).toBe(`${first.slug.slice(0, 78)}-2`);
+
+      const uuidTitle = randomUUID();
+      const uuidShaped = await created(
+        await createJson({ payload: { title: uuidTitle } }),
+      );
+      expect(uuidShaped.slug).toBe(`direction-${uuidTitle}`);
+      expect(uuidShaped.slug).not.toBe(uuidTitle);
+    });
+
     it("012 EARS-17: when If-Match is absent or stale, the system shall answer 428 then 412 and change nothing", async () => {
       const body = await created(await createJson({ payload: validPayload() }));
       const absent = await app.inject({

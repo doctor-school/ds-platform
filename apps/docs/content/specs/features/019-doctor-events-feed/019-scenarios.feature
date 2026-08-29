@@ -6,12 +6,16 @@
 # Stage-A picks in force: F-019-1 = Б (facet sidebar / mobile sheet), F-019-2 = Б
 # (month beside the feed) with its dedicated calendar page, F-019-3 = А (live block
 # above the feed).
+# Route-level scenarios tagged EARS-2/3/4/7/8/9 are integration obligations of
+# EARS-1 / #1516. Their predecessor Issues prove route-independent components,
+# the API contract, query state, or state matrix and do not publish `/events`.
 
 Feature: A doctor opens one screen and sees what is on now, what is on this week and what they missed
 
   Background:
-    Given feature 017's storefront shell and specialty books are in place
-    And feature 018's event card unit and managed adjacency are in place
+    Given feature 017's storefront shell, specialty choice and managed targeting/adjacency from #1484 are in place
+    And Feature 004's shared WebinarCard unit is in place
+    And Feature 004 / #1050's shared MonthCalendarGrid and MonthDotGrid units are in place
     And the specialty «Травматология и ортопедия» exists in specialties_minzdrav
     And that specialty has upcoming and past events of every format
 
@@ -36,7 +40,7 @@ Feature: A doctor opens one screen and sees what is on now, what is on this week
   Scenario Outline: Every format renders through the one shared card unit
     Given an upcoming event of format "<format>" in the doctor's specialty
     When the doctor opens «События»
-    Then the event renders through the shared event card unit whose anatomy feature 018 owns
+    Then the event renders through Feature 004's shared WebinarCard unit widened by feature 019
     And the card shows the date, the time, the format, the kind, the speaker and the source school
     And the card shows the sign-up count of colleagues
     And no rendered string on the card states who finances the event

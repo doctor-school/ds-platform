@@ -289,6 +289,7 @@ Feature: A doctor opens one screen and sees what is on now, what is on this week
     Then 019-design section 1.1 names the current Academy owner and canonical target for every touched capability
     And event queries delegate to EventsService and portable schemas under packages/schemas/src/events
     And room truth and entry policy delegate to RoomService and RegistrationService
+    And past/archive recording truth delegates to Feature 014's RecordingsProjectionService and shared recording schemas
     And route-independent listing, calendar, card, facet and live-strip UI units are owned by @ds/design-system
     And the extraction plan migrates the Academy consumer in the same slice when its precedent is app-local
     And apps/doctor contains only its host projection, route, copy, specialty targeting and composition

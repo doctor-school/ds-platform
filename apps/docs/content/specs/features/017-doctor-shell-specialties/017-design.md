@@ -202,7 +202,7 @@ Every failure is an RFC 7807 Problem Details document with `traceId` and an exac
 3. **EARS-2, EARS-4, EARS-5** — hero and the catalog in variant Б.
 4. **EARS-6, EARS-7** — persistence, the collapsed row and re-choice.
 5. **EARS-8** — targeting over the managed books; carries a `blocked_by` edge to the ADR-0016 §5 directions extension where that is not yet in place.
-6. **EARS-9, EARS-11** — the remaining home-page sections; independent of each other. EARS-10 builds nothing here: its block is deferred per LD-8 and only its reserved slot exists.
+6. **EARS-9 API/read, EARS-11** — the remaining home-page data slices; independent of each other. EARS-9's API projection may land here, but its rendered composition and mandatory working «Все события» CTA wait for the product-complete `/events` integration [#1516](https://github.com/doctor-school/ds-platform/issues/1516); no blank route, placeholder or «скоро» front door satisfies that dependency. EARS-10 builds nothing here: its block is deferred per LD-8 and only its reserved slot exists.
 7. **EARS-13** — inventory, owner confirmation, then the route move.
 8. **EARS-14, EARS-15** — the accessibility/mobile bar and the design gate, run against each surface as it lands rather than at the end.
 

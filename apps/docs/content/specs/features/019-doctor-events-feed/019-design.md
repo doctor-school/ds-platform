@@ -25,7 +25,7 @@ graph TD
   Events --> Mine["«Мои события» short cut — signed-in only (D-2)"]
   Cal --> Panel
   Cal --> Month["webinars-month as the page body (LD-3)"]
-  Body --> Card["shared event card — anatomy owned by 018"]
+  Body --> Card["shared WebinarCard — base owned by Feature 004, widened by 019"]
   Month --> Body
   Card --> Event["020 — #d-event"]
   Live --> Room["006 — live room (registered doctor only)"]
@@ -33,7 +33,7 @@ graph TD
   Mine --> Cabinet["022 — #d-lk"]
 ```
 
-`019` owns the composition and nothing beneath it: `webinars-listing`, `webinars-month`, `webinar-archive`, `webinar-card` and `events-filter` are consumed as shared units (REQ-137). The only new UI artefacts of this feature are the two route compositions and the widened format vocabulary the card already has a slot for.
+`019` owns the composition and nothing beneath it: `webinars-listing`, `webinars-month`, `webinar-archive`, Feature 004's `WebinarCard`, and `events-filter` are consumed as shared units (REQ-137). The only new UI artefacts of this feature are the two route compositions and the widened format vocabulary the existing card already has a slot for. Managed specialty targeting and directed adjacency come from the landed 017 artifact #1484; 018's doctor content card and rendered adjacent-areas block are not substrates here.
 
 ## 2. The URL is the state (LD-1)
 
@@ -68,7 +68,7 @@ graph LR
   URL["URL: tense · day · facets · horizon"] --> Q["query resolution"]
   Sess["session (optional)"] --> Q
   T017["017 targeting set (specialty)"] --> Q
-  A018["018 managed adjacency"] --> Q
+  A017["017 managed targeting + directed adjacency (#1484)"] --> Q
   Q --> Feed["DoctorEventsFeed"]
   Feed --> Days["DayGroup[] — the day feed body"]
   Feed --> Grid["MonthGrid — in-feed navigation AND the calendar page (LD-3)"]
@@ -177,13 +177,13 @@ Response shape is the read-model set of the requirements' Event Model. Errors ar
 
 ## 8. Sequencing the build
 
-1. **Card format vocabulary (EARS-2)** on 018's unit — offline city/seats, congress span, podcast broadcast; everything below composes it.
-2. **Read contract + URL state (EARS-3, EARS-8)** — the feed read, the query mapping and the horizon; nothing is addressable before this.
-3. **Facet panel (EARS-7)** as the shared unit with its three fill states.
-4. **Feed body + month beside it (EARS-1, EARS-4)**, then **the calendar page (EARS-5)** over the same projection.
-5. **Live block (EARS-6)** once 006's room state is readable.
-6. **Past tense (EARS-10)** once 014's recordings are readable.
-7. **States (EARS-9)** across every surface built above.
+1. **Route-independent substrates:** widen Feature 004's `WebinarCard` format vocabulary under EARS-2 / #1517 and build the shared `events-filter` with all fill states under EARS-7 / #1522. Neither publishes `/events`.
+2. **Read contract:** EARS-3 / #1518 consumes #1517, #1522, and landed targeting/adjacency #1484. It exposes no partial route.
+3. **Presentation and state:** month/feed projection EARS-4 / #1519, URL state EARS-8 / #1523, and honest states EARS-9 / #1524 each consume #1518.
+4. **First published integration:** EARS-1 / #1516 consumes shell #1478, #1519, #1523, #1524, and sequencing correction #1620, then publishes product-complete `/events` in the declared canvas order. This is the explicit same-WBS deferral: before #1516 there is no public partial route; at #1516, later-handler content regions are absent rather than empty labelled boxes, stubs, placeholders, or «скоро» markers.
+5. **Dedicated calendar page (EARS-5)** over the same projection.
+6. **Live block (EARS-6)** once 006's room state is readable.
+7. **Past tense (EARS-10)** once 014's recordings are readable.
 8. **Guest path (EARS-12)** — depends on EARS-8's addressable state and 021's return.
 9. **«Мои события» (EARS-11)** — last, behind 021 (data) and 022 (destination) per LD-8.
 10. **Mobile + axe (EARS-13)** and **purity scan (EARS-14)** across the finished surfaces; **EARS-15** is the process gate that wraps the whole sequence.

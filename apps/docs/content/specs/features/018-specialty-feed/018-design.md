@@ -62,12 +62,11 @@ stateDiagram-v2
 | ---------------------- | ---------------------------------------- | ----------------------- |
 | 018 · schools block    | schools, courses (with `seriesEpisodes`) | this spec               |
 | 018 · lessons block    | lesson of the day                        | this spec               |
-| 019 · events feed      | listing items                            | feature 019             |
 | 023 · school screen    | modules / courses inside the school      | feature 023             |
 | 024 · learning module  | lessons inside the module                | feature 024             |
 | home page · selections | mixed selections                         | feature 017's home page |
 
-Events use the **event card** (`webinar-card.dc.html`), not the doctor content card — an offline meet-up is a `format` of that same card (EARS-4), never a new card kind.
+Events use Feature 004's shared **`WebinarCard`** (`packages/design-system/src/primitives/webinar-card.tsx`, composition source `webinar-card.dc.html`), not the doctor content card — Feature 019 widens that existing event unit, and an offline meet-up is a `format` of the same card (EARS-4), never a new card kind.
 
 ## 3. Per-block read topology (LD-7)
 
@@ -181,9 +180,9 @@ All reads are `access: public` per ADR-0001; the session only changes card `stat
 
 ## 8. Sequencing the build
 
-1. **EARS-2 — the doctor content card unit** in `@ds/design-system` with all seven states and the showcase entry. Everything else composes it.
-2. **EARS-1 + EARS-3** — the route inside 017's shell, breadcrumbs, specialty heading, fixed order, statistics line.
-3. **EARS-4 → EARS-5 → EARS-6** — events (first), schools and courses, lessons, each with its own read.
+1. **EARS-2 — the doctor content card unit** in `@ds/design-system` with all seven states and the showcase entry. Schools, lessons and later doctor-content consumers compose it; event surfaces do not.
+2. **EARS-1 + EARS-3** — the route inside exact landed 017 artifacts: shell #1478, specialty choice #1482 and targeting/adjacency #1484; breadcrumbs, specialty heading, fixed order, statistics line. Route integration #1496 consumes the doctor content card #1497 without waiting for parent-level 017 completion.
+3. **EARS-4 → EARS-5 → EARS-6** — events (first), schools and courses, lessons, each with its own read. EARS-4 waits for route composition #1496, Feature 019's widening of the Feature-004 `WebinarCard` #1517, and the product-complete `/events` destination #1516; no blank route or placeholder satisfies the link-out.
 4. **EARS-7 + EARS-8 + EARS-9 + EARS-10** — value block, adjacent areas, leaderboard, communities.
 5. **EARS-11 + EARS-12** — guest gating end-to-end and the five `dataState` renders per block.
 6. **EARS-13 + EARS-14** — mobile composition, axe, and the purity scan.

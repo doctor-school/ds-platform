@@ -10,13 +10,13 @@ lang: en
 
 > **EN (this)** · **RU:** [`019-product-ru.md`](./019-product-ru.md)
 
-> Epic: [Two-site IA — product brief](../../product/two-site-ia/brief.md) · **Wave 1** (017 → 018 → **019** → 020 → 021). `blocked_by` **017** (the doctor storefront shell) and **018** (the content-card anatomy the feed reuses). 019 consumes the **004** listing engine and event card, **014** recordings and **006** the live room — it re-invents none of them (REQ-137).
+> Epic: [Two-site IA — product brief](../../product/two-site-ia/brief.md) · **Wave 1** (017 → 018 → **019** → 020 → 021). 019 consumes exact landed prerequisites from 017 — shell #1478, specialty choice #1482, managed targeting/adjacency #1484 — plus the **004** listing engine and `WebinarCard`, **014** recordings and **006** live room; parent-level completion of 017 or 018 is not a blanket gate, and 019 re-invents none of these artifacts (REQ-137).
 
 ## Feature summary
 
 Doctors come to `doctor.school` **first of all for events** — online and offline (owner revision R4 №1). On the Academy site events are a section of a media surface; on the doctor storefront they are the reason to open the site at all. Feature 019 gives the doctor an events surface of their own, targeted at their specialty, that answers three questions at a glance: **what is running right now**, **what is happening this week near me**, and **what did I miss — is there a recording**.
 
-The screen is a composition, not a new engine. The day-grouped feed, the month/week calendar, the event card and the archive slice are the units already shipped for the Academy (`webinars-listing`, `webinars-month`, `webinar-card`, `webinar-archive`); 019 assembles them inside the doctor shell (017) with the card anatomy 018 fixes, and widens the format vocabulary — an **offline colleagues' meet-up (Doctor Club)**, a **congress** and a **podcast broadcast** are first-class formats in the same feed, not sub-kinds of a webinar (REQ-15, REQ-2).
+The screen is a composition, not a new engine. The day-grouped feed, the month/week calendar, Feature 004's `WebinarCard`, and the archive slice are the units already shipped for the Academy (`webinars-listing`, `webinars-month`, `webinar-card`, `webinar-archive`); 019 assembles them inside the doctor shell (017) and widens the existing card's format vocabulary — an **offline colleagues' meet-up (Doctor Club)**, a **congress** and a **podcast broadcast** are first-class formats in the same feed, not sub-kinds of a webinar (REQ-15, REQ-2).
 
 019 also carries one **platform-wide responsibility**: the shared facet panel `events-filter` grows here from wave-1's two toggles to the **full REQ-138 facet set**, and the Academy catalogs later reuse that same panel. A panel with two buttons and a panel with seven facets behave differently, so by owner decision **D-1** the panel is designed at full strength _and_ in its intermediate fill states — the grid must not break as facets land wave by wave.
 
@@ -103,7 +103,7 @@ The feed is **fully readable by a guest** (REQ-20): the value is visible before 
 - **Which facets ship in wave 1 of 019 itself.** D-1 fixes that the design covers the full set; which facets are actually built first is not fixed by this PRD.
 - **URL persistence of feed state** — whether view, tense and applied facets survive in the URL (shareable, back-button-safe) is unresolved, and is the same open question 014 left for the «Прошедшие» tab. _(agent-proposed — UNCONFIRMED.)_
 - **Feed depth and paging** — how far «Будущие» and «Прошедшие» run before paging is needed. _(agent-proposed — UNCONFIRMED.)_
-- **What «моя и смежные» means concretely** — the adjacency directory that targets the feed is owned by 018; 019 consumes it and does not define it.
+- **What «моя и смежные» means concretely** — the managed targeting/adjacency artifact is owned by 017 and delivered under #1484; 019 consumes it and does not define it, while 018 owns only its rendered adjacent-areas block.
 - **Whether congress events belong in this feed at all** — the congress front is feature 026 in a late wave, while congress events appear here in wave 1. _(agent-proposed — UNCONFIRMED.)_
 
 ## Stage-A развилки (owner picks)
@@ -125,4 +125,4 @@ The canvas [`design-source/doctor-events.dc.html`](../../../../../../design-sour
 
 **Canvas defaults are the working assumption for reading the design; the Stage-A pick is this PRD's fork table above.** Where a fork is still `PENDING`, the canvas default only documents what the drawing happens to show — it is **not** build authorisation: an explicit owner pick is required before implementation of that row, and no variant may be inferred from what the canvas renders (AGENTS.md §6, Stage A).
 
-The event card is the **shared unit** [`design-source/webinar-card.dc.html`](../../../../../../design-source/webinar-card.dc.html) (`dc-import` «ВебинарКарточка»), with its anatomy owned by 018; the feed, month grid, archive slice and facet panel are likewise the existing shared canvases (`webinars-listing`, `webinars-month`, `webinar-archive`, `events-filter`). 019 composes them; it does not fork them.
+The event card is Feature 004's **shared `WebinarCard` unit** [`design-source/webinar-card.dc.html`](../../../../../../design-source/webinar-card.dc.html) (`dc-import` «ВебинарКарточка»); the feed, month grid, archive slice and facet panel are likewise the existing shared canvases (`webinars-listing`, `webinars-month`, `webinar-archive`, `events-filter`). 019 widens the shared card's format vocabulary and composes these units; it does not fork them.

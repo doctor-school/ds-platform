@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { ProjectExpert } from "@ds/db";
 import {
   type CreateProjectExpertRequest,
+  expertDisplayName,
   type ProjectExpertAdminDetail,
   type ProjectExpertAdminList,
   type ProjectExpertAdminListQuery,
@@ -200,7 +201,7 @@ export class ProjectExpertsService {
           // The public item is a string DTO; the query already excludes rows
           // with no name, and the remaining optional regalia become "" rather
           // than null or a missing key (the §5.2 shape the 007 projection uses).
-          name: row.expert.name ?? "",
+          name: expertDisplayName(row.expert) ?? "",
           professionalRole: row.expert.professionalRole ?? "",
           credentials: row.expert.credentials ?? "",
           affiliation: row.expert.affiliation ?? "",
@@ -213,7 +214,10 @@ export class ProjectExpertsService {
       pagination: {
         nextCursor:
           hasMore && last
-            ? encodeCursor({ name: last.expert.name ?? "", id: last.expert.id })
+            ? encodeCursor({
+                name: expertDisplayName(last.expert) ?? "",
+                id: last.expert.id,
+              })
             : null,
         hasMore,
       },

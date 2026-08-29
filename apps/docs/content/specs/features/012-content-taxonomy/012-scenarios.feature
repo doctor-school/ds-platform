@@ -805,12 +805,33 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
     Then one Expert references that User through the same command model
     And a second ownership attempt is refused with 409 USER_EXPERT_CONFLICT
 
+  @EARS-19 @happy
+  Scenario: Expert authoring reads only eligible User options
+    Given active Users include unlinked rows and rows linked to other retained Experts
+    And the current Expert already links one User
+    When the operator searches GET /v1/admin/experts/eligible-users with bounded paging and the current Expert id
+    Then results are filtered by trimmed display name email or phone in stable display-name identifier and User-id order
+    And another Expert's User is absent while the current Expert's linked User remains selectable
+    And each option contains only User id nullable display name and a non-null identifier equal to email or otherwise phone
+    And a phone-only User with no display name is searchable by phone and still has a readable identifier
+    And an unmatched or escaped-wildcard search returns a successful empty page
+    And a later ownership race is still decided by one committed link and one 409 USER_EXPERT_CONFLICT without name matching
+
   @EARS-20 @happy
   Scenario: Structured names and system-owned public links
     When the operator saves family name given name and optional patronymic
     Then the Expert display name is derived from those fields
     And no slug input is present or accepted by the API
     And Copy public link copies the generated canonical URL
+
+  @EARS-20 @migration @failure
+  Scenario: Existing Expert names are never inferred during structured-name migration
+    Given the complete reviewed stable-id mapping covers every retained non-content-removed Expert
+    When the structured-name migration runs
+    Then each covered row keeps its id slug lifecycle state and relationships and receives only its reviewed family given and patronymic values
+    And user_id remains null unless it was separately explicitly linked
+    And an unexpected uncovered Expert aborts before any schema or row mutation
+    And no whitespace split heuristic User match or second review queue is used
 
   @EARS-21 @happy
   Scenario: Entity media changes are reversible

@@ -94,7 +94,9 @@ async function grantAdminRole(sub: string): Promise<void> {
     },
   );
   if (!roleRes.ok && roleRes.status !== 409) {
-    throw new Error(`zitadel ensure platform_admin role failed: HTTP ${roleRes.status}`);
+    throw new Error(
+      `zitadel ensure platform_admin role failed: HTTP ${roleRes.status}`,
+    );
   }
 
   // Find the user's existing grant on the project (created by 003 register). The
@@ -187,8 +189,9 @@ export async function bootstrapAdminSession(
 /** Provision a `doctor_guest` (non-admin) account — register only, no role grant. */
 export async function bootstrapDoctorSession(
   adminOrigin: string,
+  prefix = "doc",
 ): Promise<BootstrapResult> {
-  const email = uniqueEmail("doc");
+  const email = uniqueEmail(prefix);
   await register(adminOrigin, email, E2E_PASSWORD);
   return { email, password: E2E_PASSWORD };
 }

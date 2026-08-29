@@ -5,8 +5,6 @@ import {
   type CreateProjectRequest,
   type ProjectAdminDetail,
   type ProjectAdminList,
-  slugifyTaxonomyTitle,
-  SlugSchema,
   taxonomyETag,
   type UpdateProjectRequest,
 } from "@ds/schemas";
@@ -27,6 +25,7 @@ import {
 } from "./media/still-image-normalizer.js";
 import { ProjectsRepository } from "./projects.repository.js";
 import { markReplayable, TaxonomyError } from "./taxonomy.errors.js";
+import { allocateTaxonomySlug, taxonomySlugBase } from "./taxonomy-slug.js";
 
 // 012 EARS-1 (#1283) — the project authoring commands. This is the layer where
 // the §5.1 failure ORDER is realized, and the order is the contract:
@@ -119,27 +118,17 @@ export class ProjectsService {
   private async createCommand(
     input: CreateProjectInput,
   ): Promise<ProjectCommandResult> {
-    const slug = this.resolveCreateSlug(input.payload);
-    // Pre-flight the conflict OUTSIDE the transaction so a doomed request never
-    // normalizes or uploads; the unique index still guards the race.
-    if (await this.repo.slugTakenAnywhere(slug)) {
-      throw new TaxonomyError(
-        "SLUG_CONFLICT",
-        "another project already holds this slug; restore that record instead of re-creating it",
-      );
-    }
+    const base = taxonomySlugBase(input.payload.title, "project");
 
     const uploaded = input.cover
       ? await this.normalizeAndUpload(input.cover, input.lease)
       : null;
 
     const row = await this.repo.transaction(async (tx) => {
-      if (await this.repo.slugTaken(tx, slug)) {
-        throw new TaxonomyError(
-          "SLUG_CONFLICT",
-          "another project already holds this slug; restore that record instead of re-creating it",
-        );
-      }
+      await this.repo.lockSlugSequence(tx, base);
+      const slug = await allocateTaxonomySlug(base, "project", (candidate) =>
+        this.repo.slugTaken(tx, candidate),
+      );
       const created = await this.repo.insert(tx, {
         slug,
         kind: input.payload.kind,
@@ -157,7 +146,10 @@ export class ProjectsService {
       return created;
     });
 
-    return { detail: await this.toDetail(row), etag: taxonomyETag(row.version) };
+    return {
+      detail: await this.toDetail(row),
+      etag: taxonomyETag(row.version),
+    };
   }
 
   private async updateCommand(
@@ -170,31 +162,6 @@ export class ProjectsService {
         "PRECONDITION_FAILED",
         "the project changed since it was read; reload and retry",
       );
-    }
-
-    // Slug immutability is a ROW-state refusal, not a shape one, and it is
-    // checked before any upload: the permanent public identity of a published
-    // project is never negotiable (012-design §2.2).
-    //
-    // §2.2 predicates slug UPDATES on `first_published_at IS NULL` — and echoing
-    // the current value is not an update. The admin form posts the whole
-    // «Основное» tab, so refusing the echo would block every ordinary edit of a
-    // published project over a field the operator never touched.
-    const slugChanges =
-      input.payload.slug !== undefined && input.payload.slug !== current.slug;
-    if (slugChanges) {
-      if (current.firstPublishedAt !== null) {
-        throw new TaxonomyError(
-          "SLUG_IMMUTABLE",
-          "the slug was locked by the first publication and cannot change",
-        );
-      }
-      if (await this.repo.slugTakenAnywhere(input.payload.slug!, current.id)) {
-        throw new TaxonomyError(
-          "SLUG_CONFLICT",
-          "another project already holds this slug",
-        );
-      }
     }
 
     // A PATCH that would leave a PUBLISHED projection incomplete is refused
@@ -225,17 +192,10 @@ export class ProjectsService {
           "the project changed since it was read; reload and retry",
         );
       }
-      if (
-        input.payload.slug !== undefined &&
-        input.payload.slug !== locked.slug &&
-        locked.firstPublishedAt !== null
-      ) {
-        throw new TaxonomyError(
-          "SLUG_IMMUTABLE",
-          "the slug was locked by the first publication and cannot change",
-        );
-      }
-      const postLockBlockers = publishRequirementBlockers(locked, input.payload);
+      const postLockBlockers = publishRequirementBlockers(
+        locked,
+        input.payload,
+      );
       if (locked.status === "published" && postLockBlockers.length > 0) {
         throw new TaxonomyError(
           "PUBLISH_REQUIREMENTS_NOT_MET",
@@ -249,8 +209,9 @@ export class ProjectsService {
         input.id,
         input.expectedVersion,
         {
-          ...(slugChanges ? { slug: input.payload.slug! } : {}),
-          ...(input.payload.kind !== undefined ? { kind: input.payload.kind } : {}),
+          ...(input.payload.kind !== undefined
+            ? { kind: input.payload.kind }
+            : {}),
           ...(input.payload.title !== undefined
             ? { title: input.payload.title }
             : {}),
@@ -287,14 +248,20 @@ export class ProjectsService {
       return updated;
     });
 
-    return { detail: await this.toDetail(row), etag: taxonomyETag(row.version) };
+    return {
+      detail: await this.toDetail(row),
+      etag: taxonomyETag(row.version),
+    };
   }
 
   /** `GET /v1/admin/projects/:id` — detail by stable id, retired rows included. */
   async detail(id: string): Promise<ProjectCommandResult> {
     const row = await this.repo.findById(id);
     if (!row) throw new TaxonomyError("RESOURCE_NOT_FOUND");
-    return { detail: await this.toDetail(row), etag: taxonomyETag(row.version) };
+    return {
+      detail: await this.toDetail(row),
+      etag: taxonomyETag(row.version),
+    };
   }
 
   /** `GET /v1/admin/projects` — the shared admin list. */
@@ -316,9 +283,9 @@ export class ProjectsService {
     };
   }
 
-  /** The generated slug preview the admin form also computes locally. */
+  /** The generated slug preview; non-transliterable titles use the system fallback. */
   previewSlug(title: string): string {
-    return slugifyTaxonomyTitle(title);
+    return taxonomySlugBase(title, "project");
   }
 
   /**
@@ -352,7 +319,9 @@ export class ProjectsService {
       });
     } catch (err) {
       if (err instanceof ObjectAlreadyExistsError) {
-        this.logger.log(`cover object ${key} already present — resumed request`);
+        this.logger.log(
+          `cover object ${key} already present — resumed request`,
+        );
         return { key, normalized };
       }
       this.logger.error(
@@ -368,23 +337,6 @@ export class ProjectsService {
     return { key, normalized };
   }
 
-  /** Resolve the create-time slug: the authored one, or generated from the title. */
-  private resolveCreateSlug(payload: CreateProjectRequest): string {
-    if (payload.slug) return payload.slug;
-    const generated = slugifyTaxonomyTitle(payload.title);
-    const parsed = SlugSchema.safeParse(generated);
-    if (!parsed.success) {
-      // The title yields no usable public identity. Refuse and let the operator
-      // supply one — a fabricated slug would become a permanent public URL.
-      throw new TaxonomyError(
-        "VALIDATION_FAILED",
-        "the title yields no usable slug; supply one explicitly",
-        [{ path: "slug", message: "could not be generated from the title" }],
-      );
-    }
-    return parsed.data;
-  }
-
   private async toDetail(row: Project): Promise<ProjectAdminDetail> {
     return {
       id: row.id,
@@ -395,13 +347,11 @@ export class ProjectsService {
       coverUrl: row.coverRef ? await this.storage.urlFor(row.coverRef) : null,
       status: row.status,
       firstPublishedAt: row.firstPublishedAt?.toISOString() ?? null,
-      slugEditable: row.firstPublishedAt === null,
       version: row.version,
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
     };
   }
-
 }
 
 /**

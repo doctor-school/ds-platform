@@ -16,6 +16,7 @@
     "test:flows": "playwright test --config=playwright.flows.config.ts"
   },
   "dependencies": {
+    "@ds/api-client": "workspace:*",
     "@ds/design-system": "workspace:*",
     "@ds/schemas": "workspace:*",
     "@hookform/resolvers": "^5.9.1",

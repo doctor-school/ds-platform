@@ -73,7 +73,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     ): Promise<string> {
       const row: Record<string, unknown> = {
         slug: `x-1290-${randomUUID()}`,
-        name: "Иванова И. И.",
+        family_name: "Иванова",
+        given_name: "И. И.",
         credentials: "д.м.н., профессор",
         professional_role: "Кардиолог",
         status: "published",
@@ -224,7 +225,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const matched = await insertSpeaker(event.id, 0, "Матчед М. М.");
       // Same name, no link — names are never compared, so it must survive.
       await insertSpeaker(event.id, 1, "Матчед М. М.");
-      const expertId = await insertExpert({ name: "Эксперт Э. Э." });
+      const expertId = await insertExpert({
+        family_name: "Эксперт",
+        given_name: "Э. Э.",
+      });
       await insertLink({
         eventId: event.id,
         expertId,
@@ -251,14 +255,19 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     it("EARS-8.2: an unpaired eligible expert is added; an ineligible expert contributes nothing", async () => {
       const event = await insertEvent();
       await insertSpeaker(event.id, 1, "Легаси Л. Л.");
-      const publishedId = await insertExpert({ name: "Опубликован О. О." });
+      const publishedId = await insertExpert({
+        family_name: "Опубликован",
+        given_name: "О. О.",
+      });
       const draftId = await insertExpert({
-        name: "Черновик Ч. Ч.",
+        family_name: "Черновик",
+        given_name: "Ч. Ч.",
         status: "draft",
         first_published_at: null,
       });
       const retiredId = await insertExpert({
-        name: "Снят С. С.",
+        family_name: "Снят",
+        given_name: "С. С.",
         status: "retired",
         deleted_at: new Date(),
       });
@@ -278,7 +287,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const event = await insertEvent();
       const fallback = await insertSpeaker(event.id, 0, "Запасной З. З.");
       const draftId = await insertExpert({
-        name: "Черновик Ч. Ч.",
+        family_name: "Черновик",
+        given_name: "Ч. Ч.",
         status: "draft",
         first_published_at: null,
       });
@@ -335,7 +345,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       // refuses it (EARS-7) and imported data can still carry it — so the READ
       // must stay deterministic. Source rank puts the expert first.
       await insertSpeaker(event.id, 0, "Легаси Первый");
-      const expertId = await insertExpert({ name: "Эксперт A" });
+      const expertId = await insertExpert({
+        family_name: "Эксперт",
+        given_name: "A",
+      });
       await insertLink({ eventId: event.id, expertId, position: 0 });
 
       const items = await speakersEndpoint(event.slug);
@@ -391,7 +404,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const event = await insertEvent();
       const matched = await insertSpeaker(event.id, 0, "Матчед М. М.");
       await insertSpeaker(event.id, 1, "Легаси Л. Л.");
-      const expertId = await insertExpert({ name: "Эксперт Э. Э." });
+      const expertId = await insertExpert({
+        family_name: "Эксперт",
+        given_name: "Э. Э.",
+      });
       await insertLink({
         eventId: event.id,
         expertId,

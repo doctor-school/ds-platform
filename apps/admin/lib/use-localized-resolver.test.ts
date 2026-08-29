@@ -180,13 +180,12 @@ describe("translateIssue — admin form RU error mapping (#665)", () => {
   });
 
   it("project form (012 EARS-1): every field's real failing rule maps to a specific key, never fallback", () => {
-    // Empty submit — title and description are required; the slug box may be
-    // empty (the server generates it), so it must NOT report an error here.
+    // Empty submit — title and description are required. The address is not an
+    // authored field: the server derives it after save.
     const empty = keysFor(ProjectFormSchema, {
       kind: "school",
       title: "",
       description: "",
-      slug: "",
     });
     expect(empty).toContain("required");
     expect(empty).not.toContain("fallback");
@@ -196,28 +195,18 @@ describe("translateIssue — admin form RU error mapping (#665)", () => {
       kind: "school",
       title: "x".repeat(161),
       description: "x".repeat(2001),
-      slug: "",
     });
     expect(tooLong).toEqual(["maxLength", "maxLength"]);
 
-    // The slug box distinguishes its two refusals: wrong grammar vs the
-    // forbidden canonical-UUID id namespace.
+    // An attempted client slug cannot enter the form's parsed mutation shape.
     expect(
-      keysFor(ProjectFormSchema, {
+      ProjectFormSchema.parse({
         kind: "school",
         title: "Школа",
         description: "Описание",
         slug: "Not valid",
       }),
-    ).toEqual(["slugPattern"]);
-    expect(
-      keysFor(ProjectFormSchema, {
-        kind: "school",
-        title: "Школа",
-        description: "Описание",
-        slug: "00000000-0000-4000-8000-000000000000",
-      }),
-    ).toEqual(["slugReserved"]);
+    ).not.toHaveProperty("slug");
 
     // An unknown kind maps to its own key.
     expect(
@@ -225,42 +214,48 @@ describe("translateIssue — admin form RU error mapping (#665)", () => {
         kind: "podcast",
         title: "Школа",
         description: "Описание",
-        slug: "",
       }),
     ).toEqual(["kind"]);
   });
 
-  it("expert form (012 EARS-2): every field's real failing rule maps to a specific key, never fallback", () => {
+  it("EARS-20: the expert form validates structured names and exposes no authored slug", () => {
     const filled = {
-      name: "Иван Петров",
+      familyName: "Петров",
+      givenName: "Иван",
+      patronymic: "Сергеевич",
+      userId: "",
       professionalRole: "Кардиолог",
       credentials: "д.м.н.",
       affiliation: "НМИЦ кардиологии",
       bio: "Практикующий кардиолог.",
-      slug: "",
     };
 
-    // An empty submit reports the NAME only: the four publish-required fields are
-    // legally empty in a draft, so the form must not manufacture an error for them.
+    // Family and given names are independently required. Patronymic and User link
+    // remain optional; publication fields remain legal draft omissions.
     expect(
       keysFor(ExpertFormSchema, {
         ...filled,
-        name: "",
+        familyName: "",
+        givenName: "",
+        patronymic: "",
+        userId: "",
         professionalRole: "",
         credentials: "",
         affiliation: "",
         bio: "",
       }),
-    ).toEqual(["required"]);
+    ).toEqual(["required", "required"]);
 
     // Every text field's over-long bound maps to the length key, never fallback.
     const tooLong = keysFor(ExpertFormSchema, {
-      name: "x".repeat(161),
+      familyName: "x".repeat(81),
+      givenName: "x".repeat(81),
+      patronymic: "x".repeat(81),
+      userId: "",
       professionalRole: "x".repeat(161),
       credentials: "x".repeat(501),
       affiliation: "x".repeat(241),
       bio: "x".repeat(4001),
-      slug: "",
     });
     expect(tooLong).toEqual([
       "maxLength",
@@ -268,18 +263,44 @@ describe("translateIssue — admin form RU error mapping (#665)", () => {
       "maxLength",
       "maxLength",
       "maxLength",
+      "maxLength",
+      "maxLength",
     ]);
 
-    // The slug box distinguishes its two refusals exactly as the project form does.
-    expect(keysFor(ExpertFormSchema, { ...filled, slug: "Not valid" })).toEqual(
-      ["slugPattern"],
-    );
+    // Slug is server-owned: the form schema strips an unknown slug property
+    // rather than validating or forwarding an operator-authored value.
     expect(
-      keysFor(ExpertFormSchema, {
+      ExpertFormSchema.parse({
         ...filled,
         slug: "00000000-0000-4000-8000-000000000000",
       }),
-    ).toEqual(["slugReserved"]);
+    ).not.toHaveProperty("slug");
+  });
+
+  it("EARS-19: the Expert User selector accepts only an empty or existing UUID value", () => {
+    const filled = {
+      familyName: "Петров",
+      givenName: "Иван",
+      patronymic: "",
+      professionalRole: "",
+      credentials: "",
+      affiliation: "",
+      bio: "",
+    };
+
+    expect(ExpertFormSchema.safeParse({ ...filled, userId: "" }).success).toBe(
+      true,
+    );
+    expect(
+      ExpertFormSchema.safeParse({
+        ...filled,
+        userId: "00000000-0000-4000-8000-000000000001",
+      }).success,
+    ).toBe(true);
+    expect(
+      ExpertFormSchema.safeParse({ ...filled, userId: "manual-user-id" })
+        .success,
+    ).toBe(false);
   });
 
   it("EARS-3: every direction-form failing rule maps to a specific key, never fallback", () => {
@@ -306,30 +327,31 @@ describe("translateIssue — admin form RU error mapping (#665)", () => {
 
   it("EARS-4: every partner-form failing rule maps to a specific key, never fallback", () => {
     // Empty submit — the title is the partner's only required value; the website
-    // and slug boxes may both be empty (no site / server-generated address) and
-    // must NOT report an error here.
-    expect(
-      keysFor(PartnerFormSchema, { title: "", websiteUrl: "", slug: "" }),
-    ).toEqual(["required"]);
+    // may be empty and the address is generated by the server.
+    expect(keysFor(PartnerFormSchema, { title: "", websiteUrl: "" })).toEqual([
+      "required",
+    ]);
 
     // The 160-character title bound maps to the length key, not the fallback.
     expect(
       keysFor(PartnerFormSchema, {
         title: "х".repeat(161),
         websiteUrl: "",
-        slug: "",
       }),
     ).toEqual(["maxLength"]);
 
     // The website box: a bare domain, an http:// address and a value carrying
     // whitespace are all the SAME fix — «начните с https://» — and none of them
     // may degrade to the generic sentence.
-    for (const bad of ["example.ru", "http://example.ru", "https:// example.ru"]) {
+    for (const bad of [
+      "example.ru",
+      "http://example.ru",
+      "https:// example.ru",
+    ]) {
       expect(
         keysFor(PartnerFormSchema, {
           title: "Фарма-Лаб",
           websiteUrl: bad,
-          slug: "",
         }),
       ).toEqual(["pattern"]);
     }
@@ -338,26 +360,17 @@ describe("translateIssue — admin form RU error mapping (#665)", () => {
       keysFor(PartnerFormSchema, {
         title: "Фарма-Лаб",
         websiteUrl: `https://example.ru/${"a".repeat(2100)}`,
-        slug: "",
       }),
     ).toEqual(["maxLength"]);
 
-    // The slug box distinguishes its two refusals exactly as its siblings do:
-    // wrong grammar vs the forbidden canonical-UUID id namespace.
+    // An attempted client slug cannot enter the form's parsed mutation shape.
     expect(
-      keysFor(PartnerFormSchema, {
+      PartnerFormSchema.parse({
         title: "Фарма-Лаб",
         websiteUrl: "",
         slug: "Not valid",
       }),
-    ).toEqual(["slugPattern"]);
-    expect(
-      keysFor(PartnerFormSchema, {
-        title: "Фарма-Лаб",
-        websiteUrl: "",
-        slug: "00000000-0000-4000-8000-000000000000",
-      }),
-    ).toEqual(["slugReserved"]);
+    ).not.toHaveProperty("slug");
   });
 
   it("EARS-7: every event↔expert link failing rule maps to a specific key, never fallback", () => {

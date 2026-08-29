@@ -115,18 +115,14 @@ export default function ExpertDetailPage() {
                     setErrorKey(null);
                     setSaved(false);
                     const vars: UpdateExpertVars = {
-                      name: values.name,
+                      familyName: values.familyName,
+                      givenName: values.givenName,
+                      patronymic: values.patronymic || null,
+                      userId: values.userId || null,
                       professionalRole: values.professionalRole || null,
                       credentials: values.credentials || null,
                       affiliation: values.affiliation || null,
                       bio: values.bio || null,
-                      // The slug field is read-only once published, so it is only
-                      // sent while it is still editable AND actually changed.
-                      ...(detail.slugEditable &&
-                      values.slug &&
-                      values.slug !== detail.slug
-                        ? { slug: values.slug }
-                        : {}),
                       ...(values.removePhoto && !values.photo
                         ? { mediaAction: "clear" as const }
                         : {}),

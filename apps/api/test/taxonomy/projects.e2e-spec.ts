@@ -21,6 +21,7 @@ import {
   RELAXED_RATE_LIMIT,
 } from "../setup/rate-limit.js";
 import { deleteUserFixture } from "../setup/fixture-cleanup.js";
+import { registerUniqueFakeUserFixture } from "../setup/fixture-registration.js";
 
 // 012 EARS-1 (#1283) — the project authoring vertical over the REAL stack:
 // Fastify + the 011 admin session + Postgres + object storage. Every assertion
@@ -65,24 +66,22 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     /** Register + grant + establish an ADMIN session; returns its sid. */
     async function adminSession(): Promise<string> {
-      const email = uniqueEmail("tax-admin");
-      const reg = await app.inject({
-        method: "POST",
-        url: "/v1/auth/register",
-        payload: { email, password, consent },
-      });
-      expect(reg.statusCode).toBe(200);
-      const { rows } = await pool.query<{ zitadel_sub: string }>(
-        "SELECT zitadel_sub FROM users WHERE email = $1",
-        [email],
-      );
-      await fake.grantProjectRole(rows[0]!.zitadel_sub, "platform_admin");
-      const admin = await establishAdminSession(app, {
-        identifier: email,
+      const { email, sub } = await registerUniqueFakeUserFixture({
+        app,
+        pool,
+        fake,
+        nextEmail: () => uniqueEmail("tax-admin"),
         password,
-        device,
+        consent,
       });
-      return admin.sid;
+      await fake.grantProjectRole(sub, "platform_admin");
+      return (
+        await establishAdminSession(app, {
+          identifier: email,
+          password,
+          device,
+        })
+      ).sid;
     }
 
     /** A doctor-portal (non-admin) session cookie — the 401 probe. */
@@ -254,8 +253,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         version: 1,
         coverUrl: null,
         firstPublishedAt: null,
-        slugEditable: true,
       });
+      expect(body).not.toHaveProperty("slugEditable");
       expect(body.slug).toMatch(/^shkola-kardiologii/);
       expect(res.headers.etag).toBe('W/"1"');
       expect(res.headers.location).toBe(`/v1/admin/projects/${body.id}`);
@@ -637,21 +636,60 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(await coverObjectCount()).toBe(objectsBefore);
     });
 
-    it("012 EARS-1: when a slug is already held by a retained row, the system shall refuse with SLUG_CONFLICT", async () => {
+    it("EARS-20: when project create carries a slug, the system shall reject it without mutation", async () => {
+      const before = await projectCount();
       const body = await created(await createJson({ payload: validPayload() }));
       const clash = await createJson({
         payload: validPayload({ slug: body.slug }),
       });
-      expect(clash.statusCode).toBe(409);
-      expect(problem(clash).errorCode).toBe("SLUG_CONFLICT");
+      expect(clash.statusCode).toBe(400);
+      expect(problem(clash).errorCode).toBe("VALIDATION_FAILED");
+      expect(await projectCount()).toBe(before + 1);
     });
 
-    it("012 EARS-1: when the project was first published, the system shall refuse a slug change with SLUG_IMMUTABLE and change nothing", async () => {
-      const body = await created(await createJson({ payload: validPayload() }));
-      await pool.query(
-        "UPDATE projects SET status = 'published', first_published_at = now() WHERE id = $1",
-        [body.id],
+    it("EARS-20: same-title, retained and concurrent project collisions shall allocate distinct stable slugs", async () => {
+      const marker = randomUUID().slice(0, 8);
+      const title = `Stable project ${marker}`;
+      const first = await created(
+        await createJson({ payload: validPayload({ title }) }),
       );
+      await pool.query(
+        "UPDATE projects SET status = 'retired', deleted_at = now() WHERE id = $1",
+        [first.id],
+      );
+      const second = await created(
+        await createJson({ payload: validPayload({ title }) }),
+      );
+      expect(second.slug).toBe(`stable-project-${marker}-2`);
+
+      const concurrentTitle = `Concurrent project ${marker}`;
+      const responses = await Promise.all([
+        createJson({ payload: validPayload({ title: concurrentTitle }) }),
+        createJson({ payload: validPayload({ title: concurrentTitle }) }),
+      ]);
+      expect(responses.map((response) => response.statusCode).sort()).toEqual([
+        201, 201,
+      ]);
+      const bodies = responses.map(
+        (response) => JSON.parse(response.payload) as { slug: string },
+      );
+      expect(bodies.map(({ slug }) => slug).sort()).toEqual(
+        [
+          `concurrent-project-${marker}`,
+          `concurrent-project-${marker}-2`,
+        ].sort(),
+      );
+    });
+
+    it("EARS-20: a project title with no transliterable base shall receive a system fallback", async () => {
+      const body = await created(
+        await createJson({ payload: validPayload({ title: "🫀🧠" }) }),
+      );
+      expect(body.slug).toMatch(/^project(?:-\d+)?$/);
+    });
+
+    it("EARS-20: when project PATCH carries a slug, the system shall reject it and change nothing", async () => {
+      const body = await created(await createJson({ payload: validPayload() }));
       const res = await app.inject({
         method: "PATCH",
         url: `/v1/admin/projects/${body.id}`,
@@ -664,32 +702,27 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         },
         payload: { slug: "sovsem-drugoy-adres" },
       });
-      expect(res.statusCode).toBe(409);
-      expect(problem(res).errorCode).toBe("SLUG_IMMUTABLE");
+      expect(res.statusCode).toBe(400);
+      expect(problem(res).errorCode).toBe("VALIDATION_FAILED");
       const { rows } = await pool.query<{ slug: string; version: number }>(
         "SELECT slug, version FROM projects WHERE id = $1",
         [body.id],
       );
       expect(rows[0]).toMatchObject({ slug: body.slug, version: 1 });
-      // The detail read tells the UI the field is locked.
       const detail = await app.inject({
         method: "GET",
         url: `/v1/admin/projects/${body.id}`,
         headers: { ...device, ...adminHeaders(adminSid) },
       });
-      expect(JSON.parse(detail.payload)).toMatchObject({ slugEditable: false });
+      expect(JSON.parse(detail.payload)).not.toHaveProperty("slugEditable");
     });
 
-    it("012 EARS-1: when a published project echoes its OWN slug, the system shall treat it as a no-op rather than SLUG_IMMUTABLE", async () => {
+    it("EARS-20: when a project title is edited, the system shall retain its generated slug", async () => {
       const body = await created(await createJson({ payload: validPayload() }));
       await pool.query(
         "UPDATE projects SET status = 'published', first_published_at = now() WHERE id = $1",
         [body.id],
       );
-      // §2.2 predicates slug UPDATES on `first_published_at IS NULL`. Re-sending
-      // the value the form was rendered with changes nothing, so refusing it would
-      // block an ordinary edit (the form posts the whole «Основное» tab) over a
-      // field the operator never touched.
       const res = await app.inject({
         method: "PATCH",
         url: `/v1/admin/projects/${body.id}`,
@@ -700,7 +733,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
           "idempotency-key": key(),
           "if-match": 'W/"1"',
         },
-        payload: { slug: body.slug, title: "Обновлённое название" },
+        payload: { title: "Обновлённое название" },
       });
       expect(res.statusCode).toBe(200);
       expect(JSON.parse(res.payload)).toMatchObject({
@@ -708,7 +741,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         title: "Обновлённое название",
         version: 2,
       });
-      // A DIFFERENT slug on the same row is still refused.
+      // Any client slug is rejected before it can mutate the stable row.
       const changed = await app.inject({
         method: "PATCH",
         url: `/v1/admin/projects/${body.id}`,
@@ -721,8 +754,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         },
         payload: { slug: `${body.slug}-2` },
       });
-      expect(changed.statusCode).toBe(409);
-      expect(problem(changed).errorCode).toBe("SLUG_IMMUTABLE");
+      expect(changed.statusCode).toBe(400);
+      expect(problem(changed).errorCode).toBe("VALIDATION_FAILED");
     });
 
     it("012 EARS-5: when a PATCH would leave a published projection incomplete, the system shall refuse with a field-addressed PUBLISH_REQUIREMENTS_NOT_MET", async () => {

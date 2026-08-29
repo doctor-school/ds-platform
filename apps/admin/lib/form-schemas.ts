@@ -25,7 +25,6 @@ import {
   RECORDING_DURATION_SEC_MAX,
   RecordingExpectedBySchema,
   refineEmbedRefForProvider,
-  SlugSchema,
   type SpeakerEntry,
   type StreamProvider,
   StreamProviderSchema,
@@ -141,10 +140,8 @@ export { parseSpecialties };
  * exactly as the event form is: each field reuses the create-schema validator, so
  * the bound the operator sees before submit is the bound the API enforces.
  *
- * `slug` is a plain string here rather than `SlugSchema.optional()`: the form box
- * is always present (it shows the generated preview), and an empty box means
- * "generate it server-side". So emptiness is legal and only a NON-empty value is
- * validated against the SSOT slug rules.
+ * Slug is intentionally absent: every mutation derives it server-side and the
+ * admin only exposes the resulting public link after save.
  *
  * `description` is required by the form even though the column is nullable: a
  * draft may legally be incomplete, but the operator authoring one is asking to
@@ -157,39 +154,22 @@ export const ProjectFormSchema = z.object({
   kind: projectCreate.kind,
   title: projectCreate.title,
   description: z.string().trim().min(1).max(2000),
-  slug: z.string().superRefine((value, ctx) => {
-    if (value.trim().length === 0) return; // empty ⇒ server generates it
-    const result = SlugSchema.safeParse(value.trim());
-    if (result.success) return;
-    for (const issue of result.error.issues) {
-      // Preserve the DISTINCTION the SSOT makes: a `custom` issue is the
-      // canonical-UUID refusal, everything else is the grammar/length rule. No
-      // baked message — an explicit one would outrank the localized error map.
-      ctx.addIssue(
-        issue.code === "custom"
-          ? { code: "custom" }
-          : { code: "invalid_format", format: "regex" },
-      );
-    }
-  }),
 });
 
 export interface ProjectFormFields {
   kind: ProjectKind;
   title: string;
   description: string;
-  slug: string;
 }
 
 /**
- * The 012 expert create/edit form (#1284, EARS-2). Same derivation rule as the
- * project form: `name` reuses the SSOT create-schema validator verbatim, and the
- * four publish-required fields reuse the SSOT length CONSTANTS rather than a
- * re-typed bound, so the client and the API can never drift.
+ * The 012 Expert form (EARS-19/20). Required family/given names reuse the SSOT
+ * validators; patronymic is optional, User is a closed Combobox UUID (or empty),
+ * and slug is absent because every mutation derives it server-side.
  *
  * Where it deliberately differs from `ProjectFormSchema`: professional role,
  * credentials, affiliation and bio are OPTIONAL in the form. The API accepts a
- * draft expert with only a display name (`CreateExpertRequestSchema` — every
+ * draft expert with only structured names (`CreateExpertRequestSchema` — every
  * other field is `.nullish()`), and an expert record is routinely started from a
  * business card and completed later. Forcing all five at authoring time would
  * make the form refuse a state the platform itself considers legal. Publication
@@ -204,32 +184,25 @@ function optionalBoundedText(max: number) {
 }
 
 export const ExpertFormSchema = z.object({
-  name: expertCreate.name,
+  familyName: expertCreate.familyName,
+  givenName: expertCreate.givenName,
+  patronymic: z.string().trim().max(80),
+  userId: z.union([z.literal(""), z.uuid()]),
   professionalRole: optionalBoundedText(EXPERT_PROFESSIONAL_ROLE_MAX),
   credentials: optionalBoundedText(EXPERT_CREDENTIALS_MAX),
   affiliation: optionalBoundedText(EXPERT_AFFILIATION_MAX),
   bio: optionalBoundedText(EXPERT_BIO_MAX),
-  slug: z.string().superRefine((value, ctx) => {
-    if (value.trim().length === 0) return; // empty ⇒ server generates it
-    const result = SlugSchema.safeParse(value.trim());
-    if (result.success) return;
-    for (const issue of result.error.issues) {
-      ctx.addIssue(
-        issue.code === "custom"
-          ? { code: "custom" }
-          : { code: "invalid_format", format: "regex" },
-      );
-    }
-  }),
 });
 
 export interface ExpertFormFields {
-  name: string;
+  familyName: string;
+  givenName: string;
+  patronymic: string;
+  userId: string;
   professionalRole: string;
   credentials: string;
   affiliation: string;
   bio: string;
-  slug: string;
 }
 
 /**
@@ -293,24 +266,11 @@ export const PartnerFormSchema = z.object({
       );
     }
   }),
-  slug: z.string().superRefine((value, ctx) => {
-    if (value.trim().length === 0) return; // empty ⇒ server generates it
-    const result = SlugSchema.safeParse(value.trim());
-    if (result.success) return;
-    for (const issue of result.error.issues) {
-      ctx.addIssue(
-        issue.code === "custom"
-          ? { code: "custom" }
-          : { code: "invalid_format", format: "regex" },
-      );
-    }
-  }),
 });
 
 export interface PartnerFormFields {
   title: string;
   websiteUrl: string;
-  slug: string;
 }
 
 /**

@@ -9,6 +9,8 @@
 // кардиологии» must become `shkola-kardiologii`, not an empty string. The table
 // is the practical BGN/PCGN-style mapping already familiar from RU URL slugs.
 
+import { SLUG_MAX } from "./taxonomy.schema.js";
+
 const CYRILLIC_TO_LATIN: Readonly<Record<string, string>> = {
   а: "a",
   б: "b",
@@ -56,8 +58,7 @@ const CYRILLIC_TO_LATIN: Readonly<Record<string, string>> = {
  * `SLUG_REGEX` — NFKC-normalize, transliterate Cyrillic, strip combining marks,
  * lowercase, replace every other run of characters with a single hyphen and trim
  * hyphens. Returns `""` when the title carries no sluggable character at all
- * (e.g. only emoji): the caller then refuses rather than inventing an identity,
- * because a slug is a permanent public URL, not a cosmetic default.
+ * (e.g. only emoji): the server-owned allocator then uses its kind fallback.
  */
 export function slugifyTaxonomyTitle(title: string): string {
   const folded = title
@@ -76,9 +77,6 @@ export function slugifyTaxonomyTitle(title: string): string {
     .slice(0, SLUG_MAX)
     .replace(/-+$/g, "");
 }
-
-/** The slug length the taxonomy tables and `SlugSchema` agree on. */
-const SLUG_MAX = 160;
 
 /**
  * How many derived candidates a caller may try before giving up. Two directions

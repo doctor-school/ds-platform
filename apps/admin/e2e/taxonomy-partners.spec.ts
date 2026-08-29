@@ -6,12 +6,9 @@ import { totpCode } from "./support/totp";
  * 012 EARS-4 (#1286), browser half — the REAL Refine → NestJS → Postgres path.
  *
  * The API e2e suites prove the contract against the API directly. This proves the
- * operator-facing arc on the running admin: sign in, create a partner (watching
- * the generated slug preview), find the row through the shared list shell's
- * search, edit it, upload a logo, replace it and clear it. Reject branches ride
- * along: an over-long title, a garbage slug and a non-https website address must
- * surface RU inline errors BEFORE any request leaves the browser, and a non-image
- * file is refused by the dropzone's preflight.
+ * operator-facing arc on the running admin: sign in, create a partner, copy its
+ * server-derived public link, find and edit it, then upload, replace and clear a
+ * logo. Invalid title/site/media inputs are refused; no slug authoring exists.
  *
  * Where it deliberately differs from `taxonomy-experts.spec.ts`: there is no
  * initials fallback to assert (an organisation has none — §2.2), and no
@@ -55,6 +52,7 @@ test.describe.configure({ mode: "serial" });
 test.describe("012 EARS-4 — partner authoring in the live admin", () => {
   test("012 EARS-4: an operator creates, finds, edits and brands a partner through the real admin", async ({
     page,
+    context,
   }) => {
     await signInAsAdmin(page);
 
@@ -63,14 +61,15 @@ test.describe("012 EARS-4 — partner authoring in the live admin", () => {
     await page.waitForURL(/\/partners$/, { timeout: 20_000 });
     await expect(page.getByTestId("partners-filters")).toBeVisible();
     // The retired-rows toggle is OFF by default (Stage-A answer 4).
-    await expect(page.getByTestId("partners-include-retired")).not.toBeChecked();
+    await expect(
+      page.getByTestId("partners-include-retired"),
+    ).not.toBeChecked();
 
     // ── Reject branch: garbage input never leaves the browser ──────────────
     await page.getByTestId("partners-create").click();
     await page.waitForURL(/\/partners\/create$/, { timeout: 20_000 });
     await page.getByTestId("partner-title").fill("x".repeat(161));
     await page.getByTestId("partner-website-url").fill("example.ru");
-    await page.getByTestId("partner-slug").fill("Not valid");
     await page.getByTestId("submit-partner").click();
     // RU inline errors — one per field kind — and we are still on the create screen.
     await expect(
@@ -79,9 +78,7 @@ test.describe("012 EARS-4 — partner authoring in the live admin", () => {
     await expect(
       page.getByText("должен начинаться с https://", { exact: false }),
     ).toBeVisible();
-    await expect(
-      page.getByText("Только строчные латинские буквы", { exact: false }),
-    ).toBeVisible();
+    await expect(page.getByTestId("partner-slug")).toHaveCount(0);
     expect(page.url()).toMatch(/\/partners\/create$/);
 
     // An http:// address is the same refusal as a bare domain — the rule is
@@ -93,15 +90,13 @@ test.describe("012 EARS-4 — partner authoring in the live admin", () => {
     ).toBeVisible();
     expect(page.url()).toMatch(/\/partners\/create$/);
 
-    // ── Accept branch: the generated slug preview ──────────────────────────
+    // ── Accept branch: the server-owned public address ─────────────────────
     // A draft partner is legally allowed to carry only a title; the site is
     // filled here because the arc under test is the complete card.
     const title = `Фарма Лаб ${Date.now()}`;
     await page.getByTestId("partner-title").fill(title);
-    await page.getByTestId("partner-slug").fill("");
-    await expect(page.getByTestId("partner-slug")).toHaveAttribute(
-      "placeholder",
-      /^farma-lab/,
+    await expect(page.getByTestId("partner-public-link-note")).toContainText(
+      "Адрес сгенерирует сервер",
     );
     await page.getByTestId("partner-website-url").fill("https://example.ru");
     await page.getByTestId("submit-partner").click();
@@ -111,9 +106,24 @@ test.describe("012 EARS-4 — partner authoring in the live admin", () => {
     const detailUrl = page.url();
     await expect(page.getByTestId("partner-heading")).toHaveText(title);
     await expect(page.getByTestId("partner-status")).toHaveText("Черновик");
-    // Only «Основное» ships in this slice — no empty placeholder tabs.
+    const publicUrl = await page.getByTestId("partner-public-link").innerText();
+    expect(publicUrl).toMatch(
+      /^https:\/\/academy\.doctor\.school\/partners\/farma-lab/,
+    );
+    await context.grantPermissions(["clipboard-read", "clipboard-write"], {
+      origin: ORIGIN,
+    });
+    await page.getByTestId("partner-copy-public-link").click();
+    await expect(page.getByTestId("partner-copy-public-link")).toHaveText(
+      "Ссылка скопирована",
+    );
+    await expect
+      .poll(() => page.evaluate(() => navigator.clipboard.readText()))
+      .toBe(publicUrl);
+    // The retained project-relation read tab ships alongside «Основное».
     await expect(page.getByTestId("tab-main")).toBeVisible();
-    await expect(page.getByRole("tab")).toHaveCount(1);
+    await expect(page.getByTestId("tab-projects")).toBeVisible();
+    await expect(page.getByRole("tab")).toHaveCount(2);
     // No logo yet ⇒ an EMPTY slot. Unlike an expert, an organisation has no
     // initials fallback anywhere on the platform, so nothing stands in for it.
     await expect(page.getByAltText("Логотип партнёра")).toHaveCount(0);
@@ -136,7 +146,9 @@ test.describe("012 EARS-4 — partner authoring in the live admin", () => {
     await page.getByTestId("submit-partner").click();
     await expect(page.getByTestId("update-saved")).toBeVisible();
     await page.reload();
-    await expect(page.getByTestId("partner-website-url")).toHaveValue(editedUrl);
+    await expect(page.getByTestId("partner-website-url")).toHaveValue(
+      editedUrl,
+    );
 
     // ── Emptying the website box CLEARS it (explicit null, not «unchanged») ─
     await page.getByTestId("partner-website-url").fill("");
@@ -186,22 +198,8 @@ test.describe("012 EARS-4 — partner authoring in the live admin", () => {
     });
     await expect(page.getByTestId("partner-logo-error")).toBeVisible();
 
-    // ── The slug stays editable while the row has never been published ────
-    await expect(page.getByTestId("partner-slug")).not.toHaveAttribute(
-      "readonly",
-      /.*/,
-    );
-    await expect(
-      page.getByText("До первой публикации адрес можно изменить", {
-        exact: false,
-      }),
-    ).toBeVisible();
-    // The LOCKED rendering (read-only box + «адрес зафиксирован…» explanation)
-    // cannot be reached from the browser in this slice: publication is #1287 and
-    // no route here can set `first_published_at`. Its contract half is proven in
-    // `apps/api/test/taxonomy/partners.e2e-spec.ts` (`slugEditable: false` on a
-    // published row plus the 409 `SLUG_IMMUTABLE` refusal); the browser assertion
-    // rides #1287, which introduces the transition that produces the state.
+    await expect(page.getByTestId("partner-slug")).toHaveCount(0);
+    await expect(page.getByTestId("partner-public-link")).toHaveText(publicUrl);
     //
     // Retire/restore is the same story: 012 exposes NO retire/restore route on
     // the partners controller in this slice (the merged expert and direction

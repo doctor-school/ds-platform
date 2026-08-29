@@ -1,5 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { DrizzleHandle } from "@ds/db";
 import { eventExperts, events, eventSpeakers, experts } from "@ds/db";
 import { PUBLIC_EVENT_STATES } from "@ds/schemas";
@@ -117,7 +117,7 @@ export class SpeakerProjectionRepository {
         legacySpeakerId: eventExperts.legacySpeakerId,
         expertId: experts.id,
         expertSlug: experts.slug,
-        expertName: experts.name,
+        expertName: sql<string | null>`CASE WHEN ${experts.familyName} IS NULL OR ${experts.givenName} IS NULL THEN NULL ELSE concat_ws(' ', ${experts.familyName}, ${experts.givenName}, ${experts.patronymic}) END`,
         expertCredentials: experts.credentials,
         photoRef: experts.photoRef,
       })

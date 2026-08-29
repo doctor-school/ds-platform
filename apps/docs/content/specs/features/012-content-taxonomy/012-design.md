@@ -150,6 +150,8 @@ Input-mask declaration is `none`. Refine uses text/textarea controls for structu
 
 Expert search NFKC-normalizes the query and uses trigram indexes over `family_name`, `given_name`, `patronymic` plus the system slug. The derived display `name` is returned by DTOs but is not a searched storage column.
 
+The legacy `experts.name` column is removed by one exact expand/backfill/contract migration, not by a parsing algorithm. Before changing any row or constraint, the migration checks the complete retained non-content-removed source set against a reviewed mapping keyed by stable Expert id. The production inventory read on 2026-08-29 contained zero Expert rows, so the approved mapping is empty and the migration asserts that the source set remains empty; a row created before deployment aborts the migration for explicit per-row review. No name splitting, heuristic, User matching or Expert-name review queue is introduced. Content-removed rows remain the structured-name-null exception.
+
 ### 2.3 Legacy-speaker migration review queue
 
 `speaker_migration_reviews` is a real retained admin queue keyed by stable source `event_speakers.id`. Every retained `event_speakers` row is imported once with immutable source provenance (event id, source id, original position and content fingerprint) and an original classification `unmatched | ambiguous | duplicate`. There is no eligibility filter: the closed source set is all retained rows in that table. No automatic or suggested name match is stored or displayed.
@@ -233,6 +235,8 @@ As defense in depth, public project reads repeat the eligibility predicate and f
 
 `experts.user_id` is nullable and uniquely constrained when present. Creating an Expert without a User, creating it from an existing unlinked User, and linking later all call one command path. The command rejects existing ownership with `USER_EXPERT_CONFLICT`. Person fields are `family_name`, `given_name`, and nullable `patronymic`; display names are derived.
 
+The Expert form owns one narrow selector read: `GET /v1/admin/experts/eligible-users?q&page&pageSize&currentExpertId`. It searches the active retained User mirror by operator-visible `display_name`, `email` or `phone`, returns stable offset pages ordered by nullable display name, a required identifier and User id, and projects exactly `{ id, displayName, identifier }`. `identifier` is `email` when present and otherwise `phone`; the `users_email_or_phone` invariant makes it non-null even for a phone-only User whose display name is null. A User linked to another retained Expert is absent; `currentExpertId` admits only that Expert's existing link so an edit does not erase its selected option. The read is advisory: the User-row lock plus `experts.user_id` uniqueness remains authoritative under a race. Separate contact fields, role, IdP subject and Expert-name matching never enter this read. EARS-23 still owns the shared combobox interaction behaviour; this section owns only EARS-19's data contract.
+
 `event_experts(event_id, expert_id, role, position)` is the sole current speaker model. The real review queue and guarded cutover are defined in §2.3; runtime projection never joins legacy rows or compares names.
 
 ### 4.1 Shared authoring composition
@@ -260,6 +264,8 @@ For each entity resource `{projects|experts|topics|partners}`:
 | `GET /v1/admin/<resource>/:id/lifecycle-impact?transition=retire\|restore` | Preview transition consequences plus signed `impactToken`.               |
 | `POST /v1/admin/<resource>/:id/retire`                                     | Target `If-Match` + matching `Lifecycle-Impact-Token`.                   |
 | `POST /v1/admin/<resource>/:id/restore`                                    | Target `If-Match` + matching `Lifecycle-Impact-Token`; retained → draft. |
+
+Experts additionally expose `GET /v1/admin/experts/eligible-users?q&page&pageSize&currentExpertId`, the authenticated `platform_admin` option read from §4. Its response is `{ data: { id, displayName, identifier }[], total, page, pageSize }`; all three option fields are sourced from the User mirror, `identifier` is the non-null email-or-phone projection, and no general User-admin resource is introduced.
 
 Projects additionally expose `POST /v1/admin/projects/:id/replace-curator` with `{ expertId }`, project `If-Match` and `Idempotency-Key`; this is the atomic command from §3.2.
 

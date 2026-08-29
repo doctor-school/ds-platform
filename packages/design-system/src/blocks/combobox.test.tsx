@@ -99,7 +99,9 @@ describe("<Combobox>", () => {
         emptyLabel="Ничего не найдено"
       />,
     );
-    expect(screen.getByRole("combobox")).toHaveAccessibleName("Выберите вид связи");
+    expect(screen.getByRole("combobox")).toHaveAccessibleName(
+      "Выберите вид связи",
+    );
 
     rerender(
       <Combobox
@@ -249,6 +251,101 @@ describe("<Combobox>", () => {
     await dismiss();
   });
 
+  it("delegates filtering to a remote option source when search is controlled by the app", async () => {
+    const onSearchChange = vi.fn();
+    render(
+      <Combobox
+        options={[{ value: "user-1", label: "Иван Петров" }]}
+        onValueChange={vi.fn()}
+        onSearchChange={onSearchChange}
+        placeholder="Выберите пользователя"
+        searchLabel="Поиск пользователя"
+        emptyLabel="Ничего не найдено"
+        showSearch
+      />,
+    );
+    await userEvent.click(screen.getByRole("combobox"));
+    const query = await screen.findByLabelText("Поиск пользователя");
+    await userEvent.type(query, "Сидоров");
+
+    expect(onSearchChange).toHaveBeenLastCalledWith("Сидоров");
+    // The returned server page remains visible even when its label does not
+    // contain the query; cmdk must not apply a second, local filter.
+    expect(screen.getByText("Иван Петров")).toBeInTheDocument();
+    await dismiss();
+  });
+
+  it("loads the next remote page only on an explicit, duplicate-safe operator action", async () => {
+    let resolveLoad: (() => void) | undefined;
+    const onLoadMore = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveLoad = resolve;
+        }),
+    );
+    render(
+      <Combobox
+        options={[{ value: "user-1", label: "Иван Петров" }]}
+        onValueChange={vi.fn()}
+        onSearchChange={vi.fn()}
+        onLoadMore={onLoadMore}
+        hasMore
+        loadMoreLabel="Загрузить ещё"
+        loadingMoreLabel="Загружаем пользователей"
+        placeholder="Выберите пользователя"
+        searchLabel="Поиск пользователя"
+        emptyLabel="Ничего не найдено"
+        showSearch
+      />,
+    );
+    await userEvent.click(screen.getByRole("combobox"));
+    const loadMore = await screen.findByRole("button", {
+      name: "Загрузить ещё",
+    });
+
+    expect(onLoadMore).not.toHaveBeenCalled();
+    await userEvent.dblClick(loadMore);
+    expect(onLoadMore).toHaveBeenCalledTimes(1);
+    expect(loadMore).toBeDisabled();
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Загружаем пользователей",
+    );
+
+    resolveLoad?.();
+    await waitFor(() => expect(loadMore).toBeEnabled());
+    await dismiss();
+  });
+
+  it("keeps loaded options available and exposes an accessible retry after a page error", async () => {
+    const onLoadMore = vi.fn();
+    render(
+      <Combobox
+        options={[{ value: "user-1", label: "Иван Петров" }]}
+        value="user-1"
+        onValueChange={vi.fn()}
+        onLoadMore={onLoadMore}
+        hasMore
+        loadMoreError
+        loadMoreLabel="Загрузить ещё"
+        loadMoreErrorLabel="Не удалось загрузить. Повторить"
+        placeholder="Выберите пользователя"
+        emptyLabel="Ничего не найдено"
+      />,
+    );
+    await userEvent.click(screen.getByRole("combobox"));
+
+    expect(screen.getAllByText("Иван Петров")).toHaveLength(2);
+    const retry = screen.getByRole("button", {
+      name: "Не удалось загрузить. Повторить",
+    });
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Не удалось загрузить. Повторить",
+    );
+    await userEvent.click(retry);
+    expect(onLoadMore).toHaveBeenCalledTimes(1);
+    await dismiss();
+  });
+
   it("never lets typing enter free text into the value", async () => {
     const onValueChange = vi.fn();
     const book: ComboboxOption[] = Array.from({ length: 20 }, (_, index) => ({
@@ -281,7 +378,10 @@ describe("<Combobox>", () => {
         invalid
       />,
     );
-    expect(screen.getByRole("combobox")).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByRole("combobox")).toHaveAttribute(
+      "aria-invalid",
+      "true",
+    );
     rerender(
       <Combobox
         options={KINDS}

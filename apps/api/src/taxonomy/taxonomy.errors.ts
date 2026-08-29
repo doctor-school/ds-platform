@@ -25,6 +25,7 @@ export const TAXONOMY_ERROR_STATUS: Readonly<
   PLATFORM_ADMIN_REQUIRED: 403,
   RESOURCE_NOT_FOUND: 404,
   RELATIONSHIP_CONFLICT: 409,
+  USER_EXPERT_CONFLICT: 409,
   SLUG_CONFLICT: 409,
   SLUG_IMMUTABLE: 409,
   PUBLISH_REQUIREMENTS_NOT_MET: 409,
@@ -57,6 +58,7 @@ const TAXONOMY_ERROR_TITLE: Readonly<Record<TaxonomyErrorCode, string>> = {
   PLATFORM_ADMIN_REQUIRED: "platform_admin required",
   RESOURCE_NOT_FOUND: "Not found",
   RELATIONSHIP_CONFLICT: "Relationship conflict",
+  USER_EXPERT_CONFLICT: "User already linked to an Expert",
   SLUG_CONFLICT: "Slug already taken",
   SLUG_IMMUTABLE: "Slug is permanently locked",
   PUBLISH_REQUIREMENTS_NOT_MET: "Publication requirements not met",
@@ -122,6 +124,7 @@ export const DETERMINISTIC_TERMINAL_ERROR_CODES: ReadonlySet<TaxonomyErrorCode> 
     "MEDIA_INVALID",
     // 409 invariants
     "RELATIONSHIP_CONFLICT",
+    "USER_EXPERT_CONFLICT",
     "SLUG_CONFLICT",
     "SLUG_IMMUTABLE",
     "PUBLISH_REQUIREMENTS_NOT_MET",

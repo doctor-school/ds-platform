@@ -118,13 +118,6 @@ export default function PartnerDetailPage() {
                     const vars: UpdatePartnerVars = {
                       title: values.title,
                       websiteUrl: values.websiteUrl || null,
-                      // The slug field is read-only once published, so it is only
-                      // sent while it is still editable AND actually changed.
-                      ...(detail.slugEditable &&
-                      values.slug &&
-                      values.slug !== detail.slug
-                        ? { slug: values.slug }
-                        : {}),
                       ...(values.removeLogo && !values.logo
                         ? { mediaAction: "clear" as const }
                         : {}),

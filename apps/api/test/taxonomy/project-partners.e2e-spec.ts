@@ -142,9 +142,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     async function insertExpert(): Promise<string> {
       const { rows } = await pool.query<{ id: string }>(
         `INSERT INTO experts
-           (slug, name, professional_role, credentials, affiliation, status,
+           (slug, family_name, given_name, professional_role, credentials, affiliation, status,
             first_published_at)
-         VALUES ($1, 'Иванова И. И.', 'Кардиолог', 'д.м.н.', 'НМИЦ',
+         VALUES ($1, 'Иванова', 'И. И.', 'Кардиолог', 'д.м.н.', 'НМИЦ',
                  'published', now())
          RETURNING id`,
         [`x-1292-${randomUUID()}`],

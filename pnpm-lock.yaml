@@ -133,6 +133,9 @@ importers:
 
   apps/admin:
     dependencies:
+      '@ds/api-client':
+        specifier: workspace:*
+        version: link:../../packages/api-client
       '@ds/design-system':
         specifier: workspace:*
         version: link:../../packages/design-system

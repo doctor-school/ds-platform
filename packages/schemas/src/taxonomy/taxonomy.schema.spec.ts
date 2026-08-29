@@ -4,9 +4,12 @@ import {
   AdminTaxonomyListQuerySchema,
   CreateExpertRequestSchema,
   CreateProjectRequestSchema,
+  expertDisplayName,
   expertInitials,
   ExpertAdminDetailSchema,
   ExpertAdminListItemSchema,
+  EligibleExpertUserListSchema,
+  EligibleExpertUserQuerySchema,
   CreateDirectionRequestSchema,
   CreatePartnerRequestSchema,
   PartnerAdminDetailSchema,
@@ -30,8 +33,11 @@ import {
   LifecycleImpactSchema,
   PublicCursorQuerySchema,
   PublicEventSummarySchema,
+  PublicPartnerSummarySchema,
+  ProjectAdminDetailSchema,
   PublicProjectSummarySchema,
   PUBLIC_PAGE_SIZE_MAX,
+  SLUG_MAX,
 } from "./index.js";
 
 // 012 EARS-1 (#1283) — the wire-contract half. These are the bounds the Refine
@@ -39,6 +45,29 @@ import {
 // bound the operator sees BEFORE the round-trip and the server enforces after.
 
 describe("012 taxonomy — authoring contract (SSOT)", () => {
+  it("EARS-20: every taxonomy DTO slug shall be 1..80 characters and non-UUID", () => {
+    expect(SLUG_MAX).toBe(80);
+    expect(SlugSchema.safeParse("a".repeat(80)).success).toBe(true);
+    expect(SlugSchema.safeParse("a".repeat(81)).success).toBe(false);
+    expect(
+      SlugSchema.safeParse("123e4567-e89b-12d3-a456-426614174000").success,
+    ).toBe(false);
+
+    for (const schema of [
+      ProjectAdminDetailSchema.shape.slug,
+      ExpertAdminDetailSchema.shape.slug,
+      DirectionAdminDetailSchema.shape.slug,
+      PartnerAdminDetailSchema.shape.slug,
+      PublicProjectSummarySchema.shape.slug,
+      PublicPartnerSummarySchema.shape.slug,
+    ]) {
+      expect(schema.safeParse("a".repeat(81)).success).toBe(false);
+      expect(
+        schema.safeParse("123e4567-e89b-12d3-a456-426614174000").success,
+      ).toBe(false);
+    }
+  });
+
   it("012 EARS-1: when a project create omits the title or exceeds its bound, the schema shall refuse it", () => {
     expect(
       CreateProjectRequestSchema.safeParse({ kind: "school" }).success,
@@ -88,6 +117,39 @@ describe("012 taxonomy — authoring contract (SSOT)", () => {
     expect(withUrl.success).toBe(false);
   });
 
+  it("EARS-20: when project create or update carries a slug, the schema shall reject the client-owned identity", () => {
+    expect(
+      CreateProjectRequestSchema.safeParse({
+        kind: "school",
+        title: "System-owned address",
+        slug: "client-owned-address",
+      }).success,
+    ).toBe(false);
+    expect(
+      UpdateProjectRequestSchema.safeParse({
+        slug: "client-owned-address",
+      }).success,
+    ).toBe(false);
+  });
+
+  it("EARS-20: when project admin detail is projected, the schema shall not advertise slug editability", () => {
+    const parsed = ProjectAdminDetailSchema.parse({
+      id: "11111111-1111-4111-8111-111111111111",
+      slug: "system-owned-address",
+      kind: "school",
+      title: "System-owned address",
+      description: null,
+      coverUrl: null,
+      status: "draft",
+      firstPublishedAt: null,
+      slugEditable: true,
+      version: 1,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    expect(parsed).not.toHaveProperty("slugEditable");
+  });
+
   it("012 EARS-1: mediaAction shall be a PATCH-only verb", () => {
     expect(
       CreateProjectRequestSchema.safeParse({
@@ -96,12 +158,12 @@ describe("012 taxonomy — authoring contract (SSOT)", () => {
         mediaAction: "clear",
       }).success,
     ).toBe(false);
-    expect(UpdateProjectRequestSchema.safeParse({ mediaAction: "clear" }).success).toBe(
-      true,
-    );
-    expect(UpdateProjectRequestSchema.safeParse({ mediaAction: "set" }).success).toBe(
-      false,
-    );
+    expect(
+      UpdateProjectRequestSchema.safeParse({ mediaAction: "clear" }).success,
+    ).toBe(true);
+    expect(
+      UpdateProjectRequestSchema.safeParse({ mediaAction: "set" }).success,
+    ).toBe(false);
   });
 
   it("012 EARS-1: an authored slug shall be lowercase-hyphen ASCII and never canonical UUID text", () => {
@@ -119,10 +181,14 @@ describe("012 taxonomy — authoring contract (SSOT)", () => {
   });
 
   it("012 EARS-1: the shared slugifier shall transliterate Cyrillic deterministically", () => {
-    expect(slugifyTaxonomyTitle("Школа кардиологии")).toBe("shkola-kardiologii");
-    expect(slugifyTaxonomyTitle("  Щи & Ёлка — 2026!  ")).toBe("shchi-elka-2026");
+    expect(slugifyTaxonomyTitle("Школа кардиологии")).toBe(
+      "shkola-kardiologii",
+    );
+    expect(slugifyTaxonomyTitle("  Щи & Ёлка — 2026!  ")).toBe(
+      "shchi-elka-2026",
+    );
     expect(slugifyTaxonomyTitle("Café Zürich")).toBe("cafe-zurich");
-    // No sluggable character at all — the caller must refuse, never invent one.
+    // No sluggable character at all — the allocator supplies a kind fallback.
     expect(slugifyTaxonomyTitle("🙂🙂")).toBe("");
     // Every produced value satisfies the wire schema.
     for (const title of ["Школа кардиологии", "Медиа-проект №3", "ABC"]) {
@@ -145,15 +211,15 @@ describe("012 taxonomy — authoring contract (SSOT)", () => {
     expect(
       AdminTaxonomyListQuerySchema.safeParse({ pageSize: "500" }).success,
     ).toBe(false);
-    expect(AdminTaxonomyListQuerySchema.safeParse({ status: "gone" }).success).toBe(
-      false,
-    );
+    expect(
+      AdminTaxonomyListQuerySchema.safeParse({ status: "gone" }).success,
+    ).toBe(false);
   });
 
   it("012 EARS-17: only canonical lowercase UUID text shall be a valid idempotency key", () => {
-    expect(isCanonicalIdempotencyKey("6f9619ff-8b86-4d01-b42d-00cf4fc964ff")).toBe(
-      true,
-    );
+    expect(
+      isCanonicalIdempotencyKey("6f9619ff-8b86-4d01-b42d-00cf4fc964ff"),
+    ).toBe(true);
     for (const bad of [
       "6F9619FF-8B86-4D01-B42D-00CF4FC964FF",
       "{6f9619ff-8b86-4d01-b42d-00cf4fc964ff}",
@@ -178,11 +244,113 @@ describe("012 taxonomy — authoring contract (SSOT)", () => {
 // asserted here is the bound the Refine form shows the operator BEFORE the
 // round-trip and the one the server enforces after.
 describe("012 taxonomy — expert authoring contract (SSOT)", () => {
-  it("012 EARS-2: when an expert create omits the name or exceeds a field bound, the schema shall refuse it", () => {
-    expect(CreateExpertRequestSchema.safeParse({}).success).toBe(false);
-    expect(CreateExpertRequestSchema.safeParse({ name: "" }).success).toBe(false);
+  it("012 EARS-19: when the Expert form requests eligible Users, the schema shall bound pagination, trim search and validate the current Expert id", () => {
     expect(
-      CreateExpertRequestSchema.safeParse({ name: "x".repeat(161) }).success,
+      EligibleExpertUserQuerySchema.parse({
+        q: "  doctor@example.test  ",
+        currentExpertId: "11111111-1111-4111-8111-111111111111",
+      }),
+    ).toEqual({
+      q: "doctor@example.test",
+      page: 1,
+      pageSize: 20,
+      currentExpertId: "11111111-1111-4111-8111-111111111111",
+    });
+    expect(
+      EligibleExpertUserQuerySchema.safeParse({ pageSize: "101" }).success,
+    ).toBe(false);
+    expect(
+      EligibleExpertUserQuerySchema.safeParse({ currentExpertId: "expert-1" })
+        .success,
+    ).toBe(false);
+  });
+
+  it("012 EARS-19: when eligible User options cross the wire, the schema shall expose stable id, nullable display name and a required operator-readable identifier", () => {
+    const option = {
+      id: "11111111-1111-4111-8111-111111111111",
+      displayName: null,
+      identifier: "doctor@example.test",
+    };
+    expect(
+      EligibleExpertUserListSchema.parse({
+        data: [option],
+        total: 1,
+        page: 1,
+        pageSize: 20,
+      }),
+    ).toEqual({ data: [option], total: 1, page: 1, pageSize: 20 });
+    expect(
+      EligibleExpertUserListSchema.safeParse({
+        data: [{ ...option, email: "doctor@example.test" }],
+        total: 1,
+        page: 1,
+        pageSize: 20,
+      }).success,
+    ).toBe(false);
+    expect(
+      EligibleExpertUserListSchema.safeParse({
+        data: [{ id: option.id, displayName: null, identifier: null }],
+        total: 1,
+        page: 1,
+        pageSize: 20,
+      }).success,
+    ).toBe(false);
+  });
+
+  it("EARS-19: when an Expert is authored, the system shall accept an optional User link and explicit unlink", () => {
+    const userId = "11111111-1111-4111-8111-111111111111";
+
+    expect(
+      CreateExpertRequestSchema.safeParse({
+        familyName: "Иванов",
+        givenName: "Иван",
+        patronymic: "Иванович",
+        userId,
+      }).success,
+    ).toBe(true);
+    expect(UpdateExpertRequestSchema.safeParse({ userId }).success).toBe(true);
+    expect(UpdateExpertRequestSchema.safeParse({ userId: null }).success).toBe(
+      true,
+    );
+  });
+
+  it("EARS-20: when an Expert is authored, the system shall require structured names and derive its display name", () => {
+    expect(
+      CreateExpertRequestSchema.safeParse({
+        familyName: "Иванов",
+        givenName: "Иван",
+        patronymic: "Иванович",
+      }).success,
+    ).toBe(true);
+    expect(
+      CreateExpertRequestSchema.safeParse({
+        familyName: "Иванов",
+        givenName: "Иван",
+      }).success,
+    ).toBe(true);
+    expect(
+      CreateExpertRequestSchema.safeParse({ name: "Иванов Иван" }).success,
+    ).toBe(false);
+    expect(
+      expertDisplayName({
+        familyName: "Иванов",
+        givenName: "Иван",
+        patronymic: "Иванович",
+      }),
+    ).toBe("Иванов Иван Иванович");
+  });
+
+  it("012 EARS-2: when an expert create omits a required structured name or exceeds a field bound, the schema shall refuse it", () => {
+    expect(CreateExpertRequestSchema.safeParse({}).success).toBe(false);
+    expect(
+      CreateExpertRequestSchema.safeParse({ familyName: "", givenName: "Иван" })
+        .success,
+    ).toBe(false);
+    expect(
+      CreateExpertRequestSchema.safeParse({
+        familyName: "x".repeat(81),
+        givenName: "Иван",
+      }).success,
     ).toBe(false);
     // Every §2.2 bound, at its exact edge.
     for (const [field, max] of [
@@ -193,19 +361,24 @@ describe("012 taxonomy — expert authoring contract (SSOT)", () => {
     ] as const) {
       expect(
         CreateExpertRequestSchema.safeParse({
-          name: "Иванов Иван",
+          familyName: "Иванов",
+          givenName: "Иван",
           [field]: "x".repeat(max + 1),
         }).success,
       ).toBe(false);
       expect(
         CreateExpertRequestSchema.safeParse({
-          name: "Иванов Иван",
+          familyName: "Иванов",
+          givenName: "Иван",
           [field]: "x".repeat(max),
         }).success,
       ).toBe(true);
     }
     expect(
-      CreateExpertRequestSchema.safeParse({ name: "Иванов Иван" }).success,
+      CreateExpertRequestSchema.safeParse({
+        familyName: "Иванов",
+        givenName: "Иван",
+      }).success,
     ).toBe(true);
   });
 
@@ -214,30 +387,36 @@ describe("012 taxonomy — expert authoring contract (SSOT)", () => {
     // an ignored field (012-design §5.1).
     expect(
       CreateExpertRequestSchema.safeParse({
-        name: "Иванов Иван",
+        familyName: "Иванов",
+        givenName: "Иван",
         photoRef: "taxonomy/experts/photos/x.webp",
       }).success,
     ).toBe(false);
     expect(
       CreateExpertRequestSchema.safeParse({
-        name: "Иванов Иван",
+        familyName: "Иванов",
+        givenName: "Иван",
         photoUrl: "https://cdn.example/x.webp",
       }).success,
     ).toBe(false);
     // `mediaAction` is a PATCH-only verb: there is nothing to clear on create.
     expect(
       CreateExpertRequestSchema.safeParse({
-        name: "Иванов Иван",
+        familyName: "Иванов",
+        givenName: "Иван",
         mediaAction: "clear",
       }).success,
     ).toBe(false);
     expect(
       UpdateExpertRequestSchema.safeParse({ mediaAction: "clear" }).success,
     ).toBe(true);
-    // There is NO required platform-user link, so no such field is accepted.
+    // The optional User link must be a canonical UUID.
     expect(
-      CreateExpertRequestSchema.safeParse({ name: "Иванов Иван", userId: "u1" })
-        .success,
+      CreateExpertRequestSchema.safeParse({
+        familyName: "Иванов",
+        givenName: "Иван",
+        userId: "u1",
+      }).success,
     ).toBe(false);
   });
 
@@ -249,10 +428,10 @@ describe("012 taxonomy — expert authoring contract (SSOT)", () => {
       UpdateExpertRequestSchema.safeParse({ affiliation: null, bio: null })
         .success,
     ).toBe(true);
-    // …but the display label is only ever removed by #1306's editorial removal.
-    expect(UpdateExpertRequestSchema.safeParse({ name: null }).success).toBe(
-      false,
-    );
+    // …but required structured names are only removed by editorial removal.
+    expect(
+      UpdateExpertRequestSchema.safeParse({ familyName: null }).success,
+    ).toBe(false);
   });
 
   it("012 EARS-2: when an expert has no photo, initials shall be derived deterministically from the name", () => {
@@ -272,6 +451,10 @@ describe("012 taxonomy — expert authoring contract (SSOT)", () => {
       id: "11111111-1111-4111-8111-111111111111",
       slug: "ivanov-ivan",
       name: "Иванов Иван",
+      familyName: "Иванов",
+      givenName: "Иван",
+      patronymic: null,
+      userId: null,
       professionalRole: "Кардиолог",
       credentials: "д.м.н.",
       affiliation: "НМИЦ кардиологии",
@@ -280,7 +463,6 @@ describe("012 taxonomy — expert authoring contract (SSOT)", () => {
       initials: "ИИ",
       status: "draft" as const,
       firstPublishedAt: null,
-      slugEditable: true,
       contentRemovedAt: null,
       version: 1,
       createdAt: new Date().toISOString(),
@@ -297,12 +479,14 @@ describe("012 taxonomy — expert authoring contract (SSOT)", () => {
       false,
     );
     expect(
-      CreateDirectionRequestSchema.safeParse({ title: "x".repeat(121) }).success,
+      CreateDirectionRequestSchema.safeParse({ title: "x".repeat(121) })
+        .success,
     ).toBe(false);
     // 120 is the direction's own bound (012-design §2.2) — deliberately tighter
     // than the 160 a project title or an expert name allows.
     expect(
-      CreateDirectionRequestSchema.safeParse({ title: "x".repeat(120) }).success,
+      CreateDirectionRequestSchema.safeParse({ title: "x".repeat(120) })
+        .success,
     ).toBe(true);
     expect(
       CreateDirectionRequestSchema.safeParse({ title: "Кардиология" }).success,
@@ -319,9 +503,9 @@ describe("012 taxonomy — expert authoring contract (SSOT)", () => {
         CreateDirectionRequestSchema.safeParse({ title: "Кардиология", slug })
           .success,
       ).toBe(false);
-      expect(
-        UpdateDirectionRequestSchema.safeParse({ slug }).success,
-      ).toBe(false);
+      expect(UpdateDirectionRequestSchema.safeParse({ slug }).success).toBe(
+        false,
+      );
     }
     expect(
       CreateDirectionRequestSchema.parse({ title: "Детская кардиология" }),
@@ -340,12 +524,16 @@ describe("012 taxonomy — expert authoring contract (SSOT)", () => {
       { kind: "school" },
     ]) {
       expect(
-        CreateDirectionRequestSchema.safeParse({ title: "Кардиология", ...extra })
-          .success,
+        CreateDirectionRequestSchema.safeParse({
+          title: "Кардиология",
+          ...extra,
+        }).success,
       ).toBe(false);
       expect(
-        UpdateDirectionRequestSchema.safeParse({ title: "Кардиология", ...extra })
-          .success,
+        UpdateDirectionRequestSchema.safeParse({
+          title: "Кардиология",
+          ...extra,
+        }).success,
       ).toBe(false);
     }
   });
@@ -358,9 +546,9 @@ describe("012 taxonomy — expert authoring contract (SSOT)", () => {
     ).toBe(true);
     // `title` is the direction's only descriptive value and NOT NULL in the DB,
     // so it is never cleared.
-    expect(UpdateDirectionRequestSchema.safeParse({ title: null }).success).toBe(
-      false,
-    );
+    expect(
+      UpdateDirectionRequestSchema.safeParse({ title: null }).success,
+    ).toBe(false);
   });
 
   it("012 EARS-3: when an admin direction detail is projected, it shall carry exactly the curated identity", () => {
@@ -391,7 +579,7 @@ describe("012 taxonomy — expert authoring contract (SSOT)", () => {
 // the matrix is the optional absolute-HTTPS website: everything else is the
 // shared §2.2 vocabulary the sibling entities already prove.
 describe("012 taxonomy — partner authoring contract (SSOT)", () => {
-  it("012 EARS-4: when a partner create carries a title, the system shall accept it with an optional website and slug", () => {
+  it("012 EARS-4: when a partner create carries a title, the system shall accept it with an optional website", () => {
     expect(
       CreatePartnerRequestSchema.parse({ title: "  Фармкомпания  " }),
     ).toEqual({ title: "Фармкомпания" });
@@ -399,11 +587,24 @@ describe("012 taxonomy — partner authoring contract (SSOT)", () => {
       CreatePartnerRequestSchema.parse({
         title: "Фармкомпания",
         websiteUrl: "https://example.org/ru/about?x=1#top",
-        slug: "farmkompaniya",
       }).websiteUrl,
       // Stored VERBATIM — path, query and fragment survive, because a sponsor's
       // URL is their identity and a "tidied" one may point elsewhere.
     ).toBe("https://example.org/ru/about?x=1#top");
+  });
+
+  it("EARS-20: when partner create or update carries a slug, the schema shall reject the client-owned identity", () => {
+    expect(
+      CreatePartnerRequestSchema.safeParse({
+        title: "System-owned address",
+        slug: "client-owned-address",
+      }).success,
+    ).toBe(false);
+    expect(
+      UpdatePartnerRequestSchema.safeParse({
+        slug: "client-owned-address",
+      }).success,
+    ).toBe(false);
   });
 
   it("012 EARS-4: when the website is not an absolute https URL, the system shall reject it", () => {
@@ -418,8 +619,10 @@ describe("012 taxonomy — partner authoring contract (SSOT)", () => {
       "",
     ]) {
       expect(
-        CreatePartnerRequestSchema.safeParse({ title: "Партнёр", websiteUrl: bad })
-          .success,
+        CreatePartnerRequestSchema.safeParse({
+          title: "Партнёр",
+          websiteUrl: bad,
+        }).success,
         `websiteUrl ${JSON.stringify(bad)} must be refused`,
       ).toBe(false);
     }
@@ -489,13 +692,13 @@ describe("012 taxonomy — partner authoring contract (SSOT)", () => {
       websiteUrl: null,
       status: "draft" as const,
       firstPublishedAt: null,
-      slugEditable: true,
       version: 1,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
     const parsed = PartnerAdminDetailSchema.parse(detail);
     expect(parsed).not.toHaveProperty("logoRef");
+    expect(parsed).not.toHaveProperty("slugEditable");
     expect(PartnerAdminListItemSchema.parse(detail)).not.toHaveProperty(
       "logoUrl",
     );
@@ -559,8 +762,10 @@ describe("012 EARS-6 — event↔project relationship contract (SSOT)", () => {
       { relationshipId: "44444444-4444-4444-8444-444444444444" },
     ]) {
       expect(
-        PublicProjectSummarySchema.safeParse({ ...publicProjectSummary, ...leak })
-          .success,
+        PublicProjectSummarySchema.safeParse({
+          ...publicProjectSummary,
+          ...leak,
+        }).success,
         `public project summary must refuse ${JSON.stringify(leak)}`,
       ).toBe(false);
     }
@@ -597,9 +802,9 @@ describe("012 EARS-6 — event↔project relationship contract (SSOT)", () => {
       false,
     );
     // An unknown query key is a caller mistake, not a silently ignored field.
-    expect(
-      PublicCursorQuerySchema.safeParse({ offset: 10 }).success,
-    ).toBe(false);
+    expect(PublicCursorQuerySchema.safeParse({ offset: 10 }).success).toBe(
+      false,
+    );
   });
 
   it("012 EARS-6: when an affected row is previewed, the schema shall require an operator-readable title and refuse a draft status", () => {
@@ -695,7 +900,8 @@ describe("012 EARS-6 — event↔project relationship contract (SSOT)", () => {
     };
     expect(EventProjectAdminDetailSchema.parse(detail)).toEqual(detail);
     expect(
-      EventProjectAdminDetailSchema.safeParse({ ...detail, version: 0 }).success,
+      EventProjectAdminDetailSchema.safeParse({ ...detail, version: 0 })
+        .success,
     ).toBe(false);
     expect(
       EventProjectAdminDetailSchema.safeParse({ ...detail, status: "draft" })

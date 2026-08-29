@@ -24,7 +24,12 @@ The DS Platform admin app (Next.js 16 + **Refine** CSR shell, ADR-0004 §3/§5).
 - **One error mapping** — `lib/taxonomy-errors.ts` maps the §5.3 `errorCode` to the RU sentence, reading the resource namespace off the caller's fallback key so each vertical says the refusal in its own nouns.
 - **Tabbed detail, «Основное» only** — Stage-A composition B (#1282). Publication and relationship tabs arrive with their own slices; an empty placeholder tab is never rendered.
 
-The expert form adds two things the project form does not have: only the display **name** is required (the API accepts a draft carrying nothing else, so the four publish-required fields say so under the box instead of blocking the save), and the no-photo avatar renders the **server-computed** `initials` — the admin never re-derives them, so this avatar, the public projection (#1294) and the speaker projection (#1290) cannot disagree about the same person.
+The Expert form authors required family/given names plus optional patronymic and
+may explicitly link one eligible existing User through the closed, server-backed
+Combobox (or unlink it later). The server owns the collision-safe slug: no slug
+input exists; detail renders the generated public URL with one copy action. The
+no-photo avatar still renders the **server-computed** `initials`, so the admin,
+public projection (#1294) and speaker projection (#1290) cannot disagree.
 
 The direction form is the thinnest of the three — the operator authors a title, while the retained slug/address is derived once by the API. There is no description box or dropzone because a direction has neither; event classification selects an existing, non-retired direction from `/directions`, never an inline-created value.
 

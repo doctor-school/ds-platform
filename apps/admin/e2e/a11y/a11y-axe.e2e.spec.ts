@@ -73,10 +73,17 @@ async function createEventForScan(page: Page): Promise<string> {
   return page.url().split("/").pop()!;
 }
 
-/** A draft expert — a name is the only value the create form demands (012 §2.2). */
-async function createExpertForScan(page: Page, name: string): Promise<string> {
+/** A draft Expert with the structured identity required by 012 EARS-20. */
+async function createExpertForScan(
+  page: Page,
+  familyName: string,
+  givenName: string,
+  patronymic: string,
+): Promise<string> {
   await page.goto("/experts/create");
-  await page.getByTestId("expert-name").fill(name);
+  await page.locator("#familyName").fill(familyName);
+  await page.locator("#givenName").fill(givenName);
+  await page.locator("#patronymic").fill(patronymic);
   await page.getByTestId("submit-expert").click();
   await page.waitForURL(/\/experts\/[0-9a-f-]{36}$/);
   return page.url().split("/").pop()!;
@@ -200,7 +207,7 @@ test.describe("007 EARS-11 axe-core a11y scan of the admin event surface", () =>
     for (const theme of THEMES) await scan(page, theme);
   });
 
-  // 012 EARS-2 (#1284) — the expert vertical. It reuses the shared list shell and
+  // 012 EARS-20 (#1606) — the expert vertical. It reuses the shared list shell and
   // the dropzone the project scan already covers, but it adds one control class no
   // other admin surface renders: the initials AVATAR (a `primary-action` fill with
   // `primary-foreground` text, carrying an `aria-label` as its only accessible
@@ -220,7 +227,9 @@ test.describe("007 EARS-11 axe-core a11y scan of the admin event surface", () =>
 
     // A real created row, so the detail scan covers the tab bar, the populated
     // counters and — the point of this test — the rendered initials avatar.
-    await page.locator("#name").fill(`Пётр Аксёнов ${Date.now()}`);
+    await page.locator("#familyName").fill(`Аксёнов-${Date.now()}`);
+    await page.locator("#givenName").fill("Пётр");
+    await page.locator("#patronymic").fill("Ильич");
     await page.locator("#professionalRole").fill("Кардиолог");
     await page.locator("#bio").fill("Биография для скана доступности.");
     await page.getByTestId("submit-expert").click();
@@ -260,7 +269,9 @@ test.describe("007 EARS-11 axe-core a11y scan of the admin event surface", () =>
     // A real created row, so the detail scan covers the tab bar and the dropzone's
     // EMPTY slot — the state that has no avatar behind it.
     await page.getByTestId("partner-website-url").fill("https://example.com");
-    await page.getByTestId("partner-title").fill(`Axe-скан партнёр ${Date.now()}`);
+    await page
+      .getByTestId("partner-title")
+      .fill(`Axe-скан партнёр ${Date.now()}`);
     await page.getByTestId("submit-partner").click();
     await page.waitForURL(/\/partners\/[0-9a-f-]{36}$/);
     await page.getByTestId("partner-form").waitFor({ state: "visible" });
@@ -323,8 +334,11 @@ test.describe("007 EARS-11 axe-core a11y scan of the admin event surface", () =>
   }) => {
     await loginAsAdmin(page);
     const eventId = await createEventForScan(page);
-    const expertName = `Axe-скан эксперт ${Date.now()}`;
-    await createExpertForScan(page, expertName);
+    const familyName = `Аксёнов-${Date.now()}`;
+    const givenName = "Пётр";
+    const patronymic = "Ильич";
+    const expertName = `${familyName} ${givenName} ${patronymic}`;
+    await createExpertForScan(page, familyName, givenName, patronymic);
 
     // The EMPTY tab first — «пока не привязан ни один эксперт» plus the retired
     // toggle is a resting state a populated panel would hide.
@@ -348,7 +362,7 @@ test.describe("007 EARS-11 axe-core a11y scan of the admin event surface", () =>
 
     // A real link, so the row's badges and its action pair are scanned as state,
     // not as an empty-list placeholder.
-    await page.getByTestId("event-expert-search").fill(expertName);
+    await page.getByTestId("event-expert-search").fill(familyName);
     await expect(
       page.getByTestId("event-expert-select").locator("option", {
         hasText: expertName,
@@ -360,7 +374,9 @@ test.describe("007 EARS-11 axe-core a11y scan of the admin event surface", () =>
     await page.getByTestId("event-expert-add-role").fill("Модератор");
     await page.getByTestId("event-expert-add-position").fill("1");
     await page.getByTestId("event-expert-add-submit").click();
-    await page.getByTestId("event-experts-active").waitFor({ state: "visible" });
+    await page
+      .getByTestId("event-experts-active")
+      .waitFor({ state: "visible" });
     for (const theme of THEMES) await scan(page, theme);
 
     // The retire `AlertDialog` — the must-be-answered variant on this surface.
@@ -393,14 +409,19 @@ test.describe("007 EARS-11 axe-core a11y scan of the admin event surface", () =>
       await page.locator("#description").fill("Описание для скана связей.");
       await page.getByTestId("submit-project").click();
       await page.waitForURL(/\/projects\/[0-9a-f-]{36}$/);
-      projects.push({ title: `Axe-скан связи ${suffix} ${stamp}`, url: page.url() });
+      projects.push({
+        title: `Axe-скан связи ${suffix} ${stamp}`,
+        url: page.url(),
+      });
     }
     const eventId = await createEventForScan(page);
 
     // The RESTING tab: the empty list, the picker and the no-delete note.
     await page.goto(`/events/${eventId}`);
     await page.getByTestId("tab-projects").click();
-    await page.getByTestId("event-projects-panel").waitFor({ state: "visible" });
+    await page
+      .getByTestId("event-projects-panel")
+      .waitFor({ state: "visible" });
     for (const theme of THEMES) await scan(page, theme);
 
     // The picker NARROWED to one match and holding a selection — the state whose
@@ -414,13 +435,18 @@ test.describe("007 EARS-11 axe-core a11y scan of the admin event surface", () =>
     // A real linked row: the title/slug pair plus the status `Badge` and the
     // transition trigger, on the success-`Alert` surface.
     await page.getByTestId("event-project-link-submit").click();
-    await page.getByTestId("event-projects-notice").waitFor({ state: "visible" });
+    await page
+      .getByTestId("event-projects-notice")
+      .waitFor({ state: "visible" });
     for (const theme of THEMES) await scan(page, theme);
 
     // The OPEN impact dialog, on its LOADED preview — the point of this test. The
     // scan waits for the affected list rather than the dialog shell, so it never
     // certifies the loading placeholder in place of the rows.
-    await page.locator('[data-testid^="event-project-retire-"]').first().click();
+    await page
+      .locator('[data-testid^="event-project-retire-"]')
+      .first()
+      .click();
     await page
       .locator('[data-testid$="-impact"]')
       .first()
@@ -468,13 +494,17 @@ test.describe("007 EARS-11 axe-core a11y scan of the admin event surface", () =>
       .getByTestId("event-projects-show-retired")
       .locator("xpath=ancestor::label[1]")
       .click();
-    await page.getByTestId("event-projects-retired").waitFor({ state: "visible" });
+    await page
+      .getByTestId("event-projects-retired")
+      .waitFor({ state: "visible" });
     for (const theme of THEMES) await scan(page, theme);
 
     // The project side: the same list without the authoring form (§5.1).
     await page.goto(projects[0].url);
     await page.getByTestId("tab-events").click();
-    await page.getByTestId("event-projects-panel").waitFor({ state: "visible" });
+    await page
+      .getByTestId("event-projects-panel")
+      .waitFor({ state: "visible" });
     for (const theme of THEMES) await scan(page, theme);
   });
 });

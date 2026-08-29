@@ -179,6 +179,8 @@ export function taxonomyErrorKey(error: unknown, fallbackKey: string): string {
   }
 
   switch (code) {
+    case "USER_EXPERT_CONFLICT":
+      return `${ns}.errors.userConflict`;
     case "SLUG_CONFLICT":
       return `${ns}.errors.slugConflict`;
     case "SLUG_IMMUTABLE":

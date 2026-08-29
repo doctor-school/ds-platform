@@ -50,9 +50,6 @@ export default function CreatePartnerPage() {
             const vars: CreatePartnerVars = {
               title: values.title,
               ...(values.websiteUrl ? { websiteUrl: values.websiteUrl } : {}),
-              // An empty box means "generate it" — the API owns that decision, so
-              // the field is omitted rather than sent as "".
-              ...(values.slug ? { slug: values.slug } : {}),
               logo: values.logo,
             };
             create(

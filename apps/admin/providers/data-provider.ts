@@ -1,6 +1,7 @@
 "use client";
 
 import type { DataProvider, HttpError } from "@refinedev/core";
+import type { components } from "@ds/api-client";
 import { adminCsrfHeaders } from "@/lib/admin-auth";
 import {
   ADMIN_LIST_PAGE_SIZE_MAX,
@@ -136,6 +137,10 @@ export type UpdateExpertVars = UpdateExpertRequest & {
   version: number;
 };
 
+export type EligibleExpertUserList =
+  components["schemas"]["EligibleExpertUserListDto"];
+export type EligibleExpertUserOption = EligibleExpertUserList["data"][number];
+
 /** Partner create variables: the authored fields plus an optional logo file (#1286). */
 export type CreatePartnerVars = CreatePartnerRequest & { logo?: File | null };
 /**
@@ -219,6 +224,32 @@ async function toHttpError(res: Response): Promise<TaxonomyHttpError> {
     ...(traceId ? { traceId } : {}),
     ...(fieldErrors ? { fieldErrors } : {}),
   };
+}
+
+/** One bounded server page for the EARS-19 User selector. */
+export async function fetchEligibleExpertUsers({
+  currentExpertId,
+  q = "",
+  page = 1,
+  pageSize = 25,
+}: {
+  currentExpertId?: string;
+  q?: string;
+  page?: number;
+  pageSize?: number;
+} = {}): Promise<EligibleExpertUserList> {
+  const params = new URLSearchParams({
+    page: String(page),
+    pageSize: String(pageSize),
+  });
+  if (q.trim()) params.set("q", q.trim());
+  if (currentExpertId) params.set("currentExpertId", currentExpertId);
+  const res = await fetch(
+    `${ADMIN_BASE}/experts/eligible-users?${params.toString()}`,
+    { credentials: "include", headers: { accept: "application/json" } },
+  );
+  if (!res.ok) throw await toHttpError(res);
+  return (await res.json()) as EligibleExpertUserList;
 }
 
 /** Split the authoring variables into the JSON payload and the file part. */

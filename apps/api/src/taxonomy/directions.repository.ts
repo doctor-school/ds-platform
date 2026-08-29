@@ -7,7 +7,6 @@ import {
   eq,
   ilike,
   isNull,
-  ne,
   or,
   sql,
 } from "drizzle-orm";
@@ -38,13 +37,11 @@ export interface DirectionInsert {
 }
 
 /**
- * The field patch a PATCH applies. `undefined` means unchanged. `slug` remains
- * server-owned: the service may re-derive it before first publication, but no
- * request contract accepts an authored address (017-design §9.3).
+ * The field patch a PATCH applies. `undefined` means unchanged. Slug never
+ * appears: it is generated once and retained for the row's lifetime.
  */
 export interface DirectionPatch {
   title?: string;
-  slug?: string;
 }
 
 /**
@@ -162,30 +159,17 @@ export class DirectionsRepository {
     );
   }
 
-  /** {@link slugTaken} against the pool — the optimistic pre-flight read. */
-  slugTakenAnywhere(slug: string, exceptId?: string): Promise<boolean> {
-    return this.slugTaken(this.db, slug, exceptId);
-  }
-
   /**
-   * Whether `slug` is held by any retained row other than `exceptId` — a retired
+   * Whether `slug` is held by any retained row — a retired
    * direction included (012-design §2.1): nothing in 012 is physically deleted, so a
    * retired direction permanently keeps its slug and the URL can never later resolve
-   * to a different subject. Checked before the write for a naming 409; the
-   * unique index remains the final race guard.
+   * to a different subject.
    */
-  async slugTaken(
-    tx: Tx | Db,
-    slug: string,
-    exceptId?: string,
-  ): Promise<boolean> {
-    const where = exceptId
-      ? and(eq(directions.slug, slug), ne(directions.id, exceptId))
-      : eq(directions.slug, slug);
+  async slugTaken(tx: Tx | Db, slug: string): Promise<boolean> {
     const [row] = await tx
       .select({ id: directions.id })
       .from(directions)
-      .where(where)
+      .where(eq(directions.slug, slug))
       .limit(1);
     return Boolean(row);
   }

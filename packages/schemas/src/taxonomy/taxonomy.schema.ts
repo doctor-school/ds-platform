@@ -27,13 +27,12 @@ export const SLUG_REGEX = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 /** Canonical UUID text, forbidden as a slug so `/:idOrSlug` stays unambiguous. */
 export const CANONICAL_UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-export const SLUG_MAX = 160;
+export const SLUG_MAX = 80;
 
 /**
- * A client-authored slug. Rejects both the wrong grammar and the id namespace
- * (012-design §2.1): a slug that parses as a canonical UUID would make
- * `/:idOrSlug` ambiguous, so it is a 400 before any row is written — never
- * silently rewritten into something else.
+ * A system-owned slug. The shared response contract rejects both the wrong
+ * grammar and the id namespace (012-design §2.1): a canonical UUID would make
+ * `/:idOrSlug` ambiguous, while mutation inputs expose no slug field at all.
  */
 export const SlugSchema = z
   .string()
@@ -112,15 +111,13 @@ const ProjectDescriptionSchema = z
  * PATCH-only verb.
  *
  * `title` and `kind` are the required display identity; `description` is
- * publish-required and may stay null on a draft; `slug` is optional and
- * server-generated from the title when omitted.
+ * publish-required and may stay null on a draft. Slug is always server-owned.
  */
 export const CreateProjectRequestSchema = z
   .object({
     kind: ProjectKindSchema,
     title: ProjectTitleSchema,
     description: ProjectDescriptionSchema.nullish(),
-    slug: SlugSchema.optional(),
   })
   .strict();
 export type CreateProjectRequest = z.infer<typeof CreateProjectRequestSchema>;
@@ -129,17 +126,14 @@ export type CreateProjectRequest = z.infer<typeof CreateProjectRequestSchema>;
  * `PATCH /v1/admin/projects/:id` — edit the same row.
  *
  * Omission means unchanged; an explicit `null` clears an optional or
- * still-incomplete draft field (012-design §2.2). `slug` is accepted only while
- * `first_published_at IS NULL` — the server refuses a later change with 409
- * `SLUG_IMMUTABLE` rather than validating it away here, because the refusal
- * depends on row state, not on request shape.
+ * still-incomplete draft field (012-design §2.2). Slug is absent because its
+ * stable public identity is generated and retained by the server.
  */
 export const UpdateProjectRequestSchema = z
   .object({
     kind: ProjectKindSchema.optional(),
     title: ProjectTitleSchema.optional(),
     description: ProjectDescriptionSchema.nullish(),
-    slug: SlugSchema.optional(),
     mediaAction: MediaActionSchema.optional(),
   })
   .strict();
@@ -152,7 +146,7 @@ export type UpdateProjectRequest = z.infer<typeof UpdateProjectRequestSchema>;
  */
 export const ProjectAdminDetailSchema = z.object({
   id: z.string(),
-  slug: z.string(),
+  slug: SlugSchema,
   kind: ProjectKindSchema,
   title: z.string(),
   description: z.string().nullable(),
@@ -160,8 +154,6 @@ export const ProjectAdminDetailSchema = z.object({
   status: TaxonomyStatusSchema,
   /** Null until the first publish; once set, the slug is permanently locked. */
   firstPublishedAt: z.string().nullable(),
-  /** True iff the slug may still be edited — the UI reads this, never re-derives it. */
-  slugEditable: z.boolean(),
   version: z.number().int().positive(),
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -191,8 +183,8 @@ export type ProjectAdminList = z.infer<typeof ProjectAdminListSchema>;
 
 // ── Expert authoring DTOs (012-design §2.2 matrix; EARS-2, #1284) ───────────
 
-export const EXPERT_NAME_MIN = 1;
-export const EXPERT_NAME_MAX = 160;
+export const EXPERT_PERSON_NAME_MIN = 1;
+export const EXPERT_PERSON_NAME_MAX = 80;
 export const EXPERT_PROFESSIONAL_ROLE_MIN = 1;
 export const EXPERT_PROFESSIONAL_ROLE_MAX = 160;
 export const EXPERT_CREDENTIALS_MIN = 1;
@@ -202,11 +194,11 @@ export const EXPERT_AFFILIATION_MAX = 240;
 export const EXPERT_BIO_MIN = 1;
 export const EXPERT_BIO_MAX = 4000;
 
-const ExpertNameSchema = z
+const ExpertPersonNameSchema = z
   .string()
   .trim()
-  .min(EXPERT_NAME_MIN)
-  .max(EXPERT_NAME_MAX);
+  .min(EXPERT_PERSON_NAME_MIN)
+  .max(EXPERT_PERSON_NAME_MAX);
 const ExpertProfessionalRoleSchema = z
   .string()
   .trim()
@@ -236,19 +228,20 @@ const ExpertBioSchema = z
  * an attempt to supply storage authority is 400 `VALIDATION_FAILED` rather than
  * a silently ignored field. `mediaAction` is PATCH-only and absent here.
  *
- * `name` is the required display identity (§2.2 — display labels are required
- * on create); every other public field is publish-required and may stay null
- * while the row is a draft. An expert has NO required platform-user link: there
- * is no `userId` field to supply, by design (EARS-2).
+ * Structured family/given names are required on create; `patronymic` and the
+ * one-to-one `userId` convergence link are optional. The system derives both
+ * display name and slug; mutation input cannot author either one (EARS-19/20).
  */
 export const CreateExpertRequestSchema = z
   .object({
-    name: ExpertNameSchema,
+    familyName: ExpertPersonNameSchema,
+    givenName: ExpertPersonNameSchema,
+    patronymic: ExpertPersonNameSchema.nullish(),
+    userId: z.uuid().optional(),
     professionalRole: ExpertProfessionalRoleSchema.nullish(),
     credentials: ExpertCredentialsSchema.nullish(),
     affiliation: ExpertAffiliationSchema.nullish(),
     bio: ExpertBioSchema.nullish(),
-    slug: SlugSchema.optional(),
   })
   .strict();
 export type CreateExpertRequest = z.infer<typeof CreateExpertRequestSchema>;
@@ -257,20 +250,21 @@ export type CreateExpertRequest = z.infer<typeof CreateExpertRequestSchema>;
  * `PATCH /v1/admin/experts/:id` — edit the same row.
  *
  * Omission means unchanged; an explicit `null` clears an optional or
- * still-incomplete draft field (012-design §2.2). `name` accepts no null: the
- * display label is only ever removed by §2.4's editorial removal (#1306), never
- * by an ordinary edit. `slug` is accepted only while `first_published_at IS
- * NULL` — the refusal depends on row state, so it is a 409 `SLUG_IMMUTABLE`
- * from the service, not a shape rule here.
+ * still-incomplete draft field (012-design §2.2). Family/given names accept no
+ * null: only §2.4 editorial removal may clear them. `userId: null` is the one
+ * explicit unlink command; omission keeps the current link. Slug stays absent.
  */
 export const UpdateExpertRequestSchema = z
   .object({
-    name: ExpertNameSchema.optional(),
+    familyName: ExpertPersonNameSchema.optional(),
+    givenName: ExpertPersonNameSchema.optional(),
+    patronymic: ExpertPersonNameSchema.nullish(),
+    /** Omission leaves the link unchanged; null explicitly unlinks. */
+    userId: z.uuid().nullable().optional(),
     professionalRole: ExpertProfessionalRoleSchema.nullish(),
     credentials: ExpertCredentialsSchema.nullish(),
     affiliation: ExpertAffiliationSchema.nullish(),
     bio: ExpertBioSchema.nullish(),
-    slug: SlugSchema.optional(),
     mediaAction: MediaActionSchema.optional(),
   })
   .strict();
@@ -298,6 +292,18 @@ export function expertInitials(name: string | null): string {
   return letters.join("").toLocaleUpperCase("ru-RU");
 }
 
+/** Derived display identity; never persisted in `experts`. */
+export function expertDisplayName(input: {
+  familyName: string | null;
+  givenName: string | null;
+  patronymic: string | null;
+}): string | null {
+  if (!input.familyName || !input.givenName) return null;
+  return [input.familyName, input.givenName, input.patronymic]
+    .filter((part): part is string => Boolean(part))
+    .join(" ");
+}
+
 /**
  * The admin detail projection. `photoUrl` is a server-issued signed/CDN URL
  * derived from the stored key at read time — the key itself never crosses the
@@ -308,9 +314,13 @@ export function expertInitials(name: string | null): string {
  */
 export const ExpertAdminDetailSchema = z.object({
   id: z.string(),
-  slug: z.string(),
+  slug: SlugSchema,
   /** Null only on an editorially removed row (#1306); the admin then labels it «[удалён]». */
   name: z.string().nullable(),
+  familyName: z.string().nullable(),
+  givenName: z.string().nullable(),
+  patronymic: z.string().nullable(),
+  userId: z.uuid().nullable(),
   professionalRole: z.string().nullable(),
   credentials: z.string().nullable(),
   affiliation: z.string().nullable(),
@@ -321,8 +331,6 @@ export const ExpertAdminDetailSchema = z.object({
   status: TaxonomyStatusSchema,
   /** Null until the first publish; once set, the slug is permanently locked. */
   firstPublishedAt: z.string().nullable(),
-  /** True iff the slug may still be edited — the UI reads this, never re-derives it. */
-  slugEditable: z.boolean(),
   /** Non-null only after #1306's irreversible editorial removal. */
   contentRemovedAt: z.string().nullable(),
   version: z.number().int().positive(),
@@ -352,6 +360,60 @@ export const ExpertAdminListSchema = z.object({
 });
 export type ExpertAdminList = z.infer<typeof ExpertAdminListSchema>;
 
+/** Maximum selector page size: bounded like every admin combobox (§4.1). */
+export const ELIGIBLE_EXPERT_USER_PAGE_SIZE_MAX = 100;
+
+/**
+ * `GET /v1/admin/experts/eligible-users` query.
+ *
+ * `currentExpertId` is the edit-form exception: its already-linked User remains
+ * selectable while Users owned by any other retained Expert stay absent. Search
+ * is deliberately limited to the two operator-facing labels below; no Expert
+ * name, phone, IdP subject or other identity heuristic participates.
+ */
+export const EligibleExpertUserQuerySchema = z
+  .object({
+    q: z.string().trim().min(1).max(254).optional(),
+    page: z.coerce.number().int().positive().default(1),
+    pageSize: z.coerce
+      .number()
+      .int()
+      .positive()
+      .max(ELIGIBLE_EXPERT_USER_PAGE_SIZE_MAX)
+      .default(20),
+    currentExpertId: z.uuid().optional(),
+  })
+  .strict();
+export type EligibleExpertUserQuery = z.infer<
+  typeof EligibleExpertUserQuerySchema
+>;
+
+/** Minimal platform-admin option label; excludes separate contact fields, IdP subject and roles. */
+export const EligibleExpertUserOptionSchema = z
+  .object({
+    id: z.uuid(),
+    displayName: z.string().nullable(),
+    /** Guaranteed by `users_email_or_phone`: email when present, otherwise phone. */
+    identifier: z.string().min(1),
+  })
+  .strict();
+export type EligibleExpertUserOption = z.infer<
+  typeof EligibleExpertUserOptionSchema
+>;
+
+/** Stable offset-paged selector envelope (ADR-0002 admin-list convention). */
+export const EligibleExpertUserListSchema = z
+  .object({
+    data: z.array(EligibleExpertUserOptionSchema),
+    total: z.number().int().nonnegative(),
+    page: z.number().int().positive(),
+    pageSize: z.number().int().positive(),
+  })
+  .strict();
+export type EligibleExpertUserList = z.infer<
+  typeof EligibleExpertUserListSchema
+>;
+
 // ── Direction authoring DTOs (012-design §2.2 matrix; EARS-3, #1285) ────────────
 
 export const DIRECTION_TITLE_MIN = 1;
@@ -378,8 +440,8 @@ const DirectionTitleSchema = z
  * admin believe it stored something. 400 `VALIDATION_FAILED` instead.
  *
  * `slug` is NOT part of this contract (017-design §9.3). «Адрес страницы» is
- * derived from the Russian title by the server and frozen on first publish; it
- * is not an editorial decision, and it is rendered nowhere in the admin. Under
+ * derived from the Russian title by the server and retained for the row's
+ * lifetime; it is not an editorial decision. Under
  * `.strict()` a posted `slug` is therefore a 400 rather than a silently honoured
  * override — the derivation has exactly one implementation, and a client cannot
  * opt out of it.
@@ -389,23 +451,26 @@ export const CreateDirectionRequestSchema = z
     title: DirectionTitleSchema,
   })
   .strict();
-export type CreateDirectionRequest = z.infer<typeof CreateDirectionRequestSchema>;
+export type CreateDirectionRequest = z.infer<
+  typeof CreateDirectionRequestSchema
+>;
 
 /**
  * `PATCH /v1/admin/directions/:id` — edit the same row.
  *
  * Omission means unchanged; `title` does not accept `null` (it is the row's only
  * descriptive value and NOT NULL in the DB). There is no `slug` here either: the
- * address never arrives from the operator, so the identity of a published
- * direction cannot move and the old 409 `SLUG_IMMUTABLE` path is unreachable
- * from this surface by construction rather than by refusal.
+ * address never arrives from the operator, so row identity stays stable by
+ * construction rather than by a publication-state refusal.
  */
 export const UpdateDirectionRequestSchema = z
   .object({
     title: DirectionTitleSchema.optional(),
   })
   .strict();
-export type UpdateDirectionRequest = z.infer<typeof UpdateDirectionRequestSchema>;
+export type UpdateDirectionRequest = z.infer<
+  typeof UpdateDirectionRequestSchema
+>;
 
 /**
  * The admin detail projection. `version` backs the ETag the next PATCH must
@@ -419,7 +484,7 @@ export type UpdateDirectionRequest = z.infer<typeof UpdateDirectionRequestSchema
  */
 export const DirectionAdminDetailSchema = z.object({
   id: z.string(),
-  slug: z.string(),
+  slug: SlugSchema,
   title: z.string(),
   status: TaxonomyStatusSchema,
   /** Null until the first publish; once set, the derived slug is permanently frozen. */
@@ -439,7 +504,9 @@ export const DirectionAdminListItemSchema = DirectionAdminDetailSchema.pick({
   version: true,
   updatedAt: true,
 });
-export type DirectionAdminListItem = z.infer<typeof DirectionAdminListItemSchema>;
+export type DirectionAdminListItem = z.infer<
+  typeof DirectionAdminListItemSchema
+>;
 
 /** Offset/page admin list envelope (ADR-0002 — admin pagination is offset-based). */
 export const DirectionAdminListSchema = z.object({
@@ -513,7 +580,6 @@ export const CreatePartnerRequestSchema = z
   .object({
     title: PartnerTitleSchema,
     websiteUrl: PartnerWebsiteUrlSchema.nullish(),
-    slug: SlugSchema.optional(),
   })
   .strict();
 export type CreatePartnerRequest = z.infer<typeof CreatePartnerRequestSchema>;
@@ -523,15 +589,13 @@ export type CreatePartnerRequest = z.infer<typeof CreatePartnerRequestSchema>;
  *
  * Omission means unchanged; an explicit `null` clears the optional website.
  * `title` accepts no null: it is the row's display identity and NOT NULL in the
- * DB. `slug` is accepted only while `first_published_at IS NULL` — the refusal
- * depends on row state, so it is a 409 `SLUG_IMMUTABLE` from the service, not a
- * shape rule here. `mediaAction: "clear"` drops the logo.
+ * DB. Slug is absent because its stable public identity is generated and
+ * retained by the server. `mediaAction: "clear"` drops the logo.
  */
 export const UpdatePartnerRequestSchema = z
   .object({
     title: PartnerTitleSchema.optional(),
     websiteUrl: PartnerWebsiteUrlSchema.nullish(),
-    slug: SlugSchema.optional(),
     mediaAction: MediaActionSchema.optional(),
   })
   .strict();
@@ -544,15 +608,13 @@ export type UpdatePartnerRequest = z.infer<typeof UpdatePartnerRequestSchema>;
  */
 export const PartnerAdminDetailSchema = z.object({
   id: z.string(),
-  slug: z.string(),
+  slug: SlugSchema,
   title: z.string(),
   logoUrl: z.string().nullable(),
   websiteUrl: z.string().nullable(),
   status: TaxonomyStatusSchema,
   /** Null until the first publish; once set, the slug is permanently locked. */
   firstPublishedAt: z.string().nullable(),
-  /** True iff the slug may still be edited — the UI reads this, never re-derives it. */
-  slugEditable: z.boolean(),
   version: z.number().int().positive(),
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -758,7 +820,7 @@ export const ADMIN_LIST_PAGE_SIZE_MAX = 100;
 export const PublicPartnerSummarySchema = z
   .object({
     id: z.string(),
-    slug: z.string(),
+    slug: SlugSchema,
     title: z.string(),
     logoUrl: z.string().nullable(),
     websiteUrl: z.string().nullable(),
@@ -779,7 +841,7 @@ export type PublicPartnerSummary = z.infer<typeof PublicPartnerSummarySchema>;
 export const PublicProjectSummarySchema = z
   .object({
     id: z.string(),
-    slug: z.string(),
+    slug: SlugSchema,
     kind: ProjectKindSchema,
     title: z.string(),
     description: z.string().nullable(),
@@ -1547,6 +1609,7 @@ export const TAXONOMY_ERROR_CODES = [
   "RESOURCE_NOT_FOUND",
   // 409
   "RELATIONSHIP_CONFLICT",
+  "USER_EXPERT_CONFLICT",
   "SLUG_CONFLICT",
   "SLUG_IMMUTABLE",
   "PUBLISH_REQUIREMENTS_NOT_MET",
@@ -1748,7 +1811,9 @@ export const DIRECTION_ADJACENCY_KINDS = [
   "interdisciplinary",
 ] as const;
 export const DirectionAdjacencyKindSchema = z.enum(DIRECTION_ADJACENCY_KINDS);
-export type DirectionAdjacencyKind = z.infer<typeof DirectionAdjacencyKindSchema>;
+export type DirectionAdjacencyKind = z.infer<
+  typeof DirectionAdjacencyKindSchema
+>;
 
 export const DIRECTION_ADJACENCY_WEIGHT_MIN = 1;
 export const DIRECTION_ADJACENCY_WEIGHT_MAX = 100;

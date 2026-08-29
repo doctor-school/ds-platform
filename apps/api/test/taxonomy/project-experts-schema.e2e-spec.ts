@@ -64,8 +64,8 @@ describe.skipIf(!process.env.DATABASE_URL)(
 
     async function insertExpert(): Promise<string> {
       const { rows } = await pool.query<{ id: string }>(
-        `INSERT INTO experts (slug, name) VALUES ($1, $2) RETURNING id`,
-        [`x-1291-${randomUUID()}`, "Иванова И. И."],
+        `INSERT INTO experts (slug, family_name, given_name) VALUES ($1, $2, $3) RETURNING id`,
+        [`x-1291-${randomUUID()}`, "Иванова", "И. И."],
       );
       createdExperts.push(rows[0]!.id);
       return rows[0]!.id;

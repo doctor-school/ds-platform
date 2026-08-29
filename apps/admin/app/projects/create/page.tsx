@@ -47,9 +47,6 @@ export default function CreateProjectPage() {
               kind: values.kind,
               title: values.title,
               description: values.description,
-              // An empty box means "generate it" — the API owns that decision, so
-              // the field is omitted rather than sent as "".
-              ...(values.slug ? { slug: values.slug } : {}),
               cover: values.cover,
             };
             create(

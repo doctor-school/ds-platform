@@ -21,18 +21,15 @@ import {
   FormLabel,
   FormMessage,
 } from "@ds/design-system/form";
+import { FormDerivedNote } from "@ds/design-system/blocks";
 import {
   ACCEPTED_IMAGE_MIME_TYPES,
   MAX_IMAGE_BYTES,
   PROJECT_DESCRIPTION_MAX,
   PROJECT_KINDS,
   type ProjectAdminDetail,
-  slugifyTaxonomyTitle,
 } from "@ds/schemas";
-import {
-  ProjectFormSchema,
-  type ProjectFormFields,
-} from "@/lib/form-schemas";
+import { ProjectFormSchema, type ProjectFormFields } from "@/lib/form-schemas";
 import { useLocalizedResolver } from "@/lib/use-localized-resolver";
 
 /**
@@ -41,14 +38,8 @@ import { useLocalizedResolver } from "@/lib/use-localized-resolver";
  * slices (#1288/#1291/#1292 and #1287/#1295/#1296). No empty placeholder tab is
  * rendered for them — an inert tab reads as a broken feature, not as a promise.
  *
- * Two behaviours are worth stating:
- *
- * 1. **Slug.** The box shows the generated preview from the title and stays
- *    editable while the project has never been published. Once
- *    `firstPublishedAt` is set the server refuses a change (409 `SLUG_IMMUTABLE`),
- *    so the field renders read-only with the reason — a field that looks editable
- *    and then fails is worse than one that explains itself.
- * 2. **Cover.** The dropzone's checks are preflight only; the API normalizer is
+ * Two behaviours are worth stating: the public address is system-owned and only
+ * exposed as a copyable derived link after save; the dropzone's checks are
  *    authoritative. Picking a file and asking to remove the stored one are
  *    mutually exclusive here because the server refuses both together with
  *    `MEDIA_INPUT_CONFLICT`.
@@ -57,8 +48,6 @@ export interface ProjectFormValues {
   kind: ProjectFormFields["kind"];
   title: string;
   description: string;
-  /** Empty string ⇒ let the server generate the slug from the title. */
-  slug: string;
   cover: File | null;
   /** True when the operator asked to drop the STORED cover (`mediaAction: "clear"`). */
   removeCover: boolean;
@@ -69,7 +58,6 @@ function defaults(detail?: ProjectAdminDetail): ProjectFormFields {
     kind: detail?.kind ?? "school",
     title: detail?.title ?? "",
     description: detail?.description ?? "",
-    slug: detail?.slug ?? "",
   };
 }
 
@@ -99,13 +87,10 @@ export function ProjectForm({
   const [cover, setCover] = useState<File | null>(null);
   const [removeCover, setRemoveCover] = useState(false);
   const [coverError, setCoverError] = useState<string | null>(null);
-
-  const slugEditable = detail ? detail.slugEditable : true;
-  const title = form.watch("title");
-  const slugValue = form.watch("slug");
-  // Live preview of what the server would generate — the SAME function the API
-  // uses (`@ds/schemas`), so the preview cannot promise a different address.
-  const generatedSlug = slugifyTaxonomyTitle(title ?? "");
+  const [copied, setCopied] = useState(false);
+  const publicUrl = detail?.slug
+    ? `https://academy.doctor.school/projects/${detail.slug}`
+    : null;
 
   return (
     <Form {...form}>
@@ -119,7 +104,6 @@ export function ProjectForm({
             kind: fields.kind,
             title: fields.title,
             description: fields.description,
-            slug: fields.slug.trim(),
             cover,
             removeCover,
           });
@@ -150,7 +134,9 @@ export function ProjectForm({
           name="title"
           render={({ field }) => (
             <FormItem>
-              <FormLabel htmlFor="title">{t("projects.fields.title")}</FormLabel>
+              <FormLabel htmlFor="title">
+                {t("projects.fields.title")}
+              </FormLabel>
               <FormControl>
                 <Input id="title" data-testid="project-title" {...field} />
               </FormControl>
@@ -190,38 +176,31 @@ export function ProjectForm({
           )}
         />
 
-        <FormField
-          control={form.control}
-          name="slug"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel htmlFor="slug">{t("projects.fields.slug")}</FormLabel>
-              <FormControl>
-                <Input
-                  id="slug"
-                  data-testid="project-slug"
-                  readOnly={!slugEditable}
-                  aria-readonly={!slugEditable || undefined}
-                  placeholder={generatedSlug}
-                  {...field}
-                />
-              </FormControl>
-              <FormMessage>
-                {slugEditable
-                  ? t("projects.fields.slugPreviewHint")
-                  : t("projects.fields.slugLockedHint")}
-              </FormMessage>
-              {slugEditable && generatedSlug && !slugValue ? (
-                <p
-                  className="text-xs text-muted-foreground"
-                  data-testid="project-slug-preview"
-                >
-                  {generatedSlug}
-                </p>
-              ) : null}
-            </FormItem>
-          )}
-        />
+        <FormDerivedNote
+          title={t("projects.fields.publicLink")}
+          data-testid="project-public-link-note"
+        >
+          <span data-testid="project-public-link">
+            {publicUrl ?? t("projects.fields.publicLinkPending")}
+          </span>
+          {publicUrl ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              data-testid="project-copy-public-link"
+              onClick={() => {
+                void navigator.clipboard
+                  .writeText(publicUrl)
+                  .then(() => setCopied(true));
+              }}
+            >
+              {copied
+                ? t("projects.actions.linkCopied")
+                : t("projects.actions.copyPublicLink")}
+            </Button>
+          ) : null}
+        </FormDerivedNote>
 
         {/* Cover — a File part, not an RHF field, so it is a plain labelled block
             (FormItem/FormLabel require a <FormField> context and throw outside one).
@@ -264,12 +243,18 @@ export function ProjectForm({
             }}
           />
           {coverError ? (
-            <FormError data-testid="project-cover-error">{coverError}</FormError>
+            <FormError data-testid="project-cover-error">
+              {coverError}
+            </FormError>
           ) : null}
         </div>
 
         <div>
-          <Button type="submit" loading={submitting} data-testid="submit-project">
+          <Button
+            type="submit"
+            loading={submitting}
+            data-testid="submit-project"
+          >
             {submitLabel}
           </Button>
         </div>

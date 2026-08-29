@@ -23,7 +23,8 @@ env:
 # so this workflow's 44 declared jobs meant 44 installs (47 executing across
 # both workflows, counting `pr-body-guards.yml`'s six and excluding the three
 # job-level `if: false` placeholders this file carried AT THE TIME — #1236 later
-# activated one of them, `db-drift`, leaving two) — the CI-minutes diet
+# activated `db-drift`; #1618 later consolidated and activated the remaining
+# API/generated pair as one real job) — the CI-minutes diet
 # ADR-0008 §2.1 names as an enabler. The guards themselves are unchanged — only their
 # PACKAGING is:
 #
@@ -36,6 +37,7 @@ env:
 #                          run — #1410, the gap #1407 fell through (BLOCK)
 #   guards-block           the hard-red light guards + primitives-first +
 #                          db-drift                                  (BLOCK)
+#   generated-artifacts    OpenAPI snapshot + api-client freshness    (BLOCK)
 #   guards-warn            the 25 WARN light guards                  (WARN)
 #   ci                     the single required status check
 #
@@ -63,11 +65,11 @@ env:
 # Trade-off, deliberate: batching is fail-fast — the first hard failure in a
 # batch skips its remaining steps, where the old parallel fan-out reported every
 # failure at once. Splitting a batch back out is mechanical (each step already carries
-# its own posture comment). `api-drift`/`generated-artifacts` stay their own
-# jobs: they are `if: false` placeholders that cost no runner time. `db-drift`
-# was the third such placeholder until #1236 activated it — being live, it is a
-# STEP of `guards-block` like every other active light guard, so it pays no
-# checkout/install of its own.
+# its own posture comment). `generated-artifacts` stays its own job because it
+# compiles the full API before deriving both artifacts; `api-drift` was folded
+# into it when the shared generator landed (#1618). `db-drift` was the third
+# placeholder until #1236 activated it — being light, it is a STEP of
+# `guards-block` and pays no checkout/install of its own.
 #
 # ─── PR-time path gating (#1251) ─────────────────────────────────────────────
 # #1235 changed job PACKAGING, not the trigger surface: a docs-only PR still
@@ -79,8 +81,8 @@ env:
 # never registers, and `tools/gh/merge-gate.mjs` treats zero registered
 # check-runs at head as FAIL (skill `merge-when-green` Step 1) — a docs PR would
 # become UNMERGEABLE rather than cheap. So the gate is JOB-level, the same shape
-# `api-drift`/`generated-artifacts` use (a job-level `if:` yielding a SKIPPED
-# job, which the merge gate reads as green):
+# the code-heavy jobs use (a job-level `if:` yielding a SKIPPED job, which the
+# merge gate reads as green):
 #
 #   changes                cheap classifier job — one checkout, no install; emits
 #                          `code=true|false` for the PR's changed-file set
@@ -334,46 +336,21 @@ jobs:
           echo "Postgres did not become ready in time"; docker logs ds-postgres; exit 1
       - run: pnpm exec turbo run test --filter=@ds/api
 
-  # ─── Drift guards from ADR-0006 §7 — GitHub-hosted placeholders ───────
-  # TWO of the three §7 drift rows are still dormant, and each states the ONE
-  # real precondition it is waiting on (#1236 — a gate comment naming an
-  # already-landed precondition is the defect, not the dormancy). They are
-  # `if: false` one-step jobs on `ubuntu-latest`, NOT the pool, and left
-  # un-batched on purpose (#1235): they cost zero wall-time today, and folding
-  # them into a batch would only add some. The third row, `db-drift`, is LIVE as
-  # of #1236 — as a step of the `guards-block` batch below, not a job here, so
-  # it reuses that batch's checkout + install (the same reason every other
-  # active light guard lives there).
-  api-drift:
-    # Enabled when the OpenAPI snapshot artifact (`openapi.snapshot.json`) lands
-    # — nothing in the repo emits or commits one today, so there is no committed
-    # baseline for a generated spec to be diffed against. `apps/api` itself
-    # landed long ago and is NOT what this is waiting on.
-    if: false
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - run: echo "api-drift placeholder"
-
-  # `db-drift` is no longer a placeholder job: see the `db-drift` step of
-  # `guards-block` below (`pnpm lint:db-drift`).
-
+  # ─── Generated API drift guard (ADR-0006 §7, BLOCK) ──────────────────
+  # One non-duplicative check owns both generated API artifacts: it rebuilds the
+  # production-compiled Nest application, derives the OpenAPI snapshot in
+  # memory, derives openapi-typescript from that same document, and compares
+  # both with the committed bytes. `--check` never rewrites a stale worktree.
+  # Glossary output remains covered separately by `glossary-roundtrip` below.
   generated-artifacts:
-    # Enabled when a REGENERATING generator pipeline lands. `pnpm generate:all`
-    # exists, but today it is exactly `pnpm generate:glossary` — one generator,
-    # whose committed output (`packages/glossary/(src/)?ids.ts`) is ALREADY
-    # covered by the `glossary-roundtrip` step of `guards-block`. A regenerate-
-    # and-assert-clean job here would duplicate that check, and duplicating a
-    # BLOCK guard buys nothing but a second way to be red for one cause. The
-    # precondition is a second committed generated artifact with no roundtrip
-    # guard of its own — `packages/api-client` is the expected first (it is
-    # generated per AGENTS.md §8 but has no generator wired into `generate:all`);
-    # the glossary regenerating pipeline is tracked by #460.
-    if: false
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - run: echo "generated-artifacts placeholder"
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with: { node-version-file: .nvmrc, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm generate:api-client:check
 
   # ─── BLOCK light guards (hard-red; wired into the `ci` needs-list) ────
   # Batch of the light-profile guards that are BLOCK today. Every step here is a
@@ -1119,10 +1096,10 @@ jobs:
 
   # ─── Meta-job: single status check for branch protection ─────────────
   # Phase 0 baseline: every hard-red job that actually runs today sits in this
-  # needs-list (#440) — a job is either here (BLOCK), carries per-step WARN
-  # (`guards-warn`), or is `if: false` (placeholder until its precondition
-  # lands: api-drift, generated-artifacts — db-drift is live since #1236, as a
-  # `guards-block` STEP, so it is covered here through that job). WARN-only work is
+  # needs-list (#440) — a job is either here (BLOCK) or carries per-step WARN
+  # (`guards-warn`). The former API/generated placeholders are live since
+  # #1618 as the single `generated-artifacts` job; db-drift is live since #1236
+  # as a `guards-block` STEP, so it is covered here through that job. WARN-only work is
   # intentionally excluded. WARN→BLOCK promotion criterion + sweep cadence:
   # ADR-0007 §2.6 (settled in #427; first sweep 2026-07-02 — per-guard verdicts
   # recorded on the Issue); promoting a guard now means moving its STEP from the
@@ -1138,6 +1115,7 @@ jobs:
       [
         changes,
         core,
+        generated-artifacts,
         api-e2e,
         guards-block,
         playwright-axe,
@@ -1157,7 +1135,8 @@ jobs:
       # the aggregate would go green on a run where nothing built or tested). So
       # the two classes are enumerated EXPLICITLY, never derived from `needs.*`:
       #
-      #   UNCONDITIONAL — `changes`, `core`, `guards-block`. These carry no
+      #   UNCONDITIONAL — `changes`, `core`, `generated-artifacts`,
+      #   `guards-block`. These carry no
       #   `if:`, so `skipped` can only mean "an upstream need failed" and
       #   `success` is the ONLY green outcome. `changes` is in this class on
       #   purpose: it is what decides the other class, so a broken classifier
@@ -1171,12 +1150,13 @@ jobs:
       #   second path is already red through the unconditional class above.
       #
       # Net: a docs-only PR is green with six SKIPPED jobs; any FAILURE in any
-      # of the eight is still red; a run where the classifier broke is red.
+      # of the ten is still red; a run where the classifier broke is red.
       - name: Aggregate
         env:
           UNCONDITIONAL: |
             changes=${{ needs.changes.result }}
             core=${{ needs.core.result }}
+            generated-artifacts=${{ needs['generated-artifacts'].result }}
             guards-block=${{ needs['guards-block'].result }}
           PATH_GATED: |
             api-e2e=${{ needs['api-e2e'].result }}

@@ -9,7 +9,7 @@ afterEach(() => {
 });
 
 describe("fetchEligibleExpertUsers", () => {
-  it("EARS-19: requests one bounded server-search page instead of exhausting the roster", async () => {
+  it("EARS-23: requests page 2 only after the caller explicitly asks, never by page-walk", async () => {
     const fetchStub = vi.fn(
       async () =>
         new Response(
@@ -30,17 +30,29 @@ describe("fetchEligibleExpertUsers", () => {
     );
     globalThis.fetch = fetchStub as unknown as typeof fetch;
 
-    const result = await fetchEligibleExpertUsers({
+    const first = await fetchEligibleExpertUsers({
       currentExpertId: "00000000-0000-4000-8000-000000000002",
       q: "  Петров  ",
       page: 1,
       pageSize: 25,
     });
 
-    expect(result.total).toBe(101);
+    expect(first.total).toBe(101);
     expect(fetchStub).toHaveBeenCalledTimes(1);
     expect(fetchStub).toHaveBeenCalledWith(
       "/v1/admin/experts/eligible-users?page=1&pageSize=25&q=%D0%9F%D0%B5%D1%82%D1%80%D0%BE%D0%B2&currentExpertId=00000000-0000-4000-8000-000000000002",
+      { credentials: "include", headers: { accept: "application/json" } },
+    );
+
+    await fetchEligibleExpertUsers({
+      currentExpertId: "00000000-0000-4000-8000-000000000002",
+      q: "Петров",
+      page: 2,
+      pageSize: 25,
+    });
+    expect(fetchStub).toHaveBeenCalledTimes(2);
+    expect(fetchStub).toHaveBeenLastCalledWith(
+      "/v1/admin/experts/eligible-users?page=2&pageSize=25&q=%D0%9F%D0%B5%D1%82%D1%80%D0%BE%D0%B2&currentExpertId=00000000-0000-4000-8000-000000000002",
       { credentials: "include", headers: { accept: "application/json" } },
     );
   });

@@ -156,9 +156,6 @@ test.describe("012 EARS-19/20 — Expert authoring", () => {
     await fillRequiredNames(page, `Связанный-${Date.now()}`);
     await selectUser(page, candidate.email);
     await expect(page.getByTestId("expert-user-unlink")).toBeVisible();
-    await page.getByTestId("submit-expert").click();
-    await page.waitForURL(/\/experts\/[0-9a-f-]{36}$/, { timeout: 20_000 });
-
     await fillRequiredNames(
       stalePage,
       `Конфликт-${Date.now()}`,
@@ -166,6 +163,9 @@ test.describe("012 EARS-19/20 — Expert authoring", () => {
       "Ивановна",
     );
     await selectUser(stalePage, candidate.email);
+
+    await page.getByTestId("submit-expert").click();
+    await page.waitForURL(/\/experts\/[0-9a-f-]{36}$/, { timeout: 20_000 });
     await stalePage.getByTestId("submit-expert").click();
     await expect(stalePage.getByTestId("create-error")).toContainText(
       "Этот пользователь уже связан с другим экспертом. Ничего не изменилось — обновите страницу и выберите другого.",
@@ -181,5 +181,52 @@ test.describe("012 EARS-19/20 — Expert authoring", () => {
       page.getByRole("combobox", { name: "Пользователь" }),
     ).toBeEnabled({ timeout: 20_000 });
     await expect(page.getByTestId("expert-user-unlink")).toHaveCount(0);
+  });
+
+  test("EARS-23: the operator explicitly loads page 2 and selects its eligible User", async ({
+    page,
+  }) => {
+    const searchPrefix = `page-${Date.now()}`;
+    const candidates = await Promise.all(
+      Array.from({ length: 26 }, () =>
+        bootstrapDoctorSession(ORIGIN, searchPrefix),
+      ),
+    );
+    const pageTwoCandidate = candidates
+      .map((candidate) => candidate.email)
+      .sort((left, right) => left.localeCompare(right))
+      .at(-1)!;
+    await signInAsAdmin(page);
+    await openExpertCreate(page);
+
+    const selector = page.getByRole("combobox", { name: "Пользователь" });
+    await selector.click();
+    await page
+      .getByRole("dialog")
+      .getByRole("combobox", { name: "Поиск пользователя" })
+      .fill(searchPrefix);
+    const loadMore = page.getByRole("button", {
+      name: "Загрузить ещё пользователей",
+    });
+    await expect(loadMore).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByText(pageTwoCandidate, { exact: true })).toHaveCount(
+      0,
+    );
+
+    await loadMore.click();
+    await expect(
+      page.getByText(pageTwoCandidate, { exact: true }),
+    ).toBeVisible();
+    await page.getByText(pageTwoCandidate, { exact: true }).click();
+    await expect(page.getByTestId("expert-user-unlink")).toBeVisible();
+    await expect(selector).toContainText(pageTwoCandidate);
+
+    await fillRequiredNames(page, `Страница-${Date.now()}`);
+    await page.getByTestId("submit-expert").click();
+    await page.waitForURL(/\/experts\/[0-9a-f-]{36}$/, { timeout: 20_000 });
+    await page.reload();
+    await expect(
+      page.getByRole("combobox", { name: /Пользователь/ }),
+    ).toContainText(pageTwoCandidate, { timeout: 20_000 });
   });
 });

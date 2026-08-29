@@ -5,6 +5,7 @@ import * as PopoverPrimitive from "@radix-ui/react-popover";
 import { Command as CommandPrimitive } from "cmdk";
 
 import { cn } from "../lib/utils";
+import { Button } from "../primitives/button";
 
 /**
  * `<Combobox>` (#1578, owner Stage-A pick Б — field-shaped trigger + owned panel).
@@ -91,6 +92,17 @@ export interface ComboboxProps {
    * options are rendered exactly as returned by its bounded query.
    */
   onSearchChange?: (query: string) => void;
+  /** True when another server page exists; renders an explicit operator action. */
+  hasMore?: boolean;
+  /** Fetch exactly the next page. Duplicate clicks are suppressed until it settles. */
+  onLoadMore?: () => void | Promise<void>;
+  /** Controlled loading state for a request owned by the app. */
+  loadingMore?: boolean;
+  /** Controlled error state; preserves current options and turns the action into retry. */
+  loadMoreError?: boolean;
+  loadMoreLabel?: string;
+  loadingMoreLabel?: string;
+  loadMoreErrorLabel?: string;
   /** The no-match line («Ничего не найдено»). */
   emptyLabel: string;
   /**
@@ -123,6 +135,13 @@ export function Combobox({
   searchLabel,
   searchPlaceholder,
   onSearchChange,
+  hasMore = false,
+  onLoadMore,
+  loadingMore = false,
+  loadMoreError = false,
+  loadMoreLabel,
+  loadingMoreLabel,
+  loadMoreErrorLabel,
   emptyLabel,
   showSearch,
   countLabel,
@@ -136,12 +155,20 @@ export function Combobox({
 }: ComboboxProps) {
   const [open, setOpen] = React.useState(false);
   const [query, setQuery] = React.useState("");
+  const [internalLoadingMore, setInternalLoadingMore] = React.useState(false);
+  const loadMoreInFlight = React.useRef(false);
   const panelId = React.useId();
   const fieldNameId = React.useId();
   const valueId = React.useId();
 
   const selected = options.find((option) => option.value === value) ?? null;
   const withSearch = showSearch ?? options.length > 12;
+  const isLoadingMore = loadingMore || internalLoadingMore;
+  const paginationLabel = isLoadingMore
+    ? loadingMoreLabel
+    : loadMoreError
+      ? loadMoreErrorLabel
+      : loadMoreLabel;
 
   const shown = React.useMemo(() => {
     if (!query) return options.length;
@@ -292,6 +319,33 @@ export function Combobox({
                 </CommandPrimitive.Item>
               ))}
             </CommandPrimitive.List>
+            {hasMore && onLoadMore && paginationLabel ? (
+              <div
+                role="status"
+                aria-live="polite"
+                className="border-t-2 border-border p-1"
+              >
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="w-full"
+                  loading={isLoadingMore}
+                  disabled={isLoadingMore}
+                  onClick={() => {
+                    if (loadMoreInFlight.current || loadingMore) return;
+                    loadMoreInFlight.current = true;
+                    setInternalLoadingMore(true);
+                    void Promise.resolve(onLoadMore()).finally(() => {
+                      loadMoreInFlight.current = false;
+                      setInternalLoadingMore(false);
+                    });
+                  }}
+                >
+                  {paginationLabel}
+                </Button>
+              </div>
+            ) : null}
             {countLabel ? (
               <p className="border-t-2 border-border px-3.5 py-2 text-caption text-muted-foreground">
                 {countLabel(shown, options.length)}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { useTranslations } from "next-intl";
 import type { z } from "zod";
@@ -36,6 +36,10 @@ import {
   MAX_IMAGE_BYTES,
 } from "@ds/schemas";
 import { ExpertFormSchema, type ExpertFormFields } from "@/lib/form-schemas";
+import {
+  includeSelectedEligibleExpertUser,
+  mergeEligibleExpertUserPages,
+} from "@/lib/eligible-expert-users";
 import { useLocalizedResolver } from "@/lib/use-localized-resolver";
 import {
   fetchEligibleExpertUsers,
@@ -100,12 +104,19 @@ export function ExpertForm({
   const [selectedUser, setSelectedUser] =
     useState<EligibleExpertUserOption | null>(null);
   const [userQuery, setUserQuery] = useState("");
+  const [usersPage, setUsersPage] = useState(0);
+  const [usersTotal, setUsersTotal] = useState(0);
   const [usersLoading, setUsersLoading] = useState(true);
   const [usersError, setUsersError] = useState(false);
+  const [usersLoadingMore, setUsersLoadingMore] = useState(false);
+  const [usersLoadMoreError, setUsersLoadMoreError] = useState(false);
+  const userRequestEpoch = useRef(0);
+  const loadMoreInFlight = useRef(false);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     let active = true;
+    const epoch = userRequestEpoch.current;
     const timer = window.setTimeout(() => {
       setUsersLoading(true);
       setUsersError(false);
@@ -116,18 +127,21 @@ export function ExpertForm({
         pageSize: 25,
       })
         .then((result) => {
-          if (!active) return;
+          if (!active || epoch !== userRequestEpoch.current) return;
           setUsers(result.data);
+          setUsersPage(result.page);
+          setUsersTotal(result.total);
           const current = result.data.find(
             (user) => user.id === detail?.userId,
           );
           if (current) setSelectedUser(current);
         })
         .catch(() => {
-          if (active) setUsersError(true);
+          if (active && epoch === userRequestEpoch.current) setUsersError(true);
         })
         .finally(() => {
-          if (active) setUsersLoading(false);
+          if (active && epoch === userRequestEpoch.current)
+            setUsersLoading(false);
         });
     }, 250);
     return () => {
@@ -138,12 +152,7 @@ export function ExpertForm({
 
   const userOptions = useMemo(
     () =>
-      [
-        ...(selectedUser && !users.some((user) => user.id === selectedUser.id)
-          ? [selectedUser]
-          : []),
-        ...users,
-      ].map((user) => ({
+      includeSelectedEligibleExpertUser(users, selectedUser).map((user) => ({
         value: user.id,
         label: user.displayName ?? user.identifier,
         ...(user.displayName ? { description: user.identifier } : {}),
@@ -151,6 +160,51 @@ export function ExpertForm({
     [selectedUser, users],
   );
   const selectedUserId = form.watch("userId");
+  const hasMoreUsers = usersPage > 0 && users.length < usersTotal;
+
+  async function loadMoreUsers(): Promise<void> {
+    if (
+      loadMoreInFlight.current ||
+      usersLoading ||
+      usersLoadingMore ||
+      !hasMoreUsers
+    )
+      return;
+    loadMoreInFlight.current = true;
+    setUsersLoadingMore(true);
+    setUsersLoadMoreError(false);
+    const epoch = userRequestEpoch.current;
+    try {
+      const result = await fetchEligibleExpertUsers({
+        ...(detail?.id ? { currentExpertId: detail.id } : {}),
+        q: userQuery,
+        page: usersPage + 1,
+        pageSize: 25,
+      });
+      if (epoch !== userRequestEpoch.current) return;
+      setUsers((current) => mergeEligibleExpertUserPages(current, result.data));
+      setUsersPage(result.page);
+      setUsersTotal(result.total);
+    } catch {
+      if (epoch === userRequestEpoch.current) setUsersLoadMoreError(true);
+    } finally {
+      loadMoreInFlight.current = false;
+      if (epoch === userRequestEpoch.current) setUsersLoadingMore(false);
+    }
+  }
+
+  function searchUsers(next: string): void {
+    userRequestEpoch.current += 1;
+    loadMoreInFlight.current = false;
+    setUserQuery(next);
+    setUsers([]);
+    setUsersPage(0);
+    setUsersTotal(0);
+    setUsersError(false);
+    setUsersLoadMoreError(false);
+    setUsersLoading(true);
+    setUsersLoadingMore(false);
+  }
   const publicUrl = detail?.slug
     ? `${ACADEMY_ORIGIN}/experts/${detail.slug}`
     : null;
@@ -259,7 +313,14 @@ export function ExpertForm({
                         users.find((user) => user.id === next) ?? selectedUser,
                       );
                     }}
-                    onSearchChange={setUserQuery}
+                    onSearchChange={searchUsers}
+                    hasMore={hasMoreUsers}
+                    onLoadMore={loadMoreUsers}
+                    loadingMore={usersLoadingMore}
+                    loadMoreError={usersLoadMoreError}
+                    loadMoreLabel={t("experts.actions.loadMoreUsers")}
+                    loadingMoreLabel={t("experts.actions.loadingMoreUsers")}
+                    loadMoreErrorLabel={t("experts.actions.retryLoadMoreUsers")}
                     placeholder={
                       usersLoading
                         ? t("common.loading")
@@ -269,7 +330,13 @@ export function ExpertForm({
                     searchPlaceholder={t(
                       "experts.fields.userSearchPlaceholder",
                     )}
-                    emptyLabel={t("experts.fields.userEmpty")}
+                    emptyLabel={
+                      usersLoading
+                        ? t("common.loading")
+                        : usersError
+                          ? t("experts.errors.usersLoadFailed")
+                          : t("experts.fields.userEmpty")
+                    }
                     showSearch
                     disabled={usersLoading && users.length === 0}
                     invalid={fieldState.invalid}

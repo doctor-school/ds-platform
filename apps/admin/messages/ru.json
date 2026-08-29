@@ -725,6 +725,9 @@
     },
     "actions": {
       "unlinkUser": "Отвязать пользователя",
+      "loadMoreUsers": "Загрузить ещё пользователей",
+      "loadingMoreUsers": "Загружаем пользователей…",
+      "retryLoadMoreUsers": "Не удалось загрузить. Повторить",
       "copyPublicLink": "Копировать публичную ссылку",
       "linkCopied": "Ссылка скопирована"
     },

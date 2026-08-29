@@ -281,3 +281,21 @@ Feature: A doctor opens one screen and sees what is on now, what is on this week
     When the doctor opens «События»
     Then it renders as an event card of format podcast
     And no Academy podcast episode from the Academy media surface is listed beside it
+
+  @EARS-15 @happy
+  Scenario: Cross-front ownership is recorded before a Doctor events slice is implemented
+    Given an implementation Issue is about to change an events, calendar, facet or live-broadcast capability
+    When its pre-implementation gate runs
+    Then 019-design section 1.1 names the current Academy owner and canonical target for every touched capability
+    And event queries delegate to EventsService and portable schemas under packages/schemas/src/events
+    And room truth and entry policy delegate to RoomService and RegistrationService
+    And route-independent listing, calendar, card, facet and live-strip UI units are owned by @ds/design-system
+    And the extraction plan migrates the Academy consumer in the same slice when its precedent is app-local
+    And apps/doctor contains only its host projection, route, copy, specialty targeting and composition
+
+  @EARS-15 @failure
+  Scenario: A parallel Doctor capability fails the reuse gate
+    Given a proposed Doctor slice copies an Academy component, query engine, URL-state codec, room or LIVE resolver
+    When the cross-front ownership gate compares it with 019-design section 1.1
+    Then the proposal is rejected before production code is written
+    And a different host response envelope alone is not treated as permission to duplicate the shared core

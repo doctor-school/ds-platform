@@ -72,12 +72,22 @@ describe.skipIf(!process.env.DATABASE_URL)(
       const unrelatedSpecialty = ordinary[2]!;
       const other = specialtyRows.rows.find((row) => row.is_other)!;
 
-      const makeDirection = async (label: string) => {
+      const makeDirection = async (
+        label: string,
+        status: "draft" | "published" | "retired" = "published",
+      ) => {
         const id = randomUUID();
         const slug = `targeting-${randomUUID()}`;
         await pool.query(
-          "INSERT INTO directions (id, slug, title) VALUES ($1, $2, $3)",
-          [id, slug, `${label} ${randomUUID().slice(0, 8)}`],
+          "INSERT INTO directions (id, slug, title, status, first_published_at, deleted_at) VALUES ($1, $2, $3, $4, $5, $6)",
+          [
+            id,
+            slug,
+            `${label} ${randomUUID().slice(0, 8)}`,
+            status,
+            status === "draft" ? null : new Date(),
+            status === "retired" ? new Date() : null,
+          ],
         );
         directionIds.push(id);
         return { id, slug };
@@ -133,12 +143,31 @@ describe.skipIf(!process.env.DATABASE_URL)(
       const adjacentTieB = await makeDirection("Диагностика");
       const unrelatedSimilar = await makeDirection("Кардиология похожая");
       const reverseOnly = await makeDirection("Обратная связь");
-      const retiredOwn = await makeDirection("Отозванное направление");
-      const retiredAdjacent = await makeDirection("Отозванная смежность");
+      const retiredLinkOwn = await makeDirection(
+        "Отозванная связь направления",
+      );
+      const draftOwn = await makeDirection("Черновое направление", "draft");
+      const retiredOwn = await makeDirection(
+        "Отозванное направление",
+        "retired",
+      );
+      const retiredEdgeAdjacent = await makeDirection(
+        "Отозванная связь смежности",
+      );
+      const draftAdjacent = await makeDirection(
+        "Черновая смежность",
+        "draft",
+      );
+      const retiredAdjacent = await makeDirection(
+        "Отозванная смежность",
+        "retired",
+      );
 
       await makeLink(ownA.id, primary.id);
       await makeLink(ownB.id, primary.id);
-      await makeLink(retiredOwn.id, primary.id, "retired");
+      await makeLink(retiredLinkOwn.id, primary.id, "retired");
+      await makeLink(draftOwn.id, primary.id);
+      await makeLink(retiredOwn.id, primary.id);
       await makeLink(unrelatedSimilar.id, unrelatedSpecialty.id);
 
       // The same adjacent target is reached twice: the stronger authored edge
@@ -181,14 +210,26 @@ describe.skipIf(!process.env.DATABASE_URL)(
       });
       await makeEdge({
         directionId: ownA.id,
-        adjacentDirectionId: retiredAdjacent.id,
+        adjacentDirectionId: retiredEdgeAdjacent.id,
         kind: "related",
         weight: 100,
         status: "retired",
       });
       await makeEdge({
-        directionId: retiredOwn.id,
+        directionId: retiredLinkOwn.id,
         adjacentDirectionId: unrelatedSimilar.id,
+        kind: "related",
+        weight: 100,
+      });
+      await makeEdge({
+        directionId: ownA.id,
+        adjacentDirectionId: draftAdjacent.id,
+        kind: "related",
+        weight: 100,
+      });
+      await makeEdge({
+        directionId: ownA.id,
+        adjacentDirectionId: retiredAdjacent.id,
         kind: "related",
         weight: 100,
       });
@@ -227,7 +268,13 @@ describe.skipIf(!process.env.DATABASE_URL)(
         reverseOnly.id,
       );
       expect(resolved.adjacentDirections.map((row) => row.id)).not.toContain(
+        draftAdjacent.id,
+      );
+      expect(resolved.adjacentDirections.map((row) => row.id)).not.toContain(
         retiredAdjacent.id,
+      );
+      expect(resolved.directions.map((row) => row.id)).not.toContain(
+        draftOwn.id,
       );
       expect(resolved.directions.map((row) => row.id)).not.toContain(
         retiredOwn.id,

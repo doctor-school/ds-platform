@@ -46,6 +46,8 @@ export class TargetingRepository {
           eq(directionSpecialties.specialtyMinzdravId, specialtyId),
           eq(directionSpecialties.status, "active"),
           isNull(directionSpecialties.deletedAt),
+          eq(directions.status, "published"),
+          isNull(directions.deletedAt),
         ),
       )
       .orderBy(asc(directions.id));
@@ -75,6 +77,8 @@ export class TargetingRepository {
           inArray(directionAdjacency.directionId, ownDirectionIds),
           eq(directionAdjacency.status, "active"),
           isNull(directionAdjacency.deletedAt),
+          eq(directions.status, "published"),
+          isNull(directions.deletedAt),
         ),
       )
       .orderBy(desc(directionAdjacency.weight), asc(directionAdjacency.id));

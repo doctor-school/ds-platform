@@ -2,7 +2,11 @@ import { Inject, Injectable } from "@nestjs/common";
 import { and, asc, count, eq, ilike, isNull, ne, or, sql } from "drizzle-orm";
 import type { DrizzleHandle, Expert } from "@ds/db";
 import { experts, users } from "@ds/db";
-import type { AdminTaxonomyListQuery } from "@ds/schemas";
+import type {
+  AdminTaxonomyListQuery,
+  EligibleExpertUserOption,
+  EligibleExpertUserQuery,
+} from "@ds/schemas";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
 import { withRequestAuditContext } from "../audit/audit-context.tx.js";
 
@@ -60,7 +64,10 @@ export class ExpertsRepository {
   }
 
   async findById(id: string): Promise<Expert | null> {
-    const [row] = await this.db.select().from(experts).where(eq(experts.id, id));
+    const [row] = await this.db
+      .select()
+      .from(experts)
+      .where(eq(experts.id, id));
     return row ?? null;
   }
 
@@ -132,7 +139,11 @@ export class ExpertsRepository {
    * person. Checked before the write for a naming 409; the unique index remains
    * the final race guard.
    */
-  async slugTaken(tx: Tx | Db, slug: string, exceptId?: string): Promise<boolean> {
+  async slugTaken(
+    tx: Tx | Db,
+    slug: string,
+    exceptId?: string,
+  ): Promise<boolean> {
     const where = exceptId
       ? and(eq(experts.slug, slug), ne(experts.id, exceptId))
       : eq(experts.slug, slug);
@@ -217,6 +228,51 @@ export class ExpertsRepository {
     const [totals] = await this.db
       .select({ value: count() })
       .from(experts)
+      .where(where);
+    return { rows, total: Number(totals?.value ?? 0) };
+  }
+
+  /**
+   * Expert-owned User selector. A LEFT JOIN makes eligibility one SQL predicate:
+   * no retained Expert owns the User, or the sole owner is the Expert currently
+   * being edited. The retained uniqueness index is the final write-race guard.
+   */
+  async listEligibleUsers(query: EligibleExpertUserQuery): Promise<{
+    rows: EligibleExpertUserOption[];
+    total: number;
+  }> {
+    const filters = [
+      eq(users.recordStatus, "active"),
+      isNull(users.deletedAt),
+      isNull(users.deactivatedAt),
+      query.currentExpertId
+        ? or(isNull(experts.id), eq(experts.id, query.currentExpertId))!
+        : isNull(experts.id),
+    ];
+    if (query.q) {
+      const pattern = `%${escapeLike(query.q.normalize("NFKC"))}%`;
+      filters.push(
+        or(ilike(users.displayName, pattern), ilike(users.email, pattern))!,
+      );
+    }
+    const where = and(...filters);
+    const selection = {
+      id: users.id,
+      displayName: users.displayName,
+      email: users.email,
+    };
+    const rows = await this.db
+      .select(selection)
+      .from(users)
+      .leftJoin(experts, eq(experts.userId, users.id))
+      .where(where)
+      .orderBy(asc(users.displayName), asc(users.email), asc(users.id))
+      .limit(query.pageSize)
+      .offset((query.page - 1) * query.pageSize);
+    const [totals] = await this.db
+      .select({ value: count() })
+      .from(users)
+      .leftJoin(experts, eq(experts.userId, users.id))
       .where(where);
     return { rows, total: Number(totals?.value ?? 0) };
   }

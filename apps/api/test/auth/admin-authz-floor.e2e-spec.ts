@@ -187,6 +187,11 @@ const FLOOR_ROUTES: {
     url: "/v1/admin/experts",
   },
   {
+    endpoint: "GET /v1/admin/experts/eligible-users",
+    method: "GET",
+    url: "/v1/admin/experts/eligible-users",
+  },
+  {
     endpoint: "GET /v1/admin/experts/:id",
     method: "GET",
     url: `/v1/admin/experts/${ABSENT_ID}`,

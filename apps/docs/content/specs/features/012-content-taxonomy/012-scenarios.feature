@@ -805,6 +805,17 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
     Then one Expert references that User through the same command model
     And a second ownership attempt is refused with 409 USER_EXPERT_CONFLICT
 
+  @EARS-19 @happy
+  Scenario: Expert authoring reads only eligible User options
+    Given active Users include unlinked rows and rows linked to other retained Experts
+    And the current Expert already links one User
+    When the operator searches GET /v1/admin/experts/eligible-users with bounded paging and the current Expert id
+    Then results are filtered by trimmed display name or email in stable display-name email and User-id order
+    And another Expert's User is absent while the current Expert's linked User remains selectable
+    And each option contains only User id nullable display name and nullable email
+    And an unmatched or escaped-wildcard search returns a successful empty page
+    And a later ownership race is still decided by one committed link and one 409 USER_EXPERT_CONFLICT without name matching
+
   @EARS-20 @happy
   Scenario: Structured names and system-owned public links
     When the operator saves family name given name and optional patronymic

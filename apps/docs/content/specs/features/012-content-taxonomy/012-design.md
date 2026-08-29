@@ -235,6 +235,8 @@ As defense in depth, public project reads repeat the eligibility predicate and f
 
 `experts.user_id` is nullable and uniquely constrained when present. Creating an Expert without a User, creating it from an existing unlinked User, and linking later all call one command path. The command rejects existing ownership with `USER_EXPERT_CONFLICT`. Person fields are `family_name`, `given_name`, and nullable `patronymic`; display names are derived.
 
+The Expert form owns one narrow selector read: `GET /v1/admin/experts/eligible-users?q&page&pageSize&currentExpertId`. It searches the active retained User mirror only by operator-visible `display_name` or `email`, returns stable offset pages ordered by display name, email and User id, and projects exactly `{ id, displayName, email }`. A User linked to another retained Expert is absent; `currentExpertId` admits only that Expert's existing link so an edit does not erase its selected option. The read is advisory: the User-row lock plus `experts.user_id` uniqueness remains authoritative under a race. Phone, role, IdP subject and Expert-name matching never enter this read. EARS-23 still owns the shared combobox interaction behaviour; this section owns only EARS-19's data contract.
+
 `event_experts(event_id, expert_id, role, position)` is the sole current speaker model. The real review queue and guarded cutover are defined in §2.3; runtime projection never joins legacy rows or compares names.
 
 ### 4.1 Shared authoring composition
@@ -262,6 +264,8 @@ For each entity resource `{projects|experts|topics|partners}`:
 | `GET /v1/admin/<resource>/:id/lifecycle-impact?transition=retire\|restore` | Preview transition consequences plus signed `impactToken`.               |
 | `POST /v1/admin/<resource>/:id/retire`                                     | Target `If-Match` + matching `Lifecycle-Impact-Token`.                   |
 | `POST /v1/admin/<resource>/:id/restore`                                    | Target `If-Match` + matching `Lifecycle-Impact-Token`; retained → draft. |
+
+Experts additionally expose `GET /v1/admin/experts/eligible-users?q&page&pageSize&currentExpertId`, the authenticated `platform_admin` option read from §4. Its response is `{ data: { id, displayName, email }[], total, page, pageSize }`; all three option fields are sourced from the User mirror, and no general User-admin resource is introduced.
 
 Projects additionally expose `POST /v1/admin/projects/:id/replace-curator` with `{ expertId }`, project `If-Match` and `Idempotency-Key`; this is the atomic command from §3.2.
 

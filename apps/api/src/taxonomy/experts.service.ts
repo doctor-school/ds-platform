@@ -3,6 +3,8 @@ import type { Expert } from "@ds/db";
 import {
   type AdminTaxonomyListQuery,
   type CreateExpertRequest,
+  type EligibleExpertUserList,
+  type EligibleExpertUserQuery,
   type ExpertAdminDetail,
   type ExpertAdminList,
   expertDisplayName,
@@ -164,7 +166,10 @@ export class ExpertsService {
       return created;
     });
 
-    return { detail: await this.toDetail(row), etag: taxonomyETag(row.version) };
+    return {
+      detail: await this.toDetail(row),
+      etag: taxonomyETag(row.version),
+    };
   }
 
   private async updateCommand(
@@ -232,7 +237,10 @@ export class ExpertsService {
         );
         this.assertUserLinkState(link);
       }
-      const postLockBlockers = publishRequirementBlockers(locked, input.payload);
+      const postLockBlockers = publishRequirementBlockers(
+        locked,
+        input.payload,
+      );
       if (locked.status === "published" && postLockBlockers.length > 0) {
         throw new TaxonomyError(
           "PUBLISH_REQUIREMENTS_NOT_MET",
@@ -300,14 +308,20 @@ export class ExpertsService {
       return updated;
     });
 
-    return { detail: await this.toDetail(row), etag: taxonomyETag(row.version) };
+    return {
+      detail: await this.toDetail(row),
+      etag: taxonomyETag(row.version),
+    };
   }
 
   /** `GET /v1/admin/experts/:id` — detail by stable id, retired rows included. */
   async detail(id: string): Promise<ExpertCommandResult> {
     const row = await this.repo.findById(id);
     if (!row) throw new TaxonomyError("RESOURCE_NOT_FOUND");
-    return { detail: await this.toDetail(row), etag: taxonomyETag(row.version) };
+    return {
+      detail: await this.toDetail(row),
+      etag: taxonomyETag(row.version),
+    };
   }
 
   /** `GET /v1/admin/experts` — the shared admin list with LD-6 name search. */
@@ -323,6 +337,19 @@ export class ExpertsService {
         version: row.version,
         updatedAt: row.updatedAt.toISOString(),
       })),
+      total,
+      page: query.page,
+      pageSize: query.pageSize,
+    };
+  }
+
+  /** Expert-form selector; eligibility remains write-authoritative in the command. */
+  async listEligibleUsers(
+    query: EligibleExpertUserQuery,
+  ): Promise<EligibleExpertUserList> {
+    const { rows, total } = await this.repo.listEligibleUsers(query);
+    return {
+      data: rows,
       total,
       page: query.page,
       pageSize: query.pageSize,
@@ -357,7 +384,9 @@ export class ExpertsService {
       });
     } catch (err) {
       if (err instanceof ObjectAlreadyExistsError) {
-        this.logger.log(`photo object ${key} already present — resumed request`);
+        this.logger.log(
+          `photo object ${key} already present — resumed request`,
+        );
         return { key, normalized };
       }
       this.logger.error(
@@ -431,10 +460,7 @@ export class ExpertsService {
     );
   }
 
-  private assertUserLinkState(link: {
-    exists: boolean;
-    owned: boolean;
-  }): void {
+  private assertUserLinkState(link: { exists: boolean; owned: boolean }): void {
     if (!link.exists) throw new TaxonomyError("RESOURCE_NOT_FOUND");
     if (link.owned) {
       throw new TaxonomyError(

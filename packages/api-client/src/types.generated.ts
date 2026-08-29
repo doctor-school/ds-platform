@@ -772,6 +772,22 @@ export interface paths {
         patch: operations["ExpertsAdminController_update"];
         trace?: never;
     };
+    "/v1/admin/experts/eligible-users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["ExpertsAdminController_eligibleUsers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/partners": {
         parameters: {
             query?: never;
@@ -1649,6 +1665,17 @@ export interface components {
             professionalRole?: string | null;
             /** Format: uuid */
             userId?: string;
+        };
+        EligibleExpertUserListDto: {
+            data: {
+                displayName: string | null;
+                email: string | null;
+                /** Format: uuid */
+                id: string;
+            }[];
+            page: number;
+            pageSize: number;
+            total: number;
         };
         ExpertAdminDetailDto: {
             affiliation: string | null;
@@ -2940,6 +2967,30 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ExpertAdminDetailDto"];
+                };
+            };
+        };
+    };
+    ExpertsAdminController_eligibleUsers: {
+        parameters: {
+            query?: {
+                currentExpertId?: string;
+                page?: number;
+                pageSize?: number;
+                q?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EligibleExpertUserListDto"];
                 };
             };
         };

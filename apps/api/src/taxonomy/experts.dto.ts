@@ -1,6 +1,7 @@
 import { createZodDto } from "nestjs-zod";
 import {
   CreateExpertRequestSchema,
+  EligibleExpertUserListSchema,
   ExpertAdminDetailSchema,
   ExpertAdminListSchema,
   UpdateExpertRequestSchema,
@@ -19,3 +20,7 @@ export class ExpertAdminDetailDto extends createZodDto(
 ) {}
 
 export class ExpertAdminListDto extends createZodDto(ExpertAdminListSchema) {}
+
+export class EligibleExpertUserListDto extends createZodDto(
+  EligibleExpertUserListSchema,
+) {}

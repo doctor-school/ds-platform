@@ -123,6 +123,28 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       return rows[0]!.id;
     }
 
+    async function selectorUser(displayName: string): Promise<{
+      id: string;
+      email: string;
+      displayName: string;
+    }> {
+      const email = uniqueEmail("exp-selector");
+      const reg = await app.inject({
+        method: "POST",
+        url: "/v1/auth/register",
+        payload: { email, password, consent },
+      });
+      expect(reg.statusCode, reg.payload).toBe(200);
+      const { rows } = await pool.query<{ id: string }>(
+        `UPDATE users
+            SET display_name = $2, updated_at = now()
+          WHERE email = $1
+          RETURNING id`,
+        [email, displayName],
+      );
+      return { id: rows[0]!.id, email, displayName };
+    }
+
     function multipartBody(
       fields: Record<string, string>,
       files: {
@@ -323,7 +345,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const linkedAtCreate = await created(
         await createJson({ payload: validPayload({ userId: createUserId }) }),
       );
-      expect(linkedAtCreate).toMatchObject({ userId: createUserId, version: 1 });
+      expect(linkedAtCreate).toMatchObject({
+        userId: createUserId,
+        version: 1,
+      });
 
       const standalone = await created(
         await createJson({ payload: validPayload() }),
@@ -386,11 +411,106 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       });
       expect(conflict.statusCode).toBe(409);
       expect(problem(conflict).errorCode).toBe("USER_EXPERT_CONFLICT");
-      const { rows } = await pool.query<{ user_id: string | null; version: number }>(
-        "SELECT user_id, version FROM experts WHERE id = $1",
-        [standalone.id],
-      );
+      const { rows } = await pool.query<{
+        user_id: string | null;
+        version: number;
+      }>("SELECT user_id, version FROM experts WHERE id = $1", [standalone.id]);
       expect(rows[0]).toEqual({ user_id: null, version: 1 });
+    });
+
+    it("012 EARS-19: when the Expert form searches eligible Users, the system shall return a bounded stable page, exclude other ownership, allow the current link and expose only minimal option data", async () => {
+      const marker = `Selector-${randomUUID().slice(0, 8)}`;
+      const current = await selectorUser(`A ${marker}`);
+      const availableFirst = await selectorUser(`B ${marker}`);
+      const occupied = await selectorUser(`C ${marker}`);
+      const availableLast = await selectorUser(`D ${marker}`);
+      const currentExpert = await created(
+        await createJson({ payload: validPayload({ userId: current.id }) }),
+      );
+      await created(
+        await createJson({ payload: validPayload({ userId: occupied.id }) }),
+      );
+
+      const withoutCurrent = await app.inject({
+        method: "GET",
+        url: `/v1/admin/experts/eligible-users?q=${encodeURIComponent(`  ${marker}  `)}&page=1&pageSize=20`,
+        headers: { ...device, ...adminHeaders(adminSid) },
+      });
+      expect(withoutCurrent.statusCode, withoutCurrent.payload).toBe(200);
+      expect(JSON.parse(withoutCurrent.payload)).toEqual({
+        data: [availableFirst, availableLast],
+        total: 2,
+        page: 1,
+        pageSize: 20,
+      });
+
+      const firstPageWithCurrent = await app.inject({
+        method: "GET",
+        url: `/v1/admin/experts/eligible-users?q=${encodeURIComponent(marker)}&page=1&pageSize=2&currentExpertId=${currentExpert.id}`,
+        headers: { ...device, ...adminHeaders(adminSid) },
+      });
+      expect(firstPageWithCurrent.statusCode).toBe(200);
+      expect(JSON.parse(firstPageWithCurrent.payload)).toEqual({
+        data: [current, availableFirst],
+        total: 3,
+        page: 1,
+        pageSize: 2,
+      });
+
+      const secondPageWithCurrent = await app.inject({
+        method: "GET",
+        url: `/v1/admin/experts/eligible-users?q=${encodeURIComponent(marker)}&page=2&pageSize=2&currentExpertId=${currentExpert.id}`,
+        headers: { ...device, ...adminHeaders(adminSid) },
+      });
+      expect(JSON.parse(secondPageWithCurrent.payload)).toEqual({
+        data: [availableLast],
+        total: 3,
+        page: 2,
+        pageSize: 2,
+      });
+
+      for (const noMatch of [`missing-${marker}`, "%"]) {
+        const empty = await app.inject({
+          method: "GET",
+          url: `/v1/admin/experts/eligible-users?q=${encodeURIComponent(noMatch)}`,
+          headers: { ...device, ...adminHeaders(adminSid) },
+        });
+        expect(empty.statusCode).toBe(200);
+        expect(JSON.parse(empty.payload)).toMatchObject({ data: [], total: 0 });
+      }
+    });
+
+    it("012 EARS-19: when two Expert links race for one eligible User, the system shall commit one owner and reject the other with USER_EXPERT_CONFLICT", async () => {
+      const userId = await unlinkedUserId();
+      const candidates = await Promise.all([
+        created(await createJson({ payload: validPayload() })),
+        created(await createJson({ payload: validPayload() })),
+      ]);
+
+      const attempts = await Promise.all(
+        candidates.map((candidate) =>
+          app.inject({
+            method: "PATCH",
+            url: `/v1/admin/experts/${candidate.id}`,
+            headers: {
+              ...device,
+              ...adminHeaders(adminSid),
+              "content-type": "application/json",
+              "idempotency-key": key(),
+              "if-match": 'W/"1"',
+            },
+            payload: { userId },
+          }),
+        ),
+      );
+      expect(attempts.map((res) => res.statusCode).sort()).toEqual([200, 409]);
+      const conflict = attempts.find((res) => res.statusCode === 409)!;
+      expect(problem(conflict).errorCode).toBe("USER_EXPERT_CONFLICT");
+      const { rows } = await pool.query<{ n: string }>(
+        "SELECT count(*)::text AS n FROM experts WHERE user_id = $1",
+        [userId],
+      );
+      expect(rows[0]!.n).toBe("1");
     });
 
     it("012 EARS-2: when an expert has no photo, the system shall answer deterministic initials derived from the name", async () => {

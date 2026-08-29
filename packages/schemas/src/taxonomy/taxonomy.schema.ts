@@ -368,6 +368,59 @@ export const ExpertAdminListSchema = z.object({
 });
 export type ExpertAdminList = z.infer<typeof ExpertAdminListSchema>;
 
+/** Maximum selector page size: bounded like every admin combobox (§4.1). */
+export const ELIGIBLE_EXPERT_USER_PAGE_SIZE_MAX = 100;
+
+/**
+ * `GET /v1/admin/experts/eligible-users` query.
+ *
+ * `currentExpertId` is the edit-form exception: its already-linked User remains
+ * selectable while Users owned by any other retained Expert stay absent. Search
+ * is deliberately limited to the two operator-facing labels below; no Expert
+ * name, phone, IdP subject or other identity heuristic participates.
+ */
+export const EligibleExpertUserQuerySchema = z
+  .object({
+    q: z.string().trim().min(1).max(254).optional(),
+    page: z.coerce.number().int().positive().default(1),
+    pageSize: z.coerce
+      .number()
+      .int()
+      .positive()
+      .max(ELIGIBLE_EXPERT_USER_PAGE_SIZE_MAX)
+      .default(20),
+    currentExpertId: z.uuid().optional(),
+  })
+  .strict();
+export type EligibleExpertUserQuery = z.infer<
+  typeof EligibleExpertUserQuerySchema
+>;
+
+/** Minimal platform-admin option label; excludes phone, IdP subject and roles. */
+export const EligibleExpertUserOptionSchema = z
+  .object({
+    id: z.uuid(),
+    displayName: z.string().nullable(),
+    email: z.email().nullable(),
+  })
+  .strict();
+export type EligibleExpertUserOption = z.infer<
+  typeof EligibleExpertUserOptionSchema
+>;
+
+/** Stable offset-paged selector envelope (ADR-0002 admin-list convention). */
+export const EligibleExpertUserListSchema = z
+  .object({
+    data: z.array(EligibleExpertUserOptionSchema),
+    total: z.number().int().nonnegative(),
+    page: z.number().int().positive(),
+    pageSize: z.number().int().positive(),
+  })
+  .strict();
+export type EligibleExpertUserList = z.infer<
+  typeof EligibleExpertUserListSchema
+>;
+
 // ── Direction authoring DTOs (012-design §2.2 matrix; EARS-3, #1285) ────────────
 
 export const DIRECTION_TITLE_MIN = 1;
@@ -405,7 +458,9 @@ export const CreateDirectionRequestSchema = z
     title: DirectionTitleSchema,
   })
   .strict();
-export type CreateDirectionRequest = z.infer<typeof CreateDirectionRequestSchema>;
+export type CreateDirectionRequest = z.infer<
+  typeof CreateDirectionRequestSchema
+>;
 
 /**
  * `PATCH /v1/admin/directions/:id` — edit the same row.
@@ -421,7 +476,9 @@ export const UpdateDirectionRequestSchema = z
     title: DirectionTitleSchema.optional(),
   })
   .strict();
-export type UpdateDirectionRequest = z.infer<typeof UpdateDirectionRequestSchema>;
+export type UpdateDirectionRequest = z.infer<
+  typeof UpdateDirectionRequestSchema
+>;
 
 /**
  * The admin detail projection. `version` backs the ETag the next PATCH must
@@ -455,7 +512,9 @@ export const DirectionAdminListItemSchema = DirectionAdminDetailSchema.pick({
   version: true,
   updatedAt: true,
 });
-export type DirectionAdminListItem = z.infer<typeof DirectionAdminListItemSchema>;
+export type DirectionAdminListItem = z.infer<
+  typeof DirectionAdminListItemSchema
+>;
 
 /** Offset/page admin list envelope (ADR-0002 — admin pagination is offset-based). */
 export const DirectionAdminListSchema = z.object({
@@ -1765,7 +1824,9 @@ export const DIRECTION_ADJACENCY_KINDS = [
   "interdisciplinary",
 ] as const;
 export const DirectionAdjacencyKindSchema = z.enum(DIRECTION_ADJACENCY_KINDS);
-export type DirectionAdjacencyKind = z.infer<typeof DirectionAdjacencyKindSchema>;
+export type DirectionAdjacencyKind = z.infer<
+  typeof DirectionAdjacencyKindSchema
+>;
 
 export const DIRECTION_ADJACENCY_WEIGHT_MIN = 1;
 export const DIRECTION_ADJACENCY_WEIGHT_MAX = 100;

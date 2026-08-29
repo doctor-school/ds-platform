@@ -11,12 +11,19 @@ import {
   Res,
   UseFilters,
 } from "@nestjs/common";
-import { ApiBody, ApiCreatedResponse, ApiOkResponse } from "@nestjs/swagger";
+import {
+  ApiBody,
+  ApiCreatedResponse,
+  ApiOkResponse,
+  ApiQuery,
+} from "@nestjs/swagger";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import {
   AdminTaxonomyListQuerySchema,
   CANONICAL_UUID_REGEX,
   CreateExpertRequestSchema,
+  EligibleExpertUserQuerySchema,
+  type EligibleExpertUserList,
   type ExpertAdminList,
   IDEMPOTENCY_KEY_HEADER,
   IF_MATCH_HEADER,
@@ -28,6 +35,7 @@ import { Authz } from "../authz/index.js";
 import { ExpertsService } from "./experts.service.js";
 import {
   CreateExpertRequestDto,
+  EligibleExpertUserListDto,
   ExpertAdminDetailDto,
   ExpertAdminListDto,
   UpdateExpertRequestDto,
@@ -97,6 +105,48 @@ export class ExpertsAdminController {
       );
     }
     return this.experts.list(parsed.data);
+  }
+
+  /** EARS-19 — bounded eligible User options owned by the Expert form. */
+  @Get("eligible-users")
+  @ApiQuery({ name: "q", required: false, type: String, maxLength: 254 })
+  @ApiQuery({ name: "page", required: false, type: Number, minimum: 1 })
+  @ApiQuery({
+    name: "pageSize",
+    required: false,
+    type: Number,
+    minimum: 1,
+    maximum: 100,
+  })
+  @ApiQuery({
+    name: "currentExpertId",
+    required: false,
+    type: String,
+    format: "uuid",
+  })
+  @ApiOkResponse({ type: EligibleExpertUserListDto })
+  @Authz({
+    access: "authenticated",
+    roles: ["platform_admin"],
+    check: "fast-path",
+    audit: "none",
+    tests: ["EARS-19", "EARS-16"],
+  })
+  eligibleUsers(
+    @Query() rawQuery: Record<string, string>,
+  ): Promise<EligibleExpertUserList> {
+    const parsed = EligibleExpertUserQuerySchema.safeParse(rawQuery);
+    if (!parsed.success) {
+      throw new TaxonomyError(
+        "VALIDATION_FAILED",
+        "invalid eligible User query",
+        parsed.error.issues.map((i) => ({
+          path: i.path.join("."),
+          message: i.message,
+        })),
+      );
+    }
+    return this.experts.listEligibleUsers(parsed.data);
   }
 
   /**

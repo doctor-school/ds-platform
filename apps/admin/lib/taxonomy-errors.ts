@@ -1,5 +1,10 @@
 import type { TaxonomyHttpError } from "@/providers/data-provider";
 
+export interface TaxonomyErrorContext {
+  /** The command disambiguates a shared wire code without changing fallback truth. */
+  action?: "restore-curator" | "restore-primary";
+}
+
 /**
  * Map an admin Problem Details failure onto the operator-facing RU catalogue key.
  * Keys off the stable `errorCode`, never the HTTP status or the server's English
@@ -14,7 +19,11 @@ import type { TaxonomyHttpError } from "@/providers/data-provider";
  * проектом» vs «…другим экспертом»), and deriving the prefix keeps one mapping
  * table for all four #1283–#1286 verticals with no call-site ceremony.
  */
-export function taxonomyErrorKey(error: unknown, fallbackKey: string): string {
+export function taxonomyErrorKey(
+  error: unknown,
+  fallbackKey: string,
+  context: TaxonomyErrorContext = {},
+): string {
   const ns = fallbackKey.split(".")[0] ?? "projects";
   const code = (error as TaxonomyHttpError | undefined)?.errorCode;
 
@@ -133,11 +142,11 @@ export function taxonomyErrorKey(error: unknown, fallbackKey: string): string {
         return "projectExperts.errors.curatorRequired";
       case "RELATIONSHIP_CONFLICT":
         // A curator RESTORE can race after the occupancy read said "free".
-        // The caller marks that action with its occupied-seat fallback; in that
+        // The caller marks that action explicitly; in that
         // context the same wire code means the seat was claimed meanwhile, not
         // that the retained pair is a duplicate.
-        if (fallbackKey === "projectExperts.fields.reverseSeatTakenHint") {
-          return fallbackKey;
+        if (context.action === "restore-curator") {
+          return "projectExperts.fields.reverseSeatTakenHint";
         }
         return "projectExperts.errors.relationshipConflict";
       case "CONTENT_REMOVED":
@@ -159,17 +168,16 @@ export function taxonomyErrorKey(error: unknown, fallbackKey: string): string {
   // `RELATIONSHIP_CONFLICT` is ambiguous here in a way it is not on the other
   // joins: it answers BOTH «эта пара уже есть» and «основной партнёр уже
   // назначен». Which one it is depends on WHICH ACTION was sent, not on the
-  // payload, so the panel intercepts the code before this table on the two
-  // primary-flag mutations and this table keeps the duplicate-pair reading — the
-  // only one the plain link/restore actions can produce.
+  // payload, so primary-flag mutations and primary restores carry explicit
+  // action context; the unqualified mapping keeps the duplicate-pair reading.
   if (ns === "projectPartners") {
     switch (code) {
       case "RELATIONSHIP_CONFLICT":
         // As above, but for a retired row that keeps `isPrimary=true`: a raced
         // restore lost the unique primary flag. Plain link actions still use
-        // duplicatePair; only the action-specific fallback changes this reading.
-        if (fallbackKey === "projectPartners.errors.primaryTaken") {
-          return fallbackKey;
+        // duplicatePair; only the action context changes this reading.
+        if (context.action === "restore-primary") {
+          return "projectPartners.errors.primaryTaken";
         }
         return "projectPartners.errors.duplicatePair";
       case "INVALID_TRANSITION":

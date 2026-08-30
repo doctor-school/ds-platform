@@ -18,7 +18,10 @@ import {
   relationshipRowActionState,
   retryRelationshipOccupancy,
 } from "@/lib/relationship-authoring-state";
-import { taxonomyErrorKey } from "@/lib/taxonomy-errors";
+import {
+  taxonomyErrorKey,
+  type TaxonomyErrorContext,
+} from "@/lib/taxonomy-errors";
 import { useRelationshipOccupancy } from "@/lib/use-relationship-occupancy";
 import type { TaxonomyHttpError } from "@/providers/data-provider";
 import { projectPartnersUrl } from "@/providers/data-provider";
@@ -85,9 +88,13 @@ export function ProjectPartnersPanel({
     if (mode === "project") void primaryOccupancy.refetch();
   }
 
-  function fail(error: unknown, fallbackKey: string) {
+  function fail(
+    error: unknown,
+    fallbackKey: string,
+    context?: TaxonomyErrorContext,
+  ) {
     setNoticeKey(null);
-    setErrorKey(taxonomyErrorKey(error, fallbackKey));
+    setErrorKey(taxonomyErrorKey(error, fallbackKey, context));
   }
 
   // The primary-flag mutations resolve their own key (see `primaryErrorKey`), so
@@ -243,7 +250,11 @@ export function ProjectPartnersPanel({
 }
 
 type DoneHandler = (toastKey: string) => void;
-type ErrorHandler = (error: unknown, fallbackKey: string) => void;
+type ErrorHandler = (
+  error: unknown,
+  fallbackKey: string,
+  context?: TaxonomyErrorContext,
+) => void;
 
 /**
  * `RELATIONSHIP_CONFLICT` means «пара уже есть» on a link and «основной уже
@@ -451,9 +462,10 @@ function LinkRow({
               onError: (error) =>
                 onError(
                   error,
+                  "projectPartners.errors.transitionFailed",
                   transition === "restore" && row.isPrimary
-                    ? "projectPartners.errors.primaryTaken"
-                    : "projectPartners.errors.transitionFailed",
+                    ? { action: "restore-primary" }
+                    : undefined,
                 ),
             },
           )

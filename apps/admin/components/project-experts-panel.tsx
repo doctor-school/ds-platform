@@ -20,7 +20,10 @@ import {
   relationshipRowActionState,
   retryRelationshipOccupancy,
 } from "@/lib/relationship-authoring-state";
-import { taxonomyErrorKey } from "@/lib/taxonomy-errors";
+import {
+  taxonomyErrorKey,
+  type TaxonomyErrorContext,
+} from "@/lib/taxonomy-errors";
 import { useRelationshipOccupancy } from "@/lib/use-relationship-occupancy";
 import { projectExpertsUrl } from "@/providers/data-provider";
 
@@ -96,9 +99,13 @@ export function ProjectExpertsPanel({
     if (mode === "project") void curatorOccupancy.refetch();
   }
 
-  function fail(error: unknown, fallbackKey: string) {
+  function fail(
+    error: unknown,
+    fallbackKey: string,
+    context?: TaxonomyErrorContext,
+  ) {
     setNoticeKey(null);
-    setErrorKey(taxonomyErrorKey(error, fallbackKey));
+    setErrorKey(taxonomyErrorKey(error, fallbackKey, context));
   }
 
   if (query.isLoading) {
@@ -255,7 +262,11 @@ export function ProjectExpertsPanel({
 }
 
 type DoneHandler = (toastKey: string) => void;
-type ErrorHandler = (error: unknown, fallbackKey: string) => void;
+type ErrorHandler = (
+  error: unknown,
+  fallbackKey: string,
+  context?: TaxonomyErrorContext,
+) => void;
 
 /** One relationship — the opposite endpoint, its role, and its transitions. */
 function LinkRow({
@@ -320,6 +331,7 @@ function LinkRow({
     values: unknown,
     toastKey: string,
     fallback: string,
+    context?: TaxonomyErrorContext,
   ) {
     mutate(
       {
@@ -330,7 +342,7 @@ function LinkRow({
       },
       {
         onSuccess: () => onDone(toastKey),
-        onError: (error) => onError(error, fallback),
+        onError: (error) => onError(error, fallback, context),
       },
     );
   }
@@ -454,9 +466,10 @@ function LinkRow({
             projectExpertsUrl.command(row.id, transition),
             {},
             `projectExperts.toast.${transition}d`,
+            "projectExperts.errors.transitionFailed",
             transition === "restore" && row.role === "curator"
-              ? "projectExperts.fields.reverseSeatTakenHint"
-              : "projectExperts.errors.transitionFailed",
+              ? { action: "restore-curator" }
+              : undefined,
           )
         }
       >

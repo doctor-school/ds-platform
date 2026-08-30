@@ -7,8 +7,8 @@ import {
 
 const PROJECT_ID = "10000000-0000-4000-8000-000000000001";
 
-describe("EARS-22 authoritative relationship occupancy URLs", () => {
-  it("scopes curator occupancy to one project, active role and one result", () => {
+describe("EARS-22: authoritative relationship occupancy URLs", () => {
+  it("EARS-22: scopes curator occupancy to one project, active role and one result", () => {
     expect(
       projectExpertsUrl.list({
         projectId: PROJECT_ID,
@@ -21,7 +21,7 @@ describe("EARS-22 authoritative relationship occupancy URLs", () => {
     );
   });
 
-  it("scopes primary occupancy to one project, active flag and one result", () => {
+  it("EARS-22: scopes primary occupancy to one project, active flag and one result", () => {
     expect(
       projectPartnersUrl.list({
         projectId: PROJECT_ID,
@@ -34,7 +34,7 @@ describe("EARS-22 authoritative relationship occupancy URLs", () => {
     );
   });
 
-  it("serializes an explicit false primary filter instead of dropping it", () => {
+  it("EARS-22: serializes an explicit false primary filter instead of dropping it", () => {
     expect(
       projectPartnersUrl.list({ projectId: PROJECT_ID, isPrimary: false }),
     ).toContain("isPrimary=false");

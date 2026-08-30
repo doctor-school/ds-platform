@@ -7,7 +7,7 @@ import {
   relationshipEndpointTotalPages,
 } from "@/lib/relationship-endpoint-query";
 
-describe("EARS-22 reverse endpoint picker query", () => {
+describe("EARS-22: reverse endpoint picker query", () => {
   it("EARS-22: sends search and pagination to the endpoint instead of scanning a client corpus", () => {
     expect(
       relationshipEndpointQuery({

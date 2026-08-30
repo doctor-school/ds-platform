@@ -1,6 +1,9 @@
 import { expect, test, type Page } from "@playwright/test";
 import { bootstrapAdminSession } from "./support/admin-session";
-import { selectRelationshipCombobox } from "./support/relationship-combobox";
+import {
+  searchRelationshipCombobox,
+  selectRelationshipCombobox,
+} from "./support/relationship-combobox";
 import { totpCode } from "./support/totp";
 
 /**
@@ -20,8 +23,65 @@ import { totpCode } from "./support/totp";
  *   E2E_ADMIN_URL=http://localhost:3201 IDP_ISSUER=… IDP_SERVICE_TOKEN=… \
  *   IDP_PROJECT_ID=… pnpm --filter @ds/admin exec playwright test \
  *     e2e/taxonomy-project-partners.spec.ts --config=playwright.flows.config.ts
+ *
+ * `E2E_SHOT_DIR` opts into the responsive/theme and open-combobox evidence
+ * cited by the PR. Unset, the same spec runs without writing screenshots.
  */
 const ORIGIN = process.env.E2E_ADMIN_URL ?? "http://localhost:3200";
+const SHOT_DIR = process.env.E2E_SHOT_DIR;
+const DESKTOP = { width: 1440, height: 900 };
+const MOBILE = { width: 390, height: 844 };
+
+async function setEvidenceTheme(
+  page: Page,
+  theme: "light" | "dark",
+): Promise<void> {
+  await page.evaluate(
+    (nextTheme) =>
+      document.documentElement.classList.toggle("dark", nextTheme === "dark"),
+    theme,
+  );
+}
+
+async function captureRelationshipEvidence(
+  page: Page,
+  projectTitle: string,
+): Promise<void> {
+  if (!SHOT_DIR) return;
+
+  const states = [
+    { name: "desktop-light", viewport: DESKTOP, theme: "light" },
+    { name: "desktop-dark", viewport: DESKTOP, theme: "dark" },
+    { name: "mobile-light", viewport: MOBILE, theme: "light" },
+    { name: "mobile-dark", viewport: MOBILE, theme: "dark" },
+  ] as const;
+
+  for (const { name, viewport, theme } of states) {
+    await page.setViewportSize(viewport);
+    await setEvidenceTheme(page, theme);
+    await page.screenshot({
+      path: `${SHOT_DIR}/${name}.png`,
+      fullPage: true,
+      animations: "disabled",
+    });
+  }
+
+  await page.setViewportSize(DESKTOP);
+  await setEvidenceTheme(page, "light");
+  const panel = await searchRelationshipCombobox(
+    page,
+    "project-partner-link-combobox",
+    projectTitle,
+  );
+  const option = panel.getByText(projectTitle, { exact: true });
+  await expect(option).toBeVisible();
+  await option.hover();
+  await page.screenshot({
+    path: `${SHOT_DIR}/interactions-open-combobox.png`,
+    fullPage: true,
+    animations: "disabled",
+  });
+}
 
 /** Sign in and complete the one-time TOTP enrollment; lands on `/events`. */
 async function signInAsAdmin(page: Page): Promise<void> {
@@ -115,6 +175,10 @@ test.describe("012 EARS-10 — project↔partner relationships in the live admin
 
     await page.goto(partner.url);
     await page.getByTestId("tab-projects").click();
+    await page
+      .getByTestId("project-partners-panel")
+      .waitFor({ state: "visible" });
+    await captureRelationshipEvidence(page, project.title);
     await selectRelationshipCombobox(
       page,
       "project-partner-link-combobox",

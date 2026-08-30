@@ -48,6 +48,7 @@ const TabsTrigger = React.forwardRef<
       "relative z-0 inline-flex flex-1 items-center justify-center whitespace-nowrap border-l-2 border-border first:border-l-0 px-4.5 py-3 text-caption transition-colors focus-visible:z-10 focus-visible:outline-none focus-visible:shadow-focus disabled:pointer-events-none disabled:opacity-40",
       "data-[state=active]:bg-primary-action data-[state=active]:text-primary-foreground data-[state=active]:font-extrabold",
       "data-[state=inactive]:bg-background data-[state=inactive]:text-tint-foreground data-[state=inactive]:font-bold data-[state=inactive]:hover:bg-tint",
+      "active:bg-primary-pressed active:text-primary-foreground active:font-extrabold",
       className,
     )}
     {...props}

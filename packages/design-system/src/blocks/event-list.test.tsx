@@ -104,6 +104,9 @@ describe("<EventList>", () => {
     ).toBeTruthy();
     expect(screen.getAllByText("Август 2026")).toHaveLength(2);
     expect(
+      screen.getByRole("tab", { name: "Расписание · 3" }).className,
+    ).toContain("active:bg-primary-pressed");
+    expect(
       screen.getByRole("link", { name: "Смотреть запись ↗" }),
     ).toHaveAttribute("href", item.href);
   });

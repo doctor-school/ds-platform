@@ -1719,6 +1719,17 @@ export interface components {
             identifier: string;
             password: string;
         };
+        MonthBroadcastListDto: {
+            /** Format: uuid */
+            id: string;
+            school: string;
+            slug: string;
+            /** Format: date-time */
+            startsAt: string;
+            /** @enum {string} */
+            state: "published" | "live" | "ended";
+            title: string;
+        }[];
         OtpRequestDto: {
             captchaToken?: string;
             /** @enum {string} */
@@ -1743,6 +1754,53 @@ export interface components {
         PostChatMessageRequestDto: {
             text: string;
         };
+        PublicEventListingPageDto: {
+            counts: {
+                past: number;
+                upcoming: number;
+            };
+            data: ({
+                /** Format: uuid */
+                id: string;
+                school: string;
+                slug: string;
+                speakers: {
+                    name: string;
+                }[];
+                specialties: string[];
+                /** Format: date-time */
+                startsAt: string;
+                /** @enum {string} */
+                state: "published" | "live";
+                title: string;
+            } | {
+                /** Format: uuid */
+                id: string;
+                recording: {
+                    expectedBy: string | null;
+                    posterUrl: string | null;
+                    primaryKind: ("edited" | "raw") | null;
+                    secondaryKind: ("edited" | "raw") | null;
+                    /** @enum {string} */
+                    state: "montage" | "raw-only" | "preparing";
+                };
+                school: string;
+                slug: string;
+                speakers: {
+                    name: string;
+                }[];
+                specialties: string[];
+                /** Format: date-time */
+                startsAt: string;
+                /** @constant */
+                state: "ended";
+                title: string;
+            })[];
+            pagination: {
+                hasMore: boolean;
+                nextCursor: string | null;
+            };
+        };
         RegisterRequestDto: {
             captchaToken?: string;
             consent: {
@@ -1760,6 +1818,21 @@ export interface components {
             /** @enum {string} */
             to: "draft" | "published" | "live" | "ended" | "archived";
         };
+        UpcomingBroadcastListDto: {
+            /** Format: uuid */
+            id: string;
+            school: string;
+            slug: string;
+            speakers: {
+                name: string;
+            }[];
+            specialties: string[];
+            /** Format: date-time */
+            startsAt: string;
+            /** @enum {string} */
+            state: "published" | "live";
+            title: string;
+        }[];
         UpdateExpertRequestDto: {
             affiliation?: string | null;
             bio?: string | null;
@@ -3881,7 +3954,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["UpcomingBroadcastListDto"] | components["schemas"]["MonthBroadcastListDto"] | components["schemas"]["PublicEventListingPageDto"];
+                };
             };
         };
     };

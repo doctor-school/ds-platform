@@ -1,7 +1,10 @@
 import { createZodDto } from "nestjs-zod";
 import {
   ConfigureStreamRequestSchema,
+  MonthBroadcastListSchema,
+  PublicEventListingPageSchema,
   TransitionEventRequestSchema,
+  UpcomingBroadcastListSchema,
 } from "@ds/schemas";
 
 // nestjs-zod DTO at the I/O boundary (ADR-0002 §3). The schema is the SSOT in
@@ -23,4 +26,19 @@ export class TransitionEventRequestDto extends createZodDto(
  */
 export class ConfigureStreamRequestDto extends createZodDto(
   ConfigureStreamRequestSchema,
+) {}
+
+/** Public bare-path response without a selector (004 EARS-7). */
+export class UpcomingBroadcastListDto extends createZodDto(
+  UpcomingBroadcastListSchema,
+) {}
+
+/** Public bare-path response selected by `month=YYYY-MM` (004 EARS-15). */
+export class MonthBroadcastListDto extends createZodDto(
+  MonthBroadcastListSchema,
+) {}
+
+/** Cursor-paged public feed selected by `timeframe` (014 EARS-11). */
+export class PublicEventListingPageDto extends createZodDto(
+  PublicEventListingPageSchema,
 ) {}

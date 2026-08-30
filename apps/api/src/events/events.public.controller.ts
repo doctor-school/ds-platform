@@ -7,7 +7,12 @@ import {
   Param,
   Query,
 } from "@nestjs/common";
-import { ApiQuery } from "@nestjs/swagger";
+import {
+  ApiExtraModels,
+  ApiOkResponse,
+  ApiQuery,
+  getSchemaPath,
+} from "@nestjs/swagger";
 import {
   MONTH_PARAM,
   type MonthBroadcastEntry,
@@ -21,6 +26,11 @@ import {
 import { Authz, Public } from "../authz/index.js";
 import { EventsService } from "./events.service.js";
 import { InvalidEventListingCursorError } from "./events.service.js";
+import {
+  MonthBroadcastListDto,
+  PublicEventListingPageDto,
+  UpcomingBroadcastListDto,
+} from "./events.dto.js";
 
 /**
  * 004 public event read surface — the read side of the webinar aggregate (004
@@ -68,6 +78,20 @@ export class EventsPublicController {
   @ApiQuery({ name: "timeframe", required: false, enum: ["upcoming", "past"] })
   @ApiQuery({ name: "limit", required: false, type: Number })
   @ApiQuery({ name: "cursor", required: false, type: String })
+  @ApiExtraModels(
+    UpcomingBroadcastListDto,
+    MonthBroadcastListDto,
+    PublicEventListingPageDto,
+  )
+  @ApiOkResponse({
+    schema: {
+      oneOf: [
+        { $ref: getSchemaPath(UpcomingBroadcastListDto) },
+        { $ref: getSchemaPath(MonthBroadcastListDto) },
+        { $ref: getSchemaPath(PublicEventListingPageDto) },
+      ],
+    },
+  })
   @Public()
   @Header("Cache-Control", "public, max-age=30")
   @Authz({

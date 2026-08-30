@@ -10,6 +10,7 @@ import {
   DataTable,
   DayAgenda,
   EmptyState,
+  EventList,
   FilterBar,
   FormActions,
   FormDerivedNote,
@@ -25,6 +26,7 @@ import {
   type ComboboxOption,
   type DataTableColumn,
   type DotGridCell,
+  type EventListTab,
   type MonthGridCell,
   type MonthPickerCell,
 } from "@ds/design-system/blocks";
@@ -137,25 +139,38 @@ function PropsTable({ rows }: { rows: PropRow[] }) {
       <table className="w-full border-collapse text-left text-sm">
         <thead>
           <tr className="border-b border-border bg-muted">
-            <th className="px-3 py-2 font-medium text-foreground">Slot / prop</th>
+            <th className="px-3 py-2 font-medium text-foreground">
+              Slot / prop
+            </th>
             <th className="px-3 py-2 font-medium text-foreground">Type</th>
             <th className="px-3 py-2 font-medium text-foreground">Required</th>
-            <th className="px-3 py-2 font-medium text-foreground">Description</th>
+            <th className="px-3 py-2 font-medium text-foreground">
+              Description
+            </th>
           </tr>
         </thead>
         <tbody>
           {rows.map((r) => (
-            <tr key={r.name} className="border-b border-border last:border-0 align-top">
+            <tr
+              key={r.name}
+              className="border-b border-border last:border-0 align-top"
+            >
               <td className="px-3 py-2">
-                <code className="font-mono text-xs text-foreground">{r.name}</code>
+                <code className="font-mono text-xs text-foreground">
+                  {r.name}
+                </code>
               </td>
               <td className="px-3 py-2">
-                <code className="font-mono text-xs text-muted-foreground">{r.type}</code>
+                <code className="font-mono text-xs text-muted-foreground">
+                  {r.type}
+                </code>
               </td>
               <td className="px-3 py-2 text-xs text-muted-foreground">
                 {r.required ? "required" : "optional"}
               </td>
-              <td className="px-3 py-2 text-sm text-muted-foreground">{r.description}</td>
+              <td className="px-3 py-2 text-sm text-muted-foreground">
+                {r.description}
+              </td>
             </tr>
           ))}
         </tbody>
@@ -216,11 +231,36 @@ function LockGlyph({ className }: { className?: string }) {
 /* ------------------------------------------------------------------ */
 
 const AUTH_CARD_PROPS: PropRow[] = [
-  { name: "icon", type: "ReactNode", required: false, description: "Glyph rendered in a tint badge tile above the title." },
-  { name: "title", type: "ReactNode", required: true, description: "Card title." },
-  { name: "description", type: "ReactNode", required: false, description: "Sub-copy under the title." },
-  { name: "children", type: "ReactNode", required: true, description: "App-owned form / body — composes any primitives." },
-  { name: "footer", type: "ReactNode", required: false, description: "Secondary links (e.g. create account)." },
+  {
+    name: "icon",
+    type: "ReactNode",
+    required: false,
+    description: "Glyph rendered in a tint badge tile above the title.",
+  },
+  {
+    name: "title",
+    type: "ReactNode",
+    required: true,
+    description: "Card title.",
+  },
+  {
+    name: "description",
+    type: "ReactNode",
+    required: false,
+    description: "Sub-copy under the title.",
+  },
+  {
+    name: "children",
+    type: "ReactNode",
+    required: true,
+    description: "App-owned form / body — composes any primitives.",
+  },
+  {
+    name: "footer",
+    type: "ReactNode",
+    required: false,
+    description: "Secondary links (e.g. create account).",
+  },
 ];
 
 /** `AuthCard` with neutral-realistic content, composed from the real field primitives. */
@@ -242,12 +282,19 @@ function NeutralAuthCard({ className }: { className?: string }) {
       }
     >
       <Form {...form}>
-        <form className="flex flex-col gap-4" onSubmit={(e) => e.preventDefault()}>
+        <form
+          className="flex flex-col gap-4"
+          onSubmit={(e) => e.preventDefault()}
+        >
           <FormField
             name="email"
             control={form.control}
             render={({ field }) => (
-              <EmailField field={field} label="Email" placeholder="you@example.com" />
+              <EmailField
+                field={field}
+                label="Email"
+                placeholder="you@example.com"
+              />
             )}
           />
           <FormField
@@ -268,16 +315,26 @@ function NeutralAuthCard({ className }: { className?: string }) {
 
 /** A compact required-only `AuthCard` (title + children) for the state matrix. */
 function MinimalAuthCard() {
-  const form = useForm<FieldValues>({ defaultValues: { email: "" }, mode: "onTouched" });
+  const form = useForm<FieldValues>({
+    defaultValues: { email: "" },
+    mode: "onTouched",
+  });
   return (
     <AuthCard className="w-full max-w-sm" title="Reset password">
       <Form {...form}>
-        <form className="flex flex-col gap-4" onSubmit={(e) => e.preventDefault()}>
+        <form
+          className="flex flex-col gap-4"
+          onSubmit={(e) => e.preventDefault()}
+        >
           <FormField
             name="email"
             control={form.control}
             render={({ field }) => (
-              <EmailField field={field} label="Email" placeholder="you@example.com" />
+              <EmailField
+                field={field}
+                label="Email"
+                placeholder="you@example.com"
+              />
             )}
           />
           <Button type="submit" className="w-full">
@@ -296,10 +353,11 @@ function AuthCardSection() {
       exportsLine="AuthCard — slots: icon? · title · description? · children · footer? (token-only Card scaffold)"
     >
       <p className="text-sm text-muted-foreground">
-        The owned presentation scaffold the four auth surfaces (login / register / reset /
-        verify) compose into. It renders the real{" "}
-        <code className="font-mono text-xs">Card</code> primitives; all copy, the form, and the
-        icon are app-supplied — the block carries none of its own.
+        The owned presentation scaffold the four auth surfaces (login / register
+        / reset / verify) compose into. It renders the real{" "}
+        <code className="font-mono text-xs">Card</code> primitives; all copy,
+        the form, and the icon are app-supplied — the block carries none of its
+        own.
       </p>
 
       <SubRow label="Preview">
@@ -314,12 +372,18 @@ function AuthCardSection() {
 
       <SubRow label="State matrix — optional-slot presence">
         <div className="grid grid-cols-1 gap-x-10 gap-y-6 lg:grid-cols-2">
-          <StateCase label="all slots" note="icon + description + footer present">
+          <StateCase
+            label="all slots"
+            note="icon + description + footer present"
+          >
             <Canvas>
               <NeutralAuthCard className="w-full max-w-sm" />
             </Canvas>
           </StateCase>
-          <StateCase label="required only" note="title + children; icon / description / footer omitted">
+          <StateCase
+            label="required only"
+            note="title + children; icon / description / footer omitted"
+          >
             <Canvas>
               <MinimalAuthCard />
             </Canvas>
@@ -335,9 +399,26 @@ function AuthCardSection() {
 /* ------------------------------------------------------------------ */
 
 const AUTH_LAYOUT_PROPS: PropRow[] = [
-  { name: "logo", type: "ReactNode", required: false, description: "Brand lockup above the form card. On lg+ it is hidden when an aside is present (the panel carries the mark); with no aside it shows on every breakpoint." },
-  { name: "aside", type: "ReactNode", required: false, description: "Brand-panel content (eyebrow / headline / sub-copy centered, footer pinned low). Present ⇒ two-column split at layout; omitted ⇒ centered form-only screen (panel not rendered)." },
-  { name: "children", type: "ReactNode", required: true, description: "The auth form for this surface (an AuthCard)." },
+  {
+    name: "logo",
+    type: "ReactNode",
+    required: false,
+    description:
+      "Brand lockup above the form card. On lg+ it is hidden when an aside is present (the panel carries the mark); with no aside it shows on every breakpoint.",
+  },
+  {
+    name: "aside",
+    type: "ReactNode",
+    required: false,
+    description:
+      "Brand-panel content (eyebrow / headline / sub-copy centered, footer pinned low). Present ⇒ two-column split at layout; omitted ⇒ centered form-only screen (panel not rendered).",
+  },
+  {
+    name: "children",
+    type: "ReactNode",
+    required: true,
+    description: "The auth form for this surface (an AuthCard).",
+  },
 ];
 
 /**
@@ -366,7 +447,9 @@ function NeutralAside() {
           Sign in to pick up where you left off.
         </p>
       </div>
-      <p className="text-sm font-semibold text-primary-surface-muted">Free · no red tape · © Acme</p>
+      <p className="text-sm font-semibold text-primary-surface-muted">
+        Free · no red tape · © Acme
+      </p>
     </div>
   );
 }
@@ -399,12 +482,19 @@ function NestedAuthCard() {
       }
     >
       <Form {...form}>
-        <form className="flex flex-col gap-4" onSubmit={(e) => e.preventDefault()}>
+        <form
+          className="flex flex-col gap-4"
+          onSubmit={(e) => e.preventDefault()}
+        >
           <FormField
             name="email"
             control={form.control}
             render={({ field }) => (
-              <EmailField field={field} label="Email" placeholder="you@example.com" />
+              <EmailField
+                field={field}
+                label="Email"
+                placeholder="you@example.com"
+              />
             )}
           />
           <FormField
@@ -431,20 +521,27 @@ function AuthLayoutSection() {
     >
       <p className="text-sm text-muted-foreground">
         The split-screen chrome wrapping an{" "}
-        <code className="font-mono text-xs">AuthCard</code>. The brand panel paints from the
-        semantic <code className="font-mono text-xs">primary-surface</code> token (the block&apos;s
-        own branding); the <code className="font-mono text-xs">logo</code> and the panel{" "}
-        <code className="font-mono text-xs">aside</code> are app-supplied. The two-column split
-        engages at the semantic <code className="font-mono text-xs">layout</code> breakpoint
-        (≥901px, §09 — the token match for the canvas ≤900px fold); the block&apos;s{" "}
-        <code className="font-mono text-xs">min-h-screen</code> is neutralised to{" "}
-        <code className="font-mono text-xs">min-h-0</code> here so it sizes to content at catalogue
-        scale.
+        <code className="font-mono text-xs">AuthCard</code>. The brand panel
+        paints from the semantic{" "}
+        <code className="font-mono text-xs">primary-surface</code> token (the
+        block&apos;s own branding); the{" "}
+        <code className="font-mono text-xs">logo</code> and the panel{" "}
+        <code className="font-mono text-xs">aside</code> are app-supplied. The
+        two-column split engages at the semantic{" "}
+        <code className="font-mono text-xs">layout</code> breakpoint (≥901px,
+        §09 — the token match for the canvas ≤900px fold); the block&apos;s{" "}
+        <code className="font-mono text-xs">min-h-screen</code> is neutralised
+        to <code className="font-mono text-xs">min-h-0</code> here so it sizes
+        to content at catalogue scale.
       </p>
 
       <SubRow label="Preview">
         <div className="overflow-hidden rounded-lg border border-border">
-          <AuthLayout className="min-h-0" logo={<NeutralLogo />} aside={<NeutralAside />}>
+          <AuthLayout
+            className="min-h-0"
+            logo={<NeutralLogo />}
+            aside={<NeutralAside />}
+          >
             <NestedAuthCard />
           </AuthLayout>
         </div>
@@ -456,14 +553,24 @@ function AuthLayoutSection() {
 
       <SubRow label="State matrix — aside present vs omitted">
         <div className="flex flex-col gap-6">
-          <StateCase label="aside present" note="branded split — brand panel (lg+) + form column">
+          <StateCase
+            label="aside present"
+            note="branded split — brand panel (lg+) + form column"
+          >
             <div className="overflow-hidden rounded-lg border border-border">
-              <AuthLayout className="min-h-0" logo={<NeutralLogo />} aside={<NeutralAside />}>
+              <AuthLayout
+                className="min-h-0"
+                logo={<NeutralLogo />}
+                aside={<NeutralAside />}
+              >
                 <NestedAuthCard />
               </AuthLayout>
             </div>
           </StateCase>
-          <StateCase label="aside omitted" note="form-only — logo on every breakpoint, panel not rendered">
+          <StateCase
+            label="aside omitted"
+            note="form-only — logo on every breakpoint, panel not rendered"
+          >
             <div className="overflow-hidden rounded-lg border border-border">
               <AuthLayout className="min-h-0" logo={<NeutralLogo />}>
                 <NestedAuthCard />
@@ -481,23 +588,115 @@ function AuthLayoutSection() {
 /* ------------------------------------------------------------------ */
 
 const OTP_FOCUS_PROPS: PropRow[] = [
-  { name: "field", type: "ControllerRenderProps", required: true, description: "RHF controller for the code field — the app owns the form/resolver." },
-  { name: "length", type: "number", required: true, description: "Fixed code length (8 for login OTP, 6 for register/reset)." },
-  { name: "variant", type: '"slotted" | "plain"', required: false, description: "OTP presentation — defaults to the unified slotted look." },
-  { name: "title", type: "ReactNode", required: true, description: "Screen title (app-supplied, localized)." },
-  { name: "sentToLabel", type: "ReactNode", required: true, description: 'Past-tense "code sent to {masked}" — app composes it with the pre-masked destination (maskDestination).' },
-  { name: "codeLabel", type: "string", required: true, description: "Label for the code input." },
-  { name: "submitLabel", type: "ReactNode", required: true, description: "Submit button copy." },
-  { name: "resendLabel", type: "ReactNode", required: true, description: "Resend control copy while enabled." },
-  { name: "resendCountdownLabel", type: "(s: number) => ReactNode", required: true, description: "Resend copy while counting down; receives remaining seconds." },
-  { name: "changeMethodLabel", type: "ReactNode", required: true, description: "Change-method / back control copy." },
-  { name: "cooldownSeconds", type: "number", required: false, description: "Resend cooldown; the countdown (re)starts when this value changes. 0 = enabled now." },
-  { name: "resendNonce", type: "number", required: false, description: "Bump on each successful resend to restart the countdown without remounting the block." },
-  { name: "isSubmitting", type: "boolean", required: false, description: "App-owned in-flight flag — disables submit + guards the auto-submit race." },
-  { name: "error", type: "ReactNode", required: false, description: "Optional error slot (already-mapped, localized message)." },
-  { name: "onSubmit", type: "FormEventHandler", required: true, description: "Manual submit handler (the form the app owns)." },
-  { name: "onResend", type: "() => void", required: true, description: "Resend handler — the app re-requests the code and bumps the cooldown." },
-  { name: "onChangeMethod", type: "() => void", required: true, description: "Change-method / back handler — returns the surface to channel selection." },
+  {
+    name: "field",
+    type: "ControllerRenderProps",
+    required: true,
+    description:
+      "RHF controller for the code field — the app owns the form/resolver.",
+  },
+  {
+    name: "length",
+    type: "number",
+    required: true,
+    description: "Fixed code length (8 for login OTP, 6 for register/reset).",
+  },
+  {
+    name: "variant",
+    type: '"slotted" | "plain"',
+    required: false,
+    description: "OTP presentation — defaults to the unified slotted look.",
+  },
+  {
+    name: "title",
+    type: "ReactNode",
+    required: true,
+    description: "Screen title (app-supplied, localized).",
+  },
+  {
+    name: "sentToLabel",
+    type: "ReactNode",
+    required: true,
+    description:
+      'Past-tense "code sent to {masked}" — app composes it with the pre-masked destination (maskDestination).',
+  },
+  {
+    name: "codeLabel",
+    type: "string",
+    required: true,
+    description: "Label for the code input.",
+  },
+  {
+    name: "submitLabel",
+    type: "ReactNode",
+    required: true,
+    description: "Submit button copy.",
+  },
+  {
+    name: "resendLabel",
+    type: "ReactNode",
+    required: true,
+    description: "Resend control copy while enabled.",
+  },
+  {
+    name: "resendCountdownLabel",
+    type: "(s: number) => ReactNode",
+    required: true,
+    description: "Resend copy while counting down; receives remaining seconds.",
+  },
+  {
+    name: "changeMethodLabel",
+    type: "ReactNode",
+    required: true,
+    description: "Change-method / back control copy.",
+  },
+  {
+    name: "cooldownSeconds",
+    type: "number",
+    required: false,
+    description:
+      "Resend cooldown; the countdown (re)starts when this value changes. 0 = enabled now.",
+  },
+  {
+    name: "resendNonce",
+    type: "number",
+    required: false,
+    description:
+      "Bump on each successful resend to restart the countdown without remounting the block.",
+  },
+  {
+    name: "isSubmitting",
+    type: "boolean",
+    required: false,
+    description:
+      "App-owned in-flight flag — disables submit + guards the auto-submit race.",
+  },
+  {
+    name: "error",
+    type: "ReactNode",
+    required: false,
+    description: "Optional error slot (already-mapped, localized message).",
+  },
+  {
+    name: "onSubmit",
+    type: "FormEventHandler",
+    required: true,
+    description: "Manual submit handler (the form the app owns).",
+  },
+  {
+    name: "onResend",
+    type: "() => void",
+    required: true,
+    description:
+      "Resend handler — the app re-requests the code and bumps the cooldown.",
+  },
+  {
+    name: "onChangeMethod",
+    type: "() => void",
+    required: true,
+    description:
+      "Change-method / back handler — returns the surface to channel selection.",
+  },
 ];
 
 /** `OtpFocusScreen` with neutral-realistic copy; mounts its own RHF form to supply the `code` field. */
@@ -548,7 +747,9 @@ function OtpFocusDemo({
 /** Catalogue frame for an OtpFocusScreen sample — the surface composes it inside a card region. */
 function OtpFrame({ children }: { children: ReactNode }) {
   return (
-    <div className="max-w-sm rounded-xl border border-border p-6">{children}</div>
+    <div className="max-w-sm rounded-xl border border-border p-6">
+      {children}
+    </div>
   );
 }
 
@@ -559,10 +760,11 @@ function OtpFocusScreenSection() {
       exportsLine="OtpFocusScreen — props: field · length · *Label copy · cooldownSeconds · resendNonce · isSubmitting · error"
     >
       <p className="text-sm text-muted-foreground">
-        The focused OTP-entry block a surface swaps in once a code is issued: by construction it
-        renders ONLY masked destination + code input + submit + resend(cooldown) + change-method,
-        so the user cannot wander off the challenge. Every visible string is an app-supplied prop;
-        the masked destination is computed by the app via{" "}
+        The focused OTP-entry block a surface swaps in once a code is issued: by
+        construction it renders ONLY masked destination + code input + submit +
+        resend(cooldown) + change-method, so the user cannot wander off the
+        challenge. Every visible string is an app-supplied prop; the masked
+        destination is computed by the app via{" "}
         <code className="font-mono text-xs">maskDestination</code>.
       </p>
 
@@ -592,7 +794,10 @@ function OtpFocusScreenSection() {
           </StateCase>
           <StateCase label="error" note="error slot populated">
             <OtpFrame>
-              <OtpFocusDemo cooldownSeconds={30} error="That code is incorrect." />
+              <OtpFocusDemo
+                cooldownSeconds={30}
+                error="That code is incorrect."
+              />
             </OtpFrame>
           </StateCase>
           <StateCase label="submitting" note="isSubmitting — submit disabled">
@@ -621,7 +826,9 @@ const GRID_WEEKS: MonthGridCell[][] = [
     { dateLabel: "3" },
     {
       dateLabel: "4",
-      pills: [{ href: "#", time: "18:00", title: "Разбор клинического случая" }],
+      pills: [
+        { href: "#", time: "18:00", title: "Разбор клинического случая" },
+      ],
     },
     { dateLabel: "5", muted: true, mutedDate: true },
     { dateLabel: "6", muted: true, mutedDate: true },
@@ -635,10 +842,16 @@ const GRID_WEEKS: MonthGridCell[][] = [
         { href: "#", time: "20:30", title: "Новое в терапии" },
       ],
     },
-    { dateLabel: "8", pills: [{ href: "#", time: "18:00", title: "Кардиология" }] },
+    {
+      dateLabel: "8",
+      pills: [{ href: "#", time: "18:00", title: "Кардиология" }],
+    },
     { dateLabel: "9" },
     { dateLabel: "10" },
-    { dateLabel: "11", pills: [{ href: "#", time: "19:30", title: "Педиатрия" }] },
+    {
+      dateLabel: "11",
+      pills: [{ href: "#", time: "19:30", title: "Педиатрия" }],
+    },
     { dateLabel: "12", muted: true, mutedDate: true },
     { dateLabel: "13", muted: true, mutedDate: true },
   ],
@@ -657,9 +870,10 @@ function MonthCalendarGridSection() {
       exportsLine="MonthCalendarGrid — props: weekdays · weeks (MonthGridCell[][]) · liveLabel · legend (display-only desktop month grid)"
     >
       <p className="text-sm text-muted-foreground">
-        The desktop pane of the webinars month view. Display-only: each day renders event
-        pills (linking to the event page), a red live pill, or a muted past-day note; today is
-        outlined; a state legend sits below. All data, copy, and hrefs are app-supplied.
+        The desktop pane of the webinars month view. Display-only: each day
+        renders event pills (linking to the event page), a red live pill, or a
+        muted past-day note; today is outlined; a state legend sits below. All
+        data, copy, and hrefs are app-supplied.
       </p>
       <SubRow label="Preview">
         <div className="rounded-lg border border-border bg-muted p-8">
@@ -679,7 +893,12 @@ function MonthCalendarGridSection() {
 const DOT_WEEKS: DotGridCell[][] = [
   [
     { day: 30, inMonth: false, dots: [], ariaLabel: "30" },
-    { day: 1, inMonth: true, dots: ["past", "past"], ariaLabel: "1 — 2 эфира прошли" },
+    {
+      day: 1,
+      inMonth: true,
+      dots: ["past", "past"],
+      ariaLabel: "1 — 2 эфира прошли",
+    },
     { day: 2, inMonth: true, dots: ["past"], ariaLabel: "2 — 1 эфир прошёл" },
     { day: 3, inMonth: true, dots: [], ariaLabel: "3 — нет эфиров" },
     { day: 4, inMonth: true, dots: ["event"], ariaLabel: "4 — 1 эфир" },
@@ -711,11 +930,12 @@ function MonthDotGridSection() {
       exportsLine="MonthDotGrid — props: weekdays · weeks (DotGridCell[][]) · selectedDay · onSelectDay (controlled mobile calendar)"
     >
       <p className="text-sm text-muted-foreground">
-        The mobile pane calendar: each day shows up to three status dots (red = airing, accent =
-        planned, muted = past). A controlled unit — the app owns the selected day and pairs it
-        with <code className="font-mono text-xs">DayAgenda</code>. Each day carries an{" "}
-        <code className="font-mono text-xs">aria-label</code> so the live signal is never
-        colour-only.
+        The mobile pane calendar: each day shows up to three status dots (red =
+        airing, accent = planned, muted = past). A controlled unit — the app
+        owns the selected day and pairs it with{" "}
+        <code className="font-mono text-xs">DayAgenda</code>. Each day carries
+        an <code className="font-mono text-xs">aria-label</code> so the live
+        signal is never colour-only.
       </p>
       <SubRow label="Preview">
         <div className="rounded-lg border border-border bg-muted p-8">
@@ -740,8 +960,9 @@ function DayAgendaSection() {
       exportsLine="DayAgenda — props: title · rows (DayAgendaRow[]) · emptyText (selected-day event list)"
     >
       <p className="text-sm text-muted-foreground">
-        The selected day&apos;s event list below the dot-grid: each row links to the event page; a
-        live row takes the red badge + border; an empty day shows the app-chosen note.
+        The selected day&apos;s event list below the dot-grid: each row links to
+        the event page; a live row takes the red badge + border; an empty day
+        shows the app-chosen note.
       </p>
       <SubRow label="State matrix — populated vs empty">
         <div className="grid grid-cols-1 gap-x-10 gap-y-6 lg:grid-cols-2">
@@ -808,16 +1029,19 @@ function MonthPickerSection() {
       exportsLine="MonthPicker — props: triggerLabel · initialYear · years (MonthPickerYear[]) · prev/nextYearHref (edge fallback) · defaultOpen (native <details> disclosure)"
     >
       <p className="text-sm text-muted-foreground">
-        The month view&apos;s chooser: a native <code className="font-mono text-xs">&lt;details&gt;</code>{" "}
-        disclosure with a year ‹ › stepper and a 3-column grid of the year&apos;s twelve months, each
-        with its event count. A past month is muted («прошёл»), the displayed month is filled, every
-        other is a link. The year ‹ › stepper pages IN PLACE across the app-provided{" "}
-        <code className="font-mono text-xs">years</code> window (no navigation, popover stays open,
-        counters swap); a step past the window edge follows{" "}
-        <code className="font-mono text-xs">prev/nextYearHref</code>. The trigger + steppers adopt the{" "}
+        The month view&apos;s chooser: a native{" "}
+        <code className="font-mono text-xs">&lt;details&gt;</code> disclosure
+        with a year ‹ › stepper and a 3-column grid of the year&apos;s twelve
+        months, each with its event count. A past month is muted («прошёл»), the
+        displayed month is filled, every other is a link. The year ‹ › stepper
+        pages IN PLACE across the app-provided{" "}
+        <code className="font-mono text-xs">years</code> window (no navigation,
+        popover stays open, counters swap); a step past the window edge follows{" "}
+        <code className="font-mono text-xs">prev/nextYearHref</code>. The
+        trigger + steppers adopt the{" "}
         <code className="font-mono text-xs">Button</code> outline states. Shown{" "}
-        <code className="font-mono text-xs">defaultOpen</code> so the popover is catalogued (and
-        a11y-scanned) in place.
+        <code className="font-mono text-xs">defaultOpen</code> so the popover is
+        catalogued (and a11y-scanned) in place.
       </p>
       <SubRow label="Preview">
         {/*
@@ -928,7 +1152,10 @@ const DIRECTION_STATUS_CHIP: Record<
   DirectionRow["status"],
   { label: string; className: string }
 > = {
-  published: { label: "Опубликовано", className: "bg-success-tint text-success-text" },
+  published: {
+    label: "Опубликовано",
+    className: "bg-success-tint text-success-text",
+  },
   draft: { label: "Черновик", className: "bg-warning-tint text-foreground" },
 };
 
@@ -977,16 +1204,72 @@ const DIRECTION_EMPTY_NO_RESULTS = {
 };
 
 const DATA_TABLE_PROPS: PropRow[] = [
-  { name: "record", type: "DataTableRecordColumn of the row type", required: true, description: "Primary two-line record column: title (wraps to 2 lines) + muted context + the row-activation accessible name." },
-  { name: "columns", type: "DataTableColumn of the row type — array", required: true, description: "Declared columns — width · align · overflow · render · fullValue (the reachable full value behind an ellipsis)." },
-  { name: "rows / getRowKey", type: "Row[] / (row) => string", required: true, description: "One server-queried page of rows and their stable keys." },
-  { name: "caption", type: "string", required: true, description: "Accessible table name — a visually hidden <caption>." },
-  { name: "rowHref / onRowClick", type: "(row) => string / (row) => void", required: false, description: "Single-action list: the whole row opens the record via a real link/button. Omit for inert rows." },
-  { name: "actions", type: "(row) => ReactNode", required: false, description: "Renders a trailing actions column — ONLY for rows with ≥2 actions." },
-  { name: "isLoading / error", type: "boolean / ReactNode", required: false, description: "Skeleton rows under a drawn header; an error node replaces the body (never an empty state)." },
-  { name: "isFiltered", type: "boolean", required: false, description: "Routes WHICH empty state shows — no records at all vs no results for the current filter." },
-  { name: "emptyNoRecords / emptyNoResults", type: "EmptyStateProps without variant", required: true, description: "The two empty situations, never collapsed into one string." },
-  { name: "pagination", type: "PaginationProps", required: false, description: "Optional paginated footer." },
+  {
+    name: "record",
+    type: "DataTableRecordColumn of the row type",
+    required: true,
+    description:
+      "Primary two-line record column: title (wraps to 2 lines) + muted context + the row-activation accessible name.",
+  },
+  {
+    name: "columns",
+    type: "DataTableColumn of the row type — array",
+    required: true,
+    description:
+      "Declared columns — width · align · overflow · render · fullValue (the reachable full value behind an ellipsis).",
+  },
+  {
+    name: "rows / getRowKey",
+    type: "Row[] / (row) => string",
+    required: true,
+    description: "One server-queried page of rows and their stable keys.",
+  },
+  {
+    name: "caption",
+    type: "string",
+    required: true,
+    description: "Accessible table name — a visually hidden <caption>.",
+  },
+  {
+    name: "rowHref / onRowClick",
+    type: "(row) => string / (row) => void",
+    required: false,
+    description:
+      "Single-action list: the whole row opens the record via a real link/button. Omit for inert rows.",
+  },
+  {
+    name: "actions",
+    type: "(row) => ReactNode",
+    required: false,
+    description:
+      "Renders a trailing actions column — ONLY for rows with ≥2 actions.",
+  },
+  {
+    name: "isLoading / error",
+    type: "boolean / ReactNode",
+    required: false,
+    description:
+      "Skeleton rows under a drawn header; an error node replaces the body (never an empty state).",
+  },
+  {
+    name: "isFiltered",
+    type: "boolean",
+    required: false,
+    description:
+      "Routes WHICH empty state shows — no records at all vs no results for the current filter.",
+  },
+  {
+    name: "emptyNoRecords / emptyNoResults",
+    type: "EmptyStateProps without variant",
+    required: true,
+    description: "The two empty situations, never collapsed into one string.",
+  },
+  {
+    name: "pagination",
+    type: "PaginationProps",
+    required: false,
+    description: "Optional paginated footer.",
+  },
 ];
 
 function DataTableSection() {
@@ -996,14 +1279,16 @@ function DataTableSection() {
       exportsLine="DataTable · Table family — props: record · columns · rows · getRowKey · caption · rowHref/onRowClick · actions · isLoading · error · isFiltered · emptyNoRecords/emptyNoResults · pagination"
     >
       <p className="text-sm text-muted-foreground">
-        The operator list block: adopted shadcn/ui <code className="font-mono text-xs">Table</code>{" "}
-        markup (MIT) re-skinned to tokens, wrapped in the owned column contract. Widths are
-        DECLARED so a list does not re-lay itself page to page; the record column wraps to two
-        lines with a muted context line under it; a long non-title cell ellipses and keeps its full
-        value on the native <code className="font-mono text-xs">title</code>. Below{" "}
-        <code className="font-mono text-xs">md</code> the grid becomes stacked record cards, so a
-        phone never scrolls sideways. A single-action list has no «Действия» column — the whole row
-        is the link.
+        The operator list block: adopted shadcn/ui{" "}
+        <code className="font-mono text-xs">Table</code> markup (MIT) re-skinned
+        to tokens, wrapped in the owned column contract. Widths are DECLARED so
+        a list does not re-lay itself page to page; the record column wraps to
+        two lines with a muted context line under it; a long non-title cell
+        ellipses and keeps its full value on the native{" "}
+        <code className="font-mono text-xs">title</code>. Below{" "}
+        <code className="font-mono text-xs">md</code> the grid becomes stacked
+        record cards, so a phone never scrolls sideways. A single-action list
+        has no «Действия» column — the whole row is the link.
       </p>
       <SubRow label="Preview — populated, whole row opens the record">
         <WideCanvas>
@@ -1024,7 +1309,10 @@ function DataTableSection() {
       </SubRow>
       <SubRow label="State matrix">
         <div className="grid gap-6">
-          <StateCase label="isLoading" note="skeleton rows under an already-drawn header">
+          <StateCase
+            label="isLoading"
+            note="skeleton rows under an already-drawn header"
+          >
             <WideCanvas>
               <DataTable
                 caption="Направления"
@@ -1039,7 +1327,10 @@ function DataTableSection() {
               />
             </WideCanvas>
           </StateCase>
-          <StateCase label="error" note="an alert replaces the body — never an empty state">
+          <StateCase
+            label="error"
+            note="an alert replaces the body — never an empty state"
+          >
             <WideCanvas>
               <DataTable
                 caption="Направления"
@@ -1053,7 +1344,10 @@ function DataTableSection() {
               />
             </WideCanvas>
           </StateCase>
-          <StateCase label="rows=[] · isFiltered=false" note="no records at all — the create action">
+          <StateCase
+            label="rows=[] · isFiltered=false"
+            note="no records at all — the create action"
+          >
             <WideCanvas>
               <DataTable
                 caption="Направления"
@@ -1066,7 +1360,10 @@ function DataTableSection() {
               />
             </WideCanvas>
           </StateCase>
-          <StateCase label="rows=[] · isFiltered" note="no results for the current filter — reset">
+          <StateCase
+            label="rows=[] · isFiltered"
+            note="no results for the current filter — reset"
+          >
             <WideCanvas>
               <DataTable
                 caption="Направления"
@@ -1080,7 +1377,10 @@ function DataTableSection() {
               />
             </WideCanvas>
           </StateCase>
-          <StateCase label="actions" note="a trailing column ONLY when a row has ≥2 actions">
+          <StateCase
+            label="actions"
+            note="a trailing column ONLY when a row has ≥2 actions"
+          >
             <WideCanvas>
               <DataTable
                 caption="Направления"
@@ -1111,14 +1411,55 @@ function DataTableSection() {
 }
 
 const PAGINATION_PROPS: PropRow[] = [
-  { name: "page / pageCount", type: "number", required: true, description: "Current 1-based page and the total. A pageCount ≤ 1 renders nothing at all." },
-  { name: "onPageChange", type: "(page: number) => void", required: true, description: "Page request — the surface re-queries." },
-  { name: "navLabel", type: "string", required: true, description: "Accessible name of the <nav> landmark («Страницы»)." },
-  { name: "previousLabel / nextLabel", type: "string", required: true, description: "Visible previous/next copy — app-supplied, localized." },
-  { name: "pageLabel", type: "(page: number) => string", required: true, description: "Per-number accessible label builder." },
-  { name: "readout", type: "ReactNode", required: false, description: "Range readout («Показаны 21–40 из 137»)." },
-  { name: "isLoading", type: "boolean", required: false, description: "Controls are inert while the next page is in flight." },
-  { name: "siblingCount", type: "number", required: false, description: "Pages rendered either side of the current one." },
+  {
+    name: "page / pageCount",
+    type: "number",
+    required: true,
+    description:
+      "Current 1-based page and the total. A pageCount ≤ 1 renders nothing at all.",
+  },
+  {
+    name: "onPageChange",
+    type: "(page: number) => void",
+    required: true,
+    description: "Page request — the surface re-queries.",
+  },
+  {
+    name: "navLabel",
+    type: "string",
+    required: true,
+    description: "Accessible name of the <nav> landmark («Страницы»).",
+  },
+  {
+    name: "previousLabel / nextLabel",
+    type: "string",
+    required: true,
+    description: "Visible previous/next copy — app-supplied, localized.",
+  },
+  {
+    name: "pageLabel",
+    type: "(page: number) => string",
+    required: true,
+    description: "Per-number accessible label builder.",
+  },
+  {
+    name: "readout",
+    type: "ReactNode",
+    required: false,
+    description: "Range readout («Показаны 21–40 из 137»).",
+  },
+  {
+    name: "isLoading",
+    type: "boolean",
+    required: false,
+    description: "Controls are inert while the next page is in flight.",
+  },
+  {
+    name: "siblingCount",
+    type: "number",
+    required: false,
+    description: "Pages rendered either side of the current one.",
+  },
 ];
 
 function PaginationSection() {
@@ -1129,12 +1470,13 @@ function PaginationSection() {
       exportsLine="Pagination · buildPageItems — props: page · pageCount · onPageChange · navLabel · previousLabel/nextLabel · pageLabel · readout · isLoading · siblingCount"
     >
       <p className="text-sm text-muted-foreground">
-        Numbered pages (owner pick П1): an operator who knows a record sits «somewhere near the
-        end» jumps there instead of pressing «дальше» nine times. The GOV.UK rules are enforced by
-        the block, not by each call site — nothing renders for a single page, «Назад» is absent on
-        page 1 and «Вперёд» on the last, and exactly one number carries{" "}
-        <code className="font-mono text-xs">aria-current=&quot;page&quot;</code>. Live sample —
-        the numbers below actually page.
+        Numbered pages (owner pick П1): an operator who knows a record sits
+        «somewhere near the end» jumps there instead of pressing «дальше» nine
+        times. The GOV.UK rules are enforced by the block, not by each call site
+        — nothing renders for a single page, «Назад» is absent on page 1 and
+        «Вперёд» on the last, and exactly one number carries{" "}
+        <code className="font-mono text-xs">aria-current=&quot;page&quot;</code>
+        . Live sample — the numbers below actually page.
       </p>
       <SubRow label="Preview">
         <Canvas>
@@ -1181,7 +1523,10 @@ function PaginationSection() {
               />
             </Canvas>
           </StateCase>
-          <StateCase label="isLoading" note="inert while the next page is in flight">
+          <StateCase
+            label="isLoading"
+            note="inert while the next page is in flight"
+          >
             <Canvas>
               <Pagination
                 page={4}
@@ -1202,10 +1547,32 @@ function PaginationSection() {
 }
 
 const EMPTY_STATE_PROPS: PropRow[] = [
-  { name: "variant", type: '"no-records" | "no-results"', required: true, description: "WHICH empty situation this is — the two are never one string." },
-  { name: "title", type: "ReactNode", required: true, description: "Heading, app-supplied and localized." },
-  { name: "description", type: "ReactNode", required: false, description: "One explanatory line; for no-results, name what was applied." },
-  { name: "action", type: "ReactNode", required: false, description: "At most one action — create for no-records, reset filters for no-results." },
+  {
+    name: "variant",
+    type: '"no-records" | "no-results"',
+    required: true,
+    description:
+      "WHICH empty situation this is — the two are never one string.",
+  },
+  {
+    name: "title",
+    type: "ReactNode",
+    required: true,
+    description: "Heading, app-supplied and localized.",
+  },
+  {
+    name: "description",
+    type: "ReactNode",
+    required: false,
+    description: "One explanatory line; for no-results, name what was applied.",
+  },
+  {
+    name: "action",
+    type: "ReactNode",
+    required: false,
+    description:
+      "At most one action — create for no-records, reset filters for no-results.",
+  },
 ];
 
 function EmptyStateSection() {
@@ -1215,21 +1582,35 @@ function EmptyStateSection() {
       exportsLine="EmptyState — props: variant (no-records | no-results) · title · description · action"
     >
       <p className="text-sm text-muted-foreground">
-        Two different situations, two different states. «Ничего не создано» invites the operator to
-        create the first record; «ничего не найдено по фильтру» must instead name what was applied
-        and offer the way back. Collapsing both into one «Нет данных» is the defect this block
-        exists to prevent — the operator cannot tell an empty catalogue from a too-narrow filter.
+        Two different situations, two different states. «Ничего не создано»
+        invites the operator to create the first record; «ничего не найдено по
+        фильтру» must instead name what was applied and offer the way back.
+        Collapsing both into one «Нет данных» is the defect this block exists to
+        prevent — the operator cannot tell an empty catalogue from a too-narrow
+        filter.
       </p>
       <SubRow label="State matrix">
         <div className="grid gap-6">
-          <StateCase label='variant="no-records"' note="the catalogue is genuinely empty">
+          <StateCase
+            label='variant="no-records"'
+            note="the catalogue is genuinely empty"
+          >
             <Canvas>
-              <EmptyState variant="no-records" {...DIRECTION_EMPTY_NO_RECORDS} />
+              <EmptyState
+                variant="no-records"
+                {...DIRECTION_EMPTY_NO_RECORDS}
+              />
             </Canvas>
           </StateCase>
-          <StateCase label='variant="no-results"' note="the filter is too narrow — name it, offer the way back">
+          <StateCase
+            label='variant="no-results"'
+            note="the filter is too narrow — name it, offer the way back"
+          >
             <Canvas>
-              <EmptyState variant="no-results" {...DIRECTION_EMPTY_NO_RESULTS} />
+              <EmptyState
+                variant="no-results"
+                {...DIRECTION_EMPTY_NO_RESULTS}
+              />
             </Canvas>
           </StateCase>
         </div>
@@ -1241,16 +1622,224 @@ function EmptyStateSection() {
   );
 }
 
+const EVENT_LIST_PROPS: PropRow[] = [
+  {
+    name: "items",
+    type: "EventListItem[]",
+    required: true,
+    description:
+      "Host-projected event cards, already ordered and grouped; the block performs no fetch.",
+  },
+  {
+    name: "selectedTab",
+    type: '"upcoming" | "past"',
+    required: true,
+    description: "Controlled membership state owned by the host router.",
+  },
+  {
+    name: "onTabChange",
+    type: "(tab) => void",
+    required: true,
+    description: "Host callback for URL/router synchronization.",
+  },
+  {
+    name: "counts",
+    type: "Record<EventListTab, number>",
+    required: true,
+    description: "Server-projected totals displayed in the two tabs.",
+  },
+  {
+    name: "labels",
+    type: "EventListLabels",
+    required: true,
+    description: "Host-owned copy for tabs, empty state, and pagination.",
+  },
+  {
+    name: "page / pageCount",
+    type: "number",
+    required: true,
+    description: "Controlled pagination position and bounded page count.",
+  },
+  {
+    name: "onPageChange",
+    type: "(page, cursor?) => void",
+    required: true,
+    description:
+      "Host callback; network and cursor ownership remain outside the block.",
+  },
+  {
+    name: "toolbar",
+    type: "ReactNode",
+    required: false,
+    description: "Optional host controls between the tabs and grouped feed.",
+  },
+];
+
+const EVENT_LIST_LABELS = {
+  upcoming: "Schedule",
+  past: "Recording archive",
+  emptyTitle: "No events yet",
+  emptyDescription: "New sessions will appear here after publication.",
+  pagination: "Event pages",
+  previous: "Previous",
+  next: "Next",
+  page: (page: number) => `Page ${page}`,
+};
+
+const EVENT_LIST_BASE_ITEM = {
+  id: "clinical-cases",
+  groupKey: "2026-08",
+  groupLabel: "August 2026",
+  href: "/webinars/clinical-cases",
+  time: "18:00",
+  tzLabel: "MSK",
+  dateLabel: "30 August · Sun",
+  school: "School of cardiology",
+  title: "Clinical cases in daily practice",
+  specialties: ["Cardiology", "Therapy"],
+  speakers: [{ name: "Dr Marina Volkova", affiliation: "University clinic" }],
+  recordingLabel: "Recording is available",
+};
+
+function EventListSection() {
+  const [selectedTab, setSelectedTab] = useState<EventListTab>("upcoming");
+  const items =
+    selectedTab === "past"
+      ? [
+          {
+            ...EVENT_LIST_BASE_ITEM,
+            variant: "past" as const,
+            ctaHref: EVENT_LIST_BASE_ITEM.href,
+            ctaLabel: "Watch recording ↗",
+          },
+        ]
+      : [
+          {
+            ...EVENT_LIST_BASE_ITEM,
+            groupKey: "2026-08-30",
+            groupLabel: "30 August, Sunday",
+            recordingLabel: undefined,
+          },
+        ];
+
+  return (
+    <BlockSection
+      title="Event list"
+      exportsLine="EventList · EventListItem · EventListTab"
+    >
+      <SubRow label="Preview">
+        <WideCanvas>
+          <div
+            className="mx-auto w-full max-w-5xl"
+            data-testid="event-list-showcase"
+          >
+            <EventList
+              items={items}
+              selectedTab={selectedTab}
+              onTabChange={setSelectedTab}
+              counts={{ upcoming: 2, past: 1 }}
+              labels={EVENT_LIST_LABELS}
+              page={1}
+              pageCount={1}
+              onPageChange={() => {}}
+            />
+          </div>
+        </WideCanvas>
+      </SubRow>
+      <SubRow label="Slots / props">
+        <PropsTable rows={EVENT_LIST_PROPS} />
+      </SubRow>
+      <SubRow label="State matrix">
+        <div className="grid gap-6">
+          <StateCase
+            label="controlled · filled"
+            note="tab and page state are supplied by the host; switching performs no network request"
+          >
+            <span className="text-sm text-muted-foreground">
+              The live preview above switches between the schedule and recording
+              archive.
+            </span>
+          </StateCase>
+          <StateCase
+            label="controlled · empty"
+            note="the host supplies an empty projection and translated recovery copy"
+          >
+            <EventList
+              items={[]}
+              selectedTab="past"
+              onTabChange={() => {}}
+              counts={{ upcoming: 0, past: 0 }}
+              labels={EVENT_LIST_LABELS}
+              page={1}
+              pageCount={1}
+              onPageChange={() => {}}
+            />
+          </StateCase>
+        </div>
+      </SubRow>
+    </BlockSection>
+  );
+}
+
 const FILTER_BAR_PROPS: PropRow[] = [
-  { name: "applyMode", type: '"instant" | "batch"', required: true, description: "REQUIRED, whole-bar — a surface cannot mix apply models by accident." },
-  { name: "label", type: "string", required: true, description: "Accessible name of the toolbar region." },
-  { name: "search", type: "{ value · onCommit · label · placeholder · debounceMs }", required: false, description: "Free-text search — debounced (~400ms) in instant, submit-gated in batch." },
-  { name: "children", type: "ReactNode", required: false, description: "Facet controls — NativeSelect, FilterChip, Switch, Combobox." },
-  { name: "applied / appliedLabel", type: "AppliedFilter[] / string", required: false, description: "Everything currently applied, as removable FilterChips." },
-  { name: "removeFilterLabel", type: "string", required: false, description: "Verb prefix for a chip's remove control («Убрать фильтр: Черновики»)." },
-  { name: "onResetAll / resetLabel", type: "() => void / string", required: false, description: "«Сбросить всё» — visible only while something is applied." },
-  { name: "resultCount", type: "ReactNode", required: false, description: "Result count line, announced politely (role=status)." },
-  { name: "isBusy / busyLabel", type: "boolean / string", required: false, description: "A query is in flight — the field carries the busy cue, never a frozen list." },
+  {
+    name: "applyMode",
+    type: '"instant" | "batch"',
+    required: true,
+    description:
+      "REQUIRED, whole-bar — a surface cannot mix apply models by accident.",
+  },
+  {
+    name: "label",
+    type: "string",
+    required: true,
+    description: "Accessible name of the toolbar region.",
+  },
+  {
+    name: "search",
+    type: "{ value · onCommit · label · placeholder · debounceMs }",
+    required: false,
+    description:
+      "Free-text search — debounced (~400ms) in instant, submit-gated in batch.",
+  },
+  {
+    name: "children",
+    type: "ReactNode",
+    required: false,
+    description: "Facet controls — NativeSelect, FilterChip, Switch, Combobox.",
+  },
+  {
+    name: "applied / appliedLabel",
+    type: "AppliedFilter[] / string",
+    required: false,
+    description: "Everything currently applied, as removable FilterChips.",
+  },
+  {
+    name: "removeFilterLabel",
+    type: "string",
+    required: false,
+    description:
+      "Verb prefix for a chip's remove control («Убрать фильтр: Черновики»).",
+  },
+  {
+    name: "onResetAll / resetLabel",
+    type: "() => void / string",
+    required: false,
+    description: "«Сбросить всё» — visible only while something is applied.",
+  },
+  {
+    name: "resultCount",
+    type: "ReactNode",
+    required: false,
+    description: "Result count line, announced politely (role=status).",
+  },
+  {
+    name: "isBusy / busyLabel",
+    type: "boolean / string",
+    required: false,
+    description:
+      "A query is in flight — the field carries the busy cue, never a frozen list.",
+  },
 ];
 
 /**
@@ -1258,24 +1847,48 @@ const FILTER_BAR_PROPS: PropRow[] = [
  * «Найдено N из M» has to move when the operator types or drops a chip, otherwise the
  * preview demonstrates the opposite of the block's contract.
  */
-type FilterFacet = { id: string; label: string; matches: (row: DirectionBookRow) => boolean };
-type DirectionBookRow = { title: string; parent: string; status: "published" | "draft" };
+type FilterFacet = {
+  id: string;
+  label: string;
+  matches: (row: DirectionBookRow) => boolean;
+};
+type DirectionBookRow = {
+  title: string;
+  parent: string;
+  status: "published" | "draft";
+};
 
 const DIRECTION_BOOK: DirectionBookRow[] = [
-  ...DIRECTION_ROWS.map(({ title, parent, status }) => ({ title, parent, status })),
-  { title: "Ультразвуковая диагностика", parent: "Диагностика", status: "draft" },
+  ...DIRECTION_ROWS.map(({ title, parent, status }) => ({
+    title,
+    parent,
+    status,
+  })),
+  {
+    title: "Ультразвуковая диагностика",
+    parent: "Диагностика",
+    status: "draft",
+  },
   { title: "Рентгенология", parent: "Диагностика", status: "published" },
   { title: "Кардиология", parent: "Терапия", status: "published" },
   { title: "Детская кардиология", parent: "Педиатрия", status: "draft" },
   { title: "Эндокринология", parent: "Терапия", status: "published" },
   { title: "Неонатология", parent: "Педиатрия", status: "published" },
   { title: "Травматология и ортопедия", parent: "Хирургия", status: "draft" },
-  { title: "Анестезиология и реаниматология", parent: "Хирургия", status: "published" },
+  {
+    title: "Анестезиология и реаниматология",
+    parent: "Хирургия",
+    status: "published",
+  },
 ];
 
 const DIRECTION_FACETS: FilterFacet[] = [
   { id: "draft", label: "Черновики", matches: (row) => row.status === "draft" },
-  { id: "diagnostics", label: "Диагностика", matches: (row) => row.parent === "Диагностика" },
+  {
+    id: "diagnostics",
+    label: "Диагностика",
+    matches: (row) => row.parent === "Диагностика",
+  },
 ];
 
 function FilterBarSection() {
@@ -1294,15 +1907,17 @@ function FilterBarSection() {
       exportsLine="FilterBar — props: applyMode · label · search · children · applied/appliedLabel · removeFilterLabel · onResetAll/resetLabel · resultCount · isBusy/busyLabel · submitLabel/onSubmit (batch only)"
     >
       <p className="text-sm text-muted-foreground">
-        Instant apply (owner pick): typing narrows the list after a ~400ms pause with a busy cue in
-        the field itself — no «Применить» button to forget. Every applied value comes back as a
-        removable chip (the <code className="font-mono text-xs">FilterChip</code> primitive) so the
-        operator always sees WHY the list is short, and «Сбросить всё» appears only while something
-        is applied. <code className="font-mono text-xs">applyMode</code> is required and whole-bar:
-        a bar where the text field applies instantly but the facets wait for a button is untypeable
-        here by construction.
+        Instant apply (owner pick): typing narrows the list after a ~400ms pause
+        with a busy cue in the field itself — no «Применить» button to forget.
+        Every applied value comes back as a removable chip (the{" "}
+        <code className="font-mono text-xs">FilterChip</code> primitive) so the
+        operator always sees WHY the list is short, and «Сбросить всё» appears
+        only while something is applied.{" "}
+        <code className="font-mono text-xs">applyMode</code> is required and
+        whole-bar: a bar where the text field applies instantly but the facets
+        wait for a button is untypeable here by construction.
       </p>
-      <SubRow label="Preview — applyMode=&quot;instant&quot;, live">
+      <SubRow label='Preview — applyMode="instant", live'>
         <div className="w-full rounded-lg border border-border bg-muted p-8">
           <FilterBar
             applyMode="instant"
@@ -1351,23 +1966,38 @@ function FilterBarSection() {
       </SubRow>
       <SubRow label="State matrix">
         <div className="grid gap-6">
-          <StateCase label="nothing applied" note="no chips row, no «Сбросить всё»">
+          <StateCase
+            label="nothing applied"
+            note="no chips row, no «Сбросить всё»"
+          >
             <div className="w-full rounded-lg border border-border bg-muted p-8">
               <FilterBar
                 applyMode="instant"
                 label="Фильтры направлений"
-                search={{ value: "", onCommit: () => {}, label: "Поиск по названию", placeholder: "Например, кардиология" }}
+                search={{
+                  value: "",
+                  onCommit: () => {},
+                  label: "Поиск по названию",
+                  placeholder: "Например, кардиология",
+                }}
                 resetLabel="Сбросить всё"
                 resultCount="Найдено 231 из 231"
               />
             </div>
           </StateCase>
-          <StateCase label="isBusy" note="busy cue in the field — the list is not frozen">
+          <StateCase
+            label="isBusy"
+            note="busy cue in the field — the list is not frozen"
+          >
             <div className="w-full rounded-lg border border-border bg-muted p-8">
               <FilterBar
                 applyMode="instant"
                 label="Фильтры направлений"
-                search={{ value: "кардио", onCommit: () => {}, label: "Поиск по названию" }}
+                search={{
+                  value: "кардио",
+                  onCommit: () => {},
+                  label: "Поиск по названию",
+                }}
                 resetLabel="Сбросить всё"
                 isBusy
                 busyLabel="Идёт поиск"
@@ -1375,12 +2005,19 @@ function FilterBarSection() {
               />
             </div>
           </StateCase>
-          <StateCase label='applyMode="batch"' note="submit-gated — for a bar whose query is expensive">
+          <StateCase
+            label='applyMode="batch"'
+            note="submit-gated — for a bar whose query is expensive"
+          >
             <div className="w-full rounded-lg border border-border bg-muted p-8">
               <FilterBar
                 applyMode="batch"
                 label="Фильтры отчёта"
-                search={{ value: "", onCommit: () => {}, label: "Поиск по названию" }}
+                search={{
+                  value: "",
+                  onCommit: () => {},
+                  label: "Поиск по названию",
+                }}
                 resetLabel="Сбросить всё"
                 submitLabel="Показать"
                 onSubmit={() => {}}
@@ -1395,11 +2032,31 @@ function FilterBarSection() {
 
 /** «Вид связи» — five options where the LABEL alone does not settle the meaning. */
 const LINK_KINDS: ComboboxOption[] = [
-  { value: "adjacent_area", label: "Смежная область", description: "Направления пересекаются, но ни одно не входит в другое" },
-  { value: "narrower", label: "Более узкое направление", description: "Частный случай выбранного направления" },
-  { value: "broader", label: "Более широкое направление", description: "Выбранное направление входит в это" },
-  { value: "diagnostic_support", label: "Диагностическая поддержка", description: "Помогает ставить диагноз в выбранном направлении" },
-  { value: "shared_disease_group", label: "Общая группа заболеваний", description: "Работают с одной группой заболеваний" },
+  {
+    value: "adjacent_area",
+    label: "Смежная область",
+    description: "Направления пересекаются, но ни одно не входит в другое",
+  },
+  {
+    value: "narrower",
+    label: "Более узкое направление",
+    description: "Частный случай выбранного направления",
+  },
+  {
+    value: "broader",
+    label: "Более широкое направление",
+    description: "Выбранное направление входит в это",
+  },
+  {
+    value: "diagnostic_support",
+    label: "Диагностическая поддержка",
+    description: "Помогает ставить диагноз в выбранном направлении",
+  },
+  {
+    value: "shared_disease_group",
+    label: "Общая группа заболеваний",
+    description: "Работают с одной группой заболеваний",
+  },
 ];
 
 /** A long closed book — the case that earns the in-panel query box. */
@@ -1423,18 +2080,65 @@ const SPECIALTY_BOOK: ComboboxOption[] = [
   { value: "otorhinolaryngology", label: "Оториноларингология" },
   { value: "psychiatry", label: "Психиатрия" },
   { value: "anesthesiology", label: "Анестезиология-реаниматология" },
-  { value: "clinical_lab_diagnostics", label: "Клиническая лабораторная диагностика" },
+  {
+    value: "clinical_lab_diagnostics",
+    label: "Клиническая лабораторная диагностика",
+  },
 ];
 
 const COMBOBOX_PROPS: PropRow[] = [
-  { name: "options", type: "ComboboxOption[]", required: true, description: "value (stored, never rendered) · label (read + searched) · description (the explanation line) · disabled." },
-  { name: "value / onValueChange", type: "string | null / (value: string) => void", required: true, description: "Commit is only ever called with a value FROM options — typing never enters free text." },
-  { name: "placeholder", type: "string", required: true, description: "Control copy while empty." },
-  { name: "emptyLabel", type: "string", required: true, description: "The no-match line («Ничего не найдено»)." },
-  { name: "searchLabel / searchPlaceholder", type: "string", required: false, description: "Accessible name + placeholder for the in-panel query box." },
-  { name: "showSearch", type: "boolean", required: false, description: "Defaults ON above 12 options, OFF for a short explained vocabulary." },
-  { name: "countLabel", type: "(shown, total) => string", required: false, description: "«Найдено N из M» counter under the list." },
-  { name: "invalid / disabled", type: "boolean", required: false, description: "Both live on the control itself, matching the NativeSelect geometry." },
+  {
+    name: "options",
+    type: "ComboboxOption[]",
+    required: true,
+    description:
+      "value (stored, never rendered) · label (read + searched) · description (the explanation line) · disabled.",
+  },
+  {
+    name: "value / onValueChange",
+    type: "string | null / (value: string) => void",
+    required: true,
+    description:
+      "Commit is only ever called with a value FROM options — typing never enters free text.",
+  },
+  {
+    name: "placeholder",
+    type: "string",
+    required: true,
+    description: "Control copy while empty.",
+  },
+  {
+    name: "emptyLabel",
+    type: "string",
+    required: true,
+    description: "The no-match line («Ничего не найдено»).",
+  },
+  {
+    name: "searchLabel / searchPlaceholder",
+    type: "string",
+    required: false,
+    description: "Accessible name + placeholder for the in-panel query box.",
+  },
+  {
+    name: "showSearch",
+    type: "boolean",
+    required: false,
+    description:
+      "Defaults ON above 12 options, OFF for a short explained vocabulary.",
+  },
+  {
+    name: "countLabel",
+    type: "(shown, total) => string",
+    required: false,
+    description: "«Найдено N из M» counter under the list.",
+  },
+  {
+    name: "invalid / disabled",
+    type: "boolean",
+    required: false,
+    description:
+      "Both live on the control itself, matching the NativeSelect geometry.",
+  },
 ];
 
 function ComboboxSection() {
@@ -1447,10 +2151,11 @@ function ComboboxSection() {
     >
       <p className="text-sm text-muted-foreground">
         Adopted from Kibo UI (MIT — Radix Popover + cmdk) and re-skinned to the{" "}
-        <code className="font-mono text-xs">NativeSelect</code> geometry, so the two read as one
-        control family. It exists for the case a native select cannot serve: a CLOSED vocabulary
-        whose options need an explanation line each, or a book too long to scan without a query
-        box. The vocabulary stays closed — typing filters, it never commits free text — and the
+        <code className="font-mono text-xs">NativeSelect</code> geometry, so the
+        two read as one control family. It exists for the case a native select
+        cannot serve: a CLOSED vocabulary whose options need an explanation line
+        each, or a book too long to scan without a query box. The vocabulary
+        stays closed — typing filters, it never commits free text — and the
         stored slug is never shown to the operator.
       </p>
       <SubRow label="Preview — explained vocabulary (no query box), live">
@@ -1469,7 +2174,10 @@ function ComboboxSection() {
       </SubRow>
       <SubRow label="State matrix">
         <div className="grid gap-6">
-          <StateCase label="long book" note="query box + counter appear above 12 options">
+          <StateCase
+            label="long book"
+            note="query box + counter appear above 12 options"
+          >
             <div className="w-full max-w-md rounded-lg border border-border bg-muted p-8">
               <Combobox
                 options={SPECIALTY_BOOK}
@@ -1479,11 +2187,16 @@ function ComboboxSection() {
                 searchLabel="Поиск по справочнику"
                 searchPlaceholder="Начните вводить название"
                 emptyLabel="Ничего не найдено"
-                countLabel={(shownCount, total) => `Найдено ${shownCount} из ${total}`}
+                countLabel={(shownCount, total) =>
+                  `Найдено ${shownCount} из ${total}`
+                }
               />
             </div>
           </StateCase>
-          <StateCase label="invalid" note="the invalid state lives on the control itself">
+          <StateCase
+            label="invalid"
+            note="the invalid state lives on the control itself"
+          >
             <div className="w-full max-w-md rounded-lg border border-border bg-muted p-8">
               <Combobox
                 options={LINK_KINDS}
@@ -1513,13 +2226,54 @@ function ComboboxSection() {
 }
 
 const FORM_SECTION_PROPS: PropRow[] = [
-  { name: "FormSection legend", type: "ReactNode", required: true, description: "The section's statement heading — a real <legend> inside a real <fieldset>." },
-  { name: "FormSection description", type: "ReactNode", required: false, description: "One line of section context — the place for what would bloat a field hint." },
-  { name: "FormSection locked", type: "boolean", required: false, description: "A section the server refuses to change (e.g. after first publication)." },
-  { name: "FormFieldGroup columns", type: '"one" | "two"', required: false, description: "Two-up row for genuinely paired short fields; collapses below sm." },
-  { name: "FormSeparator", type: "—", required: false, description: "The rule between sections of one fieldset." },
-  { name: "FormActions secondary", type: "ReactNode", required: false, description: "Cancel / secondary node, after the primary at low prominence." },
-  { name: "FormDerivedNote title", type: "ReactNode", required: true, description: "Names a value the system derives (e.g. «Адрес страницы») and when it locks." },
+  {
+    name: "FormSection legend",
+    type: "ReactNode",
+    required: true,
+    description:
+      "The section's statement heading — a real <legend> inside a real <fieldset>.",
+  },
+  {
+    name: "FormSection description",
+    type: "ReactNode",
+    required: false,
+    description:
+      "One line of section context — the place for what would bloat a field hint.",
+  },
+  {
+    name: "FormSection locked",
+    type: "boolean",
+    required: false,
+    description:
+      "A section the server refuses to change (e.g. after first publication).",
+  },
+  {
+    name: "FormFieldGroup columns",
+    type: '"one" | "two"',
+    required: false,
+    description:
+      "Two-up row for genuinely paired short fields; collapses below sm.",
+  },
+  {
+    name: "FormSeparator",
+    type: "—",
+    required: false,
+    description: "The rule between sections of one fieldset.",
+  },
+  {
+    name: "FormActions secondary",
+    type: "ReactNode",
+    required: false,
+    description:
+      "Cancel / secondary node, after the primary at low prominence.",
+  },
+  {
+    name: "FormDerivedNote title",
+    type: "ReactNode",
+    required: true,
+    description:
+      "Names a value the system derives (e.g. «Адрес страницы») and when it locks.",
+  },
 ];
 
 function FormSectionShowcase() {
@@ -1531,16 +2285,21 @@ function FormSectionShowcase() {
       <p className="text-sm text-muted-foreground">
         «Ruled sections»: a long record form is broken into real{" "}
         <code className="font-mono text-xs">&lt;fieldset&gt;</code>/
-        <code className="font-mono text-xs">&lt;legend&gt;</code> groups with a rule between them,
-        so an operator scanning for one field lands in the right group instead of reading a wall of
-        inputs. Semantics come first: assistive tech announces the group name with every field
-        inside it. <code className="font-mono text-xs">FormDerivedNote</code> covers the recurring
-        admin case of a value the system computes — the operator is told what it will be and when
-        it stops changing, instead of finding out after saving.
+        <code className="font-mono text-xs">&lt;legend&gt;</code> groups with a
+        rule between them, so an operator scanning for one field lands in the
+        right group instead of reading a wall of inputs. Semantics come first:
+        assistive tech announces the group name with every field inside it.{" "}
+        <code className="font-mono text-xs">FormDerivedNote</code> covers the
+        recurring admin case of a value the system computes — the operator is
+        told what it will be and when it stops changing, instead of finding out
+        after saving.
       </p>
       <SubRow label="Preview">
         <div className="w-full max-w-2xl rounded-lg border border-border bg-muted p-8">
-          <form className="flex flex-col gap-6" onSubmit={(e) => e.preventDefault()}>
+          <form
+            className="flex flex-col gap-6"
+            onSubmit={(e) => e.preventDefault()}
+          >
             <FormSection
               legend="Основное"
               description="Как направление называется в каталоге и в поиске."
@@ -1560,8 +2319,13 @@ function FormSectionShowcase() {
                   <Input id="direction-code" defaultValue="31.08.05" />
                 </div>
                 <div className="flex flex-col gap-2">
-                  <Label htmlFor="direction-parent">Родительское направление</Label>
-                  <NativeSelect id="direction-parent" defaultValue="diagnostics">
+                  <Label htmlFor="direction-parent">
+                    Родительское направление
+                  </Label>
+                  <NativeSelect
+                    id="direction-parent"
+                    defaultValue="diagnostics"
+                  >
                     <option value="diagnostics">Диагностика</option>
                     <option value="surgery">Хирургия</option>
                     <option value="womens-health">Женское здоровье</option>
@@ -1569,8 +2333,8 @@ function FormSectionShowcase() {
                 </div>
               </FormFieldGroup>
               <FormDerivedNote title="Адрес страницы">
-                academy.doctor.school/napravleniya/klinicheskaya-laboratornaya-diagnostika — адрес
-                перестанет меняться после первой публикации.
+                academy.doctor.school/napravleniya/klinicheskaya-laboratornaya-diagnostika
+                — адрес перестанет меняться после первой публикации.
               </FormDerivedNote>
             </FormSection>
             <FormSeparator />
@@ -1599,7 +2363,10 @@ function FormSectionShowcase() {
       </SubRow>
       <SubRow label="State matrix">
         <div className="grid gap-6">
-          <StateCase label="locked" note="the server refuses to change this section — say so, don't hide it">
+          <StateCase
+            label="locked"
+            note="the server refuses to change this section — say so, don't hide it"
+          >
             <div className="w-full max-w-2xl rounded-lg border border-border bg-muted p-8">
               <FormSection
                 legend="Адрес страницы"
@@ -1638,6 +2405,7 @@ export function BlocksView() {
       <DataTableSection />
       <PaginationSection />
       <EmptyStateSection />
+      <EventListSection />
       <FilterBarSection />
       <ComboboxSection />
       <FormSectionShowcase />

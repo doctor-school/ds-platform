@@ -466,9 +466,22 @@ export const EventAdminListItemSchema = EventAdminDetailSchema.pick({
 });
 export type EventAdminListItem = z.infer<typeof EventAdminListItemSchema>;
 
+/** Strict offset query for the operator event list and reverse relation picker. */
+export const EventAdminListQuerySchema = z
+  .object({
+    page: z.coerce.number().int().positive().default(1),
+    pageSize: z.coerce.number().int().positive().max(100).default(20),
+    /** Case-insensitive substring over the event title or stable slug. */
+    q: z.string().trim().max(160).optional(),
+  })
+  .strict();
+export type EventAdminListQuery = z.infer<typeof EventAdminListQuerySchema>;
+
 export const EventAdminListSchema = z.object({
   data: z.array(EventAdminListItemSchema),
   total: z.number().int().nonnegative(),
+  page: z.number().int().positive(),
+  pageSize: z.number().int().positive(),
 });
 export type EventAdminList = z.infer<typeof EventAdminListSchema>;
 

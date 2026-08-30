@@ -173,6 +173,41 @@ test.describe("012 EARS-10 — project↔partner relationships in the live admin
     ).toContainText("Сначала снимите отметку");
   });
 
+  test("EARS-22: the partner endpoint blocks restoring a retired primary while another row holds the flag", async ({
+    page,
+  }) => {
+    await signInAsAdmin(page);
+
+    const stamp = Date.now();
+    const project = await createProject(page, `Возврат основного ${stamp}`);
+    const retired = await createPartner(page, `Старый основной ${stamp}`);
+    const incumbent = await createPartner(page, `Новый основной ${stamp}`);
+    await openPartnersTab(page, project.url);
+    await linkPartner(page, retired.title, true);
+    const retiredRow = page
+      .getByTestId("project-partners-panel")
+      .locator('[data-testid^="project-partner-row-"]')
+      .filter({ hasText: retired.title });
+    const retiredRowId = (await retiredRow.getAttribute(
+      "data-testid",
+    ))!.replace("project-partner-row-", "");
+    await page.getByTestId(`project-partner-retire-${retiredRowId}`).click();
+    await linkPartner(page, incumbent.title, true);
+
+    await page.goto(retired.url);
+    await page.getByTestId("tab-projects").click();
+    await page
+      .getByTestId("project-partners-show-retired")
+      .locator("xpath=ancestor::label[1]")
+      .click();
+    await expect(
+      page.getByTestId(`project-partner-restore-${retiredRowId}`),
+    ).toBeDisabled();
+    await expect(
+      page.getByTestId(`project-partner-row-primary-taken-${retiredRowId}`),
+    ).toContainText("Сначала снимите отметку");
+  });
+
   test("012 EARS-10: the primary flag is cleared before it is moved, and the panel never offers a second primary", async ({
     page,
   }) => {

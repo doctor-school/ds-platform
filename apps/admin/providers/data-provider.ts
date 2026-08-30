@@ -339,7 +339,11 @@ export const dataProvider: DataProvider = {
       return { data: body.data as unknown as never[], total: body.total };
     }
     if (resource !== "events") throw new Error(`unknown resource: ${resource}`);
-    const res = await fetch(`${ADMIN_BASE}/events`, {
+    const eventQuery = taxonomyListQuery({
+      ...(pagination ? { pagination } : {}),
+      ...(filters ? { filters } : {}),
+    });
+    const res = await fetch(`${ADMIN_BASE}/events?${eventQuery}`, {
       credentials: "include",
       headers: { accept: "application/json" },
     });

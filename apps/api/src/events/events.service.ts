@@ -7,6 +7,7 @@ import {
   type CreateEventRequest,
   type EventAdminDetail,
   type EventAdminListItem,
+  type EventAdminListQuery,
   type EventLifecycleState,
   isPubliclyReachable,
   type MonthBroadcastEntry,
@@ -536,9 +537,19 @@ export class EventsService {
   }
 
   /** `EventAdminList` — all events regardless of state (`platform_admin`-only). */
-  async list(): Promise<{ data: EventAdminListItem[]; total: number }> {
-    const rows = await this.repo.listAll();
-    return { data: rows.map((r) => this.toListItem(r)), total: rows.length };
+  async list(query: EventAdminListQuery): Promise<{
+    data: EventAdminListItem[];
+    total: number;
+    page: number;
+    pageSize: number;
+  }> {
+    const { rows, total } = await this.repo.listAdminPage(query);
+    return {
+      data: rows.map((row) => this.toListItem(row)),
+      total,
+      page: query.page,
+      pageSize: query.pageSize,
+    };
   }
 
   /** `EventAdminDetail` — the full editable aggregate (or null when not found). */

@@ -5,11 +5,25 @@ import { auditLedger, eventSpeakers, events, streamConfig } from "@ds/db";
 import { withRequestAuditContext } from "../audit/audit-context.tx.js";
 import {
   type ConfigureStreamRequest,
+  type EventAdminListQuery,
   MONTH_BROADCAST_STATES,
   type StreamConfig,
   UPCOMING_BROADCAST_STATES,
 } from "@ds/schemas";
-import { and, asc, desc, eq, gt, gte, inArray, lt, or, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  gt,
+  gte,
+  ilike,
+  inArray,
+  lt,
+  or,
+  sql,
+} from "drizzle-orm";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
 import { reconcileEventSpeakers } from "./event-speakers.reconcile.js";
 
@@ -226,12 +240,28 @@ export class EventsRepository {
     return row ? { provider: row.provider, embedRef: row.embedRef } : null;
   }
 
-  async listAll(): Promise<Event[]> {
-    return this.db
+  async listAdminPage(
+    query: EventAdminListQuery,
+  ): Promise<{ rows: Event[]; total: number }> {
+    const search = query.q
+      ? or(
+          ilike(events.title, `%${escapeLike(query.q)}%`),
+          ilike(events.slug, `%${escapeLike(query.q)}%`),
+        )
+      : undefined;
+    const where = search ? and(ACTIVE_EVENT, search) : ACTIVE_EVENT;
+    const rows = await this.db
       .select()
       .from(events)
-      .where(ACTIVE_EVENT)
-      .orderBy(desc(events.createdAt));
+      .where(where)
+      .orderBy(asc(events.title), asc(events.id))
+      .limit(query.pageSize)
+      .offset((query.page - 1) * query.pageSize);
+    const [totals] = await this.db
+      .select({ value: count() })
+      .from(events)
+      .where(where);
+    return { rows, total: Number(totals?.value ?? 0) };
   }
 
   /**
@@ -589,4 +619,9 @@ export class EventsRepository {
       streamConfig: await this.loadStreamConfig(row.id),
     };
   }
+}
+
+/** Treat SQL wildcard characters in an operator query as literal text. */
+function escapeLike(value: string): string {
+  return value.replace(/[\\%_]/g, (character) => `\\${character}`);
 }

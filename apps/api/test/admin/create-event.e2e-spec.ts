@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { Test, type TestingModule } from "@nestjs/testing";
 import {
   FastifyAdapter,
@@ -287,6 +288,56 @@ describe.skipIf(
     });
     expect(detail.statusCode).toBe(200);
     expect((detail.json() as { id: string }).id).toBe(id);
+  });
+
+  it("EARS-22: the admin event picker contract searches and paginates in a stable server order", async () => {
+    const cookie = await session(uniqueEmail("admin-list"), "platform_admin");
+    const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const seeded = [
+      { id: randomUUID(), title: `EARS22 ${stamp} Альфа` },
+      { id: randomUUID(), title: `EARS22 ${stamp} Бета` },
+      { id: randomUUID(), title: `Другая тема ${stamp}` },
+    ];
+    for (const [index, event] of seeded.entries()) {
+      await pool.query(
+        `INSERT INTO events
+           (id, slug, title, school, starts_at, duration_min, description,
+            specialties, state)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+        [
+          event.id,
+          `ears22-list-${index}-${stamp}`,
+          event.title,
+          "Школа тестового поиска",
+          "2026-09-01T09:00:00.000Z",
+          60,
+          "Проверка серверной пагинации.",
+          ["therapy"],
+          "draft",
+        ],
+      );
+      createdEventIds.push(event.id);
+    }
+
+    const page = await app.inject({
+      method: "GET",
+      url: `/v1/admin/events?q=${encodeURIComponent(`EARS22 ${stamp}`)}&page=2&pageSize=1`,
+      headers: { ...device, ...authHeaders(cookie) },
+    });
+    expect(page.statusCode).toBe(200);
+    expect(page.json()).toMatchObject({
+      data: [{ id: seeded[1]!.id, title: seeded[1]!.title }],
+      total: 2,
+      page: 2,
+      pageSize: 1,
+    });
+
+    const invalid = await app.inject({
+      method: "GET",
+      url: "/v1/admin/events?page=1&pageSize=20&status=draft",
+      headers: { ...device, ...authHeaders(cookie) },
+    });
+    expect(invalid.statusCode).toBe(400);
   });
 
   it("EARS-8: a draft event is not publicly reachable — an unauthenticated caller is refused on the admin create + reads", async () => {

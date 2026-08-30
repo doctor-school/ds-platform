@@ -3,9 +3,14 @@
 import { useState } from "react";
 import { useCustom } from "@refinedev/core";
 import { useTranslations } from "next-intl";
-import { Alert, Input } from "@ds/design-system";
+import { Alert, Button, Input } from "@ds/design-system";
 import { TokenSelect } from "@/components/fields";
 import { relationshipPickerState } from "@/lib/relationship-authoring-state";
+import {
+  relationshipEndpointQuery,
+  relationshipEndpointTotalPages,
+  RELATIONSHIP_ENDPOINT_PAGE_SIZE,
+} from "@/lib/relationship-endpoint-query";
 
 type EndpointKind = "event" | "project";
 
@@ -16,6 +21,9 @@ interface EndpointListItem {
 
 interface EndpointList {
   data: EndpointListItem[];
+  total: number;
+  page: number;
+  pageSize: number;
 }
 
 interface PickerCopy {
@@ -53,23 +61,21 @@ export function RelationshipEndpointPicker({
 }) {
   const t = useTranslations();
   const [search, setSearch] = useState("");
-  const query = new URLSearchParams({ page: "1", pageSize: "50" });
-  if (search.trim().length > 0) query.set("q", search.trim());
+  const [page, setPage] = useState(1);
+  const query = relationshipEndpointQuery({ page, search });
 
   const { query: endpointsQuery } = useCustom<EndpointList>({
-    url: `/v1/admin/${RESOURCE[endpoint]}?${query.toString()}`,
+    url: `/v1/admin/${RESOURCE[endpoint]}?${query}`,
     method: "get",
   });
 
-  // Events currently return the complete admin list and ignore `q`; the local
-  // predicate keeps the shared picker immediate without inventing another API.
-  // Project search is already server-narrowed and the same predicate is a no-op.
-  const normalizedSearch = search.trim().toLocaleLowerCase("ru-RU");
   const options = (endpointsQuery.data?.data.data ?? []).filter(
-    (item) =>
-      !excludedIds.includes(item.id) &&
-      (normalizedSearch.length === 0 ||
-        item.title.toLocaleLowerCase("ru-RU").includes(normalizedSearch)),
+    (item) => !excludedIds.includes(item.id),
+  );
+  const envelope = endpointsQuery.data?.data;
+  const totalPages = relationshipEndpointTotalPages(
+    envelope?.total ?? 0,
+    envelope?.pageSize ?? RELATIONSHIP_ENDPOINT_PAGE_SIZE,
   );
   const viewState = relationshipPickerState({
     isLoading: endpointsQuery.isLoading || endpointsQuery.isFetching,
@@ -93,6 +99,7 @@ export function RelationshipEndpointPicker({
           placeholder={copy.searchPlaceholder}
           onChange={(event) => {
             setSearch(event.target.value);
+            setPage(1);
             onChange("");
           }}
         />
@@ -128,7 +135,18 @@ export function RelationshipEndpointPicker({
           </p>
         ) : viewState.kind === "error" ? (
           <Alert variant="danger" data-testid={`${testIdPrefix}-error`}>
-            {t("relationshipEndpointPicker.loadFailed")}
+            <div className="flex flex-col gap-2">
+              <span>{t("relationshipEndpointPicker.loadFailed")}</span>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                data-testid={`${testIdPrefix}-retry`}
+                onClick={() => void endpointsQuery.refetch()}
+              >
+                {t("common.retry")}
+              </Button>
+            </div>
           </Alert>
         ) : viewState.kind === "empty" ? (
           <p
@@ -137,6 +155,43 @@ export function RelationshipEndpointPicker({
           >
             {copy.noOptions}
           </p>
+        ) : null}
+        {!endpointsQuery.isError && totalPages > 1 ? (
+          <nav
+            className="flex items-center gap-3"
+            aria-label={t("common.list.paginationNav")}
+            data-testid={`${testIdPrefix}-pagination`}
+          >
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={page <= 1 || endpointsQuery.isFetching}
+              data-testid={`${testIdPrefix}-previous`}
+              onClick={() => {
+                setPage((current) => Math.max(1, current - 1));
+                onChange("");
+              }}
+            >
+              {t("common.list.previous")}
+            </Button>
+            <span className="text-sm text-muted-foreground">
+              {t("common.list.pageReadout", { page, pages: totalPages })}
+            </span>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={page >= totalPages || endpointsQuery.isFetching}
+              data-testid={`${testIdPrefix}-next`}
+              onClick={() => {
+                setPage((current) => Math.min(totalPages, current + 1));
+                onChange("");
+              }}
+            >
+              {t("common.list.next")}
+            </Button>
+          </nav>
         ) : null}
       </div>
     </>

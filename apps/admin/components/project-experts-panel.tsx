@@ -146,6 +146,9 @@ export function ProjectExpertsPanel({
           seatTaken={curator !== null}
           occupancyLoading={curatorOccupancy.isFetching}
           occupancyError={curatorOccupancy.isError}
+          onRetryOccupancy={() =>
+            retryRelationshipOccupancy(curatorOccupancy.refetch)
+          }
           onLinked={() => announce("projectExperts.toast.linked")}
           onError={(error) => fail(error, "projectExperts.errors.linkFailed")}
         />
@@ -301,6 +304,9 @@ function LinkRow({
   const transition = row.status === "active" ? "retire" : "restore";
   const nextRole: ProjectExpertRole =
     row.role === "curator" ? "member" : "curator";
+  const claimsCuratorSeat =
+    (row.status === "active" && nextRole === "curator") ||
+    (row.status === "retired" && row.role === "curator");
   const rowActionState = relationshipRowActionState({
     isLoading: effectiveLoading,
     isError: effectiveError,
@@ -356,16 +362,14 @@ function LinkRow({
           data-testid={`project-expert-role-${nextRole}-${row.id}`}
           loading={mutation.isPending}
           aria-describedby={
-            mode === "expert" &&
-            nextRole === "curator" &&
-            rowActionState.kind !== "available"
+            claimsCuratorSeat && rowActionState.kind !== "available"
               ? rowConstraintId
               : undefined
           }
           // Promoting a second curator can only ever come back 409; the atomic
           // replace control below is the way through, so the button says so
           // instead of offering a guaranteed refusal.
-          disabled={nextRole === "curator" && rowActionState.actionDisabled}
+          disabled={claimsCuratorSeat && rowActionState.actionDisabled}
           onClick={() => {
             const body: UpdateProjectExpertRequest = { role: nextRole };
             mutate(
@@ -390,10 +394,7 @@ function LinkRow({
         </Button>
       ) : null}
 
-      {mode === "expert" &&
-      row.status === "active" &&
-      nextRole === "curator" &&
-      rowActionState.kind === "loading" ? (
+      {claimsCuratorSeat && rowActionState.kind === "loading" ? (
         <p
           id={rowConstraintId}
           className="text-sm text-muted-foreground"
@@ -401,7 +402,7 @@ function LinkRow({
         >
           {t("projectExperts.fields.rowOccupancyLoading")}
         </p>
-      ) : rowActionState.kind === "error" ? (
+      ) : claimsCuratorSeat && rowActionState.kind === "error" ? (
         <Alert
           id={rowConstraintId}
           variant="danger"
@@ -420,7 +421,7 @@ function LinkRow({
             </Button>
           </div>
         </Alert>
-      ) : rowActionState.kind === "occupied" ? (
+      ) : claimsCuratorSeat && rowActionState.kind === "occupied" ? (
         <p
           id={rowConstraintId}
           className="text-sm text-muted-foreground"
@@ -436,6 +437,18 @@ function LinkRow({
         variant="secondary"
         data-testid={`project-expert-${transition}-${row.id}`}
         loading={mutation.isPending}
+        aria-describedby={
+          transition === "restore" &&
+          claimsCuratorSeat &&
+          rowActionState.kind !== "available"
+            ? rowConstraintId
+            : undefined
+        }
+        disabled={
+          transition === "restore" &&
+          claimsCuratorSeat &&
+          rowActionState.actionDisabled
+        }
         onClick={() =>
           send(
             projectExpertsUrl.command(row.id, transition),
@@ -519,7 +532,20 @@ function ReverseLinkForm({
         </p>
       ) : constraintError ? (
         <Alert variant="danger" data-testid="project-expert-link-project-error">
-          {t("projectExperts.errors.loadFailed")}
+          <div className="flex flex-col gap-2">
+            <span>{t("projectExperts.errors.loadFailed")}</span>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              data-testid="project-expert-link-project-retry"
+              onClick={() =>
+                retryRelationshipOccupancy(selectedProjectOccupancy.refetch)
+              }
+            >
+              {t("common.retry")}
+            </Button>
+          </div>
         </Alert>
       ) : null}
       <div className="flex flex-col gap-2">
@@ -606,6 +632,7 @@ function LinkForm({
   seatTaken,
   occupancyLoading,
   occupancyError,
+  onRetryOccupancy,
   onLinked,
   onError,
 }: {
@@ -614,6 +641,7 @@ function LinkForm({
   seatTaken: boolean;
   occupancyLoading: boolean;
   occupancyError: boolean;
+  onRetryOccupancy: () => void;
   onLinked: () => void;
   onError: (error: unknown) => void;
 }) {
@@ -728,7 +756,18 @@ function LinkForm({
         ) : null}
         {occupancyError ? (
           <Alert variant="danger" data-testid="project-expert-link-seat-error">
-            {t("projectExperts.errors.loadFailed")}
+            <div className="flex flex-col gap-2">
+              <span>{t("projectExperts.errors.loadFailed")}</span>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                data-testid="project-expert-link-seat-retry"
+                onClick={onRetryOccupancy}
+              >
+                {t("common.retry")}
+              </Button>
+            </div>
           </Alert>
         ) : null}
       </div>

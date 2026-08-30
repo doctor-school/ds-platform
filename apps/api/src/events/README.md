@@ -255,7 +255,9 @@ stream-config **form** (stock Refine) + its browser E2E are the integration slic
   program-PDF reference when a replacement rides the request — then, after the
   swap commits, best-effort-deletes the superseded object from storage
   (GC-on-supersede, #627) — leaving the
-  lifecycle `state` untouched), `list()` (`EventAdminList`), `detail()`
+  lifecycle `state` untouched), `list()` (`EventAdminList`: strict
+  `q`/`page`/`pageSize`, stable title+id order and offset envelope for the admin
+  list and reverse relationship pickers), `detail()`
   (`EventAdminDetail`),
   `transition()` (007 EARS-7: the closed-set guard — validates `current → to` via
   `canTransition`, refuses an invalid move with `InvalidTransitionError`, else
@@ -306,7 +308,8 @@ stream-config **form** (stock Refine) + its browser E2E are the integration slic
 - **`EventsRepository`** (`events.repository.ts`) — the transactional insert
   (event + speakers land together or not at all), `updateEvent()` (the
   transactional field-patch + optional wholesale speaker-list replacement behind
-  the EARS-2 edit command), the list/detail reads,
+  the EARS-2 edit command), `listAdminPage()` (active-row SQL search over
+  title/slug, stable title+id order, limit/offset and matching total), the detail read,
   `updateState()` (the bare lifecycle-state write behind the guard),
   `updateStateWithAudit()` (the state write + one terminal `audit_ledger` row in
   a single transaction — behind the named transition commands, EARS-4),
@@ -323,7 +326,7 @@ stream-config **form** (stock Refine) + its browser E2E are the integration slic
 | ---------------------------------------------- | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `POST /v1/admin/events`                        | `platform_admin`     | `CreateEvent` (multipart: `payload` JSON + optional `programPdf` file)                                                                                                       |
 | `PATCH /v1/admin/events/:id`                   | `platform_admin`     | `UpdateEvent` (EARS-2 pre-archive edit; multipart: optional `payload` JSON + optional `programPdf`; replace supersedes ref; 409 if `archived`)                               |
-| `GET /v1/admin/events`                         | `platform_admin`     | `EventAdminList`                                                                                                                                                             |
+| `GET /v1/admin/events?q=&page=&pageSize=`      | `platform_admin`     | Paged `EventAdminList`; strict server-side title/slug search in stable title+id order                                                                                        |
 | `GET /v1/admin/events/:id`                     | `platform_admin`     | `EventAdminDetail`                                                                                                                                                           |
 | `PUT /v1/admin/events/:id/stream`              | `platform_admin`     | `ConfigureStream` (EARS-3 `{ provider ∈ rutube\|youtube, embedRef }`; upsert; 409 past pre-air window)                                                                       |
 | `POST /v1/admin/events/:id/publish`            | `platform_admin`     | `PublishEvent` (EARS-4 `draft → published`; refused ≠ `draft`; +1 audit row)                                                                                                 |

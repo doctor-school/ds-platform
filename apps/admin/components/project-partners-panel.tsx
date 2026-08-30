@@ -145,6 +145,9 @@ export function ProjectPartnersPanel({
           primaryTaken={primaryTaken}
           occupancyLoading={primaryOccupancy.isFetching}
           occupancyError={primaryOccupancy.isError}
+          onRetryOccupancy={() =>
+            retryRelationshipOccupancy(primaryOccupancy.refetch)
+          }
           onLinked={() => announce("projectPartners.toast.linked")}
           onError={(error) => fail(error, "projectPartners.errors.linkFailed")}
         />
@@ -304,6 +307,9 @@ function LinkRow({
   const title = mode === "project" ? row.partnerTitle : row.projectTitle;
   const slug = mode === "project" ? row.partnerSlug : row.projectSlug;
   const transition = row.status === "active" ? "retire" : "restore";
+  const claimsPrimaryFlag =
+    (row.status === "active" && !row.isPrimary) ||
+    (row.status === "retired" && row.isPrimary);
 
   return (
     <div
@@ -337,15 +343,13 @@ function LinkRow({
           data-testid={`project-partner-primary-toggle-${row.id}`}
           loading={mutation.isPending}
           aria-describedby={
-            mode === "partner" &&
-            !row.isPrimary &&
-            rowActionState.kind !== "available"
+            claimsPrimaryFlag && rowActionState.kind !== "available"
               ? rowConstraintId
               : undefined
           }
           // Claiming an occupied flag can only come back 409, so the control is
           // disabled and the panel's copy names the incumbent instead.
-          disabled={!row.isPrimary && rowActionState.actionDisabled}
+          disabled={claimsPrimaryFlag && rowActionState.actionDisabled}
           onClick={() => {
             const body: UpdateProjectPartnerRequest = {
               isPrimary: !row.isPrimary,
@@ -379,10 +383,7 @@ function LinkRow({
         </Button>
       ) : null}
 
-      {mode === "partner" &&
-      row.status === "active" &&
-      !row.isPrimary &&
-      rowActionState.kind === "loading" ? (
+      {claimsPrimaryFlag && rowActionState.kind === "loading" ? (
         <p
           id={rowConstraintId}
           className="text-sm text-muted-foreground"
@@ -390,7 +391,7 @@ function LinkRow({
         >
           {t("projectPartners.fields.rowOccupancyLoading")}
         </p>
-      ) : rowActionState.kind === "error" ? (
+      ) : claimsPrimaryFlag && rowActionState.kind === "error" ? (
         <Alert
           id={rowConstraintId}
           variant="danger"
@@ -409,7 +410,7 @@ function LinkRow({
             </Button>
           </div>
         </Alert>
-      ) : rowActionState.kind === "occupied" ? (
+      ) : claimsPrimaryFlag && rowActionState.kind === "occupied" ? (
         <p
           id={rowConstraintId}
           className="text-sm text-muted-foreground"
@@ -425,6 +426,18 @@ function LinkRow({
         variant="secondary"
         data-testid={`project-partner-${transition}-${row.id}`}
         loading={mutation.isPending}
+        aria-describedby={
+          transition === "restore" &&
+          claimsPrimaryFlag &&
+          rowActionState.kind !== "available"
+            ? rowConstraintId
+            : undefined
+        }
+        disabled={
+          transition === "restore" &&
+          claimsPrimaryFlag &&
+          rowActionState.actionDisabled
+        }
         onClick={() =>
           mutate(
             {
@@ -518,7 +531,20 @@ function ReverseLinkForm({
           variant="danger"
           data-testid="project-partner-link-project-error"
         >
-          {t("projectPartners.errors.loadFailed")}
+          <div className="flex flex-col gap-2">
+            <span>{t("projectPartners.errors.loadFailed")}</span>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              data-testid="project-partner-link-project-retry"
+              onClick={() =>
+                retryRelationshipOccupancy(selectedProjectOccupancy.refetch)
+              }
+            >
+              {t("common.retry")}
+            </Button>
+          </div>
         </Alert>
       ) : projectId.length > 0 && primaryTaken ? (
         <p
@@ -590,6 +616,7 @@ function LinkForm({
   primaryTaken,
   occupancyLoading,
   occupancyError,
+  onRetryOccupancy,
   onLinked,
   onError,
 }: {
@@ -598,6 +625,7 @@ function LinkForm({
   primaryTaken: boolean;
   occupancyLoading: boolean;
   occupancyError: boolean;
+  onRetryOccupancy: () => void;
   onLinked: () => void;
   onError: (error: unknown) => void;
 }) {
@@ -705,7 +733,18 @@ function LinkForm({
           variant="danger"
           data-testid="project-partner-link-primary-error"
         >
-          {t("projectPartners.errors.loadFailed")}
+          <div className="flex flex-col gap-2">
+            <span>{t("projectPartners.errors.loadFailed")}</span>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              data-testid="project-partner-link-primary-retry"
+              onClick={onRetryOccupancy}
+            >
+              {t("common.retry")}
+            </Button>
+          </div>
         </Alert>
       ) : null}
 

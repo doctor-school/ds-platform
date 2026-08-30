@@ -11,14 +11,17 @@ import {
   Patch,
   Post,
   Put,
+  Query,
   Req,
   Res,
 } from "@nestjs/common";
+import { ApiOkResponse, ApiQuery } from "@nestjs/swagger";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import {
   CreateEventRequestSchema,
   type EventAdminDetail,
   type EventAdminList,
+  EventAdminListQuerySchema,
   IDEMPOTENCY_KEY_HEADER,
   UpdateEventRequestSchema,
 } from "@ds/schemas";
@@ -30,6 +33,7 @@ import {
 import { TaxonomyError } from "../taxonomy/taxonomy.errors.js";
 import {
   ConfigureStreamRequestDto,
+  EventAdminListDto,
   TransitionEventRequestDto,
 } from "./events.dto.js";
 import {
@@ -200,6 +204,16 @@ export class EventsAdminController {
   }
 
   @Get()
+  @ApiQuery({ name: "q", required: false, type: String, maxLength: 160 })
+  @ApiQuery({ name: "page", required: false, type: Number, minimum: 1 })
+  @ApiQuery({
+    name: "pageSize",
+    required: false,
+    type: Number,
+    minimum: 1,
+    maximum: 100,
+  })
+  @ApiOkResponse({ type: EventAdminListDto })
   @Authz({
     access: "authenticated",
     roles: ["platform_admin"],
@@ -207,8 +221,19 @@ export class EventsAdminController {
     audit: "none",
     tests: ["EARS-8"],
   })
-  list(): Promise<EventAdminList> {
-    return this.events.list();
+  list(@Query() rawQuery: Record<string, string>): Promise<EventAdminList> {
+    const parsed = EventAdminListQuerySchema.safeParse(rawQuery);
+    if (!parsed.success) {
+      throw new TaxonomyError(
+        "VALIDATION_FAILED",
+        "invalid event list query",
+        parsed.error.issues.map((issue) => ({
+          path: issue.path.join("."),
+          message: issue.message,
+        })),
+      );
+    }
+    return this.events.list(parsed.data);
   }
 
   @Get(":id")

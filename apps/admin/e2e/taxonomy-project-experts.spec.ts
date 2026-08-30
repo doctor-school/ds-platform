@@ -195,6 +195,51 @@ test.describe("012 EARS-9 — project↔expert relationships in the live admin",
     ).toContainText("Заменить куратора");
   });
 
+  test("EARS-22: the expert endpoint blocks restoring a retired curator while another row holds the seat", async ({
+    page,
+  }) => {
+    await signInAsAdmin(page);
+
+    const stamp = Date.now();
+    const project = await createProject(page, `Возврат куратора ${stamp}`);
+    const retired = await createExpert(
+      page,
+      `Старый-${stamp}`,
+      "Куратор",
+      "Ильич",
+    );
+    const incumbent = await createExpert(
+      page,
+      `Новый-${stamp}`,
+      "Куратор",
+      "Ильич",
+    );
+    await openExpertsTab(page, project.url);
+    await linkExpert(page, retired.name, "curator");
+    const retiredRow = page
+      .getByTestId("project-experts-panel")
+      .locator('[data-testid^="project-expert-row-"]')
+      .filter({ hasText: retired.name });
+    const retiredRowId = (await retiredRow.getAttribute(
+      "data-testid",
+    ))!.replace("project-expert-row-", "");
+    await page.getByTestId(`project-expert-retire-${retiredRowId}`).click();
+    await linkExpert(page, incumbent.name, "curator");
+
+    await page.goto(retired.url);
+    await page.getByTestId("tab-projects").click();
+    await page
+      .getByTestId("project-experts-show-retired")
+      .locator("xpath=ancestor::label[1]")
+      .click();
+    await expect(
+      page.getByTestId(`project-expert-restore-${retiredRowId}`),
+    ).toBeDisabled();
+    await expect(
+      page.getByTestId(`project-expert-row-seat-taken-${retiredRowId}`),
+    ).toContainText("Заменить куратора");
+  });
+
   test("012 EARS-9: an operator composes a project roster, and the curator seat can only be moved by the atomic replace", async ({
     page,
   }) => {

@@ -91,7 +91,17 @@ test.describe("012 EARS-6 — event↔project relationships in the live admin", 
 
     await page.goto(project.url);
     await page.getByTestId("tab-events").click();
+    const serverSearch = page.waitForRequest((request) => {
+      const url = new URL(request.url());
+      return (
+        url.pathname.endsWith("/v1/admin/events") &&
+        url.searchParams.get("q") === eventTitle &&
+        url.searchParams.get("page") === "1" &&
+        url.searchParams.get("pageSize") === "20"
+      );
+    });
     await page.getByTestId("event-project-link-search").fill(eventTitle);
+    await serverSearch;
     await page
       .getByTestId("event-project-link-select")
       .selectOption({ label: eventTitle });

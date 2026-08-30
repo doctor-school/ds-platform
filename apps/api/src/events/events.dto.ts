@@ -1,11 +1,15 @@
 import { createZodDto } from "nestjs-zod";
 import {
   ConfigureStreamRequestSchema,
+  EventAdminListSchema,
   MonthBroadcastListSchema,
   PublicEventListingPageSchema,
   TransitionEventRequestSchema,
   UpcomingBroadcastListSchema,
 } from "@ds/schemas";
+
+/** Paged response of `GET /v1/admin/events`, including picker pagination facts. */
+export class EventAdminListDto extends createZodDto(EventAdminListSchema) {}
 
 // nestjs-zod DTO at the I/O boundary (ADR-0002 §3). The schema is the SSOT in
 // `@ds/schemas`; this class only adapts it to Nest's `@Body()` +

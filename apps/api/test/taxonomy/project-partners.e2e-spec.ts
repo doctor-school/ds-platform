@@ -722,6 +722,62 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       ).toEqual([a.detail.id]);
     });
 
+    it("EARS-22: the project relation panel shall find the authoritative primary before pagination", async () => {
+      const projectId = await insertProject();
+      const primaryPartnerId = await insertPartner({ title: "Primary" });
+      const primary = await seedRelation(projectId, primaryPartnerId, true);
+
+      // More rows than the maximum page size prove that filtering happens in
+      // Postgres before pagination. Retired rows remain retained and include a
+      // second historical primary, which must not shadow the active one.
+      const partnerIds = await Promise.all(
+        Array.from({ length: 105 }, (_, index) =>
+          insertPartner({ title: `Partner ${String(index).padStart(3, "0")}` }),
+        ),
+      );
+      await pool.query(
+        `INSERT INTO project_partners (project_id, partner_id, is_primary)
+         SELECT $1, partner_id, false
+           FROM unnest($2::uuid[]) AS partner_id`,
+        [projectId, partnerIds.slice(0, 101)],
+      );
+      await pool.query(
+        `INSERT INTO project_partners
+           (project_id, partner_id, is_primary, status, deleted_at)
+         SELECT $1, partner_id, false, 'retired', now()
+           FROM unnest($2::uuid[]) AS partner_id`,
+        [projectId, partnerIds.slice(101, 104)],
+      );
+      await pool.query(
+        `INSERT INTO project_partners
+           (project_id, partner_id, is_primary, status, deleted_at)
+         VALUES ($1, $2, true, 'retired', now())`,
+        [projectId, partnerIds[104]],
+      );
+
+      const selected = await adminList(
+        `projectId=${projectId}&status=active&isPrimary=true&page=1&pageSize=1`,
+      );
+      expect(selected.statusCode, selected.payload).toBe(200);
+      expect(JSON.parse(selected.payload)).toMatchObject({
+        data: [{ id: primary.detail.id, isPrimary: true }],
+        total: 1,
+        page: 1,
+        pageSize: 1,
+      });
+
+      const nonPrimary = await adminList(
+        `projectId=${projectId}&status=active&isPrimary=false&page=1&pageSize=1`,
+      );
+      expect(nonPrimary.statusCode, nonPrimary.payload).toBe(200);
+      expect(JSON.parse(nonPrimary.payload)).toMatchObject({
+        data: [{ isPrimary: false }],
+        total: 101,
+        page: 1,
+        pageSize: 1,
+      });
+    });
+
     // ── §5.2 public traversals ─────────────────────────────────────────────
 
     it("012 EARS-10: the public project→partners read shall answer exactly PublicPartnerSummary + isPrimary, in a stable cursor-paged order", async () => {

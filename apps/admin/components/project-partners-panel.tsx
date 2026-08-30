@@ -13,7 +13,11 @@ import type {
 } from "@ds/schemas";
 import { TokenSelect } from "@/components/fields";
 import { RelationshipEndpointPicker } from "@/components/relationship-endpoint-picker";
-import { canClaimInvariantSeat } from "@/lib/relationship-authoring-state";
+import {
+  canClaimInvariantSeat,
+  relationshipRowActionState,
+  retryRelationshipOccupancy,
+} from "@/lib/relationship-authoring-state";
 import { taxonomyErrorKey } from "@/lib/taxonomy-errors";
 import { useRelationshipOccupancy } from "@/lib/use-relationship-occupancy";
 import type { TaxonomyHttpError } from "@/providers/data-provider";
@@ -289,10 +293,13 @@ function LinkRow({
     mode === "partner" ? rowOccupancy.isFetching : occupancyLoading;
   const effectiveError =
     mode === "partner" ? rowOccupancy.isError : occupancyError;
-  const primaryHeldByAnother = !canClaimInvariantSeat(
-    effectiveIncumbentId ?? null,
-    row.id,
-  );
+  const rowActionState = relationshipRowActionState({
+    isLoading: effectiveLoading,
+    isError: effectiveError,
+    incumbentRelationId: effectiveIncumbentId ?? null,
+    candidateRelationId: row.id,
+  });
+  const rowConstraintId = `project-partner-row-occupancy-${row.id}`;
   // The operator is standing on one endpoint, so the row names the OTHER one.
   const title = mode === "project" ? row.partnerTitle : row.projectTitle;
   const slug = mode === "project" ? row.partnerSlug : row.projectSlug;
@@ -329,12 +336,16 @@ function LinkRow({
           variant="secondary"
           data-testid={`project-partner-primary-toggle-${row.id}`}
           loading={mutation.isPending}
+          aria-describedby={
+            mode === "partner" &&
+            !row.isPrimary &&
+            rowActionState.kind !== "available"
+              ? rowConstraintId
+              : undefined
+          }
           // Claiming an occupied flag can only come back 409, so the control is
           // disabled and the panel's copy names the incumbent instead.
-          disabled={
-            !row.isPrimary &&
-            (effectiveLoading || effectiveError || primaryHeldByAnother)
-          }
+          disabled={!row.isPrimary && rowActionState.actionDisabled}
           onClick={() => {
             const body: UpdateProjectPartnerRequest = {
               isPrimary: !row.isPrimary,
@@ -371,8 +382,36 @@ function LinkRow({
       {mode === "partner" &&
       row.status === "active" &&
       !row.isPrimary &&
-      primaryHeldByAnother ? (
+      rowActionState.kind === "loading" ? (
         <p
+          id={rowConstraintId}
+          className="text-sm text-muted-foreground"
+          data-testid={`project-partner-row-occupancy-loading-${row.id}`}
+        >
+          {t("projectPartners.fields.rowOccupancyLoading")}
+        </p>
+      ) : rowActionState.kind === "error" ? (
+        <Alert
+          id={rowConstraintId}
+          variant="danger"
+          data-testid={`project-partner-row-occupancy-error-${row.id}`}
+        >
+          <div className="flex flex-col gap-2">
+            <span>{t("projectPartners.fields.rowOccupancyError")}</span>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              data-testid={`project-partner-row-occupancy-retry-${row.id}`}
+              onClick={() => retryRelationshipOccupancy(rowOccupancy.refetch)}
+            >
+              {t("common.retry")}
+            </Button>
+          </div>
+        </Alert>
+      ) : rowActionState.kind === "occupied" ? (
+        <p
+          id={rowConstraintId}
           className="text-sm text-muted-foreground"
           data-testid={`project-partner-row-primary-taken-${row.id}`}
         >

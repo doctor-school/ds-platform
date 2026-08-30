@@ -15,7 +15,11 @@ import type {
 } from "@ds/schemas";
 import { TokenSelect } from "@/components/fields";
 import { RelationshipEndpointPicker } from "@/components/relationship-endpoint-picker";
-import { canClaimInvariantSeat } from "@/lib/relationship-authoring-state";
+import {
+  canClaimInvariantSeat,
+  relationshipRowActionState,
+  retryRelationshipOccupancy,
+} from "@/lib/relationship-authoring-state";
 import { taxonomyErrorKey } from "@/lib/taxonomy-errors";
 import { useRelationshipOccupancy } from "@/lib/use-relationship-occupancy";
 import { projectExpertsUrl } from "@/providers/data-provider";
@@ -297,10 +301,13 @@ function LinkRow({
   const transition = row.status === "active" ? "retire" : "restore";
   const nextRole: ProjectExpertRole =
     row.role === "curator" ? "member" : "curator";
-  const curatorHeldByAnother = !canClaimInvariantSeat(
-    effectiveIncumbentId ?? null,
-    row.id,
-  );
+  const rowActionState = relationshipRowActionState({
+    isLoading: effectiveLoading,
+    isError: effectiveError,
+    incumbentRelationId: effectiveIncumbentId ?? null,
+    candidateRelationId: row.id,
+  });
+  const rowConstraintId = `project-expert-row-occupancy-${row.id}`;
 
   function send(
     url: string,
@@ -348,13 +355,17 @@ function LinkRow({
           variant="secondary"
           data-testid={`project-expert-role-${nextRole}-${row.id}`}
           loading={mutation.isPending}
+          aria-describedby={
+            mode === "expert" &&
+            nextRole === "curator" &&
+            rowActionState.kind !== "available"
+              ? rowConstraintId
+              : undefined
+          }
           // Promoting a second curator can only ever come back 409; the atomic
           // replace control below is the way through, so the button says so
           // instead of offering a guaranteed refusal.
-          disabled={
-            nextRole === "curator" &&
-            (effectiveLoading || effectiveError || curatorHeldByAnother)
-          }
+          disabled={nextRole === "curator" && rowActionState.actionDisabled}
           onClick={() => {
             const body: UpdateProjectExpertRequest = { role: nextRole };
             mutate(
@@ -382,8 +393,36 @@ function LinkRow({
       {mode === "expert" &&
       row.status === "active" &&
       nextRole === "curator" &&
-      curatorHeldByAnother ? (
+      rowActionState.kind === "loading" ? (
         <p
+          id={rowConstraintId}
+          className="text-sm text-muted-foreground"
+          data-testid={`project-expert-row-occupancy-loading-${row.id}`}
+        >
+          {t("projectExperts.fields.rowOccupancyLoading")}
+        </p>
+      ) : rowActionState.kind === "error" ? (
+        <Alert
+          id={rowConstraintId}
+          variant="danger"
+          data-testid={`project-expert-row-occupancy-error-${row.id}`}
+        >
+          <div className="flex flex-col gap-2">
+            <span>{t("projectExperts.fields.rowOccupancyError")}</span>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              data-testid={`project-expert-row-occupancy-retry-${row.id}`}
+              onClick={() => retryRelationshipOccupancy(rowOccupancy.refetch)}
+            >
+              {t("common.retry")}
+            </Button>
+          </div>
+        </Alert>
+      ) : rowActionState.kind === "occupied" ? (
+        <p
+          id={rowConstraintId}
           className="text-sm text-muted-foreground"
           data-testid={`project-expert-row-seat-taken-${row.id}`}
         >

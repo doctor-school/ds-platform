@@ -869,10 +869,11 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
     And no action with no possible effect is enabled
 
   @EARS-24 @happy
-  Scenario Outline: Owner-reviewed source UUID mapping supplies every original classification
-    Given the complete owner-reviewed mapping assigns source UUID <source_uuid> the original <classification>
+  Scenario Outline: Duplicate-preserving reviewed rows supply every original classification
+    Given the complete owner-reviewed row artifact contains source UUID <source_uuid> with original <classification>
     And that retained source row is included even when its legacy content is already removed
-    When migration imports the exact all-retained source set
+    When migration validates the raw duplicate-preserving rows before materializing a keyed UUID map
+    And imports the exact all-retained source set
     Then that source appears exactly once with immutable provenance and original <classification>
     And no name matching Expert or User inference normalization equality algorithm or generated suggestion supplies classification or identity
     When the operator <resolution>
@@ -887,45 +888,82 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
       | 10000000-0000-4000-8000-000000000004 | unmatched      | explicitly marks the source content-removed                   |
 
   @EARS-24 @failure
-  Scenario Outline: Inexact owner-reviewed source mapping fails before mutation
-    Given retained event_speakers rows and an owner-reviewed mapping with <defect>
+  Scenario Outline: Inexact owner-reviewed rows fail before keyed-map materialization or mutation
+    Given retained event_speakers rows and a duplicate-preserving owner-reviewed row artifact with <defect>
     When migration attempts to install the review queue
-    Then migration fails before any queue domain or audit mutation
+    Then migration fails before materializing a keyed UUID map
+    And no queue domain or audit mutation occurs
     And no classification or identity is inferred from source content
     Examples:
-      | defect                |
-      | one missing source UUID |
+      | defect                     |
+      | one missing source UUID    |
       | one duplicated source UUID |
-      | one extra source UUID |
+      | one extra source UUID      |
 
   @EARS-24 @happy
   Scenario: A pre-cutover legacy insert is queued atomically
-    Given the review queue is installed while legacy free-text authoring remains enabled
-    When the legacy writer inserts a retained event_speakers row before cutover
+    Given the durable speaker migration phase is review_open
+    When the legacy writer inserts a retained event_speakers row through the database writer fence
     Then the same transaction inserts exactly one review with original unmatched classification
     And either both retained rows commit or neither row commits
 
   @EARS-24 @failure
-  Scenario: Migration cutover refuses unresolved source rows
-    Given cutover has locked a serializable closed set of all retained event_speakers source rows
-    And every source row is queued exactly once
-    And one review remains unresolved
-    When the operator requests cutover
-    Then cutover fails with no queue domain audit free-text contract or projection change
-
-  @EARS-24 @failure
-  Scenario: Legacy insert and cutover share one writer fence
-    Given a pre-cutover legacy insert races the guarded cutover
-    When the writer fence serializes both transactions
-    Then either the inserted source and its unmatched review commit before the closed-set check and block unresolved cutover
-    And alternatively cutover commits first and the legacy free-text insert is rejected
-    And no committed source lacks exactly one retained review
+  Scenario Outline: An imported legacy source cannot change behind immutable provenance
+    Given a retained event_speakers source has an immutable review and content fingerprint
+    And the durable speaker migration phase is review_open
+    When an old or new application version <mutation> through the database writer fence
+    Then the mutation is rejected with 409 SPEAKER_MIGRATION_SOURCE_IMMUTABLE
+    And source provenance review resolution and domain audit remain unchanged
+    Examples:
+      | mutation            |
+      | updates its content |
+      | restores it         |
+      | retires it          |
+      | reorders it         |
 
   @EARS-24 @happy
-  Scenario: Completed migration cuts over to canonical speakers
-    Given a serializable locked closed source set has exactly one retained review per source
-    And every retained event_speakers source row is resolved to event_experts or content-removed
-    When the guarded cutover commits
-    Then speaker fields in event create and update schemas and every legacy free-text mutation route are disabled
-    And every public and admin read DTO and resolver uses only ordered event_experts
+  Scenario: A reusable Expert resolves speakers at different events
+    Given an existing Expert is already retained in event_experts for another event
+    When the operator selects that Expert for a reviewed source at this event
+    Then one canonical event_experts row is created for this event
+    And only a retained duplicate pair for this same event and Expert is refused
+
+  @EARS-24 @failure
+  Scenario: Migration cutover refuses unresolved source rows
+    Given source closure has locked the durable phase and all retained event_speakers rows serializably
+    And every source row is queued exactly once
+    And one review remains unresolved
+    When the operator requests source closure
+    Then source closure fails and phase remains review_open
+    And no queue domain audit legacy contract or projection change occurs
+
+  @EARS-24 @failure
+  Scenario: Insert acquires the writer fence before source closure
+    Given the durable phase is review_open and every current review is resolved
+    When a controlled legacy insert acquires the writer fence first
+    And its source and unmatched review commit before source closure acquires the fence
+    Then source closure includes the new source in its closed-set check
+    And refuses to advance because that review is unresolved
+    And the committed source has exactly one retained review
+
+  @EARS-24 @happy
+  Scenario: Source closure acquires the writer fence before insert
+    Given the phase-aware expand image is the oldest rollback-eligible image
+    And the durable phase is review_open with exact resolved source-to-review coverage
+    When controlled source closure acquires the writer fence first and commits source_closed
+    And the blocked legacy insert resumes against source_closed
+    Then that insert is rejected without a source queue domain or audit mutation
+    And every committed source still has exactly one retained review
+
+  @EARS-24 @happy
+  Scenario: Staged contract deployment preserves app-only rollback safety
+    Given the backward-compatible expand image and every rollback-eligible image recognize review_open and source_closed
+    And serializable source closure committed exact resolved source-to-review coverage as source_closed
+    Then old and new eligible writers reject every legacy INSERT UPDATE restore retire reorder and delete
+    And old and new eligible readers resolve speakers only from ordered event_experts without a merged legacy source
+    When the later contract image is deployed
+    Then speaker fields are absent from event create and update Zod and OpenAPI schemas
+    And every legacy mutation route and public or admin legacy read DTO and resolver branch is absent
     And retained event_speakers and speaker_migration_reviews remain non-deletable provenance only
+    When the application alone rolls back to the phase-aware expand image
+    Then the database remains compatible and source_closed still prevents legacy writes and merged reads

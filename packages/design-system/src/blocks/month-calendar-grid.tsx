@@ -7,8 +7,8 @@ import { Link } from "../primitives/link";
  * Neo-brutalist month-calendar grid — desktop pane (004 EARS-19, source
  * `design-source/webinars-month.dc.html`). A DISPLAY-ONLY 7-column month grid:
  * each in-month day renders its events as pills (`time · title`, linking to the
- * event page), a red live pill for an airing event, or a muted aggregate note on
- * an already-past day; today is outlined; weekend and neighbour-month cells
+ * event page), a red live pill for an airing event, or a muted linked pill for
+ * an already-past event; today is outlined; weekend and neighbour-month cells
  * take the faint calendar surface. A state legend sits below the grid.
  *
  * A PRESENTATION unit only — all data (the МСК day bucketing, the today/past
@@ -30,6 +30,8 @@ export interface MonthGridPill {
   title: string;
   /** Whether the event is airing now — renders the red live pill (EARS-9 parity). */
   live?: boolean;
+  /** Whether the event has ended; keeps its title and link in a muted pill. */
+  past?: boolean;
 }
 
 /** One day cell of the desktop grid. */
@@ -46,7 +48,7 @@ export interface MonthGridCell {
   muted?: boolean;
   /** The date ink reads muted (past / weekend / empty / neighbour day). */
   mutedDate?: boolean;
-  /** Event pills for a today/future day — the app caps these at 3, live-first. */
+  /** Linked event pills; future/today may be capped, while past events stay explicit. */
   pills?: MonthGridPill[];
   /**
    * The «+N ещё» overflow link when the day carries more events than the
@@ -185,7 +187,9 @@ const MonthCalendarGrid = React.forwardRef<
                         // day-agenda chip).
                         pill.live
                           ? "bg-live font-bold text-live-foreground"
-                          : "bg-tint font-bold text-tint-foreground",
+                          : pill.past
+                            ? "cursor-pointer border border-hairline bg-calendar-muted font-bold text-muted-foreground hover:border-primary-action hover:bg-muted hover:text-foreground active:bg-tint active:text-tint-foreground"
+                            : "bg-tint font-bold text-tint-foreground",
                       )}
                     >
                       {/* Canvas `clamp2`: the pill's whole inline run clamps at

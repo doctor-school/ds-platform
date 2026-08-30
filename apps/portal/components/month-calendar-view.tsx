@@ -176,8 +176,13 @@ export async function MonthCalendarView({
           dateLabel: String(cell.day),
           muted: cell.isWeekend,
           mutedDate: true,
-          note: hasEvents
-            ? t("pastNote", { count: cell.entries.length })
+          pills: hasEvents
+            ? cell.entries.map((e) => ({
+                href: `/webinars/${e.slug}`,
+                time: entryTime(e),
+                title: e.title,
+                past: true,
+              }))
             : undefined,
         };
       }

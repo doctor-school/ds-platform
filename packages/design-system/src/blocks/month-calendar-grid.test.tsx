@@ -10,8 +10,9 @@ afterEach(cleanup);
  * block is presentation-only (all data/copy/hrefs are app-supplied), so the
  * harness asserts on the STRUCTURE the month view depends on: event pills link to
  * their event page, a live pill carries a screen-reader live label (never
- * colour-only), a past day renders its aggregate note, today gets an outline, and
- * the legend renders.
+ * colour-only), a past event remains a muted titled link, today gets an outline,
+ * and the legend renders. The aggregate-note contract stays covered for callers
+ * that still supply a note.
  */
 const WEEKDAYS = ["пн", "вт", "ср", "чт", "пт", "сб", "вс"];
 const LEGEND = { live: "В эфире", planned: "Запланирован", past: "Прошёл / пусто" };
@@ -40,6 +41,44 @@ describe("<MonthCalendarGrid>", () => {
     );
     const link = screen.getByRole("link", { name: /18:00 · Кардиология/ });
     expect(link).toHaveAttribute("href", "/webinars/x");
+  });
+
+  it("EARS-11: keeps a past event titled and linked in a muted interactive pill", () => {
+    render(
+      <MonthCalendarGrid
+        weekdays={WEEKDAYS}
+        liveLabel="В эфире"
+        legend={LEGEND}
+        weeks={[
+          week([
+            {
+              dateLabel: "9",
+              mutedDate: true,
+              pills: [
+                {
+                  href: "/webinars/diabet-i-komorbidnost",
+                  time: "19:00",
+                  title: "Итоги: диабет и коморбидность",
+                  past: true,
+                },
+              ],
+            },
+          ]),
+        ]}
+      />,
+    );
+
+    const link = screen.getByRole("link", {
+      name: /19:00 · Итоги: диабет и коморбидность/,
+    });
+    expect(link).toHaveAttribute("href", "/webinars/diabet-i-komorbidnost");
+    expect(link).toHaveClass(
+      "bg-calendar-muted",
+      "text-muted-foreground",
+      "hover:bg-muted",
+      "focus-visible:shadow-focus",
+      "active:bg-tint",
+    );
   });
 
   it("carries a screen-reader live label on a live pill (not colour-only)", () => {

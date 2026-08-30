@@ -47,7 +47,8 @@ describe("taxonomyErrorKey — 012 EARS-6 relationship codes (#1288)", () => {
   it("EARS-22: a raced curator restore reports the occupied seat, not a duplicate pair", () => {
     const key = taxonomyErrorKey(
       { errorCode: "RELATIONSHIP_CONFLICT" },
-      "projectExperts.fields.reverseSeatTakenHint",
+      "projectExperts.errors.transitionFailed",
+      { action: "restore-curator" },
     );
 
     expect(key).toBe("projectExperts.fields.reverseSeatTakenHint");
@@ -57,12 +58,31 @@ describe("taxonomyErrorKey — 012 EARS-6 relationship codes (#1288)", () => {
   it("EARS-22: a raced primary restore reports the occupied flag, not a duplicate pair", () => {
     const key = taxonomyErrorKey(
       { errorCode: "RELATIONSHIP_CONFLICT" },
-      "projectPartners.errors.primaryTaken",
+      "projectPartners.errors.transitionFailed",
+      { action: "restore-primary" },
     );
 
     expect(key).toBe("projectPartners.errors.primaryTaken");
     expect(key).not.toBe("projectPartners.errors.duplicatePair");
     expect(typeof lookup(key)).toBe("string");
+  });
+
+  it("EARS-22: an unknown curator-restore failure remains the generic transition error", () => {
+    expect(
+      taxonomyErrorKey(
+        { errorCode: "UNMAPPED_FAILURE" },
+        "projectExperts.errors.transitionFailed",
+        { action: "restore-curator" },
+      ),
+    ).toBe("projectExperts.errors.transitionFailed");
+  });
+
+  it("EARS-22: a missing primary-restore error code remains the generic transition error", () => {
+    expect(
+      taxonomyErrorKey(undefined, "projectPartners.errors.transitionFailed", {
+        action: "restore-primary",
+      }),
+    ).toBe("projectPartners.errors.transitionFailed");
   });
 
   it("EARS-22: event-direction duplicate uses the existing actionable RU sentence", () => {

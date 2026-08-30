@@ -32,9 +32,16 @@ export interface RelationshipEndpointOption {
 
 export function mergeRelationshipEndpointPages<
   T extends RelationshipEndpointOption,
->(current: T[], incoming: T[]): T[] {
-  const byId = new Map(current.map((option) => [option.id, option]));
-  for (const option of incoming) byId.set(option.id, option);
+>(current: T[], incoming: T[], excludedIds: readonly string[] = []): T[] {
+  const excluded = new Set(excludedIds);
+  const byId = new Map(
+    current
+      .filter((option) => !excluded.has(option.id))
+      .map((option) => [option.id, option]),
+  );
+  for (const option of incoming) {
+    if (!excluded.has(option.id)) byId.set(option.id, option);
+  }
   return [...byId.values()];
 }
 

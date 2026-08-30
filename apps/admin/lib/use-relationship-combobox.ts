@@ -56,7 +56,9 @@ export function useRelationshipCombobox<
         label: item.title ?? item.name ?? removedLabel ?? "—",
       }));
     setItems((current) =>
-      page === 1 ? incoming : mergeRelationshipEndpointPages(current, incoming),
+      page === 1
+        ? incoming
+        : mergeRelationshipEndpointPages(current, incoming, [...excluded]),
     );
     setTotal(envelope.total);
   }, [envelope, excludedKey, page, removedLabel]);

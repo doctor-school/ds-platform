@@ -274,7 +274,10 @@ test.describe("012 EARS-10 — project↔partner relationships in the live admin
     await expect(page.getByTestId("project-partners-empty")).toBeVisible();
 
     // ── Restore: the SAME id comes back ────────────────────────────────────
-    await page.getByTestId("project-partners-show-retired").check();
+    await page
+      .getByTestId("project-partners-show-retired")
+      .locator("xpath=ancestor::label[1]")
+      .click();
     await expect(page.getByTestId("project-partners-retired")).toContainText(
       partner.title,
     );

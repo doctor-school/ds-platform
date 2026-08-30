@@ -328,7 +328,10 @@ test.describe("012 EARS-9 — project↔expert relationships in the live admin",
     await expect(page.getByTestId("project-experts-empty")).toBeVisible();
 
     // ── Restore: the SAME id comes back, which is what "не удаляются" means ─
-    await page.getByTestId("project-experts-show-retired").check();
+    await page
+      .getByTestId("project-experts-show-retired")
+      .locator("xpath=ancestor::label[1]")
+      .click();
     await expect(page.getByTestId("project-experts-retired")).toContainText(
       expert.name,
     );

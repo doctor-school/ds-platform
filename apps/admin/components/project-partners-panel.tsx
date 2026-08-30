@@ -13,6 +13,7 @@ import type {
 } from "@ds/schemas";
 import { TokenSelect } from "@/components/fields";
 import { RelationshipEndpointPicker } from "@/components/relationship-endpoint-picker";
+import { hasActiveProjectPrimaryPartner } from "@/lib/relationship-authoring-state";
 import { taxonomyErrorKey } from "@/lib/taxonomy-errors";
 import type { TaxonomyHttpError } from "@/providers/data-provider";
 import { projectPartnersUrl } from "@/providers/data-provider";
@@ -360,6 +361,16 @@ function ReverseLinkForm({
   const [projectId, setProjectId] = useState("");
   const [isPrimary, setIsPrimary] = useState(false);
   const { mutate, mutation } = useCustomMutation();
+  const { query: selectedProjectQuery } = useCustom<ProjectPartnerAdminList>({
+    url: projectPartnersUrl.list({ projectId, includeRetired: true }),
+    method: "get",
+    queryOptions: { enabled: projectId.length > 0 },
+  });
+  const selectedProjectRows = selectedProjectQuery.data?.data.data ?? [];
+  const constraintLoading =
+    projectId.length > 0 && selectedProjectQuery.isFetching;
+  const constraintError = projectId.length > 0 && selectedProjectQuery.isError;
+  const primaryTaken = hasActiveProjectPrimaryPartner(selectedProjectRows);
 
   return (
     <section
@@ -373,7 +384,10 @@ function ReverseLinkForm({
         endpoint="project"
         excludedIds={linkedProjectIds}
         value={projectId}
-        onChange={setProjectId}
+        onChange={(nextProjectId) => {
+          setProjectId(nextProjectId);
+          setIsPrimary(false);
+        }}
         testIdPrefix="project-partner-link"
         copy={{
           search: t("projectPartners.fields.projectSearch"),
@@ -385,21 +399,46 @@ function ReverseLinkForm({
           noOptions: t("projectPartners.fields.noProjectOptions"),
         }}
       />
-      <Switch
-        id="project-partner-link-primary"
-        data-testid="project-partner-link-primary"
-        checked={isPrimary}
-        onChange={(event) => setIsPrimary(event.target.checked)}
-      >
-        {t("projectPartners.fields.isPrimary")}
-      </Switch>
+      {constraintLoading ? (
+        <p
+          className="text-sm text-muted-foreground"
+          data-testid="project-partner-link-project-loading"
+        >
+          {t("common.loading")}
+        </p>
+      ) : constraintError ? (
+        <Alert
+          variant="danger"
+          data-testid="project-partner-link-project-error"
+        >
+          {t("projectPartners.errors.loadFailed")}
+        </Alert>
+      ) : projectId.length > 0 && primaryTaken ? (
+        <p
+          className="text-sm text-muted-foreground"
+          data-testid="project-partner-link-primary-taken"
+        >
+          {t("projectPartners.fields.primaryTakenHint")}
+        </p>
+      ) : projectId.length > 0 ? (
+        <Switch
+          id="project-partner-link-primary"
+          data-testid="project-partner-link-primary"
+          checked={isPrimary}
+          onChange={(event) => setIsPrimary(event.target.checked)}
+        >
+          {t("projectPartners.fields.isPrimary")}
+        </Switch>
+      ) : null}
       <div>
         <Button
           type="button"
           size="sm"
           data-testid="project-partner-link-submit"
           loading={mutation.isPending}
-          disabled={projectId.length === 0}
+          disabled={
+            projectId.length === 0 || constraintLoading || constraintError
+          }
           onClick={() => {
             const body: CreateProjectPartnerRequest = {
               projectId,

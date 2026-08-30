@@ -52,7 +52,7 @@ async function createProject(
   return { title, url: page.url() };
 }
 
-/** A draft expert — the name is the only value the create form demands. */
+/** A draft expert authored through the current structured-name form. */
 async function createExpert(
   page: Page,
   familyName: string,

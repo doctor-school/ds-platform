@@ -15,6 +15,7 @@ import type {
 } from "@ds/schemas";
 import { TokenSelect } from "@/components/fields";
 import { RelationshipEndpointPicker } from "@/components/relationship-endpoint-picker";
+import { hasActiveProjectCurator } from "@/lib/relationship-authoring-state";
 import { taxonomyErrorKey } from "@/lib/taxonomy-errors";
 import { projectExpertsUrl } from "@/providers/data-provider";
 
@@ -365,6 +366,16 @@ function ReverseLinkForm({
   const [projectId, setProjectId] = useState("");
   const [role, setRole] = useState<ProjectExpertRole>("member");
   const { mutate, mutation } = useCustomMutation();
+  const { query: selectedProjectQuery } = useCustom<ProjectExpertAdminList>({
+    url: projectExpertsUrl.list({ projectId, includeRetired: true }),
+    method: "get",
+    queryOptions: { enabled: projectId.length > 0 },
+  });
+  const selectedProjectRows = selectedProjectQuery.data?.data.data ?? [];
+  const constraintLoading =
+    projectId.length > 0 && selectedProjectQuery.isFetching;
+  const constraintError = projectId.length > 0 && selectedProjectQuery.isError;
+  const seatTaken = hasActiveProjectCurator(selectedProjectRows);
 
   return (
     <section
@@ -378,7 +389,10 @@ function ReverseLinkForm({
         endpoint="project"
         excludedIds={linkedProjectIds}
         value={projectId}
-        onChange={setProjectId}
+        onChange={(nextProjectId) => {
+          setProjectId(nextProjectId);
+          setRole("member");
+        }}
         testIdPrefix="project-expert-link"
         copy={{
           search: t("projectExperts.fields.projectSearch"),
@@ -390,6 +404,18 @@ function ReverseLinkForm({
           noOptions: t("projectExperts.fields.noProjectOptions"),
         }}
       />
+      {constraintLoading ? (
+        <p
+          className="text-sm text-muted-foreground"
+          data-testid="project-expert-link-project-loading"
+        >
+          {t("common.loading")}
+        </p>
+      ) : constraintError ? (
+        <Alert variant="danger" data-testid="project-expert-link-project-error">
+          {t("projectExperts.errors.loadFailed")}
+        </Alert>
+      ) : null}
       <div className="flex flex-col gap-2">
         <label
           className="text-sm text-foreground"
@@ -401,11 +427,24 @@ function ReverseLinkForm({
           id="project-expert-link-role"
           data-testid="project-expert-link-role"
           value={role}
+          disabled={
+            projectId.length === 0 || constraintLoading || constraintError
+          }
           onChange={(event) => setRole(event.target.value as ProjectExpertRole)}
         >
           <option value="member">{t("projectExperts.roles.member")}</option>
-          <option value="curator">{t("projectExperts.roles.curator")}</option>
+          {!seatTaken ? (
+            <option value="curator">{t("projectExperts.roles.curator")}</option>
+          ) : null}
         </TokenSelect>
+        {seatTaken ? (
+          <p
+            className="text-sm text-muted-foreground"
+            data-testid="project-expert-link-seat-taken"
+          >
+            {t("projectExperts.fields.reverseSeatTakenHint")}
+          </p>
+        ) : null}
       </div>
       <div>
         <Button
@@ -413,7 +452,9 @@ function ReverseLinkForm({
           size="sm"
           data-testid="project-expert-link-submit"
           loading={mutation.isPending}
-          disabled={projectId.length === 0}
+          disabled={
+            projectId.length === 0 || constraintLoading || constraintError
+          }
           onClick={() => {
             const body: CreateProjectExpertRequest = {
               projectId,

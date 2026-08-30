@@ -2,8 +2,10 @@
 
 import { useState } from "react";
 import { useCustom } from "@refinedev/core";
-import { Input } from "@ds/design-system";
+import { useTranslations } from "next-intl";
+import { Alert, Input } from "@ds/design-system";
 import { TokenSelect } from "@/components/fields";
+import { relationshipPickerState } from "@/lib/relationship-authoring-state";
 
 type EndpointKind = "event" | "project";
 
@@ -49,6 +51,7 @@ export function RelationshipEndpointPicker({
   testIdPrefix: string;
   copy: PickerCopy;
 }) {
+  const t = useTranslations();
   const [search, setSearch] = useState("");
   const query = new URLSearchParams({ page: "1", pageSize: "50" });
   if (search.trim().length > 0) query.set("q", search.trim());
@@ -68,6 +71,11 @@ export function RelationshipEndpointPicker({
       (normalizedSearch.length === 0 ||
         item.title.toLocaleLowerCase("ru-RU").includes(normalizedSearch)),
   );
+  const viewState = relationshipPickerState({
+    isLoading: endpointsQuery.isLoading || endpointsQuery.isFetching,
+    isError: endpointsQuery.isError,
+    optionCount: options.length,
+  });
 
   return (
     <>
@@ -101,6 +109,7 @@ export function RelationshipEndpointPicker({
           id={`${testIdPrefix}-select`}
           data-testid={`${testIdPrefix}-select`}
           value={value}
+          disabled={viewState.selectDisabled}
           onChange={(event) => onChange(event.target.value)}
         >
           <option value="">{copy.selectPlaceholder}</option>
@@ -110,7 +119,18 @@ export function RelationshipEndpointPicker({
             </option>
           ))}
         </TokenSelect>
-        {!endpointsQuery.isLoading && options.length === 0 ? (
+        {viewState.kind === "loading" ? (
+          <p
+            className="text-sm text-muted-foreground"
+            data-testid={`${testIdPrefix}-loading`}
+          >
+            {t("common.loading")}
+          </p>
+        ) : viewState.kind === "error" ? (
+          <Alert variant="danger" data-testid={`${testIdPrefix}-error`}>
+            {t("relationshipEndpointPicker.loadFailed")}
+          </Alert>
+        ) : viewState.kind === "empty" ? (
           <p
             className="text-sm text-muted-foreground"
             data-testid={`${testIdPrefix}-no-options`}

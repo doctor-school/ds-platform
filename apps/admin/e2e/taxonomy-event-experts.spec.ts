@@ -66,11 +66,12 @@ async function createEvent(page: Page, title: string): Promise<string> {
 }
 
 /** A draft expert — the name is the only value the create form demands. */
-async function createExpert(page: Page, name: string): Promise<void> {
+async function createExpert(page: Page, name: string): Promise<string> {
   await page.goto("/experts/create");
   await page.getByTestId("expert-name").fill(name);
   await page.getByTestId("submit-expert").click();
   await page.waitForURL(/\/experts\/[0-9a-f-]{36}$/, { timeout: 20_000 });
+  return page.url();
 }
 
 /** Open the add dialog and choose an expert through the search-narrowed selector. */
@@ -93,6 +94,25 @@ async function openAddDialog(page: Page, expertName: string): Promise<void> {
 test.describe.configure({ mode: "serial" });
 
 test.describe("012 EARS-7 — event↔expert links in the live admin", () => {
+  test("EARS-22: an operator authors an event↔expert link from the expert endpoint through the same relationship panel", async ({
+    page,
+  }) => {
+    await signInAsAdmin(page);
+
+    const stamp = Date.now();
+    const expertUrl = await createExpert(page, `Обратная связь ${stamp}`);
+    await createEvent(page, `Эфир для эксперта ${stamp}`);
+
+    await page.goto(expertUrl);
+    await expect(
+      page.getByTestId("tab-events"),
+      "expert detail must expose the reverse Event↔Expert authoring surface",
+    ).toBeVisible();
+    await page.getByTestId("tab-events").click();
+    await expect(page.getByTestId("event-experts-panel")).toBeVisible();
+    await expect(page.getByTestId("event-expert-add")).toBeVisible();
+  });
+
   test("012 EARS-7: an operator links, corrects, retires and restores an expert on a real event", async ({
     page,
   }) => {

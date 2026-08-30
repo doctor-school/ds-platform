@@ -11,6 +11,7 @@ import type {
   ProjectAdminList,
 } from "@ds/schemas";
 import { TokenSelect } from "@/components/fields";
+import { RelationshipEndpointPicker } from "@/components/relationship-endpoint-picker";
 import { taxonomyErrorKey } from "@/lib/taxonomy-errors";
 import { eventProjectsUrl } from "@/providers/data-provider";
 import { LifecycleImpactDialog } from "@/components/lifecycle-impact-dialog";
@@ -19,15 +20,8 @@ import { LifecycleImpactDialog } from "@/components/lifecycle-impact-dialog";
  * The event↔project relationship editor (012 EARS-6, 012-design §5.1/§7; #1288).
  *
  * ONE component serves BOTH directions because §5.1 serves both from one filtered
- * route: on the event detail it is the «Проекты» tab and it AUTHORS links; on the
- * project detail it is the «События» read view. The read side is deliberately not
- * a second, subtly-different list — a link is the same fact from either end, and
- * the only difference is which endpoint the operator is standing on.
- *
- * AUTHORING LIVES ON THE EVENT SIDE ONLY (§5.1). A project is a long-lived
- * container an event is added to, so the act reads «добавить проект к этому
- * эфиру»; offering the mirror control on the project detail would give one fact
- * two authoring homes and two places for it to drift.
+ * route and AUTHORS through that same command from both endpoint details. The
+ * only difference is which endpoint is fixed and which one the operator selects.
  *
  * NO DELETE (EARS-14). Retire/restore move the SAME row through the §3.1
  * confirmation gate; a retired link stays listed behind its toggle, exactly as a
@@ -67,7 +61,9 @@ export function EventProjectsPanel({
   }
 
   if (query.isLoading) {
-    return <p className="text-sm text-muted-foreground">{t("common.loading")}</p>;
+    return (
+      <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
+    );
   }
 
   // The QUERY is the source of presence, not `result`: Refine's `result.data`
@@ -108,7 +104,14 @@ export function EventProjectsPanel({
           onLinked={() => announce("eventProjects.toast.linked")}
           onError={(error) => fail(error, "eventProjects.errors.linkFailed")}
         />
-      ) : null}
+      ) : (
+        <ReverseLinkForm
+          projectId={entityId}
+          linkedEventIds={list.data.map((row) => row.eventId)}
+          onLinked={() => announce("eventProjects.toast.linked")}
+          onError={(error) => fail(error, "eventProjects.errors.linkFailed")}
+        />
+      )}
 
       <section className="flex flex-col gap-3">
         <h3 className="text-base font-extrabold text-foreground">
@@ -146,7 +149,10 @@ export function EventProjectsPanel({
           {t("eventProjects.showRetired")}
         </Switch>
         {showRetired ? (
-          <div className="flex flex-col gap-3" data-testid="event-projects-retired">
+          <div
+            className="flex flex-col gap-3"
+            data-testid="event-projects-retired"
+          >
             {retired.length === 0 ? (
               <p className="text-sm text-muted-foreground">
                 {t("eventProjects.retiredEmpty")}
@@ -170,6 +176,76 @@ export function EventProjectsPanel({
         {t("eventProjects.noDeleteNote")}
       </p>
     </div>
+  );
+}
+
+/** Reverse authoring fixes the project endpoint and selects an existing event. */
+function ReverseLinkForm({
+  projectId,
+  linkedEventIds,
+  onLinked,
+  onError,
+}: {
+  projectId: string;
+  linkedEventIds: string[];
+  onLinked: () => void;
+  onError: (error: unknown) => void;
+}) {
+  const t = useTranslations();
+  const [eventId, setEventId] = useState("");
+  const { mutate, mutation } = useCustomMutation();
+
+  return (
+    <section
+      className="flex flex-col gap-3 border-2 border-border p-4"
+      data-testid="event-project-link-form"
+    >
+      <h3 className="text-base font-extrabold text-foreground">
+        {t("eventProjects.linkEventTitle")}
+      </h3>
+      <RelationshipEndpointPicker
+        endpoint="event"
+        excludedIds={linkedEventIds}
+        value={eventId}
+        onChange={setEventId}
+        testIdPrefix="event-project-link"
+        copy={{
+          search: t("eventProjects.fields.eventSearch"),
+          searchPlaceholder: t("eventProjects.fields.eventSearchPlaceholder"),
+          select: t("eventProjects.fields.event"),
+          selectPlaceholder: t("eventProjects.fields.eventPlaceholder"),
+          noOptions: t("eventProjects.fields.noEventOptions"),
+        }}
+      />
+      <div>
+        <Button
+          type="button"
+          size="sm"
+          data-testid="event-project-link-submit"
+          loading={mutation.isPending}
+          disabled={eventId.length === 0}
+          onClick={() => {
+            const body: CreateEventProjectRequest = { eventId, projectId };
+            mutate(
+              {
+                url: eventProjectsUrl.collection(),
+                method: "post",
+                values: body,
+              },
+              {
+                onSuccess: () => {
+                  setEventId("");
+                  onLinked();
+                },
+                onError,
+              },
+            );
+          }}
+        >
+          {t("eventProjects.action.link")}
+        </Button>
+      </div>
+    </section>
   );
 }
 
@@ -310,7 +386,9 @@ function LinkForm({
           value={projectId}
           onChange={(event) => setProjectId(event.target.value)}
         >
-          <option value="">{t("eventProjects.fields.projectPlaceholder")}</option>
+          <option value="">
+            {t("eventProjects.fields.projectPlaceholder")}
+          </option>
           {options.map((project) => (
             <option key={project.id} value={project.id}>
               {project.title}
@@ -337,7 +415,11 @@ function LinkForm({
           onClick={() => {
             const body: CreateEventProjectRequest = { eventId, projectId };
             mutate(
-              { url: eventProjectsUrl.collection(), method: "post", values: body },
+              {
+                url: eventProjectsUrl.collection(),
+                method: "post",
+                values: body,
+              },
               {
                 onSuccess: () => {
                   setProjectId("");

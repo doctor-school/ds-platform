@@ -40,6 +40,7 @@ import {
 import {
   ADMIN_LIST_PAGE_SIZE_MAX,
   type CreateEventExpertRequest,
+  type EventAdminDetail,
   type EventExpertAdminList,
   type EventExpertAdminListItem,
   type ExpertAdminDetail,
@@ -53,18 +54,17 @@ import {
 import { taxonomyErrorKey } from "@/lib/taxonomy-errors";
 import { useLocalizedResolver } from "@/lib/use-localized-resolver";
 import { eventExpertsUrl } from "@/providers/data-provider";
+import { RelationshipEndpointPicker } from "@/components/relationship-endpoint-picker";
 
 /**
- * The «Эксперты» tab of the feature-007 event detail — the 012 EARS-7 event↔expert
- * link editor (#1289).
+ * The 012 EARS-7 event↔expert link editor (#1289), embedded from either endpoint.
  *
  * PLACEMENT comes from 012-design §7: «the admin owns four resource
  * lists/details/forms plus relationship editors EMBEDDED IN THE EXISTING 007
- * EVENT FORM and the project detail». So the link editor is a tab on the event
- * the links belong to, not a fifth top-level resource list — an operator authors
- * «who speaks at this event» while looking at the event, and a standalone
- * `/event-experts` table would make them carry an event id between screens. It
- * extends the tab composition the Stage-A owner pick settled (#1282, option B).
+ * EVENT FORM and the endpoint details». It is not a fifth top-level resource
+ * list: the same panel authors «who speaks at this event» from the event or
+ * expert currently in context. It extends the tab composition the Stage-A owner
+ * pick settled (#1282, option B).
  *
  * NO DELETE, anywhere (012-design §5.1). Retire frees the slot in the merged
  * speaker projection and keeps the row addressable; restore brings it back. The
@@ -81,7 +81,13 @@ import { eventExpertsUrl } from "@/providers/data-provider";
  * the `version` this panel rendered the row from. A stale version comes back as
  * 412 and is SHOWN («связь изменилась в другом окне») — never applied blindly.
  */
-export function EventExpertsPanel({ eventId }: { eventId: string }) {
+export function EventExpertsPanel({
+  mode,
+  entityId,
+}: {
+  mode: "event" | "expert";
+  entityId: string;
+}) {
   const t = useTranslations();
   const [showRetired, setShowRetired] = useState(false);
   const [errorKey, setErrorKey] = useState<string | null>(null);
@@ -93,7 +99,7 @@ export function EventExpertsPanel({ eventId }: { eventId: string }) {
   // instead of a reveal.
   const { result, query } = useCustom<EventExpertAdminList>({
     url: eventExpertsUrl.collection({
-      eventId,
+      ...(mode === "event" ? { eventId: entityId } : { expertId: entityId }),
       includeRetired: true,
       pageSize: ADMIN_LIST_PAGE_SIZE_MAX,
     }),
@@ -132,7 +138,7 @@ export function EventExpertsPanel({ eventId }: { eventId: string }) {
   return (
     <div className="flex flex-col gap-6" data-testid="event-experts-panel">
       <p className="text-sm text-muted-foreground">
-        {t("eventExperts.description")}
+        {t(`eventExperts.description.${mode}`)}
       </p>
 
       {errorKey ? (
@@ -148,7 +154,9 @@ export function EventExpertsPanel({ eventId }: { eventId: string }) {
       <div>
         <LinkDialog
           key={`add:${list.total}`}
-          eventId={eventId}
+          mode={mode}
+          entityId={entityId}
+          linkedEventIds={list.data.map((row) => row.eventId)}
           row={null}
           onDone={announce}
           onError={fail}
@@ -160,14 +168,15 @@ export function EventExpertsPanel({ eventId }: { eventId: string }) {
           className="text-sm text-muted-foreground"
           data-testid="event-experts-empty"
         >
-          {t("eventExperts.empty")}
+          {t(`eventExperts.empty.${mode}`)}
         </p>
       ) : (
         <div className="flex flex-col gap-3" data-testid="event-experts-active">
           {active.map((row) => (
             <LinkRow
               key={row.id}
-              eventId={eventId}
+              mode={mode}
+              entityId={entityId}
               row={row}
               onDone={announce}
               onError={fail}
@@ -200,7 +209,8 @@ export function EventExpertsPanel({ eventId }: { eventId: string }) {
               retired.map((row) => (
                 <LinkRow
                   key={row.id}
-                  eventId={eventId}
+                  mode={mode}
+                  entityId={entityId}
                   row={row}
                   onDone={announce}
                   onError={fail}
@@ -227,12 +237,14 @@ type ErrorHandler = (error: unknown, fallbackKey: string) => void;
  * allows (retire on an active row, restore on a retired one; never both).
  */
 function LinkRow({
-  eventId,
+  mode,
+  entityId,
   row,
   onDone,
   onError,
 }: {
-  eventId: string;
+  mode: "event" | "expert";
+  entityId: string;
   row: EventExpertAdminListItem;
   onDone: DoneHandler;
   onError: ErrorHandler;
@@ -247,7 +259,11 @@ function LinkRow({
     >
       <div className="flex flex-wrap items-center gap-3">
         <h3 className="text-base font-extrabold text-foreground">
-          <ExpertName expertId={row.expertId} />
+          {mode === "event" ? (
+            <ExpertName expertId={row.expertId} />
+          ) : (
+            <EventName eventId={row.eventId} />
+          )}
         </h3>
         <Badge variant="label" data-testid={`event-expert-status-${row.id}`}>
           {t(`eventExperts.statuses.${row.status}`)}
@@ -282,7 +298,9 @@ function LinkRow({
             // dialog to the row identity AND its version remounts it after every
             // saved edit, so «Изменить» always opens on what is stored NOW.
             key={`${row.id}:${row.version}`}
-            eventId={eventId}
+            mode={mode}
+            entityId={entityId}
+            linkedEventIds={[]}
             row={row}
             onDone={onDone}
             onError={onError}
@@ -323,6 +341,19 @@ function ExpertName({ expertId }: { expertId: string }) {
   if (!result) return <>{t("eventExperts.unknownExpert")}</>;
   // A null name means the expert was editorially removed (#1306, §2.4).
   return <>{result.name ?? t("experts.removedName")}</>;
+}
+
+/** Resolve the opposite event endpoint when the panel is mounted on an expert. */
+function EventName({ eventId }: { eventId: string }) {
+  const t = useTranslations();
+  const { result, query } = useOne<EventAdminDetail>({
+    resource: "events",
+    id: eventId,
+  });
+
+  if (query.isLoading) return <>{t("common.loading")}</>;
+  if (!result) return <>{t("eventExperts.unknownEvent")}</>;
+  return <>{result.title}</>;
 }
 
 function Fact({
@@ -502,18 +533,23 @@ function UnmatchButton({
  * about is exactly the walk-away case.
  */
 function LinkDialog({
-  eventId,
+  mode,
+  entityId,
+  linkedEventIds,
   row,
   onDone,
   onError,
 }: {
-  eventId: string;
+  mode: "event" | "expert";
+  entityId: string;
+  linkedEventIds: string[];
   row: EventExpertAdminListItem | null;
   onDone: DoneHandler;
   onError: ErrorHandler;
 }) {
   const t = useTranslations();
   const [open, setOpen] = useState(false);
+  const [selectedEventId, setSelectedEventId] = useState("");
   const { mutate, mutation } = useCustomMutation();
   const form = useForm<EventExpertFormFields>({
     mode: "onTouched",
@@ -525,7 +561,7 @@ function LinkDialog({
       "eventExperts.validation",
     ),
     defaultValues: {
-      expertId: row?.expertId ?? "",
+      expertId: row?.expertId ?? (mode === "expert" ? entityId : ""),
       role: row?.role ?? "",
       positionText: row ? String(row.position) : "",
     },
@@ -565,8 +601,8 @@ function LinkDialog({
     // which no route exposes yet (#1306 owns that surface) — so the panel never
     // offers a box that could only be filled with a hand-typed UUID.
     const body: CreateEventExpertRequest = {
-      eventId,
-      expertId: values.expertId,
+      eventId: mode === "event" ? entityId : selectedEventId,
+      expertId: mode === "expert" ? entityId : values.expertId,
       role: values.role.trim(),
       position,
     };
@@ -586,7 +622,9 @@ function LinkDialog({
     );
   }
 
-  const triggerLabel = row ? t("eventExperts.edit") : t("eventExperts.add");
+  const triggerLabel = row
+    ? t("eventExperts.edit")
+    : t(`eventExperts.add.${mode}`);
   const testId = row ? `event-expert-edit-${row.id}` : "event-expert-add";
 
   return (
@@ -603,12 +641,14 @@ function LinkDialog({
       <DialogContent data-testid={`${testId}-dialog`}>
         <DialogHeader>
           <DialogTitle>
-            {row ? t("eventExperts.editTitle") : t("eventExperts.addTitle")}
+            {row
+              ? t("eventExperts.editTitle")
+              : t(`eventExperts.addTitle.${mode}`)}
           </DialogTitle>
           <DialogDescription>
             {row
               ? t("eventExperts.editDescription")
-              : t("eventExperts.addDescription")}
+              : t(`eventExperts.addDescription.${mode}`)}
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -623,17 +663,42 @@ function LinkDialog({
               // FACT, not a control: a disabled dropdown would invite an operator
               // to try, and the honest answer — «retire and link again» — is what
               // the dialog description says instead.
-              <Fact label={t("eventExperts.fields.expert")}>
-                <span data-testid={`${testId}-expert`}>
-                  <ExpertName expertId={row.expertId} />
+              <Fact
+                label={t(
+                  mode === "event"
+                    ? "eventExperts.fields.expert"
+                    : "eventExperts.fields.event",
+                )}
+              >
+                <span data-testid={`${testId}-endpoint`}>
+                  {mode === "event" ? (
+                    <ExpertName expertId={row.expertId} />
+                  ) : (
+                    <EventName eventId={row.eventId} />
+                  )}
                 </span>
               </Fact>
-            ) : (
+            ) : mode === "event" ? (
               <ExpertPicker
                 value={form.watch("expertId")}
                 onChange={(next) =>
                   form.setValue("expertId", next, { shouldValidate: true })
                 }
+              />
+            ) : (
+              <RelationshipEndpointPicker
+                endpoint="event"
+                excludedIds={linkedEventIds}
+                value={selectedEventId}
+                onChange={setSelectedEventId}
+                testIdPrefix="event-expert-event"
+                copy={{
+                  search: t("eventExperts.eventSearchLabel"),
+                  searchPlaceholder: t("eventExperts.eventSearchPlaceholder"),
+                  select: t("eventExperts.fields.event"),
+                  selectPlaceholder: t("eventExperts.eventPlaceholder"),
+                  noOptions: t("eventExperts.eventsEmpty"),
+                }}
               />
             )}
             {row ? null : (
@@ -706,6 +771,9 @@ function LinkDialog({
               <Button
                 type="submit"
                 loading={mutation.isPending}
+                disabled={
+                  !row && mode === "expert" && selectedEventId.length === 0
+                }
                 data-testid={`${testId}-submit`}
               >
                 {row

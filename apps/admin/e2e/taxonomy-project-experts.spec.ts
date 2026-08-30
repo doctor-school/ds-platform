@@ -10,8 +10,8 @@ import { totpCode } from "./support/totp";
  * API. This proves the OPERATOR-facing arc, which no API test can: that the panel
  * REFUSES to offer a second curator instead of letting the operator discover the
  * 409, that «Заменить куратора» is the way through and does the demote+promote as
- * ONE act, that the same relation reads correctly from the expert side without a
- * second authoring home, and that a retired link comes back as the SAME row.
+ * ONE act, that the same panel authors from either endpoint, and that a retired
+ * link comes back as the SAME row.
  *
  * Dev-stand-gated + MANUAL like every other `apps/admin/e2e` flow spec. Run
  * against a booted admin + api:
@@ -91,6 +91,35 @@ async function linkExpert(
 test.describe.configure({ mode: "serial" });
 
 test.describe("012 EARS-9 — project↔expert relationships in the live admin", () => {
+  test("EARS-22: an operator authors a project↔expert link from the expert endpoint through the same relationship panel", async ({
+    page,
+  }) => {
+    await signInAsAdmin(page);
+
+    const stamp = Date.now();
+    const expert = await createExpert(page, `Обратный эксперт ${stamp}`);
+    const project = await createProject(
+      page,
+      `Обратный экспертный проект ${stamp}`,
+    );
+
+    await page.goto(expert.url);
+    await page.getByTestId("tab-projects").click();
+    await page.getByTestId("project-expert-link-search").fill(project.title);
+    await page
+      .getByTestId("project-expert-link-select")
+      .selectOption({ label: project.title });
+    await page.getByTestId("project-expert-link-role").selectOption("member");
+    await page.getByTestId("project-expert-link-submit").click();
+
+    await expect(page.getByTestId("project-experts-notice")).toContainText(
+      "Эксперт добавлен в проект.",
+    );
+    await expect(page.getByTestId("project-experts-panel")).toContainText(
+      project.title,
+    );
+  });
+
   test("012 EARS-9: an operator composes a project roster, and the curator seat can only be moved by the atomic replace", async ({
     page,
   }) => {
@@ -128,7 +157,9 @@ test.describe("012 EARS-9 — project↔expert relationships in the live admin",
       .getByTestId("project-expert-link-select")
       .selectOption({ label: member.name });
     await expect(
-      page.getByTestId("project-expert-link-role").locator('option[value="curator"]'),
+      page
+        .getByTestId("project-expert-link-role")
+        .locator('option[value="curator"]'),
     ).toBeDisabled();
     await expect(
       page.getByTestId("project-expert-link-seat-taken"),
@@ -176,7 +207,7 @@ test.describe("012 EARS-9 — project↔expert relationships in the live admin",
     ).toContainText("Куратор");
   });
 
-  test("012 EARS-9: a retired link comes back as the SAME row, and the expert detail reads the relation without authoring it", async ({
+  test("012 EARS-9: a retired link comes back as the SAME row, and the expert detail reads the relation", async ({
     page,
   }) => {
     await signInAsAdmin(page);
@@ -215,15 +246,18 @@ test.describe("012 EARS-9 — project↔expert relationships in the live admin",
     );
     await expect(page.getByTestId(`project-expert-row-${rowId}`)).toBeVisible();
 
-    // ── The expert side READS the same fact and offers no authoring ────────
-    // One fact, one authoring home (§5.1): no link form on this end.
+    // ── The expert side reads the same fact and keeps authoring available ──
     await page.goto(expert.url);
     await page.getByTestId("tab-projects").click();
-    await page.getByTestId("project-experts-panel").waitFor({ state: "visible" });
+    await page
+      .getByTestId("project-experts-panel")
+      .waitFor({ state: "visible" });
     await expect(page.getByTestId("project-experts-panel")).toContainText(
       project.title,
     );
-    await expect(page.getByTestId("project-expert-link-form")).toHaveCount(0);
-    await expect(page.getByTestId("project-curator-replace-form")).toHaveCount(0);
+    await expect(page.getByTestId("project-expert-link-form")).toBeVisible();
+    await expect(page.getByTestId("project-curator-replace-form")).toHaveCount(
+      0,
+    );
   });
 });

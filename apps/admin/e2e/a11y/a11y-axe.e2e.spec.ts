@@ -499,7 +499,7 @@ test.describe("007 EARS-11 axe-core a11y scan of the admin event surface", () =>
       .waitFor({ state: "visible" });
     for (const theme of THEMES) await scan(page, theme);
 
-    // The project side: the same list without the authoring form (§5.1).
+    // The project side: the same list and authoring form from the reverse endpoint.
     await page.goto(projects[0].url);
     await page.getByTestId("tab-events").click();
     await page

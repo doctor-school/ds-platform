@@ -100,8 +100,9 @@ test.describe("012 EARS-7 — event↔expert links in the live admin", () => {
     await signInAsAdmin(page);
 
     const stamp = Date.now();
+    const eventTitle = `Эфир для эксперта ${stamp}`;
     const expertUrl = await createExpert(page, `Обратная связь ${stamp}`);
-    await createEvent(page, `Эфир для эксперта ${stamp}`);
+    await createEvent(page, eventTitle);
 
     await page.goto(expertUrl);
     await expect(
@@ -110,7 +111,21 @@ test.describe("012 EARS-7 — event↔expert links in the live admin", () => {
     ).toBeVisible();
     await page.getByTestId("tab-events").click();
     await expect(page.getByTestId("event-experts-panel")).toBeVisible();
-    await expect(page.getByTestId("event-expert-add")).toBeVisible();
+    await page.getByTestId("event-expert-add").click();
+    await page.getByTestId("event-expert-event-search").fill(eventTitle);
+    await page
+      .getByTestId("event-expert-event-select")
+      .selectOption({ label: eventTitle });
+    await page.getByTestId("event-expert-add-role").fill("Докладчик");
+    await page.getByTestId("event-expert-add-position").fill("1");
+    await page.getByTestId("event-expert-add-submit").click();
+
+    await expect(page.getByTestId("event-experts-notice")).toContainText(
+      "Эксперт добавлен к эфиру.",
+    );
+    await expect(page.getByTestId("event-experts-panel")).toContainText(
+      eventTitle,
+    );
   });
 
   test("012 EARS-7: an operator links, corrects, retires and restores an expert on a real event", async ({

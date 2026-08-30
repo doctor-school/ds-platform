@@ -12,6 +12,7 @@ import type {
   UpdateProjectPartnerRequest,
 } from "@ds/schemas";
 import { TokenSelect } from "@/components/fields";
+import { RelationshipEndpointPicker } from "@/components/relationship-endpoint-picker";
 import { taxonomyErrorKey } from "@/lib/taxonomy-errors";
 import type { TaxonomyHttpError } from "@/providers/data-provider";
 import { projectPartnersUrl } from "@/providers/data-provider";
@@ -20,9 +21,8 @@ import { projectPartnersUrl } from "@/providers/data-provider";
  * The project↔partner relationship editor (012 EARS-10, 012-design §5.1/§7; #1292).
  *
  * ONE component serves BOTH directions, like the sibling panels: on the project
- * detail it is the «Партнёры» tab and it AUTHORS links; on the partner detail it
- * is the «Проекты» read view. Authoring lives on the PROJECT side only — a
- * project's partner list is composed while looking at the project.
+ * detail and the partner detail it AUTHORS through the same relationship command.
+ * The endpoint page only decides which side is fixed and which side is selected.
  *
  * `isPrimary` IS AN ATTRIBUTE, NOT A COMMAND. At most one ACTIVE row per project
  * may carry it (partial unique index), and the panel deliberately does NOT offer
@@ -84,7 +84,9 @@ export function ProjectPartnersPanel({
   }
 
   if (query.isLoading) {
-    return <p className="text-sm text-muted-foreground">{t("common.loading")}</p>;
+    return (
+      <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
+    );
   }
 
   // The QUERY is the source of presence, not `result`: Refine's `result.data`
@@ -127,7 +129,14 @@ export function ProjectPartnersPanel({
           onLinked={() => announce("projectPartners.toast.linked")}
           onError={(error) => fail(error, "projectPartners.errors.linkFailed")}
         />
-      ) : null}
+      ) : (
+        <ReverseLinkForm
+          partnerId={entityId}
+          linkedProjectIds={list.data.map((row) => row.projectId)}
+          onLinked={() => announce("projectPartners.toast.linked")}
+          onError={(error) => fail(error, "projectPartners.errors.linkFailed")}
+        />
+      )}
 
       <section className="flex flex-col gap-3">
         <h3 className="text-base font-extrabold text-foreground">
@@ -146,7 +155,9 @@ export function ProjectPartnersPanel({
               key={row.id}
               row={row}
               mode={mode}
-              primaryTaken={primaryTaken && !row.isPrimary}
+              primaryTaken={
+                mode === "project" && primaryTaken && !row.isPrimary
+              }
               onDone={announce}
               onError={fail}
               onErrorKey={failWithKey}
@@ -181,7 +192,7 @@ export function ProjectPartnersPanel({
                   key={row.id}
                   row={row}
                   mode={mode}
-                  primaryTaken={primaryTaken}
+                  primaryTaken={mode === "project" && primaryTaken}
                   onDone={announce}
                   onError={fail}
                   onErrorKey={failWithKey}
@@ -253,7 +264,10 @@ function LinkRow({
       </span>
       <span className="text-sm text-muted-foreground">{slug}</span>
       {row.isPrimary ? (
-        <Badge variant="label" data-testid={`project-partner-primary-${row.id}`}>
+        <Badge
+          variant="label"
+          data-testid={`project-partner-primary-${row.id}`}
+        >
           {t("projectPartners.primaryBadge")}
         </Badge>
       ) : null}
@@ -261,7 +275,7 @@ function LinkRow({
         {t(`projectPartners.statuses.${row.status}`)}
       </Badge>
 
-      {mode === "project" && row.status === "active" ? (
+      {row.status === "active" ? (
         <Button
           type="button"
           size="sm"
@@ -302,34 +316,117 @@ function LinkRow({
         </Button>
       ) : null}
 
-      {mode === "project" ? (
+      <Button
+        type="button"
+        size="sm"
+        variant="secondary"
+        data-testid={`project-partner-${transition}-${row.id}`}
+        loading={mutation.isPending}
+        onClick={() =>
+          mutate(
+            {
+              url: projectPartnersUrl.command(row.id, transition),
+              method: "post",
+              values: {},
+              meta: { version: row.version },
+            },
+            {
+              onSuccess: () => onDone(`projectPartners.toast.${transition}d`),
+              onError: (error) =>
+                onError(error, "projectPartners.errors.transitionFailed"),
+            },
+          )
+        }
+      >
+        {t(`projectPartners.action.${transition}`)}
+      </Button>
+    </div>
+  );
+}
+
+/** Reverse authoring fixes the partner endpoint and selects an existing project. */
+function ReverseLinkForm({
+  partnerId,
+  linkedProjectIds,
+  onLinked,
+  onError,
+}: {
+  partnerId: string;
+  linkedProjectIds: string[];
+  onLinked: () => void;
+  onError: (error: unknown) => void;
+}) {
+  const t = useTranslations();
+  const [projectId, setProjectId] = useState("");
+  const [isPrimary, setIsPrimary] = useState(false);
+  const { mutate, mutation } = useCustomMutation();
+
+  return (
+    <section
+      className="flex flex-col gap-3 border-2 border-border p-4"
+      data-testid="project-partner-link-form"
+    >
+      <h3 className="text-base font-extrabold text-foreground">
+        {t("projectPartners.linkProjectTitle")}
+      </h3>
+      <RelationshipEndpointPicker
+        endpoint="project"
+        excludedIds={linkedProjectIds}
+        value={projectId}
+        onChange={setProjectId}
+        testIdPrefix="project-partner-link"
+        copy={{
+          search: t("projectPartners.fields.projectSearch"),
+          searchPlaceholder: t(
+            "projectPartners.fields.projectSearchPlaceholder",
+          ),
+          select: t("projectPartners.fields.project"),
+          selectPlaceholder: t("projectPartners.fields.projectPlaceholder"),
+          noOptions: t("projectPartners.fields.noProjectOptions"),
+        }}
+      />
+      <Switch
+        id="project-partner-link-primary"
+        data-testid="project-partner-link-primary"
+        checked={isPrimary}
+        onChange={(event) => setIsPrimary(event.target.checked)}
+      >
+        {t("projectPartners.fields.isPrimary")}
+      </Switch>
+      <div>
         <Button
           type="button"
           size="sm"
-          variant="secondary"
-          data-testid={`project-partner-${transition}-${row.id}`}
+          data-testid="project-partner-link-submit"
           loading={mutation.isPending}
-          onClick={() =>
+          disabled={projectId.length === 0}
+          onClick={() => {
+            const body: CreateProjectPartnerRequest = {
+              projectId,
+              partnerId,
+              isPrimary,
+            };
             mutate(
               {
-                url: projectPartnersUrl.command(row.id, transition),
+                url: projectPartnersUrl.collection(),
                 method: "post",
-                values: {},
-                meta: { version: row.version },
+                values: body,
               },
               {
-                onSuccess: () =>
-                  onDone(`projectPartners.toast.${transition}d`),
-                onError: (error) =>
-                  onError(error, "projectPartners.errors.transitionFailed"),
+                onSuccess: () => {
+                  setProjectId("");
+                  setIsPrimary(false);
+                  onLinked();
+                },
+                onError,
               },
-            )
-          }
+            );
+          }}
         >
-          {t(`projectPartners.action.${transition}`)}
+          {t("projectPartners.action.link")}
         </Button>
-      ) : null}
-    </div>
+      </div>
+    </section>
   );
 }
 

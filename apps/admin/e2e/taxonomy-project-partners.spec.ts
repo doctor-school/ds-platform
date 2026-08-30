@@ -11,7 +11,7 @@ import { totpCode } from "./support/totp";
  * second primary (the flag is CLEARED and then SET, two visible audited acts, not
  * one control that silently demotes a sponsor), that the refusal — when it is
  * reached — says which fact is in the way instead of the generic «такая связь уже
- * есть», and that the partner side reads the same relation without authoring it.
+ * есть», and that the same panel authors the relation from either endpoint.
  *
  * Dev-stand-gated + MANUAL like every other `apps/admin/e2e` flow spec. Run
  * against a booted admin + api:
@@ -68,7 +68,9 @@ async function createPartner(
 async function openPartnersTab(page: Page, projectUrl: string): Promise<void> {
   await page.goto(projectUrl);
   await page.getByTestId("tab-partners").click();
-  await page.getByTestId("project-partners-panel").waitFor({ state: "visible" });
+  await page
+    .getByTestId("project-partners-panel")
+    .waitFor({ state: "visible" });
 }
 
 /** Link one partner to the open project; `primary` uses the create-form flag. */
@@ -91,6 +93,34 @@ async function linkPartner(
 test.describe.configure({ mode: "serial" });
 
 test.describe("012 EARS-10 — project↔partner relationships in the live admin", () => {
+  test("EARS-22: an operator authors a project↔partner link from the partner endpoint through the same relationship panel", async ({
+    page,
+  }) => {
+    await signInAsAdmin(page);
+
+    const stamp = Date.now();
+    const partner = await createPartner(page, `Обратный партнёр ${stamp}`);
+    const project = await createProject(
+      page,
+      `Обратный партнёрский проект ${stamp}`,
+    );
+
+    await page.goto(partner.url);
+    await page.getByTestId("tab-projects").click();
+    await page.getByTestId("project-partner-link-search").fill(project.title);
+    await page
+      .getByTestId("project-partner-link-select")
+      .selectOption({ label: project.title });
+    await page.getByTestId("project-partner-link-submit").click();
+
+    await expect(page.getByTestId("project-partners-notice")).toContainText(
+      "Партнёр добавлен к проекту.",
+    );
+    await expect(page.getByTestId("project-partners-panel")).toContainText(
+      project.title,
+    );
+  });
+
   test("012 EARS-10: the primary flag is cleared before it is moved, and the panel never offers a second primary", async ({
     page,
   }) => {
@@ -122,9 +152,9 @@ test.describe("012 EARS-10 — project↔partner relationships in the live admin
     await expect(
       page.getByTestId("project-partner-link-primary-taken"),
     ).toContainText("Сначала снимите отметку");
-    await expect(
-      page.getByTestId("project-partner-link-primary"),
-    ).toHaveCount(0);
+    await expect(page.getByTestId("project-partner-link-primary")).toHaveCount(
+      0,
+    );
 
     await linkPartner(page, second.title, false);
     const secondRow = page
@@ -149,7 +179,9 @@ test.describe("012 EARS-10 — project↔partner relationships in the live admin
     await expect(page.getByTestId("project-partners-notice")).toContainText(
       "Отметка «основной» снята.",
     );
-    await page.getByTestId(`project-partner-primary-toggle-${secondId}`).click();
+    await page
+      .getByTestId(`project-partner-primary-toggle-${secondId}`)
+      .click();
     await expect(page.getByTestId("project-partners-notice")).toContainText(
       "Партнёр отмечен основным.",
     );
@@ -157,7 +189,7 @@ test.describe("012 EARS-10 — project↔partner relationships in the live admin
     await expect(firstRow).not.toContainText("Основной");
   });
 
-  test("012 EARS-10: a retired link comes back as the SAME row, and the partner detail reads the relation without authoring it", async ({
+  test("012 EARS-10: a retired link comes back as the SAME row, and the partner detail reads the relation", async ({
     page,
   }) => {
     await signInAsAdmin(page);
@@ -194,9 +226,11 @@ test.describe("012 EARS-10 — project↔partner relationships in the live admin
     await expect(page.getByTestId("project-partners-notice")).toContainText(
       "Связь возвращена.",
     );
-    await expect(page.getByTestId(`project-partner-row-${rowId}`)).toBeVisible();
+    await expect(
+      page.getByTestId(`project-partner-row-${rowId}`),
+    ).toBeVisible();
 
-    // ── The partner side READS the same fact and offers no authoring ───────
+    // ── The partner side reads the same fact and keeps authoring available ─
     await page.goto(partner.url);
     await page.getByTestId("tab-projects").click();
     await page
@@ -205,6 +239,6 @@ test.describe("012 EARS-10 — project↔partner relationships in the live admin
     await expect(page.getByTestId("project-partners-panel")).toContainText(
       project.title,
     );
-    await expect(page.getByTestId("project-partner-link-form")).toHaveCount(0);
+    await expect(page.getByTestId("project-partner-link-form")).toBeVisible();
   });
 });

@@ -14,6 +14,7 @@ import type {
   UpdateProjectExpertRequest,
 } from "@ds/schemas";
 import { TokenSelect } from "@/components/fields";
+import { RelationshipEndpointPicker } from "@/components/relationship-endpoint-picker";
 import { taxonomyErrorKey } from "@/lib/taxonomy-errors";
 import { projectExpertsUrl } from "@/providers/data-provider";
 
@@ -21,14 +22,9 @@ import { projectExpertsUrl } from "@/providers/data-provider";
  * The project↔expert relationship editor (012 EARS-9, 012-design §5.1/§7; #1291).
  *
  * ONE component serves BOTH directions, like `EventProjectsPanel`: on the project
- * detail it is the «Эксперты» tab and it AUTHORS links; on the expert detail it
- * is the «Проекты» read view. A link is the same fact from either end, and a
- * second, subtly-different read list is how two views of one fact drift apart.
- *
- * AUTHORING LIVES ON THE PROJECT SIDE ONLY (§5.1). A project is the container
- * whose roster is being composed, so the act reads «добавить эксперта в этот
- * проект»; the mirror control on the expert detail would give one fact two
- * authoring homes.
+ * detail and the expert detail it AUTHORS through the same relationship command.
+ * A link is the same fact from either end, so there is one panel and one state
+ * machine rather than a second reverse implementation.
  *
  * THE CURATOR SEAT IS NOT AN ORDINARY FIELD (§3.2). A published project must have
  * exactly one active curator, enforced by an immediate partial unique index, so
@@ -90,7 +86,9 @@ export function ProjectExpertsPanel({
   }
 
   if (query.isLoading) {
-    return <p className="text-sm text-muted-foreground">{t("common.loading")}</p>;
+    return (
+      <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
+    );
   }
 
   // The QUERY is the source of presence, not `result`: Refine's `result.data`
@@ -133,7 +131,14 @@ export function ProjectExpertsPanel({
           onLinked={() => announce("projectExperts.toast.linked")}
           onError={(error) => fail(error, "projectExperts.errors.linkFailed")}
         />
-      ) : null}
+      ) : (
+        <ReverseLinkForm
+          expertId={entityId}
+          linkedProjectIds={list.data.map((row) => row.projectId)}
+          onLinked={() => announce("projectExperts.toast.linked")}
+          onError={(error) => fail(error, "projectExperts.errors.linkFailed")}
+        />
+      )}
 
       <section className="flex flex-col gap-3">
         <h3 className="text-base font-extrabold text-foreground">
@@ -152,7 +157,9 @@ export function ProjectExpertsPanel({
               key={row.id}
               row={row}
               mode={mode}
-              seatTaken={curator !== null && curator.id !== row.id}
+              seatTaken={
+                mode === "project" && curator !== null && curator.id !== row.id
+              }
               onDone={announce}
               onError={fail}
             />
@@ -185,7 +192,10 @@ export function ProjectExpertsPanel({
           {t("projectExperts.showRetired")}
         </Switch>
         {showRetired ? (
-          <div className="flex flex-col gap-3" data-testid="project-experts-retired">
+          <div
+            className="flex flex-col gap-3"
+            data-testid="project-experts-retired"
+          >
             {retired.length === 0 ? (
               <p className="text-sm text-muted-foreground">
                 {t("projectExperts.retiredEmpty")}
@@ -196,7 +206,7 @@ export function ProjectExpertsPanel({
                   key={row.id}
                   row={row}
                   mode={mode}
-                  seatTaken={curator !== null}
+                  seatTaken={mode === "project" && curator !== null}
                   onDone={announce}
                   onError={fail}
                 />
@@ -246,9 +256,19 @@ function LinkRow({
   const nextRole: ProjectExpertRole =
     row.role === "curator" ? "member" : "curator";
 
-  function send(url: string, values: unknown, toastKey: string, fallback: string) {
+  function send(
+    url: string,
+    values: unknown,
+    toastKey: string,
+    fallback: string,
+  ) {
     mutate(
-      { url, method: "post", values: values ?? {}, meta: { version: row.version } },
+      {
+        url,
+        method: "post",
+        values: values ?? {},
+        meta: { version: row.version },
+      },
       {
         onSuccess: () => onDone(toastKey),
         onError: (error) => onError(error, fallback),
@@ -275,7 +295,7 @@ function LinkRow({
         {t(`projectExperts.statuses.${row.status}`)}
       </Badge>
 
-      {mode === "project" && row.status === "active" ? (
+      {row.status === "active" ? (
         <Button
           type="button"
           size="sm"
@@ -296,7 +316,8 @@ function LinkRow({
                 meta: { version: row.version },
               },
               {
-                onSuccess: () => onDone(`projectExperts.toast.role.${nextRole}`),
+                onSuccess: () =>
+                  onDone(`projectExperts.toast.role.${nextRole}`),
                 onError: (error) =>
                   onError(error, "projectExperts.errors.roleFailed"),
               },
@@ -307,26 +328,119 @@ function LinkRow({
         </Button>
       ) : null}
 
-      {mode === "project" ? (
+      <Button
+        type="button"
+        size="sm"
+        variant="secondary"
+        data-testid={`project-expert-${transition}-${row.id}`}
+        loading={mutation.isPending}
+        onClick={() =>
+          send(
+            projectExpertsUrl.command(row.id, transition),
+            {},
+            `projectExperts.toast.${transition}d`,
+            "projectExperts.errors.transitionFailed",
+          )
+        }
+      >
+        {t(`projectExperts.action.${transition}`)}
+      </Button>
+    </div>
+  );
+}
+
+/** Reverse authoring fixes the expert endpoint and selects an existing project. */
+function ReverseLinkForm({
+  expertId,
+  linkedProjectIds,
+  onLinked,
+  onError,
+}: {
+  expertId: string;
+  linkedProjectIds: string[];
+  onLinked: () => void;
+  onError: (error: unknown) => void;
+}) {
+  const t = useTranslations();
+  const [projectId, setProjectId] = useState("");
+  const [role, setRole] = useState<ProjectExpertRole>("member");
+  const { mutate, mutation } = useCustomMutation();
+
+  return (
+    <section
+      className="flex flex-col gap-3 border-2 border-border p-4"
+      data-testid="project-expert-link-form"
+    >
+      <h3 className="text-base font-extrabold text-foreground">
+        {t("projectExperts.linkProjectTitle")}
+      </h3>
+      <RelationshipEndpointPicker
+        endpoint="project"
+        excludedIds={linkedProjectIds}
+        value={projectId}
+        onChange={setProjectId}
+        testIdPrefix="project-expert-link"
+        copy={{
+          search: t("projectExperts.fields.projectSearch"),
+          searchPlaceholder: t(
+            "projectExperts.fields.projectSearchPlaceholder",
+          ),
+          select: t("projectExperts.fields.project"),
+          selectPlaceholder: t("projectExperts.fields.projectPlaceholder"),
+          noOptions: t("projectExperts.fields.noProjectOptions"),
+        }}
+      />
+      <div className="flex flex-col gap-2">
+        <label
+          className="text-sm text-foreground"
+          htmlFor="project-expert-link-role"
+        >
+          {t("projectExperts.fields.role")}
+        </label>
+        <TokenSelect
+          id="project-expert-link-role"
+          data-testid="project-expert-link-role"
+          value={role}
+          onChange={(event) => setRole(event.target.value as ProjectExpertRole)}
+        >
+          <option value="member">{t("projectExperts.roles.member")}</option>
+          <option value="curator">{t("projectExperts.roles.curator")}</option>
+        </TokenSelect>
+      </div>
+      <div>
         <Button
           type="button"
           size="sm"
-          variant="secondary"
-          data-testid={`project-expert-${transition}-${row.id}`}
+          data-testid="project-expert-link-submit"
           loading={mutation.isPending}
-          onClick={() =>
-            send(
-              projectExpertsUrl.command(row.id, transition),
-              {},
-              `projectExperts.toast.${transition}d`,
-              "projectExperts.errors.transitionFailed",
-            )
-          }
+          disabled={projectId.length === 0}
+          onClick={() => {
+            const body: CreateProjectExpertRequest = {
+              projectId,
+              expertId,
+              role,
+            };
+            mutate(
+              {
+                url: projectExpertsUrl.collection(),
+                method: "post",
+                values: body,
+              },
+              {
+                onSuccess: () => {
+                  setProjectId("");
+                  setRole("member");
+                  onLinked();
+                },
+                onError,
+              },
+            );
+          }}
         >
-          {t(`projectExperts.action.${transition}`)}
+          {t("projectExperts.action.link")}
         </Button>
-      ) : null}
-    </div>
+      </div>
+    </section>
   );
 }
 
@@ -412,7 +526,9 @@ function LinkForm({
           value={expertId}
           onChange={(event) => setExpertId(event.target.value)}
         >
-          <option value="">{t("projectExperts.fields.expertPlaceholder")}</option>
+          <option value="">
+            {t("projectExperts.fields.expertPlaceholder")}
+          </option>
           {options.map((expert) => (
             <option key={expert.id} value={expert.id}>
               {expert.name}
@@ -440,9 +556,7 @@ function LinkForm({
           id="project-expert-link-role"
           data-testid="project-expert-link-role"
           value={role}
-          onChange={(event) =>
-            setRole(event.target.value as ProjectExpertRole)
-          }
+          onChange={(event) => setRole(event.target.value as ProjectExpertRole)}
         >
           <option value="member">{t("projectExperts.roles.member")}</option>
           <option value="curator" disabled={seatTaken}>

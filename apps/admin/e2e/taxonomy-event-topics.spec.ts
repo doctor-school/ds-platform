@@ -82,6 +82,33 @@ async function openTopicsTab(page: Page, eventUrl: string): Promise<void> {
 test.describe.configure({ mode: "serial" });
 
 test.describe("012 EARS-11 — event↔direction relationships in the live admin", () => {
+  test("EARS-22: an operator authors an event↔direction link from the direction endpoint through the same relationship panel", async ({
+    page,
+  }) => {
+    await signInAsAdmin(page);
+
+    const stamp = Date.now();
+    const eventTitle = `Обратный эфир направления ${stamp}`;
+    await createDirection(page, `Обратное направление ${stamp}`);
+    const directionUrl = page.url();
+    await createEvent(page, eventTitle);
+
+    await page.goto(directionUrl);
+    await page.getByTestId("tab-events").click();
+    await page.getByTestId("event-topic-link-search").fill(eventTitle);
+    await page
+      .getByTestId("event-topic-link-select")
+      .selectOption({ label: eventTitle });
+    await page.getByTestId("event-topic-link-submit").click();
+
+    await expect(page.getByTestId("event-topics-notice")).toContainText(
+      "Связь добавлена.",
+    );
+    await expect(page.getByTestId("event-topics-panel")).toContainText(
+      eventTitle,
+    );
+  });
+
   test("012 EARS-11: an operator files an event under an existing direction, retires the link through the impact preview and restores it", async ({
     page,
   }) => {

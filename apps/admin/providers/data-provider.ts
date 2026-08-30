@@ -553,12 +553,14 @@ export const recordingsUrl = {
 export const eventExpertsUrl = {
   collection: (query?: {
     eventId?: string;
+    expertId?: string;
     includeRetired?: boolean;
     page?: number;
     pageSize?: number;
   }) => {
     const params = new URLSearchParams();
     if (query?.eventId) params.set("eventId", query.eventId);
+    if (query?.expertId) params.set("expertId", query.expertId);
     if (query?.includeRetired) params.set("includeRetired", "true");
     if (query?.page) params.set("page", String(query.page));
     if (query?.pageSize) params.set("pageSize", String(query.pageSize));

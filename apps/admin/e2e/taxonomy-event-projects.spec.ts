@@ -79,6 +79,32 @@ async function openProjectsTab(page: Page, eventUrl: string): Promise<void> {
 test.describe.configure({ mode: "serial" });
 
 test.describe("012 EARS-6 — event↔project relationships in the live admin", () => {
+  test("EARS-22: an operator authors an event↔project link from the project endpoint through the same relationship panel", async ({
+    page,
+  }) => {
+    await signInAsAdmin(page);
+
+    const stamp = Date.now();
+    const eventTitle = `Обратный эфир проекта ${stamp}`;
+    const project = await createProject(page, `Обратный проект ${stamp}`);
+    await createEvent(page, eventTitle);
+
+    await page.goto(project.url);
+    await page.getByTestId("tab-events").click();
+    await page.getByTestId("event-project-link-search").fill(eventTitle);
+    await page
+      .getByTestId("event-project-link-select")
+      .selectOption({ label: eventTitle });
+    await page.getByTestId("event-project-link-submit").click();
+
+    await expect(page.getByTestId("event-projects-notice")).toContainText(
+      "Связь добавлена.",
+    );
+    await expect(page.getByTestId("event-projects-panel")).toContainText(
+      eventTitle,
+    );
+  });
+
   test("012 EARS-6: an operator links a project, retires the link through the impact preview and restores it", async ({
     page,
   }) => {
@@ -131,7 +157,9 @@ test.describe("012 EARS-6 — event↔project relationships in the live admin", 
 
     const otherTab = await page.context().newPage();
     await openProjectsTab(otherTab, eventUrl);
-    await otherTab.getByTestId("event-project-link-search").fill(projectB.title);
+    await otherTab
+      .getByTestId("event-project-link-search")
+      .fill(projectB.title);
     await otherTab
       .getByTestId("event-project-link-select")
       .selectOption({ label: projectB.title });
@@ -140,9 +168,9 @@ test.describe("012 EARS-6 — event↔project relationships in the live admin", 
     await otherTab.close();
 
     await page.getByTestId("event-project-link-submit").click();
-    await expect(page.getByTestId("event-projects-command-error")).toContainText(
-      "Такая связь уже есть",
-    );
+    await expect(
+      page.getByTestId("event-projects-command-error"),
+    ).toContainText("Такая связь уже есть");
 
     // ── Retire: the preview is READ, its rows are RENDERED, then it confirms ─
     await openProjectsTab(page, eventUrl);
@@ -253,14 +281,15 @@ test.describe("012 EARS-6 — event↔project relationships in the live admin", 
       page.locator('[data-testid^="event-project-row-"]'),
     ).toHaveCount(2);
 
-    // ── The project side shows the SAME link, read-only ────────────────────
+    // ── The project side shows the SAME link and the same authoring panel ──
     await page.goto(projectA.url);
     await page.getByTestId("tab-events").click();
-    await page.getByTestId("event-projects-panel").waitFor({ state: "visible" });
+    await page
+      .getByTestId("event-projects-panel")
+      .waitFor({ state: "visible" });
     await expect(page.getByTestId("event-projects-panel")).toContainText(
       `Связи эфир ${stamp}`,
     );
-    // Authoring has exactly ONE home — the event detail.
-    await expect(page.getByTestId("event-project-link-form")).toHaveCount(0);
+    await expect(page.getByTestId("event-project-link-form")).toBeVisible();
   });
 });

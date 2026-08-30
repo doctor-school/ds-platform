@@ -16,6 +16,7 @@ import type { ExpertAdminDetail, TaxonomyStatus } from "@ds/schemas";
 import { AppShell } from "@/components/app-shell";
 import { BackToList } from "@/components/back-to-list";
 import { ExpertForm } from "@/components/expert-form";
+import { EventExpertsPanel } from "@/components/event-experts-panel";
 import { ProjectExpertsPanel } from "@/components/project-experts-panel";
 import { taxonomyErrorKey } from "@/lib/taxonomy-errors";
 import type { UpdateExpertVars } from "@/providers/data-provider";
@@ -105,6 +106,9 @@ export default function ExpertDetailPage() {
                 <TabsTrigger value="projects" data-testid="tab-projects">
                   {t("experts.tabs.projects")}
                 </TabsTrigger>
+                <TabsTrigger value="events" data-testid="tab-events">
+                  {t("experts.tabs.events")}
+                </TabsTrigger>
               </TabsList>
               <TabsContent value="main">
                 <ExpertForm
@@ -149,12 +153,15 @@ export default function ExpertDetailPage() {
                 />
               </TabsContent>
 
-              {/* «Проекты» (012 EARS-9, 012-design §5.1) — the READ direction of
-                  the same relation. Authoring stays on the project detail, so one
-                  fact has exactly one authoring home; here the operator sees
-                  which проекты this expert holds and with which role. */}
+              {/* «Проекты» (012 EARS-9, 012-design §5.1) — the same canonical
+                  relationship panel authors and reads the expert's project roles
+                  from this endpoint too. */}
               <TabsContent value="projects">
                 <ProjectExpertsPanel mode="expert" entityId={detail.id} />
+              </TabsContent>
+
+              <TabsContent value="events">
+                <EventExpertsPanel mode="expert" entityId={detail.id} />
               </TabsContent>
             </Tabs>
           </>

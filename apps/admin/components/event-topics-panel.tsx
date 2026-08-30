@@ -11,6 +11,7 @@ import type {
   EventTopicAdminList,
 } from "@ds/schemas";
 import { TokenSelect } from "@/components/fields";
+import { RelationshipEndpointPicker } from "@/components/relationship-endpoint-picker";
 import { taxonomyErrorKey } from "@/lib/taxonomy-errors";
 import { eventTopicsUrl } from "@/providers/data-provider";
 import { LifecycleImpactDialog } from "@/components/lifecycle-impact-dialog";
@@ -19,15 +20,8 @@ import { LifecycleImpactDialog } from "@/components/lifecycle-impact-dialog";
  * The event↔topic relationship editor (012 EARS-11, 012-design §5.1/§7; #1293).
  *
  * ONE component serves BOTH directions because §5.1 serves both from one filtered
- * route: on the event detail it is the «Темы» tab and it AUTHORS links; on a topic
- * detail it is the «Эфиры» read view. The read side is deliberately not a second,
- * subtly-different list — a link is the same fact from either end, and the only
- * difference is which endpoint the operator is standing on.
- *
- * AUTHORING LIVES ON THE EVENT SIDE ONLY (§5.1). A topic is a long-lived
- * classifier an event is filed under, so the act reads «отнести эфир к теме»;
- * offering the mirror control on the topic detail would give one fact two
- * authoring homes and two places for it to drift.
+ * route and AUTHORS through that same command from both endpoint details. The
+ * only difference is which endpoint is fixed and which one the operator selects.
  *
  * EXISTING TOPICS ONLY (EARS-11). The picker offers rows the topics catalogue
  * already holds — there is no inline creation here, because a topic invented
@@ -114,7 +108,14 @@ export function EventTopicsPanel({
           onLinked={() => announce("eventTopics.toast.linked")}
           onError={(error) => fail(error, "eventTopics.errors.linkFailed")}
         />
-      ) : null}
+      ) : (
+        <ReverseLinkForm
+          topicId={entityId}
+          linkedEventIds={list.data.map((row) => row.eventId)}
+          onLinked={() => announce("eventTopics.toast.linked")}
+          onError={(error) => fail(error, "eventTopics.errors.linkFailed")}
+        />
+      )}
 
       <section className="flex flex-col gap-3">
         <h3 className="text-base font-extrabold text-foreground">
@@ -179,6 +180,76 @@ export function EventTopicsPanel({
         {t("eventTopics.noDeleteNote")}
       </p>
     </div>
+  );
+}
+
+/** Reverse authoring fixes the direction endpoint and selects an existing event. */
+function ReverseLinkForm({
+  topicId,
+  linkedEventIds,
+  onLinked,
+  onError,
+}: {
+  topicId: string;
+  linkedEventIds: string[];
+  onLinked: () => void;
+  onError: (error: unknown) => void;
+}) {
+  const t = useTranslations();
+  const [eventId, setEventId] = useState("");
+  const { mutate, mutation } = useCustomMutation();
+
+  return (
+    <section
+      className="flex flex-col gap-3 border-2 border-border p-4"
+      data-testid="event-topic-link-form"
+    >
+      <h3 className="text-base font-extrabold text-foreground">
+        {t("eventTopics.linkEventTitle")}
+      </h3>
+      <RelationshipEndpointPicker
+        endpoint="event"
+        excludedIds={linkedEventIds}
+        value={eventId}
+        onChange={setEventId}
+        testIdPrefix="event-topic-link"
+        copy={{
+          search: t("eventTopics.fields.eventSearch"),
+          searchPlaceholder: t("eventTopics.fields.eventSearchPlaceholder"),
+          select: t("eventTopics.fields.event"),
+          selectPlaceholder: t("eventTopics.fields.eventPlaceholder"),
+          noOptions: t("eventTopics.fields.noEventOptions"),
+        }}
+      />
+      <div>
+        <Button
+          type="button"
+          size="sm"
+          data-testid="event-topic-link-submit"
+          loading={mutation.isPending}
+          disabled={eventId.length === 0}
+          onClick={() => {
+            const body: CreateEventTopicRequest = { eventId, topicId };
+            mutate(
+              {
+                url: eventTopicsUrl.collection(),
+                method: "post",
+                values: body,
+              },
+              {
+                onSuccess: () => {
+                  setEventId("");
+                  onLinked();
+                },
+                onError,
+              },
+            );
+          }}
+        >
+          {t("eventTopics.action.link")}
+        </Button>
+      </div>
+    </section>
   );
 }
 

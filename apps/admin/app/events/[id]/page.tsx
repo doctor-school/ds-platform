@@ -214,7 +214,7 @@ export default function EventEditPage() {
                     <CardTitle>{t("eventExperts.title")}</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <EventExpertsPanel eventId={id} />
+                    <EventExpertsPanel mode="event" entityId={id} />
                   </CardContent>
                 </Card>
               </TabsContent>

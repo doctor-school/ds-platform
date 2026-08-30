@@ -76,8 +76,17 @@ export function taxonomyErrorKey(error: unknown, fallbackKey: string): string {
   // ── 012 EARS-11 event↔direction link codes (#1293) ───────────────────────
   // A duplicate is actionable on this relation surface: the operator must
   // restore the existing row instead of retrying a create mutation.
-  if (ns === "eventTopics" && code === "RELATIONSHIP_CONFLICT") {
-    return "eventTopics.errors.duplicatePair";
+  if (ns === "eventTopics") {
+    switch (code) {
+      case "RELATIONSHIP_CONFLICT":
+        return "eventTopics.errors.duplicatePair";
+      case "LIFECYCLE_IMPACT_STALE":
+        return "eventTopics.errors.impactStale";
+      case "LIFECYCLE_IMPACT_REQUIRED":
+        return "eventTopics.errors.impactRequired";
+      default:
+        break;
+    }
   }
 
   // ── The §3.1 impact-gate codes (012-design §3.1/§5.3) ────────────────────

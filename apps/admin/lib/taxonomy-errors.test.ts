@@ -54,6 +54,21 @@ describe("taxonomyErrorKey — 012 EARS-6 relationship codes (#1288)", () => {
     expect(typeof lookup(key)).toBe("string");
   });
 
+  it("EARS-22: event-direction impact refusals use the existing reload guidance", () => {
+    expect(
+      taxonomyErrorKey(
+        { errorCode: "LIFECYCLE_IMPACT_STALE" },
+        "eventTopics.errors.transitionFailed",
+      ),
+    ).toBe("eventTopics.errors.impactStale");
+    expect(
+      taxonomyErrorKey(
+        { errorCode: "LIFECYCLE_IMPACT_REQUIRED" },
+        "eventTopics.errors.transitionFailed",
+      ),
+    ).toBe("eventTopics.errors.impactRequired");
+  });
+
   it("EARS-6: every relationship refusal maps to its own existing RU sentence", () => {
     const fallback = "eventProjects.errors.transitionFailed";
     const resolved = new Set<string>();

@@ -45,6 +45,22 @@ describe("EARS-22: reverse endpoint picker query", () => {
     ]);
   });
 
+  it("EARS-22: prunes newly linked endpoints from pages already merged into the picker", () => {
+    expect(
+      mergeRelationshipEndpointPages(
+        [
+          { id: "page-one", label: "Первая страница" },
+          { id: "linked-after-page-two", label: "Уже привязан" },
+        ],
+        [{ id: "page-two", label: "Вторая страница" }],
+        ["linked-after-page-two"],
+      ),
+    ).toEqual([
+      { id: "page-one", label: "Первая страница" },
+      { id: "page-two", label: "Вторая страница" },
+    ]);
+  });
+
   it("EARS-22: exposes next-page and retry actions inside the combobox panel", () => {
     expect(
       relationshipEndpointLoadState({

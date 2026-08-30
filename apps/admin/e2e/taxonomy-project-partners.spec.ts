@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { bootstrapAdminSession } from "./support/admin-session";
+import { selectRelationshipCombobox } from "./support/relationship-combobox";
 import { totpCode } from "./support/totp";
 
 /**
@@ -79,10 +80,12 @@ async function linkPartner(
   partnerTitle: string,
   primary: boolean,
 ): Promise<void> {
-  await page.getByTestId("project-partner-link-search").fill(partnerTitle);
-  await page
-    .getByTestId("project-partner-link-select")
-    .selectOption({ label: partnerTitle });
+  await selectRelationshipCombobox(
+    page,
+    "project-partner-link-combobox",
+    partnerTitle,
+    partnerTitle,
+  );
   if (primary) {
     await page
       .getByTestId("project-partner-link-primary")
@@ -112,10 +115,12 @@ test.describe("012 EARS-10 — project↔partner relationships in the live admin
 
     await page.goto(partner.url);
     await page.getByTestId("tab-projects").click();
-    await page.getByTestId("project-partner-link-search").fill(project.title);
-    await page
-      .getByTestId("project-partner-link-select")
-      .selectOption({ label: project.title });
+    await selectRelationshipCombobox(
+      page,
+      "project-partner-link-combobox",
+      project.title,
+      project.title,
+    );
     await page.getByTestId("project-partner-link-submit").click();
 
     await expect(page.getByTestId("project-partners-notice")).toContainText(
@@ -143,10 +148,12 @@ test.describe("012 EARS-10 — project↔partner relationships in the live admin
 
     await page.goto(candidate.url);
     await page.getByTestId("tab-projects").click();
-    await page.getByTestId("project-partner-link-search").fill(project.title);
-    await page
-      .getByTestId("project-partner-link-select")
-      .selectOption({ label: project.title });
+    await selectRelationshipCombobox(
+      page,
+      "project-partner-link-combobox",
+      project.title,
+      project.title,
+    );
 
     await expect(
       page.getByTestId("project-partner-link-primary-taken"),

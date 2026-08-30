@@ -1,6 +1,10 @@
 import { expect, test, type Page } from "@playwright/test";
 import { bootstrapAdminSession } from "./support/admin-session";
 import { totpCode } from "./support/totp";
+import {
+  searchRelationshipCombobox,
+  selectRelationshipCombobox,
+} from "./support/relationship-combobox";
 
 /**
  * 012 EARS-6 (#1288), browser half — the REAL Refine → NestJS → Postgres path for
@@ -91,6 +95,7 @@ test.describe("012 EARS-6 — event↔project relationships in the live admin", 
 
     await page.goto(project.url);
     await page.getByTestId("tab-events").click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
     const serverSearch = page.waitForRequest((request) => {
       const url = new URL(request.url());
       return (
@@ -100,11 +105,14 @@ test.describe("012 EARS-6 — event↔project relationships in the live admin", 
         url.searchParams.get("pageSize") === "20"
       );
     });
-    await page.getByTestId("event-project-link-search").fill(eventTitle);
+    const pickerPanel = await searchRelationshipCombobox(
+      page,
+      "event-project-link-combobox",
+      eventTitle,
+    );
+    await expect(pickerPanel.getByRole("combobox")).toBeVisible();
+    await pickerPanel.getByText(eventTitle, { exact: true }).click();
     await serverSearch;
-    await page
-      .getByTestId("event-project-link-select")
-      .selectOption({ label: eventTitle });
     await page.getByTestId("event-project-link-submit").click();
 
     await expect(page.getByTestId("event-projects-notice")).toContainText(
@@ -135,13 +143,12 @@ test.describe("012 EARS-6 — event↔project relationships in the live admin", 
     // ── Add a link through the searchable selector ─────────────────────────
     // The search narrows SERVER-SIDE (`?q=`), so the option list is the API's
     // answer, not a client-side filter over one page of rows.
-    await page.getByTestId("event-project-link-search").fill(projectA.title);
-    await expect(
-      page.getByTestId("event-project-link-select").locator("option"),
-    ).toHaveCount(2); // the placeholder + the one match
-    await page
-      .getByTestId("event-project-link-select")
-      .selectOption({ label: projectA.title });
+    await selectRelationshipCombobox(
+      page,
+      "event-project-link-combobox",
+      projectA.title,
+      projectA.title,
+    );
     await page.getByTestId("event-project-link-submit").click();
     await expect(page.getByTestId("event-projects-notice")).toContainText(
       "Связь добавлена.",
@@ -151,28 +158,34 @@ test.describe("012 EARS-6 — event↔project relationships in the live admin", 
     );
     // An already-linked project is no longer offerable: a choice that could only
     // ever come back 409 is not a choice.
-    await page.getByTestId("event-project-link-search").fill(projectA.title);
+    const emptyProjectPanel = await searchRelationshipCombobox(
+      page,
+      "event-project-link-combobox",
+      projectA.title,
+    );
     await expect(
-      page.getByTestId("event-project-link-no-options"),
+      emptyProjectPanel.getByText(/Подходящих проектов/),
     ).toBeVisible();
 
     // ── The duplicate-pair refusal, reached the way it really happens ───────
     // Two operators on the same event: this tab's picker still offers project B
     // while the other tab links it. The stale choice must produce the RU sentence
     // that names the retained-row remedy, not a generic failure.
-    await page.getByTestId("event-project-link-search").fill(projectB.title);
-    await page
-      .getByTestId("event-project-link-select")
-      .selectOption({ label: projectB.title });
+    await selectRelationshipCombobox(
+      page,
+      "event-project-link-combobox",
+      projectB.title,
+      projectB.title,
+    );
 
     const otherTab = await page.context().newPage();
     await openProjectsTab(otherTab, eventUrl);
-    await otherTab
-      .getByTestId("event-project-link-search")
-      .fill(projectB.title);
-    await otherTab
-      .getByTestId("event-project-link-select")
-      .selectOption({ label: projectB.title });
+    await selectRelationshipCombobox(
+      otherTab,
+      "event-project-link-combobox",
+      projectB.title,
+      projectB.title,
+    );
     await otherTab.getByTestId("event-project-link-submit").click();
     await expect(otherTab.getByTestId("event-projects-notice")).toBeVisible();
     await otherTab.close();

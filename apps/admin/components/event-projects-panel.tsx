@@ -3,18 +3,19 @@
 import { useState } from "react";
 import { useCustom, useCustomMutation } from "@refinedev/core";
 import { useTranslations } from "next-intl";
-import { Alert, Badge, Button, Input, Switch } from "@ds/design-system";
+import { Alert, Badge, Button, Switch } from "@ds/design-system";
+import { Combobox } from "@ds/design-system/blocks";
 import type {
   CreateEventProjectRequest,
   EventProjectAdminDetail,
   EventProjectAdminList,
-  ProjectAdminList,
+  ProjectAdminListItem,
 } from "@ds/schemas";
-import { TokenSelect } from "@/components/fields";
 import { RelationshipEndpointPicker } from "@/components/relationship-endpoint-picker";
 import { taxonomyErrorKey } from "@/lib/taxonomy-errors";
 import { eventProjectsUrl } from "@/providers/data-provider";
 import { LifecycleImpactDialog } from "@/components/lifecycle-impact-dialog";
+import { useRelationshipCombobox } from "@/lib/use-relationship-combobox";
 
 /**
  * The event↔project relationship editor (012 EARS-6, 012-design §5.1/§7; #1288).
@@ -328,20 +329,13 @@ function LinkForm({
   onError: (error: unknown) => void;
 }) {
   const t = useTranslations();
-  const [search, setSearch] = useState("");
   const [projectId, setProjectId] = useState("");
   const { mutate, mutation } = useCustomMutation();
-
-  const query = new URLSearchParams({ page: "1", pageSize: "50" });
-  if (search.trim().length > 0) query.set("q", search.trim());
-  const { query: projectsQuery } = useCustom<ProjectAdminList>({
-    url: `/v1/admin/projects?${query.toString()}`,
-    method: "get",
+  const picker = useRelationshipCombobox<ProjectAdminListItem>({
+    resource: "projects",
+    excludedIds: linkedProjectIds,
+    value: projectId,
   });
-
-  const options = (projectsQuery.data?.data.data ?? []).filter(
-    (project) => !linkedProjectIds.includes(project.id),
-  );
 
   return (
     <section
@@ -355,54 +349,39 @@ function LinkForm({
       <div className="flex flex-col gap-2">
         <label
           className="text-sm text-foreground"
-          htmlFor="event-project-link-search"
-        >
-          {t("eventProjects.fields.search")}
-        </label>
-        <Input
-          id="event-project-link-search"
-          data-testid="event-project-link-search"
-          value={search}
-          placeholder={t("eventProjects.fields.searchPlaceholder")}
-          onChange={(event) => {
-            setSearch(event.target.value);
-            // The narrowed list may no longer contain the held choice, and a
-            // hidden selection is exactly how an operator links the wrong row.
-            setProjectId("");
-          }}
-        />
-      </div>
-
-      <div className="flex flex-col gap-2">
-        <label
-          className="text-sm text-foreground"
-          htmlFor="event-project-link-select"
+          htmlFor="event-project-link-combobox"
         >
           {t("eventProjects.fields.project")}
         </label>
-        <TokenSelect
-          id="event-project-link-select"
-          data-testid="event-project-link-select"
-          value={projectId}
-          onChange={(event) => setProjectId(event.target.value)}
-        >
-          <option value="">
-            {t("eventProjects.fields.projectPlaceholder")}
-          </option>
-          {options.map((project) => (
-            <option key={project.id} value={project.id}>
-              {project.title}
-            </option>
-          ))}
-        </TokenSelect>
-        {options.length === 0 ? (
-          <p
-            className="text-sm text-muted-foreground"
-            data-testid="event-project-link-no-options"
-          >
-            {t("eventProjects.fields.noOptions")}
-          </p>
-        ) : null}
+        <Combobox
+          id="event-project-link-combobox"
+          options={picker.options}
+          value={projectId || null}
+          onValueChange={(next) => {
+            picker.select(next);
+            setProjectId(next);
+          }}
+          onSearchChange={picker.search}
+          onLoadMore={picker.loadMore}
+          hasMore={picker.hasMore}
+          loadingMore={picker.loadingMore}
+          loadMoreError={picker.loadMoreError}
+          loadMoreLabel={t("relationshipEndpointPicker.loadMore")}
+          loadingMoreLabel={t("relationshipEndpointPicker.loadingMore")}
+          loadMoreErrorLabel={t("relationshipEndpointPicker.retryLoadMore")}
+          placeholder={t("eventProjects.fields.projectPlaceholder")}
+          searchLabel={t("eventProjects.fields.search")}
+          searchPlaceholder={t("eventProjects.fields.searchPlaceholder")}
+          emptyLabel={
+            picker.isLoading
+              ? t("common.loading")
+              : picker.isError
+                ? t("relationshipEndpointPicker.loadFailed")
+                : t("eventProjects.fields.noOptions")
+          }
+          showSearch
+          aria-label={t("eventProjects.fields.project")}
+        />
       </div>
 
       <div>

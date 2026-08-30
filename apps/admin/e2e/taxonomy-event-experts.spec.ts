@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { bootstrapAdminSession } from "./support/admin-session";
+import { selectRelationshipCombobox } from "./support/relationship-combobox";
 import { totpCode } from "./support/totp";
 
 /**
@@ -90,17 +91,12 @@ async function openAddDialog(page: Page, expertName: string): Promise<void> {
   await page.getByTestId("event-expert-add-form").waitFor({ state: "visible" });
   // The narrowing runs on the API (`?q=`), not over a page held in the browser,
   // so the assertion is that the SERVER's answer reached the dropdown.
-  await page
-    .getByTestId("event-expert-search")
-    .fill(expertName.split(" ")[0]!);
-  await expect(
-    page
-      .getByTestId("event-expert-select")
-      .locator("option", { hasText: expertName }),
-  ).toHaveCount(1);
-  await page
-    .getByTestId("event-expert-select")
-    .selectOption({ label: expertName });
+  await selectRelationshipCombobox(
+    page,
+    "event-expert-combobox",
+    expertName.split(" ")[0]!,
+    expertName,
+  );
 }
 
 test.describe.configure({ mode: "serial" });
@@ -129,10 +125,12 @@ test.describe("012 EARS-7 — event↔expert links in the live admin", () => {
     await page.getByTestId("tab-events").click();
     await expect(page.getByTestId("event-experts-panel")).toBeVisible();
     await page.getByTestId("event-expert-add").click();
-    await page.getByTestId("event-expert-event-search").fill(eventTitle);
-    await page
-      .getByTestId("event-expert-event-select")
-      .selectOption({ label: eventTitle });
+    await selectRelationshipCombobox(
+      page,
+      "event-expert-event-combobox",
+      eventTitle,
+      eventTitle,
+    );
     await page.getByTestId("event-expert-add-role").fill("Докладчик");
     await page.getByTestId("event-expert-add-position").fill("1");
     await page.getByTestId("event-expert-add-submit").click();

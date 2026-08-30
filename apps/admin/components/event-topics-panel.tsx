@@ -3,18 +3,19 @@
 import { useState } from "react";
 import { useCustom, useCustomMutation } from "@refinedev/core";
 import { useTranslations } from "next-intl";
-import { Alert, Badge, Button, Input, Switch } from "@ds/design-system";
+import { Alert, Badge, Button, Switch } from "@ds/design-system";
+import { Combobox } from "@ds/design-system/blocks";
 import type {
   CreateEventTopicRequest,
-  DirectionAdminList,
+  DirectionAdminListItem,
   EventTopicAdminDetail,
   EventTopicAdminList,
 } from "@ds/schemas";
-import { TokenSelect } from "@/components/fields";
 import { RelationshipEndpointPicker } from "@/components/relationship-endpoint-picker";
 import { taxonomyErrorKey } from "@/lib/taxonomy-errors";
 import { eventTopicsUrl } from "@/providers/data-provider";
 import { LifecycleImpactDialog } from "@/components/lifecycle-impact-dialog";
+import { useRelationshipCombobox } from "@/lib/use-relationship-combobox";
 
 /**
  * The event↔topic relationship editor (012 EARS-11, 012-design §5.1/§7; #1293).
@@ -333,20 +334,13 @@ function LinkForm({
   onError: (error: unknown) => void;
 }) {
   const t = useTranslations();
-  const [search, setSearch] = useState("");
   const [topicId, setTopicId] = useState("");
   const { mutate, mutation } = useCustomMutation();
-
-  const query = new URLSearchParams({ page: "1", pageSize: "50" });
-  if (search.trim().length > 0) query.set("q", search.trim());
-  const { query: topicsQuery } = useCustom<DirectionAdminList>({
-    url: `/v1/admin/directions?${query.toString()}`,
-    method: "get",
+  const picker = useRelationshipCombobox<DirectionAdminListItem>({
+    resource: "directions",
+    excludedIds: linkedTopicIds,
+    value: topicId,
   });
-
-  const options = (topicsQuery.data?.data.data ?? []).filter(
-    (topic) => !linkedTopicIds.includes(topic.id),
-  );
 
   return (
     <section
@@ -360,52 +354,39 @@ function LinkForm({
       <div className="flex flex-col gap-2">
         <label
           className="text-sm text-foreground"
-          htmlFor="event-topic-link-search"
-        >
-          {t("eventTopics.fields.search")}
-        </label>
-        <Input
-          id="event-topic-link-search"
-          data-testid="event-topic-link-search"
-          value={search}
-          placeholder={t("eventTopics.fields.searchPlaceholder")}
-          onChange={(event) => {
-            setSearch(event.target.value);
-            // The narrowed list may no longer contain the held choice, and a
-            // hidden selection is exactly how an operator links the wrong row.
-            setTopicId("");
-          }}
-        />
-      </div>
-
-      <div className="flex flex-col gap-2">
-        <label
-          className="text-sm text-foreground"
-          htmlFor="event-topic-link-select"
+          htmlFor="event-topic-link-combobox"
         >
           {t("eventTopics.fields.topic")}
         </label>
-        <TokenSelect
-          id="event-topic-link-select"
-          data-testid="event-topic-link-select"
-          value={topicId}
-          onChange={(event) => setTopicId(event.target.value)}
-        >
-          <option value="">{t("eventTopics.fields.topicPlaceholder")}</option>
-          {options.map((topic) => (
-            <option key={topic.id} value={topic.id}>
-              {topic.title}
-            </option>
-          ))}
-        </TokenSelect>
-        {options.length === 0 ? (
-          <p
-            className="text-sm text-muted-foreground"
-            data-testid="event-topic-link-no-options"
-          >
-            {t("eventTopics.fields.noOptions")}
-          </p>
-        ) : null}
+        <Combobox
+          id="event-topic-link-combobox"
+          options={picker.options}
+          value={topicId || null}
+          onValueChange={(next) => {
+            picker.select(next);
+            setTopicId(next);
+          }}
+          onSearchChange={picker.search}
+          onLoadMore={picker.loadMore}
+          hasMore={picker.hasMore}
+          loadingMore={picker.loadingMore}
+          loadMoreError={picker.loadMoreError}
+          loadMoreLabel={t("relationshipEndpointPicker.loadMore")}
+          loadingMoreLabel={t("relationshipEndpointPicker.loadingMore")}
+          loadMoreErrorLabel={t("relationshipEndpointPicker.retryLoadMore")}
+          placeholder={t("eventTopics.fields.topicPlaceholder")}
+          searchLabel={t("eventTopics.fields.search")}
+          searchPlaceholder={t("eventTopics.fields.searchPlaceholder")}
+          emptyLabel={
+            picker.isLoading
+              ? t("common.loading")
+              : picker.isError
+                ? t("relationshipEndpointPicker.loadFailed")
+                : t("eventTopics.fields.noOptions")
+          }
+          showSearch
+          aria-label={t("eventTopics.fields.topic")}
+        />
       </div>
 
       <div>

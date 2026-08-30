@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useForm } from "react-hook-form";
-import { useCustom, useCustomMutation, useList, useOne } from "@refinedev/core";
+import { useCustom, useCustomMutation, useOne } from "@refinedev/core";
 import { useTranslations } from "next-intl";
 import type { z } from "zod";
 import {
@@ -25,8 +25,6 @@ import {
   DialogTitle,
   DialogTrigger,
   Input,
-  Label,
-  NativeSelect,
   Switch,
 } from "@ds/design-system";
 import {
@@ -37,6 +35,7 @@ import {
   FormLabel,
   FormMessage,
 } from "@ds/design-system/form";
+import { Combobox } from "@ds/design-system/blocks";
 import {
   ADMIN_LIST_PAGE_SIZE_MAX,
   type CreateEventExpertRequest,
@@ -55,6 +54,7 @@ import { taxonomyErrorKey } from "@/lib/taxonomy-errors";
 import { useLocalizedResolver } from "@/lib/use-localized-resolver";
 import { eventExpertsUrl } from "@/providers/data-provider";
 import { RelationshipEndpointPicker } from "@/components/relationship-endpoint-picker";
+import { useRelationshipCombobox } from "@/lib/use-relationship-combobox";
 
 /**
  * The 012 EARS-7 event↔expert link editor (#1289), embedded from either endpoint.
@@ -789,8 +789,8 @@ function LinkDialog({
 }
 
 /**
- * Choose the expert to link: a SERVER-narrowed search box over the roster plus
- * the DS `NativeSelect` holding the result.
+ * Choose the expert to link through the canonical closed, server-searchable
+ * relationship Combobox.
  *
  * The search runs on the api (`GET /v1/admin/experts?q=`), not over a page held
  * in the browser: an expert roster grows without bound, and a dropdown listing
@@ -798,9 +798,7 @@ function LinkDialog({
  * `includeRetired` stays false — 012-design §7: «selectors exclude retired
  * rows» — while the detail routes can still open a retired expert for restore.
  *
- * Composed from two existing DS primitives (the same search-box-plus-select pair
- * the shared admin list shell mounts), so no new interactive element class is
- * introduced and every hover/focus/invalid state is the primitives' own.
+ * Search lives only inside the open panel; typing can never create a value.
  */
 function ExpertPicker({
   value,
@@ -810,68 +808,50 @@ function ExpertPicker({
   onChange: (next: string) => void;
 }) {
   const t = useTranslations();
-  const [search, setSearch] = useState("");
-  const { result, query } = useList<ExpertAdminListItem>({
+  const picker = useRelationshipCombobox<ExpertAdminListItem>({
     resource: "experts",
-    pagination: { currentPage: 1, pageSize: 50 },
-    filters: [
-      { field: "q", operator: "contains", value: search },
-      { field: "includeRetired", operator: "eq", value: false },
-    ],
+    excludedIds: [],
+    value,
+    removedLabel: t("experts.removedName"),
   });
 
-  const options = (result.data ?? []) as ExpertAdminListItem[];
-
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex flex-col gap-1.5">
-        <Label htmlFor="event-expert-search">
-          {t("eventExperts.expertSearchLabel")}
-        </Label>
-        <Input
-          id="event-expert-search"
-          data-testid="event-expert-search"
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-        />
-        <p className="text-xs text-muted-foreground">
-          {t("eventExperts.expertSearchHint")}
-        </p>
-      </div>
-
-      <div className="flex flex-col gap-1.5">
-        <Label htmlFor="event-expert-select">
-          {t("eventExperts.fields.expert")}
-        </Label>
-        <NativeSelect
-          id="event-expert-select"
-          data-testid="event-expert-select"
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
-        >
-          <option value="">{t("common.notSet")}</option>
-          {options.map((expert) => (
-            <option key={expert.id} value={expert.id}>
-              {expert.name ?? t("experts.removedName")}
-            </option>
-          ))}
-        </NativeSelect>
-        {query.isError ? (
-          <p
-            className="text-xs text-destructive"
-            data-testid="event-expert-select-error"
-          >
-            {t("eventExperts.errors.expertsLoadFailed")}
-          </p>
-        ) : !query.isLoading && options.length === 0 ? (
-          <p
-            className="text-xs text-muted-foreground"
-            data-testid="event-expert-select-empty"
-          >
-            {t("eventExperts.expertsEmpty")}
-          </p>
-        ) : null}
-      </div>
+    <div className="flex flex-col gap-1.5">
+      <label
+        className="text-sm text-foreground"
+        htmlFor="event-expert-combobox"
+      >
+        {t("eventExperts.fields.expert")}
+      </label>
+      <Combobox
+        id="event-expert-combobox"
+        options={picker.options}
+        value={value || null}
+        onValueChange={(next) => {
+          picker.select(next);
+          onChange(next);
+        }}
+        onSearchChange={picker.search}
+        onLoadMore={picker.loadMore}
+        hasMore={picker.hasMore}
+        loadingMore={picker.loadingMore}
+        loadMoreError={picker.loadMoreError}
+        loadMoreLabel={t("relationshipEndpointPicker.loadMore")}
+        loadingMoreLabel={t("relationshipEndpointPicker.loadingMore")}
+        loadMoreErrorLabel={t("relationshipEndpointPicker.retryLoadMore")}
+        placeholder={t("common.notSet")}
+        searchLabel={t("eventExperts.expertSearchLabel")}
+        searchPlaceholder={t("eventExperts.expertSearchHint")}
+        emptyLabel={
+          picker.isLoading
+            ? t("common.loading")
+            : picker.isError
+              ? t("eventExperts.errors.expertsLoadFailed")
+              : t("eventExperts.expertsEmpty")
+        }
+        showSearch
+        aria-label={t("eventExperts.fields.expert")}
+      />
     </div>
   );
 }

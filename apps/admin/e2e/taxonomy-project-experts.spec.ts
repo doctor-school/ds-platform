@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { bootstrapAdminSession } from "./support/admin-session";
+import { selectRelationshipCombobox } from "./support/relationship-combobox";
 import { totpCode } from "./support/totp";
 
 /**
@@ -86,12 +87,12 @@ async function linkExpert(
 ): Promise<void> {
   // The API narrows by a recognizable name token; the option label remains the
   // authoritative structured full name selected below.
-  await page
-    .getByTestId("project-expert-link-search")
-    .fill(expertName.split(" ")[0]!);
-  await page
-    .getByTestId("project-expert-link-select")
-    .selectOption({ label: expertName });
+  await selectRelationshipCombobox(
+    page,
+    "project-expert-link-combobox",
+    expertName.split(" ")[0]!,
+    expertName,
+  );
   await page.getByTestId("project-expert-link-role").selectOption(role);
   await page.getByTestId("project-expert-link-submit").click();
   await expect(page.getByTestId("project-experts-notice")).toContainText(
@@ -121,10 +122,12 @@ test.describe("012 EARS-9 — project↔expert relationships in the live admin",
 
     await page.goto(expert.url);
     await page.getByTestId("tab-projects").click();
-    await page.getByTestId("project-expert-link-search").fill(project.title);
-    await page
-      .getByTestId("project-expert-link-select")
-      .selectOption({ label: project.title });
+    await selectRelationshipCombobox(
+      page,
+      "project-expert-link-combobox",
+      project.title,
+      project.title,
+    );
     await page.getByTestId("project-expert-link-role").selectOption("member");
     await page.getByTestId("project-expert-link-submit").click();
 
@@ -163,10 +166,12 @@ test.describe("012 EARS-9 — project↔expert relationships in the live admin",
 
     await page.goto(candidate.url);
     await page.getByTestId("tab-projects").click();
-    await page.getByTestId("project-expert-link-search").fill(project.title);
-    await page
-      .getByTestId("project-expert-link-select")
-      .selectOption({ label: project.title });
+    await selectRelationshipCombobox(
+      page,
+      "project-expert-link-combobox",
+      project.title,
+      project.title,
+    );
 
     await expect(
       page
@@ -282,12 +287,12 @@ test.describe("012 EARS-9 — project↔expert relationships in the live admin",
     // This is the assertion the API test cannot make: the operator is told what
     // to do instead («Заменить куратора»), rather than being allowed to send a
     // request whose only possible answer is 409.
-    await page
-      .getByTestId("project-expert-link-search")
-      .fill(member.name.split(" ")[0]!);
-    await page
-      .getByTestId("project-expert-link-select")
-      .selectOption({ label: member.name });
+    await selectRelationshipCombobox(
+      page,
+      "project-expert-link-combobox",
+      member.name.split(" ")[0]!,
+      member.name,
+    );
     await expect(
       page
         .getByTestId("project-expert-link-role")

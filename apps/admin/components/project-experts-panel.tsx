@@ -3,10 +3,11 @@
 import { useState } from "react";
 import { useCustom, useCustomMutation } from "@refinedev/core";
 import { useTranslations } from "next-intl";
-import { Alert, Badge, Button, Input, Switch } from "@ds/design-system";
+import { Alert, Badge, Button, Switch } from "@ds/design-system";
+import { Combobox } from "@ds/design-system/blocks";
 import type {
   CreateProjectExpertRequest,
-  ExpertAdminList,
+  ExpertAdminListItem,
   ProjectExpertAdminDetail,
   ProjectExpertAdminList,
   ProjectExpertRole,
@@ -26,6 +27,7 @@ import {
 } from "@/lib/taxonomy-errors";
 import { useRelationshipOccupancy } from "@/lib/use-relationship-occupancy";
 import { projectExpertsUrl } from "@/providers/data-provider";
+import { useRelationshipCombobox } from "@/lib/use-relationship-combobox";
 
 /**
  * The project↔expert relationship editor (012 EARS-9, 012-design §5.1/§7; #1291).
@@ -661,21 +663,16 @@ function LinkForm({
   onError: (error: unknown) => void;
 }) {
   const t = useTranslations();
-  const [search, setSearch] = useState("");
   const [expertId, setExpertId] = useState("");
   const [role, setRole] = useState<ProjectExpertRole>("member");
   const { mutate, mutation } = useCustomMutation();
 
-  const query = new URLSearchParams({ page: "1", pageSize: "50" });
-  if (search.trim().length > 0) query.set("q", search.trim());
-  const { query: expertsQuery } = useCustom<ExpertAdminList>({
-    url: `/v1/admin/experts?${query.toString()}`,
-    method: "get",
+  const picker = useRelationshipCombobox<ExpertAdminListItem>({
+    resource: "experts",
+    excludedIds: linkedExpertIds,
+    value: expertId,
+    removedLabel: t("experts.removedName"),
   });
-
-  const options = (expertsQuery.data?.data.data ?? []).filter(
-    (expert) => !linkedExpertIds.includes(expert.id),
-  );
 
   return (
     <section
@@ -689,54 +686,39 @@ function LinkForm({
       <div className="flex flex-col gap-2">
         <label
           className="text-sm text-foreground"
-          htmlFor="project-expert-link-search"
-        >
-          {t("projectExperts.fields.search")}
-        </label>
-        <Input
-          id="project-expert-link-search"
-          data-testid="project-expert-link-search"
-          value={search}
-          placeholder={t("projectExperts.fields.searchPlaceholder")}
-          onChange={(event) => {
-            setSearch(event.target.value);
-            // The narrowed list may no longer contain the held choice, and a
-            // hidden selection is exactly how an operator links the wrong row.
-            setExpertId("");
-          }}
-        />
-      </div>
-
-      <div className="flex flex-col gap-2">
-        <label
-          className="text-sm text-foreground"
-          htmlFor="project-expert-link-select"
+          htmlFor="project-expert-link-combobox"
         >
           {t("projectExperts.fields.expert")}
         </label>
-        <TokenSelect
-          id="project-expert-link-select"
-          data-testid="project-expert-link-select"
-          value={expertId}
-          onChange={(event) => setExpertId(event.target.value)}
-        >
-          <option value="">
-            {t("projectExperts.fields.expertPlaceholder")}
-          </option>
-          {options.map((expert) => (
-            <option key={expert.id} value={expert.id}>
-              {expert.name}
-            </option>
-          ))}
-        </TokenSelect>
-        {options.length === 0 ? (
-          <p
-            className="text-sm text-muted-foreground"
-            data-testid="project-expert-link-no-options"
-          >
-            {t("projectExperts.fields.noOptions")}
-          </p>
-        ) : null}
+        <Combobox
+          id="project-expert-link-combobox"
+          options={picker.options}
+          value={expertId || null}
+          onValueChange={(next) => {
+            picker.select(next);
+            setExpertId(next);
+          }}
+          onSearchChange={picker.search}
+          onLoadMore={picker.loadMore}
+          hasMore={picker.hasMore}
+          loadingMore={picker.loadingMore}
+          loadMoreError={picker.loadMoreError}
+          loadMoreLabel={t("relationshipEndpointPicker.loadMore")}
+          loadingMoreLabel={t("relationshipEndpointPicker.loadingMore")}
+          loadMoreErrorLabel={t("relationshipEndpointPicker.retryLoadMore")}
+          placeholder={t("projectExperts.fields.expertPlaceholder")}
+          searchLabel={t("projectExperts.fields.search")}
+          searchPlaceholder={t("projectExperts.fields.searchPlaceholder")}
+          emptyLabel={
+            picker.isLoading
+              ? t("common.loading")
+              : picker.isError
+                ? t("relationshipEndpointPicker.loadFailed")
+                : t("projectExperts.fields.noOptions")
+          }
+          showSearch
+          aria-label={t("projectExperts.fields.expert")}
+        />
       </div>
 
       <div className="flex flex-col gap-2">

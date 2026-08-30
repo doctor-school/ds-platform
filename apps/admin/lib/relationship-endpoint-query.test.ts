@@ -10,7 +10,11 @@ import {
 describe("EARS-22 reverse endpoint picker query", () => {
   it("EARS-22: sends search and pagination to the endpoint instead of scanning a client corpus", () => {
     expect(
-      relationshipEndpointQuery({ page: 3, pageSize: 20, search: "  Кардио  " }),
+      relationshipEndpointQuery({
+        page: 3,
+        pageSize: 20,
+        search: "  Кардио  ",
+      }),
     ).toBe("page=3&pageSize=20&q=%D0%9A%D0%B0%D1%80%D0%B4%D0%B8%D0%BE");
     expect(
       relationshipEndpointQuery({ page: 1, pageSize: 20, search: "   " }),

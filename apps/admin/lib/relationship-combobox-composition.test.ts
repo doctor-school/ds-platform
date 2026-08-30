@@ -13,7 +13,7 @@ const SURFACES = [
 
 describe("EARS-22 relationship add-picker composition", () => {
   for (const [relativePath, oldSearchHandle] of SURFACES) {
-    it(`uses one closed in-panel searchable Combobox in ${relativePath}`, () => {
+    it(`EARS-22: uses one closed in-panel searchable Combobox in ${relativePath}`, () => {
       const source = readFileSync(
         fileURLToPath(new URL(relativePath, import.meta.url)),
         "utf8",

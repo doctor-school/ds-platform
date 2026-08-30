@@ -3,15 +3,15 @@
 import { useState } from "react";
 import { useCustom, useCustomMutation } from "@refinedev/core";
 import { useTranslations } from "next-intl";
-import { Alert, Badge, Button, Input, Switch } from "@ds/design-system";
+import { Alert, Badge, Button, Switch } from "@ds/design-system";
+import { Combobox } from "@ds/design-system/blocks";
 import type {
   CreateProjectPartnerRequest,
-  PartnerAdminList,
+  PartnerAdminListItem,
   ProjectPartnerAdminDetail,
   ProjectPartnerAdminList,
   UpdateProjectPartnerRequest,
 } from "@ds/schemas";
-import { TokenSelect } from "@/components/fields";
 import { RelationshipEndpointPicker } from "@/components/relationship-endpoint-picker";
 import {
   canClaimInvariantSeat,
@@ -25,6 +25,7 @@ import {
 import { useRelationshipOccupancy } from "@/lib/use-relationship-occupancy";
 import type { TaxonomyHttpError } from "@/providers/data-provider";
 import { projectPartnersUrl } from "@/providers/data-provider";
+import { useRelationshipCombobox } from "@/lib/use-relationship-combobox";
 
 /**
  * The project↔partner relationship editor (012 EARS-10, 012-design §5.1/§7; #1292).
@@ -647,21 +648,15 @@ function LinkForm({
   onError: (error: unknown) => void;
 }) {
   const t = useTranslations();
-  const [search, setSearch] = useState("");
   const [partnerId, setPartnerId] = useState("");
   const [isPrimary, setIsPrimary] = useState(false);
   const { mutate, mutation } = useCustomMutation();
 
-  const query = new URLSearchParams({ page: "1", pageSize: "50" });
-  if (search.trim().length > 0) query.set("q", search.trim());
-  const { query: partnersQuery } = useCustom<PartnerAdminList>({
-    url: `/v1/admin/partners?${query.toString()}`,
-    method: "get",
+  const picker = useRelationshipCombobox<PartnerAdminListItem>({
+    resource: "partners",
+    excludedIds: linkedPartnerIds,
+    value: partnerId,
   });
-
-  const options = (partnersQuery.data?.data.data ?? []).filter(
-    (partner) => !linkedPartnerIds.includes(partner.id),
-  );
 
   return (
     <section
@@ -675,54 +670,39 @@ function LinkForm({
       <div className="flex flex-col gap-2">
         <label
           className="text-sm text-foreground"
-          htmlFor="project-partner-link-search"
-        >
-          {t("projectPartners.fields.search")}
-        </label>
-        <Input
-          id="project-partner-link-search"
-          data-testid="project-partner-link-search"
-          value={search}
-          placeholder={t("projectPartners.fields.searchPlaceholder")}
-          onChange={(event) => {
-            setSearch(event.target.value);
-            // The narrowed list may no longer contain the held choice, and a
-            // hidden selection is exactly how an operator links the wrong row.
-            setPartnerId("");
-          }}
-        />
-      </div>
-
-      <div className="flex flex-col gap-2">
-        <label
-          className="text-sm text-foreground"
-          htmlFor="project-partner-link-select"
+          htmlFor="project-partner-link-combobox"
         >
           {t("projectPartners.fields.partner")}
         </label>
-        <TokenSelect
-          id="project-partner-link-select"
-          data-testid="project-partner-link-select"
-          value={partnerId}
-          onChange={(event) => setPartnerId(event.target.value)}
-        >
-          <option value="">
-            {t("projectPartners.fields.partnerPlaceholder")}
-          </option>
-          {options.map((partner) => (
-            <option key={partner.id} value={partner.id}>
-              {partner.title}
-            </option>
-          ))}
-        </TokenSelect>
-        {options.length === 0 ? (
-          <p
-            className="text-sm text-muted-foreground"
-            data-testid="project-partner-link-no-options"
-          >
-            {t("projectPartners.fields.noOptions")}
-          </p>
-        ) : null}
+        <Combobox
+          id="project-partner-link-combobox"
+          options={picker.options}
+          value={partnerId || null}
+          onValueChange={(next) => {
+            picker.select(next);
+            setPartnerId(next);
+          }}
+          onSearchChange={picker.search}
+          onLoadMore={picker.loadMore}
+          hasMore={picker.hasMore}
+          loadingMore={picker.loadingMore}
+          loadMoreError={picker.loadMoreError}
+          loadMoreLabel={t("relationshipEndpointPicker.loadMore")}
+          loadingMoreLabel={t("relationshipEndpointPicker.loadingMore")}
+          loadMoreErrorLabel={t("relationshipEndpointPicker.retryLoadMore")}
+          placeholder={t("projectPartners.fields.partnerPlaceholder")}
+          searchLabel={t("projectPartners.fields.search")}
+          searchPlaceholder={t("projectPartners.fields.searchPlaceholder")}
+          emptyLabel={
+            picker.isLoading
+              ? t("common.loading")
+              : picker.isError
+                ? t("relationshipEndpointPicker.loadFailed")
+                : t("projectPartners.fields.noOptions")
+          }
+          showSearch
+          aria-label={t("projectPartners.fields.partner")}
+        />
       </div>
 
       {primaryTaken ? (

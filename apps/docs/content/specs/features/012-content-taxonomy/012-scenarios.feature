@@ -948,19 +948,48 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
 
   @EARS-24 @happy
   Scenario: Source closure acquires the writer fence before insert
-    Given the phase-aware expand image is the oldest rollback-eligible image
+    Given the retained cutover row records the phase-aware expand release SHA and ordinal
     And the durable phase is review_open with exact resolved source-to-review coverage
-    When controlled source closure acquires the writer fence first and commits source_closed
+    When controlled source closure acquires the writer fence first
+    And atomically commits source_closed plus that minimum-compatible release SHA and ordinal
     And the blocked legacy insert resumes against source_closed
     Then that insert is rejected without a source queue domain or audit mutation
     And every committed source still has exactly one retained review
 
+  @EARS-24 @failure
+  Scenario Outline: The table trigger rejects old-image direct DML after source closure
+    Given the retained cutover phase is source_closed
+    And a pre-expand application image bypasses the application service
+    When it directly attempts <operation> on event_speakers
+    Then the BEFORE write trigger locks and reads the retained cutover row
+    And rejects the operation at the database boundary
+    And no source queue domain or audit mutation occurs
+    Examples:
+      | operation              |
+      | INSERT                 |
+      | UPDATE content         |
+      | UPDATE to restore      |
+      | UPDATE to retire       |
+      | UPDATE to reorder      |
+      | DELETE                 |
+
+  @EARS-24 @failure
+  Scenario: A retained pre-expand rollback is rejected before provider mutation
+    Given source closure retained minimum-compatible expand SHA expand-sha at release ordinal 42
+    And retained image pre-expand-sha has authoritative release ordinal 41
+    When the operator runs pnpm deploy:prod --rollback pre-expand-sha
+    Then the command reads the retained minimum-compatible marker and resolves the target ordinal first
+    And rejects the older target before any provider mutation
+    And the current deployment and database remain unchanged
+
   @EARS-24 @happy
   Scenario: Staged contract deployment preserves app-only rollback safety
-    Given the backward-compatible expand image and every rollback-eligible image recognize review_open and source_closed
+    Given the backward-compatible expand image recorded its production SHA and ordinal in retained cutover state
     And serializable source closure committed exact resolved source-to-review coverage as source_closed
-    Then old and new eligible writers reject every legacy INSERT UPDATE restore retire reorder and delete
+    And atomically advanced the minimum-compatible SHA and ordinal to that expand release
+    Then table triggers reject every legacy INSERT UPDATE restore retire reorder and delete
     And old and new eligible readers resolve speakers only from ordered event_experts without a merged legacy source
+    And deploy rollback rejects an unreadable mismatched or older retained target before provider mutation
     When the later contract image is deployed
     Then speaker fields are absent from event create and update Zod and OpenAPI schemas
     And every legacy mutation route and public or admin legacy read DTO and resolver branch is absent

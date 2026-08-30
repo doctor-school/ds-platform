@@ -83,7 +83,12 @@ async function linkPartner(
   await page
     .getByTestId("project-partner-link-select")
     .selectOption({ label: partnerTitle });
-  if (primary) await page.getByTestId("project-partner-link-primary").check();
+  if (primary) {
+    await page
+      .getByTestId("project-partner-link-primary")
+      .locator("xpath=ancestor::label[1]")
+      .click();
+  }
   await page.getByTestId("project-partner-link-submit").click();
   await expect(page.getByTestId("project-partners-notice")).toContainText(
     "Партнёр добавлен к проекту.",

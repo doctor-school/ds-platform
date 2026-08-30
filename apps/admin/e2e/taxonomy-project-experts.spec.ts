@@ -84,7 +84,11 @@ async function linkExpert(
   expertName: string,
   role: "curator" | "member",
 ): Promise<void> {
-  await page.getByTestId("project-expert-link-search").fill(expertName);
+  // The API narrows by a recognizable name token; the option label remains the
+  // authoritative structured full name selected below.
+  await page
+    .getByTestId("project-expert-link-search")
+    .fill(expertName.split(" ")[0]!);
   await page
     .getByTestId("project-expert-link-select")
     .selectOption({ label: expertName });

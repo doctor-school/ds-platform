@@ -136,7 +136,7 @@ test.describe("012 EARS-7 — event↔expert links in the live admin", () => {
     await page.getByTestId("event-expert-add-submit").click();
 
     await expect(page.getByTestId("event-experts-notice")).toContainText(
-      "Эксперт добавлен к эфиру.",
+      "Эксперт привязан к мероприятию.",
     );
     await expect(page.getByTestId("event-experts-panel")).toContainText(
       eventTitle,

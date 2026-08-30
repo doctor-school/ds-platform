@@ -14,18 +14,25 @@ const approvedManifest: ApprovedSourceManifest = {
   version: 1,
   sources: {
     "admin-refine-compositions-v1": {
-      evidenceProfile: "responsive-web",
+      evidenceProfiles: ["responsive-web"],
       surfacePaths: [
-        "apps/admin/app/events/",
+        "apps/admin/app/events/[id]/page.tsx",
         "apps/admin/components/recordings-panel.tsx",
+        "apps/admin/components/lifecycle-actions.tsx",
+        "apps/admin/messages/ru.json",
       ],
-      states: ["recordings-panel/loading-empty-filled-error"],
+      states: ["recordings-tab/mark-ended-when-applicable-modal-confirmation"],
       approvalProvenance: [
-        "https://github.com/doctor-school/ds-platform/issues/1282",
-        "https://github.com/doctor-school/ds-platform/issues/1337",
-        "https://github.com/doctor-school/ds-platform/issues/1578",
-        "https://github.com/doctor-school/ds-platform/pull/1575#issuecomment-5434237585",
-        "https://github.com/doctor-school/ds-platform/pull/1614",
+        "https://github.com/doctor-school/ds-platform/issues/1282#issuecomment-5314581672",
+        "https://github.com/doctor-school/ds-platform/issues/1337#issuecomment-5315895726",
+      ],
+    },
+    "mixed-approved-v1": {
+      evidenceProfiles: ["native-mobile", "responsive-web"],
+      surfacePaths: [webFile, mobileFile],
+      states: ["shared-approved-composition"],
+      approvalProvenance: [
+        "https://github.com/doctor-school/ds-platform/issues/1282#issuecomment-5314581672",
       ],
     },
   },
@@ -54,8 +61,15 @@ ${webEvidence}`;
 const approvedBody = `
 ui-source-kind: approved-non-canvas
 ui-source: admin-refine-compositions-v1
-ui-source-state: recordings-panel/loading-empty-filled-error
+ui-source-state: recordings-tab/mark-ended-when-applicable-modal-confirmation
 ${webEvidence}`;
+const mixedApprovedBody = `
+ui-source-kind: approved-non-canvas
+ui-source: mixed-approved-v1
+ui-source-state: shared-approved-composition
+ui-evidence-profile: native-mobile, responsive-web
+${webEvidence.replace("ui-evidence-profile: responsive-web\n", "")}
+${nativeEvidence.replace("ui-evidence-profile: native-mobile\n", "")}`;
 
 const verdict = (
   body: string,
@@ -81,7 +95,7 @@ describe("ui-parity body evidence", () => {
     expect(verdict(canvasBody).ok).toBe(true);
   });
 
-  it("green: #1614-shaped base-approved manifest source passes", () => {
+  it("green: exact owner-comment base-approved manifest source passes", () => {
     expect(verdict(approvedBody).ok).toBe(true);
   });
 
@@ -110,19 +124,39 @@ describe("ui-parity body evidence", () => {
     expect(
       verdict(
         approvedBody.replace(
-          "recordings-panel/loading-empty-filled-error",
+          "recordings-tab/mark-ended-when-applicable-modal-confirmation",
           "recordings-panel/unknown",
         ),
       ).ok,
     ).toBe(false);
   });
 
-  it("red: manifest entries without durable approval provenance fail closed", () => {
+  it.each([
+    "https://github.com/doctor-school/ds-platform/issues/1282",
+    "https://github.com/doctor-school/ds-platform/pull/1614",
+    "https://github.com/doctor-school/ds-platform/pull/1575#issuecomment-5434237585",
+  ])("red: manifest provenance %s is not an exact owner decision comment", (url) => {
     const invalid = structuredClone(approvedManifest);
-    invalid.sources["admin-refine-compositions-v1"].approvalProvenance = [
-      "https://example.test/not-owner-approval",
-    ];
+    invalid.sources["admin-refine-compositions-v1"].approvalProvenance = [url];
     expect(verdict(approvedBody, [webFile], invalid).ok).toBe(false);
+  });
+
+  it("green: approved non-canvas source can require mixed evidence profiles", () => {
+    expect(verdict(mixedApprovedBody, [webFile, mobileFile]).ok).toBe(true);
+  });
+
+  it("red: approved-source profiles require exact missing/extra coverage", () => {
+    const missing = structuredClone(approvedManifest);
+    missing.sources["mixed-approved-v1"].evidenceProfiles = ["responsive-web"];
+    const extra = structuredClone(approvedManifest);
+    extra.sources["admin-refine-compositions-v1"].evidenceProfiles = [
+      "native-mobile",
+      "responsive-web",
+    ];
+    expect(
+      verdict(mixedApprovedBody, [webFile, mobileFile], missing).ok,
+    ).toBe(false);
+    expect(verdict(approvedBody, [webFile], extra).ok).toBe(false);
   });
 
   it("red: responsive-web requires four distinct desktop/mobile x theme links", () => {

@@ -14,6 +14,11 @@ describe("rendered UI source classification", () => {
     "apps/promo/app/page.tsx",
     "apps/showcase/app/page.tsx",
     "packages/design-system/src/primitives/button.tsx",
+    "packages/design-system/src/index.ts",
+    "packages/design-system/src/lib/utils.ts",
+    "packages/design-system/src/primitives/interactive-base.ts",
+    "apps/portal/lib/theme.ts",
+    "apps/portal/lib/auth-error-message.ts",
   ])("green: %s is rendered UI source", (path) => {
     expect(isUiSourcePath(path)).toBe(true);
   });
@@ -40,6 +45,7 @@ describe("rendered UI source classification", () => {
     "apps/cms/next.config.ts",
     "apps/academy-demo/vitest.setup.ts",
     "packages/design-system/src/styles/allowed-tokens.json",
+    "packages/design-system/src/primitives/button.test.ts",
     "apps/portal/Dockerfile",
     "apps/promo/.eslintrc",
     "apps/admin/.env.example",

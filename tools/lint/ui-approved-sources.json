@@ -2,22 +2,19 @@
   "version": 1,
   "sources": {
     "admin-refine-compositions-v1": {
-      "evidenceProfile": "responsive-web",
+      "evidenceProfiles": ["responsive-web"],
       "surfacePaths": [
-        "apps/admin/app/events/",
+        "apps/admin/app/events/[id]/page.tsx",
         "apps/admin/components/recordings-panel.tsx",
+        "apps/admin/components/lifecycle-actions.tsx",
         "apps/admin/messages/ru.json"
       ],
       "states": [
-        "recordings-panel/loading-empty-filled-error",
-        "event-detail/active-ended-mark-ended-confirmation"
+        "recordings-tab/mark-ended-when-applicable-modal-confirmation"
       ],
       "approvalProvenance": [
-        "https://github.com/doctor-school/ds-platform/issues/1282",
-        "https://github.com/doctor-school/ds-platform/issues/1337",
-        "https://github.com/doctor-school/ds-platform/issues/1578",
-        "https://github.com/doctor-school/ds-platform/pull/1575#issuecomment-5434237585",
-        "https://github.com/doctor-school/ds-platform/pull/1614"
+        "https://github.com/doctor-school/ds-platform/issues/1282#issuecomment-5314581672",
+        "https://github.com/doctor-school/ds-platform/issues/1337#issuecomment-5315895726"
       ]
     }
   }

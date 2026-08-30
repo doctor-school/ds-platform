@@ -26,7 +26,7 @@ const MODE_A_HEADER_RE = /^## Mode \(a\) Review\b/im;
 const MODE_A_VERDICT_RE = /^VERDICT:\s*(?:APPROVE|REQUEST_CHANGES)\b/im;
 
 export interface ApprovedSourceEntry {
-  evidenceProfile: UiEvidenceProfile;
+  evidenceProfiles: UiEvidenceProfile[];
   surfacePaths: string[];
   states: string[];
   approvalProvenance: string[];
@@ -90,13 +90,19 @@ function pathFitsScope(path: string, scope: string): boolean {
 function validEntry(
   entry: ApprovedSourceEntry | undefined,
 ): entry is ApprovedSourceEntry {
+  const profiles = entry?.evidenceProfiles ?? [];
   return Boolean(
     entry &&
+    profiles.length &&
+    new Set(profiles).size === profiles.length &&
+    profiles.every(
+      (profile) => profile === "native-mobile" || profile === "responsive-web",
+    ) &&
     entry.surfacePaths.length &&
     entry.states.length &&
     entry.approvalProvenance.length &&
     entry.approvalProvenance.every((url) =>
-      /^https:\/\/github\.com\/doctor-school\/ds-platform\/(?:issues|pull)\/\d+(?:#\S+)?$/.test(
+      /^https:\/\/github\.com\/doctor-school\/ds-platform\/issues\/\d+#issuecomment-\d+$/.test(
         url,
       ),
     ),
@@ -185,8 +191,11 @@ export function bodyEvidenceVerdict(
         missing.push(
           "every touched UI path inside the approved manifest surface scope",
         );
-      if (requiredProfiles.some((profile) => profile !== entry.evidenceProfile))
-        missing.push("evidence profile matching the approved manifest entry");
+      const approvedProfiles = [...entry.evidenceProfiles].sort();
+      if (requiredProfiles.join(",") !== approvedProfiles.join(","))
+        missing.push(
+          "evidence profiles exactly matching the approved manifest entry",
+        );
     }
   } else missing.push("ui-source-kind: canvas or approved-non-canvas");
 

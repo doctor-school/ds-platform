@@ -312,10 +312,12 @@ for (const variant of RENDER_MATRIX) {
         { path: "/partners/create", inputId: "logo", label: "Логотип" },
       ]) {
         await page.goto(media.path);
+        const fileInput = page.locator(`input[type="file"]#${media.inputId}`);
         await expect(
-          page.getByText(media.label, { exact: true }),
-        ).toBeVisible();
-        await expect(page.locator(`#${media.inputId}`)).toHaveCount(1);
+          page.locator(`label[for="${media.inputId}"]`),
+        ).toHaveText(media.label);
+        await expect(fileInput).toHaveCount(1);
+        await expect(fileInput).toHaveAttribute("accept", /image\//);
       }
     });
   });

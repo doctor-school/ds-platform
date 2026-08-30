@@ -147,11 +147,23 @@ test.describe("012 EARS-19/20 — Expert authoring", () => {
     const admin = await bootstrapAdminSession(ORIGIN);
     await signInAsAdmin(page, admin);
 
+    // Closing an already-empty server-backed selector repeats the empty query.
+    // It must remain the settled no-User value instead of entering a loading
+    // state that no changed query can complete (#1626).
+    await openExpertCreate(page);
+    const emptyUserSelector = page.getByRole("combobox", {
+      name: "Пользователь",
+    });
+    await emptyUserSelector.click();
+    await page.keyboard.press("Escape");
+    await expect(emptyUserSelector).toContainText("Без учётной записи");
+    await expect(emptyUserSelector).toBeEnabled();
+
     // Open two forms before either mutation: both receive the same eligible User.
     // The second becomes intentionally stale after the first link and exercises
     // the real transaction-level duplicate-owner refusal.
     const stalePage = await context.newPage();
-    await Promise.all([openExpertCreate(page), openExpertCreate(stalePage)]);
+    await openExpertCreate(stalePage);
 
     await fillRequiredNames(page, `Связанный-${Date.now()}`);
     await selectUser(page, candidate.email);

@@ -12,11 +12,11 @@ const DS_RENDER_SOURCE_RE =
  * contract stays extensible without treating arbitrary server/data modules as UI.
  */
 const APP_RENDER_RUNTIME_TS_RE =
-  /^apps\/(?:academy-demo|admin|cms|docs|doctor|mobile|portal|promo|showcase)\/.*\/(?:theme|[^/]+-(?:theme|copy|message|view-state|render-state))\.ts$/;
+  /^apps\/(?:academy-demo|admin|cms|docs|doctor|mobile|portal|promo|showcase)\/(?:.*\/)?(?:theme|[^/]+-(?:theme|copy|message|view-state|render-state))\.ts$/;
 const DS_TOKEN_SOURCE_RE =
   /^packages\/design-system\/(?:tokens\/(?:primitive|semantic|semantic\.dark|component)\.json|src\/styles\/tokens\.css)$/;
 const NON_RENDER_SOURCE_RE =
-  /(\.test\.[tj]sx?$|\.spec\.[tj]sx?$|\/__tests__\/|(^|\/)e2e\/|\.config\.[mc]?[tj]s$|\.setup\.[mc]?[tj]sx?$)/;
+  /(\.d\.[cm]?[tj]s$|\.test\.[tj]sx?$|\.spec\.[tj]sx?$|\/__tests__\/|(^|\/)e2e\/|\.config\.[mc]?[tj]s$|\.setup\.[mc]?[tj]sx?$)/;
 
 export type UiEvidenceProfile = "native-mobile" | "responsive-web";
 

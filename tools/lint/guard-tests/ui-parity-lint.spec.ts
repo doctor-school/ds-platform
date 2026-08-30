@@ -9,21 +9,16 @@ import { caseDir, ghDir, runGuard } from "./run-guard";
 
 const canvasRoot = caseDir("ui-parity", "canvas-source");
 const webFile = "apps/admin/app/events/[id]/page.tsx";
+const approvedFile = "apps/admin/components/recordings-panel.tsx";
 const mobileFile = "apps/mobile/src/screens/home.tsx";
 const approvedManifest: ApprovedSourceManifest = {
   version: 1,
   sources: {
     "admin-refine-compositions-v1": {
       evidenceProfiles: ["responsive-web"],
-      surfacePaths: [
-        "apps/admin/app/events/[id]/page.tsx",
-        "apps/admin/components/recordings-panel.tsx",
-        "apps/admin/components/lifecycle-actions.tsx",
-        "apps/admin/messages/ru.json",
-      ],
-      states: ["recordings-tab/mark-ended-when-applicable-modal-confirmation"],
+      surfacePaths: [approvedFile],
+      states: ["recordings-tab"],
       approvalProvenance: [
-        "https://github.com/doctor-school/ds-platform/issues/1282#issuecomment-5314581672",
         "https://github.com/doctor-school/ds-platform/issues/1337#issuecomment-5315895726",
       ],
     },
@@ -61,7 +56,7 @@ ${webEvidence}`;
 const approvedBody = `
 ui-source-kind: approved-non-canvas
 ui-source: admin-refine-compositions-v1
-ui-source-state: recordings-tab/mark-ended-when-applicable-modal-confirmation
+ui-source-state: recordings-tab
 ${webEvidence}`;
 const mixedApprovedBody = `
 ui-source-kind: approved-non-canvas
@@ -73,7 +68,7 @@ ${nativeEvidence.replace("ui-evidence-profile: native-mobile\n", "")}`;
 
 const verdict = (
   body: string,
-  paths = [webFile],
+  paths = [approvedFile],
   manifest = approvedManifest,
 ) => bodyEvidenceVerdict(body, canvasRoot, paths, manifest);
 
@@ -111,7 +106,7 @@ describe("ui-parity body evidence", () => {
     expect(
       verdict(
         approvedBody.replace("admin-refine-compositions-v1", "self-added"),
-        [webFile],
+        [approvedFile],
         approvedManifest,
       ).ok,
     ).toBe(false);
@@ -124,11 +119,19 @@ describe("ui-parity body evidence", () => {
     expect(
       verdict(
         approvedBody.replace(
-          "recordings-tab/mark-ended-when-applicable-modal-confirmation",
+          "recordings-tab",
           "recordings-panel/unknown",
         ),
       ).ok,
     ).toBe(false);
+  });
+
+  it.each([
+    "apps/admin/app/events/[id]/page.tsx",
+    "apps/admin/components/lifecycle-actions.tsx",
+    "apps/admin/messages/ru.json",
+  ])("red: unrelated multipurpose file %s cannot claim the recordings source", (path) => {
+    expect(verdict(approvedBody, [path]).ok).toBe(false);
   });
 
   it.each([
@@ -138,7 +141,7 @@ describe("ui-parity body evidence", () => {
   ])("red: manifest provenance %s is not an exact owner decision comment", (url) => {
     const invalid = structuredClone(approvedManifest);
     invalid.sources["admin-refine-compositions-v1"].approvalProvenance = [url];
-    expect(verdict(approvedBody, [webFile], invalid).ok).toBe(false);
+    expect(verdict(approvedBody, [approvedFile], invalid).ok).toBe(false);
   });
 
   it("green: approved non-canvas source can require mixed evidence profiles", () => {
@@ -156,7 +159,7 @@ describe("ui-parity body evidence", () => {
     expect(
       verdict(mixedApprovedBody, [webFile, mobileFile], missing).ok,
     ).toBe(false);
-    expect(verdict(approvedBody, [webFile], extra).ok).toBe(false);
+    expect(verdict(approvedBody, [approvedFile], extra).ok).toBe(false);
   });
 
   it("red: responsive-web requires four distinct desktop/mobile x theme links", () => {

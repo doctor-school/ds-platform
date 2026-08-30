@@ -18,6 +18,7 @@ describe("rendered UI source classification", () => {
     "packages/design-system/src/lib/utils.ts",
     "packages/design-system/src/primitives/interactive-base.ts",
     "apps/portal/lib/theme.ts",
+    "apps/portal/theme.ts",
     "apps/portal/lib/auth-error-message.ts",
   ])("green: %s is rendered UI source", (path) => {
     expect(isUiSourcePath(path)).toBe(true);
@@ -46,6 +47,9 @@ describe("rendered UI source classification", () => {
     "apps/academy-demo/vitest.setup.ts",
     "packages/design-system/src/styles/allowed-tokens.json",
     "packages/design-system/src/primitives/button.test.ts",
+    "packages/design-system/src/generated.d.ts",
+    "packages/design-system/src/generated.d.mts",
+    "packages/design-system/src/generated.d.cts",
     "apps/portal/Dockerfile",
     "apps/promo/.eslintrc",
     "apps/admin/.env.example",

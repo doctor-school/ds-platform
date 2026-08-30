@@ -1,9 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   canClaimInvariantSeat,
   relationshipPickerState,
   relationshipRowActionState,
+  retryRelationshipOccupancy,
 } from "@/lib/relationship-authoring-state";
 
 describe("reverse relationship authoring state", () => {
@@ -78,5 +79,13 @@ describe("reverse relationship authoring state", () => {
         candidateRelationId: "candidate-row",
       }),
     ).toEqual({ kind: "available", actionDisabled: false });
+  });
+
+  it("EARS-22: reverse row occupancy failures can retry the authoritative read", () => {
+    const refetch = vi.fn();
+
+    retryRelationshipOccupancy(refetch);
+
+    expect(refetch).toHaveBeenCalledOnce();
   });
 });

@@ -184,3 +184,34 @@ test.describe("#351 interaction-state runtime smoke on the showcase (backend-fre
     await expect(select).toHaveValue("Партнёр");
   });
 });
+
+test("014 EARS-10: EventList is rendered as a controlled, fetch-free showcase block", async ({
+  page,
+}) => {
+  await page.goto("/blocks");
+
+  const specimen = page.getByTestId("event-list-showcase");
+  await expect(specimen).toBeVisible();
+  await expect(
+    specimen.getByRole("tab", { name: "Schedule · 2" }),
+  ).toHaveAttribute("aria-selected", "true");
+
+  const apiRequests: string[] = [];
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (
+      ["fetch", "xhr"].includes(request.resourceType()) &&
+      url.pathname.startsWith("/v1/")
+    ) {
+      apiRequests.push(request.url());
+    }
+  });
+  await specimen.getByRole("tab", { name: "Recording archive · 1" }).click();
+  await expect(
+    specimen.getByRole("tab", { name: "Recording archive · 1" }),
+  ).toHaveAttribute("aria-selected", "true");
+  await expect(
+    specimen.getByRole("link", { name: "Watch recording ↗" }),
+  ).toHaveAttribute("href", "/webinars/clinical-cases");
+  expect(apiRequests).toEqual([]);
+});

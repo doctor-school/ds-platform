@@ -1,6 +1,7 @@
 import { MONTH_PARAM } from "@ds/schemas";
 import DiscoveryListing from "@/components/discovery-listing";
 import { MonthCalendarView } from "@/components/month-calendar-view";
+import { buildWebinarsHref } from "@/lib/webinars-url";
 
 /**
  * 004 EARS-7 / EARS-19 — the public listing at `/webinars`. The default («Неделя»)
@@ -19,26 +20,41 @@ export const dynamic = "force-dynamic";
 export default async function WebinarsListingPage({
   searchParams,
 }: {
-  searchParams: Promise<{ view?: string; month?: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const { view, month } = await searchParams;
+  const params = await searchParams;
+  const value = (key: string) => {
+    const found = params[key];
+    return Array.isArray(found) ? found[0] : found;
+  };
+  const view = value("view");
+  const month = value("month");
+  const tab = value("tab") === "past" ? "past" : "upcoming";
+  const cursor = value("cursor");
+  const rawPage = Number(value("page") ?? "1");
+  const page = Number.isSafeInteger(rawPage) && rawPage > 0 ? rawPage : 1;
   // Validate `month` at the boundary (EARS-17): an absent/malformed value falls
   // back to the current МСК month, so the page never emits a malformed API param.
-  const selectedMonth =
-    month && MONTH_PARAM.test(month) ? month : undefined;
+  const selectedMonth = month && MONTH_PARAM.test(month) ? month : undefined;
 
   if (view === "month") {
-    return <MonthCalendarView month={selectedMonth} />;
+    return <MonthCalendarView month={selectedMonth} queryParams={params} />;
   }
   // Week pane: carry the month so the «Месяц» switcher restores it (loss-free
   // round-trip, EARS-18).
   return (
     <DiscoveryListing
-      monthViewHref={
-        selectedMonth
-          ? `/webinars?view=month&month=${selectedMonth}`
-          : "/webinars?view=month"
-      }
+      monthViewHref={buildWebinarsHref(params, {
+        view: "month",
+        month: selectedMonth ?? null,
+      })}
+      weekViewHref={buildWebinarsHref(params, {
+        view: "week",
+        month: selectedMonth ?? null,
+      })}
+      timeframe={tab}
+      cursor={cursor}
+      page={page}
     />
   );
 }

@@ -53,9 +53,7 @@ describe("WebinarCard — content set (EARS-8)", () => {
   });
 
   it("EARS-8: renders no specialty chip row when there are no specialties", () => {
-    const { container } = render(
-      <WebinarCard {...BASE} specialties={[]} />,
-    );
+    const { container } = render(<WebinarCard {...BASE} specialties={[]} />);
     // The two seed chips are gone; the title still renders.
     expect(screen.queryByText("Травматология")).toBeNull();
     expect(screen.getByText(BASE.title)).toBeInTheDocument();
@@ -123,6 +121,26 @@ describe("WebinarCard — live variant (EARS-9)", () => {
   it("EARS-9: a scheduled card shows no live signal", () => {
     render(<WebinarCard {...BASE} liveLabel="В эфире" />);
     expect(screen.queryByText("В эфире")).toBeNull();
+  });
+});
+
+describe("014 EARS-11 WebinarCard — archive variant", () => {
+  it("EARS-11: the past canvas variant is muted and exposes an explicit recording CTA", () => {
+    const { container } = render(
+      <WebinarCard
+        {...BASE}
+        variant="past"
+        recordingLabel="Запись готовится"
+        ctaHref={BASE.href}
+        ctaLabel="Смотреть запись ↗"
+      />,
+    );
+
+    expect(container.firstElementChild?.className).toContain("opacity-80");
+    expect(screen.getByText("Запись готовится")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Смотреть запись ↗" }),
+    ).toHaveAttribute("href", BASE.href);
   });
 });
 

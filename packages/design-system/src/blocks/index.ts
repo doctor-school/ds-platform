@@ -52,8 +52,19 @@ export type {
   DataTableAlign,
   DataTableOverflow,
 } from "./data-table";
-export { Pagination, buildPageItems, buildResponsivePageItems } from "./pagination";
+export {
+  Pagination,
+  buildPageItems,
+  buildResponsivePageItems,
+} from "./pagination";
 export type { PaginationProps } from "./pagination";
+export { EventList } from "./event-list";
+export type {
+  EventListProps,
+  EventListItem,
+  EventListLabels,
+  EventListTab,
+} from "./event-list";
 export { EmptyState } from "./empty-state";
 export type { EmptyStateProps, EmptyStateVariant } from "./empty-state";
 export { FilterBar } from "./filter-bar";

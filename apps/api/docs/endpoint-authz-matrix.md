@@ -41,7 +41,7 @@
 | GET /v1/me/events                                               | authenticated | doctor_guest                 | fast-path  | —            | false   | none       | none        | EARS-6, EARS-7, EARS-10            |
 | GET /v1/me/profile                                              | authenticated | doctor_guest                 | fast-path  | —            | false   | none       | none        | EARS-27                            |
 | GET /v1/me/specialty                                            | authenticated | doctor_guest                 | fast-path  | —            | false   | none       | low-stakes  | EARS-6                             |
-| GET /v1/public/events                                           | public        | —                            | none       | —            | false   | none       | none        | EARS-7, EARS-10, EARS-15           |
+| GET /v1/public/events                                           | public        | —                            | none       | —            | false   | none       | none        | EARS-7, EARS-10, EARS-11, EARS-15  |
 | GET /v1/public/events/:idOrSlug                                 | public        | —                            | none       | —            | false   | none       | none        | EARS-1, EARS-5, EARS-10            |
 | GET /v1/public/events/:idOrSlug/projects                        | public        | —                            | none       | —            | false   | none       | none        | EARS-6, EARS-16                    |
 | GET /v1/public/events/:idOrSlug/speakers                        | public        | —                            | none       | —            | false   | none       | none        | EARS-8, EARS-16                    |

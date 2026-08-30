@@ -2,6 +2,7 @@ import type {
   MonthBroadcastEntry,
   MonthlyEventCount,
   PublicEventPage,
+  PublicEventListingPage,
   UpcomingBroadcastCard,
 } from "@ds/schemas";
 
@@ -15,10 +16,9 @@ import type {
  * config only. No cookie is sent: the endpoint is public and its body carries no
  * per-session variation (EARS-1), so the render is identical for any recipient.
  */
-const API_BASE = (process.env.API_PROXY_TARGET ?? "http://localhost:3000").replace(
-  /\/$/,
-  "",
-);
+const API_BASE = (
+  process.env.API_PROXY_TARGET ?? "http://localhost:3000"
+).replace(/\/$/, "");
 
 /** Fetch the publish-safe projection, or `null` when the event is not publicly reachable (404 — draft/unknown). */
 export async function fetchPublicEventPage(
@@ -66,6 +66,23 @@ export async function fetchUpcomingBroadcasts(): Promise<
     throw new Error(`upcoming broadcasts fetch failed (${res.status})`);
   }
   return (await res.json()) as UpcomingBroadcastCard[];
+}
+
+/** Cursor-paged public feed for the controlled upcoming/past tabs (014 EARS-11). */
+export async function fetchEventListing(input: {
+  timeframe: "upcoming" | "past";
+  cursor?: string;
+  limit?: number;
+}): Promise<PublicEventListingPage> {
+  const query = new URLSearchParams({ timeframe: input.timeframe });
+  if (input.cursor) query.set("cursor", input.cursor);
+  if (input.limit) query.set("limit", String(input.limit));
+  const res = await fetch(`${API_BASE}/v1/public/events?${query}`, {
+    headers: { accept: "application/json" },
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`event listing fetch failed (${res.status})`);
+  return (await res.json()) as PublicEventListingPage;
 }
 
 /**

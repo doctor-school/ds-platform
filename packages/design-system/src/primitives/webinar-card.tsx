@@ -43,8 +43,12 @@ export interface WebinarCardSpeaker {
   org?: string;
 }
 
-export interface WebinarCardProps
-  extends Omit<React.ComponentPropsWithoutRef<"div">, "title" | "children"> {
+export interface WebinarCardProps extends Omit<
+  React.ComponentPropsWithoutRef<"div">,
+  "title" | "children"
+> {
+  /** Canvas presentation state; `past` is the visually muted archive anatomy. */
+  variant?: "upcoming" | "past";
   /** The event page URL the card's stretched title link points to (`/webinars/:slug`, EARS-8). */
   href: string;
   /** Start time already formatted in Europe/Moscow, e.g. `19:00` (EARS-12). */
@@ -65,6 +69,8 @@ export interface WebinarCardProps
   live?: boolean;
   /** Live-signal copy — «В эфире» (from the catalog); required visually when `live`. */
   liveLabel?: string;
+  /** Source-free recording-state badge supplied by the host for an ended event. */
+  recordingLabel?: string;
   /**
    * Whether the VIEWER is registered for this event — surfaces the canvas
    * `registered` variant's «вы записаны» marker (the green `✓` line, semantic
@@ -75,18 +81,11 @@ export interface WebinarCardProps
   registered?: boolean;
   /** Registered-marker copy — «Вы записаны» (from the catalog); required visually when `registered`. */
   registeredLabel?: string;
-  /**
-   * 006 EARS-6 — the room-entry CTA target (`/webinars/:slug/room`). Set by the
-   * caller ONLY for a registered + `live` event (the «мои события» surface),
-   * composed from the hardened `resolveRoomEntryHref` — never a raw string. When
-   * present WITH {@link ctaLabel}, the card renders a secondary room-entry button
-   * as a sibling of the card link (no nested anchor); absent → no CTA renders.
-   */
+  /** Contextual CTA target: room entry for live cards, event page for past cards. */
   ctaHref?: string;
   /**
-   * Room-entry CTA copy — «Войти в эфир» (from the catalog, EARS-10); required
-   * visually when {@link ctaHref} is set. The primitive ships no user-facing
-   * string of its own, so with no label no CTA element renders (no hardcoded copy).
+   * Catalog-owned CTA copy. The primitive ships no user-facing string of its own,
+   * so with no label no CTA element renders (no hardcoded copy).
    */
   ctaLabel?: string;
 }
@@ -105,6 +104,7 @@ const WebinarCard = React.forwardRef<HTMLDivElement, WebinarCardProps>(
   (
     {
       className,
+      variant = "upcoming",
       href,
       time,
       tzLabel,
@@ -115,6 +115,7 @@ const WebinarCard = React.forwardRef<HTMLDivElement, WebinarCardProps>(
       speakers = [],
       live = false,
       liveLabel,
+      recordingLabel,
       registered = false,
       registeredLabel,
       ctaHref,
@@ -122,113 +123,131 @@ const WebinarCard = React.forwardRef<HTMLDivElement, WebinarCardProps>(
       ...props
     },
     ref,
-  ) => (
-    <div
-      ref={ref}
-      data-webinar-card=""
-      className={cn(
-        // Base (≤900px): flat, full-bleed, borderless with a bottom divider that
-        // drops on the last card of a day group (the canvas mobile rhythm).
-        "group relative block bg-card text-card-foreground",
-        "border-b-2 border-border last:border-b-0",
-        // Desktop (>900px): the 196px time-plate grid on a bordered, raised card.
-        "layout:grid layout:grid-cols-[196px_1fr] layout:border-2 layout:border-border layout:shadow-lg layout:last:border-2",
-        className,
-      )}
-      {...props}
-    >
-      {/* Live «sticker» — desktop only, rotated + poking above the top border. */}
-      {live && liveLabel ? (
-        <span
-          role="status"
-          className="absolute -top-4 right-6 z-10 hidden rotate-3 items-center gap-2 bg-live px-[15px] py-2 text-xs font-extrabold uppercase tracking-micro text-live-foreground shadow-sm layout:inline-flex"
-        >
-          <LiveDot />
-          {liveLabel}
-        </span>
-      ) : null}
+  ) => {
+    const past = variant === "past";
 
-      {/* Time plate. */}
-      <div className="flex flex-col items-start gap-2.5 bg-tint px-4 py-[14px] layout:items-start layout:gap-3 layout:border-r-2 layout:border-border layout:px-6 layout:py-[30px]">
-        {/* Live tag — mobile only (the desktop signal is the sticker above). */}
+    return (
+      <div
+        ref={ref}
+        data-webinar-card=""
+        className={cn(
+          // Base (≤900px): flat, full-bleed, borderless with a bottom divider that
+          // drops on the last card of a day group (the canvas mobile rhythm).
+          "group relative block bg-card text-card-foreground",
+          "border-b-2 border-border last:border-b-0",
+          // Desktop (>900px): the 196px time-plate grid on a bordered, raised card.
+          "layout:grid layout:grid-cols-[196px_1fr] layout:border-2 layout:border-border layout:shadow-lg layout:last:border-2",
+          past && "opacity-80 layout:border-muted-foreground/30",
+          className,
+        )}
+        {...props}
+      >
+        {/* Live «sticker» — desktop only, rotated + poking above the top border. */}
         {live && liveLabel ? (
           <span
             role="status"
-            className="inline-flex items-center gap-1.75 self-start bg-live px-[11px] py-[5px] text-2xs font-extrabold uppercase tracking-micro text-live-foreground layout:hidden"
+            className="absolute -top-4 right-6 z-10 hidden rotate-3 items-center gap-2 bg-live px-[15px] py-2 text-xs font-extrabold uppercase tracking-micro text-live-foreground shadow-sm layout:inline-flex"
           >
             <LiveDot />
             {liveLabel}
           </span>
         ) : null}
 
-        {/* `display:contents` on desktop lets the time + meta lay out directly in
+        {/* Time plate. */}
+        <div className="flex flex-col items-start gap-2.5 bg-tint px-4 py-[14px] layout:items-start layout:gap-3 layout:border-r-2 layout:border-border layout:px-6 layout:py-[30px]">
+          {/* Live tag — mobile only (the desktop signal is the sticker above). */}
+          {live && liveLabel ? (
+            <span
+              role="status"
+              className="inline-flex items-center gap-1.75 self-start bg-live px-[11px] py-[5px] text-2xs font-extrabold uppercase tracking-micro text-live-foreground layout:hidden"
+            >
+              <LiveDot />
+              {liveLabel}
+            </span>
+          ) : null}
+          {/* `display:contents` on desktop lets the time + meta lay out directly in
             the time-column flex; on mobile they stack inside their own column. */}
-        <div className="flex w-full flex-col items-start gap-1 layout:contents">
-          <span className="text-3xl font-extrabold leading-none tracking-tighter tabular-nums text-tint-foreground layout:text-4xl">
-            {time}
-          </span>
-          <div className="text-left">
-            <div className="text-eyebrow font-extrabold uppercase tracking-micro text-tint-foreground">
-              {tzLabel}
-            </div>
-            <div className="mt-1 text-xs font-bold uppercase leading-snug tracking-wide text-tint-foreground">
-              {dateLabel}
+          <div className="flex w-full flex-col items-start gap-1 layout:contents">
+            <span className="text-3xl font-extrabold leading-none tracking-tighter tabular-nums text-tint-foreground layout:text-4xl">
+              {time}
+            </span>
+            <div className="text-left">
+              <div className="text-eyebrow font-extrabold uppercase tracking-micro text-tint-foreground">
+                {tzLabel}
+              </div>
+              <div className="mt-1 text-xs font-bold uppercase leading-snug tracking-wide text-tint-foreground">
+                {dateLabel}
+              </div>
+              {recordingLabel ? (
+                <div className="mt-1 text-xs font-bold uppercase leading-snug tracking-wide text-tint-foreground">
+                  {recordingLabel}
+                </div>
+              ) : null}
             </div>
           </div>
         </div>
-      </div>
 
-      {/* Content. */}
-      <div className="px-4 pt-4 pb-[18px] layout:px-8 layout:py-[30px]">
-        {/* Kicker + title-hover paint `primary-action` (blue.700 light / #6BB1F7
+        {/* Content. */}
+        <div className="px-4 pt-4 pb-[18px] layout:px-8 layout:py-[30px]">
+          {/* Kicker + title-hover paint `primary-action` (blue.700 light / #6BB1F7
             dark — the AA link-text token, #270 Primary Button precedent), NOT
             `primary` (blue.500): semantic.json flags blue.500 as fails-AA
             (3.69:1) for text on card surfaces — it is AA only on the pale tint.
             In dark the token IS the canvas accent (#6BB1F7) exactly. */}
-        <div className="mb-3 text-xs font-extrabold uppercase tracking-micro text-primary-action">
-          {school}
-        </div>
-        {/* The TITLE is the card's link. Its `::after` stretches over the whole
+          <div className="mb-3 text-xs font-extrabold uppercase tracking-micro text-primary-action">
+            {school}
+          </div>
+          {/* The TITLE is the card's link. Its `::after` stretches over the whole
             root (`after:inset-0`, the root is `relative`), so clicking anywhere on
             the card opens the event page while only ONE anchor exists in the DOM —
             the structure that lets a secondary CTA sit alongside without nesting
             anchors. The focus ring rides the link (keyboard target); hover paints
             via the root `group`. */}
-        <h3 className="mb-4 text-lg font-bold leading-snug tracking-tight layout:text-title-lg">
-          <a
-            href={href}
-            className="text-card-foreground no-underline outline-none after:absolute after:inset-0 after:content-[''] group-hover:text-primary-action focus-visible:text-primary-action focus-visible:after:shadow-focus"
-          >
-            {title}
-          </a>
-        </h3>
+          <h3 className="mb-4 text-lg font-bold leading-snug tracking-tight layout:text-title-lg">
+            <a
+              href={href}
+              className="text-card-foreground no-underline outline-none after:absolute after:inset-0 after:content-[''] group-hover:text-primary-action focus-visible:text-primary-action focus-visible:after:shadow-focus"
+            >
+              {title}
+            </a>
+          </h3>
 
-        {specialties.length > 0 ? (
-          <div className="mb-5 flex flex-wrap gap-2">
-            {specialties.map((chip) => (
-              <span
-                key={chip}
-                className="bg-tint px-3.25 py-1.5 text-caption font-bold text-foreground"
-              >
-                {chip}
-              </span>
-            ))}
+          {specialties.length > 0 ? (
+            <div className="mb-5 flex flex-wrap gap-2">
+              {specialties.map((chip) => (
+                <span
+                  key={chip}
+                  className="bg-tint px-3.25 py-1.5 text-caption font-bold text-foreground"
+                >
+                  {chip}
+                </span>
+              ))}
+            </div>
+          ) : null}
+
+          <div className="flex flex-wrap items-end justify-between gap-5">
+            {speakers.length > 0 ? (
+              <p className="min-w-45 text-caption leading-relaxed text-muted-foreground">
+                {speakers.map((speaker, i) => (
+                  <React.Fragment key={`${speaker.name}-${i}`}>
+                    <b className="font-bold text-foreground">{speaker.name}</b>
+                    {speaker.org ? ` — ${speaker.org}` : null}
+                    {i < speakers.length - 1 ? <br /> : null}
+                  </React.Fragment>
+                ))}
+              </p>
+            ) : null}
+
+            {past && ctaHref && ctaLabel ? (
+              <div className="relative z-10">
+                <Button asChild size="lg">
+                  <a href={ctaHref}>{ctaLabel}</a>
+                </Button>
+              </div>
+            ) : null}
           </div>
-        ) : null}
 
-        {speakers.length > 0 ? (
-          <p className="text-caption leading-relaxed text-muted-foreground">
-            {speakers.map((speaker, i) => (
-              <React.Fragment key={`${speaker.name}-${i}`}>
-                <b className="font-bold text-foreground">{speaker.name}</b>
-                {speaker.org ? ` — ${speaker.org}` : null}
-                {i < speakers.length - 1 ? <br /> : null}
-              </React.Fragment>
-            ))}
-          </p>
-        ) : null}
-
-        {/* Registered marker — the canvas `registered` variant's «✓ …» line,
+          {/* Registered marker — the canvas `registered` variant's «✓ …» line,
             sitting where the canvas CTA row lives (the listing card renders no
             CTA row — the whole card is the link). 13px/800 → text-caption +
             font-extrabold; `role="status"` mirrors the live signal (an
@@ -241,36 +260,37 @@ const WebinarCard = React.forwardRef<HTMLDivElement, WebinarCardProps>(
             it is redundant with the adjacent label (WCAG 1.4.11 exempt). The
             canvas's «Отменить» affordance is feature 005's un-register command —
             not built, so no dead control renders here. */}
-        {registered && registeredLabel ? (
-          <p
-            role="status"
-            data-registered-marker=""
-            className="mt-4 inline-flex items-center gap-1.5 text-caption font-extrabold text-foreground"
-          >
-            <span aria-hidden="true" className="text-success">
-              ✓
-            </span>
-            {registeredLabel}
-          </p>
-        ) : null}
+          {registered && registeredLabel ? (
+            <p
+              role="status"
+              data-registered-marker=""
+              className="mt-4 inline-flex items-center gap-1.5 text-caption font-extrabold text-foreground"
+            >
+              <span aria-hidden="true" className="text-success">
+                ✓
+              </span>
+              {registeredLabel}
+            </p>
+          ) : null}
 
-        {/* 006 EARS-6 — room-entry CTA («Войти в эфир»). A SIBLING of the card's
+          {/* 006 EARS-6 — room-entry CTA («Войти в эфир»). A SIBLING of the card's
             stretched title link (never nested inside it), lifted above the
             stretched-link overlay with its own stacking context (`relative z-10`)
             so it is the click target here and stays independently keyboard-
             reachable. Rendered only for a registered + `live` event (caller passes
             the hardened `ctaHref` + the catalog label); mirrors the event-page
             enter-room CTA styling (the DS `Button`, filled primary). */}
-        {ctaHref && ctaLabel ? (
-          <div className="relative z-10 mt-5">
-            <Button asChild size="lg">
-              <a href={ctaHref}>{ctaLabel}</a>
-            </Button>
-          </div>
-        ) : null}
+          {!past && ctaHref && ctaLabel ? (
+            <div className="relative z-10 mt-5">
+              <Button asChild size="lg">
+                <a href={ctaHref}>{ctaLabel}</a>
+              </Button>
+            </div>
+          ) : null}
+        </div>
       </div>
-    </div>
-  ),
+    );
+  },
 );
 WebinarCard.displayName = "WebinarCard";
 

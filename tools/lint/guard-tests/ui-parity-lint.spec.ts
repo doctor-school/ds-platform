@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
 
 import {
   type ApprovedSourceManifest,
@@ -11,6 +12,27 @@ const canvasRoot = caseDir("ui-parity", "canvas-source");
 const webFile = "apps/admin/app/events/[id]/page.tsx";
 const approvedFile = "apps/admin/components/recordings-panel.tsx";
 const mobileFile = "apps/mobile/src/screens/home.tsx";
+const relationshipSource = "feature-012-relationship-editors-v1";
+const relationshipState =
+  "taxonomy-relationship-authoring-and-event-list-pagination";
+const relationshipPaths = [
+  "apps/admin/app/directions/[id]/page.tsx",
+  "apps/admin/app/events/[id]/page.tsx",
+  "apps/admin/app/events/page.tsx",
+  "apps/admin/app/experts/[id]/page.tsx",
+  "apps/admin/app/partners/[id]/page.tsx",
+  "apps/admin/app/projects/[id]/page.tsx",
+  "apps/admin/components/event-experts-panel.tsx",
+  "apps/admin/components/event-projects-panel.tsx",
+  "apps/admin/components/event-topics-panel.tsx",
+  "apps/admin/components/project-experts-panel.tsx",
+  "apps/admin/components/project-partners-panel.tsx",
+  "apps/admin/components/relationship-endpoint-picker.tsx",
+  "apps/admin/messages/ru.json",
+];
+const baseApprovedManifest = JSON.parse(
+  readFileSync(new URL("../ui-approved-sources.json", import.meta.url), "utf8"),
+) as ApprovedSourceManifest;
 const approvedManifest: ApprovedSourceManifest = {
   version: 1,
   sources: {
@@ -58,6 +80,11 @@ ui-source-kind: approved-non-canvas
 ui-source: admin-refine-compositions-v1
 ui-source-state: recordings-tab
 ${webEvidence}`;
+const relationshipBody = `
+ui-source-kind: approved-non-canvas
+ui-source: ${relationshipSource}
+ui-source-state: ${relationshipState}
+${webEvidence}`;
 const mixedApprovedBody = `
 ui-source-kind: approved-non-canvas
 ui-source: mixed-approved-v1
@@ -92,6 +119,29 @@ describe("ui-parity body evidence", () => {
 
   it("green: exact owner-comment base-approved manifest source passes", () => {
     expect(verdict(approvedBody).ok).toBe(true);
+  });
+
+  it("green: exact Feature 012 relationship paths and composition state pass", () => {
+    expect(
+      verdict(relationshipBody, relationshipPaths, baseApprovedManifest).ok,
+    ).toBe(true);
+  });
+
+  it("red: nearby Feature 012 path and undeclared relationship state fail closed", () => {
+    expect(
+      verdict(
+        relationshipBody,
+        [...relationshipPaths, "apps/admin/components/direction-form.tsx"],
+        baseApprovedManifest,
+      ).ok,
+    ).toBe(false);
+    expect(
+      verdict(
+        relationshipBody.replace(relationshipState, "relationship-read-only"),
+        relationshipPaths,
+        baseApprovedManifest,
+      ).ok,
+    ).toBe(false);
   });
 
   it("red: nonexistent or self-added/unapproved manifest ids fail", () => {

@@ -222,6 +222,9 @@ export class ProjectPartnersRepository {
     if (query.partnerId) {
       filters.push(eq(projectPartners.partnerId, query.partnerId));
     }
+    if (query.isPrimary !== undefined) {
+      filters.push(eq(projectPartners.isPrimary, query.isPrimary));
+    }
     if (query.status) {
       filters.push(eq(projectPartners.status, query.status));
     } else if (!query.includeRetired) {

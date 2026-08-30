@@ -58,8 +58,9 @@ export class ProjectPartnersAdminController {
 
   /**
    * EARS-15 / §5.1 — the join list: offset pagination filtered by `projectId`,
-   * `partnerId` and `status`, retired links excluded unless asked for. One route
-   * serves both panel directions (project→partners, partner→projects).
+   * `partnerId`, `isPrimary` and `status`, retired links excluded unless asked
+   * for. One route serves both panel directions (project→partners,
+   * partner→projects).
    */
   @Get()
   @Authz({
@@ -67,7 +68,7 @@ export class ProjectPartnersAdminController {
     roles: ["platform_admin"],
     check: "fast-path",
     audit: "none",
-    tests: ["EARS-10", "EARS-15", "EARS-16"],
+    tests: ["EARS-10", "EARS-15", "EARS-16", "EARS-22"],
   })
   list(
     @Query() rawQuery: Record<string, string>,

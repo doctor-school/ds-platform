@@ -1513,6 +1513,10 @@ export const ProjectPartnerAdminListQuerySchema = z
       .default(ADMIN_LIST_PAGE_SIZE_DEFAULT),
     projectId: TaxonomyIdSchema.optional(),
     partnerId: TaxonomyIdSchema.optional(),
+    isPrimary: z
+      .union([z.boolean(), z.enum(["true", "false"])])
+      .transform((v) => v === true || v === "true")
+      .optional(),
     status: RelationshipStatusSchema.optional(),
     includeRetired: z
       .union([z.boolean(), z.enum(["true", "false"])])

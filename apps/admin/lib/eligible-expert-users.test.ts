@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   includeSelectedEligibleExpertUser,
   mergeEligibleExpertUserPages,
+  shouldStartEligibleExpertUserSearch,
 } from "./eligible-expert-users";
 
 const first = {
@@ -16,6 +17,16 @@ const second = {
 };
 
 describe("eligible Expert User page composition", () => {
+  it("EARS-19: selecting no User does not restart an already-empty search", () => {
+    expect(shouldStartEligibleExpertUserSearch("", "")).toBe(false);
+    expect(shouldStartEligibleExpertUserSearch("", "doctor@example.test")).toBe(
+      true,
+    );
+    expect(shouldStartEligibleExpertUserSearch("doctor@example.test", "")).toBe(
+      true,
+    );
+  });
+
   it("EARS-23: appends an explicitly loaded page and deduplicates by User id", () => {
     expect(mergeEligibleExpertUserPages([first], [first, second])).toEqual([
       first,

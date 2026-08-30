@@ -39,6 +39,7 @@ import { ExpertFormSchema, type ExpertFormFields } from "@/lib/form-schemas";
 import {
   includeSelectedEligibleExpertUser,
   mergeEligibleExpertUserPages,
+  shouldStartEligibleExpertUserSearch,
 } from "@/lib/eligible-expert-users";
 import { useLocalizedResolver } from "@/lib/use-localized-resolver";
 import {
@@ -194,6 +195,7 @@ export function ExpertForm({
   }
 
   function searchUsers(next: string): void {
+    if (!shouldStartEligibleExpertUserSearch(userQuery, next)) return;
     userRequestEpoch.current += 1;
     loadMoreInFlight.current = false;
     setUserQuery(next);

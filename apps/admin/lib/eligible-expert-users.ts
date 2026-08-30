@@ -1,5 +1,13 @@
 import type { EligibleExpertUserOption } from "@/providers/data-provider";
 
+/** Avoid invalidating a settled page when closing an already-empty search. */
+export function shouldStartEligibleExpertUserSearch(
+  currentQuery: string,
+  nextQuery: string,
+): boolean {
+  return currentQuery !== nextQuery;
+}
+
 /** Append one explicitly requested server page without duplicating a User. */
 export function mergeEligibleExpertUserPages(
   current: EligibleExpertUserOption[],

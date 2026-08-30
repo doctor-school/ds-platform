@@ -44,6 +44,16 @@ const RELATIONSHIP_CODES = [
 ] as const;
 
 describe("taxonomyErrorKey — 012 EARS-6 relationship codes (#1288)", () => {
+  it("EARS-22: event-direction duplicate uses the existing actionable RU sentence", () => {
+    const key = taxonomyErrorKey(
+      { errorCode: "RELATIONSHIP_CONFLICT" },
+      "eventTopics.errors.linkFailed",
+    );
+
+    expect(key).toBe("eventTopics.errors.duplicatePair");
+    expect(typeof lookup(key)).toBe("string");
+  });
+
   it("EARS-6: every relationship refusal maps to its own existing RU sentence", () => {
     const fallback = "eventProjects.errors.transitionFailed";
     const resolved = new Set<string>();

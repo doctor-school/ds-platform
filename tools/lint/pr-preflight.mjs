@@ -94,17 +94,17 @@ export const GUARDS = [
  * approval, which happens just before merge, so at create time there is nothing
  * to check yet.
  */
-export const MERGE_GUARDS = [
+export const PRE_CI_MERGE_GUARDS = [
   { name: "stage-b", file: "stage-b-lint.ts" },
-  {
-    name: "ui-parity-review",
-    file: "ui-parity-review-lint.ts",
-  },
 ];
+export const POST_CI_MERGE_GUARDS = [
+  { name: "ui-parity-review", file: "ui-parity-review-lint.ts" },
+];
+export const MERGE_GUARDS = [...PRE_CI_MERGE_GUARDS, ...POST_CI_MERGE_GUARDS];
 
 /**
- * The deterministic CI merge gate (#836) — `tools/gh/merge-gate.mjs`, run last
- * in `--pre-merge` mode (after the cheap stage-b guard): resolves the PR head
+ * The deterministic CI merge gate (#836) — `tools/gh/merge-gate.mjs`, run after
+ * the cheap Stage-B guard and before the final current-body/source binding:
  * SHA, requires >0 registered check-runs for THAT SHA with every non-skipped
  * run terminal-successful (zero runs = fresh-push race = FAIL), and refuses to
  * run from a worktree cwd / while the PR branch is held by a registered
@@ -338,15 +338,15 @@ function main() {
 
   if (runMergeGate) {
     out(
-      `running ${MERGE_GUARDS.length} pre-merge gate guard(s) (Stage-B + UI parity) vs live PR #${prNumber}…`,
+      `running ${PRE_CI_MERGE_GUARDS.length} pre-CI merge guard(s) vs live PR #${prNumber}…`,
     );
-    for (const g of MERGE_GUARDS) results.push(runGuard(g, root, prEnv));
+    for (const g of PRE_CI_MERGE_GUARDS) results.push(runGuard(g, root, prEnv));
 
     // Deterministic CI merge gate (#836): checks-registered + terminal-success
     // for the exact head SHA, the worktree-cwd guard, and the head-pinned
     // Mode-a verdict (#992 — `gateForward` carries the validated
-    // `--mode-a-exempt "<reason>"` escape when passed). Runs last — it may
-    // poll while CI finishes, so the cheap guards fail fast first.
+    // `--mode-a-exempt "<reason>"` escape when passed). It may poll while CI
+    // finishes; the current-body/source binding is deliberately re-read after.
     out(`── ${MERGE_GATE.name} ──`);
     const res = spawnSync(
       "node",
@@ -360,6 +360,13 @@ function main() {
       },
     );
     results.push({ name: MERGE_GATE.name, status: res.status ?? -1 });
+    if (res.status === 0) {
+      out(
+        `CI poll is green; running ${POST_CI_MERGE_GUARDS.length} final current-body/source binding guard(s)…`,
+      );
+      for (const g of POST_CI_MERGE_GUARDS)
+        results.push(runGuard(g, root, prEnv));
+    }
   }
 
   const { ok, lines } = summarize(results);

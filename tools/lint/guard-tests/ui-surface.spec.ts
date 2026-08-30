@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { isUiSourcePath } from "../lib/ui-surface";
+import { evidenceProfilesForPaths, isUiSourcePath } from "../lib/ui-surface";
 
 describe("rendered UI source classification", () => {
   it.each([
@@ -18,12 +18,15 @@ describe("rendered UI source classification", () => {
     expect(isUiSourcePath(path)).toBe(true);
   });
 
-  it.each(["apps/api/src/main.ts", "packages/db/src/index.ts"])(
-    "red: %s is outside rendered UI roots",
-    (path) => {
-      expect(isUiSourcePath(path)).toBe(false);
-    },
-  );
+  it.each([
+    "apps/api/src/main.ts",
+    "packages/db/src/index.ts",
+    "apps/portal/lib/consent.ts",
+    "apps/admin/lib/admin-auth.ts",
+    "apps/docs/lib/source.ts",
+  ])("red: %s is outside rendered UI roots", (path) => {
+    expect(isUiSourcePath(path)).toBe(false);
+  });
 
   it.each([
     "apps/doctor/README.md",
@@ -36,8 +39,7 @@ describe("rendered UI source classification", () => {
     "apps/mobile/e2e/home.ts",
     "apps/cms/next.config.ts",
     "apps/academy-demo/vitest.setup.ts",
-    "packages/design-system/styles/tokens.css",
-    "packages/design-system/allowed-tokens.json",
+    "packages/design-system/src/styles/allowed-tokens.json",
     "apps/portal/Dockerfile",
     "apps/promo/.eslintrc",
     "apps/admin/.env.example",
@@ -48,5 +50,31 @@ describe("rendered UI source classification", () => {
 
   it("green: authored CSS can change rendered parity", () => {
     expect(isUiSourcePath("apps/doctor/app/storefront.module.css")).toBe(true);
+  });
+
+  it.each([
+    "apps/admin/messages/ru.json",
+    "packages/design-system/tokens/primitive.json",
+    "packages/design-system/tokens/semantic.json",
+    "packages/design-system/tokens/semantic.dark.json",
+    "packages/design-system/tokens/component.json",
+    "packages/design-system/src/styles/tokens.css",
+  ])("green: %s can change user-visible rendering", (path) => {
+    expect(isUiSourcePath(path)).toBe(true);
+  });
+
+  it("assigns responsive-web and native-mobile evidence profiles", () => {
+    expect(evidenceProfilesForPaths(["apps/portal/app/page.tsx"])).toEqual([
+      "responsive-web",
+    ]);
+    expect(
+      evidenceProfilesForPaths(["apps/mobile/src/screens/home.tsx"]),
+    ).toEqual(["native-mobile"]);
+    expect(
+      evidenceProfilesForPaths([
+        "apps/mobile/src/screens/home.tsx",
+        "apps/admin/app/page.tsx",
+      ]),
+    ).toEqual(["native-mobile", "responsive-web"]);
   });
 });

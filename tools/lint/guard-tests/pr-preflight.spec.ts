@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
 
 import {
   GUARDS,
   MERGE_GATE,
   MERGE_GUARDS,
+  POST_CI_MERGE_GUARDS,
+  PRE_CI_MERGE_GUARDS,
   STATIC_GUARDS,
   hasNoStaticFlag,
   hasPreMergeFlag,
@@ -85,6 +88,26 @@ describe("pr-preflight MERGE_GUARDS roster (#692)", () => {
     expect(MERGE_GATE.name).toBe("merge-gate");
     // a node script under tools/gh (polls gh), not a tools/lint tsx guard
     expect(MERGE_GATE.script).toEqual(["tools", "gh", "merge-gate.mjs"]);
+  });
+
+  it("runs current-body/source binding only after the long head-pinned CI poll", () => {
+    expect(PRE_CI_MERGE_GUARDS.map((g) => g.name)).toEqual(["stage-b"]);
+    expect(MERGE_GATE.name).toBe("merge-gate");
+    expect(POST_CI_MERGE_GUARDS.map((g) => g.name)).toEqual([
+      "ui-parity-review",
+    ]);
+
+    const source = readFileSync(
+      new URL("../pr-preflight.mjs", import.meta.url),
+      "utf8",
+    );
+    const execution = source.slice(source.indexOf("if (runMergeGate)"));
+    expect(
+      execution.indexOf("for (const g of PRE_CI_MERGE_GUARDS)"),
+    ).toBeLessThan(execution.indexOf("const res = spawnSync"));
+    expect(execution.indexOf("const res = spawnSync")).toBeLessThan(
+      execution.indexOf("for (const g of POST_CI_MERGE_GUARDS)"),
+    );
   });
 });
 

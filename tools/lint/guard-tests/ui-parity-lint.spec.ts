@@ -1,218 +1,218 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  type ApprovedSourceManifest,
   bodyEvidenceVerdict,
   latestModeAComparisonVerdict,
 } from "../ui-parity-lint";
 import { caseDir, ghDir, runGuard } from "./run-guard";
 
 const canvasRoot = caseDir("ui-parity", "canvas-source");
-const commonEvidence = `
+const webFile = "apps/admin/app/events/[id]/page.tsx";
+const mobileFile = "apps/mobile/src/screens/home.tsx";
+const approvedManifest: ApprovedSourceManifest = {
+  version: 1,
+  sources: {
+    "admin-refine-compositions-v1": {
+      evidenceProfile: "responsive-web",
+      surfacePaths: [
+        "apps/admin/app/events/",
+        "apps/admin/components/recordings-panel.tsx",
+      ],
+      states: ["recordings-panel/loading-empty-filled-error"],
+      approvalProvenance: [
+        "https://github.com/doctor-school/ds-platform/issues/1282",
+        "https://github.com/doctor-school/ds-platform/issues/1337",
+        "https://github.com/doctor-school/ds-platform/issues/1578",
+        "https://github.com/doctor-school/ds-platform/pull/1575#issuecomment-5434237585",
+        "https://github.com/doctor-school/ds-platform/pull/1614",
+      ],
+    },
+  },
+};
+const webEvidence = `
+ui-evidence-profile: responsive-web
 ui-render-desktop-light: https://example.test/desktop-light.png
 ui-render-desktop-dark: https://example.test/desktop-dark.png
 ui-render-mobile-light: https://example.test/mobile-light.png
 ui-render-mobile-dark: https://example.test/mobile-dark.png
 ui-interactions: https://example.test/interactions.png — hover, active and focus-visible driven
 `;
+const nativeEvidence = `
+ui-evidence-profile: native-mobile
+ui-render-phone-light: https://example.test/phone-light.png
+ui-render-phone-dark: https://example.test/phone-dark.png
+ui-render-tablet-light: https://example.test/tablet-light.png
+ui-render-tablet-dark: https://example.test/tablet-dark.png
+ui-interactions: https://example.test/interactions.png — pressed, focus and disabled states driven
+`;
 const canvasBody = `
 ui-source-kind: canvas
 ui-source: design-source/existing.dc.html
 ui-source-state: mode=past
-${commonEvidence}`;
+${webEvidence}`;
 const approvedBody = `
 ui-source-kind: approved-non-canvas
-ui-source: #1282 and #1337 admin compositions with #1578 design-system states
-ui-source-state: admin managed-relations selector composition: loading, empty, and filled states
-ui-source-reason: no canvas owns this surface; these approved compositions and artifacts are authoritative
-${commonEvidence}`;
+ui-source: admin-refine-compositions-v1
+ui-source-state: recordings-panel/loading-empty-filled-error
+${webEvidence}`;
+
+const verdict = (
+  body: string,
+  paths = [webFile],
+  manifest = approvedManifest,
+) => bodyEvidenceVerdict(body, canvasRoot, paths, manifest);
 
 describe("ui-parity body evidence", () => {
-  it("red: the insufficient #1625 wording is not evidence", () => {
+  it("red: #1625 inspected wording is not evidence", () => {
+    expect(verdict("desktop/mobile x light/dark inspected").ok).toBe(false);
+  });
+
+  it("red: canvas requires an existing file and a mechanically declared key=value state", () => {
     expect(
-      bodyEvidenceVerdict(
-        "desktop/mobile × light/dark inspected; tests, tokens and a11y green",
-        canvasRoot,
+      verdict(canvasBody.replace("existing.dc.html", "missing.dc.html")).ok,
+    ).toBe(false);
+    expect(
+      verdict(canvasBody.replace("mode=past", "mode=does-not-exist")).ok,
+    ).toBe(false);
+  });
+
+  it("green: exact existing canvas and declared state pass", () => {
+    expect(verdict(canvasBody).ok).toBe(true);
+  });
+
+  it("green: #1614-shaped base-approved manifest source passes", () => {
+    expect(verdict(approvedBody).ok).toBe(true);
+  });
+
+  it("red: nonexistent or self-added/unapproved manifest ids fail", () => {
+    expect(
+      verdict(
+        approvedBody.replace("admin-refine-compositions-v1", "not-approved"),
+      ).ok,
+    ).toBe(false);
+    const selfAdded = structuredClone(approvedManifest);
+    selfAdded.sources["self-added"] =
+      selfAdded.sources["admin-refine-compositions-v1"];
+    expect(
+      verdict(
+        approvedBody.replace("admin-refine-compositions-v1", "self-added"),
+        [webFile],
+        approvedManifest,
       ).ok,
     ).toBe(false);
   });
 
-  it("red: canvas-derived #1346 requires an exact existing vendored canvas and state", () => {
+  it("red: approved source scope mismatch and undeclared state fail", () => {
     expect(
-      bodyEvidenceVerdict(canvasBody.replace(/ui-source:.*\n/, ""), canvasRoot)
-        .ok,
+      verdict(approvedBody, ["apps/portal/app/webinars/page.tsx"]).ok,
     ).toBe(false);
     expect(
-      bodyEvidenceVerdict(
-        canvasBody.replace("mode=past", "inspected"),
-        canvasRoot,
-      ).ok,
-    ).toBe(false);
-    expect(
-      bodyEvidenceVerdict(
-        canvasBody.replace("existing.dc.html", "missing.dc.html"),
-        canvasRoot,
-      ).ok,
-    ).toBe(false);
-  });
-
-  it("green: an exact existing vendored canvas and state pass", () => {
-    expect(bodyEvidenceVerdict(canvasBody, canvasRoot).ok).toBe(true);
-  });
-
-  it("green: #1614-shaped approved non-canvas compositions pass", () => {
-    expect(bodyEvidenceVerdict(approvedBody, canvasRoot).ok).toBe(true);
-  });
-
-  it("red: approved non-canvas evidence needs a durable reference, exact composition, and reason", () => {
-    expect(
-      bodyEvidenceVerdict(
+      verdict(
         approvedBody.replace(
-          "#1282 and #1337 admin compositions with #1578 design-system states",
-          "approved designs",
+          "recordings-panel/loading-empty-filled-error",
+          "recordings-panel/unknown",
         ),
-        canvasRoot,
-      ).ok,
-    ).toBe(false);
-    expect(
-      bodyEvidenceVerdict(
-        approvedBody.replace(/ui-source-reason:.*\n/, ""),
-        canvasRoot,
-      ).ok,
-    ).toBe(false);
-    expect(
-      bodyEvidenceVerdict(
-        approvedBody.replace(
-          /ui-source-state:.*\n/,
-          "ui-source-state: approved\n",
-        ),
-        canvasRoot,
       ).ok,
     ).toBe(false);
   });
 
-  it("red: every desktop/mobile × light/dark artifact is distinct and required", () => {
+  it("red: manifest entries without durable approval provenance fail closed", () => {
+    const invalid = structuredClone(approvedManifest);
+    invalid.sources["admin-refine-compositions-v1"].approvalProvenance = [
+      "https://example.test/not-owner-approval",
+    ];
+    expect(verdict(approvedBody, [webFile], invalid).ok).toBe(false);
+  });
+
+  it("red: responsive-web requires four distinct desktop/mobile x theme links", () => {
     expect(
-      bodyEvidenceVerdict(
-        canvasBody.replace(/ui-render-mobile-dark:.*\n/, ""),
-        canvasRoot,
-      ).ok,
+      verdict(canvasBody.replace(/ui-render-mobile-dark:.*\n/, "")).ok,
     ).toBe(false);
     expect(
-      bodyEvidenceVerdict(
-        canvasBody.replace(
-          "https://example.test/mobile-dark.png",
-          "https://example.test/mobile-light.png",
-        ),
-        canvasRoot,
-      ).ok,
+      verdict(canvasBody.replace("mobile-dark.png", "mobile-light.png")).ok,
     ).toBe(false);
   });
 
-  it("red: interaction evidence needs an artifact or a reasoned no-interactions N/A", () => {
+  it("green: native-mobile requires phone/tablet x theme rather than desktop", () => {
+    const native = canvasBody.replace(webEvidence, nativeEvidence);
+    expect(verdict(native, [mobileFile]).ok).toBe(true);
+    expect(verdict(canvasBody, [mobileFile]).ok).toBe(false);
+  });
+
+  it("red: mixed web/native changes require both declared profiles and both 2x2 sets", () => {
+    expect(verdict(canvasBody, [webFile, mobileFile]).ok).toBe(false);
+    const mixed = canvasBody
+      .replace(
+        webEvidence,
+        `${webEvidence}${nativeEvidence.replace("ui-evidence-profile: native-mobile\n", "")}`,
+      )
+      .replace(
+        "ui-evidence-profile: responsive-web",
+        "ui-evidence-profile: native-mobile, responsive-web",
+      );
+    expect(verdict(mixed, [webFile, mobileFile]).ok).toBe(true);
+  });
+
+  it("red: interaction evidence needs an artifact or reasoned N/A", () => {
     expect(
-      bodyEvidenceVerdict(
+      verdict(
         canvasBody.replace(/ui-interactions:.*\n/, "ui-interactions: N/A\n"),
-        canvasRoot,
       ).ok,
     ).toBe(false);
-  });
-
-  it("green: a reasoned non-interactive N/A passes", () => {
-    expect(
-      bodyEvidenceVerdict(
-        canvasBody.replace(
-          /ui-interactions:.*\n/,
-          "ui-interactions: N/A — no interactive elements or states exist in this source state\n",
-        ),
-        canvasRoot,
-      ).ok,
-    ).toBe(true);
   });
 });
 
 describe("ui-parity Mode (a) comparison", () => {
   const review = (body: string, submittedAt: string) => ({ body, submittedAt });
-  const completeReview = (sourceBody: string) => `## Mode (a) Review — PR #1625
+  const completeReview = (
+    sourceBody: string,
+    artifacts = "desktop-light, desktop-dark, mobile-light, mobile-dark, interactions",
+  ) => `## Mode (a) Review — PR #1625
 
 ui-source-kind: ${sourceBody.match(/ui-source-kind:\s*(.*)/)?.[1]}
 ui-source: ${sourceBody.match(/ui-source:\s*(.*)/)?.[1]}
 ui-source-state: ${sourceBody.match(/ui-source-state:\s*(.*)/)?.[1]}
-ui-artifacts-compared: desktop-light, desktop-dark, mobile-light, mobile-dark, interactions
-ui-source-applicability: the approved source applies to this touched admin surface and its operator purpose
+ui-evidence-profile: ${sourceBody.match(/ui-evidence-profile:\s*(.*)/)?.[1]}
+ui-artifacts-compared: ${artifacts}
+ui-source-applicability: this approved source applies to the touched admin surface and operator workflow purpose
 ui-comparison-result: MATCH — element-by-element geometry, values, presentation, and driven states match
 
 VERDICT: APPROVE`;
 
-  it("red: missing or vague latest review comparison fails", () => {
+  it("red: latest review must bind source, state, profile and purpose fit", () => {
     expect(latestModeAComparisonVerdict([], canvasBody).ok).toBe(false);
-    expect(
-      latestModeAComparisonVerdict(
-        [
-          review(
-            "## Mode (a) Review — PR #1625\n\nLooks fine.\n\nVERDICT: APPROVE",
-            "2026-08-30T01:00:00Z",
-          ),
-        ],
-        canvasBody,
-      ).ok,
-    ).toBe(false);
-  });
-
-  it("red: a newer vague review invalidates an older complete comparison", () => {
-    expect(
-      latestModeAComparisonVerdict(
-        [
-          review(completeReview(canvasBody), "2026-08-30T01:00:00Z"),
-          review(
-            "## Mode (a) Review — PR #1625\n\nLooks fine.\n\nVERDICT: APPROVE",
-            "2026-08-30T02:00:00Z",
-          ),
-        ],
-        canvasBody,
-      ).ok,
-    ).toBe(false);
-  });
-
-  it("red: exact source/state without source applicability still fails purpose-fit", () => {
-    const incomplete = completeReview(canvasBody).replace(
-      /ui-source-applicability:.*\n/,
+    const missingProfile = completeReview(canvasBody).replace(
+      /ui-evidence-profile:.*\n/,
       "",
     );
     expect(
       latestModeAComparisonVerdict(
-        [review(incomplete, "2026-08-30T02:00:00Z")],
+        [review(missingProfile, "2026-08-30T02:00:00Z")],
         canvasBody,
       ).ok,
     ).toBe(false);
   });
 
-  it("red: surface applicability without an explicit purpose fit still fails", () => {
-    const incomplete = completeReview(canvasBody).replace(
-      /ui-source-applicability:.*\n/,
-      "ui-source-applicability: the approved source applies to this touched surface\n",
+  it("green: web and native reviews compare their profile-specific artifacts", () => {
+    expect(
+      latestModeAComparisonVerdict(
+        [review(completeReview(canvasBody), "2026-08-30T02:00:00Z")],
+        canvasBody,
+      ).ok,
+    ).toBe(true);
+    const native = canvasBody.replace(webEvidence, nativeEvidence);
+    const nativeReview = completeReview(
+      native,
+      "phone-light, phone-dark, tablet-light, tablet-dark, interactions",
     );
     expect(
       latestModeAComparisonVerdict(
-        [review(incomplete, "2026-08-30T02:00:00Z")],
-        canvasBody,
+        [review(nativeReview, "2026-08-30T02:00:00Z")],
+        native,
       ).ok,
-    ).toBe(false);
+    ).toBe(true);
   });
-
-  it.each([
-    ["canvas", canvasBody],
-    ["approved non-canvas #1614 composition", approvedBody],
-  ])(
-    "green: Mode (a) compares the submitted %s source, 2x2 set, interactions, and purpose-fit",
-    (_name, body) => {
-      expect(
-        latestModeAComparisonVerdict(
-          [review(completeReview(body), "2026-08-30T02:00:00Z")],
-          body,
-        ).ok,
-      ).toBe(true);
-    },
-  );
 });
 
 describe("ui-parity guard integration", () => {

@@ -1,13 +1,19 @@
 #!/usr/bin/env tsx
-/** BLOCK guard for the approved-source parity evidence contract (Issue #1627). */
-import { existsSync, statSync } from "node:fs";
+/** BLOCK guard for approved-source UI parity evidence (Issue #1627). */
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
+import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 import { ghViewJson } from "./lib/gh";
-import { isUiSourcePath } from "./lib/ui-surface";
+import {
+  evidenceProfilesForPaths,
+  isUiSourcePath,
+  type UiEvidenceProfile,
+} from "./lib/ui-surface";
 
 const TAG = "[ui-parity]";
+const MANIFEST_PATH = "tools/lint/ui-approved-sources.json";
 const DEFAULT_REPO_ROOT = resolve(
   dirname(fileURLToPath(import.meta.url)),
   "..",
@@ -18,9 +24,17 @@ const REPO_ROOT = process.env.LINT_FIXTURE_ROOT
   : DEFAULT_REPO_ROOT;
 const MODE_A_HEADER_RE = /^## Mode \(a\) Review\b/im;
 const MODE_A_VERDICT_RE = /^VERDICT:\s*(?:APPROVE|REQUEST_CHANGES)\b/im;
-const PLACEHOLDER_RE =
-  /^(?:inspected|checked|tbd|todo|n\/?a|none|same|approved)$/i;
 
+export interface ApprovedSourceEntry {
+  evidenceProfile: UiEvidenceProfile;
+  surfacePaths: string[];
+  states: string[];
+  approvalProvenance: string[];
+}
+export interface ApprovedSourceManifest {
+  version: 1;
+  sources: Record<string, ApprovedSourceEntry>;
+}
 interface GhReview {
   body?: string;
   submittedAt?: string;
@@ -41,90 +55,153 @@ function marker(body: string, name: string): string | null {
       ?.trim() ?? null
   );
 }
-
+function escapeRe(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
 function isArtifactLink(value: string | null): boolean {
   return Boolean(value && /https?:\/\/\S+/i.test(value));
 }
-
-function canvasExists(source: string, repoRoot: string): boolean {
-  if (!/^design-source\/[A-Za-z0-9._/-]+\.dc\.html$/i.test(source))
-    return false;
+function canvasPath(source: string, repoRoot: string): string | null {
+  if (!/^design-source\/[A-Za-z0-9._/-]+\.dc\.html$/i.test(source)) return null;
   const absolute = resolve(repoRoot, source);
-  const designRoot = resolve(repoRoot, "design-source");
-  const inside = relative(designRoot, absolute);
-  return (
-    Boolean(inside) &&
+  const inside = relative(resolve(repoRoot, "design-source"), absolute);
+  return Boolean(inside) &&
     !inside.startsWith("..") &&
     existsSync(absolute) &&
     statSync(absolute).isFile()
+    ? absolute
+    : null;
+}
+function canvasDeclaresState(path: string, state: string): boolean {
+  const pair = /^([A-Za-z_$][\w$-]*)=([A-Za-z0-9_$.-]+)$/.exec(state);
+  if (!pair)
+    return (
+      state.length >= 8 &&
+      !/^(?:inspected|checked|tbd|todo|n\/?a|none)$/i.test(state)
+    );
+  const html = readFileSync(path, "utf8");
+  return new RegExp(
+    `\\b${escapeRe(pair[1])}\\s*:\\s*['"]${escapeRe(pair[2])}['"]`,
+  ).test(html);
+}
+function pathFitsScope(path: string, scope: string): boolean {
+  return scope.endsWith("/") ? path.startsWith(scope) : path === scope;
+}
+function validEntry(
+  entry: ApprovedSourceEntry | undefined,
+): entry is ApprovedSourceEntry {
+  return Boolean(
+    entry &&
+    entry.surfacePaths.length &&
+    entry.states.length &&
+    entry.approvalProvenance.length &&
+    entry.approvalProvenance.every((url) =>
+      /^https:\/\/github\.com\/doctor-school\/ds-platform\/(?:issues|pull)\/\d+(?:#\S+)?$/.test(
+        url,
+      ),
+    ),
   );
 }
 
-function exactState(value: string | null): boolean {
-  return Boolean(
-    value &&
-    value.length >= 8 &&
-    !PLACEHOLDER_RE.test(value) &&
-    /(?:=|:|\/|\bmode\b|\bstate\b|\bcomposition\b|\b(?:loading|empty|filled)\b)/i.test(
-      value,
-    ),
-  );
+export function readBaseApprovedSources(
+  repoRoot = REPO_ROOT,
+): ApprovedSourceManifest {
+  const fixture = process.env.UI_APPROVED_SOURCES_BASE_FILE;
+  if (fixture)
+    return JSON.parse(
+      readFileSync(resolve(fixture), "utf8"),
+    ) as ApprovedSourceManifest;
+  const base = process.env.GITHUB_BASE_REF
+    ? `origin/${process.env.GITHUB_BASE_REF}`
+    : "origin/main";
+  const result = spawnSync("git", ["show", `${base}:${MANIFEST_PATH}`], {
+    cwd: repoRoot,
+    encoding: "utf8",
+  });
+  if (result.status !== 0) return { version: 1, sources: {} };
+  return JSON.parse(result.stdout) as ApprovedSourceManifest;
+}
+
+const PROFILE_MARKERS: Record<UiEvidenceProfile, string[]> = {
+  "responsive-web": [
+    "desktop-light",
+    "desktop-dark",
+    "mobile-light",
+    "mobile-dark",
+  ],
+  "native-mobile": ["phone-light", "phone-dark", "tablet-light", "tablet-dark"],
+};
+
+function declaredProfiles(body: string): UiEvidenceProfile[] {
+  const value = marker(body, "ui-evidence-profile") ?? "";
+  return value
+    .split(",")
+    .map((part) => part.trim())
+    .filter(
+      (part): part is UiEvidenceProfile =>
+        part === "responsive-web" || part === "native-mobile",
+    )
+    .sort();
 }
 
 export function bodyEvidenceVerdict(
   body: string,
   repoRoot = REPO_ROOT,
+  changedPaths: string[] = [],
+  baseManifest?: ApprovedSourceManifest,
 ): Verdict {
   const missing: string[] = [];
+  const uiPaths = changedPaths.filter(isUiSourcePath);
+  const requiredProfiles = evidenceProfilesForPaths(uiPaths);
+  const submittedProfiles = declaredProfiles(body);
+  if (requiredProfiles.join(",") !== submittedProfiles.join(","))
+    missing.push(`ui-evidence-profile exactly ${requiredProfiles.join(", ")}`);
+
   const kind = marker(body, "ui-source-kind");
   const source = marker(body, "ui-source");
   const state = marker(body, "ui-source-state");
-
   if (kind === "canvas") {
-    if (!source || !canvasExists(source, repoRoot))
+    const path = source ? canvasPath(source, repoRoot) : null;
+    if (!path)
       missing.push("existing exact ui-source: design-source/*.dc.html");
+    else if (!state || !canvasDeclaresState(path, state))
+      missing.push(
+        "ui-source-state declared by the canvas when expressed as key=value",
+      );
   } else if (kind === "approved-non-canvas") {
-    if (
-      !source ||
-      !/(?:#\d+|https?:\/\/\S+|[A-Za-z0-9._-]+\/[A-Za-z0-9._/-]+)/i.test(source)
-    )
-      missing.push("exact approved artifact/reference in ui-source");
-    const reason = marker(body, "ui-source-reason");
-    if (
-      !reason ||
-      reason.length < 24 ||
-      !/\b(?:no canvas|non-canvas)\b/i.test(reason) ||
-      !/\b(?:approved|composition|artifact|source)\b/i.test(reason)
-    )
-      missing.push("reasoned approved non-canvas source justification");
-    if (
-      !state ||
-      state.length < 24 ||
-      !/\b(?:composition|state|screen|surface)\b/i.test(state)
-    )
-      missing.push("exact approved non-canvas state/composition");
-  } else {
-    missing.push("ui-source-kind: canvas or approved-non-canvas");
-  }
-  if (!exactState(state))
-    missing.push("exact ui-source-state/state composition");
+    const manifest = baseManifest ?? readBaseApprovedSources(repoRoot);
+    const entry = source ? manifest.sources[source] : undefined;
+    if (!validEntry(entry))
+      missing.push("ui-source id approved in the base manifest");
+    else {
+      if (!state || !entry.states.includes(state))
+        missing.push("ui-source-state declared by the approved manifest entry");
+      if (
+        uiPaths.some(
+          (path) =>
+            !entry.surfacePaths.some((scope) => pathFitsScope(path, scope)),
+        )
+      )
+        missing.push(
+          "every touched UI path inside the approved manifest surface scope",
+        );
+      if (requiredProfiles.some((profile) => profile !== entry.evidenceProfile))
+        missing.push("evidence profile matching the approved manifest entry");
+    }
+  } else missing.push("ui-source-kind: canvas or approved-non-canvas");
 
-  const renderNames = [
-    "ui-render-desktop-light",
-    "ui-render-desktop-dark",
-    "ui-render-mobile-light",
-    "ui-render-mobile-dark",
-  ];
-  const renders = renderNames.map((name) => marker(body, name));
-  renderNames.forEach((name, index) => {
-    if (!isArtifactLink(renders[index])) missing.push(`${name} evidence link`);
-  });
-  const links = renders.flatMap(
-    (value) => value?.match(/https?:\/\/\S+/i)?.[0] ?? [],
+  const renderNames = requiredProfiles.flatMap(
+    (profile) => PROFILE_MARKERS[profile],
   );
+  const links: string[] = [];
+  for (const suffix of renderNames) {
+    const value = marker(body, `ui-render-${suffix}`);
+    if (!isArtifactLink(value))
+      missing.push(`ui-render-${suffix} evidence link`);
+    else links.push(value!.match(/https?:\/\/\S+/i)![0]);
+  }
   if (new Set(links).size !== links.length)
-    missing.push("four distinct viewport/theme evidence links");
-
+    missing.push("distinct profile-specific render evidence links");
   const interactions = marker(body, "ui-interactions");
   const reasonedNa = Boolean(
     interactions &&
@@ -154,24 +231,27 @@ export function latestModeAComparisonVerdict(
           Date.parse(b.submittedAt ?? "1970-01-01") -
           Date.parse(a.submittedAt ?? "1970-01-01"),
       )[0]?.body ?? "";
-  const missing: string[] = [];
   if (!latest)
     return { ok: false, missing: ["latest structured Mode (a) review"] };
-  for (const name of ["ui-source-kind", "ui-source", "ui-source-state"]) {
+  const missing: string[] = [];
+  for (const name of [
+    "ui-source-kind",
+    "ui-source",
+    "ui-source-state",
+    "ui-evidence-profile",
+  ]) {
     const submitted = marker(prBody, name);
     if (!submitted || marker(latest, name) !== submitted)
-      missing.push(`comparison against the submitted ${name}`);
+      missing.push(`comparison against submitted ${name}`);
   }
-  const artifacts = marker(latest, "ui-artifacts-compared") ?? "";
-  for (const name of [
-    "desktop-light",
-    "desktop-dark",
-    "mobile-light",
-    "mobile-dark",
-    "interaction",
-  ])
-    if (!artifacts.toLowerCase().includes(name))
-      missing.push(`${name} artifact comparison`);
+  const artifacts =
+    marker(latest, "ui-artifacts-compared")?.toLowerCase() ?? "";
+  for (const profile of declaredProfiles(prBody))
+    for (const name of PROFILE_MARKERS[profile])
+      if (!artifacts.includes(name))
+        missing.push(`${name} artifact comparison`);
+  if (!artifacts.includes("interaction"))
+    missing.push("interaction artifact comparison");
   const applicability = marker(latest, "ui-source-applicability") ?? "";
   if (
     applicability.length < 24 ||
@@ -200,15 +280,10 @@ function fail(message: string): never {
 }
 
 export async function runUiParityGuard(): Promise<void> {
-  if (process.env.GITHUB_EVENT_NAME !== "pull_request") {
-    info("not a pull_request event, skipping");
-    return;
-  }
+  if (process.env.GITHUB_EVENT_NAME !== "pull_request")
+    return info("not a pull_request event, skipping");
   const prNumber = process.env.PR_NUMBER ?? process.env.GITHUB_PR_NUMBER ?? "";
-  if (!prNumber) {
-    info("cannot determine PR number, skipping");
-    return;
-  }
+  if (!prNumber) return info("cannot determine PR number, skipping");
   const response = await ghViewJson<GhPR>(
     "pr",
     prNumber,
@@ -217,13 +292,12 @@ export async function runUiParityGuard(): Promise<void> {
   );
   if (!response.ok) fail(`could not fetch PR #${prNumber}: ${response.error}`);
   const pr = response.data;
-  if (!(pr.files ?? []).some((file) => isUiSourcePath(file.path))) {
-    info(
-      `PR #${pr.number} touches no non-exempt UI source; rule does not apply`,
+  const paths = (pr.files ?? []).map((file) => file.path);
+  if (!paths.some(isUiSourcePath))
+    return info(
+      `PR #${pr.number} touches no render-capable UI source; rule does not apply`,
     );
-    return;
-  }
-  const bodyVerdict = bodyEvidenceVerdict(pr.body ?? "");
+  const bodyVerdict = bodyEvidenceVerdict(pr.body ?? "", REPO_ROOT, paths);
   if (!bodyVerdict.ok)
     fail(
       `PR #${pr.number} lacks approved-source parity evidence: ${bodyVerdict.missing.join("; ")}`,
@@ -235,10 +309,11 @@ export async function runUiParityGuard(): Promise<void> {
     );
     if (!reviewVerdict.ok)
       fail(
-        `latest Mode (a) review lacks explicit comparison against the submitted UI source artifacts: ${reviewVerdict.missing.join("; ")}`,
+        `latest Mode (a) review lacks current source comparison: ${reviewVerdict.missing.join("; ")}`,
       );
-    info(`PR #${pr.number} latest Mode (a) source comparison evidence OK`);
-    return;
+    return info(
+      `PR #${pr.number} latest Mode (a) source comparison evidence OK`,
+    );
   }
   info(`PR #${pr.number} approved-source parity body evidence OK`);
 }

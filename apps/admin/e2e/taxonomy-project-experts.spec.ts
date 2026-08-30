@@ -237,7 +237,9 @@ test.describe("012 EARS-9 — project↔expert relationships in the live admin",
     // This is the assertion the API test cannot make: the operator is told what
     // to do instead («Заменить куратора»), rather than being allowed to send a
     // request whose only possible answer is 409.
-    await page.getByTestId("project-expert-link-search").fill(member.name);
+    await page
+      .getByTestId("project-expert-link-search")
+      .fill(member.name.split(" ")[0]!);
     await page
       .getByTestId("project-expert-link-select")
       .selectOption({ label: member.name });

@@ -237,8 +237,12 @@ test.describe("012 EARS-10 — project↔partner relationships in the live admin
     await expect(page.getByTestId("project-partners-notice")).toContainText(
       "Партнёр отмечен основным.",
     );
-    await expect(secondRow).toContainText("Основной");
-    await expect(firstRow).not.toContainText("Основной");
+    await expect(
+      secondRow.getByTestId(`project-partner-primary-${secondId}`),
+    ).toBeVisible();
+    await expect(
+      firstRow.getByTestId(`project-partner-primary-${firstId}`),
+    ).toHaveCount(0);
   });
 
   test("012 EARS-10: a retired link comes back as the SAME row, and the partner detail reads the relation", async ({

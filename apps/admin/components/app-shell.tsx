@@ -114,6 +114,14 @@ export function AppShell({ children }: { children: ReactNode }) {
                   {t("app.nav.specialties")}
                 </Link>
               </DsLink>
+              <DsLink asChild variant="standalone">
+                <Link
+                  href="/speaker-migration"
+                  data-testid="nav-speaker-migration"
+                >
+                  {t("app.nav.speakerMigration")}
+                </Link>
+              </DsLink>
             </nav>
           </div>
           <Button

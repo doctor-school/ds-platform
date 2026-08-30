@@ -65,13 +65,23 @@ async function createEvent(page: Page, title: string): Promise<string> {
   return page.url().split("/").pop()!;
 }
 
-/** A draft expert — the name is the only value the create form demands. */
-async function createExpert(page: Page, name: string): Promise<string> {
+/** A draft expert authored through the current structured-name form. */
+async function createExpert(
+  page: Page,
+  familyName: string,
+  givenName: string,
+  patronymic: string,
+): Promise<{ name: string; url: string }> {
   await page.goto("/experts/create");
-  await page.getByTestId("expert-name").fill(name);
+  await page.getByTestId("expert-family-name").fill(familyName);
+  await page.getByTestId("expert-given-name").fill(givenName);
+  await page.getByTestId("expert-patronymic").fill(patronymic);
   await page.getByTestId("submit-expert").click();
   await page.waitForURL(/\/experts\/[0-9a-f-]{36}$/, { timeout: 20_000 });
-  return page.url();
+  return {
+    name: `${familyName} ${givenName} ${patronymic}`,
+    url: page.url(),
+  };
 }
 
 /** Open the add dialog and choose an expert through the search-narrowed selector. */
@@ -101,10 +111,15 @@ test.describe("012 EARS-7 — event↔expert links in the live admin", () => {
 
     const stamp = Date.now();
     const eventTitle = `Эфир для эксперта ${stamp}`;
-    const expertUrl = await createExpert(page, `Обратная связь ${stamp}`);
+    const expert = await createExpert(
+      page,
+      `Обратная-${stamp}`,
+      "Связь",
+      "Ильинична",
+    );
     await createEvent(page, eventTitle);
 
-    await page.goto(expertUrl);
+    await page.goto(expert.url);
     await expect(
       page.getByTestId("tab-events"),
       "expert detail must expose the reverse Event↔Expert authoring surface",
@@ -134,10 +149,18 @@ test.describe("012 EARS-7 — event↔expert links in the live admin", () => {
     await signInAsAdmin(page);
 
     const stamp = Date.now();
-    const firstExpert = `Иван Петров ${stamp}`;
-    const secondExpert = `Мария Орлова ${stamp}`;
-    await createExpert(page, firstExpert);
-    await createExpert(page, secondExpert);
+    const firstExpert = await createExpert(
+      page,
+      `Петров-${stamp}`,
+      "Иван",
+      "Ильич",
+    );
+    const secondExpert = await createExpert(
+      page,
+      `Орлова-${stamp}`,
+      "Мария",
+      "Игоревна",
+    );
     const eventId = await createEvent(page, `Кардиофорум ${stamp}`);
 
     // ── Reach the editor through the chrome, on the event it belongs to ────
@@ -192,7 +215,7 @@ test.describe("012 EARS-7 — event↔expert links in the live admin", () => {
     await page.keyboard.press("Escape");
 
     // ── Accept branch: the link is authored through the selector ───────────
-    await openAddDialog(page, firstExpert);
+    await openAddDialog(page, firstExpert.name);
     await page.getByTestId("event-expert-add-role").fill("Модератор");
     await page.getByTestId("event-expert-add-position").fill("1");
     await page.getByTestId("event-expert-add-submit").click();
@@ -201,7 +224,7 @@ test.describe("012 EARS-7 — event↔expert links in the live admin", () => {
     );
     const row = page.getByTestId("event-experts-active").locator("section");
     await expect(row).toHaveCount(1);
-    await expect(row).toContainText(firstExpert);
+    await expect(row).toContainText(firstExpert.name);
     await expect(row).toContainText("Модератор");
     await expect(row).toContainText("Активна");
     // No legacy speaker was chosen (no control ships — #1426), so the badge must
@@ -209,7 +232,7 @@ test.describe("012 EARS-7 — event↔expert links in the live admin", () => {
     await expect(row).toContainText("Не сопоставлен");
 
     // ── Server refusal 1: the slot is taken (SPEAKER_POSITION_OCCUPIED) ────
-    await openAddDialog(page, secondExpert);
+    await openAddDialog(page, secondExpert.name);
     await page.getByTestId("event-expert-add-role").fill("Докладчик");
     await page.getByTestId("event-expert-add-position").fill("1");
     await page.getByTestId("event-expert-add-submit").click();
@@ -221,7 +244,7 @@ test.describe("012 EARS-7 — event↔expert links in the live admin", () => {
     ).toHaveCount(1);
 
     // ── Server refusal 2: the pair already exists (RELATIONSHIP_CONFLICT) ──
-    await openAddDialog(page, firstExpert);
+    await openAddDialog(page, firstExpert.name);
     await page.getByTestId("event-expert-add-role").fill("Докладчик");
     await page.getByTestId("event-expert-add-position").fill("2");
     await page.getByTestId("event-expert-add-submit").click();
@@ -233,7 +256,7 @@ test.describe("012 EARS-7 — event↔expert links in the live admin", () => {
     await page.locator('[data-testid^="event-expert-edit-"]').first().click();
     const editForm = page.locator('[data-testid$="-form"]').last();
     await editForm.waitFor({ state: "visible" });
-    await expect(editForm).toContainText(firstExpert);
+    await expect(editForm).toContainText(firstExpert.name);
     await expect(
       page.getByText("Мероприятие и эксперта у существующей связи изменить", {
         exact: false,

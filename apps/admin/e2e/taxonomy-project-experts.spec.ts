@@ -55,13 +55,20 @@ async function createProject(
 /** A draft expert — the name is the only value the create form demands. */
 async function createExpert(
   page: Page,
-  name: string,
+  familyName: string,
+  givenName: string,
+  patronymic: string,
 ): Promise<{ name: string; url: string }> {
   await page.goto("/experts/create");
-  await page.getByTestId("expert-name").fill(name);
+  await page.getByTestId("expert-family-name").fill(familyName);
+  await page.getByTestId("expert-given-name").fill(givenName);
+  await page.getByTestId("expert-patronymic").fill(patronymic);
   await page.getByTestId("submit-expert").click();
   await page.waitForURL(/\/experts\/[0-9a-f-]{36}$/, { timeout: 20_000 });
-  return { name, url: page.url() };
+  return {
+    name: `${familyName} ${givenName} ${patronymic}`,
+    url: page.url(),
+  };
 }
 
 /** Open the «Эксперты» tab of a project detail and wait for the panel. */
@@ -97,7 +104,12 @@ test.describe("012 EARS-9 — project↔expert relationships in the live admin",
     await signInAsAdmin(page);
 
     const stamp = Date.now();
-    const expert = await createExpert(page, `Обратный эксперт ${stamp}`);
+    const expert = await createExpert(
+      page,
+      `Обратный-${stamp}`,
+      "Эксперт",
+      "Ильич",
+    );
     const project = await createProject(
       page,
       `Обратный экспертный проект ${stamp}`,
@@ -120,6 +132,52 @@ test.describe("012 EARS-9 — project↔expert relationships in the live admin",
     );
   });
 
+  test("EARS-22: the expert endpoint withholds curator when the selected project already has one", async ({
+    page,
+  }) => {
+    await signInAsAdmin(page);
+
+    const stamp = Date.now();
+    const project = await createProject(
+      page,
+      `Занятый куратор проект ${stamp}`,
+    );
+    const incumbent = await createExpert(
+      page,
+      `Иванов-${stamp}`,
+      "Текущий",
+      "Куратор",
+    );
+    const candidate = await createExpert(
+      page,
+      `Петров-${stamp}`,
+      "Новый",
+      "Эксперт",
+    );
+    await openExpertsTab(page, project.url);
+    await linkExpert(page, incumbent.name, "curator");
+
+    await page.goto(candidate.url);
+    await page.getByTestId("tab-projects").click();
+    await page.getByTestId("project-expert-link-search").fill(project.title);
+    await page
+      .getByTestId("project-expert-link-select")
+      .selectOption({ label: project.title });
+
+    await expect(
+      page
+        .getByTestId("project-expert-link-role")
+        .locator('option[value="curator"]'),
+    ).toHaveCount(0);
+    await expect(
+      page.getByTestId("project-expert-link-seat-taken"),
+    ).toContainText("Заменить куратора");
+    await page.getByTestId("project-expert-link-submit").click();
+    await expect(page.getByTestId("project-experts-notice")).toContainText(
+      "Эксперт добавлен в проект.",
+    );
+  });
+
   test("012 EARS-9: an operator composes a project roster, and the curator seat can only be moved by the atomic replace", async ({
     page,
   }) => {
@@ -127,8 +185,18 @@ test.describe("012 EARS-9 — project↔expert relationships in the live admin",
 
     const stamp = Date.now();
     const project = await createProject(page, `Роль проект ${stamp}`);
-    const curator = await createExpert(page, `Куратор Иванов ${stamp}`);
-    const member = await createExpert(page, `Участник Петров ${stamp}`);
+    const curator = await createExpert(
+      page,
+      `Иванов-${stamp}`,
+      "Куратор",
+      "Петрович",
+    );
+    const member = await createExpert(
+      page,
+      `Петров-${stamp}`,
+      "Участник",
+      "Иванович",
+    );
 
     // ── The tab starts empty and says the no-delete rule out loud ──────────
     await openExpertsTab(page, project.url);
@@ -214,7 +282,12 @@ test.describe("012 EARS-9 — project↔expert relationships in the live admin",
 
     const stamp = Date.now();
     const project = await createProject(page, `Возврат проект ${stamp}`);
-    const expert = await createExpert(page, `Возврат Сидоров ${stamp}`);
+    const expert = await createExpert(
+      page,
+      `Сидоров-${stamp}`,
+      "Возврат",
+      "Ильич",
+    );
 
     await openExpertsTab(page, project.url);
     await linkExpert(page, expert.name, "member");

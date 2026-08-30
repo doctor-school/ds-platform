@@ -121,6 +121,40 @@ test.describe("012 EARS-10 — project↔partner relationships in the live admin
     );
   });
 
+  test("EARS-22: the partner endpoint withholds primary when the selected project already has one", async ({
+    page,
+  }) => {
+    await signInAsAdmin(page);
+
+    const stamp = Date.now();
+    const project = await createProject(
+      page,
+      `Занятый партнёр проект ${stamp}`,
+    );
+    const incumbent = await createPartner(page, `Основной Фармаком ${stamp}`);
+    const candidate = await createPartner(page, `Новый Биотек ${stamp}`);
+    await openPartnersTab(page, project.url);
+    await linkPartner(page, incumbent.title, true);
+
+    await page.goto(candidate.url);
+    await page.getByTestId("tab-projects").click();
+    await page.getByTestId("project-partner-link-search").fill(project.title);
+    await page
+      .getByTestId("project-partner-link-select")
+      .selectOption({ label: project.title });
+
+    await expect(
+      page.getByTestId("project-partner-link-primary-taken"),
+    ).toContainText("Сначала снимите отметку");
+    await expect(page.getByTestId("project-partner-link-primary")).toHaveCount(
+      0,
+    );
+    await page.getByTestId("project-partner-link-submit").click();
+    await expect(page.getByTestId("project-partners-notice")).toContainText(
+      "Партнёр добавлен к проекту.",
+    );
+  });
+
   test("012 EARS-10: the primary flag is cleared before it is moved, and the panel never offers a second primary", async ({
     page,
   }) => {

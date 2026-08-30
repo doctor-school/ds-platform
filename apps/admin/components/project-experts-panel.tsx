@@ -15,8 +15,9 @@ import type {
 } from "@ds/schemas";
 import { TokenSelect } from "@/components/fields";
 import { RelationshipEndpointPicker } from "@/components/relationship-endpoint-picker";
-import { hasActiveProjectCurator } from "@/lib/relationship-authoring-state";
+import { canClaimInvariantSeat } from "@/lib/relationship-authoring-state";
 import { taxonomyErrorKey } from "@/lib/taxonomy-errors";
+import { useRelationshipOccupancy } from "@/lib/use-relationship-occupancy";
 import { projectExpertsUrl } from "@/providers/data-provider";
 
 /**
@@ -74,11 +75,21 @@ export function ProjectExpertsPanel({
     url: listUrl,
     method: "get",
   });
+  const curatorOccupancy = useRelationshipOccupancy<ProjectExpertAdminDetail>(
+    projectExpertsUrl.list({
+      ...(mode === "project" ? { projectId: entityId } : {}),
+      role: "curator",
+      status: "active",
+      pageSize: 1,
+    }),
+    mode === "project",
+  );
 
   function announce(toastKey: string) {
     setErrorKey(null);
     setNoticeKey(toastKey);
     void query.refetch();
+    if (mode === "project") void curatorOccupancy.refetch();
   }
 
   function fail(error: unknown, fallbackKey: string) {
@@ -106,7 +117,7 @@ export function ProjectExpertsPanel({
 
   const active = list.data.filter((row) => row.status === "active");
   const retired = list.data.filter((row) => row.status === "retired");
-  const curator = active.find((row) => row.role === "curator") ?? null;
+  const curator = curatorOccupancy.incumbent;
 
   return (
     <div className="flex flex-col gap-6" data-testid="project-experts-panel">
@@ -129,6 +140,8 @@ export function ProjectExpertsPanel({
           projectId={entityId}
           linkedExpertIds={list.data.map((row) => row.expertId)}
           seatTaken={curator !== null}
+          occupancyLoading={curatorOccupancy.isFetching}
+          occupancyError={curatorOccupancy.isError}
           onLinked={() => announce("projectExperts.toast.linked")}
           onError={(error) => fail(error, "projectExperts.errors.linkFailed")}
         />
@@ -158,9 +171,11 @@ export function ProjectExpertsPanel({
               key={row.id}
               row={row}
               mode={mode}
-              seatTaken={
-                mode === "project" && curator !== null && curator.id !== row.id
+              incumbentId={mode === "project" ? (curator?.id ?? null) : null}
+              occupancyLoading={
+                mode === "project" && curatorOccupancy.isFetching
               }
+              occupancyError={mode === "project" && curatorOccupancy.isError}
               onDone={announce}
               onError={fail}
             />
@@ -207,7 +222,15 @@ export function ProjectExpertsPanel({
                   key={row.id}
                   row={row}
                   mode={mode}
-                  seatTaken={mode === "project" && curator !== null}
+                  incumbentId={
+                    mode === "project" ? (curator?.id ?? null) : null
+                  }
+                  occupancyLoading={
+                    mode === "project" && curatorOccupancy.isFetching
+                  }
+                  occupancyError={
+                    mode === "project" && curatorOccupancy.isError
+                  }
                   onDone={announce}
                   onError={fail}
                 />
@@ -231,19 +254,37 @@ type ErrorHandler = (error: unknown, fallbackKey: string) => void;
 function LinkRow({
   row,
   mode,
-  seatTaken,
+  incumbentId,
+  occupancyLoading,
+  occupancyError,
   onDone,
   onError,
 }: {
   row: ProjectExpertAdminDetail;
   mode: "project" | "expert";
-  /** Another ACTIVE row already holds the curator seat. */
-  seatTaken: boolean;
+  incumbentId: string | null;
+  occupancyLoading: boolean;
+  occupancyError: boolean;
   onDone: DoneHandler;
   onError: ErrorHandler;
 }) {
   const t = useTranslations();
   const { mutate, mutation } = useCustomMutation();
+  const rowOccupancy = useRelationshipOccupancy<ProjectExpertAdminDetail>(
+    projectExpertsUrl.list({
+      projectId: row.projectId,
+      role: "curator",
+      status: "active",
+      pageSize: 1,
+    }),
+    mode === "expert",
+  );
+  const effectiveIncumbentId =
+    mode === "expert" ? rowOccupancy.incumbent?.id : incumbentId;
+  const effectiveLoading =
+    mode === "expert" ? rowOccupancy.isFetching : occupancyLoading;
+  const effectiveError =
+    mode === "expert" ? rowOccupancy.isError : occupancyError;
   // The operator is standing on one endpoint, so the row names the OTHER one.
   // `expertName` is nullable because §2.4's editorial removal nulls it on a
   // retained row; the fixed RU label is rendered here rather than stored as a
@@ -256,6 +297,10 @@ function LinkRow({
   const transition = row.status === "active" ? "retire" : "restore";
   const nextRole: ProjectExpertRole =
     row.role === "curator" ? "member" : "curator";
+  const curatorHeldByAnother = !canClaimInvariantSeat(
+    effectiveIncumbentId ?? null,
+    row.id,
+  );
 
   function send(
     url: string,
@@ -306,7 +351,10 @@ function LinkRow({
           // Promoting a second curator can only ever come back 409; the atomic
           // replace control below is the way through, so the button says so
           // instead of offering a guaranteed refusal.
-          disabled={nextRole === "curator" && seatTaken}
+          disabled={
+            nextRole === "curator" &&
+            (effectiveLoading || effectiveError || curatorHeldByAnother)
+          }
           onClick={() => {
             const body: UpdateProjectExpertRequest = { role: nextRole };
             mutate(
@@ -317,8 +365,10 @@ function LinkRow({
                 meta: { version: row.version },
               },
               {
-                onSuccess: () =>
-                  onDone(`projectExperts.toast.role.${nextRole}`),
+                onSuccess: () => {
+                  if (mode === "expert") void rowOccupancy.refetch();
+                  onDone(`projectExperts.toast.role.${nextRole}`);
+                },
                 onError: (error) =>
                   onError(error, "projectExperts.errors.roleFailed"),
               },
@@ -327,6 +377,18 @@ function LinkRow({
         >
           {t(`projectExperts.action.role.${nextRole}`)}
         </Button>
+      ) : null}
+
+      {mode === "expert" &&
+      row.status === "active" &&
+      nextRole === "curator" &&
+      curatorHeldByAnother ? (
+        <p
+          className="text-sm text-muted-foreground"
+          data-testid={`project-expert-row-seat-taken-${row.id}`}
+        >
+          {t("projectExperts.fields.reverseSeatTakenHint")}
+        </p>
       ) : null}
 
       <Button
@@ -366,16 +428,21 @@ function ReverseLinkForm({
   const [projectId, setProjectId] = useState("");
   const [role, setRole] = useState<ProjectExpertRole>("member");
   const { mutate, mutation } = useCustomMutation();
-  const { query: selectedProjectQuery } = useCustom<ProjectExpertAdminList>({
-    url: projectExpertsUrl.list({ projectId, includeRetired: true }),
-    method: "get",
-    queryOptions: { enabled: projectId.length > 0 },
-  });
-  const selectedProjectRows = selectedProjectQuery.data?.data.data ?? [];
-  const constraintLoading =
-    projectId.length > 0 && selectedProjectQuery.isFetching;
-  const constraintError = projectId.length > 0 && selectedProjectQuery.isError;
-  const seatTaken = hasActiveProjectCurator(selectedProjectRows);
+  const selectedProjectOccupancy =
+    useRelationshipOccupancy<ProjectExpertAdminDetail>(
+      projectExpertsUrl.list({
+        projectId,
+        role: "curator",
+        status: "active",
+        pageSize: 1,
+      }),
+      projectId.length > 0,
+    );
+  const constraintLoading = selectedProjectOccupancy.isFetching;
+  const constraintError = selectedProjectOccupancy.isError;
+  const seatTaken = !canClaimInvariantSeat(
+    selectedProjectOccupancy.incumbent?.id ?? null,
+  );
 
   return (
     <section
@@ -498,12 +565,16 @@ function LinkForm({
   projectId,
   linkedExpertIds,
   seatTaken,
+  occupancyLoading,
+  occupancyError,
   onLinked,
   onError,
 }: {
   projectId: string;
   linkedExpertIds: string[];
   seatTaken: boolean;
+  occupancyLoading: boolean;
+  occupancyError: boolean;
   onLinked: () => void;
   onError: (error: unknown) => void;
 }) {
@@ -597,6 +668,7 @@ function LinkForm({
           id="project-expert-link-role"
           data-testid="project-expert-link-role"
           value={role}
+          disabled={occupancyLoading || occupancyError}
           onChange={(event) => setRole(event.target.value as ProjectExpertRole)}
         >
           <option value="member">{t("projectExperts.roles.member")}</option>
@@ -612,6 +684,14 @@ function LinkForm({
             {t("projectExperts.fields.seatTakenHint")}
           </p>
         ) : null}
+        {occupancyLoading ? (
+          <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
+        ) : null}
+        {occupancyError ? (
+          <Alert variant="danger" data-testid="project-expert-link-seat-error">
+            {t("projectExperts.errors.loadFailed")}
+          </Alert>
+        ) : null}
       </div>
 
       <div>
@@ -620,7 +700,7 @@ function LinkForm({
           size="sm"
           data-testid="project-expert-link-submit"
           loading={mutation.isPending}
-          disabled={expertId.length === 0}
+          disabled={expertId.length === 0 || occupancyLoading || occupancyError}
           onClick={() => {
             const body: CreateProjectExpertRequest = {
               projectId,

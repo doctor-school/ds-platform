@@ -13,8 +13,9 @@ import type {
 } from "@ds/schemas";
 import { TokenSelect } from "@/components/fields";
 import { RelationshipEndpointPicker } from "@/components/relationship-endpoint-picker";
-import { hasActiveProjectPrimaryPartner } from "@/lib/relationship-authoring-state";
+import { canClaimInvariantSeat } from "@/lib/relationship-authoring-state";
 import { taxonomyErrorKey } from "@/lib/taxonomy-errors";
+import { useRelationshipOccupancy } from "@/lib/use-relationship-occupancy";
 import type { TaxonomyHttpError } from "@/providers/data-provider";
 import { projectPartnersUrl } from "@/providers/data-provider";
 
@@ -63,11 +64,21 @@ export function ProjectPartnersPanel({
     url: listUrl,
     method: "get",
   });
+  const primaryOccupancy = useRelationshipOccupancy<ProjectPartnerAdminDetail>(
+    projectPartnersUrl.list({
+      ...(mode === "project" ? { projectId: entityId } : {}),
+      isPrimary: true,
+      status: "active",
+      pageSize: 1,
+    }),
+    mode === "project",
+  );
 
   function announce(toastKey: string) {
     setErrorKey(null);
     setNoticeKey(toastKey);
     void query.refetch();
+    if (mode === "project") void primaryOccupancy.refetch();
   }
 
   function fail(error: unknown, fallbackKey: string) {
@@ -104,7 +115,8 @@ export function ProjectPartnersPanel({
 
   const active = list.data.filter((row) => row.status === "active");
   const retired = list.data.filter((row) => row.status === "retired");
-  const primaryTaken = active.some((row) => row.isPrimary);
+  const primary = primaryOccupancy.incumbent;
+  const primaryTaken = primary !== null;
 
   return (
     <div className="flex flex-col gap-6" data-testid="project-partners-panel">
@@ -127,6 +139,8 @@ export function ProjectPartnersPanel({
           projectId={entityId}
           linkedPartnerIds={list.data.map((row) => row.partnerId)}
           primaryTaken={primaryTaken}
+          occupancyLoading={primaryOccupancy.isFetching}
+          occupancyError={primaryOccupancy.isError}
           onLinked={() => announce("projectPartners.toast.linked")}
           onError={(error) => fail(error, "projectPartners.errors.linkFailed")}
         />
@@ -156,9 +170,11 @@ export function ProjectPartnersPanel({
               key={row.id}
               row={row}
               mode={mode}
-              primaryTaken={
-                mode === "project" && primaryTaken && !row.isPrimary
+              incumbentId={mode === "project" ? (primary?.id ?? null) : null}
+              occupancyLoading={
+                mode === "project" && primaryOccupancy.isFetching
               }
+              occupancyError={mode === "project" && primaryOccupancy.isError}
               onDone={announce}
               onError={fail}
               onErrorKey={failWithKey}
@@ -193,7 +209,15 @@ export function ProjectPartnersPanel({
                   key={row.id}
                   row={row}
                   mode={mode}
-                  primaryTaken={mode === "project" && primaryTaken}
+                  incumbentId={
+                    mode === "project" ? (primary?.id ?? null) : null
+                  }
+                  occupancyLoading={
+                    mode === "project" && primaryOccupancy.isFetching
+                  }
+                  occupancyError={
+                    mode === "project" && primaryOccupancy.isError
+                  }
                   onDone={announce}
                   onError={fail}
                   onErrorKey={failWithKey}
@@ -231,15 +255,18 @@ function primaryErrorKey(error: unknown): string {
 function LinkRow({
   row,
   mode,
-  primaryTaken,
+  incumbentId,
+  occupancyLoading,
+  occupancyError,
   onDone,
   onError,
   onErrorKey,
 }: {
   row: ProjectPartnerAdminDetail;
   mode: "project" | "partner";
-  /** Another ACTIVE row of this project already holds the primary flag. */
-  primaryTaken: boolean;
+  incumbentId: string | null;
+  occupancyLoading: boolean;
+  occupancyError: boolean;
   onDone: DoneHandler;
   onError: ErrorHandler;
   /** Takes an ALREADY-resolved catalogue key (the primary-flag disambiguation). */
@@ -247,6 +274,25 @@ function LinkRow({
 }) {
   const t = useTranslations();
   const { mutate, mutation } = useCustomMutation();
+  const rowOccupancy = useRelationshipOccupancy<ProjectPartnerAdminDetail>(
+    projectPartnersUrl.list({
+      projectId: row.projectId,
+      isPrimary: true,
+      status: "active",
+      pageSize: 1,
+    }),
+    mode === "partner",
+  );
+  const effectiveIncumbentId =
+    mode === "partner" ? rowOccupancy.incumbent?.id : incumbentId;
+  const effectiveLoading =
+    mode === "partner" ? rowOccupancy.isFetching : occupancyLoading;
+  const effectiveError =
+    mode === "partner" ? rowOccupancy.isError : occupancyError;
+  const primaryHeldByAnother = !canClaimInvariantSeat(
+    effectiveIncumbentId ?? null,
+    row.id,
+  );
   // The operator is standing on one endpoint, so the row names the OTHER one.
   const title = mode === "project" ? row.partnerTitle : row.projectTitle;
   const slug = mode === "project" ? row.partnerSlug : row.projectSlug;
@@ -285,7 +331,10 @@ function LinkRow({
           loading={mutation.isPending}
           // Claiming an occupied flag can only come back 409, so the control is
           // disabled and the panel's copy names the incumbent instead.
-          disabled={!row.isPrimary && primaryTaken}
+          disabled={
+            !row.isPrimary &&
+            (effectiveLoading || effectiveError || primaryHeldByAnother)
+          }
           onClick={() => {
             const body: UpdateProjectPartnerRequest = {
               isPrimary: !row.isPrimary,
@@ -298,12 +347,14 @@ function LinkRow({
                 meta: { version: row.version },
               },
               {
-                onSuccess: () =>
+                onSuccess: () => {
+                  if (mode === "partner") void rowOccupancy.refetch();
                   onDone(
                     row.isPrimary
                       ? "projectPartners.toast.primaryCleared"
                       : "projectPartners.toast.primarySet",
-                  ),
+                  );
+                },
                 onError: (error) => onErrorKey(primaryErrorKey(error)),
               },
             );
@@ -315,6 +366,18 @@ function LinkRow({
               : "projectPartners.action.setPrimary",
           )}
         </Button>
+      ) : null}
+
+      {mode === "partner" &&
+      row.status === "active" &&
+      !row.isPrimary &&
+      primaryHeldByAnother ? (
+        <p
+          className="text-sm text-muted-foreground"
+          data-testid={`project-partner-row-primary-taken-${row.id}`}
+        >
+          {t("projectPartners.fields.primaryTakenHint")}
+        </p>
       ) : null}
 
       <Button
@@ -361,16 +424,21 @@ function ReverseLinkForm({
   const [projectId, setProjectId] = useState("");
   const [isPrimary, setIsPrimary] = useState(false);
   const { mutate, mutation } = useCustomMutation();
-  const { query: selectedProjectQuery } = useCustom<ProjectPartnerAdminList>({
-    url: projectPartnersUrl.list({ projectId, includeRetired: true }),
-    method: "get",
-    queryOptions: { enabled: projectId.length > 0 },
-  });
-  const selectedProjectRows = selectedProjectQuery.data?.data.data ?? [];
-  const constraintLoading =
-    projectId.length > 0 && selectedProjectQuery.isFetching;
-  const constraintError = projectId.length > 0 && selectedProjectQuery.isError;
-  const primaryTaken = hasActiveProjectPrimaryPartner(selectedProjectRows);
+  const selectedProjectOccupancy =
+    useRelationshipOccupancy<ProjectPartnerAdminDetail>(
+      projectPartnersUrl.list({
+        projectId,
+        isPrimary: true,
+        status: "active",
+        pageSize: 1,
+      }),
+      projectId.length > 0,
+    );
+  const constraintLoading = selectedProjectOccupancy.isFetching;
+  const constraintError = selectedProjectOccupancy.isError;
+  const primaryTaken = !canClaimInvariantSeat(
+    selectedProjectOccupancy.incumbent?.id ?? null,
+  );
 
   return (
     <section
@@ -481,12 +549,16 @@ function LinkForm({
   projectId,
   linkedPartnerIds,
   primaryTaken,
+  occupancyLoading,
+  occupancyError,
   onLinked,
   onError,
 }: {
   projectId: string;
   linkedPartnerIds: string[];
   primaryTaken: boolean;
+  occupancyLoading: boolean;
+  occupancyError: boolean;
   onLinked: () => void;
   onError: (error: unknown) => void;
 }) {
@@ -576,7 +648,7 @@ function LinkForm({
         >
           {t("projectPartners.fields.primaryTakenHint")}
         </p>
-      ) : (
+      ) : !occupancyLoading && !occupancyError ? (
         <Switch
           id="project-partner-link-primary"
           data-testid="project-partner-link-primary"
@@ -585,7 +657,18 @@ function LinkForm({
         >
           {t("projectPartners.fields.isPrimary")}
         </Switch>
-      )}
+      ) : null}
+      {occupancyLoading ? (
+        <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
+      ) : null}
+      {occupancyError ? (
+        <Alert
+          variant="danger"
+          data-testid="project-partner-link-primary-error"
+        >
+          {t("projectPartners.errors.loadFailed")}
+        </Alert>
+      ) : null}
 
       <div>
         <Button
@@ -593,7 +676,9 @@ function LinkForm({
           size="sm"
           data-testid="project-partner-link-submit"
           loading={mutation.isPending}
-          disabled={partnerId.length === 0}
+          disabled={
+            partnerId.length === 0 || occupancyLoading || occupancyError
+          }
           onClick={() => {
             const body: CreateProjectPartnerRequest = {
               projectId,

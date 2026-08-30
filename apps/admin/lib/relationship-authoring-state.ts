@@ -20,16 +20,12 @@ export function relationshipPickerState({
   return { kind: "ready", selectDisabled: false };
 }
 
-/** The selected project's active roster is authoritative for the curator seat. */
-export function hasActiveProjectCurator(
-  rows: readonly { status: string; role: string }[],
+/** A create has no current row; an edit may keep the seat already held by itself. */
+export function canClaimInvariantSeat(
+  incumbentRelationId: string | null,
+  candidateRelationId?: string,
 ): boolean {
-  return rows.some((row) => row.status === "active" && row.role === "curator");
-}
-
-/** The selected project's active roster is authoritative for its primary partner. */
-export function hasActiveProjectPrimaryPartner(
-  rows: readonly { status: string; isPrimary: boolean }[],
-): boolean {
-  return rows.some((row) => row.status === "active" && row.isPrimary === true);
+  return (
+    incumbentRelationId === null || incumbentRelationId === candidateRelationId
+  );
 }

@@ -656,12 +656,16 @@ export const projectExpertsUrl = {
   list: (query: {
     projectId?: string;
     expertId?: string;
+    role?: "curator" | "member";
+    status?: RelationshipStatus;
     includeRetired?: boolean;
     pageSize?: number;
   }) => {
     const params = new URLSearchParams();
     if (query.projectId) params.set("projectId", query.projectId);
     if (query.expertId) params.set("expertId", query.expertId);
+    if (query.role) params.set("role", query.role);
+    if (query.status) params.set("status", query.status);
     if (query.includeRetired) params.set("includeRetired", "true");
     params.set("pageSize", String(query.pageSize ?? ADMIN_LIST_PAGE_SIZE_MAX));
     return `${ADMIN_BASE}/project-experts?${params.toString()}`;
@@ -687,12 +691,18 @@ export const projectPartnersUrl = {
   list: (query: {
     projectId?: string;
     partnerId?: string;
+    isPrimary?: boolean;
+    status?: RelationshipStatus;
     includeRetired?: boolean;
     pageSize?: number;
   }) => {
     const params = new URLSearchParams();
     if (query.projectId) params.set("projectId", query.projectId);
     if (query.partnerId) params.set("partnerId", query.partnerId);
+    if (query.isPrimary !== undefined) {
+      params.set("isPrimary", String(query.isPrimary));
+    }
+    if (query.status) params.set("status", query.status);
     if (query.includeRetired) params.set("includeRetired", "true");
     params.set("pageSize", String(query.pageSize ?? ADMIN_LIST_PAGE_SIZE_MAX));
     return `${ADMIN_BASE}/project-partners?${params.toString()}`;

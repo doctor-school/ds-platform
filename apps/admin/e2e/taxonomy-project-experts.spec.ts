@@ -176,6 +176,19 @@ test.describe("012 EARS-9 — project↔expert relationships in the live admin",
     await expect(page.getByTestId("project-experts-notice")).toContainText(
       "Эксперт добавлен в проект.",
     );
+    const reverseRow = page
+      .getByTestId("project-experts-panel")
+      .locator('[data-testid^="project-expert-row-"]')
+      .filter({ hasText: project.title });
+    const reverseRowId = (await reverseRow.getAttribute(
+      "data-testid",
+    ))!.replace("project-expert-row-", "");
+    await expect(
+      page.getByTestId(`project-expert-role-curator-${reverseRowId}`),
+    ).toBeDisabled();
+    await expect(
+      page.getByTestId(`project-expert-row-seat-taken-${reverseRowId}`),
+    ).toContainText("Заменить куратора");
   });
 
   test("012 EARS-9: an operator composes a project roster, and the curator seat can only be moved by the atomic replace", async ({

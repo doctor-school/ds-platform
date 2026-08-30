@@ -153,6 +153,19 @@ test.describe("012 EARS-10 — project↔partner relationships in the live admin
     await expect(page.getByTestId("project-partners-notice")).toContainText(
       "Партнёр добавлен к проекту.",
     );
+    const reverseRow = page
+      .getByTestId("project-partners-panel")
+      .locator('[data-testid^="project-partner-row-"]')
+      .filter({ hasText: project.title });
+    const reverseRowId = (await reverseRow.getAttribute(
+      "data-testid",
+    ))!.replace("project-partner-row-", "");
+    await expect(
+      page.getByTestId(`project-partner-primary-toggle-${reverseRowId}`),
+    ).toBeDisabled();
+    await expect(
+      page.getByTestId(`project-partner-row-primary-taken-${reverseRowId}`),
+    ).toContainText("Сначала снимите отметку");
   });
 
   test("012 EARS-10: the primary flag is cleared before it is moved, and the panel never offers a second primary", async ({

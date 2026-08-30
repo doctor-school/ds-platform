@@ -174,7 +174,7 @@ async function main(): Promise<void> {
   const uiFiles = files.filter(isUiSourcePath);
   if (uiFiles.length === 0) {
     info(
-      `PR #${pr.number} touches no user-facing UI source (apps/portal|promo|admin|academy-demo, packages/design-system), rule does not apply`,
+      `PR #${pr.number} touches no rendered app or design-system UI source, rule does not apply`,
     );
     process.exit(0);
   }

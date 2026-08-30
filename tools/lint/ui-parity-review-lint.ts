@@ -1,5 +1,5 @@
 #!/usr/bin/env tsx
-/** Pre-merge phase: require the latest Mode (a) canvas comparison artifact. */
+/** Pre-merge phase: require the latest Mode (a) approved-source comparison. */
 import { runUiParityGuard } from "./ui-parity-lint";
 
 process.env.UI_PARITY_REQUIRE_REVIEW = "1";

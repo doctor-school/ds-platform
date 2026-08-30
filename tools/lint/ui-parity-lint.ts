@@ -1,15 +1,25 @@
 #!/usr/bin/env tsx
-/** BLOCK guard for the canvas-parity evidence contract (Issue #1627). */
-import { resolve, dirname } from "node:path";
+/** BLOCK guard for the approved-source parity evidence contract (Issue #1627). */
+import { existsSync, statSync } from "node:fs";
+import { dirname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { ghViewJson } from "./lib/gh";
 import { isUiSourcePath } from "./lib/ui-surface";
 
 const TAG = "[ui-parity]";
-const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
+const DEFAULT_REPO_ROOT = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  "..",
+  "..",
+);
+const REPO_ROOT = process.env.LINT_FIXTURE_ROOT
+  ? resolve(process.env.LINT_FIXTURE_ROOT)
+  : DEFAULT_REPO_ROOT;
 const MODE_A_HEADER_RE = /^## Mode \(a\) Review\b/im;
 const MODE_A_VERDICT_RE = /^VERDICT:\s*(?:APPROVE|REQUEST_CHANGES)\b/im;
+const PLACEHOLDER_RE =
+  /^(?:inspected|checked|tbd|todo|n\/?a|none|same|approved)$/i;
 
 interface GhReview {
   body?: string;
@@ -36,24 +46,74 @@ function isArtifactLink(value: string | null): boolean {
   return Boolean(value && /https?:\/\/\S+/i.test(value));
 }
 
-export function bodyEvidenceVerdict(body: string): Verdict {
+function canvasExists(source: string, repoRoot: string): boolean {
+  if (!/^design-source\/[A-Za-z0-9._/-]+\.dc\.html$/i.test(source))
+    return false;
+  const absolute = resolve(repoRoot, source);
+  const designRoot = resolve(repoRoot, "design-source");
+  const inside = relative(designRoot, absolute);
+  return (
+    Boolean(inside) &&
+    !inside.startsWith("..") &&
+    existsSync(absolute) &&
+    statSync(absolute).isFile()
+  );
+}
+
+function exactState(value: string | null): boolean {
+  return Boolean(
+    value &&
+    value.length >= 8 &&
+    !PLACEHOLDER_RE.test(value) &&
+    /(?:=|:|\/|\bmode\b|\bstate\b|\bcomposition\b|\b(?:loading|empty|filled)\b)/i.test(
+      value,
+    ),
+  );
+}
+
+export function bodyEvidenceVerdict(
+  body: string,
+  repoRoot = REPO_ROOT,
+): Verdict {
   const missing: string[] = [];
-  const source = marker(body, "canvas-source");
-  const state = marker(body, "canvas-state");
-  if (!source || !/^design-source\/[^\s]+\.dc\.html(?:\s|$)/i.test(source))
-    missing.push("exact canvas-source: design-source/*.dc.html");
-  if (
-    !state ||
-    /^(?:inspected|checked|tbd|todo|n\/?a|none)$/i.test(state) ||
-    !/(?:=|:|\bmode\b|\bstate\b)/i.test(state)
-  )
-    missing.push("exact canvas-state (for example mode=past)");
+  const kind = marker(body, "ui-source-kind");
+  const source = marker(body, "ui-source");
+  const state = marker(body, "ui-source-state");
+
+  if (kind === "canvas") {
+    if (!source || !canvasExists(source, repoRoot))
+      missing.push("existing exact ui-source: design-source/*.dc.html");
+  } else if (kind === "approved-non-canvas") {
+    if (
+      !source ||
+      !/(?:#\d+|https?:\/\/\S+|[A-Za-z0-9._-]+\/[A-Za-z0-9._/-]+)/i.test(source)
+    )
+      missing.push("exact approved artifact/reference in ui-source");
+    const reason = marker(body, "ui-source-reason");
+    if (
+      !reason ||
+      reason.length < 24 ||
+      !/\b(?:no canvas|non-canvas)\b/i.test(reason) ||
+      !/\b(?:approved|composition|artifact|source)\b/i.test(reason)
+    )
+      missing.push("reasoned approved non-canvas source justification");
+    if (
+      !state ||
+      state.length < 24 ||
+      !/\b(?:composition|state|screen|surface)\b/i.test(state)
+    )
+      missing.push("exact approved non-canvas state/composition");
+  } else {
+    missing.push("ui-source-kind: canvas or approved-non-canvas");
+  }
+  if (!exactState(state))
+    missing.push("exact ui-source-state/state composition");
 
   const renderNames = [
-    "canvas-render-desktop-light",
-    "canvas-render-desktop-dark",
-    "canvas-render-mobile-light",
-    "canvas-render-mobile-dark",
+    "ui-render-desktop-light",
+    "ui-render-desktop-dark",
+    "ui-render-mobile-light",
+    "ui-render-mobile-dark",
   ];
   const renders = renderNames.map((name) => marker(body, name));
   renderNames.forEach((name, index) => {
@@ -65,7 +125,7 @@ export function bodyEvidenceVerdict(body: string): Verdict {
   if (new Set(links).size !== links.length)
     missing.push("four distinct viewport/theme evidence links");
 
-  const interactions = marker(body, "canvas-interactions");
+  const interactions = marker(body, "ui-interactions");
   const reasonedNa = Boolean(
     interactions &&
     /^n\/?a\b/i.test(interactions) &&
@@ -82,28 +142,27 @@ export function latestModeAComparisonVerdict(
   reviews: GhReview[] | null | undefined,
   prBody: string,
 ): Verdict {
-  const modeAReviews = (reviews ?? [])
-    .filter(
-      (review) =>
-        MODE_A_HEADER_RE.test(review.body ?? "") &&
-        MODE_A_VERDICT_RE.test(review.body ?? ""),
-    )
-    .sort(
-      (a, b) =>
-        Date.parse(b.submittedAt ?? "1970-01-01") -
-        Date.parse(a.submittedAt ?? "1970-01-01"),
-    );
-  const latest = modeAReviews[0]?.body ?? "";
-  const source = marker(prBody, "canvas-source");
-  const state = marker(prBody, "canvas-state");
+  const latest =
+    (reviews ?? [])
+      .filter(
+        (review) =>
+          MODE_A_HEADER_RE.test(review.body ?? "") &&
+          MODE_A_VERDICT_RE.test(review.body ?? ""),
+      )
+      .sort(
+        (a, b) =>
+          Date.parse(b.submittedAt ?? "1970-01-01") -
+          Date.parse(a.submittedAt ?? "1970-01-01"),
+      )[0]?.body ?? "";
   const missing: string[] = [];
   if (!latest)
     return { ok: false, missing: ["latest structured Mode (a) review"] };
-  if (!source || marker(latest, "canvas-source") !== source)
-    missing.push("comparison against the submitted canvas-source");
-  if (!state || marker(latest, "canvas-state") !== state)
-    missing.push("comparison against the submitted canvas-state");
-  const artifacts = marker(latest, "canvas-artifacts-compared") ?? "";
+  for (const name of ["ui-source-kind", "ui-source", "ui-source-state"]) {
+    const submitted = marker(prBody, name);
+    if (!submitted || marker(latest, name) !== submitted)
+      missing.push(`comparison against the submitted ${name}`);
+  }
+  const artifacts = marker(latest, "ui-artifacts-compared") ?? "";
   for (const name of [
     "desktop-light",
     "desktop-dark",
@@ -113,13 +172,17 @@ export function latestModeAComparisonVerdict(
   ])
     if (!artifacts.toLowerCase().includes(name))
       missing.push(`${name} artifact comparison`);
-  const applicability = marker(latest, "canvas-source-applicability") ?? "";
+  const applicability = marker(latest, "ui-source-applicability") ?? "";
   if (
-    !/(?:appl(?:y|ies|icable)|approved)/i.test(applicability) ||
-    !/(?:surface|apps\/|portal|promo|admin|academy)/i.test(applicability)
+    applicability.length < 24 ||
+    !/(?:appl(?:y|ies|icable)|approved|purpose)/i.test(applicability) ||
+    !/(?:surface|screen|composition|app|render)/i.test(applicability) ||
+    !/(?:purpose|audience|workflow|operator|patient|doctor|catalog|documentation)/i.test(
+      applicability,
+    )
   )
     missing.push("source applicability/purpose-fit for the touched surface");
-  const result = marker(latest, "canvas-comparison-result") ?? "";
+  const result = marker(latest, "ui-comparison-result") ?? "";
   if (
     !/\b(?:match|mismatch|diverg)/i.test(result) ||
     !/(?:element-by-element|geometry|presentation|values|states)/i.test(result)
@@ -163,7 +226,7 @@ export async function runUiParityGuard(): Promise<void> {
   const bodyVerdict = bodyEvidenceVerdict(pr.body ?? "");
   if (!bodyVerdict.ok)
     fail(
-      `PR #${pr.number} lacks canvas parity evidence: ${bodyVerdict.missing.join("; ")}`,
+      `PR #${pr.number} lacks approved-source parity evidence: ${bodyVerdict.missing.join("; ")}`,
     );
   if (process.env.UI_PARITY_REQUIRE_REVIEW === "1") {
     const reviewVerdict = latestModeAComparisonVerdict(
@@ -172,12 +235,12 @@ export async function runUiParityGuard(): Promise<void> {
     );
     if (!reviewVerdict.ok)
       fail(
-        `latest Mode (a) review lacks explicit comparison against the submitted canvas artifacts: ${reviewVerdict.missing.join("; ")}`,
+        `latest Mode (a) review lacks explicit comparison against the submitted UI source artifacts: ${reviewVerdict.missing.join("; ")}`,
       );
-    info(`PR #${pr.number} latest Mode (a) canvas comparison evidence OK`);
+    info(`PR #${pr.number} latest Mode (a) source comparison evidence OK`);
     return;
   }
-  info(`PR #${pr.number} canvas parity body evidence OK`);
+  info(`PR #${pr.number} approved-source parity body evidence OK`);
 }
 
 const INVOKED = process.argv[1] ? resolve(process.argv[1]) : "";

@@ -1,6 +1,6 @@
 ---
 title: "run-iteration-end-checklist"
-description: "Procedural skill (dispatch): subagent verifies the 15-item iteration-end checklist and returns a PASS/BLOCKED verdict. Primary enforcement for F-15; item 12 enforces F-22; item 15 enforces canvas-parity evidence."
+description: "Procedural skill (dispatch): subagent verifies the 15-item iteration-end checklist and returns a PASS/BLOCKED verdict. Primary enforcement for F-15; item 12 enforces F-22; item 15 enforces approved-source parity evidence."
 name: run-iteration-end-checklist
 mode: dispatch
 ---
@@ -46,14 +46,11 @@ For each of the 15 items below, return one of: **PASS** / **FAIL** (with one-lin
 
 ### Canvas-parity evidence contract (BLOCK)
 
-For every non-exempt UI-source change, the PR body MUST carry all of:
+For every non-exempt UI-source change, the PR body MUST select exactly one approved-source route: `ui-source-kind: canvas` with `ui-source: design-source/<exact-file>.dc.html` (the repo path MUST exist) and `ui-source-state: <exact state/mode>`; or `ui-source-kind: approved-non-canvas` with `ui-source: <exact durable approved artifact/reference>`, `ui-source-state: <exact state/composition>`, and `ui-source-reason: <why no canvas owns this surface and why this source is authoritative>`. Canvas-derived work MUST use the canvas route; the non-canvas route cannot substitute for an existing canvas (including #1346). The non-canvas route supports approved compositions such as #1282/#1337 with design-system states from #1578; never invent a fake canvas merely to satisfy the gate.
 
-- `canvas-source: design-source/<exact-file>.dc.html`
-- `canvas-state: <exact state/mode>`
-- four distinct evidence links: `canvas-render-desktop-light:`, `canvas-render-desktop-dark:`, `canvas-render-mobile-light:`, and `canvas-render-mobile-dark:`
-- `canvas-interactions:` with a driven hover/active/focus-visible evidence link, or `N/A — no interactive elements or states <reason>` only when the named canvas state contains none.
+Both routes MUST also carry four distinct evidence links (`ui-render-desktop-light:`, `ui-render-desktop-dark:`, `ui-render-mobile-light:`, `ui-render-mobile-dark:`) and `ui-interactions:` with driven hover/active/focus-visible evidence, or `N/A — no interactive elements or states <reason>` only when the exact source state contains none.
 
-The latest structured Mode (a) review MUST repeat the same `canvas-source:` and `canvas-state:`, record `canvas-source-applicability:` confirming that the named approved artifact applies to the touched app/surface and its purpose, list `canvas-artifacts-compared: desktop-light, desktop-dark, mobile-light, mobile-dark, interactions`, and record `canvas-comparison-result:` with an explicit element-by-element comparison of geometry, values, presentation, and driven states. “Inspected”, token/a11y/test results, or a stale earlier review are not comparison evidence. This contract automates missing-evidence failure only; it never infers, synthesizes, or replaces the product owner’s independent `Stage-B: GO`.
+The latest structured Mode (a) review MUST repeat the same `ui-source-kind:`, `ui-source:`, and `ui-source-state:`, record `ui-source-applicability:` confirming that the named approved artifact applies to the touched app/surface and its purpose, list `ui-artifacts-compared: desktop-light, desktop-dark, mobile-light, mobile-dark, interactions`, and record `ui-comparison-result:` with an explicit element-by-element comparison of geometry, values, presentation, and driven states. “Inspected”, token/a11y/test results, or a stale earlier review are not comparison evidence. This contract automates missing-evidence failure only; it never infers, synthesizes, or replaces the product owner’s independent `Stage-B: GO`.
 
 ### Output (mandatory format)
 
@@ -71,7 +68,7 @@ A markdown report:
 | 12 | vertical-slice DoD | N/A | backend-only spec / not last handler |
 | 13 | field validation + mask | N/A | no user-input field touched |
 | 14 | registry-research marker | N/A | no bespoke UI element added |
-| 15 | canvas-parity evidence | N/A | no UI source changed |
+| 15 | approved-source parity evidence | N/A | no UI source changed |
 
 VERDICT: <N> of 15 — <PASS | BLOCKED on #X[, #Y]>
 ```

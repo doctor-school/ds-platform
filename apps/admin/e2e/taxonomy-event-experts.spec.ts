@@ -90,7 +90,9 @@ async function openAddDialog(page: Page, expertName: string): Promise<void> {
   await page.getByTestId("event-expert-add-form").waitFor({ state: "visible" });
   // The narrowing runs on the API (`?q=`), not over a page held in the browser,
   // so the assertion is that the SERVER's answer reached the dropdown.
-  await page.getByTestId("event-expert-search").fill(expertName);
+  await page
+    .getByTestId("event-expert-search")
+    .fill(expertName.split(" ")[0]!);
   await expect(
     page
       .getByTestId("event-expert-select")

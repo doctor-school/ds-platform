@@ -4,6 +4,7 @@ import {
   ConfigureStreamRequestSchema,
   CreateEventRequestSchema,
   EVENT_LIFECYCLE_STATES,
+  EventAdminListQuerySchema,
   isPubliclyReachable,
   LIFECYCLE_TRANSITIONS,
   MONTH_BROADCAST_STATES,
@@ -41,6 +42,18 @@ const VALID_EMBED_REFS: Record<(typeof STREAM_PROVIDERS)[number], string> = {
     "https://playercdn.cdnvideo.ru/aloha/players/auto_player1.html?clid=kcta544ubo&plid=c263cdf6-253e-400b-a008-d1775d3ee190",
 };
 describe("007 events schema", () => {
+  it("EARS-22: admin event search is a strict paged server contract", () => {
+    expect(
+      EventAdminListQuerySchema.parse({ page: "2", pageSize: "25", q: "  Кардио  " }),
+    ).toEqual({ page: 2, pageSize: 25, q: "Кардио" });
+    expect(EventAdminListQuerySchema.safeParse({ pageSize: "101" }).success).toBe(
+      false,
+    );
+    expect(EventAdminListQuerySchema.safeParse({ status: "draft" }).success).toBe(
+      false,
+    );
+  });
+
   describe("mskLocalToInstant (EARS-1/EARS-10 — one canonical instant)", () => {
     it("folds a МСК wall-clock into the UTC instant (UTC+3, no DST)", () => {
       expect(mskLocalToInstant("2026-07-17T19:00").toISOString()).toBe(

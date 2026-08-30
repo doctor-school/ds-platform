@@ -55,6 +55,17 @@ You are a code reviewer for the DS Platform monorepo. You operate in Mode (a) pe
 
 ### Output (mandatory format)
 
+### Canvas-parity evidence contract (BLOCK)
+
+For every non-exempt UI-source change, the PR body MUST carry all of:
+
+- `canvas-source: design-source/<exact-file>.dc.html`
+- `canvas-state: <exact state/mode>`
+- four distinct evidence links: `canvas-render-desktop-light:`, `canvas-render-desktop-dark:`, `canvas-render-mobile-light:`, and `canvas-render-mobile-dark:`
+- `canvas-interactions:` with a driven hover/active/focus-visible evidence link, or `N/A — no interactive elements or states <reason>` only when the named canvas state contains none.
+
+The latest structured Mode (a) review MUST repeat the same `canvas-source:` and `canvas-state:`, record `canvas-source-applicability:` confirming that the named approved artifact applies to the touched app/surface and its purpose, list `canvas-artifacts-compared: desktop-light, desktop-dark, mobile-light, mobile-dark, interactions`, and record `canvas-comparison-result:` with an explicit element-by-element comparison of geometry, values, presentation, and driven states. “Inspected”, token/a11y/test results, or a stale earlier review are not comparison evidence. This contract automates missing-evidence failure only; it never infers, synthesizes, or replaces the product owner’s independent `Stage-B: GO`.
+
 Post the report as a PR comment via `gh pr review <N> --comment --body-file <file>`. The comment body must include this header:
 
 ```

@@ -53,6 +53,7 @@ import { parseModeAExempt } from "../gh/merge-gate.mjs";
  */
 export const GUARDS = [
   { name: "registry-research", file: "registry-research-lint.ts" },
+  { name: "ui-parity", file: "ui-parity-lint.ts" },
   { name: "spec-link", file: "spec-link-lint.ts" },
   { name: "prior-decisions", file: "prior-decisions-lint.ts" },
   { name: "spec-status-fresh", file: "spec-status-lint.ts" },
@@ -93,7 +94,13 @@ export const GUARDS = [
  * approval, which happens just before merge, so at create time there is nothing
  * to check yet.
  */
-export const MERGE_GUARDS = [{ name: "stage-b", file: "stage-b-lint.ts" }];
+export const MERGE_GUARDS = [
+  { name: "stage-b", file: "stage-b-lint.ts" },
+  {
+    name: "ui-parity-review",
+    file: "ui-parity-review-lint.ts",
+  },
+];
 
 /**
  * The deterministic CI merge gate (#836) — `tools/gh/merge-gate.mjs`, run last
@@ -282,7 +289,7 @@ function runGuard(guard, root, extraEnv) {
     ["exec", "tsx", resolve(root, "tools", "lint", guard.file)],
     {
       cwd: root,
-      env: { ...process.env, ...extraEnv },
+      env: { ...process.env, ...extraEnv, ...(guard.env ?? {}) },
       stdio: "inherit",
       encoding: "utf8",
       shell: process.platform === "win32",
@@ -331,7 +338,7 @@ function main() {
 
   if (runMergeGate) {
     out(
-      `running ${MERGE_GUARDS.length} pre-merge gate guard(s) (Stage-B) vs live PR #${prNumber}…`,
+      `running ${MERGE_GUARDS.length} pre-merge gate guard(s) (Stage-B + UI parity) vs live PR #${prNumber}…`,
     );
     for (const g of MERGE_GUARDS) results.push(runGuard(g, root, prEnv));
 

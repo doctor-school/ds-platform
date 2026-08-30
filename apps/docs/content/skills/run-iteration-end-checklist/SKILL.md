@@ -1,6 +1,6 @@
 ---
 title: "run-iteration-end-checklist"
-description: "Procedural skill (dispatch): subagent verifies the 14-item iteration-end checklist and returns a PASS/BLOCKED verdict. Primary enforcement for F-15; item 12 enforces F-22 (vertical-slice DoD); item 14 enforces the registry-research artifact before PR."
+description: "Procedural skill (dispatch): subagent verifies the 15-item iteration-end checklist and returns a PASS/BLOCKED verdict. Primary enforcement for F-15; item 12 enforces F-22; item 15 enforces canvas-parity evidence."
 name: run-iteration-end-checklist
 mode: dispatch
 ---
@@ -15,7 +15,7 @@ The body below is the **subagent prompt**. The lead agent dispatches a fresh-con
 
 ## Subagent prompt
 
-You are a verification subagent. Your sole job is to verify the 14-item iteration-end checklist and return a structured verdict. You do not fix anything; you do not push; you do not merge. You produce a report.
+You are a verification subagent. Your sole job is to verify the 15-item iteration-end checklist and return a structured verdict. You do not fix anything; you do not push; you do not merge. You produce a report.
 
 ### Input (from the lead agent's message)
 
@@ -25,7 +25,7 @@ You are a verification subagent. Your sole job is to verify the 14-item iteratio
 
 ### Procedure
 
-For each of the 14 items below, return one of: **PASS** / **FAIL** (with one-line reason) / **N/A** (with one-line reason).
+For each of the 15 items below, return one of: **PASS** / **FAIL** (with one-line reason) / **N/A** (with one-line reason).
 
 1. `pnpm test` — green (unit + e2e where applicable).
 2. `pnpm generate:all && git diff --exit-code` — no drift in generated artifacts.
@@ -41,6 +41,19 @@ For each of the 14 items below, return one of: **PASS** / **FAIL** (with one-lin
 12. **Vertical-slice DoD (conditional — closes F-22).** Applies **only** when (a) the feature-spec's `surface:` frontmatter is `user-facing` **and** (b) this iteration closes the **last** open `kind:ears-handler`/`kind:integration` Issue of that spec (the lead agent states this in the dispatch message; if unstated, check the spec's `issues:` graph). When it applies: the user journey must be completable end-to-end — the browser/E2E row of the Verification matrix is green — **or** the remaining gap is a tracked open Issue named in the verdict. FAIL if the journey is not completable and no Issue tracks the gap (this is the "five green backend handlers over a non-functional product" failure). The Issue mandate here is an **instance of the AGENTS.md §6 significance threshold**, not a separate rule: an incomplete vertical slice blocks a product deliverable, so it sits above the threshold by definition — a `DEBT.md` ledger line is never a valid substitute for this gap. Report **N/A** when `surface: backend-only`, or when this iteration is not the spec's last handler.
 13. **Field validation + input mask (conditional).** For every user-input field added or changed: a relevant client-side validation rule **and** input mask are declared (or `none` with a one-line reason), and a live browser check exercised one reject + one accept per field. Prefer the shared field primitives (#197) over raw inputs. FAIL if a touched field ships with no declared rule/mask and no `none`-with-reason, or with no live reject/accept check. Report **N/A** when the iteration touches no user-input field.
 14. **Registry-research marker (conditional).** When the diff adds any **bespoke** UI element under a UI surface (`apps/portal/`, `apps/promo/`, `apps/admin/`, `packages/design-system/`), the PR body carries the `registry-research:` artifact (`adopted <block> from <registry>` or `bespoke — <which registries searched, why no fit>`) — written **before** the PR is opened, not reactively after the `registry-research` CI gate goes red. FAIL if a bespoke UI element ships with no marker. Report **N/A** when the diff touches no UI source, or adds no bespoke element (pure refactor/adoption of an existing owned primitive). Format is lint-enforced by `tools/lint/registry-research-lint.ts`; memory `feedback_registry_research_before_bespoke_ui`.
+
+15. **Canvas-parity evidence (conditional).** Apply the following contract to every non-exempt UI-source change; otherwise report N/A.
+
+### Canvas-parity evidence contract (BLOCK)
+
+For every non-exempt UI-source change, the PR body MUST carry all of:
+
+- `canvas-source: design-source/<exact-file>.dc.html`
+- `canvas-state: <exact state/mode>`
+- four distinct evidence links: `canvas-render-desktop-light:`, `canvas-render-desktop-dark:`, `canvas-render-mobile-light:`, and `canvas-render-mobile-dark:`
+- `canvas-interactions:` with a driven hover/active/focus-visible evidence link, or `N/A — no interactive elements or states <reason>` only when the named canvas state contains none.
+
+The latest structured Mode (a) review MUST repeat the same `canvas-source:` and `canvas-state:`, record `canvas-source-applicability:` confirming that the named approved artifact applies to the touched app/surface and its purpose, list `canvas-artifacts-compared: desktop-light, desktop-dark, mobile-light, mobile-dark, interactions`, and record `canvas-comparison-result:` with an explicit element-by-element comparison of geometry, values, presentation, and driven states. “Inspected”, token/a11y/test results, or a stale earlier review are not comparison evidence. This contract automates missing-evidence failure only; it never infers, synthesizes, or replaces the product owner’s independent `Stage-B: GO`.
 
 ### Output (mandatory format)
 
@@ -58,8 +71,9 @@ A markdown report:
 | 12 | vertical-slice DoD | N/A | backend-only spec / not last handler |
 | 13 | field validation + mask | N/A | no user-input field touched |
 | 14 | registry-research marker | N/A | no bespoke UI element added |
+| 15 | canvas-parity evidence | N/A | no UI source changed |
 
-VERDICT: <N> of 14 — <PASS | BLOCKED on #X[, #Y]>
+VERDICT: <N> of 15 — <PASS | BLOCKED on #X[, #Y]>
 ```
 
 `VERDICT: PASS` is allowed only when every item is PASS or N/A. Any single FAIL → `VERDICT: BLOCKED on #X`.

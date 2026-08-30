@@ -25,6 +25,7 @@ describe("pr-preflight GUARDS roster", () => {
   it("runs exactly the PR-event-gated guards", () => {
     expect(GUARDS.map((g) => g.name)).toEqual([
       "registry-research",
+      "ui-parity",
       "spec-link",
       "prior-decisions",
       "spec-status-fresh",
@@ -65,7 +66,10 @@ describe("pr-preflight STATIC_GUARDS roster (#462)", () => {
 
 describe("pr-preflight MERGE_GUARDS roster (#692)", () => {
   it("holds the stage-b pre-merge gate mapped to its entrypoint", () => {
-    expect(MERGE_GUARDS.map((g) => g.name)).toEqual(["stage-b"]);
+    expect(MERGE_GUARDS.map((g) => g.name)).toEqual([
+      "stage-b",
+      "ui-parity-review",
+    ]);
     for (const g of MERGE_GUARDS) expect(g.file).toMatch(/-lint\.ts$/);
   });
 

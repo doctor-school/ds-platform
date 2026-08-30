@@ -32,6 +32,8 @@ import {
 import { OBJECT_STORAGE, type ObjectStorage } from "../storage/index.js";
 import { RecordingsProjectionService } from "../recordings/recordings.projection.js";
 import { SpeakerProjectionService } from "../taxonomy/speaker-projection.service.js";
+import { SpeakerMigrationService } from "../taxonomy/speaker-migration.service.js";
+import { TaxonomyError } from "../taxonomy/taxonomy.errors.js";
 import {
   type EventWithSpeakers,
   EventsRepository,
@@ -490,6 +492,8 @@ export class EventsService {
     private readonly speakerProjection: SpeakerProjectionService,
     @Inject(RecordingsProjectionService)
     private readonly recordingsProjection: RecordingsProjectionService,
+    @Inject(SpeakerMigrationService)
+    private readonly speakerMigration: SpeakerMigrationService,
   ) {}
 
   /**
@@ -502,6 +506,12 @@ export class EventsService {
     input: CreateEventRequest,
     pdf?: UploadedPdf,
   ): Promise<EventAdminDetail> {
+    if ((await this.isSpeakerCutover()) && input.speakers.length > 0) {
+      throw new TaxonomyError(
+        "VALIDATION_FAILED",
+        "free-text event speakers are disabled after canonical speaker cutover",
+      );
+    }
     const slug = slugify(input.title);
 
     const programPdfRef = pdf ? await this.storeProgramPdf(slug, pdf) : null;
@@ -579,6 +589,15 @@ export class EventsService {
     input: UpdateEventRequest,
     pdf?: UploadedPdf,
   ): Promise<EventAdminDetail | null> {
+    if (
+      input.speakers !== undefined &&
+      (await this.isSpeakerCutover())
+    ) {
+      throw new TaxonomyError(
+        "VALIDATION_FAILED",
+        "free-text event speakers are disabled after canonical speaker cutover",
+      );
+    }
     const current = await this.repo.findById(id);
     if (!current) return null;
 
@@ -656,6 +675,10 @@ export class EventsService {
     }
 
     return this.toDetail(updated);
+  }
+
+  private isSpeakerCutover(): Promise<boolean> {
+    return this.speakerMigration.isCutover();
   }
 
   /** `EventAdminList` — all events regardless of state (`platform_admin`-only). */
@@ -1365,6 +1388,7 @@ export class EventsService {
 
   private async toDetail(a: EventWithSpeakers): Promise<EventAdminDetail> {
     const e = a.event;
+    const canonicalSpeakers = await this.speakerProjection.resolve(e.id);
     return {
       id: e.id,
       slug: e.slug,
@@ -1373,10 +1397,10 @@ export class EventsService {
       startsAt: e.startsAt.toISOString(),
       durationMin: e.durationMin,
       description: e.description,
-      speakers: a.speakers
-        .slice()
-        .sort((x, y) => x.position - y.position)
-        .map((s) => ({ name: s.name, regalia: s.regalia })),
+      speakers: canonicalSpeakers.map((speaker) => ({
+        name: speaker.name,
+        regalia: speaker.credentials,
+      })),
       specialties: e.specialties,
       partnerRef: e.partnerRef,
       programPdfRef: e.programPdfRef,

@@ -12,6 +12,7 @@ import type {
 } from "./events.repository.js";
 import type { SpeakerProjectionService } from "../taxonomy/speaker-projection.service.js";
 import type { RecordingsProjectionService } from "../recordings/recordings.projection.js";
+import type { SpeakerMigrationService } from "../taxonomy/speaker-migration.service.js";
 import { EventsService, type UploadedPdf } from "./events.service.js";
 
 // 007 EARS-2 — GC-on-supersede (#627). When a program-PDF replacement commits
@@ -148,6 +149,11 @@ const PREPARING_PROJECTION = {
   posterUrl: null,
   expectedBy: null,
 };
+function speakerMigrationStub(): SpeakerMigrationService {
+  return {
+    isCutover: () => Promise.resolve(false),
+  } as unknown as SpeakerMigrationService;
+}
 
 function service(storage: RecordingStorage, repo: unknown): EventsService {
   return new EventsService(
@@ -162,6 +168,7 @@ function service(storage: RecordingStorage, repo: unknown): EventsService {
         Promise.resolve(new Map(ids.map((id) => [id, PREPARING_PROJECTION]))),
       resolveRecordingProjection: () => Promise.resolve(PREPARING_PROJECTION),
     } as unknown as RecordingsProjectionService,
+    speakerMigrationStub(),
   );
 }
 

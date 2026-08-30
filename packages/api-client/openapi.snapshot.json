@@ -3644,6 +3644,51 @@
         "tags": ["ProjectCuratorAdmin"]
       }
     },
+    "/v1/admin/speaker-migration-reviews": {
+      "get": {
+        "operationId": "SpeakerMigrationAdminController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["SpeakerMigrationAdmin"]
+      }
+    },
+    "/v1/admin/speaker-migration-reviews/{sourceId}/resolve": {
+      "post": {
+        "operationId": "SpeakerMigrationAdminController_resolve",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sourceId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["SpeakerMigrationAdmin"]
+      }
+    },
+    "/v1/admin/speaker-migration-reviews/cutover": {
+      "post": {
+        "operationId": "SpeakerMigrationAdminController_cutover",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["SpeakerMigrationAdmin"]
+      }
+    },
     "/v1/admin/users/{id}/mfa": {
       "delete": {
         "operationId": "AdminUsersController_removeMfaFactor",

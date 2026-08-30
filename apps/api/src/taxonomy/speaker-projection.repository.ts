@@ -1,7 +1,13 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { DrizzleHandle } from "@ds/db";
-import { eventExperts, events, eventSpeakers, experts } from "@ds/db";
+import {
+  eventExperts,
+  events,
+  eventSpeakers,
+  experts,
+  speakerMigrationCutover,
+} from "@ds/db";
 import { PUBLIC_EVENT_STATES } from "@ds/schemas";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
 
@@ -48,6 +54,14 @@ export type PublicEventKey = { id: string } | { slug: string };
 @Injectable()
 export class SpeakerProjectionRepository {
   constructor(@Inject(DRIZZLE_DB) private readonly db: Db) {}
+
+  async isCutover(): Promise<boolean> {
+    const [row] = await this.db
+      .select({ status: speakerMigrationCutover.status })
+      .from(speakerMigrationCutover)
+      .where(eq(speakerMigrationCutover.id, "speaker_migration"));
+    return row?.status === "cutover";
+  }
 
   /**
    * Resolve a public event key to its id under the SAME visibility policy the

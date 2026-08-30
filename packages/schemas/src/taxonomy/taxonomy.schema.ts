@@ -1586,6 +1586,128 @@ export type AdminEventExpertListQuery = z.infer<
   typeof AdminEventExpertListQuerySchema
 >;
 
+// ── Legacy speaker migration review (012 EARS-24, #1607) ───────────────────
+
+export const SPEAKER_MIGRATION_CLASSIFICATIONS = [
+  "unmatched",
+  "ambiguous",
+  "duplicate",
+] as const;
+export const SpeakerMigrationClassificationSchema = z.enum(
+  SPEAKER_MIGRATION_CLASSIFICATIONS,
+);
+
+export const SPEAKER_MIGRATION_DISPOSITIONS = [
+  "unresolved",
+  "existing_expert",
+  "created_expert",
+  "content_removed",
+] as const;
+export const SpeakerMigrationDispositionSchema = z.enum(
+  SPEAKER_MIGRATION_DISPOSITIONS,
+);
+
+export const SpeakerMigrationReviewItemSchema = z
+  .object({
+    sourceId: TaxonomyIdSchema,
+    eventId: TaxonomyIdSchema,
+    sourcePosition: z.number().int().min(0).max(EVENT_EXPERT_POSITION_MAX),
+    sourceName: z.string(),
+    sourceRegalia: z.string(),
+    contentFingerprint: z.string().regex(/^[0-9a-f]{64}$/),
+    originalClassification: SpeakerMigrationClassificationSchema,
+    disposition: SpeakerMigrationDispositionSchema,
+    resolvedExpertId: TaxonomyIdSchema.nullable(),
+    eventExpertId: TaxonomyIdSchema.nullable(),
+    resolvedRole: z.string().nullable(),
+    resolvedPosition: z.number().int().nonnegative().nullable(),
+    reviewerId: z.string().nullable(),
+    reviewedAt: z.string().nullable(),
+    createdAt: z.string(),
+    updatedAt: z.string(),
+  })
+  .strict();
+export type SpeakerMigrationReviewItem = z.infer<
+  typeof SpeakerMigrationReviewItemSchema
+>;
+
+export const SpeakerMigrationReviewListSchema = z
+  .object({
+    data: z.array(SpeakerMigrationReviewItemSchema),
+    total: z.number().int().nonnegative(),
+    page: z.number().int().positive(),
+    pageSize: z.number().int().positive(),
+  })
+  .strict();
+export type SpeakerMigrationReviewList = z.infer<
+  typeof SpeakerMigrationReviewListSchema
+>;
+
+export const SpeakerMigrationReviewListQuerySchema = z
+  .object({
+    page: z.coerce.number().int().min(1).default(1),
+    pageSize: z.coerce.number().int().min(1).max(100).default(25),
+    disposition: SpeakerMigrationDispositionSchema.optional(),
+    classification: SpeakerMigrationClassificationSchema.optional(),
+  })
+  .strict();
+export type SpeakerMigrationReviewListQuery = z.infer<
+  typeof SpeakerMigrationReviewListQuerySchema
+>;
+
+const ExistingExpertResolutionSchema = z
+  .object({
+    disposition: z.literal("existing_expert"),
+    expertId: TaxonomyIdSchema,
+    role: EventExpertRoleSchema,
+    position: z.number().int().min(0).max(EVENT_EXPERT_POSITION_MAX),
+  })
+  .strict();
+
+const CreateExpertResolutionSchema = z
+  .object({
+    disposition: z.literal("created_expert"),
+    expert: z
+      .object({
+        familyName: ExpertPersonNameSchema,
+        givenName: ExpertPersonNameSchema,
+        patronymic: ExpertPersonNameSchema.nullish(),
+        professionalRole: ExpertProfessionalRoleSchema.nullish(),
+      })
+      .strict(),
+    role: EventExpertRoleSchema,
+    position: z.number().int().min(0).max(EVENT_EXPERT_POSITION_MAX),
+  })
+  .strict();
+
+const ContentRemovedResolutionSchema = z
+  .object({ disposition: z.literal("content_removed") })
+  .strict();
+
+export const ResolveSpeakerMigrationReviewRequestSchema = z.discriminatedUnion(
+  "disposition",
+  [
+    ExistingExpertResolutionSchema,
+    CreateExpertResolutionSchema,
+    ContentRemovedResolutionSchema,
+  ],
+);
+export type ResolveSpeakerMigrationReviewRequest = z.infer<
+  typeof ResolveSpeakerMigrationReviewRequestSchema
+>;
+
+export const SpeakerMigrationCutoverResultSchema = z
+  .object({
+    status: z.literal("cutover"),
+    resolved: z.number().int().nonnegative(),
+    contentRemoved: z.number().int().nonnegative(),
+    completedAt: z.string(),
+  })
+  .strict();
+export type SpeakerMigrationCutoverResult = z.infer<
+  typeof SpeakerMigrationCutoverResultSchema
+>;
+
 // ── Errors (012-design §5.3) ─────────────────────────────────────────────────
 
 /**

@@ -613,6 +613,124 @@ export const eventExperts = pgTable(
 export type EventExpert = typeof eventExperts.$inferSelect;
 export type NewEventExpert = typeof eventExperts.$inferInsert;
 
+/** Original, operator-facing classification retained for the migration review. */
+export const speakerMigrationClassification = pgEnum(
+  "speaker_migration_classification",
+  ["unmatched", "ambiguous", "duplicate"],
+);
+
+/** Terminal resolution chosen explicitly by the reviewing operator. */
+export const speakerMigrationDisposition = pgEnum(
+  "speaker_migration_disposition",
+  ["unresolved", "existing_expert", "created_expert", "content_removed"],
+);
+
+/** Singleton lifecycle of the guarded legacy-speaker cutover. */
+export const speakerMigrationCutoverStatus = pgEnum(
+  "speaker_migration_cutover_status",
+  ["pre_cutover", "cutover"],
+);
+
+/**
+ * Every retained legacy speaker has exactly one review row. Source fields are a
+ * snapshot, not a second editable copy: the migration trigger pins them forever
+ * while resolution columns move once from `unresolved` to a terminal state.
+ */
+export const speakerMigrationReviews = pgTable(
+  "speaker_migration_reviews",
+  {
+    sourceSpeakerId: uuid("source_speaker_id").primaryKey(),
+    eventId: uuid("event_id")
+      .notNull()
+      .references(() => events.id, { onDelete: "restrict" }),
+    sourcePosition: integer("source_position").notNull(),
+    sourceName: text("source_name").notNull(),
+    sourceRegalia: text("source_regalia").notNull(),
+    contentFingerprint: text("content_fingerprint").notNull(),
+    originalClassification: speakerMigrationClassification(
+      "original_classification",
+    ).notNull(),
+    disposition: speakerMigrationDisposition("disposition")
+      .notNull()
+      .default("unresolved"),
+    resolvedExpertId: uuid("resolved_expert_id").references(() => experts.id, {
+      onDelete: "restrict",
+    }),
+    eventExpertId: uuid("event_expert_id").references(() => eventExperts.id, {
+      onDelete: "restrict",
+    }),
+    resolvedRole: text("resolved_role"),
+    resolvedPosition: integer("resolved_position"),
+    reviewerId: text("reviewer_id"),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    foreignKey({
+      name: "speaker_migration_reviews_source_fk",
+      columns: [t.eventId, t.sourceSpeakerId],
+      foreignColumns: [eventSpeakers.eventId, eventSpeakers.id],
+    }).onDelete("restrict"),
+    uniqueIndex("speaker_migration_reviews_event_expert_key").on(t.eventExpertId),
+    index("speaker_migration_reviews_queue_idx").on(
+      t.disposition,
+      t.createdAt,
+      t.sourceSpeakerId,
+    ),
+    check(
+      "speaker_migration_reviews_fingerprint_shape",
+      sql`${t.contentFingerprint} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      "speaker_migration_reviews_source_position_bounds",
+      sql`${t.sourcePosition} BETWEEN ${sql.raw(String(EVENT_EXPERT_POSITION_MIN))} AND ${sql.raw(String(EVENT_EXPERT_POSITION_MAX))}`,
+    ),
+    check(
+      "speaker_migration_reviews_resolution_shape",
+      sql`(
+        (${t.disposition} = 'unresolved' AND ${t.resolvedExpertId} IS NULL AND ${t.eventExpertId} IS NULL AND ${t.resolvedRole} IS NULL AND ${t.resolvedPosition} IS NULL AND ${t.reviewerId} IS NULL AND ${t.reviewedAt} IS NULL)
+        OR
+        (${t.disposition} IN ('existing_expert', 'created_expert') AND ${t.resolvedExpertId} IS NOT NULL AND ${t.eventExpertId} IS NOT NULL AND ${t.resolvedRole} IS NOT NULL AND ${t.resolvedPosition} IS NOT NULL AND ${t.reviewerId} IS NOT NULL AND ${t.reviewedAt} IS NOT NULL)
+        OR
+        (${t.disposition} = 'content_removed' AND ${t.resolvedExpertId} IS NULL AND ${t.eventExpertId} IS NULL AND ${t.resolvedRole} IS NULL AND ${t.resolvedPosition} IS NULL AND ${t.reviewerId} IS NOT NULL AND ${t.reviewedAt} IS NOT NULL)
+      )`,
+    ),
+  ],
+);
+
+export type SpeakerMigrationReview = typeof speakerMigrationReviews.$inferSelect;
+
+/** One retained singleton proving whether legacy speaker boundaries are closed. */
+export const speakerMigrationCutover = pgTable(
+  "speaker_migration_cutover",
+  {
+    id: text("id").primaryKey().default("speaker_migration"),
+    status: speakerMigrationCutoverStatus("status")
+      .notNull()
+      .default("pre_cutover"),
+    completedBy: text("completed_by"),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    check("speaker_migration_cutover_singleton", sql`${t.id} = 'speaker_migration'`),
+    check(
+      "speaker_migration_cutover_completion_shape",
+      sql`(${t.status} = 'cutover') = (${t.completedBy} IS NOT NULL AND ${t.completedAt} IS NOT NULL)`,
+    ),
+  ],
+);
+
 /**
  * `event_projects` — the retained event↔project relationship (012 EARS-6,
  * #1288), and the first join table of the feature.

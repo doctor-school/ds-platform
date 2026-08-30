@@ -57,6 +57,9 @@ import { PublicProjectSummaryService } from "./public-project-summary.service.js
 import { EventSpeakersPublicController } from "./speaker-projection.public.controller.js";
 import { SpeakerProjectionRepository } from "./speaker-projection.repository.js";
 import { SpeakerProjectionService } from "./speaker-projection.service.js";
+import { SpeakerMigrationAdminController } from "./speaker-migration.admin.controller.js";
+import { SpeakerMigrationRepository } from "./speaker-migration.repository.js";
+import { SpeakerMigrationService } from "./speaker-migration.service.js";
 import { TaxonomyProblemFilter } from "./taxonomy.problem-filter.js";
 import { DirectionsAdminController } from "./directions.admin.controller.js";
 import { DirectionsRepository } from "./directions.repository.js";
@@ -117,6 +120,7 @@ import { DirectionsService } from "./directions.service.js";
     // projection. Same reasoning: the merge policy is the taxonomy's, the
     // event contributes only the parent key.
     EventSpeakersPublicController,
+    SpeakerMigrationAdminController,
     // #1483 (ADR-0016 §2.8) — the two direction reference relations: which
     // Минздрав specialties a direction serves, and which directions are
     // adjacent to it. They live here because a direction is a taxonomy entity
@@ -155,6 +159,8 @@ import { DirectionsService } from "./directions.service.js";
     EventDirectionsService,
     SpeakerProjectionRepository,
     SpeakerProjectionService,
+    SpeakerMigrationRepository,
+    SpeakerMigrationService,
     DirectionSpecialtiesRepository,
     DirectionSpecialtiesService,
     DirectionAdjacencyRepository,
@@ -173,6 +179,7 @@ import { DirectionsService } from "./directions.service.js";
     // listing (events module) read speakers through THIS resolver. Exporting it
     // is what makes «one canonical resolver» enforceable rather than aspirational.
     SpeakerProjectionService,
+    SpeakerMigrationService,
     // Exported for the sibling relationship verticals (#1295 / #1296): they
     // adopt this exact envelope rather than re-deriving a token format.
     LifecycleImpactService,

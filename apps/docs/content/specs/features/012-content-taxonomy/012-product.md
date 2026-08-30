@@ -82,9 +82,9 @@ Two consequences the downstream EARS spec inherits:
 
 **Review and cut over legacy speakers (US-8, US-18):**
 
-1. Every retained source row appears once in a paginated review queue with immutable provenance and its original unmatched, ambiguous or duplicate classification; the UI never suggests identity from a name.
-2. Operator explicitly selects an existing Expert or creates one with structured names, sets event role/order, or marks the source content-removed. Reviewer and resolution are audited without overwriting the original classification.
-3. Cutover is allowed only after every retained `event_speakers` source row is resolved; then free-text writes and reads are disabled and only ordered `event_experts` remain current.
+1. Every retained source row, including already removed legacy content, appears once in a paginated review queue with immutable provenance. Existing rows receive their original unmatched, ambiguous or duplicate classification only from a complete owner-reviewed stable-source-UUID mapping; a missing, duplicate or extra mapping entry stops migration before mutation, and the UI never derives or suggests identity from any name, User or Expert.
+2. A new legacy row committed before cutover is atomically queued as unmatched. Operator explicitly selects an existing Expert or creates one with structured names, sets event role/order, or marks the source content-removed. Reviewer and resolution are audited without overwriting the original classification, and retained source/review history cannot be deleted.
+3. Serializable cutover locks a closed source set and is allowed only when every retained `event_speakers` row has exactly one resolved review; then every free-text speaker write/read contract is disabled and only ordered `event_experts` remain current.
 
 **Branches:**
 

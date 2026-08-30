@@ -82,9 +82,9 @@ lang: ru
 
 **Review и cutover legacy speakers (US-8, US-18):**
 
-1. Каждая retained source row один раз появляется в paginated review queue с immutable provenance и original classification unmatched, ambiguous или duplicate; UI никогда не предлагает identity по имени.
-2. Оператор явно выбирает existing Expert либо создаёт его со structured names, задаёт event role/order либо marks source content-removed. Reviewer/resolution аудируются без перезаписи original classification.
-3. Cutover разрешён только после resolution каждой retained source row из `event_speakers`; затем free-text writes/reads отключаются и current остаются только ordered `event_experts`.
+1. Каждая retained source row, включая уже удалённый legacy content, один раз появляется в paginated review queue с immutable provenance. Existing rows получают original classification unmatched, ambiguous или duplicate только из полного owner-reviewed mapping по стабильным source UUID; missing, duplicate или extra mapping entry останавливает миграцию до mutation, а UI никогда не выводит и не предлагает identity из имени, User или Expert.
+2. Новая legacy row, committed до cutover, атомарно ставится в queue как unmatched. Оператор явно выбирает existing Expert либо создаёт его со structured names, задаёт event role/order либо marks source content-removed. Reviewer/resolution аудируются без перезаписи original classification, а retained source/review history нельзя удалить.
+3. Serializable cutover блокирует closed source set и разрешён, только когда у каждой retained `event_speakers` row есть ровно один resolved review; затем каждый free-text speaker write/read contract отключается и current остаются только ordered `event_experts`.
 
 **Ветки:**
 

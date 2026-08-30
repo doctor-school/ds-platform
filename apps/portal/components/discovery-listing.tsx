@@ -15,6 +15,25 @@ import { CalendarShell } from "./calendar-shell";
 import { EventListRouter } from "./event-list-router";
 import { ViewSwitcher } from "./view-switcher";
 
+function formatMskMonth(isoInstant: string) {
+  const label = new Intl.DateTimeFormat("ru-RU", {
+    month: "long",
+    year: "numeric",
+    timeZone: "Europe/Moscow",
+  })
+    .format(new Date(isoInstant))
+    .replace(/\s*г\.$/u, "");
+  return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
+function mskMonthKey(isoInstant: string) {
+  return new Intl.DateTimeFormat("sv-SE", {
+    year: "numeric",
+    month: "2-digit",
+    timeZone: "Europe/Moscow",
+  }).format(new Date(isoInstant));
+}
+
 async function fetchRegisteredSlugs(): Promise<ReadonlySet<string>> {
   const h = await headers();
   try {
@@ -56,8 +75,14 @@ export default async function DiscoveryListing({
       "recording" in card ? (card as PastBroadcastCard).recording : null;
     return {
       id: card.id,
-      groupKey: mskDayKey(card.startsAt),
-      groupLabel: formatMskDayLabel(card.startsAt),
+      groupKey:
+        timeframe === "past"
+          ? mskMonthKey(card.startsAt)
+          : mskDayKey(card.startsAt),
+      groupLabel:
+        timeframe === "past"
+          ? formatMskMonth(card.startsAt)
+          : formatMskDayLabel(card.startsAt),
       href: `/webinars/${card.slug}`,
       time: parts.time,
       tzLabel: t("cardTz"),
@@ -72,6 +97,9 @@ export default async function DiscoveryListing({
       live: card.state === "live",
       liveLabel: t("live"),
       recordingLabel: recording ? t(`recording.${recording.state}`) : undefined,
+      variant: timeframe === "past" ? ("past" as const) : ("upcoming" as const),
+      ctaHref: timeframe === "past" ? `/webinars/${card.slug}` : undefined,
+      ctaLabel: timeframe === "past" ? t("recordingCta") : undefined,
       registered: registeredSlugs.has(card.slug),
       registeredLabel: t("registered"),
     };
@@ -118,12 +146,16 @@ export default async function DiscoveryListing({
   return (
     <CalendarShell
       title={t("title")}
-      subtitle={t("subtitle")}
+      subtitle={
+        timeframe === "past"
+          ? t("archiveSubtitle", { count: listing.counts.past })
+          : t("subtitle")
+      }
       taglineTop={t("taglineTop")}
       taglineBottom={t("taglineBottom")}
-      toolbar={toolbar}
+      toolbar={null}
     >
-      <div className="layout:mt-14" data-testid="week-listbody">
+      <div className="-mt-16 layout:mt-0" data-testid="week-listbody">
         <EventListRouter
           items={items}
           selectedTab={timeframe}
@@ -146,6 +178,7 @@ export default async function DiscoveryListing({
           nextCursor={listing.pagination.nextCursor}
           hasMore={listing.pagination.hasMore}
           page={page}
+          toolbar={timeframe === "upcoming" ? toolbar : undefined}
         />
       </div>
     </CalendarShell>

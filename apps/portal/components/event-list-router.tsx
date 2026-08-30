@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   EventList,
@@ -16,6 +17,7 @@ export function EventListRouter({
   nextCursor,
   hasMore,
   page,
+  toolbar,
 }: {
   items: readonly EventListItem[];
   selectedTab: EventListTab;
@@ -34,6 +36,7 @@ export function EventListRouter({
   nextCursor: string | null;
   hasMore: boolean;
   page: number;
+  toolbar?: ReactNode;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -93,6 +96,7 @@ export function EventListRouter({
           }
         })
       }
+      toolbar={toolbar}
     />
   );
 }

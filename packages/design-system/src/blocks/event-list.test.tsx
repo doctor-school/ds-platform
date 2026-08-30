@@ -62,4 +62,49 @@ describe("<EventList>", () => {
     expect(onPageChange).toHaveBeenCalledWith(2, "opaque-current");
     expect(fetchSpy).not.toHaveBeenCalled();
   });
+
+  it("EARS-11: archive mode keeps the canvas tabs ahead of a month-grouped feed", () => {
+    const archiveItem = {
+      ...item,
+      groupKey: "2026-08",
+      groupLabel: "Август 2026",
+      recordingLabel: "Запись готовится",
+      ctaHref: item.href,
+      ctaLabel: "Смотреть запись ↗",
+      variant: "past" as const,
+    };
+
+    const { container } = render(
+      <EventList
+        items={[archiveItem]}
+        selectedTab="past"
+        onTabChange={vi.fn()}
+        counts={{ upcoming: 3, past: 2 }}
+        labels={{
+          upcoming: "Расписание",
+          past: "Архив записей",
+          emptyTitle: "Событий нет",
+          pagination: "Страницы",
+          previous: "Назад",
+          next: "Вперёд",
+          page: (page) => `Страница ${page}`,
+        }}
+        page={1}
+        pageCount={1}
+        onPageChange={vi.fn()}
+      />,
+    );
+
+    const tabs = container.querySelector("[data-event-list-tabs]");
+    const body = container.querySelector("[data-event-list-body]");
+    expect(tabs).not.toBeNull();
+    expect(body).not.toBeNull();
+    expect(
+      tabs!.compareDocumentPosition(body!) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(screen.getAllByText("Август 2026")).toHaveLength(2);
+    expect(
+      screen.getByRole("link", { name: "Смотреть запись ↗" }),
+    ).toHaveAttribute("href", item.href);
+  });
 });

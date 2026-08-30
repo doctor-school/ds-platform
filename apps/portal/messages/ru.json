@@ -253,15 +253,17 @@
     "breadcrumb": "Эфиры",
     "title": "Расписание эфиров",
     "subtitle": "Ближайшие эфиры · время — МСК",
+    "archiveSubtitle": "Архив · {count, plural, one {# запись} few {# записи} many {# записей} other {# записи}} · доступ после входа",
     "taglineTop": "Врачи учат врачей",
     "taglineBottom": "Бесплатно · без бюрократии",
     "cardTz": "МСК",
     "cardDate": "{date} · {weekday}",
     "live": "В эфире",
     "tabs": {
-      "upcoming": "Предстоящие",
-      "past": "Прошедшие"
+      "upcoming": "Расписание",
+      "past": "Архив записей"
     },
+    "recordingCta": "Смотреть запись ↗",
     "recording": {
       "montage": "Запись · монтаж",
       "raw-only": "Запись эфира",

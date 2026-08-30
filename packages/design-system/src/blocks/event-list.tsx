@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { cn } from "../lib/utils";
 import { DayBand } from "../primitives/day-band";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../primitives/tabs";
 import { WebinarCard, type WebinarCardProps } from "../primitives/webinar-card";
@@ -39,6 +40,8 @@ export interface EventListProps {
   pageCount: number;
   cursor?: string | null;
   onPageChange: (page: number, cursor?: string | null) => void;
+  /** Host-owned controls that belong between the canvas tabs and the feed. */
+  toolbar?: React.ReactNode;
 }
 
 /** Shared, controlled and fetch-free event feed for every DS frontend. */
@@ -52,6 +55,7 @@ export function EventList({
   pageCount,
   cursor,
   onPageChange,
+  toolbar,
 }: EventListProps) {
   const groups = React.useMemo(() => {
     const result: Array<{
@@ -77,7 +81,11 @@ export function EventList({
       value={selectedTab}
       onValueChange={(value) => onTabChange(value as EventListTab)}
     >
-      <TabsList>
+      <TabsList
+        className="w-full shadow-lg layout:w-auto"
+        data-event-list-tabs=""
+        data-testid="event-list-tabs"
+      >
         <TabsTrigger value="upcoming">
           {labels.upcoming} · {counts.upcoming}
         </TabsTrigger>
@@ -85,7 +93,12 @@ export function EventList({
           {labels.past} · {counts.past}
         </TabsTrigger>
       </TabsList>
-      <TabsContent value={selectedTab}>
+      <TabsContent
+        value={selectedTab}
+        className="mt-7 layout:mt-8"
+        data-event-list-body=""
+      >
+        {toolbar}
         {groups.length === 0 ? (
           <EmptyState
             variant="no-records"
@@ -93,7 +106,12 @@ export function EventList({
             description={labels.emptyDescription}
           />
         ) : (
-          <div className="flex flex-col gap-8 layout:gap-12">
+          <div
+            className={cn(
+              "flex flex-col gap-8 layout:gap-12",
+              toolbar && "mt-8 layout:mt-9",
+            )}
+          >
             {groups.map((group) => (
               <section key={group.key} id={`day-${group.key}`}>
                 <DayBand className="-mx-4 layout:hidden">{group.label}</DayBand>

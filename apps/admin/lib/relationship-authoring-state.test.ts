@@ -1,8 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  hasActiveProjectCurator,
-  hasActiveProjectPrimaryPartner,
+  canClaimInvariantSeat,
   relationshipPickerState,
 } from "@/lib/relationship-authoring-state";
 
@@ -38,27 +37,10 @@ describe("reverse relationship authoring state", () => {
     ).toEqual({ kind: "ready", selectDisabled: false });
   });
 
-  it("EARS-22: an active curator occupies only the selected project curator seat", () => {
-    expect(
-      hasActiveProjectCurator([
-        { status: "retired", role: "curator" },
-        { status: "active", role: "member" },
-      ]),
-    ).toBe(false);
-    expect(
-      hasActiveProjectCurator([{ status: "active", role: "curator" }]),
-    ).toBe(true);
-  });
-
-  it("EARS-22: an active primary occupies only the selected project primary seat", () => {
-    expect(
-      hasActiveProjectPrimaryPartner([
-        { status: "retired", isPrimary: true },
-        { status: "active", isPrimary: false },
-      ]),
-    ).toBe(false);
-    expect(
-      hasActiveProjectPrimaryPartner([{ status: "active", isPrimary: true }]),
-    ).toBe(true);
+  it("EARS-22: create and row actions use the authoritative incumbent relation id", () => {
+    expect(canClaimInvariantSeat(null)).toBe(true);
+    expect(canClaimInvariantSeat("incumbent-id")).toBe(false);
+    expect(canClaimInvariantSeat("same-row", "same-row")).toBe(true);
+    expect(canClaimInvariantSeat("other-row", "candidate-row")).toBe(false);
   });
 });

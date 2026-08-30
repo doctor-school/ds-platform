@@ -132,6 +132,13 @@ export function taxonomyErrorKey(error: unknown, fallbackKey: string): string {
       case "PUBLISHED_PROJECT_REQUIRES_CURATOR":
         return "projectExperts.errors.curatorRequired";
       case "RELATIONSHIP_CONFLICT":
+        // A curator RESTORE can race after the occupancy read said "free".
+        // The caller marks that action with its occupied-seat fallback; in that
+        // context the same wire code means the seat was claimed meanwhile, not
+        // that the retained pair is a duplicate.
+        if (fallbackKey === "projectExperts.fields.reverseSeatTakenHint") {
+          return fallbackKey;
+        }
         return "projectExperts.errors.relationshipConflict";
       case "CONTENT_REMOVED":
         return "projectExperts.errors.contentRemoved";
@@ -158,6 +165,12 @@ export function taxonomyErrorKey(error: unknown, fallbackKey: string): string {
   if (ns === "projectPartners") {
     switch (code) {
       case "RELATIONSHIP_CONFLICT":
+        // As above, but for a retired row that keeps `isPrimary=true`: a raced
+        // restore lost the unique primary flag. Plain link actions still use
+        // duplicatePair; only the action-specific fallback changes this reading.
+        if (fallbackKey === "projectPartners.errors.primaryTaken") {
+          return fallbackKey;
+        }
         return "projectPartners.errors.duplicatePair";
       case "INVALID_TRANSITION":
         return "projectPartners.errors.invalidTransition";

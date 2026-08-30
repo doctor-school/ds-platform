@@ -449,7 +449,12 @@ function LinkRow({
             {
               onSuccess: () => onDone(`projectPartners.toast.${transition}d`),
               onError: (error) =>
-                onError(error, "projectPartners.errors.transitionFailed"),
+                onError(
+                  error,
+                  transition === "restore" && row.isPrimary
+                    ? "projectPartners.errors.primaryTaken"
+                    : "projectPartners.errors.transitionFailed",
+                ),
             },
           )
         }

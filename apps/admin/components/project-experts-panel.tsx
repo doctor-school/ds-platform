@@ -454,7 +454,9 @@ function LinkRow({
             projectExpertsUrl.command(row.id, transition),
             {},
             `projectExperts.toast.${transition}d`,
-            "projectExperts.errors.transitionFailed",
+            transition === "restore" && row.role === "curator"
+              ? "projectExperts.fields.reverseSeatTakenHint"
+              : "projectExperts.errors.transitionFailed",
           )
         }
       >

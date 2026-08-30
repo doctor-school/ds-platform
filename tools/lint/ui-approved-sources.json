@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "sources": {
+    "admin-refine-compositions-v1": {
+      "evidenceProfiles": ["responsive-web"],
+      "surfacePaths": ["apps/admin/components/recordings-panel.tsx"],
+      "states": ["recordings-tab"],
+      "approvalProvenance": [
+        "https://github.com/doctor-school/ds-platform/issues/1337#issuecomment-5315895726"
+      ]
+    }
+  }
+}

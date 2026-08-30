@@ -1,4 +1,4 @@
-# PR-body-parsing guard family (Issue #651) — spec-link, registry-research,
+# PR-body-parsing guard family (Issue #651) — spec-link, ui-parity, registry-research,
 # spec-status-fresh, prior-decisions, spec-deletion, catalog-deletion,
 # epic-autoclose (ADR-0007 §2.6). These guards evaluate the PR body/metadata, so they live in a DEDICATED
 # workflow that also triggers on the `edited` activity type: a post-create body
@@ -13,7 +13,7 @@
 # They are now sequential steps of a single job. Posture is preserved exactly,
 # re-encoded from per-JOB to per-STEP:
 #   • `spec-link` is BLOCK → a plain step (fails the job → red check-run the
-#     merge gate reads). It runs LAST so a spec-link failure never skips the
+#     merge gate reads). BLOCK guards run LAST so their failures never skip the
 #     WARN guards' findings.
 #   • every other member is WARN → `continue-on-error: true` on the STEP so one
 #     flagged guard never stops the others, PLUS a final `if: always()`
@@ -190,6 +190,15 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_BODY: ${{ github.event.pull_request.body }}
         run: pnpm exec tsx tools/lint/spec-link-lint.ts
+
+      # ui-parity: BLOCK. Checks submitted render proof only; product-owner
+      # Stage-B remains the independent pre-merge approval gate.
+      - name: ui-parity (BLOCK)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: pnpm lint:ui-parity
 
       # WARN report — the second half of the WARN encoding, and this batch's
       # VISIBILITY surface. It lists every WARN step whose `outcome` is `failure`

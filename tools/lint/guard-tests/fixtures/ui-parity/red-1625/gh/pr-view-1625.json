@@ -1,0 +1,6 @@
+{
+  "number": 1625,
+  "body": "## Verification\n\ndesktop/mobile × light/dark inspected; tests, tokens and a11y green\n",
+  "files": [{ "path": "apps/academy-demo/src/app/webinars/page.tsx" }],
+  "reviews": []
+}

@@ -37,14 +37,13 @@
  * Run: `pnpm lint:registry-research` (PR_NUMBER from the Actions context).
  */
 import { ghViewJson } from "./lib/gh";
+import { isUiSourcePath } from "./lib/ui-surface";
 
 const TAG = "[registry-research]";
 
 // User-facing UI surfaces. A diff that touches any of these requires the
 // registry-research artifact. `packages/design-system/**` is included because
 // that is where adopted/bespoke blocks actually land (the #235 sin lived there).
-const UI_PATH_RE =
-  /^(apps\/portal\/|apps\/promo\/|apps\/admin\/|apps\/academy-demo\/|packages\/design-system\/)/;
 
 // Non-UI files inside those trees that should NOT trip the gate on their own
 // (config, docs, tests, generated tokens). If a PR ONLY touches these, the
@@ -77,8 +76,6 @@ const UI_PATH_RE =
 // source file in the same diff still requires the artifact, and comment-only
 // UI-source changes still count (no content-based opt-out — see
 // `reference_registry_research_guard_no_comment_optout`).
-const UI_PATH_EXEMPT_RE =
-  /(\.md$|\.mdx$|\.json$|\.css$|\.test\.[tj]sx?$|\.spec\.[tj]sx?$|\/__tests__\/|(^|\/)e2e\/|\.config\.[mc]?[tj]s$|\.setup\.[mc]?[tj]sx?$|\/styles\/tokens\.css$|allowed-tokens\.json$|(^|\/)Dockerfile[^/]*$|(^|\/)\.[^/]+$|\.env\.example$|\.ya?ml$)/;
 
 // The artifact: a `registry-research:` marker line, or a `## Registry research`
 // section heading followed by its body. Either form is accepted.
@@ -174,12 +171,10 @@ async function main(): Promise<void> {
   if (!pr) fail(`could not fetch PR #${prNumber} metadata`);
 
   const files = (pr.files ?? []).map((f) => f.path);
-  const uiFiles = files.filter(
-    (p) => UI_PATH_RE.test(p) && !UI_PATH_EXEMPT_RE.test(p),
-  );
+  const uiFiles = files.filter(isUiSourcePath);
   if (uiFiles.length === 0) {
     info(
-      `PR #${pr.number} touches no user-facing UI source (apps/portal|promo|admin|academy-demo, packages/design-system), rule does not apply`,
+      `PR #${pr.number} touches no rendered app or design-system UI source, rule does not apply`,
     );
     process.exit(0);
   }

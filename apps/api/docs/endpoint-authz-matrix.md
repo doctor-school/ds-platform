@@ -29,7 +29,7 @@
 | GET /v1/admin/partners/:id                                      | authenticated | platform_admin               | fast-path  | —            | false   | none       | none        | EARS-4, EARS-16                    |
 | GET /v1/admin/project-experts                                   | authenticated | platform_admin               | fast-path  | —            | false   | none       | none        | EARS-9, EARS-15, EARS-16           |
 | GET /v1/admin/project-experts/:id                               | authenticated | platform_admin               | fast-path  | —            | false   | none       | none        | EARS-9, EARS-16                    |
-| GET /v1/admin/project-partners                                  | authenticated | platform_admin               | fast-path  | —            | false   | none       | none        | EARS-10, EARS-15, EARS-16          |
+| GET /v1/admin/project-partners                                  | authenticated | platform_admin               | fast-path  | —            | false   | none       | none        | EARS-10, EARS-15, EARS-16, EARS-22 |
 | GET /v1/admin/project-partners/:id                              | authenticated | platform_admin               | fast-path  | —            | false   | none       | none        | EARS-10, EARS-16                   |
 | GET /v1/admin/projects                                          | authenticated | platform_admin               | fast-path  | —            | false   | none       | none        | EARS-1, EARS-15, EARS-16           |
 | GET /v1/admin/projects/:id                                      | authenticated | platform_admin               | fast-path  | —            | false   | none       | none        | EARS-1, EARS-16                    |

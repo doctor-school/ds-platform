@@ -34,6 +34,7 @@ import {
   PublicCursorQuerySchema,
   PublicEventSummarySchema,
   PublicPartnerSummarySchema,
+  ProjectPartnerAdminListQuerySchema,
   ProjectAdminDetailSchema,
   PublicProjectSummarySchema,
   PUBLIC_PAGE_SIZE_MAX,
@@ -213,6 +214,25 @@ describe("012 taxonomy — authoring contract (SSOT)", () => {
     ).toBe(false);
     expect(
       AdminTaxonomyListQuerySchema.safeParse({ status: "gone" }).success,
+    ).toBe(false);
+  });
+
+  it("EARS-22: the project-partner admin query shall strictly filter the primary flag", () => {
+    expect(
+      ProjectPartnerAdminListQuerySchema.parse({ isPrimary: "true" })
+        .isPrimary,
+    ).toBe(true);
+    expect(
+      ProjectPartnerAdminListQuerySchema.parse({ isPrimary: "false" })
+        .isPrimary,
+    ).toBe(false);
+    expect(
+      ProjectPartnerAdminListQuerySchema.safeParse({ isPrimary: "1" })
+        .success,
+    ).toBe(false);
+    expect(
+      ProjectPartnerAdminListQuerySchema.safeParse({ isPrimary: "yes" })
+        .success,
     ).toBe(false);
   });
 

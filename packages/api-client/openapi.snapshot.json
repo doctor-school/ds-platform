@@ -185,6 +185,80 @@
         "required": ["data", "total", "page", "pageSize"],
         "type": "object"
       },
+      "EventAdminListDto": {
+        "properties": {
+          "data": {
+            "items": {
+              "properties": {
+                "durationMin": {
+                  "maximum": 9007199254740991,
+                  "minimum": -9007199254740991,
+                  "type": "integer"
+                },
+                "id": {
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                  "type": "string"
+                },
+                "school": {
+                  "type": "string"
+                },
+                "slug": {
+                  "type": "string"
+                },
+                "startsAt": {
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+                  "type": "string"
+                },
+                "state": {
+                  "enum": ["draft", "published", "live", "ended", "archived"],
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "validTransitions": {
+                  "items": {
+                    "enum": ["draft", "published", "live", "ended", "archived"],
+                    "type": "string"
+                  },
+                  "type": "array"
+                }
+              },
+              "required": [
+                "id",
+                "slug",
+                "title",
+                "school",
+                "startsAt",
+                "durationMin",
+                "state",
+                "validTransitions"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "page": {
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "pageSize": {
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "total": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": ["data", "total", "page", "pageSize"],
+        "type": "object"
+      },
       "ExpertAdminDetailDto": {
         "properties": {
           "affiliation": {
@@ -1825,9 +1899,45 @@
     "/v1/admin/events": {
       "get": {
         "operationId": "EventsAdminController_list",
-        "parameters": [],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "maximum": 100,
+              "minimum": 1,
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "minimum": 1,
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "maxLength": 160,
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventAdminListDto"
+                }
+              }
+            },
             "description": ""
           }
         },

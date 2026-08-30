@@ -144,10 +144,8 @@ export default function PartnerDetailPage() {
                 />
               </TabsContent>
 
-              {/* «Проекты» (012 EARS-10, 012-design §5.1) — the READ direction of
-                  the same relation. Authoring stays on the project detail; here
-                  the operator sees which проекты this partner is listed on and
-                  where it is the основной партнёр. */}
+              {/* «Проекты» (012 EARS-22) — reverse authoring through the same
+                  ProjectPartnersPanel and canonical relationship command. */}
               <TabsContent value="projects">
                 <ProjectPartnersPanel mode="partner" entityId={detail.id} />
               </TabsContent>

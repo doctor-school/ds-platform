@@ -3,26 +3,36 @@
 import { useState } from "react";
 import { useCustom, useCustomMutation } from "@refinedev/core";
 import { useTranslations } from "next-intl";
-import { Alert, Badge, Button, Input, Switch } from "@ds/design-system";
+import { Alert, Badge, Button, Switch } from "@ds/design-system";
+import { Combobox } from "@ds/design-system/blocks";
 import type {
   CreateProjectPartnerRequest,
-  PartnerAdminList,
+  PartnerAdminListItem,
   ProjectPartnerAdminDetail,
   ProjectPartnerAdminList,
   UpdateProjectPartnerRequest,
 } from "@ds/schemas";
-import { TokenSelect } from "@/components/fields";
-import { taxonomyErrorKey } from "@/lib/taxonomy-errors";
+import { RelationshipEndpointPicker } from "@/components/relationship-endpoint-picker";
+import {
+  canClaimInvariantSeat,
+  relationshipRowActionState,
+  retryRelationshipOccupancy,
+} from "@/lib/relationship-authoring-state";
+import {
+  taxonomyErrorKey,
+  type TaxonomyErrorContext,
+} from "@/lib/taxonomy-errors";
+import { useRelationshipOccupancy } from "@/lib/use-relationship-occupancy";
 import type { TaxonomyHttpError } from "@/providers/data-provider";
 import { projectPartnersUrl } from "@/providers/data-provider";
+import { useRelationshipCombobox } from "@/lib/use-relationship-combobox";
 
 /**
  * The project↔partner relationship editor (012 EARS-10, 012-design §5.1/§7; #1292).
  *
  * ONE component serves BOTH directions, like the sibling panels: on the project
- * detail it is the «Партнёры» tab and it AUTHORS links; on the partner detail it
- * is the «Проекты» read view. Authoring lives on the PROJECT side only — a
- * project's partner list is composed while looking at the project.
+ * detail and the partner detail it AUTHORS through the same relationship command.
+ * The endpoint page only decides which side is fixed and which side is selected.
  *
  * `isPrimary` IS AN ATTRIBUTE, NOT A COMMAND. At most one ACTIVE row per project
  * may carry it (partial unique index), and the panel deliberately does NOT offer
@@ -62,16 +72,30 @@ export function ProjectPartnersPanel({
     url: listUrl,
     method: "get",
   });
+  const primaryOccupancy = useRelationshipOccupancy<ProjectPartnerAdminDetail>(
+    projectPartnersUrl.list({
+      ...(mode === "project" ? { projectId: entityId } : {}),
+      isPrimary: true,
+      status: "active",
+      pageSize: 1,
+    }),
+    mode === "project",
+  );
 
   function announce(toastKey: string) {
     setErrorKey(null);
     setNoticeKey(toastKey);
     void query.refetch();
+    if (mode === "project") void primaryOccupancy.refetch();
   }
 
-  function fail(error: unknown, fallbackKey: string) {
+  function fail(
+    error: unknown,
+    fallbackKey: string,
+    context?: TaxonomyErrorContext,
+  ) {
     setNoticeKey(null);
-    setErrorKey(taxonomyErrorKey(error, fallbackKey));
+    setErrorKey(taxonomyErrorKey(error, fallbackKey, context));
   }
 
   // The primary-flag mutations resolve their own key (see `primaryErrorKey`), so
@@ -84,7 +108,9 @@ export function ProjectPartnersPanel({
   }
 
   if (query.isLoading) {
-    return <p className="text-sm text-muted-foreground">{t("common.loading")}</p>;
+    return (
+      <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
+    );
   }
 
   // The QUERY is the source of presence, not `result`: Refine's `result.data`
@@ -101,7 +127,8 @@ export function ProjectPartnersPanel({
 
   const active = list.data.filter((row) => row.status === "active");
   const retired = list.data.filter((row) => row.status === "retired");
-  const primaryTaken = active.some((row) => row.isPrimary);
+  const primary = primaryOccupancy.incumbent;
+  const primaryTaken = primary !== null;
 
   return (
     <div className="flex flex-col gap-6" data-testid="project-partners-panel">
@@ -124,10 +151,22 @@ export function ProjectPartnersPanel({
           projectId={entityId}
           linkedPartnerIds={list.data.map((row) => row.partnerId)}
           primaryTaken={primaryTaken}
+          occupancyLoading={primaryOccupancy.isFetching}
+          occupancyError={primaryOccupancy.isError}
+          onRetryOccupancy={() =>
+            retryRelationshipOccupancy(primaryOccupancy.refetch)
+          }
           onLinked={() => announce("projectPartners.toast.linked")}
           onError={(error) => fail(error, "projectPartners.errors.linkFailed")}
         />
-      ) : null}
+      ) : (
+        <ReverseLinkForm
+          partnerId={entityId}
+          linkedProjectIds={list.data.map((row) => row.projectId)}
+          onLinked={() => announce("projectPartners.toast.linked")}
+          onError={(error) => fail(error, "projectPartners.errors.linkFailed")}
+        />
+      )}
 
       <section className="flex flex-col gap-3">
         <h3 className="text-base font-extrabold text-foreground">
@@ -146,7 +185,11 @@ export function ProjectPartnersPanel({
               key={row.id}
               row={row}
               mode={mode}
-              primaryTaken={primaryTaken && !row.isPrimary}
+              incumbentId={mode === "project" ? (primary?.id ?? null) : null}
+              occupancyLoading={
+                mode === "project" && primaryOccupancy.isFetching
+              }
+              occupancyError={mode === "project" && primaryOccupancy.isError}
               onDone={announce}
               onError={fail}
               onErrorKey={failWithKey}
@@ -181,7 +224,15 @@ export function ProjectPartnersPanel({
                   key={row.id}
                   row={row}
                   mode={mode}
-                  primaryTaken={primaryTaken}
+                  incumbentId={
+                    mode === "project" ? (primary?.id ?? null) : null
+                  }
+                  occupancyLoading={
+                    mode === "project" && primaryOccupancy.isFetching
+                  }
+                  occupancyError={
+                    mode === "project" && primaryOccupancy.isError
+                  }
                   onDone={announce}
                   onError={fail}
                   onErrorKey={failWithKey}
@@ -200,7 +251,11 @@ export function ProjectPartnersPanel({
 }
 
 type DoneHandler = (toastKey: string) => void;
-type ErrorHandler = (error: unknown, fallbackKey: string) => void;
+type ErrorHandler = (
+  error: unknown,
+  fallbackKey: string,
+  context?: TaxonomyErrorContext,
+) => void;
 
 /**
  * `RELATIONSHIP_CONFLICT` means «пара уже есть» on a link and «основной уже
@@ -219,15 +274,18 @@ function primaryErrorKey(error: unknown): string {
 function LinkRow({
   row,
   mode,
-  primaryTaken,
+  incumbentId,
+  occupancyLoading,
+  occupancyError,
   onDone,
   onError,
   onErrorKey,
 }: {
   row: ProjectPartnerAdminDetail;
   mode: "project" | "partner";
-  /** Another ACTIVE row of this project already holds the primary flag. */
-  primaryTaken: boolean;
+  incumbentId: string | null;
+  occupancyLoading: boolean;
+  occupancyError: boolean;
   onDone: DoneHandler;
   onError: ErrorHandler;
   /** Takes an ALREADY-resolved catalogue key (the primary-flag disambiguation). */
@@ -235,10 +293,35 @@ function LinkRow({
 }) {
   const t = useTranslations();
   const { mutate, mutation } = useCustomMutation();
+  const rowOccupancy = useRelationshipOccupancy<ProjectPartnerAdminDetail>(
+    projectPartnersUrl.list({
+      projectId: row.projectId,
+      isPrimary: true,
+      status: "active",
+      pageSize: 1,
+    }),
+    mode === "partner",
+  );
+  const effectiveIncumbentId =
+    mode === "partner" ? rowOccupancy.incumbent?.id : incumbentId;
+  const effectiveLoading =
+    mode === "partner" ? rowOccupancy.isFetching : occupancyLoading;
+  const effectiveError =
+    mode === "partner" ? rowOccupancy.isError : occupancyError;
+  const rowActionState = relationshipRowActionState({
+    isLoading: effectiveLoading,
+    isError: effectiveError,
+    incumbentRelationId: effectiveIncumbentId ?? null,
+    candidateRelationId: row.id,
+  });
+  const rowConstraintId = `project-partner-row-occupancy-${row.id}`;
   // The operator is standing on one endpoint, so the row names the OTHER one.
   const title = mode === "project" ? row.partnerTitle : row.projectTitle;
   const slug = mode === "project" ? row.partnerSlug : row.projectSlug;
   const transition = row.status === "active" ? "retire" : "restore";
+  const claimsPrimaryFlag =
+    (row.status === "active" && !row.isPrimary) ||
+    (row.status === "retired" && row.isPrimary);
 
   return (
     <div
@@ -253,7 +336,10 @@ function LinkRow({
       </span>
       <span className="text-sm text-muted-foreground">{slug}</span>
       {row.isPrimary ? (
-        <Badge variant="label" data-testid={`project-partner-primary-${row.id}`}>
+        <Badge
+          variant="label"
+          data-testid={`project-partner-primary-${row.id}`}
+        >
           {t("projectPartners.primaryBadge")}
         </Badge>
       ) : null}
@@ -261,16 +347,21 @@ function LinkRow({
         {t(`projectPartners.statuses.${row.status}`)}
       </Badge>
 
-      {mode === "project" && row.status === "active" ? (
+      {row.status === "active" ? (
         <Button
           type="button"
           size="sm"
           variant="secondary"
           data-testid={`project-partner-primary-toggle-${row.id}`}
           loading={mutation.isPending}
+          aria-describedby={
+            claimsPrimaryFlag && rowActionState.kind !== "available"
+              ? rowConstraintId
+              : undefined
+          }
           // Claiming an occupied flag can only come back 409, so the control is
           // disabled and the panel's copy names the incumbent instead.
-          disabled={!row.isPrimary && primaryTaken}
+          disabled={claimsPrimaryFlag && rowActionState.actionDisabled}
           onClick={() => {
             const body: UpdateProjectPartnerRequest = {
               isPrimary: !row.isPrimary,
@@ -283,12 +374,14 @@ function LinkRow({
                 meta: { version: row.version },
               },
               {
-                onSuccess: () =>
+                onSuccess: () => {
+                  if (mode === "partner") void rowOccupancy.refetch();
                   onDone(
                     row.isPrimary
                       ? "projectPartners.toast.primaryCleared"
                       : "projectPartners.toast.primarySet",
-                  ),
+                  );
+                },
                 onError: (error) => onErrorKey(primaryErrorKey(error)),
               },
             );
@@ -302,34 +395,228 @@ function LinkRow({
         </Button>
       ) : null}
 
-      {mode === "project" ? (
+      {claimsPrimaryFlag && rowActionState.kind === "loading" ? (
+        <p
+          id={rowConstraintId}
+          className="text-sm text-muted-foreground"
+          data-testid={`project-partner-row-occupancy-loading-${row.id}`}
+        >
+          {t("projectPartners.fields.rowOccupancyLoading")}
+        </p>
+      ) : claimsPrimaryFlag && rowActionState.kind === "error" ? (
+        <Alert
+          id={rowConstraintId}
+          variant="danger"
+          data-testid={`project-partner-row-occupancy-error-${row.id}`}
+        >
+          <div className="flex flex-col gap-2">
+            <span>{t("projectPartners.fields.rowOccupancyError")}</span>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              data-testid={`project-partner-row-occupancy-retry-${row.id}`}
+              onClick={() => retryRelationshipOccupancy(rowOccupancy.refetch)}
+            >
+              {t("common.retry")}
+            </Button>
+          </div>
+        </Alert>
+      ) : claimsPrimaryFlag && rowActionState.kind === "occupied" ? (
+        <p
+          id={rowConstraintId}
+          className="text-sm text-muted-foreground"
+          data-testid={`project-partner-row-primary-taken-${row.id}`}
+        >
+          {t("projectPartners.fields.primaryTakenHint")}
+        </p>
+      ) : null}
+
+      <Button
+        type="button"
+        size="sm"
+        variant="secondary"
+        data-testid={`project-partner-${transition}-${row.id}`}
+        loading={mutation.isPending}
+        aria-describedby={
+          transition === "restore" &&
+          claimsPrimaryFlag &&
+          rowActionState.kind !== "available"
+            ? rowConstraintId
+            : undefined
+        }
+        disabled={
+          transition === "restore" &&
+          claimsPrimaryFlag &&
+          rowActionState.actionDisabled
+        }
+        onClick={() =>
+          mutate(
+            {
+              url: projectPartnersUrl.command(row.id, transition),
+              method: "post",
+              values: {},
+              meta: { version: row.version },
+            },
+            {
+              onSuccess: () => onDone(`projectPartners.toast.${transition}d`),
+              onError: (error) =>
+                onError(
+                  error,
+                  "projectPartners.errors.transitionFailed",
+                  transition === "restore" && row.isPrimary
+                    ? { action: "restore-primary" }
+                    : undefined,
+                ),
+            },
+          )
+        }
+      >
+        {t(`projectPartners.action.${transition}`)}
+      </Button>
+    </div>
+  );
+}
+
+/** Reverse authoring fixes the partner endpoint and selects an existing project. */
+function ReverseLinkForm({
+  partnerId,
+  linkedProjectIds,
+  onLinked,
+  onError,
+}: {
+  partnerId: string;
+  linkedProjectIds: string[];
+  onLinked: () => void;
+  onError: (error: unknown) => void;
+}) {
+  const t = useTranslations();
+  const [projectId, setProjectId] = useState("");
+  const [isPrimary, setIsPrimary] = useState(false);
+  const { mutate, mutation } = useCustomMutation();
+  const selectedProjectOccupancy =
+    useRelationshipOccupancy<ProjectPartnerAdminDetail>(
+      projectPartnersUrl.list({
+        projectId,
+        isPrimary: true,
+        status: "active",
+        pageSize: 1,
+      }),
+      projectId.length > 0,
+    );
+  const constraintLoading = selectedProjectOccupancy.isFetching;
+  const constraintError = selectedProjectOccupancy.isError;
+  const primaryTaken = !canClaimInvariantSeat(
+    selectedProjectOccupancy.incumbent?.id ?? null,
+  );
+
+  return (
+    <section
+      className="flex flex-col gap-3 border-2 border-border p-4"
+      data-testid="project-partner-link-form"
+    >
+      <h3 className="text-base font-extrabold text-foreground">
+        {t("projectPartners.linkProjectTitle")}
+      </h3>
+      <RelationshipEndpointPicker
+        endpoint="project"
+        excludedIds={linkedProjectIds}
+        value={projectId}
+        onChange={(nextProjectId) => {
+          setProjectId(nextProjectId);
+          setIsPrimary(false);
+        }}
+        testIdPrefix="project-partner-link"
+        copy={{
+          search: t("projectPartners.fields.projectSearch"),
+          searchPlaceholder: t(
+            "projectPartners.fields.projectSearchPlaceholder",
+          ),
+          select: t("projectPartners.fields.project"),
+          selectPlaceholder: t("projectPartners.fields.projectPlaceholder"),
+          noOptions: t("projectPartners.fields.noProjectOptions"),
+        }}
+      />
+      {constraintLoading ? (
+        <p
+          className="text-sm text-muted-foreground"
+          data-testid="project-partner-link-project-loading"
+        >
+          {t("common.loading")}
+        </p>
+      ) : constraintError ? (
+        <Alert
+          variant="danger"
+          data-testid="project-partner-link-project-error"
+        >
+          <div className="flex flex-col gap-2">
+            <span>{t("projectPartners.errors.loadFailed")}</span>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              data-testid="project-partner-link-project-retry"
+              onClick={() =>
+                retryRelationshipOccupancy(selectedProjectOccupancy.refetch)
+              }
+            >
+              {t("common.retry")}
+            </Button>
+          </div>
+        </Alert>
+      ) : projectId.length > 0 && primaryTaken ? (
+        <p
+          className="text-sm text-muted-foreground"
+          data-testid="project-partner-link-primary-taken"
+        >
+          {t("projectPartners.fields.primaryTakenHint")}
+        </p>
+      ) : projectId.length > 0 ? (
+        <Switch
+          id="project-partner-link-primary"
+          data-testid="project-partner-link-primary"
+          checked={isPrimary}
+          onChange={(event) => setIsPrimary(event.target.checked)}
+        >
+          {t("projectPartners.fields.isPrimary")}
+        </Switch>
+      ) : null}
+      <div>
         <Button
           type="button"
           size="sm"
-          variant="secondary"
-          data-testid={`project-partner-${transition}-${row.id}`}
+          data-testid="project-partner-link-submit"
           loading={mutation.isPending}
-          onClick={() =>
+          disabled={
+            projectId.length === 0 || constraintLoading || constraintError
+          }
+          onClick={() => {
+            const body: CreateProjectPartnerRequest = {
+              projectId,
+              partnerId,
+              isPrimary,
+            };
             mutate(
               {
-                url: projectPartnersUrl.command(row.id, transition),
+                url: projectPartnersUrl.collection(),
                 method: "post",
-                values: {},
-                meta: { version: row.version },
+                values: body,
               },
               {
-                onSuccess: () =>
-                  onDone(`projectPartners.toast.${transition}d`),
-                onError: (error) =>
-                  onError(error, "projectPartners.errors.transitionFailed"),
+                onSuccess: () => {
+                  setProjectId("");
+                  setIsPrimary(false);
+                  onLinked();
+                },
+                onError,
               },
-            )
-          }
+            );
+          }}
         >
-          {t(`projectPartners.action.${transition}`)}
+          {t("projectPartners.action.link")}
         </Button>
-      ) : null}
-    </div>
+      </div>
+    </section>
   );
 }
 
@@ -345,31 +632,31 @@ function LinkForm({
   projectId,
   linkedPartnerIds,
   primaryTaken,
+  occupancyLoading,
+  occupancyError,
+  onRetryOccupancy,
   onLinked,
   onError,
 }: {
   projectId: string;
   linkedPartnerIds: string[];
   primaryTaken: boolean;
+  occupancyLoading: boolean;
+  occupancyError: boolean;
+  onRetryOccupancy: () => void;
   onLinked: () => void;
   onError: (error: unknown) => void;
 }) {
   const t = useTranslations();
-  const [search, setSearch] = useState("");
   const [partnerId, setPartnerId] = useState("");
   const [isPrimary, setIsPrimary] = useState(false);
   const { mutate, mutation } = useCustomMutation();
 
-  const query = new URLSearchParams({ page: "1", pageSize: "50" });
-  if (search.trim().length > 0) query.set("q", search.trim());
-  const { query: partnersQuery } = useCustom<PartnerAdminList>({
-    url: `/v1/admin/partners?${query.toString()}`,
-    method: "get",
+  const picker = useRelationshipCombobox<PartnerAdminListItem>({
+    resource: "partners",
+    excludedIds: linkedPartnerIds,
+    value: partnerId,
   });
-
-  const options = (partnersQuery.data?.data.data ?? []).filter(
-    (partner) => !linkedPartnerIds.includes(partner.id),
-  );
 
   return (
     <section
@@ -383,54 +670,39 @@ function LinkForm({
       <div className="flex flex-col gap-2">
         <label
           className="text-sm text-foreground"
-          htmlFor="project-partner-link-search"
-        >
-          {t("projectPartners.fields.search")}
-        </label>
-        <Input
-          id="project-partner-link-search"
-          data-testid="project-partner-link-search"
-          value={search}
-          placeholder={t("projectPartners.fields.searchPlaceholder")}
-          onChange={(event) => {
-            setSearch(event.target.value);
-            // The narrowed list may no longer contain the held choice, and a
-            // hidden selection is exactly how an operator links the wrong row.
-            setPartnerId("");
-          }}
-        />
-      </div>
-
-      <div className="flex flex-col gap-2">
-        <label
-          className="text-sm text-foreground"
-          htmlFor="project-partner-link-select"
+          htmlFor="project-partner-link-combobox"
         >
           {t("projectPartners.fields.partner")}
         </label>
-        <TokenSelect
-          id="project-partner-link-select"
-          data-testid="project-partner-link-select"
-          value={partnerId}
-          onChange={(event) => setPartnerId(event.target.value)}
-        >
-          <option value="">
-            {t("projectPartners.fields.partnerPlaceholder")}
-          </option>
-          {options.map((partner) => (
-            <option key={partner.id} value={partner.id}>
-              {partner.title}
-            </option>
-          ))}
-        </TokenSelect>
-        {options.length === 0 ? (
-          <p
-            className="text-sm text-muted-foreground"
-            data-testid="project-partner-link-no-options"
-          >
-            {t("projectPartners.fields.noOptions")}
-          </p>
-        ) : null}
+        <Combobox
+          id="project-partner-link-combobox"
+          options={picker.options}
+          value={partnerId || null}
+          onValueChange={(next) => {
+            picker.select(next);
+            setPartnerId(next);
+          }}
+          onSearchChange={picker.search}
+          onLoadMore={picker.loadMore}
+          hasMore={picker.hasMore}
+          loadingMore={picker.loadingMore}
+          loadMoreError={picker.loadMoreError}
+          loadMoreLabel={t("relationshipEndpointPicker.loadMore")}
+          loadingMoreLabel={t("relationshipEndpointPicker.loadingMore")}
+          loadMoreErrorLabel={t("relationshipEndpointPicker.retryLoadMore")}
+          placeholder={t("projectPartners.fields.partnerPlaceholder")}
+          searchLabel={t("projectPartners.fields.search")}
+          searchPlaceholder={t("projectPartners.fields.searchPlaceholder")}
+          emptyLabel={
+            picker.isLoading
+              ? t("common.loading")
+              : picker.isError
+                ? t("relationshipEndpointPicker.loadFailed")
+                : t("projectPartners.fields.noOptions")
+          }
+          showSearch
+          aria-label={t("projectPartners.fields.partner")}
+        />
       </div>
 
       {primaryTaken ? (
@@ -440,7 +712,7 @@ function LinkForm({
         >
           {t("projectPartners.fields.primaryTakenHint")}
         </p>
-      ) : (
+      ) : !occupancyLoading && !occupancyError ? (
         <Switch
           id="project-partner-link-primary"
           data-testid="project-partner-link-primary"
@@ -449,7 +721,29 @@ function LinkForm({
         >
           {t("projectPartners.fields.isPrimary")}
         </Switch>
-      )}
+      ) : null}
+      {occupancyLoading ? (
+        <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
+      ) : null}
+      {occupancyError ? (
+        <Alert
+          variant="danger"
+          data-testid="project-partner-link-primary-error"
+        >
+          <div className="flex flex-col gap-2">
+            <span>{t("projectPartners.errors.loadFailed")}</span>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              data-testid="project-partner-link-primary-retry"
+              onClick={onRetryOccupancy}
+            >
+              {t("common.retry")}
+            </Button>
+          </div>
+        </Alert>
+      ) : null}
 
       <div>
         <Button
@@ -457,7 +751,9 @@ function LinkForm({
           size="sm"
           data-testid="project-partner-link-submit"
           loading={mutation.isPending}
-          disabled={partnerId.length === 0}
+          disabled={
+            partnerId.length === 0 || occupancyLoading || occupancyError
+          }
           onClick={() => {
             const body: CreateProjectPartnerRequest = {
               projectId,

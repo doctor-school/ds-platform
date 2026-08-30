@@ -4,22 +4,27 @@ import { useState } from "react";
 import { useParams } from "next/navigation";
 import { Authenticated, useOne, useUpdate } from "@refinedev/core";
 import { useTranslations } from "next-intl";
-import { Alert } from "@ds/design-system";
+import {
+  Alert,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@ds/design-system";
 import type { DirectionAdminDetail, TaxonomyStatus } from "@ds/schemas";
 import { AppShell } from "@/components/app-shell";
 import { BackToList } from "@/components/back-to-list";
 import { DirectionForm } from "@/components/direction-form";
 import { DirectionLifecycleActions } from "@/components/direction-lifecycle-actions";
+import { EventTopicsPanel } from "@/components/event-topics-panel";
 import { StatusChip } from "@/components/status-chip";
 import { taxonomyErrorKey } from "@/lib/taxonomy-errors";
 import type { UpdateDirectionVars } from "@/providers/data-provider";
 
 /**
- * Direction detail / edit (012 EARS-3; 017 EARS-18). The record has exactly ONE
- * section today — «Публикация» (#1287/#1295/#1296) arrives with its own slice —
- * and a tab strip holding a single tab is chrome that navigates nowhere, so the
- * strip is not rendered at all (017-design §9.3, owner Stage-A pick 2026-08-27).
- * It returns with the second section, alongside the project and expert details.
+ * Direction detail / edit (012 EARS-3; 017 EARS-18). The main taxonomy form and
+ * the direction's event relationships are separate sections of one detail page,
+ * composed with the same approved tabs used by the sibling taxonomy resources.
  *
  * Every save carries the row's `version` as `If-Match`, and the detail is
  * refetched afterwards, so the next edit asserts the version the SERVER holds
@@ -108,11 +113,17 @@ export default function DirectionDetailPage() {
               </Alert>
             ) : null}
 
-            {/* No tab bar (017-design §9.3, EARS-18): a tab strip with a single
-                tab is chrome that navigates nowhere. «Публикация»
-                (#1287/#1295/#1296) brings the second tab and the strip back with
-                it; until then the section renders its content directly. */}
-            <DirectionForm
+            <Tabs defaultValue="main">
+              <TabsList>
+                <TabsTrigger value="main" data-testid="tab-main">
+                  {t("directions.tabs.main")}
+                </TabsTrigger>
+                <TabsTrigger value="events" data-testid="tab-events">
+                  {t("directions.tabs.events")}
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value="main">
+                <DirectionForm
                   detail={detail}
                   submitLabel={t("common.save")}
                   submitting={mutation.isPending}
@@ -141,6 +152,11 @@ export default function DirectionDetailPage() {
                     );
                   }}
                 />
+              </TabsContent>
+              <TabsContent value="events">
+                <EventTopicsPanel mode="topic" entityId={detail.id} />
+              </TabsContent>
+            </Tabs>
           </>
         )}
       </AppShell>

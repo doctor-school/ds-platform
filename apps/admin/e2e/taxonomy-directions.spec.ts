@@ -107,9 +107,10 @@ test.describe("012 EARS-3 / 017 EARS-16…18 — curated direction authoring in 
     const detailUrl = page.url();
     await expect(page.getByTestId("direction-heading")).toHaveText(title);
     await expect(page.getByTestId("direction-status")).toHaveText("Черновик");
-    // EARS-18: one section ⇒ no tab strip at all until «Публикация» (#1287)
-    // brings the second one.
-    await expect(page.getByRole("tab")).toHaveCount(0);
+    // EARS-18: publication remains absent; EARS-22 now adds the independent
+    // event-relationship section without exposing publication controls.
+    await expect(page.getByTestId("tab-main")).toBeVisible();
+    await expect(page.getByTestId("tab-events")).toBeVisible();
     await expect(page.getByTestId("direction-slug")).toHaveCount(0);
 
     // ── No destructive affordance anywhere on the surface (012 §5.1) ───────

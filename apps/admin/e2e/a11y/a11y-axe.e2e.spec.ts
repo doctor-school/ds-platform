@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { PROJECT_DESCRIPTION_MAX } from "@ds/schemas";
 import { bootstrapAdminSession } from "../support/admin-session";
+import { selectRelationshipCombobox } from "../support/relationship-combobox";
 import { totpCode } from "../support/totp";
 
 /**
@@ -324,8 +325,7 @@ test.describe("007 EARS-11 axe-core a11y scan of the admin event surface", () =>
 
   // 012 EARS-7 (#1289) — the «Эксперты» tab of the event detail. It reuses the
   // recordings tab's modal classes but adds three states no scanned surface holds:
-  // a SELECTOR composed of a search box narrowing a `NativeSelect` (two controls
-  // that must each carry their own accessible name, not one shared label), a link
+  // a searchable `Combobox` whose query lives inside its open panel, a link
   // row whose two `Badge`s carry status and legacy-match state as colour-plus-text,
   // and a form REJECTED inside an open modal — an invalid control and its message
   // living under a focus trap, which the closed-dialog scans certify nothing about.
@@ -347,7 +347,7 @@ test.describe("007 EARS-11 axe-core a11y scan of the admin event surface", () =>
     await page.getByTestId("event-experts-panel").waitFor({ state: "visible" });
     for (const theme of THEMES) await scan(page, theme);
 
-    // The add `Dialog` — the selector pair, two text boxes and their hints.
+    // The add `Dialog` — the searchable combobox, two text boxes and their hints.
     await page.getByTestId("event-expert-add").click();
     await page
       .getByTestId("event-expert-add-form")
@@ -362,15 +362,12 @@ test.describe("007 EARS-11 axe-core a11y scan of the admin event surface", () =>
 
     // A real link, so the row's badges and its action pair are scanned as state,
     // not as an empty-list placeholder.
-    await page.getByTestId("event-expert-search").fill(familyName);
-    await expect(
-      page.getByTestId("event-expert-select").locator("option", {
-        hasText: expertName,
-      }),
-    ).toHaveCount(1);
-    await page
-      .getByTestId("event-expert-select")
-      .selectOption({ label: expertName });
+    await selectRelationshipCombobox(
+      page,
+      "event-expert-combobox",
+      familyName,
+      expertName,
+    );
     await page.getByTestId("event-expert-add-role").fill("Модератор");
     await page.getByTestId("event-expert-add-position").fill("1");
     await page.getByTestId("event-expert-add-submit").click();
@@ -392,7 +389,7 @@ test.describe("007 EARS-11 axe-core a11y scan of the admin event surface", () =>
   // `Dialog`, whose body is a LIST of affected rows, each carrying two `Badge`s
   // (kind + status) — a naming/contrast surface the recordings `AlertDialog`
   // (a sentence and an action pair, no list) certifies nothing about. Its resting
-  // picker (search `Input` + `TokenSelect` + the «no options» hint), its danger
+  // searchable `Combobox` plus its «no options» hint, its danger
   // command `Alert` and the read-only project-side view are enumerated for the
   // same reason the partner (#1286) scan enumerates its own states.
   test("the event-project relationship editor and its impact dialog pass WCAG 2 A/AA (light)", async ({
@@ -425,11 +422,13 @@ test.describe("007 EARS-11 axe-core a11y scan of the admin event surface", () =>
     for (const theme of THEMES) await scan(page, theme);
 
     // The picker NARROWED to one match and holding a selection — the state whose
-    // accessible naming (label → `TokenSelect`) a resting empty select cannot show.
-    await page.getByTestId("event-project-link-search").fill(projects[0].title);
-    await page
-      .getByTestId("event-project-link-select")
-      .selectOption({ label: projects[0].title });
+    // accessible naming and selected value a resting empty control cannot show.
+    await selectRelationshipCombobox(
+      page,
+      "event-project-link-combobox",
+      projects[0].title,
+      projects[0].title,
+    );
     for (const theme of THEMES) await scan(page, theme);
 
     // A real linked row: the title/slug pair plus the status `Badge` and the
@@ -476,10 +475,12 @@ test.describe("007 EARS-11 axe-core a11y scan of the admin event surface", () =>
         }),
       });
     });
-    await page.getByTestId("event-project-link-search").fill(projects[1].title);
-    await page
-      .getByTestId("event-project-link-select")
-      .selectOption({ label: projects[1].title });
+    await selectRelationshipCombobox(
+      page,
+      "event-project-link-combobox",
+      projects[1].title,
+      projects[1].title,
+    );
     await page.getByTestId("event-project-link-submit").click();
     await page
       .getByTestId("event-projects-command-error")
@@ -499,7 +500,7 @@ test.describe("007 EARS-11 axe-core a11y scan of the admin event surface", () =>
       .waitFor({ state: "visible" });
     for (const theme of THEMES) await scan(page, theme);
 
-    // The project side: the same list without the authoring form (§5.1).
+    // The project side: the same list and authoring form from the reverse endpoint.
     await page.goto(projects[0].url);
     await page.getByTestId("tab-events").click();
     await page

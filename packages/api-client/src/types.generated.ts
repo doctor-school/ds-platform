@@ -1677,6 +1677,24 @@ export interface components {
             pageSize: number;
             total: number;
         };
+        EventAdminListDto: {
+            data: {
+                durationMin: number;
+                /** Format: uuid */
+                id: string;
+                school: string;
+                slug: string;
+                /** Format: date-time */
+                startsAt: string;
+                /** @enum {string} */
+                state: "draft" | "published" | "live" | "ended" | "archived";
+                title: string;
+                validTransitions: ("draft" | "published" | "live" | "ended" | "archived")[];
+            }[];
+            page: number;
+            pageSize: number;
+            total: number;
+        };
         ExpertAdminDetailDto: {
             affiliation: string | null;
             bio: string | null;
@@ -2666,7 +2684,11 @@ export interface operations {
     };
     EventsAdminController_list: {
         parameters: {
-            query?: never;
+            query?: {
+                page?: number;
+                pageSize?: number;
+                q?: string;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -2677,7 +2699,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["EventAdminListDto"];
+                };
             };
         };
     };

@@ -1,5 +1,9 @@
 import { expect, test, type Page } from "@playwright/test";
 import { bootstrapAdminSession } from "./support/admin-session";
+import {
+  searchRelationshipCombobox,
+  selectRelationshipCombobox,
+} from "./support/relationship-combobox";
 import { totpCode } from "./support/totp";
 
 /**
@@ -82,6 +86,35 @@ async function openTopicsTab(page: Page, eventUrl: string): Promise<void> {
 test.describe.configure({ mode: "serial" });
 
 test.describe("012 EARS-11 — event↔direction relationships in the live admin", () => {
+  test("EARS-22: an operator authors an event↔direction link from the direction endpoint through the same relationship panel", async ({
+    page,
+  }) => {
+    await signInAsAdmin(page);
+
+    const stamp = Date.now();
+    const eventTitle = `Обратный эфир направления ${stamp}`;
+    await createDirection(page, `Обратное направление ${stamp}`);
+    const directionUrl = page.url();
+    await createEvent(page, eventTitle);
+
+    await page.goto(directionUrl);
+    await page.getByTestId("tab-events").click();
+    await selectRelationshipCombobox(
+      page,
+      "event-topic-link-combobox",
+      eventTitle,
+      eventTitle,
+    );
+    await page.getByTestId("event-topic-link-submit").click();
+
+    await expect(page.getByTestId("event-topics-notice")).toContainText(
+      "Связь добавлена.",
+    );
+    await expect(page.getByTestId("event-topics-panel")).toContainText(
+      eventTitle,
+    );
+  });
+
   test("012 EARS-11: an operator files an event under an existing direction, retires the link through the impact preview and restores it", async ({
     page,
   }) => {
@@ -109,10 +142,14 @@ test.describe("012 EARS-11 — event↔direction relationships in the live admin
     // A title that names no catalogue row yields no options and no way to
     // create one from here — a direction invented mid-link would enter the
     // taxonomy without ever passing the direction form.
-    await page
-      .getByTestId("event-topic-link-search")
-      .fill(`Несуществующее направление ${stamp}`);
-    await expect(page.getByTestId("event-topic-link-no-options")).toBeVisible();
+    const missingDirectionPanel = await searchRelationshipCombobox(
+      page,
+      "event-topic-link-combobox",
+      `Несуществующее направление ${stamp}`,
+    );
+    await expect(
+      missingDirectionPanel.getByText(/Подходящих направлений/),
+    ).toBeVisible();
     await expect(page.getByTestId("event-topic-link-form")).not.toContainText(
       "Создать",
     );
@@ -120,13 +157,15 @@ test.describe("012 EARS-11 — event↔direction relationships in the live admin
     // ── Add a link through the searchable selector ─────────────────────────
     // The search narrows SERVER-SIDE (`?q=`), so the option list is the API's
     // answer, not a client-side filter over one page of rows.
-    await page.getByTestId("event-topic-link-search").fill(directionA);
+    const directionPanel = await searchRelationshipCombobox(
+      page,
+      "event-topic-link-combobox",
+      directionA,
+    );
     await expect(
-      page.getByTestId("event-topic-link-select").locator("option"),
-    ).toHaveCount(2); // the placeholder + the one match
-    await page
-      .getByTestId("event-topic-link-select")
-      .selectOption({ label: directionA });
+      directionPanel.getByText(directionA, { exact: true }),
+    ).toHaveCount(1);
+    await directionPanel.getByText(directionA, { exact: true }).click();
     await page.getByTestId("event-topic-link-submit").click();
     await expect(page.getByTestId("event-topics-notice")).toContainText(
       "Связь добавлена.",
@@ -136,24 +175,34 @@ test.describe("012 EARS-11 — event↔direction relationships in the live admin
     );
     // An already-linked direction is no longer offerable: a choice that could only
     // ever come back 409 is not a choice.
-    await page.getByTestId("event-topic-link-search").fill(directionA);
-    await expect(page.getByTestId("event-topic-link-no-options")).toBeVisible();
+    const linkedDirectionPanel = await searchRelationshipCombobox(
+      page,
+      "event-topic-link-combobox",
+      directionA,
+    );
+    await expect(
+      linkedDirectionPanel.getByText(/Подходящих направлений/),
+    ).toBeVisible();
 
     // ── The duplicate-pair refusal, reached the way it really happens ───────
     // Two operators on the same event: this tab's picker still offers direction B
     // while the other tab links it. The stale choice must produce the RU
     // sentence that names the retained-row remedy, not a generic failure.
-    await page.getByTestId("event-topic-link-search").fill(directionB);
-    await page
-      .getByTestId("event-topic-link-select")
-      .selectOption({ label: directionB });
+    await selectRelationshipCombobox(
+      page,
+      "event-topic-link-combobox",
+      directionB,
+      directionB,
+    );
 
     const otherTab = await page.context().newPage();
     await openTopicsTab(otherTab, eventUrl);
-    await otherTab.getByTestId("event-topic-link-search").fill(directionB);
-    await otherTab
-      .getByTestId("event-topic-link-select")
-      .selectOption({ label: directionB });
+    await selectRelationshipCombobox(
+      otherTab,
+      "event-topic-link-combobox",
+      directionB,
+      directionB,
+    );
     await otherTab.getByTestId("event-topic-link-submit").click();
     await expect(otherTab.getByTestId("event-topics-notice")).toBeVisible();
     await otherTab.close();

@@ -149,11 +149,8 @@ export default function ProjectDetailPage() {
                 />
               </TabsContent>
 
-              {/* «События» (012 EARS-6, 012-design §5.1) — the READ direction of
-                  the same relationship. Authoring stays on the event detail, so
-                  one fact has exactly one authoring home; here the operator sees
-                  which эфиры this project holds and can still move a link
-                  through its §3.1 gate without leaving the project. */}
+              {/* «События» (012 EARS-22) — reverse authoring through the same
+                  EventProjectsPanel and canonical relationship command. */}
               <TabsContent value="events">
                 <EventProjectsPanel mode="project" entityId={detail.id} />
               </TabsContent>

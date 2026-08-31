@@ -1,5 +1,140 @@
 # @ds/api
 
+## 2.0.0
+
+### Major Changes
+
+- [#1575](https://github.com/doctor-school/ds-platform/pull/1575) [`9ee8b78`](https://github.com/doctor-school/ds-platform/commit/9ee8b78b7b3c575a5cf8ae425517040baaaf8cae) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - [#1483](https://github.com/doctor-school/ds-platform/issues/1483) (ADR-0016 §5): the taxonomy admin API renames its curated book and serves
+  the two direction relations [#1484](https://github.com/doctor-school/ds-platform/issues/1484)'s targeting resolution will read.
+
+  BREAKING — renamed routes: `/v1/admin/topics*` is now `/v1/admin/directions*`.
+  The old paths are gone rather than aliased: the shipped surface is one operator
+  admin whose only client ships from this repo, and a redirect would preserve the
+  vocabulary the rename exists to retire.
+
+  New admin surfaces, with the SAME authz as the existing taxonomy admin routes
+  (`platform_admin`, recorded in the committed endpoint-authz matrix):
+
+  - `/v1/admin/direction-specialties` — link a direction to one entry of the closed
+    Минздрав nomenclature, list/read, and retire/restore. There is no PATCH: a link
+    has no editable field, and «переставить» a link means retiring it and authoring
+    the other one.
+  - `/v1/admin/direction-adjacency` — author a DIRECTED edge between two directions
+    with `kind` + `weight`, edit `kind`/`weight` while active (an edge's ENDS are
+    immutable), and retire/restore. A retired edge refuses PATCH with 409.
+
+  Writes take an `Idempotency-Key`; the lifecycle transitions take `If-Match` and
+  answer a stale precondition with 412, exactly like the 012 relation routes.
+
+- [#1622](https://github.com/doctor-school/ds-platform/pull/1622) [`e1b771f`](https://github.com/doctor-school/ds-platform/commit/e1b771fdeddc55990c67a5f903aba280d7d174b4) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - [#1606](https://github.com/doctor-school/ds-platform/issues/1606): converge Expert authoring with an optional unique User link and replace
+  the stored free-form Expert name with required family/given names plus optional
+  patronymic. Expert display names and slugs are now server-derived, and mutation
+  input no longer accepts a slug. Project, Partner, Expert and Direction slugs are
+  stable system-owned identities with retained-row-safe collision suffixes and
+  kind fallbacks when authored text has no transliterable base.
+
+- [#1594](https://github.com/doctor-school/ds-platform/pull/1594) [`2883a90`](https://github.com/doctor-school/ds-platform/commit/2883a90d978fe1aa51edcb409ef9984fabdc585e) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 012 EARS-8: one canonical merged speaker projection for every public surface.
+
+  **Breaking.** `PublicEventPage.speakers` is no longer a flat `{name, credentials}` array. It is now `PublicEventSpeakerList` — an array of the `PublicEventPageSpeaker` discriminated union on `source`: a legacy arm (`{source: "legacy", name, credentials}`) and an expert arm (`{source: "expert", expertId, expertSlug, name, credentials, photoUrl, role}`, `photoUrl` present-and-nullable, signed at read time). Any consumer that read a speaker entry as the flat shape must narrow on `source`; both arms still carry `name` and `credentials`, so a consumer that only reads those two fields needs no change.
+
+  Adds `GET /v1/public/events/:idOrSlug/speakers`, the standalone public read of that same ordered list (404 `RESOURCE_NOT_FOUND` for an unknown or unpublished event key).
+
+  Every public speaker surface — the event page, the upcoming-broadcast cards and the new endpoint — now resolves through the single `SpeakerProjectionService`, ordered position → source rank (expert before legacy) → stable id, with a draft/retired/removed linked expert falling back to the legacy row it matched. The duplicate assembly blocks in `EventsService` are gone.
+
+### Minor Changes
+
+- [#1598](https://github.com/doctor-school/ds-platform/pull/1598) [`3833f11`](https://github.com/doctor-school/ds-platform/commit/3833f1177f9fc93d47cdc75469582069a0eb9a4b) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Curated event↔topic relationships (012 EARS-11). An event is filed under topics the catalogue already holds — the new «Темы» tab on the event detail links, retires and restores them through the §3.1 preview→confirm gate, with no inline topic creation and no delete. The admin surface is served by `/v1/admin/event-topics` (list filtered by either endpoint, create, transition-specific lifecycle-impact/retire/restore) and the public reads by `/v1/public/events/:idOrSlug/topics` and `/v1/public/topics/:idOrSlug/events`. The event's own `specialties[]` free-text axis is left untouched by every one of these paths.
+
+- [#1636](https://github.com/doctor-school/ds-platform/pull/1636) [`3a13d7c`](https://github.com/doctor-school/ds-platform/commit/3a13d7cca9ec57062a8c102ef811471a7eb86651) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - [#1610](https://github.com/doctor-school/ds-platform/issues/1610): author all five taxonomy relationships from either endpoint with one retained command, bounded server search, and the canonical in-dropdown Combobox.
+
+- [#1625](https://github.com/doctor-school/ds-platform/pull/1625) [`89e24a2`](https://github.com/doctor-school/ds-platform/commit/89e24a2b49f59887977271210b7ea5b333e339ad) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Add the shared, controlled `EventList` and the Academy `/webinars` upcoming/past tabs. The public event feed now exposes an opaque cursor page with tab counts; ended events are newest-first and carry the canonical batch-resolved recording state. Academy keeps URL state for tabs, facets, cursor/page and week/month view while preserving its registered-event overlay.
+
+- [#1654](https://github.com/doctor-school/ds-platform/pull/1654) [`61b46bc`](https://github.com/doctor-school/ds-platform/commit/61b46bcfb3ceb86fe3abafad026f05e4705b81c5) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - [#1646](https://github.com/doctor-school/ds-platform/issues/1646) (audit D2 of [#1639](https://github.com/doctor-school/ds-platform/issues/1639)): `POST /v1/public/specialty-choice` — the storefront's
+  only unauthenticated write — now carries the EARS-13 rate limiter. Every
+  accepted call mints an `idempotency_keys` row keyed by a header the CALLER
+  chooses, and the TTL sweep soft-expires those rows rather than removing them, so
+  an unbounded anonymous caller was unbounded row growth rather than merely wasted
+  work.
+
+  `@ds/api` minor, not patch: a client of this route gains a response it could not
+  previously receive. Over the budget the route answers `429` as an RFC 7807
+  problem naming neither the threshold nor the breached dimension (EARS-13/16),
+  and a caller that handled only `200`/`422`/`428` now has a fourth case. Nothing
+  is removed or renamed, and the accepted path is byte-identical.
+
+  `@RateLimited` gains an optional scope tag, and this route passes one
+  (`storefront:specialty-choice`). The tag partitions the limiter's
+  source-address windows, so this endpoint owns its bucket and can never exhaust
+  the ceiling `/v1/auth/register`, login and `password/reset` consume from the
+  same address. Every existing auth call site keeps the argument-less form, whose
+  keying is unchanged — the shared auth budget behaves exactly as before.
+
+  The budget on this route is 20 requests / 15 minutes **per source address as the
+  api resolves it**. No other dimension engages: the body carries no `identifier`
+  / `email` / `phone`, so there is no per-user window, and the per-ASN ceiling is
+  inert because no infrastructure layer sets `x-asn` in this deployment. And the
+  api does not currently resolve the caller — `trustProxy` is unconfigured and
+  nothing reads `x-forwarded-for` ([#1655](https://github.com/doctor-school/ds-platform/issues/1655)), while guest calls arrive through the
+  doctor app's server-side `/v1/:path*` rewrite — so until [#1655](https://github.com/doctor-school/ds-platform/issues/1655) lands the
+  effective production behaviour is a single shared bucket for this route: a
+  global bound on anonymous `idempotency_keys` growth, not a per-caller control.
+
+- [#1577](https://github.com/doctor-school/ds-platform/pull/1577) [`2d76e79`](https://github.com/doctor-school/ds-platform/commit/2d76e794ab7ef5d6ea937f2755d9819ef833042e) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 017 EARS-6: a doctor's chosen specialty is remembered, and the platform keeps
+  remembering it across sign-in.
+
+  `@ds/db` gains the `(doctor, specialty, role)` link row (LD-1) with restrictive
+  foreign keys, one primary specialty per doctor enforced by a partial unique
+  index, the retained-row lifecycle columns, and an audit trigger — the choice is
+  personal data with a recorded history, not a preference blob.
+
+  `@ds/api` gains ONE command with two routes, because the ACTOR decides where the
+  choice belongs and the actor is resolved from the request, never submitted:
+  `POST /v1/public/specialty-choice` writes a guest's answer into the anonymous
+  session, and `PUT /v1/me/specialty` writes a signed-in doctor's into the profile
+  link row. Both are idempotent, both reject a reference that is not a member of
+  the closed book, and «Другое» is a member like any other (LD-5). No client can
+  name a subject, so no client can write another doctor's specialty.
+
+  On the first authenticated read the sign-in cascade runs (LD-2): an anonymous
+  choice is ADOPTED into an empty profile and DISCARDED when the profile already
+  carries one — the profile always wins, with no prompt, no merge and no
+  cross-device carry. `@ds/schemas` carries the shared `SpecialtyChoice` contract,
+  where «resolved: nothing chosen» is a distinct answer from an unresolved read.
+
+- [#1597](https://github.com/doctor-school/ds-platform/pull/1597) [`16dfd8b`](https://github.com/doctor-school/ds-platform/commit/16dfd8bb0388caff1a91032ee44d6c3ade0528ad) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 014 EARS-18 — `MarkEventEnded`: a `platform_admin` can move a published event straight to `ended` when the эфир happened off the platform, without opening a room. New `POST /v1/admin/events/:id/mark-ended` (Idempotency-Key required; refuses with `EVENT_NOT_PAST` when the scheduled end is still ahead and `INVALID_TRANSITION` from any other origin or once a room was ever opened), the `published → ended` edge in the `LIFECYCLE_TRANSITIONS` SSOT, and the admin action «Отметить завершённым (трансляция прошла вне платформы)» — offered only when the server's `validTransitions` carries the edge. The lifecycle action table is now keyed on the `(origin, target)` pair, so `live → ended` keeps firing `close` while `published → ended` fires the new command.
+
+- [#1592](https://github.com/doctor-school/ds-platform/pull/1592) [`f9b61ce`](https://github.com/doctor-school/ds-platform/commit/f9b61ce678f906c31abcba507f3eff8e639e2c54) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 014 EARS-3 — one canonical edited-over-raw recording projection. `@ds/schemas`
+  gains the source-free `RecordingProjectionSchema` (`state: montage | raw-only | preparing`,
+  `primaryKind`, `secondaryKind`, `posterUrl`, `expectedBy`) plus `RecordingStateSchema`;
+  `@ds/api` gains `RecordingsProjectionService`, exported by `RecordingsModule` as the
+  single place the display rule lives. The primary/secondary choice is derived on every
+  read from the published, non-retired rows alone — no ordering column is stored, so
+  publishing the montage later promotes it with no operator edit — and the batch form
+  resolves a whole listing page in one statement.
+
+- [#1599](https://github.com/doctor-school/ds-platform/pull/1599) [`ba859b3`](https://github.com/doctor-school/ds-platform/commit/ba859b3d90fe7a9436dd677f92045ccbd79e8dbb) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Project↔expert and project↔partner relationships (012 EARS-9 / EARS-10). A project now carries its people and its sponsors as first-class curated links: experts are listed with a `curator | member` role under an at-most-one-active-curator invariant (a published project is never committed with zero or two curators), and the curator seat is handed over by the atomic, version-checked `POST /v1/admin/projects/:id/replace-curator` rather than by a second create. Partners carry `isPrimary` as an ordinary row attribute — a second active primary is refused with 409 `RELATIONSHIP_CONFLICT` and zero mutation — and `PublicProjectSummary.primaryPartner` is now populated on every public route that emits it, through one shared builder instead of a copy per vertical. Admin surfaces: `/v1/admin/project-experts` and `/v1/admin/project-partners` (list filtered by either endpoint, create, patch, retire, restore); public reads: `/v1/public/projects/:idOrSlug/{experts,partners}`, `/v1/public/experts/:idOrSlug/projects`, `/v1/public/partners/:idOrSlug/projects`. Two new admin panels are embedded bidirectionally on the project, expert and partner detail pages.
+
+- [#1617](https://github.com/doctor-school/ds-platform/pull/1617) [`b1533e3`](https://github.com/doctor-school/ds-platform/commit/b1533e318780e09c96689bb7de54283bf09c0e69) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 017 EARS-8: storefront targeting now resolves from the chosen closed-book
+  specialty through active managed specialty-to-direction links and directed
+  adjacency edges.
+
+  `@ds/schemas` gains the shared `TargetingSet` contract. Own and adjacent
+  directions carry explicit roles, adjacent rows retain their authored kind and
+  weight, and «Другое» is represented as an explicit general, non-targeted
+  selection with Russian explanatory copy rather than an empty targeted result.
+
+  `@ds/api` exports the read-through `TargetingService` for subsequent storefront
+  blocks. It excludes retired rows, reverse-only edges and inferred relations,
+  orders by authored weight with a stable tie-break, and de-duplicates a direction
+  reached from multiple own directions without ever re-labelling an own direction
+  as adjacent.
+
+### Patch Changes
+
+- Updated dependencies [[`3833f11`](https://github.com/doctor-school/ds-platform/commit/3833f1177f9fc93d47cdc75469582069a0eb9a4b), [`3a13d7c`](https://github.com/doctor-school/ds-platform/commit/3a13d7cca9ec57062a8c102ef811471a7eb86651), [`89e24a2`](https://github.com/doctor-school/ds-platform/commit/89e24a2b49f59887977271210b7ea5b333e339ad), [`e1b771f`](https://github.com/doctor-school/ds-platform/commit/e1b771fdeddc55990c67a5f903aba280d7d174b4), [`2d76e79`](https://github.com/doctor-school/ds-platform/commit/2d76e794ab7ef5d6ea937f2755d9819ef833042e), [`16dfd8b`](https://github.com/doctor-school/ds-platform/commit/16dfd8bb0388caff1a91032ee44d6c3ade0528ad), [`2883a90`](https://github.com/doctor-school/ds-platform/commit/2883a90d978fe1aa51edcb409ef9984fabdc585e), [`f9b61ce`](https://github.com/doctor-school/ds-platform/commit/f9b61ce678f906c31abcba507f3eff8e639e2c54), [`ba859b3`](https://github.com/doctor-school/ds-platform/commit/ba859b3d90fe7a9436dd677f92045ccbd79e8dbb), [`9ee8b78`](https://github.com/doctor-school/ds-platform/commit/9ee8b78b7b3c575a5cf8ae425517040baaaf8cae), [`b1533e3`](https://github.com/doctor-school/ds-platform/commit/b1533e318780e09c96689bb7de54283bf09c0e69), [`9ee8b78`](https://github.com/doctor-school/ds-platform/commit/9ee8b78b7b3c575a5cf8ae425517040baaaf8cae)]:
+  - @ds/schemas@4.0.0
+  - @ds/db@1.0.0
+
 ## 1.7.0
 
 ### Minor Changes

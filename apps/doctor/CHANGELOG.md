@@ -1,5 +1,44 @@
 # @ds/doctor
 
+## 0.3.0
+
+### Minor Changes
+
+- [#1577](https://github.com/doctor-school/ds-platform/pull/1577) [`2d76e79`](https://github.com/doctor-school/ds-platform/commit/2d76e794ab7ef5d6ea937f2755d9819ef833042e) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 017 EARS-6 / EARS-7 — the doctor storefront now REMEMBERS the specialty a doctor
+  picks, and the home page opens targeted on every visit after the first.
+
+  Activating an entry is the whole command: there is no confirm, no draft and no
+  save control to reach afterwards, from the pointer or from the keyboard. The
+  catalog collapses to the row the canvas draws — the official name verbatim,
+  «Другое» included, a «сменить» control, and the line explaining that content is
+  picked by the chosen specialty and its adjacent fields. The row is drawn from
+  what the write RETURNED, never from the chip that was clicked, so the page can
+  only ever name a specialty the platform actually recorded.
+
+  A refusal claims nothing: the catalog stays open and fully usable, says in plain
+  Russian that the choice was not remembered, and the doctor simply chooses again.
+  «сменить» restores the FULL variant-Б catalog — the search field over the whole
+  book, the frequent set and the route to «Другое» — and re-choosing re-targets and
+  is remembered in turn.
+
+  The remembered choice is resolved on the server, so a return visit's first byte
+  of HTML is already the collapsed row rather than the catalog folding itself away
+  a moment after it painted. When that read cannot be answered the section holds
+  its loading render and re-issues the read from the browser instead of re-asking a
+  question the doctor has already answered. Nothing here gates the page: no modal,
+  no backdrop, no scroll lock, and the rest of the home page stays whole.
+
+### Patch Changes
+
+- [#1664](https://github.com/doctor-school/ds-platform/pull/1664) [`521a541`](https://github.com/doctor-school/ds-platform/commit/521a5416892613f661ebb94fab90df3810ab3484) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 021 EARS-1 — the doctor registration route (`doctor.school/register`) inside the
+  017 storefront shell: the `auth` canvas's split composition, exactly three fields
+  (рабочая почта, пароль, необязательный промокод) and no document requested at the
+  door (REQ-22). Additive route on a private app whose host cut-over has not
+  happened, and no existing export or behaviour changes — patch.
+- Updated dependencies [[`de51447`](https://github.com/doctor-school/ds-platform/commit/de5144764860d6e3c009330d7ea4d667316be367), [`3833f11`](https://github.com/doctor-school/ds-platform/commit/3833f1177f9fc93d47cdc75469582069a0eb9a4b), [`1ec641e`](https://github.com/doctor-school/ds-platform/commit/1ec641e59b849a2e728c4bdbfdf7486a31fd6825), [`3a13d7c`](https://github.com/doctor-school/ds-platform/commit/3a13d7cca9ec57062a8c102ef811471a7eb86651), [`89e24a2`](https://github.com/doctor-school/ds-platform/commit/89e24a2b49f59887977271210b7ea5b333e339ad), [`e1b771f`](https://github.com/doctor-school/ds-platform/commit/e1b771fdeddc55990c67a5f903aba280d7d174b4), [`2d76e79`](https://github.com/doctor-school/ds-platform/commit/2d76e794ab7ef5d6ea937f2755d9819ef833042e), [`16dfd8b`](https://github.com/doctor-school/ds-platform/commit/16dfd8bb0388caff1a91032ee44d6c3ade0528ad), [`2883a90`](https://github.com/doctor-school/ds-platform/commit/2883a90d978fe1aa51edcb409ef9984fabdc585e), [`f9b61ce`](https://github.com/doctor-school/ds-platform/commit/f9b61ce678f906c31abcba507f3eff8e639e2c54), [`ba859b3`](https://github.com/doctor-school/ds-platform/commit/ba859b3d90fe7a9436dd677f92045ccbd79e8dbb), [`9ee8b78`](https://github.com/doctor-school/ds-platform/commit/9ee8b78b7b3c575a5cf8ae425517040baaaf8cae), [`dc0fcf9`](https://github.com/doctor-school/ds-platform/commit/dc0fcf9f5c7ef1569003552b244be654229c9f06), [`b1533e3`](https://github.com/doctor-school/ds-platform/commit/b1533e318780e09c96689bb7de54283bf09c0e69)]:
+  - @ds/design-system@5.2.0
+  - @ds/schemas@4.0.0
+
 ## 0.2.0
 
 ### Minor Changes

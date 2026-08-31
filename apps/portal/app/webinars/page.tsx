@@ -55,6 +55,7 @@ export default async function WebinarsListingPage({
       timeframe={tab}
       cursor={cursor}
       page={page}
+      queryParams={params}
     />
   );
 }

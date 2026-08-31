@@ -9,7 +9,6 @@ import type {
   CreateEventProjectRequest,
   EventProjectAdminDetail,
   EventProjectAdminList,
-  ProjectAdminListItem,
 } from "@ds/schemas";
 import { RelationshipEndpointPicker } from "@/components/relationship-endpoint-picker";
 import { taxonomyErrorKey } from "@/lib/taxonomy-errors";
@@ -331,7 +330,7 @@ function LinkForm({
   const t = useTranslations();
   const [projectId, setProjectId] = useState("");
   const { mutate, mutation } = useCustomMutation();
-  const picker = useRelationshipCombobox<ProjectAdminListItem>({
+  const picker = useRelationshipCombobox({
     resource: "projects",
     excludedIds: linkedProjectIds,
     value: projectId,

@@ -43,7 +43,6 @@ import {
   type EventExpertAdminList,
   type EventExpertAdminListItem,
   type ExpertAdminDetail,
-  type ExpertAdminListItem,
   type UpdateEventExpertRequest,
 } from "@ds/schemas";
 import {
@@ -808,7 +807,7 @@ function ExpertPicker({
   onChange: (next: string) => void;
 }) {
   const t = useTranslations();
-  const picker = useRelationshipCombobox<ExpertAdminListItem>({
+  const picker = useRelationshipCombobox({
     resource: "experts",
     excludedIds: [],
     value,

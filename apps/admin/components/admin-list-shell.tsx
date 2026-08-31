@@ -21,9 +21,15 @@ import {
  * error states. It owns NO column knowledge: the caller passes `columns` and a
  * row renderer, so a resource's table stays that resource's business.
  *
- * The filter form is deliberately submit-driven, not keystroke-driven: each
- * submit is one server query with one `q`, which keeps the operator in control of
- * when the list moves and keeps a slow list from re-querying per character.
+ * ITS SUBMIT-DRIVEN FILTER FORM IS NOW OUT OF CONTRACT. EARS-23 requires every
+ * taxonomy list to apply text search and every filter immediately, render each
+ * active value as a removable chip and offer one «Сбросить всё» — which is
+ * exactly what `admin-data-list.tsx` already does over the `FilterBar` block. The
+ * fix is therefore to MOVE the three surfaces still mounting this shell (experts,
+ * partners, projects) onto `AdminDataList` and delete this file, NOT to grow a
+ * second instant-apply toolbar here; a duplicated one is what #1638 audited.
+ * That page migration is #1297's own next step and the only thing keeping this
+ * component alive.
  */
 
 export interface AdminListColumn {

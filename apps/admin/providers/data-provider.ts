@@ -252,6 +252,45 @@ export async function fetchEligibleExpertUsers({
   return (await res.json()) as EligibleExpertUserList;
 }
 
+/**
+ * One bounded server page for a relationship endpoint selector (EARS-22/23). It
+ * is the same relative, cookie-authenticated GET the Refine `custom` path makes —
+ * a read owes no CSRF proof — expressed as a plain promise so the shared
+ * `useServerCombobox` owns the paging/debounce state for every selector alike.
+ */
+export async function fetchRelationshipEndpointOptions({
+  resource,
+  q = "",
+  page = 1,
+  pageSize = 20,
+}: {
+  resource: "events" | "projects" | "experts" | "directions" | "partners";
+  q?: string;
+  page?: number;
+  pageSize?: number;
+}): Promise<{
+  data: { id: string; title?: string; name?: string | null }[];
+  total: number;
+  page: number;
+}> {
+  const params = new URLSearchParams({
+    page: String(page),
+    pageSize: String(pageSize),
+  });
+  if (q.trim()) params.set("q", q.trim());
+  const res = await fetch(`${ADMIN_BASE}/${resource}?${params.toString()}`, {
+    credentials: "include",
+    headers: { accept: "application/json" },
+  });
+  if (!res.ok) throw await toHttpError(res);
+  const body = (await res.json()) as {
+    data: { id: string; title?: string; name?: string | null }[];
+    total: number;
+    page?: number;
+  };
+  return { data: body.data, total: body.total, page: body.page ?? page };
+}
+
 /** Split the authoring variables into the JSON payload and the file part. */
 function toAuthoringForm(vars: CreateEventVars | UpdateEventVars): FormData {
   const { programPdf, ...payload } = vars;

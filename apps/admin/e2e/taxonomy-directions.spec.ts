@@ -182,8 +182,9 @@ test.describe("012 EARS-3 / 017 EARS-16…18 — curated direction authoring in 
       ),
     ).toHaveCount(2);
 
-    // EARS-16: a maximum-length Russian title must grow beyond two desktop
-    // lines instead of being clipped by the reusable record cell.
+    // EARS-16: a maximum-length Russian title is laid out IN FULL by the
+    // reusable record cell — it wraps onto as many lines as it needs and is
+    // never clamped, ellipsised or scroll-clipped.
     const longTitle =
       `${"\u0414\u0435\u0442\u0441\u043a\u0430\u044f \u043a\u0430\u0440\u0434\u0438\u043e\u043b\u043e\u0433\u0438\u044f, \u043a\u0430\u0440\u0434\u0438\u043e\u0445\u0438\u0440\u0443\u0440\u0433\u0438\u044f \u0438 \u043a\u043b\u0438\u043d\u0438\u0447\u0435\u0441\u043a\u0430\u044f \u044d\u043b\u0435\u043a\u0442\u0440\u043e\u0444\u0438\u0437\u0438\u043e\u043b\u043e\u0433\u0438\u044f \u0441\u0435\u0440\u0434\u0446\u0430"} ${suffix}`.slice(
         0,
@@ -204,19 +205,35 @@ test.describe("012 EARS-3 / 017 EARS-16…18 — curated direction authoring in 
         .getByText(longTitle, { exact: true }),
     );
     await expect(longDesktopTitle).toHaveCount(1);
+    // The measurement counts LINE BOXES and compares the rendered string with
+    // the authored one. The earlier form compared the bounding height against
+    // `lineHeight * 2` and rotted twice over (#1669): the node the locator
+    // resolves to is an INLINE <span>, whose bounding height across two lines is
+    // `lineHeight + fontBoxHeight` (20 + 17 = 37px) rather than `lines ×
+    // lineHeight`, so the number never was the line count it read as; and the
+    // threshold silently depended on the cell being narrow enough that 120
+    // characters could not fit in two lines, which the block-tier record column
+    // no longer is. It also let the regression it existed for through — a
+    // `line-clamp-3` cell measures 57px and would have PASSED. Line boxes plus
+    // "the whole title is what got rendered" catch every clamp, at any width.
     const titleMetrics = await longDesktopTitle.evaluate((element) => {
       const style = getComputedStyle(element);
-      const lineHeight = Number.parseFloat(style.lineHeight);
+      const cell = element.closest("td") as HTMLElement;
       return {
-        height: element.getBoundingClientRect().height,
-        lineHeight,
+        lineBoxes: element.getClientRects().length,
+        renderedTitle: (element.textContent ?? "").trim(),
         overflow: style.overflow,
         webkitLineClamp: style.webkitLineClamp,
+        cellClipsItsContent: cell.scrollHeight > cell.clientHeight,
       };
     });
     expect(titleMetrics.webkitLineClamp).toBe("none");
     expect(titleMetrics.overflow).not.toBe("hidden");
-    expect(titleMetrics.height).toBeGreaterThan(titleMetrics.lineHeight * 2);
+    // A max-length RU title does not fit one line at this width: it wraps.
+    expect(titleMetrics.lineBoxes).toBeGreaterThan(1);
+    // Every character the operator typed is the text the cell renders.
+    expect(titleMetrics.renderedTitle).toBe(longTitle);
+    expect(titleMetrics.cellClipsItsContent).toBe(false);
   });
 
   /**

@@ -25,7 +25,17 @@ const TabsList = React.forwardRef<
       // single hard 2px-bordered container, no rounding, no gap, no padding — the
       // segments butt together and are divided by a 2px rule (owned per-trigger
       // via `border-l-2`, dropped on the first). Full-width like the old list.
-      "inline-flex w-full items-stretch border-2 border-border bg-background",
+      //
+      // The strip scrolls ITSELF once its segments no longer fit (#1669). The
+      // segments are `whitespace-nowrap`, so their min-content width is a hard
+      // floor `flex-1` cannot shrink past: a five-segment RU tab bar measures
+      // ~539px, and without a scroll container of its own that width landed on
+      // the PAGE — the admin `/events/[id]` screen side-scrolled by 149px at
+      // 390px, which is precisely the fault #1222/#1399 removed from the same
+      // surfaces. `overflow-x-auto` is width-keyed, not breakpoint-keyed: at
+      // every width where the segments already fit the render is unchanged, and
+      // where they do not, the strip pans instead of the page.
+      "inline-flex w-full items-stretch overflow-x-auto border-2 border-border bg-background",
       className,
     )}
     {...props}

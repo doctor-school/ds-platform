@@ -96,7 +96,7 @@ export function EventExpertsPanel({
   // resource, they are the same list without the default filter, and fetching
   // them only when the toggle flips would make «показать отозванные» a spinner
   // instead of a reveal.
-  const { result, query } = useCustom<EventExpertAdminList>({
+  const { query } = useCustom<EventExpertAdminList>({
     url: eventExpertsUrl.collection({
       ...(mode === "event" ? { eventId: entityId } : { expertId: entityId }),
       includeRetired: true,
@@ -122,7 +122,10 @@ export function EventExpertsPanel({
     );
   }
 
-  const list = result?.data;
+  // The QUERY is the source of presence, not `result`: Refine's `result.data`
+  // substitutes a frozen `{}` when the query has no answer, so a check against it
+  // reads "loaded" for a failed read and then trips over `list.data`.
+  const list = query.data?.data;
   if (!list) {
     return (
       <Alert variant="danger" data-testid="event-experts-error">

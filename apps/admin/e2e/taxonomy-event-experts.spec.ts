@@ -319,4 +319,41 @@ test.describe("012 EARS-7 — event↔expert links in the live admin", () => {
       page.getByTestId("event-experts-active").locator("section"),
     ).toContainText("Активна");
   });
+
+  test("012 EARS-7: a failed collection read shall render the RU error state, never a white screen (#1590)", async ({
+    page,
+  }) => {
+    await signInAsAdmin(page);
+    const eventId = await createEvent(
+      page,
+      `Эксперты — сбой чтения ${Date.now()}`,
+    );
+
+    // Fault injection at the transport: the failure under test is the BROWSER's
+    // rendering of a read that has no answer. Refine's `result.data` substitutes
+    // a frozen `{}` there, so a presence check against it reads "loaded" and the
+    // panel then trips over `list.data` — the white screen of #1590 (the same
+    // defect as #1428). Only the query's own `data` distinguishes the two states.
+    await page.route("**/v1/admin/event-experts?**", async (route) => {
+      if (route.request().method() !== "GET") {
+        await route.fallback();
+        return;
+      }
+      await route.fulfill({
+        status: 500,
+        contentType: "application/json",
+        body: JSON.stringify({ message: "injected read failure" }),
+      });
+    });
+
+    await page.goto(`/events/${eventId}`);
+    await page.getByTestId("tab-experts").click();
+    await expect(page.getByTestId("event-experts-error")).toContainText(
+      "Не удалось загрузить экспертов мероприятия.",
+    );
+    // The panel body never rendered, and the tab is still a live screen rather
+    // than a blank document — an operator can read WHY and retry.
+    await expect(page.getByTestId("event-experts-panel")).toHaveCount(0);
+    await expect(page.getByTestId("tab-experts")).toBeVisible();
+  });
 });

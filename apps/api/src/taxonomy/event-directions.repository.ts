@@ -1,42 +1,41 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { and, asc, count, eq, gt, inArray, isNull, or, sql } from "drizzle-orm";
-// #1483 (ADR-0016 §5) renamed the `topics` book to `directions`. The 012
-// EARS-11 join keeps its own nouns — the table is still `event_topics`, the
-// column is still `topic_id` and the public route still answers «темы этого
-// эфира» — so the rename is bridged at this import instead of being rewritten
-// through a vertical whose API surface did not change.
+// #1483 (ADR-0016 §5) renamed the `topics` book to `directions`; #1645
+// completed the rename through this vertical, so the join, its column and its
+// public route all speak `direction` and no bridge alias survives at the
+// import.
 import type {
-  Direction as Topic,
+  Direction,
   DrizzleHandle,
   Event,
-  EventTopic,
+  EventDirection,
 } from "@ds/db";
-import { directions as topics, eventTopics, events } from "@ds/db";
-import type { EventTopicAdminListQuery } from "@ds/schemas";
+import { directions, eventDirections, events } from "@ds/db";
+import type { EventDirectionAdminListQuery } from "@ds/schemas";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
 import { withRequestAuditContext } from "../audit/audit-context.tx.js";
 import { PUBLIC_EVENT_STATES } from "./event-projects.repository.js";
 
-// 012 EARS-11 (#1293) — Drizzle data access for the `event_topics` join. Same
+// 012 EARS-11 (#1293) — Drizzle data access for the `event_directions` join. Same
 // posture as the sibling `event_projects` repository: every mutating path opens
 // its transaction through `withRequestAuditContext`, so feature 010's capture
-// trigger attributes the resulting `data.event_topics.*` ledger rows to the
+// trigger attributes the resulting `data.event_directions.*` ledger rows to the
 // acting admin without this layer knowing who that is.
 //
 // A relationship row holds NO editorial content — only its two endpoint ids and
 // its own lifecycle — so nothing here is a masked column. Nothing in this file
-// reads or writes `events.specialties[]`: topics and specialties are different
+// reads or writes `events.specialties[]`: directions and specialties are different
 // axes (012-requirements EARS-11), and the only way the array could change
-// under a topic write is if some query here touched it, so none does.
+// under a direction write is if some query here touched it, so none does.
 
 type Db = DrizzleHandle["db"];
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 
 /** One relationship joined to both endpoints' display forms (§5.1, §3.1). */
-export interface EventTopicRow {
-  relation: EventTopic;
+export interface EventDirectionRow {
+  relation: EventDirection;
   event: Pick<Event, "id" | "slug" | "title" | "state" | "recordStatus">;
-  topic: Pick<Topic, "id" | "slug" | "title" | "status">;
+  direction: Pick<Direction, "id" | "slug" | "title" | "status">;
 }
 
 /** The lifecycle patch a retire/restore applies. */
@@ -46,7 +45,7 @@ export interface RelationshipLifecyclePatch {
 }
 
 @Injectable()
-export class EventTopicsRepository {
+export class EventDirectionsRepository {
   constructor(@Inject(DRIZZLE_DB) private readonly db: Db) {}
 
   /** Run `fn` in one audit-attributed transaction. */
@@ -69,18 +68,18 @@ export class EventTopicsRepository {
 
   async insert(
     tx: Tx,
-    values: { eventId: string; topicId: string },
-  ): Promise<EventTopic> {
-    const [row] = await tx.insert(eventTopics).values(values).returning();
-    if (!row) throw new Error("event_topics insert returned no row");
+    values: { eventId: string; directionId: string },
+  ): Promise<EventDirection> {
+    const [row] = await tx.insert(eventDirections).values(values).returning();
+    if (!row) throw new Error("event_directions insert returned no row");
     return row;
   }
 
-  async findById(id: string): Promise<EventTopic | null> {
+  async findById(id: string): Promise<EventDirection | null> {
     const [row] = await this.db
       .select()
-      .from(eventTopics)
-      .where(eq(eventTopics.id, id));
+      .from(eventDirections)
+      .where(eq(eventDirections.id, id));
     return row ?? null;
   }
 
@@ -91,11 +90,11 @@ export class EventTopicsRepository {
    * command that locked its own row first and then reached for an endpoint
    * would invert the order an entity command uses and deadlock against it.
    */
-  async lockForTransition(tx: Tx, id: string): Promise<EventTopicRow | null> {
+  async lockForTransition(tx: Tx, id: string): Promise<EventDirectionRow | null> {
     const [existing] = await tx
       .select()
-      .from(eventTopics)
-      .where(eq(eventTopics.id, id));
+      .from(eventDirections)
+      .where(eq(eventDirections.id, id));
     if (!existing) return null;
 
     await tx
@@ -104,22 +103,22 @@ export class EventTopicsRepository {
       .where(eq(events.id, existing.eventId))
       .for("update");
     await tx
-      .select({ id: topics.id })
-      .from(topics)
-      .where(eq(topics.id, existing.topicId))
+      .select({ id: directions.id })
+      .from(directions)
+      .where(eq(directions.id, existing.directionId))
       .for("update");
 
     const [locked] = await tx
       .select()
-      .from(eventTopics)
-      .where(eq(eventTopics.id, id))
+      .from(eventDirections)
+      .where(eq(eventDirections.id, id))
       .for("update");
     if (!locked) return null;
     return this.hydrate(tx, locked);
   }
 
   /** Join one relation row to both endpoints' display forms. */
-  async hydrate(tx: Tx | Db, relation: EventTopic): Promise<EventTopicRow> {
+  async hydrate(tx: Tx | Db, relation: EventDirection): Promise<EventDirectionRow> {
     const [row] = await tx
       .select({
         eventId: events.id,
@@ -127,19 +126,19 @@ export class EventTopicsRepository {
         eventTitle: events.title,
         eventState: events.state,
         eventRecordStatus: events.recordStatus,
-        topicId: topics.id,
-        topicSlug: topics.slug,
-        topicTitle: topics.title,
-        topicStatus: topics.status,
+        directionId: directions.id,
+        directionSlug: directions.slug,
+        directionTitle: directions.title,
+        directionStatus: directions.status,
       })
       .from(events)
-      .innerJoin(topics, eq(topics.id, relation.topicId))
+      .innerJoin(directions, eq(directions.id, relation.directionId))
       .where(eq(events.id, relation.eventId));
     if (!row) {
       // Both FKs are RESTRICT and nothing in 012 is physically deleted, so an
       // endpoint cannot vanish under a relation. Reaching here means the
       // database no longer satisfies its own constraints.
-      throw new Error("event_topics row has an unresolvable endpoint");
+      throw new Error("event_directions row has an unresolvable endpoint");
     }
     return {
       relation,
@@ -150,36 +149,36 @@ export class EventTopicsRepository {
         state: row.eventState,
         recordStatus: row.eventRecordStatus,
       },
-      topic: {
-        id: row.topicId,
-        slug: row.topicSlug,
-        title: row.topicTitle,
-        status: row.topicStatus,
+      direction: {
+        id: row.directionId,
+        slug: row.directionSlug,
+        title: row.directionTitle,
+        status: row.directionStatus,
       },
     };
   }
 
-  async detailById(id: string): Promise<EventTopicRow | null> {
+  async detailById(id: string): Promise<EventDirectionRow | null> {
     const relation = await this.findById(id);
     if (!relation) return null;
     return this.hydrate(this.db, relation);
   }
 
   /**
-   * The logical pair, ACTIVE OR RETIRED (`event_topics_pair_key` spans both).
+   * The logical pair, ACTIVE OR RETIRED (`event_directions_pair_key` spans both).
    * A retired pair is what turns a duplicate create into «restore that relation
    * instead», rather than a second row for one relationship.
    */
   async findPair(
     tx: Tx | Db,
     eventId: string,
-    topicId: string,
-  ): Promise<EventTopic | null> {
+    directionId: string,
+  ): Promise<EventDirection | null> {
     const [row] = await tx
       .select()
-      .from(eventTopics)
+      .from(eventDirections)
       .where(
-        and(eq(eventTopics.eventId, eventId), eq(eventTopics.topicId, topicId)),
+        and(eq(eventDirections.eventId, eventId), eq(eventDirections.directionId, directionId)),
       );
     return row ?? null;
   }
@@ -189,8 +188,8 @@ export class EventTopicsRepository {
     return row ?? null;
   }
 
-  async findTopic(tx: Tx | Db, id: string): Promise<Topic | null> {
-    const [row] = await tx.select().from(topics).where(eq(topics.id, id));
+  async findDirection(tx: Tx | Db, id: string): Promise<Direction | null> {
+    const [row] = await tx.select().from(directions).where(eq(directions.id, id));
     return row ?? null;
   }
 
@@ -205,17 +204,17 @@ export class EventTopicsRepository {
     id: string,
     expectedVersion: number,
     patch: RelationshipLifecyclePatch,
-  ): Promise<EventTopic | null> {
+  ): Promise<EventDirection | null> {
     const [row] = await tx
-      .update(eventTopics)
+      .update(eventDirections)
       .set({
         status: patch.status,
         deletedAt: patch.deletedAt,
-        version: sql`${eventTopics.version} + 1`,
+        version: sql`${eventDirections.version} + 1`,
         updatedAt: new Date(),
       })
       .where(
-        and(eq(eventTopics.id, id), eq(eventTopics.version, expectedVersion)),
+        and(eq(eventDirections.id, id), eq(eventDirections.version, expectedVersion)),
       )
       .returning();
     return row ?? null;
@@ -224,9 +223,9 @@ export class EventTopicsRepository {
   /** {@link discoverIncident} against the pool — the preview's optimistic read. */
   discoverIncidentAnywhere(
     eventId: string,
-    topicId: string,
-  ): Promise<EventTopicRow[]> {
-    return this.discoverIncident(this.db, eventId, topicId);
+    directionId: string,
+  ): Promise<EventDirectionRow[]> {
+    return this.discoverIncident(this.db, eventId, directionId);
   }
 
   /**
@@ -240,28 +239,28 @@ export class EventTopicsRepository {
   async discoverIncident(
     tx: Tx | Db,
     eventId: string,
-    topicId: string,
-  ): Promise<EventTopicRow[]> {
+    directionId: string,
+  ): Promise<EventDirectionRow[]> {
     const rows = await tx
       .select({
-        relation: eventTopics,
+        relation: eventDirections,
         eventId: events.id,
         eventSlug: events.slug,
         eventTitle: events.title,
         eventState: events.state,
         eventRecordStatus: events.recordStatus,
-        topicId: topics.id,
-        topicSlug: topics.slug,
-        topicTitle: topics.title,
-        topicStatus: topics.status,
+        directionId: directions.id,
+        directionSlug: directions.slug,
+        directionTitle: directions.title,
+        directionStatus: directions.status,
       })
-      .from(eventTopics)
-      .innerJoin(events, eq(events.id, eventTopics.eventId))
-      .innerJoin(topics, eq(topics.id, eventTopics.topicId))
+      .from(eventDirections)
+      .innerJoin(events, eq(events.id, eventDirections.eventId))
+      .innerJoin(directions, eq(directions.id, eventDirections.directionId))
       .where(
-        or(eq(eventTopics.eventId, eventId), eq(eventTopics.topicId, topicId)),
+        or(eq(eventDirections.eventId, eventId), eq(eventDirections.directionId, directionId)),
       )
-      .orderBy(asc(eventTopics.id));
+      .orderBy(asc(eventDirections.id));
 
     return rows.map((row) => ({
       relation: row.relation,
@@ -272,55 +271,55 @@ export class EventTopicsRepository {
         state: row.eventState,
         recordStatus: row.eventRecordStatus,
       },
-      topic: {
-        id: row.topicId,
-        slug: row.topicSlug,
-        title: row.topicTitle,
-        status: row.topicStatus,
+      direction: {
+        id: row.directionId,
+        slug: row.directionSlug,
+        title: row.directionTitle,
+        status: row.directionStatus,
       },
     }));
   }
 
   /** The filtered admin list (§5.1): offset pagination, either endpoint scopes it. */
   async list(
-    query: EventTopicAdminListQuery,
-  ): Promise<{ rows: EventTopicRow[]; total: number }> {
+    query: EventDirectionAdminListQuery,
+  ): Promise<{ rows: EventDirectionRow[]; total: number }> {
     const filters = [];
-    if (query.eventId) filters.push(eq(eventTopics.eventId, query.eventId));
-    if (query.topicId) filters.push(eq(eventTopics.topicId, query.topicId));
+    if (query.eventId) filters.push(eq(eventDirections.eventId, query.eventId));
+    if (query.directionId) filters.push(eq(eventDirections.directionId, query.directionId));
     if (query.status) {
-      filters.push(eq(eventTopics.status, query.status));
+      filters.push(eq(eventDirections.status, query.status));
     } else if (!query.includeRetired) {
-      filters.push(isNull(eventTopics.deletedAt));
+      filters.push(isNull(eventDirections.deletedAt));
     }
     const where = filters.length > 0 ? and(...filters) : undefined;
 
     const rows = await this.db
       .select({
-        relation: eventTopics,
+        relation: eventDirections,
         eventId: events.id,
         eventSlug: events.slug,
         eventTitle: events.title,
         eventState: events.state,
         eventRecordStatus: events.recordStatus,
-        topicId: topics.id,
-        topicSlug: topics.slug,
-        topicTitle: topics.title,
-        topicStatus: topics.status,
+        directionId: directions.id,
+        directionSlug: directions.slug,
+        directionTitle: directions.title,
+        directionStatus: directions.status,
       })
-      .from(eventTopics)
-      .innerJoin(events, eq(events.id, eventTopics.eventId))
-      .innerJoin(topics, eq(topics.id, eventTopics.topicId))
+      .from(eventDirections)
+      .innerJoin(events, eq(events.id, eventDirections.eventId))
+      .innerJoin(directions, eq(directions.id, eventDirections.directionId))
       .where(where)
       // Stable total order ending in the relation id — two rows created in the
       // same millisecond must not swap places between pages.
-      .orderBy(asc(events.title), asc(topics.title), asc(eventTopics.id))
+      .orderBy(asc(events.title), asc(directions.title), asc(eventDirections.id))
       .limit(query.pageSize)
       .offset((query.page - 1) * query.pageSize);
 
     const [totals] = await this.db
       .select({ value: count() })
-      .from(eventTopics)
+      .from(eventDirections)
       .where(where);
 
     return {
@@ -333,11 +332,11 @@ export class EventTopicsRepository {
           state: row.eventState,
           recordStatus: row.eventRecordStatus,
         },
-        topic: {
-          id: row.topicId,
-          slug: row.topicSlug,
-          title: row.topicTitle,
-          status: row.topicStatus,
+        direction: {
+          id: row.directionId,
+          slug: row.directionSlug,
+          title: row.directionTitle,
+          status: row.directionStatus,
         },
       })),
       total: Number(totals?.value ?? 0),
@@ -354,63 +353,63 @@ export class EventTopicsRepository {
     return row ?? null;
   }
 
-  /** Resolve a public topic by canonical UUID or slug; eligibility is the caller's. */
-  async findPublicTopic(key: {
+  /** Resolve a public direction by canonical UUID or slug; eligibility is the caller's. */
+  async findPublicDirection(key: {
     id?: string;
     slug?: string;
-  }): Promise<Topic | null> {
-    const where = key.id ? eq(topics.id, key.id) : eq(topics.slug, key.slug!);
-    const [row] = await this.db.select().from(topics).where(where);
+  }): Promise<Direction | null> {
+    const where = key.id ? eq(directions.id, key.id) : eq(directions.slug, key.slug!);
+    const [row] = await this.db.select().from(directions).where(where);
     return row ?? null;
   }
 
   /**
-   * §5.2 — the published topics of one event, keyset-paginated on `(title, id)`.
-   * Only ACTIVE relations to PUBLISHED topics are traversed: a retired relation
+   * §5.2 — the published directions of one event, keyset-paginated on `(title, id)`.
+   * Only ACTIVE relations to PUBLISHED directions are traversed: a retired relation
    * and an unpublished endpoint are both invisible here, and neither is
    * distinguishable from «no such relation» by the caller.
    */
-  async listTopicsForEvent(
+  async listDirectionsForEvent(
     eventId: string,
     limit: number,
     after: { title: string; id: string } | null,
-  ): Promise<Topic[]> {
+  ): Promise<Direction[]> {
     const filters = [
-      eq(eventTopics.eventId, eventId),
-      eq(eventTopics.status, "active"),
-      eq(topics.status, "published"),
+      eq(eventDirections.eventId, eventId),
+      eq(eventDirections.status, "active"),
+      eq(directions.status, "published"),
     ];
     if (after) {
       filters.push(
         or(
-          gt(topics.title, after.title),
-          and(eq(topics.title, after.title), gt(topics.id, after.id)),
+          gt(directions.title, after.title),
+          and(eq(directions.title, after.title), gt(directions.id, after.id)),
         )!,
       );
     }
     const rows = await this.db
-      .select({ topic: topics })
-      .from(eventTopics)
-      .innerJoin(topics, eq(topics.id, eventTopics.topicId))
+      .select({ direction: directions })
+      .from(eventDirections)
+      .innerJoin(directions, eq(directions.id, eventDirections.directionId))
       .where(and(...filters))
-      .orderBy(asc(topics.title), asc(topics.id))
+      .orderBy(asc(directions.title), asc(directions.id))
       .limit(limit);
-    return rows.map((row) => row.topic);
+    return rows.map((row) => row.direction);
   }
 
   /**
-   * §5.2 — the publish-visible events carrying one topic, keyset-paginated on
+   * §5.2 — the publish-visible events carrying one direction, keyset-paginated on
    * `(startsAt, id)`: a broadcast list is read chronologically, so the cursor
    * order is the order the reader already sees.
    */
-  async listEventsForTopic(
-    topicId: string,
+  async listEventsForDirection(
+    directionId: string,
     limit: number,
     after: { startsAt: string; id: string } | null,
   ): Promise<Event[]> {
     const filters = [
-      eq(eventTopics.topicId, topicId),
-      eq(eventTopics.status, "active"),
+      eq(eventDirections.directionId, directionId),
+      eq(eventDirections.status, "active"),
       eq(events.recordStatus, "active"),
       inArray(events.state, [...PUBLIC_EVENT_STATES]),
     ];
@@ -425,8 +424,8 @@ export class EventTopicsRepository {
     }
     const rows = await this.db
       .select({ event: events })
-      .from(eventTopics)
-      .innerJoin(events, eq(events.id, eventTopics.eventId))
+      .from(eventDirections)
+      .innerJoin(events, eq(events.id, eventDirections.eventId))
       .where(and(...filters))
       .orderBy(asc(events.startsAt), asc(events.id))
       .limit(limit);

@@ -16,7 +16,7 @@ import { AppShell } from "@/components/app-shell";
 import { BackToList } from "@/components/back-to-list";
 import { DirectionForm } from "@/components/direction-form";
 import { DirectionLifecycleActions } from "@/components/direction-lifecycle-actions";
-import { EventTopicsPanel } from "@/components/event-topics-panel";
+import { EventDirectionsPanel } from "@/components/event-directions-panel";
 import { StatusChip } from "@/components/status-chip";
 import { taxonomyErrorKey } from "@/lib/taxonomy-errors";
 import type { UpdateDirectionVars } from "@/providers/data-provider";
@@ -154,7 +154,7 @@ export default function DirectionDetailPage() {
                 />
               </TabsContent>
               <TabsContent value="events">
-                <EventTopicsPanel mode="topic" entityId={detail.id} />
+                <EventDirectionsPanel mode="direction" entityId={detail.id} />
               </TabsContent>
             </Tabs>
           </>

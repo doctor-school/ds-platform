@@ -88,10 +88,10 @@ describe("taxonomyErrorKey — 012 EARS-6 relationship codes (#1288)", () => {
   it("EARS-22: event-direction duplicate uses the existing actionable RU sentence", () => {
     const key = taxonomyErrorKey(
       { errorCode: "RELATIONSHIP_CONFLICT" },
-      "eventTopics.errors.linkFailed",
+      "eventDirections.errors.linkFailed",
     );
 
-    expect(key).toBe("eventTopics.errors.duplicatePair");
+    expect(key).toBe("eventDirections.errors.duplicatePair");
     expect(typeof lookup(key)).toBe("string");
   });
 
@@ -99,15 +99,15 @@ describe("taxonomyErrorKey — 012 EARS-6 relationship codes (#1288)", () => {
     expect(
       taxonomyErrorKey(
         { errorCode: "LIFECYCLE_IMPACT_STALE" },
-        "eventTopics.errors.transitionFailed",
+        "eventDirections.errors.transitionFailed",
       ),
-    ).toBe("eventTopics.errors.impactStale");
+    ).toBe("eventDirections.errors.impactStale");
     expect(
       taxonomyErrorKey(
         { errorCode: "LIFECYCLE_IMPACT_REQUIRED" },
-        "eventTopics.errors.transitionFailed",
+        "eventDirections.errors.transitionFailed",
       ),
-    ).toBe("eventTopics.errors.impactRequired");
+    ).toBe("eventDirections.errors.impactRequired");
   });
 
   it("EARS-6: every relationship refusal maps to its own existing RU sentence", () => {

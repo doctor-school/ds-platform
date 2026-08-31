@@ -94,7 +94,7 @@ async function createExpertForScan(
  * A curated direction, created through the real authoring screen.
  *
  * The taxonomy scans below need a direction that EXISTS: a link row (a
- * direction↔specialty pair, a direction↔direction edge) and an event's topic
+ * direction↔specialty pair, a direction↔direction edge) and an event's direction
  * panel all render their populated states only against one, and an empty list is
  * a different a11y surface from a populated one.
  */
@@ -539,9 +539,9 @@ test.describe("007 EARS-11 axe-core a11y scan of the admin event surface", () =>
   // as the only authoring control, the explaining KIND combobox with its open
   // panel, and a deliberately read-only book with no create affordance.
   //
-  // «event-topics» gets no test of its own on purpose: it is not a route. The
-  // topics surface is the `tab-topics` panel of `/events/[id]`
-  // (`taxonomy-event-topics.spec.ts`), so it is scanned as a tab state of the
+  // «event-directions» gets no test of its own on purpose: it is not a route. The
+  // directions surface is the `tab-directions` panel of `/events/[id]`
+  // (`taxonomy-event-directions.spec.ts`), so it is scanned as a tab state of the
   // event detail — scanning a URL that does not exist would certify nothing.
 
   test("the direction list + create + rejected + detail surfaces pass WCAG 2 A/AA (light)", async ({
@@ -701,13 +701,13 @@ test.describe("007 EARS-11 axe-core a11y scan of the admin event surface", () =>
     for (const theme of THEMES) await scan(page, theme);
   });
 
-  test("the event topics tab passes WCAG 2 A/AA (light)", async ({ page }) => {
+  test("the event directions tab passes WCAG 2 A/AA (light)", async ({ page }) => {
     await loginAsAdmin(page);
     const id = await createEventForScan(page);
 
     await page.goto(`/events/${id}`);
-    await page.getByTestId("tab-topics").click();
-    await page.getByTestId("event-topics-panel").waitFor({ state: "visible" });
+    await page.getByTestId("tab-directions").click();
+    await page.getByTestId("event-directions-panel").waitFor({ state: "visible" });
     for (const theme of THEMES) await scan(page, theme);
   });
 });

@@ -10,7 +10,7 @@ import { totpCode } from "./support/totp";
  * 012 EARS-11 (#1293), browser half — the REAL Refine → NestJS → Postgres path
  * for the event↔direction relationship editor and the §3.1 preview→confirm gate.
  *
- * `apps/api/test/taxonomy/event-topics.e2e-spec.ts` proves the contract against
+ * `apps/api/test/taxonomy/event-directions.e2e-spec.ts` proves the contract against
  * the API. This proves the OPERATOR-facing arc, which no API test can: that the
  * picker offers only directions the catalogue ALREADY holds (no inline creation),
  * that the confirmation dialog shows the affected rows BEFORE the transition
@@ -25,7 +25,7 @@ import { totpCode } from "./support/totp";
  *
  *   E2E_ADMIN_URL=http://localhost:3201 IDP_ISSUER=… IDP_SERVICE_TOKEN=… \
  *   IDP_PROJECT_ID=… pnpm --filter @ds/admin exec playwright test \
- *     e2e/taxonomy-event-topics.spec.ts --config=playwright.flows.config.ts
+ *     e2e/taxonomy-event-directions.spec.ts --config=playwright.flows.config.ts
  */
 const ORIGIN = process.env.E2E_ADMIN_URL ?? "http://localhost:3200";
 
@@ -77,10 +77,10 @@ async function createEvent(page: Page, title: string): Promise<string> {
 }
 
 /** Open the «Направления» tab of an event detail and wait for the panel. */
-async function openTopicsTab(page: Page, eventUrl: string): Promise<void> {
+async function openDirectionsTab(page: Page, eventUrl: string): Promise<void> {
   await page.goto(eventUrl);
-  await page.getByTestId("tab-topics").click();
-  await page.getByTestId("event-topics-panel").waitFor({ state: "visible" });
+  await page.getByTestId("tab-directions").click();
+  await page.getByTestId("event-directions-panel").waitFor({ state: "visible" });
 }
 
 test.describe.configure({ mode: "serial" });
@@ -101,16 +101,16 @@ test.describe("012 EARS-11 — event↔direction relationships in the live admin
     await page.getByTestId("tab-events").click();
     await selectRelationshipCombobox(
       page,
-      "event-topic-link-combobox",
+      "event-direction-link-combobox",
       eventTitle,
       eventTitle,
     );
-    await page.getByTestId("event-topic-link-submit").click();
+    await page.getByTestId("event-direction-link-submit").click();
 
-    await expect(page.getByTestId("event-topics-notice")).toContainText(
+    await expect(page.getByTestId("event-directions-notice")).toContainText(
       "Связь добавлена.",
     );
-    await expect(page.getByTestId("event-topics-panel")).toContainText(
+    await expect(page.getByTestId("event-directions-panel")).toContainText(
       eventTitle,
     );
   });
@@ -132,9 +132,9 @@ test.describe("012 EARS-11 — event↔direction relationships in the live admin
     const eventUrl = await createEvent(page, `Связи направлений эфир ${stamp}`);
 
     // ── The tab starts empty and says so ───────────────────────────────────
-    await openTopicsTab(page, eventUrl);
-    await expect(page.getByTestId("event-topics-empty")).toBeVisible();
-    await expect(page.getByTestId("event-topics-panel")).toContainText(
+    await openDirectionsTab(page, eventUrl);
+    await expect(page.getByTestId("event-directions-empty")).toBeVisible();
+    await expect(page.getByTestId("event-directions-panel")).toContainText(
       "Связи не удаляются",
     );
 
@@ -144,13 +144,13 @@ test.describe("012 EARS-11 — event↔direction relationships in the live admin
     // taxonomy without ever passing the direction form.
     const missingDirectionPanel = await searchRelationshipCombobox(
       page,
-      "event-topic-link-combobox",
+      "event-direction-link-combobox",
       `Несуществующее направление ${stamp}`,
     );
     await expect(
       missingDirectionPanel.getByText(/Подходящих направлений/),
     ).toBeVisible();
-    await expect(page.getByTestId("event-topic-link-form")).not.toContainText(
+    await expect(page.getByTestId("event-direction-link-form")).not.toContainText(
       "Создать",
     );
 
@@ -159,25 +159,25 @@ test.describe("012 EARS-11 — event↔direction relationships in the live admin
     // answer, not a client-side filter over one page of rows.
     const directionPanel = await searchRelationshipCombobox(
       page,
-      "event-topic-link-combobox",
+      "event-direction-link-combobox",
       directionA,
     );
     await expect(
       directionPanel.getByText(directionA, { exact: true }),
     ).toHaveCount(1);
     await directionPanel.getByText(directionA, { exact: true }).click();
-    await page.getByTestId("event-topic-link-submit").click();
-    await expect(page.getByTestId("event-topics-notice")).toContainText(
+    await page.getByTestId("event-direction-link-submit").click();
+    await expect(page.getByTestId("event-directions-notice")).toContainText(
       "Связь добавлена.",
     );
-    await expect(page.getByTestId("event-topics-panel")).toContainText(
+    await expect(page.getByTestId("event-directions-panel")).toContainText(
       directionA,
     );
     // An already-linked direction is no longer offerable: a choice that could only
     // ever come back 409 is not a choice.
     const linkedDirectionPanel = await searchRelationshipCombobox(
       page,
-      "event-topic-link-combobox",
+      "event-direction-link-combobox",
       directionA,
     );
     await expect(
@@ -190,40 +190,40 @@ test.describe("012 EARS-11 — event↔direction relationships in the live admin
     // sentence that names the retained-row remedy, not a generic failure.
     await selectRelationshipCombobox(
       page,
-      "event-topic-link-combobox",
+      "event-direction-link-combobox",
       directionB,
       directionB,
     );
 
     const otherTab = await page.context().newPage();
-    await openTopicsTab(otherTab, eventUrl);
+    await openDirectionsTab(otherTab, eventUrl);
     await selectRelationshipCombobox(
       otherTab,
-      "event-topic-link-combobox",
+      "event-direction-link-combobox",
       directionB,
       directionB,
     );
-    await otherTab.getByTestId("event-topic-link-submit").click();
-    await expect(otherTab.getByTestId("event-topics-notice")).toBeVisible();
+    await otherTab.getByTestId("event-direction-link-submit").click();
+    await expect(otherTab.getByTestId("event-directions-notice")).toBeVisible();
     await otherTab.close();
 
-    await page.getByTestId("event-topic-link-submit").click();
-    await expect(page.getByTestId("event-topics-command-error")).toContainText(
+    await page.getByTestId("event-direction-link-submit").click();
+    await expect(page.getByTestId("event-directions-command-error")).toContainText(
       "Такая связь уже есть",
     );
 
     // ── Retire: the preview is READ, its rows are RENDERED, then it confirms ─
-    await openTopicsTab(page, eventUrl);
+    await openDirectionsTab(page, eventUrl);
     // BOTH directions are linked by now (the duplicate arc above linked B from the
     // other tab), so the retired one is named from the row itself rather than
     // assumed — the list order is the API's to decide, not this spec's.
     const retiredTitle = (
       await page
-        .locator('[data-testid^="event-topic-title-"]')
+        .locator('[data-testid^="event-direction-title-"]')
         .first()
         .innerText()
     ).trim();
-    await page.locator('[data-testid^="event-topic-retire-"]').first().click();
+    await page.locator('[data-testid^="event-direction-retire-"]').first().click();
     const dialog = page.getByRole("dialog");
     await expect(dialog).toContainText("Снять связь с направлением?");
     // NO DELETE WORDING anywhere on the confirmation (§3.1 / EARS-14).
@@ -236,10 +236,10 @@ test.describe("012 EARS-11 — event↔direction relationships in the live admin
     // Fault injection at the transport, because the refusal under test is the
     // CLIENT's: the API half (tampered/expired/wrong-transition → one
     // undifferentiated 412 `LIFECYCLE_IMPACT_STALE`) is proven in
-    // `event-topics.e2e-spec.ts`. Corrupting the signed envelope on exactly one
+    // `event-directions.e2e-spec.ts`. Corrupting the signed envelope on exactly one
     // confirmation is the only way to reach the browser branch deterministically.
     let previewReads = 0;
-    await page.route("**/v1/admin/event-topics/**", async (route) => {
+    await page.route("**/v1/admin/event-directions/**", async (route) => {
       const request = route.request();
       if (request.url().includes("lifecycle-impact")) {
         previewReads += 1;
@@ -269,50 +269,50 @@ test.describe("012 EARS-11 — event↔direction relationships in the live admin
     await expect
       .poll(() => previewReads, { timeout: 10_000 })
       .toBeGreaterThan(readsBefore);
-    await page.unroute("**/v1/admin/event-topics/**");
+    await page.unroute("**/v1/admin/event-directions/**");
 
     // ── The honest confirmation applies it ─────────────────────────────────
     await page.getByRole("dialog").locator('[data-testid$="-submit"]').click();
-    await expect(page.getByTestId("event-topics-notice")).toContainText(
+    await expect(page.getByTestId("event-directions-notice")).toContainText(
       "Связь снята.",
     );
 
     // ── The retired link is hidden by default and listed behind the toggle ──
     await expect(
-      page.getByTestId("event-topics-panel").getByText(retiredTitle),
+      page.getByTestId("event-directions-panel").getByText(retiredTitle),
     ).toHaveCount(0);
     // The DS `Switch` is a real checkbox rendered `sr-only` behind its painted
     // track, so a user (and this spec) clicks the wrapping label, not the input —
     // `.check()` on the input is intercepted by the track, as a mouse would be.
     await page
-      .getByTestId("event-topics-show-retired")
+      .getByTestId("event-directions-show-retired")
       .locator("xpath=ancestor::label[1]")
       .click();
-    await expect(page.getByTestId("event-topics-retired")).toContainText(
+    await expect(page.getByTestId("event-directions-retired")).toContainText(
       retiredTitle,
     );
 
     // ── Restore moves the SAME row back ────────────────────────────────────
     const rowTestId = await page
-      .getByTestId("event-topics-retired")
-      .locator('[data-testid^="event-topic-row-"]')
+      .getByTestId("event-directions-retired")
+      .locator('[data-testid^="event-direction-row-"]')
       .first()
       .getAttribute("data-testid");
     await page
-      .getByTestId("event-topics-retired")
-      .locator('[data-testid^="event-topic-restore-"]')
+      .getByTestId("event-directions-retired")
+      .locator('[data-testid^="event-direction-restore-"]')
       .first()
       .click();
     await expect(page.getByRole("dialog")).toContainText(
       "Вернуть связь с направлением?",
     );
     await page.getByRole("dialog").locator('[data-testid$="-submit"]').click();
-    await expect(page.getByTestId("event-topics-notice")).toContainText(
+    await expect(page.getByTestId("event-directions-notice")).toContainText(
       "Связь возвращена.",
     );
     // Same row id ⇒ restored, not reinserted (the §2.1 retained-join contract).
     await expect(page.locator(`[data-testid="${rowTestId}"]`)).toBeVisible();
-    await expect(page.locator('[data-testid^="event-topic-row-"]')).toHaveCount(
+    await expect(page.locator('[data-testid^="event-direction-row-"]')).toHaveCount(
       2,
     );
 

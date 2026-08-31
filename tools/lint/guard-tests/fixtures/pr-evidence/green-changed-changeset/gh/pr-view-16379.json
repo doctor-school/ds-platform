@@ -1,0 +1,7 @@
+{
+  "number": 16379,
+  "author": { "login": "octocat" },
+  "headRefName": "tooling/1637-guard",
+  "files": [{ "path": ".changeset/actual.md" }],
+  "body": "Stage-B: N/A - internal tooling-only change with no visual surface\nChangeset: `.changeset/actual.md` - patch\nBehavior change: The evidence guard validates changed changeset files.\nLocal touched-suite verification: `pnpm test` - PASS\nDeviations: N/A - no ADR or spec deviations"
+}

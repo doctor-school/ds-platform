@@ -14,6 +14,14 @@ interface GhPR {
   number: number;
   body?: string | null;
   headRefName?: string | null;
+  author?: { login?: string | null } | null;
+  files?: Array<{ path?: string | null }> | null;
+}
+
+interface GhIssue {
+  number: number;
+  state?: string | null;
+  url?: string | null;
 }
 
 function info(message: string): void {
@@ -25,6 +33,9 @@ function fail(message: string): never {
 }
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+function stripHtmlComments(body: string): string {
+  return body.replace(/<!--[\s\S]*?-->/g, "");
 }
 function markerValues(body: string, label: string): string[] {
   const pattern = new RegExp(
@@ -86,6 +97,11 @@ function validStageB(value: string): boolean {
 function hasChangesetFile(value: string): boolean {
   return /(?:^|[\s`])\.changeset\/[\w.-]+\.md(?:[\s`]|$)/i.test(value);
 }
+function changesetFiles(value: string): string[] {
+  return [
+    ...value.matchAll(/(?:^|[\s`])(\.changeset\/[\w.-]+\.md)(?=[\s`]|$)/gi),
+  ].map((match) => match[1]);
+}
 function validChangeset(value: string): boolean {
   return isReasonedNa(value) || hasChangesetFile(value);
 }
@@ -132,6 +148,15 @@ function hasTracking(value: string): boolean {
     /\[[^\]]*DEBT\.md[^\]]*\]\([^)]*#[a-z0-9][^)]*\)/i.test(value)
   );
 }
+function issueReferences(value: string): number[] {
+  return [...value.matchAll(/#([1-9]\d*)\b/g)].map((match) => Number(match[1]));
+}
+function hasDebtTracking(value: string): boolean {
+  return (
+    /DEBT\.md#[a-z0-9][\w-]*/i.test(value) ||
+    /\[[^\]]*DEBT\.md[^\]]*\]\([^)]*#[a-z0-9][^)]*\)/i.test(value)
+  );
+}
 function resolvePrNumber(): string {
   let number = process.env.PR_NUMBER ?? process.env.GITHUB_PR_NUMBER ?? "";
   if (!number && process.env.GITHUB_REF) {
@@ -150,17 +175,21 @@ async function main(): Promise<void> {
   const result = await ghViewJson<GhPR>(
     "pr",
     prNumber,
-    "number,body,headRefName",
+    "number,body,headRefName,author,files",
   );
   if (!result.ok) fail(`could not fetch PR #${prNumber}: ${result.error}`);
   const branch = result.data.headRefName ?? "";
-  if (branch === "changeset-release/main" || /^dependabot\//.test(branch)) {
+  const author = result.data.author?.login ?? "";
+  const automated =
+    (author === "app/github-actions" && branch === "changeset-release/main") ||
+    (author === "app/dependabot" && /^dependabot\/.+/.test(branch));
+  if (automated) {
     info(
       `PR #${result.data.number} is an automated PR (${branch}); evidence contract exempt.`,
     );
     process.exit(0);
   }
-  const body = result.data.body ?? "";
+  const body = stripHtmlComments(result.data.body ?? "");
   const findings: string[] = [];
 
   for (const label of REQUIRED) {
@@ -182,13 +211,26 @@ async function main(): Promise<void> {
 
   const behaviorValues = markerValues(body, "Behavior change");
   const changesetValues = markerValues(body, "Changeset");
+  const declaredChangesets = changesetValues.flatMap(changesetFiles);
+  const changedFiles = new Set(
+    (result.data.files ?? []).flatMap((file) => (file.path ? [file.path] : [])),
+  );
   if (
     behaviorValues.some((value) => !/^N\/A\b/i.test(value)) &&
-    !changesetValues.some(hasChangesetFile)
+    declaredChangesets.length === 0
   ) {
     findings.push(
       "Behavior change: a declared behavior change requires a real .changeset/*.md; Changeset: N/A is not allowed",
     );
+  }
+  if (behaviorValues.some((value) => !/^N\/A\b/i.test(value))) {
+    for (const path of new Set(declaredChangesets)) {
+      if (!changedFiles.has(path)) {
+        findings.push(
+          `Changeset: declared ${path} is absent from the PR changed files`,
+        );
+      }
+    }
   }
 
   const deviations = [
@@ -200,10 +242,31 @@ async function main(): Promise<void> {
       findings.push("Deviations: placeholder evidence");
     } else if (/^N\/A\b/i.test(deviation) && !isReasonedNa(deviation)) {
       findings.push("Deviations: N/A must include a reason");
-    } else if (namesClause(deviation) && !hasTracking(deviation)) {
-      findings.push(
-        "Deviations: an ADR/spec clause must name its tracked #<issue> or exact DEBT.md#anchor",
-      );
+    } else if (namesClause(deviation)) {
+      if (!hasTracking(deviation)) {
+        findings.push(
+          "Deviations: an ADR/spec clause must name its tracked #<issue> or exact DEBT.md#anchor",
+        );
+        continue;
+      }
+      if (!hasDebtTracking(deviation)) {
+        for (const issueNumber of new Set(issueReferences(deviation))) {
+          const issue = await ghViewJson<GhIssue>(
+            "issue",
+            issueNumber,
+            "number,state,url",
+          );
+          if (
+            !issue.ok ||
+            issue.data.number !== issueNumber ||
+            !issue.data.url?.endsWith(`/issues/${issueNumber}`)
+          ) {
+            findings.push(
+              `Deviations: #${issueNumber} does not resolve to a durable GitHub Issue`,
+            );
+          }
+        }
+      }
     }
   }
   if (findings.length > 0) {

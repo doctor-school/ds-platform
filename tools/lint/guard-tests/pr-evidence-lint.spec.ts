@@ -15,6 +15,50 @@ function prEnv(prNumber: string, ghCase: string): Record<string, string> {
 }
 
 describe("pr-evidence-lint (#1637)", () => {
+  it("passes the completed PR template while retaining its HTML comments", () => {
+    const body = readFileSync(
+      new URL("../../../.github/pull_request_template.md", import.meta.url),
+      "utf8",
+    )
+      .replace(
+        '- Closes #<issue-number> (or "Relates #N" if partial)',
+        "- Closes #1637",
+      )
+      .replace(
+        "- Spec: <link to apps/docs/content/specs/features/NNN-<slug>/ if feature-PR>",
+        "- Spec: N/A - internal tooling",
+      )
+      .replace(
+        "- ADR: <link to apps/docs/content/adr/NNNN-*.md if architectural decision>",
+        "- ADR: N/A - no architectural decision",
+      )
+      .replace(
+        /^Stage-B:.*$/m,
+        "Stage-B: N/A - internal tooling-only change with no visual surface",
+      )
+      .replace(
+        /^Changeset:.*$/m,
+        "Changeset: N/A - internal process tooling only",
+      )
+      .replace(
+        /^Behavior change:.*$/m,
+        "Behavior change: N/A - no product behavior changes",
+      )
+      .replace(
+        /^Local touched-suite verification:.*$/m,
+        "Local touched-suite verification: `pnpm test` - PASS",
+      )
+      .replace(
+        /^Deviations:.*$/m,
+        "Deviations: N/A - no ADR or spec deviations",
+      );
+    const { code, stderr } = runGuard(GUARD, ".", {
+      env: { ...prEnv("16371", "green-reasoned-na"), PR_BODY: body },
+    });
+    expect(stderr).toBe("");
+    expect(code).toBe(0);
+  });
+
   it("passes complete, non-placeholder evidence and absent Deviations", () => {
     const { code } = runGuard(GUARD, ".", {
       env: prEnv("16370", "green-complete"),
@@ -151,6 +195,22 @@ describe("pr-evidence-lint (#1637)", () => {
     expect(stderr).toContain(".changeset/");
   });
 
+  it("passes behavior-change coupling when the declared changeset is changed", () => {
+    const { code } = runGuard(GUARD, ".", {
+      env: prEnv("16379", "green-changed-changeset"),
+    });
+    expect(code).toBe(0);
+  });
+
+  it("blocks a body-only changeset path absent from the changed files", () => {
+    const { code, stderr } = runGuard(GUARD, ".", {
+      env: prEnv("16380", "red-body-only-changeset"),
+    });
+    expect(code).toBe(1);
+    expect(stderr).toContain(".changeset/missing.md");
+    expect(stderr).toContain("changed files");
+  });
+
   it.each([
     ["16377", "green-changeset-release-bot", "changeset-release/main"],
     ["16378", "green-dependabot", "dependabot/npm_and_yarn/tooling"],
@@ -161,6 +221,26 @@ describe("pr-evidence-lint (#1637)", () => {
     expect(code).toBe(0);
     expect(stdout).toContain(branch);
     expect(stdout).toContain("automated PR");
+  });
+
+  it.each([
+    ["16381", "red-human-changeset-branch", "changeset-release/main"],
+    ["16382", "red-human-dependabot-branch", "dependabot/npm_and_yarn/tooling"],
+  ])("does not exempt human PR %s on bot-shaped branch %s", (pr, fixture) => {
+    const { code, stderr } = runGuard(GUARD, ".", {
+      env: prEnv(pr, fixture),
+    });
+    expect(code).toBe(1);
+    expect(stderr).toContain("delivery evidence is incomplete");
+  });
+
+  it("blocks deviation tracking that names PR #1653 instead of an Issue", () => {
+    const { code, stderr } = runGuard(GUARD, ".", {
+      env: prEnv("16383", "red-deviation-pr"),
+    });
+    expect(code).toBe(1);
+    expect(stderr).toContain("#1653");
+    expect(stderr).toContain("GitHub Issue");
   });
 
   it.each(["known red", "pnpm test -- failed", "N/A — not run"])(

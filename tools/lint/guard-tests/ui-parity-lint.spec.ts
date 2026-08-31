@@ -13,8 +13,7 @@ const webFile = "apps/admin/app/events/[id]/page.tsx";
 const approvedFile = "apps/admin/components/recordings-panel.tsx";
 const mobileFile = "apps/mobile/src/screens/home.tsx";
 const relationshipSource = "feature-012-relationship-editors-v1";
-const relationshipState =
-  "taxonomy-relationship-authoring-and-event-list-pagination";
+const relationshipState = "taxonomy-relationship-authoring";
 const relationshipPaths = [
   "apps/admin/components/event-experts-panel.tsx",
   "apps/admin/components/event-projects-panel.tsx",

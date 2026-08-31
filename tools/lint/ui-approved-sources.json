@@ -19,7 +19,7 @@
         "apps/admin/components/project-partners-panel.tsx",
         "apps/admin/components/relationship-endpoint-picker.tsx"
       ],
-      "states": ["taxonomy-relationship-authoring-and-event-list-pagination"],
+      "states": ["taxonomy-relationship-authoring"],
       "approvalProvenance": [
         "https://github.com/doctor-school/ds-platform/issues/1578#issuecomment-5435209906"
       ]

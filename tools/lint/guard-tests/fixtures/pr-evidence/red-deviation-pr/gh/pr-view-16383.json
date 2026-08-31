@@ -1,0 +1,7 @@
+{
+  "number": 16383,
+  "author": { "login": "octocat" },
+  "headRefName": "tooling/1637-guard",
+  "files": [],
+  "body": "Stage-B: N/A - internal process tooling with no visual surface\nChangeset: N/A - internal process tooling only\nBehavior change: N/A - no product behavior changes\nLocal touched-suite verification: `pnpm test` - PASS\nDeviations: ADR-0007 section 2.4 is tracked by #1653"
+}

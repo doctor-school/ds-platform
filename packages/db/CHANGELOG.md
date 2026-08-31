@@ -1,5 +1,59 @@
 # @ds/db
 
+## 1.0.0
+
+### Major Changes
+
+- [#1622](https://github.com/doctor-school/ds-platform/pull/1622) [`e1b771f`](https://github.com/doctor-school/ds-platform/commit/e1b771fdeddc55990c67a5f903aba280d7d174b4) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - [#1606](https://github.com/doctor-school/ds-platform/issues/1606): converge Expert authoring with an optional unique User link and replace
+  the stored free-form Expert name with required family/given names plus optional
+  patronymic. Expert display names and slugs are now server-derived, and mutation
+  input no longer accepts a slug. Project, Partner, Expert and Direction slugs are
+  stable system-owned identities with retained-row-safe collision suffixes and
+  kind fallbacks when authored text has no transliterable base.
+
+- [#1575](https://github.com/doctor-school/ds-platform/pull/1575) [`9ee8b78`](https://github.com/doctor-school/ds-platform/commit/9ee8b78b7b3c575a5cf8ae425517040baaaf8cae) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - [#1483](https://github.com/doctor-school/ds-platform/issues/1483) (ADR-0016 §2.8/§5): the curated `topics` book becomes `directions`, and the
+  schema gains the two relations the 017 targeting resolution reads.
+
+  BREAKING — a renamed table and renamed exports: `topics` → `directions`, with
+  every exported symbol renamed to match. ADR-0016 §5 also names an `event_topics`
+  join as following the rename; no such table exists in the shipped schema (events
+  carry no direction join yet), so nothing was renamed for it.
+
+  The rename is hand-written as a true SQL `RENAME` over the drizzle-kit diff —
+  the generator offers only DROP + CREATE for a renamed table — and it renames every
+  dependent constraint, index and trigger with it, so the
+  retained-row lifecycle (`record_status`, [#1278](https://github.com/doctor-school/ds-platform/issues/1278)) and every existing row survive
+  it; nothing is dropped and re-created.
+
+  New: `direction_specialties` (directions ↔ the closed Минздрав nomenclature) and
+  `direction_adjacency` (a DIRECTED self-relation carrying `kind` + `weight`), both
+  with RESTRICTIVE foreign keys (ADR-0003) and the same lifecycle columns as every
+  other retained-row table.
+
+### Minor Changes
+
+- [#1577](https://github.com/doctor-school/ds-platform/pull/1577) [`2d76e79`](https://github.com/doctor-school/ds-platform/commit/2d76e794ab7ef5d6ea937f2755d9819ef833042e) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 017 EARS-6: a doctor's chosen specialty is remembered, and the platform keeps
+  remembering it across sign-in.
+
+  `@ds/db` gains the `(doctor, specialty, role)` link row (LD-1) with restrictive
+  foreign keys, one primary specialty per doctor enforced by a partial unique
+  index, the retained-row lifecycle columns, and an audit trigger — the choice is
+  personal data with a recorded history, not a preference blob.
+
+  `@ds/api` gains ONE command with two routes, because the ACTOR decides where the
+  choice belongs and the actor is resolved from the request, never submitted:
+  `POST /v1/public/specialty-choice` writes a guest's answer into the anonymous
+  session, and `PUT /v1/me/specialty` writes a signed-in doctor's into the profile
+  link row. Both are idempotent, both reject a reference that is not a member of
+  the closed book, and «Другое» is a member like any other (LD-5). No client can
+  name a subject, so no client can write another doctor's specialty.
+
+  On the first authenticated read the sign-in cascade runs (LD-2): an anonymous
+  choice is ADOPTED into an empty profile and DISCARDED when the profile already
+  carries one — the profile always wins, with no prompt, no merge and no
+  cross-device carry. `@ds/schemas` carries the shared `SpecialtyChoice` contract,
+  where «resolved: nothing chosen» is a distinct answer from an unresolved read.
+
 ## 0.11.0
 
 ### Minor Changes

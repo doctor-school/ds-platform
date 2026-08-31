@@ -343,6 +343,65 @@ export class ExpertsAdminController {
   }
 
   /**
+   * EARS-5 / §5.1 — `POST /v1/admin/experts/:id/publish`. `draft → published`,
+   * target `If-Match` required, empty body.
+   *
+   * Deliberately WITHOUT the §3.1 impact envelope the retire/restore routes
+   * carry: the preview gate exists so an operator sees what a transition
+   * WITHDRAWS from the public surface, and a publish withdraws nothing — what it
+   * ADDS to each event's speaker projection is answered by the service, which
+   * refuses an occupied position outright rather than previewing it.
+   */
+  @Post(":id/publish")
+  @HttpCode(200)
+  @Authz({
+    access: "authenticated",
+    roles: ["platform_admin"],
+    check: "fast-path",
+    revalidate: "live",
+    audit: "low-stakes",
+    tests: ["EARS-2", "EARS-5", "EARS-16", "EARS-17"],
+  })
+  async publish(
+    @Param("id") id: string,
+    @Req() req: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<unknown> {
+    if (!CANONICAL_UUID_REGEX.test(id)) {
+      throw new TaxonomyError("RESOURCE_NOT_FOUND");
+    }
+    const key = this.idempotency.requireKey(req.headers[IDEMPOTENCY_KEY_HEADER]);
+    const { raw: rawIfMatch, version: expectedVersion } = requirePublishVersion(
+      req,
+      "a publish",
+    );
+
+    const route = "/v1/admin/experts/:id/publish";
+    const outcome = await this.idempotency.begin({
+      key,
+      scope: "taxonomy.experts",
+      actorId: actorSub(req),
+      method: "POST",
+      route,
+      fingerprint: this.idempotency.fingerprint({
+        method: "POST",
+        path: `/v1/admin/experts/${id}/publish`,
+        payload: {},
+        ifMatch: rawIfMatch,
+      }),
+    });
+    if (replayed(outcome, reply)) return outcome.replay.body;
+
+    const { detail, etag } = await this.experts.publish({
+      id,
+      expectedVersion,
+      lease: outcome.lease,
+    });
+    void reply.header("etag", etag);
+    return detail;
+  }
+
+  /**
    * Read the exact §5.1 request shape.
    *
    * JSON → the parsed body, no file. Multipart → exactly one `payload` JSON part
@@ -439,6 +498,32 @@ export class ExpertsAdminController {
  * body and allow-listed `ETag`/`Location`. Returns `true` when the caller must
  * return the stored body instead of running the command again.
  */
+/**
+ * The `If-Match` precondition a lifecycle command carries: absent is 428,
+ * syntactically unusable is 412 — a validator that asserts nothing cannot pass,
+ * and treating it as "no precondition" would silently downgrade the write.
+ */
+function requirePublishVersion(
+  req: FastifyRequest,
+  what: string,
+): { raw: string; version: number } {
+  const raw = req.headers[IF_MATCH_HEADER] as string | undefined;
+  if (!raw || raw.trim().length === 0) {
+    throw new TaxonomyError(
+      "PRECONDITION_REQUIRED",
+      `${what} must carry the If-Match of the version it was read at`,
+    );
+  }
+  const version = parseIfMatchVersion(raw);
+  if (version === null) {
+    throw new TaxonomyError(
+      "PRECONDITION_FAILED",
+      "the If-Match validator is not one this API issued",
+    );
+  }
+  return { raw, version };
+}
+
 function replayed(
   outcome: IdempotencyOutcome,
   reply: FastifyReply,

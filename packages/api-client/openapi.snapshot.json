@@ -1580,6 +1580,112 @@
         "tags": ["DirectionsAdmin"]
       }
     },
+    "/v1/admin/event-directions": {
+      "get": {
+        "operationId": "EventDirectionsAdminController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["EventDirectionsAdmin"]
+      },
+      "post": {
+        "operationId": "EventDirectionsAdminController_create",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": ["EventDirectionsAdmin"]
+      }
+    },
+    "/v1/admin/event-directions/{id}": {
+      "get": {
+        "operationId": "EventDirectionsAdminController_detail",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["EventDirectionsAdmin"]
+      }
+    },
+    "/v1/admin/event-directions/{id}/lifecycle-impact": {
+      "get": {
+        "operationId": "EventDirectionsAdminController_lifecycleImpact",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["EventDirectionsAdmin"]
+      }
+    },
+    "/v1/admin/event-directions/{id}/restore": {
+      "post": {
+        "operationId": "EventDirectionsAdminController_restore",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["EventDirectionsAdmin"]
+      }
+    },
+    "/v1/admin/event-directions/{id}/retire": {
+      "post": {
+        "operationId": "EventDirectionsAdminController_retire",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["EventDirectionsAdmin"]
+      }
+    },
     "/v1/admin/event-experts": {
       "get": {
         "operationId": "EventExpertsAdminController_list",
@@ -1788,112 +1894,6 @@
           }
         },
         "tags": ["EventProjectsAdmin"]
-      }
-    },
-    "/v1/admin/event-topics": {
-      "get": {
-        "operationId": "EventTopicsAdminController_list",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": ["EventTopicsAdmin"]
-      },
-      "post": {
-        "operationId": "EventTopicsAdminController_create",
-        "parameters": [],
-        "responses": {
-          "201": {
-            "description": ""
-          }
-        },
-        "tags": ["EventTopicsAdmin"]
-      }
-    },
-    "/v1/admin/event-topics/{id}": {
-      "get": {
-        "operationId": "EventTopicsAdminController_detail",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": ["EventTopicsAdmin"]
-      }
-    },
-    "/v1/admin/event-topics/{id}/lifecycle-impact": {
-      "get": {
-        "operationId": "EventTopicsAdminController_lifecycleImpact",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": ["EventTopicsAdmin"]
-      }
-    },
-    "/v1/admin/event-topics/{id}/restore": {
-      "post": {
-        "operationId": "EventTopicsAdminController_restore",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": ["EventTopicsAdmin"]
-      }
-    },
-    "/v1/admin/event-topics/{id}/retire": {
-      "post": {
-        "operationId": "EventTopicsAdminController_retire",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": ["EventTopicsAdmin"]
       }
     },
     "/v1/admin/events": {
@@ -2377,6 +2377,27 @@
         "tags": ["ExpertsAdmin"]
       }
     },
+    "/v1/admin/experts/{id}/publish": {
+      "post": {
+        "operationId": "ExpertsAdminController_publish",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["ExpertsAdmin"]
+      }
+    },
     "/v1/admin/experts/eligible-users": {
       "get": {
         "operationId": "ExpertsAdminController_eligibleUsers",
@@ -2478,6 +2499,27 @@
       },
       "patch": {
         "operationId": "PartnersAdminController_update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["PartnersAdmin"]
+      }
+    },
+    "/v1/admin/partners/{id}/publish": {
+      "post": {
+        "operationId": "PartnersAdminController_publish",
         "parameters": [
           {
             "in": "path",
@@ -2748,6 +2790,27 @@
       },
       "patch": {
         "operationId": "ProjectsAdminController_update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["ProjectsAdmin"]
+      }
+    },
+    "/v1/admin/projects/{id}/publish": {
+      "post": {
+        "operationId": "ProjectsAdminController_publish",
         "parameters": [
           {
             "in": "path",
@@ -3212,7 +3275,17 @@
     "/v1/me/events": {
       "get": {
         "operationId": "MyEventsController_list",
-        "parameters": [],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "tab",
+            "required": false,
+            "schema": {
+              "enum": ["upcoming", "recordings"],
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": ""
@@ -3253,6 +3326,27 @@
           }
         },
         "tags": ["SpecialtyChoiceMe"]
+      }
+    },
+    "/v1/public/directions/{idOrSlug}/events": {
+      "get": {
+        "operationId": "DirectionEventsPublicController_events",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "idOrSlug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["DirectionEventsPublic"]
       }
     },
     "/v1/public/events": {
@@ -3339,6 +3433,27 @@
         "tags": ["EventsPublic"]
       }
     },
+    "/v1/public/events/{idOrSlug}/directions": {
+      "get": {
+        "operationId": "EventDirectionsPublicController_directions",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "idOrSlug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["EventDirectionsPublic"]
+      }
+    },
     "/v1/public/events/{idOrSlug}/projects": {
       "get": {
         "operationId": "EventProjectsPublicController_projects",
@@ -3379,27 +3494,6 @@
           }
         },
         "tags": ["EventSpeakersPublic"]
-      }
-    },
-    "/v1/public/events/{idOrSlug}/topics": {
-      "get": {
-        "operationId": "EventTopicsPublicController_topics",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "idOrSlug",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": ["EventTopicsPublic"]
       }
     },
     "/v1/public/events/month-counts": {
@@ -3596,27 +3690,6 @@
           }
         },
         "tags": ["StatisticsPublic"]
-      }
-    },
-    "/v1/public/topics/{idOrSlug}/events": {
-      "get": {
-        "operationId": "TopicEventsPublicController_events",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "idOrSlug",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": ["TopicEventsPublic"]
       }
     },
     "/v1/ready": {

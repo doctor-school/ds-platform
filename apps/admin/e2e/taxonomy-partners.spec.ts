@@ -1,6 +1,5 @@
-import { expect, test, type Page } from "@playwright/test";
-import { bootstrapAdminSession } from "./support/admin-session";
-import { totpCode } from "./support/totp";
+import { expect, test } from "@playwright/test";
+import { ADMIN_ORIGIN, signInAsAdmin } from "./support/sign-in";
 
 /**
  * 012 EARS-4 (#1286) + EARS-23 (#1297), browser half — the REAL Refine → NestJS → Postgres path.
@@ -23,29 +22,12 @@ import { totpCode } from "./support/totp";
  *   IDP_PROJECT_ID=… pnpm --filter @ds/admin exec playwright test e2e/taxonomy-partners.spec.ts \
  *     --config=playwright.flows.config.ts
  */
-const ORIGIN = process.env.E2E_ADMIN_URL ?? "http://localhost:3200";
 
 /** A tiny valid PNG (1×1, opaque) — the logo fixture, built in-process. */
 const PNG_1x1 = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==",
   "base64",
 );
-
-/** Sign in and complete the one-time TOTP enrollment; lands on `/events`. */
-async function signInAsAdmin(page: Page): Promise<void> {
-  const { email, password } = await bootstrapAdminSession(ORIGIN);
-  await page.goto("/login");
-  await page.locator("#email").fill(email);
-  await page.locator("#password").fill(password);
-  await page.getByTestId("login-submit").click();
-  await page.waitForURL(/\/mfa\/enroll/, { timeout: 20_000 });
-  const secret = (await page.getByTestId("mfa-secret").innerText()).trim();
-  await page
-    .getByTestId("mfa-enroll-form")
-    .getByRole("textbox")
-    .fill(totpCode(secret));
-  await page.waitForURL(/\/events/, { timeout: 20_000 });
-}
 
 test.describe.configure({ mode: "serial" });
 
@@ -111,7 +93,7 @@ test.describe("012 EARS-4 — partner authoring in the live admin", () => {
       /^https:\/\/academy\.doctor\.school\/partners\/farma-lab/,
     );
     await context.grantPermissions(["clipboard-read", "clipboard-write"], {
-      origin: ORIGIN,
+      origin: ADMIN_ORIGIN,
     });
     await page.getByTestId("partner-copy-public-link").click();
     await expect(page.getByTestId("partner-copy-public-link")).toHaveText(
@@ -120,10 +102,12 @@ test.describe("012 EARS-4 — partner authoring in the live admin", () => {
     await expect
       .poll(() => page.evaluate(() => navigator.clipboard.readText()))
       .toBe(publicUrl);
-    // The retained project-relation read tab ships alongside «Основное».
+    // The retained project-relation read tab ships alongside «Основное», and
+    // «Публикация» (EARS-5) is the third — a partner has no other tab.
     await expect(page.getByTestId("tab-main")).toBeVisible();
     await expect(page.getByTestId("tab-projects")).toBeVisible();
-    await expect(page.getByRole("tab")).toHaveCount(2);
+    await expect(page.getByTestId("tab-publish")).toBeVisible();
+    await expect(page.getByRole("tab")).toHaveCount(3);
     // No logo yet ⇒ an EMPTY slot. Unlike an expert, an organisation has no
     // initials fallback anywhere on the platform, so nothing stands in for it.
     await expect(page.getByAltText("Логотип партнёра")).toHaveCount(0);
@@ -232,10 +216,67 @@ test.describe("012 EARS-4 — partner authoring in the live admin", () => {
     await expect(page.getByTestId("partner-slug")).toHaveCount(0);
     await expect(page.getByTestId("partner-public-link")).toHaveText(publicUrl);
     //
-    // Retire/restore is the same story: 012 exposes NO retire/restore route on
-    // the partners controller in this slice (the merged expert and direction
-    // verticals have none either — the transitions arrive with #1287/#1295/#1296),
-    // so no control is rendered for them here. Rendering a button with no route
+    // Retire/restore is a different story from publish: 012 exposes NO
+    // retire/restore route on the partners controller (they arrive with
+    // #1295/#1296), so no control is rendered for them — a button with no route
     // behind it would be exactly the untracked scaffold AGENTS.md §6 forbids.
+    // The PUBLISH half landed with #1287 and is exercised below.
+  });
+
+  /**
+   * 012 EARS-5 (#1287), partner half — the simplest of the three publishes and
+   * therefore the one that proves the shared gesture in isolation.
+   *
+   * A partner carries NO completeness branch and NO relation invariant
+   * (012-design §5.2: `logoUrl` and `websiteUrl` are both nullable on the public
+   * projection, and `title` is NOT NULL), so a partner that exists at all is
+   * already a complete public projection. There is nothing to refuse and nothing
+   * to preview — which is precisely why the publish is a plain command and not
+   * the §3.1 impact dialog the direction retire goes through.
+   *
+   * What the browser proves that the API suite cannot: the control is on the
+   * RECORD (017 EARS-16 — the list grows no «Действия» column), it is offered
+   * ONLY from a draft, and once the row is published the button is GONE rather
+   * than left on screen to be refused by the server.
+   */
+  test("012 EARS-5: an operator publishes a draft partner, and the offered action disappears with the state it belonged to", async ({
+    page,
+  }) => {
+    await signInAsAdmin(page);
+
+    const title = `Клиника Согласие ${Date.now()}`;
+    await page.goto("/partners/create");
+    await page.getByTestId("partner-title").fill(title);
+    await page.getByTestId("submit-partner").click();
+    await page.waitForURL(/\/partners\/[0-9a-f-]{36}$/, { timeout: 20_000 });
+    const detailUrl = page.url();
+    await expect(page.getByTestId("partner-status")).toHaveText("Черновик");
+
+    // The action lives behind «Публикация», not on the list and not on «Основное».
+    await page.getByTestId("tab-publish").click();
+    await expect(page.getByTestId("partners-publish-panel")).toBeVisible();
+    await expect(page.getByTestId("partners-publish")).toBeVisible();
+
+    await page.getByTestId("partners-publish").click();
+    await expect(page.getByTestId("publish-notice")).toBeVisible();
+    await expect(page.getByTestId("partner-status")).toHaveText("Опубликован");
+    // A published partner has no further move on offer here: retire/restore are
+    // #1295/#1296, so the panel says the state and stops.
+    await expect(page.getByTestId("partners-publish")).toHaveCount(0);
+    // The row is the SAME row — publishing is not a re-creation.
+    expect(page.url()).toBe(detailUrl);
+
+    await page.reload();
+    await expect(page.getByTestId("partner-status")).toHaveText("Опубликован");
+    await page.getByTestId("tab-publish").click();
+    await expect(page.getByTestId("partners-publish")).toHaveCount(0);
+
+    // 017 EARS-16: the action is on the record, so the list keeps its single row
+    // action and never grows an «Действия» column for it.
+    await page.getByTestId("back-to-list").click();
+    await page.waitForURL(/\/partners$/, { timeout: 20_000 });
+    await expect(
+      page.getByRole("columnheader", { name: "Действия" }),
+    ).toHaveCount(0);
   });
 });

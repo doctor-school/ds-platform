@@ -50,6 +50,42 @@ export function mskDayKey(isoInstant: string): string {
 }
 
 /**
+ * A stable calendar-MONTH key (`YYYY-MM`) for the instant **in Europe/Moscow** —
+ * the grouping key every month-grouped feed shares (the public archive listing
+ * and the «Записи» tab of «Мои события», 014 EARS-9). One canonical
+ * implementation, imported by every host: a per-host copy would let the two
+ * feeds' month rhythm drift apart (AGENTS.md cross-front reuse).
+ */
+const MSK_MONTH_KEY = new Intl.DateTimeFormat("sv-SE", {
+  timeZone: MSK_TIME_ZONE,
+  year: "numeric",
+  month: "2-digit",
+});
+
+export function mskMonthKey(isoInstant: string): string {
+  return MSK_MONTH_KEY.format(new Date(isoInstant));
+}
+
+/**
+ * The month-header label for a month-grouped feed — `«Июль 2026»`. `ru-RU`
+ * yields `июль 2026 г.`; the trailing `г.` is dropped and the month capitalised
+ * so the header matches the canvas band token.
+ */
+const MSK_MONTH_LABEL = new Intl.DateTimeFormat("ru-RU", {
+  timeZone: MSK_TIME_ZONE,
+  month: "long",
+  year: "numeric",
+});
+
+export function formatMskMonth(isoInstant: string): string {
+  const label = MSK_MONTH_LABEL.format(new Date(isoInstant)).replace(
+    /\s*г\.$/u,
+    "",
+  );
+  return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
+/**
  * The day-header label for a listing group — `«16 июля, среда»` (date first,
  * weekday after), matching the §09 canvas rhythm. Computed in Europe/Moscow so
  * the grouping label agrees with {@link mskDayKey}.

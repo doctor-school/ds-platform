@@ -1,5 +1,12 @@
 # @ds/academy-demo
 
+## 0.1.7
+
+### Patch Changes
+
+- Updated dependencies [[`de51447`](https://github.com/doctor-school/ds-platform/commit/de5144764860d6e3c009330d7ea4d667316be367), [`1ec641e`](https://github.com/doctor-school/ds-platform/commit/1ec641e59b849a2e728c4bdbfdf7486a31fd6825), [`89e24a2`](https://github.com/doctor-school/ds-platform/commit/89e24a2b49f59887977271210b7ea5b333e339ad), [`dc0fcf9`](https://github.com/doctor-school/ds-platform/commit/dc0fcf9f5c7ef1569003552b244be654229c9f06)]:
+  - @ds/design-system@5.2.0
+
 ## 0.1.6
 
 ### Patch Changes

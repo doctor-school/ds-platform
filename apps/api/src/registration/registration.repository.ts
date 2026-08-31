@@ -6,9 +6,11 @@ import {
   type EventLifecycleState,
   type EventRosterEntry,
   type MyEventItem,
+  type MyEventsCounts,
+  type MyEventsTab,
   REGISTRABLE_EVENT_STATES,
 } from "@ds/schemas";
-import { and, asc, eq, gte, inArray, or } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, or, type SQL, sql } from "drizzle-orm";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
 import { withRequestAuditContext } from "../audit/audit-context.tx.js";
 
@@ -33,6 +35,41 @@ export interface RegistrationUpsert {
   registeredAt: Date;
   /** `true` only on the first insert for the pair — the sole path that emits the terminal audit row. */
   created: boolean;
+}
+
+/**
+ * One «Мои события» row as it leaves SQL: every `MyEventItem` field EXCEPT
+ * `recording`. The recording projection is feature 014's own canonical resolver
+ * (`RecordingsProjectionService`, #1340) — 005's repository does not re-derive it
+ * from `event_recordings`, because a second derivation is exactly how the badge on
+ * a doctor's own row starts disagreeing with the badge on the public card. The
+ * service composes the two.
+ */
+export type MyEventRow = Omit<MyEventItem, "recording">;
+
+/**
+ * The SQL membership predicate of one «Мои события» tab (014 EARS-9,
+ * 014-design §8.3) — the single place either tab's membership is defined, shared
+ * by the row query and the count query so a listed row and a counted row can never
+ * be different sets.
+ *
+ * - `upcoming` — `published`/`live` still inside the 004 upcoming window
+ *   (`starts_at ≥ now − AIR_WINDOW_MS`): an event appears here iff it would still
+ *   appear as upcoming/live publicly (the shipped EARS-6 rule).
+ * - `recordings` — every `ended` registration, with NO temporal window: the Записи
+ *   tab is the doctor's whole finished history, so a two-year-old эфир is listed.
+ *
+ * `archived` satisfies NEITHER predicate — feature 004's visibility policy hides an
+ * archived event from every listing, so it is in neither tab and in neither count.
+ */
+function tabMembership(tab: MyEventsTab, cutoff: Date): SQL {
+  if (tab === "upcoming") {
+    return and(
+      inArray(events.state, [...REGISTRABLE_EVENT_STATES]),
+      gte(events.startsAt, cutoff),
+    )!;
+  }
+  return eq(events.state, "ended");
 }
 
 /** The registration-gating view of an event: its id + the single lifecycle state. */
@@ -168,7 +205,11 @@ export class RegistrationRepository {
    * is a valid empty list (design §5). No registrant PII, no roster — only the thin
    * per-event choose-set the «мои события» card renders.
    */
-  async findMyEvents(userId: string, cutoff: Date): Promise<MyEventItem[]> {
+  async findMyEvents(
+    userId: string,
+    tab: MyEventsTab,
+    cutoff: Date,
+  ): Promise<MyEventRow[]> {
     const rows = await this.db
       .select({
         eventId: events.id,
@@ -180,23 +221,45 @@ export class RegistrationRepository {
       })
       .from(registrations)
       .innerJoin(events, eq(events.id, registrations.eventId))
-      .where(
-        and(
-          eq(registrations.userId, userId),
-          inArray(events.state, [...REGISTRABLE_EVENT_STATES]),
-          gte(events.startsAt, cutoff),
-        ),
-      )
-      .orderBy(asc(events.startsAt));
+      .where(and(eq(registrations.userId, userId), tabMembership(tab, cutoff)))
+      // Most-relevant-first on each side: the imminent эфир leads Предстоящие
+      // (`starts_at ASC`, the shipped EARS-6 order), the most recent finished one
+      // leads Записи (`starts_at DESC`, 014 EARS-9).
+      .orderBy(
+        tab === "upcoming" ? asc(events.startsAt) : desc(events.startsAt),
+      );
     return rows.map((r) => ({
       eventId: r.eventId,
       slug: r.slug,
       title: r.title,
       school: r.school,
       startsAt: r.startsAt.toISOString(),
-      // Narrowed to the registrable set by the SQL state filter above.
-      state: r.state as MyEventItem["state"],
+      // Narrowed to the tab's membership set by the SQL state filter above.
+      state: r.state as MyEventRow["state"],
     }));
+  }
+
+  /**
+   * Both tabs' row counts in ONE statement (014 EARS-9). The tab bar renders
+   * «Предстоящие · N | Записи · N» in a single paint, so the count of the tab the
+   * doctor is NOT looking at is needed on every read; issuing it as a second
+   * round-trip per tab would make the two labels observably disagree while one
+   * request is in flight. `FILTER` keeps it one index-backed pass over the
+   * doctor's registrations.
+   */
+  async countMyEvents(
+    userId: string,
+    cutoff: Date,
+  ): Promise<MyEventsCounts> {
+    const [row] = await this.db
+      .select({
+        upcoming: sql<number>`count(*) FILTER (WHERE ${tabMembership("upcoming", cutoff)})::int`,
+        recordings: sql<number>`count(*) FILTER (WHERE ${tabMembership("recordings", cutoff)})::int`,
+      })
+      .from(registrations)
+      .innerJoin(events, eq(events.id, registrations.eventId))
+      .where(eq(registrations.userId, userId));
+    return { upcoming: row?.upcoming ?? 0, recordings: row?.recordings ?? 0 };
   }
 
   /**

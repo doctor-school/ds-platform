@@ -650,35 +650,36 @@ export const eventProjectsUrl = {
 };
 
 /**
- * The `event_topics` relationship endpoints (012-design §5.1, EARS-11 / #1293).
+ * The `event_directions` relationship endpoints (012-design §5.1, EARS-11 / #1293).
  *
  * Same flat-collection shape as `eventProjectsUrl`, filtered by EITHER endpoint,
- * so one route serves «темы этого эфира» on the event detail and «эфиры этой
- * темы» from the topic side. No `PATCH` and no `DELETE`: an event↔topic link is
+ * so one route serves «направления этого эфира» on the event detail and «эфиры
+ * этого направления» from the direction side. No `PATCH` and no `DELETE`: an
+ * event↔direction link is
  * attribute-less, and its lifecycle is the two named commands behind the §3.1
  * impact gate.
  */
-export const eventTopicsUrl = {
-  collection: () => `${ADMIN_BASE}/event-topics`,
+export const eventDirectionsUrl = {
+  collection: () => `${ADMIN_BASE}/event-directions`,
   list: (query: {
     eventId?: string;
-    topicId?: string;
+    directionId?: string;
     includeRetired?: boolean;
     pageSize?: number;
   }) => {
     const params = new URLSearchParams();
     if (query.eventId) params.set("eventId", query.eventId);
-    if (query.topicId) params.set("topicId", query.topicId);
+    if (query.directionId) params.set("directionId", query.directionId);
     if (query.includeRetired) params.set("includeRetired", "true");
     params.set("pageSize", String(query.pageSize ?? ADMIN_LIST_PAGE_SIZE_MAX));
-    return `${ADMIN_BASE}/event-topics?${params.toString()}`;
+    return `${ADMIN_BASE}/event-directions?${params.toString()}`;
   },
-  row: (id: string) => `${ADMIN_BASE}/event-topics/${id}`,
+  row: (id: string) => `${ADMIN_BASE}/event-directions/${id}`,
   /** The §3.1 preview. Transition-specific: a token binds exactly one of them. */
   impact: (id: string, transition: TaxonomyLifecycleTransition) =>
-    `${ADMIN_BASE}/event-topics/${id}/lifecycle-impact?transition=${transition}`,
+    `${ADMIN_BASE}/event-directions/${id}/lifecycle-impact?transition=${transition}`,
   transition: (id: string, transition: TaxonomyLifecycleTransition) =>
-    `${ADMIN_BASE}/event-topics/${id}/${transition}`,
+    `${ADMIN_BASE}/event-directions/${id}/${transition}`,
 };
 
 /**
@@ -832,6 +833,29 @@ export const directionAdjacencyUrl = {
   row: (id: string) => `${ADMIN_BASE}/direction-adjacency/${id}`,
   transition: (id: string, transition: RelationshipTransition) =>
     `${ADMIN_BASE}/direction-adjacency/${id}/${transition}`,
+};
+
+/**
+ * The publish command of the three remaining taxonomy entities (012 EARS-5,
+ * #1287). Built the same way `directionsUrl.publish` is, for the same reason:
+ * each stays a Refine CRUD resource for its list / create / PATCH, and this map
+ * holds ONLY what CRUD has no verb for — `draft → published`. The `custom` path
+ * is what owns the Idempotency-Key / If-Match protocol headers a command owes.
+ *
+ * There is no `retire` and no `restore` here YET (#1295/#1296): the API exposes
+ * neither for these kinds, and a builder for a route that 404s is a button that
+ * lies. There will never be a `delete` (§3.1).
+ */
+export const projectsUrl = {
+  publish: (id: string) => `${ADMIN_BASE}/projects/${id}/publish`,
+};
+
+export const expertsUrl = {
+  publish: (id: string) => `${ADMIN_BASE}/experts/${id}/publish`,
+};
+
+export const partnersUrl = {
+  publish: (id: string) => `${ADMIN_BASE}/partners/${id}/publish`,
 };
 
 /** The two named lifecycle commands a relationship row answers to. */

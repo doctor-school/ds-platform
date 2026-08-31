@@ -19,15 +19,17 @@ import { ProjectForm } from "@/components/project-form";
 import { EventProjectsPanel } from "@/components/event-projects-panel";
 import { ProjectExpertsPanel } from "@/components/project-experts-panel";
 import { ProjectPartnersPanel } from "@/components/project-partners-panel";
+import { PublishAction } from "@/components/publish-action";
 import { taxonomyErrorKey } from "@/lib/taxonomy-errors";
-import type { UpdateProjectVars } from "@/providers/data-provider";
+import { projectsUrl, type UpdateProjectVars } from "@/providers/data-provider";
 
 /**
  * Project detail / edit (012 EARS-1) in the Stage-A composition-B tabbed layout
- * (#1282, owner pick 2026-08-17). Only «Основное» ships in this slice: «Связи»
- * (#1288/#1291/#1292) and «Публикация» (#1287/#1295/#1296) are added by their own
- * slices, and an empty placeholder tab is deliberately NOT rendered — it would
- * advertise a surface that does nothing.
+ * (#1282, owner pick 2026-08-17). «Публикация» (012 EARS-5, #1287) now has
+ * something to show — the publish command — so the tab ships; the withdraw and
+ * restore halves join it with their own routes (#1295/#1296). An empty
+ * placeholder tab is still never rendered: it would advertise a surface that
+ * does nothing.
  *
  * Every save carries the row's `version` as `If-Match`, and the detail is refetched
  * afterwards, so the next edit asserts the version the server actually holds
@@ -110,6 +112,9 @@ export default function ProjectDetailPage() {
                 <TabsTrigger value="partners" data-testid="tab-partners">
                   {t("projects.tabs.partners")}
                 </TabsTrigger>
+                <TabsTrigger value="publish" data-testid="tab-publish">
+                  {t("projects.tabs.publish")}
+                </TabsTrigger>
               </TabsList>
               <TabsContent value="main">
                 <ProjectForm
@@ -172,6 +177,21 @@ export default function ProjectDetailPage() {
                   primary one the public project page shows. */}
               <TabsContent value="partners">
                 <ProjectPartnersPanel mode="project" entityId={detail.id} />
+              </TabsContent>
+
+              {/* «Публикация» (012 EARS-5) — publish only, and only from a
+                  draft: the withdraw/restore routes do not exist for projects
+                  yet (#1295/#1296). The refusal an operator meets most often
+                  here points at the «Эксперты» tab, not at a field. */}
+              <TabsContent value="publish">
+                <PublishAction
+                  namespace="projects"
+                  id={detail.id}
+                  status={detail.status}
+                  version={detail.version}
+                  publishUrl={projectsUrl.publish}
+                  onPublished={() => void query.refetch()}
+                />
               </TabsContent>
             </Tabs>
           </>

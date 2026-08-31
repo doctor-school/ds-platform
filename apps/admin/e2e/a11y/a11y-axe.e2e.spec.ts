@@ -91,6 +91,25 @@ async function createExpertForScan(
 }
 
 /**
+ * A curated direction, created through the real authoring screen.
+ *
+ * The taxonomy scans below need a direction that EXISTS: a link row (a
+ * direction↔specialty pair, a direction↔direction edge) and an event's direction
+ * panel all render their populated states only against one, and an empty list is
+ * a different a11y surface from a populated one.
+ */
+async function createDirectionForScan(page: Page): Promise<string> {
+  const title = `Axe-скан направление ${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+  await page.goto("/directions/create");
+  await page.getByTestId("direction-form").waitFor({ state: "visible" });
+  await page.getByTestId("direction-title").fill(title);
+  await page.getByTestId("submit-direction").click();
+  await page.waitForURL(/\/directions\/[0-9a-f-]{36}$/);
+  await page.getByTestId("direction-heading").waitFor({ state: "visible" });
+  return title;
+}
+
+/**
  * Block until nothing on the page is still ANIMATING, so axe samples a settled
  * state rather than a frame of a transition.
  *
@@ -506,6 +525,189 @@ test.describe("007 EARS-11 axe-core a11y scan of the admin event surface", () =>
     await page
       .getByTestId("event-projects-panel")
       .waitFor({ state: "visible" });
+    for (const theme of THEMES) await scan(page, theme);
+  });
+
+  // ── 012 EARS-3 / 017 EARS-16…19 — the taxonomy surfaces (#1647) ─────────
+  // These four routes shipped with a browser FLOW spec each and no axe scan at
+  // all: `taxonomy-{directions,direction-specialties,direction-adjacency,
+  // specialties}.spec.ts` drive the behaviour, and behaviour green certifies
+  // nothing about contrast, accessible naming or landmark structure. They are
+  // enumerated here for the same reason the partner (#1286) and event↔project
+  // (#1288) scans are: each renders a state no already-scanned surface holds —
+  // the block-tier list bar with its applied-filter chip, a native `select` pair
+  // as the only authoring control, the explaining KIND combobox with its open
+  // panel, and a deliberately read-only book with no create affordance.
+  //
+  // «event-directions» gets no test of its own on purpose: it is not a route. The
+  // directions surface is the `tab-directions` panel of `/events/[id]`
+  // (`taxonomy-event-directions.spec.ts`), so it is scanned as a tab state of the
+  // event detail — scanning a URL that does not exist would certify nothing.
+
+  test("the direction list + create + rejected + detail surfaces pass WCAG 2 A/AA (light)", async ({
+    page,
+  }) => {
+    await loginAsAdmin(page);
+    await page.goto("/directions");
+    await page.getByTestId("directions-filters").waitFor({ state: "visible" });
+    for (const theme of THEMES) await scan(page, theme);
+
+    await page.goto("/directions/create");
+    await page.getByTestId("direction-form").waitFor({ state: "visible" });
+    for (const theme of THEMES) await scan(page, theme);
+
+    // The REJECTED form — a destructive inline message plus the field's invalid
+    // border, its own colour state and its own accessible-name wiring. The
+    // client refuses an over-long title without a round-trip (EARS-16), so this
+    // state is reachable with no server dependency.
+    await page.getByTestId("direction-title").fill("х".repeat(121));
+    await page.getByTestId("submit-direction").click();
+    await expect(
+      page.getByText("Слишком длинное значение", { exact: false }),
+    ).toBeVisible();
+    for (const theme of THEMES) await scan(page, theme);
+
+    // A real created row, so the detail scan covers the tab bar and the status
+    // badge rather than an empty form.
+    await page
+      .getByTestId("direction-title")
+      .fill(`Axe-скан направление ${Date.now()}`);
+    await page.getByTestId("submit-direction").click();
+    await page.waitForURL(/\/directions\/[0-9a-f-]{36}$/);
+    await page.getByTestId("direction-heading").waitFor({ state: "visible" });
+    for (const theme of THEMES) await scan(page, theme);
+
+    // The list holding an APPLIED search — the removable «Выбрано:» chip is a
+    // colour-plus-text state the resting bar does not render.
+    await page.getByTestId("back-to-list").click();
+    await page.waitForURL(/\/directions$/);
+    await page.getByRole("searchbox", { name: "Поиск" }).fill("Axe-скан");
+    await expect(page.getByText("Выбрано:", { exact: false })).toBeVisible();
+    for (const theme of THEMES) await scan(page, theme);
+  });
+
+  test("the direction↔specialty list + create + detail surfaces pass WCAG 2 A/AA (light)", async ({
+    page,
+  }) => {
+    await loginAsAdmin(page);
+    const directionTitle = await createDirectionForScan(page);
+
+    await page.goto("/direction-specialties");
+    await page
+      .getByTestId("direction-specialties-filters")
+      .waitFor({ state: "visible" });
+    for (const theme of THEMES) await scan(page, theme);
+
+    await page.goto("/direction-specialties/create");
+    await page
+      .getByTestId("submit-direction-specialty")
+      .waitFor({ state: "visible" });
+    for (const theme of THEMES) await scan(page, theme);
+
+    // BOTH selects rejected at once — two inline messages under two native
+    // controls, the state an operator meets before they have chosen anything.
+    await page.getByTestId("submit-direction-specialty").click();
+    await expect(
+      page.getByText("Выберите направление из списка.", { exact: false }),
+    ).toBeVisible();
+    for (const theme of THEMES) await scan(page, theme);
+
+    // A real link, so the detail scan covers the resolved pair and its status
+    // badge. The specialty is picked positionally: the nomenclature is the
+    // seed's to decide, and naming one here would assert the seed, not the screen.
+    await page
+      .getByTestId("direction-specialty-direction")
+      .selectOption({ label: directionTitle });
+    await page
+      .getByTestId("direction-specialty-specialty")
+      .selectOption({ index: 1 });
+    await page.getByTestId("submit-direction-specialty").click();
+    await page.waitForURL(/\/direction-specialties\/[0-9a-f-]{36}$/);
+    await page
+      .getByTestId("direction-specialty-status")
+      .waitFor({ state: "visible" });
+    for (const theme of THEMES) await scan(page, theme);
+  });
+
+  test("the direction-adjacency list, its kind combobox and its detail pass WCAG 2 A/AA (light)", async ({
+    page,
+  }) => {
+    await loginAsAdmin(page);
+    const source = await createDirectionForScan(page);
+    const target = await createDirectionForScan(page);
+
+    await page.goto("/direction-adjacency");
+    await page
+      .getByTestId("direction-adjacency-filters")
+      .waitFor({ state: "visible" });
+    for (const theme of THEMES) await scan(page, theme);
+
+    await page.goto("/direction-adjacency/create");
+    await page
+      .getByTestId("submit-direction-adjacency")
+      .waitFor({ state: "visible" });
+    for (const theme of THEMES) await scan(page, theme);
+
+    // The OPEN kind panel — the point of this test. «Вид связи» is a combobox
+    // rather than a native select precisely because each member carries an
+    // explanation, so the panel is a listbox of two-line options with its own
+    // naming and its own contrast; a closed trigger certifies none of it.
+    await page
+      .getByTestId("direction-adjacency-direction")
+      .selectOption({ label: source });
+    await page
+      .getByTestId("direction-adjacency-adjacent")
+      .selectOption({ label: source });
+    await page.locator("#kind").click();
+    await expect(
+      page.getByText("Более узкая область внутри направления", {
+        exact: false,
+      }),
+    ).toBeVisible();
+    for (const theme of THEMES) await scan(page, theme);
+    await page
+      .getByRole("option", { name: "Смежное направление", exact: false })
+      .click();
+
+    // The REFUSED self-edge — a server-refused command rendered as an inline
+    // danger message, a different surface from the client-side reject above.
+    await page.getByTestId("submit-direction-adjacency").click();
+    await expect(
+      page.getByText("Направление не бывает смежным самому себе", {
+        exact: false,
+      }),
+    ).toBeVisible();
+    for (const theme of THEMES) await scan(page, theme);
+
+    await page
+      .getByTestId("direction-adjacency-adjacent")
+      .selectOption({ label: target });
+    await page.getByTestId("submit-direction-adjacency").click();
+    await page.waitForURL(/\/direction-adjacency\/[0-9a-f-]{36}$/);
+    await page
+      .getByTestId("direction-adjacency-status")
+      .waitFor({ state: "visible" });
+    for (const theme of THEMES) await scan(page, theme);
+  });
+
+  test("the specialty book passes WCAG 2 A/AA (light)", async ({ page }) => {
+    await loginAsAdmin(page);
+    await page.goto("/specialties");
+    await page.getByTestId("specialties-table").waitFor({ state: "visible" });
+    // The book's own notice is part of what is scanned: it is the surface that
+    // TELLS the operator the nomenclature is read-only, so its contrast and its
+    // reading order are the whole affordance.
+    await page.getByTestId("specialties-notice").waitFor({ state: "visible" });
+    for (const theme of THEMES) await scan(page, theme);
+  });
+
+  test("the event directions tab passes WCAG 2 A/AA (light)", async ({ page }) => {
+    await loginAsAdmin(page);
+    const id = await createEventForScan(page);
+
+    await page.goto(`/events/${id}`);
+    await page.getByTestId("tab-directions").click();
+    await page.getByTestId("event-directions-panel").waitFor({ state: "visible" });
     for (const theme of THEMES) await scan(page, theme);
   });
 });

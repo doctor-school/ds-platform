@@ -35,7 +35,7 @@ function publicKey(token: string): PublicEventKey {
 @UseFilters(TaxonomyProblemFilter)
 export class EventSpeakersPublicController {
   // Explicit @Inject token — the root-level authz gate boots this graph under
-  // `tsx`, which emits no `design:paramtypes` (see `topics.service.ts`).
+  // `tsx`, which emits no `design:paramtypes` (see `directions.service.ts`).
   constructor(
     @Inject(SpeakerProjectionService)
     private readonly speakers: SpeakerProjectionService,

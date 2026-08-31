@@ -1042,6 +1042,240 @@ jobs:
       - run: pnpm --filter @ds/doctor exec playwright install --with-deps chromium
       - run: pnpm --filter @ds/doctor test:e2e:ci
 
+  # ─── admin-e2e: the admin flows tier + admin axe sweep (#1647) ────────
+  # The #1638 audit finding D3: `apps/admin` had ZERO CI runtime coverage. Its
+  # two Playwright configs — `playwright.flows.config.ts` (the 5 taxonomy specs
+  # + the MFA-enrollment arc) and `playwright.axe.config.ts` (the WCAG 2 A/AA
+  # page sweep) — existed but ran nowhere; every admin regression had to be
+  # caught by hand on the dev stand.
+  #
+  # Unlike `playwright-axe-portal` / `-doctor`, this tier is NOT backend-free:
+  # `bootstrapAdminSession` (apps/admin/e2e/support/admin-session.ts) POSTs
+  # `/v1/auth/register` through the ADMIN origin (the `__Host-ds_session`
+  # cookie needs the same-origin `/v1/*` rewrite) and then grants the
+  # `platform_admin` role through the IdP's `management/v1/*` REST API. So the
+  # job boots the WHOLE lower stack: Postgres → Zitadel → api → admin. That is
+  # the "new job" arm of #1647 — moving the tier into an existing job would have
+  # forced one of the backend-free jobs to grow a database and an IdP.
+  #
+  # Everything runs on the runner's HOST network, so `localhost` is a single
+  # namespace shared by Postgres:5432, the IdP:9080, the api:3000 and the
+  # admin:3200 — no container-to-host address translation anywhere.
+  #
+  # The Минздрав specialty reference book (`/specialties`, and the specialty
+  # select of `/direction-specialties/create`) is NOT seeded by a migration: the
+  # api seeds it itself at boot, in `StorefrontModule.onModuleInit`
+  # (apps/api/src/storefront/storefront.module.ts), under an advisory lock. So
+  # `drizzle:migrate:ci` + an api boot is the complete data precondition and
+  # this job needs no seed step of its own.
+  #
+  # PATH-GATED (#1251), same rationale as the sibling Playwright jobs.
+  admin-e2e:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      DATABASE_URL: postgres://ds:ds@localhost:5432/ds_admin_e2e
+      IDP_ISSUER: http://localhost:9080
+      E2E_ADMIN_URL: http://localhost:3200
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with: { node-version-file: .nvmrc, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+
+      # ─ data layer ─ same SSOT image the `api-e2e` job builds (#369).
+      - name: Build the data-layer Postgres image (pgvector + pg_partman)
+        run: docker build -t ds-platform/postgres:pg17-partman infra/dev-stand/postgres
+      - name: Start Postgres
+        run: |
+          docker run -d --name ds-postgres --network host \
+            -e POSTGRES_USER=ds \
+            -e POSTGRES_PASSWORD=ds \
+            -e POSTGRES_DB=ds_admin_e2e \
+            ds-platform/postgres:pg17-partman
+      - name: Wait for Postgres to be ready
+        run: |
+          for i in $(seq 1 30); do
+            if docker exec ds-postgres pg_isready -U ds -d ds_admin_e2e; then
+              echo "Postgres is ready"; exit 0
+            fi
+            echo "waiting for Postgres ($i/30)..."; sleep 2
+          done
+          echo "Postgres did not become ready in time"; docker logs ds-postgres; exit 1
+
+      # ─ IdP ─ the same Zitadel image and bootstrap env the dev stand uses
+      # (infra/dev-stand/compose.core.yml). ONE CI-only difference, forced by
+      # the absence of compose: `ZITADEL_PORT=9080`. The dev stand maps
+      # 9080→8080 at the compose layer; on the host network the binary must
+      # LISTEN on the external port itself, or the issuer URL and the socket
+      # disagree. Its `zitadel` database is created by `start-from-init` with
+      # the admin credentials, exactly as on the stand — no init script does it.
+      # `/pat` is a HOST bind mount here, not the stand's tmpfs. Same root
+      # cause as the #144 trap — the image is distroless, runs as uid 1000 and
+      # cannot write a root-owned mount — but the CI answer is a world-writable
+      # runner directory rather than a tmpfs, because the PAT then lands on the
+      # runner filesystem and is read with `cat`. `docker cp` off the tmpfs did
+      # not produce the file (first run of this job, 2026-08-31), and the
+      # distroless image has no shell to `docker exec cat` with.
+      - name: Prepare the PAT mount
+        run: mkdir -p "$RUNNER_TEMP/idp-pat" && chmod 0777 "$RUNNER_TEMP/idp-pat"
+      - name: Start the IdP (Zitadel)
+        run: |
+          docker run -d --name ds-idp --network host \
+            -v "$RUNNER_TEMP/idp-pat":/pat \
+            -e ZITADEL_MASTERKEY=MasterkeyNeedsToHave32Characters \
+            -e ZITADEL_EXTERNALSECURE=false \
+            -e ZITADEL_TLS_ENABLED=false \
+            -e ZITADEL_EXTERNALDOMAIN=localhost \
+            -e ZITADEL_EXTERNALPORT=9080 \
+            -e ZITADEL_PORT=9080 \
+            -e ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_REQUIRED=true \
+            -e ZITADEL_DATABASE_POSTGRES_HOST=localhost \
+            -e ZITADEL_DATABASE_POSTGRES_PORT=5432 \
+            -e ZITADEL_DATABASE_POSTGRES_DATABASE=zitadel \
+            -e ZITADEL_DATABASE_POSTGRES_USER_USERNAME=ds \
+            -e ZITADEL_DATABASE_POSTGRES_USER_PASSWORD=ds \
+            -e ZITADEL_DATABASE_POSTGRES_USER_SSL_MODE=disable \
+            -e ZITADEL_DATABASE_POSTGRES_ADMIN_USERNAME=ds \
+            -e ZITADEL_DATABASE_POSTGRES_ADMIN_PASSWORD=ds \
+            -e ZITADEL_DATABASE_POSTGRES_ADMIN_SSL_MODE=disable \
+            -e ZITADEL_FIRSTINSTANCE_PATPATH=/pat/pat.txt \
+            -e ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_USERNAME=ds-bootstrap \
+            -e ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_NAME=ds-bootstrap \
+            -e ZITADEL_FIRSTINSTANCE_ORG_MACHINE_PAT_EXPIRATIONDATE=2099-12-31T23:59:59Z \
+            ghcr.io/zitadel/zitadel:latest \
+            start-from-init --masterkeyFromEnv
+      - name: Wait for the IdP to be ready
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:9080/debug/ready >/dev/null 2>&1; then
+              echo "IdP is ready"; exit 0
+            fi
+            echo "waiting for the IdP ($i/60)..."; sleep 5
+          done
+          echo "the IdP did not become ready in time"; docker logs ds-idp; exit 1
+      - name: Read the bootstrap PAT
+        run: |
+          for i in $(seq 1 30); do
+            if [ -s "$RUNNER_TEMP/idp-pat/pat.txt" ]; then
+              cp "$RUNNER_TEMP/idp-pat/pat.txt" ./idp-pat.txt
+              echo "::add-mask::$(cat ./idp-pat.txt)"
+              echo "IDP_SERVICE_TOKEN=$(cat ./idp-pat.txt)" >> "$GITHUB_ENV"
+              echo "bootstrap PAT read"; exit 0
+            fi
+            echo "waiting for the bootstrap PAT ($i/30)..."; sleep 2
+          done
+          echo "the bootstrap PAT never appeared"; docker logs ds-idp; exit 1
+      # The dev stand's own provisioner, unmodified — it is idempotent, needs
+      # only curl + jq (both on ubuntu-latest), seeds the
+      # `doctor_guest,platform_admin` roles the flows tier grants, and prints
+      # the three IDP_* values on STDOUT (diagnostics go to stderr). STDOUT
+      # goes to the FILE only — this repo is public, and the values include the
+      # OIDC client secret, so the log gets the stderr diagnostics and nothing
+      # else; the secret is masked before it enters $GITHUB_ENV. The secrets
+      # are per-run ephemeral (the IdP lives and dies on this runner), but a
+      # public log stays clean regardless.
+      - name: Provision the IdP project, client and roles
+        env:
+          IDP_BASE_URL: http://localhost:9080
+        run: |
+          set -euo pipefail
+          bash infra/dev-stand/idp/provision.sh --pat-file ./idp-pat.txt > ./idp-provision.out
+          client_secret="$(grep -E '^IDP_CLIENT_SECRET=' ./idp-provision.out | cut -d= -f2- || true)"
+          if [ -n "$client_secret" ]; then echo "::add-mask::$client_secret"; fi
+          grep -E '^IDP_(PROJECT_ID|CLIENT_ID|CLIENT_SECRET)=' ./idp-provision.out >> "$GITHUB_ENV"
+
+      # ─ application layer ─
+      # `drizzle:migrate:ci`, never `drizzle:migrate`: the latter chains
+      # `dev:snapshot`, which has no meaning on a throwaway runner database.
+      - name: Apply the migrations
+        run: pnpm --filter @ds/api drizzle:migrate:ci
+      # `API_PROXY_TARGET` belongs to the BUILD, not to `next start`: the
+      # `/v1/:path*` rewrite in apps/admin/next.config.ts is evaluated when the
+      # routes manifest is emitted, so the destination is baked into
+      # `.next/routes-manifest.json` and a value supplied only at start time is
+      # ignored. Verified locally on #1647 — an admin built without it proxied
+      # `/v1/auth/register` to the config default and answered 404 while the api
+      # answered on its real port.
+      - name: Build the api and the admin
+        env:
+          API_PROXY_TARGET: http://localhost:3000
+        run: pnpm exec turbo run build --filter=@ds/api --filter=@ds/admin
+      - name: Start the api
+        env:
+          PORT: "3000"
+          BOT_PROTECTION_ENABLED: "false"
+          IDP_REDIRECT_URI: http://localhost:3000/auth/callback
+          # Both fail CLOSED outside a test runtime, so CI must supply them.
+          # Throwaway literals for a throwaway database — they protect nothing
+          # here and are never reused off this runner.
+          AUDIT_IDENTIFIER_PEPPER: ci-admin-e2e-audit-pepper
+          LIFECYCLE_IMPACT_TOKEN_SECRET: ci-admin-e2e-lifecycle-secret
+          # The #1076 ops-window ceilings: the MFA arc spends several auth calls
+          # from ONE loopback address, which the production ceilings would
+          # throttle into a false red.
+          RATE_LIMIT_PER_IP_15MIN: "100000"
+          RATE_LIMIT_PER_USER_15MIN: "100000"
+          RATE_LIMIT_PER_ASN_1H: "1000000"
+        run: |
+          pnpm --filter @ds/api start > api.log 2>&1 &
+          echo $! > api.pid
+      - name: Wait for the api
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:3000/v1/health >/dev/null 2>&1; then
+              echo "api is up"; exit 0
+            fi
+            echo "waiting for the api ($i/60)..."; sleep 2
+          done
+          echo "the api did not come up in time"; cat api.log; exit 1
+      - name: Start the admin
+        run: |
+          pnpm --filter @ds/admin start > admin.log 2>&1 &
+          echo $! > admin.pid
+      - name: Wait for the admin
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:3200/login >/dev/null 2>&1; then
+              echo "admin is up"; exit 0
+            fi
+            echo "waiting for the admin ($i/60)..."; sleep 2
+          done
+          echo "the admin did not come up in time"; cat admin.log; exit 1
+
+      # ─ the tiers themselves ─ Both tiers run whenever the stack booted: a
+      # red flows tier must not skip the axe sweep (each is its own evidence),
+      # so the sweep keys on the browser-install step having succeeded — the
+      # proof the whole boot chain reached the tiers — not on the flows result.
+      - name: Install the Playwright browser
+        id: pw-install
+        run: pnpm --filter @ds/admin exec playwright install --with-deps chromium
+      - name: Admin flows tier
+        run: pnpm --filter @ds/admin test:flows
+      - name: Admin axe sweep
+        if: ${{ !cancelled() && steps.pw-install.outcome == 'success' }}
+        run: pnpm --filter @ds/admin test:axe
+
+      # ─ failure forensics ─ four processes, so a bare red step says nothing.
+      - name: Dump the service logs
+        if: failure()
+        run: |
+          echo '::group::api'; tail -n 400 api.log || true; echo '::endgroup::'
+          echo '::group::admin'; tail -n 400 admin.log || true; echo '::endgroup::'
+          echo '::group::idp'; docker logs --tail 400 ds-idp || true; echo '::endgroup::'
+          echo '::group::postgres'; docker logs --tail 200 ds-postgres || true; echo '::endgroup::'
+      - name: Upload the Playwright artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: admin-e2e-results
+          path: apps/admin/test-results
+          if-no-files-found: ignore
+          retention-days: 7
+
   # ─── standalone-boot: the deployed artifact must actually BOOT (#1410) ─
   # #1407: bumping `next` 16.3.0 → 16.3.1 crash-looped the portal AND admin
   # standalone servers on prod, and every check above stayed green — `next build`
@@ -1122,6 +1356,7 @@ jobs:
         playwright-academy-demo,
         playwright-axe-portal,
         playwright-axe-doctor,
+        admin-e2e,
         standalone-boot,
       ]
     if: always()
@@ -1143,14 +1378,15 @@ jobs:
       #   must red `ci` rather than skip the gated jobs into a free green.
       #
       #   PATH-GATED — `api-e2e`, `playwright-axe`, `playwright-academy-demo`,
-      #   `playwright-axe-portal`, `playwright-axe-doctor`, `standalone-boot`.
+      #   `playwright-axe-portal`, `playwright-axe-doctor`, `admin-e2e`,
+      #   `standalone-boot`.
       #   `success` OR `skipped` is green; `failure`/`cancelled` is still red.
       #   `skipped` here is reachable ONLY via `needs.changes.outputs.code`
       #   (a docs-only diff) or via `changes` itself not succeeding — and that
       #   second path is already red through the unconditional class above.
       #
-      # Net: a docs-only PR is green with six SKIPPED jobs; any FAILURE in any
-      # of the ten is still red; a run where the classifier broke is red.
+      # Net: a docs-only PR is green with seven SKIPPED jobs; any FAILURE in any
+      # of the eleven is still red; a run where the classifier broke is red.
       - name: Aggregate
         env:
           UNCONDITIONAL: |
@@ -1164,6 +1400,7 @@ jobs:
             playwright-academy-demo=${{ needs['playwright-academy-demo'].result }}
             playwright-axe-portal=${{ needs['playwright-axe-portal'].result }}
             playwright-axe-doctor=${{ needs['playwright-axe-doctor'].result }}
+            admin-e2e=${{ needs['admin-e2e'].result }}
             standalone-boot=${{ needs['standalone-boot'].result }}
         run: |
           fail=0

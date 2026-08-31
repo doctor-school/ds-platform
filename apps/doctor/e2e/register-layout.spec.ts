@@ -1,13 +1,14 @@
 import { test, expect, type Page } from "@playwright/test";
 
 /**
- * 021 EARS-1 — the doctor registration route inside 017's shell.
+ * 021 EARS-1 — the doctor registration route as a CHROMELESS auth frame.
  *
  * The browser tier of the EARS-1 contract, and the only tier that can prove what
- * the clause actually asserts: that the route renders the `auth` canvas's split
- * composition INSIDE the 017 shell (rather than beside a screen-local copy of
- * it), that the door asks for exactly three things, and that no document is ever
- * requested at it (REQ-22 — the feature's central product promise).
+ * the clause actually asserts: that the route renders the `auth` canvas's
+ * chromeless split — no storefront header, navigation or footer, the wordmark
+ * present, the card centred on the vertical axis — that the door asks for
+ * exactly three things, and that no document is ever requested at it (REQ-22 —
+ * the feature's central product promise).
  *
  * On REQ-22 and the word «документ». The requirement (021-requirements-en §112)
  * bans the *request*: "no upload control, no file input, no document field and no
@@ -15,9 +16,9 @@ import { test, expect, type Page } from "@playwright/test";
  * says «Документы на входе не нужны.», which is REQ-22 being *stated to the
  * doctor*, and 021-product.md builds the whole positioning on it. So 1.3 scans
  * for request-shaped tells and asserts the promise is present, instead of
- * banning a substring. The scan is scoped to the registration screen for a second
- * reason too: the 017 shell's own footer carries «Документы и контакты» (see
- * `shell.spec.ts` → `footer-documents`), which a document-wide scan would flag.
+ * banning a substring. The scan stays scoped to the registration screen because
+ * that is the surface the requirement governs — the scope is the contract, not a
+ * workaround for neighbouring copy.
  *
  * Scope of this slice: layout only. The envelope's other slots (return context,
  * attribution, points promise, consent tiers — return context #1538, attribution
@@ -55,7 +56,9 @@ const NO_DOCUMENTS_PROMISE = "Документы на входе не нужны
 async function assertNoDocumentRequest(page: Page, state: string) {
   // No upload affordance anywhere on the document, in any state.
   await expect(
-    page.locator('input[type="file"], [accept], [role="button"][aria-label*="файл" i]'),
+    page.locator(
+      'input[type="file"], [accept], [role="button"][aria-label*="файл" i]',
+    ),
     `upload affordance on the registration surface (${state})`,
   ).toHaveCount(0);
 
@@ -70,26 +73,27 @@ async function assertNoDocumentRequest(page: Page, state: string) {
   }
 }
 
-test.describe("021 EARS-1: the registration route inside the 017 shell", () => {
-  test("021 EARS-1.1: the split composition renders inside the shell, not beside it", async ({
+test.describe("021 EARS-1: the chromeless registration route", () => {
+  test("021 EARS-1.1: the chromeless auth frame renders — wordmark, brand panel, card", async ({
     page,
   }) => {
     await page.goto("/register");
 
     await expect(page.getByTestId("registration-screen")).toBeVisible();
-    // Inside the shell's `main` — the route group's layout is what wraps it.
-    await expect(
-      page
-        .getByTestId("storefront-shell")
-        .locator("main")
-        .getByTestId("registration-screen"),
-    ).toHaveCount(1);
+    // The storefront shell does not exist on this route at all: the route lives
+    // in the `(auth)` group, a SIBLING of `(storefront)`, so the 017 layout is
+    // never in the tree — not merely hidden by CSS.
+    await expect(page.getByTestId("storefront-shell")).toHaveCount(0);
 
-    const screen = page.getByTestId("registration-screen");
-    // The canvas's two halves: the navy brand panel and the bordered form card.
-    await expect(screen.getByTestId("registration-brand-panel")).toBeVisible();
-    await expect(screen.getByTestId("registration-form-card")).toBeVisible();
-    // The route owns the document's single h1 (the shell layout carries none).
+    // The frame the canvas draws instead: the wordmark plus the two halves of
+    // the split — the brand panel and the bordered form card. Exactly ONE
+    // wordmark is visible per viewport: above the split it is the panel mark,
+    // and the form-column lockup is hidden (1.7 pins the mirror case at 390).
+    await expect(page.getByTestId("auth-panel-wordmark")).toBeVisible();
+    await expect(page.getByTestId("auth-wordmark")).toBeHidden();
+    await expect(page.getByTestId("auth-brand-panel")).toBeVisible();
+    await expect(page.getByTestId("registration-form-card")).toBeVisible();
+    // The route owns the document's single h1 (no layout above it carries one).
     await expect(page.locator("h1")).toHaveCount(1);
     await expect(page.locator("h1")).toHaveText("Регистрация");
   });
@@ -114,9 +118,10 @@ test.describe("021 EARS-1: the registration route inside the 017 shell", () => {
     const promo = page.getByTestId("register-promo");
     await expect(promo).toHaveAttribute("type", "text");
     expect(await promo.getAttribute("required"), "promo required").toBeNull();
-    expect(await promo.getAttribute("aria-required"), "promo aria-required").not.toBe(
-      "true",
-    );
+    expect(
+      await promo.getAttribute("aria-required"),
+      "promo aria-required",
+    ).not.toBe("true");
 
     // Design §7's «trim + length bound» must not rewrite what is being typed:
     // trimming on every keystroke makes an interior space unreachable, because
@@ -154,20 +159,19 @@ test.describe("021 EARS-1: the registration route inside the 017 shell", () => {
     await assertNoDocumentRequest(page, "error");
   });
 
-  test("021 EARS-1.4: the route contributes no header or footer of its own", async ({
+  test("021 EARS-1.4: no site chrome anywhere on the route", async ({
     page,
   }) => {
     await page.goto("/register");
 
-    await expect(page.locator("header")).toHaveCount(1);
-    await expect(page.locator("footer")).toHaveCount(1);
-
-    const screen = page.getByTestId("registration-screen");
-    await expect(screen.locator("header")).toHaveCount(0);
-    await expect(screen.locator("footer")).toHaveCount(0);
-    await expect(screen.getByTestId("storefront-header")).toHaveCount(0);
-    await expect(screen.getByTestId("storefront-footer")).toHaveCount(0);
-    await expect(screen.locator("nav")).toHaveCount(0);
+    // Not «the route adds none of its own» — the door carries NO header, nav or
+    // footer at all, from any layer. A single onward-link cluster on this screen
+    // is the defect: it leads the doctor away from the one CTA they came for.
+    await expect(page.locator("header")).toHaveCount(0);
+    await expect(page.locator("footer")).toHaveCount(0);
+    await expect(page.locator("nav")).toHaveCount(0);
+    await expect(page.getByTestId("storefront-header")).toHaveCount(0);
+    await expect(page.getByTestId("storefront-footer")).toHaveCount(0);
   });
 
   test("021 EARS-1.5: an unfilled envelope slot is absent from the tree, not an empty frame", async ({
@@ -184,7 +188,9 @@ test.describe("021 EARS-1: the registration route inside the 017 shell", () => {
       "registration-consent-access",
       "registration-consent-marketing",
     ]) {
-      await expect(page.getByTestId(slot), `unfilled slot ${slot}`).toHaveCount(0);
+      await expect(page.getByTestId(slot), `unfilled slot ${slot}`).toHaveCount(
+        0,
+      );
     }
   });
 
@@ -211,6 +217,92 @@ test.describe("021 EARS-1: the registration route inside the 017 shell", () => {
   });
 });
 
+/**
+ * The owner's Stage-review finding (#1667) in its own tier: the card sits on the
+ * vertical axis of the frame rather than riding the top edge. It needs a viewport
+ * tall enough for the card to fit with room to spare — otherwise "centred" and
+ * "top-pinned" are the same picture and the assertion would prove nothing.
+ */
+test.describe("021 EARS-1: the vertical axis", () => {
+  test.use({ viewport: { width: 1440, height: 1200 } });
+
+  test("021 EARS-1.8: the card is centred on the vertical axis, not pinned to the top", async ({
+    page,
+  }) => {
+    await page.goto("/register");
+
+    const card = page.getByTestId("registration-form-card");
+    const box = await card.boundingBox();
+    expect(box, "the form card has a layout box").not.toBeNull();
+    const viewport = page.viewportSize();
+    expect(viewport, "the test declares a viewport").not.toBeNull();
+
+    // Centred means the space above the card equals the space below it. The card
+    // is shorter than the viewport at this size, so the two gaps are real; a
+    // top-pinned card would leave the whole remainder below it. The tolerance
+    // absorbs sub-pixel rounding and the wordmark row's asymmetric contribution,
+    // and is far tighter than the difference a top-aligned layout produces.
+    const above = box!.y;
+    const below = viewport!.height - (box!.y + box!.height);
+    expect(below, "the card is shorter than the viewport").toBeGreaterThan(0);
+    expect(
+      Math.abs(above - below),
+      `vertical centring: ${above}px above vs ${below}px below`,
+    ).toBeLessThanOrEqual(48);
+  });
+
+  test("021 EARS-1.9: the brand panel is the canvas's three zones — mark pinned top-left, value prop centred, closing line at the foot", async ({
+    page,
+  }) => {
+    await page.goto("/register");
+
+    const panel = page.getByTestId("auth-brand-panel");
+    const mark = page.getByTestId("auth-panel-wordmark");
+    const eyebrow = panel.getByText("Врачи учат врачей");
+    const closing = panel.getByText(
+      "Бесплатно для врача · без бюрократии · © Doctor.School 2026",
+    );
+
+    await expect(closing).toBeVisible();
+
+    const panelBox = (await panel.boundingBox())!;
+    const markBox = (await mark.boundingBox())!;
+    const eyebrowBox = (await eyebrow.boundingBox())!;
+    const closingBox = (await closing.boundingBox())!;
+
+    // Zone 1 — the mark sits at the TOP of the panel, not mid-panel. The canvas
+    // pins it with `align-self:flex-start`; a centred mark would leave a void
+    // above it, which at this height is hundreds of px, so a generous bound
+    // still separates the two layouts decisively.
+    expect(
+      markBox.y - panelBox.y,
+      `mark top offset inside the panel: ${markBox.y - panelBox.y}px`,
+    ).toBeLessThanOrEqual(80);
+
+    // …and FLUSH LEFT, in line with the copy beneath it. Without `self-start`
+    // the stretched image box centres the SVG and this alignment breaks.
+    expect(
+      Math.abs(markBox.x - eyebrowBox.x),
+      `mark left ${markBox.x}px vs eyebrow left ${eyebrowBox.x}px`,
+    ).toBeLessThanOrEqual(2);
+
+    // Zone 3 — the closing line is the panel's own last zone, at its foot. It is
+    // panel content, not site chrome: 1.4 separately pins that no `footer`
+    // element exists anywhere in the document, and 1.7 that it leaves with the
+    // panel at 390.
+    const belowClosing = panelBox.y + panelBox.height - (closingBox.y + closingBox.height);
+    expect(
+      belowClosing,
+      `space under the closing line: ${belowClosing}px`,
+    ).toBeLessThanOrEqual(80);
+
+    // Zone 2 — the value prop occupies the space between them, so the mark and
+    // the closing line are genuinely separated rather than stacked.
+    expect(closingBox.y).toBeGreaterThan(eyebrowBox.y);
+    expect(eyebrowBox.y).toBeGreaterThan(markBox.y + markBox.height);
+  });
+});
+
 test.describe("021 EARS-1: the 390 collapse", () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
@@ -219,7 +311,10 @@ test.describe("021 EARS-1: the 390 collapse", () => {
   }) => {
     await page.goto("/register");
 
-    await expect(page.getByTestId("registration-brand-panel")).toBeHidden();
+    await expect(page.getByTestId("auth-brand-panel")).toBeHidden();
+    // The one-logo-per-viewport rule inverted: with the panel gone the
+    // form-column lockup is what carries the brand.
+    await expect(page.getByTestId("auth-wordmark")).toBeVisible();
     await expect(page.getByTestId("registration-form-card")).toBeVisible();
     await expect(page.getByTestId("register-email")).toBeVisible();
     await expect(page.getByTestId("register-promo")).toBeVisible();

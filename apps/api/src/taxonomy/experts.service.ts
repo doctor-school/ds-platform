@@ -17,7 +17,11 @@ import {
   ObjectAlreadyExistsError,
   type ObjectStorage,
 } from "../storage/index.js";
-import { ExpertsRepository } from "./experts.repository.js";
+import {
+  type ExpertEventSlot,
+  ExpertsRepository,
+  type LegacySlotOccupant,
+} from "./experts.repository.js";
 import {
   type IdempotencyLease,
   IdempotencyService,
@@ -59,6 +63,12 @@ export interface UpdateExpertInput {
   lease: IdempotencyLease;
 }
 
+export interface PublishExpertInput {
+  id: string;
+  expectedVersion: number;
+  lease: IdempotencyLease;
+}
+
 /** A command result plus the ETag the client must echo on its next write. */
 export interface ExpertCommandResult {
   detail: ExpertAdminDetail;
@@ -91,6 +101,11 @@ export class ExpertsService {
   /** `PATCH /v1/admin/experts/:id` — edit the SAME row. */
   update(input: UpdateExpertInput): Promise<ExpertCommandResult> {
     return this.fenced(input.lease, () => this.updateCommand(input));
+  }
+
+  /** `POST /v1/admin/experts/:id/publish` — `draft → published` (EARS-5). */
+  publish(input: PublishExpertInput): Promise<ExpertCommandResult> {
+    return this.fenced(input.lease, () => this.publishCommand(input));
   }
 
   /**
@@ -308,6 +323,131 @@ export class ExpertsService {
     };
   }
 
+  /**
+   * `draft → published`, which is a change to the MERGED SPEAKER PROJECTION of
+   * every event this expert is linked to (012-design §4), not just to one row.
+   *
+   * An active `event_experts` link is invisible while its expert is a draft:
+   * `eligibleExpertLinks` filters on `experts.status = 'published'`. Publishing
+   * therefore makes every one of this expert's slots appear at once — and a slot
+   * a legacy `event_speakers` row still visibly occupies would give the event
+   * page two speakers in position N. That is refused with
+   * `SPEAKER_POSITION_OCCUPIED` BEFORE any write, so the projection is never
+   * momentarily double-booked and the expert's own row is never left half-moved.
+   *
+   * The exception is an EXPLICIT merge: a link carrying `legacy_speaker_id`
+   * suppresses exactly that legacy row, so the position it names is the same
+   * person, not a collision.
+   *
+   * Lock order is «parent events ascending, then the expert» — the same
+   * ascending-id discipline §3.2 fixes for the project vertical, for the same
+   * deadlock reason. A link set that moved between discovery and the locks is a
+   * 412, never a late event lock.
+   */
+  private async publishCommand(
+    input: PublishExpertInput,
+  ): Promise<ExpertCommandResult> {
+    // Optimistic pre-flight OUTSIDE the transaction: a doomed request never
+    // opens one. Every check below repeats under the locks.
+    const current = await this.repo.findById(input.id);
+    if (!current) throw new TaxonomyError("RESOURCE_NOT_FOUND");
+
+    const row = await this.repo.transaction(async (tx) => {
+      // 1. Discover the affected events BEFORE any lock.
+      const discovered = await this.repo.activeEventSlots(tx, input.id);
+      // 2. Lock them, ascending stable id (the repository owns the ordering).
+      await this.repo.lockEvents(
+        tx,
+        discovered.map((slot) => slot.eventId),
+      );
+      // 3. Only now the expert.
+      const locked = await this.repo.lockById(tx, input.id);
+      if (!locked) throw new TaxonomyError("RESOURCE_NOT_FOUND");
+      if (locked.version !== input.expectedVersion) {
+        throw new TaxonomyError(
+          "PRECONDITION_FAILED",
+          "the expert changed since it was read; reload and retry",
+        );
+      }
+      // §2.4: a person who asked to be taken off the site is never republished —
+      // checked before the transition rule, because "removed" is the stronger
+      // statement and must not be reported as a mere lifecycle mismatch.
+      if (locked.contentRemovedAt !== null) {
+        throw new TaxonomyError(
+          "CONTENT_REMOVED",
+          "this expert record was editorially removed and cannot be published",
+        );
+      }
+      if (locked.status !== "draft") {
+        throw new TaxonomyError(
+          "INVALID_TRANSITION",
+          locked.status === "published"
+            ? "this expert is already published"
+            : "this expert is retired; restore it before publishing it again",
+        );
+      }
+
+      // 4. Re-run the discovery under the locks: a link added, retired or
+      //    re-positioned since step 1 means this publish was decided against a
+      //    projection the operator never saw.
+      const confirmed = await this.repo.activeEventSlots(tx, input.id);
+      if (!sameSlotSet(discovered, confirmed)) {
+        throw new TaxonomyError(
+          "PRECONDITION_FAILED",
+          "this expert's event links changed while the publish was being decided; reload and retry",
+        );
+      }
+
+      const blockers = publishRequirementBlockers(locked);
+      if (blockers.length > 0) {
+        throw new TaxonomyError(
+          "PUBLISH_REQUIREMENTS_NOT_MET",
+          "this expert is not complete enough to publish",
+          blockers,
+        );
+      }
+
+      // 5. Recompute the combined projection over the locked events and refuse a
+      //    slot a visible legacy speaker already holds.
+      const legacy = await this.repo.activeLegacySpeakers(
+        tx,
+        confirmed.map((slot) => slot.eventId),
+      );
+      assertNoOccupiedSpeakerPosition(confirmed, legacy);
+
+      const moved = await this.repo.transitionVersioned(
+        tx,
+        input.id,
+        input.expectedVersion,
+        {
+          status: "published",
+          deletedAt: null,
+          // Set ONCE and never re-stamped: a republished expert keeps the date
+          // it first became public, which is what pins its slug (LD-3).
+          ...(locked.firstPublishedAt ? {} : { firstPublishedAt: new Date() }),
+        },
+      );
+      if (!moved) {
+        throw new TaxonomyError(
+          "PRECONDITION_FAILED",
+          "the expert changed since it was read; reload and retry",
+        );
+      }
+      const detail = await this.toDetail(moved);
+      await this.idempotency.complete(tx, input.lease, {
+        status: 200,
+        body: detail,
+        etag: taxonomyETag(moved.version),
+      });
+      return moved;
+    });
+
+    return {
+      detail: await this.toDetail(row),
+      etag: taxonomyETag(row.version),
+    };
+  }
+
   /** `GET /v1/admin/experts/:id` — detail by stable id, retired rows included. */
   async detail(id: string): Promise<ExpertCommandResult> {
     const row = await this.repo.findById(id);
@@ -457,7 +597,7 @@ export class ExpertsService {
  */
 function publishRequirementBlockers(
   current: Expert,
-  patch: UpdateExpertRequest,
+  patch: UpdateExpertRequest = {},
 ): { path: string; message: string }[] {
   const required = [
     ["familyName", "a published expert requires a family name"],
@@ -476,4 +616,54 @@ function publishRequirementBlockers(
     }
   }
   return blockers;
+}
+
+/** Two slot sets are the same when every (link, event, position, merge) matches. */
+function sameSlotSet(
+  a: readonly ExpertEventSlot[],
+  b: readonly ExpertEventSlot[],
+): boolean {
+  if (a.length !== b.length) return false;
+  // Both reads come back in the SAME repository-fixed order, so a positional
+  // comparison is exact — no re-sorting that could hide a reordering.
+  return a.every((slot, index) => {
+    const other = b[index];
+    return (
+      other !== undefined &&
+      slot.linkId === other.linkId &&
+      slot.eventId === other.eventId &&
+      slot.position === other.position &&
+      slot.legacySpeakerId === other.legacySpeakerId
+    );
+  });
+}
+
+/**
+ * Refuse a publish that would land an expert on a position a VISIBLE legacy
+ * speaker still holds (012-design §4 / `SPEAKER_POSITION_OCCUPIED`).
+ *
+ * Two active `event_experts` links can never share a position — the partial
+ * unique index `event_experts_event_position_active_uniq` forbids it regardless
+ * of anybody's publication state — so the only collision publication itself can
+ * create is against `event_speakers`. A link that explicitly names the legacy
+ * row at that position is a MERGE, and the merged row is suppressed rather than
+ * rendered twice, so it is not a collision.
+ */
+function assertNoOccupiedSpeakerPosition(
+  slots: readonly ExpertEventSlot[],
+  legacy: readonly LegacySlotOccupant[],
+): void {
+  const occupied = new Map<string, LegacySlotOccupant>();
+  for (const row of legacy) {
+    occupied.set(`${row.eventId}:${row.position}`, row);
+  }
+  for (const slot of slots) {
+    const holder = occupied.get(`${slot.eventId}:${slot.position}`);
+    if (!holder) continue;
+    if (holder.id === slot.legacySpeakerId) continue;
+    throw new TaxonomyError(
+      "SPEAKER_POSITION_OCCUPIED",
+      "another visible speaker already holds this position on the event",
+    );
+  }
 }

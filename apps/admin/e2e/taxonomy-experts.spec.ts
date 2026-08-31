@@ -2,10 +2,9 @@ import { expect, test, type Page } from "@playwright/test";
 import {
   bootstrapAdminSession,
   bootstrapDoctorSession,
-  type BootstrapResult,
 } from "./support/admin-session";
-import { totpCode } from "./support/totp";
 import { visible } from "./support/visible";
+import { ADMIN_ORIGIN, signInAsAdmin } from "./support/sign-in";
 
 /**
  * 012 EARS-19/20/23 — real Refine → NestJS → Postgres expert authoring, plus the
@@ -14,31 +13,11 @@ import { visible } from "./support/visible";
  * disabled rather than dead.
  * Manual dev-stand flow; no mocked directory or mutation response is used.
  */
-const ORIGIN = process.env.E2E_ADMIN_URL ?? "http://localhost:3200";
 
 const PNG_1x1 = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==",
   "base64",
 );
-
-async function signInAsAdmin(
-  page: Page,
-  credentials?: BootstrapResult,
-): Promise<void> {
-  const { email, password } =
-    credentials ?? (await bootstrapAdminSession(ORIGIN));
-  await page.goto("/login");
-  await page.locator("#email").fill(email);
-  await page.locator("#password").fill(password);
-  await page.getByTestId("login-submit").click();
-  await page.waitForURL(/\/mfa\/enroll/, { timeout: 20_000 });
-  const secret = (await page.getByTestId("mfa-secret").innerText()).trim();
-  await page
-    .getByTestId("mfa-enroll-form")
-    .getByRole("textbox")
-    .fill(totpCode(secret));
-  await page.waitForURL(/\/events/, { timeout: 20_000 });
-}
 
 async function openExpertCreate(page: Page): Promise<void> {
   await page.goto("/experts/create");
@@ -114,7 +93,7 @@ test.describe("012 EARS-19/20 — Expert authoring", () => {
     );
 
     await context.grantPermissions(["clipboard-read", "clipboard-write"], {
-      origin: ORIGIN,
+      origin: ADMIN_ORIGIN,
     });
     await page.getByTestId("expert-copy-public-link").click();
     await expect(page.getByTestId("expert-copy-public-link")).toHaveText(
@@ -193,7 +172,9 @@ test.describe("012 EARS-19/20 — Expert authoring", () => {
     await expect(expertsResetAll).toHaveCount(1);
     await expertsResetAll.click();
     await expect(page.getByText("Выбрано:", { exact: false })).toHaveCount(0);
-    await expect(page.getByRole("searchbox", { name: "Поиск" })).toHaveValue("");
+    await expect(page.getByRole("searchbox", { name: "Поиск" })).toHaveValue(
+      "",
+    );
     await expect(page.getByTestId("experts-status")).toHaveValue("");
 
     // ── EARS-23: no dead-end pager ─────────────────────────────────────────
@@ -217,8 +198,8 @@ test.describe("012 EARS-19/20 — Expert authoring", () => {
     page,
     context,
   }) => {
-    const candidate = await bootstrapDoctorSession(ORIGIN);
-    const admin = await bootstrapAdminSession(ORIGIN);
+    const candidate = await bootstrapDoctorSession(ADMIN_ORIGIN);
+    const admin = await bootstrapAdminSession(ADMIN_ORIGIN);
     await signInAsAdmin(page, admin);
 
     // Closing an already-empty server-backed selector repeats the empty query.
@@ -275,7 +256,7 @@ test.describe("012 EARS-19/20 — Expert authoring", () => {
     const searchPrefix = `page-${Date.now()}`;
     const candidates = await Promise.all(
       Array.from({ length: 26 }, () =>
-        bootstrapDoctorSession(ORIGIN, searchPrefix),
+        bootstrapDoctorSession(ADMIN_ORIGIN, searchPrefix),
       ),
     );
     const candidateEmails = candidates.map((candidate) => candidate.email);
@@ -330,5 +311,70 @@ test.describe("012 EARS-19/20 — Expert authoring", () => {
     await expect(
       page.getByRole("combobox", { name: /Пользователь/ }),
     ).toContainText(pageTwoCandidate, { timeout: 20_000 });
+  });
+
+  /**
+   * 012 EARS-5 (#1287), expert half — the REFUSE-then-accept arc, which is the
+   * one an operator actually meets: a card is created from names alone, and the
+   * public projection needs four more fields (012-design §5.2 —
+   * `professionalRole`, `credentials`, `affiliation`, `bio`).
+   *
+   * The refusal leg is the point of this spec. The server answers
+   * `PUBLISH_REQUIREMENTS_NOT_MET`, and what must reach the screen is the RU
+   * sentence NAMING the missing fields and where to fill them — never the wire
+   * code, and never the generic «проверьте поля», which would send the operator
+   * hunting through a form where nothing is wrong, only empty. The card must
+   * still be a draft afterwards: a refused publish changes nothing.
+   */
+  test("012 EARS-5: an incomplete expert is refused with the RU sentence naming what is missing, and publishes once it is complete", async ({
+    page,
+  }) => {
+    await signInAsAdmin(page);
+
+    // ── A card with names and nothing else: valid to CREATE, not to publish ──
+    const familyName = `Публикационов-${Date.now()}`;
+    await openExpertCreate(page);
+    await fillRequiredNames(page, familyName);
+    await page.getByTestId("submit-expert").click();
+    await page.waitForURL(/\/experts\/[0-9a-f-]{36}$/, { timeout: 20_000 });
+    const detailUrl = page.url();
+    await expect(page.getByTestId("expert-status")).toHaveText("Черновик");
+
+    // ── Refuse: the sentence names the fields, and the state does not move ───
+    await page.getByTestId("tab-publish").click();
+    await expect(page.getByTestId("experts-publish")).toBeVisible();
+    await page.getByTestId("experts-publish").click();
+    const refusal = page.getByTestId("publish-error");
+    await expect(refusal).toBeVisible();
+    await expect(refusal).toContainText("должность");
+    await expect(refusal).toContainText("биография");
+    // No wire code ever reaches the operator.
+    await expect(refusal).not.toContainText("PUBLISH_REQUIREMENTS_NOT_MET");
+    // Nothing changed: still a draft, still offering the same command.
+    await expect(page.getByTestId("expert-status")).toHaveText("Черновик");
+    await expect(page.getByTestId("experts-publish")).toBeVisible();
+    await page.reload();
+    await expect(page.getByTestId("expert-status")).toHaveText("Черновик");
+
+    // ── Complete the public projection on «Основное», then publish ───────────
+    await page.getByTestId("tab-main").click();
+    await page.getByTestId("expert-professional-role").fill("Кардиолог");
+    await page.getByTestId("expert-credentials").fill("К. м. н.");
+    await page
+      .getByTestId("expert-affiliation")
+      .fill("НМИЦ кардиологии им. акад. Е. И. Чазова");
+    await page
+      .getByTestId("expert-bio")
+      .fill("Ведёт приём и обучает ординаторов более пятнадцати лет.");
+    await page.getByTestId("submit-expert").click();
+    await expect(page.getByTestId("update-saved")).toBeVisible();
+
+    await page.getByTestId("tab-publish").click();
+    await page.getByTestId("experts-publish").click();
+    await expect(page.getByTestId("publish-notice")).toBeVisible();
+    await expect(page.getByTestId("expert-status")).toHaveText("Опубликован");
+    await expect(page.getByTestId("experts-publish")).toHaveCount(0);
+    // The SAME record: publishing does not re-create the card or move its address.
+    expect(page.url()).toBe(detailUrl);
   });
 });

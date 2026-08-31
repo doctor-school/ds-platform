@@ -8,7 +8,7 @@ import { VersioningType } from "@nestjs/common";
 import multipart from "@fastify/multipart";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import type pg from "pg";
-import type { MyEventItem } from "@ds/schemas";
+import type { MyEventItem, MyEvents } from "@ds/schemas";
 import { AppModule } from "../../src/app.module.js";
 import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
 import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
@@ -144,7 +144,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         headers: { ...device, cookie: `${SESSION_COOKIE_NAME}=${cookie}` },
       });
       expect(res.statusCode).toBe(200);
-      return res.json() as MyEventItem[];
+      // 014 EARS-9 — the read model is an envelope per tab; freshness is asserted
+      // over the DEFAULT «Предстоящие» rows.
+      return (res.json() as MyEvents).data;
     }
 
     const nowMs = Date.now();

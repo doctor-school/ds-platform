@@ -31,6 +31,14 @@ export interface ProjectPatch {
   coverRef?: string | null;
 }
 
+/** The lifecycle columns a publish/retire/restore moves (012-design §2.1). */
+export interface ProjectLifecyclePatch {
+  status?: "draft" | "published" | "retired";
+  deletedAt?: Date | null;
+  /** Written by the FIRST publish only; never re-stamped (LD-3). */
+  firstPublishedAt?: Date;
+}
+
 @Injectable()
 export class ProjectsRepository {
   constructor(@Inject(DRIZZLE_DB) private readonly db: Db) {}
@@ -90,6 +98,30 @@ export class ProjectsRepository {
     id: string,
     expectedVersion: number,
     patch: ProjectPatch,
+  ): Promise<Project | null> {
+    const [row] = await tx
+      .update(projects)
+      .set({
+        ...patch,
+        version: sql`${projects.version} + 1`,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(projects.id, id), eq(projects.version, expectedVersion)))
+      .returning();
+    return row ?? null;
+  }
+
+  /**
+   * Move the row's LIFECYCLE and bump `version` in one statement, guarded by the
+   * caller's expected version. Separate from {@link updateVersioned} because a
+   * lifecycle move writes columns a PATCH may never touch — `status`,
+   * `deleted_at` and the write-once `first_published_at` (012-design §2.1/LD-3).
+   */
+  async transitionVersioned(
+    tx: Tx,
+    id: string,
+    expectedVersion: number,
+    patch: ProjectLifecyclePatch,
   ): Promise<Project | null> {
     const [row] = await tx
       .update(projects)

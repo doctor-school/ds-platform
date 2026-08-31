@@ -12,6 +12,10 @@ import { cn } from "../lib/utils";
  *                       constant), copy + dot = `live-foreground` (white). The
  *                       leading 7px dot (`size-1.75`, the only round shape) pulses
  *                       on `animate-live-pulse` (1.6s). role defaults to `status`.
+ *   • `success`         the pale-green result plate — 014's «Запись доступна»
+ *                       (`webinar-archive` canvas). Same geometry as `label`,
+ *                       green ink so a positive outcome reads apart from a
+ *                       neutral meta tag at a glance.
  *   • `label`/`speaker` the pale `tint` tag with `tint-foreground` copy (a meta
  *                       tag / speaker chip); identical visual, two names for intent.
  *
@@ -24,6 +28,17 @@ const badgeVariants = cva(
     variants: {
       variant: {
         live: "gap-1.75 bg-live px-3 py-1.5 text-live-foreground",
+        // A POSITIVE result rather than a status: 014's «Запись доступна» plate
+        // (the `webinar-archive` canvas paints it green against the same poster
+        // the pale `label` sits on, so the two read apart at a glance).
+        //
+        // The pairing is `success-tint` + `success-text`, NOT the `success` fill
+        // with `success-foreground`: white on green.500 is 3.68:1, which is AA
+        // only for large/bold copy, and this badge is 11px (`text-2xs`) — the
+        // canvas's green had to survive the badge's own type scale, so it lands
+        // as the pale-green plate with the darker green ink the token docs
+        // designate for exactly this (light 4.96:1, dark 8.81:1).
+        success: "bg-success-tint px-3 py-1.5 text-success-text",
         label: "bg-tint px-2.5 py-1.5 text-tint-foreground",
         speaker: "bg-tint px-2.5 py-1.5 text-tint-foreground",
       },

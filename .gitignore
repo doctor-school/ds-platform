@@ -61,6 +61,11 @@ test-results/
 # read/written by the dispatch-guard PreToolUse hook — machine state, not repo content
 .claude/dispatch-guard-state/
 
+# Owner-only escape hatch for the lead context budget (#1693): its presence lifts
+# the 120K/160K dispatch tiers for the CURRENT session — live marker, never a
+# committed setting (created on an explicit owner instruction, removed by /wrap)
+.claude/lead-budget-override
+
 # Brand book raw staging — the ~142 MB presentation PDF plus raw logo sources
 # (.ai / large exports). Track via Git LFS if any of it must be versioned. The
 # durable artifact is the extracted brand->token map (see

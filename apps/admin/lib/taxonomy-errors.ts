@@ -85,14 +85,14 @@ export function taxonomyErrorKey(
   // ── 012 EARS-11 event↔direction link codes (#1293) ───────────────────────
   // A duplicate is actionable on this relation surface: the operator must
   // restore the existing row instead of retrying a create mutation.
-  if (ns === "eventTopics") {
+  if (ns === "eventDirections") {
     switch (code) {
       case "RELATIONSHIP_CONFLICT":
-        return "eventTopics.errors.duplicatePair";
+        return "eventDirections.errors.duplicatePair";
       case "LIFECYCLE_IMPACT_STALE":
-        return "eventTopics.errors.impactStale";
+        return "eventDirections.errors.impactStale";
       case "LIFECYCLE_IMPACT_REQUIRED":
-        return "eventTopics.errors.impactRequired";
+        return "eventDirections.errors.impactRequired";
       default:
         break;
     }
@@ -210,6 +210,38 @@ export function taxonomyErrorKey(
         return `${ns}.errors.notFound`;
       case "VALIDATION_FAILED":
         return `${ns}.errors.validation`;
+      default:
+        break;
+    }
+  }
+
+  // ── 012 EARS-5 publish refusals on the entity surfaces (#1287) ───────────
+  // Scoped like every block above: these codes reach an ENTITY screen only
+  // through its publish command, and three of them are the refusals whose fix
+  // is somewhere OTHER than the form the operator is looking at — which is
+  // exactly why the generic «проверьте поля» would be a wrong sentence:
+  //
+  // - `PUBLISHED_PROJECT_REQUIRES_CURATOR` — the project has no active curator
+  //   pointing at a publicly visible expert. The fix lives on the «Эксперты»
+  //   tab, not in any field on «Основное».
+  // - `SPEAKER_POSITION_OCCUPIED` — publishing this expert would make an event
+  //   link visible on a slot a legacy speaker row still holds. The fix is a
+  //   different NUMBER on the event, not a corrected expert field.
+  // - `CONTENT_REMOVED` — an editorially removed expert is never publishable.
+  //
+  // `PUBLISH_REQUIREMENTS_NOT_MET` keeps the shared tail mapping: the field-set
+  // sentence is already per-kind there, and partners have no completeness
+  // branch at all (§5.2 — title alone is a complete public projection).
+  if (ns === "projects" || ns === "experts" || ns === "partners") {
+    switch (code) {
+      case "PUBLISHED_PROJECT_REQUIRES_CURATOR":
+        return "projects.errors.curatorRequired";
+      case "SPEAKER_POSITION_OCCUPIED":
+        return "experts.errors.positionOccupied";
+      case "CONTENT_REMOVED":
+        return "experts.errors.contentRemoved";
+      case "INVALID_TRANSITION":
+        return `${ns}.errors.invalidTransition`;
       default:
         break;
     }

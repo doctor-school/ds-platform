@@ -1,7 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
-import { bootstrapAdminSession } from "./support/admin-session";
-import { totpCode } from "./support/totp";
 import { visible } from "./support/visible";
+import { signInAsAdmin } from "./support/sign-in";
 
 /**
  * #1483 (ADR-0016 §5; 017 EARS-16…18), browser half — the REAL Refine → NestJS →
@@ -25,23 +24,6 @@ import { visible } from "./support/visible";
  *   IDP_PROJECT_ID=… pnpm --filter @ds/admin exec playwright test \
  *     e2e/taxonomy-direction-adjacency.spec.ts --config=playwright.flows.config.ts
  */
-const ORIGIN = process.env.E2E_ADMIN_URL ?? "http://localhost:3200";
-
-/** Sign in and complete the one-time TOTP enrollment; lands on `/events`. */
-async function signInAsAdmin(page: Page): Promise<void> {
-  const { email, password } = await bootstrapAdminSession(ORIGIN);
-  await page.goto("/login");
-  await page.locator("#email").fill(email);
-  await page.locator("#password").fill(password);
-  await page.getByTestId("login-submit").click();
-  await page.waitForURL(/\/mfa\/enroll/, { timeout: 20_000 });
-  const secret = (await page.getByTestId("mfa-secret").innerText()).trim();
-  await page
-    .getByTestId("mfa-enroll-form")
-    .getByRole("textbox")
-    .fill(totpCode(secret));
-  await page.waitForURL(/\/events/, { timeout: 20_000 });
-}
 
 /** A real direction row authored through the admin; returns its title. */
 async function createDirection(page: Page, title: string): Promise<string> {

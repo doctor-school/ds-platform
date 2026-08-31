@@ -144,6 +144,32 @@ export class ProjectExpertsRepository {
   }
 
   /**
+   * The expert ids the project's ACTIVE curator links point at, ascending.
+   *
+   * 012 EARS-5 / §2.3 — the optimistic half of a project publish: the publish
+   * command needs the affected expert set BEFORE it may take any lock, because
+   * §3.2 fixes the order «experts ascending, then the project». Re-running this
+   * read under the project lock is what turns the optimistic guess into a
+   * verified one; a difference is a 412, never a late expert lock.
+   *
+   * Returned as a set (`[...new Set]`, sorted) so a duplicated link cannot make
+   * the same expert look like two curators.
+   */
+  async activeCuratorExpertIds(tx: Tx | Db, projectId: string): Promise<string[]> {
+    const rows = await tx
+      .select({ expertId: projectExperts.expertId })
+      .from(projectExperts)
+      .where(
+        and(
+          eq(projectExperts.projectId, projectId),
+          eq(projectExperts.role, "curator"),
+          eq(projectExperts.status, "active"),
+        ),
+      );
+    return [...new Set(rows.map((row) => row.expertId))].sort();
+  }
+
+  /**
    * The lifecycle of every expert referenced by `ids`, WITHOUT locking — used to
    * classify the OTHER relations of the same project once their rows are pinned
    * by the relation locks. Those experts are not being mutated, so locking them

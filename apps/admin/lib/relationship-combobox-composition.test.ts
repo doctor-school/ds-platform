@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 const SURFACES = [
   ["../components/event-projects-panel.tsx", "event-project-link-search"],
   ["../components/event-experts-panel.tsx", "event-expert-search"],
-  ["../components/event-topics-panel.tsx", "event-topic-link-search"],
+  ["../components/event-directions-panel.tsx", "event-direction-link-search"],
   ["../components/project-experts-panel.tsx", "project-expert-link-search"],
   ["../components/project-partners-panel.tsx", "project-partner-link-search"],
   ["../components/relationship-endpoint-picker.tsx", "testIdPrefix}-search"],

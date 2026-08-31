@@ -92,13 +92,26 @@ describe("005 EARS-2 returnTo onward carry (withReturnTarget)", () => {
       "https://evil.example/webinars/x",
       "//evil.example",
       "/\\evil.example",
-      "/account",
       "/webinars/../account",
-      "/webinars/a/b",
     ]) {
       expect(withReturnTarget("/login", evil), `must drop: ${evil}`).toBe(
         "/login",
       );
     }
+  });
+
+  it("014 EARS-6: any OTHER safe same-origin page is carried onward too, not silently lost at the hop", () => {
+    // The platform-wide rule (014 EARS-6, design §6) generalizes this carry beyond
+    // the 005 event page and the 006 room: a visitor sent to auth from ANY
+    // login-gated surface keeps their origin across the intermediate hop. These
+    // two targets were dropped before this clause landed — `/account` and a
+    // multi-segment page are ordinary same-origin pages, not open redirects, and
+    // dropping them was exactly the "stranded after login" defect EARS-6 repairs.
+    expect(withReturnTarget("/login", "/account")).toBe(
+      "/login?returnTo=%2Faccount",
+    );
+    expect(withReturnTarget("/login", "/webinars/a/b")).toBe(
+      "/login?returnTo=%2Fwebinars%2Fa%2Fb",
+    );
   });
 });

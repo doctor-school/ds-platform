@@ -59,6 +59,12 @@ export interface UpdatePartnerInput {
   lease: IdempotencyLease;
 }
 
+export interface PublishPartnerInput {
+  id: string;
+  expectedVersion: number;
+  lease: IdempotencyLease;
+}
+
 /** A command result plus the ETag the client must echo on its next write. */
 export interface PartnerCommandResult {
   detail: PartnerAdminDetail;
@@ -91,6 +97,11 @@ export class PartnersService {
   /** `PATCH /v1/admin/partners/:id` — edit the SAME row. */
   update(input: UpdatePartnerInput): Promise<PartnerCommandResult> {
     return this.fenced(input.lease, () => this.updateCommand(input));
+  }
+
+  /** `POST /v1/admin/partners/:id/publish` — `draft → published` (EARS-5). */
+  publish(input: PublishPartnerInput): Promise<PartnerCommandResult> {
+    return this.fenced(input.lease, () => this.publishCommand(input));
   }
 
   /**
@@ -213,6 +224,78 @@ export class PartnersService {
         etag: taxonomyETag(updated.version),
       });
       return updated;
+    });
+
+    return {
+      detail: await this.toDetail(row),
+      etag: taxonomyETag(row.version),
+    };
+  }
+
+  /**
+   * `draft → published`, with `first_published_at` stamped ONCE (LD-3).
+   *
+   * There is NO completeness branch and no relation invariant here, and that is
+   * the decision rather than an omission: `title` is NOT NULL and the PATCH
+   * contract refuses a null one, while §5.2 declares both `logoUrl` and
+   * `websiteUrl` nullable on `PublicPartner`. So a partner with a title alone is
+   * already a complete public projection, and a partner with zero project links
+   * is an ordinary one. Inventing a blocker would refuse what the product allows.
+   *
+   * The publish is therefore a single-row lifecycle move, and needs no lock set
+   * beyond its own row — unlike a project (curator) or an expert (speaker slots).
+   */
+  private async publishCommand(
+    input: PublishPartnerInput,
+  ): Promise<PartnerCommandResult> {
+    // Optimistic pre-flight OUTSIDE the transaction: a doomed request never
+    // opens one. Every check below repeats under the lock.
+    const current = await this.repo.findById(input.id);
+    if (!current) throw new TaxonomyError("RESOURCE_NOT_FOUND");
+
+    const row = await this.repo.transaction(async (tx) => {
+      const locked = await this.repo.lockById(tx, input.id);
+      if (!locked) throw new TaxonomyError("RESOURCE_NOT_FOUND");
+      if (locked.version !== input.expectedVersion) {
+        throw new TaxonomyError(
+          "PRECONDITION_FAILED",
+          "the partner changed since it was read; reload and retry",
+        );
+      }
+      if (locked.status !== "draft") {
+        throw new TaxonomyError(
+          "INVALID_TRANSITION",
+          locked.status === "published"
+            ? "this partner is already published"
+            : "this partner is retired; restore it before publishing it again",
+        );
+      }
+
+      const moved = await this.repo.transitionVersioned(
+        tx,
+        input.id,
+        input.expectedVersion,
+        {
+          status: "published",
+          deletedAt: null,
+          // Set ONCE and never re-stamped: a republished partner keeps the date
+          // it first became public, which is what pins its slug (LD-3).
+          ...(locked.firstPublishedAt ? {} : { firstPublishedAt: new Date() }),
+        },
+      );
+      if (!moved) {
+        throw new TaxonomyError(
+          "PRECONDITION_FAILED",
+          "the partner changed since it was read; reload and retry",
+        );
+      }
+      const detail = await this.toDetail(moved);
+      await this.idempotency.complete(tx, input.lease, {
+        status: 200,
+        body: detail,
+        etag: taxonomyETag(moved.version),
+      });
+      return moved;
     });
 
     return {

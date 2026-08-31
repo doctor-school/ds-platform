@@ -17,7 +17,7 @@ const relationshipState = "taxonomy-relationship-authoring";
 const relationshipPaths = [
   "apps/admin/components/event-experts-panel.tsx",
   "apps/admin/components/event-projects-panel.tsx",
-  "apps/admin/components/event-topics-panel.tsx",
+  "apps/admin/components/event-directions-panel.tsx",
   "apps/admin/components/project-experts-panel.tsx",
   "apps/admin/components/project-partners-panel.tsx",
   "apps/admin/components/relationship-endpoint-picker.tsx",

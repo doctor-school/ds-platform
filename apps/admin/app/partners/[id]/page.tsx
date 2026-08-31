@@ -17,15 +17,16 @@ import { AppShell } from "@/components/app-shell";
 import { BackToList } from "@/components/back-to-list";
 import { PartnerForm } from "@/components/partner-form";
 import { ProjectPartnersPanel } from "@/components/project-partners-panel";
+import { PublishAction } from "@/components/publish-action";
 import { taxonomyErrorKey } from "@/lib/taxonomy-errors";
-import type { UpdatePartnerVars } from "@/providers/data-provider";
+import { partnersUrl, type UpdatePartnerVars } from "@/providers/data-provider";
 
 /**
  * Partner detail / edit (012 EARS-4) in the Stage-A composition-B tabbed layout
  * (#1282, owner pick 2026-08-17) — the same shell the expert and direction details
- * mount. Only «Основное» ships in this slice; «Публикация» (#1287/#1295/#1296)
- * brings the retire/restore controls with its own routes, and an empty
- * placeholder tab is deliberately NOT rendered for it.
+ * mount. «Публикация» (012 EARS-5, #1287) ships with the publish command; the
+ * retire/restore controls join it with their own routes (#1295/#1296), and an
+ * empty placeholder tab is still deliberately NOT rendered.
  *
  * Every save carries the row's `version` as `If-Match`, and the detail is
  * refetched afterwards, so the next edit asserts the version the server actually
@@ -106,6 +107,9 @@ export default function PartnerDetailPage() {
                 <TabsTrigger value="projects" data-testid="tab-projects">
                   {t("partners.tabs.projects")}
                 </TabsTrigger>
+                <TabsTrigger value="publish" data-testid="tab-publish">
+                  {t("partners.tabs.publish")}
+                </TabsTrigger>
               </TabsList>
               <TabsContent value="main">
                 <PartnerForm
@@ -148,6 +152,21 @@ export default function PartnerDetailPage() {
                   ProjectPartnersPanel and canonical relationship command. */}
               <TabsContent value="projects">
                 <ProjectPartnersPanel mode="partner" entityId={detail.id} />
+              </TabsContent>
+
+              {/* «Публикация» (012 EARS-5) — a partner carries no completeness
+                  branch and no relation invariant (§5.2: logo and website are
+                  nullable), so the only refusals here are the shared protocol
+                  ones. */}
+              <TabsContent value="publish">
+                <PublishAction
+                  namespace="partners"
+                  id={detail.id}
+                  status={detail.status}
+                  version={detail.version}
+                  publishUrl={partnersUrl.publish}
+                  onPublished={() => void query.refetch()}
+                />
               </TabsContent>
             </Tabs>
           </>

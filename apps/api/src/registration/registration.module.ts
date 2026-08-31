@@ -1,4 +1,5 @@
 import { Module } from "@nestjs/common";
+import { RecordingsModule } from "../recordings/recordings.module.js";
 import { MyEventsController } from "./my-events.controller.js";
 import { RegistrationController } from "./registration.controller.js";
 import { RegistrationRepository } from "./registration.repository.js";
@@ -14,6 +15,11 @@ import { RegistrationService } from "./registration.service.js";
  * 004/007 events surface.
  */
 @Module({
+  // 014 EARS-9: the «Записи» tab badges each finished registration with feature
+  // 014's OWN canonical recording projection (#1340) rather than re-deriving the
+  // edited-over-raw rule here — so the badge on a doctor's row and the badge on
+  // the public card have one implementation.
+  imports: [RecordingsModule],
   controllers: [RegistrationController, MyEventsController],
   providers: [RegistrationService, RegistrationRepository],
   exports: [RegistrationService],

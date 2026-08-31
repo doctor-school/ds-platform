@@ -46,6 +46,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     const consent = [{ purpose: "tos", version: "2026-01" }];
     const createdEmails: string[] = [];
     const createdProjectIds: string[] = [];
+    // The EARS-5 curator invariant needs real expert rows and real curator
+    // links; both reference `projects` with ON DELETE RESTRICT, so they are
+    // tracked separately and torn down BEFORE the projects they point at.
+    const createdExpertIds: string[] = [];
     const usedKeys: string[] = [];
     let adminSid: string;
     let otherAdminSid: string;
@@ -216,6 +220,17 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     });
 
     afterEach(async () => {
+      for (const id of createdProjectIds) {
+        await pool.query("DELETE FROM project_experts WHERE project_id = $1", [
+          id,
+        ]);
+      }
+      for (const id of createdExpertIds.splice(0)) {
+        await pool.query("DELETE FROM project_experts WHERE expert_id = $1", [
+          id,
+        ]);
+        await pool.query("DELETE FROM experts WHERE id = $1", [id]);
+      }
       for (const id of createdProjectIds.splice(0)) {
         await pool.query(
           "DELETE FROM media_cleanup_jobs WHERE entity_id = $1",
@@ -764,6 +779,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         "UPDATE projects SET status = 'published', first_published_at = now() WHERE id = $1",
         [body.id],
       );
+      const auditBefore = await auditRowCount(body.id);
       const res = await app.inject({
         method: "PATCH",
         url: `/v1/admin/projects/${body.id}`,
@@ -788,6 +804,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         description: "Программа для практикующих кардиологов.",
         version: 1,
       });
+      // "Refused" and "refused without changing anything" are different
+      // guarantees: the refusal must leave no audit row behind either, or the
+      // ledger would record a write that never happened.
+      expect(await auditRowCount(body.id)).toBe(auditBefore);
     });
 
     it("012 EARS-17: when If-Match is absent or stale, the system shall answer 428 then 412 and change nothing", async () => {
@@ -1012,6 +1032,314 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
           WHERE metadata->>'table' IN ('idempotency_keys', 'media_cleanup_jobs')`,
       );
       expect(Number(technical.rows[0]!.count)).toBe(0);
+    });
+
+    // ── 012 EARS-5: publish completeness + the curator invariant (#1287) ──
+    //
+    // §2.3 splits the gate in two on purpose, and these cases keep it split: the
+    // FIELD matrix (`PUBLISH_REQUIREMENTS_NOT_MET`, answered by typing into this
+    // form) and the STRUCTURAL invariant (`PUBLISHED_PROJECT_REQUIRES_CURATOR`,
+    // answered on a different screen). Collapsing them would send an operator to
+    // fix a field that is not the problem.
+
+    /** A real expert row; PUBLISHED and visible unless overridden. */
+    async function insertExpert(
+      overrides: Record<string, unknown> = {},
+    ): Promise<string> {
+      const row: Record<string, unknown> = {
+        slug: `x-1287-${randomUUID()}`,
+        family_name: "Иванова",
+        given_name: "Мария",
+        status: "published",
+        first_published_at: new Date(),
+        ...overrides,
+      };
+      const cols = Object.keys(row);
+      const { rows } = await pool.query<{ id: string }>(
+        `INSERT INTO experts (${cols.map((c) => `"${c}"`).join(", ")})
+           VALUES (${cols.map((_, i) => `$${i + 1}`).join(", ")}) RETURNING id`,
+        Object.values(row),
+      );
+      createdExpertIds.push(rows[0]!.id);
+      return rows[0]!.id;
+    }
+
+    /** Link an expert to a project. `role` defaults to the curator slot. */
+    async function linkExpert(
+      projectId: string,
+      expertId: string,
+      role: "curator" | "member" = "curator",
+    ): Promise<void> {
+      await pool.query(
+        `INSERT INTO project_experts (project_id, expert_id, role, status)
+           VALUES ($1, $2, $3, 'active')`,
+        [projectId, expertId, role],
+      );
+    }
+
+    async function publishProject(
+      id: string,
+      version: number,
+      overrides: {
+        ifMatch?: string | null;
+        idempotencyKey?: string | null;
+      } = {},
+    ) {
+      const ifMatch =
+        overrides.ifMatch === undefined ? `W/"${version}"` : overrides.ifMatch;
+      const idempotencyKey =
+        overrides.idempotencyKey === undefined
+          ? key()
+          : overrides.idempotencyKey;
+      return app.inject({
+        method: "POST",
+        url: `/v1/admin/projects/${id}/publish`,
+        headers: {
+          ...device,
+          ...adminHeaders(adminSid),
+          ...(ifMatch === null ? {} : { "if-match": ifMatch }),
+          ...(idempotencyKey === null
+            ? {}
+            : { "idempotency-key": idempotencyKey }),
+        },
+      });
+    }
+
+    async function projectRow(id: string) {
+      const { rows } = await pool.query<{
+        status: string;
+        version: number;
+        description: string | null;
+        first_published_at: Date | null;
+      }>(
+        `SELECT status, version, description, first_published_at
+           FROM projects WHERE id = $1`,
+        [id],
+      );
+      return rows[0]!;
+    }
+
+    async function auditRowCount(id: string): Promise<number> {
+      const { rows } = await pool.query<{ count: string }>(
+        "SELECT count(*) FROM audit_ledger WHERE metadata->'pk'->>'id' = $1",
+        [id],
+      );
+      return Number(rows[0]!.count);
+    }
+
+    /** A complete draft project with exactly one publicly visible curator. */
+    async function publishableProject() {
+      const body = await created(await createJson({ payload: validPayload() }));
+      const curatorId = await insertExpert();
+      await linkExpert(body.id, curatorId);
+      return { body, curatorId };
+    }
+
+    it("012 EARS-5.1: when a complete project with one visible curator is published, the system shall stamp first_published_at, bump the ETag and write the audit row in the same transaction", async () => {
+      const { body } = await publishableProject();
+      const auditBefore = await auditRowCount(body.id);
+
+      const res = await publishProject(body.id, 1);
+      expect(res.statusCode).toBe(200);
+      const published = JSON.parse(res.payload) as {
+        status: string;
+        version: number;
+        firstPublishedAt: string | null;
+      };
+      expect(published).toMatchObject({ status: "published", version: 2 });
+      expect(published.firstPublishedAt).toBeTypeOf("string");
+      expect(res.headers.etag).toBe('W/"2"');
+
+      const row = await projectRow(body.id);
+      expect(row.first_published_at).toEqual(
+        new Date(published.firstPublishedAt!),
+      );
+      // Feature 010's ledger row rides the SAME transaction as the transition.
+      expect(await auditRowCount(body.id)).toBeGreaterThan(auditBefore);
+    });
+
+    it("012 EARS-5.8: when a publishable project carries no cover, no events and no partners, the system shall publish it — optional media never blocks", async () => {
+      const body = await created(
+        await createJson({ payload: validPayload({ description: "Кратко." }) }),
+      );
+      expect(body.coverUrl).toBeNull();
+      await linkExpert(body.id, await insertExpert());
+
+      const res = await publishProject(body.id, 1);
+      expect(res.statusCode).toBe(200);
+      expect(JSON.parse(res.payload)).toMatchObject({
+        status: "published",
+        coverUrl: null,
+      });
+    });
+
+    it("012 EARS-5.2/5.12: when a published project is published again, the system shall answer 409 INVALID_TRANSITION and keep the original first_published_at", async () => {
+      const { body } = await publishableProject();
+      expect((await publishProject(body.id, 1)).statusCode).toBe(200);
+      const stamped = (await projectRow(body.id)).first_published_at;
+      expect(stamped).not.toBeNull();
+
+      const again = await publishProject(body.id, 2);
+      expect(again.statusCode).toBe(409);
+      expect(problem(again).errorCode).toBe("INVALID_TRANSITION");
+      const after = await projectRow(body.id);
+      expect(after).toMatchObject({ status: "published", version: 2 });
+      // Write-once — the date that pins the slug (LD-3) is never re-stamped.
+      expect(after.first_published_at).toEqual(stamped);
+    });
+
+    it("012 EARS-5.3: when an incomplete project is published, the system shall refuse with a field-addressed PUBLISH_REQUIREMENTS_NOT_MET and change nothing", async () => {
+      const body = await created(
+        await createJson({ payload: validPayload({ description: null }) }),
+      );
+      await linkExpert(body.id, await insertExpert());
+
+      const res = await publishProject(body.id, 1);
+      expect(res.statusCode).toBe(409);
+      const detail = problem(res);
+      expect(detail.errorCode).toBe("PUBLISH_REQUIREMENTS_NOT_MET");
+      // Field-addressed: the operator is told WHICH field, not merely refused.
+      expect(detail.errors?.map((e) => e.path)).toContain("description");
+      expect(await projectRow(body.id)).toMatchObject({
+        status: "draft",
+        version: 1,
+      });
+    });
+
+    it("012 EARS-5.6: when a project has no active curator, the system shall refuse with PUBLISHED_PROJECT_REQUIRES_CURATOR rather than a field error", async () => {
+      const body = await created(await createJson({ payload: validPayload() }));
+      // A MEMBER link is not a curator: the invariant is about the curator slot,
+      // not about having some expert attached.
+      await linkExpert(body.id, await insertExpert(), "member");
+
+      const res = await publishProject(body.id, 1);
+      expect(res.statusCode).toBe(409);
+      expect(problem(res).errorCode).toBe("PUBLISHED_PROJECT_REQUIRES_CURATOR");
+      // The complete field matrix must NOT be reported as the blocker.
+      expect(problem(res).errors ?? []).toHaveLength(0);
+      expect(await projectRow(body.id)).toMatchObject({
+        status: "draft",
+        version: 1,
+      });
+    });
+
+    it("012 EARS-5.7: when the curator is not itself publicly visible, the system shall refuse with PUBLISHED_PROJECT_REQUIRES_CURATOR", async () => {
+      for (const lifecycle of [
+        { status: "draft", first_published_at: null },
+        { status: "retired", deleted_at: new Date(), first_published_at: null },
+        // The §2.4 removed shape is pinned by `experts_content_removed_shape`:
+        // retired, deleted, and every descriptive value NULL — a half-removal
+        // is not expressible, so the fixture has to be the real thing.
+        {
+          status: "retired",
+          deleted_at: new Date(),
+          content_removed_at: new Date(),
+          family_name: null,
+          given_name: null,
+        },
+      ]) {
+        const body = await created(
+          await createJson({ payload: validPayload() }),
+        );
+        await linkExpert(body.id, await insertExpert(lifecycle));
+
+        const res = await publishProject(body.id, 1);
+        expect(res.statusCode).toBe(409);
+        expect(problem(res).errorCode).toBe(
+          "PUBLISHED_PROJECT_REQUIRES_CURATOR",
+        );
+        expect(await projectRow(body.id)).toMatchObject({ status: "draft" });
+      }
+    });
+
+    it("012 EARS-5.6: when the curator link is retired between the read and the publish, the system shall answer 412 and change nothing", async () => {
+      const { body, curatorId } = await publishableProject();
+      // The operator decided the publish against a curator set that has since
+      // moved. §3.2 answers 412 — "reload and retry" — not a silent publish.
+      await pool.query(
+        `UPDATE project_experts SET status = 'retired', deleted_at = now()
+           WHERE project_id = $1 AND expert_id = $2`,
+        [body.id, curatorId],
+      );
+      const res = await publishProject(body.id, 1);
+      // With the link gone the set is empty at BOTH the unlocked and the locked
+      // read, so the invariant — not the staleness check — is what answers.
+      expect(res.statusCode).toBe(409);
+      expect(problem(res).errorCode).toBe("PUBLISHED_PROJECT_REQUIRES_CURATOR");
+      expect(await projectRow(body.id)).toMatchObject({
+        status: "draft",
+        version: 1,
+      });
+    });
+
+    it("012 EARS-5.13: when the publish carries no If-Match, a stale If-Match or no Idempotency-Key, the system shall answer 428/412/428 and change nothing", async () => {
+      const { body } = await publishableProject();
+
+      const absent = await publishProject(body.id, 1, { ifMatch: null });
+      expect(absent.statusCode).toBe(428);
+      expect(problem(absent).errorCode).toBe("PRECONDITION_REQUIRED");
+
+      const stale = await publishProject(body.id, 1, { ifMatch: 'W/"99"' });
+      expect(stale.statusCode).toBe(412);
+      expect(problem(stale).errorCode).toBe("PRECONDITION_FAILED");
+
+      const noKey = await publishProject(body.id, 1, { idempotencyKey: null });
+      expect(noKey.statusCode).toBe(428);
+
+      expect(await projectRow(body.id)).toMatchObject({
+        status: "draft",
+        version: 1,
+      });
+    });
+
+    it("012 EARS-5.13: when a refused publish is retried with the same key, the system shall replay the STORED refusal", async () => {
+      const body = await created(
+        await createJson({ payload: validPayload({ description: null }) }),
+      );
+      await linkExpert(body.id, await insertExpert());
+      const reused = key();
+
+      const first = await publishProject(body.id, 1, {
+        idempotencyKey: reused,
+      });
+      expect(first.statusCode).toBe(409);
+      // `PUBLISH_REQUIREMENTS_NOT_MET` is a DETERMINISTIC terminal code, so the
+      // refusal itself is fenced-stored: the retry gets the same answer without
+      // re-deciding it.
+      const replay = await publishProject(body.id, 1, {
+        idempotencyKey: reused,
+      });
+      expect(replay.statusCode).toBe(409);
+      expect(problem(replay).errorCode).toBe(problem(first).errorCode);
+      expect(await projectRow(body.id)).toMatchObject({ version: 1 });
+    });
+
+    it("012 EARS-5.14: when a non-public project is addressed on the public surface, the system shall answer exactly as it does for an unknown one", async () => {
+      const { body } = await publishableProject();
+      const draft = await app.inject({
+        method: "GET",
+        url: `/v1/public/projects/${body.slug}/experts`,
+        headers: device,
+      });
+      const unknown = await app.inject({
+        method: "GET",
+        url: `/v1/public/projects/${randomUUID()}/experts`,
+        headers: device,
+      });
+      expect(draft.statusCode).toBe(404);
+      expect(unknown.statusCode).toBe(404);
+      // Indistinguishable: a probe cannot learn that a draft project exists.
+      expect(problem(draft).errorCode).toBe(problem(unknown).errorCode);
+
+      expect((await publishProject(body.id, 1)).statusCode).toBe(200);
+      const visible = await app.inject({
+        method: "GET",
+        url: `/v1/public/projects/${body.slug}/experts`,
+        headers: device,
+      });
+      // The SAME address answers once published — so the 404 above was the
+      // visibility allow-list, not a missing route.
+      expect(visible.statusCode).toBe(200);
     });
 
     // ── helpers ───────────────────────────────────────────────────────────

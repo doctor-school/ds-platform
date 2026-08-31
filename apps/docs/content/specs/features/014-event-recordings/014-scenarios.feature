@@ -275,11 +275,12 @@ Feature: A finished broadcast keeps its value as a recording, and the archive is
     And no «Сертификаты» tab, placeholder or disabled stub is present
 
   @EARS-9 @core @happy
-  Scenario: Each tab shows the full history newest first
+  Scenario: Each tab shows the full history in its canvas order
     Given a doctor with registrations spanning more than a year
     When the doctor opens either tab of «Мои события»
     Then every registration on that side of today is listed
-    And the entries are ordered newest first
+    And «Предстоящие» is ordered nearest first, the most imminent эфир on top
+    And «Записи» is ordered newest first, the most recently attended эфир on top
     And the list is rendered by the shared event list unit
 
   @EARS-9 @core @happy

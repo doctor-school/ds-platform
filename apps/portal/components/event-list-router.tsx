@@ -33,10 +33,37 @@ export function EventListRouter({
   hasMore,
   page,
   toolbar,
+  basePath = "/webinars",
+  pastTabParam = "past",
+  paginationMode = "cursor",
+  pageCount = 1,
 }: {
   items: readonly EventListItem[];
   selectedTab: EventListTab;
   counts: Record<EventListTab, number>;
+  /**
+   * The route this router navigates within. The shared feed is hosted by more
+   * than one surface — the public `/webinars` listing and the authenticated
+   * `/account/events` «Мои события» (014 EARS-9) — so the path is a host
+   * projection prop, never hardcoded here; a per-host copy of this router is
+   * forbidden (AGENTS.md cross-front reuse).
+   */
+  basePath?: string;
+  /**
+   * The `?tab=` VALUE the host uses for the block's `past` tab. The block's own
+   * union stays `upcoming | past`; «Мои события» spells its second tab
+   * `?tab=recordings` in the URL (matching the api's `tab=recordings`), so the
+   * mapping lives in this projection rather than widening the block.
+   */
+  pastTabParam?: string;
+  /**
+   * Paging shape, passed through to the block. The public listing is cursor-
+   * paged; `MyEvents` returns a whole tab at once, so its host passes
+   * `"pages"` with `pageCount = 1` (the `Pagination` block renders nothing at
+   * `pageCount <= 1`).
+   */
+  paginationMode?: "cursor" | "pages";
+  pageCount?: number;
   labels: {
     upcoming: string;
     past: string;
@@ -61,7 +88,7 @@ export function EventListRouter({
     const params = new URLSearchParams(searchParams.toString());
     mutator(params);
     const query = params.toString();
-    router.push(query ? `/webinars?${query}` : "/webinars");
+    router.push(query ? `${basePath}?${query}` : basePath);
   }
 
   // «Назад» renders only when this projection can actually serve the previous page:
@@ -70,14 +97,27 @@ export function EventListRouter({
   const trail = readTrail(new URLSearchParams(searchParams.toString()));
   const hasPreviousPage = page === 2 || (page > 2 && trail.length > 0);
 
+  // The block's paging props are a discriminated union (#1641): a cursor host
+  // knows only whether a neighbour page exists, an offset host knows its
+  // `pageCount`. Pick the arm here so each host passes exactly one shape.
+  const paging =
+    paginationMode === "cursor"
+      ? ({
+          paginationMode: "cursor",
+          hasPrevious: hasPreviousPage,
+          hasNext: Boolean(hasMore && nextCursor),
+        } as const)
+      : ({ paginationMode: "pages", pageCount } as const);
+
   return (
     <EventList
+      {...paging}
       items={items}
       selectedTab={selectedTab}
       onTabChange={(tab) =>
         navigate((params) => {
           if (tab === "upcoming") params.delete("tab");
-          else params.set("tab", tab);
+          else params.set("tab", pastTabParam);
           params.delete("cursor");
           params.delete("cursorTrail");
           params.delete("page");
@@ -86,9 +126,6 @@ export function EventListRouter({
       counts={counts}
       labels={{ ...eventLabels, page: (number) => `${pagePrefix} ${number}` }}
       page={page}
-      paginationMode="cursor"
-      hasPrevious={hasPreviousPage}
-      hasNext={Boolean(hasMore && nextCursor)}
       cursor={cursor}
       onPageChange={(nextPage) =>
         navigate((params) => {

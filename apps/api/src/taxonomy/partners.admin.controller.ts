@@ -284,6 +284,63 @@ export class PartnersAdminController {
    * drained even when refused, so a rejected upload cannot leave the connection
    * half-read.
    */
+  /**
+   * EARS-5 / §5.1 — `POST /v1/admin/partners/:id/publish`. `draft → published`,
+   * target `If-Match` required, empty body.
+   *
+   * Deliberately WITHOUT the §3.1 impact envelope the retire/restore routes
+   * carry: the preview gate exists so an operator sees what a transition
+   * WITHDRAWS from the public surface, and a publish withdraws nothing.
+   */
+  @Post(":id/publish")
+  @HttpCode(200)
+  @Authz({
+    access: "authenticated",
+    roles: ["platform_admin"],
+    check: "fast-path",
+    revalidate: "live",
+    audit: "low-stakes",
+    tests: ["EARS-4", "EARS-5", "EARS-16", "EARS-17"],
+  })
+  async publish(
+    @Param("id") id: string,
+    @Req() req: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<unknown> {
+    if (!CANONICAL_UUID_REGEX.test(id)) {
+      throw new TaxonomyError("RESOURCE_NOT_FOUND");
+    }
+    const key = this.idempotency.requireKey(req.headers[IDEMPOTENCY_KEY_HEADER]);
+    const { raw: rawIfMatch, version: expectedVersion } = requirePublishVersion(
+      req,
+      "a publish",
+    );
+
+    const route = "/v1/admin/partners/:id/publish";
+    const outcome = await this.idempotency.begin({
+      key,
+      scope: "taxonomy.partners",
+      actorId: actorSub(req),
+      method: "POST",
+      route,
+      fingerprint: this.idempotency.fingerprint({
+        method: "POST",
+        path: `/v1/admin/partners/${id}/publish`,
+        payload: {},
+        ifMatch: rawIfMatch,
+      }),
+    });
+    if (replayed(outcome, reply)) return outcome.replay.body;
+
+    const { detail, etag } = await this.partners.publish({
+      id,
+      expectedVersion,
+      lease: outcome.lease,
+    });
+    void reply.header("etag", etag);
+    return detail;
+  }
+
   private async readAuthoringRequest(
     req: FastifyRequest,
     payloadOptional: boolean,
@@ -370,6 +427,32 @@ export class PartnersAdminController {
  * body and allow-listed `ETag`/`Location`. Returns `true` when the caller must
  * return the stored body instead of running the command again.
  */
+/**
+ * The `If-Match` precondition a lifecycle command carries: absent is 428,
+ * syntactically unusable is 412 — a validator that asserts nothing cannot pass,
+ * and treating it as "no precondition" would silently downgrade the write.
+ */
+function requirePublishVersion(
+  req: FastifyRequest,
+  what: string,
+): { raw: string; version: number } {
+  const raw = req.headers[IF_MATCH_HEADER] as string | undefined;
+  if (!raw || raw.trim().length === 0) {
+    throw new TaxonomyError(
+      "PRECONDITION_REQUIRED",
+      `${what} must carry the If-Match of the version it was read at`,
+    );
+  }
+  const version = parseIfMatchVersion(raw);
+  if (version === null) {
+    throw new TaxonomyError(
+      "PRECONDITION_FAILED",
+      "the If-Match validator is not one this API issued",
+    );
+  }
+  return { raw, version };
+}
+
 function replayed(
   outcome: IdempotencyOutcome,
   reply: FastifyReply,

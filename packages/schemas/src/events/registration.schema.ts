@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { RecordingProjectionSchema } from "../recordings/recordings.schema.js";
 import { EventLifecycleStateSchema } from "./events.schema.js";
 
 // 005 — Event-registration contracts (API SSOT, ADR-0002 §3, ADR-0006 §6.2).
@@ -48,22 +49,65 @@ export type EventRegistrationState = z.infer<
 >;
 
 /**
- * `MyEventItem` — one row of the authenticated doctor's «мои события»
- * **Предстоящие** list (design §4/§5, EARS-6). The thin per-event projection the
- * `MyEvents` read model returns for each of the caller's registered **upcoming**
- * events: `{ eventId, slug, title, school, startsAt, state }` — exactly the
- * choose-set the «мои события» card needs to render a day-grouped row that links
- * back to `/webinars/:slug`, and NOTHING more (no roster, no registrant PII, no
- * other doctor's data — EARS-10). It is a THINNER allow-list than the 004
+ * The two tabs of «Мои события» (014 EARS-9, 014-design §8.3) — and the only two.
+ * `upcoming` is the doctor's still-to-come registrations; `recordings` is their
+ * finished ones, the «Записи» side. The owner's canvas decision of 2026-08-17 is
+ * exactly this pair with `upcoming` selected by default: the canvas's third
+ * «Сертификаты» tab is a review miss and is neither built nor stubbed, so it has
+ * no member here — the closed set IS the contract, and a third tab cannot appear
+ * on the surface without first appearing in this union.
+ */
+export const MY_EVENTS_TABS = ["upcoming", "recordings"] as const;
+export const MyEventsTabSchema = z.enum(MY_EVENTS_TABS);
+export type MyEventsTab = z.infer<typeof MyEventsTabSchema>;
+
+/**
+ * The `?tab=` query of `GET /v1/me/events` (014 EARS-9). Absent means
+ * `upcoming` — the default tab is a server-side fact, so a bare `/v1/me/events`
+ * (the shape 005 shipped, and the one `fetchRegisteredSlugs` still issues) keeps
+ * returning the Предстоящие side rather than 400ing on a missing param.
+ */
+export const MyEventsQuerySchema = z.object({
+  tab: MyEventsTabSchema.default("upcoming"),
+});
+export type MyEventsQuery = z.infer<typeof MyEventsQuerySchema>;
+
+/**
+ * The lifecycle states a «Мои события» row can carry (014 EARS-9). The union of
+ * the two tabs' membership rules: `published`/`live` on the Предстоящие side and
+ * `ended` on the Записи side. `archived` is deliberately ABSENT — feature 004's
+ * visibility policy hides an archived event from every listing surface, so it
+ * belongs to NEITHER tab, and leaving it out of the field type means the SQL
+ * filter and the contract cannot drift apart. `draft` is unreachable: it is never
+ * publicly registrable in the first place.
+ */
+export const MY_EVENT_STATES = ["published", "live", "ended"] as const;
+export const MyEventStateSchema = z.enum(MY_EVENT_STATES);
+export type MyEventState = z.infer<typeof MyEventStateSchema>;
+
+/**
+ * `MyEventItem` — one row of the authenticated doctor's «Мои события» list
+ * (005 design §4/§5 EARS-6; 014 EARS-9, 014-design §8.3). The thin per-event
+ * projection the `MyEvents` read model returns for each of the caller's
+ * registrations: `{ eventId, slug, title, school, startsAt, state, recording }` —
+ * exactly the choose-set the shared `EventList` row needs to render a grouped card
+ * that links back to `/webinars/:slug`, and NOTHING more (no roster, no registrant
+ * PII, no other doctor's data — EARS-10). It is a THINNER allow-list than the 004
  * `UpcomingBroadcastCard`: no specialties/speakers, because the surface renders
  * from the registration list, not the public listing projection.
  *
- * `startsAt` is the canonical UTC instant (ISO-8601); the «мои события» surface
+ * `startsAt` is the canonical UTC instant (ISO-8601); the «Мои события» surface
  * renders it in `Europe/Moscow` labeled МСК (EARS-11), never the viewer's local
- * timezone. `state` is constrained to {@link RegistrableEventStateSchema}
- * (`published`/`live`) — an `ended`/`archived` registration never appears on this
- * list (EARS-6), so the closed two-value set the query filters on IS the field
- * type, and the two can never drift.
+ * timezone.
+ *
+ * `recording` is the SAME source-free {@link RecordingProjectionSchema} the public
+ * archive page and the `/webinars` past tab consume (014 EARS-3, #1340) — one
+ * canonical resolver, so the badge a doctor sees on their own row can never
+ * disagree with the badge on the public card. It is `null` on an `upcoming` row
+ * (a not-yet-finished event has no recording state to speak of) and always PRESENT
+ * on a `recordings` row: an `ended` event with nothing published resolves to
+ * `preparing`, which is why every finished registration appears on the Записи tab
+ * whether or not a recording exists (EARS-9).
  */
 export const MyEventItemSchema = z.object({
   eventId: z.uuid(),
@@ -71,19 +115,40 @@ export const MyEventItemSchema = z.object({
   title: z.string(),
   school: z.string(),
   startsAt: z.iso.datetime({ offset: true }),
-  state: RegistrableEventStateSchema,
+  state: MyEventStateSchema,
+  recording: RecordingProjectionSchema.nullable(),
 });
 export type MyEventItem = z.infer<typeof MyEventItemSchema>;
 
+/** Row counts for BOTH tabs, so the tab bar labels its own inactive side. */
+export const MyEventsCountsSchema = z.object({
+  upcoming: z.number().int().nonnegative(),
+  recordings: z.number().int().nonnegative(),
+});
+export type MyEventsCounts = z.infer<typeof MyEventsCountsSchema>;
+
 /**
- * `MyEvents` — the authenticated doctor's registered **upcoming** events
- * (`published`/`live`, future or currently airing), ordered **nearest `startsAt`
- * first** (`starts_at ASC`), returned by `GET /v1/me/events` (design §5, EARS-6).
- * A bare array; an empty result is a valid `[]` (the «мои события» surface renders
- * the canvas empty-state, EARS-6/EARS-12). It carries only the caller's own
- * registrations — never another doctor's (EARS-10).
+ * `MyEvents` — one tab of the authenticated doctor's «Мои события», returned by
+ * `GET /v1/me/events?tab=upcoming|recordings` (005 design §5 EARS-6; 014 EARS-9,
+ * 014-design §8.3). It carries only the caller's own registrations — never another
+ * doctor's (EARS-10).
+ *
+ * `data` is the tab's FULL registration history — no window, no cap: «Записи» must
+ * show an event the doctor attended two years ago, and truncating it would quietly
+ * lose the doctor's own history. Order is most-relevant-first on each side, which
+ * is `starts_at ASC` (nearest first) for `upcoming` — the imminent эфир is what the
+ * doctor came for, the shipped EARS-6 behaviour — and `starts_at DESC` (newest
+ * first) for `recordings`.
+ *
+ * `counts` covers BOTH tabs regardless of which one `data` holds, because the tab
+ * bar renders «Предстоящие · N | Записи · N» in one paint; an empty `data` is a
+ * valid result and renders the canvas empty-state (EARS-6/EARS-12).
  */
-export const MyEventsSchema = z.array(MyEventItemSchema);
+export const MyEventsSchema = z.object({
+  tab: MyEventsTabSchema,
+  data: z.array(MyEventItemSchema),
+  counts: MyEventsCountsSchema,
+});
 export type MyEvents = z.infer<typeof MyEventsSchema>;
 
 /**

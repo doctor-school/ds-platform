@@ -37,7 +37,11 @@ export default defineConfig({
   testIgnore: "a11y/**",
   fullyParallel: false,
   workers: 1,
-  retries: 0,
+  // One CI retry (sibling convention: portal/doctor ci configs) — the tier
+  // gates the required `ci` aggregate, and the #1676 signInAsAdmin login-lag
+  // flake is open; a spec that reds once and greens on retry must not refuse
+  // merges on unrelated PRs. Local runs keep retries 0 so rot surfaces loudly.
+  retries: process.env.CI ? 1 : 0,
   reporter: [["list"]],
   timeout: 120_000,
   expect: { timeout: 20_000 },

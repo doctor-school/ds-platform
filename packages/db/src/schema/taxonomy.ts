@@ -673,23 +673,25 @@ export const eventProjects = pgTable(
 export type EventProject = typeof eventProjects.$inferSelect;
 
 /**
- * `event_topics` — the retained event↔topic relationship (012 EARS-11, #1293).
+ * `event_directions` — the retained event↔direction relationship (012 EARS-11,
+ * #1293; renamed from `event_topics` by #1645 per ADR-0016 §5).
  *
  * This is the ONLY way an event is classified by subject: the operator LINKS an
- * existing, non-retired `topics` row, so there is no inline topic creation path
- * and no per-event string that could drift into a second spelling of the same
- * subject. The pre-012 `events.specialties[]` text array is a SEPARATE axis and
- * is neither read nor written by this join (012-requirements EARS-11, §axis
- * invariant): the two coexist, byte-for-byte untouched by each other.
+ * existing, non-retired `directions` row, so there is no inline direction
+ * creation path and no per-event string that could drift into a second spelling
+ * of the same subject. The pre-012 `events.specialties[]` text array is a
+ * SEPARATE axis and is neither read nor written by this join
+ * (012-requirements EARS-11, §axis invariant): the two coexist, byte-for-byte
+ * untouched by each other.
  *
- * Several topics may classify one event and several events may carry one topic;
- * the row is the relationship itself, never a copy of either endpoint's
- * editorial values. Creating, retiring or restoring it has NO lifecycle side
- * effect on the event or the topic (012-design §3): public traversal simply
- * filters an ineligible endpoint out.
+ * Several directions may classify one event and several events may carry one
+ * direction; the row is the relationship itself, never a copy of either
+ * endpoint's editorial values. Creating, retiring or restoring it has NO
+ * lifecycle side effect on the event or the direction (012-design §3): public
+ * traversal simply filters an ineligible endpoint out.
  *
  * The logical pair is unique across ACTIVE AND RETAINED rows
- * (`event_topics_pair_key` is deliberately NOT partial): a retired relation is
+ * (`event_directions_pair_key` is deliberately NOT partial): a retired relation is
  * RESTORED — same row, same id, `version + 1` — never re-inserted as a second
  * row, so one relationship keeps one audit lineage.
  *
@@ -697,18 +699,19 @@ export type EventProject = typeof eventProjects.$inferSelect;
  * would have no legitimate trigger and its presence in generated SQL is itself a
  * 012-design §2.1 violation (`retained-data` CI guard).
  */
-export const eventTopics = pgTable(
-  "event_topics",
+export const eventDirections = pgTable(
+  "event_directions",
   {
     id: uuid("id").defaultRandom().primaryKey(),
     eventId: uuid("event_id")
       .notNull()
       .references(() => events.id, { onDelete: "restrict" }),
-    topicId: uuid("topic_id")
+    directionId: uuid("direction_id")
       .notNull()
-      // #1483 renamed the `topics` book to `directions` (ADR-0016 §5). The
-      // physical column stays `topic_id`: renaming the table does not rename
-      // the columns that point at it, and the 012 EARS-11 link is the same row.
+      // #1483 renamed the `topics` book to `directions` (ADR-0016 §5) and
+      // #1645 renamed this join's own column `topic_id` → `direction_id` in the
+      // same true-rename discipline: the row, its id and its audit lineage are
+      // the 012 EARS-11 link untouched, only the NAME moved.
       .references(() => directions.id, { onDelete: "restrict" }),
     status: relationshipStatus("status").notNull().default("active"),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
@@ -724,21 +727,21 @@ export const eventTopics = pgTable(
   (t) => [
     // Spans active AND retained rows (012-design §2.1) — the restore-never-
     // reinsert rule expressed as a constraint rather than as service etiquette.
-    uniqueIndex("event_topics_pair_key").on(t.eventId, t.topicId),
+    uniqueIndex("event_directions_pair_key").on(t.eventId, t.directionId),
     check(
-      "event_topics_retired_iff_deleted",
+      "event_directions_retired_iff_deleted",
       sql`(${t.status} = 'retired') = (${t.deletedAt} IS NOT NULL)`,
     ),
-    check("event_topics_version_positive", sql`${t.version} >= 1`),
+    check("event_directions_version_positive", sql`${t.version} >= 1`),
     // Both traversal directions of §5.2 are indexed reads, not scans: the pair
     // index already serves `event_id`-leading lookups, so only the reverse
     // direction needs its own.
-    index("event_topics_topic_id_idx").on(t.topicId),
+    index("event_directions_direction_id_idx").on(t.directionId),
   ],
 );
 
-export type EventTopic = typeof eventTopics.$inferSelect;
-export type NewEventTopic = typeof eventTopics.$inferInsert;
+export type EventDirection = typeof eventDirections.$inferSelect;
+export type NewEventDirection = typeof eventDirections.$inferInsert;
 export type NewEventProject = typeof eventProjects.$inferInsert;
 
 /**

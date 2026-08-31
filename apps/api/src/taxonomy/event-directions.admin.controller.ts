@@ -13,9 +13,9 @@ import {
 import type { FastifyReply, FastifyRequest } from "fastify";
 import {
   CANONICAL_UUID_REGEX,
-  CreateEventTopicRequestSchema,
-  type EventTopicAdminList,
-  EventTopicAdminListQuerySchema,
+  CreateEventDirectionRequestSchema,
+  type EventDirectionAdminList,
+  EventDirectionAdminListQuerySchema,
   IDEMPOTENCY_KEY_HEADER,
   IF_MATCH_HEADER,
   type LifecycleImpact,
@@ -25,7 +25,7 @@ import {
   type TaxonomyLifecycleTransition,
 } from "@ds/schemas";
 import { Authz } from "../authz/index.js";
-import { EventTopicsService } from "./event-topics.service.js";
+import { EventDirectionsService } from "./event-directions.service.js";
 import {
   type IdempotencyOutcome,
   IdempotencyService,
@@ -34,14 +34,14 @@ import { LifecycleImpactService } from "./lifecycle-impact.service.js";
 import { TaxonomyError } from "./taxonomy.errors.js";
 import { TaxonomyProblemFilter } from "./taxonomy.problem-filter.js";
 
-// 012 EARS-11 (#1293) — the event↔topic relationship admin surface (012-design
+// 012 EARS-11 (#1293) — the event↔direction relationship admin surface (012-design
 // §5.1 + §3.1). The authorization contract is the one the entity verticals
 // established, unchanged: feature 011's MFA-verified admin session plus CSRF
 // double-submit, with the route guard requiring `platform_admin` BEFORE
 // validation, idempotency or handler (EARS-16).
 //
 // There is deliberately NO `PATCH` route, for exactly the reason `event_projects`
-// has none: `event_topics` carries no mutable attribute (012-design §2 ER: the
+// has none: `event_directions` carries no mutable attribute (012-design §2 ER: the
 // row is exactly the pair plus its lifecycle envelope), unlike `project_experts`
 // (`role`) or `project_partners` (`is_primary`). §5.1's "PATCH attributes with
 // the join ETag" is a generic statement over the five joins and is vacuous for
@@ -50,27 +50,27 @@ import { TaxonomyProblemFilter } from "./taxonomy.problem-filter.js";
 // transitions.
 //
 // There is likewise no route, and no request field anywhere in this controller,
-// that creates a topic: EARS-11's «no inline creation» is the absence of the
-// seam, not a flag on it. An event is tagged by referencing a `topics` row that
+// that creates a direction: EARS-11's «no inline creation» is the absence of the
+// seam, not a flag on it. An event is tagged by referencing a `directions` row that
 // already exists, authored through its own #1285 vertical.
 //
 // Every relationship request carries JSON or nothing — a relationship has no
 // media slot, so a non-JSON content type is 415 with no branch to mirror.
 
 /** The §5.1 route templates, as the idempotency record stores them. */
-const ROUTE_CREATE = "/v1/admin/event-topics";
-const ROUTE_TRANSITION = "/v1/admin/event-topics/:id/:transition";
-const SCOPE = "taxonomy.event-topics";
+const ROUTE_CREATE = "/v1/admin/event-directions";
+const ROUTE_TRANSITION = "/v1/admin/event-directions/:id/:transition";
+const SCOPE = "taxonomy.event-directions";
 
-@Controller({ path: "admin/event-topics", version: "1" })
+@Controller({ path: "admin/event-directions", version: "1" })
 @UseFilters(TaxonomyProblemFilter)
-export class EventTopicsAdminController {
-  // Explicit @Inject tokens — see the note in `topics.service.ts`: the
+export class EventDirectionsAdminController {
+  // Explicit @Inject tokens — see the note in `directions.service.ts`: the
   // root-level authz gate boots this graph under `tsx`, which emits no
   // `design:paramtypes`, so type-inferred injection resolves to `undefined`.
   constructor(
-    @Inject(EventTopicsService)
-    private readonly relations: EventTopicsService,
+    @Inject(EventDirectionsService)
+    private readonly relations: EventDirectionsService,
     @Inject(IdempotencyService)
     private readonly idempotency: IdempotencyService,
     @Inject(LifecycleImpactService)
@@ -79,7 +79,7 @@ export class EventTopicsAdminController {
 
   /**
    * EARS-11 / EARS-15 — the relationship list. Either endpoint may scope it
-   * (`eventId` / `topicId`), `status` filters explicitly, and retired
+   * (`eventId` / `directionId`), `status` filters explicitly, and retired
    * relationships are excluded unless asked for: a retained row that was
    * withdrawn is still addressable, it is simply not the default view.
    */
@@ -91,15 +91,15 @@ export class EventTopicsAdminController {
     audit: "none",
     tests: ["EARS-11", "EARS-15", "EARS-16"],
   })
-  list(@Query() rawQuery: Record<string, string>): Promise<EventTopicAdminList> {
-    const parsed = EventTopicAdminListQuerySchema.safeParse(rawQuery);
+  list(@Query() rawQuery: Record<string, string>): Promise<EventDirectionAdminList> {
+    const parsed = EventDirectionAdminListQuerySchema.safeParse(rawQuery);
     if (!parsed.success) throw validationFailed(parsed.error.issues, "query");
     return this.relations.list(parsed.data);
   }
 
   /**
-   * EARS-11 — `POST /v1/admin/event-topics`. Tags one event with one EXISTING
-   * topic. Requires a canonical UUID `Idempotency-Key`; there is no `If-Match`
+   * EARS-11 — `POST /v1/admin/event-directions`. Tags one event with one EXISTING
+   * direction. Requires a canonical UUID `Idempotency-Key`; there is no `If-Match`
    * because there is no prior version to assert. Answers 201 with the detail
    * body, the row's `ETag` and a `Location`.
    *
@@ -129,7 +129,7 @@ export class EventTopicsAdminController {
     // 1. Key shape — before any payload work (§5.1 failure order).
     const key = this.idempotency.requireKey(req.headers[IDEMPOTENCY_KEY_HEADER]);
     // 2. Request shape + payload.
-    const parsed = CreateEventTopicRequestSchema.safeParse(readJsonBody(req));
+    const parsed = CreateEventDirectionRequestSchema.safeParse(readJsonBody(req));
     if (!parsed.success) throw validationFailed(parsed.error.issues, "payload");
     // 3. Fingerprint binding.
     const outcome = await this.idempotency.begin({
@@ -297,7 +297,7 @@ export class EventTopicsAdminController {
       req.headers[LIFECYCLE_IMPACT_TOKEN_HEADER],
     );
 
-    const path = `/v1/admin/event-topics/${id}/${transition}`;
+    const path = `/v1/admin/event-directions/${id}/${transition}`;
     const outcome = await this.idempotency.begin({
       key,
       scope: SCOPE,

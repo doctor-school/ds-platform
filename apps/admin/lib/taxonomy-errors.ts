@@ -85,14 +85,14 @@ export function taxonomyErrorKey(
   // ── 012 EARS-11 event↔direction link codes (#1293) ───────────────────────
   // A duplicate is actionable on this relation surface: the operator must
   // restore the existing row instead of retrying a create mutation.
-  if (ns === "eventTopics") {
+  if (ns === "eventDirections") {
     switch (code) {
       case "RELATIONSHIP_CONFLICT":
-        return "eventTopics.errors.duplicatePair";
+        return "eventDirections.errors.duplicatePair";
       case "LIFECYCLE_IMPACT_STALE":
-        return "eventTopics.errors.impactStale";
+        return "eventDirections.errors.impactStale";
       case "LIFECYCLE_IMPACT_REQUIRED":
-        return "eventTopics.errors.impactRequired";
+        return "eventDirections.errors.impactRequired";
       default:
         break;
     }

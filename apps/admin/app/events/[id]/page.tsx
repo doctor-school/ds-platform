@@ -24,7 +24,7 @@ import { StreamConfigForm } from "@/components/stream-config-form";
 import { LifecycleActions } from "@/components/lifecycle-actions";
 import { RecordingsPanel } from "@/components/recordings-panel";
 import { EventProjectsPanel } from "@/components/event-projects-panel";
-import { EventTopicsPanel } from "@/components/event-topics-panel";
+import { EventDirectionsPanel } from "@/components/event-directions-panel";
 import { StateBadge } from "@/components/state-badge";
 import { formatMskDateTime } from "@/lib/msk";
 import type { UpdateEventVars } from "@/providers/data-provider";
@@ -98,8 +98,8 @@ export default function EventEditPage() {
                 <TabsTrigger value="projects" data-testid="tab-projects">
                   {t("events.tabs.projects")}
                 </TabsTrigger>
-                <TabsTrigger value="topics" data-testid="tab-topics">
-                  {t("events.tabs.topics")}
+                <TabsTrigger value="directions" data-testid="tab-directions">
+                  {t("events.tabs.directions")}
                 </TabsTrigger>
               </TabsList>
 
@@ -235,19 +235,19 @@ export default function EventEditPage() {
                 </Card>
               </TabsContent>
 
-              {/* «Темы» (012 EARS-11, 012-design §5.1/§7) — the event↔topic
+              {/* «Направления» (012 EARS-11, 012-design §5.1/§7) — the event↔direction
                   editor sits beside the projects tab for the same reason: the
-                  «event form» EARS-11 names is this detail surface, and a topic
+                  «event form» EARS-11 names is this detail surface, and a direction
                   is chosen while looking at the event it classifies. Only
-                  already-created, non-retired topics are offerable — the picker
+                  already-created, non-retired directions are offerable — the picker
                   authors links, never taxonomy. */}
-              <TabsContent value="topics">
+              <TabsContent value="directions">
                 <Card>
                   <CardHeader>
-                    <CardTitle>{t("eventTopics.title")}</CardTitle>
+                    <CardTitle>{t("eventDirections.title")}</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <EventTopicsPanel mode="event" entityId={id} />
+                    <EventDirectionsPanel mode="event" entityId={id} />
                   </CardContent>
                 </Card>
               </TabsContent>

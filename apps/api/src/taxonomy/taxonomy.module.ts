@@ -15,13 +15,13 @@ import {
 } from "./event-projects.public.controller.js";
 import { EventProjectsRepository } from "./event-projects.repository.js";
 import { EventProjectsService } from "./event-projects.service.js";
-import { EventTopicsAdminController } from "./event-topics.admin.controller.js";
+import { EventDirectionsAdminController } from "./event-directions.admin.controller.js";
 import {
-  EventTopicsPublicController,
-  TopicEventsPublicController,
-} from "./event-topics.public.controller.js";
-import { EventTopicsRepository } from "./event-topics.repository.js";
-import { EventTopicsService } from "./event-topics.service.js";
+  EventDirectionsPublicController,
+  DirectionEventsPublicController,
+} from "./event-directions.public.controller.js";
+import { EventDirectionsRepository } from "./event-directions.repository.js";
+import { EventDirectionsService } from "./event-directions.service.js";
 import { ExpertsAdminController } from "./experts.admin.controller.js";
 import { ExpertsRepository } from "./experts.repository.js";
 import { ExpertsService } from "./experts.service.js";
@@ -93,10 +93,10 @@ import { DirectionsService } from "./directions.service.js";
     // contributes only the parent row it locks.
     EventExpertsAdminController,
     EventProjectsAdminController,
-    // #1293 EARS-11 — the topic↔event JOIN surface, same reasoning as the two
+    // #1293 EARS-11 — the direction↔event JOIN surface, same reasoning as the two
     // above: the relationship contract is the taxonomy's, the event side
     // contributes only the parent row it locks.
-    EventTopicsAdminController,
+    EventDirectionsAdminController,
     // The §5.2 public traversals. They mount here, not in the events
     // module, because the relationship is what they read (see the file header).
     EventProjectsPublicController,
@@ -111,8 +111,8 @@ import { DirectionsService } from "./directions.service.js";
     ProjectPartnersAdminController,
     ProjectPartnersPublicController,
     PartnerProjectsPublicController,
-    EventTopicsPublicController,
-    TopicEventsPublicController,
+    EventDirectionsPublicController,
+    DirectionEventsPublicController,
     // #1290 EARS-8 — the standalone half of the canonical merged speaker
     // projection. Same reasoning: the merge policy is the taxonomy's, the
     // event contributes only the parent key.
@@ -151,8 +151,8 @@ import { DirectionsService } from "./directions.service.js";
     // copy per vertical is how `primaryPartner` goes back to being null on one
     // route while being populated on another.
     PublicProjectSummaryService,
-    EventTopicsRepository,
-    EventTopicsService,
+    EventDirectionsRepository,
+    EventDirectionsService,
     SpeakerProjectionRepository,
     SpeakerProjectionService,
     DirectionSpecialtiesRepository,

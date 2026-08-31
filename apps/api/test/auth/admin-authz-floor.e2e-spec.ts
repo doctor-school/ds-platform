@@ -461,36 +461,36 @@ const FLOOR_ROUTES: {
   // caller reads a protocol answer off a relationship it may not know exists.
   // No PATCH row — the join carries no mutable attribute.
   {
-    endpoint: "GET /v1/admin/event-topics",
+    endpoint: "GET /v1/admin/event-directions",
     method: "GET",
-    url: "/v1/admin/event-topics",
+    url: "/v1/admin/event-directions",
   },
   {
-    endpoint: "GET /v1/admin/event-topics/:id",
+    endpoint: "GET /v1/admin/event-directions/:id",
     method: "GET",
-    url: `/v1/admin/event-topics/${ABSENT_ID}`,
+    url: `/v1/admin/event-directions/${ABSENT_ID}`,
   },
   {
-    endpoint: "GET /v1/admin/event-topics/:id/lifecycle-impact",
+    endpoint: "GET /v1/admin/event-directions/:id/lifecycle-impact",
     method: "GET",
-    url: `/v1/admin/event-topics/${ABSENT_ID}/lifecycle-impact?transition=retire`,
+    url: `/v1/admin/event-directions/${ABSENT_ID}/lifecycle-impact?transition=retire`,
   },
   {
-    endpoint: "POST /v1/admin/event-topics",
+    endpoint: "POST /v1/admin/event-directions",
     method: "POST",
-    url: "/v1/admin/event-topics",
+    url: "/v1/admin/event-directions",
     payload: {},
   },
   {
-    endpoint: "POST /v1/admin/event-topics/:id/retire",
+    endpoint: "POST /v1/admin/event-directions/:id/retire",
     method: "POST",
-    url: `/v1/admin/event-topics/${ABSENT_ID}/retire`,
+    url: `/v1/admin/event-directions/${ABSENT_ID}/retire`,
     payload: {},
   },
   {
-    endpoint: "POST /v1/admin/event-topics/:id/restore",
+    endpoint: "POST /v1/admin/event-directions/:id/restore",
     method: "POST",
-    url: `/v1/admin/event-topics/${ABSENT_ID}/restore`,
+    url: `/v1/admin/event-directions/${ABSENT_ID}/restore`,
     payload: {},
   },
   // 012 EARS-9 (#1291) — the project↔expert relationship surface, curator seat

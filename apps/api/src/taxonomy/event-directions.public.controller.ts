@@ -10,18 +10,18 @@ import {
 import {
   CANONICAL_UUID_REGEX,
   type PublicEventSummaryPage,
-  type PublicTopicSummaryPage,
+  type PublicDirectionSummaryPage,
   PublicCursorQuerySchema,
 } from "@ds/schemas";
 import { Authz, Public } from "../authz/index.js";
 import {
-  EventTopicsService,
+  EventDirectionsService,
   type PublicKey,
-} from "./event-topics.service.js";
+} from "./event-directions.service.js";
 import { TaxonomyError } from "./taxonomy.errors.js";
 import { TaxonomyProblemFilter } from "./taxonomy.problem-filter.js";
 
-// 012 EARS-11 (#1293) — the two §5.2 public traversals of the event↔topic
+// 012 EARS-11 (#1293) — the two §5.2 public traversals of the event↔direction
 // relationship, on the same public surface pattern feature 004 established:
 // `@Public()` so the 003 authentication layer skips the subject requirement,
 // `@Authz({ access: "public" })` as the SSOT the global guard, the completeness
@@ -34,14 +34,15 @@ import { TaxonomyProblemFilter } from "./taxonomy.problem-filter.js";
 // the sibling public routes it shares a path prefix with.
 //
 // Neither direction exposes `events.specialties[]`: the item DTOs are exactly
-// §5.2's `PublicTopicSummary` and `PublicEventSummary`, and a reader of «темы
-// эфира» is reading the curated topic axis, not the legacy specialty array.
+// §5.2's `PublicDirectionSummary` and `PublicEventSummary`, and a reader of
+// «направления эфира» is reading the curated direction axis, not the legacy
+// specialty array.
 //
 // Visibility policy (§5.2), identical in both directions:
 // - an unknown OR not-publicly-eligible source is 404, indistinguishable from
 //   each other, so a draft leaks no "exists but private" oracle;
 // - an eligible source with no eligible relations is an ordinary empty page,
-//   never a 404 — "this event has no topics yet" is a fact, not an error.
+//   never a 404 — "this event has no directions yet" is a fact, not an error.
 
 /** The §5.2 public key: a canonical UUID addresses by id, anything else by slug. */
 function publicKey(token: string): PublicKey {
@@ -65,20 +66,20 @@ function parseCursorQuery(raw: Record<string, string>) {
 
 @Controller({ path: "public/events", version: "1" })
 @UseFilters(TaxonomyProblemFilter)
-export class EventTopicsPublicController {
+export class EventDirectionsPublicController {
   // Explicit @Inject token — the root-level authz gate boots this graph under
-  // `tsx`, which emits no `design:paramtypes` (see `topics.service.ts`).
+  // `tsx`, which emits no `design:paramtypes` (see `directions.service.ts`).
   constructor(
-    @Inject(EventTopicsService)
-    private readonly relations: EventTopicsService,
+    @Inject(EventDirectionsService)
+    private readonly relations: EventDirectionsService,
   ) {}
 
   /**
-   * §5.2 — `GET /v1/public/events/:idOrSlug/topics`. The topics a
-   * publish-visible event is classified under, as exactly `PublicTopicSummary`
+   * §5.2 — `GET /v1/public/events/:idOrSlug/directions`. The directions a
+   * publish-visible event is classified under, as exactly `PublicDirectionSummary`
    * rows, cursor-paginated in a stable title order.
    */
-  @Get(":idOrSlug/topics")
+  @Get(":idOrSlug/directions")
   @Public()
   @Header("Cache-Control", "public, max-age=30")
   @Authz({
@@ -87,28 +88,28 @@ export class EventTopicsPublicController {
     audit: "none",
     tests: ["EARS-11", "EARS-16"],
   })
-  topics(
+  directions(
     @Param("idOrSlug") idOrSlug: string,
     @Query() rawQuery: Record<string, string>,
-  ): Promise<PublicTopicSummaryPage> {
-    return this.relations.publicTopicsForEvent(
+  ): Promise<PublicDirectionSummaryPage> {
+    return this.relations.publicDirectionsForEvent(
       publicKey(idOrSlug),
       parseCursorQuery(rawQuery),
     );
   }
 }
 
-@Controller({ path: "public/topics", version: "1" })
+@Controller({ path: "public/directions", version: "1" })
 @UseFilters(TaxonomyProblemFilter)
-export class TopicEventsPublicController {
+export class DirectionEventsPublicController {
   constructor(
-    @Inject(EventTopicsService)
-    private readonly relations: EventTopicsService,
+    @Inject(EventDirectionsService)
+    private readonly relations: EventDirectionsService,
   ) {}
 
   /**
-   * §5.2 — `GET /v1/public/topics/:idOrSlug/events`. The reverse traversal: the
-   * publish-visible events a published topic classifies, as exactly
+   * §5.2 — `GET /v1/public/directions/:idOrSlug/events`. The reverse traversal: the
+   * publish-visible events a published direction classifies, as exactly
    * `PublicEventSummary` rows, cursor-paginated by air date.
    */
   @Get(":idOrSlug/events")
@@ -124,7 +125,7 @@ export class TopicEventsPublicController {
     @Param("idOrSlug") idOrSlug: string,
     @Query() rawQuery: Record<string, string>,
   ): Promise<PublicEventSummaryPage> {
-    return this.relations.publicEventsForTopic(
+    return this.relations.publicEventsForDirection(
       publicKey(idOrSlug),
       parseCursorQuery(rawQuery),
     );

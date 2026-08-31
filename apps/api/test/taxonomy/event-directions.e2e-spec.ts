@@ -24,7 +24,7 @@ import {
   deleteUserFixture,
 } from "../setup/fixture-cleanup.js";
 
-// 012 EARS-11 (#1293) — the event↔topic classification vertical over the REAL
+// 012 EARS-11 (#1293) — the event↔direction classification vertical over the REAL
 // stack: Fastify + the 011 admin session + Postgres.
 //
 // It is the structural twin of the event↔project suite (#1288): same retained
@@ -32,17 +32,17 @@ import {
 // specific to THIS vertical, and therefore what the extra assertions here spend
 // themselves on:
 //
-// 1. **Existing non-retired topics only, no inline creation.** The create body
-//    carries two ids and nothing a topic could be minted from, so an unknown id
-//    is a 404 and a retired one a 409 — never a topic quietly created on the fly.
+// 1. **Existing non-retired directions only, no inline creation.** The create body
+//    carries two ids and nothing a direction could be minted from, so an unknown id
+//    is a 404 and a retired one a 409 — never a direction quietly created on the fly.
 // 2. **The two axes never synchronize.** `events.specialties[]` is a separate
-//    classification axis; relating an event to a topic and retiring that link
+//    classification axis; relating an event to a direction and retiring that link
 //    again must leave the array byte-for-byte identical as the event resource
 //    itself renders it.
 //
 // Skips when the stand is absent, exactly as the sibling admin suites do.
 describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
-  "012 EARS-11 event↔topic classification vertical (e2e)",
+  "012 EARS-11 event↔direction classification vertical (e2e)",
   () => {
     let app: NestFastifyApplication;
     let pool: pg.Pool;
@@ -56,12 +56,12 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     const consent = [{ purpose: "tos", version: "2026-01" }];
     const createdEmails: string[] = [];
     const createdEventIds: string[] = [];
-    const createdTopicIds: string[] = [];
+    const createdDirectionIds: string[] = [];
     const createdRelationIds: string[] = [];
     const usedKeys: string[] = [];
     let adminSid: string;
 
-    const ADMIN_BASE = "/v1/admin/event-topics";
+    const ADMIN_BASE = "/v1/admin/event-directions";
 
     function uniqueEmail(prefix: string): string {
       const email = `${prefix}-${Date.now()}-${Math.random()
@@ -165,13 +165,13 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     }
 
     /**
-     * A topic through the 012 EARS-3 create endpoint. It lands `draft`: the
-     * topic publish command is a later slice, so a test that needs a PUBLISHED
-     * topic sets the columns the publish command would have written. That is
+     * A direction through the 012 EARS-3 create endpoint. It lands `draft`: the
+     * direction publish command is a later slice, so a test that needs a PUBLISHED
+     * direction sets the columns the publish command would have written. That is
      * fixture setup for ANOTHER aggregate, not a shortcut around this vertical's
-     * own contract — every event↔topic route under test is exercised over HTTP.
+     * own contract — every event↔direction route under test is exercised over HTTP.
      */
-    async function makeTopic(
+    async function makeDirection(
       published: boolean,
     ): Promise<{ id: string; slug: string; title: string }> {
       const title = `Аритмология ${Math.random().toString(36).slice(2, 8)}`;
@@ -188,9 +188,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       });
       expect(res.statusCode).toBe(201);
       const body = res.json() as { id: string; slug: string };
-      createdTopicIds.push(body.id);
+      createdDirectionIds.push(body.id);
       if (published) {
-        // `topics_published_has_first_published_at` is a table CHECK: a
+        // `directions_published_has_first_published_at` is a table CHECK: a
         // published row without its first-publication stamp is not a state the
         // schema admits, so the fixture writes the pair the publish command
         // would have written, never a half-state the DB would reject.
@@ -205,9 +205,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     interface RelationBody {
       id: string;
       eventId: string;
-      topicId: string;
+      directionId: string;
       eventTitle: string;
-      topicTitle: string;
+      directionTitle: string;
       status: string;
       version: number;
       [k: string]: unknown;
@@ -215,7 +215,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     async function relate(
       eventId: string,
-      topicId: string,
+      directionId: string,
       opts: { idempotencyKey?: string } = {},
     ) {
       return app.inject({
@@ -229,16 +229,16 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
             ? {}
             : { "idempotency-key": opts.idempotencyKey ?? key() }),
         },
-        payload: { eventId, topicId },
+        payload: { eventId, directionId },
       });
     }
 
     /** Create a classification and track it for teardown. */
     async function relation(
       eventId: string,
-      topicId: string,
+      directionId: string,
     ): Promise<RelationBody> {
-      const res = await relate(eventId, topicId);
+      const res = await relate(eventId, directionId);
       expect(res.statusCode).toBe(201);
       const body = res.json() as RelationBody;
       createdRelationIds.push(body.id);
@@ -334,7 +334,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         status: string;
         version: number;
         deleted_at: string | null;
-      }>("SELECT status, version, deleted_at FROM event_topics WHERE id = $1", [
+      }>("SELECT status, version, deleted_at FROM event_directions WHERE id = $1", [
         id,
       ]);
       return rows[0]!;
@@ -346,7 +346,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         // plus the primary key in `metadata -> 'pk'` (the ledger has no
         // per-entity column) — the same shape `test/audit/*` reads.
         `SELECT count(*)::text AS count FROM audit_ledger
-          WHERE event_type LIKE 'data.event_topics.%'
+          WHERE event_type LIKE 'data.event_directions.%'
             AND metadata -> 'pk' ->> 'id' = $1`,
         [id],
       );
@@ -380,12 +380,12 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     afterEach(async () => {
       // Classifications first: they hold RESTRICT references into both endpoints.
       for (const id of createdRelationIds.splice(0)) {
-        await pool.query("DELETE FROM event_topics WHERE id = $1", [id]);
+        await pool.query("DELETE FROM event_directions WHERE id = $1", [id]);
       }
       for (const id of createdEventIds.splice(0)) {
         await deleteEventFixture(pool, id);
       }
-      for (const id of createdTopicIds.splice(0)) {
+      for (const id of createdDirectionIds.splice(0)) {
         await pool.query("DELETE FROM directions WHERE id = $1", [id]);
       }
       for (const k of usedKeys.splice(0)) {
@@ -402,11 +402,11 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     // ── Accept branches ────────────────────────────────────────────────────
 
-    it("012 EARS-11: when a platform_admin classifies an event under a topic, the system shall persist one active relationship at version 1 with both endpoints' display forms and an ETag", async () => {
+    it("012 EARS-11: when a platform_admin classifies an event under a direction, the system shall persist one active relationship at version 1 with both endpoints' display forms and an ETag", async () => {
       const event = await makeEvent(false);
-      const topic = await makeTopic(false);
+      const direction = await makeDirection(false);
 
-      const res = await relate(event.id, topic.id);
+      const res = await relate(event.id, direction.id);
       expect(res.statusCode).toBe(201);
       const body = res.json() as RelationBody;
       createdRelationIds.push(body.id);
@@ -415,9 +415,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         eventId: event.id,
         eventTitle: event.title,
         eventSlug: event.slug,
-        topicId: topic.id,
-        topicTitle: topic.title,
-        topicSlug: topic.slug,
+        directionId: direction.id,
+        directionTitle: direction.title,
+        directionSlug: direction.slug,
         status: "active",
         version: 1,
       });
@@ -438,7 +438,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     it("012 EARS-11: when an event is classified and the classification is then retired, the system shall leave events.specialties byte-for-byte unchanged — the two axes never synchronize", async () => {
       const specialties = ["cardiology", "therapy"];
       const event = await makeEvent(true, specialties);
-      const topic = await makeTopic(true);
+      const direction = await makeDirection(true);
 
       // Read the array as the EVENT RESOURCE renders it, so the assertion covers
       // the whole write path (service, repository, trigger), not merely a column
@@ -456,10 +456,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const before = await readSpecialties();
       expect(before).toEqual(specialties);
       // The serialized form, not a deep-equal: a reorder, a re-case or an
-      // appended topic slug would survive a looser comparison.
+      // appended direction slug would survive a looser comparison.
       const beforeJson = JSON.stringify(before);
 
-      const rel = await relation(event.id, topic.id);
+      const rel = await relation(event.id, direction.id);
       expect(JSON.stringify(await readSpecialties())).toBe(beforeJson);
 
       expect((await move(rel.id, "retire")).statusCode).toBe(200);
@@ -471,8 +471,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     it("012 EARS-11: when a classification between two publicly visible endpoints is previewed for retirement, the system shall list it as affected with a non-null title and hand back a signed impact token", async () => {
       const event = await makeEvent(true);
-      const topic = await makeTopic(true);
-      const rel = await relation(event.id, topic.id);
+      const direction = await makeDirection(true);
+      const rel = await relation(event.id, direction.id);
 
       const p = await previewed(rel.id, "retire");
       expect(p.transition).toBe("retire");
@@ -488,13 +488,13 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       // §3.1: the display title is never null — an operator confirming a
       // consequence must be able to read WHICH classification it is.
       expect(p.affected[0]!.title).toContain(event.title);
-      expect(p.affected[0]!.title).toContain(topic.title);
+      expect(p.affected[0]!.title).toContain(direction.title);
     });
 
     it("012 EARS-11: when a previewed retirement is confirmed and then restored, the system shall move the SAME row and keep its id, never re-inserting a second one", async () => {
       const event = await makeEvent(true);
-      const topic = await makeTopic(true);
-      const rel = await relation(event.id, topic.id);
+      const direction = await makeDirection(true);
+      const rel = await relation(event.id, direction.id);
 
       const retired = await move(rel.id, "retire");
       expect(retired.statusCode).toBe(200);
@@ -519,20 +519,20 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
       // Exactly one row for this pair has ever existed.
       const { rows } = await pool.query<{ count: string }>(
-        "SELECT count(*)::text AS count FROM event_topics WHERE event_id = $1 AND topic_id = $2",
-        [event.id, topic.id],
+        "SELECT count(*)::text AS count FROM event_directions WHERE event_id = $1 AND direction_id = $2",
+        [event.id, direction.id],
       );
       expect(rows[0]!.count).toBe("1");
     });
 
-    it("012 EARS-11: when a publicly visible event is traversed, the system shall answer exactly the PublicTopicSummary page of its publicly visible topics", async () => {
+    it("012 EARS-11: when a publicly visible event is traversed, the system shall answer exactly the PublicDirectionSummary page of its publicly visible directions", async () => {
       const event = await makeEvent(true);
-      const topic = await makeTopic(true);
-      await relation(event.id, topic.id);
+      const direction = await makeDirection(true);
+      await relation(event.id, direction.id);
 
       for (const url of [
-        `/v1/public/events/${event.id}/topics`,
-        `/v1/public/events/${event.slug}/topics`,
+        `/v1/public/events/${event.id}/directions`,
+        `/v1/public/events/${event.slug}/directions`,
       ]) {
         const res = await app.inject({ method: "GET", url });
         expect(res.statusCode).toBe(200);
@@ -547,21 +547,21 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
           ["id", "slug", "title"].sort(),
         );
         expect(page.data[0]).toMatchObject({
-          id: topic.id,
-          slug: topic.slug,
-          title: topic.title,
+          id: direction.id,
+          slug: direction.slug,
+          title: direction.title,
         });
       }
     });
 
-    it("012 EARS-11: when a published topic is traversed, the system shall answer exactly the PublicEventSummary page of its publicly visible events", async () => {
+    it("012 EARS-11: when a published direction is traversed, the system shall answer exactly the PublicEventSummary page of its publicly visible events", async () => {
       const event = await makeEvent(true);
-      const topic = await makeTopic(true);
-      await relation(event.id, topic.id);
+      const direction = await makeDirection(true);
+      await relation(event.id, direction.id);
 
       for (const url of [
-        `/v1/public/topics/${topic.id}/events`,
-        `/v1/public/topics/${topic.slug}/events`,
+        `/v1/public/directions/${direction.id}/events`,
+        `/v1/public/directions/${direction.slug}/events`,
       ]) {
         const res = await app.inject({ method: "GET", url });
         expect(res.statusCode).toBe(200);
@@ -577,7 +577,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
           state: "published",
         });
         // The public event summary is the 007 DTO and carries no `specialties`
-        // — the topic axis is what this traversal discloses, never the other one.
+        // — the direction axis is what this traversal discloses, never the other one.
         expect(page.data[0]).not.toHaveProperty("specialties");
       }
     });
@@ -586,7 +586,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const event = await makeEvent(true);
       const res = await app.inject({
         method: "GET",
-        url: `/v1/public/events/${event.slug}/topics`,
+        url: `/v1/public/events/${event.slug}/directions`,
       });
       expect(res.statusCode).toBe(200);
       expect(res.json()).toEqual({
@@ -597,18 +597,18 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     it("012 EARS-11: when a classification is retired, the system shall drop it from BOTH public traversals while keeping it addressable to an admin", async () => {
       const event = await makeEvent(true);
-      const topic = await makeTopic(true);
-      const rel = await relation(event.id, topic.id);
+      const direction = await makeDirection(true);
+      const rel = await relation(event.id, direction.id);
       expect((await move(rel.id, "retire")).statusCode).toBe(200);
 
       const forward = await app.inject({
         method: "GET",
-        url: `/v1/public/events/${event.id}/topics`,
+        url: `/v1/public/events/${event.id}/directions`,
       });
       expect((forward.json() as { data: unknown[] }).data).toHaveLength(0);
       const reverse = await app.inject({
         method: "GET",
-        url: `/v1/public/topics/${topic.id}/events`,
+        url: `/v1/public/directions/${direction.id}/events`,
       });
       expect((reverse.json() as { data: unknown[] }).data).toHaveLength(0);
 
@@ -623,9 +623,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     it("012 EARS-11: when the admin list is scoped by either endpoint, the system shall answer the classifications of that endpoint and exclude retired ones unless asked", async () => {
       const event = await makeEvent(false);
-      const topic = await makeTopic(false);
-      const other = await makeTopic(false);
-      const rel = await relation(event.id, topic.id);
+      const direction = await makeDirection(false);
+      const other = await makeDirection(false);
+      const rel = await relation(event.id, direction.id);
       await relation(event.id, other.id);
       expect((await move(rel.id, "retire")).statusCode).toBe(200);
 
@@ -640,33 +640,33 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       };
 
       const active = await list(`eventId=${event.id}`);
-      expect(active.data.map((r) => r.topicId)).toEqual([other.id]);
+      expect(active.data.map((r) => r.directionId)).toEqual([other.id]);
 
       const all = await list(`eventId=${event.id}&includeRetired=true`);
-      expect(all.data.map((r) => r.topicId).sort()).toEqual(
-        [topic.id, other.id].sort(),
+      expect(all.data.map((r) => r.directionId).sort()).toEqual(
+        [direction.id, other.id].sort(),
       );
 
       // The reverse scope reads the same route — one join surface, two lenses.
-      const byTopic = await list(`topicId=${other.id}`);
-      expect(byTopic.data.map((r) => r.eventId)).toEqual([event.id]);
+      const byDirection = await list(`directionId=${other.id}`);
+      expect(byDirection.data.map((r) => r.eventId)).toEqual([event.id]);
     });
 
     // ── Reject branches ────────────────────────────────────────────────────
 
     it("012 EARS-11: when a draft endpoint is traversed publicly, the system shall answer 404, indistinguishable from an unknown one", async () => {
       const event = await makeEvent(false);
-      const topic = await makeTopic(false);
-      await relation(event.id, topic.id);
+      const direction = await makeDirection(false);
+      await relation(event.id, direction.id);
 
       const draftSource = await app.inject({
         method: "GET",
-        url: `/v1/public/events/${event.id}/topics`,
+        url: `/v1/public/events/${event.id}/directions`,
       });
       expect(draftSource.statusCode).toBe(404);
       const unknownSource = await app.inject({
         method: "GET",
-        url: `/v1/public/events/${randomUUID()}/topics`,
+        url: `/v1/public/events/${randomUUID()}/directions`,
       });
       expect(unknownSource.statusCode).toBe(404);
 
@@ -693,34 +693,34 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       });
       // The echoed instance is the caller's own path and carries nothing else.
       expect((draftSource.json() as { instance?: string }).instance).toBe(
-        `/v1/public/events/${event.id}/topics`,
+        `/v1/public/events/${event.id}/directions`,
       );
     });
 
     it("012 EARS-11: when the same pair is classified twice, the system shall refuse the second with 409 and persist no second row", async () => {
       const event = await makeEvent(false);
-      const topic = await makeTopic(false);
-      await relation(event.id, topic.id);
+      const direction = await makeDirection(false);
+      await relation(event.id, direction.id);
 
-      const again = await relate(event.id, topic.id);
+      const again = await relate(event.id, direction.id);
       expect(again.statusCode).toBe(409);
       expect((again.json() as { errorCode?: string }).errorCode).toBe(
         "RELATIONSHIP_CONFLICT",
       );
       const { rows } = await pool.query<{ count: string }>(
-        "SELECT count(*)::text AS count FROM event_topics WHERE event_id = $1 AND topic_id = $2",
-        [event.id, topic.id],
+        "SELECT count(*)::text AS count FROM event_directions WHERE event_id = $1 AND direction_id = $2",
+        [event.id, direction.id],
       );
       expect(rows[0]!.count).toBe("1");
     });
 
     it("012 EARS-11: when a RETIRED pair is classified again, the system shall refuse with 409 and tell the operator to restore the existing classification", async () => {
       const event = await makeEvent(false);
-      const topic = await makeTopic(false);
-      const rel = await relation(event.id, topic.id);
+      const direction = await makeDirection(false);
+      const rel = await relation(event.id, direction.id);
       expect((await move(rel.id, "retire")).statusCode).toBe(200);
 
-      const again = await relate(event.id, topic.id);
+      const again = await relate(event.id, direction.id);
       expect(again.statusCode).toBe(409);
       const body = again.json() as { errorCode?: string; detail?: string };
       expect(body.errorCode).toBe("RELATIONSHIP_CONFLICT");
@@ -732,43 +732,43 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       });
     });
 
-    it("012 EARS-11: when a classification names an unknown or RETIRED topic, the system shall refuse and create no topic on the fly", async () => {
+    it("012 EARS-11: when a classification names an unknown or RETIRED direction, the system shall refuse and create no direction on the fly", async () => {
       const event = await makeEvent(false);
-      const topic = await makeTopic(false);
+      const direction = await makeDirection(false);
 
-      const absentEvent = await relate(randomUUID(), topic.id);
+      const absentEvent = await relate(randomUUID(), direction.id);
       expect(absentEvent.statusCode).toBe(404);
-      const absentTopic = await relate(event.id, randomUUID());
-      expect(absentTopic.statusCode).toBe(404);
+      const absentDirection = await relate(event.id, randomUUID());
+      expect(absentDirection.statusCode).toBe(404);
 
-      // `topics_retired_iff_deleted` — retirement is the status AND the
+      // `directions_retired_iff_deleted` — retirement is the status AND the
       // soft-delete stamp together; the fixture may not invent a half-retired row.
       await pool.query(
         "UPDATE directions SET status = 'retired', deleted_at = now() WHERE id = $1",
-        [topic.id],
+        [direction.id],
       );
-      const retiredTopic = await relate(event.id, topic.id);
-      expect(retiredTopic.statusCode).toBe(409);
+      const retiredDirection = await relate(event.id, direction.id);
+      expect(retiredDirection.statusCode).toBe(409);
 
       const { rows } = await pool.query<{ count: string }>(
-        "SELECT count(*)::text AS count FROM event_topics WHERE event_id = $1",
+        "SELECT count(*)::text AS count FROM event_directions WHERE event_id = $1",
         [event.id],
       );
       expect(rows[0]!.count).toBe("0");
     });
 
-    it("012 EARS-11: when a create body carries a topic TITLE instead of an id, the system shall refuse it rather than mint a topic inline", async () => {
+    it("012 EARS-11: when a create body carries a direction TITLE instead of an id, the system shall refuse it rather than mint a direction inline", async () => {
       const event = await makeEvent(false);
       const before = await pool.query<{ count: string }>(
         "SELECT count(*)::text AS count FROM directions",
       );
 
       for (const payload of [
-        { eventId: event.id, topicTitle: "Совершенно новая тема" },
+        { eventId: event.id, directionTitle: "Совершенно новая тема" },
         {
           eventId: event.id,
-          topicId: randomUUID(),
-          topicTitle: "Совершенно новая тема",
+          directionId: randomUUID(),
+          directionTitle: "Совершенно новая тема",
         },
       ]) {
         const res = await app.inject({
@@ -797,7 +797,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     it("012 EARS-11: when a create body tries to set lifecycle fields directly, the system shall refuse rather than silently ignore them", async () => {
       const event = await makeEvent(false);
-      const topic = await makeTopic(false);
+      const direction = await makeDirection(false);
 
       const res = await app.inject({
         method: "POST",
@@ -810,14 +810,14 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         },
         payload: {
           eventId: event.id,
-          topicId: topic.id,
+          directionId: direction.id,
           status: "retired",
           version: 7,
         },
       });
       expect(res.statusCode).toBe(400);
       const { rows } = await pool.query<{ count: string }>(
-        "SELECT count(*)::text AS count FROM event_topics WHERE event_id = $1",
+        "SELECT count(*)::text AS count FROM event_directions WHERE event_id = $1",
         [event.id],
       );
       expect(rows[0]!.count).toBe("0");
@@ -825,8 +825,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     it("012 EARS-11: when a transition is confirmed without a Lifecycle-Impact-Token, the system shall answer 428 and change nothing", async () => {
       const event = await makeEvent(true);
-      const topic = await makeTopic(true);
-      const rel = await relation(event.id, topic.id);
+      const direction = await makeDirection(true);
+      const rel = await relation(event.id, direction.id);
 
       const before = await auditCount(rel.id);
       const res = await confirm(rel.id, "retire", { version: 1, token: null });
@@ -843,8 +843,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     it("012 EARS-11: when a transition is confirmed without an If-Match, the system shall answer 428 before it ever looks at the impact token", async () => {
       const event = await makeEvent(true);
-      const topic = await makeTopic(true);
-      const rel = await relation(event.id, topic.id);
+      const direction = await makeDirection(true);
+      const rel = await relation(event.id, direction.id);
 
       const res = await confirm(rel.id, "retire", {
         ifMatch: null,
@@ -858,8 +858,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     it("012 EARS-11: when a transition quotes an unusable If-Match, the system shall answer 412 rather than treating it as no precondition", async () => {
       const event = await makeEvent(true);
-      const topic = await makeTopic(true);
-      const rel = await relation(event.id, topic.id);
+      const direction = await makeDirection(true);
+      const rel = await relation(event.id, direction.id);
       const p = await previewed(rel.id, "retire");
 
       const res = await confirm(rel.id, "retire", {
@@ -875,14 +875,14 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     it("012 EARS-11: when the discovered set changes between preview and confirmation, the system shall answer 412 LIFECYCLE_IMPACT_STALE with zero domain and zero audit mutation", async () => {
       const event = await makeEvent(true);
-      const topic = await makeTopic(true);
-      const rel = await relation(event.id, topic.id);
+      const direction = await makeDirection(true);
+      const rel = await relation(event.id, direction.id);
 
       const p = await previewed(rel.id, "retire");
       // A SECOND classification on the same event: the transition's discovered
       // set is every relation sharing either endpoint, so the operator is now
       // looking at a screen that no longer describes the consequences.
-      const other = await makeTopic(true);
+      const other = await makeDirection(true);
       await relation(event.id, other.id);
 
       const before = await auditCount(rel.id);
@@ -906,15 +906,15 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     it("012 EARS-11: when a token issued for the OTHER transition is presented, the system shall answer 412 and change nothing", async () => {
       const event = await makeEvent(true);
-      const topic = await makeTopic(true);
-      const rel = await relation(event.id, topic.id);
+      const direction = await makeDirection(true);
+      const rel = await relation(event.id, direction.id);
 
       const p = await previewed(rel.id, "retire");
       // Re-sign the identical discovered set under the restore transition — the
       // envelope binds WHICH move it authorizes, not merely which rows moved.
       const forged = impact.issue({
         transition: "restore",
-        targetKind: "event↔topic",
+        targetKind: "event↔direction",
         targetId: rel.id,
         targetVersion: p.version,
         fingerprint: tokenPayload(p.impactToken).f,
@@ -933,15 +933,15 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     it("012 EARS-11: when an expired impact token is presented, the system shall answer 412 — a preview an operator read an hour ago no longer describes anything", async () => {
       const event = await makeEvent(true);
-      const topic = await makeTopic(true);
-      const rel = await relation(event.id, topic.id);
+      const direction = await makeDirection(true);
+      const rel = await relation(event.id, direction.id);
 
       const p = await previewed(rel.id, "retire");
       const payload = tokenPayload(p.impactToken);
       const stale = impact.issue(
         {
           transition: "retire",
-          targetKind: "event↔topic",
+          targetKind: "event↔direction",
           targetId: rel.id,
           targetVersion: p.version,
           fingerprint: payload.f,
@@ -962,8 +962,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     it("012 EARS-11: when a tampered impact token is presented, the system shall answer 412 with the SAME undifferentiated refusal as a stale one", async () => {
       const event = await makeEvent(true);
-      const topic = await makeTopic(true);
-      const rel = await relation(event.id, topic.id);
+      const direction = await makeDirection(true);
+      const rel = await relation(event.id, direction.id);
       const p = await previewed(rel.id, "retire");
 
       const [payload, sig] = p.impactToken.split(".");
@@ -982,8 +982,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     it("012 EARS-11: when the transition already in effect is previewed, the system shall answer 409 rather than treating it as a no-op", async () => {
       const event = await makeEvent(true);
-      const topic = await makeTopic(true);
-      const rel = await relation(event.id, topic.id);
+      const direction = await makeDirection(true);
+      const rel = await relation(event.id, direction.id);
 
       const res = await preview(rel.id, "restore");
       expect(res.statusCode).toBe(409);
@@ -994,12 +994,12 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     it("012 EARS-11: when a classification is created without an Idempotency-Key, the system shall refuse before persisting anything", async () => {
       const event = await makeEvent(false);
-      const topic = await makeTopic(false);
+      const direction = await makeDirection(false);
 
-      const res = await relate(event.id, topic.id, { idempotencyKey: "" });
+      const res = await relate(event.id, direction.id, { idempotencyKey: "" });
       expect(res.statusCode).toBeGreaterThanOrEqual(400);
       const { rows } = await pool.query<{ count: string }>(
-        "SELECT count(*)::text AS count FROM event_topics WHERE event_id = $1",
+        "SELECT count(*)::text AS count FROM event_directions WHERE event_id = $1",
         [event.id],
       );
       expect(rows[0]!.count).toBe("0");
@@ -1007,19 +1007,19 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     it("012 EARS-17: when the identical create is retried under the same Idempotency-Key, the system shall replay the stored outcome instead of classifying twice", async () => {
       const event = await makeEvent(false);
-      const topic = await makeTopic(false);
+      const direction = await makeDirection(false);
       const k = key();
 
-      const first = await relate(event.id, topic.id, { idempotencyKey: k });
+      const first = await relate(event.id, direction.id, { idempotencyKey: k });
       expect(first.statusCode).toBe(201);
       const body = first.json() as RelationBody;
       createdRelationIds.push(body.id);
 
-      const replay = await relate(event.id, topic.id, { idempotencyKey: k });
+      const replay = await relate(event.id, direction.id, { idempotencyKey: k });
       expect(replay.statusCode).toBe(201);
       expect((replay.json() as RelationBody).id).toBe(body.id);
       const { rows } = await pool.query<{ count: string }>(
-        "SELECT count(*)::text AS count FROM event_topics WHERE event_id = $1",
+        "SELECT count(*)::text AS count FROM event_directions WHERE event_id = $1",
         [event.id],
       );
       expect(rows[0]!.count).toBe("1");
@@ -1027,8 +1027,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     it("012 EARS-11: the classification surface shall expose no PATCH route — the join carries no attribute to edit", async () => {
       const event = await makeEvent(false);
-      const topic = await makeTopic(false);
-      const rel = await relation(event.id, topic.id);
+      const direction = await makeDirection(false);
+      const rel = await relation(event.id, direction.id);
 
       const res = await app.inject({
         method: "PATCH",
@@ -1049,7 +1049,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const event = await makeEvent(true);
       const res = await app.inject({
         method: "GET",
-        url: `/v1/public/events/${event.id}/topics?cursor=not-a-cursor`,
+        url: `/v1/public/events/${event.id}/directions?cursor=not-a-cursor`,
       });
       expect(res.statusCode).toBe(400);
       expect((res.json() as { errorCode?: string }).errorCode).toBe(
@@ -1059,8 +1059,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     it("012 EARS-11: when a public traversal quotes a DECODABLE cursor carrying values this API never issues, the system shall still refuse it as CURSOR_INVALID rather than fail on the query", async () => {
       const event = await makeEvent(true);
-      const topic = await makeTopic(true);
-      await relation(event.id, topic.id);
+      const direction = await makeDirection(true);
+      await relation(event.id, direction.id);
 
       // A hand-edited cursor decodes fine; its VALUES are what reach SQL. A
       // non-UUID id would hit a `uuid` column as pg `22P02`, and a bogus
@@ -1071,22 +1071,22 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
       const cases: { url: string; cursor: string }[] = [
         {
-          url: `/v1/public/events/${event.id}/topics`,
+          url: `/v1/public/events/${event.id}/directions`,
           cursor: forge({ title: "anything", id: "not-a-uuid" }),
         },
         {
-          url: `/v1/public/events/${event.id}/topics`,
+          url: `/v1/public/events/${event.id}/directions`,
           cursor: forge({
             startsAt: "nope",
             id: "0f4c1b6e-9d2a-4a3b-8c11-2f5e7a9b0c31",
           }),
         },
         {
-          url: `/v1/public/topics/${topic.id}/events`,
+          url: `/v1/public/directions/${direction.id}/events`,
           cursor: forge({ startsAt: "2026-01-01T00:00:00.000Z", id: "x" }),
         },
         {
-          url: `/v1/public/topics/${topic.id}/events`,
+          url: `/v1/public/directions/${direction.id}/events`,
           cursor: forge({
             startsAt: "nope",
             id: "0f4c1b6e-9d2a-4a3b-8c11-2f5e7a9b0c31",

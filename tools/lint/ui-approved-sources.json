@@ -23,6 +23,28 @@
       "approvalProvenance": [
         "https://github.com/doctor-school/ds-platform/issues/1578#issuecomment-5435209906"
       ]
+    },
+    "admin-list-block-tier-v1": {
+      "evidenceProfiles": ["responsive-web"],
+      "surfacePaths": [
+        "apps/admin/app/experts/page.tsx",
+        "apps/admin/app/partners/page.tsx",
+        "apps/admin/app/projects/page.tsx",
+        "apps/admin/components/admin-data-list.tsx",
+        "apps/admin/components/admin-list-shell.tsx",
+        "apps/admin/components/event-experts-panel.tsx",
+        "apps/admin/components/event-projects-panel.tsx",
+        "apps/admin/components/event-topics-panel.tsx",
+        "apps/admin/components/expert-form.tsx",
+        "apps/admin/components/project-experts-panel.tsx",
+        "apps/admin/components/project-partners-panel.tsx",
+        "apps/admin/components/relationship-endpoint-picker.tsx",
+        "apps/admin/messages/ru.json"
+      ],
+      "states": ["admin-list-search-and-server-combobox"],
+      "approvalProvenance": [
+        "https://github.com/doctor-school/ds-platform/issues/1578#issuecomment-5435209906"
+      ]
     }
   }
 }

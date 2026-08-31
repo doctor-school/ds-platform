@@ -215,6 +215,38 @@ export function taxonomyErrorKey(
     }
   }
 
+  // ── 012 EARS-5 publish refusals on the entity surfaces (#1287) ───────────
+  // Scoped like every block above: these codes reach an ENTITY screen only
+  // through its publish command, and three of them are the refusals whose fix
+  // is somewhere OTHER than the form the operator is looking at — which is
+  // exactly why the generic «проверьте поля» would be a wrong sentence:
+  //
+  // - `PUBLISHED_PROJECT_REQUIRES_CURATOR` — the project has no active curator
+  //   pointing at a publicly visible expert. The fix lives on the «Эксперты»
+  //   tab, not in any field on «Основное».
+  // - `SPEAKER_POSITION_OCCUPIED` — publishing this expert would make an event
+  //   link visible on a slot a legacy speaker row still holds. The fix is a
+  //   different NUMBER on the event, not a corrected expert field.
+  // - `CONTENT_REMOVED` — an editorially removed expert is never publishable.
+  //
+  // `PUBLISH_REQUIREMENTS_NOT_MET` keeps the shared tail mapping: the field-set
+  // sentence is already per-kind there, and partners have no completeness
+  // branch at all (§5.2 — title alone is a complete public projection).
+  if (ns === "projects" || ns === "experts" || ns === "partners") {
+    switch (code) {
+      case "PUBLISHED_PROJECT_REQUIRES_CURATOR":
+        return "projects.errors.curatorRequired";
+      case "SPEAKER_POSITION_OCCUPIED":
+        return "experts.errors.positionOccupied";
+      case "CONTENT_REMOVED":
+        return "experts.errors.contentRemoved";
+      case "INVALID_TRANSITION":
+        return `${ns}.errors.invalidTransition`;
+      default:
+        break;
+    }
+  }
+
   switch (code) {
     case "USER_EXPERT_CONFLICT":
       return `${ns}.errors.userConflict`;

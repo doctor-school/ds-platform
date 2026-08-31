@@ -1,7 +1,18 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { and, asc, count, eq, ilike, isNull, ne, or, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  eq,
+  ilike,
+  inArray,
+  isNull,
+  ne,
+  or,
+  sql,
+} from "drizzle-orm";
 import type { DrizzleHandle, Expert } from "@ds/db";
-import { experts, users } from "@ds/db";
+import { eventExperts, events, eventSpeakers, experts, users } from "@ds/db";
 import type {
   AdminTaxonomyListQuery,
   EligibleExpertUserOption,
@@ -46,6 +57,30 @@ export interface ExpertPatch {
   bio?: string | null;
   /** `undefined` keeps the current reference; `null` clears it; a string replaces it. */
   photoRef?: string | null;
+}
+
+/** The lifecycle columns a publish/retire/restore moves (012-design §2.1). */
+export interface ExpertLifecyclePatch {
+  status?: "draft" | "published" | "retired";
+  deletedAt?: Date | null;
+  /** Written by the FIRST publish only; never re-stamped (LD-3). */
+  firstPublishedAt?: Date;
+}
+
+/** One ACTIVE `event_experts` link of the expert whose visibility is changing. */
+export interface ExpertEventSlot {
+  linkId: string;
+  eventId: string;
+  position: number;
+  /** The legacy row this link explicitly MERGES with, if any (012-design §4). */
+  legacySpeakerId: string | null;
+}
+
+/** One ACTIVE legacy `event_speakers` row, as a slot occupant. */
+export interface LegacySlotOccupant {
+  id: string;
+  eventId: string;
+  position: number;
 }
 
 @Injectable()
@@ -178,6 +213,106 @@ export class ExpertsRepository {
    * unless asked for. The predicate is SQL, never a full-roster scan filtered in
    * application code (EARS-15).
    */
+  /**
+   * Move the row's LIFECYCLE and bump `version`, guarded by the expected
+   * version. Separate from {@link updateVersioned} because a lifecycle move
+   * writes columns a PATCH may never touch — `status`, `deleted_at` and the
+   * write-once `first_published_at` (012-design §2.1/LD-3).
+   */
+  async transitionVersioned(
+    tx: Tx,
+    id: string,
+    expectedVersion: number,
+    patch: ExpertLifecyclePatch,
+  ): Promise<Expert | null> {
+    const [row] = await tx
+      .update(experts)
+      .set({
+        ...patch,
+        version: sql`${experts.version} + 1`,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(experts.id, id), eq(experts.version, expectedVersion)))
+      .returning();
+    return row ?? null;
+  }
+
+  /**
+   * Every ACTIVE `event_experts` link this expert holds — the slots that BECOME
+   * visible the moment the expert is published (012-design §4).
+   *
+   * Read before any lock is taken, so the publish command knows which parent
+   * events it must lock; re-read under those locks to prove the set did not
+   * move. Ascending by event id so the caller's lock order is already decided.
+   */
+  async activeEventSlots(
+    tx: Tx | Db,
+    expertId: string,
+  ): Promise<ExpertEventSlot[]> {
+    return tx
+      .select({
+        linkId: eventExperts.id,
+        eventId: eventExperts.eventId,
+        position: eventExperts.position,
+        legacySpeakerId: eventExperts.legacySpeakerId,
+      })
+      .from(eventExperts)
+      .where(
+        and(
+          eq(eventExperts.expertId, expertId),
+          eq(eventExperts.status, "active"),
+          isNull(eventExperts.deletedAt),
+        ),
+      )
+      .orderBy(asc(eventExperts.eventId), asc(eventExperts.id));
+  }
+
+  /**
+   * Lock the parent events of a visibility change, ASCENDING by stable id.
+   *
+   * Sorted and de-duplicated HERE so no call site can establish a second order:
+   * the combined speaker projection of an event is recomputed under this lock,
+   * and two publishes racing over the same two events must queue, not deadlock.
+   */
+  async lockEvents(tx: Tx, ids: string[]): Promise<string[]> {
+    const ordered = [...new Set(ids)].sort();
+    if (ordered.length === 0) return [];
+    const rows = await tx
+      .select({ id: events.id })
+      .from(events)
+      .where(inArray(events.id, ordered))
+      .orderBy(asc(events.id))
+      .for("update");
+    return rows.map((row) => row.id);
+  }
+
+  /**
+   * The ACTIVE legacy speakers of the locked events, with the SAME predicates
+   * the public projection applies (`record_status = 'active'`, not editorially
+   * removed). Repeated here rather than trusted from the write path, for the
+   * §3.3 reason: an imported or manually corrupted row must fail closed.
+   */
+  async activeLegacySpeakers(
+    tx: Tx | Db,
+    eventIds: string[],
+  ): Promise<LegacySlotOccupant[]> {
+    if (eventIds.length === 0) return [];
+    return tx
+      .select({
+        id: eventSpeakers.id,
+        eventId: eventSpeakers.eventId,
+        position: eventSpeakers.position,
+      })
+      .from(eventSpeakers)
+      .where(
+        and(
+          inArray(eventSpeakers.eventId, eventIds),
+          eq(eventSpeakers.recordStatus, "active"),
+          isNull(eventSpeakers.contentRemovedAt),
+        ),
+      );
+  }
+
   async list(
     query: AdminTaxonomyListQuery,
   ): Promise<{ rows: Expert[]; total: number }> {

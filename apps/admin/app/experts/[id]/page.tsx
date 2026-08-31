@@ -18,14 +18,16 @@ import { BackToList } from "@/components/back-to-list";
 import { ExpertForm } from "@/components/expert-form";
 import { EventExpertsPanel } from "@/components/event-experts-panel";
 import { ProjectExpertsPanel } from "@/components/project-experts-panel";
+import { PublishAction } from "@/components/publish-action";
 import { taxonomyErrorKey } from "@/lib/taxonomy-errors";
-import type { UpdateExpertVars } from "@/providers/data-provider";
+import { expertsUrl, type UpdateExpertVars } from "@/providers/data-provider";
 
 /**
  * Expert detail / edit (012 EARS-2) in the Stage-A composition-B tabbed layout
- * (#1282, owner pick 2026-08-17). Only «Основное» ships in this slice: «Связи»
- * (#1291/#1289) and «Публикация» (#1287/#1295/#1296) are added by their own
- * slices, and an empty placeholder tab is deliberately NOT rendered.
+ * (#1282, owner pick 2026-08-17). «Публикация» (012 EARS-5, #1287) now has
+ * something to show — the publish command — so the tab ships; the withdraw and
+ * restore halves join it with their own routes (#1295/#1296). An empty
+ * placeholder tab is still deliberately NOT rendered.
  *
  * Every save carries the row's `version` as `If-Match`, and the detail is
  * refetched afterwards, so the next edit asserts the version the server actually
@@ -109,6 +111,9 @@ export default function ExpertDetailPage() {
                 <TabsTrigger value="events" data-testid="tab-events">
                   {t("experts.tabs.events")}
                 </TabsTrigger>
+                <TabsTrigger value="publish" data-testid="tab-publish">
+                  {t("experts.tabs.publish")}
+                </TabsTrigger>
               </TabsList>
               <TabsContent value="main">
                 <ExpertForm
@@ -162,6 +167,21 @@ export default function ExpertDetailPage() {
 
               <TabsContent value="events">
                 <EventExpertsPanel mode="expert" entityId={detail.id} />
+              </TabsContent>
+
+              {/* «Публикация» (012 EARS-5) — publishing an expert makes every
+                  active event link visible at once, so the server refuses a
+                  slot a legacy speaker row still holds; that refusal has its own
+                  sentence, because the fix is a NUMBER on the event. */}
+              <TabsContent value="publish">
+                <PublishAction
+                  namespace="experts"
+                  id={detail.id}
+                  status={detail.status}
+                  version={detail.version}
+                  publishUrl={expertsUrl.publish}
+                  onPublished={() => void query.refetch()}
+                />
               </TabsContent>
             </Tabs>
           </>

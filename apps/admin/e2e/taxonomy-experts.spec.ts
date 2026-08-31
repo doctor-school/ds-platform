@@ -278,23 +278,39 @@ test.describe("012 EARS-19/20 — Expert authoring", () => {
         bootstrapDoctorSession(ORIGIN, searchPrefix),
       ),
     );
-    const pageTwoCandidate = candidates
-      .map((candidate) => candidate.email)
-      .sort((left, right) => left.localeCompare(right))
-      .at(-1)!;
+    const candidateEmails = candidates.map((candidate) => candidate.email);
     await signInAsAdmin(page);
     await openExpertCreate(page);
 
     const selector = page.getByRole("combobox", { name: "Пользователь" });
     await selector.click();
-    await page
-      .getByRole("dialog")
+    const dialog = page.getByRole("dialog");
+    await dialog
       .getByRole("combobox", { name: "Поиск пользователя" })
       .fill(searchPrefix);
     const loadMore = page.getByRole("button", {
       name: "Загрузить ещё пользователей",
     });
     await expect(loadMore).toBeVisible({ timeout: 20_000 });
+
+    // The page-2 candidate is READ OFF page 1 rather than predicted from a
+    // client-side sort (#1669). The picker orders by `displayName → identifier →
+    // id` under the database's own collation; the spec used to guess the last
+    // row by `Array.sort(localeCompare)`, which disagrees with that collation on
+    // the hyphens these generated addresses are full of, so the "candidate" it
+    // named was frequently already on page 1 and the assertion that it appears
+    // after «Загрузить ещё» could never pass. Whichever seeded address page 1
+    // did NOT render is, by definition, behind the pagination — that is the
+    // subject, and it is exact regardless of how the server sorts.
+    const pageOneRendering = await dialog.innerText();
+    const pageTwoCandidate = candidateEmails.find(
+      (email) => !pageOneRendering.includes(email),
+    );
+    if (!pageTwoCandidate) {
+      throw new Error(
+        "every seeded candidate rendered on page 1 — the seed no longer exceeds one picker page",
+      );
+    }
     await expect(page.getByText(pageTwoCandidate, { exact: true })).toHaveCount(
       0,
     );

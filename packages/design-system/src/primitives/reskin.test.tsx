@@ -70,6 +70,48 @@ describe("Tabs — hard-bordered segment control (#512)", () => {
     expect(list.className).not.toMatch(/\bbg-muted\b/);
   });
 
+  /**
+   * #1669 — the strip, not the page, owns the overflow. Segments are
+   * `whitespace-nowrap`, so a five-segment RU tab bar has a min-content width
+   * `flex-1` cannot shrink past; without a scroll container of its own that
+   * width reached the document and the admin `/events/[id]` screen side-scrolled
+   * by 149px at 390px. jsdom cannot lay the strip out, so the guarantee is
+   * measured live by `apps/admin/e2e/event-detail-narrow.spec.ts`
+   * (`documentElement.scrollWidth === clientWidth`); this pins the class the
+   * live measurement depends on so it cannot be dropped silently.
+   */
+  it("the list scrolls itself rather than the page when its segments do not fit", () => {
+    render(
+      <Tabs defaultValue="a">
+        <TabsList data-testid="list">
+          <TabsTrigger value="a">A</TabsTrigger>
+        </TabsList>
+      </Tabs>,
+    );
+    expect(screen.getByTestId("list")).toHaveClass("overflow-x-auto");
+  });
+
+  /**
+   * #1675 (Mode-a) — an `overflow-x-auto` container clips OUTER box-shadows on
+   * its children on every side at every width, so the segment's keyboard-focus
+   * ring must be the inset token (`shadow-focus-inset`, same 3px blue.300 @ 50%
+   * as `shadow-focus`), never the outer one.
+   */
+  it("segment focus ring is inset so the scroll container cannot clip it", () => {
+    render(
+      <Tabs defaultValue="a">
+        <TabsList>
+          <TabsTrigger value="a" data-testid="seg">
+            A
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>,
+    );
+    const seg = screen.getByTestId("seg");
+    expect(seg).toHaveClass("focus-visible:shadow-focus-inset");
+    expect(seg.className).not.toMatch(/focus-visible:shadow-focus(?![\w-])/);
+  });
+
   it("selected segment fills the accessible action colour (weight 800), divided by a 2px rule", () => {
     render(
       <Tabs defaultValue="a">
@@ -88,8 +130,8 @@ describe("Tabs — hard-bordered segment control (#512)", () => {
       "border-l-2",
       "first:border-l-0",
     );
-    // Flush focus ring, not the generic ring-with-offset.
-    expect(seg).toHaveClass("focus-visible:shadow-focus");
+    // Flush focus ring, not the generic ring-with-offset — inset, per #1675.
+    expect(seg).toHaveClass("focus-visible:shadow-focus-inset");
   });
 });
 

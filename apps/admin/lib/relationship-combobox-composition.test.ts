@@ -26,4 +26,21 @@ describe("EARS-22: relationship add-picker composition", () => {
       expect(source).not.toContain(oldSearchHandle);
     });
   }
+
+  // Source-level binding only: it proves the shared state helpers are the ones
+  // wired in, not that the panels behave — the behaviour itself is asserted on
+  // the pure state layer in `server-combobox.test.ts`.
+  it("EARS-22: binds the exclusion prune and the retry action to the shared helpers", () => {
+    const wrapper = readFileSync(
+      fileURLToPath(new URL("./use-relationship-combobox.ts", import.meta.url)),
+      "utf8",
+    );
+    expect(wrapper).toContain("pruneComboboxOptions");
+
+    const hook = readFileSync(
+      fileURLToPath(new URL("./use-server-combobox.ts", import.meta.url)),
+      "utf8",
+    );
+    expect(hook).toContain("serverComboboxLoadAction");
+  });
 });

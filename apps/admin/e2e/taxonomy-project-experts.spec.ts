@@ -1,6 +1,9 @@
 import { expect, test, type Page } from "@playwright/test";
 import { bootstrapAdminSession } from "./support/admin-session";
-import { selectRelationshipCombobox } from "./support/relationship-combobox";
+import {
+  searchRelationshipCombobox,
+  selectRelationshipCombobox,
+} from "./support/relationship-combobox";
 import { totpCode } from "./support/totp";
 
 /**
@@ -103,6 +106,70 @@ async function linkExpert(
 test.describe.configure({ mode: "serial" });
 
 test.describe("012 EARS-9 — project↔expert relationships in the live admin", () => {
+  /**
+   * EARS-23 regression for #1297's convergence: the relationship picker and the
+   * Expert user selector now run on ONE state machine (`lib/use-server-combobox`),
+   * and the picker fetches through a promise instead of Refine's `useCustom`.
+   * That is a real change of transport, so the behaviours the operator depends on
+   * are re-proved against the running stand rather than assumed from the unit
+   * tests: a query NARROWS the option set, a changed query replaces it (no stale
+   * page merged in), and the value already chosen survives the re-search.
+   */
+  test("EARS-23: the relationship picker narrows on the typed query and keeps the chosen value across a re-search", async ({
+    page,
+  }) => {
+    await signInAsAdmin(page);
+
+    const stamp = Date.now();
+    const wanted = await createExpert(page, `Искомый-${stamp}`, "Пётр", "Ильич");
+    const other = await createExpert(page, `Прочий-${stamp}`, "Семён", "Ильич");
+    const project = await createProject(page, `Поисковый проект ${stamp}`);
+
+    await openExpertsTab(page, project.url);
+
+    // A query that matches ONE of the two experts returns only that one — the
+    // proof the typed value reaches the server rather than filtering a cache.
+    const panel = await searchRelationshipCombobox(
+      page,
+      "project-expert-link-combobox",
+      `Искомый-${stamp}`,
+    );
+    await expect(panel.getByText(wanted.name, { exact: true })).toBeVisible();
+    await expect(panel.getByText(other.name, { exact: true })).toHaveCount(0);
+
+    // A changed query REPLACES the option set; the debounce must not merge the
+    // previous page into the new one.
+    await panel.getByRole("combobox").fill(`Прочий-${stamp}`);
+    await expect(panel.getByText(other.name, { exact: true })).toBeVisible();
+    await expect(panel.getByText(wanted.name, { exact: true })).toHaveCount(0);
+
+    // Select, then search again for something else: the chosen label is retained
+    // even though it is no longer in the returned page (`serverComboboxOptions`).
+    await panel.getByText(other.name, { exact: true }).click();
+    await expect(page.locator("#project-expert-link-combobox")).toContainText(
+      other.name,
+    );
+    const reopened = await searchRelationshipCombobox(
+      page,
+      "project-expert-link-combobox",
+      `Искомый-${stamp}`,
+    );
+    await expect(reopened.getByText(wanted.name, { exact: true })).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page.locator("#project-expert-link-combobox")).toContainText(
+      other.name,
+    );
+
+    // The link still completes — a converged selector that cannot author is a
+    // regression the option assertions above would not catch.
+    await page.getByTestId("project-expert-link-role").selectOption("member");
+    await page.getByTestId("project-expert-link-submit").click();
+    await expect(page.getByTestId("project-experts-notice")).toContainText(
+      "Эксперт добавлен в проект.",
+    );
+  });
+
+
   test("EARS-22: an operator authors a project↔expert link from the expert endpoint through the same relationship panel", async ({
     page,
   }) => {

@@ -7,7 +7,9 @@ import { totpCode } from "./support/totp";
  *
  * The API e2e suites prove the contract against the API directly. This proves the
  * operator-facing arc on the running admin: sign in, create a project, copy its
- * server-derived public link, find it through the shared list shell's search,
+ * server-derived public link, find it through the block-tier list's INSTANT
+ * search (#1297, EARS-23 — no «Применить», a removable chip, one «Сбросить
+ * всё», a pager that omits rather than disables a control it cannot act on),
  * edit it, then upload and remove a cover. An over-long title is refused before
  * any request leaves the browser; no slug authoring control exists.
  *
@@ -113,12 +115,36 @@ test.describe("012 EARS-1 — project authoring in the live admin", () => {
     await expect(page.getByTestId("tab-events")).toBeVisible();
     await expect(page.getByRole("tab")).toHaveCount(4);
 
-    // ── The shared list shell finds it by search ───────────────────────────
+    // ── The block-tier list finds it by search, with no «Применить» ────────
     await page.getByTestId("back-to-list").click();
     await page.waitForURL(/\/projects$/, { timeout: 20_000 });
-    await page.getByTestId("projects-search").fill(title);
-    await page.getByTestId("projects-apply").click();
+    // EARS-23: typing is the whole gesture. No Enter, no Apply — the bar
+    // debounces and applies on its own, so the assertion below is the proof
+    // that no submit control was needed.
+    await page.getByRole("searchbox", { name: "Поиск" }).fill(title);
+    await expect(
+      page.getByRole("button", { name: "Применить", exact: true }),
+    ).toHaveCount(0);
     await expect(page.getByTestId("projects-table")).toContainText(title);
+    // EARS-23: the applied set is a removable chip, and one control clears all.
+    await expect(page.getByText("Выбрано:", { exact: false })).toBeVisible();
+    await page.getByRole("button", { name: "Сбросить всё" }).click();
+    await expect(page.getByText("Выбрано:", { exact: false })).toHaveCount(0);
+    await expect(page.getByRole("searchbox", { name: "Поиск" })).toHaveValue("");
+
+    // ── EARS-16: single-action list ⇒ the ROW is the action ────────────────
+    await expect(
+      page.getByRole("columnheader", { name: "Действия" }),
+    ).toHaveCount(0);
+    await expect(page.getByTestId("projects-total")).toBeVisible();
+
+    // ── EARS-23: no dead-end pager ─────────────────────────────────────────
+    // The DS `Pagination` block never renders a focusable control that does
+    // nothing: it OMITS «Назад» on the first page and the whole pager while
+    // there is a single page (`packages/design-system/src/blocks/pagination.tsx`).
+    await expect(
+      page.getByRole("button", { name: "Назад", exact: true }),
+    ).toHaveCount(0);
 
     // ── Edit the same row (If-Match round-trip) ────────────────────────────
     await page.goto(detailUrl);

@@ -7,7 +7,6 @@ import { Alert, Badge, Button, Switch } from "@ds/design-system";
 import { Combobox } from "@ds/design-system/blocks";
 import type {
   CreateEventTopicRequest,
-  DirectionAdminListItem,
   EventTopicAdminDetail,
   EventTopicAdminList,
 } from "@ds/schemas";
@@ -336,7 +335,7 @@ function LinkForm({
   const t = useTranslations();
   const [topicId, setTopicId] = useState("");
   const { mutate, mutation } = useCustomMutation();
-  const picker = useRelationshipCombobox<DirectionAdminListItem>({
+  const picker = useRelationshipCombobox({
     resource: "directions",
     excludedIds: linkedTopicIds,
     value: topicId,

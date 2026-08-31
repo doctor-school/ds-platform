@@ -1,26 +1,25 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useCustom } from "@refinedev/core";
-import type { ComboboxOption } from "@ds/design-system/blocks";
+import { useCallback, useMemo } from "react";
+import { fetchRelationshipEndpointOptions } from "@/providers/data-provider";
+import { pruneComboboxOptions } from "@/lib/server-combobox";
 import {
-  mergeRelationshipEndpointPages,
-  relationshipEndpointLoadState,
-  relationshipEndpointQuery,
-  RELATIONSHIP_ENDPOINT_PAGE_SIZE,
-  type RelationshipEndpointOption,
-} from "@/lib/relationship-endpoint-query";
+  useServerCombobox,
+  type ServerComboboxController,
+} from "@/lib/use-server-combobox";
 
-interface EndpointEnvelope<T> {
-  data: T[];
-  total: number;
-  page: number;
-  pageSize: number;
-}
+/** One bounded endpoint page; the list routes cap `pageSize` well above it. */
+const RELATIONSHIP_ENDPOINT_PAGE_SIZE = 20;
 
-export function useRelationshipCombobox<
-  T extends { id: string; title?: string; name?: string | null },
->({
+/**
+ * The relationship-endpoint projection of the shared selector: it contributes
+ * only what is specific to a relationship — which resource to list, which already
+ * linked endpoints to exclude, and how an endpoint row reads as a label. Every
+ * behaviour EARS-23 names (debounced immediate search, bounded pages, load-more,
+ * loading/error states) belongs to `useServerCombobox` and is therefore identical
+ * here and in the Expert User selector.
+ */
+export function useRelationshipCombobox({
   resource,
   excludedIds,
   value,
@@ -30,81 +29,58 @@ export function useRelationshipCombobox<
   excludedIds: string[];
   value: string;
   removedLabel?: string;
-}) {
-  const [search, setSearch] = useState("");
-  const [page, setPage] = useState(1);
-  const [items, setItems] = useState<RelationshipEndpointOption[]>([]);
-  const [selected, setSelected] = useState<RelationshipEndpointOption | null>(
-    null,
-  );
-  const [total, setTotal] = useState(0);
+}): ServerComboboxController {
   const excludedKey = excludedIds.join("|");
-  const queryString = relationshipEndpointQuery({ page, search });
-  const { query } = useCustom<EndpointEnvelope<T>>({
-    url: `/v1/admin/${resource}?${queryString}`,
-    method: "get",
+
+  const fetchPage = useCallback(
+    async ({
+      q,
+      page,
+      pageSize,
+    }: {
+      q: string;
+      page: number;
+      pageSize: number;
+    }) => {
+      const result = await fetchRelationshipEndpointOptions({
+        resource,
+        q,
+        page,
+        pageSize,
+      });
+      // An already linked endpoint is filtered out of the OPTIONS, never out of
+      // the total: the total is the server's answer about the page set, and
+      // subtracting from it would stop load-more one page early.
+      const excluded = new Set(excludedKey ? excludedKey.split("|") : []);
+      return {
+        ...result,
+        data: result.data.filter((item) => !excluded.has(item.id)),
+      };
+    },
+    [excludedKey, resource],
+  );
+
+  const controller = useServerCombobox({
+    fetchPage,
+    toOption: (item) => ({
+      id: item.id,
+      label: item.title ?? item.name ?? removedLabel ?? "—",
+    }),
+    selectedId: value || null,
+    pageSize: RELATIONSHIP_ENDPOINT_PAGE_SIZE,
   });
 
-  const envelope = query.data?.data;
-  useEffect(() => {
-    if (!envelope) return;
-    const excluded = new Set(excludedKey ? excludedKey.split("|") : []);
-    const incoming = envelope.data
-      .filter((item) => !excluded.has(item.id))
-      .map((item) => ({
-        id: item.id,
-        label: item.title ?? item.name ?? removedLabel ?? "—",
-      }));
-    setItems((current) =>
-      page === 1
-        ? incoming
-        : mergeRelationshipEndpointPages(current, incoming, [...excluded]),
-    );
-    setTotal(envelope.total);
-  }, [envelope, excludedKey, page, removedLabel]);
-
-  const options = useMemo<ComboboxOption[]>(() => {
-    const retained =
-      selected &&
-      selected.id === value &&
-      !items.some((item) => item.id === value)
-        ? [selected]
-        : [];
-    return [...retained, ...items].map((item) => ({
-      value: item.id,
-      label: item.label,
-    }));
-  }, [items, selected, value]);
-  const loadState = relationshipEndpointLoadState({
-    page,
-    pageSize: envelope?.pageSize ?? RELATIONSHIP_ENDPOINT_PAGE_SIZE,
-    total,
-    isError: query.isError,
-  });
-
-  return {
-    options,
-    isLoading: query.isFetching && page === 1 && items.length === 0,
-    isError: query.isError,
-    hasMore: loadState.hasMore,
-    loadingMore: query.isFetching && page > 1,
-    loadMoreError: query.isError,
-    search(next: string) {
-      setSearch(next);
-      setPage(1);
-      setItems([]);
-      setTotal(0);
-    },
-    select(next: string) {
-      const option = items.find((item) => item.id === next) ?? null;
-      setSelected(option);
-    },
-    async loadMore(): Promise<void> {
-      if (query.isError) {
-        await query.refetch();
-        return;
-      }
-      if (loadState.action === "next") setPage((current) => current + 1);
-    },
-  };
+  // The exclusion is applied TWICE on purpose, and the two are not redundant:
+  // `fetchPage` keeps a linked endpoint out of pages fetched from now on, this
+  // prunes it out of the pages already in hand. A successful link leaves the
+  // panel mounted (`LinkForm` only clears its value), so nothing re-queries —
+  // and an endpoint that can only ever come back 409 must stop being offered
+  // the moment it is linked, not at the next search.
+  return useMemo(() => {
+    const excluded = excludedKey ? excludedKey.split("|") : [];
+    return {
+      ...controller,
+      options: pruneComboboxOptions(controller.options, excluded),
+    };
+  }, [controller, excludedKey]);
 }

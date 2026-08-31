@@ -1,27 +1,33 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { Authenticated, useList } from "@refinedev/core";
 import { useTranslations } from "next-intl";
-import { Badge, Button } from "@ds/design-system";
+import type { DataTableColumn } from "@ds/design-system/blocks";
 import type { ProjectAdminListItem, TaxonomyStatus } from "@ds/schemas";
 import { AppShell } from "@/components/app-shell";
 import {
-  ADMIN_LIST_INITIAL_QUERY,
-  AdminListShell,
-  type AdminListQueryState,
-} from "@/components/admin-list-shell";
+  ADMIN_DATA_LIST_INITIAL_QUERY,
+  AdminDataList,
+  type AdminDataListQueryState,
+} from "@/components/admin-data-list";
+import { StatusChip } from "@/components/status-chip";
 
 /**
- * The project list (012-design §5.1, EARS-15) on the SHARED admin list shell —
- * search, state filter, «показывать снятые с публикации» (off by default) and
- * page controls. #1284–#1286 mount the same shell for their kinds.
+ * The project list (012-design §5.1, EARS-15) on the #1578 BLOCK TIER
+ * (017-design §9.1–§9.3, EARS-16/17) — the same composition the direction and
+ * specialty lists mount. Search and facets apply INSTANTLY, the applied set
+ * renders as removable chips with one «Сбросить всё», and the pager reports the
+ * honest page count.
+ *
+ * There is no «Действия» column: a project row has exactly one action, so the
+ * whole ROW opens the record (EARS-16) and a column of identical
+ * «Редактировать» buttons would restate the row.
  */
 export default function ProjectsListPage() {
   const t = useTranslations();
-  const [query, setQuery] = useState<AdminListQueryState>(
-    ADMIN_LIST_INITIAL_QUERY,
+  const [query, setQuery] = useState<AdminDataListQueryState>(
+    ADMIN_DATA_LIST_INITIAL_QUERY,
   );
   const { result, query: request } = useList<ProjectAdminListItem>({
     resource: "projects",
@@ -39,62 +45,72 @@ export default function ProjectsListPage() {
     retired: t("projects.statuses.retired"),
   };
 
+  const columns: DataTableColumn<ProjectAdminListItem>[] = [
+    {
+      key: "kind",
+      header: t("projects.columns.kind"),
+      width: "16%",
+      overflow: "wrap",
+      render: (row) => t(`projects.kinds.${row.kind}`),
+    },
+    {
+      key: "slug",
+      header: t("projects.columns.slug"),
+      width: "22%",
+      // A derived address is long and rarely read in full — it ellipses, and the
+      // native `title` keeps the whole value reachable (the block's rule).
+      fullValue: (row) => row.slug,
+      render: (row) => (
+        <span className="text-muted-foreground">{row.slug}</span>
+      ),
+    },
+    {
+      key: "status",
+      header: t("projects.columns.status"),
+      width: "18%",
+      overflow: "wrap",
+      render: (row) => (
+        <StatusChip status={row.status} label={statusLabels[row.status]} />
+      ),
+    },
+  ];
+
   return (
     <Authenticated key="projects-list" redirectOnFail="/login">
       <AppShell>
-        <AdminListShell<ProjectAdminListItem>
+        <AdminDataList<ProjectAdminListItem>
           title={t("projects.listTitle")}
           description={t("projects.listDescription")}
           createHref="/projects/create"
           createLabel={t("projects.createButton")}
           statusLabels={statusLabels}
-          columns={[
-            { key: "title", label: t("projects.columns.title") },
-            { key: "kind", label: t("projects.columns.kind") },
-            { key: "slug", label: t("projects.columns.slug") },
-            { key: "status", label: t("projects.columns.status") },
-            { key: "actions", label: t("projects.columns.actions") },
-          ]}
+          caption={t("projects.tableCaption")}
+          record={{
+            header: t("projects.columns.title"),
+            width: "44%",
+            title: (row) => (
+              <span data-testid={`row-${row.id}`}>{row.title}</span>
+            ),
+            // The second line is the fact the operator cannot read off the
+            // title: when the row last moved.
+            context: (row) =>
+              t("projects.rowContext", {
+                date: new Date(row.updatedAt).toLocaleDateString("ru-RU"),
+              }),
+            label: (row) => row.title,
+          }}
+          columns={columns}
           rows={(result.data ?? []) as ProjectAdminListItem[]}
+          getRowKey={(row) => row.id}
           total={result.total ?? 0}
           isLoading={request.isLoading}
           error={request.isError ? t("projects.errors.loadFailed") : null}
           query={query}
           onQueryChange={setQuery}
-          emptyLabel={t("projects.empty")}
+          rowHref={(row) => `/projects/${row.id}`}
+          emptyTitle={t("projects.empty")}
+          emptyDescription={t("projects.emptyDescription")}
           testId="projects"
-          renderRow={(row) => (
-            <tr
-              key={row.id}
-              className="border-b border-hairline"
-              data-testid={`project-row-${row.id}`}
-            >
-              <td className="px-4 py-3 font-semibold">{row.title}</td>
-              <td className="px-4 py-3 text-muted-foreground">
-                {t(`projects.kinds.${row.kind}`)}
-              </td>
-              <td className="px-4 py-3 text-muted-foreground">{row.slug}</td>
-              <td className="px-4 py-3">
-                {/* The DS Badge has one neutral tag variant (`label`) plus the
-                    on-air `live` one; a lifecycle state is not "live", so every
-                    status renders as the neutral tag and the WORD carries the
-                    meaning. */}
-                <Badge variant="label" data-testid={`status-${row.status}`}>
-                  {statusLabels[row.status]}
-                </Badge>
-              </td>
-              <td className="px-4 py-3">
-                <Button asChild variant="outline" size="sm">
-                  <Link
-                    href={`/projects/${row.id}`}
-                    data-testid={`edit-${row.id}`}
-                  >
-                    {t("projects.edit")}
-                  </Link>
-                </Button>
-              </td>
-            </tr>
-          )}
         />
       </AppShell>
     </Authenticated>

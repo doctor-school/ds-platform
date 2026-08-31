@@ -23,13 +23,15 @@ import {
  * over this app's server query state. It owns no table, no toolbar and no chip of
  * its own: everything visible here is a `@ds/design-system` block (#1578).
  *
- * It stands BESIDE `admin-list-shell.tsx` rather than replacing it. The old shell
- * is submit-driven («Применить») and hand-assembles its table; converting the five
- * feature-012 sections that mount it is EARS-20's separate deliverable under #1578.
- * Two shells is the temporary state that split buys — recorded in the PR body, not
- * a silent fork.
+ * It is the ONLY admin list composition (#1297, EARS-23). The submit-driven
+ * `admin-list-shell.tsx` that preceded it — «Применить», a hand-assembled table,
+ * a per-row «Редактировать» button — is deleted, and every list route (projects,
+ * experts, partners, directions, specialties and the two relationship books)
+ * mounts this one. `lib/server-combobox-adoption.test.ts` guards that at the
+ * source level, because "there is only one" is exactly the claim that rots.
  *
- * Differences from the old shell that are spec, not preference:
+ * What this composition does that the deleted shell did not, by spec and not by
+ * preference:
  *   • filters apply INSTANTLY — the text field debounces inside `FilterBar`
  *     (≈400ms) and every facet fires on change; there is no submit control;
  *   • the applied set renders as removable chips with «Сбросить всё»;

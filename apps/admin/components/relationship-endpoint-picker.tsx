@@ -6,11 +6,6 @@ import { useRelationshipCombobox } from "@/lib/use-relationship-combobox";
 
 type EndpointKind = "event" | "project";
 
-interface EndpointListItem {
-  id: string;
-  title: string;
-}
-
 interface PickerCopy {
   search: string;
   searchPlaceholder: string;
@@ -45,7 +40,7 @@ export function RelationshipEndpointPicker({
   copy: PickerCopy;
 }) {
   const t = useTranslations();
-  const picker = useRelationshipCombobox<EndpointListItem>({
+  const picker = useRelationshipCombobox({
     resource: RESOURCE[endpoint],
     excludedIds,
     value,

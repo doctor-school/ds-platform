@@ -7,7 +7,6 @@ import { Alert, Badge, Button, Switch } from "@ds/design-system";
 import { Combobox } from "@ds/design-system/blocks";
 import type {
   CreateProjectPartnerRequest,
-  PartnerAdminListItem,
   ProjectPartnerAdminDetail,
   ProjectPartnerAdminList,
   UpdateProjectPartnerRequest,
@@ -652,7 +651,7 @@ function LinkForm({
   const [isPrimary, setIsPrimary] = useState(false);
   const { mutate, mutation } = useCustomMutation();
 
-  const picker = useRelationshipCombobox<PartnerAdminListItem>({
+  const picker = useRelationshipCombobox({
     resource: "partners",
     excludedIds: linkedPartnerIds,
     value: partnerId,

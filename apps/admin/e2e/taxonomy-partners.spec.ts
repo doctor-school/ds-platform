@@ -3,7 +3,7 @@ import { bootstrapAdminSession } from "./support/admin-session";
 import { totpCode } from "./support/totp";
 
 /**
- * 012 EARS-4 (#1286), browser half — the REAL Refine → NestJS → Postgres path.
+ * 012 EARS-4 (#1286) + EARS-23 (#1297), browser half — the REAL Refine → NestJS → Postgres path.
  *
  * The API e2e suites prove the contract against the API directly. This proves the
  * operator-facing arc on the running admin: sign in, create a partner, copy its
@@ -128,16 +128,47 @@ test.describe("012 EARS-4 — partner authoring in the live admin", () => {
     // initials fallback anywhere on the platform, so nothing stands in for it.
     await expect(page.getByAltText("Логотип партнёра")).toHaveCount(0);
 
-    // ── The shared list shell finds it by search ───────────────────────────
+    // ── The block-tier list finds it by search, with no «Применить» ────────
     await page.getByTestId("back-to-list").click();
     await page.waitForURL(/\/partners$/, { timeout: 20_000 });
-    await page.getByTestId("partners-search").fill(title);
-    await page.getByTestId("partners-apply").click();
+    // EARS-23: typing is the whole gesture — no Enter, no Apply control.
+    await page.getByRole("searchbox", { name: "Поиск" }).fill(title);
+    await expect(
+      page.getByRole("button", { name: "Применить", exact: true }),
+    ).toHaveCount(0);
     await expect(page.getByTestId("partners-table")).toContainText(title);
     // The list column carries the address the operator typed.
     await expect(page.getByTestId("partners-table")).toContainText(
       "https://example.ru",
     );
+    // EARS-23: the applied set is a removable chip; one control clears all.
+    await expect(page.getByText("Выбрано:", { exact: false })).toBeVisible();
+
+    // ── EARS-23: the state facet applies on change, with no submit ─────────
+    await page.getByTestId("partners-status").selectOption("published");
+    // A draft partner leaves the result set the moment the facet moves.
+    await expect(page.getByTestId("partners-table")).not.toContainText(title);
+    // Scoped to the toolbar: when the facet empties the result set the empty
+    // state offers the SAME reset action as its own way out, so an unscoped
+    // role query legitimately matches two controls.
+    await page
+      .getByTestId("partners-filters")
+      .getByRole("button", { name: "Сбросить всё" })
+      .click();
+    await expect(page.getByText("Выбрано:", { exact: false })).toHaveCount(0);
+    await expect(page.getByTestId("partners-status")).toHaveValue("");
+
+    // ── EARS-16: single-action list ⇒ the ROW is the action ────────────────
+    await expect(
+      page.getByRole("columnheader", { name: "Действия" }),
+    ).toHaveCount(0);
+    await expect(page.getByTestId("partners-total")).toBeVisible();
+    // EARS-23: no dead-end pager — the DS `Pagination` block omits «Назад» on
+    // the first page and the whole pager on a single page, rather than
+    // rendering a focusable disabled control.
+    await expect(
+      page.getByRole("button", { name: "Назад", exact: true }),
+    ).toHaveCount(0);
 
     // ── Edit the same row (If-Match round-trip) ────────────────────────────
     await page.goto(detailUrl);

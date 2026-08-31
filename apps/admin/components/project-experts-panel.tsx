@@ -7,7 +7,6 @@ import { Alert, Badge, Button, Switch } from "@ds/design-system";
 import { Combobox } from "@ds/design-system/blocks";
 import type {
   CreateProjectExpertRequest,
-  ExpertAdminListItem,
   ProjectExpertAdminDetail,
   ProjectExpertAdminList,
   ProjectExpertRole,
@@ -667,7 +666,7 @@ function LinkForm({
   const [role, setRole] = useState<ProjectExpertRole>("member");
   const { mutate, mutation } = useCustomMutation();
 
-  const picker = useRelationshipCombobox<ExpertAdminListItem>({
+  const picker = useRelationshipCombobox({
     resource: "experts",
     excludedIds: linkedExpertIds,
     value: expertId,

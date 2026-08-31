@@ -250,6 +250,57 @@ test.describe("021 EARS-1: the vertical axis", () => {
       `vertical centring: ${above}px above vs ${below}px below`,
     ).toBeLessThanOrEqual(48);
   });
+
+  test("021 EARS-1.9: the brand panel is the canvas's three zones — mark pinned top-left, value prop centred, closing line at the foot", async ({
+    page,
+  }) => {
+    await page.goto("/register");
+
+    const panel = page.getByTestId("auth-brand-panel");
+    const mark = page.getByTestId("auth-panel-wordmark");
+    const eyebrow = panel.getByText("Врачи учат врачей");
+    const closing = panel.getByText(
+      "Бесплатно для врача · без бюрократии · © Doctor.School 2026",
+    );
+
+    await expect(closing).toBeVisible();
+
+    const panelBox = (await panel.boundingBox())!;
+    const markBox = (await mark.boundingBox())!;
+    const eyebrowBox = (await eyebrow.boundingBox())!;
+    const closingBox = (await closing.boundingBox())!;
+
+    // Zone 1 — the mark sits at the TOP of the panel, not mid-panel. The canvas
+    // pins it with `align-self:flex-start`; a centred mark would leave a void
+    // above it, which at this height is hundreds of px, so a generous bound
+    // still separates the two layouts decisively.
+    expect(
+      markBox.y - panelBox.y,
+      `mark top offset inside the panel: ${markBox.y - panelBox.y}px`,
+    ).toBeLessThanOrEqual(80);
+
+    // …and FLUSH LEFT, in line with the copy beneath it. Without `self-start`
+    // the stretched image box centres the SVG and this alignment breaks.
+    expect(
+      Math.abs(markBox.x - eyebrowBox.x),
+      `mark left ${markBox.x}px vs eyebrow left ${eyebrowBox.x}px`,
+    ).toBeLessThanOrEqual(2);
+
+    // Zone 3 — the closing line is the panel's own last zone, at its foot. It is
+    // panel content, not site chrome: 1.4 separately pins that no `footer`
+    // element exists anywhere in the document, and 1.7 that it leaves with the
+    // panel at 390.
+    const belowClosing = panelBox.y + panelBox.height - (closingBox.y + closingBox.height);
+    expect(
+      belowClosing,
+      `space under the closing line: ${belowClosing}px`,
+    ).toBeLessThanOrEqual(80);
+
+    // Zone 2 — the value prop occupies the space between them, so the mark and
+    // the closing line are genuinely separated rather than stacked.
+    expect(closingBox.y).toBeGreaterThan(eyebrowBox.y);
+    expect(eyebrowBox.y).toBeGreaterThan(markBox.y + markBox.height);
+  });
 });
 
 test.describe("021 EARS-1: the 390 collapse", () => {

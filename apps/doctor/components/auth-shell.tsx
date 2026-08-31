@@ -6,9 +6,13 @@ import { AuthLayout } from "@ds/design-system/blocks";
 /**
  * `<AuthShell>` — the doctor-storefront auth frame: the CHROMELESS page the
  * `design-source/auth.dc.html` `#d-register` artboard draws. The canvas composes
- * the auth screens as a full-viewport split — brand panel beside a form column
- * that carries the wordmark at its top and the card centred on the vertical axis
- * — and it carries NO site header, navigation or footer. That absence is the
+ * the auth screens as a full-viewport split — a brand panel (mark pinned top-left,
+ * value prop centred in the remaining space, the panel's own footer line) beside a
+ * form column holding the card centred on the vertical axis — and it carries NO site
+ * header, navigation or footer. Exactly ONE wordmark shows per viewport (#237/#275):
+ * the panel mark above the `layout:` breakpoint, the form-column lockup below it,
+ * where the panel is not rendered at all — the canvas likewise draws its brand panel
+ * on the desktop artboard only. The chromelessness is the
  * design decision, not an omission: the door is a single-CTA surface, and the
  * storefront's own nav cluster would lead the doctor away from the form.
  *
@@ -59,35 +63,53 @@ export function AuthShell({ children }: { children: ReactNode }) {
         />
       }
       aside={
-        <div
-          data-testid="auth-brand-panel"
-          className="flex flex-1 flex-col justify-center"
-        >
-          {/* Decorative brand mark — the headline carries the accessible name,
-              so the panel logo is presentational (empty alt). */}
+        /* The canvas panel (`auth.dc.html`, brand panel) is a flex column of THREE
+           zones — mark, `flex:1` value-prop, footer — and `apps/portal` mirrors the
+           same three into the block's `justify-between` aside. This wrapper is that
+           column (it also carries the panel testid); it takes `flex-1` so it fills
+           the aside and distributes the zones itself. */
+        <div data-testid="auth-brand-panel" className="flex flex-1 flex-col">
+          {/* Zone 1 — decorative brand mark, pinned to the TOP of the panel and flush
+              LEFT exactly as the canvas pins it (`align-self:flex-start`): without
+              `self-start` the aside's default `align-items: stretch` widens the image
+              box to the column and the SVG paints centred, out of line with the
+              left-flush copy beneath it. The headline carries the accessible name, so
+              the mark is presentational (empty alt). */}
           <Image
             src="/brand/logo-white.svg"
             alt=""
             width={500}
             height={164}
             unoptimized
-            className="mb-10 h-12 w-auto"
+            className="h-12 w-auto self-start"
             data-testid="auth-panel-wordmark"
           />
-          <p className="mb-5 text-eyebrow font-extrabold uppercase tracking-micro text-primary-surface-muted">
-            Врачи учат врачей
-          </p>
-          <p className="max-w-lg text-4xl font-extrabold leading-tight tracking-tight text-balance">
-            Учитесь у практикующих врачей
-          </p>
-          <p className="mt-6 max-w-md text-base font-medium leading-relaxed text-primary-surface-muted">
-            {/*
-              The canvas reads «… от практикующих врачей 38 школ.» The count has
-              no source in the read model, and the 017 precedent
-              (`storefront-hero.tsx` / `scale-counters.tsx`) omits a counter with
-              no source rather than hardcoding one. Dropped, not zeroed.
-            */}
-            Бесплатные эфиры, записи и сертификаты НМО — от практикующих врачей.
+          {/* Zone 2 — value prop, growing into the space between mark and footer and
+              centring itself there, so the panel reads as the canvas's deliberate
+              three-zone split rather than a block with a void above it. */}
+          <div className="flex flex-1 flex-col justify-center gap-5">
+            <p className="text-eyebrow font-extrabold uppercase tracking-micro text-primary-surface-muted">
+              Врачи учат врачей
+            </p>
+            <p className="max-w-lg text-4xl font-extrabold leading-tight tracking-tight text-balance">
+              Учитесь у практикующих врачей
+            </p>
+            <p className="max-w-md text-base font-medium leading-relaxed text-primary-surface-muted">
+              {/*
+                The canvas reads «… от практикующих врачей 38 школ.» The count has
+                no source in the read model, and the 017 precedent
+                (`storefront-hero.tsx` / `scale-counters.tsx`) omits a counter with
+                no source rather than hardcoding one. Dropped, not zeroed.
+              */}
+              Бесплатные эфиры, записи и сертификаты НМО — от практикующих врачей.
+            </p>
+          </div>
+          {/* Zone 3 — panel footer, verbatim from the canvas. It is the panel's own
+              closing line, not site chrome: the route stays chromeless (no storefront
+              header/footer/nav), and this line lives inside the brand panel, which the
+              block renders only above `layout:`. */}
+          <p className="text-sm font-semibold text-primary-surface-muted">
+            Бесплатно для врача · без бюрократии · © Doctor.School 2026
           </p>
         </div>
       }

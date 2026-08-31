@@ -23,6 +23,12 @@ import { interactiveBase } from "../primitives/interactive-base";
  *   • never a focusable disabled-looking control that does nothing.
  * All copy is app-supplied (RU lives in the app), so the block stays i18n-free.
  *
+ * Two modes, one block (#1641, ADR-0013 A1 — a host never forks paging UI):
+ * `mode="pages"` (default) is the numbered shape above, for a surface that knows its
+ * total; `mode="cursor"` is previous / current / next for a cursor-paged feed, whose
+ * total is unknowable — there, numbers would be fabricated and all but `page ± 1`
+ * would be dead clicks.
+ *
  * Narrow viewports are the block's problem too: below `sm` it collapses to the GOV.UK
  * mobile shape — first / current / last with ellipses — and the list may wrap. The
  * collapse is CSS on one rendered sequence, never a second nav, so `aria-current` stays
@@ -30,12 +36,10 @@ import { interactiveBase } from "../primitives/interactive-base";
  * next remain reachable at every width.
  */
 
-export interface PaginationProps
+export interface PaginationBaseProps
   extends Omit<React.HTMLAttributes<HTMLElement>, "onChange"> {
   /** Current 1-based page. */
   page: number;
-  /** Total number of pages. `<= 1` renders nothing at all. */
-  pageCount: number;
   /** Page change request — the surface re-queries. */
   onPageChange: (page: number) => void;
   /** Accessible name for the `<nav>` landmark (app-supplied, e.g. «Страницы»). */
@@ -49,9 +53,39 @@ export interface PaginationProps
   readout?: React.ReactNode;
   /** Controls are inert while the next page is in flight. */
   isLoading?: boolean;
+}
+
+/**
+ * Numbered mode (the default): the surface knows its total, so every number is a
+ * page that exists.
+ */
+export interface PaginationPagesProps extends PaginationBaseProps {
+  mode?: "pages";
+  /** Total number of pages. `<= 1` renders nothing at all. */
+  pageCount: number;
   /** Pages rendered either side of the current one (shrink on narrow screens). */
   siblingCount?: number;
+  hasPrevious?: never;
+  hasNext?: never;
 }
+
+/**
+ * Cursor mode (#1641): a cursor-paged feed knows only whether a page exists before
+ * and after the current one, so it gets previous / current / next and nothing else.
+ * Rendering numbers there would mean inventing a `pageCount` and shipping controls
+ * that cannot change state (012 EARS-23).
+ */
+export interface PaginationCursorProps extends PaginationBaseProps {
+  mode: "cursor";
+  /** A page exists before the current one AND the surface can reach it. */
+  hasPrevious: boolean;
+  /** A page exists after the current one. */
+  hasNext: boolean;
+  pageCount?: never;
+  siblingCount?: never;
+}
+
+export type PaginationProps = PaginationPagesProps | PaginationCursorProps;
 
 /** The visible page sequence: first, last, current ± siblings, `null` = ellipsis. */
 export function buildPageItems(
@@ -126,24 +160,42 @@ const stepClasses = cn(
   "active:translate-x-0.5 active:translate-y-0.5 active:border-primary-action",
 );
 
-export function Pagination({
-  page,
-  pageCount,
-  onPageChange,
-  navLabel,
-  previousLabel,
-  nextLabel,
-  pageLabel,
-  readout,
-  isLoading = false,
-  siblingCount = 1,
-  className,
-  ...rest
-}: PaginationProps) {
-  // GOV.UK: "do not show pagination if there's only one page of content".
-  if (pageCount <= 1) return null;
+export function Pagination(props: PaginationProps) {
+  const {
+    page,
+    onPageChange,
+    navLabel,
+    previousLabel,
+    nextLabel,
+    pageLabel,
+    readout,
+    isLoading = false,
+    className,
+    mode = "pages",
+    pageCount = 0,
+    siblingCount = 1,
+    hasPrevious = false,
+    hasNext = false,
+    ...rest
+  } = props as PaginationBaseProps & {
+    mode?: "pages" | "cursor";
+    pageCount?: number;
+    siblingCount?: number;
+    hasPrevious?: boolean;
+    hasNext?: boolean;
+  };
 
-  const items = buildResponsivePageItems(page, pageCount, siblingCount);
+  const isCursor = mode === "cursor";
+  const showPrevious = isCursor ? hasPrevious : page > 1;
+  const showNext = isCursor ? hasNext : page < pageCount;
+
+  // GOV.UK: "do not show pagination if there's only one page of content" — in
+  // cursor mode that is exactly "there is no page before or after this one".
+  if (isCursor ? !showPrevious && !showNext : pageCount <= 1) return null;
+
+  const items = isCursor
+    ? []
+    : buildResponsivePageItems(page, pageCount, siblingCount);
 
   return (
     <div
@@ -163,7 +215,7 @@ export function Pagination({
             list re-flows onto a second line instead of pushing the page sideways. */}
         <ul className="flex list-none flex-wrap items-center justify-center gap-1 sm:justify-end">
           {/* No previous control at all on the first page — not a dead one. */}
-          {page > 1 ? (
+          {showPrevious ? (
             <li>
               <button
                 type="button"
@@ -173,6 +225,20 @@ export function Pagination({
               >
                 {previousLabel}
               </button>
+            </li>
+          ) : null}
+          {/* Cursor mode keeps orientation with a non-interactive current-page
+              marker — the `ViewSwitcher` precedent: the active side is a label,
+              never a button that does nothing. */}
+          {isCursor ? (
+            <li>
+              <span
+                aria-current="page"
+                className="inline-flex min-w-11 items-center justify-center border-2 border-primary-action bg-primary-surface px-3 py-2 text-caption font-extrabold text-primary-surface-foreground"
+              >
+                <span className="sr-only">{pageLabel(page)}</span>
+                <span aria-hidden="true">{page}</span>
+              </span>
             </li>
           ) : null}
           {items.map((item, index) =>
@@ -214,7 +280,7 @@ export function Pagination({
             ),
           )}
           {/* …and no next control on the last page. */}
-          {page < pageCount ? (
+          {showNext ? (
             <li>
               <button
                 type="button"

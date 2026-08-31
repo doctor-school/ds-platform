@@ -30,19 +30,34 @@ export interface EventListLabels {
   page: (page: number) => string;
 }
 
-export interface EventListProps {
+export interface EventListBaseProps {
   items: readonly EventListItem[];
   selectedTab: EventListTab;
   onTabChange: (tab: EventListTab) => void;
   counts: Readonly<Record<EventListTab, number>>;
   labels: EventListLabels;
   page: number;
-  pageCount: number;
   cursor?: string | null;
   onPageChange: (page: number, cursor?: string | null) => void;
   /** Host-owned controls that belong between the canvas tabs and the feed. */
   toolbar?: React.ReactNode;
 }
+
+/**
+ * Paging shape, passed straight through to the shared `<Pagination>` block:
+ * an offset host knows its `pageCount`, a cursor host knows only whether a page
+ * exists on either side of the current one (#1641).
+ */
+export type EventListProps = EventListBaseProps &
+  (
+    | { paginationMode?: "pages"; pageCount: number; hasPrevious?: never; hasNext?: never }
+    | {
+        paginationMode: "cursor";
+        hasPrevious: boolean;
+        hasNext: boolean;
+        pageCount?: never;
+      }
+  );
 
 /** Shared, controlled and fetch-free event feed for every DS frontend. */
 export function EventList({
@@ -56,6 +71,9 @@ export function EventList({
   cursor,
   onPageChange,
   toolbar,
+  paginationMode = "pages",
+  hasPrevious = false,
+  hasNext = false,
 }: EventListProps) {
   const groups = React.useMemo(() => {
     const result: Array<{
@@ -137,16 +155,31 @@ export function EventList({
             ))}
           </div>
         )}
-        <Pagination
-          className="mt-8"
-          page={page}
-          pageCount={pageCount}
-          onPageChange={(nextPage) => onPageChange(nextPage, cursor)}
-          navLabel={labels.pagination}
-          previousLabel={labels.previous}
-          nextLabel={labels.next}
-          pageLabel={labels.page}
-        />
+        {paginationMode === "cursor" ? (
+          <Pagination
+            className="mt-8"
+            mode="cursor"
+            page={page}
+            hasPrevious={hasPrevious}
+            hasNext={hasNext}
+            onPageChange={(nextPage) => onPageChange(nextPage, cursor)}
+            navLabel={labels.pagination}
+            previousLabel={labels.previous}
+            nextLabel={labels.next}
+            pageLabel={labels.page}
+          />
+        ) : (
+          <Pagination
+            className="mt-8"
+            page={page}
+            pageCount={pageCount ?? 1}
+            onPageChange={(nextPage) => onPageChange(nextPage, cursor)}
+            navLabel={labels.pagination}
+            previousLabel={labels.previous}
+            nextLabel={labels.next}
+            pageLabel={labels.page}
+          />
+        )}
       </TabsContent>
     </Tabs>
   );

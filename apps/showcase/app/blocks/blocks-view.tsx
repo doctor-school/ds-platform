@@ -1460,6 +1460,20 @@ const PAGINATION_PROPS: PropRow[] = [
     required: false,
     description: "Pages rendered either side of the current one.",
   },
+  {
+    name: "mode",
+    type: '"pages" | "cursor"',
+    required: false,
+    description:
+      'Default "pages" (numbered, needs pageCount). "cursor" is previous / current / next for a cursor-paged feed whose total is unknowable.',
+  },
+  {
+    name: "hasPrevious / hasNext",
+    type: "boolean",
+    required: false,
+    description:
+      'Cursor mode only, and required there: whether a page exists on each side. Both false renders nothing.',
+  },
 ];
 
 function PaginationSection() {
@@ -1467,7 +1481,7 @@ function PaginationSection() {
   return (
     <BlockSection
       title="Pagination"
-      exportsLine="Pagination · buildPageItems — props: page · pageCount · onPageChange · navLabel · previousLabel/nextLabel · pageLabel · readout · isLoading · siblingCount"
+      exportsLine="Pagination · buildPageItems — props: page · pageCount · onPageChange · navLabel · previousLabel/nextLabel · pageLabel · readout · isLoading · siblingCount · mode · hasPrevious/hasNext"
     >
       <p className="text-sm text-muted-foreground">
         Numbered pages (owner pick П1): an operator who knows a record sits
@@ -1537,6 +1551,24 @@ function PaginationSection() {
                 nextLabel="Вперёд"
                 pageLabel={(n) => `Страница ${n}`}
                 isLoading
+              />
+            </Canvas>
+          </StateCase>
+          <StateCase
+            label='mode="cursor"'
+            note="cursor feed — previous / current / next, no fabricated numbers"
+          >
+            <Canvas>
+              <Pagination
+                mode="cursor"
+                page={4}
+                hasPrevious
+                hasNext
+                onPageChange={() => {}}
+                navLabel="Страницы"
+                previousLabel="Назад"
+                nextLabel="Вперёд"
+                pageLabel={(n) => `Страница ${n}`}
               />
             </Canvas>
           </StateCase>

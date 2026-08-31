@@ -110,4 +110,43 @@ describe("<EventList>", () => {
       screen.getByRole("link", { name: "Смотреть запись ↗" }),
     ).toHaveAttribute("href", item.href);
   });
+
+  it("#1641: a cursor-paged host gets prev/next only — never a fabricated page count", async () => {
+    const onPageChange = vi.fn();
+
+    render(
+      <EventList
+        items={[item]}
+        selectedTab="past"
+        onTabChange={vi.fn()}
+        counts={{ upcoming: 3, past: 2 }}
+        labels={{
+          upcoming: "Расписание",
+          past: "Архив записей",
+          emptyTitle: "Событий нет",
+          pagination: "Страницы",
+          previous: "Назад",
+          next: "Вперёд",
+          page: (page) => `Страница ${page}`,
+        }}
+        paginationMode="cursor"
+        page={3}
+        hasPrevious
+        hasNext
+        cursor="opaque-current"
+        onPageChange={onPageChange}
+      />,
+    );
+
+    expect(
+      screen
+        .getAllByRole("button")
+        .map((button) => button.textContent)
+        .filter((text) => text === "Назад" || text === "Вперёд"),
+    ).toEqual(["Назад", "Вперёд"]);
+    expect(screen.queryByRole("button", { name: "Страница 1" })).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Вперёд" }));
+    expect(onPageChange).toHaveBeenCalledWith(4, "opaque-current");
+  });
 });

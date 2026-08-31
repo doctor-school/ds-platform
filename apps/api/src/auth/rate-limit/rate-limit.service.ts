@@ -25,13 +25,34 @@ interface Dimension {
 }
 
 /**
+ * Key a SOURCE-ADDRESS dimension (per-IP, per-ASN) inside its bucket (#1646).
+ *
+ * No scope => the bare address, byte-for-byte the key every 003 auth call site
+ * has always used, so the shared auth budget is untouched. A scope => the
+ * address namespaced under the tag, joined by a separator that occurs in
+ * neither an IP nor an `x-asn` value, so a scoped key can never collide with an
+ * unscoped one, nor one scope with another, whatever tag a future call site picks.
+ */
+const SCOPE_SEPARATOR = "\u0000";
+
+function scoped(scope: string | undefined, address: string): string {
+  return scope === undefined ? address : `${scope}${SCOPE_SEPARATOR}${address}`;
+}
+
+/**
  * EARS-13 auth rate limiter (ADR-0001 §7).
  *
  * Owns three fixed-window counters — per-user (the submitted identifier,
  * 15 min), per-IP (15 min), per-ASN (hourly). {@link tryConsume} answers one
  * question per attempt: may this request proceed? It is allowed only when
  * **every applicable window has room**; a refused request consumes **nothing**
- * (so a single over-limit dimension cannot spuriously burn the others). This is
+ * (so a single over-limit dimension cannot spuriously burn the others).
+ *
+ * The source-address counters are keyed inside the caller's optional
+ * {@link RateLimitContext.scope} bucket (#1646): unscoped — every 003 auth
+ * endpoint — they share one budget per address exactly as before; a scoped
+ * consumer gets a disjoint window, so a non-auth route can neither exhaust the
+ * ceiling register / login / reset consume nor be exhausted by them. This is
  * the request-rate sibling of {@link SmsBudgetService}; the same fixed-window
  * shape, gating every decorated auth endpoint.
  *
@@ -65,7 +86,7 @@ export class RateLimitService {
     const dims: Dimension[] = [
       {
         map: this.byIp,
-        key: ctx.ip,
+        key: scoped(ctx.scope, ctx.ip),
         windowMs: FIFTEEN_MIN_MS,
         limit: this.thresholds.perIpPer15Min,
       },
@@ -81,7 +102,7 @@ export class RateLimitService {
     if (ctx.asn !== undefined) {
       dims.push({
         map: this.byAsn,
-        key: ctx.asn,
+        key: scoped(ctx.scope, ctx.asn),
         windowMs: HOUR_MS,
         limit: this.thresholds.perAsnPerHour,
       });

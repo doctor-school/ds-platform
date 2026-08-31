@@ -43,11 +43,22 @@ export type Clock = () => number;
  * (Fastify supplies it); `identifier` (the submitted email/phone) and `asn` (the
  * edge-supplied `x-asn`) are optional — when absent their window is skipped, so
  * the limiter degrades rather than refusing blindly (mirrors the SMS budget).
+ *
+ * `scope` (#1646) partitions the SOURCE-ADDRESS windows (per-IP, per-ASN) into a
+ * named bucket. Absent — the shape every 003 auth endpoint uses — the source
+ * address alone is the key, so the whole auth surface keeps sharing one budget,
+ * which is the EARS-13 intent: an attacker spraying identifiers across register,
+ * login and reset from one origin must meet a single ceiling. A non-auth
+ * consumer supplies its own tag instead, so its traffic can never exhaust the
+ * key the auth endpoints consume, nor be exhausted by them. The per-user window
+ * is never scoped: an identifier's budget is deliberately shared across the
+ * endpoints that submit it (011 design §6).
  */
 export interface RateLimitContext {
   ip: string;
   identifier?: string | undefined;
   asn?: string | undefined;
+  scope?: string | undefined;
 }
 
 /** DI token for {@link RateLimitThresholds} (env-overridable in the module). */
@@ -58,6 +69,21 @@ export const RATE_LIMIT_CLOCK = Symbol("RATE_LIMIT_CLOCK");
 
 /** Nest metadata key the `@RateLimited` decorator writes and the guard reads. */
 export const RATE_LIMITED_KEY = "ds:rate-limited";
+
+/**
+ * What `@RateLimited` writes into {@link RATE_LIMITED_KEY}: `true` for the
+ * shared auth budget (every 003 call site), or a scope tag for a consumer that
+ * must own its bucket (#1646). The guard only ever tests truthiness to decide
+ * whether the handler is marked, so the two forms are interchangeable there.
+ */
+export type RateLimitedMarker = true | string;
+
+/**
+ * Scope tag for the storefront's public specialty-choice POST (#1646, audit D2
+ * of #1639) — the first non-auth consumer of the EARS-13 limiter. Named as a
+ * constant so the route and its tests key on one literal.
+ */
+export const SPECIALTY_CHOICE_RATE_LIMIT_SCOPE = "storefront:specialty-choice";
 
 /**
  * Env var name per ceiling for the ops / load-test-window overrides (#1076,

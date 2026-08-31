@@ -150,7 +150,9 @@ describe("RateLimitService (EARS-13)", () => {
         () => now,
       );
       expect(perUser.tryConsume({ ip, identifier: "User@DS.test" })).toBe(true);
-      expect(perUser.tryConsume({ ip, identifier: "user@ds.test" })).toBe(false);
+      expect(perUser.tryConsume({ ip, identifier: "user@ds.test" })).toBe(
+        false,
+      );
       perUser.reset({ ip, identifier: "USER@ds.TEST" });
       expect(perUser.tryConsume({ ip, identifier: "user@ds.test" })).toBe(true);
     });
@@ -194,6 +196,77 @@ describe("RateLimitService (EARS-13)", () => {
       expect(ipOnly.tryConsume({ ip })).toBe(true);
       ipOnly.reset({ ip }); // no identifier → nothing to forgive
       expect(ipOnly.tryConsume({ ip })).toBe(false); // per-IP still spent
+    });
+  });
+
+  // #1646: a non-auth consumer of the limiter must own its bucket. The per-IP
+  // (and per-ASN) counters are keyed inside the caller's scope tag; the
+  // argument-less 003 form passes none and keeps the shared auth budget.
+  describe("scoped source-address buckets (#1646)", () => {
+    const SCOPE = "storefront:specialty-choice";
+
+    it("EARS-13: a scoped caller exhausting its per-IP window leaves the shared auth window untouched", () => {
+      const svc = new RateLimitService(
+        { ...thresholds, perIpPer15Min: 2 },
+        () => now,
+      );
+      expect(svc.tryConsume({ ip, scope: SCOPE })).toBe(true);
+      expect(svc.tryConsume({ ip, scope: SCOPE })).toBe(true);
+      expect(svc.tryConsume({ ip, scope: SCOPE })).toBe(false); // scoped bucket full
+      // Same source address, no scope — the auth surface's own window, untouched.
+      expect(svc.tryConsume({ ip, identifier })).toBe(true);
+      expect(svc.tryConsume({ ip, identifier })).toBe(true);
+    });
+
+    it("EARS-13: an exhausted auth window does not refuse the scoped caller", () => {
+      const svc = new RateLimitService(
+        { ...thresholds, perIpPer15Min: 2 },
+        () => now,
+      );
+      expect(svc.tryConsume({ ip, identifier: "a@ds.test" })).toBe(true);
+      expect(svc.tryConsume({ ip, identifier: "b@ds.test" })).toBe(true);
+      expect(svc.tryConsume({ ip, identifier: "c@ds.test" })).toBe(false); // auth bucket full
+      expect(svc.tryConsume({ ip, scope: SCOPE })).toBe(true);
+    });
+
+    it("EARS-13: two scopes from one address are disjoint budgets", () => {
+      const svc = new RateLimitService(
+        { ...thresholds, perIpPer15Min: 1 },
+        () => now,
+      );
+      expect(svc.tryConsume({ ip, scope: SCOPE })).toBe(true);
+      expect(svc.tryConsume({ ip, scope: SCOPE })).toBe(false);
+      expect(svc.tryConsume({ ip, scope: "other:route" })).toBe(true);
+    });
+
+    it("EARS-13: the per-ASN window is scoped the same way", () => {
+      const svc = new RateLimitService(
+        { ...thresholds, perIpPer15Min: 1_000, perAsnPerHour: 1 },
+        () => now,
+      );
+      expect(svc.tryConsume({ ip: "1.1.1.1", asn, scope: SCOPE })).toBe(true);
+      expect(svc.tryConsume({ ip: "1.1.1.2", asn, scope: SCOPE })).toBe(false);
+      expect(svc.tryConsume({ ip: "1.1.1.3", asn })).toBe(true); // auth's ASN window
+    });
+
+    it("EARS-13: a scoped window rolls on its own 15-min boundary", () => {
+      const svc = new RateLimitService(
+        { ...thresholds, perIpPer15Min: 1 },
+        () => now,
+      );
+      expect(svc.tryConsume({ ip, scope: SCOPE })).toBe(true);
+      expect(svc.tryConsume({ ip, scope: SCOPE })).toBe(false);
+      now += 15 * 60 * 1000;
+      expect(svc.tryConsume({ ip, scope: SCOPE })).toBe(true);
+    });
+
+    it("EARS-13: an undefined scope keys exactly as before — the 003 call sites are byte-for-byte unchanged", () => {
+      const svc = new RateLimitService(
+        { ...thresholds, perIpPer15Min: 1 },
+        () => now,
+      );
+      expect(svc.tryConsume({ ip, scope: undefined })).toBe(true);
+      expect(svc.tryConsume({ ip })).toBe(false); // same unscoped key
     });
   });
 });

@@ -7,7 +7,10 @@ import {
 } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import { RateLimitService } from "./rate-limit.service.js";
-import { RATE_LIMITED_KEY } from "./rate-limit.types.js";
+import {
+  RATE_LIMITED_KEY,
+  type RateLimitedMarker,
+} from "./rate-limit.types.js";
 
 /** One generic throttled message — names no threshold, no account (EARS-13/16). */
 const GENERIC_THROTTLED = "too many requests, please try again later";
@@ -32,6 +35,11 @@ interface GuardRequest {
  * per-IP key, and the per-ASN key, then asks {@link RateLimitService}. A refusal
  * is a generic `429` that reveals neither the breached dimension nor whether the
  * account exists (EARS-16).
+ *
+ * When the marker carries a scope tag (`@RateLimited("<tag>")`, #1646) the
+ * source-address windows are partitioned under it, so that handler's traffic
+ * cannot exhaust the auth surface's shared budget. The argument-less form is
+ * unchanged: no tag, no partition.
  */
 @Injectable()
 export class RateLimitGuard implements CanActivate {
@@ -41,10 +49,9 @@ export class RateLimitGuard implements CanActivate {
   ) {}
 
   canActivate(context: ExecutionContext): boolean {
-    const marked = this.reflector.getAllAndOverride<boolean | undefined>(
-      RATE_LIMITED_KEY,
-      [context.getHandler(), context.getClass()],
-    );
+    const marked = this.reflector.getAllAndOverride<
+      RateLimitedMarker | undefined
+    >(RATE_LIMITED_KEY, [context.getHandler(), context.getClass()]);
     if (!marked) return true;
 
     const request = context.switchToHttp().getRequest<GuardRequest>();
@@ -52,6 +59,10 @@ export class RateLimitGuard implements CanActivate {
       ip: request.ip ?? "",
       identifier: this.extractIdentifier(request),
       asn: this.extractAsn(request),
+      // `true` (the argument-less 003 form) leaves the source-address windows
+      // keyed on the address alone — the shared auth budget, unchanged. A string
+      // marker is the handler's own bucket tag (#1646).
+      scope: typeof marked === "string" ? marked : undefined,
     });
     if (!allowed) {
       throw new HttpException(GENERIC_THROTTLED, HttpStatus.TOO_MANY_REQUESTS);

@@ -193,6 +193,10 @@ The `loggedIn` × `specialtyChosen` axes multiply this: 4 × 2 × 2 renders per 
 
 `SpecialtyBook` exposes `total` — the actual number of book entries served by the read — and every surface that shows a specialty count (the expand control «Показать весь список — N», the hero scale counter) binds to it; no surface carries a count literal.
 
+The guest half of «choose / change specialty» is the only unauthenticated WRITE on this surface, and each accepted call mints an `idempotency_keys` row keyed by a caller-chosen header, so it carries the EARS-13 rate limiter (`@RateLimited`, 003 F6) — with its OWN bucket, not the auth surface's. The decorator takes a scope tag (`storefront:specialty-choice`); the limiter keys its source-address windows inside that tag, so this route can neither exhaust nor be exhausted by the ceiling `/v1/auth/register`, login and `password/reset` share. The budget is 20 requests / 15 minutes **per source address as the api resolves it**, and no other dimension engages: the body carries no `identifier`/`email`/`phone`, so there is no per-user window, and the per-ASN ceiling is inert because no infrastructure layer sets `x-asn` in this deployment. The refusal is a generic 429 problem naming neither threshold nor dimension.
+
+What that bounds today is stated plainly, because the deployed topology does not resolve the caller: `trustProxy` is unconfigured and nothing reads `x-forwarded-for` (tracked platform-wide as #1655), while guest calls reach the api through the doctor app's server-side `/v1/:path*` rewrite — so every visitor presents as one source address. Until #1655 lands, the effective production behaviour of this control is therefore a SINGLE shared 20 / 15 min bucket for the route: enough to bound anonymous `idempotency_keys` growth globally, which is what the D2 finding asked for, and explicitly not a per-caller control. Once the real-client-IP chain is established the same keying becomes per caller with no change here.
+
 Every failure is an RFC 7807 Problem Details document with `traceId` and an exact `errorCode` (ADR-0002).
 
 ## 8. Sequencing the build

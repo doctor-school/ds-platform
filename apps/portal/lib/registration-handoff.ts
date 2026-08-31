@@ -20,7 +20,7 @@
  *     protocol-relative or cross-origin return target.
  */
 
-import { parseReturnTarget } from "@ds/schemas";
+import { parseReturnTarget, parseSameOriginReturnTarget } from "@ds/schemas";
 
 import { parseRoomReturnTarget } from "./room-return";
 
@@ -41,26 +41,28 @@ export function buildRegistrationHref(slug: string): string {
 }
 
 /**
- * 005 EARS-2 — carry a `returnTo` event context ONWARD through an intermediate
+ * 005 EARS-2 / 014 EARS-6 — carry a `returnTo` ONWARD through an intermediate
  * auth navigation (e.g. `/register → /verify`, or a `/verify → /login` fallback),
- * appending it to `path` ONLY when it is a SAFE same-origin event target (the
- * `@ds/schemas` `parseReturnTarget` guard). An absent or hostile `returnTo` is
- * dropped, so a cross-origin / open-redirect value can never be propagated across
- * the round-trip — the returnTo the next page reads is always guard-clean. The
- * appended value is the canonical `/webinars/<slug>` the guard reconstructs.
+ * appending it to `path` ONLY when it is a SAFE same-origin target. An absent or
+ * hostile `returnTo` is dropped, so a cross-origin / open-redirect value can never
+ * be propagated across the round-trip — the returnTo the next page reads is always
+ * guard-clean, and the appended value is the canonical form the guard reconstructs,
+ * never the raw input.
  */
 export function withReturnTarget(
   path: string,
   rawReturnTo: string | null,
 ): string {
-  // A safe carry is EITHER the 005 registration-intent (`/webinars/<slug>`) or the
-  // 006 room-return target (`/webinars/<slug>/room`, EARS-6) — both survive the
-  // onward hop so the event/room context is not lost if a visitor bounced from the
-  // room chooses the signup path; anything hostile is dropped at the hop. The
-  // canonical (guard-reconstructed) value is appended, never the raw input.
+  // Three guards, narrowest first, because the narrower two also decide what
+  // happens on ARRIVAL: the 005 registration-intent (`/webinars/<slug>`) additionally
+  // fires `RegisterForEvent`, and the 006 room-return (`/webinars/<slug>/room`)
+  // additionally re-runs the room gate. 014 EARS-6 then generalizes the carry to
+  // ANY same-origin page, so a visitor sent to auth from any other login-gated
+  // surface keeps their origin across the hop instead of silently losing it here.
   const safe =
     parseRoomReturnTarget(rawReturnTo)?.returnTo ??
-    parseReturnTarget(rawReturnTo)?.returnTo;
+    parseReturnTarget(rawReturnTo)?.returnTo ??
+    parseSameOriginReturnTarget(rawReturnTo);
   if (!safe) return path;
   const sep = path.includes("?") ? "&" : "?";
   return `${path}${sep}returnTo=${encodeURIComponent(safe)}`;

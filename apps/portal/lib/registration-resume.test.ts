@@ -54,7 +54,6 @@ describe("005 EARS-2 guest-through-auth completion (registration resume)", () =>
       "https://evil.example/webinars/x",
       "//evil.example",
       "/\\evil.example",
-      "/account", // same-origin but not an event return target
       "/webinars/../account",
     ]) {
       // Dropped by the guard → falls back to the safe default discovery listing
@@ -72,6 +71,18 @@ describe("005 EARS-2 guest-through-auth completion (registration resume)", () =>
     for (const raw of [null, "", "/", "https://evil.example/webinars/x", "//evil.example"]) {
       await expect(completeReturnTarget(raw)).resolves.toBe("/webinars");
     }
+  });
+
+  it("014 EARS-6: any OTHER login-gated same-origin page is honoured as the landing, and registers nothing", async () => {
+    // The platform-wide rule (014 EARS-6, design §6). Before this clause a
+    // same-origin page that was neither the event page nor the room was dropped to
+    // the default listing — the "stranded after login" defect the owner's
+    // 2026-08-17 rule forbids. There is no event in these targets, so no
+    // `RegisterForEvent` fires; the visitor is simply returned to their origin.
+    for (const page of ["/account", "/account/events", "/webinars/a/b"]) {
+      await expect(completeReturnTarget(page)).resolves.toBe(page);
+    }
+    expect(registerForEvent).not.toHaveBeenCalled();
   });
 
   it("013 EARS-15: a captured SAFE same-origin return target still wins over the default landing", async () => {

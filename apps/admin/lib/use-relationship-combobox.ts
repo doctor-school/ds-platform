@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import { fetchRelationshipEndpointOptions } from "@/providers/data-provider";
+import { pruneComboboxOptions } from "@/lib/server-combobox";
 import {
   useServerCombobox,
   type ServerComboboxController,
@@ -59,7 +60,7 @@ export function useRelationshipCombobox({
     [excludedKey, resource],
   );
 
-  return useServerCombobox({
+  const controller = useServerCombobox({
     fetchPage,
     toOption: (item) => ({
       id: item.id,
@@ -68,4 +69,18 @@ export function useRelationshipCombobox({
     selectedId: value || null,
     pageSize: RELATIONSHIP_ENDPOINT_PAGE_SIZE,
   });
+
+  // The exclusion is applied TWICE on purpose, and the two are not redundant:
+  // `fetchPage` keeps a linked endpoint out of pages fetched from now on, this
+  // prunes it out of the pages already in hand. A successful link leaves the
+  // panel mounted (`LinkForm` only clears its value), so nothing re-queries —
+  // and an endpoint that can only ever come back 409 must stop being offered
+  // the moment it is linked, not at the next search.
+  return useMemo(() => {
+    const excluded = excludedKey ? excludedKey.split("|") : [];
+    return {
+      ...controller,
+      options: pruneComboboxOptions(controller.options, excluded),
+    };
+  }, [controller, excludedKey]);
 }

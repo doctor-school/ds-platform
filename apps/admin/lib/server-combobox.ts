@@ -140,6 +140,50 @@ export function serverComboboxHasMore(
 }
 
 /**
+ * What the foot of the combobox panel offers, as one decision rather than a
+ * `hasMore` boolean the callers each re-derive:
+ *
+ * - `"retry"` — the last request failed. A failed FIRST page matters most: its
+ *   `page` never advanced, so page arithmetic alone says "nothing more to ask
+ *   for" and the operator is dead-ended with no control but retyping. The
+ *   relationship pickers offered this retry before the convergence and still do.
+ * - `"next"` — the server's total says another page exists.
+ * - `null` — a healthy, exhausted list.
+ */
+export function serverComboboxLoadAction(
+  state: ServerComboboxState,
+  pageSize: number,
+): "next" | "retry" | null {
+  if (state.isError || state.loadMoreError) return "retry";
+  return serverComboboxHasMore(state, pageSize) ? "next" : null;
+}
+
+/**
+ * The page a retry or a load-more must ask for. A failed page never advanced
+ * `page`, so the retry re-asks for the same one — and for a failed first page
+ * that is page 1, which `pageSettled` then treats as a replacement rather than
+ * an append.
+ */
+export function serverComboboxNextPage(state: ServerComboboxState): number {
+  return state.page + 1;
+}
+
+/**
+ * Drop options the host has since excluded — the endpoints a relationship panel
+ * just linked. The pages already merged into the picker are not re-fetched when
+ * the excluded set changes, so without this projection a just-linked endpoint
+ * stays selectable and the only feedback is a 409 on submit.
+ */
+export function pruneComboboxOptions(
+  options: readonly ComboboxOption[],
+  excludedIds: readonly string[],
+): ComboboxOption[] {
+  if (excludedIds.length === 0) return [...options];
+  const excluded = new Set(excludedIds);
+  return options.filter((item) => !excluded.has(item.value));
+}
+
+/**
  * The options handed to `Combobox`, with the selected row kept visible even when
  * the current search does not return it — otherwise narrowing the search blanks
  * the operator's own choice.

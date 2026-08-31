@@ -1,11 +1,19 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+} from "react";
 import type { ComboboxOption } from "@ds/design-system/blocks";
 import {
   createSearchDebouncer,
-  serverComboboxHasMore,
   serverComboboxInitialState,
+  serverComboboxLoadAction,
+  serverComboboxNextPage,
   serverComboboxOptions,
   serverComboboxReducer,
   type ServerComboboxOption,
@@ -141,11 +149,11 @@ export function useServerCombobox<T>({
   const loadMore = useCallback(async (): Promise<void> => {
     const current = stateRef.current;
     if (current.isLoading || current.loadingMore) return;
-    // A failed load-more never advanced `page`, so retry and first attempt ask
-    // for the same one; only an exhausted, healthy list has nothing left to ask.
-    const nextPage = current.page + 1;
-    if (!current.loadMoreError && !serverComboboxHasMore(current, pageSize))
-      return;
+    // A failed page never advanced `page`, so retry and first attempt ask for
+    // the same one — including a failed FIRST page, whose retry asks for page 1
+    // and lands as a replacement. Only an exhausted, healthy list is a no-op.
+    if (serverComboboxLoadAction(current, pageSize) === null) return;
+    const nextPage = serverComboboxNextPage(current);
     const { epoch: issuedAt } = current;
     dispatch({ type: "loadMore" });
     try {
@@ -170,7 +178,10 @@ export function useServerCombobox<T>({
     options,
     isLoading: state.isLoading,
     isError: state.isError,
-    hasMore: serverComboboxHasMore(state, pageSize) || state.loadMoreError,
+    // `hasMore` is what makes `Combobox` render the foot control at all, so a
+    // retry-able error has to answer true — otherwise a failed first page is a
+    // dead end (#1660 review).
+    hasMore: serverComboboxLoadAction(state, pageSize) !== null,
     loadingMore: state.loadingMore,
     loadMoreError: state.loadMoreError,
     search,

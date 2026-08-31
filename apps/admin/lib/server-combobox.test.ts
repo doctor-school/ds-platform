@@ -3,14 +3,20 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createSearchDebouncer,
   mergeServerComboboxPages,
+  pruneComboboxOptions,
   serverComboboxHasMore,
   serverComboboxInitialState,
+  serverComboboxLoadAction,
+  serverComboboxNextPage,
   serverComboboxOptions,
   serverComboboxReducer,
   type ServerComboboxOption,
 } from "@/lib/server-combobox";
 
-const option = (id: string, label = id): ServerComboboxOption => ({ id, label });
+const option = (id: string, label = id): ServerComboboxOption => ({
+  id,
+  label,
+});
 
 describe("server-backed combobox state (EARS-23)", () => {
   it("EARS-23.1: pages in load-more results without duplicating an already listed option", () => {
@@ -189,5 +195,86 @@ describe("server-backed combobox state (EARS-23)", () => {
         [option("a", "новый"), option("c")],
       ),
     ).toEqual([option("a", "новый"), option("b"), option("c")]);
+  });
+
+  // The two behaviours the #1638 convergence has to carry over from the Refine
+  // relationship picker, both proved here at the state layer because the panels
+  // that host them are only exercised end-to-end once.
+  it("EARS-22: prunes newly linked endpoints from pages already merged into the picker", () => {
+    // A successful link changes only the excluded set — the pages already in
+    // hand are not re-fetched, so the just-linked endpoint has to disappear
+    // from the projection or it stays selectable until the server 409s.
+    expect(
+      pruneComboboxOptions(
+        [
+          { value: "page-one", label: "Первая страница" },
+          { value: "linked-after-page-two", label: "Уже привязан" },
+          { value: "page-two", label: "Вторая страница" },
+        ],
+        ["linked-after-page-two"],
+      ),
+    ).toEqual([
+      { value: "page-one", label: "Первая страница" },
+      { value: "page-two", label: "Вторая страница" },
+    ]);
+    expect(
+      pruneComboboxOptions([{ value: "only", label: "Один" }], []),
+    ).toEqual([{ value: "only", label: "Один" }]);
+  });
+
+  it("EARS-22: exposes next-page and retry actions inside the combobox panel", () => {
+    const settled = serverComboboxReducer(serverComboboxInitialState, {
+      type: "pageSettled",
+      epoch: 0,
+      items: [option("a")],
+      page: 1,
+      total: 41,
+    });
+    expect(serverComboboxLoadAction(settled, 20)).toBe("next");
+
+    const exhausted = serverComboboxReducer(serverComboboxInitialState, {
+      type: "pageSettled",
+      epoch: 0,
+      items: [option("a")],
+      page: 1,
+      total: 1,
+    });
+    expect(serverComboboxLoadAction(exhausted, 20)).toBe(null);
+
+    // A FAILED FIRST page: nothing listed, `hasMore` false by page arithmetic —
+    // without an explicit retry the operator's only recovery is retyping.
+    const firstPageFailed = serverComboboxReducer(serverComboboxInitialState, {
+      type: "pageFailed",
+      epoch: 0,
+    });
+    expect(firstPageFailed.isError).toBe(true);
+    expect(serverComboboxLoadAction(firstPageFailed, 20)).toBe("retry");
+
+    const loadMoreFailed = serverComboboxReducer(
+      serverComboboxReducer(settled, { type: "loadMore" }),
+      { type: "pageFailed", epoch: 0 },
+    );
+    expect(serverComboboxLoadAction(loadMoreFailed, 20)).toBe("retry");
+  });
+
+  it("EARS-22: a retry after a failed first page re-asks for page one and replaces the set", () => {
+    const failed = serverComboboxReducer(serverComboboxInitialState, {
+      type: "pageFailed",
+      epoch: 0,
+    });
+    const retrying = serverComboboxReducer(failed, { type: "loadMore" });
+    expect(retrying.loadingMore).toBe(true);
+    expect(serverComboboxNextPage(retrying)).toBe(1);
+
+    const recovered = serverComboboxReducer(retrying, {
+      type: "pageSettled",
+      epoch: 0,
+      items: [option("a")],
+      page: 1,
+      total: 1,
+    });
+    expect(recovered.isError).toBe(false);
+    expect(recovered.items).toEqual([option("a")]);
+    expect(serverComboboxLoadAction(recovered, 20)).toBe(null);
   });
 });

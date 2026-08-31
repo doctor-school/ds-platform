@@ -27,7 +27,18 @@ The D-decision gate, over the **whole deploy range** (`deployedSha..origin/main`
 6. **Clean deploy environment** — clean working tree + `git pull --ff-only origin main` (the pre-flight enforces this; verify it _before_ deciding to ship).
 7. **No live broadcast (эфир gate)** — `pnpm deploy:check-live`: `CLEAR` (exit 0) proceeds; `LIVE:` or `UNKNOWN` (exit 1, fail-closed) **holds regardless of change-class** — wait for the эфир to end or bind to the maintenance window (02:00–06:00 MSK). The deploy pre-flight runs the same probe as a hard gate; an urgent mid-broadcast ship is by definition **escalate**: owner's explicit go + `--allow-live-broadcast`.
 
-**Standing-auth** class + 1–7 green → ship autonomously. **Escalate** class — or any эфир hold — → the one-line **"ready to ship X — go?"** first, then proceed on the owner's go.
+8. **Release gate clear (spec §10.10)** — no OPEN Issue carries `release-blocker` (`gh issue list --label release-blocker --state open`), and no merged-undeployed PR in the range defers Stage-B to a still-OPEN batched gate (item 2's `Stage-B: batched at #<gate>` markers → `gh issue view <gate> --json state`). The deploy pre-flight enforces both as a hard, fail-closed gate; bypass only via `--release-gate-exempt "<reason>"` on the owner's go.
+
+**Standing-auth** class + 1–8 green → ship autonomously. **Escalate** class — or any эфир hold — → the one-line **"ready to ship X — go?"** first, then proceed on the owner's go.
+
+## `main` stays deployable — revert by default (spec §10.10)
+
+The deploy ships the WHOLE `deployedSha..origin/main` range, so one broken merged PR holds every other merged PR out of prod. When a merged PR is discovered broken ahead of its fix:
+
+- **Revert it from `main`** — the default, not the fallback. A normal revert PR (`git revert <squash-sha>`) under the normal rules: Conventional-Commit title, linked defect Issue, Mode-a review, green CI, changeset if the reverted change was user-facing. The fix re-lands later as its own PR.
+- **Or label the defect Issue `release-blocker`** when a revert is disproportionate (deep migration in the range, wide refactor, fix already in flight this session) — prod then waits, and the deploy pre-flight holds until the Issue closes. Record on the Issue WHY a revert was disproportionate; the label is a release HOLD, not a severity marker, and never a substitute for fixing or reverting.
+
+Never leave a known-broken PR on `main` unlabelled and un-reverted: that is exactly the state where the next standing-auth deploy ships it silently.
 
 ## Input
 
@@ -42,6 +53,7 @@ The D-decision gate, over the **whole deploy range** (`deployedSha..origin/main`
 2. **Fast-forward local `main`** — `git pull --ff-only origin main` first, so your checkout's record/digest code matches the SHA being shipped. A divergent `HEAD` is a loud WARNING (deploy still ships `origin/main`), a dirty tree is a hard fail.
 3. **Green CI for that SHA** — the pipeline queries the latest check-run per name via `gh api …/commits/<sha>/check-runs` and refuses on red/pending. Escape hatch `--skip-ci-check` logs a loud warning.
 4. **No live broadcast** — the pipeline runs the read-only эфир probe (`pnpm deploy:check-live`, `GET /v1/public/events`) and refuses while a broadcast is `live` **or** the probe fails (fail-closed `UNKNOWN`). Escape hatch `--allow-live-broadcast` (owner-approved urgent ship only — checklist item 7) logs a loud warning. The `--rollback` path skips this gate (an emergency rollback must never wait out an эфир).
+5. **Release gate clear** — the pipeline refuses while any OPEN Issue carries `release-blocker`, or any merged-but-not-yet-deployed PR defers its Stage-B to a still-OPEN batched gate (`tools/deploy/release-gate.mjs`, spec §10.10). Fail-closed on an UNKNOWN (a `gh` failure, or no production Deployment record to anchor the delta). Escape hatch `--release-gate-exempt "<reason>"` — a non-empty reason is mandatory and the printed line is the audit record.
 
 ## Procedure
 

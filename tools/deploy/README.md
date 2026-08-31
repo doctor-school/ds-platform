@@ -16,6 +16,7 @@ bootstrap) is a one-time human setup, out of the steady-state loop.
 | `release-notes.mjs`        | `deploy:release-notes` | Aggregated PROD release note to Mattermost (#868); render+POST seam fired from CI on `deployment_status: success` (`release-digest.yml`, #968).                    |
 | `live-broadcast-check.mjs` | `deploy:check-live`    | Read-only live-эфир probe (`GET /v1/public/events`, spec §10.4 item 7): `CLEAR` exit 0 / `LIVE`+`UNKNOWN` exit 1 (fail-closed); also a `prod.mjs` pre-flight hold. |
 | `deploy-probe.mjs`         | `deploy:probe`         | One-line box-reality probe (#905): health SHA + running api/portal/admin images/status over ssh; the STALLED watchdog message routes here.                         |
+| `release-gate.mjs`         | —                      | Release-blocker + open-batched-Stage-B pre-flight hold (#1662): probe + pure verdict consumed by `prod.mjs` (see below).                                           |
 
 ## `pnpm deploy:prod`
 
@@ -24,6 +25,7 @@ pnpm deploy:prod                    # deploy origin/main (default)
 pnpm deploy:prod --rollback <sha>   # app-only rollback to a prior SHA-tagged image
 pnpm deploy:prod --skip-ci-check    # escape hatch (loud warning)
 pnpm deploy:prod --allow-live-broadcast  # эфир-hold escape hatch (owner-approved urgent ship only)
+pnpm deploy:prod --release-gate-exempt "<reason>"  # release-gate escape hatch (reason mandatory, printed)
 ```
 
 Pipeline, fail-closed, stops at the first red step and prints a rollback pointer:
@@ -32,8 +34,9 @@ Pipeline, fail-closed, stops at the first red step and prints a rollback pointer
    CI** for that SHA (latest check-run per name via
    `gh api …/commits/<sha>/check-runs`) · **no live broadcast**
    (`live-broadcast-check.mjs`, fail-closed — #1000, spec §10.4 item 7; the
-   `--rollback` path skips this hold). Refuses otherwise. Fixes the deployed
-   commit to `origin/main`'s SHA.
+   `--rollback` path skips this hold) · **release gate** (`release-gate.mjs`,
+   #1662 — below). Refuses otherwise. Fixes the deployed commit to
+   `origin/main`'s SHA.
 2. **Ship** — `git archive <sha>` streamed over SSH to both boxes (no registry,
    no deploy key). Streams are piped in-process → Windows-safe.
 3. **data-prod** — `docker compose up -d --build` (idempotent).
@@ -50,7 +53,7 @@ Pipeline, fail-closed, stops at the first red step and prints a rollback pointer
    files visible through the running containers and **restart only consumers
    whose bind mount is stale**. Both mounts are compared again after apply, so
    a mismatch fails the deploy instead of requiring a manual SSH step (#1175).
-5a. **Pre-swap boot verify (#1410)** — between `build` and `migrate`/`up -d`, the
+   5a. **Pre-swap boot verify (#1410)** — between `build` and `migrate`/`up -d`, the
    freshly built **`ds-portal:<sha>` and `ds-admin:<sha>`** are each started as a
    throwaway detached container (`ds-bootcheck-<svc>`, no published port, no
    compose network, always removed) with the SAME `env_file` production uses, and
@@ -116,6 +119,42 @@ see "Release digest → Mattermost" below, #975.)
 The **deployed SHA is queryable over HTTP**: `GET /v1/health` → `{"version":…}`
 (from the api's `DEPLOY_SHA` env). `--rollback` `up -d`s an already-present prior
 image tag with **no** rebuild / migrate / DB change.
+
+## Release gate (`release-gate.mjs`, #1662)
+
+`main` is deployable **by default** (release-cycle spec §10): a merged PR found
+broken ahead of its fix is REVERTED from `main`; when a revert is
+disproportionate, its Issue carries `release-blocker` instead. The pre-flight
+turns that norm into a machine check and **holds the deploy** while either
+signal stands:
+
+1. **`release-blocker`** — any OPEN Issue carrying the label holds every deploy.
+   The failure names each blocking Issue number + title.
+   (`gh issue list --label release-blocker --state open`.)
+2. **Open batched Stage-B gate** — a **merged-but-not-yet-deployed** PR whose
+   body carries `Stage-B: batched at #<gate>` (the AGENTS.md §6 batched
+   carve-out) has by construction NOT been live-verified by the product owner;
+   shipping it would consume a deferral granted only for _merging_. The failure
+   names each **PR → gate** pair. The merged-undeployed delta is enumerated the
+   way the `## Project reality` bootstrap section does it (`tools/project-reality.ts`
+   step 4): basis = the latest `production` GitHub Deployment SHA, range
+   `<basis>..origin/main`, PR numbers via the shared `extractPrNumbers` seam of
+   `release-notes.mjs` — never a bespoke re-implementation.
+
+**Fail-closed**, like the эфир probe: an UNKNOWN (a `gh` call errored, or no
+production Deployment exists to anchor the delta) HOLDS rather than waving the
+deploy through. The **only** bypass is explicit and loudly printed — never a
+silent auto-detection, mirroring `--mode-a-exempt` in `tools/gh/merge-gate.mjs`:
+
+```bash
+pnpm deploy:prod --release-gate-exempt "owner go — the fix ships in this very range"
+```
+
+A bare `--release-gate-exempt` (or one followed by another flag) is a usage
+error, not an exemption. The printed line IS the audit record.
+
+Unit cover: `tools/lint/guard-tests/release-gate.spec.ts` (pure flag parser,
+marker parser, evaluator and formatters over fabricated probes — no subprocess).
 
 ## `pnpm deploy:smoke`
 

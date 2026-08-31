@@ -14,10 +14,15 @@
 //     pnpm deploy:prod --allow-live-broadcast   (escape hatch for the live-эфир
 //                                          hold — owner-approved urgent ship ONLY,
 //                                          release-cycle spec §10.4 item 7)
+//     pnpm deploy:prod --release-gate-exempt "<reason>"   (escape hatch for the
+//                                          release-blocker / open batched
+//                                          Stage-B hold — #1662; reason is
+//                                          mandatory and loudly printed)
 //
 // Pipeline (deploy):
 //   pre-flight  clean tree · HEAD==origin/main · green CI for the SHA (gh)
 //               · no live broadcast (tools/deploy/live-broadcast-check.mjs)
+//               · release gate (tools/deploy/release-gate.mjs)
 //   ship        git archive <sha> → api-prod + data-prod over ssh (no registry)
 //   data-prod   up -d --build (idempotent; attestations off → no-op ≠ recreate, #486)
 //   checkpoint  pgbackrest pre-migrate incr backup  (DSO-129 — BEFORE migrate)
@@ -41,6 +46,14 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { envFooter } from "../ci/post-product-note.mjs";
 import { cutDeployRelease } from "../release/cut-release.mjs";
 import { createDeploymentRecord } from "./deployment-record.mjs";
+import {
+  RELEASE_GATE_EXEMPT_FLAG,
+  evaluateReleaseGate,
+  formatReleaseGateClear,
+  formatReleaseGateHold,
+  parseReleaseGateExempt,
+  probeReleaseGate,
+} from "./release-gate.mjs";
 import { composeDigest } from "./release-notes.mjs";
 
 // Prod health endpoint — the status record's `log_url` and the verify-over-HTTP
@@ -205,9 +218,9 @@ function localCap(cmd, args) {
   return (r.stdout || "").trim();
 }
 
-function preflight() {
+async function preflight() {
   step(
-    "Pre-flight: clean tree · HEAD==origin/main · green CI · no live broadcast",
+    "Pre-flight: clean tree · HEAD==origin/main · green CI · no live broadcast · release gate",
   );
 
   // 1. clean working tree
@@ -257,7 +270,34 @@ function preflight() {
   } else {
     assertNoLiveBroadcast();
   }
+
+  // 5. release gate (#1662, spec §10): an OPEN `release-blocker` Issue, or a
+  //    merged-but-not-yet-deployed PR whose `Stage-B: batched at #<gate>` gate
+  //    Issue is still open, HOLDS the deploy. Fail-closed on an UNKNOWN, like
+  //    the эфир probe above; the only bypass is the explicit, printed flag.
+  await assertReleaseGate(originMain);
+
   return originMain;
+}
+
+// Release-blocker + open-batched-Stage-B hold (#1662). The evidence probe and
+// the pure verdict live in tools/deploy/release-gate.mjs (unit-tested there);
+// this is the deploy-side wiring: print the exemption loudly, else hold.
+async function assertReleaseGate(sha) {
+  const exempt = parseReleaseGateExempt(process.argv);
+  if (exempt.error) die(exempt.error);
+  if (exempt.exempt) {
+    console.log(
+      `  ⚠ ${RELEASE_GATE_EXEMPT_FLAG}: SKIPPING the release-blocker / batched-Stage-B gate` +
+        ` — ${exempt.reason} (this line is the audit record).`,
+    );
+    return;
+  }
+  const probe = await probeReleaseGate({ targetSha: sha, cwd: process.cwd() });
+  const verdict = evaluateReleaseGate(probe);
+  const hold = formatReleaseGateHold(verdict);
+  if (hold) die(hold);
+  ok(formatReleaseGateClear(probe.basisSha));
 }
 
 // Read-only probe of the public upcoming-broadcasts listing (exit 0 = CLEAR,
@@ -606,7 +646,9 @@ probe admin ds-admin 3002`,
         `  Fix the image (see the boot log above) and re-run the deploy (#1407/#1410).`,
     );
   }
-  ok(`ds-portal + ds-admin :${sha.slice(0, 12)} boot and serve / before the swap`);
+  ok(
+    `ds-portal + ds-admin :${sha.slice(0, 12)} boot and serve / before the swap`,
+  );
 }
 
 // Ship the committed tree to a box through a sibling staging directory. The
@@ -690,7 +732,7 @@ async function shipTree(sha, host) {
 // --- deploy ---------------------------------------------------------------
 
 async function deploy() {
-  const sha = preflight();
+  const sha = await preflight();
 
   // Capture the previously-deployed prod SHA BEFORE the build/up swap — the
   // durable deploy record IS the running api-prod container's image tag

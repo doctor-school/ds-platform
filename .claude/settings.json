@@ -43,6 +43,16 @@
         ]
       },
       {
+        "matcher": "Agent|Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/tools/hooks/lead-context-budget.mjs\"",
+            "timeout": 10
+          }
+        ]
+      },
+      {
         "matcher": ".*",
         "hooks": [
           {

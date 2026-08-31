@@ -13,13 +13,16 @@
  * It reads the CURRENT session transcript (path arrives on stdin), takes the
  * last assistant message's usage block, and computes the live context size as
  * input_tokens + cache_read_input_tokens + cache_creation_input_tokens.
- * Thresholds (owner decision 2026-08-18: wave-boundary reminder, advisory
- * only): 200K / 250K. The former 110K/120K pair fired ~20 minutes into a
- * session and read as noise; the lead's real decision point is a WAVE
- * boundary, not a token count, so the advisory now speaks in wave language and
- * lands only once a wave is plausibly finishable. Subagents are governed
- * separately and coercively by `subagent-context-budget.mjs` (#1374). Do not
- * change without an explicit owner directive. Below the first tier: silent.
+ * Thresholds (owner decision 2026-08-31, #1693: 120K / 160K). The advisory
+ * speaks in WAVE language — the lead's real decision point is a wave boundary,
+ * not a token count — but it now lands at the point where a SECOND wave
+ * actually starts: the 2026-08-31 retro found lead sessions opening a fresh
+ * dispatch wave at ≈208K, i.e. above the former 200K/250K pair, so those tiers
+ * could only ever confirm the overrun after the fact. The same 120K/160K pair
+ * is enforced coercively at the dispatch boundary by `lead-context-budget.mjs`
+ * (PreToolUse `Agent|Task`, #1693); subagents are governed separately by
+ * `subagent-context-budget.mjs` (#1374). Do not change without an explicit
+ * owner directive. Below the first tier: silent.
  *
  * Fail-safe: any parse/IO error exits 0 with no output — a broken budget probe
  * must never break prompting.
@@ -28,8 +31,8 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-export const WARN_THRESHOLD = 200_000;
-export const WRAP_THRESHOLD = 250_000;
+export const WARN_THRESHOLD = 120_000;
+export const WRAP_THRESHOLD = 160_000;
 
 export function contextTokensFromJsonl(jsonl) {
   const lines = String(jsonl).split("\n");
@@ -73,7 +76,7 @@ function main() {
       const k = Math.round(context / 1000);
       process.stdout.write(
         JSON.stringify({
-          systemMessage: `⚠ Контекст лида ≈ ${k}K (порог 250K). Волна легла → /wrap + handoff → новая сессия; новую волну здесь не начинать.`,
+          systemMessage: `⚠ Контекст лида ≈ ${k}K (порог ${Math.round(WRAP_THRESHOLD / 1000)}K). Волна легла → /wrap + handoff → новая сессия; новую волну здесь не начинать.`,
         }),
       );
     } else if (context >= WARN_THRESHOLD) {

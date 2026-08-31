@@ -12,7 +12,7 @@ All conventions in [`AGENTS.md`](./AGENTS.md) apply (imported above); this file 
 
 ## Wrap cadence
 
-`/wrap` runs on owner request or before a planned long gap — not a mandatory end-of-every-session step. The context-budget hook (200K/250K) is advisory to the operator, never a directive to the model — work continues until the owner calls `/wrap`.
+`/wrap` runs on owner request or before a planned long gap — not a mandatory end-of-every-session step. The `context-budget` hook (120K/160K) is advisory to the operator, never a directive to the model. The same tiers bind at the DISPATCH boundary (`lead-context-budget`, PreToolUse `Agent|Task`, #1693): ≥120K — finish the wave, start no new one; ≥160K — a new dispatch is denied (accept running agents, finish PR tails by hand, `/wrap` + handoff). Owner-only hatch: `.claude/lead-budget-override`, removed by `/wrap`.
 
 ## Auto-memory (load-on-demand by design)
 

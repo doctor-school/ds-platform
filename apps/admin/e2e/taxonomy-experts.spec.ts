@@ -2,10 +2,9 @@ import { expect, test, type Page } from "@playwright/test";
 import {
   bootstrapAdminSession,
   bootstrapDoctorSession,
-  type BootstrapResult,
 } from "./support/admin-session";
-import { totpCode } from "./support/totp";
 import { visible } from "./support/visible";
+import { ADMIN_ORIGIN, signInAsAdmin } from "./support/sign-in";
 
 /**
  * 012 EARS-19/20/23 — real Refine → NestJS → Postgres expert authoring, plus the
@@ -14,31 +13,11 @@ import { visible } from "./support/visible";
  * disabled rather than dead.
  * Manual dev-stand flow; no mocked directory or mutation response is used.
  */
-const ORIGIN = process.env.E2E_ADMIN_URL ?? "http://localhost:3200";
 
 const PNG_1x1 = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==",
   "base64",
 );
-
-async function signInAsAdmin(
-  page: Page,
-  credentials?: BootstrapResult,
-): Promise<void> {
-  const { email, password } =
-    credentials ?? (await bootstrapAdminSession(ORIGIN));
-  await page.goto("/login");
-  await page.locator("#email").fill(email);
-  await page.locator("#password").fill(password);
-  await page.getByTestId("login-submit").click();
-  await page.waitForURL(/\/mfa\/enroll/, { timeout: 20_000 });
-  const secret = (await page.getByTestId("mfa-secret").innerText()).trim();
-  await page
-    .getByTestId("mfa-enroll-form")
-    .getByRole("textbox")
-    .fill(totpCode(secret));
-  await page.waitForURL(/\/events/, { timeout: 20_000 });
-}
 
 async function openExpertCreate(page: Page): Promise<void> {
   await page.goto("/experts/create");
@@ -114,7 +93,7 @@ test.describe("012 EARS-19/20 — Expert authoring", () => {
     );
 
     await context.grantPermissions(["clipboard-read", "clipboard-write"], {
-      origin: ORIGIN,
+      origin: ADMIN_ORIGIN,
     });
     await page.getByTestId("expert-copy-public-link").click();
     await expect(page.getByTestId("expert-copy-public-link")).toHaveText(
@@ -219,8 +198,8 @@ test.describe("012 EARS-19/20 — Expert authoring", () => {
     page,
     context,
   }) => {
-    const candidate = await bootstrapDoctorSession(ORIGIN);
-    const admin = await bootstrapAdminSession(ORIGIN);
+    const candidate = await bootstrapDoctorSession(ADMIN_ORIGIN);
+    const admin = await bootstrapAdminSession(ADMIN_ORIGIN);
     await signInAsAdmin(page, admin);
 
     // Closing an already-empty server-backed selector repeats the empty query.
@@ -277,7 +256,7 @@ test.describe("012 EARS-19/20 — Expert authoring", () => {
     const searchPrefix = `page-${Date.now()}`;
     const candidates = await Promise.all(
       Array.from({ length: 26 }, () =>
-        bootstrapDoctorSession(ORIGIN, searchPrefix),
+        bootstrapDoctorSession(ADMIN_ORIGIN, searchPrefix),
       ),
     );
     const candidateEmails = candidates.map((candidate) => candidate.email);

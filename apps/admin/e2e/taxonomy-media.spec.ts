@@ -5,10 +5,7 @@ import {
   type Request,
   type Route,
 } from "@playwright/test";
-import { bootstrapAdminSession } from "./support/admin-session";
-import { totpCode } from "./support/totp";
-
-const ORIGIN = process.env.E2E_ADMIN_URL ?? "http://localhost:3200";
+import { ADMIN_ORIGIN, signInAsAdmin } from "./support/sign-in";
 
 const PNG_1x1 = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==",
@@ -18,21 +15,6 @@ const REPLACEMENT_PNG_1x1 = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
   "base64",
 );
-
-async function signInAsAdmin(page: Page): Promise<void> {
-  const { email, password } = await bootstrapAdminSession(ORIGIN);
-  await page.goto("/login");
-  await page.locator("#email").fill(email);
-  await page.locator("#password").fill(password);
-  await page.getByTestId("login-submit").click();
-  await page.waitForURL(/\/mfa\/enroll/, { timeout: 20_000 });
-  const secret = (await page.getByTestId("mfa-secret").innerText()).trim();
-  await page
-    .getByTestId("mfa-enroll-form")
-    .getByRole("textbox")
-    .fill(totpCode(secret));
-  await page.waitForURL(/\/events/, { timeout: 20_000 });
-}
 
 interface MediaCase {
   resource: "projects" | "experts" | "partners";
@@ -59,7 +41,7 @@ function expectMultipartRequest(request: Pick<Request, "headers">): void {
 }
 
 function storedObjectIdentity(src: string): string {
-  const url = new URL(src, ORIGIN);
+  const url = new URL(src, ADMIN_ORIGIN);
   return `${url.host}${url.pathname}`;
 }
 

@@ -1,6 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { bootstrapAdminSession } from "./support/admin-session";
-import { totpCode } from "./support/totp";
+import { signInAsAdmin } from "./support/sign-in";
 
 /**
  * #1222 — the admin `/events` list at a phone width (390px).
@@ -43,7 +42,6 @@ import { totpCode } from "./support/totp";
  * unset, the spec still asserts — the images are evidence for a human, not the
  * gate.
  */
-const ORIGIN = process.env.E2E_ADMIN_URL ?? "http://localhost:3200";
 const SHOT_DIR = process.env.E2E_SHOT_DIR;
 
 /** The phone width the 011 Stage-B screenshot was taken at. */
@@ -72,31 +70,6 @@ const BROKEN_SHELL_GROUP_CLASS = "flex items-center gap-8";
  */
 const BROKEN_SHELL_NAV_CLASS = "flex items-center gap-5 text-sm";
 const BROKEN_LIST_HEADER_CLASS = "mb-6 flex items-center justify-between";
-
-async function loginAsAdmin(page: Page): Promise<void> {
-  const { email, password } = await bootstrapAdminSession(ORIGIN);
-  for (let attempt = 0; attempt < 4; attempt++) {
-    if (attempt > 0) await page.waitForTimeout(2500);
-    await page.goto("/login");
-    await page.locator("#email").fill(email);
-    await page.locator("#password").fill(password);
-    await page.getByTestId("login-submit").click();
-    try {
-      await page.waitForURL(/\/mfa\/enroll/, { timeout: 8000 });
-    } catch {
-      /* the platform_admin role projection lags the grant — retry */
-      continue;
-    }
-    const secret = (await page.getByTestId("mfa-secret").innerText()).trim();
-    await page
-      .getByTestId("mfa-enroll-form")
-      .getByRole("textbox")
-      .fill(totpCode(secret));
-    await page.waitForURL(/\/events/, { timeout: 20_000 });
-    return;
-  }
-  throw new Error("admin login did not reach /events");
-}
 
 /**
  * The list must have at least one row for the table to render at all — the empty
@@ -187,7 +160,7 @@ test.describe("#1222 admin /events at 390px", () => {
     page,
   }) => {
     await page.setViewportSize(WIDE);
-    await loginAsAdmin(page);
+    await signInAsAdmin(page);
     await seedEventIfListEmpty(page);
 
     // --- narrow, fixed ------------------------------------------------------

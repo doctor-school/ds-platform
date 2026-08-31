@@ -1,10 +1,9 @@
 import { expect, test, type Page } from "@playwright/test";
-import { bootstrapAdminSession } from "./support/admin-session";
 import {
   searchRelationshipCombobox,
   selectRelationshipCombobox,
 } from "./support/relationship-combobox";
-import { totpCode } from "./support/totp";
+import { signInAsAdmin } from "./support/sign-in";
 
 /**
  * 012 EARS-10 (#1292), browser half — the REAL Refine → NestJS → Postgres path
@@ -27,7 +26,6 @@ import { totpCode } from "./support/totp";
  * `E2E_SHOT_DIR` opts into the responsive/theme and open-combobox evidence
  * cited by the PR. Unset, the same spec runs without writing screenshots.
  */
-const ORIGIN = process.env.E2E_ADMIN_URL ?? "http://localhost:3200";
 const SHOT_DIR = process.env.E2E_SHOT_DIR;
 const DESKTOP = { width: 1440, height: 900 };
 const MOBILE = { width: 390, height: 844 };
@@ -81,22 +79,6 @@ async function captureRelationshipEvidence(
     fullPage: true,
     animations: "disabled",
   });
-}
-
-/** Sign in and complete the one-time TOTP enrollment; lands on `/events`. */
-async function signInAsAdmin(page: Page): Promise<void> {
-  const { email, password } = await bootstrapAdminSession(ORIGIN);
-  await page.goto("/login");
-  await page.locator("#email").fill(email);
-  await page.locator("#password").fill(password);
-  await page.getByTestId("login-submit").click();
-  await page.waitForURL(/\/mfa\/enroll/, { timeout: 20_000 });
-  const secret = (await page.getByTestId("mfa-secret").innerText()).trim();
-  await page
-    .getByTestId("mfa-enroll-form")
-    .getByRole("textbox")
-    .fill(totpCode(secret));
-  await page.waitForURL(/\/events/, { timeout: 20_000 });
 }
 
 /** A real project row; returns its title and detail URL. */

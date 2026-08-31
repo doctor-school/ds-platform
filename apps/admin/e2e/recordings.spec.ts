@@ -1,6 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { bootstrapAdminSession } from "./support/admin-session";
-import { totpCode } from "./support/totp";
+import { signInAsAdmin } from "./support/sign-in";
 
 /**
  * 014 EARS-1 / EARS-2 (#1339), browser half — the REAL Refine → NestJS → Postgres
@@ -22,27 +21,10 @@ import { totpCode } from "./support/totp";
  *   IDP_PROJECT_ID=… pnpm --filter @ds/admin exec playwright test e2e/recordings.spec.ts \
  *     --config=playwright.flows.config.ts
  */
-const ORIGIN = process.env.E2E_ADMIN_URL ?? "http://localhost:3200";
 
 /** A real 32-char Rutube video code — the SSOT shape guard refuses anything else. */
 const RUTUBE_EDITED = "a1b2c3d4e5f60718293a4b5c6d7e8f90";
 const RUTUBE_RAW = "0f9e8d7c6b5a49382716f5e4d3c2b1a0";
-
-/** Sign in and complete the one-time TOTP enrollment; lands on `/events`. */
-async function signInAsAdmin(page: Page): Promise<void> {
-  const { email, password } = await bootstrapAdminSession(ORIGIN);
-  await page.goto("/login");
-  await page.locator("#email").fill(email);
-  await page.locator("#password").fill(password);
-  await page.getByTestId("login-submit").click();
-  await page.waitForURL(/\/mfa\/enroll/, { timeout: 20_000 });
-  const secret = (await page.getByTestId("mfa-secret").innerText()).trim();
-  await page
-    .getByTestId("mfa-enroll-form")
-    .getByRole("textbox")
-    .fill(totpCode(secret));
-  await page.waitForURL(/\/events/, { timeout: 20_000 });
-}
 
 /** Author a draft event and land on its detail page; returns the event id. */
 async function createEvent(page: Page, title: string): Promise<string> {

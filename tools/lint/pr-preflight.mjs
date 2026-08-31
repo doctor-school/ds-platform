@@ -59,6 +59,7 @@ export const GUARDS = [
   { name: "spec-status-fresh", file: "spec-status-lint.ts" },
   { name: "product-note", file: "product-note-lint.ts" },
   { name: "assignee-milestone", file: "assignee-milestone-lint.ts" },
+  { name: "pr-evidence", file: "pr-evidence-lint.ts" },
 ];
 
 /**
@@ -214,14 +215,15 @@ export function resolvePlan(argv) {
 }
 
 /**
- * Resolve the extra argv forwarded to the merge-gate spawn (#992 review on
- * PR #1014). The merge gate's Mode-a verdict check has an explicit escape flag
+ * Resolve the extra argv forwarded to the merge-gate spawn (#992/#1637).
+ * Polling options keep their values across the canonical pr:land → preflight →
+ * merge-gate path. The merge gate's Mode-a verdict check has an explicit escape flag
  * (`--mode-a-exempt "<reason>"`, for the AGENTS.md §3.8 no-Mode-a classes) —
  * without forwarding, the canonical `pr:preflight <N> --pre-merge` path would
  * RED-block those sanctioned classes with no exemption route. Delegates the
  * reason parse to the gate's own `parseModeAExempt` seam (single grammar), and
- * accepts the flag ONLY when the merge gate actually runs — passing it in a
- * create-time / static invocation is a loud usage error, never a silent no-op.
+ * accepts merge-only flags ONLY when the merge gate actually runs — passing one
+ * in a create-time / static invocation is a loud usage error, never a silent no-op.
  *
  * @param {string[]} argv `process.argv.slice(2)`
  * @param {boolean} runMergeGate from `resolvePlan(argv)`
@@ -230,15 +232,31 @@ export function resolvePlan(argv) {
 export function mergeGateForwardArgs(argv, runMergeGate) {
   const parsed = parseModeAExempt(argv);
   if (parsed.error) return { forward: [], error: parsed.error };
-  if (!parsed.exempt) return { forward: [], error: null };
-  if (!runMergeGate) {
+  const mergeFlags = new Set([
+    "--timeout",
+    "--interval",
+    "--reg-timeout",
+    "--mode-a-exempt",
+  ]);
+  const forward = [];
+  for (let i = 0; i < argv.length; i += 1) {
+    const flag = argv[i];
+    if (!mergeFlags.has(flag)) continue;
+    const value = argv[i + 1];
+    if (!value || value.startsWith("--")) {
+      return { forward: [], error: `${flag} requires a value` };
+    }
+    forward.push(flag, flag === "--mode-a-exempt" ? parsed.reason : value);
+    i += 1;
+  }
+  if (forward.length > 0 && !runMergeGate) {
     return {
       forward: [],
       error:
-        "--mode-a-exempt is a merge-time escape forwarded to the merge gate — pass it with `pnpm pr:preflight <N> --pre-merge`; it has no meaning in the create-time or static preflight.",
+        "merge polling and Mode-a options are forwarded to the merge gate — pass them with `pnpm pr:preflight <N> --pre-merge`; they have no meaning in the create-time or static preflight.",
     };
   }
-  return { forward: ["--mode-a-exempt", parsed.reason], error: null };
+  return { forward, error: null };
 }
 
 /**

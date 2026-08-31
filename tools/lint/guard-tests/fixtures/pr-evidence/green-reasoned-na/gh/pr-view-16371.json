@@ -1,0 +1,4 @@
+{
+  "number": 16371,
+  "body": "Stage-B: N/A (no visual surface) — lead-certified; authorization and live behavioral verification: https://github.example.test/issues/1637#comment-1\nChangeset: N/A — internal process tooling only\nBehavior change: N/A — no product behavior changes\nLocal touched-suite verification: `pnpm exec vitest run tools/lint/guard-tests/pr-evidence-lint.spec.ts` — PASS\nDeviations: N/A — followed all applicable ADR and spec clauses"
+}

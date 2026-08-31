@@ -34,6 +34,7 @@ describe("pr-preflight GUARDS roster", () => {
       "spec-status-fresh",
       "product-note",
       "assignee-milestone",
+      "pr-evidence",
     ]);
   });
 
@@ -234,6 +235,31 @@ describe("pr-preflight mergeGateForwardArgs() (#992)", () => {
     );
     expect(error).toBeNull();
     expect(forward).toEqual(["--mode-a-exempt", "pure docs — §3.8"]);
+  });
+
+  it("forwards merge polling options through the canonical pre-merge path (#1637)", () => {
+    const { forward, error } = mergeGateForwardArgs(
+      [
+        "1637",
+        "--pre-merge",
+        "--timeout",
+        "900",
+        "--interval",
+        "30",
+        "--reg-timeout",
+        "120",
+      ],
+      true,
+    );
+    expect(error).toBeNull();
+    expect(forward).toEqual([
+      "--timeout",
+      "900",
+      "--interval",
+      "30",
+      "--reg-timeout",
+      "120",
+    ]);
   });
 
   it("errors loudly (never a silent no-op) when the flag is passed outside --pre-merge", () => {

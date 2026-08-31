@@ -1,0 +1,4 @@
+{
+  "number": 16370,
+  "body": "Stage-B: GO — Product Lead, 2026-08-31\nChangeset: .changeset/bright-tools.md — patch\nBehavior change: `pnpm pr:land` now runs the complete hard pre-merge sequence.\nLocal touched-suite verification: `pnpm exec vitest run tools/lint/guard-tests/pr-evidence-lint.spec.ts` — PASS"
+}

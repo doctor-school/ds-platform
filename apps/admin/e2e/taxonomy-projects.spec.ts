@@ -1,7 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { bootstrapAdminSession } from "./support/admin-session";
 import { totpCode } from "./support/totp";
-import { visible } from "./support/visible";
 
 /**
  * 012 EARS-1 (#1283), browser half — the REAL Refine → NestJS → Postgres path.
@@ -10,7 +9,7 @@ import { visible } from "./support/visible";
  * operator-facing arc on the running admin: sign in, create a project, copy its
  * server-derived public link, find it through the block-tier list's INSTANT
  * search (#1297, EARS-23 — no «Применить», a removable chip, one «Сбросить
- * всё», a pager whose non-actionable control is disabled rather than dead),
+ * всё», a pager that omits rather than disables a control it cannot act on),
  * edit it, then upload and remove a cover. An over-long title is refused before
  * any request leaves the browser; no slug authoring control exists.
  *
@@ -139,10 +138,13 @@ test.describe("012 EARS-1 — project authoring in the live admin", () => {
     ).toHaveCount(0);
     await expect(page.getByTestId("projects-total")).toBeVisible();
 
-    // ── EARS-23: a non-actionable pager control is DISABLED, not a dead end ─
+    // ── EARS-23: no dead-end pager ─────────────────────────────────────────
+    // The DS `Pagination` block never renders a focusable control that does
+    // nothing: it OMITS «Назад» on the first page and the whole pager while
+    // there is a single page (`packages/design-system/src/blocks/pagination.tsx`).
     await expect(
-      visible(page.getByRole("button", { name: "Назад", exact: true })),
-    ).toBeDisabled();
+      page.getByRole("button", { name: "Назад", exact: true }),
+    ).toHaveCount(0);
 
     // ── Edit the same row (If-Match round-trip) ────────────────────────────
     await page.goto(detailUrl);

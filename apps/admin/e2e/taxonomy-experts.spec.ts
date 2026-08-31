@@ -184,18 +184,25 @@ test.describe("012 EARS-19/20 — Expert authoring", () => {
     );
 
     // ── EARS-23: ONE control clears the whole applied set ─────────────────
-    await expect(
-      page.getByRole("button", { name: "Сбросить всё" }),
-    ).toHaveCount(1);
-    await page.getByRole("button", { name: "Сбросить всё" }).click();
+    // Exactly one in the toolbar. (The empty state, when the facet leaves no
+    // rows, offers the same reset as its own way out — that is the way OUT of
+    // an empty result, not a second toolbar control.)
+    const expertsResetAll = page
+      .getByTestId("experts-filters")
+      .getByRole("button", { name: "Сбросить всё" });
+    await expect(expertsResetAll).toHaveCount(1);
+    await expertsResetAll.click();
     await expect(page.getByText("Выбрано:", { exact: false })).toHaveCount(0);
     await expect(page.getByRole("searchbox", { name: "Поиск" })).toHaveValue("");
     await expect(page.getByTestId("experts-status")).toHaveValue("");
 
-    // ── EARS-23: a pager control that cannot act is DISABLED, not a dead end ─
+    // ── EARS-23: no dead-end pager ─────────────────────────────────────────
+    // The DS `Pagination` block omits «Назад» on the first page and the whole
+    // pager while there is a single page, rather than rendering a focusable
+    // control that does nothing.
     await expect(
-      visible(page.getByRole("button", { name: "Назад", exact: true })),
-    ).toBeDisabled();
+      page.getByRole("button", { name: "Назад", exact: true }),
+    ).toHaveCount(0);
 
     // ── EARS-16: the whole ROW opens the record ───────────────────────────
     await page.getByRole("searchbox", { name: "Поиск" }).fill(familyName);

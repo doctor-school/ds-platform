@@ -1,7 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { bootstrapAdminSession } from "./support/admin-session";
 import { totpCode } from "./support/totp";
-import { visible } from "./support/visible";
 
 /**
  * 012 EARS-4 (#1286) + EARS-23 (#1297), browser half — the REAL Refine → NestJS → Postgres path.
@@ -149,7 +148,13 @@ test.describe("012 EARS-4 — partner authoring in the live admin", () => {
     await page.getByTestId("partners-status").selectOption("published");
     // A draft partner leaves the result set the moment the facet moves.
     await expect(page.getByTestId("partners-table")).not.toContainText(title);
-    await page.getByRole("button", { name: "Сбросить всё" }).click();
+    // Scoped to the toolbar: when the facet empties the result set the empty
+    // state offers the SAME reset action as its own way out, so an unscoped
+    // role query legitimately matches two controls.
+    await page
+      .getByTestId("partners-filters")
+      .getByRole("button", { name: "Сбросить всё" })
+      .click();
     await expect(page.getByText("Выбрано:", { exact: false })).toHaveCount(0);
     await expect(page.getByTestId("partners-status")).toHaveValue("");
 
@@ -158,9 +163,12 @@ test.describe("012 EARS-4 — partner authoring in the live admin", () => {
       page.getByRole("columnheader", { name: "Действия" }),
     ).toHaveCount(0);
     await expect(page.getByTestId("partners-total")).toBeVisible();
+    // EARS-23: no dead-end pager — the DS `Pagination` block omits «Назад» on
+    // the first page and the whole pager on a single page, rather than
+    // rendering a focusable disabled control.
     await expect(
-      visible(page.getByRole("button", { name: "Назад", exact: true })),
-    ).toBeDisabled();
+      page.getByRole("button", { name: "Назад", exact: true }),
+    ).toHaveCount(0);
 
     // ── Edit the same row (If-Match round-trip) ────────────────────────────
     await page.goto(detailUrl);

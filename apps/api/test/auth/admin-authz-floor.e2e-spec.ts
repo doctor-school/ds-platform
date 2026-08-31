@@ -179,6 +179,17 @@ const FLOOR_ROUTES: {
     url: `/v1/admin/projects/${ABSENT_ID}`,
     payload: {},
   },
+  // 012 EARS-5 (#1287) — the publish completeness gate on the project entity.
+  // It sits on the same floor as its authoring siblings: the guard refuses
+  // before the completeness evaluation, so an anonymous caller cannot probe,
+  // through the 404-vs-422 difference, whether a project exists or how close to
+  // publishable it is.
+  {
+    endpoint: "POST /v1/admin/projects/:id/publish",
+    method: "POST",
+    url: `/v1/admin/projects/${ABSENT_ID}/publish`,
+    payload: {},
+  },
   // 012 EARS-2/EARS-16 (#1284) — the taxonomy expert routes sit on the same
   // raised floor as every other admin route: the guard refuses before validation,
   // idempotency or upload, so an unfielded request never even reaches the handler.
@@ -207,6 +218,15 @@ const FLOOR_ROUTES: {
     endpoint: "PATCH /v1/admin/experts/:id",
     method: "PATCH",
     url: `/v1/admin/experts/${ABSENT_ID}`,
+    payload: {},
+  },
+  // 012 EARS-5 (#1287) — the publish completeness gate on the expert entity.
+  // Same floor as the project one above, and for the same reason: the refusal
+  // has to come from authz, not from the completeness verdict.
+  {
+    endpoint: "POST /v1/admin/experts/:id/publish",
+    method: "POST",
+    url: `/v1/admin/experts/${ABSENT_ID}/publish`,
     payload: {},
   },
   // 012 EARS-3 (#1285) — the curated direction authoring surface. Same floor as its
@@ -347,6 +367,14 @@ const FLOOR_ROUTES: {
     endpoint: "PATCH /v1/admin/partners/:id",
     method: "PATCH",
     url: `/v1/admin/partners/${ABSENT_ID}`,
+    payload: {},
+  },
+  // 012 EARS-5 (#1287) — the publish completeness gate on the partner entity.
+  // Same floor as its project and expert counterparts.
+  {
+    endpoint: "POST /v1/admin/partners/:id/publish",
+    method: "POST",
+    url: `/v1/admin/partners/${ABSENT_ID}/publish`,
     payload: {},
   },
   // 012 EARS-7/EARS-16 (#1289) — the explicit expert↔event link. A JOIN leaks

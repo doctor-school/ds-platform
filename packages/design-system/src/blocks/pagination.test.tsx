@@ -1,9 +1,13 @@
-import type * as React from "react";
 import { render, screen, cleanup } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { Pagination, buildPageItems, buildResponsivePageItems } from "./pagination";
+import {
+  Pagination,
+  buildPageItems,
+  buildResponsivePageItems,
+  type PaginationPagesProps,
+} from "./pagination";
 
 afterEach(cleanup);
 
@@ -13,7 +17,7 @@ afterEach(cleanup);
  * previous on the first page, no next on the last, exactly one `aria-current`, and
  * no focusable disabled-looking control that does nothing.
  */
-function renderPagination(props: Partial<React.ComponentProps<typeof Pagination>> = {}) {
+function renderPagination(props: Partial<PaginationPagesProps> = {}) {
   return render(
     <Pagination
       page={3}
@@ -137,5 +141,88 @@ describe("<Pagination>", () => {
   it("lets the control wrap instead of overflowing a narrow viewport", () => {
     renderPagination();
     expect(screen.getByRole("navigation").querySelector("ul")?.className).toContain("flex-wrap");
+  });
+});
+
+/**
+ * Cursor mode (#1641). A cursor-paged feed knows only «is there a page before /
+ * after this one» — it has no total, so numbered pages there are fabricated and
+ * every number but `page ± 1` is a dead click (012 EARS-23: no control that cannot
+ * change state). The block therefore owns a second shape — previous / current /
+ * next — instead of each host inventing one (ADR-0013 A1).
+ */
+function renderCursorPagination({
+  page = 4,
+  hasPrevious = true,
+  hasNext = true,
+  onPageChange = vi.fn(),
+}: {
+  page?: number;
+  hasPrevious?: boolean;
+  hasNext?: boolean;
+  onPageChange?: (page: number) => void;
+} = {}) {
+  return render(
+    <Pagination
+      mode="cursor"
+      page={page}
+      hasPrevious={hasPrevious}
+      hasNext={hasNext}
+      onPageChange={onPageChange}
+      navLabel="Страницы"
+      previousLabel="Назад"
+      nextLabel="Вперёд"
+      pageLabel={(number) => `Страница ${number}`}
+    />,
+  );
+}
+
+describe("<Pagination mode=\"cursor\">", () => {
+  it("#1641: renders no page number a cursor feed cannot reach", () => {
+    renderCursorPagination();
+    expect(
+      screen.getAllByRole("button").map((button) => button.textContent),
+    ).toEqual(["Назад", "Вперёд"]);
+  });
+
+  it("#1641: every rendered control moves the feed one page", async () => {
+    const onPageChange = vi.fn();
+    renderCursorPagination({ onPageChange });
+
+    await userEvent.click(screen.getByRole("button", { name: "Назад" }));
+    await userEvent.click(screen.getByRole("button", { name: "Вперёд" }));
+
+    expect(onPageChange).toHaveBeenNthCalledWith(1, 3);
+    expect(onPageChange).toHaveBeenNthCalledWith(2, 5);
+  });
+
+  it("#1641: omits the control with nowhere to go rather than rendering a dead one", () => {
+    renderCursorPagination({ hasNext: false });
+    expect(screen.queryByRole("button", { name: "Вперёд" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Назад" })).toBeInTheDocument();
+
+    cleanup();
+    renderCursorPagination({ hasPrevious: false, page: 1 });
+    expect(screen.queryByRole("button", { name: "Назад" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Вперёд" })).toBeInTheDocument();
+  });
+
+  it("#1641: does not render at all when the feed has a single page", () => {
+    const { container } = renderCursorPagination({
+      page: 1,
+      hasPrevious: false,
+      hasNext: false,
+    });
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it("#1641: keeps the current page as a non-interactive marker, like the view switcher", () => {
+    const { container } = renderCursorPagination();
+    const current = container.querySelector('[aria-current="page"]');
+    expect(current).not.toBeNull();
+    expect(current!.tagName).not.toBe("BUTTON");
+    expect(current).toHaveTextContent("Страница 4");
+    // Exactly one current marker, and it is not part of the tab order.
+    expect(container.querySelectorAll('[aria-current="page"]')).toHaveLength(1);
   });
 });

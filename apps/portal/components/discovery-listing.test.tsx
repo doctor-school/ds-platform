@@ -41,7 +41,7 @@ vi.mock("@/lib/public-events", () => ({
 }));
 
 vi.mock("@/lib/my-events", () => ({
-  fetchMyEvents: async () => ({ authenticated: false, events: [] }),
+  fetchMyEvents: async () => ({ authenticated: false }),
 }));
 
 import DiscoveryListing from "./discovery-listing";

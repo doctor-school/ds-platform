@@ -38,7 +38,7 @@
 | GET /v1/events/:idOrSlug/room                                   | authenticated | doctor_guest                 | policy     | —            | false   | none       | none        | EARS-1, EARS-8                     |
 | GET /v1/health                                                  | public        | —                            | none       | —            | false   | none       | none        | EARS-1                             |
 | GET /v1/me/display-name                                         | authenticated | doctor_guest                 | fast-path  | —            | false   | none       | none        | EARS-16                            |
-| GET /v1/me/events                                               | authenticated | doctor_guest                 | fast-path  | —            | false   | none       | none        | EARS-6, EARS-7, EARS-10            |
+| GET /v1/me/events                                               | authenticated | doctor_guest                 | fast-path  | —            | false   | none       | none        | EARS-6, EARS-7, EARS-9, EARS-10    |
 | GET /v1/me/profile                                              | authenticated | doctor_guest                 | fast-path  | —            | false   | none       | none        | EARS-27                            |
 | GET /v1/me/specialty                                            | authenticated | doctor_guest                 | fast-path  | —            | false   | none       | low-stakes  | EARS-6                             |
 | GET /v1/public/directions/:idOrSlug/events                      | public        | —                            | none       | —            | false   | none       | none        | EARS-11, EARS-16                   |

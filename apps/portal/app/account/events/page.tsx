@@ -1,25 +1,30 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
+import type { MyEventsTab } from "@ds/schemas";
 import { Container } from "@ds/design-system/container";
-import { DayBand } from "@ds/design-system/day-band";
-import { WebinarCard } from "@ds/design-system/webinar-card";
-import { fetchMyEvents, groupMyEventsByDay } from "../../../lib/my-events";
-import { toCanvasStatus } from "../../../lib/event-lifecycle";
-import { resolveRoomEntryHref } from "../../../lib/registration-state";
-import {
-  formatMskParts,
-  formatMskWeekdayShort,
-} from "../../../lib/msk";
+import { buildMyEventListItems, fetchMyEvents } from "../../../lib/my-events";
+import { EventListRouter } from "../../../components/event-list-router";
 
 /**
- * 005 EARS-6 — the «мои события» account surface (the **Предстоящие** tab of
- * `my-events.dc.html`), server-rendered at `/account/events`. It lists the
- * authenticated doctor's registered UPCOMING events (`published`/`live`, future or
- * currently airing), day-grouped, nearest first, each carrying date/time (МСК,
- * EARS-11), title, school, and a link back to its event page (`/webinars/:slug`) —
- * closing the legacy "registered but can't find it" gap. When the `MyEvents` read
- * is `[]` the canvas empty-state renders instead of a blank surface (EARS-6/EARS-12).
+ * 005 EARS-6 + 014 EARS-9 — the «Мои события» account surface
+ * (`my-events.dc.html`), server-rendered at `/account/events`. It carries exactly
+ * TWO tabs, **Предстоящие** (default) and **Записи**, over the doctor's FULL
+ * registration history:
+ *
+ *   • **Предстоящие** — the registered `published`/`live` events (future or
+ *     currently airing), day-grouped, NEAREST first, each linking back to its
+ *     event page and admitting the doctor into a live room (006 EARS-6);
+ *   • **Записи** — every registered `ended` event, month-grouped, newest first,
+ *     each badged with its recording state. An ended event whose recording is not
+ *     published yet still appears, carrying the «Запись готовится» badge, so a
+ *     doctor never loses an эфир they attended. `archived` events appear in
+ *     NEITHER tab.
+ *
+ * Each tab is one `GET /v1/me/events?tab=…` read; the envelope carries BOTH tabs'
+ * counts, so the un-selected tab's chip is right without a second read. The tab is
+ * explicit URL state (`?tab=recordings`) — the surface is deep-linkable and the
+ * browser's back button walks the tabs (014-design §8.3).
  *
  * `MyEvents` is a `doctor_guest`-authenticated read (EARS-10) — a SEPARATE authed
  * read (`lib/my-events`) forwarding the request's session cookie + fingerprint
@@ -27,14 +32,20 @@ import {
  * authenticated, unlike the public 004 pages). The read returns ONLY the caller's
  * own registrations, never another doctor's.
  *
- * Wave-1 cut (requirements Scope, design §6.2): the vendored canvas also carries
- * **Записи** / **Сертификаты** tabs and a specialty filter — those are wave 2+ and
- * are intentionally NOT built here (named deferral), and no dead tab stubs are
- * rendered. Only the Предстоящие content + the day-grouped card rhythm are in
- * scope. Each row is the `webinar-card.dc.html` unit (the `@ds/design-system`
- * `WebinarCard` primitive graduated in 004), reused verbatim; the `MyEvents`
- * projection is thinner than the public card (no specialties/speakers), so the
- * card omits those rows.
+ * The listing renders through the SHARED `EventList` block (#1346) by way of the
+ * portal's one `EventListRouter` projection — the same unit the public `/webinars`
+ * feed uses, never a section-local copy (AGENTS.md cross-front reuse). Only the
+ * route, the `?tab=` value and the copy differ.
+ *
+ * Deviations from the vendored canvas:
+ *   • the canvas's third **Сертификаты** tab is a review miss and is owner-decided
+ *     out of scope (2026-08-17) — it is not built, and no placeholder or disabled
+ *     stub is rendered;
+ *   • the canvas's **«Направление»** specialty filter is a Wave-1 cut, deferred to
+ *     014 EARS-12 / EARS-14 (the `facets` wave) — it lands with that wave, not here;
+ *   • the canvas's «Доступно 30 дней после эфира» band and its «Показать все N
+ *     записей» link are superseded by 014-design §8.3: «Записи» is the FULL history
+ *     with no retention window and no truncation, so neither is built.
  *
  * Rendered per request (`force-dynamic`) — a per-user read whose lifecycle state /
  * membership can change; a static prerender would go stale, and a just-registered
@@ -42,26 +53,47 @@ import {
  */
 export const dynamic = "force-dynamic";
 
-export default async function MyEventsPage() {
+/** `?tab=recordings` selects «Записи»; anything else is the default «Предстоящие». */
+function resolveTab(raw: string | string[] | undefined): MyEventsTab {
+  return raw === "recordings" ? "recordings" : "upcoming";
+}
+
+export default async function MyEventsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const t = await getTranslations("myEvents");
   // 006 EARS-6 — the room-entry CTA copy («Войти в эфир») is the SAME catalog key
   // the event-page enter-room CTA uses (`webinar.registered.live.cta`), reused
-  // verbatim so «мои события» never carries a hardcoded or divergent string.
+  // verbatim so «Мои события» never carries a hardcoded or divergent string.
   const tWebinar = await getTranslations("webinar");
+  const tab = resolveTab((await searchParams).tab);
   const h = await headers();
-  const result = await fetchMyEvents({
-    cookie: h.get("cookie") ?? "",
-    // The session is fingerprint-bound (ADR-0001 §6) — forward the same surface
-    // the browser bound at login so the authed read is not 401'd (see the lib).
-    userAgent: h.get("user-agent") ?? "",
-    acceptLanguage: h.get("accept-language") ?? "",
-  });
+  const result = await fetchMyEvents(
+    {
+      cookie: h.get("cookie") ?? "",
+      // The session is fingerprint-bound (ADR-0001 §6) — forward the same surface
+      // the browser bound at login so the authed read is not 401'd (see the lib).
+      userAgent: h.get("user-agent") ?? "",
+      acceptLanguage: h.get("accept-language") ?? "",
+    },
+    tab,
+  );
   // Authenticated surface: a guest / expired session goes to login (never a blank
   // or public render, unlike the 004 public pages).
   if (!result.authenticated) redirect("/login");
 
-  const groups = groupMyEventsByDay(result.events);
-  const count = result.events.length;
+  const { data, counts } = result.events;
+  const recordings = tab === "recordings";
+  const items = buildMyEventListItems(data, tab, {
+    cardTz: t("cardTz"),
+    dateLabel: ({ date, weekday }) => t("cardDate", { date, weekday }),
+    live: t("live"),
+    recordingLabel: (state) => t(`recording.${state}`),
+    recordingCta: t("recordingCta"),
+    roomCta: tWebinar("registered.live.cta"),
+  });
 
   return (
     <main className="min-h-screen bg-background text-foreground">
@@ -76,10 +108,12 @@ export default async function MyEventsPage() {
                 className="mt-4 text-caption font-semibold opacity-90"
                 data-testid="poster-decor"
               >
-                {t("subtitle", { count })}
+                {recordings
+                  ? t("recordingsSubtitle", { count: counts.recordings })
+                  : t("subtitle", { count: counts.upcoming })}
               </p>
             </div>
-            {/* Timezone block (EARS-11): «мои события» presents every instant in
+            {/* Timezone block (EARS-11): «Мои события» presents every instant in
                 Europe/Moscow (МСК), never the viewer's local timezone. The whole
                 block renders at `opacity-80` (the inner `opacity-100` cannot lift
                 a parent opacity group), so it is decorative-poster contrast debt. */}
@@ -96,71 +130,34 @@ export default async function MyEventsPage() {
       </header>
 
       <Container className="py-10 layout:py-14">
-        {groups.length === 0 ? (
-          <div className="border-2 border-dashed border-border px-6 py-14 text-center layout:py-20">
-            <p className="text-lg font-extrabold tracking-tight">
-              {t("empty.title")}
-            </p>
-            <p className="mx-auto mt-2 max-w-md text-caption leading-relaxed text-muted-foreground">
-              {t("empty.body")}
-            </p>
-          </div>
-        ) : (
-          <div className="flex flex-col gap-8 layout:gap-12">
-            {groups.map((group) => (
-              <section key={group.key}>
-                {/* Mobile: full-bleed day band; desktop: label + 2px ink rule. */}
-                <DayBand className="-mx-4 layout:hidden">{group.label}</DayBand>
-                <div className="hidden layout:mb-6 layout:flex layout:items-baseline layout:gap-4">
-                  <span className="text-caption font-extrabold uppercase tracking-micro whitespace-nowrap">
-                    {group.label}
-                  </span>
-                  <span className="flex-1 border-t-2 border-foreground" />
-                </div>
-
-                <div className="-mx-4 flex flex-col layout:mx-0 layout:gap-7">
-                  {group.events.map((event) => {
-                    const parts = formatMskParts(event.startsAt);
-                    // 006 EARS-6 — every «мои события» row is one of the caller's
-                    // OWN registrations (the read returns only registered events),
-                    // so a `live` row admits the doctor into the room. Reuse the
-                    // hardened `resolveRoomEntryHref` (with the known-registered
-                    // state) so the room path is built through the same open-
-                    // redirect defence as the event-page CTA — non-null only for a
-                    // `live` event, `null` otherwise (no CTA renders).
-                    const roomEntryHref = resolveRoomEntryHref(
-                      { registered: true },
-                      toCanvasStatus(event.state),
-                      event.slug,
-                    );
-                    return (
-                      <WebinarCard
-                        key={event.eventId}
-                        href={`/webinars/${event.slug}`}
-                        time={parts.time}
-                        tzLabel={t("cardTz")}
-                        dateLabel={t("cardDate", {
-                          date: parts.date,
-                          weekday: formatMskWeekdayShort(event.startsAt),
-                        })}
-                        school={event.school}
-                        title={event.title}
-                        live={event.state === "live"}
-                        liveLabel={t("live")}
-                        ctaHref={roomEntryHref ?? undefined}
-                        ctaLabel={
-                          roomEntryHref
-                            ? tWebinar("registered.live.cta")
-                            : undefined
-                        }
-                      />
-                    );
-                  })}
-                </div>
-              </section>
-            ))}
-          </div>
-        )}
+        {/* `MyEvents` returns a whole tab at once — no paging; `pageCount = 1`
+            makes the shared `Pagination` block render nothing at all. */}
+        <EventListRouter
+          basePath="/account/events"
+          pastTabParam="recordings"
+          items={items}
+          selectedTab={recordings ? "past" : "upcoming"}
+          counts={{ upcoming: counts.upcoming, past: counts.recordings }}
+          labels={{
+            upcoming: t("tabs.upcoming"),
+            past: t("tabs.recordings"),
+            emptyTitle: t(
+              recordings ? "recordingsEmpty.title" : "empty.title",
+            ),
+            emptyDescription: t(
+              recordings ? "recordingsEmpty.body" : "empty.body",
+            ),
+            pagination: t("pagination.label"),
+            previous: t("pagination.previous"),
+            next: t("pagination.next"),
+            pagePrefix: t("pagination.page"),
+          }}
+          paginationMode="pages"
+          pageCount={1}
+          page={1}
+          nextCursor={null}
+          hasMore={false}
+        />
       </Container>
     </main>
   );

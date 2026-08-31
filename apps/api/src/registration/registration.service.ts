@@ -1,12 +1,14 @@
-import { Injectable } from "@nestjs/common";
+import { Inject, Injectable } from "@nestjs/common";
 import {
   type EventLifecycleState,
   type EventRegistrationState,
   type EventRoster,
   isRegistrable,
   type MyEvents,
+  type MyEventsTab,
 } from "@ds/schemas";
 import { AIR_WINDOW_MS } from "../events/events.service.js";
+import { RecordingsProjectionService } from "../recordings/index.js";
 import { RegistrationRepository } from "./registration.repository.js";
 
 /**
@@ -56,7 +58,14 @@ export class RegistrationEventNotFoundError extends Error {
  */
 @Injectable()
 export class RegistrationService {
-  constructor(private readonly repo: RegistrationRepository) {}
+  // Explicit `@Inject`: the `endpoint-authz` gate boots this graph under `tsx`,
+  // which emits no `design:paramtypes` (the recordings module README's rule 6).
+  constructor(
+    @Inject(RegistrationRepository)
+    private readonly repo: RegistrationRepository,
+    @Inject(RecordingsProjectionService)
+    private readonly recordings: RecordingsProjectionService,
+  ) {}
 
   /**
    * `RegisterForEvent` (EARS-1 + EARS-3): record a registration against the
@@ -105,20 +114,52 @@ export class RegistrationService {
   }
 
   /**
-   * `MyEvents` (EARS-6; design §4/§5): the authenticated doctor's registered
-   * **upcoming** events (`published`/`live`, future or currently airing), ordered
-   * NEAREST `startsAt` first. Returns only the caller's own registrations
-   * (EARS-10); an empty result is a valid `[]` (the «мои события» surface renders
-   * the empty-state). The temporal window mirrors the 004 upcoming listing — an
-   * event the doctor registered for appears here iff it would still appear as
-   * upcoming/live publicly (`starts_at ≥ now − {@link AIR_WINDOW_MS}`), with the
-   * lifecycle STATE (not the clock) the primary filter (`ended`/`archived` never
-   * list). A just-registered event appears on the next read (EARS-7).
+   * `MyEvents` (005 EARS-6, design §4/§5; 014 EARS-9, 014-design §8.3): ONE tab of
+   * the authenticated doctor's «Мои события», plus both tabs' counts. Returns only
+   * the caller's own registrations (EARS-10); an empty `data` is a valid result
+   * (the surface renders the empty-state). A just-registered event appears on the
+   * next read (005 EARS-7).
+   *
+   * Tab membership and ordering are the repository's single `tabMembership`
+   * predicate: `upcoming` is `published`/`live` inside the 004 upcoming window
+   * (`starts_at ≥ now − {@link AIR_WINDOW_MS}`) nearest-first, `recordings` is the
+   * doctor's FULL `ended` history newest-first, and `archived` is in neither.
+   *
+   * The `recording` badge is resolved through feature 014's own canonical
+   * projection service (#1340) in ONE batched statement for the whole page — the
+   * same resolver the public archive page and the `/webinars` past tab read, so a
+   * doctor's own row and the public card cannot disagree. It runs for the
+   * `recordings` tab only: an upcoming event has no recording state to speak of,
+   * and asking for one would be a pointless query on every Предстоящие read.
    */
-  async myEvents(sub: string, now: Date = new Date()): Promise<MyEvents> {
+  async myEvents(
+    sub: string,
+    tab: MyEventsTab = "upcoming",
+    now: Date = new Date(),
+  ): Promise<MyEvents> {
     const userId = await this.resolveUser(sub);
     const cutoff = new Date(now.getTime() - AIR_WINDOW_MS);
-    return this.repo.findMyEvents(userId, cutoff);
+    const [rows, counts] = await Promise.all([
+      this.repo.findMyEvents(userId, tab, cutoff),
+      this.repo.countMyEvents(userId, cutoff),
+    ]);
+    if (tab === "upcoming") {
+      return { tab, counts, data: rows.map((row) => ({ ...row, recording: null })) };
+    }
+    const projections = await this.recordings.resolveRecordingProjections(
+      rows.map((row) => row.eventId),
+    );
+    return {
+      tab,
+      counts,
+      data: rows.map((row) => ({
+        ...row,
+        // `resolveRecordingProjections` sets an entry for EVERY requested id
+        // (`preparing` when nothing is published), which is precisely why an
+        // ended event with no recording is still LISTED and still badged.
+        recording: projections.get(row.eventId) ?? null,
+      })),
+    };
   }
 
   /**

@@ -26,18 +26,33 @@ non-`doctor_guest` role (403) before the handler runs — never a silent success
 Gating reads the single `EventLifecycleState` (owned by 007, read-only): a
 non-`published`/`live` state is a 409, a missing event a 404.
 
-**EARS-6** adds the `MyEvents` «мои события» read:
+**EARS-6** adds the `MyEvents` «Мои события» read; **014 EARS-9** splits it across
+the surface's two canvas tabs (014-design §8.3):
 
-- `MyEvents` (`GET /v1/me/events`) — the authenticated doctor's registered
-  **upcoming** events (`published`/`live`, future or currently airing), ordered
-  **nearest `startsAt` first**, each `{ eventId, slug, title, school, startsAt,
-state }`. Feeds the portal «мои события» Предстоящие tab (`/account/events`); an
-  empty result is a valid `[]` (the surface renders the canvas empty-state). The
-  temporal window mirrors the 004 upcoming listing (`starts_at ≥ now −
-AIR_WINDOW_MS`), with the lifecycle STATE the primary filter — `ended`/`archived`
-  registrations never list (EARS-6). The read returns ONLY the caller's own
-  registrations, never another doctor's (EARS-10); a just-registered event appears
-  on the next read (EARS-7).
+- `MyEvents` (`GET /v1/me/events?tab=upcoming|recordings`) — ONE tab of the
+  authenticated doctor's «Мои события» plus BOTH tabs' counts:
+  `{ tab, data, counts }`, each row `{ eventId, slug, title, school, startsAt,
+state, recording }`. `?tab=` is optional and defaults to `upcoming`, so the bare
+  call 005 shipped keeps returning the Предстоящие side; anything outside the
+  closed two-value set is a 400, never coerced to the default.
+  - **`upcoming`** — `published`/`live` inside the 004 upcoming window
+    (`starts_at ≥ now − AIR_WINDOW_MS`), **nearest `startsAt` first**, `recording`
+    always `null`.
+  - **`recordings`** — the doctor's **full** `ended` history, **newest first**,
+    with NO temporal window: an эфир from two years ago is still listed. Each row
+    carries feature 014's source-free `RecordingProjection`, resolved through
+    014's own `RecordingsProjectionService` (#1340) in one batched statement —
+    never re-derived here, so the badge on a doctor's own row and the badge on the
+    public card have one implementation. An `ended` event with nothing published
+    resolves to `preparing`, which is why it is still listed and still badged.
+  - `archived` registrations are in **neither** tab and **neither** count
+    (feature 004's visibility policy). Tab membership is one SQL predicate
+    (`tabMembership`) shared by the row query and the count query, so a listed row
+    and a counted row can never be different sets.
+
+  An empty `data` is a valid result (the surface renders the canvas empty-state).
+  The read returns ONLY the caller's own registrations, never another doctor's
+  (EARS-10); a just-registered event appears on the next read (EARS-7).
 
 **EARS-8** adds the durable `EventRoster` read model on top of the record:
 

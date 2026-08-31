@@ -136,7 +136,13 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         headers: authed(cookie),
       });
       expect(healed.statusCode).toBe(200);
-      expect(healed.json()).toEqual([]);
+      // 014 EARS-9 — the read model is an envelope per tab; a healed mirror with
+      // no registrations serves the empty DEFAULT tab, not a bare `[]`.
+      expect(healed.json()).toEqual({
+        tab: "upcoming",
+        data: [],
+        counts: { upcoming: 0, recordings: 0 },
+      });
 
       // The mirror row was re-materialized from the IdP (email restored, the
       // doctor_guest projection re-granted).

@@ -3999,7 +3999,9 @@ export interface operations {
     };
     MyEventsController_list: {
         parameters: {
-            query?: never;
+            query?: {
+                tab?: "upcoming" | "recordings";
+            };
             header?: never;
             path?: never;
             cookie?: never;

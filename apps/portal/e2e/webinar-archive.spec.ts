@@ -70,8 +70,10 @@ test.describe("014 EARS-4 public post-live event page (e2e)", () => {
     // The 004 projection still renders whole: title, school, description and the
     // speaker list are the page's substance, not a recording teaser.
     await expect(page.getByRole("heading", { level: 1 })).not.toBeEmpty();
-    await expect(page.getByText("О чём эфир")).toBeVisible();
-    await expect(page.getByText("Спикеры")).toBeVisible();
+    await expect(page.getByText("О чём эфир", { exact: true })).toBeVisible();
+    // `exact` because the sponsor disclaimer prose also contains the word
+    // «спикеры» — the assertion is about the section LABEL, not the substring.
+    await expect(page.getByText("Спикеры", { exact: true })).toBeVisible();
 
     // The exactly-one-CTA invariant holds in the ended state: no participation
     // CTA, and no half-built player button pretending to be one.
@@ -97,12 +99,27 @@ test.describe("014 EARS-4 public post-live event page (e2e)", () => {
     });
 
     const html = await page.content();
-    for (const forbidden of ["rutube", "embedRef", "embed_ref", "provider"]) {
+    // The forbidden set is the SOURCE itself — provider names, the carrier field
+    // names, and the shape of a provider-scoped embed id (#1134: a 32-hex ref,
+    // never a pasted URL). The bare word «provider» is deliberately NOT in this
+    // list: React and next-intl ship components called `…Provider`, so matching
+    // it asserts against framework internals rather than the product promise.
+    for (const forbidden of [
+      "rutube",
+      "youtube",
+      "vk.com",
+      "embedRef",
+      "embed_ref",
+    ]) {
       expect(
         html.toLowerCase(),
         `delivered HTML must not carry «${forbidden}»`,
       ).not.toContain(forbidden.toLowerCase());
     }
+    expect(
+      html.match(/\b[0-9a-f]{32}\b/i),
+      "delivered HTML must not carry a provider-scoped embed ref",
+    ).toBeNull();
     // No player frame of any kind was mounted.
     await expect(page.locator("iframe, video")).toHaveCount(0);
     expect(
@@ -141,8 +158,12 @@ test.describe("014 EARS-4 public post-live event page (e2e)", () => {
     });
     // Degrades in place — never a 404 or a redirect (004 EARS-5, owner variant «а»).
     expect(res?.status()).toBe(200);
-    await expect(page.getByText("В архиве")).toBeVisible();
-    await expect(page.getByText("Регистрация недоступна")).toBeVisible();
+    // `exact` — the archive notice card repeats the phrase as «Мероприятие в
+    // архиве»; the hero badge is the render 004 EARS-5 owns.
+    await expect(page.getByText("В архиве", { exact: true })).toBeVisible();
+    await expect(
+      page.getByText("Регистрация недоступна", { exact: true }),
+    ).toBeVisible();
     await expect(page.getByTestId("recording-badge")).toHaveCount(0);
     await expect(page.getByTestId("recording-meta")).toHaveCount(0);
   });

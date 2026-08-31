@@ -1,5 +1,68 @@
 # @ds/admin
 
+## 1.0.0
+
+### Major Changes
+
+- [#1622](https://github.com/doctor-school/ds-platform/pull/1622) [`e1b771f`](https://github.com/doctor-school/ds-platform/commit/e1b771fdeddc55990c67a5f903aba280d7d174b4) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - [#1606](https://github.com/doctor-school/ds-platform/issues/1606): replace free-form Expert name and editable slug authoring with structured
+  family/given/patronymic fields, an optional closed selector for one eligible User,
+  explicit unlink, and a server-derived public link with a copy action.
+
+### Minor Changes
+
+- [#1660](https://github.com/doctor-school/ds-platform/pull/1660) [`360db61`](https://github.com/doctor-school/ds-platform/commit/360db6192e658cd2f0bae47b3d616ce0463dbfa9) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - [#1297](https://github.com/doctor-school/ds-platform/issues/1297): migrate the admin project, expert and partner lists onto the approved
+  `@ds/design-system` block tier — instant search and instant facets with no
+  «Применить», removable chips for the applied set, one «Сбросить всё», and a
+  pager that omits rather than disables a control it cannot act on; the bespoke
+  list shell and the per-surface relationship search fields are removed in favour
+  of one server-backed Combobox.
+
+- [#1598](https://github.com/doctor-school/ds-platform/pull/1598) [`3833f11`](https://github.com/doctor-school/ds-platform/commit/3833f1177f9fc93d47cdc75469582069a0eb9a4b) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Curated event↔topic relationships (012 EARS-11). An event is filed under topics the catalogue already holds — the new «Темы» tab on the event detail links, retires and restores them through the §3.1 preview→confirm gate, with no inline topic creation and no delete. The admin surface is served by `/v1/admin/event-topics` (list filtered by either endpoint, create, transition-specific lifecycle-impact/retire/restore) and the public reads by `/v1/public/events/:idOrSlug/topics` and `/v1/public/topics/:idOrSlug/events`. The event's own `specialties[]` free-text axis is left untouched by every one of these paths.
+
+- [#1636](https://github.com/doctor-school/ds-platform/pull/1636) [`3a13d7c`](https://github.com/doctor-school/ds-platform/commit/3a13d7cca9ec57062a8c102ef811471a7eb86651) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - [#1610](https://github.com/doctor-school/ds-platform/issues/1610): author all five taxonomy relationships from either endpoint with one retained command, bounded server search, and the canonical in-dropdown Combobox.
+
+- [#1597](https://github.com/doctor-school/ds-platform/pull/1597) [`16dfd8b`](https://github.com/doctor-school/ds-platform/commit/16dfd8bb0388caff1a91032ee44d6c3ade0528ad) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 014 EARS-18 — `MarkEventEnded`: a `platform_admin` can move a published event straight to `ended` when the эфир happened off the platform, without opening a room. New `POST /v1/admin/events/:id/mark-ended` (Idempotency-Key required; refuses with `EVENT_NOT_PAST` when the scheduled end is still ahead and `INVALID_TRANSITION` from any other origin or once a room was ever opened), the `published → ended` edge in the `LIFECYCLE_TRANSITIONS` SSOT, and the admin action «Отметить завершённым (трансляция прошла вне платформы)» — offered only when the server's `validTransitions` carries the edge. The lifecycle action table is now keyed on the `(origin, target)` pair, so `live → ended` keeps firing `close` while `published → ended` fires the new command.
+
+- [#1599](https://github.com/doctor-school/ds-platform/pull/1599) [`ba859b3`](https://github.com/doctor-school/ds-platform/commit/ba859b3d90fe7a9436dd677f92045ccbd79e8dbb) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Project↔expert and project↔partner relationships (012 EARS-9 / EARS-10). A project now carries its people and its sponsors as first-class curated links: experts are listed with a `curator | member` role under an at-most-one-active-curator invariant (a published project is never committed with zero or two curators), and the curator seat is handed over by the atomic, version-checked `POST /v1/admin/projects/:id/replace-curator` rather than by a second create. Partners carry `isPrimary` as an ordinary row attribute — a second active primary is refused with 409 `RELATIONSHIP_CONFLICT` and zero mutation — and `PublicProjectSummary.primaryPartner` is now populated on every public route that emits it, through one shared builder instead of a copy per vertical. Admin surfaces: `/v1/admin/project-experts` and `/v1/admin/project-partners` (list filtered by either endpoint, create, patch, retire, restore); public reads: `/v1/public/projects/:idOrSlug/{experts,partners}`, `/v1/public/experts/:idOrSlug/projects`, `/v1/public/partners/:idOrSlug/projects`. Two new admin panels are embedded bidirectionally on the project, expert and partner detail pages.
+
+- [#1575](https://github.com/doctor-school/ds-platform/pull/1575) [`9ee8b78`](https://github.com/doctor-school/ds-platform/commit/9ee8b78b7b3c575a5cf8ae425517040baaaf8cae) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - [#1483](https://github.com/doctor-school/ds-platform/issues/1483) (ADR-0016 §5): the admin gains the two direction-relation sections, and the
+  curated book is called what it is.
+
+  - «Направления и специальности» — which Минздрав specialties a direction serves.
+    The specialty end is a CLOSED book: it is chosen from the nomenclature, and the
+    screen offers no way to author one.
+  - «Смежность направлений» — which directions count as близкие, as a DIRECTED edge
+    with a kind and a weight. The list says so in words, because an operator who
+    reads the edge as symmetric would author half the graph they meant to. An
+    authored edge's ends are locked; a retired one shows its kind/weight as text
+    rather than an edit form the API would refuse.
+  - The whole «Темы» vocabulary becomes «Направления» — nav, list, form and every
+    RU sentence, including gender agreement. This is renamed product copy, not a
+    mechanical key swap, and reads as copy.
+
+### Patch Changes
+
+- [#1661](https://github.com/doctor-school/ds-platform/pull/1661) [`8cfb36b`](https://github.com/doctor-school/ds-platform/commit/8cfb36bc70bb2a93d47e70cde8bf9817ed749d3a) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Fix the «Эксперты» panel white-screening on a failed read. The event↔expert panel
+  checked presence against Refine's `result.data`, which substitutes a frozen `{}` when
+  the query has no answer — the check read "loaded" for a failed read and the render then
+  tripped over `list.data` / `list.total`. Presence now comes from the query itself
+  (`query.data?.data`), so a failed collection read renders the existing RU error alert
+  instead of a blank screen.
+
+- [#1628](https://github.com/doctor-school/ds-platform/pull/1628) [`bd5e782`](https://github.com/doctor-school/ds-platform/commit/bd5e782a91bfadb27210220c1a8846c151e464ab) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - [#1626](https://github.com/doctor-school/ds-platform/issues/1626): keep the Expert User selector settled on «Без учётной записи» when its
+  already-empty server search closes, instead of leaving the control loading.
+
+- [#1591](https://github.com/doctor-school/ds-platform/pull/1591) [`f5f07cf`](https://github.com/doctor-school/ds-platform/commit/f5f07cf87903eba3ba8f071e0076ca0f0e9d4682) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Fix the «Записи» panel white-screening on a failed read. The panel checked presence
+  against Refine's `result.data`, which substitutes a frozen `{}` when the query has no
+  answer — the check read "loaded" for a failed read and the render then tripped over
+  `list.eventState` / `list.data`. Presence now comes from the query itself
+  (`query.data?.data`), so a failed collection read renders the existing RU error alert
+  instead of a blank screen.
+- Updated dependencies [[`de51447`](https://github.com/doctor-school/ds-platform/commit/de5144764860d6e3c009330d7ea4d667316be367), [`3833f11`](https://github.com/doctor-school/ds-platform/commit/3833f1177f9fc93d47cdc75469582069a0eb9a4b), [`1ec641e`](https://github.com/doctor-school/ds-platform/commit/1ec641e59b849a2e728c4bdbfdf7486a31fd6825), [`3a13d7c`](https://github.com/doctor-school/ds-platform/commit/3a13d7cca9ec57062a8c102ef811471a7eb86651), [`89e24a2`](https://github.com/doctor-school/ds-platform/commit/89e24a2b49f59887977271210b7ea5b333e339ad), [`e1b771f`](https://github.com/doctor-school/ds-platform/commit/e1b771fdeddc55990c67a5f903aba280d7d174b4), [`2d76e79`](https://github.com/doctor-school/ds-platform/commit/2d76e794ab7ef5d6ea937f2755d9819ef833042e), [`16dfd8b`](https://github.com/doctor-school/ds-platform/commit/16dfd8bb0388caff1a91032ee44d6c3ade0528ad), [`2883a90`](https://github.com/doctor-school/ds-platform/commit/2883a90d978fe1aa51edcb409ef9984fabdc585e), [`f9b61ce`](https://github.com/doctor-school/ds-platform/commit/f9b61ce678f906c31abcba507f3eff8e639e2c54), [`ba859b3`](https://github.com/doctor-school/ds-platform/commit/ba859b3d90fe7a9436dd677f92045ccbd79e8dbb), [`9ee8b78`](https://github.com/doctor-school/ds-platform/commit/9ee8b78b7b3c575a5cf8ae425517040baaaf8cae), [`dc0fcf9`](https://github.com/doctor-school/ds-platform/commit/dc0fcf9f5c7ef1569003552b244be654229c9f06), [`b1533e3`](https://github.com/doctor-school/ds-platform/commit/b1533e318780e09c96689bb7de54283bf09c0e69)]:
+  - @ds/design-system@5.2.0
+  - @ds/schemas@4.0.0
+  - @ds/api-client@0.1.0
+
 ## 0.9.2
 
 ### Patch Changes

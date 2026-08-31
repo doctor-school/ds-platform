@@ -1,5 +1,17 @@
 # @ds/showcase
 
+## 0.1.0
+
+### Minor Changes
+
+- [#1651](https://github.com/doctor-school/ds-platform/pull/1651) [`1ec641e`](https://github.com/doctor-school/ds-platform/commit/1ec641e59b849a2e728c4bdbfdf7486a31fd6825) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Give cursor-paged feeds an honest paging control. `<Pagination>` gains an additive `mode="cursor"` shape — «Назад» / current page / «Вперёд», rendered only where a page actually exists — alongside the unchanged default numbered mode, and `<EventList>` passes it through (`paginationMode="cursor"` with `hasPrevious` / `hasNext`). The portal's webinar archive, a cursor feed with no knowable total, stops fabricating a page count and rendering page numbers that did nothing when clicked; its `?cursorTrail=` is now a bounded window of the cursors «Назад» can use instead of growing with every page forward.
+
+### Patch Changes
+
+- Updated dependencies [[`de51447`](https://github.com/doctor-school/ds-platform/commit/de5144764860d6e3c009330d7ea4d667316be367), [`3833f11`](https://github.com/doctor-school/ds-platform/commit/3833f1177f9fc93d47cdc75469582069a0eb9a4b), [`1ec641e`](https://github.com/doctor-school/ds-platform/commit/1ec641e59b849a2e728c4bdbfdf7486a31fd6825), [`3a13d7c`](https://github.com/doctor-school/ds-platform/commit/3a13d7cca9ec57062a8c102ef811471a7eb86651), [`89e24a2`](https://github.com/doctor-school/ds-platform/commit/89e24a2b49f59887977271210b7ea5b333e339ad), [`e1b771f`](https://github.com/doctor-school/ds-platform/commit/e1b771fdeddc55990c67a5f903aba280d7d174b4), [`2d76e79`](https://github.com/doctor-school/ds-platform/commit/2d76e794ab7ef5d6ea937f2755d9819ef833042e), [`16dfd8b`](https://github.com/doctor-school/ds-platform/commit/16dfd8bb0388caff1a91032ee44d6c3ade0528ad), [`2883a90`](https://github.com/doctor-school/ds-platform/commit/2883a90d978fe1aa51edcb409ef9984fabdc585e), [`f9b61ce`](https://github.com/doctor-school/ds-platform/commit/f9b61ce678f906c31abcba507f3eff8e639e2c54), [`ba859b3`](https://github.com/doctor-school/ds-platform/commit/ba859b3d90fe7a9436dd677f92045ccbd79e8dbb), [`9ee8b78`](https://github.com/doctor-school/ds-platform/commit/9ee8b78b7b3c575a5cf8ae425517040baaaf8cae), [`dc0fcf9`](https://github.com/doctor-school/ds-platform/commit/dc0fcf9f5c7ef1569003552b244be654229c9f06), [`b1533e3`](https://github.com/doctor-school/ds-platform/commit/b1533e318780e09c96689bb7de54283bf09c0e69)]:
+  - @ds/design-system@5.2.0
+  - @ds/schemas@4.0.0
+
 ## 0.0.24
 
 ### Patch Changes

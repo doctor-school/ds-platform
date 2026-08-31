@@ -24,6 +24,20 @@
         "https://github.com/doctor-school/ds-platform/issues/1578#issuecomment-5435209906"
       ]
     },
+    "feature-012-publish-lifecycle-v1": {
+      "evidenceProfiles": ["responsive-web"],
+      "surfacePaths": [
+        "apps/admin/app/experts/[id]/page.tsx",
+        "apps/admin/app/partners/[id]/page.tsx",
+        "apps/admin/app/projects/[id]/page.tsx",
+        "apps/admin/components/publish-action.tsx",
+        "apps/admin/messages/ru.json"
+      ],
+      "states": ["taxonomy-publish-tab"],
+      "approvalProvenance": [
+        "https://github.com/doctor-school/ds-platform/issues/1578#issuecomment-5435209906"
+      ]
+    },
     "admin-list-block-tier-v1": {
       "evidenceProfiles": ["responsive-web"],
       "surfacePaths": [

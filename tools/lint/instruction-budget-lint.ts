@@ -19,6 +19,15 @@
  * Budgets (per file):
  *   - lines:  <= 200   (Anthropic CLAUDE.md target + MEMORY.md load cutoff)
  *   - bytes:  <= 25 KB  (MEMORY.md load cutoff; applied to all three for headroom)
+ *
+ * Budget (always-on TOTAL, #1678): <= 30 KB across every file that loads at
+ * session start (AGENTS.md + CLAUDE.md + MEMORY.md when resolvable + path-less
+ * .claude/rules/*.md). Per-file caps alone cannot bound the window: three files
+ * each comfortably inside 25 KB still open a 75 KB session, and context rot is a
+ * function of the TOTAL, not of any single file. The cap is a hard FAIL (BLOCK,
+ * exit 1) in the same style as a per-file overrun — the remedy is identical:
+ * relocate detail into a `paths:`-scoped rules file or a read-on-demand skill,
+ * both of which are off the total by construction.
  *   CLAUDE.md additionally carries a softer high-signal WARN target of 120 lines.
  *   An always-on file within budget but with < 256 B of byte-headroom left WARNs
  *   (#1042) — the next edit would force ad-hoc squeezing; compact proactively.
@@ -57,6 +66,7 @@ const TAG = "[instruction-budget]";
 
 const MAX_LINES = 200;
 const MAX_BYTES = 25 * 1024; // 25 KB, matching the MEMORY.md auto-load cutoff
+const MAX_TOTAL_BYTES = 30 * 1024; // 30 KB across the whole always-on set (#1678)
 const CLAUDE_SOFT_LINES = 120; // high-signal target (WARN only)
 const HEADROOM_WARN_BYTES = 256; // always-on byte-headroom WARN tier (#1042)
 
@@ -221,14 +231,24 @@ for (const t of targets) {
   }
 }
 
+const overTotal = totalBytes > MAX_TOTAL_BYTES;
 lines.push(
-  `${TAG} always-on total: ${totalLines} lines / ${(totalBytes / 1024).toFixed(1)} KB ` +
+  `${TAG} ${(overTotal ? "OVER BUDGET" : "ok").padEnd(11)} always-on total: ${totalLines} lines / ${(totalBytes / 1024).toFixed(1)} KB ` +
+    `(limit ${(MAX_TOTAL_BYTES / 1024).toFixed(0)} KB) ` +
     `(AGENTS.md + CLAUDE.md${memPath ? " + MEMORY.md" : ""} + path-less .claude/rules/*.md)`,
 );
+if (overTotal) {
+  process.stderr.write(
+    `${TAG} always-on total: ${(totalBytes / 1024).toFixed(1)} KB > ${(MAX_TOTAL_BYTES / 1024).toFixed(0)} KB. ` +
+      `Per-file budgets are individually satisfied — the SESSION WINDOW is not. ` +
+      `Relocate detail to a \`paths:\`-scoped .claude/rules/*.md file or a read-on-demand skill (both off the total).\n`,
+  );
+  failed = true;
+}
 
 process.stdout.write(lines.join("\n") + "\n");
 if (failed) {
-  process.stderr.write(`${TAG} FAIL — at least one always-on file is over budget. Compact before declaring the session done.\n`);
+  process.stderr.write(`${TAG} FAIL — an always-on file, or the always-on total, is over budget. Compact before declaring the session done.\n`);
   process.exit(1);
 }
 process.stdout.write(`${TAG} PASS — always-on context within budget.\n`);

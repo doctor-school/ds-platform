@@ -60,6 +60,19 @@ const headroomCase = (agentsBytes: number): string => {
   return root;
 };
 
+/**
+ * Temp fixture root sizing BOTH always-on repo files (#1678) — the total-cap
+ * seam: each file byte-exact and individually legal, so only their sum can trip
+ * the guard.
+ */
+const totalCase = (agentsBytes: number, claudeBytes: number): string => {
+  const root = mkdtempSync(join(tmpdir(), "instruction-budget-total-"));
+  tempRoots.push(root);
+  writeFileSync(join(root, "AGENTS.md"), sizedMd(agentsBytes));
+  writeFileSync(join(root, "CLAUDE.md"), sizedMd(claudeBytes));
+  return root;
+};
+
 afterAll(() => {
   for (const root of tempRoots) rmSync(root, { recursive: true, force: true });
 });
@@ -167,6 +180,31 @@ describe("instruction-budget-lint", () => {
     expect(code).toBe(1);
     expect(stderr).toContain("AGENTS.md");
     expect(stderr).toContain("KB >");
+  });
+
+  // ── always-on TOTAL cap (#1678) ────────────────────────────────────────────
+  // Per-file caps cannot bound the session window: several files each inside the
+  // 25 KB per-file ceiling still open an arbitrarily large session, and context
+  // rot is a function of the total. The total is a hard FAIL, like a per-file
+  // overrun — and it must fire while every individual file is comfortably legal.
+
+  it("#1678: always-on total over 30 KB FAILs even with every file individually in budget", () => {
+    const { code, stdout, stderr } = runGuard(GUARD, totalCase(20 * 1024, 11 * 1024));
+    // Neither file is over the 25 KB per-file ceiling…
+    expect(stderr).not.toContain("AGENTS.md:");
+    expect(stderr).not.toContain("CLAUDE.md:");
+    // …but 31 KB of always-on window is over the total cap.
+    expect(code).toBe(1);
+    expect(stdout).toContain("OVER BUDGET always-on total");
+    expect(stderr).toContain("always-on total");
+    expect(stderr).toContain("30 KB");
+  });
+
+  it("#1678: always-on total at or under 30 KB passes", () => {
+    const { code, stdout } = runGuard(GUARD, totalCase(20 * 1024, 9 * 1024));
+    expect(code).toBe(0);
+    expect(stdout).toContain("PASS");
+    expect(stdout).toContain("(limit 30 KB)");
   });
 
   // ── `paths:` frontmatter classification (#1370) ────────────────────────────

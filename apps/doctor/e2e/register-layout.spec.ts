@@ -20,7 +20,8 @@ import { test, expect, type Page } from "@playwright/test";
  * `shell.spec.ts` → `footer-documents`), which a document-wide scan would flag.
  *
  * Scope of this slice: layout only. The envelope's other slots (return context,
- * attribution, points promise, consent tiers — #1538/#1540/#1541/#1544/#1545) are
+ * attribution, points promise, consent tiers — return context #1538, attribution
+ * #1544, points promise #1545, consent tiers #1540/#1541/#1542) are
  * unfilled here, and EARS-3's honest-empty rule makes an unfilled slot ABSENT
  * from the tree rather than an empty frame — which 1.5 pins, so a later Issue
  * cannot land a reserved placeholder frame without failing this spec first.
@@ -116,6 +117,16 @@ test.describe("021 EARS-1: the registration route inside the 017 shell", () => {
     expect(await promo.getAttribute("aria-required"), "promo aria-required").not.toBe(
       "true",
     );
+
+    // Design §7's «trim + length bound» must not rewrite what is being typed:
+    // trimming on every keystroke makes an interior space unreachable, because
+    // the trailing space is stripped before the next character arrives. Typed
+    // interior whitespace survives; the surrounding whitespace goes on blur.
+    await promo.fill("");
+    await promo.pressSequentially("  DS 2026  ");
+    await expect(promo, "promo value while typing").toHaveValue("  DS 2026  ");
+    await promo.blur();
+    await expect(promo, "promo value after blur").toHaveValue("DS 2026");
   });
 
   test("021 EARS-1.3: no document is requested in the empty, filled or error state", async ({

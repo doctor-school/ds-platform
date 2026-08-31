@@ -14,9 +14,10 @@ import { RegistrationScreen } from "@/components/registration-screen";
  * closes a link that resolved to a 404.
  *
  * The screen is rendered with EVERY envelope slot unsupplied. That is the correct
- * state of this slice, not an omission: the return context (#1540), the
- * attribution line (#1541), the points promise (#1545) and the two consent tiers
- * (#1538/#1544) are separate EARS handlers, and EARS-3's honest-empty rule says an
+ * state of this slice, not an omission: the return context (#1538), the
+ * attribution line (#1544), the points promise (#1545) and the two consent tiers
+ * (#1541/#1542, with the medical-worker declaration at #1540) are separate EARS
+ * handlers, and EARS-3's honest-empty rule says an
  * unsupplied slot is absent from the tree rather than rendered as an empty frame.
  * `RegistrationScreen` enforces that; passing nothing here is how the enforcement
  * is exercised.

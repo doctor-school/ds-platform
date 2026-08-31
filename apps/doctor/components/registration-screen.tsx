@@ -23,8 +23,8 @@ import { Input } from "@ds/design-system/input";
  * This is the ENVELOPE, not the whole feature. The canvas's split screen has a
  * navy brand panel on the left and the bordered form card on the right, and the
  * card is surrounded by four things this slice does not own: the return context
- * (#1540), the attribution line (#1541), the points promise (#1545) and the two
- * consent tiers (#1538/#1544). They arrive here as props, and — per EARS-3's
+ * (#1538), the attribution line (#1544), the points promise (#1545) and the two
+ * consent tiers (#1541/#1542). They arrive here as props, and — per EARS-3's
  * honest-empty rule — a slot that is not supplied renders NOTHING: no wrapper, no
  * reserved frame, no dashed placeholder. That is why every slot below is guarded
  * by a truthiness check rather than always rendered with `children` inside; an
@@ -44,7 +44,7 @@ import { Input } from "@ds/design-system/input";
  *   so `apps/doctor` has none yet. Wiring `RegisterDoctor` here would ship the
  *   untracked seam design §2 names by name. The mandatory access-condition
  *   consents (EARS-4/EARS-5) are likewise a precondition of the command and
- *   land in #1538, so the reason line states the real unmet condition rather
+ *   land in #1540/#1541, so the reason line states the real unmet condition rather
  *   than a build-status note.
  *
  * • **No password policy of its own.** 021 design §7 and 003 EARS-36 make the
@@ -65,14 +65,18 @@ import { Input } from "@ds/design-system/input";
 export type RegistrationScreenProps = {
   /**
    * The gate context the doctor arrived from — 018's event-card unit (EARS-2,
-   * #1540). Absent when they came on their own (EARS-3).
+   * #1538). Absent when they came on their own (EARS-3, #1539).
    */
   returnContext?: ReactNode;
-  /** The resolved representative/organisation line (EARS-8, #1541). */
+  /** The resolved representative/organisation line (EARS-8, #1544). */
   attribution?: ReactNode;
   /** The pre-submission points promise read from configuration (EARS-9, #1545). */
   pointsPromise?: ReactNode;
-  /** The two consent tiers (EARS-4/5/6, #1538/#1544). */
+  /**
+   * The two consent tiers — tier 1 carries the medical-worker declaration
+   * (EARS-4, #1540) and the two-tier consent block (EARS-5, #1541); tier 2 is
+   * the optional marketing opt-in (EARS-6, #1542).
+   */
   consentTiers?: {
     /** Tier 1 — access conditions, rendered ABOVE the submit. */
     accessConditions?: ReactNode;
@@ -235,9 +239,16 @@ export function RegistrationScreen({
                           data-testid="register-promo"
                           {...field}
                           value={field.value ?? ""}
-                          onChange={(event) =>
-                            field.onChange(event.target.value.trim())
-                          }
+                          // Trim on BLUR, never per keystroke: stripping on
+                          // every change makes an interior space untypable
+                          // («DS » + «2» would land as «DS2»), silently
+                          // rewriting what the doctor typed. Blur covers the
+                          // paste case design §7 asks for, and the submit path
+                          // trims again once the command is wired.
+                          onBlur={(event) => {
+                            field.onChange(event.target.value.trim());
+                            field.onBlur();
+                          }}
                         />
                       </FormControl>
                       <FormMessage />
@@ -260,6 +271,19 @@ export function RegistrationScreen({
                 ) : null}
 
                 <div className="flex flex-col gap-2.5">
+                  {/*
+                    Natively `disabled` rather than `aria-disabled` + a no-op
+                    submit: `@ds/design-system`'s Button carries its whole
+                    inert appearance on the `disabled:` pseudo-class
+                    (`disabled:opacity-40`, the flattened cast shadow), so an
+                    aria-only variant would mean re-declaring that appearance
+                    screen-locally — the adopt-first failure mode — and would
+                    change a Stage-B-evidenced visual surface. The stronger
+                    announcement path belongs in the primitive; folded into
+                    #1663 with the hint/error slot. EARS-16 still holds here:
+                    the reason is a visible paragraph in the form's reading
+                    order, wired by `aria-describedby` on top of that.
+                  */}
                   <Button
                     type="submit"
                     className="w-full"

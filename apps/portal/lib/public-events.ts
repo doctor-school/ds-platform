@@ -68,12 +68,36 @@ export async function fetchUpcomingBroadcasts(): Promise<
   return (await res.json()) as UpcomingBroadcastCard[];
 }
 
-/** Cursor-paged public feed for the controlled upcoming/past tabs (014 EARS-11). */
-export async function fetchEventListing(input: {
+/**
+ * The api rejected the opaque `cursor` (400). Distinguished from a real upstream
+ * failure so the listing can restart at the first page instead of erroring out
+ * (#1640): the cursor rides in a shareable, hand-editable URL, and a truncated or
+ * stale one is a routine visitor situation, not a fault.
+ */
+export class InvalidEventCursorError extends Error {
+  constructor(cursor: string) {
+    super(`event listing cursor rejected (400): ${cursor}`);
+    this.name = "InvalidEventCursorError";
+  }
+}
+
+export interface EventListingInput {
   timeframe: "upcoming" | "past";
   cursor?: string;
   limit?: number;
-}): Promise<PublicEventListingPage> {
+}
+
+/**
+ * Cursor-paged public feed for the controlled upcoming/past tabs (014 EARS-11).
+ *
+ * A 400 WITH a cursor in play is surfaced as {@link InvalidEventCursorError} — the
+ * cursor is opaque (`@ds/schemas` bounds only its length), so the api is the only
+ * component that can judge it, and its 400 is the correct answer, not a defect.
+ * Every other non-ok status stays a generic failure.
+ */
+export async function fetchEventListing(
+  input: EventListingInput,
+): Promise<PublicEventListingPage> {
   const query = new URLSearchParams({ timeframe: input.timeframe });
   if (input.cursor) query.set("cursor", input.cursor);
   if (input.limit) query.set("limit", String(input.limit));
@@ -81,8 +105,32 @@ export async function fetchEventListing(input: {
     headers: { accept: "application/json" },
     cache: "no-store",
   });
+  if (res.status === 400 && input.cursor) {
+    throw new InvalidEventCursorError(input.cursor);
+  }
   if (!res.ok) throw new Error(`event listing fetch failed (${res.status})`);
   return (await res.json()) as PublicEventListingPage;
+}
+
+/**
+ * {@link fetchEventListing} with the #1640 boundary policy applied: a cursor the
+ * api rejects is treated as "start from the first page" and reported back through
+ * `cursorRejected`, so the caller can also reset the page counter and the
+ * pagination links it hands to the UI. Any other failure propagates untouched —
+ * a genuinely broken upstream must still reach the route's error boundary.
+ */
+export async function fetchEventListingWithCursorFallback(
+  input: EventListingInput,
+): Promise<{ listing: PublicEventListingPage; cursorRejected: boolean }> {
+  try {
+    return { listing: await fetchEventListing(input), cursorRejected: false };
+  } catch (error) {
+    if (!(error instanceof InvalidEventCursorError)) throw error;
+    return {
+      listing: await fetchEventListing({ ...input, cursor: undefined }),
+      cursorRejected: true,
+    };
+  }
 }
 
 /**

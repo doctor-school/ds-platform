@@ -3,7 +3,7 @@ import { headers } from "next/headers";
 import { getTranslations } from "next-intl/server";
 import type { PastBroadcastCard } from "@ds/schemas";
 import { Link as DsLink } from "@ds/design-system/link";
-import { fetchEventListing } from "@/lib/public-events";
+import { fetchEventListingWithCursorFallback } from "@/lib/public-events";
 import { fetchMyEvents } from "@/lib/my-events";
 import {
   formatMskDayLabel,
@@ -65,10 +65,16 @@ export default async function DiscoveryListing({
   page?: number;
 }) {
   const t = await getTranslations("webinars");
-  const [listing, registeredSlugs] = await Promise.all([
-    fetchEventListing({ timeframe, cursor }),
+  const [{ listing, cursorRejected }, registeredSlugs] = await Promise.all([
+    fetchEventListingWithCursorFallback({ timeframe, cursor }),
     fetchRegisteredSlugs(),
   ]);
+  // #1640: a `?cursor=` the api could not decode (shared, truncated or stale
+  // link) degrades to the first page rather than a 500. The page counter and the
+  // cursor handed to the pagination controls reset with it, so what the visitor
+  // sees and what the controls say stay the same page.
+  const effectiveCursor = cursorRejected ? undefined : cursor;
+  const effectivePage = cursorRejected ? 1 : page;
   const items = listing.data.map((card) => {
     const parts = formatMskParts(card.startsAt);
     const recording =
@@ -174,10 +180,10 @@ export default async function DiscoveryListing({
             next: t("pagination.next"),
             pagePrefix: t("pagination.page"),
           }}
-          cursor={cursor}
+          cursor={effectiveCursor}
           nextCursor={listing.pagination.nextCursor}
           hasMore={listing.pagination.hasMore}
-          page={page}
+          page={effectivePage}
           toolbar={timeframe === "upcoming" ? toolbar : undefined}
         />
       </div>

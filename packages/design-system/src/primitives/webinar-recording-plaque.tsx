@@ -19,7 +19,11 @@ import { cn } from "../lib/utils";
  *
  *   • time plate  the tinted left column: the micro LABEL («Запись») and, when
  *                 the operator committed to a readiness day, the formatted value
- *                 («до 18 июля»). With no committed day the VALUE IS OMITTED —
+ *                 («до 18 июля»). The value steps DOWN one type size from the
+ *                 status card's clock («16:29»): a readiness day is a multi-word
+ *                 RU string whose longest month («сентября») overflows the 196px
+ *                 plate at the clock size — verified on the live stand.
+ *                 With no committed day the VALUE IS OMITTED —
  *                 the canvas's «≈2 дня» is placeholder copy, and printing an
  *                 invented estimate would be a promise the operator never made.
  *   • body        the plaque head («Запись готовится») and the honest one-line
@@ -72,7 +76,7 @@ const WebinarRecordingPlaque = React.forwardRef<
       {time ? (
         <span
           data-testid="recording-plaque-date"
-          className="text-2xl font-extrabold leading-none tracking-tighter text-tint-foreground layout:text-3xl"
+          className="text-xl font-extrabold leading-tight tracking-tight text-tint-foreground layout:text-2xl"
         >
           {time}
         </span>

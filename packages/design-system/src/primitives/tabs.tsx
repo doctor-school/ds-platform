@@ -34,7 +34,10 @@ const TabsList = React.forwardRef<
       // 390px, which is precisely the fault #1222/#1399 removed from the same
       // surfaces. `overflow-x-auto` is width-keyed, not breakpoint-keyed: at
       // every width where the segments already fit the render is unchanged, and
-      // where they do not, the strip pans instead of the page.
+      // where they do not, the strip pans instead of the page. Being a scroll
+      // container it clips OUTER box-shadows on its children, so the trigger's
+      // focus ring is the inset one (`shadow-focus-inset`), fully visible at any
+      // width and at any scroll offset.
       "inline-flex w-full items-stretch overflow-x-auto border-2 border-border bg-background",
       className,
     )}
@@ -53,9 +56,12 @@ const TabsTrigger = React.forwardRef<
       // Neo-brutalist segment (source §05): selected = `primary-action` fill +
       // `primary-foreground` weight 800; unselected = surface + `tint-foreground`
       // weight 700. Divider = a 2px left border between segments (`first:border-l-0`
-      // drops it on the leading segment). Focus = the flush 3px `shadow-focus` ring
-      // (z-10 so it is not clipped by the container border). Font 13px = `text-caption`.
-      "relative z-0 inline-flex flex-1 items-center justify-center whitespace-nowrap border-l-2 border-border first:border-l-0 px-4.5 py-3 text-caption transition-colors focus-visible:z-10 focus-visible:outline-none focus-visible:shadow-focus disabled:pointer-events-none disabled:opacity-40",
+      // drops it on the leading segment). Focus = the 3px `shadow-focus-inset` ring —
+      // same width and colour as the outer `shadow-focus`, drawn INSIDE the segment
+      // edge because `TabsList` is an `overflow-x-auto` scroll container, which clips
+      // an outer ring on every side at every width (Mode-a finding on #1669/#1675).
+      // Font 13px = `text-caption`.
+      "relative z-0 inline-flex flex-1 items-center justify-center whitespace-nowrap border-l-2 border-border first:border-l-0 px-4.5 py-3 text-caption transition-colors focus-visible:outline-none focus-visible:shadow-focus-inset disabled:pointer-events-none disabled:opacity-40",
       "data-[state=active]:bg-primary-action data-[state=active]:text-primary-foreground data-[state=active]:font-extrabold",
       "data-[state=inactive]:bg-background data-[state=inactive]:text-tint-foreground data-[state=inactive]:font-bold data-[state=inactive]:hover:bg-tint",
       "active:bg-primary-pressed active:text-primary-foreground active:font-extrabold",

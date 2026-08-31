@@ -91,6 +91,27 @@ describe("Tabs — hard-bordered segment control (#512)", () => {
     expect(screen.getByTestId("list")).toHaveClass("overflow-x-auto");
   });
 
+  /**
+   * #1675 (Mode-a) — an `overflow-x-auto` container clips OUTER box-shadows on
+   * its children on every side at every width, so the segment's keyboard-focus
+   * ring must be the inset token (`shadow-focus-inset`, same 3px blue.300 @ 50%
+   * as `shadow-focus`), never the outer one.
+   */
+  it("segment focus ring is inset so the scroll container cannot clip it", () => {
+    render(
+      <Tabs defaultValue="a">
+        <TabsList>
+          <TabsTrigger value="a" data-testid="seg">
+            A
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>,
+    );
+    const seg = screen.getByTestId("seg");
+    expect(seg).toHaveClass("focus-visible:shadow-focus-inset");
+    expect(seg.className).not.toMatch(/focus-visible:shadow-focus(?![\w-])/);
+  });
+
   it("selected segment fills the accessible action colour (weight 800), divided by a 2px rule", () => {
     render(
       <Tabs defaultValue="a">
@@ -109,8 +130,8 @@ describe("Tabs — hard-bordered segment control (#512)", () => {
       "border-l-2",
       "first:border-l-0",
     );
-    // Flush focus ring, not the generic ring-with-offset.
-    expect(seg).toHaveClass("focus-visible:shadow-focus");
+    // Flush focus ring, not the generic ring-with-offset — inset, per #1675.
+    expect(seg).toHaveClass("focus-visible:shadow-focus-inset");
   });
 });
 

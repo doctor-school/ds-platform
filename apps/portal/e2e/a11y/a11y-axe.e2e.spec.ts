@@ -116,6 +116,18 @@ test.describe("005 EARS-13 axe-core a11y scan of the portal webinar surfaces", (
       page.locator(`a[href="/webinars/${SEED}"]`).first(),
     ).toBeVisible();
     for (const theme of THEMES) await scan(page, theme);
+
+    // 014 EARS-9 — «Мои события» has TWO tabs; the Записи side is its own rendered
+    // surface (month bands, recording badges, the recordings empty-state), so it is
+    // scanned too. A tab that only the tab-strip covers would leave half the surface
+    // unscanned.
+    await page.goto("/account/events?tab=recordings", {
+      waitUntil: "domcontentloaded",
+    });
+    await expect(
+      page.getByTestId("event-list-tabs").getByRole("tab").nth(1),
+    ).toHaveAttribute("aria-selected", "true");
+    for (const theme of THEMES) await scan(page, theme);
   });
 
   // 003 EARS-28 (#770) — the /account profile surface (canvas «Разделы»): the

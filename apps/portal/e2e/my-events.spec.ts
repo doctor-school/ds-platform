@@ -84,6 +84,100 @@ test("EARS-6: the Предстоящие list shows the registered event with М
   await expect(page).toHaveURL(new RegExp(`/webinars/${SLUG}$`));
 });
 
+/**
+ * 014 EARS-9 — «Мои события» carries exactly TWO tabs, **Предстоящие** (default)
+ * and **Записи**, over the doctor's FULL registration history. This drives the tab
+ * contract in the ACTUAL running stack (browser → portal SSR → `/v1/*` rewrite →
+ * api → Postgres): the default tab on first open, the deep-linkable
+ * `?tab=recordings` state, both tabs' counts on the chips, the absence of any third
+ * tab, and that no `archived` event surfaces in either tab.
+ *
+ * Split of duty (the same split this file already uses for freshness): the
+ * CONTENT invariants of the Записи tab — the full `ended` history newest-first, the
+ * «Запись готовится» badge on an ended event whose recording is not published yet,
+ * `archived` in neither tab, and the 400 on an unknown tab — are owned
+ * authoritatively by the Vitest e2e (`apps/api/test/recordings/my-events.e2e-spec.ts`,
+ * 8 pinned cases), because reaching an `ended` REGISTRATION requires a lifecycle
+ * transition after the registration was taken, which no browser journey can drive
+ * (registration is refused on an already-`ended` event, 005 EARS-1). What the
+ * browser tier owns is what only the browser can prove: the rendered tabs, the URL
+ * state, and that every entry link resolves.
+ *
+ * Self-provisioning + live-stand-gated via `LIVE_STAND`; inert on a bare CI run.
+ */
+test.describe("014 EARS-9 my-events tabs (e2e)", () => {
+  const ARCHIVED_SLUG = process.env.E2E_ARCHIVED_SLUG ?? "seed-005-archived";
+
+  test("014 EARS-9: «Мои события» opens on Предстоящие, offers exactly Предстоящие|Записи, and deep-links the Записи tab", async ({
+    page,
+  }) => {
+    test.skip(!LIVE_STAND, "requires a live portal + real Zitadel + Mailpit");
+
+    await provisionLoggedInDoctor(page);
+
+    // A real registration so the default tab has content to be right ABOUT.
+    const status = await page.evaluate(async (slug) => {
+      const res = await fetch(
+        `/v1/events/${encodeURIComponent(slug)}/registration`,
+        {
+          method: "POST",
+          headers: { accept: "application/json" },
+          credentials: "include",
+        },
+      );
+      return res.status;
+    }, process.env.E2E_LIVE_SLUG ?? "seed-005-live");
+    expect(status).toBe(200);
+
+    await page.goto(`${BASE}/account/events`, { waitUntil: "domcontentloaded" });
+
+    // EXACTLY two tabs — the canvas's third «Сертификаты» tab is owner-decided out
+    // of scope (2026-08-17) and must not render, not even as a disabled stub.
+    const tabs = page.getByTestId("event-list-tabs").getByRole("tab");
+    await expect(tabs).toHaveCount(2);
+    await expect(tabs.nth(0)).toContainText("Предстоящие");
+    await expect(tabs.nth(1)).toContainText("Записи");
+    await expect(page.locator("body")).not.toContainText("Сертификаты");
+
+    // Default tab on first open is Предстоящие (no `?tab=` in the URL).
+    await expect(tabs.nth(0)).toHaveAttribute("aria-selected", "true");
+    // …and its chip carries the count, which is at least the registration above.
+    await expect(tabs.nth(0)).toContainText("·");
+
+    // Switching to «Записи» is explicit URL state — deep-linkable and back-navigable.
+    await tabs.nth(1).click();
+    await expect(page).toHaveURL(/\?(.*&)?tab=recordings/);
+    await expect(
+      page.getByTestId("event-list-tabs").getByRole("tab").nth(1),
+    ).toHaveAttribute("aria-selected", "true");
+
+    // An `archived` event never surfaces — in EITHER tab (014 EARS-9).
+    await expect(page.locator(`a[href="/webinars/${ARCHIVED_SLUG}"]`)).toHaveCount(
+      0,
+    );
+    await page.goto(`${BASE}/account/events`, { waitUntil: "domcontentloaded" });
+    await expect(page.locator(`a[href="/webinars/${ARCHIVED_SLUG}"]`)).toHaveCount(
+      0,
+    );
+
+    // A direct deep link opens Записи straight away (no click needed).
+    await page.goto(`${BASE}/account/events?tab=recordings`, {
+      waitUntil: "domcontentloaded",
+    });
+    await expect(
+      page.getByTestId("event-list-tabs").getByRole("tab").nth(1),
+    ).toHaveAttribute("aria-selected", "true");
+
+    // Every entry the surface renders links to a real event page — no dead CTA.
+    const hrefs = await page
+      .locator("[data-webinar-card] a[href^='/webinars/']")
+      .evaluateAll((nodes) =>
+        nodes.map((n) => (n as HTMLAnchorElement).getAttribute("href") ?? ""),
+      );
+    for (const href of hrefs) expect(href).toMatch(/^\/webinars\/[^/]+(\/room)?$/);
+  });
+});
+
 test("EARS-6: with no registrations, the surface renders the empty-state", async ({
   page,
   context,

@@ -42,10 +42,22 @@ Field lists are **indicative names and kinds**, not a schema. Every entity addit
 | `deactivated_at`                                                                  | timestamptz  | existing, ADR-0009 lifecycle              |
 | `role`                                                                            | text         | **retired** → role assignment             |
 | profile attributes (full name parts, city/location, place of work, avatar, about) | text         | doctor profile (OWD-2 scope)              |
-| `primary_specialty_id`                                                            | fk → §2.7    | Minzdrav specialty (REQ-101)              |
 | `verification_state`                                                              | enum         | unverified / verified / rejected (REQ-22) |
 
-One row per human being, on both storefronts (OWD-1). Contacts (`email`, `phone`) are never part of an investor-facing projection (OWD-2).
+One row per human being, on both storefronts (OWD-1). Contacts (`email`, `phone`) are never part of an investor-facing projection (OWD-2). The primary specialty is **not** a column on `users` — it is the link table below.
+
+#### Person ↔ Minzdrav specialty — `doctor_specialties`
+
+| Field                                   | Kind      | Note                                                                    |
+| --------------------------------------- | --------- | ----------------------------------------------------------------------- |
+| `id`                                    | uuid      |                                                                         |
+| `doctor_id`                             | fk → §2.1 | `users`, `restrict`                                                     |
+| `specialty_id`                          | fk → §2.7 | `specialties_minzdrav`, `restrict` (REQ-101)                            |
+| `role`                                  | enum      | `doctor_specialty_role` — `primary` today, the axis extra roles land on |
+| `record_status` / `deleted_at`          | enum / ts | retained-row lifecycle; a CHECK enforces `retired ⇔ deleted_at is set`  |
+| `version` / `created_at` / `updated_at` | int / ts  | standard lifecycle fields                                               |
+
+A doctor holds **at most one active primary specialty** — enforced in the database by a partial unique index on `doctor_id` restricted to active `primary` rows, not by application logic. Re-choosing a specialty is retire-then-insert inside one transaction, so the previous choice is retained rather than overwritten: the history of what a doctor declared, and when, survives every change. Modelling the link as its own table (rather than a `primary_specialty_id` column) is what makes both properties possible, and leaves room for the non-primary roles the `role` enum anticipates.
 
 ### 2.2 Role assignment
 
@@ -188,7 +200,8 @@ erDiagram
   DIRECTION ||--o{ DIRECTION_ADJACENCY : adjacent_to
   DIRECTION ||--o{ DIRECTION_SPECIALTIES : maps_to
   SPECIALTY_MINZDRAV ||--o{ DIRECTION_SPECIALTIES : mapped_by
-  SPECIALTY_MINZDRAV ||--o{ PERSON : declared_by
+  PERSON ||--o{ DOCTOR_SPECIALTIES : declares
+  SPECIALTY_MINZDRAV ||--o{ DOCTOR_SPECIALTIES : declared_in
   PERSON ||--o{ LEDGER_ACCOUNT : owns
   PROJECT ||--o{ LEDGER_ACCOUNT : funds
   ORGANISATION ||--o{ LEDGER_ACCOUNT : owns
@@ -204,6 +217,7 @@ Load-bearing invariants:
 3. Every output and every posting carries a `project_id` (OWD-9).
 4. Balances are derived, never stored as mutable state (OWD-10).
 5. A confirmed account↔expert link is unique on both sides.
+6. A person declares their specialty through `DOCTOR_SPECIALTIES`, never as a column on `PERSON`: at most one active `primary` row per person (§2.1), and superseded rows are retired, not overwritten.
 
 ---
 
@@ -232,24 +246,24 @@ Load-bearing invariants:
 
 ## 5. Mapping to the current schema
 
-| Existing table (`packages/db/src/schema/`)                  | Verdict                | Detail                                                                                                                                                                                                                                        |
-| ----------------------------------------------------------- | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `users`                                                     | **extended**           | §2.1; `role` retired in favour of role assignments (§2.2) after backfill; profile + verification attributes added                                                                                                                             |
-| `events`                                                    | **kept**               | the event output (§2.6); `school` / `specialties` text fields migrate to the direction/specialty references                                                                                                                                   |
-| `event_speakers`                                            | **kept**               | legacy speaker rows; merge into `experts` per feature-012 §4                                                                                                                                                                                  |
-| `registrations`                                             | **kept**               | participation in an event output; the accrual source of attention-points postings                                                                                                                                                             |
-| `taxonomy.projects`                                         | **kept**               | §2.5, the container — unchanged shape, gains `direction_id`                                                                                                                                                                                   |
-| `taxonomy.experts`                                          | **kept**               | §2.9, gains `primary_direction_id` + `organisation_id`                                                                                                                                                                                        |
-| `taxonomy.topics`                                           | **renamed + extended** | → `directions` (§2.8) with adjacency and the specialty link; `event_topics` follows                                                                                                                                                           |
-| `taxonomy.partners`                                         | **renamed + extended** | → `organisations` (§2.3) with the open, extensible `kinds` set (investor · clinical base · licensee, more expected); the 012-designed `project_partners` link follows the rename                                                              |
-| `taxonomy.event_experts` / `event_projects`                 | **kept**               | feature-012 relations, absorbed as they are (#1288/#1289)                                                                                                                                                                                     |
-| `event_recordings`                                          | **kept**               | feature 014, absorbed unchanged                                                                                                                                                                                                               |
-| `consent_records`                                           | **kept**               | §2.14, ADR-0009                                                                                                                                                                                                                               |
-| `audit_ledger`                                              | **kept**               | feature 010; gains the link-transition and document-access event types                                                                                                                                                                        |
-| `lifecycle.ts` (not a table)                                | **kept**               | the `record_status` pgEnum + the shared retained-row lifecycle column helpers reused by every table (ADR-0003 §3.6)                                                                                                                           |
-| `presence_beats`                                            | **kept**               | attention measurement — a posting source, not a ledger                                                                                                                                                                                        |
-| `idempotency_keys` / `media_cleanup_jobs` / `stream_config` | **kept**               | operational, untouched                                                                                                                                                                                                                        |
-| — (new)                                                     | **new**                | `role_assignments`, `memberships`, `account_expert_links`, `specialties_minzdrav`, `direction_adjacency`, `direction_specialties`, the output tables (school/course/module/lesson/podcast), `ledger_accounts`, `postings`, `document_records` |
+| Existing table (`packages/db/src/schema/`)                  | Verdict                | Detail                                                                                                                                                                                                                                                                                                |
+| ----------------------------------------------------------- | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `users`                                                     | **extended**           | §2.1; `role` retired in favour of role assignments (§2.2) after backfill; profile + verification attributes added                                                                                                                                                                                     |
+| `events`                                                    | **kept**               | the event output (§2.6); `school` / `specialties` text fields migrate to the direction/specialty references                                                                                                                                                                                           |
+| `event_speakers`                                            | **kept**               | legacy speaker rows; merge into `experts` per feature-012 §4                                                                                                                                                                                                                                          |
+| `registrations`                                             | **kept**               | participation in an event output; the accrual source of attention-points postings                                                                                                                                                                                                                     |
+| `taxonomy.projects`                                         | **kept**               | §2.5, the container — unchanged shape, gains `direction_id`                                                                                                                                                                                                                                           |
+| `taxonomy.experts`                                          | **kept**               | §2.9, gains `primary_direction_id` + `organisation_id`                                                                                                                                                                                                                                                |
+| `taxonomy.topics`                                           | **renamed + extended** | → `directions` (§2.8) with adjacency and the specialty link; `event_topics` follows                                                                                                                                                                                                                   |
+| `taxonomy.partners`                                         | **renamed + extended** | → `organisations` (§2.3) with the open, extensible `kinds` set (investor · clinical base · licensee, more expected); the 012-designed `project_partners` link follows the rename                                                                                                                      |
+| `taxonomy.event_experts` / `event_projects`                 | **kept**               | feature-012 relations, absorbed as they are (#1288/#1289)                                                                                                                                                                                                                                             |
+| `event_recordings`                                          | **kept**               | feature 014, absorbed unchanged                                                                                                                                                                                                                                                                       |
+| `consent_records`                                           | **kept**               | §2.14, ADR-0009                                                                                                                                                                                                                                                                                       |
+| `audit_ledger`                                              | **kept**               | feature 010; gains the link-transition and document-access event types                                                                                                                                                                                                                                |
+| `lifecycle.ts` (not a table)                                | **kept**               | the `record_status` pgEnum + the shared retained-row lifecycle column helpers reused by every table (ADR-0003 §3.6)                                                                                                                                                                                   |
+| `presence_beats`                                            | **kept**               | attention measurement — a posting source, not a ledger                                                                                                                                                                                                                                                |
+| `idempotency_keys` / `media_cleanup_jobs` / `stream_config` | **kept**               | operational, untouched                                                                                                                                                                                                                                                                                |
+| — (new)                                                     | **new**                | `role_assignments`, `memberships`, `account_expert_links`, `specialties_minzdrav`, `doctor_specialties` (§2.1, shipped by migration 0027), `direction_adjacency`, `direction_specialties`, the output tables (school/course/module/lesson/podcast), `ledger_accounts`, `postings`, `document_records` |
 
 **Feature 012 and feature 014 are absorbed, not rewritten.** The only shipped-surface change is the `topics` → `directions` and `partners` → `organisations` rename, which is its own migration slice preserving the retained-row lifecycle (#1278).
 

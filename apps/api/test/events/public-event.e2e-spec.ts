@@ -275,6 +275,12 @@ describe.skipIf(!process.env.DATABASE_URL)(
           "id",
           "partners",
           "programPdfUrl",
+          // 014 EARS-4 (#1341): the source-free recording projection. It joins
+          // the allow-list rather than a sibling endpoint because the post-live
+          // page is one read; it carries state/kind/poster/expectedBy and NO
+          // provider or embed ref, so widening the allow-list here does not
+          // widen what a guest can play.
+          "recording",
           "school",
           "slug",
           "specialties",

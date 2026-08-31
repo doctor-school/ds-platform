@@ -757,6 +757,13 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     });
 
     // ── Lifecycle: publish / retire / restore (012 EARS-13/14, §3.1) ──────
+    //
+    // These two cases are ALSO the whole of EARS-5.2 ("first publication is
+    // stamped once, incl. across retire and restore"): directions are the only
+    // taxonomy kind that has retire/restore today, so this is the only place
+    // the full round trip can be driven end to end. Projects, experts and
+    // partners assert the stamp-once half on publish in their own suites; their
+    // retire/restore leg arrives with #1295/#1296, which build those routes.
 
     it("012 EARS-13: when a draft direction is published, the system shall stamp first_published_at once and refuse a second publish with INVALID_TRANSITION", async () => {
       const body = await created(await createJson({ payload: validPayload() }));

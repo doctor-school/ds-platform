@@ -53,6 +53,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     const createdEmails: string[] = [];
     const createdPhones: string[] = [];
     const createdExpertIds: string[] = [];
+    // EARS-5's slot rule is only testable against REAL events, real links and
+    // real legacy speakers; all three reference rows this suite deletes, so
+    // they are tracked separately and torn down first.
+    const createdEventIds: string[] = [];
     const usedKeys: string[] = [];
     let adminSid: string;
     let otherAdminSid: string;
@@ -285,6 +289,13 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     });
 
     afterEach(async () => {
+      for (const id of createdEventIds.splice(0)) {
+        await pool.query("DELETE FROM event_experts WHERE event_id = $1", [id]);
+        await pool.query("DELETE FROM event_speakers WHERE event_id = $1", [
+          id,
+        ]);
+        await pool.query("DELETE FROM events WHERE id = $1", [id]);
+      }
       for (const id of createdExpertIds.splice(0)) {
         await pool.query(
           "DELETE FROM media_cleanup_jobs WHERE entity_id = $1",
@@ -1315,6 +1326,269 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       );
       expect(rows.map((r) => r.event_type)).toContain("data.experts.insert");
       expect(rows[0]!.subject_id).not.toBeNull();
+    });
+
+    // ── 012 EARS-5: publish completeness + the speaker slot rule (#1287) ──
+    //
+    // Publishing an expert is the moment their event links become PUBLICLY
+    // visible, so it is also the moment a slot collision with a legacy speaker
+    // can first appear. Two active `event_experts` links can never share a
+    // position — `event_experts_event_position_active_uniq` forbids it whatever
+    // anybody's publication state — so `event_speakers` is the only collision
+    // publication itself can create, and that is what these cases drive.
+
+    async function insertEvent(): Promise<string> {
+      const { rows } = await pool.query<{ id: string }>(
+        `INSERT INTO events (slug, title, school, starts_at, duration_min)
+           VALUES ($1, $2, $3, now(), 60) RETURNING id`,
+        [`e-1287-${randomUUID()}`, "Эфир 1287", "Школа 1287"],
+      );
+      createdEventIds.push(rows[0]!.id);
+      return rows[0]!.id;
+    }
+
+    async function insertLegacySpeaker(
+      eventId: string,
+      position: number,
+    ): Promise<string> {
+      const { rows } = await pool.query<{ id: string }>(
+        `INSERT INTO event_speakers (event_id, position, name)
+           VALUES ($1, $2, $3) RETURNING id`,
+        [eventId, position, "Петров П. П."],
+      );
+      return rows[0]!.id;
+    }
+
+    async function linkExpertToEvent(
+      eventId: string,
+      expertId: string,
+      position: number,
+      legacySpeakerId: string | null = null,
+    ): Promise<void> {
+      await pool.query(
+        `INSERT INTO event_experts (event_id, expert_id, role, position, legacy_speaker_id)
+           VALUES ($1, $2, 'Докладчик', $3, $4)`,
+        [eventId, expertId, position, legacySpeakerId],
+      );
+    }
+
+    async function publishExpert(
+      id: string,
+      version: number,
+      overrides: { ifMatch?: string | null; idempotencyKey?: string | null } = {},
+    ) {
+      const ifMatch =
+        overrides.ifMatch === undefined ? `W/"${version}"` : overrides.ifMatch;
+      const idempotencyKey =
+        overrides.idempotencyKey === undefined
+          ? key()
+          : overrides.idempotencyKey;
+      return app.inject({
+        method: "POST",
+        url: `/v1/admin/experts/${id}/publish`,
+        headers: {
+          ...device,
+          ...adminHeaders(adminSid),
+          ...(ifMatch === null ? {} : { "if-match": ifMatch }),
+          ...(idempotencyKey === null
+            ? {}
+            : { "idempotency-key": idempotencyKey }),
+        },
+      });
+    }
+
+    async function expertRow(id: string) {
+      const { rows } = await pool.query<{
+        status: string;
+        version: number;
+        first_published_at: Date | null;
+      }>(
+        "SELECT status, version, first_published_at FROM experts WHERE id = $1",
+        [id],
+      );
+      return rows[0]!;
+    }
+
+    async function auditRowCount(id: string): Promise<number> {
+      const { rows } = await pool.query<{ count: string }>(
+        "SELECT count(*) FROM audit_ledger WHERE metadata->'pk'->>'id' = $1",
+        [id],
+      );
+      return Number(rows[0]!.count);
+    }
+
+    it("012 EARS-5.1: when a complete draft expert is published, the system shall stamp first_published_at, bump the ETag and write the audit row in the same transaction", async () => {
+      const body = await created(await createJson({ payload: validPayload() }));
+      const auditBefore = await auditRowCount(body.id);
+
+      const res = await publishExpert(body.id, 1);
+      expect(res.statusCode).toBe(200);
+      const published = JSON.parse(res.payload) as {
+        status: string;
+        version: number;
+        firstPublishedAt: string | null;
+      };
+      expect(published).toMatchObject({ status: "published", version: 2 });
+      expect(published.firstPublishedAt).toBeTypeOf("string");
+      expect(res.headers.etag).toBe('W/"2"');
+      expect((await expertRow(body.id)).first_published_at).toEqual(
+        new Date(published.firstPublishedAt!),
+      );
+      expect(await auditRowCount(body.id)).toBeGreaterThan(auditBefore);
+    });
+
+    it("012 EARS-5.4: when an incomplete expert is published, the system shall name EVERY missing field in one field-addressed refusal", async () => {
+      const body = await created(
+        await createJson({
+          payload: validPayload({
+            professionalRole: null,
+            credentials: null,
+            affiliation: null,
+            bio: null,
+          }),
+        }),
+      );
+      const res = await publishExpert(body.id, 1);
+      expect(res.statusCode).toBe(409);
+      const detail = problem(res);
+      expect(detail.errorCode).toBe("PUBLISH_REQUIREMENTS_NOT_MET");
+      // All four at once, not one per round trip: an operator fixing a form
+      // should not have to discover the requirements by repeated refusal.
+      expect(detail.errors?.map((e) => e.path).sort()).toEqual([
+        "affiliation",
+        "bio",
+        "credentials",
+        "professionalRole",
+      ]);
+      expect(await expertRow(body.id)).toMatchObject({
+        status: "draft",
+        version: 1,
+      });
+    });
+
+    it("012 EARS-5.12: when an already-published expert is published again, the system shall answer 409 INVALID_TRANSITION and keep the original first_published_at", async () => {
+      const body = await created(await createJson({ payload: validPayload() }));
+      expect((await publishExpert(body.id, 1)).statusCode).toBe(200);
+      const stamped = (await expertRow(body.id)).first_published_at;
+
+      const again = await publishExpert(body.id, 2);
+      expect(again.statusCode).toBe(409);
+      expect(problem(again).errorCode).toBe("INVALID_TRANSITION");
+      const after = await expertRow(body.id);
+      expect(after).toMatchObject({ status: "published", version: 2 });
+      expect(after.first_published_at).toEqual(stamped);
+    });
+
+    it("012 EARS-5.10: when the expert record was editorially removed, the system shall refuse with CONTENT_REMOVED rather than a lifecycle mismatch", async () => {
+      const body = await created(await createJson({ payload: validPayload() }));
+      // The §2.4 removed shape, exactly as `experts_content_removed_shape`
+      // pins it — retired, deleted, every descriptive value NULL.
+      await pool.query(
+        `UPDATE experts SET status = 'retired', deleted_at = now(),
+            content_removed_at = now(), family_name = NULL, given_name = NULL,
+            patronymic = NULL, photo_ref = NULL, professional_role = NULL,
+            credentials = NULL, affiliation = NULL, bio = NULL
+          WHERE id = $1`,
+        [body.id],
+      );
+      const res = await publishExpert(body.id, 1);
+      expect(res.statusCode).toBe(409);
+      // "Removed" is the stronger statement: reporting INVALID_TRANSITION would
+      // invite an operator to restore and republish a person who asked to be
+      // taken off the site.
+      expect(problem(res).errorCode).toBe("CONTENT_REMOVED");
+      expect(await expertRow(body.id)).toMatchObject({
+        status: "retired",
+        version: 1,
+      });
+    });
+
+    it("012 EARS-5.9: when publishing would land the expert on a position a visible legacy speaker holds, the system shall refuse with SPEAKER_POSITION_OCCUPIED", async () => {
+      const body = await created(await createJson({ payload: validPayload() }));
+      const eventId = await insertEvent();
+      await insertLegacySpeaker(eventId, 3);
+      await linkExpertToEvent(eventId, body.id, 3);
+
+      const res = await publishExpert(body.id, 1);
+      expect(res.statusCode).toBe(409);
+      expect(problem(res).errorCode).toBe("SPEAKER_POSITION_OCCUPIED");
+      expect(await expertRow(body.id)).toMatchObject({
+        status: "draft",
+        version: 1,
+      });
+    });
+
+    it("012 EARS-5.9: when the occupying legacy speaker is the one the link explicitly merges, the system shall publish — a merge is not a collision", async () => {
+      const body = await created(await createJson({ payload: validPayload() }));
+      const eventId = await insertEvent();
+      const legacyId = await insertLegacySpeaker(eventId, 4);
+      // `legacy_speaker_id` names the row being superseded: the expert IS that
+      // speaker, so the position is not contested, it is inherited.
+      await linkExpertToEvent(eventId, body.id, 4, legacyId);
+
+      const res = await publishExpert(body.id, 1);
+      expect(res.statusCode).toBe(200);
+      expect(JSON.parse(res.payload)).toMatchObject({ status: "published" });
+    });
+
+    it("012 EARS-5.9: when a content-removed legacy speaker holds the position, the system shall publish — an invisible occupant contests nothing", async () => {
+      const body = await created(await createJson({ payload: validPayload() }));
+      const eventId = await insertEvent();
+      const legacyId = await insertLegacySpeaker(eventId, 5);
+      await pool.query(
+        "UPDATE event_speakers SET content_removed_at = now() WHERE id = $1",
+        [legacyId],
+      );
+      await linkExpertToEvent(eventId, body.id, 5);
+
+      const res = await publishExpert(body.id, 1);
+      expect(res.statusCode).toBe(200);
+      expect(JSON.parse(res.payload)).toMatchObject({ status: "published" });
+    });
+
+    it("012 EARS-5.13: when the publish carries no If-Match, a stale If-Match or no Idempotency-Key, the system shall answer 428/412/428 and change nothing", async () => {
+      const body = await created(await createJson({ payload: validPayload() }));
+
+      const absent = await publishExpert(body.id, 1, { ifMatch: null });
+      expect(absent.statusCode).toBe(428);
+      expect(problem(absent).errorCode).toBe("PRECONDITION_REQUIRED");
+
+      const stale = await publishExpert(body.id, 1, { ifMatch: 'W/"99"' });
+      expect(stale.statusCode).toBe(412);
+      expect(problem(stale).errorCode).toBe("PRECONDITION_FAILED");
+
+      const noKey = await publishExpert(body.id, 1, { idempotencyKey: null });
+      expect(noKey.statusCode).toBe(428);
+
+      expect(await expertRow(body.id)).toMatchObject({
+        status: "draft",
+        version: 1,
+      });
+    });
+
+    it("012 EARS-5.14: when a non-public expert is addressed on the public surface, the system shall answer exactly as it does for an unknown one", async () => {
+      const body = await created(await createJson({ payload: validPayload() }));
+      const draft = await app.inject({
+        method: "GET",
+        url: `/v1/public/experts/${body.slug}/projects`,
+        headers: device,
+      });
+      const unknown = await app.inject({
+        method: "GET",
+        url: `/v1/public/experts/${randomUUID()}/projects`,
+        headers: device,
+      });
+      expect(draft.statusCode).toBe(404);
+      expect(unknown.statusCode).toBe(404);
+      expect(problem(draft).errorCode).toBe(problem(unknown).errorCode);
+
+      expect((await publishExpert(body.id, 1)).statusCode).toBe(200);
+      const visible = await app.inject({
+        method: "GET",
+        url: `/v1/public/experts/${body.slug}/projects`,
+        headers: device,
+      });
+      expect(visible.statusCode).toBe(200);
     });
 
     // ── helpers ───────────────────────────────────────────────────────────

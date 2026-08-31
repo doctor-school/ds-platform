@@ -969,6 +969,192 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(rows[0]!.subject_id).not.toBeNull();
     });
 
+    // ── 012 EARS-5: publish completeness (#1287) ──────────────────────────
+    //
+    // A partner has NO completeness branch by decision, not omission: `title`
+    // is NOT NULL at the schema level and §5.2 declares `logoUrl` / `websiteUrl`
+    // nullable on `PublicPartner`, so a titled row already IS a complete public
+    // projection. These cases pin that decision so a later "tighten it up"
+    // cannot silently make the bare partner unpublishable.
+
+    async function publishPartner(
+      id: string,
+      version: number,
+      overrides: {
+        ifMatch?: string | null;
+        idempotencyKey?: string | null;
+        sid?: string;
+      } = {},
+    ) {
+      const ifMatch =
+        overrides.ifMatch === undefined ? `W/"${version}"` : overrides.ifMatch;
+      const idempotencyKey =
+        overrides.idempotencyKey === undefined
+          ? key()
+          : overrides.idempotencyKey;
+      return app.inject({
+        method: "POST",
+        url: `/v1/admin/partners/${id}/publish`,
+        headers: {
+          ...device,
+          ...adminHeaders(overrides.sid ?? adminSid),
+          ...(ifMatch === null ? {} : { "if-match": ifMatch }),
+          ...(idempotencyKey === null
+            ? {}
+            : { "idempotency-key": idempotencyKey }),
+        },
+      });
+    }
+
+    async function partnerRow(id: string) {
+      const { rows } = await pool.query<{
+        status: string;
+        version: number;
+        first_published_at: Date | null;
+      }>(
+        "SELECT status, version, first_published_at FROM partners WHERE id = $1",
+        [id],
+      );
+      return rows[0]!;
+    }
+
+    async function auditRowCount(id: string): Promise<number> {
+      const { rows } = await pool.query<{ count: string }>(
+        "SELECT count(*) FROM audit_ledger WHERE metadata->'pk'->>'id' = $1",
+        [id],
+      );
+      return Number(rows[0]!.count);
+    }
+
+    it("012 EARS-5.1: when a draft partner is published, the system shall stamp first_published_at once, bump the ETag and write the audit row in the same transaction", async () => {
+      const body = await created(await createJson({ payload: validPayload() }));
+      const auditBefore = await auditRowCount(body.id);
+
+      const res = await publishPartner(body.id, 1);
+      expect(res.statusCode).toBe(200);
+      const published = JSON.parse(res.payload) as {
+        status: string;
+        version: number;
+        firstPublishedAt: string | null;
+      };
+      expect(published).toMatchObject({ status: "published", version: 2 });
+      expect(published.firstPublishedAt).toBeTypeOf("string");
+      expect(res.headers.etag).toBe('W/"2"');
+
+      const row = await partnerRow(body.id);
+      expect(row.status).toBe("published");
+      expect(row.first_published_at).toEqual(
+        new Date(published.firstPublishedAt!),
+      );
+      // Feature 010 writes the ledger row inside the SAME transaction as the
+      // status change: had it been an after-the-fact side effect, this read
+      // could observe the published row with no ledger entry behind it.
+      expect(await auditRowCount(body.id)).toBeGreaterThan(auditBefore);
+    });
+
+    it("012 EARS-5.11: when a partner carries no logo, no website and no project relation, the system shall still publish it", async () => {
+      const body = await created(
+        await createJson({
+          payload: { title: `Ромашка ${randomUUID().slice(0, 8)}` },
+        }),
+      );
+      expect(body).toMatchObject({ logoUrl: null, websiteUrl: null });
+
+      const res = await publishPartner(body.id, 1);
+      expect(res.statusCode).toBe(200);
+      expect(JSON.parse(res.payload)).toMatchObject({
+        status: "published",
+        logoUrl: null,
+        websiteUrl: null,
+      });
+    });
+
+    it("012 EARS-5.12: when an already-published partner is published again, the system shall answer 409 INVALID_TRANSITION and change nothing", async () => {
+      const body = await created(await createJson({ payload: validPayload() }));
+      expect((await publishPartner(body.id, 1)).statusCode).toBe(200);
+      const stamped = (await partnerRow(body.id)).first_published_at;
+
+      const again = await publishPartner(body.id, 2);
+      expect(again.statusCode).toBe(409);
+      expect(problem(again).errorCode).toBe("INVALID_TRANSITION");
+      const after = await partnerRow(body.id);
+      expect(after).toMatchObject({ status: "published", version: 2 });
+      // Write-once: a refused second publish must not re-stamp the date that
+      // pins the slug (LD-3).
+      expect(after.first_published_at).toEqual(stamped);
+    });
+
+    it("012 EARS-5.13: when the publish carries no If-Match, a stale If-Match or no Idempotency-Key, the system shall answer 428/412/428 and change nothing", async () => {
+      const body = await created(await createJson({ payload: validPayload() }));
+
+      const absent = await publishPartner(body.id, 1, { ifMatch: null });
+      expect(absent.statusCode).toBe(428);
+      expect(problem(absent).errorCode).toBe("PRECONDITION_REQUIRED");
+
+      const stale = await publishPartner(body.id, 1, { ifMatch: 'W/"99"' });
+      expect(stale.statusCode).toBe(412);
+      expect(problem(stale).errorCode).toBe("PRECONDITION_FAILED");
+
+      const garbage = await publishPartner(body.id, 1, { ifMatch: "not-an-etag" });
+      expect([412, 428]).toContain(garbage.statusCode);
+
+      const noKey = await publishPartner(body.id, 1, { idempotencyKey: null });
+      expect(noKey.statusCode).toBe(428);
+
+      expect(await partnerRow(body.id)).toMatchObject({
+        status: "draft",
+        version: 1,
+      });
+    });
+
+    it("012 EARS-5.13: when the exact publish request is retried, the system shall replay the stored outcome instead of transitioning twice", async () => {
+      const body = await created(await createJson({ payload: validPayload() }));
+      const reused = key();
+
+      const first = await publishPartner(body.id, 1, { idempotencyKey: reused });
+      expect(first.statusCode).toBe(200);
+      const replay = await publishPartner(body.id, 1, {
+        idempotencyKey: reused,
+      });
+      expect(replay.statusCode).toBe(200);
+      // Value-identical, not byte-identical: the stored body round-trips through
+      // jsonb, which does not preserve key order. What EARS-17 promises is the
+      // same OUTCOME, and a deep comparison is exactly that promise.
+      expect(JSON.parse(replay.payload)).toEqual(JSON.parse(first.payload));
+      expect(replay.headers.etag).toBe(first.headers.etag);
+      // One transition, not two: the replay must not have bumped the version.
+      expect(await partnerRow(body.id)).toMatchObject({ version: 2 });
+    });
+
+    it("012 EARS-5.14: when a non-public partner is addressed on the public surface, the system shall answer exactly as it does for an unknown one", async () => {
+      const body = await created(await createJson({ payload: validPayload() }));
+      const draft = await app.inject({
+        method: "GET",
+        url: `/v1/public/partners/${body.slug}/projects`,
+        headers: device,
+      });
+      const unknown = await app.inject({
+        method: "GET",
+        url: `/v1/public/partners/${randomUUID()}/projects`,
+        headers: device,
+      });
+      expect(draft.statusCode).toBe(404);
+      expect(unknown.statusCode).toBe(404);
+      // Indistinguishable: same status AND same error code, so a probe cannot
+      // learn that a draft partner exists behind this slug.
+      expect(problem(draft).errorCode).toBe(problem(unknown).errorCode);
+
+      // Once published, the SAME address answers — proving the 404 above was
+      // the visibility allow-list and not a missing route.
+      expect((await publishPartner(body.id, 1)).statusCode).toBe(200);
+      const visible = await app.inject({
+        method: "GET",
+        url: `/v1/public/partners/${body.slug}/projects`,
+        headers: device,
+      });
+      expect(visible.statusCode).toBe(200);
+    });
+
     // ── helpers ───────────────────────────────────────────────────────────
 
     function problem(res: { payload: string }): {

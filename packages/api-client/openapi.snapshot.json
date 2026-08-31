@@ -3275,7 +3275,17 @@
     "/v1/me/events": {
       "get": {
         "operationId": "MyEventsController_list",
-        "parameters": [],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "tab",
+            "required": false,
+            "schema": {
+              "enum": ["upcoming", "recordings"],
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": ""

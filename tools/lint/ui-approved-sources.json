@@ -59,6 +59,19 @@
       "approvalProvenance": [
         "https://github.com/doctor-school/ds-platform/issues/1578#issuecomment-5435209906"
       ]
+    },
+    "admin-event-and-direction-pages-v1": {
+      "evidenceProfiles": ["responsive-web"],
+      "surfacePaths": [
+        "apps/admin/app/directions/[id]/page.tsx",
+        "apps/admin/app/events/[id]/page.tsx",
+        "apps/admin/components/event-directions-panel.tsx",
+        "apps/admin/messages/ru.json"
+      ],
+      "states": ["admin-event-and-direction-detail-tabs"],
+      "approvalProvenance": [
+        "https://github.com/doctor-school/ds-platform/issues/1645#issuecomment-5477986523"
+      ]
     }
   }
 }

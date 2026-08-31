@@ -1177,7 +1177,17 @@ jobs:
       # `dev:snapshot`, which has no meaning on a throwaway runner database.
       - name: Apply the migrations
         run: pnpm --filter @ds/api drizzle:migrate:ci
-      - run: pnpm exec turbo run build --filter=@ds/api --filter=@ds/admin
+      # `API_PROXY_TARGET` belongs to the BUILD, not to `next start`: the
+      # `/v1/:path*` rewrite in apps/admin/next.config.ts is evaluated when the
+      # routes manifest is emitted, so the destination is baked into
+      # `.next/routes-manifest.json` and a value supplied only at start time is
+      # ignored. Verified locally on #1647 — an admin built without it proxied
+      # `/v1/auth/register` to the config default and answered 404 while the api
+      # answered on its real port.
+      - name: Build the api and the admin
+        env:
+          API_PROXY_TARGET: http://localhost:3000
+        run: pnpm exec turbo run build --filter=@ds/api --filter=@ds/admin
       - name: Start the api
         env:
           PORT: "3000"
@@ -1207,8 +1217,6 @@ jobs:
           done
           echo "the api did not come up in time"; cat api.log; exit 1
       - name: Start the admin
-        env:
-          API_PROXY_TARGET: http://localhost:3000
         run: |
           pnpm --filter @ds/admin start > admin.log 2>&1 &
           echo $! > admin.pid

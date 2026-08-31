@@ -1,9 +1,28 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
+const resolve = (relativePath: string): string =>
+  fileURLToPath(new URL(relativePath, import.meta.url));
+
 const source = (relativePath: string): string =>
-  readFileSync(fileURLToPath(new URL(relativePath, import.meta.url)), "utf8");
+  readFileSync(resolve(relativePath), "utf8");
+
+/**
+ * Every admin list route. EARS-23 is a claim about the SET, not about whichever
+ * page happens to have been converted last — so the guard enumerates the routes
+ * and a new list that hand-rolls its own toolbar fails here rather than in a
+ * review someone might skip.
+ */
+const LIST_PAGES = [
+  "../app/projects/page.tsx",
+  "../app/experts/page.tsx",
+  "../app/partners/page.tsx",
+  "../app/directions/page.tsx",
+  "../app/specialties/page.tsx",
+  "../app/direction-specialties/page.tsx",
+  "../app/direction-adjacency/page.tsx",
+] as const;
 
 /**
  * EARS-23 says a taxonomy SELECTOR uses «the shared search/select combobox» and a
@@ -55,5 +74,39 @@ describe("EARS-23: one shared selector and one instant-apply list", () => {
 
     expect(text).toContain("onResetAll=");
     expect(text.match(/const resetAll =/g)).toHaveLength(1);
+  });
+
+  it("EARS-23.2: every admin list route mounts the one block-tier composition", () => {
+    for (const path of LIST_PAGES) {
+      const text = source(path);
+
+      expect(text).toContain("AdminDataList");
+      expect(text).toContain("ADMIN_DATA_LIST_INITIAL_QUERY");
+    }
+  });
+
+  it("EARS-23.2: the submit-driven list shell is gone, not merely unused", () => {
+    // A second toolbar that no page mounts is still a second toolbar: the next
+    // list would find it and mount it. The deliverable is its DELETION.
+    expect(existsSync(resolve("../components/admin-list-shell.tsx"))).toBe(
+      false,
+    );
+
+    for (const path of LIST_PAGES) {
+      expect(source(path)).not.toContain("AdminListShell");
+    }
+  });
+
+  it("EARS-23.2: no list page hand-assembles its own row markup or actions column", () => {
+    for (const path of LIST_PAGES) {
+      const text = source(path);
+
+      // The block owns the table: a page that still writes `<tr>`/`<td>` is
+      // rendering beside the block instead of through it.
+      expect(text).not.toContain("<tr");
+      expect(text).not.toContain("<td");
+      // A single-action list has no «Действия» column — the row IS the action.
+      expect(text).not.toContain("columns.actions");
+    }
   });
 });

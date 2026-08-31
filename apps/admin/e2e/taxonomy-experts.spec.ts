@@ -5,9 +5,13 @@ import {
   type BootstrapResult,
 } from "./support/admin-session";
 import { totpCode } from "./support/totp";
+import { visible } from "./support/visible";
 
 /**
- * 012 EARS-19/20 — real Refine → NestJS → Postgres expert authoring.
+ * 012 EARS-19/20/23 — real Refine → NestJS → Postgres expert authoring, plus the
+ * block-tier expert LIST (#1297): instant search and facets, a removable applied
+ * chip with one «Сбросить всё», and a pager whose non-actionable control is
+ * disabled rather than dead.
  * Manual dev-stand flow; no mocked directory or mutation response is used.
  */
 const ORIGIN = process.env.E2E_ADMIN_URL ?? "http://localhost:3200";
@@ -137,6 +141,69 @@ test.describe("012 EARS-19/20 — Expert authoring", () => {
       buffer: PNG_1x1,
     });
     await expect(page.getByAltText("Фото эксперта")).toBeVisible();
+  });
+
+  test("EARS-23: the expert list applies search and facets instantly, and one control undoes them", async ({
+    page,
+  }) => {
+    await signInAsAdmin(page);
+
+    // A row the search can actually find — created through the real form, so
+    // this asserts the list against a record the API just produced.
+    await openExpertCreate(page);
+    const familyName = `Списочный-${Date.now()}`;
+    await fillRequiredNames(page, familyName);
+    await page.getByTestId("submit-expert").click();
+    await page.waitForURL(/\/experts\/[0-9a-f-]{36}$/, { timeout: 20_000 });
+
+    // ── Reach the list through the chrome, not by typing a URL ─────────────
+    await page.getByTestId("nav-experts").click();
+    await page.waitForURL(/\/experts$/, { timeout: 20_000 });
+    await expect(page.getByTestId("experts-filters")).toBeVisible();
+    // The retired-rows toggle is OFF by default (Stage-A answer 4).
+    await expect(page.getByTestId("experts-include-retired")).not.toBeChecked();
+    // EARS-16: single-action list ⇒ the ROW is the action, so no «Действия».
+    await expect(
+      page.getByRole("columnheader", { name: "Действия" }),
+    ).toHaveCount(0);
+
+    // ── EARS-23: typing IS the gesture — no Enter, no «Применить» ──────────
+    await page.getByRole("searchbox", { name: "Поиск" }).fill(familyName);
+    await expect(
+      page.getByRole("button", { name: "Применить", exact: true }),
+    ).toHaveCount(0);
+    await expect(page.getByTestId("experts-table")).toContainText(familyName);
+    await expect(page.getByText("Выбрано:", { exact: false })).toBeVisible();
+    await expect(page.getByTestId("experts-total")).toBeVisible();
+
+    // ── EARS-23: the state facet applies on change, not on submit ──────────
+    await page.getByTestId("experts-status").selectOption("published");
+    // The draft just created leaves the result set the moment the facet moves.
+    await expect(page.getByTestId("experts-table")).not.toContainText(
+      familyName,
+    );
+
+    // ── EARS-23: ONE control clears the whole applied set ─────────────────
+    await expect(
+      page.getByRole("button", { name: "Сбросить всё" }),
+    ).toHaveCount(1);
+    await page.getByRole("button", { name: "Сбросить всё" }).click();
+    await expect(page.getByText("Выбрано:", { exact: false })).toHaveCount(0);
+    await expect(page.getByRole("searchbox", { name: "Поиск" })).toHaveValue("");
+    await expect(page.getByTestId("experts-status")).toHaveValue("");
+
+    // ── EARS-23: a pager control that cannot act is DISABLED, not a dead end ─
+    await expect(
+      visible(page.getByRole("button", { name: "Назад", exact: true })),
+    ).toBeDisabled();
+
+    // ── EARS-16: the whole ROW opens the record ───────────────────────────
+    await page.getByRole("searchbox", { name: "Поиск" }).fill(familyName);
+    await visible(
+      page.getByTestId("experts-table").getByText(familyName, { exact: false }),
+    ).click();
+    await page.waitForURL(/\/experts\/[0-9a-f-]{36}$/, { timeout: 20_000 });
+    await expect(page.getByTestId("expert-heading")).toContainText(familyName);
   });
 
   test("EARS-19: an existing User links explicitly, duplicate ownership returns RU 409, and unlink persists", async ({

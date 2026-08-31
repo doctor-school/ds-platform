@@ -165,6 +165,10 @@ flowchart LR
 
 Two rules the review enforces: nothing enters `TargetingSet` without a managed row behind it, and items reached only through `ADJ` are labelled adjacent in the UI — never as the doctor's own specialty (EARS-8).
 
+**An empty targeted set is honest, not a failure.** A non-«Другое» specialty with no managed `SPECIALTY_DIRECTION` rows resolves to `mode: "targeted"` with empty `directions` — and therefore empty adjacent directions, since adjacency is reachable only through the doctor's own rows. That is the truthful answer: the specialty _is_ targeted, the managed books simply hold no rows behind it yet. Consumers MUST render their documented `пусто` state from the §6 matrix — nearest events show «Пока ничего не запланировано…» with the adjacent-areas link, the leaderboard shows its calm explanation. Silently falling back to general or non-targeted content is forbidden: unmanaged content would enter the doctor's view without a managed row behind it, breaking the first rule above.
+
+`mode: "general"` with the explicit LD-5 statement is reserved for «Другое» and nothing else. Consumers must never infer generality from emptiness — the two states are distinguished by `mode`, never by the size of `directions`. This contract binds the block consumers #1485 (nearest events) and #1487 (leaderboard).
+
 ## 6. Home-page block × `dataState` matrix
 
 Every block resolves to exactly one render per state. An empty labelled box, a bare zero and an unresolving spinner are each defects.

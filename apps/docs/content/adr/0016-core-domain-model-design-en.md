@@ -42,10 +42,22 @@ Field lists are **indicative names and kinds**, not a schema. Every entity addit
 | `deactivated_at`                                                                  | timestamptz  | existing, ADR-0009 lifecycle              |
 | `role`                                                                            | text         | **retired** → role assignment             |
 | profile attributes (full name parts, city/location, place of work, avatar, about) | text         | doctor profile (OWD-2 scope)              |
-| `primary_specialty_id`                                                            | fk → §2.7    | Minzdrav specialty (REQ-101)              |
 | `verification_state`                                                              | enum         | unverified / verified / rejected (REQ-22) |
 
-One row per human being, on both storefronts (OWD-1). Contacts (`email`, `phone`) are never part of an investor-facing projection (OWD-2).
+One row per human being, on both storefronts (OWD-1). Contacts (`email`, `phone`) are never part of an investor-facing projection (OWD-2). The primary specialty is **not** a column on `users` — it is the link table below.
+
+#### Person ↔ Minzdrav specialty — `doctor_specialties`
+
+| Field                                   | Kind      | Note                                                                    |
+| --------------------------------------- | --------- | ----------------------------------------------------------------------- |
+| `id`                                    | uuid      |                                                                         |
+| `doctor_id`                             | fk → §2.1 | `users`, `restrict`                                                     |
+| `specialty_id`                          | fk → §2.7 | `specialties_minzdrav`, `restrict` (REQ-101)                            |
+| `role`                                  | enum      | `doctor_specialty_role` — `primary` today, the axis extra roles land on |
+| `record_status` / `deleted_at`          | enum / ts | retained-row lifecycle; a CHECK enforces `retired ⇔ deleted_at is set`  |
+| `version` / `created_at` / `updated_at` | int / ts  | standard lifecycle fields                                               |
+
+A doctor holds **at most one active primary specialty** — enforced in the database by a partial unique index on `doctor_id` restricted to active `primary` rows, not by application logic. Re-choosing a specialty is retire-then-insert inside one transaction, so the previous choice is retained rather than overwritten: the history of what a doctor declared, and when, survives every change. Modelling the link as its own table (rather than a `primary_specialty_id` column) is what makes both properties possible, and leaves room for the non-primary roles the `role` enum anticipates.
 
 ### 2.2 Role assignment
 

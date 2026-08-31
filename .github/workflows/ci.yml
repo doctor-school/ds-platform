@@ -1113,12 +1113,19 @@ jobs:
       # LISTEN on the external port itself, or the issuer URL and the socket
       # disagree. Its `zitadel` database is created by `start-from-init` with
       # the admin credentials, exactly as on the stand — no init script does it.
-      # The `/pat` tmpfs must be uid/gid 1000: the image is distroless and runs
-      # non-root, and a root-owned mount is the #144 trap.
+      # `/pat` is a HOST bind mount here, not the stand's tmpfs. Same root
+      # cause as the #144 trap — the image is distroless, runs as uid 1000 and
+      # cannot write a root-owned mount — but the CI answer is a world-writable
+      # runner directory rather than a tmpfs, because the PAT then lands on the
+      # runner filesystem and is read with `cat`. `docker cp` off the tmpfs did
+      # not produce the file (first run of this job, 2026-08-31), and the
+      # distroless image has no shell to `docker exec cat` with.
+      - name: Prepare the PAT mount
+        run: mkdir -p "$RUNNER_TEMP/idp-pat" && chmod 0777 "$RUNNER_TEMP/idp-pat"
       - name: Start the IdP (Zitadel)
         run: |
           docker run -d --name ds-idp --network host \
-            --tmpfs /pat:uid=1000,gid=1000,mode=0700 \
+            -v "$RUNNER_TEMP/idp-pat":/pat \
             -e ZITADEL_MASTERKEY=MasterkeyNeedsToHave32Characters \
             -e ZITADEL_EXTERNALSECURE=false \
             -e ZITADEL_TLS_ENABLED=false \
@@ -1153,7 +1160,8 @@ jobs:
       - name: Read the bootstrap PAT
         run: |
           for i in $(seq 1 30); do
-            if docker cp ds-idp:/pat/pat.txt ./idp-pat.txt 2>/dev/null && [ -s ./idp-pat.txt ]; then
+            if [ -s "$RUNNER_TEMP/idp-pat/pat.txt" ]; then
+              cp "$RUNNER_TEMP/idp-pat/pat.txt" ./idp-pat.txt
               echo "IDP_SERVICE_TOKEN=$(cat ./idp-pat.txt)" >> "$GITHUB_ENV"
               echo "bootstrap PAT read"; exit 0
             fi

@@ -1,7 +1,6 @@
-import { expect, test, type Page } from "@playwright/test";
-import { bootstrapAdminSession } from "./support/admin-session";
+import { expect, test } from "@playwright/test";
 import { selectRelationshipCombobox } from "./support/relationship-combobox";
-import { totpCode } from "./support/totp";
+import { ADMIN_ORIGIN, signInAsAdmin } from "./support/sign-in";
 
 /**
  * 012 EARS-1 (#1283), browser half — the REAL Refine → NestJS → Postgres path.
@@ -22,29 +21,12 @@ import { totpCode } from "./support/totp";
  *   IDP_PROJECT_ID=… pnpm --filter @ds/admin exec playwright test e2e/taxonomy-projects.spec.ts \
  *     --config=playwright.flows.config.ts
  */
-const ORIGIN = process.env.E2E_ADMIN_URL ?? "http://localhost:3200";
 
 /** A tiny valid PNG (1×1, opaque) — the cover fixture, built in-process. */
 const PNG_1x1 = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==",
   "base64",
 );
-
-/** Sign in and complete the one-time TOTP enrollment; lands on `/events`. */
-async function signInAsAdmin(page: Page): Promise<void> {
-  const { email, password } = await bootstrapAdminSession(ORIGIN);
-  await page.goto("/login");
-  await page.locator("#email").fill(email);
-  await page.locator("#password").fill(password);
-  await page.getByTestId("login-submit").click();
-  await page.waitForURL(/\/mfa\/enroll/, { timeout: 20_000 });
-  const secret = (await page.getByTestId("mfa-secret").innerText()).trim();
-  await page
-    .getByTestId("mfa-enroll-form")
-    .getByRole("textbox")
-    .fill(totpCode(secret));
-  await page.waitForURL(/\/events/, { timeout: 20_000 });
-}
 
 test.describe.configure({ mode: "serial" });
 
@@ -100,7 +82,7 @@ test.describe("012 EARS-1 — project authoring in the live admin", () => {
       /^https:\/\/academy\.doctor\.school\/projects\/shkola-kardiologii/,
     );
     await context.grantPermissions(["clipboard-read", "clipboard-write"], {
-      origin: ORIGIN,
+      origin: ADMIN_ORIGIN,
     });
     await page.getByTestId("project-copy-public-link").click();
     await expect(page.getByTestId("project-copy-public-link")).toHaveText(

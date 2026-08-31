@@ -98,7 +98,7 @@ routes:
   # registration actually completes and the route carries its Stage-B verdict.
   - app: doctor
     route: /register
-    file: apps/doctor/app/(storefront)/register/page.tsx
+    file: apps/doctor/app/(auth)/register/page.tsx
     status: deferred
     issue: "#1430"
 

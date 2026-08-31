@@ -20,7 +20,8 @@ Feature: A doctor stopped by a gate registers in a short honest form and comes b
   Scenario: A doctor registers from a gate and returns to the эфир
     Given a guest doctor pressed «Участвовать» on «Артроскопия коленного сустава»
     When the registration screen opens
-    Then it renders inside feature 017's shell in the auth canvas split composition
+    Then it renders the auth canvas split composition with no storefront header, navigation or footer
+    And the card stands centred on the vertical axis under the wordmark
     And the left half shows the эфир through feature 018's event-card unit
     And that card carries no back-navigation control
     And the form asks only for email, password and an optional promo code

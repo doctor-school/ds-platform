@@ -11,7 +11,7 @@ lang: en
 
 ## 1. Route topology and screen composition
 
-`#d-register` is a public route of `apps/doctor` on `doctor.school`, rendered inside feature 017's shell. The composition is the `auth` canvas's split screen, taken unchanged; 021 changes what fills the split's left half and what stands around the submit button.
+`#d-register` is a public route of `apps/doctor` on `doctor.school`, rendered CHROMELESS — outside feature 017's shell, with no storefront header, navigation or footer. The route lives in the app's `(auth)` route group, a sibling of `(storefront)`, so the 017 layout is never in its tree. That is the canvas composition and the product reason behind it: the door is a single-CTA surface, and the shell's onward-link cluster leads the doctor away from the form they came to fill. The frame is the `auth` canvas's split screen taken unchanged — brand panel beside a form column that carries the wordmark at its top and the card centred on the vertical axis — realized through `@ds/design-system`'s `AuthLayout` block wrapped by a doctor-local `AuthShell`, the mirror of the Academy's own auth frame (the two are lifted into one shared shell by the follow-on Issue). 021 changes what fills the split's left half and what stands around the submit button.
 
 | Region                   | Content                                                                                       | Stage-A pick                        |
 | ------------------------ | --------------------------------------------------------------------------------------------- | ----------------------------------- |

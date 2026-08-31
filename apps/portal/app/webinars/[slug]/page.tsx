@@ -10,6 +10,7 @@ import { WebinarPageContent } from "@ds/design-system/webinar-page-content";
 import { WebinarStatusCard } from "@ds/design-system/webinar-status-card";
 import { fetchPublicEventPage } from "../../../lib/public-events";
 import { resolvePrimaryCta, toCanvasStatus } from "../../../lib/event-lifecycle";
+import { resolveRecordingSignal } from "../../../lib/recording-signal";
 import {
   fetchEventRegistrationState,
   resolveJoinSignpost,
@@ -137,6 +138,13 @@ export default async function WebinarEventPage({
   // geometry. Every state now renders the status card (the archived body swaps
   // its own time-plate/head/sub copy + the CTA-column notice).
   const isArchived = status === "archived";
+  // 014 EARS-4 — the source-free recording signal, read from the SAME public
+  // projection the rest of this render uses (`event.recording`, resolved api-side
+  // by the one canonical resolver, so the page and the listing card can never
+  // disagree). Non-null only on `ended`; the player itself is #1343, the
+  // readiness-date plaque #1344 and the raw spoiler #1345 — this slice renders
+  // the availability signal and nothing that pretends to be those.
+  const recordingSignal = resolveRecordingSignal(event.recording, status);
   // The footer conversion band mirrors the status card's route but only for a
   // participable event (upcoming / live); `ended` and `archived` carry none. It
   // is a GUEST conversion band: its CTA links to the `/register` auth handoff,
@@ -211,12 +219,27 @@ export default async function WebinarEventPage({
                 </div>
               ) : null}
             </div>
-            {/* Hero lifecycle badge (EARS-4 swap): live → the pulsing «В эфире»
-                danger tag; every other state → the pale label with its state copy
-                («Скоро» / «Эфир завершён» / «В архиве»). */}
+            {/* Hero lifecycle badge (004 EARS-4 swap): live → the pulsing «В
+                эфире» danger tag; every other state → the pale label with its
+                state copy («Скоро» / «Эфир завершён» / «В архиве»).
+
+                014 EARS-4: on an ENDED event the badge speaks about the
+                RECORDING instead — «Запись доступна» (green) or «Запись
+                готовится» (the neutral label) — because that is the one thing a
+                post-live visitor came to find out, and «Эфир завершён» merely
+                restates the date they can already read. `archived` is
+                deliberately untouched: 004 EARS-5's «В архиве» owns that render. */}
             {event.state === "live" ? (
               <Badge variant="live" className="mt-1 shrink-0">
                 {t("state.live")}
+              </Badge>
+            ) : recordingSignal ? (
+              <Badge
+                data-testid="recording-badge"
+                variant={recordingSignal.available ? "success" : "label"}
+                className="mt-1 shrink-0"
+              >
+                {t(`recordingBadge.${recordingSignal.badgeKey}`)}
               </Badge>
             ) : (
               <Badge variant="label" className="mt-1 shrink-0">
@@ -309,6 +332,22 @@ export default async function WebinarEventPage({
               <Button asChild size="lg">
                 <Link href={cta.href}>{t("cta.participate")}</Link>
               </Button>
+            ) : recordingSignal?.kindKey ? (
+              // 014 EARS-4 — the canvas's recording meta («Монтаж · 90 минут»)
+              // in the column an `ended` event otherwise leaves empty. It is a
+              // STATEMENT, not an affordance: the play control belongs to the
+              // player (#1343), and a button here with nothing behind it would
+              // be a dead end. `text-primary-action` (blue.700) is the card-safe
+              // AA token on `bg-card` — never `text-primary` (#270).
+              <div data-testid="recording-meta">
+                <p className="text-2xs font-extrabold uppercase tracking-micro text-muted-foreground">
+                  {t("recordingKind.label")}
+                </p>
+                <p className="mt-1 text-sm font-bold text-primary-action">
+                  {t(`recordingKind.${recordingSignal.kindKey}`)} ·{" "}
+                  {t("recordingKind.duration", { duration: event.durationMin })}
+                </p>
+              </div>
             ) : null}
           </WebinarStatusCard>
         </div>

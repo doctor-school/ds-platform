@@ -149,6 +149,16 @@
       "ended": "Эфир завершён",
       "archived": "В архиве"
     },
+    "recordingBadge": {
+      "available": "Запись доступна",
+      "preparing": "Запись готовится"
+    },
+    "recordingKind": {
+      "label": "Запись",
+      "edited": "Монтаж",
+      "raw": "Оригинал",
+      "duration": "{duration} мин"
+    },
     "statusCard": {
       "upcoming": {
         "timeLabel": "Начало",

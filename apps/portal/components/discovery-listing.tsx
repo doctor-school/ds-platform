@@ -8,33 +8,16 @@ import { fetchEventListingWithCursorFallback } from "@/lib/public-events";
 import { fetchMyEvents } from "@/lib/my-events";
 import {
   formatMskDayLabel,
+  formatMskMonth,
   formatMskParts,
   formatMskWeekdayShort,
   mskDayKey,
+  mskMonthKey,
 } from "@/lib/msk";
 import { buildWebinarsHref, type WebinarsQueryInput } from "@/lib/webinars-url";
 import { CalendarShell } from "./calendar-shell";
 import { EventListRouter } from "./event-list-router";
 import { ViewSwitcher } from "./view-switcher";
-
-function formatMskMonth(isoInstant: string) {
-  const label = new Intl.DateTimeFormat("ru-RU", {
-    month: "long",
-    year: "numeric",
-    timeZone: "Europe/Moscow",
-  })
-    .format(new Date(isoInstant))
-    .replace(/\s*г\.$/u, "");
-  return label.charAt(0).toUpperCase() + label.slice(1);
-}
-
-function mskMonthKey(isoInstant: string) {
-  return new Intl.DateTimeFormat("sv-SE", {
-    year: "numeric",
-    month: "2-digit",
-    timeZone: "Europe/Moscow",
-  }).format(new Date(isoInstant));
-}
 
 async function fetchRegisteredSlugs(): Promise<ReadonlySet<string>> {
   const h = await headers();
@@ -44,8 +27,11 @@ async function fetchRegisteredSlugs(): Promise<ReadonlySet<string>> {
       userAgent: h.get("user-agent") ?? "",
       acceptLanguage: h.get("accept-language") ?? "",
     });
+    // `MyEvents` is an envelope per tab (014 EARS-9); the public listing's
+    // «вы записаны» marker is about the caller's UPCOMING registrations, which
+    // is the read's default tab — the rows live under `.data`.
     return new Set(
-      result.authenticated ? result.events.map((event) => event.slug) : [],
+      result.authenticated ? result.events.data.map((event) => event.slug) : [],
     );
   } catch {
     return new Set();

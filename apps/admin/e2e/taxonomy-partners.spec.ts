@@ -120,10 +120,12 @@ test.describe("012 EARS-4 — partner authoring in the live admin", () => {
     await expect
       .poll(() => page.evaluate(() => navigator.clipboard.readText()))
       .toBe(publicUrl);
-    // The retained project-relation read tab ships alongside «Основное».
+    // The retained project-relation read tab ships alongside «Основное», and
+    // «Публикация» (EARS-5) is the third — a partner has no other tab.
     await expect(page.getByTestId("tab-main")).toBeVisible();
     await expect(page.getByTestId("tab-projects")).toBeVisible();
-    await expect(page.getByRole("tab")).toHaveCount(2);
+    await expect(page.getByTestId("tab-publish")).toBeVisible();
+    await expect(page.getByRole("tab")).toHaveCount(3);
     // No logo yet ⇒ an EMPTY slot. Unlike an expert, an organisation has no
     // initials fallback anywhere on the platform, so nothing stands in for it.
     await expect(page.getByAltText("Логотип партнёра")).toHaveCount(0);

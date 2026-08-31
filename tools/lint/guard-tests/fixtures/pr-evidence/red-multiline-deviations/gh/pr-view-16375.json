@@ -1,0 +1,6 @@
+{
+  "number": 16375,
+  "headRefName": "tooling/1637-guard",
+  "files": [{ "path": ".changeset/bright-tools.md" }],
+  "body": "Stage-B: N/A — internal tooling-only change with no visual surface\nChangeset: .changeset/bright-tools.md — patch\nBehavior change: PR authoring checks now fail closed on missing evidence.\nLocal touched-suite verification: `pnpm --filter @ds/lint-guard-tests test` — PASS\n\n## Deviations\n\n- ADR-0007 §2.4 review artifact intentionally omitted\n- 012-design.md §2.3 naming differs — tracked at #1700\n\n## Verification\n\nFocused tests pass."
+}

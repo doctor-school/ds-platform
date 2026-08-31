@@ -12,9 +12,10 @@
 # checkout + `pnpm install` — six installs to run six sub-second body parsers.
 # They are now sequential steps of a single job. Posture is preserved exactly,
 # re-encoded from per-JOB to per-STEP:
-#   • `spec-link` is BLOCK → a plain step (fails the job → red check-run the
-#     merge gate reads). BLOCK guards run LAST so their failures never skip the
-#     WARN guards' findings.
+#   • `spec-link`, `ui-parity`, and `pr-evidence` are BLOCK → plain steps (a
+#     failure makes the job/check-run red for the merge gate). BLOCK guards run
+#     after WARN guards; `pr-evidence` uses `if: always()` so it still reports
+#     when an earlier BLOCK member failed.
 #   • every other member is WARN → `continue-on-error: true` on the STEP so one
 #     flagged guard never stops the others, PLUS a final `if: always()`
 #     WARN-REPORT step that lists every flagged guard in the job summary and
@@ -200,6 +201,17 @@ jobs:
           PR_BODY: ${{ github.event.pull_request.body }}
         run: pnpm lint:ui-parity
 
+      # pr-evidence: BLOCK. Durable delivery markers may not be missing or
+      # placeholder, local touched suites may not be known-red/failed, and an
+      # ADR/spec-clause deviation must point at its Issue or DEBT.md anchor.
+      - name: pr-evidence (BLOCK)
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: pnpm exec tsx tools/lint/pr-evidence-lint.ts
+
       # WARN report — the second half of the WARN encoding, and this batch's
       # VISIBILITY surface. It lists every WARN step whose `outcome` is `failure`
       # in the job summary and exits 0 by design.
@@ -210,9 +222,10 @@ jobs:
       # ADR-0007 §2.6 (WARN is visible, never merge-blocking). Fixed in #1253.
       #
       # No classifier exempts this check-run by name — none exempts any name
-      # (#1253). The batch is MIXED: it hosts the BLOCK `spec-link`, whose red IS
-      # this check-run's red (cross-workflow `needs` is impossible, so
-      # `spec-link` gates only through the head-SHA check-run the gate reads). A
+      # (#1253). The batch is MIXED: it hosts BLOCK members (`spec-link`,
+      # `ui-parity`, `pr-evidence`), whose red IS this check-run's red
+      # (cross-workflow `needs` is impossible, so they gate through the
+      # head-SHA check-run the gate reads). A
       # check-run carries one bit, so the WARN/BLOCK decision is resolved HERE,
       # in the exit codes: only a BLOCK member — or an infra failure that means
       # the guards never ran — may turn it red.
@@ -246,5 +259,5 @@ jobs:
           printf '%s\n' "$failed"
           printf -- '- `%s`\n' $failed >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "WARN is visible, never merge-blocking (ADR-0007 §2.6): these guards exit 0 here, so they do not fail this check-run and do not block \`merge:gate\`. Only the BLOCK member (\`spec-link\`) reds this check-run. Fix the findings or promote the guard — do not silence it." >> "$GITHUB_STEP_SUMMARY"
+          echo "WARN is visible, never merge-blocking (ADR-0007 §2.6): these guards exit 0 here, so they do not fail this check-run and do not block \`merge:gate\`. Only BLOCK members (\`spec-link\`, \`ui-parity\`, \`pr-evidence\`) red this check-run. Fix the findings or promote the guard — do not silence it." >> "$GITHUB_STEP_SUMMARY"
           exit 0

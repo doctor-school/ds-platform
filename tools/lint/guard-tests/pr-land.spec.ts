@@ -125,6 +125,16 @@ describe("pr-land pure seams (#1026)", () => {
 });
 
 describe("pr-land landPr() stage ordering (#1026)", () => {
+  it("uses the canonical hard pre-merge preflight and has no raw merge-gate spawn (#1637)", () => {
+    const source = readFileSync(
+      new URL("../../gh/pr-land.mjs", import.meta.url),
+      "utf8",
+    );
+    expect(source).toContain('"tools/lint/pr-preflight.mjs"');
+    expect(source).toContain('"--pre-merge"');
+    expect(source).not.toContain('["tools/gh/merge-gate.mjs"');
+  });
+
   it("all-green: stages run in canonical order and exit 0", () => {
     const { io, calls, state } = makeIo();
     expect(() => landPr(55, [], io as never)).toThrow("exit:0");

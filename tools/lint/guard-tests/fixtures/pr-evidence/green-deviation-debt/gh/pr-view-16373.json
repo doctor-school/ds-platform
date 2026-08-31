@@ -1,0 +1,5 @@
+{
+  "number": 16373,
+  "files": [{ "path": ".changeset/pr-evidence.md" }],
+  "body": "Stage-B: N/A (no visual surface) — lead-certified; authorization and live behavioral verification: https://github.example.test/issues/1637#comment-1\nChangeset: .changeset/pr-evidence.md — patch\nBehavior change: PR authoring checks now fail closed on missing evidence.\nLocal touched-suite verification: `pnpm exec vitest run tools/lint/guard-tests/pr-evidence-lint.spec.ts` — PASS\nDeviations: 012-design.md §2.3 naming differs; tracked at [DEBT.md](../../DEBT.md#relationship-name)"
+}

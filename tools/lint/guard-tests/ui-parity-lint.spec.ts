@@ -13,22 +13,14 @@ const webFile = "apps/admin/app/events/[id]/page.tsx";
 const approvedFile = "apps/admin/components/recordings-panel.tsx";
 const mobileFile = "apps/mobile/src/screens/home.tsx";
 const relationshipSource = "feature-012-relationship-editors-v1";
-const relationshipState =
-  "taxonomy-relationship-authoring-and-event-list-pagination";
+const relationshipState = "taxonomy-relationship-authoring";
 const relationshipPaths = [
-  "apps/admin/app/directions/[id]/page.tsx",
-  "apps/admin/app/events/[id]/page.tsx",
-  "apps/admin/app/events/page.tsx",
-  "apps/admin/app/experts/[id]/page.tsx",
-  "apps/admin/app/partners/[id]/page.tsx",
-  "apps/admin/app/projects/[id]/page.tsx",
   "apps/admin/components/event-experts-panel.tsx",
   "apps/admin/components/event-projects-panel.tsx",
   "apps/admin/components/event-topics-panel.tsx",
   "apps/admin/components/project-experts-panel.tsx",
   "apps/admin/components/project-partners-panel.tsx",
   "apps/admin/components/relationship-endpoint-picker.tsx",
-  "apps/admin/messages/ru.json",
 ];
 const baseApprovedManifest = JSON.parse(
   readFileSync(new URL("../ui-approved-sources.json", import.meta.url), "utf8"),
@@ -127,6 +119,28 @@ describe("ui-parity body evidence", () => {
     ).toBe(true);
   });
 
+  it("green: Feature 012 approval provenance excludes its own implementation Issue", () => {
+    expect(
+      baseApprovedManifest.sources[relationshipSource].approvalProvenance,
+    ).not.toContain(
+      "https://github.com/doctor-school/ds-platform/issues/1610#issuecomment-5468254896",
+    );
+  });
+
+  it.each([
+    "apps/admin/app/directions/[id]/page.tsx",
+    "apps/admin/app/events/[id]/page.tsx",
+    "apps/admin/app/events/page.tsx",
+    "apps/admin/app/experts/[id]/page.tsx",
+    "apps/admin/app/partners/[id]/page.tsx",
+    "apps/admin/app/projects/[id]/page.tsx",
+    "apps/admin/messages/ru.json",
+  ])("red: Feature 012 source no longer grants broad surface %s", (path) => {
+    expect(verdict(relationshipBody, [path], baseApprovedManifest).ok).toBe(
+      false,
+    );
+  });
+
   it("red: nearby Feature 012 path and undeclared relationship state fail closed", () => {
     expect(
       verdict(
@@ -168,10 +182,7 @@ describe("ui-parity body evidence", () => {
     ).toBe(false);
     expect(
       verdict(
-        approvedBody.replace(
-          "recordings-tab",
-          "recordings-panel/unknown",
-        ),
+        approvedBody.replace("recordings-tab", "recordings-panel/unknown"),
       ).ok,
     ).toBe(false);
   });
@@ -180,19 +191,27 @@ describe("ui-parity body evidence", () => {
     "apps/admin/app/events/[id]/page.tsx",
     "apps/admin/components/lifecycle-actions.tsx",
     "apps/admin/messages/ru.json",
-  ])("red: unrelated multipurpose file %s cannot claim the recordings source", (path) => {
-    expect(verdict(approvedBody, [path]).ok).toBe(false);
-  });
+  ])(
+    "red: unrelated multipurpose file %s cannot claim the recordings source",
+    (path) => {
+      expect(verdict(approvedBody, [path]).ok).toBe(false);
+    },
+  );
 
   it.each([
     "https://github.com/doctor-school/ds-platform/issues/1282",
     "https://github.com/doctor-school/ds-platform/pull/1614",
     "https://github.com/doctor-school/ds-platform/pull/1575#issuecomment-5434237585",
-  ])("red: manifest provenance %s is not an exact owner decision comment", (url) => {
-    const invalid = structuredClone(approvedManifest);
-    invalid.sources["admin-refine-compositions-v1"].approvalProvenance = [url];
-    expect(verdict(approvedBody, [approvedFile], invalid).ok).toBe(false);
-  });
+  ])(
+    "red: manifest provenance %s is not an exact owner decision comment",
+    (url) => {
+      const invalid = structuredClone(approvedManifest);
+      invalid.sources["admin-refine-compositions-v1"].approvalProvenance = [
+        url,
+      ];
+      expect(verdict(approvedBody, [approvedFile], invalid).ok).toBe(false);
+    },
+  );
 
   it("green: approved non-canvas source can require mixed evidence profiles", () => {
     expect(verdict(mixedApprovedBody, [webFile, mobileFile]).ok).toBe(true);
@@ -206,9 +225,9 @@ describe("ui-parity body evidence", () => {
       "native-mobile",
       "responsive-web",
     ];
-    expect(
-      verdict(mixedApprovedBody, [webFile, mobileFile], missing).ok,
-    ).toBe(false);
+    expect(verdict(mixedApprovedBody, [webFile, mobileFile], missing).ok).toBe(
+      false,
+    );
     expect(verdict(approvedBody, [approvedFile], extra).ok).toBe(false);
   });
 

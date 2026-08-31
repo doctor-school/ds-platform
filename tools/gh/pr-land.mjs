@@ -10,8 +10,9 @@
  * (AGENTS.md §6 "PR lifecycle runs to completion"). This wrapper makes the
  * whole tail ONE deterministic command, without weakening any gate semantics:
  *
- *   1. gate       — spawns `tools/gh/merge-gate.mjs <N>` (the single sanctioned
- *                   pre-merge gate, #836/#992) as its OWN statement and applies
+ *   1. gate       — spawns `tools/lint/pr-preflight.mjs <N> --pre-merge`
+ *                   (stage-b → merge-gate → ui-parity-review, #1637) as its OWN
+ *                   statement and applies
  *                   the same barrier `merge-when-green.mjs` uses (its exported
  *                   `shouldMerge` seam, #928): any non-zero gate exit aborts —
  *                   no merge is attempted. Extra flags (incl. the loud
@@ -151,11 +152,11 @@ export function failCode(status) {
 
 // ── default (impure) runners — injectable so the guard-test stubs them ───────
 
-/** Stage 1: the sanctioned merge gate, streamed, own statement. */
+/** Stage 1: the canonical hard pre-merge preflight, streamed, own statement. */
 function runGate(pr, extraArgs) {
   return spawnSync(
     "node",
-    ["tools/gh/merge-gate.mjs", String(pr), ...extraArgs],
+    ["tools/lint/pr-preflight.mjs", String(pr), "--pre-merge", ...extraArgs],
     {
       stdio: "inherit",
     },
@@ -379,13 +380,14 @@ export function landPr(pr, extraArgs = [], io = {}) {
   }
   const issues = (ctx.issues ?? []).filter((n) => Number.isInteger(n) && n > 0);
 
-  // Stage 1 — merge gate, own statement; the #928 barrier via shouldMerge.
+  // Stage 1 — canonical stage-b → merge-gate → ui-parity-review path, own
+  // statement; the #928 barrier via shouldMerge.
   const gateRes = gate(pr, extraArgs);
   if (gateRes.error)
     return fail(
       "gate",
       3,
-      `failed to spawn the merge gate: ${gateRes.error.message}`,
+      `failed to spawn the pre-merge preflight: ${gateRes.error.message}`,
     );
   if (!shouldMerge(gateRes.status))
     return fail(
@@ -393,7 +395,7 @@ export function landPr(pr, extraArgs = [], io = {}) {
       gateRes.status,
       `gate exit ${gateRes.status} — not GREEN`,
     );
-  report.push("gate: OK (GREEN, Mode-a pinned)");
+  report.push("gate: OK (Stage-B, GREEN Mode-a/CI, UI parity bound)");
 
   // Stage 2 — the single mandatory Phase-0 merge command, own statement.
   const mergeRes = merge(pr);

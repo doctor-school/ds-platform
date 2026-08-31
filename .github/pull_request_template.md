@@ -42,6 +42,30 @@ none
 - [ ] author:codex
 - [ ] author:human
 
+## Delivery evidence
+
+<!--
+Replace every angle-bracket placeholder below. The PR-body guard rejects missing,
+placeholder, known-red, or failed evidence. Reasoned N/A examples:
+
+- Stage-B: N/A (no visual surface) — lead-certified; authorization and live behavioral verification: <link>
+- Changeset: N/A — internal-only tooling change with no user-facing package impact
+- Behavior change: N/A — test-only change; runtime and user behavior are unchanged
+- Deviations: N/A — no ADR/spec deviations
+
+Local touched-suite verification always requires a concrete command and PASS;
+N/A, known-red, or failed local suites are not acceptable evidence. Fix a local
+failure or prove and resolve the same failure on origin/main before merge.
+Any deviation from an ADR/spec clause must name its tracked `#<issue>` or an
+exact `DEBT.md#<anchor>`.
+-->
+
+Stage-B: <GO with owner/date/link | batched at #N | reasoned N/A in the exact lead-certified form above>
+Changeset: <`.changeset/<file>.md` | reasoned N/A>
+Behavior change: <concise user/runtime behavior change | reasoned N/A>
+Local touched-suite verification: <exact command(s) and PASS result>
+Deviations: <ADR/spec clause — #N or DEBT.md#anchor | N/A — reason>
+
 ## Checklist
 
 - [ ] Tests green (unit + e2e where applicable)

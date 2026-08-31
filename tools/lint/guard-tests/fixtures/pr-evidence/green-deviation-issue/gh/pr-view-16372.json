@@ -1,0 +1,5 @@
+{
+  "number": 16372,
+  "files": [{ "path": ".changeset/pr-evidence.md" }],
+  "body": "Stage-B: N/A (no visual surface) — lead-certified; authorization and live behavioral verification: https://github.example.test/issues/1637#comment-1\nChangeset: .changeset/pr-evidence.md — patch\nBehavior change: PR authoring checks now fail closed on missing evidence.\nLocal touched-suite verification: `pnpm exec vitest run tools/lint/guard-tests/pr-evidence-lint.spec.ts` — PASS\nDeviations: ADR-0007 §2.4 deferred review artifact is tracked by #1700"
+}

@@ -1020,6 +1020,16 @@ export class EventsService {
       partners: e.partnerRef ? [{ label: e.partnerRef }] : [],
       // `draft` is excluded above, so the residual states are the public subset.
       state: state as PublicEventState,
+      // 014 EARS-4: the recording answer comes from the ONE canonical resolver
+      // that `listPublicEvents` already reads, never a page-local rule — so the
+      // card and the page can never disagree about what is published. The
+      // projection is SOURCE-FREE by construction (no provider, no embed ref):
+      // the login gate of 014-design §5 is enforced in the payload itself, not
+      // in a rendering decision. Always present — `preparing` is the honest
+      // answer when nothing is published, never an omitted field.
+      recording: await this.recordingsProjection.resolveRecordingProjection(
+        e.id,
+      ),
     };
     // Omit (not null) the field when the event carries no program PDF (EARS-2).
     // Signed at read time — the bucket is private, an unsigned URL is dead (#842).

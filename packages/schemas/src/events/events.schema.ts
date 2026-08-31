@@ -574,7 +574,7 @@ export type PublicExpertSpeaker = z.infer<typeof PublicExpertSpeakerSchema>;
  * 012 EARS-8 — the canonical merged page-speaker item: a STRICT discriminated
  * union on `source` (012-design §5.2). One resolver produces it for
  * `GET /v1/public/events/:idOrSlug/speakers` and for
- * {@link PublicEventPageSchema}`.speakers`, and the thinner
+ * `PublicEventPageSchema.speakers`, and the thinner
  * {@link UpcomingBroadcastSpeakerSchema} card array is mapped from the SAME
  * ordered result — so the shipped public surfaces cannot disagree.
  *
@@ -646,7 +646,7 @@ export type UpcomingBroadcastSpeaker = z.infer<
 /**
  * `UpcomingBroadcastCard` — the publish-safe projection returned by
  * `GET /v1/public/events?upcoming` (004 design §3, §4, EARS-7). A THINNER
- * allow-list than {@link PublicEventPageSchema}: only the card choose-set (EARS-8)
+ * allow-list than `PublicEventPageSchema`: only the card choose-set (EARS-8)
  * — `id, slug, title, school, startsAt, specialties[], speakers[]{name}, state` —
  * with **no** description, partners, program PDF, duration, or any
  * operator/commercial field or registrant PII (the structural half of EARS-10).

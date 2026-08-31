@@ -125,27 +125,32 @@ function speakerProjectionStub(): SpeakerProjectionService {
   } as unknown as SpeakerProjectionService;
 }
 
+/**
+ * The neutral recording answer: nothing published. These unit tests are about
+ * the 004 allow-list and the lifecycle rules, not about EARS-3 resolution — the
+ * projection's own behaviour is covered by `recordings.projection` and the 014
+ * e2e suite.
+ */
+const PREPARING_PROJECTION = {
+  state: "preparing" as const,
+  primaryKind: null,
+  secondaryKind: null,
+  posterUrl: null,
+  expectedBy: null,
+};
+
 function service(storage: RecordingStorage, repo: unknown): EventsService {
   return new EventsService(
     storage,
     repo as EventsRepository,
     speakerProjectionStub(),
     {
+      // Both forms answer from ONE stub value: the real service derives the
+      // single-event form from the batch form, so a fake that let them drift
+      // would hide exactly the disagreement `toPublicPage` must not have.
       resolveRecordingProjections: (ids: string[]) =>
-        Promise.resolve(
-          new Map(
-            ids.map((id) => [
-              id,
-              {
-                state: "preparing" as const,
-                primaryKind: null,
-                secondaryKind: null,
-                posterUrl: null,
-                expectedBy: null,
-              },
-            ]),
-          ),
-        ),
+        Promise.resolve(new Map(ids.map((id) => [id, PREPARING_PROJECTION]))),
+      resolveRecordingProjection: () => Promise.resolve(PREPARING_PROJECTION),
     } as unknown as RecordingsProjectionService,
   );
 }

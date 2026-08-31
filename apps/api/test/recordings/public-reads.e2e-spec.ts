@@ -207,9 +207,16 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         "Анна Соколова",
         "Михаил Верещагин",
       ]);
-      // The program PDF is a signed, followable URL — «present when present» is
-      // the promise, and a bare storage key would render as a dead link.
-      expect(body.programPdfUrl).toMatch(/^https?:\/\//);
+      // The program PDF is a SIGNED, dereferenceable URL — «present when
+      // present» is the promise, and a bare storage key would render as a dead
+      // link (#842: prod served an unsigned URL the private bucket denied). The
+      // scheme belongs to the storage adapter (`memory://` under the fake,
+      // `https://` under S3), so the assertion is on the two facts that are
+      // adapter-independent: it is not the bare ref, and it carries a signature.
+      expect(body.programPdfUrl).toBeTypeOf("string");
+      expect(body.programPdfUrl).toContain("programs/1341.pdf");
+      expect(body.programPdfUrl).not.toBe("programs/1341.pdf");
+      expect(body.programPdfUrl).toContain("?");
     });
 
     it("014 EARS-4.2: the same response shall carry the source-free recording projection and no playable source at all", async () => {

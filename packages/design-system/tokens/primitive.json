@@ -255,6 +255,10 @@
     "md": { "$value": "4px 4px 0 var(--color-elevation)" },
     "lg": { "$value": "6px 6px 0 var(--color-elevation)" },
     "focus": { "$value": "0 0 0 3px rgba(107, 177, 247, 0.5)" },
+    "focus-inset": {
+      "$description": "Keyboard-focus ring drawn INSIDE the edge — same 3px, same blue.300 @ 50% as `focus`. For triggers living in a scroll container, which clips outer shadows (an `overflow-x:auto` strip clips vertically too, at every width), so the outer ring is never fully visible there.",
+      "$value": "inset 0 0 0 3px rgba(107, 177, 247, 0.5)"
+    },
     "btn": {
       "$description": "Filled-button rest offset shadow — 4px hard cast in the INK/structural border colour (neutral.900 → white in dark), the source's 4px offset in the border tone. The generic md/lg shadows cast in the blue elevation tone; a filled primary/destructive action casts in ink, so it needs its own token, not md (fidelity trap: per-variant shadow colour).",
       "$value": "4px 4px 0 var(--color-border)"

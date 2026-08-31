@@ -61,6 +61,16 @@ const BROKEN_SHELL_ROW_CLASS =
  * has to come back too, which is precisely why the fix wraps both.
  */
 const BROKEN_SHELL_GROUP_CLASS = "flex items-center gap-8";
+/**
+ * The `<nav>` INSIDE that group carries a `flex-wrap` of its own, added with the
+ * #1483 relation books when the nav grew to eight links. Restoring only the two
+ * outer rows therefore stopped reproducing the defect (#1669): the nav quietly
+ * broke its links onto a second line and kept the outer row inside 390px, so the
+ * "the page side-scrolls" leg measured 0 against a shell that was still fixed.
+ * The reproducer has to put the pre-fix class back on every node that gives —
+ * the nav included — or it proves nothing.
+ */
+const BROKEN_SHELL_NAV_CLASS = "flex items-center gap-5 text-sm";
 const BROKEN_LIST_HEADER_CLASS = "mb-6 flex items-center justify-between";
 
 async function loginAsAdmin(page: Page): Promise<void> {
@@ -162,6 +172,9 @@ async function restoreBrokenLayout(page: Page): Promise<void> {
     // <a> → <nav> → the brand+nav group div.
     navLink.closest("nav")!.parentElement!.setAttribute("class", cls);
   }, BROKEN_SHELL_GROUP_CLASS);
+  await page.getByTestId("nav-events").evaluate((navLink, cls) => {
+    navLink.closest("nav")!.setAttribute("class", cls);
+  }, BROKEN_SHELL_NAV_CLASS);
   await page.getByTestId("create-event").evaluate((createLink, cls) => {
     // The DS Button renders its `asChild` link, so this node is the <a> and its
     // nearest <div> ancestor IS the list header row.

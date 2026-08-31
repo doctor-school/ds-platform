@@ -25,6 +25,11 @@ import { caseDir, runGuard } from "./run-guard";
  * byte-exact sizes, so they are generated at run time under a temp fixture root
  * (platform-agnostic — no committed near-ceiling blobs).
  *
+ * The always-on TOTAL group (#1678) additionally pins the cap's determinism
+ * (#1680): the total verdict must be byte-identical with and without a
+ * resolvable MEMORY.md (that file lives outside git, so counting it would split
+ * the verdict between CI and a developer's box), and 30 KB exactly still passes.
+ *
  * The last group covers the `paths:` frontmatter classifier (#1370), which
  * decides whether a `.claude/rules/*.md` file counts toward the always-on total
  * at all — ~21 KB of session window rests on it, so every shape Claude Code
@@ -60,6 +65,28 @@ const headroomCase = (agentsBytes: number): string => {
   return root;
 };
 
+/**
+ * Temp fixture root sizing BOTH always-on repo files (#1678) — the total-cap
+ * seam: each file byte-exact and individually legal, so only their sum can trip
+ * the guard.
+ */
+const totalCase = (agentsBytes: number, claudeBytes: number): string => {
+  const root = mkdtempSync(join(tmpdir(), "instruction-budget-total-"));
+  tempRoots.push(root);
+  writeFileSync(join(root, "AGENTS.md"), sizedMd(agentsBytes));
+  writeFileSync(join(root, "CLAUDE.md"), sizedMd(claudeBytes));
+  return root;
+};
+
+/** A byte-exact MEMORY.md fixture in its own temp dir; returns its path. */
+const memoryFixture = (bytes: number): string => {
+  const root = mkdtempSync(join(tmpdir(), "instruction-budget-memory-"));
+  tempRoots.push(root);
+  const path = join(root, "MEMORY.md");
+  writeFileSync(path, sizedMd(bytes));
+  return path;
+};
+
 afterAll(() => {
   for (const root of tempRoots) rmSync(root, { recursive: true, force: true });
 });
@@ -78,6 +105,13 @@ const rulesCase = (name: string, rulesBody: string): string => {
   mkdirSync(join(root, ".claude", "rules"), { recursive: true });
   writeFileSync(join(root, ".claude", "rules", name), rulesBody);
   return root;
+};
+
+/** The guard's whole `always-on total:` summary line. */
+const totalLine = (stdout: string): string => {
+  const m = /^.*always-on total:.*$/m.exec(stdout);
+  if (!m) throw new Error(`no always-on total line in guard output:\n${stdout}`);
+  return m[0];
 };
 
 /** The `lines` figure from the guard's `always-on total:` summary line. */
@@ -167,6 +201,56 @@ describe("instruction-budget-lint", () => {
     expect(code).toBe(1);
     expect(stderr).toContain("AGENTS.md");
     expect(stderr).toContain("KB >");
+  });
+
+  // ── always-on TOTAL cap (#1678) ────────────────────────────────────────────
+  // Per-file caps cannot bound the session window: several files each inside the
+  // 25 KB per-file ceiling still open an arbitrarily large session, and context
+  // rot is a function of the total. The total is a hard FAIL, like a per-file
+  // overrun — and it must fire while every individual file is comfortably legal.
+
+  it("#1678: always-on total over 30 KB FAILs even with every file individually in budget", () => {
+    const { code, stdout, stderr } = runGuard(GUARD, totalCase(20 * 1024, 11 * 1024));
+    // Neither file is over the 25 KB per-file ceiling…
+    expect(stderr).not.toContain("AGENTS.md:");
+    expect(stderr).not.toContain("CLAUDE.md:");
+    // …but 31 KB of always-on window is over the total cap.
+    expect(code).toBe(1);
+    expect(stdout).toContain("OVER BUDGET always-on total");
+    expect(stderr).toContain("always-on total");
+    expect(stderr).toContain("30 KB");
+  });
+
+  it("#1678: always-on total at or under 30 KB passes", () => {
+    const { code, stdout } = runGuard(GUARD, totalCase(20 * 1024, 9 * 1024));
+    expect(code).toBe(0);
+    expect(stdout).toContain("PASS");
+    expect(stdout).toContain("(limit 30 KB)");
+  });
+
+  it("#1678: the total verdict is IDENTICAL with and without a resolvable MEMORY.md (#1680)", () => {
+    // MEMORY.md lives outside git — counting it would make the total green in CI
+    // (no auto-memory dir) and red on a developer's box. The verdict must be a
+    // pure function of the repo-tracked always-on files.
+    const root = totalCase(20 * 1024, 9 * 1024); // 29 KB — legal
+    const without = runGuard(GUARD, root);
+    const withMemory = runGuard(GUARD, root, {
+      env: { LINT_MEMORY_FILE: memoryFixture(20 * 1024) }, // individually legal, 20 KB
+    });
+    expect(without.code).toBe(0);
+    expect(withMemory.code).toBe(0);
+    // Same bytes, same lines, same "ok" verdict — the memory file moved nothing.
+    expect(totalLine(withMemory.stdout)).toBe(totalLine(without.stdout));
+    // …and the memory file WAS scanned (per-file budget still applies to it).
+    expect(withMemory.stdout).toContain("MEMORY.md (auto-memory index)");
+  });
+
+  it("#1678: a total of exactly 30 KB is within budget (boundary is inclusive)", () => {
+    const { code, stdout } = runGuard(GUARD, totalCase(20 * 1024, 10 * 1024));
+    expect(code).toBe(0);
+    expect(stdout).toContain("PASS");
+    expect(totalLine(stdout)).toContain("30.0 KB");
+    expect(totalLine(stdout)).not.toContain("OVER BUDGET");
   });
 
   // ── `paths:` frontmatter classification (#1370) ────────────────────────────

@@ -19,6 +19,19 @@
  * Budgets (per file):
  *   - lines:  <= 200   (Anthropic CLAUDE.md target + MEMORY.md load cutoff)
  *   - bytes:  <= 25 KB  (MEMORY.md load cutoff; applied to all three for headroom)
+ *
+ * Budget (always-on TOTAL, #1678): <= 30 KB across the repo-tracked files that
+ * load at session start (AGENTS.md + CLAUDE.md + path-less .claude/rules/*.md).
+ * MEMORY.md is deliberately OFF the total: it is machine-local (auto-memory dir,
+ * outside git), invisible in CI, and already bounded by its own 200-line / 25 KB
+ * load cutoff — counting it would make the total verdict differ between a
+ * developer's box and CI, i.e. non-deterministic. It keeps its per-file budget.
+ * Per-file caps alone cannot bound the window: three files
+ * each comfortably inside 25 KB still open a 75 KB session, and context rot is a
+ * function of the TOTAL, not of any single file. The cap is a hard FAIL (BLOCK,
+ * exit 1) in the same style as a per-file overrun — the remedy is identical:
+ * relocate detail into a `paths:`-scoped rules file or a read-on-demand skill,
+ * both of which are off the total by construction.
  *   CLAUDE.md additionally carries a softer high-signal WARN target of 120 lines.
  *   An always-on file within budget but with < 256 B of byte-headroom left WARNs
  *   (#1042) — the next edit would force ad-hoc squeezing; compact proactively.
@@ -57,6 +70,7 @@ const TAG = "[instruction-budget]";
 
 const MAX_LINES = 200;
 const MAX_BYTES = 25 * 1024; // 25 KB, matching the MEMORY.md auto-load cutoff
+const MAX_TOTAL_BYTES = 30 * 1024; // 30 KB across the whole always-on set (#1678)
 const CLAUDE_SOFT_LINES = 120; // high-signal target (WARN only)
 const HEADROOM_WARN_BYTES = 256; // always-on byte-headroom WARN tier (#1042)
 
@@ -66,7 +80,8 @@ interface Target {
   optional: boolean; // outside git (auto-memory) — skip when absent
   softLines?: number;
   warnOnly?: boolean; // over-budget WARNs instead of failing (Phase-0 skills, #416)
-  offTotal?: boolean; // not part of the always-on total (read-on-demand skills, `paths:`-scoped rules)
+  offTotal?: boolean; // not part of the always-on total (read-on-demand skills, `paths:`-scoped rules, MEMORY.md)
+  sessionStart?: boolean; // loads in full at session start → eligible for the byte-headroom WARN (#1042)
 }
 
 // MEMORY.md path: derive from this repo's auto-memory dir convention
@@ -92,9 +107,15 @@ function memoryPath(): string | null {
 const memPath = memoryPath();
 
 const targets: Target[] = [
-  { label: "AGENTS.md", path: resolve(REPO_ROOT, "AGENTS.md"), optional: false },
-  { label: "CLAUDE.md", path: resolve(REPO_ROOT, "CLAUDE.md"), optional: false, softLines: CLAUDE_SOFT_LINES },
-  ...(memPath ? [{ label: "MEMORY.md (auto-memory index)", path: memPath, optional: true } as Target] : []),
+  { label: "AGENTS.md", path: resolve(REPO_ROOT, "AGENTS.md"), optional: false, sessionStart: true },
+  { label: "CLAUDE.md", path: resolve(REPO_ROOT, "CLAUDE.md"), optional: false, softLines: CLAUDE_SOFT_LINES, sessionStart: true },
+  // MEMORY.md keeps its per-file budget and its headroom WARN, but is OFF the
+  // always-on total (#1680): it lives outside git, so counting it would make the
+  // total verdict machine-dependent — green in CI, red on one developer's box —
+  // and its own 200-line / 25 KB auto-load cutoff already bounds it.
+  ...(memPath
+    ? [{ label: "MEMORY.md (auto-memory index)", path: memPath, optional: true, offTotal: true, sessionStart: true } as Target]
+    : []),
 ];
 
 /**
@@ -141,6 +162,7 @@ if (existsSync(rulesDir)) {
       // it never enters the session-start window — same treatment as skills: the
       // per-file budget still applies, the always-on total excludes it.
       offTotal: lazy,
+      sessionStart: !lazy,
     });
   }
 }
@@ -208,12 +230,13 @@ for (const t of targets) {
   if (!overLines && t.softLines && lineCount > t.softLines) {
     lines.push(`${TAG} WARN        ${t.label}: ${lineCount} lines > soft target ${t.softLines} — consider trimming (not a failure).`);
   }
-  // Headroom WARN tier (#1042): an always-on file (never lazy rules, never
-  // read-on-demand skills — both carry `offTotal`) that is WITHIN budget but has
-  // < 256 B left before the byte ceiling gets a WARN — the next edit would force
-  // ad-hoc squeezing of canonical rules. Exit code stays 0.
+  // Headroom WARN tier (#1042): a file that LOADS AT SESSION START (never lazy
+  // rules, never read-on-demand skills) and is WITHIN budget but has < 256 B left
+  // before the byte ceiling gets a WARN — the next edit would force ad-hoc
+  // squeezing of canonical rules. Keyed on `sessionStart`, not `offTotal`:
+  // MEMORY.md is off the total yet still loads every session (#1680).
   const headroom = MAX_BYTES - bytes;
-  if (!over && !t.offTotal && headroom < HEADROOM_WARN_BYTES) {
+  if (!over && t.sessionStart && headroom < HEADROOM_WARN_BYTES) {
     lines.push(
       `${TAG} WARN        ${t.label}: low byte-headroom — ${bytes} B used, ${headroom} B remaining ` +
         `(< ${HEADROOM_WARN_BYTES} B before the ${(MAX_BYTES / 1024).toFixed(0)} KB ceiling) — compact before the next always-on edit (not a failure).`,
@@ -221,14 +244,24 @@ for (const t of targets) {
   }
 }
 
+const overTotal = totalBytes > MAX_TOTAL_BYTES;
 lines.push(
-  `${TAG} always-on total: ${totalLines} lines / ${(totalBytes / 1024).toFixed(1)} KB ` +
-    `(AGENTS.md + CLAUDE.md${memPath ? " + MEMORY.md" : ""} + path-less .claude/rules/*.md)`,
+  `${TAG} ${(overTotal ? "OVER BUDGET" : "ok").padEnd(11)} always-on total: ${totalLines} lines / ${(totalBytes / 1024).toFixed(1)} KB ` +
+    `(limit ${(MAX_TOTAL_BYTES / 1024).toFixed(0)} KB) ` +
+    `(AGENTS.md + CLAUDE.md + path-less .claude/rules/*.md; MEMORY.md excluded — machine-local)`,
 );
+if (overTotal) {
+  process.stderr.write(
+    `${TAG} always-on total: ${(totalBytes / 1024).toFixed(1)} KB > ${(MAX_TOTAL_BYTES / 1024).toFixed(0)} KB. ` +
+      `Per-file budgets are individually satisfied — the SESSION WINDOW is not. ` +
+      `Relocate detail to a \`paths:\`-scoped .claude/rules/*.md file or a read-on-demand skill (both off the total).\n`,
+  );
+  failed = true;
+}
 
 process.stdout.write(lines.join("\n") + "\n");
 if (failed) {
-  process.stderr.write(`${TAG} FAIL — at least one always-on file is over budget. Compact before declaring the session done.\n`);
+  process.stderr.write(`${TAG} FAIL — an always-on file, or the always-on total, is over budget. Compact before declaring the session done.\n`);
   process.exit(1);
 }
 process.stdout.write(`${TAG} PASS — always-on context within budget.\n`);

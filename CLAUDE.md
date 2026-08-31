@@ -2,7 +2,7 @@
 
 # CLAUDE.md — Claude Code overlay for DS Platform
 
-All conventions in [`AGENTS.md`](./AGENTS.md) apply (imported above); this file adds only Claude-Code-specific tooling. Detail lives in `.claude/rules/*.md` (per the AGENTS.md §0 index) and the skill catalog. Anti-bloat budget: ≤200 lines / ≤25 KB per always-on file (`pnpm lint:instruction-budget`), and net-negative: new always-on rule text is offset by removing at least as many bytes.
+All conventions in [`AGENTS.md`](./AGENTS.md) apply (imported above); this file adds only Claude-Code-specific tooling. Detail lives in `.claude/rules/*.md` (per the AGENTS.md §0 index) and the skill catalog. Anti-bloat budget (`pnpm lint:instruction-budget`): ≤200 lines / ≤25 KB per always-on file AND ≤30 KB across the always-on set; net-negative — new always-on rule text is offset by removing at least as many bytes.
 
 ---
 
@@ -30,7 +30,7 @@ All conventions in [`AGENTS.md`](./AGENTS.md) apply (imported above); this file 
 
 ## Propose Workflow (multi-agent) when the shape is known
 
-`Workflow` (deterministic scripted fan-out — pipeline/parallel/adversarial-verify, ≤16 concurrent agents) is user-opt-in: never auto-run — propose with a rough scale/token estimate and await go. Triggers (shape knowable upfront): batch audit/sweep over same-shape items; impl/review wave of ≈4+ independent, non-overlapping-touch-set Issues/PRs; find→verify pipeline — the lead CLOSES the run by diffing the synthesis row-set against the seed ledgers/inputs it handed in (verifiers check rows that exist; nothing checks completeness); N-approach bake-off with a judge panel. Stay on plain orchestration when steps depend on judging the prior return, or the discipline contour (worktree/Mode-a/merge/board) must run inline — Workflow subagents don't carry it.
+`Workflow` (deterministic scripted fan-out, ≤16 concurrent agents) is user-opt-in: never auto-run — propose with a rough scale/token estimate and await go. Triggers, all shape-knowable upfront: same-shape batch audit/sweep; an impl/review wave of ≈4+ independent, non-overlapping-touch-set Issues/PRs; a find→verify pipeline; an N-approach bake-off with a judge panel. The lead CLOSES a run by diffing the synthesis row-set against the seed ledgers it handed in — verifiers check rows that exist, nothing checks completeness. Stay on plain orchestration when a step depends on judging the prior return, or the discipline contour (worktree/Mode-a/merge/board) must run inline — Workflow subagents don't carry it.
 
 ## Session plan (первый ответ сессии — canon AGENTS.md §3.2)
 
@@ -50,19 +50,20 @@ Then the §3.2 entry point (kind / artifact / skill). A handoff-resumed session 
 
 ## PR-review subagent (Mode a)
 
-`feature-dev:code-reviewer` has no Bash/`gh`. Dispatch `ds-reviewer` (`.claude/agents/ds-reviewer.md` — Opus, read-only + `gh`, diffs a branch not in the tree); fallback `general-purpose` `model: opus` if project agents are unavailable.
+`feature-dev:code-reviewer` has no Bash/`gh` — dispatch `ds-reviewer` (Opus, read-only + `gh`, diffs a branch not in the tree); fallback `general-purpose` `model: opus` when project agents are unavailable.
 
 ## Subagent context economy
 
 A subagent's final message lands in the lead's context and is re-read until session end — that, not dispatch count, burns the limit.
 
-1. Return contract in every brief: final message = verdict / diff summary / artifact paths, ≤30 lines; heavy content → file or PR comment, never the reply. Scaffold IMPL briefs with `pnpm dispatch:brief <issue-N>`.
-2. Model routing: mechanical fan-out (find/enumerate/collect) → `ds-explorer` (Sonnet, read-only); judgment (Mode-a review, architecture, implementation, spec work) → Opus: `ds-implementer` (impl), `ds-reviewer` (review), or `general-purpose` with EXPLICIT `model: opus` on every dispatch. Inheriting the session model is forbidden — a Fable-led session silently spawns Fable subagents; Fable is never a subagent model.
+1. Return contract in every brief: final message = verdict / diff summary / artifact paths, ≤30 lines, heavy content → file or PR comment. Scaffold IMPL briefs with `pnpm dispatch:brief <issue-N>`.
+2. Model routing: mechanical fan-out → `ds-explorer` (Sonnet, read-only); judgment (review, architecture, implementation, spec work) → Opus (`ds-implementer` / `ds-reviewer` / `general-purpose` with EXPLICIT `model: opus` on every dispatch) — inheriting the session model is forbidden, and Fable is never a subagent model.
 3. Browser payloads are dispatched — interactive Playwright runs inside a subagent, not the lead (`.claude/rules/dev-stand.md`).
-4. Lead-only tools are never delegated — a tool absent from the subagent environment (DesignSync, …) the lead runs itself BEFORE dispatch; the subagent gets only the mechanical follow-on — dead-ending there is a guaranteed block.
+4. Lead-only tools are never delegated: a tool absent from the subagent environment (DesignSync, …) the lead runs itself BEFORE dispatch, handing the subagent only the mechanical follow-on — dead-ending there is a guaranteed block.
 5. Briefs in English; RU only where the RU string is itself the artifact. User-facing replies stay RU.
-6. Background dispatches are checkpointed; report only observed artifacts. Probe after a bounded interval with `pnpm dispatch:probe <N>` (one line `<ALIVE|QUIET|STILL-CLEAN> #<N> age= commits= dirty=`; STILL-CLEAN ≈10 min in ⇒ kill + re-dispatch with a tighter brief) — never "wait for the notification". Rework/re-review via SendMessage only under the AGENTS.md §6 subagent-token thresholds; a `ROTATE:` return = fresh dispatch from the checkpoint. Owner-facing status = observed artifacts only (commit / PR # / verdict); downstream steps are phrased as plan. Every impl brief carries the dispatch-brief checklist heading (memory `feedback_orchestration_brief_full_lint_before_pr`). Same for ANY background waiter, CI pollers included: a bounded FOREGROUND poll, deadline ≈ avg CI + ~2 min, terminal GREEN/RED/TIMEOUT line, parsing the `gh pr checks <N> --json name,state` STATE field, never `grep` (job names contain «pending»). The 5000/hr `gh` token is SHARED — no hand-rolled `gh run view` loops or repeated `gh project item-list --limit 2000` dumps; use `pnpm merge:gate <N>` / `run:wait`.
+6. Background dispatches are checkpointed and probed with `pnpm dispatch:probe <N>` (STILL-CLEAN ≈10 min in ⇒ kill + re-dispatch on a tighter brief), never by "waiting for the notification"; owner-facing status names observed artifacts only (commit / PR # / verdict), downstream steps are phrased as plan, and every impl brief carries the dispatch-brief checklist heading (memory `feedback_orchestration_brief_full_lint_before_pr`). Any wait on CI or a workflow run follows the shared-token poller rules in skill `merge-when-green` Step 1.
 7. Context budget hook: subagent ≥150K → ROTATE (checkpoint + fresh dispatch), ≥200K → tools denied except git/checkpoint; dispatch impl via `ds-implementer` (Opus, maxTurns 120).
+8. `<subagent_tokens>` = the child's reading in the task-notification `<usage>`, taken BEFORE the round (it ignores that round's own ≈20K+ cost). SendMessage rework/re-review only while it is < 120K — impl and reviewer alike; at or above, and on any `ROTATE:` return, dispatch a FRESH agent with PR + review URL + checkpoint. Wave landed → `/wrap` + handoff → new session.
 
 ## On-demand pointers
 

@@ -5,6 +5,7 @@ import {
   RELEASE_GATE_EXEMPT_FLAG,
   evaluateReleaseGate,
   extractBatchedGateRefs,
+  extractClosedIssues,
   formatReleaseGateClear,
   formatReleaseGateHold,
   parseReleaseGateExempt,
@@ -102,6 +103,44 @@ describe("release-gate extractBatchedGateRefs()", () => {
     expect(extractBatchedGateRefs(null)).toEqual([]);
     expect(extractBatchedGateRefs(undefined)).toEqual([]);
   });
+
+  it("reads the marker out of an ISSUE COMMENT blob too (accepted source parity)", () => {
+    // The merge guard (tools/lint/stage-b-lint.ts) accepts the record in the PR
+    // body OR in a comment on a linked `Closes #N` Issue; the deploy gate feeds
+    // comment bodies through this same parser.
+    expect(
+      extractBatchedGateRefs(
+        "Live walkthrough deferred.\n\nStage-B: batched at #1348\n\n— lead",
+      ),
+    ).toEqual([1348]);
+  });
+
+  it("is re-entrancy-safe: repeated calls do not skip matches", () => {
+    const body = "Stage-B: batched at #1300";
+    expect(extractBatchedGateRefs(body)).toEqual([1300]);
+    expect(extractBatchedGateRefs(body)).toEqual([1300]);
+    expect(extractBatchedGateRefs(body)).toEqual([1300]);
+  });
+});
+
+describe("release-gate extractClosedIssues()", () => {
+  it("collects every auto-close keyword form, deduped in first-seen order", () => {
+    expect(
+      extractClosedIssues(
+        "Closes #1662\nfixes #700\nRESOLVED #42\nCloses #1662 again",
+      ),
+    ).toEqual([1662, 700, 42]);
+  });
+
+  it("ignores a bare reference and a non-close mention", () => {
+    expect(extractClosedIssues("Part of #1430, see #1300")).toEqual([]);
+  });
+
+  it("returns [] for an empty/absent body", () => {
+    expect(extractClosedIssues("")).toEqual([]);
+    expect(extractClosedIssues(null)).toEqual([]);
+    expect(extractClosedIssues(undefined)).toEqual([]);
+  });
 });
 
 describe("release-gate evaluateReleaseGate()", () => {
@@ -158,6 +197,23 @@ describe("release-gate evaluateReleaseGate()", () => {
     );
     expect(v.hold).toBe(true);
     expect(v.reasons.join("\n")).toContain("merged-but-not-deployed");
+  });
+
+  it("fails closed when the delta basis is the Deployment record, not live health", () => {
+    // An app-only `--rollback` records NO Deployment, so the recorded SHA can be
+    // NEWER than what runs and the range too narrow — a fail-open exactly when
+    // the train is known-sick. A degraded basis therefore HOLDS.
+    const v = evaluateReleaseGate(
+      probe({ basisDegraded: "live health probe failed: health 502" }),
+    );
+    expect(v.hold).toBe(true);
+    const msg = formatReleaseGateHold(v) ?? "";
+    expect(msg).toContain("UNKNOWN");
+    expect(msg).toContain("health 502");
+  });
+
+  it("does not add the degraded-basis reason when live health anchored the delta", () => {
+    expect(evaluateReleaseGate(probe()).hold).toBe(false);
   });
 
   it("fails closed on an empty/absent probe rather than clearing", () => {

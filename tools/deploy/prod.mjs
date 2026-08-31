@@ -285,7 +285,7 @@ async function preflight() {
 // this is the deploy-side wiring: print the exemption loudly, else hold.
 async function assertReleaseGate(sha) {
   const exempt = parseReleaseGateExempt(process.argv);
-  if (exempt.error) die(exempt.error);
+  if (exempt.error) die(exempt.error); // already caught at start-up; belt-and-braces
   if (exempt.exempt) {
     console.log(
       `  ⚠ ${RELEASE_GATE_EXEMPT_FLAG}: SKIPPING the release-blocker / batched-Stage-B gate` +
@@ -293,7 +293,11 @@ async function assertReleaseGate(sha) {
     );
     return;
   }
-  const probe = await probeReleaseGate({ targetSha: sha, cwd: process.cwd() });
+  const probe = await probeReleaseGate({
+    targetSha: sha,
+    cwd: process.cwd(),
+    healthUrl: PROD_HEALTH_URL,
+  });
   const verdict = evaluateReleaseGate(probe);
   const hold = formatReleaseGateHold(verdict);
   if (hold) die(hold);
@@ -1115,6 +1119,12 @@ sudo docker compose up -d
 // --- entry ----------------------------------------------------------------
 
 async function main() {
+  // Validate CLI usage FIRST — a mistyped/bare `--release-gate-exempt` must
+  // fail fast, not after the clean-tree, fetch, green-CI and эфир probes have
+  // already run (the same contract `--rollback` validates its argument under).
+  const exemptUsage = parseReleaseGateExempt(process.argv);
+  if (exemptUsage.error) die(exemptUsage.error);
+
   const rbIdx = process.argv.indexOf("--rollback");
   if (rbIdx !== -1) {
     const sha = process.argv[rbIdx + 1];

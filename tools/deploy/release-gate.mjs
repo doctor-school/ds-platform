@@ -10,11 +10,16 @@
 //      This is the tracked counterpart of the revert norm: a merged PR found
 //      broken ahead of its fix is REVERTED from `main`; when a revert is
 //      disproportionate, the Issue gets `release-blocker` instead.
-//   2. Open batched Stage-B gate — a merged-but-not-yet-deployed PR whose body
-//      carries `Stage-B: batched at #<gate>` (the AGENTS.md §6 batched
-//      carve-out) has, by construction, NOT been live-verified by the product
-//      owner. Shipping it to prod would consume the deferral the carve-out only
-//      ever granted for merging. So the gate holds until the gate Issue closes.
+//   2. Open batched Stage-B gate — a merged-but-not-yet-deployed PR carrying
+//      `Stage-B: batched at #<gate>` (the AGENTS.md §6 batched carve-out) has,
+//      by construction, NOT been live-verified by the product owner. Shipping
+//      it to prod would consume the deferral the carve-out only ever granted
+//      for merging. So the gate holds until the gate Issue closes. The marker
+//      is read from the SAME source set the merge guard accepts
+//      (`tools/lint/stage-b-lint.ts`): the PR body OR a comment on any Issue
+//      the body links with a `Closes #N` keyword — a gate that read only the
+//      body would ship an un-live-verified surface whenever the record was
+//      filed on the linked Issue, which the guard explicitly allows.
 //
 // Fail-closed by design (mirrors the live-broadcast hold in `prod.mjs`): an
 // UNKNOWN — the delta basis could not be derived, a `gh` call errored — HOLDS
@@ -73,24 +78,47 @@ export function parseReleaseGateExempt(args) {
 const MARKER_RE = /^[ \t>*_-]*stage-?b\s*:\s*(.+?)\s*$/gim;
 const BATCHED_RE = /^batched\s+at\s+#(\d+)/i;
 
+// GitHub auto-close keywords, same shape `stage-b-lint.ts` / `spec-link-lint.ts`
+// parse — the linked Issues whose comments are an accepted Stage-B source.
+const CLOSE_RE = /\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+#(\d+)\b/gi;
+
 /**
  * Gate Issue numbers referenced by `Stage-B: batched at #<gate>` markers in a
- * PR body. Deduped, in first-seen order; a body with no batched marker (a
+ * text blob (a PR body or an Issue comment — both are accepted sources, see the
+ * module header). Deduped, in first-seen order; text with no batched marker (a
  * `Stage-B: GO`, a lead self-cert, or nothing at all) yields `[]`.
+ *
+ * `matchAll` over the module-level global regex is re-entrancy-safe by
+ * construction (no shared `lastIndex`), matching `stage-b-lint.ts`.
+ *
+ * @param {string|null|undefined} text
+ * @returns {number[]}
+ */
+export function extractBatchedGateRefs(text) {
+  if (typeof text !== "string" || text.length === 0) return [];
+  const out = [];
+  for (const m of text.matchAll(MARKER_RE)) {
+    const batched = BATCHED_RE.exec((m[1] ?? "").trim());
+    if (!batched) continue;
+    const n = Number(batched[1]);
+    if (Number.isInteger(n) && n > 0 && !out.includes(n)) out.push(n);
+  }
+  return out;
+}
+
+/**
+ * Issue numbers a PR body links with a GitHub auto-close keyword. These are the
+ * Issues whose COMMENTS the merge guard accepts as a Stage-B record, so the
+ * deploy gate must read them too. Deduped, in first-seen order.
  *
  * @param {string|null|undefined} body
  * @returns {number[]}
  */
-export function extractBatchedGateRefs(body) {
+export function extractClosedIssues(body) {
   if (typeof body !== "string" || body.length === 0) return [];
   const out = [];
-  MARKER_RE.lastIndex = 0;
-  let m;
-  while ((m = MARKER_RE.exec(body)) !== null) {
-    const value = m[1] ?? "";
-    const batched = BATCHED_RE.exec(value.trim());
-    if (!batched) continue;
-    const n = Number(batched[1]);
+  for (const m of body.matchAll(CLOSE_RE)) {
+    const n = Number(m[1]);
     if (Number.isInteger(n) && n > 0 && !out.includes(n)) out.push(n);
   }
   return out;
@@ -108,6 +136,11 @@ export function extractBatchedGateRefs(body) {
  *   delta could not be enumerated (fail-closed).
  * @property {string=} openBatchedError first line of the delta error.
  * @property {string|null} basisSha the deployed SHA the delta was computed from.
+ * @property {string=} basisDegraded set when the delta basis is NOT the live
+ *   running SHA (the `/v1/health` probe failed, so the recorded Deployment was
+ *   used instead). The recorded Deployment can be NEWER than what runs — an
+ *   app-only `--rollback` records none — so the delta may be too narrow; the
+ *   evaluator reads this as UNKNOWN and HOLDS.
  */
 
 /**
@@ -154,6 +187,14 @@ export function evaluateReleaseGate(probe) {
     }
   }
 
+  if (Array.isArray(p.openBatched) && p.basisDegraded) {
+    reasons.push(
+      `UNKNOWN: the delta basis is the recorded Deployment, not the live running SHA` +
+        ` (${p.basisDegraded}) — an app-only rollback records no Deployment, so the` +
+        " range can be too narrow to see every undeployed PR — fail-closed",
+    );
+  }
+
   return { hold: reasons.length > 0, reasons };
 }
 
@@ -188,9 +229,19 @@ function firstLine(e) {
   return e instanceof Error ? e.message.split("\n")[0] : String(e);
 }
 
+/** Per-call subprocess bound, same as every `gh`/`git` call in project-reality. */
+const CALL_TIMEOUT_MS = 15000;
+
+/** Live-health probe bound (same as `probeHealth` in project-reality). */
+const HEALTH_TIMEOUT_MS = 8000;
+
 /** Capture a command's stdout; throws with a one-line message on failure. */
 function capture(cmd, args, cwd) {
-  const r = spawnSync(cmd, args, { encoding: "utf8", cwd });
+  const r = spawnSync(cmd, args, {
+    encoding: "utf8",
+    cwd,
+    timeout: CALL_TIMEOUT_MS,
+  });
   if (r.error) throw r.error;
   if (r.status !== 0) {
     throw new Error(
@@ -201,20 +252,60 @@ function capture(cmd, args, cwd) {
 }
 
 /**
+ * Read the SHA prod is actually RUNNING from `GET <healthUrl> → {version}`.
+ * Never throws — a failure degrades to `{sha: null, error}`.
+ *
+ * @param {string} url
+ * @returns {Promise<{sha: string|null, error?: string}>}
+ */
+async function probeHealthSha(url) {
+  if (typeof url !== "string" || url === "") {
+    return { sha: null, error: "no health URL supplied" };
+  }
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), HEALTH_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, { signal: ac.signal });
+    if (!res.ok) return { sha: null, error: `health ${res.status}` };
+    const json = await res.json();
+    const version = json && typeof json === "object" ? json.version : undefined;
+    if (typeof version === "string" && version.trim() !== "") {
+      return { sha: version.trim() };
+    }
+    return { sha: null, error: "health response carried no .version" };
+  } catch (e) {
+    return { sha: null, error: firstLine(e) };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
  * Gather the gate's evidence. NEVER throws — every failure degrades to a `null`
  * list plus an error string, which `evaluateReleaseGate` reads as UNKNOWN and
  * therefore HOLDS.
  *
  * The merged-but-not-deployed delta is enumerated exactly the way the
  * `## Project reality` bootstrap section does it (`tools/project-reality.ts`
- * step 4): basis = the latest `production` GitHub Deployment's SHA, range =
- * `<basis>..<targetSha>`, PR numbers via the shared `extractPrNumbers` seam
- * from `release-notes.mjs` — never a bespoke re-implementation (#847).
+ * step 4): basis = the LIVE `/v1/health` SHA (ground truth), falling back to
+ * the latest `production` GitHub Deployment's SHA (recorded intent) — the same
+ * `healthSha ?? deploymentSha` rule, because an app-only `--rollback` records
+ * no Deployment and would otherwise leave a recorded SHA NEWER than what runs,
+ * narrowing the range and letting undeployed PRs escape the batched check.
+ * Range = `<basis>..<targetSha>`; PR numbers via the shared `extractPrNumbers`
+ * seam from `release-notes.mjs` — never a bespoke re-implementation (#847).
+ * Falling back to the Deployment record marks the basis DEGRADED, which the
+ * evaluator reads as UNKNOWN and holds (fail-closed, not fail-open).
  *
- * @param {{targetSha: string, cwd?: string, run?: (cmd: string, args: string[]) => string}} opts
+ * @param {{targetSha: string, cwd?: string, healthUrl?: string, run?: (cmd: string, args: string[]) => string}} opts
  * @returns {Promise<ReleaseGateProbe>}
  */
-export async function probeReleaseGate({ targetSha, cwd, run } = {}) {
+export async function probeReleaseGate({
+  targetSha,
+  cwd,
+  healthUrl,
+  run,
+} = {}) {
   const exec = run ?? ((cmd, args) => capture(cmd, args, cwd));
   /** @type {ReleaseGateProbe} */
   const probe = { blockers: null, openBatched: null, basisSha: null };
@@ -245,25 +336,42 @@ export async function probeReleaseGate({ targetSha, cwd, run } = {}) {
   }
 
   // 2. Merged-but-not-deployed PRs whose batched Stage-B gate is still open.
+  const health = await probeHealthSha(healthUrl);
   try {
-    const raw = exec("gh", [
-      "api",
-      "repos/{owner}/{repo}/deployments?environment=production&per_page=1",
-    ]);
-    const deployments = JSON.parse(raw || "[]");
-    const d = Array.isArray(deployments) ? deployments[0] : null;
-    const basis =
-      d && typeof d.sha === "string"
-        ? d.sha
-        : d && typeof d.ref === "string"
-          ? d.ref
-          : null;
+    let deploymentSha = null;
+    let deploymentError = null;
+    try {
+      const raw = exec("gh", [
+        "api",
+        "repos/{owner}/{repo}/deployments?environment=production&per_page=1",
+      ]);
+      const deployments = JSON.parse(raw || "[]");
+      const d = Array.isArray(deployments) ? deployments[0] : null;
+      deploymentSha =
+        d && typeof d.sha === "string"
+          ? d.sha
+          : d && typeof d.ref === "string"
+            ? d.ref
+            : null;
+      if (!deploymentSha) {
+        deploymentError = "no production GitHub Deployment recorded";
+      }
+    } catch (e) {
+      deploymentError = firstLine(e);
+    }
+
+    // basis = live health SHA (ground truth) ?? the Deployment record — the
+    // same rule as `## Project reality` step 4 (tools/project-reality.ts).
+    const basis = health.sha ?? deploymentSha;
     if (!basis) {
       throw new Error(
-        "no production GitHub Deployment recorded — no basis for the merged-undeployed delta",
+        `no deployed SHA to anchor the merged-undeployed delta (health: ${health.error ?? "n/a"}; deployment: ${deploymentError ?? "n/a"})`,
       );
     }
     probe.basisSha = basis;
+    if (!health.sha) {
+      probe.basisDegraded = `live health probe failed: ${health.error ?? "unknown"}`;
+    }
 
     const subjects = exec("git", [
       "log",
@@ -277,6 +385,8 @@ export async function probeReleaseGate({ targetSha, cwd, run } = {}) {
     const pairs = [];
     /** @type {Map<number, {state: string, title: string}>} */
     const gateCache = new Map();
+    /** @type {Map<number, string[]>} linked-Issue number → comment bodies */
+    const issueCommentsCache = new Map();
     for (const n of prNumbers) {
       let body;
       try {
@@ -286,7 +396,39 @@ export async function probeReleaseGate({ targetSha, cwd, run } = {}) {
         // A ref that is an Issue (not a PR) / a 404 → skip it, like the digest.
         continue;
       }
-      for (const gate of extractBatchedGateRefs(body)) {
+
+      // Accepted marker sources, mirroring the merge guard
+      // (`tools/lint/stage-b-lint.ts`): the PR body OR a comment on any Issue
+      // the body links with a `Closes #N` keyword. Union, so a record filed in
+      // either place holds the deploy.
+      const refs = [...extractBatchedGateRefs(body)];
+      for (const linked of extractClosedIssues(body)) {
+        let comments = issueCommentsCache.get(linked);
+        if (!comments) {
+          // Deliberately NOT caught: an unreadable linked Issue means an
+          // accepted marker source could not be checked, so the gate must not
+          // claim it is clear — it propagates to the delta UNKNOWN and HOLDS.
+          const issueRaw = exec("gh", [
+            "issue",
+            "view",
+            String(linked),
+            "--json",
+            "comments",
+          ]);
+          const parsed = JSON.parse(issueRaw || "{}");
+          comments = Array.isArray(parsed.comments)
+            ? parsed.comments.map((c) => String(c?.body ?? ""))
+            : [];
+          issueCommentsCache.set(linked, comments);
+        }
+        for (const c of comments) {
+          for (const gate of extractBatchedGateRefs(c)) {
+            if (!refs.includes(gate)) refs.push(gate);
+          }
+        }
+      }
+
+      for (const gate of refs) {
         let info = gateCache.get(gate);
         if (!info) {
           const gateRaw = exec("gh", [

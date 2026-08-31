@@ -131,27 +131,42 @@ signal stands:
 1. **`release-blocker`** — any OPEN Issue carrying the label holds every deploy.
    The failure names each blocking Issue number + title.
    (`gh issue list --label release-blocker --state open`.)
-2. **Open batched Stage-B gate** — a **merged-but-not-yet-deployed** PR whose
-   body carries `Stage-B: batched at #<gate>` (the AGENTS.md §6 batched
-   carve-out) has by construction NOT been live-verified by the product owner;
-   shipping it would consume a deferral granted only for _merging_. The failure
-   names each **PR → gate** pair. The merged-undeployed delta is enumerated the
-   way the `## Project reality` bootstrap section does it (`tools/project-reality.ts`
-   step 4): basis = the latest `production` GitHub Deployment SHA, range
-   `<basis>..origin/main`, PR numbers via the shared `extractPrNumbers` seam of
-   `release-notes.mjs` — never a bespoke re-implementation.
+2. **Open batched Stage-B gate** — a **merged-but-not-yet-deployed** PR carrying
+   `Stage-B: batched at #<gate>` (the AGENTS.md §6 batched carve-out) has by
+   construction NOT been live-verified by the product owner; shipping it would
+   consume a deferral granted only for _merging_. The failure names each
+   **PR → gate** pair. The marker is read from the **same accepted-source set
+   the merge guard enforces** (`tools/lint/stage-b-lint.ts`): the **PR body OR a
+   comment on any Issue the body links with a `Closes #N` keyword** — a
+   body-only read would print "clear" for a PR that legitimately merged on a
+   linked-Issue record. The merged-undeployed delta is enumerated the way the
+   `## Project reality` bootstrap section does it (`tools/project-reality.ts`
+   step 4): basis = the **live** deployed SHA (`GET /v1/health → {version}`,
+   ground truth) falling back to the latest `production` GitHub Deployment SHA
+   (recorded intent) — `healthSha ?? deploymentSha`, the same rule as step 4 —
+   range `<basis>..origin/main`, PR numbers via the shared `extractPrNumbers`
+   seam of `release-notes.mjs`, never a bespoke re-implementation. Health first
+   matters: an app-only `--rollback` records no Deployment, so a
+   Deployment-only basis can be NEWER than what runs and would narrow the range
+   past undeployed PRs.
 
-**Fail-closed**, like the эфир probe: an UNKNOWN (a `gh` call errored, or no
-production Deployment exists to anchor the delta) HOLDS rather than waving the
-deploy through. The **only** bypass is explicit and loudly printed — never a
-silent auto-detection, mirroring `--mode-a-exempt` in `tools/gh/merge-gate.mjs`:
+**Fail-closed**, like the эфир probe: an UNKNOWN HOLDS rather than waving the
+deploy through — a `gh` call errored (including an unreadable linked Issue, i.e.
+an accepted marker source that could not be checked), the delta basis fell back
+to the Deployment record because the live health probe failed (a DEGRADED
+basis), or there is no deployed SHA at all to anchor the delta. Every `gh`/`git`
+call is bounded at 15 s (the health probe at 8 s), so a hung call degrades to
+that hold instead of stalling the pre-flight with no output. The **only** bypass
+is explicit and loudly printed — never a silent auto-detection, mirroring
+`--mode-a-exempt` in `tools/gh/merge-gate.mjs`:
 
 ```bash
 pnpm deploy:prod --release-gate-exempt "owner go — the fix ships in this very range"
 ```
 
 A bare `--release-gate-exempt` (or one followed by another flag) is a usage
-error, not an exemption. The printed line IS the audit record.
+error, not an exemption — caught at start-up, before any probe runs. The printed
+line IS the audit record.
 
 Unit cover: `tools/lint/guard-tests/release-gate.spec.ts` (pure flag parser,
 marker parser, evaluator and formatters over fabricated probes — no subprocess).

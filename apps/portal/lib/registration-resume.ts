@@ -3,6 +3,7 @@
 import { parseReturnTarget } from "@ds/schemas";
 
 import { registerForEvent } from "./registration-client";
+import { resolveReturnTarget } from "./return-to-origin";
 import { parseRoomReturnTarget } from "./room-return";
 
 /**
@@ -63,10 +64,27 @@ export function currentReturnTarget(): string | null {
  * refusal), the doctor is still landed on the event page — the per-user
  * registered-state read (EARS-4) or a retry surfaces there — never stranded on
  * the default listing. Firing again on a retry is a server-side idempotent no-op (EARS-3).
+ *
+ * 014 EARS-6 makes this the SINGLE consumption point of the platform-wide
+ * return-to-origin mechanism (014 design §6): the carried target is resolved once
+ * — the query value if it is still on the URL, otherwise the target parked when
+ * the visitor entered the auth flow (which is how the registration branch survives
+ * the trip through the verification mail) — and cleared in the same step, so a
+ * later unrelated sign-in can never teleport the visitor into a stale page. A
+ * gated surface that is neither an event page nor a room now keeps its origin too:
+ * the visitor lands back exactly where they were trying to consume content, and
+ * the `/webinars` default applies ONLY when no valid target exists.
  */
 export async function completeReturnTarget(
   rawReturnTo: string | null,
 ): Promise<string> {
+  // Resolve + consume once. Everything below sees a guard-clean same-origin path
+  // or `null`; a hostile value never reaches a navigation.
+  const resolved = resolveReturnTarget(rawReturnTo);
+  // 013 EARS-15 stands: `/` is the Academy MARKETING landing, never a login-gated
+  // page anyone was consuming, and no post-login flow may strand a doctor there.
+  // It is therefore not a return target — it falls through to the default landing.
+  const carried = resolved === "/" ? null : resolved;
   // 006 EARS-6 — a visitor bounced from the room to auth carries a ROOM return
   // (`/webinars/<slug>/room`). On success route BACK to the room so the
   // server-side gate RE-EVALUATES; fire NO registration — an unauthenticated
@@ -74,11 +92,17 @@ export async function completeReturnTarget(
   // then guided to register by the re-evaluation, not auto-admitted). Checked
   // before the registration-intent so the room's trailing `/room` is not mistaken
   // for an event-page intent.
-  const roomReturn = parseRoomReturnTarget(rawReturnTo);
+  const roomReturn = parseRoomReturnTarget(carried);
   if (roomReturn) return roomReturn.returnTo;
 
-  const intent = parseReturnTarget(rawReturnTo);
-  if (!intent) return DEFAULT_LANDING;
+  const intent = parseReturnTarget(carried);
+  if (!intent) {
+    // 014 EARS-6 — any OTHER safe same-origin origin page is honoured as-is: no
+    // registration fires (there is no event to register for), the visitor is
+    // simply returned to the page they were consuming. The default landing is
+    // reached only when no valid target survived at all.
+    return carried ?? DEFAULT_LANDING;
+  }
   try {
     await registerForEvent(intent.eventSlug);
   } catch {

@@ -223,7 +223,7 @@ flowchart LR
   GATE["gated surface<br/>builds returnTo = current path"] --> ENTRY["/login or /register<br/>?returnTo=…"]
   ENTRY --> VALID{"same-origin<br/>relative path?"}
   VALID -- no --> DEF["drop it; use the surface default landing"]
-  VALID -- yes --> COOKIE["signed, short-lived returnTo cookie"]
+  VALID -- yes --> COOKIE["short-lived returnTo cookie<br/>re-validated at the moment of use"]
   COOKIE --> FLOW["registration → email verification → login"]
   FLOW --> FIRST["first authenticated navigation"]
   FIRST --> CONSUME["consume once, redirect, clear"]
@@ -232,6 +232,7 @@ flowchart LR
 Rules the mechanism must satisfy:
 
 - Accept only a relative path on this origin. An absolute URL, a protocol-relative `//host`, a backslash-escaped variant or a path escaping the app are dropped in favour of the default landing — the mechanism must never become an open redirect.
+- The cookie carries no signature; its integrity control is re-running the same same-origin guard at the moment of consumption — a tampered value fails validation and falls back to the default landing, so a signature would add no property the guard does not already enforce.
 - Survive the interruption of email verification, because the registration branch leaves the browser and comes back.
 - Consume exactly once, then clear, so a later unrelated login does not teleport the user into an old page.
 - Have a per-surface default landing when no target exists. For 013 that default is `/webinars` ([#1324](https://github.com/doctor-school/ds-platform/issues/1324)) — a default, never an override of a present target.

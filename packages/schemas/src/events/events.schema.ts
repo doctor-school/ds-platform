@@ -617,39 +617,6 @@ export const PublicPartnerSchema = z.object({
 export type PublicPartner = z.infer<typeof PublicPartnerSchema>;
 
 /**
- * `PublicEventPage` — the publish-safe projection returned by
- * `GET /v1/public/events/:idOrSlug` (004 design §3, EARS-1). It is an
- * ALLOW-LIST, not a redactor: only the fields named here are ever exposed, so a
- * new internal column stays invisible to the public API until it is explicitly
- * added to this projection (the structural guard behind EARS-10 — the recon §6
- * `getEmailsForOrder` roster can never touch a public surface). It carries NO
- * operator/commercial field (the raw partner ref, the program storage key, the
- * row timestamps, the admin `validTransitions`) and NO registrant PII.
- *
- * `startsAt` is the canonical UTC instant (ISO-8601); every surface renders it
- * in `Europe/Moscow` labeled МСК (EARS-12). `programPdfUrl` is OMITTED (not
- * null) when the event has no program PDF — the page renders the program section
- * without a download affordance rather than a broken link (EARS-2).
- */
-export const PublicEventPageSchema = z.object({
-  id: z.uuid(),
-  slug: z.string(),
-  title: z.string(),
-  school: z.string(),
-  startsAt: z.iso.datetime({ offset: true }),
-  durationMin: z.number().int(),
-  description: z.string(),
-  // 012 EARS-8: the merged legacy+expert union, produced by the ONE canonical
-  // resolver that also feeds `/events/:key/speakers` and the upcoming card.
-  speakers: z.array(PublicEventPageSpeakerSchema),
-  specialties: z.array(z.string()),
-  partners: z.array(PublicPartnerSchema),
-  programPdfUrl: z.string().optional(),
-  state: PublicEventStateSchema,
-});
-export type PublicEventPage = z.infer<typeof PublicEventPageSchema>;
-
-/**
  * The two lifecycle states an event may carry on the upcoming listing (004
  * design §3, §4, EARS-7). Only a `published` or a currently-airing `live` event
  * is listed — `ended`/`archived` drop from the listing (EARS-9) and `draft` is

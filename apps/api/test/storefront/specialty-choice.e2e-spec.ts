@@ -19,6 +19,11 @@ import {
 } from "../../src/storefront/specialty-choice.cookie.js";
 import { SpecialtyChoiceService } from "../../src/storefront/specialty-choice.service.js";
 import { IdempotencyService } from "../../src/taxonomy/idempotency.service.js";
+import { RateLimitService } from "../../src/auth/rate-limit/rate-limit.service.js";
+import {
+  RATE_LIMIT_CLOCK,
+  SPECIALTY_CHOICE_RATE_LIMIT_SCOPE,
+} from "../../src/auth/rate-limit/rate-limit.types.js";
 import {
   RATE_LIMIT_THRESHOLDS,
   RELAXED_RATE_LIMIT,
@@ -407,16 +412,23 @@ describe.skipIf(!process.env.DATABASE_URL)(
 // limiter is stateful per instance and this block binds a LOW per-IP ceiling
 // where the functional suite above binds the relaxed one.
 //
-// Per-IP, not per-user: the ChooseSpecialty body carries no `identifier` /
-// `email` / `phone`, so the guard's per-user window has nothing to key on and
-// the per-IP + per-ASN dimensions are the whole budget for this route.
+// Per source ADDRESS, not per user: the ChooseSpecialty body carries no
+// `identifier` / `email` / `phone`, so the guard's per-user window has nothing
+// to key on. And per this route's OWN bucket — the decorator carries the
+// `storefront:specialty-choice` scope tag, so the window it spends is disjoint
+// from the one register / login / reset share from the same address.
 describe.skipIf(!process.env.DATABASE_URL)(
-  "017 EARS-6 (#1646): the guest choice POST is rate-limited per IP",
+  "017 EARS-6 (#1646): the guest choice POST is rate-limited in its own per-address bucket",
   () => {
     const PER_IP_CEILING = 3;
+    const WINDOW_MS = 15 * 60 * 1000;
     let app: NestFastifyApplication;
     let db: DrizzleHandle["db"];
     let specialties: SpecialtiesService;
+    let limiter: RateLimitService;
+    // Fake wall clock so the window boundary is crossed deterministically
+    // instead of by waiting 15 real minutes.
+    let now = Date.now();
     const usedKeys: string[] = [];
 
     beforeAll(async () => {
@@ -431,6 +443,8 @@ describe.skipIf(!process.env.DATABASE_URL)(
           perIpPer15Min: PER_IP_CEILING,
           perAsnPerHour: 1_000_000,
         })
+        .overrideProvider(RATE_LIMIT_CLOCK)
+        .useValue(() => now)
         .compile();
       app = moduleRef.createNestApplication<NestFastifyApplication>(
         new FastifyAdapter(),
@@ -440,6 +454,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
       await app.getHttpAdapter().getInstance().ready();
       db = app.get<DrizzleHandle["db"]>(DRIZZLE_DB);
       specialties = app.get(SpecialtiesService);
+      limiter = app.get(RateLimitService);
     }, 60_000);
 
     afterAll(async () => {
@@ -449,21 +464,34 @@ describe.skipIf(!process.env.DATABASE_URL)(
       await app?.close();
     });
 
-    it("EARS-6.18: an anonymous caller inside the window is served, and the call over it is refused with a generic 429 problem", async () => {
+    // Explicit source addresses (`remoteAddress` is what Fastify reports as
+    // `request.ip` with no trusted proxy) so each case owns its window and the
+    // key the guard derives is stated, not inferred from the inject default.
+    const GUEST_IP = "203.0.113.41";
+    const OTHER_GUEST_IP = "203.0.113.42";
+
+    const chooseFrom = (remoteAddress: string, specialtyId: string) => {
+      const idempotencyKey = randomUUID();
+      usedKeys.push(idempotencyKey);
+      return app.inject({
+        method: "POST",
+        url: "/v1/public/specialty-choice",
+        payload: { specialty: specialtyId },
+        headers: { "idempotency-key": idempotencyKey },
+        remoteAddress,
+      });
+    };
+
+    const anyMember = async () => {
       const book = await specialties.book();
       const member = book.entries.find((e) => !e.isOther)!;
       expect(member).toBeDefined();
+      return member;
+    };
 
-      const choose = () => {
-        const idempotencyKey = randomUUID();
-        usedKeys.push(idempotencyKey);
-        return app.inject({
-          method: "POST",
-          url: "/v1/public/specialty-choice",
-          payload: { specialty: member.id },
-          headers: { "idempotency-key": idempotencyKey },
-        });
-      };
+    it("EARS-6.18: an anonymous caller inside the window is served, and the call over it is refused with a generic 429 problem", async () => {
+      const member = await anyMember();
+      const choose = () => chooseFrom(GUEST_IP, member.id);
 
       // Under the ceiling the route is untouched — a doctor choosing, changing
       // and re-changing their view must never meet the limiter.
@@ -508,6 +536,56 @@ describe.skipIf(!process.env.DATABASE_URL)(
         url: "/v1/public/specialty-choice",
       });
       expect(read.statusCode).toBe(200);
+
+      // …and the refusal is TEMPORARY: once the 15-min window rolls the same
+      // caller is served again. A limiter that latched shut would satisfy every
+      // assertion above, so the recovery edge is asserted, not assumed — the
+      // injected `RATE_LIMIT_CLOCK` is what makes it cheap to reach.
+      now += WINDOW_MS;
+      const recovered = await chooseFrom(GUEST_IP, member.id);
+      expect(recovered.statusCode).toBe(200);
+      expect(SpecialtyChoiceSchema.parse(recovered.json()).specialty).toEqual(
+        member,
+      );
+    });
+
+    it("EARS-6.18: the route's bucket is disjoint from the auth surface's — neither exhausts the other", async () => {
+      const member = await anyMember();
+
+      // Spend this address's AUTH budget the way register / login / reset do:
+      // the unscoped source-address window, the shape every `@RateLimited()`
+      // call site under `src/auth` uses.
+      for (let i = 0; i < PER_IP_CEILING; i++) {
+        expect(limiter.tryConsume({ ip: OTHER_GUEST_IP })).toBe(true);
+      }
+      expect(limiter.tryConsume({ ip: OTHER_GUEST_IP })).toBe(false);
+
+      // The storefront POST from that very address is unaffected — an auth burst
+      // cannot lock a visitor out of choosing a specialty.
+      const served = await chooseFrom(OTHER_GUEST_IP, member.id);
+      expect(served.statusCode).toBe(200);
+
+      // And the reverse, which is the failure this PR exists to prevent: draining
+      // the storefront bucket must never spend the ceiling `/v1/auth/register`,
+      // login and `password/reset` consume from the same address.
+      for (let i = 1; i < PER_IP_CEILING; i++) {
+        expect((await chooseFrom(OTHER_GUEST_IP, member.id)).statusCode).toBe(
+          200,
+        );
+      }
+      expect((await chooseFrom(OTHER_GUEST_IP, member.id)).statusCode).toBe(
+        429,
+      );
+      // The auth window's own state is exactly where it was — still refusing on
+      // its own count, and its scoped sibling's exhaustion added nothing to it.
+      expect(limiter.tryConsume({ ip: OTHER_GUEST_IP })).toBe(false);
+      // A THIRD party's scope is likewise untouched by either.
+      expect(
+        limiter.tryConsume({
+          ip: OTHER_GUEST_IP,
+          scope: `${SPECIALTY_CHOICE_RATE_LIMIT_SCOPE}:other`,
+        }),
+      ).toBe(true);
     });
   },
 );

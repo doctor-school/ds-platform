@@ -20,7 +20,10 @@ import {
 } from "@ds/schemas";
 import type { DrizzleHandle } from "@ds/db";
 import { Authz, Public } from "../authz/index.js";
-import { RateLimited } from "../auth/rate-limit/index.js";
+import {
+  RateLimited,
+  SPECIALTY_CHOICE_RATE_LIMIT_SCOPE,
+} from "../auth/rate-limit/index.js";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
 import { IdempotencyService } from "../taxonomy/idempotency.service.js";
 import { SpecialtyProblemFilter } from "./specialties.problem-filter.js";
@@ -103,21 +106,36 @@ export class SpecialtyChoicePublicController {
    * filter, before any cookie is written — so a refused choice leaves the
    * previously remembered one standing rather than clearing it.
    *
-   * `@RateLimited()` (#1646, audit D2 of #1639) because this is an
-   * unauthenticated WRITE: every accepted call inserts an `idempotency_keys`
-   * row keyed by a client-supplied header, and the TTL sweep soft-expires those
-   * rows rather than removing them — so an unbounded anonymous caller is
-   * unbounded row growth, not merely wasted work. The decorator carries no
-   * per-endpoint value on purpose: the shared EARS-13 windows
-   * (`rate-limit.types.ts`) are the platform's one abuse budget, and a body with
-   * no `email`/`phone` field engages the per-IP (20 / 15 min) and per-ASN
-   * (100 / h) dimensions only — there is no submitted identifier here to key a
-   * per-user window on. Neither `@TimingEqualized()` nor `@BotProtected()`
-   * applies: the route enumerates nothing and discloses no account existence.
+   * `@RateLimited(SPECIALTY_CHOICE_RATE_LIMIT_SCOPE)` (#1646, audit D2 of
+   * #1639) because this is an unauthenticated WRITE: every accepted call inserts
+   * an `idempotency_keys` row keyed by a client-supplied header, and the TTL
+   * sweep soft-expires those rows rather than removing them — so an unbounded
+   * anonymous caller is unbounded row growth, not merely wasted work.
+   *
+   * The scope tag matters as much as the decorator. The EARS-13 counters are
+   * keyed per source address, and this is the first consumer OUTSIDE the auth
+   * surface; unscoped, storefront browsing would spend the very ceiling
+   * `/v1/auth/register`, login and `password/reset` consume from the same
+   * address, so a burst here could refuse sign-in platform-wide. Scoped, this
+   * route's 20 / 15 min is its own and cannot touch theirs.
+   *
+   * What the ceiling actually bounds today: the window is per SOURCE ADDRESS as
+   * the api resolves it, and this deployment does not resolve the caller —
+   * `trustProxy` is unset and no layer reads `x-forwarded-for` (#1655), while
+   * guest calls arrive through the doctor app's `/v1/:path*` rewrite, so every
+   * visitor presents as one address. Until #1655 lands the effective prod
+   * behaviour is therefore ONE shared 20 / 15 min bucket for this route — enough
+   * to bound anonymous `idempotency_keys` growth, which is what D2 asked for,
+   * and not a per-caller control. The per-ASN dimension is inert in this
+   * deployment: nothing in `infra/**` sets `x-asn`. There is no per-user window
+   * either — the body carries no `identifier` / `email` / `phone` to key one on.
+   * Neither `@TimingEqualized()` nor `@BotProtected()` applies: the route
+   * enumerates nothing and discloses no account existence, and SmartCaptcha is
+   * not deployed on prod today, so bot protection is not available to engage.
    */
   @Post()
   @Public()
-  @RateLimited()
+  @RateLimited(SPECIALTY_CHOICE_RATE_LIMIT_SCOPE)
   @HttpCode(200)
   @Header("Cache-Control", "no-store")
   @Authz({

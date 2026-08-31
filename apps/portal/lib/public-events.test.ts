@@ -49,9 +49,38 @@ describe("fetchEventListing", () => {
   });
 
   it("#1640: a 400 with no cursor in play stays a generic failure", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({}, 400)));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => jsonResponse({}, 400)),
+    );
 
     const failure = fetchEventListing({ timeframe: "upcoming" });
+    await expect(failure).rejects.toThrow(/event listing fetch failed \(400\)/);
+    await expect(failure).rejects.not.toBeInstanceOf(InvalidEventCursorError);
+  });
+
+  it("#1640: the published CURSOR_INVALID errorCode is what classifies the 400", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => jsonResponse({ errorCode: "CURSOR_INVALID" }, 400)),
+    );
+
+    await expect(
+      fetchEventListing({ timeframe: "upcoming", cursor: "not-a-cursor" }),
+    ).rejects.toBeInstanceOf(InvalidEventCursorError);
+  });
+
+  it("#1640: a 400 raised by another param (VALIDATION_FAILED) is NOT swallowed as a cursor rejection", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => jsonResponse({ errorCode: "VALIDATION_FAILED" }, 400)),
+    );
+
+    const failure = fetchEventListing({
+      timeframe: "upcoming",
+      cursor: "a-perfectly-good-cursor",
+      limit: -1,
+    });
     await expect(failure).rejects.toThrow(/event listing fetch failed \(400\)/);
     await expect(failure).rejects.not.toBeInstanceOf(InvalidEventCursorError);
   });

@@ -93,7 +93,12 @@ export interface EventListingInput {
  * A 400 WITH a cursor in play is surfaced as {@link InvalidEventCursorError} — the
  * cursor is opaque (`@ds/schemas` bounds only its length), so the api is the only
  * component that can judge it, and its 400 is the correct answer, not a defect.
- * Every other non-ok status stays a generic failure.
+ * The classification rides the published `errorCode` (`014-design.md` error table:
+ * `VALIDATION_FAILED` | `CURSOR_INVALID` | `IDEMPOTENCY_KEY_INVALID`), so a 400
+ * raised by some OTHER param while a cursor happens to be in play surfaces as the
+ * real fault instead of being silently retried as page 1. A 400 body carrying no
+ * `errorCode` at all keeps the cursor reading — the safe fallback for an upstream
+ * that answers off-contract. Every other non-ok status stays a generic failure.
  */
 export async function fetchEventListing(
   input: EventListingInput,
@@ -106,7 +111,13 @@ export async function fetchEventListing(
     cache: "no-store",
   });
   if (res.status === 400 && input.cursor) {
-    throw new InvalidEventCursorError(input.cursor);
+    const body = (await res.json().catch(() => null)) as {
+      errorCode?: unknown;
+    } | null;
+    const errorCode = body?.errorCode;
+    if (errorCode === undefined || errorCode === "CURSOR_INVALID") {
+      throw new InvalidEventCursorError(input.cursor);
+    }
   }
   if (!res.ok) throw new Error(`event listing fetch failed (${res.status})`);
   return (await res.json()) as PublicEventListingPage;

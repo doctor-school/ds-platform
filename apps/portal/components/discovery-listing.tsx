@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { headers } from "next/headers";
+import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import type { PastBroadcastCard } from "@ds/schemas";
 import { Link as DsLink } from "@ds/design-system/link";
@@ -11,6 +12,7 @@ import {
   formatMskWeekdayShort,
   mskDayKey,
 } from "@/lib/msk";
+import { buildWebinarsHref, type WebinarsQueryInput } from "@/lib/webinars-url";
 import { CalendarShell } from "./calendar-shell";
 import { EventListRouter } from "./event-list-router";
 import { ViewSwitcher } from "./view-switcher";
@@ -57,12 +59,15 @@ export default async function DiscoveryListing({
   timeframe = "upcoming",
   cursor,
   page = 1,
+  queryParams,
 }: {
   monthViewHref: string;
   weekViewHref?: string;
   timeframe?: "upcoming" | "past";
   cursor?: string;
   page?: number;
+  /** The route's raw query, so a rejected cursor can be stripped from the URL itself. */
+  queryParams?: WebinarsQueryInput;
 }) {
   const t = await getTranslations("webinars");
   const [{ listing, cursorRejected }, registeredSlugs] = await Promise.all([
@@ -70,9 +75,19 @@ export default async function DiscoveryListing({
     fetchRegisteredSlugs(),
   ]);
   // #1640: a `?cursor=` the api could not decode (shared, truncated or stale
-  // link) degrades to the first page rather than a 500. The page counter and the
-  // cursor handed to the pagination controls reset with it, so what the visitor
-  // sees and what the controls say stay the same page.
+  // link) degrades to the first page rather than a 500. Pagination state is
+  // THREE params — `cursor`, `cursorTrail` and `page` — and `cursorTrail` is
+  // read by the client router straight from the URL, so resetting only the two
+  // props would leave a stale back-stack behind: "next" then "previous" would
+  // pop a foreign cursor and show later-page content under the page-1 label.
+  // So redirect to the canonical stripped URL through the repo's single reset
+  // (`resetFeedPage`): all three clear atomically, the visitor keeps a clean
+  // shareable link, and no reload re-issues the doomed upstream request.
+  if (cursorRejected && queryParams) {
+    redirect(
+      buildWebinarsHref(queryParams, { view: "week", resetFeedPage: true }),
+    );
+  }
   const effectiveCursor = cursorRejected ? undefined : cursor;
   const effectivePage = cursorRejected ? 1 : page;
   const items = listing.data.map((card) => {

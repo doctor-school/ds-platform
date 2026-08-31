@@ -1162,6 +1162,7 @@ jobs:
           for i in $(seq 1 30); do
             if [ -s "$RUNNER_TEMP/idp-pat/pat.txt" ]; then
               cp "$RUNNER_TEMP/idp-pat/pat.txt" ./idp-pat.txt
+              echo "::add-mask::$(cat ./idp-pat.txt)"
               echo "IDP_SERVICE_TOKEN=$(cat ./idp-pat.txt)" >> "$GITHUB_ENV"
               echo "bootstrap PAT read"; exit 0
             fi
@@ -1171,13 +1172,20 @@ jobs:
       # The dev stand's own provisioner, unmodified — it is idempotent, needs
       # only curl + jq (both on ubuntu-latest), seeds the
       # `doctor_guest,platform_admin` roles the flows tier grants, and prints
-      # the three IDP_* values on STDOUT (diagnostics go to stderr).
+      # the three IDP_* values on STDOUT (diagnostics go to stderr). STDOUT
+      # goes to the FILE only — this repo is public, and the values include the
+      # OIDC client secret, so the log gets the stderr diagnostics and nothing
+      # else; the secret is masked before it enters $GITHUB_ENV. The secrets
+      # are per-run ephemeral (the IdP lives and dies on this runner), but a
+      # public log stays clean regardless.
       - name: Provision the IdP project, client and roles
         env:
           IDP_BASE_URL: http://localhost:9080
         run: |
           set -euo pipefail
-          bash infra/dev-stand/idp/provision.sh --pat-file ./idp-pat.txt | tee ./idp-provision.out
+          bash infra/dev-stand/idp/provision.sh --pat-file ./idp-pat.txt > ./idp-provision.out
+          client_secret="$(grep -E '^IDP_CLIENT_SECRET=' ./idp-provision.out | cut -d= -f2- || true)"
+          if [ -n "$client_secret" ]; then echo "::add-mask::$client_secret"; fi
           grep -E '^IDP_(PROJECT_ID|CLIENT_ID|CLIENT_SECRET)=' ./idp-provision.out >> "$GITHUB_ENV"
 
       # ─ application layer ─
@@ -1238,11 +1246,17 @@ jobs:
           done
           echo "the admin did not come up in time"; cat admin.log; exit 1
 
-      # ─ the tiers themselves ─
-      - run: pnpm --filter @ds/admin exec playwright install --with-deps chromium
+      # ─ the tiers themselves ─ Both tiers run whenever the stack booted: a
+      # red flows tier must not skip the axe sweep (each is its own evidence),
+      # so the sweep keys on the browser-install step having succeeded — the
+      # proof the whole boot chain reached the tiers — not on the flows result.
+      - name: Install the Playwright browser
+        id: pw-install
+        run: pnpm --filter @ds/admin exec playwright install --with-deps chromium
       - name: Admin flows tier
         run: pnpm --filter @ds/admin test:flows
       - name: Admin axe sweep
+        if: ${{ !cancelled() && steps.pw-install.outcome == 'success' }}
         run: pnpm --filter @ds/admin test:axe
 
       # ─ failure forensics ─ four processes, so a bare red step says nothing.

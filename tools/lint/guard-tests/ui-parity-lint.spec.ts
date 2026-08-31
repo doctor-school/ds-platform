@@ -22,6 +22,18 @@ const relationshipPaths = [
   "apps/admin/components/project-partners-panel.tsx",
   "apps/admin/components/relationship-endpoint-picker.tsx",
 ];
+const adminListSource = "admin-list-block-tier-v1";
+const adminListState = "admin-list-search-and-server-combobox";
+const adminListPaths = [
+  "apps/admin/app/experts/page.tsx",
+  "apps/admin/app/partners/page.tsx",
+  "apps/admin/app/projects/page.tsx",
+  "apps/admin/components/admin-data-list.tsx",
+  "apps/admin/components/admin-list-shell.tsx",
+  "apps/admin/components/expert-form.tsx",
+  ...relationshipPaths,
+  "apps/admin/messages/ru.json",
+];
 const baseApprovedManifest = JSON.parse(
   readFileSync(new URL("../ui-approved-sources.json", import.meta.url), "utf8"),
 ) as ApprovedSourceManifest;
@@ -76,6 +88,11 @@ const relationshipBody = `
 ui-source-kind: approved-non-canvas
 ui-source: ${relationshipSource}
 ui-source-state: ${relationshipState}
+${webEvidence}`;
+const adminListBody = `
+ui-source-kind: approved-non-canvas
+ui-source: ${adminListSource}
+ui-source-state: ${adminListState}
 ${webEvidence}`;
 const mixedApprovedBody = `
 ui-source-kind: approved-non-canvas
@@ -139,6 +156,39 @@ describe("ui-parity body evidence", () => {
     expect(verdict(relationshipBody, [path], baseApprovedManifest).ok).toBe(
       false,
     );
+  });
+
+  it("green: exact admin-list block-tier paths and composition state pass", () => {
+    expect(
+      verdict(adminListBody, adminListPaths, baseApprovedManifest).ok,
+    ).toBe(true);
+  });
+
+  it("green: admin-list block-tier provenance is the owner Stage-A pick, not its consumer Issue", () => {
+    expect(
+      baseApprovedManifest.sources[adminListSource].approvalProvenance,
+    ).toEqual([
+      "https://github.com/doctor-school/ds-platform/issues/1578#issuecomment-5435209906",
+    ]);
+  });
+
+  it.each([
+    "apps/admin/app/directions/page.tsx",
+    "apps/admin/components/direction-form.tsx",
+  ])("red: admin-list block-tier source does not grant %s", (path) => {
+    expect(
+      verdict(adminListBody, [...adminListPaths, path], baseApprovedManifest).ok,
+    ).toBe(false);
+  });
+
+  it("red: undeclared admin-list state fails closed", () => {
+    expect(
+      verdict(
+        adminListBody.replace(adminListState, "admin-list-read-only"),
+        adminListPaths,
+        baseApprovedManifest,
+      ).ok,
+    ).toBe(false);
   });
 
   it("red: nearby Feature 012 path and undeclared relationship state fail closed", () => {

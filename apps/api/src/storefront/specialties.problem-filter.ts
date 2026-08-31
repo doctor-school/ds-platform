@@ -44,6 +44,12 @@ const CLIENT_ERROR_TITLE: Readonly<Record<number, string>> = {
   400: "Bad request",
   404: "Not found",
   422: "Unprocessable entity",
+  // #1646: the `@RateLimited` POST refusal reaches this filter as a plain
+  // `HttpException(429)` from the global guard. Without an entry it would be
+  // titled «Request cannot be processed», which reads as a refusal of the
+  // submitted value rather than of the CALL RATE. The title names the
+  // dimension-free fact only — no threshold, no window, per EARS-13/16.
+  429: "Too many requests",
 };
 
 @Catch()

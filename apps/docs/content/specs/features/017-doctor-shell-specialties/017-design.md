@@ -193,6 +193,8 @@ The `loggedIn` × `specialtyChosen` axes multiply this: 4 × 2 × 2 renders per 
 
 `SpecialtyBook` exposes `total` — the actual number of book entries served by the read — and every surface that shows a specialty count (the expand control «Показать весь список — N», the hero scale counter) binds to it; no surface carries a count literal.
 
+The guest half of «choose / change specialty» is the only unauthenticated WRITE on this surface, and each accepted call mints an `idempotency_keys` row keyed by a caller-chosen header, so it carries the platform's shared EARS-13 rate limit (`@RateLimited`, 003 F6) rather than a limit of its own: with no `identifier`/`email`/`phone` in the body there is no per-user window to key, leaving the per-IP ceiling of 20 requests / 15 min and the per-ASN ceiling of 100 / h as the whole budget — far above any doctor choosing and re-choosing a specialty, and the refusal is a generic 429 problem naming neither threshold nor dimension.
+
 Every failure is an RFC 7807 Problem Details document with `traceId` and an exact `errorCode` (ADR-0002).
 
 ## 8. Sequencing the build

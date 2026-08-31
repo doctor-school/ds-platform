@@ -19,6 +19,10 @@ import {
 } from "../../src/storefront/specialty-choice.cookie.js";
 import { SpecialtyChoiceService } from "../../src/storefront/specialty-choice.service.js";
 import { IdempotencyService } from "../../src/taxonomy/idempotency.service.js";
+import {
+  RATE_LIMIT_THRESHOLDS,
+  RELAXED_RATE_LIMIT,
+} from "../setup/rate-limit.js";
 
 // 017 EARS-6 (#1482) — choice persistence and the sign-in cascade, over the REAL
 // stack: Fastify + Postgres + the boot-time book seed + the 010 audit trigger.
@@ -51,9 +55,16 @@ describe.skipIf(!process.env.DATABASE_URL)(
     const usedKeys: string[] = [];
 
     beforeAll(async () => {
+      // #1646: the guest POST is `@RateLimited`, and this functional suite makes
+      // many guest mutations from one loopback address inside a single window.
+      // The limiter's own behaviour is proven by the dedicated block below (and
+      // by the auth abuse-limits e2e); here it must simply not interfere.
       const moduleRef: TestingModule = await Test.createTestingModule({
         imports: [AppModule],
-      }).compile();
+      })
+        .overrideProvider(RATE_LIMIT_THRESHOLDS)
+        .useValue(RELAXED_RATE_LIMIT)
+        .compile();
       app = moduleRef.createNestApplication<NestFastifyApplication>(
         new FastifyAdapter(),
       );
@@ -386,6 +397,117 @@ describe.skipIf(!process.env.DATABASE_URL)(
         specialtyId: first.id,
         status: "active",
       });
+    });
+  },
+);
+
+// #1646 (audit D2 of #1639) — the guest POST is the storefront's only
+// unauthenticated write, and every accepted call inserts an `idempotency_keys`
+// row keyed by a header the CALLER chooses. Its own app instance, because the
+// limiter is stateful per instance and this block binds a LOW per-IP ceiling
+// where the functional suite above binds the relaxed one.
+//
+// Per-IP, not per-user: the ChooseSpecialty body carries no `identifier` /
+// `email` / `phone`, so the guard's per-user window has nothing to key on and
+// the per-IP + per-ASN dimensions are the whole budget for this route.
+describe.skipIf(!process.env.DATABASE_URL)(
+  "017 EARS-6 (#1646): the guest choice POST is rate-limited per IP",
+  () => {
+    const PER_IP_CEILING = 3;
+    let app: NestFastifyApplication;
+    let db: DrizzleHandle["db"];
+    let specialties: SpecialtiesService;
+    const usedKeys: string[] = [];
+
+    beforeAll(async () => {
+      const moduleRef: TestingModule = await Test.createTestingModule({
+        imports: [AppModule],
+      })
+        .overrideProvider(RATE_LIMIT_THRESHOLDS)
+        // Tight per-IP window so the boundary is reached in a few requests;
+        // per-ASN wide open so the dimension under test is unambiguous.
+        .useValue({
+          perUserPer15Min: 1_000_000,
+          perIpPer15Min: PER_IP_CEILING,
+          perAsnPerHour: 1_000_000,
+        })
+        .compile();
+      app = moduleRef.createNestApplication<NestFastifyApplication>(
+        new FastifyAdapter(),
+      );
+      app.enableVersioning({ type: VersioningType.URI, defaultVersion: "1" });
+      await app.init();
+      await app.getHttpAdapter().getInstance().ready();
+      db = app.get<DrizzleHandle["db"]>(DRIZZLE_DB);
+      specialties = app.get(SpecialtiesService);
+    }, 60_000);
+
+    afterAll(async () => {
+      for (const key of usedKeys) {
+        await db.delete(idempotencyKeys).where(eq(idempotencyKeys.key, key));
+      }
+      await app?.close();
+    });
+
+    it("EARS-6.18: an anonymous caller inside the window is served, and the call over it is refused with a generic 429 problem", async () => {
+      const book = await specialties.book();
+      const member = book.entries.find((e) => !e.isOther)!;
+      expect(member).toBeDefined();
+
+      const choose = () => {
+        const idempotencyKey = randomUUID();
+        usedKeys.push(idempotencyKey);
+        return app.inject({
+          method: "POST",
+          url: "/v1/public/specialty-choice",
+          payload: { specialty: member.id },
+          headers: { "idempotency-key": idempotencyKey },
+        });
+      };
+
+      // Under the ceiling the route is untouched — a doctor choosing, changing
+      // and re-changing their view must never meet the limiter.
+      for (let i = 0; i < PER_IP_CEILING; i++) {
+        const allowed = await choose();
+        expect(allowed.statusCode).toBe(200);
+        expect(SpecialtyChoiceSchema.parse(allowed.json()).specialty).toEqual(
+          member,
+        );
+      }
+
+      // The call over the ceiling is refused BEFORE the handler, so no further
+      // `idempotency_keys` row is minted — which is the growth this closes.
+      const throttled = await choose();
+      expect(throttled.statusCode).toBe(429);
+      expect(String(throttled.headers["content-type"])).toContain(
+        "application/problem+json",
+      );
+      const problem = throttled.json() as {
+        type: string;
+        title: string;
+        status: number;
+        traceId: string;
+        instance: string;
+      };
+      expect(problem.status).toBe(429);
+      expect(problem.title).toBe("Too many requests");
+      expect(problem.traceId).toBeTruthy();
+      expect(problem.instance).toBe("/v1/public/specialty-choice");
+      // Generic by contract (EARS-13/16): the body carries no threshold, no
+      // window and no name for the breached dimension — a caller cannot learn
+      // the budget by probing it.
+      const wire = JSON.stringify(problem).toLowerCase();
+      for (const leak of ["per-ip", "asn", "retry", "limit", "window"]) {
+        expect(wire).not.toContain(leak);
+      }
+
+      // The refusal is scoped to the WRITE: the read stays available, so a
+      // throttled browser still renders the choice it already made.
+      const read = await app.inject({
+        method: "GET",
+        url: "/v1/public/specialty-choice",
+      });
+      expect(read.statusCode).toBe(200);
     });
   },
 );

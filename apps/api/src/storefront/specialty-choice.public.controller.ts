@@ -20,6 +20,7 @@ import {
 } from "@ds/schemas";
 import type { DrizzleHandle } from "@ds/db";
 import { Authz, Public } from "../authz/index.js";
+import { RateLimited } from "../auth/rate-limit/index.js";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
 import { IdempotencyService } from "../taxonomy/idempotency.service.js";
 import { SpecialtyProblemFilter } from "./specialties.problem-filter.js";
@@ -101,9 +102,22 @@ export class SpecialtyChoicePublicController {
    * refused with `SPECIALTY_NOT_IN_BOOK` (422) through the shared problem
    * filter, before any cookie is written — so a refused choice leaves the
    * previously remembered one standing rather than clearing it.
+   *
+   * `@RateLimited()` (#1646, audit D2 of #1639) because this is an
+   * unauthenticated WRITE: every accepted call inserts an `idempotency_keys`
+   * row keyed by a client-supplied header, and the TTL sweep soft-expires those
+   * rows rather than removing them — so an unbounded anonymous caller is
+   * unbounded row growth, not merely wasted work. The decorator carries no
+   * per-endpoint value on purpose: the shared EARS-13 windows
+   * (`rate-limit.types.ts`) are the platform's one abuse budget, and a body with
+   * no `email`/`phone` field engages the per-IP (20 / 15 min) and per-ASN
+   * (100 / h) dimensions only — there is no submitted identifier here to key a
+   * per-user window on. Neither `@TimingEqualized()` nor `@BotProtected()`
+   * applies: the route enumerates nothing and discloses no account existence.
    */
   @Post()
   @Public()
+  @RateLimited()
   @HttpCode(200)
   @Header("Cache-Control", "no-store")
   @Authz({

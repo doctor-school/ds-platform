@@ -20,9 +20,13 @@
  *   - lines:  <= 200   (Anthropic CLAUDE.md target + MEMORY.md load cutoff)
  *   - bytes:  <= 25 KB  (MEMORY.md load cutoff; applied to all three for headroom)
  *
- * Budget (always-on TOTAL, #1678): <= 30 KB across every file that loads at
- * session start (AGENTS.md + CLAUDE.md + MEMORY.md when resolvable + path-less
- * .claude/rules/*.md). Per-file caps alone cannot bound the window: three files
+ * Budget (always-on TOTAL, #1678): <= 30 KB across the repo-tracked files that
+ * load at session start (AGENTS.md + CLAUDE.md + path-less .claude/rules/*.md).
+ * MEMORY.md is deliberately OFF the total: it is machine-local (auto-memory dir,
+ * outside git), invisible in CI, and already bounded by its own 200-line / 25 KB
+ * load cutoff — counting it would make the total verdict differ between a
+ * developer's box and CI, i.e. non-deterministic. It keeps its per-file budget.
+ * Per-file caps alone cannot bound the window: three files
  * each comfortably inside 25 KB still open a 75 KB session, and context rot is a
  * function of the TOTAL, not of any single file. The cap is a hard FAIL (BLOCK,
  * exit 1) in the same style as a per-file overrun — the remedy is identical:
@@ -76,7 +80,8 @@ interface Target {
   optional: boolean; // outside git (auto-memory) — skip when absent
   softLines?: number;
   warnOnly?: boolean; // over-budget WARNs instead of failing (Phase-0 skills, #416)
-  offTotal?: boolean; // not part of the always-on total (read-on-demand skills, `paths:`-scoped rules)
+  offTotal?: boolean; // not part of the always-on total (read-on-demand skills, `paths:`-scoped rules, MEMORY.md)
+  sessionStart?: boolean; // loads in full at session start → eligible for the byte-headroom WARN (#1042)
 }
 
 // MEMORY.md path: derive from this repo's auto-memory dir convention
@@ -102,9 +107,15 @@ function memoryPath(): string | null {
 const memPath = memoryPath();
 
 const targets: Target[] = [
-  { label: "AGENTS.md", path: resolve(REPO_ROOT, "AGENTS.md"), optional: false },
-  { label: "CLAUDE.md", path: resolve(REPO_ROOT, "CLAUDE.md"), optional: false, softLines: CLAUDE_SOFT_LINES },
-  ...(memPath ? [{ label: "MEMORY.md (auto-memory index)", path: memPath, optional: true } as Target] : []),
+  { label: "AGENTS.md", path: resolve(REPO_ROOT, "AGENTS.md"), optional: false, sessionStart: true },
+  { label: "CLAUDE.md", path: resolve(REPO_ROOT, "CLAUDE.md"), optional: false, softLines: CLAUDE_SOFT_LINES, sessionStart: true },
+  // MEMORY.md keeps its per-file budget and its headroom WARN, but is OFF the
+  // always-on total (#1680): it lives outside git, so counting it would make the
+  // total verdict machine-dependent — green in CI, red on one developer's box —
+  // and its own 200-line / 25 KB auto-load cutoff already bounds it.
+  ...(memPath
+    ? [{ label: "MEMORY.md (auto-memory index)", path: memPath, optional: true, offTotal: true, sessionStart: true } as Target]
+    : []),
 ];
 
 /**
@@ -151,6 +162,7 @@ if (existsSync(rulesDir)) {
       // it never enters the session-start window — same treatment as skills: the
       // per-file budget still applies, the always-on total excludes it.
       offTotal: lazy,
+      sessionStart: !lazy,
     });
   }
 }
@@ -218,12 +230,13 @@ for (const t of targets) {
   if (!overLines && t.softLines && lineCount > t.softLines) {
     lines.push(`${TAG} WARN        ${t.label}: ${lineCount} lines > soft target ${t.softLines} — consider trimming (not a failure).`);
   }
-  // Headroom WARN tier (#1042): an always-on file (never lazy rules, never
-  // read-on-demand skills — both carry `offTotal`) that is WITHIN budget but has
-  // < 256 B left before the byte ceiling gets a WARN — the next edit would force
-  // ad-hoc squeezing of canonical rules. Exit code stays 0.
+  // Headroom WARN tier (#1042): a file that LOADS AT SESSION START (never lazy
+  // rules, never read-on-demand skills) and is WITHIN budget but has < 256 B left
+  // before the byte ceiling gets a WARN — the next edit would force ad-hoc
+  // squeezing of canonical rules. Keyed on `sessionStart`, not `offTotal`:
+  // MEMORY.md is off the total yet still loads every session (#1680).
   const headroom = MAX_BYTES - bytes;
-  if (!over && !t.offTotal && headroom < HEADROOM_WARN_BYTES) {
+  if (!over && t.sessionStart && headroom < HEADROOM_WARN_BYTES) {
     lines.push(
       `${TAG} WARN        ${t.label}: low byte-headroom — ${bytes} B used, ${headroom} B remaining ` +
         `(< ${HEADROOM_WARN_BYTES} B before the ${(MAX_BYTES / 1024).toFixed(0)} KB ceiling) — compact before the next always-on edit (not a failure).`,
@@ -235,7 +248,7 @@ const overTotal = totalBytes > MAX_TOTAL_BYTES;
 lines.push(
   `${TAG} ${(overTotal ? "OVER BUDGET" : "ok").padEnd(11)} always-on total: ${totalLines} lines / ${(totalBytes / 1024).toFixed(1)} KB ` +
     `(limit ${(MAX_TOTAL_BYTES / 1024).toFixed(0)} KB) ` +
-    `(AGENTS.md + CLAUDE.md${memPath ? " + MEMORY.md" : ""} + path-less .claude/rules/*.md)`,
+    `(AGENTS.md + CLAUDE.md + path-less .claude/rules/*.md; MEMORY.md excluded — machine-local)`,
 );
 if (overTotal) {
   process.stderr.write(

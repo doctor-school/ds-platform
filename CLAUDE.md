@@ -63,6 +63,7 @@ A subagent's final message lands in the lead's context and is re-read until sess
 5. Briefs in English; RU only where the RU string is itself the artifact. User-facing replies stay RU.
 6. Background dispatches are checkpointed and probed with `pnpm dispatch:probe <N>` (STILL-CLEAN ≈10 min in ⇒ kill + re-dispatch on a tighter brief), never by "waiting for the notification"; owner-facing status names observed artifacts only (commit / PR # / verdict), downstream steps are phrased as plan, and every impl brief carries the dispatch-brief checklist heading (memory `feedback_orchestration_brief_full_lint_before_pr`). Any wait on CI or a workflow run follows the shared-token poller rules in skill `merge-when-green` Step 1.
 7. Context budget hook: subagent ≥150K → ROTATE (checkpoint + fresh dispatch), ≥200K → tools denied except git/checkpoint; dispatch impl via `ds-implementer` (Opus, maxTurns 120).
+8. `<subagent_tokens>` = the child's reading in the task-notification `<usage>`, taken BEFORE the round (it ignores that round's own ≈20K+ cost). SendMessage rework/re-review only while it is < 120K — impl and reviewer alike; at or above, and on any `ROTATE:` return, dispatch a FRESH agent with PR + review URL + checkpoint. Wave landed → `/wrap` + handoff → new session.
 
 ## On-demand pointers
 

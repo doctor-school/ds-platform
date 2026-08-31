@@ -200,7 +200,8 @@ erDiagram
   DIRECTION ||--o{ DIRECTION_ADJACENCY : adjacent_to
   DIRECTION ||--o{ DIRECTION_SPECIALTIES : maps_to
   SPECIALTY_MINZDRAV ||--o{ DIRECTION_SPECIALTIES : mapped_by
-  SPECIALTY_MINZDRAV ||--o{ PERSON : declared_by
+  PERSON ||--o{ DOCTOR_SPECIALTIES : declares
+  SPECIALTY_MINZDRAV ||--o{ DOCTOR_SPECIALTIES : declared_in
   PERSON ||--o{ LEDGER_ACCOUNT : owns
   PROJECT ||--o{ LEDGER_ACCOUNT : funds
   ORGANISATION ||--o{ LEDGER_ACCOUNT : owns
@@ -216,6 +217,7 @@ Load-bearing invariants:
 3. Every output and every posting carries a `project_id` (OWD-9).
 4. Balances are derived, never stored as mutable state (OWD-10).
 5. A confirmed account↔expert link is unique on both sides.
+6. A person declares their specialty through `DOCTOR_SPECIALTIES`, never as a column on `PERSON`: at most one active `primary` row per person (§2.1), and superseded rows are retired, not overwritten.
 
 ---
 

@@ -200,7 +200,8 @@ erDiagram
   DIRECTION ||--o{ DIRECTION_ADJACENCY : adjacent_to
   DIRECTION ||--o{ DIRECTION_SPECIALTIES : maps_to
   SPECIALTY_MINZDRAV ||--o{ DIRECTION_SPECIALTIES : mapped_by
-  SPECIALTY_MINZDRAV ||--o{ PERSON : declared_by
+  PERSON ||--o{ DOCTOR_SPECIALTIES : declares
+  SPECIALTY_MINZDRAV ||--o{ DOCTOR_SPECIALTIES : declared_in
   PERSON ||--o{ LEDGER_ACCOUNT : owns
   PROJECT ||--o{ LEDGER_ACCOUNT : funds
   ORGANISATION ||--o{ LEDGER_ACCOUNT : owns
@@ -216,6 +217,7 @@ erDiagram
 3. Каждый результат и каждая проводка несут `project_id` (OWD-9).
 4. Балансы выводятся, а не хранятся изменяемым состоянием (OWD-10).
 5. Подтверждённая связь учётка ↔ эксперт уникальна с обеих сторон.
+6. Человек заявляет специальность через `DOCTOR_SPECIALTIES`, а не колонкой в `PERSON`: не более одной активной строки с ролью `primary` на человека (§2.1), а вытесненные строки снимаются, а не затираются.
 
 ---
 

@@ -165,7 +165,12 @@ flowchart LR
 
 Two rules the review enforces: nothing enters `TargetingSet` without a managed row behind it, and items reached only through `ADJ` are labelled adjacent in the UI — never as the doctor's own specialty (EARS-8).
 
-**An empty targeted set is honest, not a failure.** A non-«Другое» specialty with no managed `SPECIALTY_DIRECTION` rows resolves to `mode: "targeted"` with empty `directions` — and therefore empty adjacent directions, since adjacency is reachable only through the doctor's own rows. That is the truthful answer: the specialty _is_ targeted, the managed books simply hold no rows behind it yet. Consumers MUST render their documented `пусто` state from the §6 matrix — nearest events show «Пока ничего не запланировано…» with the adjacent-areas link, the leaderboard shows its calm explanation. Silently falling back to general or non-targeted content is forbidden: unmanaged content would enter the doctor's view without a managed row behind it, breaking the first rule above.
+**An empty targeted set is honest, not a failure.** A non-«Другое» specialty with no managed `SPECIALTY_DIRECTION` rows resolves to `mode: "targeted"` with empty `directions` — and therefore empty adjacent directions, since adjacency is reachable only through the doctor's own rows. That is the truthful answer: the specialty _is_ targeted, the managed books simply hold no rows behind it yet. Consumers MUST render their documented `пусто` state from the §6 matrix — the leaderboard shows its calm explanation, nearest events show «Пока ничего не запланировано…». Silently falling back to general or non-targeted content is forbidden: unmanaged content would enter the doctor's view without a managed row behind it, breaking the first rule above.
+
+**The adjacent-areas link renders only when there are adjacent areas to link to.** The `пусто` state of the nearest-events block has two variants, and the block picks between them on `adjacentDirections`, never on `directions`:
+
+- **`adjacentDirections` non-empty** — the doctor has own directions, they simply hold no upcoming events. «Пока ничего не запланировано…» plus the adjacent-areas link, which leads somewhere real.
+- **`adjacentDirections` empty** — including every honest-empty set above, where empty `directions` makes empty adjacency a certainty rather than a coincidence. The block renders the copy **alone**, with no link. A link to an empty adjacent set is a dead control, and a dead control is the same class of defect as the empty labelled box §6 opens by banning.
 
 `mode: "general"` with the explicit LD-5 statement is reserved for «Другое» and nothing else. Consumers must never infer generality from emptiness — the two states are distinguished by `mode`, never by the size of `directions`. This contract binds the block consumers #1485 (nearest events) and #1487 (leaderboard).
 
@@ -173,13 +178,13 @@ Two rules the review enforces: nothing enters `TargetingSet` without a managed r
 
 Every block resolves to exactly one render per state. An empty labelled box, a bare zero and an unresolving spinner are each defects.
 
-| Block             | `обычно`                                    | `загрузка`           | `пусто`                                               | `ошибка`                                     |
-| ----------------- | ------------------------------------------- | -------------------- | ----------------------------------------------------- | -------------------------------------------- |
-| Hero + statistics | 4 counters + goal verbatim                  | counters as skeleton | a counter with no source is **omitted**, not zeroed   | counters omitted, hero copy intact           |
-| Specialty catalog | variant Б open, or the collapsed chosen row | tile skeletons       | n/a — the book is closed and never empty              | error with retry; the page stays readable    |
-| Nearest events    | cards + compact month calendar              | card skeletons       | «Пока ничего не запланировано…» + adjacent-areas link | «Не удалось загрузить события.» + «Обновить» |
-| «Что исследовать» | **deferred (LD-8)** — nothing renders       | n/a                  | n/a                                                   | n/a                                          |
-| Leaderboard       | consented rows + voluntary note             | row skeletons        | calm explanation instead of rows                      | error with retry, note still shown           |
+| Block             | `обычно`                                    | `загрузка`           | `пусто`                                                                                               | `ошибка`                                     |
+| ----------------- | ------------------------------------------- | -------------------- | ----------------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| Hero + statistics | 4 counters + goal verbatim                  | counters as skeleton | a counter with no source is **omitted**, not zeroed                                                   | counters omitted, hero copy intact           |
+| Specialty catalog | variant Б open, or the collapsed chosen row | tile skeletons       | n/a — the book is closed and never empty                                                              | error with retry; the page stays readable    |
+| Nearest events    | cards + compact month calendar              | card skeletons       | «Пока ничего не запланировано…»; + adjacent-areas link only if `adjacentDirections` is non-empty (§5) | «Не удалось загрузить события.» + «Обновить» |
+| «Что исследовать» | **deferred (LD-8)** — nothing renders       | n/a                  | n/a                                                                                                   | n/a                                          |
+| Leaderboard       | consented rows + voluntary note             | row skeletons        | calm explanation instead of rows                                                                      | error with retry, note still shown           |
 
 The `loggedIn` × `specialtyChosen` axes multiply this: 4 × 2 × 2 renders per block are the review surface EARS-15 signs off. «Что исследовать» has no row to multiply — the composition reserves its slot between the events block and the leaderboard and 017 renders nothing in it (LD-8): the block has no read contract in §7, no endpoint and no content entity, and it lands with the features that own school, lesson and clinical-case content.
 

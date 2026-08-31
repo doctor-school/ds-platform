@@ -11,6 +11,7 @@ import {
 } from "./msk";
 import { resolveRoomEntryHref, type ForwardedSession } from "./registration-state";
 import { toCanvasStatus } from "./event-lifecycle";
+import { isRecordingPlayable } from "./recording-cta";
 
 /**
  * 005 EARS-6 / 014 EARS-9 — the `MyEvents` read composed onto the «Мои события»
@@ -147,7 +148,9 @@ export function buildMyEventListItems(
       variant: past ? ("past" as const) : ("upcoming" as const),
       ctaHref: past ? href : (roomEntryHref ?? undefined),
       ctaLabel: past
-        ? copy.recordingCta
+        ? isRecordingPlayable(event.recording)
+          ? copy.recordingCta
+          : undefined
         : roomEntryHref
           ? copy.roomCta
           : undefined,

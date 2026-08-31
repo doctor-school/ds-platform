@@ -15,6 +15,7 @@ import {
   mskMonthKey,
 } from "@/lib/msk";
 import { buildWebinarsHref, type WebinarsQueryInput } from "@/lib/webinars-url";
+import { isRecordingPlayable } from "@/lib/recording-cta";
 import { CalendarShell } from "./calendar-shell";
 import { EventListRouter } from "./event-list-router";
 import { ViewSwitcher } from "./view-switcher";
@@ -106,7 +107,10 @@ export default async function DiscoveryListing({
       recordingLabel: recording ? t(`recording.${recording.state}`) : undefined,
       variant: timeframe === "past" ? ("past" as const) : ("upcoming" as const),
       ctaHref: timeframe === "past" ? `/webinars/${card.slug}` : undefined,
-      ctaLabel: timeframe === "past" ? t("recordingCta") : undefined,
+      ctaLabel:
+        timeframe === "past" && isRecordingPlayable(recording)
+          ? t("recordingCta")
+          : undefined,
       registered: registeredSlugs.has(card.slug),
       registeredLabel: t("registered"),
     };

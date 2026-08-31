@@ -137,6 +137,42 @@ describe("014 EARS-9 my events tab projection (unit)", () => {
     expect(items.every((i) => i.live === false)).toBe(true);
   });
 
+  it("014 EARS-9.8: a Записи row offers «Смотреть запись» only when a cut is published — a preparing row carries the badge and NO CTA label", () => {
+    const ended: MyEventItem[] = [
+      {
+        ...upcoming[0]!,
+        state: "ended",
+        startsAt: "2026-08-01T00:00:00.000Z",
+        recording: { state: "montage" } as MyEventItem["recording"],
+      },
+      {
+        ...upcoming[1]!,
+        state: "ended",
+        startsAt: "2026-07-17T15:00:00.000Z",
+        recording: { state: "preparing" } as MyEventItem["recording"],
+      },
+      {
+        ...upcoming[2]!,
+        state: "ended",
+        startsAt: "2026-06-10T15:00:00.000Z",
+        // An ended row the projection could not resolve at all — no recording
+        // object. Nothing is playable, so it must not advertise a cut either.
+        recording: null,
+      },
+    ];
+    const items = buildMyEventListItems(ended, "recordings", COPY);
+    // The card renders its CTA only on `ctaHref && ctaLabel`, so suppressing the
+    // label is what removes the button — the href stays, the card is still a link.
+    expect(items.map((i) => i.ctaLabel)).toEqual([
+      "Смотреть запись ↗",
+      undefined,
+      undefined,
+    ]);
+    // The preparing row keeps its badge — it is listed, just not playable.
+    expect(items[1]!.recordingLabel).toBe("recording:preparing");
+    expect(items.every((i) => i.ctaHref !== undefined)).toBe(true);
+  });
+
   it("014 EARS-9.5: instants render in Europe/Moscow (МСК) regardless of the runtime timezone (no local drift)", () => {
     // Runtime TZ is America/New_York (set above). The live event's 16:00Z instant
     // is 19:00 in Moscow and 12:00 in New York — the МСК formatter must yield 19:00.

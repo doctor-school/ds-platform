@@ -37,9 +37,15 @@ import { EventListRouter } from "../../../components/event-list-router";
  * feed uses, never a section-local copy (AGENTS.md cross-front reuse). Only the
  * route, the `?tab=` value and the copy differ.
  *
- * Deviation from the vendored canvas: the canvas's third **Сертификаты** tab is a
- * review miss and is owner-decided out of scope (2026-08-17) — it is not built,
- * and no placeholder or disabled stub is rendered.
+ * Deviations from the vendored canvas:
+ *   • the canvas's third **Сертификаты** tab is a review miss and is owner-decided
+ *     out of scope (2026-08-17) — it is not built, and no placeholder or disabled
+ *     stub is rendered;
+ *   • the canvas's **«Направление»** specialty filter is a Wave-1 cut, deferred to
+ *     014 EARS-12 / EARS-14 (the `facets` wave) — it lands with that wave, not here;
+ *   • the canvas's «Доступно 30 дней после эфира» band and its «Показать все N
+ *     записей» link are superseded by 014-design §8.3: «Записи» is the FULL history
+ *     with no retention window and no truncation, so neither is built.
  *
  * Rendered per request (`force-dynamic`) — a per-user read whose lifecycle state /
  * membership can change; a static prerender would go stale, and a just-registered

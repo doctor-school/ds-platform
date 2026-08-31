@@ -308,7 +308,7 @@ Because the unit does not fetch, the `facets` wave adds a capability to it witho
 
 ### 8.3 «Мои события»
 
-Exactly two tabs — «Предстоящие» (default) and «Записи» — per the owner's canvas decision; the canvas's third «Сертификаты» tab is a review miss and is not built. Each tab is the full registration history for its side, newest first, over `registrations ⋈ events`, with the projection's `state` supplying the per-row badge. A past registered event with no recording is present and carries the preparing badge.
+Exactly two tabs — «Предстоящие» (default) and «Записи» — per the owner's canvas decision; the canvas's third «Сертификаты» tab is a review miss and is not built. Each tab is the full registration history for its side over `registrations ⋈ events`, with the projection's `state` supplying the per-row badge. The two tabs order in opposite directions, because each leads with the row the doctor came for: **Предстоящие** is nearest-first (`starts_at ASC`) so the most imminent эфир is on top — the order feature 005 already ships for this surface — while **Записи** is newest-first (`starts_at DESC`) so the most recently attended эфир leads. A single «newest first» rule across both would bury the next эфир under the furthest-future one. A past registered event with no recording is present and carries the preparing badge.
 
 ### 8.4 `/webinars` tabs
 

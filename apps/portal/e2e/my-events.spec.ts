@@ -175,6 +175,24 @@ test.describe("014 EARS-9 my-events tabs (e2e)", () => {
         nodes.map((n) => (n as HTMLAnchorElement).getAttribute("href") ?? ""),
       );
     for (const href of hrefs) expect(href).toMatch(/^\/webinars\/[^/]+(\/room)?$/);
+
+    // A card must never contradict its own badge: «Запись готовится» means nothing
+    // is published yet, so that card may NOT also offer «Смотреть запись» (014
+    // EARS-9). Asserted structurally over whatever the tab renders — the rule is
+    // owned by the unit tier (`lib/my-events.test.ts` 014 EARS-9.8), because a
+    // browser cannot drive a registration to `ended` (005 EARS-1).
+    const contradictions = await page
+      .locator("[data-webinar-card]")
+      .evaluateAll((nodes) =>
+        nodes.filter((n) => {
+          const text = n.textContent ?? "";
+          return (
+            text.includes("Запись готовится") &&
+            text.includes("Смотреть запись")
+          );
+        }).length,
+      );
+    expect(contradictions).toBe(0);
   });
 });
 

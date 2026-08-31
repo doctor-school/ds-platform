@@ -330,19 +330,21 @@ The same pick settles row activation: a **single-action list has no «Дейст
 
 ## Tabs / segmented control
 
-**status: researched** — seeded from ADR-0013 §7 (K-2, redone in #333).
+**status: researched** — seeded from ADR-0013 §7 (K-2, redone in #333); look per the design-language canvas §05.
 
 **Unit & states.** A segmented switch (each segment a different form/view): inactive / hover / active / focus / disabled.
 
-**Best-practice principle.** Segments need **visible separation** — a `gap-2` track between them — so an inactive segment's hover fill never butts flush against the active segment and reads as one glued block (the slice-B K-2 defect). A connected track tips a segmented control toward **tabs** once its segments show different views; either is acceptable if the separation is explicit.
+**Best-practice principle.** The look is the canvas §05 «Сегмент-контрол» (`design-source/design-system.dc.html`): a single hard 2px-bordered strip, no rounding, no gap — segments butt together, divided by a 2px rule; selected = `primary-action` fill. Segment separation is carried by that explicit 2px divider (the slice-B K-2 defect was a hover fill with NO visible separation from the active segment).
 
-**Citations.** [GitHub Primer — segmented control](https://primer.style/components/segmented-control) · [The Component Gallery — segmented control](https://component.gallery/components/segmented-control/).
+**Overflow standard (researched, #1669).** When the segments' min-content width exceeds the container (`whitespace-nowrap` labels are a floor flex cannot shrink past), the strip **scrolls itself** (`overflow-x-auto` on `TabsList`) — never the page. This is the consensus pattern for 5+ tabs on narrow viewports (Material scrollable tabs; PatternFly; NN/g); the segment cut mid-label at the strip edge is the scroll affordance (never fade/mask it away), and keyboard access rides Radix roving focus, which scrolls the focused segment into view. Rejected alternatives: a «More»-overflow menu hides navigation entries (anti-pattern for primary tabs); a two-row wrap breaks the tab metaphor and leaves a dangling `border-l-2` with no row divider. Known accepted trade-off: while the strip actually scrolls, the 3px `shadow-focus` ring clips on the top/bottom edges (left/right stay visible).
+
+**Citations.** [GitHub Primer — segmented control](https://primer.style/components/segmented-control) · [The Component Gallery — segmented control](https://component.gallery/components/segmented-control/) · [Material Design — scrollable tabs](https://m1.material.io/components/tabs.html) · [Eleken — tabs UX](https://www.eleken.co/blog-posts/tabs-ux) · [PatternFly — scrolling horizontal tabs discussion](https://github.com/patternfly/patternfly-design/issues/1034).
 
 **Adopted from.** shadcn/ui `Tabs` (Radix), re-skinned.
 
-**Rendered options + owner pick.** #333: gap-pills vs underline-tabs — owner picked **gap-pills**.
+**Rendered options + owner pick.** #333: gap-pills vs underline-tabs — owner picked **gap-pills**; superseded by the owner-approved #512 re-skin to the canvas §05 connected strip. Overflow behavior: owner-delegated lead decision, recorded on #1669.
 
-**Token / primitive mapping.** `Tabs`/`TabsTrigger` (`TabsList` `gap-2`) → `packages/design-system/README.md` → _Clickable state matrix_.
+**Token / primitive mapping.** `Tabs`/`TabsTrigger` (`TabsList` `overflow-x-auto`) → `packages/design-system/README.md` → _Clickable state matrix_.
 
 **Rendered contract.** Showcase → Primitives → Tabs.
 

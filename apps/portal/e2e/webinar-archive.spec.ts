@@ -16,10 +16,18 @@ import { test, expect } from "@playwright/test";
  *     post-live page, so a sponsor-distributed link and an in-product link are
  *     the same URL (design §8.1).
  *
+ * 014 EARS-7 (#1344) added the second describe below — the «запись готовится»
+ * PLAQUE that occupies the player position while nothing is published, carrying
+ * the operator's readiness day when there is one and an honest date-free line
+ * when there is not.
+ *
  * Out of scope by design — each is its own Issue, and a placeholder standing in
  * for one here would be the banned stub: the player and its login gate (#1343,
- * EARS-5), the «запись готовится» plaque with the readiness date (#1344,
- * EARS-7), the raw-original spoiler (#1345, EARS-8).
+ * EARS-5), the raw-original spoiler (#1345, EARS-8). The player FAILURE boundary
+ * (EARS-7's second half) ships with #1344 as a unit-tested component
+ * (`app/webinars/[slug]/recording-player.test.tsx`) but has no page surface to
+ * drive until #1343 mounts it — driving it here would require faking a mount,
+ * which is the banned stub.
  *
  * Live-stand-gated tier, mirroring `event-page-registered.spec.ts`: it needs a
  * running portal whose `/v1/*` rewrite reaches a running api + Postgres seeded
@@ -33,8 +41,18 @@ import { test, expect } from "@playwright/test";
 const BASE = process.env.E2E_PORTAL_URL ?? "http://localhost:3001";
 /** An `ended` event whose recording is PUBLISHED (montage). */
 const ENDED_SLUG = process.env.E2E_ENDED_WEBINAR_SLUG;
-/** An `ended` event with NO published recording — the preparing projection. */
+/**
+ * An `ended` event with NO published recording — the preparing projection.
+ * Carries `recording_expected_by`, so it drives the DATED plaque (014 EARS-7).
+ */
 const PREPARING_SLUG = process.env.E2E_PREPARING_WEBINAR_SLUG;
+/**
+ * A second `ended`, nothing-published event whose `recording_expected_by` is
+ * NULL — the operator committed to no day. It exists as its own seed because the
+ * date-free plaque copy is a distinct product promise, not a formatting branch:
+ * the page must say «как только будет готова» rather than invent an estimate.
+ */
+const PREPARING_UNDATED_SLUG = process.env.E2E_PREPARING_UNDATED_WEBINAR_SLUG;
 /** An `archived` event — the 004 EARS-5 notice must survive 014 untouched. */
 const ARCHIVED_SLUG = process.env.E2E_ARCHIVED_WEBINAR_SLUG;
 
@@ -141,9 +159,7 @@ test.describe("014 EARS-4 public post-live event page (e2e)", () => {
     await expect(page.getByTestId("recording-badge")).toHaveText(
       "Запись готовится",
     );
-    // No kind/duration meta — there is no recording to describe. (The plaque
-    // carrying the readiness DATE is #1344; its absence here is the scope line,
-    // not an oversight.)
+    // No kind/duration meta — there is no recording to describe.
     await expect(page.getByTestId("recording-meta")).toHaveCount(0);
   });
 
@@ -186,5 +202,88 @@ test.describe("014 EARS-4 public post-live event page (e2e)", () => {
         `${mirror} must not exist — /webinars/:slug is the single route`,
       ).toBe(404);
     }
+  });
+});
+
+test.describe("014 EARS-7 the «запись готовится» plaque (e2e)", () => {
+  test.use({ storageState: { cookies: [], origins: [] } });
+
+  test("014 EARS-7: an ended event awaiting its recording shows the plaque in the PLAYER position with the operator's own readiness day", async ({
+    page,
+    context,
+  }) => {
+    test.skip(!PREPARING_SLUG, "requires an ended event with no recording");
+    await context.clearCookies();
+    await page.goto(`${BASE}/webinars/${PREPARING_SLUG}`, {
+      waitUntil: "domcontentloaded",
+    });
+
+    const plaque = page.getByTestId("recording-plaque");
+    await expect(plaque).toBeVisible();
+    await expect(plaque).toContainText("Запись готовится");
+    // The operator's committed day, formatted for a Russian reader — the whole
+    // point of EARS-7. The seed's `recording_expected_by` supplies it; the
+    // assertion is on the «до <day> <month>» SHAPE so the seed can move.
+    await expect(page.getByTestId("recording-plaque-date")).toHaveText(
+      /^до \d{1,2} [а-яё]+( \d{4})?$/,
+    );
+    await expect(plaque).toContainText("опубликуем на этой странице до");
+
+    // Still no player and no source — the plaque is what stands in the player
+    // position, not a frame waiting on something (#1343 owns the mount).
+    await expect(page.locator("iframe, video")).toHaveCount(0);
+    // No dead affordance: readiness notifications are a declared 014 non-goal,
+    // so the canvas's «Напомнить на почту» button must not exist.
+    await expect(page.getByText(/Напомнить/)).toHaveCount(0);
+    // And no invented estimate — «≈2 дня» is placeholder canvas copy.
+    await expect(page.getByText(/≈\s*\d+\s*дн/)).toHaveCount(0);
+  });
+
+  test("014 EARS-7: with NO committed day the plaque stays honest — it promises the page, not a date it does not have", async ({
+    page,
+    context,
+  }) => {
+    test.skip(
+      !PREPARING_UNDATED_SLUG,
+      "requires an ended event with no recording and no expected-by day",
+    );
+    await context.clearCookies();
+    await page.goto(`${BASE}/webinars/${PREPARING_UNDATED_SLUG}`, {
+      waitUntil: "domcontentloaded",
+    });
+
+    const plaque = page.getByTestId("recording-plaque");
+    await expect(plaque).toBeVisible();
+    await expect(plaque).toContainText("Запись готовится");
+    await expect(plaque).toContainText("как только будет готова");
+    // Hide-until-content: no date line at all, not an empty slot or a dash.
+    await expect(page.getByTestId("recording-plaque-date")).toHaveCount(0);
+    await expect(plaque).not.toContainText("до ");
+  });
+
+  test("014 EARS-7: a PUBLISHED recording carries no plaque — the promise clears itself the moment it is kept", async ({
+    page,
+    context,
+  }) => {
+    await context.clearCookies();
+    await page.goto(`${BASE}/webinars/${ENDED_SLUG}`, {
+      waitUntil: "domcontentloaded",
+    });
+
+    await expect(page.getByTestId("recording-plaque")).toHaveCount(0);
+    await expect(page.getByText("Запись готовится")).toHaveCount(0);
+  });
+
+  test("014 EARS-7: an ARCHIVED event shows no plaque — 004 EARS-5's «в архиве» notice owns that render alone", async ({
+    page,
+    context,
+  }) => {
+    test.skip(!ARCHIVED_SLUG, "requires an archived event slug");
+    await context.clearCookies();
+    await page.goto(`${BASE}/webinars/${ARCHIVED_SLUG}`, {
+      waitUntil: "domcontentloaded",
+    });
+
+    await expect(page.getByTestId("recording-plaque")).toHaveCount(0);
   });
 });

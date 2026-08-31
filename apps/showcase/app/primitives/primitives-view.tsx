@@ -62,6 +62,7 @@ import { DayBand } from "@ds/design-system/day-band";
 import { WebinarCard } from "@ds/design-system/webinar-card";
 import { WebinarPageContent } from "@ds/design-system/webinar-page-content";
 import { WebinarStatusCard } from "@ds/design-system/webinar-status-card";
+import { WebinarRecordingPlaque } from "@ds/design-system/webinar-recording-plaque";
 import { WebinarRoomLayout } from "@ds/design-system/webinar-room";
 import { Container } from "@ds/design-system/container";
 import {
@@ -1917,6 +1918,57 @@ function WebinarStatusCardSection() {
   );
 }
 
+function WebinarRecordingPlaqueSection() {
+  const states = [
+    {
+      key: "dated",
+      time: "до 18 июля",
+      body: "Монтируем запись — опубликуем на этой странице до 18 июля.",
+    },
+    {
+      key: "undated",
+      time: null,
+      body: "Монтируем запись — она появится на этой странице, как только будет готова.",
+    },
+  ] as const;
+  return (
+    <PrimitiveSection
+      title="Webinar-recording-plaque"
+      exportsLine="WebinarRecordingPlaque — «запись готовится» plaque (time plate · head/body, no CTA)"
+    >
+      <p className="text-sm text-muted-foreground">
+        The post-live «запись готовится» plaque (source{" "}
+        <code className="font-mono text-xs">webinar-archive.dc.html</code>, 014
+        EARS-7): what occupies the player position while nothing is published
+        yet. The{" "}
+        <span className="font-medium text-foreground">dated</span> render carries
+        the operator&apos;s committed readiness day; the{" "}
+        <span className="font-medium text-foreground">undated</span> render omits
+        the time-plate value entirely (hide-until-content) and lets the body
+        carry the honest date-free line — the plaque never invents an estimate.
+        It has NO CTA slot by design: readiness notifications are a declared 014
+        non-goal, so a «Напомнить на почту» button would be a dead affordance.
+      </p>
+      {states.map((s) => (
+        <SubRow key={s.key} label={`expectedBy="${s.key}"`}>
+          <ThemePair
+            render={() => (
+              <div className="w-full">
+                <WebinarRecordingPlaque
+                  timeLabel="Запись"
+                  time={s.time}
+                  title="Запись готовится"
+                  body={s.body}
+                />
+              </div>
+            )}
+          />
+        </SubRow>
+      ))}
+    </PrimitiveSection>
+  );
+}
+
 function WebinarRoomSection() {
   // A static demo of the Twitch-model composition shell (#1123): the player is now
   // REGION CONTENT (pinned inset-0 inside the dark letterbox the layout owns, not
@@ -2174,6 +2226,7 @@ export function PrimitivesView() {
       <WebinarCardSection />
       <WebinarPageContentSection />
       <WebinarStatusCardSection />
+      <WebinarRecordingPlaqueSection />
       <WebinarRoomSection />
       <ContainerSection />
     </div>

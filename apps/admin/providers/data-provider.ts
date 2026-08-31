@@ -834,6 +834,29 @@ export const directionAdjacencyUrl = {
     `${ADMIN_BASE}/direction-adjacency/${id}/${transition}`,
 };
 
+/**
+ * The publish command of the three remaining taxonomy entities (012 EARS-5,
+ * #1287). Built the same way `directionsUrl.publish` is, for the same reason:
+ * each stays a Refine CRUD resource for its list / create / PATCH, and this map
+ * holds ONLY what CRUD has no verb for — `draft → published`. The `custom` path
+ * is what owns the Idempotency-Key / If-Match protocol headers a command owes.
+ *
+ * There is no `retire` and no `restore` here YET (#1295/#1296): the API exposes
+ * neither for these kinds, and a builder for a route that 404s is a button that
+ * lies. There will never be a `delete` (§3.1).
+ */
+export const projectsUrl = {
+  publish: (id: string) => `${ADMIN_BASE}/projects/${id}/publish`,
+};
+
+export const expertsUrl = {
+  publish: (id: string) => `${ADMIN_BASE}/experts/${id}/publish`,
+};
+
+export const partnersUrl = {
+  publish: (id: string) => `${ADMIN_BASE}/partners/${id}/publish`,
+};
+
 /** The two named lifecycle commands a relationship row answers to. */
 export type RelationshipTransition = "retire" | "restore";
 

@@ -232,10 +232,67 @@ test.describe("012 EARS-4 — partner authoring in the live admin", () => {
     await expect(page.getByTestId("partner-slug")).toHaveCount(0);
     await expect(page.getByTestId("partner-public-link")).toHaveText(publicUrl);
     //
-    // Retire/restore is the same story: 012 exposes NO retire/restore route on
-    // the partners controller in this slice (the merged expert and direction
-    // verticals have none either — the transitions arrive with #1287/#1295/#1296),
-    // so no control is rendered for them here. Rendering a button with no route
+    // Retire/restore is a different story from publish: 012 exposes NO
+    // retire/restore route on the partners controller (they arrive with
+    // #1295/#1296), so no control is rendered for them — a button with no route
     // behind it would be exactly the untracked scaffold AGENTS.md §6 forbids.
+    // The PUBLISH half landed with #1287 and is exercised below.
+  });
+
+  /**
+   * 012 EARS-5 (#1287), partner half — the simplest of the three publishes and
+   * therefore the one that proves the shared gesture in isolation.
+   *
+   * A partner carries NO completeness branch and NO relation invariant
+   * (012-design §5.2: `logoUrl` and `websiteUrl` are both nullable on the public
+   * projection, and `title` is NOT NULL), so a partner that exists at all is
+   * already a complete public projection. There is nothing to refuse and nothing
+   * to preview — which is precisely why the publish is a plain command and not
+   * the §3.1 impact dialog the direction retire goes through.
+   *
+   * What the browser proves that the API suite cannot: the control is on the
+   * RECORD (017 EARS-16 — the list grows no «Действия» column), it is offered
+   * ONLY from a draft, and once the row is published the button is GONE rather
+   * than left on screen to be refused by the server.
+   */
+  test("012 EARS-5: an operator publishes a draft partner, and the offered action disappears with the state it belonged to", async ({
+    page,
+  }) => {
+    await signInAsAdmin(page);
+
+    const title = `Клиника Согласие ${Date.now()}`;
+    await page.goto("/partners/create");
+    await page.getByTestId("partner-title").fill(title);
+    await page.getByTestId("submit-partner").click();
+    await page.waitForURL(/\/partners\/[0-9a-f-]{36}$/, { timeout: 20_000 });
+    const detailUrl = page.url();
+    await expect(page.getByTestId("partner-status")).toHaveText("Черновик");
+
+    // The action lives behind «Публикация», not on the list and not on «Основное».
+    await page.getByTestId("tab-publish").click();
+    await expect(page.getByTestId("partners-publish-panel")).toBeVisible();
+    await expect(page.getByTestId("partners-publish")).toBeVisible();
+
+    await page.getByTestId("partners-publish").click();
+    await expect(page.getByTestId("publish-notice")).toBeVisible();
+    await expect(page.getByTestId("partner-status")).toHaveText("Опубликован");
+    // A published partner has no further move on offer here: retire/restore are
+    // #1295/#1296, so the panel says the state and stops.
+    await expect(page.getByTestId("partners-publish")).toHaveCount(0);
+    // The row is the SAME row — publishing is not a re-creation.
+    expect(page.url()).toBe(detailUrl);
+
+    await page.reload();
+    await expect(page.getByTestId("partner-status")).toHaveText("Опубликован");
+    await page.getByTestId("tab-publish").click();
+    await expect(page.getByTestId("partners-publish")).toHaveCount(0);
+
+    // 017 EARS-16: the action is on the record, so the list keeps its single row
+    // action and never grows an «Действия» column for it.
+    await page.getByTestId("back-to-list").click();
+    await page.waitForURL(/\/partners$/, { timeout: 20_000 });
+    await expect(
+      page.getByRole("columnheader", { name: "Действия" }),
+    ).toHaveCount(0);
   });
 });

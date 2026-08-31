@@ -23,6 +23,10 @@ import {
   StillImageNormalizer,
   type UploadedImage,
 } from "./media/still-image-normalizer.js";
+import {
+  type ExpertLifecycle,
+  ProjectExpertsRepository,
+} from "./project-experts.repository.js";
 import { ProjectsRepository } from "./projects.repository.js";
 import { markReplayable, TaxonomyError } from "./taxonomy.errors.js";
 import { allocateTaxonomySlug, taxonomySlugBase } from "./taxonomy-slug.js";
@@ -55,6 +59,12 @@ export interface UpdateProjectInput {
   lease: IdempotencyLease;
 }
 
+export interface PublishProjectInput {
+  id: string;
+  expectedVersion: number;
+  lease: IdempotencyLease;
+}
+
 /** A command result plus the ETag the client must echo on its next write. */
 export interface ProjectCommandResult {
   detail: ProjectAdminDetail;
@@ -81,6 +91,8 @@ export class ProjectsService {
     private readonly idempotency: IdempotencyService,
     @Inject(MediaCleanupService) private readonly cleanup: MediaCleanupService,
     @Inject(OBJECT_STORAGE) private readonly storage: ObjectStorage,
+    @Inject(ProjectExpertsRepository)
+    private readonly relations: ProjectExpertsRepository,
   ) {}
 
   /** `POST /v1/admin/projects` — create one draft project. */
@@ -91,6 +103,11 @@ export class ProjectsService {
   /** `PATCH /v1/admin/projects/:id` — edit the SAME row. */
   update(input: UpdateProjectInput): Promise<ProjectCommandResult> {
     return this.fenced(input.lease, () => this.updateCommand(input));
+  }
+
+  /** `POST /v1/admin/projects/:id/publish` — `draft → published` (EARS-5). */
+  publish(input: PublishProjectInput): Promise<ProjectCommandResult> {
+    return this.fenced(input.lease, () => this.publishCommand(input));
   }
 
   /**
@@ -254,6 +271,121 @@ export class ProjectsService {
     };
   }
 
+  /**
+   * `draft → published` with the §2.3 curator invariant enforced (EARS-5).
+   *
+   * The hard part is not the status write, it is the LOCK ORDER. §3.2 fixes it
+   * as «every affected expert, ascending stable id → the project», and the set
+   * of affected experts is itself a query result — so the command discovers the
+   * curator set OPTIMISTICALLY, locks exactly those experts, locks the project,
+   * then re-runs the discovery under both locks. A set that moved is a 412: the
+   * alternative would be locking an expert AFTER the project, which is the
+   * deadlock the order exists to prevent. There is deliberately no retry loop
+   * here — the client re-reads and re-issues, which is also what makes the
+   * idempotency record's fingerprint honest.
+   *
+   * Media and `websiteUrl`-style optional fields never block: §5.2 declares
+   * `coverUrl` nullable, so a coverless published project is a COMPLETE
+   * projection. Zero events and zero partners are likewise fine — only the
+   * single active curator is structural.
+   */
+  private async publishCommand(
+    input: PublishProjectInput,
+  ): Promise<ProjectCommandResult> {
+    // Optimistic pre-flight OUTSIDE the transaction: a doomed request never
+    // opens one. Every check below repeats under the locks.
+    const current = await this.repo.findById(input.id);
+    if (!current) throw new TaxonomyError("RESOURCE_NOT_FOUND");
+
+    const row = await this.repo.transaction(async (tx) => {
+      // 1. Discover the affected experts BEFORE any lock — an unlocked read, so
+      //    it cannot itself violate the order it is about to establish.
+      const discovered = await this.relations.activeCuratorExpertIds(
+        tx,
+        input.id,
+      );
+      // 2. Lock them, ascending stable id (the repository owns the ordering).
+      const lockedExperts = await this.relations.lockExperts(tx, discovered);
+      // 3. Only now the project.
+      const locked = await this.repo.lockById(tx, input.id);
+      if (!locked) throw new TaxonomyError("RESOURCE_NOT_FOUND");
+      if (locked.version !== input.expectedVersion) {
+        throw new TaxonomyError(
+          "PRECONDITION_FAILED",
+          "the project changed since it was read; reload and retry",
+        );
+      }
+      if (locked.status !== "draft") {
+        throw new TaxonomyError(
+          "INVALID_TRANSITION",
+          locked.status === "published"
+            ? "this project is already published"
+            : "this project is retired; restore it before publishing it again",
+        );
+      }
+
+      // 4. Re-run the discovery under both locks. A curator linked, retired or
+      //    re-pointed since step 1 changes the set, and this publish was decided
+      //    against a set the operator never saw.
+      const confirmed = await this.relations.activeCuratorExpertIds(
+        tx,
+        input.id,
+      );
+      if (
+        confirmed.length !== discovered.length ||
+        confirmed.some((id, index) => id !== discovered[index])
+      ) {
+        throw new TaxonomyError(
+          "PRECONDITION_FAILED",
+          "the project's curator changed while this publish was being decided; reload and retry",
+        );
+      }
+
+      // 5. The field matrix, then the structural invariant. Field blockers come
+      //    first because they are the ones a form can point at.
+      const blockers = publishRequirementBlockers(locked);
+      if (blockers.length > 0) {
+        throw new TaxonomyError(
+          "PUBLISH_REQUIREMENTS_NOT_MET",
+          "this project is not complete enough to publish",
+          blockers,
+        );
+      }
+      assertExactlyOneEligibleCurator(confirmed, lockedExperts);
+
+      const moved = await this.repo.transitionVersioned(
+        tx,
+        input.id,
+        input.expectedVersion,
+        {
+          status: "published",
+          deletedAt: null,
+          // Set ONCE and never re-stamped: a republished project keeps the date
+          // it first became public, which is what pins its slug (LD-3).
+          ...(locked.firstPublishedAt ? {} : { firstPublishedAt: new Date() }),
+        },
+      );
+      if (!moved) {
+        throw new TaxonomyError(
+          "PRECONDITION_FAILED",
+          "the project changed since it was read; reload and retry",
+        );
+      }
+      const detail = await this.toDetail(moved);
+      await this.idempotency.complete(tx, input.lease, {
+        status: 200,
+        body: detail,
+        etag: taxonomyETag(moved.version),
+      });
+      return moved;
+    });
+
+    return {
+      detail: await this.toDetail(row),
+      etag: taxonomyETag(row.version),
+    };
+  }
+
   /** `GET /v1/admin/projects/:id` — detail by stable id, retired rows included. */
   async detail(id: string): Promise<ProjectCommandResult> {
     const row = await this.repo.findById(id);
@@ -362,7 +494,7 @@ export class ProjectsService {
  */
 function publishRequirementBlockers(
   current: Project,
-  patch: UpdateProjectRequest,
+  patch: UpdateProjectRequest = {},
 ): { path: string; message: string }[] {
   const blockers: { path: string; message: string }[] = [];
   const description =
@@ -374,4 +506,49 @@ function publishRequirementBlockers(
     });
   }
   return blockers;
+}
+
+/**
+ * §2.3's published-project curator invariant: EXACTLY ONE active curator link,
+ * pointing at an expert that is itself publicly visible — `published`, not
+ * retired, not editorially removed.
+ *
+ * A separate error code from `PUBLISH_REQUIREMENTS_NOT_MET` on purpose: the
+ * field matrix is answered by typing into this form, while this one is answered
+ * on a different screen (the project's expert links, or the curator's own
+ * record). Collapsing them would send the operator to fix a field that is not
+ * the problem.
+ *
+ * `lockedExperts` is the FOR-UPDATE read of exactly `curatorIds`, so an expert
+ * missing from it is one that vanished between discovery and the lock — treated
+ * as ineligible rather than as absent, because the row is gone either way.
+ */
+function assertExactlyOneEligibleCurator(
+  curatorIds: readonly string[],
+  lockedExperts: readonly ExpertLifecycle[],
+): void {
+  if (curatorIds.length === 0) {
+    throw new TaxonomyError(
+      "PUBLISHED_PROJECT_REQUIRES_CURATOR",
+      "a published project needs exactly one active curator; this project has none",
+    );
+  }
+  if (curatorIds.length > 1) {
+    throw new TaxonomyError(
+      "PUBLISHED_PROJECT_REQUIRES_CURATOR",
+      "a published project needs exactly one active curator; this project has more than one",
+    );
+  }
+  const curator = lockedExperts.find((expert) => expert.id === curatorIds[0]);
+  const eligible =
+    curator !== undefined &&
+    curator.status === "published" &&
+    curator.deletedAt === null &&
+    curator.contentRemovedAt === null;
+  if (!eligible) {
+    throw new TaxonomyError(
+      "PUBLISHED_PROJECT_REQUIRES_CURATOR",
+      "the project's curator is not publicly visible; publish the curator first",
+    );
+  }
 }

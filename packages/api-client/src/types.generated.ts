@@ -772,6 +772,22 @@ export interface paths {
         patch: operations["ExpertsAdminController_update"];
         trace?: never;
     };
+    "/v1/admin/experts/{id}/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["ExpertsAdminController_publish"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/experts/eligible-users": {
         parameters: {
             query?: never;
@@ -818,6 +834,22 @@ export interface paths {
         options?: never;
         head?: never;
         patch: operations["PartnersAdminController_update"];
+        trace?: never;
+    };
+    "/v1/admin/partners/{id}/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["PartnersAdminController_publish"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/v1/admin/project-experts": {
@@ -978,6 +1010,22 @@ export interface paths {
         options?: never;
         head?: never;
         patch: operations["ProjectsAdminController_update"];
+        trace?: never;
+    };
+    "/v1/admin/projects/{id}/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["ProjectsAdminController_publish"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/v1/admin/projects/{id}/replace-curator": {
@@ -3068,6 +3116,25 @@ export interface operations {
             };
         };
     };
+    ExpertsAdminController_publish: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     ExpertsAdminController_eligibleUsers: {
         parameters: {
             query?: {
@@ -3146,6 +3213,25 @@ export interface operations {
         };
     };
     PartnersAdminController_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    PartnersAdminController_publish: {
         parameters: {
             query?: never;
             header?: never;
@@ -3438,6 +3524,25 @@ export interface operations {
         };
     };
     ProjectsAdminController_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ProjectsAdminController_publish: {
         parameters: {
             query?: never;
             header?: never;

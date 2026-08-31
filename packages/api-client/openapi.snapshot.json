@@ -2377,6 +2377,27 @@
         "tags": ["ExpertsAdmin"]
       }
     },
+    "/v1/admin/experts/{id}/publish": {
+      "post": {
+        "operationId": "ExpertsAdminController_publish",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["ExpertsAdmin"]
+      }
+    },
     "/v1/admin/experts/eligible-users": {
       "get": {
         "operationId": "ExpertsAdminController_eligibleUsers",
@@ -2478,6 +2499,27 @@
       },
       "patch": {
         "operationId": "PartnersAdminController_update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["PartnersAdmin"]
+      }
+    },
+    "/v1/admin/partners/{id}/publish": {
+      "post": {
+        "operationId": "PartnersAdminController_publish",
         "parameters": [
           {
             "in": "path",
@@ -2748,6 +2790,27 @@
       },
       "patch": {
         "operationId": "ProjectsAdminController_update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["ProjectsAdmin"]
+      }
+    },
+    "/v1/admin/projects/{id}/publish": {
+      "post": {
+        "operationId": "ProjectsAdminController_publish",
         "parameters": [
           {
             "in": "path",

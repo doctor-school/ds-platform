@@ -2,7 +2,7 @@
 title: "021 — Doctor registration & consents"
 description: "Requirements for `#d-register`, the doctor storefront's registration surface: the soft email + password form with no documents at the door, the return context carried in the left half of the split and returned to after email confirmation, the two-tier consent block with the mandatory medical-worker declaration and the purpose-separated partner-data consent above the button and the optional marketing opt-in below it, the visible partner / medical-representative attribution, the points promise on the form and the credit on the success state, the enumeration-safe already-registered path, the actionable field errors with their validation rules and masks, and the handoff of an opted-in doctor to the external mailing service — all built over feature 003's live authentication engine, which 021 re-specifies no part of."
 slug: 021-doctor-registration
-status: Draft
+status: In dev
 surface: user-facing
 tracker: https://github.com/doctor-school/ds-platform/milestone/13
 prior_decisions:

@@ -109,3 +109,47 @@ test("#1440 the hero counters' loading render passes WCAG 2 A/AA", async ({
   }));
   expect(summary, "axe violations on / (loading counters)").toEqual([]);
 });
+
+/**
+ * 021 EARS-1 / EARS-16 — the registration route joins the gate the day it ships.
+ *
+ * A form surface fails differently from a content surface, so this scans the two
+ * states that carry the a11y risk: the resting form (label/control association,
+ * the disabled submit's `aria-describedby` reason) and the error state (the
+ * `aria-invalid` + message linkage that makes a rejection audible rather than
+ * merely red). The route takes no backend read, so no route mock is needed.
+ */
+for (const [state, drive] of [
+  ["resting", async () => {}],
+  [
+    "error",
+    async (page: import("@playwright/test").Page) => {
+      await page.getByTestId("register-email").fill("not-an-address");
+      await page.getByTestId("register-email").blur();
+      await page.getByTestId("register-password").fill("short");
+      await page.getByTestId("register-password").blur();
+      await expect(page.locator('[aria-invalid="true"]').first()).toBeVisible();
+    },
+  ],
+] as const) {
+  test(`021 EARS-1 /register passes WCAG 2 A/AA + one-h1 check (${state})`, async ({
+    page,
+  }) => {
+    await page.goto("/register");
+    await drive(page);
+
+    const h1 = page.locator("h1");
+    await expect(h1, "h1 count on /register").toHaveCount(1);
+    await expect(h1, "h1 text on /register").not.toHaveText(/^\s*$/);
+
+    const results = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze();
+
+    const summary = results.violations.map((v) => ({
+      id: v.id,
+      impact: v.impact,
+      help: v.help,
+      nodes: v.nodes.map((n) => n.target).flat(),
+    }));
+    expect(summary, `axe violations on /register (${state})`).toEqual([]);
+  });
+}

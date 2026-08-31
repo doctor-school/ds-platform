@@ -87,6 +87,21 @@ routes:
     status: deferred
     issue: "#1430"
 
+  # 021 EARS-1 — the registration route the shell's «Регистрация» cluster points
+  # at. The split composition, the three fields and their validation are REAL
+  # (canvas `auth.dc.html`, `#d-register`), and no document is requested at the
+  # door (REQ-22). The DOOR, however, does not open yet: the submit is inert
+  # because design §2 forbids a public 021 form reaching a 003 EARS-17-protected
+  # endpoint without the EARS-19 bot-protection client half `apps/doctor` has
+  # not got, and the mandatory access-condition consents (EARS-4/5) that the
+  # command validates as a precondition land in #1538. `deferred` until the
+  # registration actually completes and the route carries its Stage-B verdict.
+  - app: doctor
+    route: /register
+    file: apps/doctor/app/(storefront)/register/page.tsx
+    status: deferred
+    issue: "#1430"
+
   # apps/admin — 007 admin console (login + events CRUD/lifecycle), all real
   # Refine surfaces; root is a pure redirect to /events.
   - app: admin

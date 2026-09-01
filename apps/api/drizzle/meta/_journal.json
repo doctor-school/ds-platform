@@ -218,6 +218,13 @@
       "when": 1788101243907,
       "tag": "0030_event_directions_rename",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1788233341022,
+      "tag": "0031_events_version",
+      "breakpoints": true
     }
   ]
 }

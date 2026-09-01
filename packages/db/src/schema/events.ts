@@ -64,6 +64,23 @@ export const events = pgTable(
     programPdfRef: text("program_pdf_ref"),
     state: eventLifecycleState("state").notNull().default("draft"),
     /**
+     * #1593 — the optimistic-concurrency version of the event aggregate, the
+     * same column `event_recordings` and every versioned taxonomy row already
+     * carry (012-design §6). The 007 admin detail read projects it as the weak
+     * `ETag` validator (`W/"<version>"`), and every admin mutation applies its
+     * write CAS-guarded on the version the caller read at — `SET version =
+     * version + 1 WHERE id = :id AND version = :expected`. A zero-row update is
+     * the definition of "the row moved under the caller", answered 412.
+     *
+     * Starts at 1 and is monotonic per row, never reused: it is a change
+     * COUNTER, not a content hash, so two edits that happen to restore the
+     * original field values still produce different validators — a client
+     * holding the pre-edit ETag must be told it is stale, because the audit
+     * history it was reasoning about has moved on. Bumped on the committed
+     * mutation only; a refused transition (409/412) writes nothing at all.
+     */
+    version: integer("version").notNull().default(1),
+    /**
      * The actual go-live instant — server-stamped exactly once when the director
      * opens the room (the `published → live` transition, 007 EARS-5 `OpenRoom`),
      * `null` until then and on any event that never went live. Distinct from

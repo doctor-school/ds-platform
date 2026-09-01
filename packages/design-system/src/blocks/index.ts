@@ -73,6 +73,20 @@ export type {
   FilterBarApplyMode,
   AppliedFilter,
 } from "./filter-bar";
+// 019 EARS-7 — the ONE shared events facet panel (doctor-events.dc.html,
+// F-019-1 Б sidebar); 019/030/031 mount it at different D-1 fill states and
+// none of them owns a private copy.
+export { EventsFilter } from "./events-filter";
+export type {
+  EventsFilterProps,
+  EventsFilterFill,
+  EventsFilterOption,
+  EventsFilterOptions,
+  EventsFilterLabels,
+  AppliedFacets,
+  FacetPanelState,
+  SpecialtyRef,
+} from "./events-filter";
 export { Combobox } from "./combobox";
 export type { ComboboxProps, ComboboxOption } from "./combobox";
 export {

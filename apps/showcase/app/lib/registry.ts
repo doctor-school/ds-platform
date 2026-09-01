@@ -129,6 +129,11 @@ export const SHOWCASE_REGISTRY: ShowcaseEntry[] = [
   // 014 EARS-10/11 — the controlled cross-front event feed.
   { id: "EventList", section: "blocks" },
   { id: "FilterBar", section: "blocks" },
+
+  // ── Events facet panel (019 EARS-7, #1522) — the ONE shared events-filter
+  // sidebar, catalogued at all three D-1 fill states.
+  { id: "events-filter", section: "blocks" },
+  { id: "EventsFilter", section: "blocks" },
   { id: "Combobox", section: "blocks" },
   { id: "FormSection", section: "blocks" },
   { id: "FormFieldGroup", section: "blocks" },

@@ -38,14 +38,18 @@ export interface ApprovedSourceManifest {
 interface GhReview {
   body?: string;
   submittedAt?: string;
+  commit?: { oid?: string } | null;
 }
 interface GhPR {
   number: number;
   body?: string;
+  headRefOid?: string;
   files?: { path: string }[];
   reviews?: GhReview[];
 }
 type Verdict = { ok: boolean; missing: string[] };
+/** An N/A claim is only adjudicated when the author actually made one. */
+type NaVerdict = Verdict & { claimed: boolean };
 
 function marker(body: string, name: string): string | null {
   const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -224,11 +228,15 @@ export function bodyEvidenceVerdict(
   return { ok: missing.length === 0, missing };
 }
 
-export function latestModeAComparisonVerdict(
+/**
+ * The LATEST structured `## Mode (a) Review` by submission time — the same
+ * selection both the comparison verdict and the reviewer-certified N/A path
+ * pin on. Unstructured drive-by reviews (no header, no `VERDICT:`) are ignored.
+ */
+export function latestModeAReview(
   reviews: GhReview[] | null | undefined,
-  prBody: string,
-): Verdict {
-  const latest =
+): GhReview | null {
+  return (
     (reviews ?? [])
       .filter(
         (review) =>
@@ -239,7 +247,60 @@ export function latestModeAComparisonVerdict(
         (a, b) =>
           Date.parse(b.submittedAt ?? "1970-01-01") -
           Date.parse(a.submittedAt ?? "1970-01-01"),
-      )[0]?.body ?? "";
+      )[0] ?? null
+  );
+}
+
+/**
+ * Reviewer-certified N/A path (Issue #1708).
+ *
+ * A diff can touch an `isUiSourcePath` file and still produce no rendered-output
+ * delta (a behavioral-only edit inside a render-capable file). Demanding the
+ * full canvas/manifest evidence set there forces fabricated evidence, so the
+ * guard accepts the body marker
+ *
+ *     ui-parity: N/A (no render delta) — <reason>
+ *
+ * ONLY when the latest structured Mode (a) review, pinned to the CURRENT head
+ * SHA (same invalidate-on-rework rule as the merge gate), itself carries an
+ * explicit `render-delta: none` certification line. An author-asserted N/A with
+ * no such reviewer line stays FAIL — the author cannot self-certify.
+ */
+export function certifiedNaVerdict(
+  prBody: string,
+  reviews: GhReview[] | null | undefined,
+  headSha: string | null | undefined,
+): NaVerdict {
+  const claim = marker(prBody, "ui-parity");
+  if (!claim || !/^n\/?a\b/i.test(claim))
+    return { claimed: false, ok: false, missing: [] };
+  const missing: string[] = [];
+  const reason = /^n\/a\s*\(no render delta\)\s*[—-]\s*(.+)$/i.exec(
+    claim.replace(/^n\/?a/i, "N/A"),
+  )?.[1];
+  if (!reason || reason.trim().length < 12)
+    missing.push(
+      "marker exactly `ui-parity: N/A (no render delta) — <reason>` with a stated reason",
+    );
+  const latest = latestModeAReview(reviews);
+  if (!latest) missing.push("latest structured Mode (a) review");
+  else {
+    const oid = latest.commit?.oid ?? "";
+    if (!headSha || oid !== headSha)
+      missing.push(
+        `Mode (a) review pinned to the current head ${headSha || "(unresolved)"}`,
+      );
+    if (marker(latest.body ?? "", "render-delta")?.toLowerCase() !== "none")
+      missing.push("reviewer `render-delta: none` certification line");
+  }
+  return { claimed: true, ok: missing.length === 0, missing };
+}
+
+export function latestModeAComparisonVerdict(
+  reviews: GhReview[] | null | undefined,
+  prBody: string,
+): Verdict {
+  const latest = latestModeAReview(reviews)?.body ?? "";
   if (!latest)
     return { ok: false, missing: ["latest structured Mode (a) review"] };
   const missing: string[] = [];
@@ -296,7 +357,7 @@ export async function runUiParityGuard(): Promise<void> {
   const response = await ghViewJson<GhPR>(
     "pr",
     prNumber,
-    "number,body,files,reviews",
+    "number,body,headRefOid,files,reviews",
     REPO_ROOT,
   );
   if (!response.ok) fail(`could not fetch PR #${prNumber}: ${response.error}`);
@@ -306,6 +367,16 @@ export async function runUiParityGuard(): Promise<void> {
     return info(
       `PR #${pr.number} touches no render-capable UI source; rule does not apply`,
     );
+  const na = certifiedNaVerdict(pr.body ?? "", pr.reviews, pr.headRefOid);
+  if (na.claimed) {
+    if (!na.ok)
+      fail(
+        `PR #${pr.number} asserts ui-parity N/A without reviewer certification: ${na.missing.join("; ")}`,
+      );
+    return info(
+      `PR #${pr.number} ui-parity N/A certified by the latest head-pinned Mode (a) review (render-delta: none)`,
+    );
+  }
   const bodyVerdict = bodyEvidenceVerdict(pr.body ?? "", REPO_ROOT, paths);
   if (!bodyVerdict.ok)
     fail(

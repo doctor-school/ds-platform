@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import {
   type ApprovedSourceManifest,
   bodyEvidenceVerdict,
+  certifiedNaVerdict,
   latestModeAComparisonVerdict,
 } from "../ui-parity-lint";
 import { caseDir, ghDir, runGuard } from "./run-guard";
@@ -177,7 +178,8 @@ describe("ui-parity body evidence", () => {
     "apps/admin/components/direction-form.tsx",
   ])("red: admin-list block-tier source does not grant %s", (path) => {
     expect(
-      verdict(adminListBody, [...adminListPaths, path], baseApprovedManifest).ok,
+      verdict(adminListBody, [...adminListPaths, path], baseApprovedManifest)
+        .ok,
     ).toBe(false);
   });
 
@@ -368,6 +370,89 @@ VERDICT: APPROVE`;
         native,
       ).ok,
     ).toBe(true);
+  });
+});
+
+describe("ui-parity reviewer-certified N/A (#1708)", () => {
+  const HEAD = "b475af8c1d2e3f405162738495a6b7c8d9e0f1a2";
+  const OLD = "0000000000000000000000000000000000000001";
+  const naBody =
+    "ui-parity: N/A (no render delta) — adds meta: { version } to an existing mutation call; no JSX touched";
+  const certifying = (oid = HEAD, delta = "render-delta: none") => [
+    {
+      body: `## Mode (a) Review — PR #1708\n\n${delta}\n\nVERDICT: APPROVE`,
+      submittedAt: "2026-09-01T10:00:00Z",
+      commit: { oid },
+    },
+  ];
+
+  it("green: certified N/A passes when the head-pinned latest review says render-delta: none", () => {
+    const verdict = certifiedNaVerdict(naBody, certifying(), HEAD);
+    expect(verdict).toMatchObject({ claimed: true, ok: true });
+  });
+
+  it("red: author-asserted N/A without the reviewer certification line fails", () => {
+    expect(
+      certifiedNaVerdict(naBody, certifying(HEAD, "VERDICT-note: fine"), HEAD)
+        .ok,
+    ).toBe(false);
+    expect(certifiedNaVerdict(naBody, [], HEAD).ok).toBe(false);
+  });
+
+  it("red: a certification pinned to a stale head does not survive rework", () => {
+    expect(certifiedNaVerdict(naBody, certifying(OLD), HEAD).ok).toBe(false);
+    expect(certifiedNaVerdict(naBody, certifying(HEAD), "").ok).toBe(false);
+  });
+
+  it("red: the marker needs the exact wording and a stated reason", () => {
+    expect(certifiedNaVerdict("ui-parity: N/A", certifying(), HEAD).ok).toBe(
+      false,
+    );
+    expect(
+      certifiedNaVerdict(
+        "ui-parity: N/A (no render delta) — trivial",
+        certifying(),
+        HEAD,
+      ).ok,
+    ).toBe(false);
+  });
+
+  it("no claim: an absent or non-N/A marker leaves the full evidence rule in force", () => {
+    expect(certifiedNaVerdict(canvasBody, certifying(), HEAD).claimed).toBe(
+      false,
+    );
+  });
+
+  it("green fixture: the guard exits 0 on a certified N/A PR", () => {
+    const { code, stdout } = runGuard(
+      "ui-parity-lint.ts",
+      caseDir("ui-parity", "green-1708-certified-na"),
+      {
+        env: {
+          GITHUB_EVENT_NAME: "pull_request",
+          PR_NUMBER: "1708",
+          LINT_GH_FIXTURE_DIR: ghDir("ui-parity", "green-1708-certified-na"),
+        },
+      },
+    );
+    expect(code).toBe(0);
+    expect(stdout).toContain("N/A certified");
+  });
+
+  it("red fixture: the same body without the reviewer line fails the BLOCK guard", () => {
+    const { code, stderr } = runGuard(
+      "ui-parity-lint.ts",
+      caseDir("ui-parity", "red-1708-uncertified-na"),
+      {
+        env: {
+          GITHUB_EVENT_NAME: "pull_request",
+          PR_NUMBER: "1708",
+          LINT_GH_FIXTURE_DIR: ghDir("ui-parity", "red-1708-uncertified-na"),
+        },
+      },
+    );
+    expect(code).toBe(1);
+    expect(stderr).toContain("without reviewer certification");
   });
 });
 

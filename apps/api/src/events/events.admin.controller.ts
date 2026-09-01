@@ -408,13 +408,13 @@ export class EventsAdminController {
       if (!updated) throw new NotFoundException("event not found");
       return this.withETag(reply, updated);
     } catch (err) {
-      if (err instanceof InvalidTransitionError) {
-        throw new ConflictException({
-          message: "event is not in draft — publish is refused",
-          from: err.from,
-          to: err.to,
-        });
-      }
+      // Every refusal — domain and precondition alike — goes through the ONE
+      // mapper (#1593). Publish used to shape its own `InvalidTransitionError`
+      // 409 here, and that body carried no `code`: the admin client reads the
+      // stable code to decide whether a refused command means "your screen is
+      // behind the row, re-read it", so an uncoded 409 left the operator on a
+      // draft badge with an impossible publish button (the owner's Stage-B dead
+      // end). There is no second refusal envelope on this controller.
       throw asTransitionRefusal(err);
     }
   }

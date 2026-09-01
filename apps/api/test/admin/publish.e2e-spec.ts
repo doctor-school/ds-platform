@@ -287,6 +287,17 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         expect(res.statusCode, `publish must be refused from ${state}`).toBe(
           409,
         );
+        // #1593 — the refusal must carry the STABLE code, not just a 409 and an
+        // English sentence. The admin screen keys its recovery off `code`
+        // (`lib/lifecycle.lifecycleErrorOutcome`): an unclassified refusal is
+        // treated as "no evidence the row is readable" and the screen is left
+        // on its stale state, which is precisely the dead end the owner hit at
+        // Stage-B. Every other named command answers `INVALID_TRANSITION` here;
+        // publish must not be the one that says it differently.
+        expect(
+          (res.json() as { code?: string }).code,
+          `publish refusal from ${state} must name INVALID_TRANSITION`,
+        ).toBe("INVALID_TRANSITION");
         expect(await currentState(id)).toBe(state); // unchanged
         expect(await publishAuditCount(id)).toBe(0); // no terminal row
       }

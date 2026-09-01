@@ -101,6 +101,37 @@ export function actionsFor(
     .filter((a): a is LifecycleAction => a !== undefined);
 }
 
+/**
+ * Build the `useCustomMutation` request for one named lifecycle command
+ * (007 EARS-7, 014 EARS-17).
+ *
+ * Since #1593 every named command is CONDITIONAL: the server refuses one that
+ * carries no `If-Match` validator with `428 PRECONDITION_REQUIRED`, and the data
+ * provider (`providers/data-provider.ts` → `custom`) derives that header from
+ * `meta.version` alone. So the version the operator's screen was rendered from
+ * is part of the request, not of the button — and it is passed EXPLICITLY from
+ * the detail the caller holds rather than re-read at click time, because the
+ * whole point of the precondition is that a command applies to the state the
+ * operator actually saw. A concurrently changed event answers 412 and the bar
+ * surfaces the refusal; it never silently overwrites the other operator.
+ */
+export function lifecycleCommandRequest(
+  detail: { readonly id: string; readonly version: number },
+  command: LifecycleAction["command"],
+): {
+  url: string;
+  method: "post";
+  values: Record<string, never>;
+  meta: { version: number };
+} {
+  return {
+    url: `/v1/admin/events/${detail.id}/${command}`,
+    method: "post",
+    values: {},
+    meta: { version: detail.version },
+  };
+}
+
 /** The message-catalog key (under `events.state.*`) for a lifecycle-state badge label. */
 export function stateLabelKey(state: EventLifecycleState): string {
   return `events.state.${state}`;

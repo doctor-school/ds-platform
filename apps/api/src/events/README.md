@@ -205,7 +205,12 @@ window and no recording: only the state change and exactly one
 `event.marked_ended` `audit_ledger` row, written atomically. The route is
 `Idempotency-Key`-protected on 012's `IdempotencyService` (428 when the header is
 absent, 400 when malformed, 409 on reuse with a different body; a stored refusal
-replays verbatim). Its protocol refusals answer in 007's `{ code, message }`
+replays verbatim). Since #1593 it is ALSO `If-Match`-conditional, and the raw
+validator joins the idempotency fingerprint — so a retry after a 412 must mint a
+NEW key as well as re-read the validator: the same key with a different validator
+is a REUSE (409), not a replay. The 412 itself is deliberately not fence-stored
+(only a `ConflictException` is), because a stale-validator refusal is a property
+of the caller's read, not of the bound request. Its protocol refusals answer in 007's `{ code, message }`
 envelope, not 014-design §11's RFC 7807 body — the deviation is recorded in
 `DEBT.md`. `platform_admin`-only, `revalidate: "live"` (#1304).
 
@@ -322,21 +327,46 @@ stream-config **form** (stock Refine) + its browser E2E are the integration slic
 
 ## Endpoints
 
-| Route                                          | Access               | Command / read                                                                                                                                                               |
-| ---------------------------------------------- | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `POST /v1/admin/events`                        | `platform_admin`     | `CreateEvent` (multipart: `payload` JSON + optional `programPdf` file)                                                                                                       |
-| `PATCH /v1/admin/events/:id`                   | `platform_admin`     | `UpdateEvent` (EARS-2 pre-archive edit; multipart: optional `payload` JSON + optional `programPdf`; replace supersedes ref; 409 if `archived`)                               |
-| `GET /v1/admin/events?q=&page=&pageSize=`      | `platform_admin`     | Paged `EventAdminList`; strict server-side title/slug search in stable title+id order                                                                                        |
-| `GET /v1/admin/events/:id`                     | `platform_admin`     | `EventAdminDetail`                                                                                                                                                           |
-| `PUT /v1/admin/events/:id/stream`              | `platform_admin`     | `ConfigureStream` (EARS-3 `{ provider ∈ rutube\|youtube, embedRef }`; upsert; 409 past pre-air window)                                                                       |
-| `POST /v1/admin/events/:id/publish`            | `platform_admin`     | `PublishEvent` (EARS-4 `draft → published`; refused ≠ `draft`; +1 audit row)                                                                                                 |
-| `POST /v1/admin/events/:id/open`               | `platform_admin`     | `OpenRoom` (EARS-5 `published → live`; refused ≠ `published`; +1 `event.went_live` audit row)                                                                                |
-| `POST /v1/admin/events/:id/close`              | `platform_admin`     | `CloseRoom` (EARS-5 `live → ended`; refused ≠ `live`; +1 `event.ended` audit row)                                                                                            |
-| `POST /v1/admin/events/:id/mark-ended`         | `platform_admin`     | `MarkEventEnded` (014 EARS-18 `published → ended` for an off-platform эфир; `Idempotency-Key` required; refused unless past + never live; +1 `event.marked_ended` audit row) |
-| `POST /v1/admin/events/:id/archive`            | `platform_admin`     | `ArchiveEvent` (EARS-6 `ended → archived`; manual/LD-2; refused ≠ `ended`; +1 `event.archived` audit row)                                                                    |
-| `POST /v1/admin/events/:id/transition`         | `platform_admin`     | `TransitionEvent` (EARS-7 closed-set guard; body `{ to }`)                                                                                                                   |
-| `GET /v1/public/events/:idOrSlug`              | **public** (no auth) | `PublicEventPage` (004 EARS-1) — `draft`/unknown → 404                                                                                                                       |
-| `GET /v1/public/events` (`?upcoming`)          | **public** (no auth) | `UpcomingBroadcastCard[]` (004 EARS-7) — nearest first; empty → `[]`                                                                                                         |
-| `GET /v1/public/events?timeframe=upcoming      | past`                | **public** (no auth)                                                                                                                                                         | `PublicEventListingPage` (014 EARS-11) — opaque cursor, both tab counts; past is ended-only newest-first with canonical recording state |
-| `GET /v1/public/events?month=YYYY-MM`          | **public** (no auth) | `MonthBroadcastEntry[]` (004 EARS-15) — МСК month window incl. the month's past events; malformed month → 400; empty → `[]`                                                  |
-| `GET /v1/public/events/month-counts?year=YYYY` | **public** (no auth) | `MonthlyEventCount[12]` (004 EARS-16) — publish-visible counts per МСК month, zero months included; malformed year → 400                                                     |
+| Route                                          | Access               | Command / read                                                                                                                                                                              |
+| ---------------------------------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /v1/admin/events`                        | `platform_admin`     | `CreateEvent` (multipart: `payload` JSON + optional `programPdf` file)                                                                                                                      |
+| `PATCH /v1/admin/events/:id`                   | `platform_admin`     | `UpdateEvent` (EARS-2 pre-archive edit; multipart: optional `payload` JSON + optional `programPdf`; replace supersedes ref; 409 if `archived`)                                              |
+| `GET /v1/admin/events?q=&page=&pageSize=`      | `platform_admin`     | Paged `EventAdminList`; strict server-side title/slug search in stable title+id order                                                                                                       |
+| `GET /v1/admin/events/:id`                     | `platform_admin`     | `EventAdminDetail`                                                                                                                                                                          |
+| `PUT /v1/admin/events/:id/stream`              | `platform_admin`     | `ConfigureStream` (EARS-3 `{ provider ∈ rutube\|youtube, embedRef }`; upsert; 409 past pre-air window)                                                                                      |
+| `POST /v1/admin/events/:id/publish`            | `platform_admin`     | `PublishEvent` (EARS-4 `draft → published`; refused ≠ `draft`; +1 audit row)                                                                                                                |
+| `POST /v1/admin/events/:id/open`               | `platform_admin`     | `OpenRoom` (EARS-5 `published → live`; refused ≠ `published`; +1 `event.went_live` audit row)                                                                                               |
+| `POST /v1/admin/events/:id/close`              | `platform_admin`     | `CloseRoom` (EARS-5 `live → ended`; refused ≠ `live`; +1 `event.ended` audit row)                                                                                                           |
+| `POST /v1/admin/events/:id/mark-ended`         | `platform_admin`     | `MarkEventEnded` (014 EARS-18 `published → ended` for an off-platform эфир; `Idempotency-Key` AND `If-Match` required; refused unless past + never live; +1 `event.marked_ended` audit row) |
+| `POST /v1/admin/events/:id/archive`            | `platform_admin`     | `ArchiveEvent` (EARS-6 `ended → archived`; manual/LD-2; refused ≠ `ended`; +1 `event.archived` audit row)                                                                                   |
+| `POST /v1/admin/events/:id/transition`         | `platform_admin`     | `TransitionEvent` (EARS-7 closed-set guard; body `{ to }`)                                                                                                                                  |
+| `GET /v1/public/events/:idOrSlug`              | **public** (no auth) | `PublicEventPage` (004 EARS-1) — `draft`/unknown → 404                                                                                                                                      |
+| `GET /v1/public/events` (`?upcoming`)          | **public** (no auth) | `UpcomingBroadcastCard[]` (004 EARS-7) — nearest first; empty → `[]`                                                                                                                        |
+| `GET /v1/public/events?timeframe=upcoming      | past`                | **public** (no auth)                                                                                                                                                                        | `PublicEventListingPage` (014 EARS-11) — opaque cursor, both tab counts; past is ended-only newest-first with canonical recording state |
+| `GET /v1/public/events?month=YYYY-MM`          | **public** (no auth) | `MonthBroadcastEntry[]` (004 EARS-15) — МСК month window incl. the month's past events; malformed month → 400; empty → `[]`                                                                 |
+| `GET /v1/public/events/month-counts?year=YYYY` | **public** (no auth) | `MonthlyEventCount[12]` (004 EARS-16) — publish-visible counts per МСК month, zero months included; malformed year → 400                                                                    |
+
+### The admin write precondition (`ETag` / `If-Match`)
+
+Every admin route above that answers an `EventAdminDetail` — create, the detail
+read, `UpdateEvent`, `ConfigureStream` and all six state-changing commands —
+emits `ETag: W/"<version>"` off the `events.version` column, and the detail body
+carries the same `version`. The six **state-changing** commands (`publish`,
+`open`, `close`, `archive`, `mark-ended`, bare `transition`) REQUIRE that
+validator back: `If-Match` absent or blank → **428** `PRECONDITION_REQUIRED`,
+unparseable (or `*`) → **412** `PRECONDITION_FAILED`, stale → **412** with
+«the event changed since it was read; reload and retry». Both the weak form
+`W/"7"` and a bare `7` are accepted. The check is a pre-read plus a compare-and-set
+clause on the same `UPDATE`, so two operators acting from the same rendered state
+cannot silently overwrite one another.
+
+Two boundaries are deliberate. A **domain 409** (`INVALID_TRANSITION`,
+`EVENT_NOT_PAST`) is decided BEFORE the version check — a request illegal at every
+version gets the reason it is illegal, not «reload and retry». And `UpdateEvent` /
+`ConfigureStream` BUMP the version (so a concurrent edit invalidates a validator an
+operator is holding) but do not themselves require `If-Match`; the lost-update
+window on the authoring writes stays open and is a tracked follow-on, not closed
+here — see the #1593 PR body for the recorded rationale. The admin
+UI supplies the validator through the Refine data provider's `meta.version`
+(`apps/admin/lib/lifecycle.ts` → `lifecycleCommandRequest`). The list read carries
+no `version` and emits no `ETag` — a validator belongs to one addressable resource.

@@ -508,6 +508,53 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(await persistedState(id)).toBe("published");
     });
 
+    it("EARS-18: after a 412 the mark-ended retry must mint a NEW Idempotency-Key — the raw validator is bound into the fingerprint, so the same key with the reloaded validator is a REUSE", async () => {
+      const cookie = await adminSession(uniqueEmail("admin"));
+      const { id } = await createDraft(cookie, PAST());
+      await forceState(id, "published");
+      const held = await adminDetail(cookie, id);
+      await concurrentWrite(id);
+
+      const key = randomUUID();
+      const markEnded = (ifMatch: string, idempotencyKey: string) =>
+        app.inject({
+          method: "POST",
+          url: `/v1/admin/events/${id}/mark-ended`,
+          headers: {
+            ...device,
+            ...authHeaders(cookie),
+            "idempotency-key": idempotencyKey,
+            "if-match": ifMatch,
+          },
+        });
+
+      // The stale validator is refused 412, and that refusal is deliberately NOT
+      // fence-stored (only a deterministic domain 409 is) — it is a property of
+      // the caller's read, not of the bound request.
+      const stale = await markEnded(held.etag!, key);
+      expect(stale.statusCode).toBe(412);
+      expect((stale.json() as { code: string }).code).toBe(
+        "PRECONDITION_FAILED",
+      );
+      expect(await persistedState(id)).toBe("published");
+
+      // Reloading the validator makes the request a DIFFERENT bound request, so
+      // replaying the ORIGINAL key against it is a reuse, not a retry.
+      const reloaded = await adminDetail(cookie, id);
+      const reused = await markEnded(reloaded.etag!, key);
+      expect(reused.statusCode).toBe(409);
+      expect((reused.json() as { code: string }).code).toBe(
+        "IDEMPOTENCY_KEY_REUSED",
+      );
+      expect(await persistedState(id)).toBe("published");
+
+      // A fresh key plus the reloaded validator is the correct retry, and it
+      // applies exactly once.
+      const retried = await markEnded(reloaded.etag!, randomUUID());
+      expect(retried.statusCode).toBe(200);
+      expect(await persistedState(id)).toBe("ended");
+    });
+
     it("EARS-7: a conditional command against a non-existent event is a 404 — the validator never leaks whether the id exists", async () => {
       const cookie = await adminSession(uniqueEmail("admin"));
       const res = await command(

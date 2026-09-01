@@ -5,7 +5,7 @@ import { useCustomMutation } from "@refinedev/core";
 import { useTranslations } from "next-intl";
 import { Alert, Button } from "@ds/design-system";
 import type { EventAdminDetail } from "@ds/schemas";
-import { actionsFor } from "@/lib/lifecycle";
+import { actionsFor, lifecycleCommandRequest } from "@/lib/lifecycle";
 
 /**
  * The lifecycle-action bar (EARS-5/6/7, design §2/§8). The offered buttons are
@@ -16,6 +16,12 @@ import { actionsFor } from "@/lib/lifecycle";
  * close|archive|mark-ended}`); the server is the authority (EARS-7) — an
  * out-of-order call it refuses (409) surfaces as `transitionRefused`, the state
  * untouched. Stock DS buttons (EARS-11), RU copy (EARS-10).
+ *
+ * Every command is CONDITIONAL on the version the operator's screen was rendered
+ * from (#1593): {@link lifecycleCommandRequest} carries it as `meta.version`, the
+ * data provider turns that into `If-Match`, and a command built from a stale read
+ * is refused 412 — which surfaces as the same `transitionRefused` alert, the
+ * event untouched, instead of overwriting another operator's action.
  *
  * `detail.state` is passed alongside the transitions because since 014 EARS-18
  * two commands share the `ended` target — `close` from `live` and `mark-ended`
@@ -58,11 +64,7 @@ export function LifecycleActions({
             onClick={() => {
               setError(null);
               mutate(
-                {
-                  url: `/v1/admin/events/${detail.id}/${action.command}`,
-                  method: "post",
-                  values: {},
-                },
+                lifecycleCommandRequest(detail, action.command),
                 {
                   onSuccess: () => onTransition(),
                   onError: () => setError(t("events.errors.transitionRefused")),

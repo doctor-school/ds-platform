@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { validTransitions } from "@ds/schemas";
 import type { EventLifecycleState } from "@ds/schemas";
-import { actionsFor, stateLabelKey } from "./lifecycle";
+import {
+  actionsFor,
+  lifecycleCommandRequest,
+  stateLabelKey,
+} from "./lifecycle";
 
 /**
  * 007 EARS-7 / EARS-9 + 014 EARS-18 — the admin lifecycle-action derivation. The
@@ -78,5 +82,42 @@ describe("007 EARS-7 admin lifecycle action derivation", () => {
   it("EARS-9: state label keys resolve under the events.state.* catalog namespace", () => {
     expect(stateLabelKey("live")).toBe("events.state.live");
     expect(stateLabelKey("archived")).toBe("events.state.archived");
+  });
+});
+
+/**
+ * 007 EARS-7 / 014 EARS-17 — the lifecycle command REQUEST the action bar fires.
+ * Since #1593 every named command is conditional: the data provider attaches
+ * `If-Match: W/"<version>"` only when the call carries `meta.version`, and the
+ * server refuses a command without a validator `428 PRECONDITION_REQUIRED`. The
+ * version therefore belongs to the request contract, not to the button's
+ * rendering — so it is asserted here, in the same pure tier as the action
+ * derivation, rather than only through the manual browser flow.
+ */
+describe("007 EARS-7 lifecycle command request", () => {
+  it("EARS-7: every offered command carries the rendered version as mutation meta", () => {
+    const detail = { id: "evt-1", version: 7 };
+    for (const command of [
+      "publish",
+      "open",
+      "close",
+      "archive",
+      "mark-ended",
+    ] as const) {
+      const request = lifecycleCommandRequest(detail, command);
+      expect(request).toEqual({
+        url: `/v1/admin/events/evt-1/${command}`,
+        method: "post",
+        values: {},
+        meta: { version: 7 },
+      });
+    }
+  });
+
+  it("EARS-7: the request reflects the version it was built from, never a default", () => {
+    expect(lifecycleCommandRequest({ id: "evt-2", version: 1 }, "publish").meta)
+      .toEqual({ version: 1 });
+    expect(lifecycleCommandRequest({ id: "evt-2", version: 42 }, "publish").meta)
+      .toEqual({ version: 42 });
   });
 });

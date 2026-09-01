@@ -18,7 +18,7 @@ Two routes of `apps/doctor`, both inside feature 017's shell, both over one read
 graph TD
   Shell["017 shell — header / nav / footer"] --> Events["#d-events — /events"]
   Shell --> Cal["dedicated calendar page — /events/calendar (EARS-5)"]
-  Events --> Row["tense row: Будущие / Прошедшие (no Неделя / Месяц switch — F-019-2 Б)"]
+  Events --> Row["tense row: Будущие / Прошедшие — wave 2 (#1525); release 1 renders no tense row, LD-10 (no Неделя / Месяц switch — F-019-2 Б)"]
   Events --> Live["«Идёт сейчас» block above the feed (F-019-3 А)"]
   Events --> Panel["events-filter — sidebar on desktop (F-019-1 Б)"]
   Events --> Body["body: month grid as navigation + day-grouped feed (F-019-2 Б)"]

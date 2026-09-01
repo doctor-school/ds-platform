@@ -97,7 +97,7 @@ Feature: A doctor arrives at their own storefront, picks a specialty, and the si
   Scenario: Nothing blocks the page before a choice is made
     Given a visitor with no chosen specialty
     When they open the storefront home page and scroll to the footer
-    Then the events block and the leaderboard are both readable
+    Then the events block is readable
     And no modal gate, interstitial, scroll lock or empty page appears at any point
 
   @EARS-5 @happy
@@ -294,7 +294,6 @@ Feature: A doctor arrives at their own storefront, picks a specialty, and the si
       | the catalog search field and expand control |
       | the collapsed specialty row                 |
       | the events block and its compact calendar   |
-      | the leaderboard section                     |
 
   @EARS-14 @happy
   Scenario: Every storefront surface meets the accessibility bar
@@ -302,7 +301,6 @@ Feature: A doctor arrives at their own storefront, picks a specialty, and the si
     Then no violation is reported
     And the catalog search field is labelled
     And every catalog entry and the expand control are real labelled interactive elements
-    And the leaderboard is readable by a screen reader
 
   # ------------------------------------------------- admin operator surfaces
 

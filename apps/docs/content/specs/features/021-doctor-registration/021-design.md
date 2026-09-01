@@ -13,14 +13,14 @@ lang: en
 
 `#d-register` is a public route of `apps/doctor` on `doctor.school`, rendered CHROMELESS — outside feature 017's shell, with no storefront header, navigation or footer. The route lives in the app's `(auth)` route group, a sibling of `(storefront)`, so the 017 layout is never in its tree. That is the canvas composition and the product reason behind it: the door is a single-CTA surface, and the shell's onward-link cluster leads the doctor away from the form they came to fill. The frame is the `auth` canvas's split screen taken unchanged — a brand panel of three zones (the wordmark pinned to its top edge and flush left, the value prop centred in the space below it, the panel's own closing line «Бесплатно для врача · без бюрократии · © Doctor.School 2026» at the bottom) beside a form column that holds the card centred on the vertical axis. Exactly ONE wordmark renders per viewport, never two: the brand-panel mark at and above the `layout` breakpoint (901px), the form-column lockup below it, where the panel does not render at all — the canvas likewise draws its brand panel on the desktop artboard only, and the design system's block owns the rule (#237/#275). The panel's closing line is panel content, not site chrome: it lives inside the brand surface and disappears with it on the narrow layout, so the route stays chromeless at every breakpoint. Realized through `@ds/design-system`'s `AuthLayout` block wrapped by a doctor-local `AuthShell`, the mirror of the Academy's own auth frame (the two are lifted into one shared shell by the follow-on Issue). 021 changes what fills the split's left half and what stands around the submit button.
 
-| Region                   | Content                                                                                       | Stage-A pick                        |
-| ------------------------ | --------------------------------------------------------------------------------------------- | ----------------------------------- |
-| Split — left half        | The return context: 018's event-card unit for the lesson / эфир / ticket, **no back control** | F-021-2 **Б**                       |
-| Split — right half, top  | Soft-terms statement, the attribution line when one resolved, the points promise              | F-021-3 (promise on the form)       |
-| Split — right half, form | email · password (show-password toggle) · optional promo code                                 | —                                   |
-| Above the submit button  | Tier 1 — access conditions: medical-worker declaration + partner-data consent                 | F-021-1 **Б**                       |
-| Below the submit button  | Tier 2 — the optional marketing opt-in                                                        | F-021-1 **Б**                       |
-| Sent / confirmed states  | The canvas's «письмо отправлено» / «почта подтверждена» states, plus the success block        | base canvas + the 021 success block |
+| Region                   | Content                                                                                                                             | Stage-A pick                        |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------- |
+| Split — left half        | The return context: the canonical 004 event-card unit as widened by 019 (#1517) for the lesson / эфир / ticket, **no back control** | F-021-2 **Б**                       |
+| Split — right half, top  | Soft-terms statement, the attribution line when one resolved, the points promise                                                    | F-021-3 (promise on the form)       |
+| Split — right half, form | email · password (show-password toggle) · optional promo code                                                                       | —                                   |
+| Above the submit button  | Tier 1 — access conditions: medical-worker declaration + partner-data consent                                                       | F-021-1 **Б**                       |
+| Below the submit button  | Tier 2 — the optional marketing opt-in                                                                                              | F-021-1 **Б**                       |
+| Sent / confirmed states  | The canvas's «письмо отправлено» / «почта подтверждена» states, plus the success block                                              | base canvas + the 021 success block |
 
 At 390 the split collapses per the canvas: the return-context card becomes the background plate above the form, and both consent tiers keep their relative order and their visual separation. With no return context the left half's card is **absent from the tree** — the split renders as the canvas's single-column arrangement rather than as an empty frame (EARS-3).
 
@@ -68,7 +68,7 @@ stateDiagram-v2
   InEmail --> Degraded: content ended / full / unpublished
   Resolved --> [*]: land on the point of interest (primary)
   Degraded --> [*]: nearest honest destination + stated reason (LD-8)
-  Absent --> [*]: specialty feed, home fallback (LD-4)
+  Absent --> [*]: 019 events feed, home fallback (LD-4)
 ```
 
 Three properties the implementation must preserve: the value that reaches a navigation is always the guard's reconstruction and never the raw client-supplied string; the client never rebuilds the target from a referrer, a `document.referrer` read or a stored breadcrumb; and the degraded branch always renders a plain Russian statement of what happened rather than a silent redirect. 019 LD-7 hands a card action into 021 through this same guard, and 019 EARS-8 / EARS-12 require the guest to land back on the **exact stateful feed URL** — so the declared whitelist must carry that feed shape with its URL state, and the increment's shape is agreed with 019 before either guest path ships.

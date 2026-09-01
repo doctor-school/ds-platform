@@ -25,9 +25,9 @@ Feature: A doctor opens one screen and sees what is on now, what is on this week
     When the doctor opens «События»
     Then the header, navigation and footer are rendered by feature 017's shell layout
     And the breadcrumbs read «Травматология и ортопедия › События»
-    And the tense row offers Будущие / Прошедшие
+    And no tense row is rendered anywhere on the route, the feed reading «Будущие» only
     And no «Неделя / Месяц» view control is rendered anywhere on the route
-    And the blocks appear in the order: строка времени, «Идёт сейчас», панель фасетов рядом с телом, лента по дням
+    And the blocks appear in the order: «Идёт сейчас», панель фасетов рядом с телом, лента по дням
 
   @EARS-1 @failure
   Scenario: An events route defining its own header is a defect
@@ -99,7 +99,8 @@ Feature: A doctor opens one screen and sees what is on now, what is on this week
   Scenario: The dedicated calendar page renders the month as the page body
     When the doctor opens the dedicated calendar page
     Then the month grid is the body of the page inside feature 017's shell
-    And the page carries its own breadcrumbs, the same facet panel and the same tense controls
+    And the page carries its own breadcrumbs and the same facet panel
+    And no tense control is rendered on the page, the month reading «Будущие» only
     And the page reads the same month contract as the in-feed grid
     When the doctor selects a day on the calendar page
     Then the doctor lands in the events feed at that day
@@ -163,9 +164,9 @@ Feature: A doctor opens one screen and sees what is on now, what is on this week
 
   @EARS-8 @happy
   Scenario: Feed state round-trips through the URL
-    Given the doctor has applied a format facet, switched the tense to «Прошедшие» and widened the horizon
+    Given the doctor has applied a format facet, selected a day in the month grid and widened the horizon
     When the doctor copies the URL and opens it in a fresh browser context
-    Then the same tense, the same facets and the same horizon are rendered
+    Then the same facets, the same selected day and the same horizon are rendered
     When the doctor presses the browser back button
     Then the previous feed state is rendered rather than the doctor leaving the feed
 
@@ -193,11 +194,11 @@ Feature: A doctor opens one screen and sees what is on now, what is on this week
 
   @EARS-9 @failure
   Scenario: A failing read is contained to its own block
-    Given the read behind the «Мои события» cut fails
+    Given the read behind the month grid fails
     When the doctor opens «События»
-    Then the cut states the cause in Russian and offers a retry
+    Then the month grid states the cause in Russian and offers a retry
     And the retry re-runs only that read
-    And the feed, the month grid and the facet panel stay usable
+    And the feed, the live block and the facet panel stay usable
     And no page-level error screen replaces the feed
 
   @EARS-10 @happy
@@ -234,7 +235,7 @@ Feature: A doctor opens one screen and sees what is on now, what is on this week
   Scenario: A guest reads the whole screen and returns to it after registering
     Given a visitor with no account
     When the visitor opens «События»
-    Then the feed, the month grid, the calendar page, the facet panel and «Прошедшие» are fully readable
+    Then the feed, the month grid, the calendar page and the facet panel are fully readable
     When the visitor follows the action on a card
     Then feature 021's registration opens carrying that event and the current feed URL
     When the registration completes
@@ -245,7 +246,7 @@ Feature: A doctor opens one screen and sees what is on now, what is on this week
     Given a visitor with no account
     When the anonymous read of the events feed is inspected
     Then the response carries no payload that the client hides
-    And no block other than the «Мои события» cut is withheld from the guest
+    And no release-1 block is withheld from the guest
 
   @EARS-13 @happy
   Scenario: The screen works at 390 with the facet panel behind a counted control
@@ -262,7 +263,7 @@ Feature: A doctor opens one screen and sees what is on now, what is on this week
     Then the scan reports no violations
     And every card is a real labelled link
     And every facet is a real control with a visible state
-    And the tense control and the month-grid day selection are keyboard-operable
+    And the month-grid day selection is keyboard-operable
     And the LIVE state is announced to a screen reader rather than conveyed by colour alone
 
   @EARS-14 @failure

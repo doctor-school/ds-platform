@@ -1,5 +1,18 @@
 # @ds/design-system
 
+## 5.3.0
+
+### Minor Changes
+
+- [#1684](https://github.com/doctor-school/ds-platform/pull/1684) [`77d8a33`](https://github.com/doctor-school/ds-platform/commit/77d8a3369f6e5fb0cd4d8e6d2df692367d76c793) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Publicly readable post-live event page: `GET /v1/public/events/:idOrSlug` now carries the source-free recording projection (`state`, `primaryKind`, `secondaryKind`, `posterUrl`, `expectedBy`) and the portal event page renders the recording signal on an ended event — a `success` badge in the hero plus the kind/duration meta — while an archived event keeps its «в архиве» notice untouched (014 EARS-4). Adds a `success` variant to the design-system `Badge` primitive.
+
+- [#1697](https://github.com/doctor-school/ds-platform/pull/1697) [`e987b7c`](https://github.com/doctor-school/ds-platform/commit/e987b7cb853b614bef9f901b9dba7adfd3db233b) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 014 EARS-7 — the «запись готовится» plaque and an honest player failure boundary. An ended event whose recording is not published yet now shows the plaque in the player position, carrying the operator's own readiness day («до 18 июля», year appended across a year boundary) or an honest date-free line when no day was committed; it clears itself the moment something is published, because it derives purely from the recording projection state on a per-request render. Adds the `WebinarRecordingPlaque` design-system primitive. Also adds the portal's recording-player failure boundary: an embed that errors or delivers nothing within 12s is replaced by an explicit «Запись временно недоступна» message plus a retry that re-creates the frame — no silent dead or forever-spinning player. The boundary component is mounted by the player slice ([#1343](https://github.com/doctor-school/ds-platform/issues/1343)).
+
+### Patch Changes
+
+- Updated dependencies [[`f8cb3f9`](https://github.com/doctor-school/ds-platform/commit/f8cb3f93c6c2512433a5840afcbdbbb0ef28a712), [`ea28861`](https://github.com/doctor-school/ds-platform/commit/ea2886168662925eb58ad522633e4a9f2bca40da)]:
+  - @ds/schemas@5.0.0
+
 ## 5.2.0
 
 ### Minor Changes

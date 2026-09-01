@@ -1,5 +1,14 @@
 # @ds/doctor
 
+## 0.3.1
+
+### Patch Changes
+
+- [#1682](https://github.com/doctor-school/ds-platform/pull/1682) [`c64dafe`](https://github.com/doctor-school/ds-platform/commit/c64dafe79269c5ad97146cb798e7b537423025ad) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - `/register` renders as a chromeless auth frame: no storefront header, navigation or footer, wordmark above the form column and the card centred on the vertical axis, per the `auth` canvas `#d-register` composition. The route moves into an `(auth)` route group and composes a doctor-local `AuthShell` over the design-system `AuthLayout` block.
+- Updated dependencies [[`f8cb3f9`](https://github.com/doctor-school/ds-platform/commit/f8cb3f93c6c2512433a5840afcbdbbb0ef28a712), [`ea28861`](https://github.com/doctor-school/ds-platform/commit/ea2886168662925eb58ad522633e4a9f2bca40da), [`77d8a33`](https://github.com/doctor-school/ds-platform/commit/77d8a3369f6e5fb0cd4d8e6d2df692367d76c793), [`e987b7c`](https://github.com/doctor-school/ds-platform/commit/e987b7cb853b614bef9f901b9dba7adfd3db233b)]:
+  - @ds/schemas@5.0.0
+  - @ds/design-system@5.3.0
+
 ## 0.3.0
 
 ### Minor Changes

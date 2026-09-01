@@ -1,5 +1,48 @@
 # @ds/api
 
+## 3.0.0
+
+### Major Changes
+
+- [#1686](https://github.com/doctor-school/ds-platform/pull/1686) [`f8cb3f9`](https://github.com/doctor-school/ds-platform/commit/f8cb3f93c6c2512433a5840afcbdbbb0ef28a712) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Complete the ADR-0016 §5 `topics` → `directions` rename through the 012 EARS-11
+  event join ([#1645](https://github.com/doctor-school/ds-platform/issues/1645)). The table is now `event_directions` with a `direction_id`
+  column (true rename — every retained row, id, version and audit lineage
+  survives), the admin surface is `/v1/admin/event-directions`, and the public
+  traversal answers `GET /v1/public/events/:idOrSlug/directions` and
+  `GET /v1/public/directions/:idOrSlug/events`.
+
+  Breaking: the old `event-topics` / `…/topics` routes and the `EventTopic*` /
+  `PublicTopicSummary*` contract exports are gone with no alias — the rename has
+  no consumers outside this repo. Behaviour, pagination, problem shapes and
+  visible RU copy are unchanged.
+
+### Minor Changes
+
+- [#1684](https://github.com/doctor-school/ds-platform/pull/1684) [`77d8a33`](https://github.com/doctor-school/ds-platform/commit/77d8a3369f6e5fb0cd4d8e6d2df692367d76c793) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Publicly readable post-live event page: `GET /v1/public/events/:idOrSlug` now carries the source-free recording projection (`state`, `primaryKind`, `secondaryKind`, `posterUrl`, `expectedBy`) and the portal event page renders the recording signal on an ended event — a `success` badge in the hero plus the kind/duration meta — while an archived event keeps its «в архиве» notice untouched (014 EARS-4). Adds a `success` variant to the design-system `Badge` primitive.
+
+- [#1691](https://github.com/doctor-school/ds-platform/pull/1691) [`d9b1948`](https://github.com/doctor-school/ds-platform/commit/d9b1948d6ab4fbb11eec9021eee83041307d30b4) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 014 EARS-9 — «Мои события» carries two tabs over the full registration history
+
+  `GET /v1/me/events` now takes `?tab=upcoming|recordings` and answers with an
+  envelope (`{ tab, data, counts }`) instead of a bare array: one tab of rows plus
+  BOTH tabs' counts, so a surface can label the un-selected tab without a second
+  read. «Предстоящие» keeps the shipped nearest-first order over the registered
+  `published`/`live` events; «Записи» is the doctor's FULL `ended` history,
+  newest-first, each row badged with its recording state — an ended event whose
+  recording is not published yet still appears, badged «Запись готовится», so an
+  эфир a doctor attended is never lost. `archived` events appear in neither tab; an
+  unknown tab is a 400.
+
+  The `/account/events` surface renders both tabs through the shared `EventList`
+  block, with the tab as deep-linkable URL state (`?tab=recordings`).
+
+- [#1679](https://github.com/doctor-school/ds-platform/pull/1679) [`69bbe50`](https://github.com/doctor-school/ds-platform/commit/69bbe50c16c5c7cd8a67a96603338a509369c345) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Publish completeness rules and the admin publish tab for projects, experts and partners (012 EARS-5).
+
+### Patch Changes
+
+- Updated dependencies [[`f8cb3f9`](https://github.com/doctor-school/ds-platform/commit/f8cb3f93c6c2512433a5840afcbdbbb0ef28a712), [`ea28861`](https://github.com/doctor-school/ds-platform/commit/ea2886168662925eb58ad522633e4a9f2bca40da)]:
+  - @ds/db@2.0.0
+  - @ds/schemas@5.0.0
+
 ## 2.0.0
 
 ### Major Changes

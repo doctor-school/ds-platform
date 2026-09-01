@@ -18,6 +18,60 @@ import type pg from "pg";
  * reason).
  */
 
+/**
+ * Tables whose physical removal is refused by a DATABASE trigger, not only by an
+ * FK. `event_speakers` carries the 012 EARS-24 migration fence
+ * (`event_speakers_migration_fence_before_write`, migration 0031): DELETE is
+ * refused in EVERY phase because a source row is the retained provenance the
+ * migration review queue is keyed by.
+ *
+ * That rule is about application DML — a legacy image, a service method, a
+ * forgotten script. Fixture teardown is none of those: it is a DBA-level
+ * operation on a disposable branch database, and it announces itself as one by
+ * setting `session_replication_role = 'replica'` for the duration of ONE
+ * transaction, which is Postgres's own switch for "this session is not the
+ * application". It is `SET LOCAL`, so it cannot leak past the transaction, and
+ * it is confined to this file — no production path can reach it
+ * (`tools/lint/retained-data-lint.ts` allowlists `apps/api/test/**`).
+ */
+const FENCED_TABLES = new Set(["event_speakers"]);
+
+/**
+ * Run `fn` with user triggers suspended for one transaction, on a dedicated
+ * client. Test-teardown infrastructure ONLY — see `FENCED_TABLES`.
+ */
+export async function withFenceBypass<T>(
+  pool: pg.Pool,
+  fn: (client: pg.PoolClient) => Promise<T>,
+): Promise<T> {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("SET LOCAL session_replication_role = 'replica'");
+    const result = await fn(client);
+    await client.query("COMMIT");
+    return result;
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => undefined);
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Physically remove the retained `event_speakers` rows of one event fixture.
+ * The single sanctioned way for a suite to do that — see `withFenceBypass`.
+ */
+export async function deleteEventSpeakersFixture(
+  pool: pg.Pool,
+  eventId: string,
+): Promise<void> {
+  await withFenceBypass(pool, (client) =>
+    client.query("DELETE FROM event_speakers WHERE event_id = $1", [eventId]),
+  );
+}
+
 /** Child tables of `events`, in the order they must be removed. */
 const EVENT_CHILDREN = [
   "presence_beats",
@@ -47,8 +101,13 @@ export async function deleteEventFixture(
   pool: pg.Pool,
   eventId: string,
 ): Promise<void> {
-  for (const table of EVENT_CHILDREN)
+  for (const table of EVENT_CHILDREN) {
+    if (FENCED_TABLES.has(table)) {
+      await deleteEventSpeakersFixture(pool, eventId);
+      continue;
+    }
     await pool.query(`DELETE FROM ${table} WHERE event_id = $1`, [eventId]);
+  }
   await pool.query("DELETE FROM events WHERE id = $1", [eventId]);
 }
 

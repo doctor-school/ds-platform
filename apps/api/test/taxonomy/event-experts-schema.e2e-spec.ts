@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import pg from "pg";
 
+import { deleteEventSpeakersFixture } from "../setup/fixture-cleanup.js";
+
 // 012 EARS-7 (#1289) — the DB half of the explicit expert↔legacy-speaker match
 // (012-design §2, §2.3, §4 LD-2, §6). Talks to Postgres directly via pg.Pool
 // (no Nest boot), the same pattern as `directions-schema.e2e-spec.ts`.
@@ -35,9 +37,10 @@ describe.skipIf(!process.env.DATABASE_URL)(
       // be removed while a link still points at it.
       for (const id of createdEventIds) {
         await pool.query("DELETE FROM event_experts WHERE event_id = $1", [id]);
-        await pool.query("DELETE FROM event_speakers WHERE event_id = $1", [
-          id,
-        ]);
+        // 012 EARS-24 (#1633): the migration fence refuses a raw DELETE on
+        // event_speakers in every phase — teardown goes through the one
+        // sanctioned bypass helper.
+        await deleteEventSpeakersFixture(pool, id);
         await pool.query("DELETE FROM events WHERE id = $1", [id]);
       }
       for (const id of createdExpertIds) {

@@ -203,9 +203,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       // Children first — every FK is RESTRICT by design.
       for (const id of createdEventIds.splice(0)) {
         await pool.query("DELETE FROM event_experts WHERE event_id = $1", [id]);
-        await pool.query("DELETE FROM event_speakers WHERE event_id = $1", [
-          id,
-        ]);
+        // 012 EARS-24 (#1633): the migration fence refuses a raw DELETE on
+        // event_speakers in every phase — teardown goes through the one
+        // sanctioned bypass helper.
+        await deleteEventSpeakersFixture(pool, id);
         await pool.query("DELETE FROM events WHERE id = $1", [id]);
       }
       for (const id of createdExpertIds.splice(0)) {

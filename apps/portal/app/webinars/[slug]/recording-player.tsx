@@ -53,10 +53,16 @@ import { resolveEmbed } from "../../../lib/room-player";
 export const RECORDING_PLAYER_LOAD_TIMEOUT_MS = 12_000;
 
 export interface RecordingPlayerProps {
-  /** The explicit provider enum from the authenticated source read (#1343). */
-  provider: StreamProvider;
+  /**
+   * The explicit provider enum from the authenticated source read (#1343), or
+   * `null` when that read carried no playable source. `null` is not an error
+   * state to be handled by the caller: it resolves to the SAME unavailability
+   * message the boundary shows for a dead frame, so a signed-in doctor never
+   * meets a blank card and the page never has to duplicate this copy.
+   */
+  provider: StreamProvider | null;
   /** The provider-scoped stream reference — an opaque id, never sniffed. */
-  embedRef: string;
+  embedRef: string | null;
   /** The event title, for the frame's accessible name. */
   title: string;
   /** «Монтаж» / «Оригинал» — the cut being played, part of the frame's name. */
@@ -125,11 +131,15 @@ export function RecordingPlayer({
     };
   }, []);
 
-  const embed = resolveEmbed({ provider, embedRef });
+  // No source at all (the authenticated read answered without one) is decided
+  // before `resolveEmbed` is asked anything — the resolver maps a provider to a
+  // src and has no opinion about an absent provider.
+  const embed =
+    provider && embedRef ? resolveEmbed({ provider, embedRef }) : null;
 
   // A provider whose src cannot be composed is the SAME honest failure, reached
   // before a frame is ever mounted — never a blank card.
-  if (failed || embed.kind === "unavailable" || !embed.src) {
+  if (failed || !embed || embed.kind === "unavailable" || !embed.src) {
     return (
       <div
         data-testid="recording-player-unavailable"

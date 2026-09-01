@@ -1,8 +1,9 @@
-import type { RecordingProjection } from "@ds/schemas";
+import type { EventPlayback, RecordingProjection } from "@ds/schemas";
 import { describe, expect, it } from "vitest";
 import {
   formatReadinessDay,
   resolveRecordingPlaque,
+  resolvePlayerCard,
   resolveRecordingSignal,
 } from "./recording-signal";
 
@@ -134,5 +135,76 @@ describe("014 EARS-7 — the «запись готовится» plaque projecti
     expect(formatReadinessDay("", NOW)).toBeNull();
     expect(formatReadinessDay("скоро", NOW)).toBeNull();
     expect(formatReadinessDay("2026-13-01", NOW)).toBeNull();
+  });
+});
+
+describe("014 EARS-5 — which of the four things the player card holds", () => {
+  /** A fixed reading moment, so the plaque's year suffix is not clock-dependent. */
+  const NOW = new Date("2026-07-16T18:30:00.000Z");
+  const montage = projection({
+    state: "montage",
+    primaryKind: "edited",
+    secondaryKind: "raw",
+  });
+  const source = {
+    primary: {
+      kind: "edited",
+      provider: "rutube",
+      embedRef: "abc123",
+      posterRef: null,
+      durationSec: null,
+    },
+    secondary: null,
+  } satisfies EventPlayback;
+
+  it("014 EARS-5.1: a GUEST on a published recording gets the login gate — never a source, never an empty card", () => {
+    expect(resolvePlayerCard(montage, "ended", false, null)).toEqual({
+      mode: "gate",
+      kindKey: "edited",
+    });
+  });
+
+  it("014 EARS-5.2: a signed-in doctor gets the player, fed the provider + ref from the AUTHENTICATED read", () => {
+    expect(resolvePlayerCard(montage, "ended", true, source)).toEqual({
+      mode: "player",
+      kindKey: "edited",
+      provider: "rutube",
+      embedRef: "abc123",
+    });
+  });
+
+  it("014 EARS-5.3: `preparing` is the plaque for guest AND doctor alike — the gate must not promise a recording that does not exist", () => {
+    const preparing = projection({ state: "preparing", expectedBy: "2026-07-18" });
+    const nulls = { primary: null, secondary: null } as EventPlayback;
+    expect(resolvePlayerCard(preparing, "ended", false, null, NOW)).toEqual({
+      mode: "plaque",
+      expectedByLabel: "18 июля",
+    });
+    expect(resolvePlayerCard(preparing, "ended", true, nulls, NOW)).toEqual({
+      mode: "plaque",
+      expectedByLabel: "18 июля",
+    });
+  });
+
+  it("014 EARS-5.4: a signed-in doctor whose authenticated read carries no playable source gets the honest unavailability message, never a frame with nothing behind it", () => {
+    expect(
+      resolvePlayerCard(montage, "ended", true, {
+        primary: null,
+        secondary: null,
+      } as EventPlayback),
+    ).toEqual({ mode: "unavailable", kindKey: "edited" });
+    // The read itself failing (401 after an expired session, a 404) collapses to
+    // the same honest message rather than a blank card.
+    expect(resolvePlayerCard(montage, "ended", true, null)).toEqual({
+      mode: "unavailable",
+      kindKey: "edited",
+    });
+  });
+
+  it("014 EARS-5.5: the player card exists only on an ENDED event — upcoming, live and archived render no card at all", () => {
+    for (const status of ["upcoming", "live", "archived"] as const) {
+      expect(resolvePlayerCard(montage, status, true, source)).toBeNull();
+      expect(resolvePlayerCard(montage, status, false, null)).toBeNull();
+    }
   });
 });

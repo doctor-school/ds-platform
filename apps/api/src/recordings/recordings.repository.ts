@@ -1,11 +1,12 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import type { DrizzleHandle, Event, EventRecording } from "@ds/db";
 import { eventRecordings, events } from "@ds/db";
-import type {
-  RecordingKind,
-  RecordingStatus,
-  StreamProvider,
+import {
+  CANONICAL_UUID_REGEX,
+  type RecordingKind,
+  type RecordingStatus,
+  type StreamProvider,
 } from "@ds/schemas";
 import { withRequestAuditContext } from "../audit/audit-context.tx.js";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
@@ -41,6 +42,19 @@ export interface ProjectionRow {
   recordingExpectedBy: string | null;
   kind: RecordingKind | null;
   posterRef: string | null;
+}
+
+/**
+ * One published, non-retired cut WITH its source — the row set behind the
+ * authenticated EARS-5 read, and the only place this repository selects
+ * `provider` / `embed_ref` for a non-admin caller.
+ */
+export interface PlayableRow {
+  kind: RecordingKind;
+  provider: StreamProvider;
+  embedRef: string;
+  posterRef: string | null;
+  durationSec: number | null;
 }
 
 /** The field patch a PATCH applies. `undefined` means unchanged. */
@@ -214,6 +228,60 @@ export class RecordingsRepository {
         ),
       )
       .where(inArray(events.id, [...eventIds]));
+  }
+
+  /**
+   * 014 EARS-5 (#1343) — resolve `:idOrSlug` to the event the playback read is
+   * about. The 004/005/006 rule verbatim: a value that is not a canonical UUID
+   * is matched against the SLUG COLUMN ONLY, because feeding it to the uuid `id`
+   * column reaches Postgres as `22P02 invalid input syntax for type uuid` and
+   * surfaces as a 500 where the caller deserves a 404.
+   *
+   * RETIRED EVENTS ARE NOT RESOLVED. `record_status = 'active'` is the same
+   * predicate 004's public resolution applies (`events.repository.ts` →
+   * `ACTIVE_EVENT`) and the sibling source-bearing 006 room read applies
+   * (`room.repository.ts`). Without it a soft-deleted event would 404 publicly
+   * and still answer this route 200 with `provider` + `embed_ref` to any
+   * signed-in account — authenticating would turn the route into an oracle on
+   * a record the platform says does not exist.
+   */
+  async findEventByIdOrSlug(idOrSlug: string): Promise<Event | null> {
+    const key = CANONICAL_UUID_REGEX.test(idOrSlug)
+      ? or(eq(events.id, idOrSlug), eq(events.slug, idOrSlug))
+      : eq(events.slug, idOrSlug);
+    const where = and(key, eq(events.recordStatus, "active"));
+    const [row] = await this.db.select().from(events).where(where).limit(1);
+    return row ?? null;
+  }
+
+  /**
+   * 014 EARS-5 (#1343) — the published, non-retired rows of ONE event WITH their
+   * sources, for the authenticated playback read (014-design §5).
+   *
+   * Deliberately separate from {@link projectionRowsByEvents}: that read is
+   * source-FREE by construction and feeds every public surface, and widening it
+   * to carry `provider`/`embed_ref` "for the one caller that needs them" is
+   * exactly how a source ends up in a guest's HTML. Two reads, two column sets,
+   * one of which can never leak. The row PREDICATE is identical, so which cuts
+   * exist cannot disagree between the gate and the badge.
+   */
+  playableRowsByEvent(eventId: string): Promise<PlayableRow[]> {
+    return this.db
+      .select({
+        kind: eventRecordings.kind,
+        provider: eventRecordings.provider,
+        embedRef: eventRecordings.embedRef,
+        posterRef: eventRecordings.posterRef,
+        durationSec: eventRecordings.durationSec,
+      })
+      .from(eventRecordings)
+      .where(
+        and(
+          eq(eventRecordings.eventId, eventId),
+          eq(eventRecordings.status, "published"),
+          isNull(eventRecordings.deletedAt),
+        ),
+      );
   }
 
   /**

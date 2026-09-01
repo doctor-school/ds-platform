@@ -121,3 +121,15 @@ describe("014 EARS-7 — the recording player failure boundary", () => {
     expect(screen.getByTestId("recording-player-retry")).toBeVisible();
   });
 });
+
+describe("014 EARS-5 — an authenticated read that carried no source", () => {
+  beforeEach(() => vi.useFakeTimers({ shouldAdvanceTime: true }));
+  afterEach(() => vi.useRealTimers());
+
+  it("014 EARS-5.6: a signed-in doctor whose source read came back empty gets the same honest unavailability message, never a frame with nothing behind it", () => {
+    renderPlayer({ provider: null, embedRef: null });
+    expect(frame()).toBeNull();
+    expect(message()).not.toBeNull();
+    expect(screen.getByTestId("recording-player-retry")).not.toBeNull();
+  });
+});

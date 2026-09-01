@@ -12,11 +12,20 @@ import { AppModule } from "../../src/app.module.js";
 import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
 import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
 import { FakeIdpClient } from "../../src/auth/idp/idp.fake.js";
+import { SESSION_COOKIE_NAME } from "../../src/auth/session/session.cookie.js";
+import {
+  BOT_PROTECTION,
+  type BotProtection,
+  type BotProtectionResult,
+} from "../../src/bot-protection/index.js";
 import {
   RATE_LIMIT_THRESHOLDS,
   RELAXED_RATE_LIMIT,
 } from "../setup/rate-limit.js";
-import { deleteEventFixture } from "../setup/fixture-cleanup.js";
+import {
+  deleteEventFixture,
+  deleteUserFixture,
+} from "../setup/fixture-cleanup.js";
 
 // 014 EARS-4 (#1341) — the PUBLIC read behind the post-live event page, over the
 // real stack. Two promises are under test here and they pull in opposite
@@ -62,13 +71,29 @@ interface PublicPageBody {
   };
 }
 
+/** The authenticated playback body of 014-design §5 — sources or two nulls. */
+interface PlaybackBody {
+  primary: {
+    kind: string;
+    provider: string;
+    embedRef: string;
+    posterRef: string | null;
+    durationSec: number | null;
+  } | null;
+  secondary: PlaybackBody["primary"];
+}
+
 describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
-  "014 EARS-4 public post-live event read (e2e)",
+  "014 EARS-4 / EARS-5 post-live event reads (e2e)",
   () => {
     let app: NestFastifyApplication;
     let pool: pg.Pool;
     const fake = new FakeIdpClient();
     const createdEventIds: string[] = [];
+    const createdEmails: string[] = [];
+    const password = "Aa1!ufficiently-long-pw";
+    const device = { "user-agent": "Test/1.0", "accept-language": "en-US" };
+    const consent = [{ purpose: "tos", version: "2026-01" }];
 
     /**
      * One event in the given lifecycle state, carrying the full 004 allow-list
@@ -138,6 +163,45 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       return app.inject({ method: "GET", url: `/v1/public/events/${key}` });
     }
 
+    /**
+     * Register + login a doctor and return the session cookie value. The account
+     * is created through the REAL 003 commands, so «a signed-in doctor» in the
+     * EARS-5 scenarios is an actual session the guard resolves, never a stub.
+     */
+    async function doctorSession(prefix: string): Promise<string> {
+      const email = `${prefix}-${randomUUID()}@ds.test`;
+      createdEmails.push(email);
+      const reg = await app.inject({
+        method: "POST",
+        url: "/v1/auth/register",
+        payload: { email, password, consent },
+      });
+      expect(reg.statusCode).toBe(200);
+      const res = await app.inject({
+        method: "POST",
+        url: "/v1/auth/login",
+        headers: device,
+        payload: { identifier: email, password },
+      });
+      expect(res.statusCode).toBe(200);
+      const cookie = res.cookies.find((c) => c.name === SESSION_COOKIE_NAME);
+      expect(cookie).toBeDefined();
+      return cookie!.value;
+    }
+
+    function cookieHeader(cookie: string): Record<string, string> {
+      return { ...device, cookie: `${SESSION_COOKIE_NAME}=${cookie}` };
+    }
+
+    /** The authenticated playback read — the ONE source-bearing 014 response. */
+    function readPlayback(key: string, headers: Record<string, string>) {
+      return app.inject({
+        method: "GET",
+        url: `/v1/events/${key}/recordings`,
+        headers,
+      });
+    }
+
     async function readBody(key: string): Promise<PublicPageBody> {
       const res = await read(key);
       expect(res.statusCode).toBe(200);
@@ -152,6 +216,15 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         .useValue(fake)
         .overrideProvider(RATE_LIMIT_THRESHOLDS)
         .useValue(RELAXED_RATE_LIMIT)
+        // Hermetic: the register fixture path behind `doctorSession` must not
+        // depend on the recipe's bot-protection env/flag state (an enabled
+        // SmartCaptcha rejects the token-less test register with a 403
+        // BOT_PROTECTION_REQUIRED). Bot protection is not under test here.
+        .overrideProvider(BOT_PROTECTION)
+        .useValue({
+          verify: (): Promise<BotProtectionResult> =>
+            Promise.resolve({ ok: true }),
+        } satisfies BotProtection)
         .compile();
 
       app = moduleRef.createNestApplication<NestFastifyApplication>(
@@ -170,6 +243,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
           id,
         ]);
         await deleteEventFixture(pool, id);
+      }
+      for (const email of createdEmails.splice(0)) {
+        await deleteUserFixture(pool, "email", email);
       }
     });
 
@@ -329,6 +405,145 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       // must not become a side channel that says «this slug exists».
       expect(res.statusCode).toBe(404);
       expect(res.payload).not.toContain("recording");
+    });
+
+    // ---------------------------------------------------------------------
+    // 014 EARS-5 (#1343) — the login gate as a READ SPLIT (014-design §5).
+    //
+    // The public read above is the guest's whole answer and it carries no
+    // source. The authenticated `GET /v1/events/:idOrSlug/recordings` is the
+    // ONE source-bearing response in the feature. Its guard is
+    // `access: authenticated` and nothing else: no registration, no attendance,
+    // no 014-specific role. That "nothing else" is asserted, not assumed —
+    // EARS-5.2 signs in a doctor who never registered for the event.
+    // ---------------------------------------------------------------------
+
+    it("014 EARS-5.1: when the playback endpoint is read with no session, it shall refuse with 401 and hand out no playable source", async () => {
+      const { id, slug } = await insertEvent("ended");
+      await publishRecording(id, "edited");
+
+      // The public read is complete for the guest — and source-free (EARS-4.2).
+      const publicRes = await read(slug);
+      expect(publicRes.statusCode).toBe(200);
+      expect(publicRes.payload).not.toContain(EDITED_REF);
+
+      // The playback read is the gate, and the gate is SERVER-SIDE: the refusal
+      // is a status code, not a rendering rule.
+      const res = await readPlayback(slug, device);
+      expect(res.statusCode).toBe(401);
+      expect(res.payload).not.toContain(EDITED_REF);
+      expect(res.payload).not.toContain("embedRef");
+      // A crafted/forged cookie is the same refusal — the guard authenticates
+      // against the real session store, so an invented value never yields one.
+      const forged = await readPlayback(
+        slug,
+        cookieHeader("forged-session-id-that-does-not-exist"),
+      );
+      expect(forged.statusCode).toBe(401);
+      expect(forged.payload).not.toContain(EDITED_REF);
+    });
+
+    it("014 EARS-5.2: when a signed-in doctor who never registered opens the event, the playback read shall return the resolver-selected source", async () => {
+      const { id, slug } = await insertEvent("ended");
+      await publishRecording(id, "edited", "posters/1343.webp");
+      await publishRecording(id, "raw");
+
+      // No registration is created for this doctor anywhere in this test: the
+      // 005 roster is deliberately untouched, and the read still succeeds.
+      const cookie = await doctorSession("doc-1343-unreg");
+      const res = await readPlayback(slug, cookieHeader(cookie));
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.payload) as PlaybackBody;
+
+      // The EARS-3 rule decides which cut plays — the same resolver the public
+      // projection reads, not a second "which cut wins" implementation.
+      expect(body.primary).toMatchObject({
+        kind: "edited",
+        provider: "rutube",
+        embedRef: EDITED_REF,
+        posterRef: "posters/1343.webp",
+      });
+      expect(body.secondary).toMatchObject({
+        kind: "raw",
+        provider: "rutube",
+        embedRef: RAW_REF,
+      });
+      // The response is per-caller and behind a gate — never shared-cacheable.
+      expect(res.headers["cache-control"]).toContain("no-store");
+    });
+
+    it("014 EARS-5.3: a preparing event shall answer the authenticated read with 200 and two nulls — the plaque is not an error", async () => {
+      const { slug } = await insertEvent("ended", {
+        recordingExpectedBy: "2026-09-15",
+      });
+      const cookie = await doctorSession("doc-1343-preparing");
+
+      const res = await readPlayback(slug, cookieHeader(cookie));
+      expect(res.statusCode).toBe(200);
+      expect(JSON.parse(res.payload)).toEqual({
+        primary: null,
+        secondary: null,
+      });
+    });
+
+    it("014 EARS-5.4: the playback read shall track the published row set and leak no hidden event through the gate", async () => {
+      const rawOnly = await insertEvent("ended");
+      await publishRecording(rawOnly.id, "raw");
+      const draft = await insertEvent("draft");
+      await publishRecording(draft.id, "edited");
+      const cookie = await doctorSession("doc-1343-rowset");
+      const headers = cookieHeader(cookie);
+
+      // Raw alone plays as the primary, with no secondary affordance at all.
+      const raw = await readPlayback(rawOnly.slug, headers);
+      expect(raw.statusCode).toBe(200);
+      const rawBody = JSON.parse(raw.payload) as PlaybackBody;
+      expect(rawBody.primary).toMatchObject({ kind: "raw", embedRef: RAW_REF });
+      expect(rawBody.secondary).toBeNull();
+
+      // A draft event is invisible on the public read (EARS-4.6); authenticating
+      // must not turn the playback route into the oracle that reveals it.
+      const hidden = await readPlayback(draft.slug, headers);
+      expect(hidden.statusCode).toBe(404);
+      expect(hidden.payload).not.toContain(EDITED_REF);
+
+      // An unknown key is the same 404 — indistinguishable from the above.
+      const unknown = await readPlayback(`no-such-${randomUUID()}`, headers);
+      expect(unknown.statusCode).toBe(404);
+    });
+
+    it("014 EARS-5.5: a retired event shall refuse the authenticated playback read exactly as the public read does, so signing in is not an oracle on a soft-deleted event", async () => {
+      const { id, slug } = await insertEvent("ended");
+      await publishRecording(id, "edited");
+      // Soft-delete the EVENT itself (004's `record_status`; the table's CHECK
+      // ties `retired` to a non-null `deleted_at`). The recording row stays
+      // published — the point is that the event's retirement, not the cut's,
+      // decides the answer.
+      await pool.query(
+        `UPDATE events SET record_status = 'retired', deleted_at = now() WHERE id = $1`,
+        [id],
+      );
+
+      const cookie = await doctorSession("doc-1343-retired");
+      const headers = cookieHeader(cookie);
+
+      // The public read refuses (004's ACTIVE_EVENT filter)…
+      const publicRes = await read(slug);
+      expect(publicRes.statusCode).toBe(404);
+
+      // …and authenticating must produce the IDENTICAL refusal. A 200 here
+      // would hand `provider` + `embedRef` for an event the platform says
+      // does not exist.
+      const res = await readPlayback(slug, headers);
+      expect(res.statusCode).toBe(404);
+      expect(res.payload).not.toContain(EDITED_REF);
+      expect(res.payload).not.toContain("embedRef");
+
+      // The uuid arm resolves the same way — the retirement filter is on the
+      // event row, not on which key spelled it.
+      const byId = await readPlayback(id, headers);
+      expect(byId.statusCode).toBe(404);
+      expect(byId.payload).not.toContain(EDITED_REF);
     });
   },
 );

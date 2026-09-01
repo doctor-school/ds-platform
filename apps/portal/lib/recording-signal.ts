@@ -1,4 +1,8 @@
-import type { RecordingProjection } from "@ds/schemas";
+import type {
+  EventPlayback,
+  RecordingProjection,
+  StreamProvider,
+} from "@ds/schemas";
 import type { CanvasStatus } from "./event-lifecycle";
 
 /**
@@ -150,4 +154,77 @@ export function formatReadinessDay(
   if (monthIndex < 0 || monthIndex > 11 || day < 1 || day > 31) return null;
   const label = `${day} ${RU_MONTHS_GENITIVE[monthIndex]}`;
   return year === now.getFullYear() ? label : `${label} ${year}`;
+}
+
+/**
+ * 014 EARS-5 — WHICH of the four mutually exclusive things the player card holds
+ * on this render (design §8.1: exactly one of the player, the guest gate, the
+ * plaque, or the unavailability message — never two stacked, never an empty
+ * card).
+ *
+ * The decision lives here rather than in the page so the login gate and the
+ * player can never disagree about what is behind them: both read the same
+ * source-free public projection for «is there anything published», and the
+ * authenticated read decides only whether a source actually came back. That
+ * ordering is what makes the gate honest — a guest is invited to sign in ONLY
+ * when signing in would really produce a recording.
+ */
+export type PlayerCard =
+  /** Nothing published yet — the #1344 «запись готовится» plaque, for everyone. */
+  | { mode: "plaque"; expectedByLabel: string | null }
+  /** A guest on a published recording — the canvas login gate over the poster. */
+  | { mode: "gate"; kindKey: "edited" | "raw" }
+  /** A signed-in doctor with a playable source — the mounted player. */
+  | {
+      mode: "player";
+      kindKey: "edited" | "raw";
+      provider: StreamProvider;
+      embedRef: string;
+    }
+  /** Signed in, but no source came back — the honest unavailability message. */
+  | { mode: "unavailable"; kindKey: "edited" | "raw" };
+
+/**
+ * Resolve the player card for this render, or `null` when the page shows no
+ * player card at all (every non-`ended` state — the same silence rule
+ * {@link resolveRecordingSignal} applies, so the card can never contradict the
+ * lifecycle machine or 004 EARS-5's archived notice).
+ *
+ * `playback` is the result of the AUTHENTICATED source read, and `null` there
+ * covers both "not signed in" and "the read did not answer with a source"
+ * (a 401 on an expired session, a 404). For a signed-in doctor that collapses to
+ * the unavailability message rather than a blank card or a re-offered login gate:
+ * they already have a session, so inviting them to sign in again would be a lie.
+ */
+export function resolvePlayerCard(
+  recording: RecordingProjection,
+  status: CanvasStatus,
+  isAuthenticated: boolean,
+  playback: EventPlayback | null,
+  now: Date = new Date(),
+): PlayerCard | null {
+  const signal = resolveRecordingSignal(recording, status);
+  if (!signal) return null;
+  // Nothing published — the plaque, identically for a guest and for a doctor.
+  // Signing in must never be sold as the thing standing between the doctor and a
+  // recording that does not exist yet.
+  if (!signal.available || signal.kindKey === null) {
+    return {
+      mode: "plaque",
+      expectedByLabel: formatReadinessDay(recording.expectedBy, now),
+    };
+  }
+  const kindKey = signal.kindKey;
+  if (!isAuthenticated) return { mode: "gate", kindKey };
+
+  const primary = playback?.primary ?? null;
+  if (!primary) return { mode: "unavailable", kindKey };
+  return {
+    mode: "player",
+    // The KIND the doctor is actually watching comes from the source read (what
+    // was handed over), not from the public projection's advertisement.
+    kindKey: primary.kind,
+    provider: primary.provider,
+    embedRef: primary.embedRef,
+  };
 }

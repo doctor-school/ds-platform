@@ -34,6 +34,7 @@
 | GET /v1/admin/projects                                          | authenticated | platform_admin               | fast-path  | —            | false   | none       | none        | EARS-1, EARS-15, EARS-16           |
 | GET /v1/admin/projects/:id                                      | authenticated | platform_admin               | fast-path  | —            | false   | none       | none        | EARS-1, EARS-16                    |
 | GET /v1/auth/session                                            | authenticated | doctor_guest, platform_admin | fast-path  | —            | false   | none       | low-stakes  | EARS-8                             |
+| GET /v1/events/:idOrSlug/recordings                             | authenticated | doctor_guest                 | fast-path  | —            | false   | none       | none        | EARS-5                             |
 | GET /v1/events/:idOrSlug/registration                           | authenticated | doctor_guest                 | fast-path  | —            | false   | none       | none        | EARS-1, EARS-10                    |
 | GET /v1/events/:idOrSlug/room                                   | authenticated | doctor_guest                 | policy     | —            | false   | none       | none        | EARS-1, EARS-8                     |
 | GET /v1/health                                                  | public        | —                            | none       | —            | false   | none       | none        | EARS-1                             |

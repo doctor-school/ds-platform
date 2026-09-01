@@ -1,6 +1,6 @@
 ---
 "@ds/api": minor
-"portal": minor
+"@ds/portal": minor
 ---
 
 014 EARS-9 — «Мои события» carries two tabs over the full registration history

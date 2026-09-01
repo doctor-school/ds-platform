@@ -479,7 +479,7 @@ function main() {
   }
 }
 
-// Entry-point guard (same pattern as main-tree-read-guard.mjs): run `main()`
+// Entry-point guard (same pattern as worktree-path-guard.mjs): run `main()`
 // only when invoked directly, so the guard-tests spec can import the pure
 // seams without firing stdin reads / process.exit.
 function norm(p) {

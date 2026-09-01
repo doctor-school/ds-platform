@@ -8,7 +8,9 @@
 // intervening Agent dispatch; the streak RESETS on an Agent call. When the
 // streak reaches the threshold (DISPATCH_WARN_THRESHOLD) it emits a non-blocking
 // WARN naming §6 + the sanctioned inline carve-outs, so the lead must
-// consciously continue inline or dispatch. Phase-0 severity: WARN, never BLOCK.
+// consciously continue inline or dispatch. Phase-0 severity: WARN, never BLOCK,
+// and ONCE PER SESSION (#1700 latch) — the drift signal is worth saying once;
+// repeating it on every later mutation was noise, not enforcement.
 //
 // Contract: reads the PreToolUse hook JSON on stdin ({session_id, cwd,
 // tool_name, tool_input}). Warn = exit 0 + JSON on stdout ({systemMessage,
@@ -59,7 +61,7 @@ export const DISPATCH_TOOL_RE = /^(Agent|Task|spawn_agent)$/;
 export const CARVE_OUT_ENV = "DS_DISPATCH_GUARD_DISABLE";
 
 /** Per-session guard-state directory. Holds one `<session_id>.json` per session
- * with `{streak}`. Gitignored (machine state, not repo content). */
+ * with `{streak, warned}`. Gitignored (machine state, not repo content). */
 export const GUARD_STATE_DIR_REL = ".claude/dispatch-guard-state";
 
 /** Case-insensitive + separator-insensitive path normalization (Windows FS). */
@@ -97,14 +99,27 @@ export function readStreak(path, readFile = (p) => readFileSync(p, "utf8")) {
   }
 }
 
+/** Read the once-per-session WARN latch. Missing/corrupt → `false` (fail-open:
+ * a lost latch costs at most one extra WARN, never a wedged call). */
+export function readWarned(path, readFile = (p) => readFileSync(p, "utf8")) {
+  try {
+    return JSON.parse(readFile(path))?.warned === true;
+  } catch {
+    return false;
+  }
+}
+
 /** Persist the streak (best-effort). Any FS error is swallowed — a state-write
- * failure must NEVER block or crash a tool call. FS ops are injectable for tests. */
-export function writeStreak(path, streak, deps = {}) {
+ * failure must NEVER block or crash a tool call. FS ops are injectable for tests.
+ * `warned` is the once-per-session latch; omitted ⇒ the field is not written. */
+export function writeStreak(path, streak, deps = {}, warned = undefined) {
   const mkdir = deps.mkdir || ((d) => mkdirSync(d, { recursive: true }));
   const writeFile = deps.writeFile || ((p, c) => writeFileSync(p, c));
   try {
     mkdir(dirname(path));
-    writeFile(path, JSON.stringify({ streak }));
+    const state =
+      warned === undefined ? { streak } : { streak, warned: warned === true };
+    writeFile(path, JSON.stringify(state));
   } catch {
     // fail-open: state persistence is best-effort.
   }
@@ -120,7 +135,7 @@ export function warnMessage(streak, threshold = DISPATCH_WARN_THRESHOLD) {
     `or, if this is a sanctioned inline mode — recon / scope-framing, an ` +
     `engineering-task inline discipline gate, ADR/spec inline authoring, or a ` +
     `worktree-isolated executor — continue consciously. WARN-level only ` +
-    `(Phase 0): never blocks. Provisional carve-out list; full rework at #914.`
+    `(Phase 0): never blocks, and this is the ONLY time it is said this session.`
   );
 }
 
@@ -132,7 +147,14 @@ export function warnMessage(streak, threshold = DISPATCH_WARN_THRESHOLD) {
  * - non-mutation tool            → `{ action: "silent" }` (no state change).
  * - mutation, but carved out     → `{ action: "silent" }` (worktree / env optout).
  * - mutation, streak+1 < N       → `{ action: "count", streak }`.
- * - mutation, streak+1 >= N      → `{ action: "warn",  streak }`.
+ * - mutation, streak+1 >= N, not yet warned this session → `{ action: "warn", streak }`.
+ * - mutation, streak+1 >= N, ALREADY warned this session → `{ action: "count", streak }`.
+ *
+ * The `warned` latch (#1700) caps the guard at ONE WARN per session: the signal
+ * is "you are drifting inline", and repeating it on every subsequent mutation
+ * was pure noise (a week-long transcript audit found the guard the second-
+ * loudest hook, with zero blocks). Counting itself is unchanged — the streak
+ * keeps advancing and still RESETS on an Agent dispatch.
  */
 export function decideDispatch({
   toolName,
@@ -141,6 +163,7 @@ export function decideDispatch({
   streak,
   threshold = DISPATCH_WARN_THRESHOLD,
   carveOut = false,
+  warned = false,
 }) {
   if (DISPATCH_TOOL_RE.test(toolName || "")) {
     return { action: "reset", streak: 0 };
@@ -151,7 +174,7 @@ export function decideDispatch({
   if (carveOut) return { action: "silent" };
   if (inWorktree(cwd) || inWorktree(projectDir)) return { action: "silent" };
   const next = (Number.isFinite(streak) && streak >= 0 ? streak : 0) + 1;
-  if (next >= threshold) return { action: "warn", streak: next };
+  if (next >= threshold && !warned) return { action: "warn", streak: next };
   return { action: "count", streak: next };
 }
 
@@ -161,19 +184,28 @@ function main() {
     const projectDir = projectRoot(payload);
     const statePath = stateFilePath(projectDir, payload.session_id || "");
     const streak = readStreak(statePath);
+    const warned = readWarned(statePath);
     const decision = decideDispatch({
       toolName: payload.tool_name,
       cwd: payload.cwd || "",
       projectDir,
       streak,
       carveOut: isCarveOut(process.env),
+      warned,
     });
     if (
       decision.action === "reset" ||
       decision.action === "count" ||
       decision.action === "warn"
     ) {
-      writeStreak(statePath, decision.streak);
+      // The latch is sticky for the whole session — it is NOT cleared by the
+      // Agent dispatch that resets the streak.
+      writeStreak(
+        statePath,
+        decision.streak,
+        {},
+        warned || decision.action === "warn",
+      );
     }
     if (decision.action === "warn") {
       const msg = warnMessage(decision.streak, DISPATCH_WARN_THRESHOLD);
@@ -194,7 +226,7 @@ function main() {
   }
 }
 
-// Entry-point guard (same pattern as main-tree-read-guard.mjs): run `main()`
+// Entry-point guard (same pattern as worktree-path-guard.mjs): run `main()`
 // only when invoked directly, so the guard-tests spec can import the pure seams
 // without firing stdin reads / process.exit.
 const invoked = process.argv[1] ? norm(resolve(process.argv[1])) : "";

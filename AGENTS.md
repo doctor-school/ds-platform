@@ -71,9 +71,9 @@ First reply opens with the «План сессии» block (format: CLAUDE.md �
 
 `Read` `apps/docs/content/skills/<name>/SKILL.md` directly. No vendor auto-discovery — the path is the contract.
 
-### 3.4 Superpowers whitelist (single exception)
+### 3.4 Vendor skill packs are off
 
-`superpowers:brainstorming` is the only `superpowers:*` skill allowed for project work, and only as the step-2 implementation vehicle of `author-feature-spec` (and its `do-product-discovery` upstream) — never as the orchestrator (that is the catalog skill, §3.3). Do not chain into `superpowers:writing-plans`: the requirements/design triplet is the plan (ADR-0007 §2.4). Every other `superpowers:*` skill, and any chain one starts internally, is disallowed for project work; citing them as patterns inside project SKILL.md content is fine.
+No vendor skill pack is enabled for project work — the catalog is the only source (§3.3). The one skill this project used from the superpowers pack, `brainstorming`, is VENDORED at `apps/docs/content/skills/brainstorming/SKILL.md` (MIT, attribution in the file) and dispatched by catalog path like any other; the pack itself is disabled in `.claude/settings.json`. It is the step-2 vehicle of `author-feature-spec` (and its `do-product-discovery` upstream), never the orchestrator. Do not chain into a plan-writing skill: the requirements/design triplet is the plan (ADR-0007 §2.4). Citing an external skill as a pattern source inside project SKILL.md content is fine.
 
 ### 3.5 Bootstrap
 

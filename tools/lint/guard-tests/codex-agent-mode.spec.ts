@@ -1,11 +1,5 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import {
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -19,7 +13,6 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "..", "..", "..");
 const WORKTREE_GUARD = resolve(ROOT, "tools/hooks/worktree-path-guard.mjs");
 const DISPATCH_GUARD = resolve(ROOT, "tools/hooks/dispatch-guard.mjs");
-const READ_GUARD = resolve(ROOT, "tools/hooks/main-tree-read-guard.mjs");
 const tempDirs: string[] = [];
 afterEach(() => {
   while (tempDirs.length)
@@ -44,11 +37,8 @@ describe("Codex project configuration", () => {
     ).toBe(true);
     expect(
       pre.some((group: { matcher: string }) =>
-        group.matcher.includes("request_user_input"),
+        group.matcher.includes("mcp__.*__browser_"),
       ),
-    ).toBe(true);
-    expect(
-      pre.some((group: { matcher: string }) => group.matcher.includes("Bash")),
     ).toBe(true);
     for (const groups of Object.values(config.hooks) as Array<
       Array<{ hooks: Array<{ command: string; commandWindows: string }> }>
@@ -243,33 +233,6 @@ describe("canonical Codex hook payloads (spawned end-to-end)", () => {
     expect(run("apply_patch", patch).stdout).toBe("");
   });
 
-  it("observes a Codex Bash payload in the main-tree read guard", () => {
-    const cwd = mkdtempSync(resolve(tmpdir(), "codex-read-"));
-    tempDirs.push(cwd);
-    const peer = resolve(cwd, "peer.jsonl");
-    writeFileSync(peer, "{}\n", "utf8");
-    const flagDir = resolve(cwd, ".claude");
-    mkdirSync(flagDir, { recursive: true });
-    writeFileSync(
-      resolve(flagDir, "parallel-sessions.flag.json"),
-      JSON.stringify({ sessions: [{ id: "peer", logPath: peer }] }),
-      "utf8",
-    );
-    const result = spawnSync(process.execPath, [READ_GUARD], {
-      input: JSON.stringify({
-        session_id: "codex-read-shape",
-        cwd,
-        hook_event_name: "PreToolUse",
-        tool_name: "Bash",
-        tool_input: { command: "rg TODO tools" },
-      }),
-      encoding: "utf8",
-    });
-    expect(result.status).toBe(0);
-    expect(JSON.parse(result.stdout).systemMessage).toContain(
-      "main-tree read guard",
-    );
-  });
 });
 
 describe("Codex context-budget fallback", () => {

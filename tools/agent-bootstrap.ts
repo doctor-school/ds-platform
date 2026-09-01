@@ -5,9 +5,14 @@
  * Spec: docs/superpowers/specs/2026-05-15-ds-platform-ai-stack-design-en.md §4
  * ADR:  docs/adr/0007-ai-stack-en.md §2.5
  *
- * Prints a ≤ 2 KB markdown snapshot of git + GitHub state + active spec metadata
- * + recommended next step. Used by Claude Code SessionStart hook (pnpm bootstrap),
- * Codex AGENTS.md "Before any task" first step, or manual invocation.
+ * Prints a ≤ 2 KB markdown snapshot of git + GitHub state + active spec metadata.
+ * Used by Claude Code SessionStart hook (pnpm bootstrap), Codex AGENTS.md
+ * "Before any task" first step, or manual invocation.
+ *
+ * FACTS ONLY (#1700). The former `## Recommendation` rollup is gone: it was a
+ * derived re-ranking of the same buckets printed just above it, and AGENTS.md
+ * §3.5 already forbids treating it as ground truth. The agent triages the open
+ * board itself (`pnpm backlog:triage`); the bootstrap reports state.
  *
  * Hard rule: NEVER throw an unhandled error. Every failure path returns a
  * printable warning so the SessionStart hook does not crash. Exit code is
@@ -349,46 +354,6 @@ async function readSpecMeta(featureSlug: string): Promise<SpecMeta | null> {
   }
 }
 
-// `openCount` is the raw `gh issue list --state open` total — deliberately
-// independent of the working/awaiting/ready triage buckets (#306). An empty
-// ready bucket (label-driven) must NEVER read as an empty backlog: when the
-// buckets are all empty but open issues exist, the recommendation is to triage
-// the board by readiness, not "clean slate / nothing to do".
-export function recommend(
-  activeWorking: GhIssue[],
-  awaitingReview: GhIssue[],
-  prs: GhPRGroups,
-  readyQueue: GhIssue[],
-  openCount: number,
-): string {
-  if (prs.others.length > 0) {
-    return `${prs.others.length} non-author PR(s) open (Dependabot et al.) — triage before product work.`;
-  }
-  if (awaitingReview.length > 0) {
-    return `Address review on Issue #${awaitingReview[0]!.number}.`;
-  }
-  if (prs.mine.some((pr) => pr.reviewDecision === "CHANGES_REQUESTED")) {
-    return `You have a PR with CHANGES_REQUESTED — address feedback first.`;
-  }
-  if (activeWorking.length > 0) {
-    return `Resume #${activeWorking[0]!.number} (most recently updated).`;
-  }
-  if (readyQueue.length > 0) {
-    return `No active work. Pick from ready queue: ${readyQueue
-      .slice(0, 3)
-      .map((i) => `#${i.number}`)
-      .join(", ")}.`;
-  }
-  if (openCount > 0) {
-    // Buckets empty (none labelled agent-ready / agent-working / awaiting-review)
-    // but the board is NOT empty — the `ready` queue is a label-driven view, not
-    // ground truth (AGENTS.md §3.5). Direct the agent to TRIAGE by resolving the
-    // dependency graph (`pnpm backlog:triage`, #497), never "done".
-    return `${openCount} open issue(s) but none in ready/working/awaiting buckets — run \`pnpm backlog:triage\` to TRIAGE the open board by readiness resolved from the native blocked_by graph (NOT labels). The ready queue is label-driven, not ground truth; an empty bucket set is NOT an empty backlog.`;
-  }
-  return `Clean slate. Open a new feature-spec via superpowers:brainstorming.`;
-}
-
 // ── concurrency detector (#359) ─────────────────────────────────────────────
 // The user runs PARALLEL Claude sessions in one repo. A session editing the
 // SHARED main tree while another is live sweeps uncommitted edits into the wrong
@@ -435,14 +400,15 @@ export function liveParallelSessions(
 
 // ── parallel-sessions flag + directive (#823) ───────────────────────────────
 // When live parallel sessions exist AND this session is in the SHARED main
-// tree, the bootstrap (1) prints an imperative first-action directive (not an
-// advisory ⚠) and (2) drops a machine-readable flag file that the PreToolUse
-// hook `tools/hooks/main-tree-read-guard.mjs` consults to WARN on main-tree
-// source reads until the session enters a worktree. When no parallel sessions
-// exist, the flag is removed so the guard stays silent.
+// tree, the bootstrap (1) prints one imperative first-action banner line and
+// (2) drops a machine-readable flag file that the BLOCK-level PreToolUse hook
+// `tools/hooks/worktree-path-guard.mjs` consults when classifying a main-tree
+// WRITE. When no parallel sessions exist, the flag is removed so the guard
+// stays silent. (#1700 retired the read-side WARN hook that also read this
+// flag; the write guard still does, so the flag stays.)
 
-/** MUST match `FLAG_REL` in `tools/hooks/main-tree-read-guard.mjs` (asserted
- * equal by the guard-tests spec). Gitignored — session-local state, not repo. */
+/** MUST match `FLAG_REL` in `tools/hooks/main-tree-state.mjs` (asserted equal
+ * by the guard-tests spec). Gitignored — session-local state, not repo. */
 export const PARALLEL_FLAG_REL = ".claude/parallel-sessions.flag.json";
 
 export interface ParallelSessionsFlag {
@@ -468,16 +434,17 @@ export function buildParallelFlag(
   };
 }
 
-/** Imperative first-action directive — replaces the former advisory ⚠ (#823). */
+/**
+ * Imperative first-action directive — ONE compact banner line (#1700). The
+ * former multi-clause paragraph re-argued the rule the agent is already bound
+ * by (AGENTS.md §6 worktree-per-session); the banner only has to name the
+ * trigger and the command.
+ */
 export function mainTreeIsolationDirective(liveSessions: number): string {
   return (
-    `> 🛑 **FIRST ACTION — ISOLATE BEFORE ANY REPO-FILE READ.** ${liveSessions} other live ` +
-    `session(s) share this repo and you are in the SHARED main tree. Run ` +
-    "`pnpm task:worktree <N>` → `EnterWorktree path:.claude/worktrees/<N>` NOW — " +
-    `before any repo-file Read/Grep/Glob, analysis reads included (#418): a parallel ` +
-    `session can advance origin/main or switch HEAD under you and sweep uncommitted ` +
-    `edits into the wrong PR (AGENTS.md §6). A PreToolUse guard warns on every ` +
-    `main-tree source read until this session enters a worktree.`
+    `> 🛑 **ISOLATE FIRST (AGENTS.md §6)** — ${liveSessions} other live session(s), ` +
+    "you are in the SHARED main tree: run `pnpm task:worktree <N>` → " +
+    "`EnterWorktree path:.claude/worktrees/<N>` before any repo-file read."
   );
 }
 
@@ -519,6 +486,20 @@ export function isRepoSessionDir(dirName: string, mainSlug: string): boolean {
   return (
     dirName === mainSlug || dirName.startsWith(`${mainSlug}--claude-worktrees-`)
   );
+}
+
+/**
+ * One compact line for a raw `git worktree list` row (#1700).
+ * `C:/repo/.claude/worktrees/1700  a1b2c3d [tooling/1700-slug]` → `1700 [tooling/1700-slug]`.
+ * The absolute path and the HEAD sha are noise in a session snapshot — the
+ * directory name plus the branch is what the agent acts on. An unparseable row
+ * is returned untouched (never lose information to a formatting helper).
+ */
+export function compactWorktreeLine(row: string): string {
+  const m = /^(\S+)\s+[0-9a-f]{7,40}\s+(\[.+\]|\(.+\))\s*$/.exec(row.trim());
+  if (!m) return row.trim();
+  const dir = m[1]!.replace(/\\/g, "/").replace(/\/+$/, "").split("/").pop();
+  return `${dir || m[1]} ${m[2]}`;
 }
 
 interface Concurrency {
@@ -728,7 +709,6 @@ async function main(): Promise<void> {
   await syncParallelFlag(conc);
   // Parallel-session claim signal (#811) — same check as `pnpm backlog:triage`.
   const claims = await claimSignals(ready);
-  const readyFree = ready.filter((i) => !claims.has(i.number));
 
   const activeSpecs = await Promise.all(
     working.map(async (i) => {
@@ -842,8 +822,11 @@ async function main(): Promise<void> {
     }`,
   );
   if (conc.worktrees.length > 1) {
+    // One compact line per worktree (#1700): the raw `git worktree list` row
+    // repeats the absolute path and the HEAD sha, neither of which the agent
+    // acts on — the directory name and the branch are the whole signal.
     out.push(`- Worktrees (${conc.worktrees.length}):`);
-    for (const w of conc.worktrees) out.push(`  - ${w}`);
+    for (const w of conc.worktrees) out.push(`  - ${compactWorktreeLine(w)}`);
   }
   if (conc.inSharedMainTree && conc.liveSessions > 0) {
     out.push("");
@@ -956,12 +939,6 @@ async function main(): Promise<void> {
       out.push(`  - glossary: ${spec.terms.join(", ") || "(none)"}`);
     }
   }
-  out.push("");
-
-  out.push("## Recommendation");
-  // The pick list excludes IN-FLIGHT-ELSEWHERE items (#811) — a claimed Issue
-  // must never be recommended as free (the #770 miss).
-  out.push(recommend(working, awaiting, prs, readyFree, openCount ?? 0));
   out.push("");
 
   if (warnings.length > 0) {

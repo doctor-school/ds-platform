@@ -1,6 +1,8 @@
 import { Module } from "@nestjs/common";
 import { TaxonomyModule } from "../taxonomy/taxonomy.module.js";
 import { RecordingsAdminController } from "./recordings.admin.controller.js";
+import { RecordingsPlaybackController } from "./recordings.playback.controller.js";
+import { RecordingsPlaybackService } from "./recordings.playback.service.js";
 import { RecordingsProjectionService } from "./recordings.projection.js";
 import { RecordingsRepository } from "./recordings.repository.js";
 import { RecordingsService } from "./recordings.service.js";
@@ -23,11 +25,16 @@ import { RecordingsService } from "./recordings.service.js";
  */
 @Module({
   imports: [TaxonomyModule],
-  controllers: [RecordingsAdminController],
+  // 014 EARS-5 (#1343) adds the AUTHENTICATED playback controller beside the
+  // operator's one. Same module, because it reads the same aggregate through the
+  // same repository and the same EARS-3 resolver; a separate module would have
+  // duplicated both to serve one route.
+  controllers: [RecordingsAdminController, RecordingsPlaybackController],
   providers: [
     RecordingsRepository,
     RecordingsService,
     RecordingsProjectionService,
+    RecordingsPlaybackService,
   ],
   // 014 EARS-3 (#1340): the derived projection is exported so the four §4
   // consumers (#1341/#1344/#1346/#1347) inject THIS resolver instead of each

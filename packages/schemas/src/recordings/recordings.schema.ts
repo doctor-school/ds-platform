@@ -177,6 +177,46 @@ export const RecordingProjectionSchema = z.object({
 export type RecordingProjection = z.infer<typeof RecordingProjectionSchema>;
 
 /**
+ * 014 EARS-5 (#1343) — ONE playable cut, as the authenticated read hands it out
+ * (014-design §5). This is the counterpart the `RecordingProjection` docblock
+ * above points at: the projection answers «what does this event offer», and this
+ * contract answers «what do I load», and only ever behind the login gate.
+ *
+ * It carries the source and nothing administrative: no id, no `status`, no
+ * `version`, no `firstPublishedAt`. A doctor needs the provider and the embed
+ * reference to mount a player; handing them the row's lifecycle would be a
+ * second, accidental admin surface reachable with a plain doctor session.
+ *
+ * `embedRef` stays a PROVIDER-SCOPED REFERENCE, never a URL (#1134): the consumer
+ * resolves it through the same 006 provider mapping it already uses for the live
+ * room, so there is one place that knows what a rutube id becomes.
+ */
+export const PlayableRecordingSchema = z.object({
+  kind: RecordingKindSchema,
+  provider: StreamProviderSchema,
+  embedRef: z.string(),
+  posterRef: PosterRefSchema.nullable(),
+  durationSec: z.number().int().nullable(),
+});
+export type PlayableRecording = z.infer<typeof PlayableRecordingSchema>;
+
+/**
+ * `GET /v1/events/:idOrSlug/recordings` — the whole authenticated playback body.
+ *
+ * The two slots mirror the EARS-3 projection exactly: `primary` is the cut the
+ * player loads (edited over raw), `secondary` is the raw capture under a montage
+ * and `null` otherwise. Both are `null` for a `preparing` event, and that is a
+ * **200, not an error** (014-design §5): the plaque is a legitimate answer to
+ * «what can I watch», and a 404 there would make an honest empty state look like
+ * a broken link. The event's own 404 is a different fact and keeps its status.
+ */
+export const EventPlaybackSchema = z.object({
+  primary: PlayableRecordingSchema.nullable(),
+  secondary: PlayableRecordingSchema.nullable(),
+});
+export type EventPlayback = z.infer<typeof EventPlaybackSchema>;
+
+/**
  * The operator's view of one recording row (014-design §7). Source-bearing on
  * purpose: this is the `platform_admin` surface. The public projection
  * (#1340/#1341) is a different, deliberately source-free contract — the login

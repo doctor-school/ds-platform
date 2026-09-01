@@ -3167,6 +3167,27 @@
         "tags": ["Room"]
       }
     },
+    "/v1/events/{idOrSlug}/recordings": {
+      "get": {
+        "operationId": "RecordingsPlaybackController_read",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "idOrSlug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["RecordingsPlayback"]
+      }
+    },
     "/v1/events/{idOrSlug}/registration": {
       "get": {
         "operationId": "RegistrationController_state",

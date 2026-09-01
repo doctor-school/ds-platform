@@ -151,18 +151,11 @@ text rather than an exit code) and `ears-naming` (format hygiene; exit-code
 cases for a malformed `EARS-…` prefix).
 
 **Also here (direct import, not a lint guard):**
-`agent-bootstrap-recommend.spec.ts` unit-covers the pure `recommend()` of
-[`tools/agent-bootstrap.ts`](../../agent-bootstrap.ts) (#306) — its only
-side-effect-free seam (the script guards `main()` behind an entry-point check so
-the import fires no `gh`/`git` subprocess). It rides this package's `vitest run`
-because `tools/` has no test workspace of its own; the assertion that an empty
-ready/working/awaiting bucket set with open issues yields a _triage_ nudge (never
-"clean slate") is the deterministic backstop the #306 retro asked for.
-
 `agent-bootstrap-concurrency.spec.ts` + `task-worktree.spec.ts` unit-cover the
 parallel-session detector (#359): the pure `liveParallelSessions()` (mtime
-window, self-exclusion, shared-main-tree breakdown), `isSharedMainTree()`, and
-`encodeProjectSlug()` of [`tools/agent-bootstrap.ts`](../../agent-bootstrap.ts),
+window, self-exclusion, shared-main-tree breakdown), `isSharedMainTree()`,
+`encodeProjectSlug()` and `compactWorktreeLine()` (#1700) of
+[`tools/agent-bootstrap.ts`](../../agent-bootstrap.ts),
 plus the slug/prefix/path derivation of
 [`tools/dev/task-worktree.mjs`](../../dev/task-worktree.mjs) (`pnpm
 task:worktree`). Same entry-point-guard discipline — the import fires no

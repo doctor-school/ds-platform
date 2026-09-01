@@ -110,10 +110,7 @@ export default function EventEditPage() {
                     <CardTitle>{t("events.sections.lifecycle")}</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <LifecycleActions
-                      detail={detail}
-                      onTransition={() => refetch()}
-                    />
+                    <LifecycleActions detail={detail} refetch={() => refetch()} />
                   </CardContent>
                 </Card>
 

@@ -1,9 +1,12 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { validTransitions } from "@ds/schemas";
 import type { EventLifecycleState } from "@ds/schemas";
 import {
   actionsFor,
   lifecycleCommandRequest,
+  lifecycleErrorOutcome,
   stateLabelKey,
 } from "./lifecycle";
 
@@ -119,5 +122,56 @@ describe("007 EARS-7 lifecycle command request", () => {
       .toEqual({ version: 1 });
     expect(lifecycleCommandRequest({ id: "evt-2", version: 42 }, "publish").meta)
       .toEqual({ version: 42 });
+  });
+});
+
+/**
+ * 007 EARS-7 / #1593 — how the action bar EXPLAINS and RECOVERS from a refusal.
+ *
+ * A conditional command has two refusal families the operator must be able to
+ * tell apart: the transition itself is illegal (409 — nothing to retry), and the
+ * screen is simply behind the row (412/428 — the same click succeeds once the
+ * page re-reads the event). The second one is not an error the operator caused,
+ * so it gets the shipped `errors.stale` sentence every other admin surface uses
+ * AND a refetch, so the retry is one click and not a manual browser reload with
+ * the spent validator resent in between.
+ */
+describe("#1593 lifecycle refusal outcome", () => {
+  it("EARS-7: a stale validator explains the stale read and refetches the event", () => {
+    for (const errorCode of ["PRECONDITION_FAILED", "PRECONDITION_REQUIRED"]) {
+      expect(lifecycleErrorOutcome({ errorCode })).toEqual({
+        messageKey: "events.errors.stale",
+        refetch: true,
+      });
+    }
+  });
+
+  it("EARS-7: an illegal transition keeps the refusal sentence and does NOT refetch", () => {
+    expect(lifecycleErrorOutcome({ errorCode: "INVALID_TRANSITION" })).toEqual({
+      messageKey: "events.errors.transitionRefused",
+      refetch: false,
+    });
+  });
+
+  it("EARS-7: an unmapped or bodiless failure stays the generic refusal, no refetch", () => {
+    expect(lifecycleErrorOutcome(undefined)).toEqual({
+      messageKey: "events.errors.transitionRefused",
+      refetch: false,
+    });
+    expect(lifecycleErrorOutcome({ errorCode: "SOMETHING_NEW" })).toEqual({
+      messageKey: "events.errors.transitionRefused",
+      refetch: false,
+    });
+  });
+
+  it("EARS-7: both refusal sentences exist in the shipped RU catalogue", () => {
+    const messages = JSON.parse(
+      readFileSync(
+        fileURLToPath(new URL("../messages/ru.json", import.meta.url)),
+        "utf8",
+      ),
+    ) as { events: { errors: Record<string, string> } };
+    expect(typeof messages.events.errors.stale).toBe("string");
+    expect(typeof messages.events.errors.transitionRefused).toBe("string");
   });
 });

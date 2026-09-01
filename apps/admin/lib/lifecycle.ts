@@ -1,4 +1,6 @@
 import type { EventLifecycleState } from "@ds/schemas";
+import type { TaxonomyHttpError } from "@/providers/data-provider";
+import { taxonomyErrorKey } from "./taxonomy-errors";
 
 /**
  * The admin lifecycle-action model (007 EARS-5/6/7, design §2, §8; extended by
@@ -116,6 +118,10 @@ export function actionsFor(
  * surfaces the refusal; it never silently overwrites the other operator.
  */
 export function lifecycleCommandRequest(
+  // The structural `{ id, version }` shape rather than `EventAdminDetail` is
+  // DELIBERATE: it is what keeps this builder (and `lifecycleErrorOutcome`
+  // below) in the pure node tier, testable without React. Do not tighten it back
+  // to the full DTO.
   detail: { readonly id: string; readonly version: number },
   command: LifecycleAction["command"],
 ): {
@@ -129,6 +135,43 @@ export function lifecycleCommandRequest(
     method: "post",
     values: {},
     meta: { version: detail.version },
+  };
+}
+
+/** What the action bar does with one refused lifecycle command. */
+export interface LifecycleErrorOutcome {
+  /** The RU message-catalog key the alert renders. */
+  readonly messageKey: string;
+  /** Whether the screen must re-read the event before the operator retries. */
+  readonly refetch: boolean;
+}
+
+/**
+ * Explain and recover from a refused lifecycle command (#1593).
+ *
+ * A conditional command has two refusal families, and they need different words
+ * AND different next steps. An illegal transition (409 `INVALID_TRANSITION`) is
+ * a real refusal — the sentence says so, and re-reading the event changes
+ * nothing. A precondition refusal (412 `PRECONDITION_FAILED`, 428
+ * `PRECONDITION_REQUIRED`) is NOT about the transition: it says the operator's
+ * screen is behind the row, and the very same click succeeds once the screen
+ * re-reads it. So it gets the shipped `errors.stale` sentence — resolved through
+ * the same `taxonomyErrorKey` mapper every other admin surface keys off, not a
+ * second copy of the code table — plus `refetch: true`, which reloads the
+ * validator so the retry is one click rather than a manual browser reload with
+ * the spent validator resent in between (which would loop on 412 forever).
+ */
+export function lifecycleErrorOutcome(error: unknown): LifecycleErrorOutcome {
+  const messageKey = taxonomyErrorKey(
+    error,
+    "events.errors.transitionRefused",
+  );
+  const code = (error as TaxonomyHttpError | undefined)?.errorCode;
+
+  return {
+    messageKey,
+    refetch:
+      code === "PRECONDITION_FAILED" || code === "PRECONDITION_REQUIRED",
   };
 }
 

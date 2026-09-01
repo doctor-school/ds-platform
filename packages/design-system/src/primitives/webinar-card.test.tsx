@@ -195,3 +195,198 @@ describe("006 EARS-6 WebinarCard — room-entry CTA slot (no nested anchor)", ()
     expect(screen.getAllByRole("link")).toHaveLength(1);
   });
 });
+
+/**
+ * 019 EARS-2 — the shared card widened to the full doctor-feed format
+ * vocabulary. This is the spec's Verification row 2: the route-independent
+ * shared-card proof (all five formats distinguishable, sign-up count in every
+ * state, offline city and seats, zero cost as «бесплатно для врача», no rouble
+ * string). Route mounting and screen-local tree checks belong to #1516.
+ */
+const FORMAT_KICKERS = [
+  "Вебинар",
+  "Разбор",
+  "Doctor Club",
+  "Подкаст",
+  "Конгресс",
+] as const;
+
+const FEED = {
+  ...BASE,
+  formatLabel: "Вебинар",
+  venueLabel: "Онлайн",
+  nmoLabel: "НМО · 2 ЗЕТ",
+  pulCost: 120,
+  pulCostLabel: "120 Pul",
+  freeLabel: "бесплатно для врача",
+  signUpCount: 128,
+  signUpLabel: "коллег записались",
+};
+
+describe("019 EARS-2 WebinarCard — the five formats", () => {
+  it("019 EARS-2.1: each of the five formats reads from the time-plate kicker, per the canvas card contract", () => {
+    const kickers = new Set<string>();
+
+    for (const kicker of FORMAT_KICKERS) {
+      const { container } = render(
+        <WebinarCard {...FEED} formatLabel={kicker} />,
+      );
+      const el = container.querySelector("[data-event-format-kicker]");
+      expect(el, `no kicker rendered for «${kicker}»`).not.toBeNull();
+      expect(el!.textContent).toBe(kicker);
+      // The canvas card has no coloured format badge and no glyph vocabulary —
+      // the format is the kicker, everything else is a text chip.
+      expect(container.querySelector("[data-event-format]")).toBeNull();
+      kickers.add(el!.textContent!);
+      cleanup();
+    }
+
+    expect(kickers.size).toBe(5);
+  });
+
+  it("019 EARS-2.2: the format kicker never renders without its catalog label (no hardcoded copy)", () => {
+    const { container } = render(<WebinarCard {...BASE} />);
+    expect(container.querySelector("[data-event-format-kicker]")).toBeNull();
+  });
+
+  it("019 EARS-2.3: НМО renders as a chip only — never as the card's heading", () => {
+    const { container } = render(<WebinarCard {...FEED} />);
+    const chip = screen.getByText("НМО · 2 ЗЕТ");
+    expect(chip.getAttribute("data-event-nmo")).toBe("");
+    // It lives in the ONE chip row — not in a badge row of its own.
+    expect(chip.closest("[data-event-chips]")).not.toBeNull();
+    expect(container.querySelector("[data-nmo-badge]")).toBeNull();
+    // The card's only heading is its title link, and it says nothing about НМО.
+    expect(screen.getByRole("heading").textContent).toBe(BASE.title);
+  });
+});
+
+describe("019 EARS-2 WebinarCard — cost, sign-ups, offline city and seats", () => {
+  it("019 EARS-2.4: a zero Pul cost renders «бесплатно для врача» and no rouble string", () => {
+    const { container } = render(<WebinarCard {...FEED} pulCost={0} />);
+    expect(screen.getByText("бесплатно для врача")).toBeInTheDocument();
+    expect(screen.queryByText("120 Pul")).toBeNull();
+    expect(container.textContent).not.toMatch(/₽|руб/i);
+  });
+
+  it("019 EARS-2.5: a priced event reads in Pul and never in roubles", () => {
+    const { container } = render(<WebinarCard {...FEED} />);
+    expect(screen.getByText("120 Pul")).toBeInTheDocument();
+    expect(container.textContent).not.toMatch(/₽|руб/i);
+  });
+
+  it("019 EARS-2.6: the sign-up count renders in EVERY card state", () => {
+    const states = [
+      { name: "normal", props: {} },
+      { name: "live", props: { live: true, liveLabel: "В эфире" } },
+      {
+        name: "registered",
+        props: { registered: true, registeredLabel: "Вы записаны" },
+      },
+      { name: "sold out", props: { seatsLeft: 0, soldOutLabel: "мест не осталось" } },
+      {
+        name: "past with a recording",
+        props: {
+          variant: "past" as const,
+          recordingLabel: "Есть запись",
+          ctaHref: BASE.href,
+          ctaLabel: "Смотреть запись ↗",
+        },
+      },
+    ];
+
+    for (const state of states) {
+      const { container } = render(<WebinarCard {...FEED} {...state.props} />);
+      const count = container.querySelector("[data-signup-count]");
+      expect(count, `sign-up count missing in the «${state.name}» state`)
+        .not.toBeNull();
+      expect(count!.textContent).toContain("128");
+      cleanup();
+    }
+  });
+
+  it("019 EARS-2.7: an offline event carries its city and its remaining seats", () => {
+    const { container } = render(
+      <WebinarCard
+        {...FEED}
+        formatLabel="Doctor Club"
+        venueLabel="Офлайн"
+        city="Казань"
+        seatsLeft={12}
+        seatsLeftLabel="мест осталось"
+      />,
+    );
+    // The canvas venue chip carries the city inside it — «Офлайн · Казань».
+    const venue = container.querySelector("[data-event-city]");
+    expect(venue?.getAttribute("data-event-city")).toBe("Казань");
+    expect(venue?.textContent).toBe("Офлайн · Казань");
+    expect(container.querySelector("[data-event-seats]")?.textContent).toContain(
+      "12",
+    );
+  });
+
+  it("019 EARS-2.8: a hybrid congress spanning dates still carries its city and seats", () => {
+    const { container } = render(
+      <WebinarCard
+        {...FEED}
+        formatLabel="Конгресс"
+        venueLabel="Гибрид"
+        // The date SPAN rides the time-plate sub-label (canvas «14–15 ноября»).
+        dateLabel="14–15 ноября"
+        city="Москва"
+        seatsLeft={40}
+        seatsLeftLabel="мест осталось"
+      />,
+    );
+    expect(screen.getByText("14–15 ноября")).toBeInTheDocument();
+    expect(
+      container.querySelector("[data-event-format-kicker]")?.textContent,
+    ).toBe("Конгресс");
+    expect(container.querySelector("[data-event-city]")?.textContent).toBe(
+      "Гибрид · Москва",
+    );
+    expect(container.querySelector("[data-event-seats]")?.textContent).toContain(
+      "40",
+    );
+  });
+
+  it("019 EARS-2.9: zero remaining seats reads «мест не осталось» in the chip row, with no seat count", () => {
+    const { container } = render(
+      <WebinarCard
+        {...FEED}
+        formatLabel="Doctor Club"
+        venueLabel="Офлайн"
+        city="Казань"
+        seatsLeft={0}
+        seatsLeftLabel="мест осталось"
+        soldOutLabel="мест не осталось"
+      />,
+    );
+    const chip = screen.getByText("мест не осталось");
+    expect(chip.getAttribute("data-sold-out")).toBe("");
+    // It is a chip in the ONE row, not a standalone announced element.
+    expect(chip.closest("[data-event-chips]")).not.toBeNull();
+    expect(chip.getAttribute("role")).toBeNull();
+    expect(container.querySelector("[data-event-seats]")).toBeNull();
+    // A sold-out event stays readable — its event-page link is untouched.
+    expect(screen.getByRole("link")).toHaveAttribute("href", BASE.href);
+  });
+
+  it("019 EARS-2.10: no rendered string states who finances the event", () => {
+    const { container } = render(
+      <WebinarCard
+        {...FEED}
+        formatLabel="Doctor Club"
+        venueLabel="Офлайн"
+        city="Казань"
+        seatsLeft={5}
+        seatsLeftLabel="мест осталось"
+        registered
+        registeredLabel="Вы записаны"
+      />,
+    );
+    expect(container.textContent).not.toMatch(
+      /спонсор|при поддержке|финанс|партнёр|партнер|инвестор/i,
+    );
+  });
+});

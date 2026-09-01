@@ -81,6 +81,43 @@ export interface WebinarCardProps extends Omit<
   registered?: boolean;
   /** Registered-marker copy — «Вы записаны» (from the catalog); required visually when `registered`. */
   registeredLabel?: string;
+  /**
+   * 019 EARS-2 — the format/kind KICKER on the time plate (the canvas card's
+   * `num` slot): «Вебинар», «Разбор», «Doctor Club», «Подкаст», «Конгресс».
+   * Pure catalog copy — the card holds NO format vocabulary of its own, so it
+   * carries no dependency on the read contract in `@ds/schemas` and cannot
+   * drift from it. With no label the kicker line simply does not render.
+   */
+  formatLabel?: string;
+  /**
+   * НМО copy — «НМО · 2 ЗЕТ». A text CHIP in the one chip row (EARS-2/EARS-14:
+   * never a heading, never the card's primary emphasis).
+   */
+  nmoLabel?: string;
+  /** Venue chip copy — «Онлайн» / «Офлайн» / «Гибрид»; joined with {@link city} when present. */
+  venueLabel?: string;
+  /**
+   * Cost in Pul attention points. `0` renders `freeLabel` («бесплатно для
+   * врача»); any other value renders `pulCostLabel`. The card renders NO rouble
+   * string in either branch — there is no rouble prop to render one from.
+   */
+  pulCost?: number;
+  /** Catalog copy for a non-zero Pul cost, e.g. «120 Pul». */
+  pulCostLabel?: string;
+  /** Catalog copy for a zero Pul cost — «бесплатно для врача». */
+  freeLabel?: string;
+  /** Colleagues signed up — rendered in EVERY card state (EARS-2 invariant). */
+  signUpCount?: number;
+  /** Catalog noun phrase following the count, e.g. «коллег записались». */
+  signUpLabel?: string;
+  /** Offline city — required by EARS-2 wherever an offline event is rendered. */
+  city?: string;
+  /** Remaining seats for an offline event; `0` is the «мест не осталось» state. */
+  seatsLeft?: number;
+  /** Catalog noun phrase following the seat count, e.g. «мест осталось». */
+  seatsLeftLabel?: string;
+  /** Catalog copy for the sold-out state — «мест не осталось». */
+  soldOutLabel?: string;
   /** Contextual CTA target: room entry for live cards, event page for past cards. */
   ctaHref?: string;
   /**
@@ -89,6 +126,9 @@ export interface WebinarCardProps extends Omit<
    */
   ctaLabel?: string;
 }
+
+/** The canvas chip: pale tint plate, 12.5px/700 ink, `6px 13px` padding. */
+const CHIP_CLASS = "bg-tint px-3.25 py-1.5 text-caption font-bold text-foreground";
 
 /** The pulsing round dot shared by the desktop sticker and the mobile live tag. */
 function LiveDot() {
@@ -118,6 +158,18 @@ const WebinarCard = React.forwardRef<HTMLDivElement, WebinarCardProps>(
       recordingLabel,
       registered = false,
       registeredLabel,
+      formatLabel,
+      nmoLabel,
+      venueLabel,
+      pulCost,
+      pulCostLabel,
+      freeLabel,
+      signUpCount,
+      signUpLabel,
+      city,
+      seatsLeft,
+      seatsLeftLabel,
+      soldOutLabel,
       ctaHref,
       ctaLabel,
       ...props
@@ -125,6 +177,22 @@ const WebinarCard = React.forwardRef<HTMLDivElement, WebinarCardProps>(
     ref,
   ) => {
     const past = variant === "past";
+    // EARS-2: the cost reads in Pul, and a zero cost reads «бесплатно для
+    // врача». There is no rouble branch because there is no rouble input.
+    const costLabel = pulCost === 0 ? freeLabel : pulCostLabel;
+    // «мест не осталось» is the seat count reaching zero — one state, one source.
+    const soldOut = seatsLeft === 0;
+    // The canvas venue chip carries the city inside it («Офлайн · Казань»); the
+    // city stays a STRUCTURED prop so the host never pre-concatenates copy.
+    const venueChipLabel =
+      venueLabel && city ? `${venueLabel} · ${city}` : (venueLabel ?? city);
+    const hasChipRow =
+      specialties.length > 0 ||
+      Boolean(venueChipLabel) ||
+      Boolean(nmoLabel) ||
+      Boolean(costLabel) ||
+      typeof signUpCount === "number" ||
+      typeof seatsLeft === "number";
 
     return (
       <div
@@ -172,6 +240,18 @@ const WebinarCard = React.forwardRef<HTMLDivElement, WebinarCardProps>(
               {time}
             </span>
             <div className="text-left">
+              {/* 019 EARS-2 — the format/kind kicker, the canvas card's `num`
+                slot on the time plate (NOT a badge of its own): «Вебинар»,
+                «Разбор», «Doctor Club», «Подкаст», «Конгресс». Pure catalog
+                copy, so no format vocabulary lives in the primitive. */}
+              {formatLabel ? (
+                <div
+                  data-event-format-kicker=""
+                  className="mb-1 text-eyebrow font-extrabold uppercase tracking-micro text-tint-foreground"
+                >
+                  {formatLabel}
+                </div>
+              ) : null}
               <div className="text-eyebrow font-extrabold uppercase tracking-micro text-tint-foreground">
                 {tzLabel}
               </div>
@@ -197,6 +277,7 @@ const WebinarCard = React.forwardRef<HTMLDivElement, WebinarCardProps>(
           <div className="mb-3 text-xs font-extrabold uppercase tracking-micro text-primary-action">
             {school}
           </div>
+
           {/* The TITLE is the card's link. Its `::after` stretches over the whole
             root (`after:inset-0`, the root is `relative`), so clicking anywhere on
             the card opens the event page while only ONE anchor exists in the DOM —
@@ -212,13 +293,55 @@ const WebinarCard = React.forwardRef<HTMLDivElement, WebinarCardProps>(
             </a>
           </h3>
 
-          {specialties.length > 0 ? (
-            <div className="mb-5 flex flex-wrap gap-2">
+          {/* The ONE chip row of the canvas card. Venue (with the offline city
+            inside it), НМО, cost in Pul, the sign-up count and the seat state
+            are all plain text chips here — the canvas has no second badge row,
+            no glyph vocabulary and no separate facts strip. The row sits
+            OUTSIDE every state branch on purpose: the sign-up count is required
+            «in every card state», so it renders for the scheduled, live,
+            registered, sold-out and past card alike and no variant can switch
+            it off. Specialty chips (004) share the row. */}
+          {hasChipRow ? (
+            <div
+              data-event-chips=""
+              className="mb-5 flex flex-wrap items-center gap-2"
+            >
+              {venueChipLabel ? (
+                <span data-event-city={city ?? undefined} className={CHIP_CLASS}>
+                  {venueChipLabel}
+                </span>
+              ) : null}
+              {nmoLabel ? (
+                <span data-event-nmo="" className={CHIP_CLASS}>
+                  {nmoLabel}
+                </span>
+              ) : null}
+              {costLabel ? (
+                <span data-event-cost="" className={CHIP_CLASS}>
+                  {costLabel}
+                </span>
+              ) : null}
+              {typeof signUpCount === "number" ? (
+                <span data-signup-count="" className={CHIP_CLASS}>
+                  {signUpCount}
+                  {signUpLabel ? ` ${signUpLabel}` : null}
+                </span>
+              ) : null}
+              {/* «мест не осталось» is the seat count reaching zero — the same
+                chip, re-worded, never a standalone announced element. */}
+              {soldOut && soldOutLabel ? (
+                <span data-sold-out="" className={CHIP_CLASS}>
+                  {soldOutLabel}
+                </span>
+              ) : null}
+              {typeof seatsLeft === "number" && !soldOut ? (
+                <span data-event-seats="" className={CHIP_CLASS}>
+                  {seatsLeft}
+                  {seatsLeftLabel ? ` ${seatsLeftLabel}` : null}
+                </span>
+              ) : null}
               {specialties.map((chip) => (
-                <span
-                  key={chip}
-                  className="bg-tint px-3.25 py-1.5 text-caption font-bold text-foreground"
-                >
+                <span key={chip} className={CHIP_CLASS}>
                   {chip}
                 </span>
               ))}

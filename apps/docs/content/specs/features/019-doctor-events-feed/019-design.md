@@ -2,7 +2,7 @@
 title: "019 — Design"
 description: "Design companion to the 019 doctor-events-feed requirements: route topology across the feed and the dedicated calendar page, the URL as the single state carrier, the composition of the shared units, live-block resolution against feature 006, the tense switch into 014's recordings, the facet panel's three fill states, the guest round-trip through 021 and the build sequence."
 slug: 019-doctor-events-feed-design
-status: Draft
+status: In dev
 lang: en
 ---
 

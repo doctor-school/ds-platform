@@ -15,6 +15,15 @@ import { signInAsAdmin } from "./support/sign-in";
  * a manual browser reload (before the fix a retry resent the spent validator and
  * answered 412 again, indefinitely).
  *
+ * Two further obligations come from the owner's Stage-B pass (2026-09-01), both
+ * about the re-read being HONEST rather than partial: the refusal alert clears
+ * itself once the state it describes has been replaced (its only reset used to be
+ * the next button's click, so it sat beside an already-corrected badge and
+ * action bar), and the re-read reaches the FORM FIELDS — the approved sentence
+ * «Данные на этой странице уже обновлены до актуального состояния» was false
+ * about every field, because react-hook-form seeded them once at mount. Fields
+ * the operator has edited survive that sync; only untouched ones follow.
+ *
  * The conflict is forced the way two real operators produce it: TWO tabs on the
  * same event in one session. Tab B saves an edit — an authoring write bumps
  * `version` WITHOUT moving the lifecycle state — so tab A still offers a legal
@@ -118,6 +127,13 @@ test.describe("#1593 — a stale lifecycle command in the live admin", () => {
     await expect(page.getByTestId("action-publish")).toBeVisible();
     await shot(page, "interaction-1-before-desktop-light");
 
+    // Tab A's operator is mid-edit on ONE field when the other write lands. The
+    // re-read must correct the fields nobody here touched and leave this one
+    // alone — a page that "updates to the current state" by eating the
+    // operator's typing would be a data-loss bug wearing the fix's clothes.
+    const dirtySchool = "Дерматология (правка в этой вкладке)";
+    await page.locator("#school").fill(dirtySchool);
+
     // ── Tab B — the second operator — saves an edit. An authoring write bumps
     //    `version` and leaves the state alone, so tab A's offer stays legal and
     //    only its validator goes stale. ─────────────────────────────────────
@@ -125,7 +141,8 @@ test.describe("#1593 — a stale lifecycle command in the live admin", () => {
     await other.setViewportSize(WIDE);
     await other.goto(`/events/${eventId}`);
     await expect(other.getByTestId("event-form")).toBeVisible();
-    await other.locator("#title").fill(`Правка второго администратора ${Date.now()}`);
+    const otherTitle = `Правка второго администратора ${Date.now()}`;
+    await other.locator("#title").fill(otherTitle);
     await other.getByTestId("submit-event").click();
     await expect(other.getByTestId("edit-ok")).toBeVisible({ timeout: 20_000 });
     await other.close();
@@ -143,6 +160,15 @@ test.describe("#1593 — a stale lifecycle command in the live admin", () => {
     // The command was refused, not applied: the event is still a draft.
     await expect(page.getByTestId("state-draft")).toBeVisible();
     await shot(page, "stale-412-desktop-light");
+
+    // ── The sentence must be TRUE of the fields, not only of the badge and the
+    //    action bar (owner Stage-B finding). The refetch the refusal triggered
+    //    carries tab B's title into this form… ───────────────────────────────
+    await expect(page.locator("#title")).toHaveValue(otherTitle, {
+      timeout: 20_000,
+    });
+    // …while the field this operator was editing is untouched by that sync.
+    await expect(page.locator("#school")).toHaveValue(dirtySchool);
 
     await setPalette(page, "dark");
     await shot(page, "stale-412-desktop-dark");
@@ -212,5 +238,14 @@ test.describe("#1593 — a stale lifecycle command in the live admin", () => {
     });
     // …and the impossible offer is gone from the bar.
     await expect(page.getByTestId("action-publish")).toHaveCount(0);
+
+    // ── The refusal must not OUTLIVE the state it describes. It stayed long
+    //    enough to read, and then — with no click, no reload, no interaction of
+    //    any kind — it clears itself, because the badge and the actions beside
+    //    it no longer match the sentence. Before the fix its only reset was the
+    //    next button's `onClick`, so on a screen whose actions had just been
+    //    withdrawn there was no next button and the alert stood forever (the
+    //    owner's Stage-B screenshot, 2026-09-01). ────────────────────────────
+    await expect(alert).toHaveCount(0, { timeout: 15_000 });
   });
 });

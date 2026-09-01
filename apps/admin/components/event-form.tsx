@@ -16,9 +16,12 @@ import {
 } from "@ds/design-system/form";
 import type { EventAdminDetail, SpeakerEntry } from "@ds/schemas";
 import { TokenTextarea } from "@/components/fields";
+import {
+  FORM_SYNC_RESET_OPTIONS,
+  eventFormFields,
+} from "@/lib/event-form-fields";
 import { EventFormSchema, type EventFormFields } from "@/lib/form-schemas";
 import { useLocalizedResolver } from "@/lib/use-localized-resolver";
-import { instantToMskInput } from "@/lib/msk";
 
 /**
  * The authored payload the form emits (007 EARS-1/2). The МСК wall-clock is the
@@ -36,19 +39,6 @@ export interface EventFormValues {
   specialties: string[];
   partnerRef: string | null;
   programPdf: File | null;
-}
-
-function defaultFields(detail?: EventAdminDetail): EventFormFields {
-  return {
-    title: detail?.title ?? "",
-    school: detail?.school ?? "",
-    startsAtMsk: detail ? instantToMskInput(detail.startsAt) : "",
-    durationMin: detail?.durationMin ?? 60,
-    description: detail?.description ?? "",
-    partnerRef: detail?.partnerRef ?? "",
-    speakers: detail?.speakers.map((s) => ({ ...s })) ?? [],
-    specialtiesText: (detail?.specialties ?? []).join(", "),
-  };
 }
 
 const PDF_MIME = "application/pdf";
@@ -81,7 +71,17 @@ export function EventForm({
     resolver: useLocalizedResolver(
       EventFormSchema as unknown as z.ZodType<EventFormFields, EventFormFields>,
     ),
-    defaultValues: defaultFields(detail),
+    defaultValues: eventFormFields(detail),
+    // The form FOLLOWS the server aggregate (#1593). The detail page re-reads the
+    // event after every mutation and after every refused lifecycle command, and
+    // until now only the badge and the action bar acted on that re-read — the
+    // fields stayed frozen at whatever the mount saw, which made the approved
+    // stale-refusal sentence («данные на этой странице уже обновлены…») false
+    // about everything the operator was actually looking at. `values` re-projects
+    // on each refetched detail; `keepDirtyValues` means the correction lands on
+    // untouched fields only and never eats an edit in progress.
+    values: detail ? eventFormFields(detail) : undefined,
+    resetOptions: FORM_SYNC_RESET_OPTIONS,
   });
   const { fields, append, remove } = useFieldArray({
     control: form.control,

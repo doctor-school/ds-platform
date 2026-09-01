@@ -1,14 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useCustomMutation } from "@refinedev/core";
 import { useTranslations } from "next-intl";
 import { Alert, Button } from "@ds/design-system";
 import type { EventAdminDetail } from "@ds/schemas";
 import {
+  REFUSAL_DISMISS_MS,
   actionsFor,
   lifecycleCommandRequest,
   lifecycleErrorOutcome,
+  lifecycleSignature,
 } from "@/lib/lifecycle";
 
 /**
@@ -34,6 +36,16 @@ import {
  * `refetch` is therefore fired on BOTH outcomes: an applied transition and a
  * stale-read refusal both leave the screen holding an out-of-date version.
  *
+ * A refusal alert is scoped to the lifecycle facts it was raised against
+ * ({@link lifecycleSignature}), not to the component's lifetime. When the re-read
+ * it triggered lands on a different signature — the 409 case replaces badge and
+ * actions, the 412 case spends and replaces the version — the explanation has
+ * outlived its subject, so it self-dismisses {@link REFUSAL_DISMISS_MS} later:
+ * long enough to read, short enough that it never sits beside already-corrected
+ * state (the owner's Stage-B screenshot, 2026-09-01). The next command clears it
+ * immediately, as before. No new visual element: the design system ships no
+ * toast/notification primitive, so this is the SAME `Alert` on a timer.
+ *
  * `detail.state` is passed alongside the transitions because since 014 EARS-18
  * two commands share the `ended` target — `close` from `live` and `mark-ended`
  * from `published` — so the ORIGIN is what names the command (`lib/lifecycle`).
@@ -47,8 +59,20 @@ export function LifecycleActions({
 }) {
   const t = useTranslations();
   const { mutate, mutation } = useCustomMutation();
-  const [error, setError] = useState<string | null>(null);
+  // The refusal carries the signature it was raised AGAINST, so the dismissal
+  // rule is a comparison rather than a guess about which refetch was "the" one.
+  const [refusal, setRefusal] = useState<{
+    message: string;
+    signature: string;
+  } | null>(null);
   const actions = actionsFor(detail.state, detail.validTransitions);
+  const signature = lifecycleSignature(detail);
+
+  useEffect(() => {
+    if (!refusal || refusal.signature === signature) return;
+    const timer = setTimeout(() => setRefusal(null), REFUSAL_DISMISS_MS);
+    return () => clearTimeout(timer);
+  }, [refusal, signature]);
 
   if (actions.length === 0) {
     return (
@@ -60,9 +84,9 @@ export function LifecycleActions({
 
   return (
     <div className="flex flex-col gap-3">
-      {error ? (
+      {refusal ? (
         <Alert variant="danger" data-testid="transition-error">
-          {error}
+          {refusal.message}
         </Alert>
       ) : null}
       <div className="flex flex-wrap gap-3" data-testid="lifecycle-actions">
@@ -73,14 +97,21 @@ export function LifecycleActions({
             disabled={mutation.isPending}
             data-testid={action.testId}
             onClick={() => {
-              setError(null);
+              setRefusal(null);
+              // Captured BEFORE the command: the alert is about the screen the
+              // operator clicked on, and the refetch that follows a refusal is
+              // exactly what makes that screen obsolete.
+              const raisedAgainst = signature;
               mutate(
                 lifecycleCommandRequest(detail, action.command),
                 {
                   onSuccess: () => refetch(),
                   onError: (failure) => {
                     const outcome = lifecycleErrorOutcome(failure);
-                    setError(t(outcome.messageKey));
+                    setRefusal({
+                      message: t(outcome.messageKey),
+                      signature: raisedAgainst,
+                    });
                     if (outcome.refetch) refetch();
                   },
                 },

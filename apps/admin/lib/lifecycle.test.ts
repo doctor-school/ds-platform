@@ -4,9 +4,11 @@ import { describe, expect, it } from "vitest";
 import { validTransitions } from "@ds/schemas";
 import type { EventLifecycleState } from "@ds/schemas";
 import {
+  REFUSAL_DISMISS_MS,
   actionsFor,
   lifecycleCommandRequest,
   lifecycleErrorOutcome,
+  lifecycleSignature,
   stateLabelKey,
 } from "./lifecycle";
 
@@ -175,5 +177,54 @@ describe("#1593 lifecycle refusal outcome", () => {
     ) as { events: { errors: Record<string, string> } };
     expect(typeof messages.events.errors.stale).toBe("string");
     expect(typeof messages.events.errors.transitionRefused).toBe("string");
+  });
+});
+
+/**
+ * #1593 owner Stage-B finding (2026-09-01) — a refusal alert must not outlive the
+ * state it describes. Both refusal families refetch, and once that re-read lands
+ * the sentence on screen is talking about a version nobody is looking at any
+ * more; left alone it sat beside already-corrected badge and actions
+ * indefinitely. {@link lifecycleSignature} is the pure half of the dismissal
+ * rule: what the alert was raised AGAINST, compared against what is rendered now.
+ */
+describe("#1593 refusal-alert dismissal", () => {
+  const draft = {
+    state: "draft" as const,
+    validTransitions: ["published"] as const,
+    version: 4,
+  };
+
+  it("EARS-7: the signature is stable while nothing about the rendered lifecycle moved", () => {
+    expect(lifecycleSignature(draft)).toBe(
+      lifecycleSignature({ ...draft, validTransitions: ["published"] }),
+    );
+  });
+
+  it("EARS-7: a bumped version alone moves the signature — the 412 case, where the state and the offered actions are unchanged and only the validator was spent", () => {
+    expect(lifecycleSignature({ ...draft, version: 5 })).not.toBe(
+      lifecycleSignature(draft),
+    );
+  });
+
+  it("EARS-7: a moved state moves the signature — the 409 case, where the refetch replaces the badge the operator was looking at", () => {
+    expect(
+      lifecycleSignature({
+        state: "published",
+        validTransitions: ["live", "ended"],
+        version: 5,
+      }),
+    ).not.toBe(lifecycleSignature(draft));
+  });
+
+  it("EARS-7: a changed action offer moves the signature even at the same state and version", () => {
+    expect(lifecycleSignature({ ...draft, validTransitions: [] })).not.toBe(
+      lifecycleSignature(draft),
+    );
+  });
+
+  it("EARS-7: the dismissal delay stays inside the readable 5–8s window the owner asked for", () => {
+    expect(REFUSAL_DISMISS_MS).toBeGreaterThanOrEqual(5_000);
+    expect(REFUSAL_DISMISS_MS).toBeLessThanOrEqual(8_000);
   });
 });

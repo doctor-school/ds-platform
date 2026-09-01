@@ -181,6 +181,40 @@ export function lifecycleErrorOutcome(error: unknown): LifecycleErrorOutcome {
   };
 }
 
+/**
+ * How long a refusal alert stays on screen AFTER the re-read it triggered has
+ * replaced the state it was describing (#1593, owner Stage-B 2026-09-01).
+ *
+ * Not zero: the sentence is the only explanation the operator gets for why their
+ * click did nothing, and yanking it the instant the refetch resolves — often
+ * within a few hundred ms — would make the refusal invisible. Not infinite
+ * either, which is the bug: the alert used to be cleared ONLY by the next button
+ * click, so it sat beside an already-corrected badge and an already-corrected
+ * action bar, still claiming a refusal about a version nobody was looking at.
+ * Six seconds is a full read of either RU sentence with room to spare.
+ */
+export const REFUSAL_DISMISS_MS = 6_000;
+
+/**
+ * A stable identity for the lifecycle facts a refusal alert is ABOUT — the state
+ * on the badge, the actions on the bar, and the version the commands are built
+ * from. The alert is raised against the signature the screen held at click time;
+ * once the refetch lands on a different one, the alert has outlived its subject
+ * and {@link REFUSAL_DISMISS_MS} later it goes.
+ *
+ * `version` is part of it deliberately: the 412 family changes NOTHING visible —
+ * same state, same offered actions — and only spends the validator, so a
+ * signature over the visible fields alone would leave the stale-read alert
+ * permanent in exactly the case it was written for.
+ */
+export function lifecycleSignature(detail: {
+  readonly state: EventLifecycleState;
+  readonly validTransitions: readonly EventLifecycleState[];
+  readonly version: number;
+}): string {
+  return `${detail.state}|${detail.validTransitions.join(",")}|${detail.version}`;
+}
+
 /** The message-catalog key (under `events.state.*`) for a lifecycle-state badge label. */
 export function stateLabelKey(state: EventLifecycleState): string {
   return `events.state.${state}`;

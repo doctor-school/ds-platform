@@ -195,3 +195,196 @@ describe("006 EARS-6 WebinarCard — room-entry CTA slot (no nested anchor)", ()
     expect(screen.getAllByRole("link")).toHaveLength(1);
   });
 });
+
+/**
+ * 019 EARS-2 — the shared card widened to the full doctor-feed format
+ * vocabulary. This is the spec's Verification row 2: the route-independent
+ * shared-card proof (all five formats distinguishable, sign-up count in every
+ * state, offline city and seats, zero cost as «бесплатно для врача», no rouble
+ * string). Route mounting and screen-local tree checks belong to #1516.
+ */
+const FORMATS = [
+  "webinar",
+  "online-meeting",
+  "offline-meetup",
+  "congress",
+  "podcast",
+] as const;
+
+const FEED = {
+  ...BASE,
+  formatLabel: "Вебинар",
+  kindLabel: "Разбор клинического случая",
+  nmoLabel: "НМО",
+  pulCost: 120,
+  pulCostLabel: "120 Pul",
+  freeLabel: "бесплатно для врача",
+  signUpCount: 128,
+  signUpLabel: "коллег записались",
+};
+
+describe("019 EARS-2 WebinarCard — the five formats", () => {
+  it("019 EARS-2.1: every format renders its own glyph and its own surface — distinguishable without reading the text", () => {
+    const glyphs = new Set<string>();
+    const surfaces = new Set<string>();
+
+    for (const format of FORMATS) {
+      const { container } = render(
+        <WebinarCard {...FEED} format={format} formatLabel="Формат" />,
+      );
+      const badge = container.querySelector(
+        `[data-event-format="${format}"]`,
+      ) as HTMLElement | null;
+      expect(badge).not.toBeNull();
+      // The glyph is decorative-but-distinguishing: hidden from AT because the
+      // adjacent catalog label already names the format.
+      const glyph = badge!.querySelector("[aria-hidden]") as HTMLElement;
+      expect(glyph.textContent).toBeTruthy();
+      glyphs.add(glyph.textContent!);
+      surfaces.add(badge!.className);
+      cleanup();
+    }
+
+    // Five formats → five distinct glyphs AND five distinct surfaces.
+    expect(glyphs.size).toBe(5);
+    expect(surfaces.size).toBe(5);
+  });
+
+  it("019 EARS-2.2: the format badge never renders without its catalog label (no hardcoded copy)", () => {
+    const { container } = render(
+      <WebinarCard {...BASE} format="congress" />,
+    );
+    expect(container.querySelector("[data-event-format]")).toBeNull();
+  });
+
+  it("019 EARS-2.3: НМО renders as a badge only — never as the card's heading", () => {
+    render(<WebinarCard {...FEED} />);
+    const badge = screen.getByText("НМО");
+    expect(badge.getAttribute("data-nmo-badge")).toBe("");
+    // The card's only heading is its title link, and it says nothing about НМО.
+    expect(screen.getByRole("heading").textContent).toBe(BASE.title);
+  });
+});
+
+describe("019 EARS-2 WebinarCard — cost, sign-ups, offline city and seats", () => {
+  it("019 EARS-2.4: a zero Pul cost renders «бесплатно для врача» and no rouble string", () => {
+    const { container } = render(<WebinarCard {...FEED} pulCost={0} />);
+    expect(screen.getByText("бесплатно для врача")).toBeInTheDocument();
+    expect(screen.queryByText("120 Pul")).toBeNull();
+    expect(container.textContent).not.toMatch(/₽|руб/i);
+  });
+
+  it("019 EARS-2.5: a priced event reads in Pul and never in roubles", () => {
+    const { container } = render(<WebinarCard {...FEED} />);
+    expect(screen.getByText("120 Pul")).toBeInTheDocument();
+    expect(container.textContent).not.toMatch(/₽|руб/i);
+  });
+
+  it("019 EARS-2.6: the sign-up count renders in EVERY card state", () => {
+    const states = [
+      { name: "normal", props: {} },
+      { name: "live", props: { live: true, liveLabel: "В эфире" } },
+      {
+        name: "registered",
+        props: { registered: true, registeredLabel: "Вы записаны" },
+      },
+      { name: "sold out", props: { seatsLeft: 0, soldOutLabel: "мест не осталось" } },
+      {
+        name: "past with a recording",
+        props: {
+          variant: "past" as const,
+          recordingLabel: "Есть запись",
+          ctaHref: BASE.href,
+          ctaLabel: "Смотреть запись ↗",
+        },
+      },
+    ];
+
+    for (const state of states) {
+      const { container } = render(<WebinarCard {...FEED} {...state.props} />);
+      const count = container.querySelector("[data-signup-count]");
+      expect(count, `sign-up count missing in the «${state.name}» state`)
+        .not.toBeNull();
+      expect(count!.textContent).toContain("128");
+      cleanup();
+    }
+  });
+
+  it("019 EARS-2.7: an offline event carries its city and its remaining seats", () => {
+    const { container } = render(
+      <WebinarCard
+        {...FEED}
+        format="offline-meetup"
+        formatLabel="Встреча коллег"
+        city="Казань"
+        seatsLeft={12}
+        seatsLeftLabel="мест осталось"
+      />,
+    );
+    expect(container.querySelector("[data-event-city]")?.textContent).toBe(
+      "Казань",
+    );
+    expect(container.querySelector("[data-event-seats]")?.textContent).toContain(
+      "12",
+    );
+  });
+
+  it("019 EARS-2.8: a hybrid congress spanning dates still carries its city and seats", () => {
+    const { container } = render(
+      <WebinarCard
+        {...FEED}
+        format="congress"
+        formatLabel="Конгресс"
+        dateLabel="14–16 сентября · пн–ср"
+        city="Санкт-Петербург"
+        seatsLeft={40}
+        seatsLeftLabel="мест осталось"
+      />,
+    );
+    expect(screen.getByText("14–16 сентября · пн–ср")).toBeInTheDocument();
+    expect(container.querySelector('[data-event-format="congress"]')).not.toBeNull();
+    expect(container.querySelector("[data-event-city]")?.textContent).toBe(
+      "Санкт-Петербург",
+    );
+    expect(container.querySelector("[data-event-seats]")?.textContent).toContain(
+      "40",
+    );
+  });
+
+  it("019 EARS-2.9: zero remaining seats renders «мест не осталось» instead of a seat count", () => {
+    const { container } = render(
+      <WebinarCard
+        {...FEED}
+        format="offline-meetup"
+        formatLabel="Встреча коллег"
+        city="Казань"
+        seatsLeft={0}
+        seatsLeftLabel="мест осталось"
+        soldOutLabel="мест не осталось"
+      />,
+    );
+    const marker = screen.getByText("мест не осталось");
+    expect(marker.getAttribute("role")).toBe("status");
+    expect(container.querySelector("[data-event-seats]")).toBeNull();
+    // A sold-out event stays readable — its event-page link is untouched.
+    expect(screen.getByRole("link")).toHaveAttribute("href", BASE.href);
+  });
+
+  it("019 EARS-2.10: no rendered string states who finances the event", () => {
+    const { container } = render(
+      <WebinarCard
+        {...FEED}
+        format="offline-meetup"
+        formatLabel="Встреча коллег"
+        city="Казань"
+        seatsLeft={5}
+        seatsLeftLabel="мест осталось"
+        registered
+        registeredLabel="Вы записаны"
+      />,
+    );
+    expect(container.textContent).not.toMatch(
+      /спонсор|при поддержке|финанс|партнёр|партнер|инвестор/i,
+    );
+  });
+});

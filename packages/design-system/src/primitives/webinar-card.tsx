@@ -1,3 +1,4 @@
+import type { DoctorEventFormat } from "@ds/schemas";
 import * as React from "react";
 
 import { cn } from "../lib/utils";
@@ -81,6 +82,42 @@ export interface WebinarCardProps extends Omit<
   registered?: boolean;
   /** Registered-marker copy — «Вы записаны» (from the catalog); required visually when `registered`. */
   registeredLabel?: string;
+  /**
+   * 019 EARS-2 — the event FORMAT. The five-value vocabulary is owned by
+   * `@ds/schemas` (`DoctorEventFormatSchema`), never restated here, so the card
+   * and the read contract cannot drift. Each format renders with its OWN glyph
+   * and its OWN surface token, so the five are distinguishable without reading
+   * the text (the badge also carries `data-event-format` for host/test hooks).
+   */
+  format?: DoctorEventFormat;
+  /** Catalog copy for the format badge; with no label no badge renders (no hardcoded copy). */
+  formatLabel?: string;
+  /** Catalog copy for the event KIND («Разбор клинического случая»). */
+  kindLabel?: string;
+  /** НМО copy — rendered as a BADGE ONLY (EARS-2/EARS-14: never a heading, never the primary filter). */
+  nmoLabel?: string;
+  /**
+   * Cost in Pul attention points. `0` renders `freeLabel` («бесплатно для
+   * врача»); any other value renders `pulCostLabel`. The card renders NO rouble
+   * string in either branch — there is no rouble prop to render one from.
+   */
+  pulCost?: number;
+  /** Catalog copy for a non-zero Pul cost, e.g. «120 Pul». */
+  pulCostLabel?: string;
+  /** Catalog copy for a zero Pul cost — «бесплатно для врача». */
+  freeLabel?: string;
+  /** Colleagues signed up — rendered in EVERY card state (EARS-2 invariant). */
+  signUpCount?: number;
+  /** Catalog noun phrase following the count, e.g. «коллег записались». */
+  signUpLabel?: string;
+  /** Offline city — required by EARS-2 wherever an offline event is rendered. */
+  city?: string;
+  /** Remaining seats for an offline event; `0` is the «мест не осталось» state. */
+  seatsLeft?: number;
+  /** Catalog noun phrase following the seat count, e.g. «мест осталось». */
+  seatsLeftLabel?: string;
+  /** Catalog copy for the sold-out state — «мест не осталось». */
+  soldOutLabel?: string;
   /** Contextual CTA target: room entry for live cards, event page for past cards. */
   ctaHref?: string;
   /**
@@ -89,6 +126,25 @@ export interface WebinarCardProps extends Omit<
    */
   ctaLabel?: string;
 }
+
+/**
+ * 019 EARS-2 — the format anatomy. Each of the five formats gets a DISTINCT
+ * glyph AND a distinct surface token, so a reader tells them apart without
+ * reading the badge text (the requirement's «visually distinguishable without
+ * reading the text»). Surfaces are token pairs that already carry their own AA
+ * foreground; the glyph is `aria-hidden` because it is redundant with the
+ * adjacent catalog label (WCAG 1.4.11 exempt, the #270 precedent in this file).
+ */
+const FORMAT_ANATOMY: Record<
+  DoctorEventFormat,
+  { glyph: string; surface: string }
+> = {
+  webinar: { glyph: "▶", surface: "bg-tint text-tint-foreground" },
+  "online-meeting": { glyph: "⧉", surface: "bg-accent text-accent-foreground" },
+  "offline-meetup": { glyph: "⚑", surface: "bg-success text-success-foreground" },
+  congress: { glyph: "▣", surface: "bg-primary-surface-muted text-foreground" },
+  podcast: { glyph: "♪", surface: "bg-muted-2 text-foreground" },
+};
 
 /** The pulsing round dot shared by the desktop sticker and the mobile live tag. */
 function LiveDot() {
@@ -118,6 +174,19 @@ const WebinarCard = React.forwardRef<HTMLDivElement, WebinarCardProps>(
       recordingLabel,
       registered = false,
       registeredLabel,
+      format = "webinar",
+      formatLabel,
+      kindLabel,
+      nmoLabel,
+      pulCost,
+      pulCostLabel,
+      freeLabel,
+      signUpCount,
+      signUpLabel,
+      city,
+      seatsLeft,
+      seatsLeftLabel,
+      soldOutLabel,
       ctaHref,
       ctaLabel,
       ...props
@@ -125,6 +194,12 @@ const WebinarCard = React.forwardRef<HTMLDivElement, WebinarCardProps>(
     ref,
   ) => {
     const past = variant === "past";
+    const anatomy = FORMAT_ANATOMY[format] ?? FORMAT_ANATOMY.webinar;
+    // EARS-2: the cost reads in Pul, and a zero cost reads «бесплатно для
+    // врача». There is no rouble branch because there is no rouble input.
+    const costLabel = pulCost === 0 ? freeLabel : pulCostLabel;
+    // «мест не осталось» is the seat count reaching zero — one state, one source.
+    const soldOut = seatsLeft === 0;
 
     return (
       <div
@@ -197,6 +272,43 @@ const WebinarCard = React.forwardRef<HTMLDivElement, WebinarCardProps>(
           <div className="mb-3 text-xs font-extrabold uppercase tracking-micro text-primary-action">
             {school}
           </div>
+
+          {/* 019 EARS-2 — format · kind · НМО badge row. The format badge is the
+            at-a-glance format signal (own glyph + own surface per format); НМО
+            appears HERE and only here, as a badge — never as a heading and never
+            as the card's primary emphasis. Every string is caller-injected. */}
+          {formatLabel || kindLabel || nmoLabel ? (
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              {formatLabel ? (
+                <span
+                  data-event-format={format}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 px-3.25 py-1.5 text-caption font-extrabold",
+                    anatomy.surface,
+                  )}
+                >
+                  <span aria-hidden="true">{anatomy.glyph}</span>
+                  {formatLabel}
+                </span>
+              ) : null}
+              {kindLabel ? (
+                <span
+                  data-event-kind=""
+                  className="inline-flex items-center px-3.25 py-1.5 text-caption font-bold text-muted-foreground"
+                >
+                  {kindLabel}
+                </span>
+              ) : null}
+              {nmoLabel ? (
+                <span
+                  data-nmo-badge=""
+                  className="inline-flex items-center border-2 border-border px-3.25 py-1.5 text-caption font-extrabold text-foreground"
+                >
+                  {nmoLabel}
+                </span>
+              ) : null}
+            </div>
+          ) : null}
           {/* The TITLE is the card's link. Its `::after` stretches over the whole
             root (`after:inset-0`, the root is `relative`), so clicking anywhere on
             the card opens the event page while only ONE anchor exists in the DOM —
@@ -222,6 +334,42 @@ const WebinarCard = React.forwardRef<HTMLDivElement, WebinarCardProps>(
                   {chip}
                 </span>
               ))}
+            </div>
+          ) : null}
+
+          {/* 019 EARS-2 — the facts row. It sits OUTSIDE every state branch on
+            purpose: the sign-up count is required «in every card state», so it
+            renders for the scheduled, live, registered, sold-out and past card
+            alike, and cannot be switched off by a variant. An offline event
+            additionally carries its city and its remaining seats here, so they
+            travel wherever the card is rendered. */}
+          {costLabel || typeof signUpCount === "number" || city ? (
+            <div
+              data-event-facts=""
+              className="mb-5 flex flex-wrap items-center gap-x-5 gap-y-2 text-caption text-muted-foreground"
+            >
+              {costLabel ? (
+                <span data-event-cost="" className="font-extrabold text-foreground">
+                  {costLabel}
+                </span>
+              ) : null}
+              {typeof signUpCount === "number" ? (
+                <span data-signup-count="">
+                  <b className="font-bold text-foreground">{signUpCount}</b>
+                  {signUpLabel ? ` ${signUpLabel}` : null}
+                </span>
+              ) : null}
+              {city ? (
+                <span data-event-city="" className="font-bold text-foreground">
+                  {city}
+                </span>
+              ) : null}
+              {typeof seatsLeft === "number" && !soldOut ? (
+                <span data-event-seats="">
+                  <b className="font-bold text-foreground">{seatsLeft}</b>
+                  {seatsLeftLabel ? ` ${seatsLeftLabel}` : null}
+                </span>
+              ) : null}
             </div>
           ) : null}
 
@@ -270,6 +418,21 @@ const WebinarCard = React.forwardRef<HTMLDivElement, WebinarCardProps>(
                 ✓
               </span>
               {registeredLabel}
+            </p>
+          ) : null}
+
+          {/* 019 EARS-2 — «мест не осталось». Derived from the seat count
+            reaching zero (never a second boolean that could contradict it), and
+            announced like the other at-a-glance states (`role="status"`). The
+            card keeps its event-page link: a sold-out event is still readable,
+            only its sign-up action is gone (that action lives in feature 021). */}
+          {soldOut && soldOutLabel ? (
+            <p
+              role="status"
+              data-sold-out-marker=""
+              className="mt-4 inline-flex items-center gap-1.5 text-caption font-extrabold text-foreground"
+            >
+              {soldOutLabel}
             </p>
           ) : null}
 

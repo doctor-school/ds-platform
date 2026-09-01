@@ -1743,6 +1743,15 @@ function WebinarCardSection() {
         room-entry button that routes to{" "}
         <code className="font-mono text-xs">/webinars/:slug/room</code>.
       </p>
+      <p className="text-sm text-muted-foreground">
+        019 EARS-2 widens the same unit for the doctor feed: the{" "}
+        <span className="font-medium text-foreground">format</span> badge (five
+        formats, each with its own glyph and surface so they are distinguishable
+        without reading the text), the kind and the НМО badge, and a facts row
+        carrying the Pul cost («бесплатно для врача» at zero, never roubles), the
+        sign-up count — present in every card state — and, for an offline event,
+        its city and remaining seats. Zero seats renders «мест не осталось».
+      </p>
       {(
         [
           { key: "scheduled", live: false, cta: false },
@@ -1786,9 +1795,121 @@ function WebinarCardSection() {
           />
         </SubRow>
       ))}
+
+      {DOCTOR_FEED_CARDS.map((variant) => (
+        <SubRow key={variant.label} label={variant.label}>
+          <ThemePair
+            render={() => (
+              <div className="w-full">
+                <WebinarCard
+                  href="#"
+                  time="19:00"
+                  tzLabel="МСК"
+                  dateLabel={
+                    "dateLabel" in variant ? variant.dateLabel : "16 июля · ср"
+                  }
+                  school="Школа травматологии и ортопедии"
+                  title={variant.title}
+                  specialties={["Травматология", "Ортопедия"]}
+                  speakers={[{ name: "Анна Соколова", org: "К.м.н." }]}
+                  kindLabel="Разбор клинического случая"
+                  nmoLabel="НМО"
+                  freeLabel="бесплатно для врача"
+                  pulCostLabel="120 Pul"
+                  signUpLabel="коллег записались"
+                  seatsLeftLabel="мест осталось"
+                  soldOutLabel="мест не осталось"
+                  registeredLabel="Вы записаны"
+                  {...variant.props}
+                />
+              </div>
+            )}
+          />
+        </SubRow>
+      ))}
     </PrimitiveSection>
   );
 }
+
+/**
+ * 019 EARS-2 — the widened doctor-feed states of the SAME shared unit: the five
+ * formats plus the states the feed reads (registered, sold out, free-by-Pul,
+ * hybrid congress). No screen-local card exists anywhere; the doctor feed
+ * supplies data and copy, never JSX.
+ */
+const DOCTOR_FEED_CARDS = [
+  {
+    label: 'format="webinar" · 120 Pul',
+    title: "Пластика ахиллова сухожилия: разбор клинических случаев",
+    props: {
+      format: "webinar" as const,
+      formatLabel: "Вебинар",
+      pulCost: 120,
+      signUpCount: 128,
+    },
+  },
+  {
+    label: 'format="online-meeting" · бесплатно для врача',
+    title: "Онлайн-встреча: ведение пациентов с хронической болью",
+    props: {
+      format: "online-meeting" as const,
+      formatLabel: "Онлайн-встреча",
+      pulCost: 0,
+      signUpCount: 42,
+    },
+  },
+  {
+    label: 'format="offline-meetup" · city + seatsLeft',
+    title: "Встреча коллег: разбор сложных случаев за ужином",
+    props: {
+      format: "offline-meetup" as const,
+      formatLabel: "Встреча коллег",
+      pulCost: 0,
+      signUpCount: 18,
+      city: "Казань",
+      seatsLeft: 12,
+    },
+  },
+  {
+    label: 'format="offline-meetup" · seatsLeft=0 → «мест не осталось»',
+    title: "Doctor Club: вечер травматологии",
+    props: {
+      format: "offline-meetup" as const,
+      formatLabel: "Встреча коллег",
+      pulCost: 0,
+      signUpCount: 60,
+      city: "Новосибирск",
+      seatsLeft: 0,
+    },
+  },
+  {
+    label: 'format="congress" · hybrid, spans dates, registered',
+    title: "Национальный конгресс травматологов и ортопедов",
+    dateLabel: "14–16 сентября · пн–ср",
+    props: {
+      format: "congress" as const,
+      formatLabel: "Конгресс",
+      pulCost: 450,
+      pulCostLabel: "450 Pul",
+      signUpCount: 314,
+      city: "Санкт-Петербург",
+      seatsLeft: 40,
+      registered: true,
+    },
+  },
+  {
+    label: 'format="podcast" · live',
+    title: "Подкаст «Разбор»: эфир о боли в плече",
+    props: {
+      format: "podcast" as const,
+      formatLabel: "Подкаст",
+      pulCost: 0,
+      signUpCount: 9,
+      live: true,
+      liveLabel: "В эфире",
+    },
+  },
+] as const;
 
 function WebinarPageContentSection() {
   return (

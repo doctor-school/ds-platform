@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Button } from "@ds/design-system/button";
+import { Link as DsLink } from "@ds/design-system/link";
 
 /**
  * 014 EARS-5 — the GUEST GATE: what a visitor with no session sees in the player
@@ -97,13 +98,11 @@ export function RecordingGate({
           </Button>
           <p className="mt-4 text-caption font-semibold text-muted-foreground">
             {noAccountLabel}{" "}
-            <Link
-              href={signUpHref}
-              data-testid="recording-gate-signup"
-              className="font-bold text-primary-action underline underline-offset-2"
-            >
-              {signUpLabel}
-            </Link>
+            <DsLink asChild className="font-bold">
+              <Link href={signUpHref} data-testid="recording-gate-signup">
+                {signUpLabel}
+              </Link>
+            </DsLink>
           </p>
         </div>
       </div>

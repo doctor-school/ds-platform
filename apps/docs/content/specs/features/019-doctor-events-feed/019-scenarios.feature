@@ -99,7 +99,8 @@ Feature: A doctor opens one screen and sees what is on now, what is on this week
   Scenario: The dedicated calendar page renders the month as the page body
     When the doctor opens the dedicated calendar page
     Then the month grid is the body of the page inside feature 017's shell
-    And the page carries its own breadcrumbs, the same facet panel and the same tense controls
+    And the page carries its own breadcrumbs and the same facet panel
+    And no tense control is rendered on the page, the month reading «Будущие» only
     And the page reads the same month contract as the in-feed grid
     When the doctor selects a day on the calendar page
     Then the doctor lands in the events feed at that day
@@ -262,7 +263,7 @@ Feature: A doctor opens one screen and sees what is on now, what is on this week
     Then the scan reports no violations
     And every card is a real labelled link
     And every facet is a real control with a visible state
-    And the tense control and the month-grid day selection are keyboard-operable
+    And the month-grid day selection is keyboard-operable
     And the LIVE state is announced to a screen reader rather than conveyed by colour alone
 
   @EARS-14 @failure

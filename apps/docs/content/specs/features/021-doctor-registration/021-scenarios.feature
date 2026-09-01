@@ -29,6 +29,7 @@ Feature: A doctor stopped by a gate registers in a short honest form and comes b
     And that card carries no back-navigation control
     And the form asks only for email, password and an optional promo code
     And no file input, document field or document copy exists anywhere on the screen
+    # release-1 half of EARS-9: points deferred to wave 2 (#1545), no placeholder
     And the form makes no points promise and renders no placeholder in its place
     And the medical-worker declaration and the partner-data consent are framed together above the submit button
     And the partner-data consent names имя, специальность, город, место работы and states that contact details are not shared
@@ -48,7 +49,8 @@ Feature: A doctor stopped by a gate registers in a short honest form and comes b
   @EARS-9 @happy
   Scenario: Wave 2 — the form promises the registration points and the success state credits them
     Given the wave-2 points surface of #1545 is in place
-    And a guest doctor opened the registration screen from «Артроскопия коленного сустава»
+    And a guest doctor pressed «Участвовать» on «Артроскопия коленного сустава»
+    When the registration screen opens
     Then the form promises «+20 Pul за регистрацию»
     When the doctor registers and confirms the email with the code from the letter
     And feature 025 emits PointsCredited for that account

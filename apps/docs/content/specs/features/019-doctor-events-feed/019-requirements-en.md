@@ -2,7 +2,7 @@
 title: "019 — The doctor events feed"
 description: "Requirements for `#d-events`, the doctor storefront's own events surface: the day-grouped feed with the month calendar standing beside it as navigation, the dedicated calendar page the owner attached to that pick, the «идёт сейчас» block above the feed, the widened format vocabulary with offline city and seats, the shared `events-filter` panel carried as a desktop sidebar and a mobile sheet at the full REQ-138 strength with its intermediate fill states, the «Прошедшие» tense leading into 014's recordings, the short «Мои события» cut, the guest read path that returns to the exact feed state, and the honest loading / empty / error renders of every block."
 slug: 019-doctor-events-feed
-status: Draft
+status: In dev
 surface: user-facing
 tracker: https://github.com/doctor-school/ds-platform/milestone/13
 issues:

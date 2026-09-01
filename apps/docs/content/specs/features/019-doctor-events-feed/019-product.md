@@ -3,7 +3,7 @@ title: "Feature 019 — Doctor events feed (PRD)"
 description: "Product requirements for `#d-events` — the doctor storefront's own events surface on `doctor.school`: a day-grouped week feed and a month calendar over the same 004 listing engine, a «идёт сейчас» live strip, a «Прошедшие» slice that leads into recordings, a short «Мои события» cut, and the `events-filter` facet panel drawn at full REQ-138 strength with its intermediate fill states (owner decision D-1). Wave 1 of the two-site IA epic; source of the 019 EARS triplet (ADR-0014)."
 slug: two-site-ia-019-doctor-events-feed-product
 epic: ../../product/two-site-ia/brief.md
-status: Draft
+status: In dev
 surface: user-facing
 lang: en
 ---

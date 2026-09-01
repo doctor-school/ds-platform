@@ -15,6 +15,7 @@ import {
   RATE_LIMIT_THRESHOLDS,
   RELAXED_RATE_LIMIT,
 } from "../setup/rate-limit.js";
+import { deleteEventSpeakersFixture } from "../setup/fixture-cleanup.js";
 
 // 012 EARS-8 (#1290) — the ONE canonical merged speaker projection over the
 // REAL stack: Fastify + Postgres, zero auth (every route under test is a

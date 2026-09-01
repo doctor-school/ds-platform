@@ -17,6 +17,7 @@ bootstrap) is a one-time human setup, out of the steady-state loop.
 | `live-broadcast-check.mjs` | `deploy:check-live`    | Read-only live-эфир probe (`GET /v1/public/events`, spec §10.4 item 7): `CLEAR` exit 0 / `LIVE`+`UNKNOWN` exit 1 (fail-closed); also a `prod.mjs` pre-flight hold. |
 | `deploy-probe.mjs`         | `deploy:probe`         | One-line box-reality probe (#905): health SHA + running api/portal/admin images/status over ssh; the STALLED watchdog message routes here.                         |
 | `release-gate.mjs`         | —                      | Release-blocker + open-batched-Stage-B pre-flight hold (#1662): probe + pure verdict consumed by `prod.mjs` (see below).                                           |
+| `rollback-floor.mjs`       | —                      | Rollback compatibility-floor guard (012 EARS-24, #1633): reads the prod cutover marker and refuses a `--rollback` target older than the floor (see below).         |
 
 ## `pnpm deploy:prod`
 
@@ -119,6 +120,42 @@ see "Release digest → Mattermost" below, #975.)
 The **deployed SHA is queryable over HTTP**: `GET /v1/health` → `{"version":…}`
 (from the api's `DEPLOY_SHA` env). `--rollback` `up -d`s an already-present prior
 image tag with **no** rebuild / migrate / DB change.
+
+## Rollback compatibility floor (`rollback-floor.mjs`, 012 EARS-24 / #1633)
+
+`--rollback` swaps the app image while the database stays where it is. That is
+safe only while the older image can still read what the newer one wrote. The
+legacy-speaker cutover breaks that symmetry once and for all: after the source
+set is closed, a pre-cutover image would happily write to `event_speakers`
+again, so **some prior SHAs stop being valid rollback targets permanently**.
+
+The floor is DB state, not a constant in this repo — production is the only
+thing that knows which release closed the source. `speaker_migration_cutover`
+(migration 0031) retains `minimum_compatible_release_sha` / `_ordinal`, and this
+guard is the **first step inside `rollback()`**, before the image-presence probe
+and before any `.env` rewrite or `up -d`. Nothing on the box is touched until it
+returns.
+
+The ordinal is the authoritative comparison key, not the SHA and not the tag
+name: `release-YYYY.MM.DD-<n>` restarts `<n>` each day, so `<n>` is not globally
+monotonic. `releaseOrdinalFor()` ranks the release tags chronologically and uses
+the 1-based rank.
+
+It **fails closed** — every refusal aborts the rollback with its code:
+
+| Code                        | Meaning                                                                                                            |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `FLOOR_UNREADABLE`          | The marker could not be read or did not parse as exactly one row. An unknown floor is never treated as "no floor". |
+| `FLOOR_METADATA_MISMATCH`   | The recorded floor SHA and ordinal disagree with the release tags — the marker is not trustworthy.                 |
+| `TARGET_ORDINAL_UNRESOLVED` | The requested SHA carries no `release-*` tag, so it has no position relative to the floor.                         |
+| `TARGET_BELOW_FLOOR`        | The target predates the floor. Roll **forward** instead; this rollback cannot be made safe.                        |
+
+Three cases are allowed, each named in the verdict: `no-floor-table` (the prod
+DB predates migration 0031), `no-floor-recorded` (still `review_open` — nothing
+has been closed, so every target is fair game) and `at-or-above-floor`.
+
+`rollback-floor.test.mjs` (`node --test`, run by `pnpm test:tools`) covers the
+whole decision table against injected readers — no ssh, psql or provider calls.
 
 ## Release gate (`release-gate.mjs`, #1662)
 

@@ -33,6 +33,10 @@ const AUDITED_TABLES = [
   // decides which person the public speaker projection shows, so it is domain
   // truth and carries the capture trigger like any authored row.
   "event_experts",
+  // 012 EARS-24 (#1633) — the speaker-cutover SSOT. Advancing the phase or
+  // raising the rollback floor is a deploy-affecting editorial decision, so the
+  // singleton carries the capture trigger like any other authored row.
+  "speaker_migration_cutover",
 ] as const;
 
 /** Design §5 allowlist — tables that must NOT carry the capture trigger. */

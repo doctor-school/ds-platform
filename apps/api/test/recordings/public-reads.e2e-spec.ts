@@ -14,6 +14,11 @@ import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
 import { FakeIdpClient } from "../../src/auth/idp/idp.fake.js";
 import { SESSION_COOKIE_NAME } from "../../src/auth/session/session.cookie.js";
 import {
+  BOT_PROTECTION,
+  type BotProtection,
+  type BotProtectionResult,
+} from "../../src/bot-protection/index.js";
+import {
   RATE_LIMIT_THRESHOLDS,
   RELAXED_RATE_LIMIT,
 } from "../setup/rate-limit.js";
@@ -211,6 +216,15 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         .useValue(fake)
         .overrideProvider(RATE_LIMIT_THRESHOLDS)
         .useValue(RELAXED_RATE_LIMIT)
+        // Hermetic: the register fixture path behind `doctorSession` must not
+        // depend on the recipe's bot-protection env/flag state (an enabled
+        // SmartCaptcha rejects the token-less test register with a 403
+        // BOT_PROTECTION_REQUIRED). Bot protection is not under test here.
+        .overrideProvider(BOT_PROTECTION)
+        .useValue({
+          verify: (): Promise<BotProtectionResult> =>
+            Promise.resolve({ ok: true }),
+        } satisfies BotProtection)
         .compile();
 
       app = moduleRef.createNestApplication<NestFastifyApplication>(

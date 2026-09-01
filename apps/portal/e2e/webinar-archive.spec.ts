@@ -79,11 +79,14 @@ test.describe("014 EARS-4 public post-live event page (e2e)", () => {
     await expect(badge).toBeVisible();
     await expect(badge).toHaveText("Запись доступна");
 
-    // The recording meta — a STATEMENT of what is published, not an affordance
-    // (the player is #1343, so there must be no play control to dead-end on).
-    const meta = page.getByTestId("recording-meta");
-    await expect(meta).toBeVisible();
-    await expect(meta).toContainText("Монтаж");
+    // The recording meta. It lives in the PLAYER CARD, not in the status card:
+    // #1343 mounted the card and the meta moved with it, so the same fact is
+    // not stated twice on one screen (the #1697 dedup obligation). For a guest
+    // the card is the login gate, and the gate's eyebrow carries the kind.
+    await expect(page.getByTestId("recording-meta")).toHaveCount(0);
+    const gate = page.getByTestId("recording-gate");
+    await expect(gate).toBeVisible();
+    await expect(gate).toContainText("Монтаж");
 
     // The 004 projection still renders whole: title, school, description and the
     // speaker list are the page's substance, not a recording teaser.

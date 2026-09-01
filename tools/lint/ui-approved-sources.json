@@ -72,6 +72,18 @@
       "approvalProvenance": [
         "https://github.com/doctor-school/ds-platform/issues/1645#issuecomment-5477986523"
       ]
+    },
+    "admin-lifecycle-actions-v1": {
+      "evidenceProfiles": ["responsive-web"],
+      "surfacePaths": [
+        "apps/admin/app/events/[id]/page.tsx",
+        "apps/admin/components/lifecycle-actions.tsx",
+        "apps/admin/messages/ru.json"
+      ],
+      "states": ["event-lifecycle-stale-refusal"],
+      "approvalProvenance": [
+        "https://github.com/doctor-school/ds-platform/issues/1593#issuecomment-5491422263"
+      ]
     }
   }
 }

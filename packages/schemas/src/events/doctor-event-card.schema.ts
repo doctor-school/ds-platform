@@ -4,10 +4,12 @@ import { z } from "zod";
  * 019 EARS-2 — the shared event-card read model and its format vocabulary.
  *
  * This module is the SoT of the five-format vocabulary the doctor feed, the
- * facet panel (#1522) and the URL/query codec (#1523) all read; the shared
- * `WebinarCard` in `@ds/design-system` types its `format` prop off
- * `DoctorEventFormat` rather than restating the union, so the card and the read
- * contract can never drift apart (AGENTS.md §6 — one canonical implementation).
+ * facet panel (#1522) and the URL/query codec (#1523) all read. The vocabulary
+ * lives HERE and only here: per the approved canvas the shared `WebinarCard` in
+ * `@ds/design-system` renders the format as pure catalog copy (the time-plate
+ * kicker) and holds no format union of its own, so the presentation primitive
+ * stays free of any dependency on this read contract while the contract stays
+ * the single source of the vocabulary (AGENTS.md §6).
  *
  * It is DELIBERATELY not the 012 `PublicEventSummarySchema` of
  * `taxonomy.schema.ts`: that one is the `.strict()` item DTO of
@@ -56,7 +58,7 @@ export const DoctorEventCardSchema = z
     title: z.string(),
     speaker: z.string(),
     source: z.string(),
-    /** НМО is a badge and a facet only — never a heading or the primary filter. */
+    /** НМО is a chip and a facet only — never a heading or the primary filter. */
     nmo: z.boolean(),
     /** Cost in Pul attention points; `0` is the free-for-the-doctor reading. */
     pulCost: z.number().int().nonnegative(),

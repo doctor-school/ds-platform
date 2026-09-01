@@ -1744,13 +1744,14 @@ function WebinarCardSection() {
         <code className="font-mono text-xs">/webinars/:slug/room</code>.
       </p>
       <p className="text-sm text-muted-foreground">
-        019 EARS-2 widens the same unit for the doctor feed: the{" "}
-        <span className="font-medium text-foreground">format</span> badge (five
-        formats, each with its own glyph and surface so they are distinguishable
-        without reading the text), the kind and the НМО badge, and a facts row
-        carrying the Pul cost («бесплатно для врача» at zero, never roubles), the
-        sign-up count — present in every card state — and, for an offline event,
-        its city and remaining seats. Zero seats renders «мест не осталось».
+        019 EARS-2 widens the same unit for the doctor feed exactly as the
+        approved canvas draws it: the format/kind reads from the time-plate{" "}
+        <span className="font-medium text-foreground">kicker</span> («Вебинар»,
+        «Разбор», «Doctor Club», «Подкаст», «Конгресс»), and the one chip row
+        carries the venue with the offline city, НМО, the Pul cost («бесплатно
+        для врача» at zero, never roubles), the sign-up count — present in every
+        card state — and the seats. Zero seats re-words that chip to «мест не
+        осталось». A congress date span rides the time-plate sub-label.
       </p>
       {(
         [
@@ -1810,10 +1811,8 @@ function WebinarCardSection() {
                   }
                   school="Школа травматологии и ортопедии"
                   title={variant.title}
-                  specialties={["Травматология", "Ортопедия"]}
                   speakers={[{ name: "Анна Соколова", org: "К.м.н." }]}
-                  kindLabel="Разбор клинического случая"
-                  nmoLabel="НМО"
+                  nmoLabel="НМО · 2 ЗЕТ"
                   freeLabel="бесплатно для врача"
                   pulCostLabel="120 Pul"
                   signUpLabel="коллег записались"
@@ -1832,38 +1831,42 @@ function WebinarCardSection() {
 }
 
 /**
- * 019 EARS-2 — the widened doctor-feed states of the SAME shared unit: the five
- * formats plus the states the feed reads (registered, sold out, free-by-Pul,
- * hybrid congress). No screen-local card exists anywhere; the doctor feed
- * supplies data and copy, never JSX.
+ * 019 EARS-2 — the widened doctor-feed states of the SAME shared unit, staged
+ * exactly as the approved canvas (`design-source/doctor-events.dc.html`) draws
+ * them: the format is the time-plate KICKER («Вебинар», «Разбор», «Doctor
+ * Club», «Подкаст», «Конгресс») and everything else — venue with the offline
+ * city, НМО, cost in Pul, the sign-up count, the seat state — is a text chip in
+ * the one chip row. No coloured format badge, no separate facts strip. No
+ * screen-local card exists anywhere; the doctor feed supplies data and copy,
+ * never JSX.
  */
 const DOCTOR_FEED_CARDS = [
   {
-    label: 'format="webinar" · 120 Pul',
+    label: "kicker «Вебинар» · онлайн · НМО · 120 Pul",
     title: "Пластика ахиллова сухожилия: разбор клинических случаев",
     props: {
-      format: "webinar" as const,
       formatLabel: "Вебинар",
+      venueLabel: "Онлайн",
       pulCost: 120,
       signUpCount: 128,
     },
   },
   {
-    label: 'format="online-meeting" · бесплатно для врача',
-    title: "Онлайн-встреча: ведение пациентов с хронической болью",
+    label: "kicker «Разбор» · бесплатно для врача",
+    title: "Разбор клинического случая с экспертом",
     props: {
-      format: "online-meeting" as const,
-      formatLabel: "Онлайн-встреча",
+      formatLabel: "Разбор",
+      venueLabel: "Онлайн",
       pulCost: 0,
       signUpCount: 42,
     },
   },
   {
-    label: 'format="offline-meetup" · city + seatsLeft',
-    title: "Встреча коллег: разбор сложных случаев за ужином",
+    label: "kicker «Doctor Club» · офлайн · city + seatsLeft",
+    title: "Doctor Club Казань — встреча коллег по направлению",
     props: {
-      format: "offline-meetup" as const,
-      formatLabel: "Встреча коллег",
+      formatLabel: "Doctor Club",
+      venueLabel: "Офлайн",
       pulCost: 0,
       signUpCount: 18,
       city: "Казань",
@@ -1871,11 +1874,11 @@ const DOCTOR_FEED_CARDS = [
     },
   },
   {
-    label: 'format="offline-meetup" · seatsLeft=0 → «мест не осталось»',
+    label: "kicker «Doctor Club» · seatsLeft=0 → «мест не осталось»",
     title: "Doctor Club: вечер травматологии",
     props: {
-      format: "offline-meetup" as const,
-      formatLabel: "Встреча коллег",
+      formatLabel: "Doctor Club",
+      venueLabel: "Офлайн",
       pulCost: 0,
       signUpCount: 60,
       city: "Новосибирск",
@@ -1883,26 +1886,26 @@ const DOCTOR_FEED_CARDS = [
     },
   },
   {
-    label: 'format="congress" · hybrid, spans dates, registered',
-    title: "Национальный конгресс травматологов и ортопедов",
-    dateLabel: "14–16 сентября · пн–ср",
+    label: "kicker «Конгресс» · гибрид, дата-спан на плите, registered",
+    title: "Конгресс «Ортобиология-2026»",
+    dateLabel: "14–15 ноября",
     props: {
-      format: "congress" as const,
       formatLabel: "Конгресс",
+      venueLabel: "Гибрид",
       pulCost: 450,
       pulCostLabel: "450 Pul",
       signUpCount: 314,
-      city: "Санкт-Петербург",
+      city: "Москва",
       seatsLeft: 40,
       registered: true,
     },
   },
   {
-    label: 'format="podcast" · live',
+    label: "kicker «Подкаст» · live",
     title: "Подкаст «Разбор»: эфир о боли в плече",
     props: {
-      format: "podcast" as const,
       formatLabel: "Подкаст",
+      venueLabel: "Онлайн",
       pulCost: 0,
       signUpCount: 9,
       live: true,

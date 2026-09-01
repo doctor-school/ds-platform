@@ -203,19 +203,19 @@ describe("006 EARS-6 WebinarCard — room-entry CTA slot (no nested anchor)", ()
  * state, offline city and seats, zero cost as «бесплатно для врача», no rouble
  * string). Route mounting and screen-local tree checks belong to #1516.
  */
-const FORMATS = [
-  "webinar",
-  "online-meeting",
-  "offline-meetup",
-  "congress",
-  "podcast",
+const FORMAT_KICKERS = [
+  "Вебинар",
+  "Разбор",
+  "Doctor Club",
+  "Подкаст",
+  "Конгресс",
 ] as const;
 
 const FEED = {
   ...BASE,
   formatLabel: "Вебинар",
-  kindLabel: "Разбор клинического случая",
-  nmoLabel: "НМО",
+  venueLabel: "Онлайн",
+  nmoLabel: "НМО · 2 ЗЕТ",
   pulCost: 120,
   pulCostLabel: "120 Pul",
   freeLabel: "бесплатно для врача",
@@ -224,43 +224,38 @@ const FEED = {
 };
 
 describe("019 EARS-2 WebinarCard — the five formats", () => {
-  it("019 EARS-2.1: every format renders its own glyph and its own surface — distinguishable without reading the text", () => {
-    const glyphs = new Set<string>();
-    const surfaces = new Set<string>();
+  it("019 EARS-2.1: each of the five formats reads from the time-plate kicker, per the canvas card contract", () => {
+    const kickers = new Set<string>();
 
-    for (const format of FORMATS) {
+    for (const kicker of FORMAT_KICKERS) {
       const { container } = render(
-        <WebinarCard {...FEED} format={format} formatLabel="Формат" />,
+        <WebinarCard {...FEED} formatLabel={kicker} />,
       );
-      const badge = container.querySelector(
-        `[data-event-format="${format}"]`,
-      ) as HTMLElement | null;
-      expect(badge).not.toBeNull();
-      // The glyph is decorative-but-distinguishing: hidden from AT because the
-      // adjacent catalog label already names the format.
-      const glyph = badge!.querySelector("[aria-hidden]") as HTMLElement;
-      expect(glyph.textContent).toBeTruthy();
-      glyphs.add(glyph.textContent!);
-      surfaces.add(badge!.className);
+      const el = container.querySelector("[data-event-format-kicker]");
+      expect(el, `no kicker rendered for «${kicker}»`).not.toBeNull();
+      expect(el!.textContent).toBe(kicker);
+      // The canvas card has no coloured format badge and no glyph vocabulary —
+      // the format is the kicker, everything else is a text chip.
+      expect(container.querySelector("[data-event-format]")).toBeNull();
+      kickers.add(el!.textContent!);
       cleanup();
     }
 
-    // Five formats → five distinct glyphs AND five distinct surfaces.
-    expect(glyphs.size).toBe(5);
-    expect(surfaces.size).toBe(5);
+    expect(kickers.size).toBe(5);
   });
 
-  it("019 EARS-2.2: the format badge never renders without its catalog label (no hardcoded copy)", () => {
-    const { container } = render(
-      <WebinarCard {...BASE} format="congress" />,
-    );
-    expect(container.querySelector("[data-event-format]")).toBeNull();
+  it("019 EARS-2.2: the format kicker never renders without its catalog label (no hardcoded copy)", () => {
+    const { container } = render(<WebinarCard {...BASE} />);
+    expect(container.querySelector("[data-event-format-kicker]")).toBeNull();
   });
 
-  it("019 EARS-2.3: НМО renders as a badge only — never as the card's heading", () => {
-    render(<WebinarCard {...FEED} />);
-    const badge = screen.getByText("НМО");
-    expect(badge.getAttribute("data-nmo-badge")).toBe("");
+  it("019 EARS-2.3: НМО renders as a chip only — never as the card's heading", () => {
+    const { container } = render(<WebinarCard {...FEED} />);
+    const chip = screen.getByText("НМО · 2 ЗЕТ");
+    expect(chip.getAttribute("data-event-nmo")).toBe("");
+    // It lives in the ONE chip row — not in a badge row of its own.
+    expect(chip.closest("[data-event-chips]")).not.toBeNull();
+    expect(container.querySelector("[data-nmo-badge]")).toBeNull();
     // The card's only heading is its title link, and it says nothing about НМО.
     expect(screen.getByRole("heading").textContent).toBe(BASE.title);
   });
@@ -314,16 +309,17 @@ describe("019 EARS-2 WebinarCard — cost, sign-ups, offline city and seats", ()
     const { container } = render(
       <WebinarCard
         {...FEED}
-        format="offline-meetup"
-        formatLabel="Встреча коллег"
+        formatLabel="Doctor Club"
+        venueLabel="Офлайн"
         city="Казань"
         seatsLeft={12}
         seatsLeftLabel="мест осталось"
       />,
     );
-    expect(container.querySelector("[data-event-city]")?.textContent).toBe(
-      "Казань",
-    );
+    // The canvas venue chip carries the city inside it — «Офлайн · Казань».
+    const venue = container.querySelector("[data-event-city]");
+    expect(venue?.getAttribute("data-event-city")).toBe("Казань");
+    expect(venue?.textContent).toBe("Офлайн · Казань");
     expect(container.querySelector("[data-event-seats]")?.textContent).toContain(
       "12",
     );
@@ -333,38 +329,44 @@ describe("019 EARS-2 WebinarCard — cost, sign-ups, offline city and seats", ()
     const { container } = render(
       <WebinarCard
         {...FEED}
-        format="congress"
         formatLabel="Конгресс"
-        dateLabel="14–16 сентября · пн–ср"
-        city="Санкт-Петербург"
+        venueLabel="Гибрид"
+        // The date SPAN rides the time-plate sub-label (canvas «14–15 ноября»).
+        dateLabel="14–15 ноября"
+        city="Москва"
         seatsLeft={40}
         seatsLeftLabel="мест осталось"
       />,
     );
-    expect(screen.getByText("14–16 сентября · пн–ср")).toBeInTheDocument();
-    expect(container.querySelector('[data-event-format="congress"]')).not.toBeNull();
+    expect(screen.getByText("14–15 ноября")).toBeInTheDocument();
+    expect(
+      container.querySelector("[data-event-format-kicker]")?.textContent,
+    ).toBe("Конгресс");
     expect(container.querySelector("[data-event-city]")?.textContent).toBe(
-      "Санкт-Петербург",
+      "Гибрид · Москва",
     );
     expect(container.querySelector("[data-event-seats]")?.textContent).toContain(
       "40",
     );
   });
 
-  it("019 EARS-2.9: zero remaining seats renders «мест не осталось» instead of a seat count", () => {
+  it("019 EARS-2.9: zero remaining seats reads «мест не осталось» in the chip row, with no seat count", () => {
     const { container } = render(
       <WebinarCard
         {...FEED}
-        format="offline-meetup"
-        formatLabel="Встреча коллег"
+        formatLabel="Doctor Club"
+        venueLabel="Офлайн"
         city="Казань"
         seatsLeft={0}
         seatsLeftLabel="мест осталось"
         soldOutLabel="мест не осталось"
       />,
     );
-    const marker = screen.getByText("мест не осталось");
-    expect(marker.getAttribute("role")).toBe("status");
+    const chip = screen.getByText("мест не осталось");
+    expect(chip.getAttribute("data-sold-out")).toBe("");
+    // It is a chip in the ONE row, not a standalone announced element.
+    expect(chip.closest("[data-event-chips]")).not.toBeNull();
+    expect(chip.getAttribute("role")).toBeNull();
     expect(container.querySelector("[data-event-seats]")).toBeNull();
     // A sold-out event stays readable — its event-page link is untouched.
     expect(screen.getByRole("link")).toHaveAttribute("href", BASE.href);
@@ -374,8 +376,8 @@ describe("019 EARS-2 WebinarCard — cost, sign-ups, offline city and seats", ()
     const { container } = render(
       <WebinarCard
         {...FEED}
-        format="offline-meetup"
-        formatLabel="Встреча коллег"
+        formatLabel="Doctor Club"
+        venueLabel="Офлайн"
         city="Казань"
         seatsLeft={5}
         seatsLeftLabel="мест осталось"

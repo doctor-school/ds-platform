@@ -1,6 +1,10 @@
 import type { RecordingProjection } from "@ds/schemas";
 import { describe, expect, it } from "vitest";
-import { resolveRecordingSignal } from "./recording-signal";
+import {
+  formatReadinessDay,
+  resolveRecordingPlaque,
+  resolveRecordingSignal,
+} from "./recording-signal";
 
 /** The api's projection shape, with only the field under test varied. */
 function projection(
@@ -58,9 +62,9 @@ describe("014 EARS-4 — the post-live recording signal", () => {
     ).toBeNull();
   });
 
-  it("014 EARS-4.6: the readiness date is never formatted here — the «запись готовится» plaque carrying it is #1344 (EARS-7), and a stand-in would be a stub", () => {
+  it("014 EARS-4.6: the readiness date never rides the BADGE signal — the hero badge says «Запись готовится» and nothing more; the date belongs to the EARS-7 plaque", () => {
     const signal = resolveRecordingSignal(
-      projection({ expectedBy: "2026-07-18T09:00:00.000Z" }),
+      projection({ expectedBy: "2026-07-18" }),
       "ended",
     );
     expect(signal).toEqual({
@@ -69,5 +73,66 @@ describe("014 EARS-4 — the post-live recording signal", () => {
       kindKey: null,
     });
     expect(JSON.stringify(signal)).not.toContain("2026");
+  });
+});
+
+describe("014 EARS-7 — the «запись готовится» plaque projection", () => {
+  /** A fixed reading moment, so «is it the current year» is not clock-dependent. */
+  const NOW = new Date("2026-07-16T18:30:00.000Z");
+
+  it("014 EARS-7.1: an ended event with nothing published yet and a committed day carries that day, formatted for a Russian reader", () => {
+    expect(
+      resolveRecordingPlaque(projection({ expectedBy: "2026-07-18" }), "ended", NOW),
+    ).toEqual({ expectedByLabel: "18 июля" });
+  });
+
+  it("014 EARS-7.2: no committed day yields NO label — the page then speaks the date-free line instead of inventing an estimate", () => {
+    expect(
+      resolveRecordingPlaque(projection({ expectedBy: null }), "ended", NOW),
+    ).toEqual({ expectedByLabel: null });
+  });
+
+  it("014 EARS-7.3: publishing CLEARS the plaque — a montage and a raw-only recording both end the promise, with no timer or cached flag to go stale", () => {
+    expect(
+      resolveRecordingPlaque(
+        projection({ state: "montage", primaryKind: "edited", expectedBy: "2026-07-18" }),
+        "ended",
+        NOW,
+      ),
+    ).toBeNull();
+    expect(
+      resolveRecordingPlaque(
+        projection({ state: "raw-only", primaryKind: "raw" }),
+        "ended",
+        NOW,
+      ),
+    ).toBeNull();
+  });
+
+  it("014 EARS-7.4: the plaque exists only on an ENDED event — an upcoming, live, or archived page never promises a recording", () => {
+    const preparing = projection({ expectedBy: "2026-07-18" });
+    for (const status of ["upcoming", "live", "archived"] as const) {
+      expect(resolveRecordingPlaque(preparing, status, NOW)).toBeNull();
+    }
+  });
+
+  it("014 EARS-7.5: a day in another year keeps its year — «18 июля» read in 2026 is noise, «18 июля 2027» is the whole point", () => {
+    expect(formatReadinessDay("2027-07-18", NOW)).toBe("18 июля 2027");
+    expect(formatReadinessDay("2026-01-09", NOW)).toBe("9 января");
+    expect(formatReadinessDay("2026-12-31", NOW)).toBe("31 декабря");
+  });
+
+  it("014 EARS-7.6: the day is read as CALENDAR FIELDS — a day near either edge of UTC keeps the day the operator committed to, never shifted by a timezone", () => {
+    // Parsed through `new Date()` in a westward zone these would render as the
+    // previous day — a silently wrong promise, which is worse than none.
+    expect(formatReadinessDay("2026-07-01", NOW)).toBe("1 июля");
+    expect(formatReadinessDay("2026-08-31", NOW)).toBe("31 августа");
+  });
+
+  it("014 EARS-7.7: an absent or malformed day yields no label rather than a broken string on the page", () => {
+    expect(formatReadinessDay(null, NOW)).toBeNull();
+    expect(formatReadinessDay("", NOW)).toBeNull();
+    expect(formatReadinessDay("скоро", NOW)).toBeNull();
+    expect(formatReadinessDay("2026-13-01", NOW)).toBeNull();
   });
 });

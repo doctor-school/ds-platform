@@ -106,6 +106,10 @@ export {
   type WebinarStatusCardProps,
 } from "./primitives/webinar-status-card";
 export {
+  WebinarRecordingPlaque,
+  type WebinarRecordingPlaqueProps,
+} from "./primitives/webinar-recording-plaque";
+export {
   WebinarRoomLayout,
   type WebinarRoomLayoutProps,
 } from "./primitives/webinar-room";

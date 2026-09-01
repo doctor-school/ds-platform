@@ -7,10 +7,14 @@ import { Badge } from "@ds/design-system/badge";
 import { Button } from "@ds/design-system/button";
 import { Container } from "@ds/design-system/container";
 import { WebinarPageContent } from "@ds/design-system/webinar-page-content";
+import { WebinarRecordingPlaque } from "@ds/design-system/webinar-recording-plaque";
 import { WebinarStatusCard } from "@ds/design-system/webinar-status-card";
 import { fetchPublicEventPage } from "../../../lib/public-events";
 import { resolvePrimaryCta, toCanvasStatus } from "../../../lib/event-lifecycle";
-import { resolveRecordingSignal } from "../../../lib/recording-signal";
+import {
+  resolveRecordingPlaque,
+  resolveRecordingSignal,
+} from "../../../lib/recording-signal";
 import {
   fetchEventRegistrationState,
   resolveJoinSignpost,
@@ -145,6 +149,14 @@ export default async function WebinarEventPage({
   // readiness-date plaque #1344 and the raw spoiler #1345 — this slice renders
   // the availability signal and nothing that pretends to be those.
   const recordingSignal = resolveRecordingSignal(event.recording, status);
+  // 014 EARS-7 — the «запись готовится» plaque that occupies the PLAYER position
+  // while nothing is published yet (design §8.1: the player card holds exactly
+  // one of the player, the guest gate, the plaque, or the unavailability
+  // message). Non-null only in the `preparing` branch, so it self-clears on the
+  // next render after the operator publishes — the page is `force-dynamic` and
+  // this derives purely from `RecordingProjection.state`, with no timer, cache
+  // flag, or client mechanism that could keep promising a delivered recording.
+  const recordingPlaque = resolveRecordingPlaque(event.recording, status);
   // The footer conversion band mirrors the status card's route but only for a
   // participable event (upcoming / live); `ended` and `archived` carry none. It
   // is a GUEST conversion band: its CTA links to the `/register` auth handoff,
@@ -351,6 +363,37 @@ export default async function WebinarEventPage({
             ) : null}
           </WebinarStatusCard>
         </div>
+
+        {/* 014 EARS-7 — the plaque sits in the player position: below the status
+            card, above the page body, exactly where the player will mount
+            (#1343). It carries the operator's readiness DAY when there is one
+            («до 18 июля») and an honest date-free line when there is not —
+            never an invented estimate (the canvas's «≈2 дня» is placeholder
+            art), and never a «Напомнить на почту» button: readiness
+            notifications are a declared 014 non-goal, so that control would be
+            a dead affordance. */}
+        {recordingPlaque ? (
+          <div className="mt-10" data-testid="recording-plaque">
+            <WebinarRecordingPlaque
+              timeLabel={t("plaque.timeLabel")}
+              time={
+                recordingPlaque.expectedByLabel
+                  ? t("plaque.timeValue", {
+                      date: recordingPlaque.expectedByLabel,
+                    })
+                  : null
+              }
+              title={t("plaque.title")}
+              body={
+                recordingPlaque.expectedByLabel
+                  ? t("plaque.bodyDated", {
+                      date: recordingPlaque.expectedByLabel,
+                    })
+                  : t("plaque.bodyUndated")
+              }
+            />
+          </div>
+        ) : null}
 
         <div className="mt-16">
           <WebinarPageContent

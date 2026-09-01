@@ -89,6 +89,9 @@ export const SHOWCASE_REGISTRY: ShowcaseEntry[] = [
   // ── Event-page status card (004 EARS-4, #553) — the lifecycle status swap.
   { id: "webinar-status-card", section: "primitives" },
 
+  // ── Post-live recording plaque (014 EARS-7, #1344) — «запись готовится».
+  { id: "webinar-recording-plaque", section: "primitives" },
+
   // ── Webinar room layout (006 EARS-2/EARS-11, #578) — the webinar-room.dc.html
   //    composition shell (desktop 1fr 400px player + chat aside; mobile tabs).
   { id: "webinar-room", section: "primitives" },

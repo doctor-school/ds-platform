@@ -8,6 +8,7 @@ import type { EventAdminDetail } from "@ds/schemas";
 import {
   REFUSAL_DISMISS_MS,
   actionsFor,
+  lifecycleBarContent,
   lifecycleCommandRequest,
   lifecycleErrorOutcome,
   lifecycleSignature,
@@ -74,21 +75,23 @@ export function LifecycleActions({
     return () => clearTimeout(timer);
   }, [refusal, signature]);
 
-  if (actions.length === 0) {
-    return (
-      <p className="text-sm text-muted-foreground" data-testid="no-transitions">
-        {t("events.action.none")}
-      </p>
-    );
-  }
+  // One rule for what the bar shows ({@link lifecycleBarContent}), not an early
+  // return: a refusal whose re-read withdrew every action must still be readable,
+  // and a control-flow shortcut past the alert is exactly how it stopped being.
+  const bar = lifecycleBarContent(refusal?.message ?? null, actions);
 
   return (
     <div className="flex flex-col gap-3">
-      {refusal ? (
+      {bar.refusal ? (
         <Alert variant="danger" data-testid="transition-error">
-          {refusal.message}
+          {bar.refusal}
         </Alert>
       ) : null}
+      {bar.emptyNotice ? (
+        <p className="text-sm text-muted-foreground" data-testid="no-transitions">
+          {t("events.action.none")}
+        </p>
+      ) : (
       <div className="flex flex-wrap gap-3" data-testid="lifecycle-actions">
         {actions.map((action) => (
           <Button
@@ -122,6 +125,7 @@ export function LifecycleActions({
           </Button>
         ))}
       </div>
+      )}
     </div>
   );
 }

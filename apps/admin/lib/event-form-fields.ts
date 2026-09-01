@@ -55,3 +55,18 @@ export function streamConfigFields(
  * moment somebody else saved the same event.
  */
 export const FORM_SYNC_RESET_OPTIONS = { keepDirtyValues: true } as const;
+
+/**
+ * How a form re-baselines itself once its OWN save has landed.
+ *
+ * The counterpart to {@link FORM_SYNC_RESET_OPTIONS}, and the reason it is a
+ * separate constant: "dirty" means "differs from the baseline the operator is
+ * working against", and after a successful save that baseline IS the saved
+ * values. Without this re-baseline every field the operator ever touched stays
+ * dirty for the life of the mounted page, so `keepDirtyValues` would protect it
+ * forever — and a colleague's later change to that same field would be silently
+ * dropped by the very mechanism meant to keep the page current. Clearing the
+ * dirty set on save is what keeps the protection scoped to edits actually still
+ * in flight.
+ */
+export const FORM_SAVED_RESET_OPTIONS = { keepDirtyValues: false } as const;

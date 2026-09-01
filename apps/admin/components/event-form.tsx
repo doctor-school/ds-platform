@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
 import { useTranslations } from "next-intl";
 import type { z } from "zod";
@@ -17,6 +17,7 @@ import {
 import type { EventAdminDetail, SpeakerEntry } from "@ds/schemas";
 import { TokenTextarea } from "@/components/fields";
 import {
+  FORM_SAVED_RESET_OPTIONS,
   FORM_SYNC_RESET_OPTIONS,
   eventFormFields,
 } from "@/lib/event-form-fields";
@@ -59,11 +60,20 @@ export function EventForm({
   submitLabel,
   onSubmit,
   submitting,
+  savedAt,
 }: {
   detail?: EventAdminDetail;
   submitLabel: string;
   onSubmit: (values: EventFormValues) => void;
   submitting?: boolean;
+  /**
+   * Bumped by the page each time a save LANDS (#1593). The form owns no mutation,
+   * so success is the page's fact to report; what the form does with it is
+   * re-baseline itself on the values that were saved, which is the only thing
+   * that keeps `keepDirtyValues` scoped to edits still in flight rather than to
+   * every field ever touched on this mount.
+   */
+  savedAt?: number;
 }) {
   const t = useTranslations();
   const form = useForm<EventFormFields>({
@@ -91,9 +101,19 @@ export function EventForm({
   // than by the resolver — a non-PDF is refused with the RU catalog message.
   const [programPdf, setProgramPdf] = useState<File | null>(null);
   const [pdfError, setPdfError] = useState<string | null>(null);
+  // What the last submit sent — the baseline a landed save re-bases the form on.
+  const submitted = useRef<EventFormFields | null>(null);
+
+  useEffect(() => {
+    if (!savedAt || !submitted.current) return;
+    // Keyed on the save COUNTER only (`form` is a stable RHF handle): re-running
+    // this on any other render would undo the operator's next keystrokes.
+    form.reset(submitted.current, FORM_SAVED_RESET_OPTIONS);
+  }, [savedAt, form]);
 
   function submit(fieldsValue: EventFormFields) {
     if (pdfError) return;
+    submitted.current = fieldsValue;
     onSubmit({
       title: fieldsValue.title,
       school: fieldsValue.school,

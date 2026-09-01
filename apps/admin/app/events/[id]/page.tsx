@@ -51,6 +51,9 @@ export default function EventEditPage() {
   const updating = updateMutation.isPending;
   const [editError, setEditError] = useState<string | null>(null);
   const [editOk, setEditOk] = useState(false);
+  // Bumped on each landed save so the form can re-baseline itself clean (#1593)
+  // — the mutation lives here, so success is this page's fact to report.
+  const [savedAt, setSavedAt] = useState(0);
 
   return (
     <Authenticated key="events-edit" redirectOnFail="/login">
@@ -155,6 +158,7 @@ export default function EventEditPage() {
                       detail={detail}
                       submitLabel={t("common.save")}
                       submitting={updating}
+                      savedAt={savedAt}
                       onSubmit={(values) => {
                         setEditError(null);
                         setEditOk(false);
@@ -174,6 +178,7 @@ export default function EventEditPage() {
                           {
                             onSuccess: () => {
                               setEditOk(true);
+                              setSavedAt(Date.now());
                               refetch();
                             },
                             onError: () =>

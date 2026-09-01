@@ -215,6 +215,32 @@ export function lifecycleSignature(detail: {
   return `${detail.state}|${detail.validTransitions.join(",")}|${detail.version}`;
 }
 
+/** What the lifecycle bar puts on screen for one render. */
+export interface LifecycleBarContent {
+  /** The refusal sentence to show, or `null` when there is none. */
+  readonly refusal: string | null;
+  /** Whether the «no transitions offered» notice replaces the button row. */
+  readonly emptyNotice: boolean;
+}
+
+/**
+ * What the bar renders, as a rule rather than as a control-flow accident.
+ *
+ * The refusal is INDEPENDENT of whether any transition is still offered. That
+ * independence is the whole point: the bar used to return the «no transitions»
+ * notice early, before it ever reached the alert, so on the one screen where the
+ * operator most needs the explanation — a refusal whose re-read then withdrew
+ * every action, e.g. an event someone else archived — the sentence disappeared in
+ * the same frame it was raised, and the operator was left with a silent, empty
+ * bar and no account of why their click did nothing.
+ */
+export function lifecycleBarContent(
+  refusal: string | null,
+  actions: readonly LifecycleAction[],
+): LifecycleBarContent {
+  return { refusal, emptyNotice: actions.length === 0 };
+}
+
 /** The message-catalog key (under `events.state.*`) for a lifecycle-state badge label. */
 export function stateLabelKey(state: EventLifecycleState): string {
   return `events.state.${state}`;

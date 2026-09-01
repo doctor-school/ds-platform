@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { EventAdminDetail } from "@ds/schemas";
 import {
+  FORM_SAVED_RESET_OPTIONS,
   FORM_SYNC_RESET_OPTIONS,
   eventFormFields,
   streamConfigFields,
@@ -81,5 +82,12 @@ describe("007 EARS-2/EARS-3 form fields projection (#1593)", () => {
 
   it("EARS-2: the shared sync options keep the operator's own edits — a server refetch updates untouched fields ONLY", () => {
     expect(FORM_SYNC_RESET_OPTIONS).toEqual({ keepDirtyValues: true });
+  });
+
+  it("EARS-2: a landed save re-baselines the form CLEAN — otherwise every field the operator ever touched stays dirty for the life of the page and a colleague's later change to it is silently dropped by the very option meant to keep the page current", () => {
+    expect(FORM_SAVED_RESET_OPTIONS).toEqual({ keepDirtyValues: false });
+    expect(FORM_SAVED_RESET_OPTIONS.keepDirtyValues).not.toBe(
+      FORM_SYNC_RESET_OPTIONS.keepDirtyValues,
+    );
   });
 });

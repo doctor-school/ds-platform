@@ -21,6 +21,7 @@ import {
 } from "@ds/schemas";
 import { TokenSelect } from "@/components/fields";
 import {
+  FORM_SAVED_RESET_OPTIONS,
   FORM_SYNC_RESET_OPTIONS,
   streamConfigFields,
 } from "@/lib/event-form-fields";
@@ -86,6 +87,10 @@ export function StreamConfigForm({
       {
         onSuccess: () => {
           setOk(true);
+          // The saved values ARE the new baseline: leaving the fields dirty
+          // would make `keepDirtyValues` shield them from every later server
+          // change for the life of this mount (#1593).
+          form.reset(body, FORM_SAVED_RESET_OPTIONS);
           onConfigured();
         },
         onError: () => setError(t("events.errors.streamFailed")),

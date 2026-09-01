@@ -6,6 +6,7 @@ import type { EventLifecycleState } from "@ds/schemas";
 import {
   REFUSAL_DISMISS_MS,
   actionsFor,
+  lifecycleBarContent,
   lifecycleCommandRequest,
   lifecycleErrorOutcome,
   lifecycleSignature,
@@ -226,5 +227,25 @@ describe("#1593 refusal-alert dismissal", () => {
   it("EARS-7: the dismissal delay stays inside the readable 5–8s window the owner asked for", () => {
     expect(REFUSAL_DISMISS_MS).toBeGreaterThanOrEqual(5_000);
     expect(REFUSAL_DISMISS_MS).toBeLessThanOrEqual(8_000);
+  });
+
+  it("EARS-7: a refusal is shown even when the re-read left NO transition offered — the screen where the explanation matters most is the one with nothing left to click", () => {
+    expect(lifecycleBarContent("Недопустимый переход статуса", [])).toEqual({
+      refusal: "Недопустимый переход статуса",
+      emptyNotice: true,
+    });
+  });
+
+  it("EARS-7: with actions offered, the refusal shows and the empty notice does not", () => {
+    expect(
+      lifecycleBarContent("Недопустимый переход статуса", actionsFor("draft", ["published"])),
+    ).toEqual({ refusal: "Недопустимый переход статуса", emptyNotice: false });
+  });
+
+  it("EARS-7: a terminal event with no refusal shows the notice alone", () => {
+    expect(lifecycleBarContent(null, [])).toEqual({
+      refusal: null,
+      emptyNotice: true,
+    });
   });
 });

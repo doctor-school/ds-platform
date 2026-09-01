@@ -182,28 +182,43 @@ function toggle(values: string[], id: string): string[] {
 }
 
 /**
+ * ALL-SELECTED IS «ВСЕ» (owner decision on #1522). A multi-select facet whose
+ * selected set covers its whole option list narrows nothing, so it collapses to
+ * the EMPTY set at selection time: the closed control returns to «Все», the
+ * chips disappear and the facet stops counting toward «Применено фильтров».
+ * Omit-to-drop — the consumer therefore writes no URL parameter for it either.
+ * The sheet gains no «Все» row: the collapse is a normalization of the value,
+ * not a new control in the canvas language.
+ */
+function toggleFacet(
+  values: string[],
+  id: string,
+  all: EventsFilterOption[] | undefined,
+): string[] {
+  const next = toggle(values, id);
+  return all && all.length > 0 && next.length >= all.length ? [] : next;
+}
+
+/**
  * The canvas facet control: a bordered button stating «LABEL / current value».
  * Open switches the fill to `tint` and drops the raised shadow, exactly as the
  * source does — the control looks pressed while its sheet is out.
  */
-function FacetButton({
-  label,
-  value,
-  active,
-  caret,
-  onClick,
-  ...aria
-}: {
-  label: string;
-  value: string;
-  active: boolean;
-  caret: string;
-  onClick: () => void;
-  "aria-expanded"?: boolean;
-  "aria-controls"?: string;
-}) {
+const FacetButton = React.forwardRef<
+  HTMLButtonElement,
+  {
+    label: string;
+    value: string;
+    active: boolean;
+    caret: string;
+    onClick: () => void;
+    "aria-expanded"?: boolean;
+    "aria-controls"?: string;
+  }
+>(function FacetButton({ label, value, active, caret, onClick, ...aria }, ref) {
   return (
     <button
+      ref={ref}
       type="button"
       onClick={onClick}
       // The name is assembled explicitly: the label and the value are two
@@ -233,12 +248,26 @@ function FacetButton({
           {value}
         </span>
       </span>
-      <span aria-hidden="true" className="flex-none text-caption">
+      {/*
+        The chevron (and the ✕ of the two-state facets) carries its OWN token
+        colour: with no colour class it inherits the document foreground, which
+        in the dark theme is the same ink as the panel's own surface — the
+        glyph disappears. It takes the same pair as the value line beside it,
+        which is proven against both surfaces the control wears (`bg-card`
+        closed, `bg-tint` open).
+      */}
+      <span
+        aria-hidden="true"
+        className={cn(
+          "flex-none text-caption",
+          active ? "text-primary-action" : "text-foreground",
+        )}
+      >
         {caret}
       </span>
     </button>
   );
-}
+});
 
 /**
  * One option inside the sheet — the chosen ones filled and marked ✓. `FilterChip`
@@ -281,6 +310,7 @@ function FacetSelect({
   open,
   onOpenChange,
   closeLabel,
+  triggerRef,
   children,
 }: {
   label: string;
@@ -290,12 +320,15 @@ function FacetSelect({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   closeLabel: string;
+  /** Registers the trigger so the panel can return focus to it on close. */
+  triggerRef: (node: HTMLButtonElement | null) => void;
   children: React.ReactNode;
 }) {
   const sheetId = React.useId();
   return (
     <div className="flex flex-col">
       <FacetButton
+        ref={triggerRef}
         label={label}
         value={value}
         active={active}
@@ -355,6 +388,18 @@ export function EventsFilter({
   // previous one, so the column never grows into the wall of options the
   // closed controls exist to prevent.
   const [openFacet, setOpenFacet] = React.useState<string | null>(null);
+  const panelRef = React.useRef<HTMLElement | null>(null);
+  const appliedRowRef = React.useRef<HTMLDivElement | null>(null);
+  const resetRef = React.useRef<HTMLElement | null>(null);
+  // The live trigger element per facet key — the sheet is inline, so the only
+  // stable focus anchor after it unmounts is the button that opened it.
+  const triggers = React.useRef(new Map<string, HTMLButtonElement>());
+  const restoreFocus = React.useRef<{ key: string; force: boolean } | null>(
+    null,
+  );
+  // Which applied chip was just removed; the row re-renders without it, so the
+  // focus target is resolved from the NEW row, not from the removed node.
+  const chipReturn = React.useRef<number | null>(null);
   const rank = FILL_RANK[fill];
   const showsFormatTier = rank >= FILL_RANK.intermediate;
   const showsFullTier = rank >= FILL_RANK.full;
@@ -389,11 +434,80 @@ export function EventsFilter({
   const onQueryChange = (value: string) => {
     setDraft(value);
     if (timer.current) clearTimeout(timer.current);
+    // The COMMITTED query is trimmed: a whitespace-only field is no query at
+    // all (no chip, no count, no URL parameter), and « вебинар » must not
+    // search for a different string than «вебинар». The draft keeps the raw
+    // keystrokes, so the caret and in-word spaces survive typing.
+    const committed = value.trim();
     timer.current = setTimeout(() => {
-      lastCommitted.current = value;
-      commitRef.current(value);
+      lastCommitted.current = committed;
+      commitRef.current(committed);
     }, queryDebounceMs);
   };
+
+  /**
+   * Closing a sheet must never drop focus to `<body>`: the ✕ and the option
+   * buttons unmount with the sheet, so focus is restored to the trigger. An
+   * outside click that lands on another focusable element keeps ITS focus —
+   * only a focus that has fallen to the document is recovered — while Escape
+   * always returns to the trigger (`force`), as the disclosure pattern requires.
+   */
+  const closeFacet = React.useCallback((key: string, force = false) => {
+    restoreFocus.current = { key, force };
+    setOpenFacet((current) => (current === key ? null : current));
+  }, []);
+
+  React.useLayoutEffect(() => {
+    const pending = restoreFocus.current;
+    if (!pending || openFacet !== null) return;
+    restoreFocus.current = null;
+    const trigger = triggers.current.get(pending.key);
+    if (!trigger) return;
+    const active = document.activeElement;
+    if (pending.force || !active || active === document.body) trigger.focus();
+  }, [openFacet]);
+
+  // Escape and a click outside the panel close the open sheet — the standard
+  // disclosure contract, beside the trigger and the sheet's own ✕.
+  React.useEffect(() => {
+    if (openFacet === null) return;
+    const key = openFacet;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      closeFacet(key, true);
+    };
+    const onPointerDown = (event: MouseEvent) => {
+      const target = event.target;
+      if (target instanceof Node && panelRef.current?.contains(target)) return;
+      closeFacet(key);
+    };
+    document.addEventListener("keydown", onKeyDown);
+    document.addEventListener("mousedown", onPointerDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("mousedown", onPointerDown);
+    };
+  }, [openFacet, closeFacet]);
+
+  // Removing an applied chip moves focus along the row (the next chip, else the
+  // last one), and when the row itself disappears to the reset control or the
+  // panel region — never to `<body>`.
+  React.useLayoutEffect(() => {
+    const index = chipReturn.current;
+    if (index === null) return;
+    chipReturn.current = null;
+    const chips = appliedRowRef.current
+      ? Array.from(
+          appliedRowRef.current.querySelectorAll<HTMLButtonElement>("button"),
+        )
+      : [];
+    const next = chips[Math.min(index, chips.length - 1)];
+    if (next) {
+      next.focus();
+      return;
+    }
+    (resetRef.current ?? panelRef.current)?.focus();
+  });
 
   const scope = applied.specialtyScope;
   const scopeIds = Array.isArray(scope) ? scope.map((ref) => ref.id) : [];
@@ -481,8 +595,15 @@ export function EventsFilter({
   const closeLabel = labels.closeOptions ?? labels.applied;
   const sheet = (key: string) => ({
     open: openFacet === key,
-    onOpenChange: (next: boolean) => setOpenFacet(next ? key : null),
+    onOpenChange: (next: boolean) => {
+      if (next) setOpenFacet(key);
+      else closeFacet(key);
+    },
     closeLabel,
+    triggerRef: (node: HTMLButtonElement | null) => {
+      if (node) triggers.current.set(key, node);
+      else triggers.current.delete(key);
+    },
   });
   const named = (ids: string[], list: EventsFilterOption[] | undefined) =>
     ids.map((id) => list?.find((item) => item.id === id)?.label ?? id).join(", ");
@@ -497,10 +618,15 @@ export function EventsFilter({
   return (
     <section
       aria-label={labels.panel}
+      ref={panelRef}
+      // Programmatic focus target only (never in the tab order): the landing
+      // place when the last applied chip removes the whole applied row.
+      tabIndex={-1}
       className={cn(
         // No width and no grid placement of its own: the host column (desktop
         // sidebar) or the #1528 sheet decides where this body sits.
         "flex flex-col gap-3 border-2 border-border bg-card p-4",
+        "focus:outline-none",
         className,
       )}
     >
@@ -511,7 +637,11 @@ export function EventsFilter({
             options.view.find((option) => option.id === view?.value)?.label ??
             anyValue
           }
-          active={Boolean(view?.value)}
+          // A control paints APPLIED only when its facet actually contributes
+          // to the applied set — a chip and a unit of the stated count. `view`
+          // and `tense` are always-present single selects that contribute
+          // neither, so at every value they read as the neutral default does.
+          active={false}
           {...sheet("view")}
         >
           {options.view.map((option) => (
@@ -520,7 +650,7 @@ export function EventsFilter({
               selected={view?.value === option.id}
               onClick={() => {
                 view?.onChange(option.id);
-                setOpenFacet(null);
+                closeFacet("view");
               }}
             >
               {option.label}
@@ -536,7 +666,7 @@ export function EventsFilter({
             options.tense.find((option) => option.id === tense?.value)?.label ??
             anyValue
           }
-          active={Boolean(tense?.value)}
+          active={false}
           {...sheet("tense")}
         >
           {options.tense.map((option) => (
@@ -545,7 +675,7 @@ export function EventsFilter({
               selected={tense?.value === option.id}
               onClick={() => {
                 tense?.onChange(option.id);
-                setOpenFacet(null);
+                closeFacet("tense");
               }}
             >
               {option.label}
@@ -572,7 +702,7 @@ export function EventsFilter({
               onClick={() =>
                 onChange({
                   ...applied,
-                  format: toggle(applied.format, option.id),
+                  format: toggleFacet(applied.format, option.id, options.format),
                 })
               }
             >
@@ -596,7 +726,10 @@ export function EventsFilter({
               key={option.id}
               selected={applied.kind.includes(option.id)}
               onClick={() =>
-                onChange({ ...applied, kind: toggle(applied.kind, option.id) })
+                onChange({
+                  ...applied,
+                  kind: toggleFacet(applied.kind, option.id, options.kind),
+                })
               }
             >
               {option.label}
@@ -639,9 +772,14 @@ export function EventsFilter({
                 key={option.id}
                 selected={selected}
                 onClick={() => {
-                  const next = selected
-                    ? scopeIds.filter((id) => id !== option.id)
-                    : [...scopeIds, option.id];
+                  // Naming every offered specialty narrows nothing beyond the
+                  // default scope, so the same all-selected normalization
+                  // returns the facet to «моя и смежные».
+                  const next = toggleFacet(
+                    scopeIds,
+                    option.id,
+                    options.specialty,
+                  );
                   const refs = next.map((id) => {
                     const known =
                       options.specialty?.find((item) => item.id === id) ??
@@ -680,7 +818,10 @@ export function EventsFilter({
               key={option.id}
               selected={applied.city.includes(option.id)}
               onClick={() =>
-                onChange({ ...applied, city: toggle(applied.city, option.id) })
+                onChange({
+                  ...applied,
+                  city: toggleFacet(applied.city, option.id, options.city),
+                })
               }
             >
               {option.label}
@@ -720,7 +861,14 @@ export function EventsFilter({
 
       {showsFullTier && labels.query ? (
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor={queryId}>{labels.query}</Label>
+          {/*
+            `Label` carries weight and size but no colour of its own, so on the
+            panel's own surface it must be told which ink to use — otherwise it
+            inherits the document foreground and vanishes in the dark theme.
+          */}
+          <Label htmlFor={queryId} className="text-foreground">
+            {labels.query}
+          </Label>
           <Input
             id={queryId}
             type="search"
@@ -737,15 +885,19 @@ export function EventsFilter({
             {labels.appliedCount(appliedCount)}
           </p>
           <div
+            ref={appliedRowRef}
             role="group"
             aria-label={labels.applied}
             className="flex flex-wrap items-center gap-2"
           >
-            {appliedChips.map((chip) => (
+            {appliedChips.map((chip, index) => (
               <FilterChip
                 key={chip.id}
                 selected
-                onClick={chip.onRemove}
+                onClick={() => {
+                  chipReturn.current = index;
+                  chip.onRemove();
+                }}
                 aria-label={`${labels.removeFacet}: ${chip.label}`}
               >
                 {chip.label} ✕
@@ -754,6 +906,9 @@ export function EventsFilter({
           </div>
           {resetHref ? (
             <a
+              ref={(node) => {
+                resetRef.current = node;
+              }}
               href={resetHref}
               className="self-start text-caption font-semibold text-primary-action underline underline-offset-4"
             >
@@ -761,6 +916,9 @@ export function EventsFilter({
             </a>
           ) : onReset ? (
             <button
+              ref={(node) => {
+                resetRef.current = node;
+              }}
               type="button"
               onClick={onReset}
               className="self-start text-caption font-semibold text-primary-action underline underline-offset-4"

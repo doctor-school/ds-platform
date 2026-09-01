@@ -54,18 +54,19 @@ for (const theme of ["light", "dark"]) {
     viewport: "desktop",
     theme,
     after: async (page, section) => {
-      // The applied/reset demo is the last one in the section; open its format
-      // sheet in BOTH theme copies so one shot shows the open sheet light and
-      // dark.
+      // The applied/reset demo is the last one in the section. Only ONE sheet
+      // can be out at a time now — a click outside a panel closes that panel's
+      // sheet (the disclosure contract), and the two theme copies are two
+      // independent panels — so each shot opens the copy of ITS OWN theme:
+      // light → the first column, dark → the second.
       const applied = section.locator("> div").last();
-      for (const control of await applied
+      const controls = await applied
         .getByRole("button", { name: /^Формат:/ })
-        .all()) {
-        await control.click();
-      }
+        .all();
+      await controls[theme === "light" ? 0 : 1].click();
       await applied
         .getByRole("button", { name: "Конгресс", exact: true })
-        .last()
+        .first()
         .hover();
       await page.waitForTimeout(200);
     },

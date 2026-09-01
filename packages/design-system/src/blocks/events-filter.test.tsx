@@ -1,3 +1,4 @@
+import * as React from "react";
 import { render, screen, cleanup, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -475,5 +476,185 @@ describe("EventsFilter — the three D-1 fill states (EARS-7)", () => {
     // No hard-coded sidebar width: the same body is reusable inside #1528's
     // mobile sheet without fighting a baked-in desktop column.
     expect(region.className).not.toMatch(/\bw-\[|\bw-\d|\bmax-w-\[/);
+  });
+});
+
+describe("EventsFilter — all-selected normalizes to «Все» (EARS-7)", () => {
+  it("EARS-7.6: checking the LAST remaining option of a multi-select facet collapses it to the empty set", async () => {
+    const user = userEvent.setup();
+    const { onChange } = renderPanel({
+      applied: { ...EMPTY, kind: ["case-review"] },
+      appliedCount: 1,
+    });
+
+    const sheet = await openSheet(user, LABELS.kind);
+    await user.click(within(sheet).getByRole("button", { name: "Doctor Club" }));
+
+    // Selecting every option narrows nothing, so the facet drops out of the
+    // applied set entirely instead of listing its own whole option book.
+    expect(onChange).toHaveBeenCalledWith({ ...EMPTY, kind: [] });
+  });
+
+  it("EARS-7.6: the collapsed facet shows «Все», carries no chip and adds nothing to the count", () => {
+    renderPanel({ applied: { ...EMPTY, kind: [] }, appliedCount: 0 });
+
+    expect(facet(LABELS.kind)).toHaveTextContent(LABELS.anyValue);
+    expect(
+      screen.queryByRole("group", { name: LABELS.applied }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(LABELS.appliedCount(0))).not.toBeInTheDocument();
+  });
+
+  it("EARS-7.6: naming every offered specialty returns the scope to «моя и смежные»", async () => {
+    const user = userEvent.setup();
+    const { onChange } = renderPanel({
+      applied: {
+        ...EMPTY,
+        specialtyScope: [{ id: "traumatology", label: "Травматология" }],
+      },
+      appliedCount: 1,
+    });
+
+    const sheet = await openSheet(user, LABELS.specialty);
+    await user.click(within(sheet).getByRole("button", { name: "Ревматология" }));
+
+    expect(onChange).toHaveBeenCalledWith({
+      ...EMPTY,
+      specialtyScope: "mine-and-adjacent",
+    });
+  });
+
+  it("EARS-7.6: the sheet gains no «Все» row — the collapse normalizes the value, not the canvas control", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+    const sheet = await openSheet(user, LABELS.format);
+    expect(within(sheet).getAllByRole("button")).toHaveLength(
+      // five format options + the sheet's own ✕
+      OPTIONS.format.length + 1,
+    );
+  });
+});
+
+describe("EventsFilter — the query is committed trimmed (EARS-7)", () => {
+  it("EARS-7.7: a whitespace-only input commits as NO query", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const { onChange } = renderPanel();
+
+    await user.type(screen.getByLabelText(LABELS.query), "   ");
+    vi.advanceTimersByTime(400);
+
+    expect(onChange).toHaveBeenCalledWith({ ...EMPTY, query: "" });
+    vi.useRealTimers();
+  });
+
+  it("EARS-7.7: a padded query commits trimmed — the same search as the unpadded one", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const { onChange } = renderPanel();
+
+    await user.type(screen.getByLabelText(LABELS.query), "  prp  ");
+    vi.advanceTimersByTime(400);
+
+    expect(onChange).toHaveBeenCalledWith({ ...EMPTY, query: "prp" });
+    vi.useRealTimers();
+  });
+});
+
+describe("EventsFilter — the control paints applied only when it applies (EARS-7)", () => {
+  it("EARS-7.8: `вид` and `время` read as neutral at their default values — they contribute no chip and no count", () => {
+    renderPanel({
+      view: { value: "week", onChange: vi.fn() },
+      tense: { value: "upcoming", onChange: vi.fn() },
+    });
+
+    // The value line of an applied facet carries the accent token; these two
+    // never contribute to the applied set, so they must not claim it.
+    expect(screen.getByText("Неделя")).toHaveClass("text-foreground");
+    expect(screen.getByText("Будущие")).toHaveClass("text-foreground");
+    expect(screen.getByText("Неделя")).not.toHaveClass("text-primary-action");
+  });
+
+  it("EARS-7.8: a facet that DOES contribute paints applied", () => {
+    renderPanel({ applied: { ...EMPTY, city: ["kazan"] }, appliedCount: 1 });
+    expect(screen.getByText("Казань", { selector: "span.block" })).toHaveClass(
+      "text-primary-action",
+    );
+  });
+});
+
+describe("EventsFilter — the sheet is a disclosure and keeps focus (EARS-7)", () => {
+  it("EARS-7.9: Escape closes the open sheet and returns focus to its trigger", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+
+    await openSheet(user, LABELS.format);
+    await user.keyboard("{Escape}");
+
+    expect(
+      screen.queryByRole("group", { name: LABELS.format }),
+    ).not.toBeInTheDocument();
+    expect(facet(LABELS.format)).toHaveFocus();
+  });
+
+  it("EARS-7.9: a click outside the panel closes the open sheet", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+    const outside = document.createElement("button");
+    outside.textContent = "снаружи";
+    document.body.append(outside);
+
+    await openSheet(user, LABELS.format);
+    await user.click(outside);
+
+    expect(
+      screen.queryByRole("group", { name: LABELS.format }),
+    ).not.toBeInTheDocument();
+    outside.remove();
+  });
+
+  it("EARS-7.9: closing the sheet on its own ✕ never drops focus to the document", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+
+    const sheet = await openSheet(user, LABELS.format);
+    await user.click(
+      within(sheet).getByRole("button", { name: LABELS.closeOptions }),
+    );
+
+    expect(document.activeElement).not.toBe(document.body);
+    expect(facet(LABELS.format)).toHaveFocus();
+  });
+
+  it("EARS-7.9: removing an applied chip moves focus to the next chip, not to the document", async () => {
+    const user = userEvent.setup();
+    function Harness() {
+      const [applied, setApplied] = React.useState<AppliedFacets>({
+        ...EMPTY,
+        format: ["webinar"],
+        city: ["kazan"],
+      });
+      return (
+        <EventsFilter
+          fill="full"
+          applied={applied}
+          appliedCount={2}
+          options={OPTIONS}
+          labels={LABELS}
+          onChange={setApplied}
+          onReset={() => setApplied(EMPTY)}
+        />
+      );
+    }
+    render(<Harness />);
+
+    await user.click(
+      screen.getByRole("button", { name: `${LABELS.removeFacet}: Вебинар` }),
+    );
+
+    expect(document.activeElement).not.toBe(document.body);
+    expect(
+      screen.getByRole("button", { name: `${LABELS.removeFacet}: Казань` }),
+    ).toHaveFocus();
   });
 });

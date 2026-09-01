@@ -63,7 +63,7 @@ The canvas **state** props are not forks — they are content-driven obligations
 - A doctor's first action is choosing a specialty, and the whole Минздрав list is reachable both by typing a name and by browsing what exists — never as a bare full-length scroll.
 - The choice is remembered — on the profile for a signed-in doctor, in the anonymous session for a guest — so the second visit opens the targeted view with the catalog collapsed to a changeable row.
 - Targeting follows the managed adjacency reference table, so an operator changes what a specialty sees by editing a reference book rather than a page.
-- The home page is credible and alive before anything is chosen: scale statistics, the nearest events with a month calendar and the voluntary leaderboard, none of which block the page — every one of them backed by a real read, so no block ships ahead of its content.
+- The home page is credible and alive before anything is chosen: scale statistics, the nearest events with a month calendar, and — from wave 2, per the А1 release-1 cut ([#1703](https://github.com/doctor-school/ds-platform/issues/1703), tracked by [#1487](https://github.com/doctor-school/ds-platform/issues/1487)) — the voluntary leaderboard, none of which block the page — every one of them backed by a real read, so no block ships ahead of its content.
 - A doctor never meets the Academy's backstage on the storefront; one footer link is the entire crossing.
 - The public marketing routes answer from `doctor.school` inside one information architecture.
 
@@ -107,7 +107,7 @@ The canvas **state** props are not forks — they are content-driven obligations
 - **Three distinct things.** Specialties (Минздрав), directions and schools are never merged into one on-screen list and never labelled with one word.
 - **Adjacency is read, never derived.** Adjacent content comes from the managed `directions` ↔ `specialties_minzdrav` link and the direction adjacency self-relation. String similarity, shared prefixes and embedding similarity are all refused at review, and adjacent content is never presented as the doctor's own specialty.
 - **Nothing blocks the home page.** No modal gate, no interstitial, no empty page and no scroll lock keys on the absence of a chosen specialty.
-- **Public by default.** The home page, the catalog, the events block and the leaderboard are all readable with no account; nothing on 017's surface requires a session to read.
+- **Public by default.** The home page, the catalog, the events block — and the leaderboard once wave 2 lands it (#1487) — are all readable with no account; nothing on 017's surface requires a session to read.
 - **The leaderboard is opt-in.** A doctor appears only with the recorded separate consent to public display. The default is not to publish; no row is fabricated, inferred or anonymised into existence.
 - **No financing statement.** The interface says that learning is free for the doctor and never states who pays for it.
 - **No commerce.** No prices in roubles, no cart, no subscription and no payment affordance exists on any 017 surface.

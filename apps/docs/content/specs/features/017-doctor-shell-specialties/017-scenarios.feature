@@ -97,7 +97,7 @@ Feature: A doctor arrives at their own storefront, picks a specialty, and the si
   Scenario: Nothing blocks the page before a choice is made
     Given a visitor with no chosen specialty
     When they open the storefront home page and scroll to the footer
-    Then the events block and the leaderboard are both readable
+    Then the events block is readable
     And no modal gate, interstitial, scroll lock or empty page appears at any point
 
   @EARS-5 @happy

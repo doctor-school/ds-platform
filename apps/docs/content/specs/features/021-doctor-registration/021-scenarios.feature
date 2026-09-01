@@ -6,7 +6,9 @@
 # feature 037's and the points ledger is feature 025's.
 # Stage-A picks in force: F-021-1 = Б (two-tier consents), F-021-2 = Б (return
 # context in the split's left half, WITHOUT a back-navigation control), F-021-3 =
-# points promised on the form (+20 Pul registration / +30 Pul profile completion).
+# points promised on the form (+20 Pul registration / +30 Pul profile completion) —
+# deferred to wave 2 by the А1 release-1 cut (#1703, tracked by #1545), so the
+# @EARS-9 scenarios below are wave-2 acceptance and release 1 promises no points.
 
 Feature: A doctor stopped by a gate registers in a short honest form and comes back to what they came for
 
@@ -16,7 +18,7 @@ Feature: A doctor stopped by a gate registers in a short honest form and comes b
     And feature 003's authentication engine is running
     And an эфир «Артроскопия коленного сустава» exists with a public event page
 
-  @EARS-1 @EARS-2 @EARS-4 @EARS-5 @EARS-9 @EARS-7 @EARS-10 @happy
+  @EARS-1 @EARS-2 @EARS-4 @EARS-5 @EARS-7 @EARS-10 @happy
   Scenario: A doctor registers from a gate and returns to the эфир
     Given a guest doctor pressed «Участвовать» on «Артроскопия коленного сустава»
     When the registration screen opens
@@ -27,7 +29,7 @@ Feature: A doctor stopped by a gate registers in a short honest form and comes b
     And that card carries no back-navigation control
     And the form asks only for email, password and an optional promo code
     And no file input, document field or document copy exists anywhere on the screen
-    And the form promises «+20 Pul за регистрацию»
+    And the form makes no points promise and renders no placeholder in its place
     And the medical-worker declaration and the partner-data consent are framed together above the submit button
     And the partner-data consent names имя, специальность, город, место работы and states that contact details are not shared
     And the marketing opt-in stands separately below the submit button and is not pre-ticked
@@ -39,15 +41,24 @@ Feature: A doctor stopped by a gate registers in a short honest form and comes b
     And one versioned dated consent record exists for partner-data-sharing
     And no consent record exists for marketing-communications
     When the doctor confirms the email with the code from the letter
-    And feature 025 emits PointsCredited for that account
-    Then the success state states the credited «+20 Pul» as the amount carried by that event
-    And it names «+30 Pul» for completing the profile and what completing it unlocks
+    Then the success state states no points amount, promised or credited
     And the primary action returns to «Артроскопия коленного сустава»
     And «в личный кабинет» is offered only as a secondary action
 
+  @EARS-9 @happy
+  Scenario: Wave 2 — the form promises the registration points and the success state credits them
+    Given the wave-2 points surface of #1545 is in place
+    And a guest doctor opened the registration screen from «Артроскопия коленного сустава»
+    Then the form promises «+20 Pul за регистрацию»
+    When the doctor registers and confirms the email with the code from the letter
+    And feature 025 emits PointsCredited for that account
+    Then the success state states the credited «+20 Pul» as the amount carried by that event
+    And it names «+30 Pul» for completing the profile and what completing it unlocks
+
   @EARS-9 @failure
   Scenario: With no ledger event the success state promises rather than claims a credit
-    Given feature 025 has emitted no PointsCredited for the account
+    Given the wave-2 points surface of #1545 is in place
+    And feature 025 has emitted no PointsCredited for the account
     When a doctor confirms their email and reaches the success state
     Then the success state names the accrual as a pending promise
     And no credited amount is stated as a fact

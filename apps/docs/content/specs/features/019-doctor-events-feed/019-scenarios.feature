@@ -25,9 +25,9 @@ Feature: A doctor opens one screen and sees what is on now, what is on this week
     When the doctor opens «События»
     Then the header, navigation and footer are rendered by feature 017's shell layout
     And the breadcrumbs read «Травматология и ортопедия › События»
-    And the tense row offers Будущие / Прошедшие
+    And no tense row is rendered anywhere on the route, the feed reading «Будущие» only
     And no «Неделя / Месяц» view control is rendered anywhere on the route
-    And the blocks appear in the order: строка времени, «Идёт сейчас», панель фасетов рядом с телом, лента по дням
+    And the blocks appear in the order: «Идёт сейчас», панель фасетов рядом с телом, лента по дням
 
   @EARS-1 @failure
   Scenario: An events route defining its own header is a defect
@@ -245,7 +245,7 @@ Feature: A doctor opens one screen and sees what is on now, what is on this week
     Given a visitor with no account
     When the anonymous read of the events feed is inspected
     Then the response carries no payload that the client hides
-    And no block other than the «Мои события» cut is withheld from the guest
+    And no release-1 block is withheld from the guest
 
   @EARS-13 @happy
   Scenario: The screen works at 390 with the facet panel behind a counted control

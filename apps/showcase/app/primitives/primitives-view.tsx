@@ -66,6 +66,11 @@ import { WebinarRecordingPlaque } from "@ds/design-system/webinar-recording-plaq
 import { WebinarRoomLayout } from "@ds/design-system/webinar-room";
 import { Container } from "@ds/design-system/container";
 import {
+  EventsFilter,
+  type AppliedFacets,
+  type EventsFilterFill,
+} from "@ds/design-system/events-filter";
+import {
   Form,
   FormControl,
   FormDescription,
@@ -1721,6 +1726,177 @@ function ContainerSection() {
   );
 }
 
+const EVENTS_FILTER_OPTIONS = {
+  view: [
+    { id: "week", label: "Неделя" },
+    { id: "month", label: "Месяц" },
+  ],
+  tense: [
+    { id: "upcoming", label: "Будущие" },
+    { id: "past", label: "Прошедшие" },
+  ],
+  format: [
+    { id: "webinar", label: "Вебинар" },
+    { id: "online-meeting", label: "Онлайн-встреча" },
+    { id: "offline-meetup", label: "Офлайн-встреча коллег" },
+    { id: "congress", label: "Конгресс" },
+    { id: "podcast", label: "Подкаст-эфир" },
+  ],
+  kind: [
+    { id: "case-review", label: "Разбор случая" },
+    { id: "club", label: "Doctor Club" },
+    { id: "lecture", label: "Лекция" },
+  ],
+  specialty: [
+    { id: "traumatology", label: "Травматология" },
+    { id: "rheumatology", label: "Ревматология" },
+  ],
+  city: [
+    { id: "kazan", label: "Казань" },
+    { id: "moscow", label: "Москва" },
+    { id: "spb", label: "Санкт-Петербург" },
+  ],
+};
+
+const EVENTS_FILTER_LABELS = {
+  panel: "Фильтры событий",
+  view: "Вид",
+  tense: "Время",
+  format: "Формат",
+  kind: "Тип события",
+  specialty: "Специальность",
+  specialtyMine: "Моя и смежные",
+  specialtyAll: "Все специальности",
+  city: "Город",
+  cityHint: "Город действует на офлайн- и гибридные события.",
+  nmoOnly: "Только с НМО",
+  freeByPul: "Бесплатно по Pul",
+  query: "Поиск по названию",
+  queryPlaceholder: "Поиск по названию",
+  applied: "Фильтры:",
+  appliedCount: (n: number) => `Применено фильтров: ${n}`,
+  removeFacet: "Убрать фильтр",
+  reset: "Сбросить фильтры",
+};
+
+const EVENTS_FILTER_EMPTY: AppliedFacets = {
+  format: [],
+  kind: [],
+  specialtyScope: "mine-and-adjacent",
+  city: [],
+  nmoOnly: false,
+  freeByPul: false,
+  query: "",
+};
+
+function countAppliedFacets(applied: AppliedFacets) {
+  return (
+    applied.format.length +
+    applied.kind.length +
+    applied.city.length +
+    (applied.specialtyScope === "mine-and-adjacent"
+      ? 0
+      : Array.isArray(applied.specialtyScope)
+        ? applied.specialtyScope.length
+        : 1) +
+    (applied.nmoOnly ? 1 : 0) +
+    (applied.freeByPul ? 1 : 0) +
+    (applied.query.trim() ? 1 : 0)
+  );
+}
+
+function EventsFilterDemo({
+  fill,
+  initial,
+}: {
+  fill: EventsFilterFill;
+  initial?: Partial<AppliedFacets>;
+}) {
+  const [applied, setApplied] = useState<AppliedFacets>({
+    ...EVENTS_FILTER_EMPTY,
+    ...initial,
+  });
+  const [view, setView] = useState("week");
+  const [tense, setTense] = useState("upcoming");
+
+  return (
+    <div className="w-full max-w-sm">
+      <EventsFilter
+        fill={fill}
+        applied={applied}
+        appliedCount={countAppliedFacets(applied)}
+        options={EVENTS_FILTER_OPTIONS}
+        labels={EVENTS_FILTER_LABELS}
+        onChange={setApplied}
+        onReset={() => setApplied(EVENTS_FILTER_EMPTY)}
+        view={{ value: view, onChange: setView }}
+        tense={{ value: tense, onChange: setTense }}
+      />
+    </div>
+  );
+}
+
+function EventsFilterSection() {
+  return (
+    <PrimitiveSection
+      title="Events-filter"
+      exportsLine="EventsFilter — the shared events facet panel (REQ-138 set · applied chips + reset + count · three D-1 fill states)"
+    >
+      <p className="text-sm text-muted-foreground">
+        019 EARS-7, fork F-019-1 Б (source{" "}
+        <code className="font-mono text-xs">doctor-events.dc.html</code>): the
+        ONE shared facet panel the doctor feed mounts as a desktop sidebar —
+        format, тип события, специальность (по умолчанию «моя и смежные»),
+        город для офлайн-событий, «только с НМО», «бесплатно по Pul» и поиск по
+        названию. Every applied facet stays visible as its own removable chip
+        above the groups, the applied count is stated, and one «Сбросить
+        фильтры» returns to the default scope. The panel is presentational —
+        values in, the next applied set out; the URL codec is its own unit.
+      </p>
+      <p className="text-sm text-muted-foreground">
+        The three <span className="font-medium text-foreground">D-1 fill</span>{" "}
+        states are a property of the UNIT, not of the 019 screen: a later
+        consumer mounting fewer facets must break neither the panel nor the host
+        grid. The panel declares no width of its own — the host column places
+        it, which is also what lets the mobile sheet host the same body instead
+        of forking it.
+      </p>
+      {(
+        [
+          { fill: "wave-1", label: 'fill="wave-1" — вид + время' },
+          {
+            fill: "intermediate",
+            label: 'fill="intermediate" — + формат, тип',
+          },
+          { fill: "full", label: 'fill="full" — весь набор REQ-138' },
+        ] as const
+      ).map((variant) => (
+        <SubRow key={variant.fill} label={variant.label}>
+          <ThemePair render={() => <EventsFilterDemo fill={variant.fill} />} />
+        </SubRow>
+      ))}
+      <SubRow label="fill=&quot;full&quot; — применённые фасеты, счётчик и сброс">
+        <ThemePair
+          render={() => (
+            <EventsFilterDemo
+              fill="full"
+              initial={{
+                format: ["webinar", "offline-meetup"],
+                kind: ["club"],
+                specialtyScope: "all",
+                city: ["kazan"],
+                nmoOnly: true,
+                freeByPul: true,
+                query: "PRP",
+              }}
+            />
+          )}
+        />
+      </SubRow>
+    </PrimitiveSection>
+  );
+}
+
 function WebinarCardSection() {
   return (
     <PrimitiveSection
@@ -2347,6 +2523,7 @@ export function PrimitivesView() {
       <AlertSection />
       <SkeletonSection />
       <DayBandSection />
+      <EventsFilterSection />
       <WebinarCardSection />
       <WebinarPageContentSection />
       <WebinarStatusCardSection />

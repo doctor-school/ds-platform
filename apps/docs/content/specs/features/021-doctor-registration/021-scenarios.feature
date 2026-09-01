@@ -74,7 +74,7 @@ Feature: A doctor stopped by a gate registers in a short honest form and comes b
     When the doctor completes the form with both access-condition consents and leaves the marketing opt-in unticked
     And confirms the email
     Then registration completes
-    And the doctor lands on the specialty feed rather than the account page
+    And the doctor lands on the 019 events feed rather than the account page
     And no consent record exists for marketing-communications
 
   @EARS-8 @EARS-17 @happy

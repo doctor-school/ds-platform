@@ -294,7 +294,6 @@ Feature: A doctor arrives at their own storefront, picks a specialty, and the si
       | the catalog search field and expand control |
       | the collapsed specialty row                 |
       | the events block and its compact calendar   |
-      | the leaderboard section                     |
 
   @EARS-14 @happy
   Scenario: Every storefront surface meets the accessibility bar
@@ -302,7 +301,6 @@ Feature: A doctor arrives at their own storefront, picks a specialty, and the si
     Then no violation is reported
     And the catalog search field is labelled
     And every catalog entry and the expand control are real labelled interactive elements
-    And the leaderboard is readable by a screen reader
 
   # ------------------------------------------------- admin operator surfaces
 

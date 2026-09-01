@@ -68,7 +68,7 @@ stateDiagram-v2
   InEmail --> Degraded: content ended / full / unpublished
   Resolved --> [*]: land on the point of interest (primary)
   Degraded --> [*]: nearest honest destination + stated reason (LD-8)
-  Absent --> [*]: specialty feed, home fallback (LD-4)
+  Absent --> [*]: 019 events feed, home fallback (LD-4)
 ```
 
 Three properties the implementation must preserve: the value that reaches a navigation is always the guard's reconstruction and never the raw client-supplied string; the client never rebuilds the target from a referrer, a `document.referrer` read or a stored breadcrumb; and the degraded branch always renders a plain Russian statement of what happened rather than a silent redirect. 019 LD-7 hands a card action into 021 through this same guard, and 019 EARS-8 / EARS-12 require the guest to land back on the **exact stateful feed URL** — so the declared whitelist must carry that feed shape with its URL state, and the increment's shape is agreed with 019 before either guest path ships.

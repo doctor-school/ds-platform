@@ -163,9 +163,9 @@ Feature: A doctor opens one screen and sees what is on now, what is on this week
 
   @EARS-8 @happy
   Scenario: Feed state round-trips through the URL
-    Given the doctor has applied a format facet, switched the tense to «Прошедшие» and widened the horizon
+    Given the doctor has applied a format facet, selected a day in the month grid and widened the horizon
     When the doctor copies the URL and opens it in a fresh browser context
-    Then the same tense, the same facets and the same horizon are rendered
+    Then the same facets, the same selected day and the same horizon are rendered
     When the doctor presses the browser back button
     Then the previous feed state is rendered rather than the doctor leaving the feed
 
@@ -193,11 +193,11 @@ Feature: A doctor opens one screen and sees what is on now, what is on this week
 
   @EARS-9 @failure
   Scenario: A failing read is contained to its own block
-    Given the read behind the «Мои события» cut fails
+    Given the read behind the month grid fails
     When the doctor opens «События»
-    Then the cut states the cause in Russian and offers a retry
+    Then the month grid states the cause in Russian and offers a retry
     And the retry re-runs only that read
-    And the feed, the month grid and the facet panel stay usable
+    And the feed, the live block and the facet panel stay usable
     And no page-level error screen replaces the feed
 
   @EARS-10 @happy
@@ -234,7 +234,7 @@ Feature: A doctor opens one screen and sees what is on now, what is on this week
   Scenario: A guest reads the whole screen and returns to it after registering
     Given a visitor with no account
     When the visitor opens «События»
-    Then the feed, the month grid, the calendar page, the facet panel and «Прошедшие» are fully readable
+    Then the feed, the month grid, the calendar page and the facet panel are fully readable
     When the visitor follows the action on a card
     Then feature 021's registration opens carrying that event and the current feed URL
     When the registration completes

@@ -45,7 +45,7 @@ import {
   stateFilePath,
   targetPath,
   writeState,
-} from "./main-tree-read-guard.mjs";
+} from "./main-tree-state.mjs";
 import { mutationPaths, projectRoot } from "./hook-compat.mjs";
 
 /**

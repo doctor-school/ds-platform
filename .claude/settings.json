@@ -1,5 +1,8 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "enabledPlugins": {
+    "superpowers@claude-plugins-official": false
+  },
   "hooks": {
     "SessionStart": [
       {
@@ -19,16 +22,6 @@
           {
             "type": "command",
             "command": "node \"$CLAUDE_PROJECT_DIR/tools/hooks/worktree-path-guard.mjs\""
-          }
-        ]
-      },
-      {
-        "matcher": "Read|Grep|Glob",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"$CLAUDE_PROJECT_DIR/tools/hooks/main-tree-read-guard.mjs\"",
-            "timeout": 10
           }
         ]
       },
@@ -71,16 +64,6 @@
             "timeout": 10
           }
         ]
-      },
-      {
-        "matcher": "AskUserQuestion",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"$CLAUDE_PROJECT_DIR/tools/hooks/askuserquestion-calibration-guard.mjs\"",
-            "timeout": 10
-          }
-        ]
       }
     ],
     "Stop": [
@@ -107,11 +90,6 @@
           {
             "type": "command",
             "command": "node \"$CLAUDE_PROJECT_DIR/tools/hooks/context-budget.mjs\"",
-            "timeout": 10
-          },
-          {
-            "type": "command",
-            "command": "node \"$CLAUDE_PROJECT_DIR/tools/hooks/handoff-verify-reminder.mjs\"",
             "timeout": 10
           }
         ]

@@ -28,4 +28,4 @@ mode: inline
 
 ## Failure mode
 
-- Invoking any open-ended exploration skill (`superpowers:brainstorming`) without having loaded ADRs first — process violation per G11 finding F-16. The agent ends up re-deriving an architectural answer that is already fixed in an ADR it could have read.
+- Invoking any open-ended exploration skill (`brainstorming`) without having loaded ADRs first — process violation per G11 finding F-16. The agent ends up re-deriving an architectural answer that is already fixed in an ADR it could have read.

@@ -12,6 +12,7 @@ import {
   inWorktree,
   isCarveOut,
   readStreak,
+  readWarned,
   stateFilePath,
   warnMessage,
   writeStreak,
@@ -251,5 +252,84 @@ describe("dispatch-guard state seam", () => {
         writeFile: () => undefined,
       }),
     ).not.toThrow();
+  });
+
+  it("writeStreak persists the warned latch when it is supplied", () => {
+    const calls: Array<[string, string]> = [];
+    writeStreak(
+      join(ROOT, ".claude", "dispatch-guard-state", "s.json"),
+      3,
+      { mkdir: () => undefined, writeFile: (p, c) => calls.push([p, c]) },
+      true,
+    );
+    expect(JSON.parse(calls[0][1])).toEqual({ streak: 3, warned: true });
+  });
+
+  it("readWarned fails open to false on missing/corrupt/absent-field state", () => {
+    expect(
+      readWarned("nope", () => {
+        throw new Error("ENOENT");
+      }),
+    ).toBe(false);
+    expect(readWarned("bad", () => "{not json")).toBe(false);
+    expect(readWarned("x", () => JSON.stringify({ streak: 4 }))).toBe(false);
+    expect(
+      readWarned("x", () => JSON.stringify({ streak: 4, warned: true })),
+    ).toBe(true);
+  });
+});
+
+/**
+ * #1700 latch: the guard says "you are drifting inline" ONCE per session. The
+ * week-long transcript audit (2026-08-25..09-01) found this guard the second-
+ * loudest hook with zero blocks — the repeat WARNs were noise, not enforcement.
+ * Counting is deliberately untouched: the streak still advances and still
+ * RESETS on an Agent dispatch, so the state stays truthful for the retro.
+ */
+describe("dispatch-guard decideDispatch() — once-per-session WARN latch (#1700)", () => {
+  const mutate = (streak: number, warned: boolean) =>
+    decideDispatch({
+      toolName: "Edit",
+      cwd: ROOT,
+      projectDir: ROOT,
+      streak,
+      warned,
+    });
+
+  it("warns on the first threshold crossing", () => {
+    expect(mutate(DISPATCH_WARN_THRESHOLD - 1, false)).toEqual({
+      action: "warn",
+      streak: DISPATCH_WARN_THRESHOLD,
+    });
+  });
+
+  it("stays silent on every later crossing once latched — but keeps counting", () => {
+    const d = mutate(DISPATCH_WARN_THRESHOLD + 4, true);
+    expect(d.action).toBe("count");
+    expect(d.streak).toBe(DISPATCH_WARN_THRESHOLD + 5);
+  });
+
+  it("a whole latched run of mutations emits exactly one warn", () => {
+    let streak = 0;
+    let warned = false;
+    const actions = Array.from({ length: 12 }, () => {
+      const d = mutate(streak, warned);
+      streak = d.streak as number;
+      if (d.action === "warn") warned = true;
+      return d.action;
+    });
+    expect(actions.filter((a) => a === "warn")).toHaveLength(1);
+    expect(streak).toBe(12);
+  });
+
+  it("defaults to unlatched when `warned` is omitted (back-compat)", () => {
+    expect(
+      decideDispatch({
+        toolName: "Edit",
+        cwd: ROOT,
+        projectDir: ROOT,
+        streak: DISPATCH_WARN_THRESHOLD - 1,
+      }).action,
+    ).toBe("warn");
   });
 });

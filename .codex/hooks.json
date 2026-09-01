@@ -28,17 +28,6 @@
         ]
       },
       {
-        "matcher": "Bash|Read|Grep|Glob",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"$(git rev-parse --show-toplevel)/tools/hooks/main-tree-read-guard.mjs\"",
-            "commandWindows": "powershell -NoProfile -Command \"node ((git rev-parse --show-toplevel) + '/tools/hooks/main-tree-read-guard.mjs')\"",
-            "timeout": 10
-          }
-        ]
-      },
-      {
         "matcher": "spawn_agent|Agent|Task|apply_patch|Edit|Write|MultiEdit",
         "hooks": [
           {
@@ -56,17 +45,6 @@
             "type": "command",
             "command": "node \"$(git rev-parse --show-toplevel)/tools/hooks/screenshot-path-guard.mjs\"",
             "commandWindows": "powershell -NoProfile -Command \"node ((git rev-parse --show-toplevel) + '/tools/hooks/screenshot-path-guard.mjs')\"",
-            "timeout": 10
-          }
-        ]
-      },
-      {
-        "matcher": "request_user_input|AskUserQuestion",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"$(git rev-parse --show-toplevel)/tools/hooks/askuserquestion-calibration-guard.mjs\"",
-            "commandWindows": "powershell -NoProfile -Command \"node ((git rev-parse --show-toplevel) + '/tools/hooks/askuserquestion-calibration-guard.mjs')\"",
             "timeout": 10
           }
         ]
@@ -97,12 +75,6 @@
             "type": "command",
             "command": "node \"$(git rev-parse --show-toplevel)/tools/hooks/context-budget.mjs\"",
             "commandWindows": "powershell -NoProfile -Command \"node ((git rev-parse --show-toplevel) + '/tools/hooks/context-budget.mjs')\"",
-            "timeout": 10
-          },
-          {
-            "type": "command",
-            "command": "node \"$(git rev-parse --show-toplevel)/tools/hooks/handoff-verify-reminder.mjs\"",
-            "commandWindows": "powershell -NoProfile -Command \"node ((git rev-parse --show-toplevel) + '/tools/hooks/handoff-verify-reminder.mjs')\"",
             "timeout": 10
           }
         ]

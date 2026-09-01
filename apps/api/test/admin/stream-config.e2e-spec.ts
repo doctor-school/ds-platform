@@ -308,10 +308,20 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       ).toBe(200);
 
       // Publish (draft → published) so the correction happens on a live event.
+      // `publish` is conditional (#1593): the arrangement echoes the validator
+      // the stream upsert above already bumped.
+      const { rows: versionRows } = await pool.query<{ version: number }>(
+        "SELECT version FROM events WHERE id = $1",
+        [id],
+      );
       const pub = await app.inject({
         method: "POST",
         url: `/v1/admin/events/${id}/publish`,
-        headers: { ...device, ...authHeaders(cookie) },
+        headers: {
+          ...device,
+          ...authHeaders(cookie),
+          "if-match": `"${versionRows[0]?.version ?? 1}"`,
+        },
       });
       expect(pub.statusCode).toBe(200);
 

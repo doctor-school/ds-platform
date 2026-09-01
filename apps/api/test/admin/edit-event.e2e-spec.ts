@@ -189,6 +189,19 @@ describe.skipIf(
     return body;
   }
 
+  /**
+   * The current `If-Match` validator (#1593) — the transition command is
+   * conditional. Staleness itself is owned by
+   * `test/admin/optimistic-concurrency.e2e-spec.ts`.
+   */
+  async function ifMatch(id: string): Promise<Record<string, string>> {
+    const { rows } = await pool.query<{ version: number }>(
+      "SELECT version FROM events WHERE id = $1",
+      [id],
+    );
+    return { "if-match": `"${rows[0]?.version ?? 1}"` };
+  }
+
   /** Move an event through a lifecycle transition via the generic guard endpoint. */
   async function transition(
     cookie: string,
@@ -198,7 +211,10 @@ describe.skipIf(
     const res = await app.inject({
       method: "POST",
       url: `/v1/admin/events/${id}/transition`,
-      headers: admHeaders(cookie, "application/json"),
+      headers: {
+        ...admHeaders(cookie, "application/json"),
+        ...(await ifMatch(id)),
+      },
       payload: { to },
     });
     expect(res.statusCode).toBe(200);
@@ -410,7 +426,10 @@ describe.skipIf(
     const published = await app.inject({
       method: "POST",
       url: `/v1/admin/events/${id}/transition`,
-      headers: admHeaders(cookie, "application/json"),
+      headers: {
+        ...admHeaders(cookie, "application/json"),
+        ...(await ifMatch(id)),
+      },
       payload: { to: "published" },
     });
     expect(published.statusCode).toBe(200);

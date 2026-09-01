@@ -152,6 +152,19 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       return { id: body.id, slug: body.slug };
     }
 
+    /**
+     * The current `If-Match` validator (#1593) — publish is conditional.
+     * Staleness itself is owned by
+     * `test/admin/optimistic-concurrency.e2e-spec.ts`.
+     */
+    async function ifMatch(id: string): Promise<Record<string, string>> {
+      const { rows } = await pool.query<{ version: number }>(
+        "SELECT version FROM events WHERE id = $1",
+        [id],
+      );
+      return { "if-match": `"${rows[0]?.version ?? 1}"` };
+    }
+
     /** POST the named publish command. */
     async function publish(cookie: string | undefined, id: string) {
       return app.inject({
@@ -159,6 +172,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         url: `/v1/admin/events/${id}/publish`,
         headers: {
           ...device,
+          ...(await ifMatch(id)),
           ...(cookie ? { ...authHeaders(cookie) } : {}),
         },
       });

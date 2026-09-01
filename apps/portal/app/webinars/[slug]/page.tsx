@@ -12,9 +12,11 @@ import { WebinarStatusCard } from "@ds/design-system/webinar-status-card";
 import { fetchPublicEventPage } from "../../../lib/public-events";
 import { resolvePrimaryCta, toCanvasStatus } from "../../../lib/event-lifecycle";
 import {
-  resolveRecordingPlaque,
+  resolvePlayerCard,
   resolveRecordingSignal,
 } from "../../../lib/recording-signal";
+import { fetchEventPlayback } from "../../../lib/event-playback";
+import { withReturnTarget } from "../../../lib/registration-handoff";
 import {
   fetchEventRegistrationState,
   resolveJoinSignpost,
@@ -22,6 +24,8 @@ import {
 } from "../../../lib/registration-state";
 import { formatMskParts } from "../../../lib/msk";
 import { RegisterOneTap } from "./register-one-tap";
+import { RecordingGate } from "./recording-gate";
+import { RecordingPlayer } from "./recording-player";
 
 /**
  * 004 EARS-1 — the public webinar event page, server-rendered. A
@@ -149,14 +153,37 @@ export default async function WebinarEventPage({
   // readiness-date plaque #1344 and the raw spoiler #1345 — this slice renders
   // the availability signal and nothing that pretends to be those.
   const recordingSignal = resolveRecordingSignal(event.recording, status);
-  // 014 EARS-7 — the «запись готовится» plaque that occupies the PLAYER position
-  // while nothing is published yet (design §8.1: the player card holds exactly
-  // one of the player, the guest gate, the plaque, or the unavailability
-  // message). Non-null only in the `preparing` branch, so it self-clears on the
-  // next render after the operator publishes — the page is `force-dynamic` and
-  // this derives purely from `RecordingProjection.state`, with no timer, cache
-  // flag, or client mechanism that could keep promising a delivered recording.
-  const recordingPlaque = resolveRecordingPlaque(event.recording, status);
+  // 014 EARS-5 — the AUTHENTICATED source read, the ONLY source-bearing response
+  // in the feature (design §5). Issued exactly when it can produce something: a
+  // session rode the request AND the public projection already says something is
+  // published. A guest render never calls it, so no playable source can reach a
+  // guest's HTML; a `preparing` render never calls it either, because the plaque
+  // owns that card regardless of who is looking.
+  const playback =
+    isAuthenticated && recordingSignal?.available
+      ? await fetchEventPlayback(slug, {
+          cookie: h.get("cookie") ?? "",
+          userAgent: h.get("user-agent") ?? "",
+          acceptLanguage: h.get("accept-language") ?? "",
+        })
+      : null;
+  // 014 EARS-5 / EARS-7 — WHAT the player card holds this render: exactly one of
+  // the player, the guest gate, the «запись готовится» plaque, or the honest
+  // unavailability message (design §8.1 — never two stacked, never empty). The
+  // plaque branch self-clears on the next render after the operator publishes:
+  // the page is `force-dynamic` and the mode derives purely from the projection,
+  // with no timer or cached "we already promised" flag to go stale.
+  const playerCard = resolvePlayerCard(
+    event.recording,
+    status,
+    isAuthenticated,
+    playback,
+  );
+  // 014 EARS-6 — both gate actions carry THIS page as a same-origin returnTo, so
+  // a guest who signs in lands back here with the player mounted. The target is
+  // built by the shared guard (`withReturnTarget`), never a hand-rolled query
+  // param — a hostile slug can therefore never surface an open redirect.
+  const gateReturnTo = `/webinars/${encodeURIComponent(slug)}`;
   // The footer conversion band mirrors the status card's route but only for a
   // participable event (upcoming / live); `ended` and `archived` carry none. It
   // is a GUEST conversion band: its CTA links to the `/register` auth handoff,
@@ -344,23 +371,13 @@ export default async function WebinarEventPage({
               <Button asChild size="lg">
                 <Link href={cta.href}>{t("cta.participate")}</Link>
               </Button>
-            ) : recordingSignal?.kindKey ? (
-              // 014 EARS-4 — the canvas's recording meta («Монтаж · 90 минут»)
-              // in the column an `ended` event otherwise leaves empty. It is a
-              // STATEMENT, not an affordance: the play control belongs to the
-              // player (#1343), and a button here with nothing behind it would
-              // be a dead end. `text-primary-action` (blue.700) is the card-safe
-              // AA token on `bg-card` — never `text-primary` (#270).
-              <div data-testid="recording-meta">
-                <p className="text-2xs font-extrabold uppercase tracking-micro text-muted-foreground">
-                  {t("recordingKind.label")}
-                </p>
-                <p className="mt-1 text-sm font-bold text-primary-action">
-                  {t(`recordingKind.${recordingSignal.kindKey}`)} ·{" "}
-                  {t("recordingKind.duration", { duration: event.durationMin })}
-                </p>
-              </div>
             ) : null}
+            {/* 014 EARS-5 — the recording meta («Монтаж · 90 мин») deliberately
+                does NOT appear here any more. #1341 put it in this column while
+                the player position was empty; now that the player card below
+                renders the same kind + duration in every one of its four modes,
+                repeating it in the status card would be the same fact stated
+                twice on one screen (the dedup obligation recorded at #1697). */}
           </WebinarStatusCard>
         </div>
 
@@ -372,26 +389,77 @@ export default async function WebinarEventPage({
             art), and never a «Напомнить на почту» button: readiness
             notifications are a declared 014 non-goal, so that control would be
             a dead affordance. */}
-        {recordingPlaque ? (
-          <div className="mt-10" data-testid="recording-plaque">
-            <WebinarRecordingPlaque
-              timeLabel={t("plaque.timeLabel")}
-              time={
-                recordingPlaque.expectedByLabel
-                  ? t("plaque.timeValue", {
-                      date: recordingPlaque.expectedByLabel,
-                    })
-                  : null
-              }
-              title={t("plaque.title")}
-              body={
-                recordingPlaque.expectedByLabel
-                  ? t("plaque.bodyDated", {
-                      date: recordingPlaque.expectedByLabel,
-                    })
-                  : t("plaque.bodyUndated")
-              }
-            />
+        {playerCard ? (
+          <div className="mt-10" data-testid="player-card">
+            {playerCard.mode === "plaque" ? (
+              <div data-testid="recording-plaque">
+                <WebinarRecordingPlaque
+                  timeLabel={t("plaque.timeLabel")}
+                  time={
+                    playerCard.expectedByLabel
+                      ? t("plaque.timeValue", {
+                          date: playerCard.expectedByLabel,
+                        })
+                      : null
+                  }
+                  title={t("plaque.title")}
+                  body={
+                    playerCard.expectedByLabel
+                      ? t("plaque.bodyDated", {
+                          date: playerCard.expectedByLabel,
+                        })
+                      : t("plaque.bodyUndated")
+                  }
+                />
+              </div>
+            ) : playerCard.mode === "gate" ? (
+              // A guest on a published recording: the canvas login gate. The
+              // source is not in this HTML at all — the authenticated read was
+              // never issued above — so this is a real gate, not a soft wall.
+              <RecordingGate
+                posterUrl={event.recording.posterUrl}
+                kindLabel={t(`recordingKind.${playerCard.kindKey}`)}
+                metaLabel={t("playerGate.eyebrow", {
+                  duration: event.durationMin,
+                })}
+                title={t("playerGate.title")}
+                body={t("playerGate.body")}
+                ctaLabel={t("playerGate.cta")}
+                signInHref={withReturnTarget("/login", gateReturnTo)}
+                noAccountLabel={t("playerGate.noAccount")}
+                signUpLabel={t("playerGate.signUp")}
+                signUpHref={withReturnTarget("/register", gateReturnTo)}
+              />
+            ) : (
+              // The signed-in doctor's card. `RecordingPlayer` owns BOTH the
+              // mounted frame and the unavailability message with its retry (its
+              // failure boundary is a client branch — the api ships no "the embed
+              // is broken" status, design §5), so the `unavailable` mode here is
+              // the same component reached with no source: one component, one
+              // honest failed state, never a second copy of the copy.
+              <>
+                <p
+                  data-testid="recording-meta"
+                  className="mb-3 text-2xs font-extrabold uppercase tracking-micro text-muted-foreground"
+                >
+                  {t(`recordingKind.${playerCard.kindKey}`)} ·{" "}
+                  {t("recordingKind.duration", { duration: event.durationMin })}
+                </p>
+                <RecordingPlayer
+                  provider={
+                    playerCard.mode === "player" ? playerCard.provider : null
+                  }
+                  embedRef={
+                    playerCard.mode === "player" ? playerCard.embedRef : null
+                  }
+                  title={event.title}
+                  kindLabel={t(`recordingKind.${playerCard.kindKey}`)}
+                  unavailableTitle={t("playerUnavailable.title")}
+                  unavailableBody={t("playerUnavailable.body")}
+                  retryLabel={t("playerUnavailable.retry")}
+                />
+              </>
+            )}
           </div>
         ) : null}
 

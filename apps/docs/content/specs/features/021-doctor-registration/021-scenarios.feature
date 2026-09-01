@@ -23,7 +23,7 @@ Feature: A doctor stopped by a gate registers in a short honest form and comes b
     Then it renders the auth canvas split composition with no storefront header, navigation or footer
     And exactly one wordmark renders for the viewport — pinned to the top of the brand panel on the wide layout, above the card on the narrow one where the panel does not render
     And the card stands centred on the vertical axis of the form column
-    And the left half shows the эфир through feature 018's event-card unit
+    And the left half shows the эфир through the canonical event-card unit feature 004 owns and feature 019 widens
     And that card carries no back-navigation control
     And the form asks only for email, password and an optional promo code
     And no file input, document field or document copy exists anywhere on the screen

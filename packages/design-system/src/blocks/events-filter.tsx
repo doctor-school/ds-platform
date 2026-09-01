@@ -3,7 +3,6 @@
 import * as React from "react";
 
 import { cn } from "../lib/utils";
-import { Checkbox } from "../primitives/checkbox";
 import { FilterChip } from "../primitives/filter-chip";
 import { Input } from "../primitives/input";
 import { Label } from "../primitives/label";
@@ -13,6 +12,18 @@ import { Label } from "../primitives/label";
  * fork F-019-1 Б — the sidebar panel) — the ONE shared facet panel every events
  * surface mounts. 019 mounts the full REQ-138 set; no screen owns a private
  * copy (ADR-0013 A1: one canonical core, thin host projections).
+ *
+ * THE CONTROL LANGUAGE IS THE CANVAS'S, NOT A CHOICE OF THIS UNIT (owner
+ * Stage-B decision on #1522). Every list facet is a CLOSED labelled select —
+ * a bordered button carrying the small-caps facet name over its CURRENT VALUE
+ * with a chevron — which expands into the canvas option sheet (tinted, its own
+ * heading + ✕, options as bordered buttons, the chosen ones carrying ✓) inline
+ * beneath that button. Nothing is expanded by default: the sidebar column reads
+ * as the panel's seven answers, not as its whole option book. НМО and «цена в
+ * Pul» wear the same button and TOGGLE on a single click («Не важно» ↔ «✓
+ * Только с НМО»), because a two-state facet has no book to open. The canvas
+ * lays these in a horizontal grid; the sidebar fork (F-019-1 Б) stacks the same
+ * controls vertically — the same language, one column wide.
  *
  * PRESENTATIONAL BY CONTRACT. Values in, the next `AppliedFacets` out. The
  * panel writes no URL and parses none: the query/URL codec is its own unit
@@ -100,8 +111,26 @@ export interface EventsFilterLabels {
   city?: string;
   /** Why the city facet does not narrow online events. */
   cityHint?: string;
+  /**
+   * The value a list facet shows while nothing in it is applied («Все»). The
+   * closed control always states a value — an empty select reads as broken.
+   */
+  anyValue?: string;
+  /** The city facet's own empty value («Все города»). Falls back to `anyValue`. */
+  cityAny?: string;
+  /**
+   * `nmoOnly` / `freeByPul` are the APPLIED values («Только с НМО») — they name
+   * the chip in the applied row and the on-state of the toggle facet. The
+   * facet's own caption («НМО») and its off value («Не важно») are these.
+   */
   nmoOnly?: string;
+  nmoFacet?: string;
+  nmoOff?: string;
   freeByPul?: string;
+  freeByPulFacet?: string;
+  freeByPulOff?: string;
+  /** Accessible name of the option sheet's close control. */
+  closeOptions?: string;
   query?: string;
   queryPlaceholder?: string;
   /** Heading of the applied row («Фильтры:»). */
@@ -152,25 +181,158 @@ function toggle(values: string[], id: string): string[] {
     : [...values, id];
 }
 
-function FacetGroup({
+/**
+ * The canvas facet control: a bordered button stating «LABEL / current value».
+ * Open switches the fill to `tint` and drops the raised shadow, exactly as the
+ * source does — the control looks pressed while its sheet is out.
+ */
+function FacetButton({
   label,
-  hint,
-  children,
+  value,
+  active,
+  caret,
+  onClick,
+  ...aria
 }: {
   label: string;
-  hint?: string | undefined;
+  value: string;
+  active: boolean;
+  caret: string;
+  onClick: () => void;
+  "aria-expanded"?: boolean;
+  "aria-controls"?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      // The name is assembled explicitly: the label and the value are two
+      // separate blocks, so the computed name would otherwise run them
+      // together («ФорматВсе»). Both visible strings are kept, in reading
+      // order, so the accessible name still contains the visible label.
+      aria-label={`${label}: ${value}`}
+      {...aria}
+      className={cn(
+        "flex w-full items-center justify-between gap-3 border-2 border-border px-4 py-3 text-left transition-all",
+        "focus-visible:outline-none focus-visible:shadow-focus",
+        aria["aria-expanded"]
+          ? "bg-tint shadow-none"
+          : "bg-card shadow-ghost hover:bg-tint",
+      )}
+    >
+      <span className="min-w-0">
+        <span className="block text-caption font-extrabold uppercase tracking-wider text-primary-action">
+          {label}
+        </span>
+        <span
+          className={cn(
+            "block truncate text-sm font-extrabold",
+            active ? "text-primary-action" : "text-foreground",
+          )}
+        >
+          {value}
+        </span>
+      </span>
+      <span aria-hidden="true" className="flex-none text-caption">
+        {caret}
+      </span>
+    </button>
+  );
+}
+
+/**
+ * One option inside the sheet — the chosen ones filled and marked ✓. `FilterChip`
+ * carries the whole selected/hover/pressed/focus state set already (ADR-0013 §7);
+ * only the full-width sheet geometry is applied on top.
+ */
+function FacetOption({
+  selected,
+  onClick,
+  children,
+}: {
+  selected: boolean;
+  onClick: () => void;
   children: React.ReactNode;
 }) {
   return (
-    <fieldset className="flex flex-col gap-2 border-0 p-0">
-      <legend className="text-caption font-semibold text-muted-foreground">
-        {label}
-      </legend>
-      <div className="flex flex-wrap gap-2">{children}</div>
-      {hint ? (
-        <p className="text-caption text-muted-foreground">{hint}</p>
+    <FilterChip
+      selected={selected}
+      onClick={onClick}
+      className="w-full justify-between gap-2.5 px-3 py-2.5 text-left"
+    >
+      <span className="truncate">{children}</span>
+      <span aria-hidden="true" className="flex-none">
+        {selected ? "✓" : ""}
+      </span>
+    </FilterChip>
+  );
+}
+
+/**
+ * A list facet: the closed control plus, while open, the canvas option sheet
+ * inline beneath it. The sheet is the labelled `group` — assistive tech reads
+ * the options as the facet's set, and a closed facet contributes no group.
+ */
+function FacetSelect({
+  label,
+  value,
+  active,
+  hint,
+  open,
+  onOpenChange,
+  closeLabel,
+  children,
+}: {
+  label: string;
+  value: string;
+  active: boolean;
+  hint?: string | undefined;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  closeLabel: string;
+  children: React.ReactNode;
+}) {
+  const sheetId = React.useId();
+  return (
+    <div className="flex flex-col">
+      <FacetButton
+        label={label}
+        value={value}
+        active={active}
+        caret={open ? "▲" : "▼"}
+        onClick={() => onOpenChange(!open)}
+        aria-expanded={open}
+        aria-controls={sheetId}
+      />
+      {open ? (
+        <div
+          id={sheetId}
+          role="group"
+          aria-label={label}
+          className="flex flex-col gap-2 border-2 border-t-0 border-border bg-tint p-3"
+        >
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-caption font-extrabold uppercase tracking-wider text-tint-foreground">
+              {label}
+            </span>
+            <button
+              type="button"
+              aria-label={closeLabel}
+              onClick={() => onOpenChange(false)}
+              className="flex-none px-1 text-sm text-tint-foreground focus-visible:outline-none focus-visible:shadow-focus"
+            >
+              ✕
+            </button>
+          </div>
+          <div className="flex flex-col gap-2">{children}</div>
+          {hint ? (
+            <p className="text-caption font-semibold text-tint-foreground">
+              {hint}
+            </p>
+          ) : null}
+        </div>
       ) : null}
-    </fieldset>
+    </div>
   );
 }
 
@@ -189,6 +351,10 @@ export function EventsFilter({
   className,
 }: EventsFilterProps) {
   const queryId = React.useId();
+  // ONE sheet at a time, as the canvas does: opening a facet closes the
+  // previous one, so the column never grows into the wall of options the
+  // closed controls exist to prevent.
+  const [openFacet, setOpenFacet] = React.useState<string | null>(null);
   const rank = FILL_RANK[fill];
   const showsFormatTier = rank >= FILL_RANK.intermediate;
   const showsFullTier = rank >= FILL_RANK.full;
@@ -311,16 +477,260 @@ export function EventsFilter({
 
   const isFiltered = appliedChips.length > 0;
 
+  const anyValue = labels.anyValue ?? "";
+  const closeLabel = labels.closeOptions ?? labels.applied;
+  const sheet = (key: string) => ({
+    open: openFacet === key,
+    onOpenChange: (next: boolean) => setOpenFacet(next ? key : null),
+    closeLabel,
+  });
+  const named = (ids: string[], list: EventsFilterOption[] | undefined) =>
+    ids.map((id) => list?.find((item) => item.id === id)?.label ?? id).join(", ");
+
+  const specialtyValue =
+    scope === "all"
+      ? (labels.specialtyAll ?? anyValue)
+      : Array.isArray(scope)
+        ? scope.map((ref) => ref.label).join(", ")
+        : (labels.specialtyMine ?? anyValue);
+
   return (
     <section
       aria-label={labels.panel}
       className={cn(
         // No width and no grid placement of its own: the host column (desktop
         // sidebar) or the #1528 sheet decides where this body sits.
-        "flex flex-col gap-4 border-2 border-border bg-card p-4",
+        "flex flex-col gap-3 border-2 border-border bg-card p-4",
         className,
       )}
     >
+      {options.view?.length && labels.view ? (
+        <FacetSelect
+          label={labels.view}
+          value={
+            options.view.find((option) => option.id === view?.value)?.label ??
+            anyValue
+          }
+          active={Boolean(view?.value)}
+          {...sheet("view")}
+        >
+          {options.view.map((option) => (
+            <FacetOption
+              key={option.id}
+              selected={view?.value === option.id}
+              onClick={() => {
+                view?.onChange(option.id);
+                setOpenFacet(null);
+              }}
+            >
+              {option.label}
+            </FacetOption>
+          ))}
+        </FacetSelect>
+      ) : null}
+
+      {options.tense?.length && labels.tense ? (
+        <FacetSelect
+          label={labels.tense}
+          value={
+            options.tense.find((option) => option.id === tense?.value)?.label ??
+            anyValue
+          }
+          active={Boolean(tense?.value)}
+          {...sheet("tense")}
+        >
+          {options.tense.map((option) => (
+            <FacetOption
+              key={option.id}
+              selected={tense?.value === option.id}
+              onClick={() => {
+                tense?.onChange(option.id);
+                setOpenFacet(null);
+              }}
+            >
+              {option.label}
+            </FacetOption>
+          ))}
+        </FacetSelect>
+      ) : null}
+
+      {showsFormatTier && options.format?.length && labels.format ? (
+        <FacetSelect
+          label={labels.format}
+          value={
+            applied.format.length > 0
+              ? named(applied.format, options.format)
+              : anyValue
+          }
+          active={applied.format.length > 0}
+          {...sheet("format")}
+        >
+          {options.format.map((option) => (
+            <FacetOption
+              key={option.id}
+              selected={applied.format.includes(option.id)}
+              onClick={() =>
+                onChange({
+                  ...applied,
+                  format: toggle(applied.format, option.id),
+                })
+              }
+            >
+              {option.label}
+            </FacetOption>
+          ))}
+        </FacetSelect>
+      ) : null}
+
+      {showsFormatTier && options.kind?.length && labels.kind ? (
+        <FacetSelect
+          label={labels.kind}
+          value={
+            applied.kind.length > 0 ? named(applied.kind, options.kind) : anyValue
+          }
+          active={applied.kind.length > 0}
+          {...sheet("kind")}
+        >
+          {options.kind.map((option) => (
+            <FacetOption
+              key={option.id}
+              selected={applied.kind.includes(option.id)}
+              onClick={() =>
+                onChange({ ...applied, kind: toggle(applied.kind, option.id) })
+              }
+            >
+              {option.label}
+            </FacetOption>
+          ))}
+        </FacetSelect>
+      ) : null}
+
+      {showsFullTier &&
+      labels.specialty &&
+      (labels.specialtyMine || labels.specialtyAll) ? (
+        <FacetSelect
+          label={labels.specialty}
+          value={specialtyValue}
+          active={scope !== "mine-and-adjacent"}
+          {...sheet("specialty")}
+        >
+          {labels.specialtyMine ? (
+            <FacetOption
+              selected={scope === "mine-and-adjacent"}
+              onClick={() =>
+                onChange({ ...applied, specialtyScope: "mine-and-adjacent" })
+              }
+            >
+              {labels.specialtyMine}
+            </FacetOption>
+          ) : null}
+          {labels.specialtyAll ? (
+            <FacetOption
+              selected={scope === "all"}
+              onClick={() => onChange({ ...applied, specialtyScope: "all" })}
+            >
+              {labels.specialtyAll}
+            </FacetOption>
+          ) : null}
+          {options.specialty?.map((option) => {
+            const selected = scopeIds.includes(option.id);
+            return (
+              <FacetOption
+                key={option.id}
+                selected={selected}
+                onClick={() => {
+                  const next = selected
+                    ? scopeIds.filter((id) => id !== option.id)
+                    : [...scopeIds, option.id];
+                  const refs = next.map((id) => {
+                    const known =
+                      options.specialty?.find((item) => item.id === id) ??
+                      (Array.isArray(scope)
+                        ? scope.find((item) => item.id === id)
+                        : undefined);
+                    return { id, label: known?.label ?? id };
+                  });
+                  onChange({
+                    ...applied,
+                    specialtyScope: refs.length > 0 ? refs : "mine-and-adjacent",
+                  });
+                }}
+              >
+                {option.label}
+              </FacetOption>
+            );
+          })}
+        </FacetSelect>
+      ) : null}
+
+      {showsFullTier && options.city?.length && labels.city ? (
+        <FacetSelect
+          label={labels.city}
+          value={
+            applied.city.length > 0
+              ? named(applied.city, options.city)
+              : (labels.cityAny ?? anyValue)
+          }
+          active={applied.city.length > 0}
+          hint={labels.cityHint}
+          {...sheet("city")}
+        >
+          {options.city.map((option) => (
+            <FacetOption
+              key={option.id}
+              selected={applied.city.includes(option.id)}
+              onClick={() =>
+                onChange({ ...applied, city: toggle(applied.city, option.id) })
+              }
+            >
+              {option.label}
+            </FacetOption>
+          ))}
+        </FacetSelect>
+      ) : null}
+
+      {/* Two-state facets: the same control, no sheet — one click flips it. */}
+      {showsFullTier && labels.nmoOnly ? (
+        <FacetButton
+          label={labels.nmoFacet ?? labels.nmoOnly}
+          value={
+            applied.nmoOnly
+              ? `✓ ${labels.nmoOnly}`
+              : (labels.nmoOff ?? anyValue)
+          }
+          active={applied.nmoOnly}
+          caret={applied.nmoOnly ? "✕" : ""}
+          onClick={() => onChange({ ...applied, nmoOnly: !applied.nmoOnly })}
+        />
+      ) : null}
+
+      {showsFullTier && labels.freeByPul ? (
+        <FacetButton
+          label={labels.freeByPulFacet ?? labels.freeByPul}
+          value={
+            applied.freeByPul
+              ? `✓ ${labels.freeByPul}`
+              : (labels.freeByPulOff ?? anyValue)
+          }
+          active={applied.freeByPul}
+          caret={applied.freeByPul ? "✕" : ""}
+          onClick={() => onChange({ ...applied, freeByPul: !applied.freeByPul })}
+        />
+      ) : null}
+
+      {showsFullTier && labels.query ? (
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor={queryId}>{labels.query}</Label>
+          <Input
+            id={queryId}
+            type="search"
+            value={draft}
+            placeholder={labels.queryPlaceholder}
+            onChange={(event) => onQueryChange(event.target.value)}
+          />
+        </div>
+      ) : null}
+
       {isFiltered ? (
         <div className="flex flex-col gap-2">
           <p className="text-caption text-muted-foreground">
@@ -358,171 +768,6 @@ export function EventsFilter({
               {labels.reset}
             </button>
           ) : null}
-        </div>
-      ) : null}
-
-      {options.view?.length && labels.view ? (
-        <FacetGroup label={labels.view}>
-          {options.view.map((option) => (
-            <FilterChip
-              key={option.id}
-              selected={view?.value === option.id}
-              onClick={() => view?.onChange(option.id)}
-            >
-              {option.label}
-            </FilterChip>
-          ))}
-        </FacetGroup>
-      ) : null}
-
-      {options.tense?.length && labels.tense ? (
-        <FacetGroup label={labels.tense}>
-          {options.tense.map((option) => (
-            <FilterChip
-              key={option.id}
-              selected={tense?.value === option.id}
-              onClick={() => tense?.onChange(option.id)}
-            >
-              {option.label}
-            </FilterChip>
-          ))}
-        </FacetGroup>
-      ) : null}
-
-      {showsFormatTier && options.format?.length && labels.format ? (
-        <FacetGroup label={labels.format}>
-          {options.format.map((option) => (
-            <FilterChip
-              key={option.id}
-              selected={applied.format.includes(option.id)}
-              onClick={() =>
-                onChange({ ...applied, format: toggle(applied.format, option.id) })
-              }
-            >
-              {option.label}
-            </FilterChip>
-          ))}
-        </FacetGroup>
-      ) : null}
-
-      {showsFormatTier && options.kind?.length && labels.kind ? (
-        <FacetGroup label={labels.kind}>
-          {options.kind.map((option) => (
-            <FilterChip
-              key={option.id}
-              selected={applied.kind.includes(option.id)}
-              onClick={() =>
-                onChange({ ...applied, kind: toggle(applied.kind, option.id) })
-              }
-            >
-              {option.label}
-            </FilterChip>
-          ))}
-        </FacetGroup>
-      ) : null}
-
-      {showsFullTier && labels.specialty && (labels.specialtyMine || labels.specialtyAll) ? (
-        <FacetGroup label={labels.specialty}>
-          {labels.specialtyMine ? (
-            <FilterChip
-              selected={scope === "mine-and-adjacent"}
-              onClick={() =>
-                onChange({ ...applied, specialtyScope: "mine-and-adjacent" })
-              }
-            >
-              {labels.specialtyMine}
-            </FilterChip>
-          ) : null}
-          {labels.specialtyAll ? (
-            <FilterChip
-              selected={scope === "all"}
-              onClick={() => onChange({ ...applied, specialtyScope: "all" })}
-            >
-              {labels.specialtyAll}
-            </FilterChip>
-          ) : null}
-          {options.specialty?.map((option) => {
-            const selected = scopeIds.includes(option.id);
-            return (
-              <FilterChip
-                key={option.id}
-                selected={selected}
-                onClick={() => {
-                  const next = selected
-                    ? scopeIds.filter((id) => id !== option.id)
-                    : [...scopeIds, option.id];
-                  const refs = next.map((id) => {
-                    const known =
-                      options.specialty?.find((item) => item.id === id) ??
-                      (Array.isArray(scope)
-                        ? scope.find((item) => item.id === id)
-                        : undefined);
-                    return { id, label: known?.label ?? id };
-                  });
-                  onChange({
-                    ...applied,
-                    specialtyScope: refs.length > 0 ? refs : "mine-and-adjacent",
-                  });
-                }}
-              >
-                {option.label}
-              </FilterChip>
-            );
-          })}
-        </FacetGroup>
-      ) : null}
-
-      {showsFullTier && options.city?.length && labels.city ? (
-        <FacetGroup label={labels.city} hint={labels.cityHint}>
-          {options.city.map((option) => (
-            <FilterChip
-              key={option.id}
-              selected={applied.city.includes(option.id)}
-              onClick={() =>
-                onChange({ ...applied, city: toggle(applied.city, option.id) })
-              }
-            >
-              {option.label}
-            </FilterChip>
-          ))}
-        </FacetGroup>
-      ) : null}
-
-      {showsFullTier && (labels.nmoOnly || labels.freeByPul) ? (
-        <div className="flex flex-col gap-2">
-          {labels.nmoOnly ? (
-            <Checkbox
-              checked={applied.nmoOnly}
-              onChange={(event) =>
-                onChange({ ...applied, nmoOnly: event.target.checked })
-              }
-            >
-              {labels.nmoOnly}
-            </Checkbox>
-          ) : null}
-          {labels.freeByPul ? (
-            <Checkbox
-              checked={applied.freeByPul}
-              onChange={(event) =>
-                onChange({ ...applied, freeByPul: event.target.checked })
-              }
-            >
-              {labels.freeByPul}
-            </Checkbox>
-          ) : null}
-        </div>
-      ) : null}
-
-      {showsFullTier && labels.query ? (
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor={queryId}>{labels.query}</Label>
-          <Input
-            id={queryId}
-            type="search"
-            value={draft}
-            placeholder={labels.queryPlaceholder}
-            onChange={(event) => onQueryChange(event.target.value)}
-          />
         </div>
       ) : null}
     </section>

@@ -1769,8 +1769,15 @@ const EVENTS_FILTER_LABELS = {
   specialtyAll: "Все специальности",
   city: "Город",
   cityHint: "Город действует на офлайн- и гибридные события.",
+  anyValue: "Все",
+  cityAny: "Все города",
   nmoOnly: "Только с НМО",
+  nmoFacet: "НМО",
+  nmoOff: "Не важно",
   freeByPul: "Бесплатно по Pul",
+  freeByPulFacet: "Цена в Pul",
+  freeByPulOff: "Любая",
+  closeOptions: "Закрыть список значений",
   query: "Поиск по названию",
   queryPlaceholder: "Поиск по названию",
   applied: "Фильтры:",
@@ -1847,11 +1854,14 @@ function EventsFilterSection() {
         <code className="font-mono text-xs">doctor-events.dc.html</code>): the
         ONE shared facet panel the doctor feed mounts as a desktop sidebar —
         format, тип события, специальность (по умолчанию «моя и смежные»),
-        город для офлайн-событий, «только с НМО», «бесплатно по Pul» и поиск по
-        названию. Every applied facet stays visible as its own removable chip
-        above the groups, the applied count is stated, and one «Сбросить
-        фильтры» returns to the default scope. The panel is presentational —
-        values in, the next applied set out; the URL codec is its own unit.
+        город для офлайн-событий, «НМО», «цена в Pul» и поиск по названию.
+        Каждый фасет — закрытый селект в языке канваса: подпись капсом над
+        текущим значением, а список значений раскрывается листом под кнопкой
+        («НМО» и «цена в Pul» переключаются одним кликом). Every applied facet
+        stays visible as its own removable chip under the controls, the applied
+        count is stated, and one «Сбросить фильтры» returns to the default
+        scope. The panel is presentational — values in, the next applied set
+        out; the URL codec is its own unit.
       </p>
       <p className="text-sm text-muted-foreground">
         The three <span className="font-medium text-foreground">D-1 fill</span>{" "}

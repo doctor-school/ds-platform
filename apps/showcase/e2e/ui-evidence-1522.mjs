@@ -44,16 +44,42 @@ for (const viewport of ["desktop", "mobile"]) {
   }
 }
 
-// Interactions: a facet chip under the pointer, the name-search field focused,
-// and the applied row of the full-set demo carrying its removable chips.
+// Interactions: the canvas option sheet OPEN under its facet button (the
+// control language the owner approved), an option under the pointer, the
+// name-search field focused, and the applied row of the full-set demo carrying
+// its removable chips.
+for (const theme of ["light", "dark"]) {
+  await shoot(browser, {
+    name: `interactions-option-sheet-${theme}`,
+    viewport: "desktop",
+    theme,
+    after: async (page, section) => {
+      // The applied/reset demo is the last one in the section; open its format
+      // sheet in BOTH theme copies so one shot shows the open sheet light and
+      // dark.
+      const applied = section.locator("> div").last();
+      for (const control of await applied
+        .getByRole("button", { name: /^Формат:/ })
+        .all()) {
+        await control.click();
+      }
+      await applied
+        .getByRole("button", { name: "Конгресс", exact: true })
+        .last()
+        .hover();
+      await page.waitForTimeout(200);
+    },
+  });
+}
+
 await shoot(browser, {
   name: "interactions-hover-and-focus",
   viewport: "desktop",
   theme: "light",
   after: async (page, section) => {
     await section
-      .getByRole("button", { name: "Вебинар", exact: true })
-      .first()
+      .getByRole("button", { name: /^Город:/ })
+      .last()
       .hover();
     await section.getByLabel("Поиск по названию").last().focus();
     await page.waitForTimeout(200);

@@ -12,10 +12,12 @@ afterEach(() => {
 /**
  * 019 EARS-7 — the shared `events-filter` unit (source
  * `design-source/doctor-events.dc.html`, F-019-1 Б sidebar). jsdom pins the
- * contract the requirement states: the full REQ-138 facet set, every applied
- * facet visible as a removable unit with a working reset and a stated count,
- * and the three D-1 fill states rendering correctly so a consumer mounting
- * fewer facets breaks neither the panel nor the host grid.
+ * contract the requirement states: the full REQ-138 facet set in the canvas
+ * control language (closed labelled selects stating their current value, the
+ * option sheet on demand), every applied facet visible as a removable unit
+ * with a working reset and a stated count, and the three D-1 fill states
+ * rendering correctly so a consumer mounting fewer facets breaks neither the
+ * panel nor the host grid.
  */
 
 const EMPTY: AppliedFacets = {
@@ -69,8 +71,15 @@ const LABELS = {
   specialtyAll: "Все специальности",
   city: "Город",
   cityHint: "Город действует на офлайн-события.",
+  anyValue: "Все",
+  cityAny: "Все города",
   nmoOnly: "Только с НМО",
+  nmoFacet: "НМО",
+  nmoOff: "Не важно",
   freeByPul: "Бесплатно по Pul",
+  freeByPulFacet: "Цена в Pul",
+  freeByPulOff: "Любая",
+  closeOptions: "Закрыть список",
   query: "Поиск по названию",
   queryPlaceholder: "Поиск по названию",
   applied: "Фильтры:",
@@ -97,31 +106,72 @@ function renderPanel(
   return { onChange, ...utils };
 }
 
-function group(name: string) {
-  return screen.getByRole("group", { name });
+/** The CLOSED control of a facet — the canvas language's resting state. */
+function facet(label: string) {
+  return screen.getByRole("button", { name: new RegExp(`^${label}: `) });
+}
+
+function queryFacet(label: string) {
+  return screen.queryByRole("button", { name: new RegExp(`^${label}: `) });
+}
+
+/** Open a facet's option sheet and return the sheet as its labelled group. */
+async function openSheet(user: ReturnType<typeof userEvent.setup>, label: string) {
+  await user.click(facet(label));
+  return screen.getByRole("group", { name: label });
 }
 
 describe("EventsFilter — the REQ-138 facet set (EARS-7)", () => {
-  it("EARS-7.1: renders all seven REQ-138 facets in the `full` fill state", async () => {
+  it("EARS-7.1: renders all seven REQ-138 facets in the `full` fill state", () => {
     renderPanel();
 
-    // format · kind · specialty · city — grouped facets.
-    expect(within(group(LABELS.format)).getByText("Вебинар")).toBeInTheDocument();
-    expect(
-      within(group(LABELS.format)).getByText("Офлайн-встреча коллег"),
-    ).toBeInTheDocument();
-    expect(
-      within(group(LABELS.kind)).getByText("Doctor Club"),
-    ).toBeInTheDocument();
-    expect(
-      within(group(LABELS.specialty)).getByText(LABELS.specialtyMine),
-    ).toBeInTheDocument();
-    expect(within(group(LABELS.city)).getByText("Казань")).toBeInTheDocument();
-    // НМО · free-by-Pul — boolean facets.
-    expect(screen.getByLabelText(LABELS.nmoOnly)).toBeInTheDocument();
-    expect(screen.getByLabelText(LABELS.freeByPul)).toBeInTheDocument();
+    // format · kind · specialty · city — list facets, each a closed control
+    // stating its own current value.
+    expect(facet(LABELS.format)).toHaveTextContent(LABELS.anyValue);
+    expect(facet(LABELS.kind)).toHaveTextContent(LABELS.anyValue);
+    expect(facet(LABELS.specialty)).toHaveTextContent(LABELS.specialtyMine);
+    expect(facet(LABELS.city)).toHaveTextContent(LABELS.cityAny);
+    // НМО · цена в Pul — two-state facets in the same control.
+    expect(facet(LABELS.nmoFacet)).toHaveTextContent(LABELS.nmoOff);
+    expect(facet(LABELS.freeByPulFacet)).toHaveTextContent(LABELS.freeByPulOff);
     // name search.
     expect(screen.getByLabelText(LABELS.query)).toBeInTheDocument();
+  });
+
+  it("EARS-7.1: nothing is expanded by default — the sidebar states its answers, not its option book", () => {
+    renderPanel();
+    for (const label of [LABELS.format, LABELS.kind, LABELS.specialty, LABELS.city]) {
+      expect(screen.queryByRole("group", { name: label })).not.toBeInTheDocument();
+      expect(facet(label)).toHaveAttribute("aria-expanded", "false");
+    }
+  });
+
+  it("EARS-7.1: opening a facet closes the previously open one — one sheet at a time", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+
+    await openSheet(user, LABELS.format);
+    await openSheet(user, LABELS.city);
+
+    expect(
+      screen.queryByRole("group", { name: LABELS.format }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("group", { name: LABELS.city })).toBeInTheDocument();
+  });
+
+  it("EARS-7.1: the option sheet closes on its own ✕ without touching the applied set", async () => {
+    const user = userEvent.setup();
+    const { onChange } = renderPanel();
+
+    const sheet = await openSheet(user, LABELS.format);
+    await user.click(
+      within(sheet).getByRole("button", { name: LABELS.closeOptions }),
+    );
+
+    expect(
+      screen.queryByRole("group", { name: LABELS.format }),
+    ).not.toBeInTheDocument();
+    expect(onChange).not.toHaveBeenCalled();
   });
 
   it("EARS-7.1: the panel is one labelled region — the sidebar the screen mounts beside the body", () => {
@@ -131,19 +181,25 @@ describe("EventsFilter — the REQ-138 facet set (EARS-7)", () => {
     ).toBeInTheDocument();
   });
 
-  it("EARS-7.1: defaults the specialty facet to «моя и смежные»", () => {
+  it("EARS-7.1: defaults the specialty facet to «моя и смежные»", async () => {
+    const user = userEvent.setup();
     renderPanel();
+
+    expect(facet(LABELS.specialty)).toHaveTextContent(LABELS.specialtyMine);
+    const sheet = await openSheet(user, LABELS.specialty);
     expect(
-      within(group(LABELS.specialty)).getByRole("button", {
+      within(sheet).getByRole("button", {
         name: LABELS.specialtyMine,
         pressed: true,
       }),
     ).toBeInTheDocument();
   });
 
-  it("EARS-7.1: city carries its offline-only hint — the facet does not silently narrow online events", () => {
+  it("EARS-7.1: city carries its offline-only hint — the facet does not silently narrow online events", async () => {
+    const user = userEvent.setup();
     renderPanel();
-    expect(within(group(LABELS.city)).getByText(LABELS.cityHint)).toBeInTheDocument();
+    const sheet = await openSheet(user, LABELS.city);
+    expect(within(sheet).getByText(LABELS.cityHint)).toBeInTheDocument();
   });
 });
 
@@ -152,9 +208,8 @@ describe("EventsFilter — facets apply and combine (EARS-7)", () => {
     const user = userEvent.setup();
     const { onChange } = renderPanel();
 
-    await user.click(
-      within(group(LABELS.format)).getByRole("button", { name: "Вебинар" }),
-    );
+    const sheet = await openSheet(user, LABELS.format);
+    await user.click(within(sheet).getByRole("button", { name: "Вебинар" }));
 
     expect(onChange).toHaveBeenCalledWith({ ...EMPTY, format: ["webinar"] });
   });
@@ -168,9 +223,8 @@ describe("EventsFilter — facets apply and combine (EARS-7)", () => {
     };
     const { onChange } = renderPanel({ applied, appliedCount: 2 });
 
-    await user.click(
-      within(group(LABELS.city)).getByRole("button", { name: "Казань" }),
-    );
+    const sheet = await openSheet(user, LABELS.city);
+    await user.click(within(sheet).getByRole("button", { name: "Казань" }));
 
     expect(onChange).toHaveBeenCalledWith({ ...applied, city: ["kazan"] });
   });
@@ -184,32 +238,51 @@ describe("EventsFilter — facets apply and combine (EARS-7)", () => {
     };
     const { onChange } = renderPanel({ applied, appliedCount: 3 });
 
-    await user.click(
-      within(group(LABELS.format)).getByRole("button", { name: "Вебинар" }),
-    );
+    const sheet = await openSheet(user, LABELS.format);
+    await user.click(within(sheet).getByRole("button", { name: "Вебинар" }));
 
     expect(onChange).toHaveBeenCalledWith({ ...applied, format: ["podcast"] });
   });
 
-  it("EARS-7.2: the boolean facets emit their own flag only", async () => {
+  it("EARS-7.2: a list facet states its selected values on the closed control", () => {
+    renderPanel({
+      applied: { ...EMPTY, format: ["webinar", "congress"] },
+      appliedCount: 2,
+    });
+    expect(facet(LABELS.format)).toHaveTextContent("Вебинар, Конгресс");
+  });
+
+  it("EARS-7.2: the two-state facets flip on a single click, with no sheet to open", async () => {
     const user = userEvent.setup();
     const { onChange } = renderPanel();
 
-    await user.click(screen.getByLabelText(LABELS.nmoOnly));
+    await user.click(facet(LABELS.nmoFacet));
     expect(onChange).toHaveBeenCalledWith({ ...EMPTY, nmoOnly: true });
+    expect(
+      screen.queryByRole("group", { name: LABELS.nmoFacet }),
+    ).not.toBeInTheDocument();
 
-    await user.click(screen.getByLabelText(LABELS.freeByPul));
+    await user.click(facet(LABELS.freeByPulFacet));
     expect(onChange).toHaveBeenCalledWith({ ...EMPTY, freeByPul: true });
+  });
+
+  it("EARS-7.2: a two-state facet that is ON states its applied value and clears on the next click", async () => {
+    const user = userEvent.setup();
+    const applied: AppliedFacets = { ...EMPTY, nmoOnly: true };
+    const { onChange } = renderPanel({ applied, appliedCount: 1 });
+
+    expect(facet(LABELS.nmoFacet)).toHaveTextContent(LABELS.nmoOnly);
+    await user.click(facet(LABELS.nmoFacet));
+    expect(onChange).toHaveBeenCalledWith({ ...applied, nmoOnly: false });
   });
 
   it("EARS-7.2: the specialty facet switches scope between «моя и смежные», «все» and explicit ids", async () => {
     const user = userEvent.setup();
     const { onChange, rerender } = renderPanel();
 
+    let sheet = await openSheet(user, LABELS.specialty);
     await user.click(
-      within(group(LABELS.specialty)).getByRole("button", {
-        name: LABELS.specialtyAll,
-      }),
+      within(sheet).getByRole("button", { name: LABELS.specialtyAll }),
     );
     expect(onChange).toHaveBeenCalledWith({ ...EMPTY, specialtyScope: "all" });
 
@@ -223,10 +296,9 @@ describe("EventsFilter — facets apply and combine (EARS-7)", () => {
         onChange={onChange}
       />,
     );
+    sheet = screen.getByRole("group", { name: LABELS.specialty });
     await user.click(
-      within(group(LABELS.specialty)).getByRole("button", {
-        name: "Травматология",
-      }),
+      within(sheet).getByRole("button", { name: "Травматология" }),
     );
     expect(onChange).toHaveBeenLastCalledWith({
       ...EMPTY,
@@ -329,15 +401,18 @@ describe("EventsFilter — the three D-1 fill states (EARS-7)", () => {
   it("EARS-7.4: `wave-1` renders view + tense only — and stays a complete panel", () => {
     renderPanel({ fill: "wave-1" });
 
-    expect(group(LABELS.view)).toBeInTheDocument();
-    expect(group(LABELS.tense)).toBeInTheDocument();
-    for (const absent of [LABELS.format, LABELS.kind, LABELS.specialty, LABELS.city]) {
-      expect(
-        screen.queryByRole("group", { name: absent }),
-      ).not.toBeInTheDocument();
+    expect(facet(LABELS.view)).toBeInTheDocument();
+    expect(facet(LABELS.tense)).toBeInTheDocument();
+    for (const absent of [
+      LABELS.format,
+      LABELS.kind,
+      LABELS.specialty,
+      LABELS.city,
+      LABELS.nmoFacet,
+      LABELS.freeByPulFacet,
+    ]) {
+      expect(queryFacet(absent)).not.toBeInTheDocument();
     }
-    expect(screen.queryByLabelText(LABELS.nmoOnly)).not.toBeInTheDocument();
-    expect(screen.queryByLabelText(LABELS.freeByPul)).not.toBeInTheDocument();
     expect(screen.queryByLabelText(LABELS.query)).not.toBeInTheDocument();
     // Still the same labelled sidebar region — a lighter fill is not a broken panel.
     expect(screen.getByRole("region", { name: LABELS.panel })).toBeInTheDocument();
@@ -346,19 +421,17 @@ describe("EventsFilter — the three D-1 fill states (EARS-7)", () => {
   it("EARS-7.4: `intermediate` adds format and kind and nothing beyond them", () => {
     renderPanel({ fill: "intermediate" });
 
-    expect(group(LABELS.view)).toBeInTheDocument();
-    expect(group(LABELS.tense)).toBeInTheDocument();
-    expect(group(LABELS.format)).toBeInTheDocument();
-    expect(group(LABELS.kind)).toBeInTheDocument();
+    expect(facet(LABELS.view)).toBeInTheDocument();
+    expect(facet(LABELS.tense)).toBeInTheDocument();
+    expect(facet(LABELS.format)).toBeInTheDocument();
+    expect(facet(LABELS.kind)).toBeInTheDocument();
     for (const absent of [LABELS.specialty, LABELS.city]) {
-      expect(
-        screen.queryByRole("group", { name: absent }),
-      ).not.toBeInTheDocument();
+      expect(queryFacet(absent)).not.toBeInTheDocument();
     }
     expect(screen.queryByLabelText(LABELS.query)).not.toBeInTheDocument();
   });
 
-  it("EARS-7.4: `full` carries every group the lighter states carry, plus the REQ-138 remainder", () => {
+  it("EARS-7.4: `full` carries every facet the lighter states carry, plus the REQ-138 remainder", () => {
     renderPanel();
     for (const present of [
       LABELS.view,
@@ -367,24 +440,22 @@ describe("EventsFilter — the three D-1 fill states (EARS-7)", () => {
       LABELS.kind,
       LABELS.specialty,
       LABELS.city,
+      LABELS.nmoFacet,
+      LABELS.freeByPulFacet,
     ]) {
-      expect(group(present)).toBeInTheDocument();
+      expect(facet(present)).toBeInTheDocument();
     }
   });
 
-  it("EARS-7.4: a fill state whose options the consumer omits renders no empty group shell", () => {
+  it("EARS-7.4: a fill state whose options the consumer omits renders no empty facet control", () => {
     renderPanel({ options: { view: OPTIONS.view, tense: OPTIONS.tense } });
     // `full` was asked for, but only two option sets were supplied: the panel
-    // drops the group rather than rendering a labelled empty box (LD-9's
-    // «empty labelled box is a defect», applied to the panel itself).
-    expect(
-      screen.queryByRole("group", { name: LABELS.format }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("group", { name: LABELS.city }),
-    ).not.toBeInTheDocument();
+    // drops the facet rather than offering a control whose sheet is empty
+    // (LD-9's «empty labelled box is a defect», applied to the panel itself).
+    expect(queryFacet(LABELS.format)).not.toBeInTheDocument();
+    expect(queryFacet(LABELS.city)).not.toBeInTheDocument();
     // The facets that need no option list still render at `full`.
-    expect(screen.getByLabelText(LABELS.nmoOnly)).toBeInTheDocument();
+    expect(facet(LABELS.nmoFacet)).toBeInTheDocument();
     expect(screen.getByLabelText(LABELS.query)).toBeInTheDocument();
   });
 

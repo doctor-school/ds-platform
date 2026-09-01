@@ -1,0 +1,13 @@
+{
+  "number": 1708,
+  "headRefOid": "b475af8c1d2e3f405162738495a6b7c8d9e0f1a2",
+  "body": "## Verification\n\nui-parity: N/A (no render delta) — adds `meta: { version }` to an existing mutation call; no JSX, copy or style touched.\n",
+  "files": [{ "path": "apps/admin/components/lifecycle-actions.tsx" }],
+  "reviews": [
+    {
+      "body": "## Mode (a) Review — PR #1708\n\nrender-delta: none\n\nVERDICT: APPROVE",
+      "submittedAt": "2026-09-01T10:00:00Z",
+      "commit": { "oid": "b475af8c1d2e3f405162738495a6b7c8d9e0f1a2" }
+    }
+  ]
+}

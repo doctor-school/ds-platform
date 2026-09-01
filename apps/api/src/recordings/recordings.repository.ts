@@ -236,11 +236,20 @@ export class RecordingsRepository {
    * is matched against the SLUG COLUMN ONLY, because feeding it to the uuid `id`
    * column reaches Postgres as `22P02 invalid input syntax for type uuid` and
    * surfaces as a 500 where the caller deserves a 404.
+   *
+   * RETIRED EVENTS ARE NOT RESOLVED. `record_status = 'active'` is the same
+   * predicate 004's public resolution applies (`events.repository.ts` →
+   * `ACTIVE_EVENT`) and the sibling source-bearing 006 room read applies
+   * (`room.repository.ts`). Without it a soft-deleted event would 404 publicly
+   * and still answer this route 200 with `provider` + `embed_ref` to any
+   * signed-in account — authenticating would turn the route into an oracle on
+   * a record the platform says does not exist.
    */
   async findEventByIdOrSlug(idOrSlug: string): Promise<Event | null> {
-    const where = CANONICAL_UUID_REGEX.test(idOrSlug)
+    const key = CANONICAL_UUID_REGEX.test(idOrSlug)
       ? or(eq(events.id, idOrSlug), eq(events.slug, idOrSlug))
       : eq(events.slug, idOrSlug);
+    const where = and(key, eq(events.recordStatus, "active"));
     const [row] = await this.db.select().from(events).where(where).limit(1);
     return row ?? null;
   }

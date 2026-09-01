@@ -36,7 +36,7 @@ export interface RecordingGateProps {
   title: string;
   /** The free-for-doctors reassurance line. */
   body: string;
-  /** The primary action label («Войти и смотреть»). */
+  /** The primary action label («Войти и смотреть ↗», verbatim from the canvas). */
   ctaLabel: string;
   /** Same-origin `/login?returnTo=…` href (built with `withReturnTarget`). */
   signInHref: string;
@@ -61,9 +61,18 @@ export function RecordingGate({
   signUpHref,
 }: RecordingGateProps) {
   return (
+    // Below `layout:` the box takes its height FROM the invitation, and the
+    // invitation is in normal flow. A 390px-wide `aspect-video` plate is 219px
+    // tall while the invitation (eyebrow + 2-line headline + 2-line body + `lg`
+    // button + the sign-up line) is ~290px, so a fixed ratio plus
+    // `overflow-hidden` clipped the eyebrow off the top and the «Нет аккаунта?
+    // Создать» action off the bottom — a registration action that stayed
+    // focusable while invisible. From `layout:` up the invitation fits with
+    // room to spare, so the canvas's 16:9 plate and the centred overlay are
+    // both restored.
     <div
       data-testid="recording-gate"
-      className="relative -mx-4 aspect-video overflow-hidden bg-header layout:mx-0 layout:border-2 layout:border-border layout:shadow-lg"
+      className="relative -mx-4 overflow-hidden bg-header layout:mx-0 layout:aspect-video layout:border-2 layout:border-border layout:shadow-lg"
     >
       {posterUrl ? (
         // Decorative: the invitation below carries the whole message, so the
@@ -80,7 +89,7 @@ export function RecordingGate({
       {/* The dim, per the canvas: the poster stays legible underneath, which is
           what makes the gate read as «there is a recording here» rather than as
           an error state. */}
-      <div className="absolute inset-0 flex items-center justify-center bg-header/80 p-5">
+      <div className="relative flex items-center justify-center bg-header/80 p-5 layout:absolute layout:inset-0">
         <div className="max-w-md border-2 border-border bg-card p-6 text-center text-card-foreground shadow-lg layout:p-8">
           <p className="text-2xs font-extrabold uppercase tracking-micro text-primary-action">
             {kindLabel} · {metaLabel}

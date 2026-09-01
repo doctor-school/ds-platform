@@ -30,6 +30,12 @@ async function shoot(browser, { name, viewport, theme, signedIn, after }) {
   });
   const page = await ctx.newPage();
   await page.goto(`${BASE}/webinars/${ENDED}`, { waitUntil: "networkidle" });
+  // The player card sits below the status card, so on the 390×900 mobile
+  // viewport the guest gate starts below the fold. Scroll it into view before
+  // shooting: the evidence is about the GATE, and a shot of the hero above it
+  // proves nothing about whether the invitation renders whole.
+  const gate = page.getByTestId("recording-gate");
+  if (await gate.count()) await gate.scrollIntoViewIfNeeded();
   if (after) await after(page);
   await page.screenshot({ path: `${OUT}/${name}.png`, fullPage: false });
   await ctx.close();

@@ -511,5 +511,39 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const unknown = await readPlayback(`no-such-${randomUUID()}`, headers);
       expect(unknown.statusCode).toBe(404);
     });
+
+    it("014 EARS-5.5: a retired event shall refuse the authenticated playback read exactly as the public read does, so signing in is not an oracle on a soft-deleted event", async () => {
+      const { id, slug } = await insertEvent("ended");
+      await publishRecording(id, "edited");
+      // Soft-delete the EVENT itself (004's `record_status`; the table's CHECK
+      // ties `retired` to a non-null `deleted_at`). The recording row stays
+      // published — the point is that the event's retirement, not the cut's,
+      // decides the answer.
+      await pool.query(
+        `UPDATE events SET record_status = 'retired', deleted_at = now() WHERE id = $1`,
+        [id],
+      );
+
+      const cookie = await doctorSession("doc-1343-retired");
+      const headers = cookieHeader(cookie);
+
+      // The public read refuses (004's ACTIVE_EVENT filter)…
+      const publicRes = await read(slug);
+      expect(publicRes.statusCode).toBe(404);
+
+      // …and authenticating must produce the IDENTICAL refusal. A 200 here
+      // would hand `provider` + `embedRef` for an event the platform says
+      // does not exist.
+      const res = await readPlayback(slug, headers);
+      expect(res.statusCode).toBe(404);
+      expect(res.payload).not.toContain(EDITED_REF);
+      expect(res.payload).not.toContain("embedRef");
+
+      // The uuid arm resolves the same way — the retirement filter is on the
+      // event row, not on which key spelled it.
+      const byId = await readPlayback(id, headers);
+      expect(byId.statusCode).toBe(404);
+      expect(byId.payload).not.toContain(EDITED_REF);
+    });
   },
 );

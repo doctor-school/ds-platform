@@ -4,6 +4,11 @@
  * against the live pair. Kept out of `e2e/*.spec.ts` so Playwright never picks
  * it up as a spec.
  */
+
+// `Event` is declared for ESLint because the `page.evaluate` body below is
+// serialised and executed in the BROWSER, not in this Node process.
+/* global Event */
+
 import { chromium } from "@playwright/test";
 import { mkdirSync } from "node:fs";
 

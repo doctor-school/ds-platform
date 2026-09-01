@@ -67,7 +67,8 @@ export function RecordingGate({
       {posterUrl ? (
         // Decorative: the invitation below carries the whole message, so the
         // poster adds no information a screen reader would lose (empty alt).
-        // eslint-disable-next-line @next/next/no-img-element
+        // A plain <img>, not next/image: the poster URL is remote CMS content
+        // with no configured loader domain, and the element is decorative.
         <img
           src={posterUrl}
           alt=""

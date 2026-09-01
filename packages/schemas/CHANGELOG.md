@@ -1,5 +1,25 @@
 # @ds/schemas
 
+## 5.0.0
+
+### Major Changes
+
+- [#1686](https://github.com/doctor-school/ds-platform/pull/1686) [`f8cb3f9`](https://github.com/doctor-school/ds-platform/commit/f8cb3f93c6c2512433a5840afcbdbbb0ef28a712) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Complete the ADR-0016 §5 `topics` → `directions` rename through the 012 EARS-11
+  event join ([#1645](https://github.com/doctor-school/ds-platform/issues/1645)). The table is now `event_directions` with a `direction_id`
+  column (true rename — every retained row, id, version and audit lineage
+  survives), the admin surface is `/v1/admin/event-directions`, and the public
+  traversal answers `GET /v1/public/events/:idOrSlug/directions` and
+  `GET /v1/public/directions/:idOrSlug/events`.
+
+  Breaking: the old `event-topics` / `…/topics` routes and the `EventTopic*` /
+  `PublicTopicSummary*` contract exports are gone with no alias — the rename has
+  no consumers outside this repo. Behaviour, pagination, problem shapes and
+  visible RU copy are unchanged.
+
+### Minor Changes
+
+- [#1685](https://github.com/doctor-school/ds-platform/pull/1685) [`ea28861`](https://github.com/doctor-school/ds-platform/commit/ea2886168662925eb58ad522633e4a9f2bca40da) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Platform-wide post-login return-to-origin (014 EARS-6): a visitor who authenticates from a login-gated page is landed back on the page they were trying to consume — through registration, email verification and sign-in alike — and the target is consumed exactly once. Hostile targets (absolute, protocol-relative and backslash-escaped hosts) are dropped to the surface default landing rather than followed.
+
 ## 4.0.0
 
 ### Major Changes

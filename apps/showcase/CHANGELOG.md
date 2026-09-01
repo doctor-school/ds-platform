@@ -1,5 +1,13 @@
 # @ds/showcase
 
+## 0.1.1
+
+### Patch Changes
+
+- Updated dependencies [[`f8cb3f9`](https://github.com/doctor-school/ds-platform/commit/f8cb3f93c6c2512433a5840afcbdbbb0ef28a712), [`ea28861`](https://github.com/doctor-school/ds-platform/commit/ea2886168662925eb58ad522633e4a9f2bca40da), [`77d8a33`](https://github.com/doctor-school/ds-platform/commit/77d8a3369f6e5fb0cd4d8e6d2df692367d76c793), [`e987b7c`](https://github.com/doctor-school/ds-platform/commit/e987b7cb853b614bef9f901b9dba7adfd3db233b)]:
+  - @ds/schemas@5.0.0
+  - @ds/design-system@5.3.0
+
 ## 0.1.0
 
 ### Minor Changes

@@ -1,5 +1,32 @@
 # @ds/admin
 
+## 2.0.0
+
+### Major Changes
+
+- [#1686](https://github.com/doctor-school/ds-platform/pull/1686) [`f8cb3f9`](https://github.com/doctor-school/ds-platform/commit/f8cb3f93c6c2512433a5840afcbdbbb0ef28a712) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Complete the ADR-0016 §5 `topics` → `directions` rename through the 012 EARS-11
+  event join ([#1645](https://github.com/doctor-school/ds-platform/issues/1645)). The table is now `event_directions` with a `direction_id`
+  column (true rename — every retained row, id, version and audit lineage
+  survives), the admin surface is `/v1/admin/event-directions`, and the public
+  traversal answers `GET /v1/public/events/:idOrSlug/directions` and
+  `GET /v1/public/directions/:idOrSlug/events`.
+
+  Breaking: the old `event-topics` / `…/topics` routes and the `EventTopic*` /
+  `PublicTopicSummary*` contract exports are gone with no alias — the rename has
+  no consumers outside this repo. Behaviour, pagination, problem shapes and
+  visible RU copy are unchanged.
+
+### Minor Changes
+
+- [#1679](https://github.com/doctor-school/ds-platform/pull/1679) [`69bbe50`](https://github.com/doctor-school/ds-platform/commit/69bbe50c16c5c7cd8a67a96603338a509369c345) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Publish completeness rules and the admin publish tab for projects, experts and partners (012 EARS-5).
+
+### Patch Changes
+
+- Updated dependencies [[`f8cb3f9`](https://github.com/doctor-school/ds-platform/commit/f8cb3f93c6c2512433a5840afcbdbbb0ef28a712), [`ea28861`](https://github.com/doctor-school/ds-platform/commit/ea2886168662925eb58ad522633e4a9f2bca40da), [`77d8a33`](https://github.com/doctor-school/ds-platform/commit/77d8a3369f6e5fb0cd4d8e6d2df692367d76c793), [`e987b7c`](https://github.com/doctor-school/ds-platform/commit/e987b7cb853b614bef9f901b9dba7adfd3db233b)]:
+  - @ds/schemas@5.0.0
+  - @ds/api-client@1.0.0
+  - @ds/design-system@5.3.0
+
 ## 1.0.0
 
 ### Major Changes

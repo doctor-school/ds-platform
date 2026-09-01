@@ -10,6 +10,7 @@ import {
   Param,
   Patch,
   Post,
+  PreconditionFailedException,
   Put,
   Query,
   Req,
@@ -23,6 +24,9 @@ import {
   type EventAdminList,
   EventAdminListQuerySchema,
   IDEMPOTENCY_KEY_HEADER,
+  IF_MATCH_HEADER,
+  parseIfMatchVersion,
+  taxonomyETag,
   UpdateEventRequestSchema,
 } from "@ds/schemas";
 import { Authz } from "../authz/index.js";
@@ -40,6 +44,7 @@ import {
   EventNotEditableError,
   EventNotPastError,
   EventsService,
+  EventVersionConflictError,
   InvalidTransitionError,
   StreamNotConfigurableError,
   type UploadedPdf,
@@ -85,7 +90,10 @@ export class EventsAdminController {
     audit: "low-stakes",
     tests: ["EARS-1", "EARS-8"],
   })
-  async create(@Req() req: FastifyRequest): Promise<EventAdminDetail> {
+  async create(
+    @Req() req: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<EventAdminDetail> {
     const { payloadRaw, pdf } = await this.readMultipart(req);
     if (payloadRaw === undefined) {
       throw new BadRequestException("missing 'payload' form field");
@@ -99,7 +107,62 @@ export class EventsAdminController {
         issues: parsed.error.issues,
       });
     }
-    return this.events.create(parsed.data, pdf);
+    // #1593 — the 201 already carries the aggregate, so it also carries the
+    // validator for it: a client that creates then immediately transitions must
+    // not have to re-read the detail just to obtain an `If-Match`.
+    return this.withETag(reply, await this.events.create(parsed.data, pdf));
+  }
+
+  /**
+   * #1593 — stamp the aggregate's optimistic-concurrency validator on the
+   * response and return the body unchanged. Every admin response that carries an
+   * `EventAdminDetail` goes through here, so the header and the body's `version`
+   * are derived from ONE value and cannot drift apart. The weak form `W/"<n>"`
+   * is the house contract (`taxonomyETag`, shared with 012's taxonomy surface and
+   * 014's recordings surface): the validator asserts the aggregate's revision,
+   * not a byte-exact representation, so a signed-URL field that differs per read
+   * must not invalidate it.
+   */
+  private withETag(
+    reply: FastifyReply,
+    detail: EventAdminDetail,
+  ): EventAdminDetail {
+    void reply.header("etag", taxonomyETag(detail.version));
+    return detail;
+  }
+
+  /**
+   * #1593 — the precondition the six lifecycle commands carry, in the contract
+   * 014's recordings surface already established. Absent or blank is 428
+   * `PRECONDITION_REQUIRED`; present but not a validator this API issued is 412
+   * `PRECONDITION_FAILED`, because a syntactically unusable validator asserts
+   * nothing and therefore cannot pass — treating it as «no precondition» would
+   * turn a malformed header into a bypass of the whole mechanism.
+   *
+   * Raised as a `TaxonomyError` and re-shaped by {@link withProtocolRefusalShape}
+   * onto THIS surface's `{ code, message }` body: the codes are the shared ones,
+   * the envelope stays the events surface's own.
+   *
+   * @returns the raw header (it joins the `mark-ended` idempotency fingerprint —
+   * the same key against a different validator is a different bound request) and
+   * the parsed version.
+   */
+  private requireIfMatch(req: FastifyRequest): { raw: string; version: number } {
+    const raw = req.headers[IF_MATCH_HEADER] as string | undefined;
+    if (!raw || raw.trim().length === 0) {
+      throw new TaxonomyError(
+        "PRECONDITION_REQUIRED",
+        "an event lifecycle command must carry the If-Match of the version it was read at",
+      );
+    }
+    const version = parseIfMatchVersion(raw);
+    if (version === null) {
+      throw new TaxonomyError(
+        "PRECONDITION_FAILED",
+        "the If-Match validator is not one this API issued",
+      );
+    }
+    return { raw, version };
   }
 
   /**
@@ -175,6 +238,7 @@ export class EventsAdminController {
   async update(
     @Param("id") id: string,
     @Req() req: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<EventAdminDetail> {
     const { payloadRaw, pdf } = await this.readMultipart(req);
     // `payload` is optional on an edit: a PDF-only replacement carries no fields,
@@ -191,7 +255,7 @@ export class EventsAdminController {
     try {
       const updated = await this.events.update(id, parsed.data, pdf);
       if (!updated) throw new NotFoundException("event not found");
-      return updated;
+      return this.withETag(reply, updated);
     } catch (err) {
       if (err instanceof EventNotEditableError) {
         throw new ConflictException({
@@ -244,10 +308,15 @@ export class EventsAdminController {
     audit: "none",
     tests: ["EARS-8"],
   })
-  async detail(@Param("id") id: string): Promise<EventAdminDetail> {
+  async detail(
+    @Param("id") id: string,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<EventAdminDetail> {
     const found = await this.events.detail(id);
     if (!found) throw new NotFoundException("event not found");
-    return found;
+    // #1593 — THE read that issues the validator: every lifecycle command's
+    // `If-Match` is expected to be the `ETag` an operator's client received here.
+    return this.withETag(reply, found);
   }
 
   /**
@@ -278,11 +347,12 @@ export class EventsAdminController {
   async configureStream(
     @Param("id") id: string,
     @Body() dto: ConfigureStreamRequestDto,
+    @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<EventAdminDetail> {
     try {
       const updated = await this.events.configureStream(id, dto);
       if (!updated) throw new NotFoundException("event not found");
-      return updated;
+      return this.withETag(reply, updated);
     } catch (err) {
       if (err instanceof StreamNotConfigurableError) {
         throw new ConflictException({
@@ -322,15 +392,21 @@ export class EventsAdminController {
   async publish(
     @Param("id") id: string,
     @Req() req: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<EventAdminDetail> {
+    // #1593 — the precondition is evaluated before the command, so a caller with
+    // no validator is told to read first rather than having its publish applied.
+    const { version } = await withProtocolRefusalShape(async () =>
+      this.requireIfMatch(req),
+    );
     // The 003 session hook attaches the authenticated subject; the acting admin
     // `sub` keys the audit row (ADR-0003 §6). Null only if unresolved — the
     // AuthzGuard has already refused any unauthenticated caller (EARS-8).
     const actorSub = (req as { user?: { sub?: string } }).user?.sub ?? null;
     try {
-      const updated = await this.events.publish(id, actorSub);
+      const updated = await this.events.publish(id, actorSub, version);
       if (!updated) throw new NotFoundException("event not found");
-      return updated;
+      return this.withETag(reply, updated);
     } catch (err) {
       if (err instanceof InvalidTransitionError) {
         throw new ConflictException({
@@ -339,7 +415,7 @@ export class EventsAdminController {
           to: err.to,
         });
       }
-      throw err;
+      throw asTransitionRefusal(err);
     }
   }
 
@@ -368,9 +444,10 @@ export class EventsAdminController {
   async open(
     @Param("id") id: string,
     @Req() req: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<EventAdminDetail> {
-    return this.namedTransition(id, req, (eventId, actorSub) =>
-      this.events.openRoom(eventId, actorSub),
+    return this.namedTransition(id, req, reply, (eventId, actorSub, version) =>
+      this.events.openRoom(eventId, actorSub, version),
     );
   }
 
@@ -395,9 +472,10 @@ export class EventsAdminController {
   async close(
     @Param("id") id: string,
     @Req() req: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<EventAdminDetail> {
-    return this.namedTransition(id, req, (eventId, actorSub) =>
-      this.events.closeRoom(eventId, actorSub),
+    return this.namedTransition(id, req, reply, (eventId, actorSub, version) =>
+      this.events.closeRoom(eventId, actorSub, version),
     );
   }
 
@@ -420,19 +498,21 @@ export class EventsAdminController {
    * `INVALID_TRANSITION` from any other origin state or when the room was ever
    * opened. It creates no room record, no presence window and no recording.
    *
-   * **Protocol.** A canonical-UUID `Idempotency-Key` is REQUIRED (014-design
-   * §3.1), over the ONE retained fenced record 012-design §6 owns — the same
-   * `IdempotencyService` 014's recordings surface consumes, not a second
-   * implementation. The order is: auth (guard) → key shape → reserve/replay →
-   * command. The completion is enlisted in the transition's own transaction, so
-   * a fenced-out owner rolls the state change and the audit row back with it,
-   * and a deterministic 409 is fenced-stored so a retry replays that exact
-   * refusal instead of re-deciding it.
+   * **Protocol.** A canonical-UUID `Idempotency-Key` and an `If-Match` are both
+   * REQUIRED (014-design §3.1), over the ONE retained fenced record 012-design
+   * §6 owns — the same `IdempotencyService` 014's recordings surface consumes,
+   * not a second implementation. The order is: auth (guard) → key shape →
+   * `If-Match` presence/shape → reserve/replay → command. The completion is
+   * enlisted in the transition's own transaction, so a fenced-out owner rolls the
+   * state change and the audit row back with it, and a deterministic 409 is
+   * fenced-stored so a retry replays that exact refusal instead of re-deciding it.
    *
-   * `If-Match` is NOT threaded: the `events` aggregate carries no version column
-   * and the 007 admin reads emit no `ETag`, so there is no validator a client
-   * could send. That foundation is tracked at #1593; adding a bespoke one here
-   * would be the per-route drift 014-design §3.1 warns against.
+   * The two headers answer different questions and neither substitutes for the
+   * other: the key makes a RETRY of this exact request safe, the validator makes
+   * the request itself conditional on the revision the operator read. So the raw
+   * `If-Match` joins the fingerprint — the same key replayed against a DIFFERENT
+   * validator is a different bound request (a reuse), not a replay of this one,
+   * exactly as 014's recordings command binds it.
    */
   @Post(":id/mark-ended")
   @HttpCode(200)
@@ -462,21 +542,29 @@ export class EventsAdminController {
     // filter onto a controller whose four live sibling routes answer the other
     // shape — one new route is not a licence to reshape `publish`/`open`/
     // `close`/`archive`.
+    let expectedVersion = 0;
     const outcome = await withProtocolRefusalShape(async () => {
       const key = this.idempotency.requireKey(
         req.headers[IDEMPOTENCY_KEY_HEADER],
       );
+      // #1593 — the key's shape is checked first (it identifies the retry), then
+      // the validator (it conditions the command). Both refusals precede any
+      // record reservation, so a malformed request burns no key.
+      const { raw: rawIfMatch, version } = this.requireIfMatch(req);
+      expectedVersion = version;
       return this.idempotency.begin({
         key,
         scope: "events",
         actorId: actor,
         method: "POST",
         route: "/v1/admin/events/:id/mark-ended",
-        // The command has no body, so the concrete path IS the whole bound
-        // input: the same key against a different event is a reuse, not a replay.
+        // The command has no body, so the concrete path plus the validator IS
+        // the whole bound input: the same key against a different event — or
+        // against a different revision of this one — is a reuse, not a replay.
         fingerprint: this.idempotency.fingerprint({
           method: "POST",
           path: `/v1/admin/events/${id}/mark-ended`,
+          ifMatch: rawIfMatch,
         }),
       });
     });
@@ -486,17 +574,21 @@ export class EventsAdminController {
     }
 
     try {
-      const updated = await this.events.markEnded(id, actor, (tx, detail) =>
-        // The stored bytes ARE the bytes sent: the record is completed with the
-        // very projection this handler returns, inside the transaction that
-        // applies the transition.
-        this.idempotency.complete(tx, outcome.lease, {
-          status: 200,
-          body: detail,
-        }),
+      const updated = await this.events.markEnded(
+        id,
+        actor,
+        (tx, detail) =>
+          // The stored bytes ARE the bytes sent: the record is completed with the
+          // very projection this handler returns, inside the transaction that
+          // applies the transition.
+          this.idempotency.complete(tx, outcome.lease, {
+            status: 200,
+            body: detail,
+          }),
+        expectedVersion,
       );
       if (!updated) throw new NotFoundException("event not found");
-      return updated;
+      return this.withETag(reply, updated);
     } catch (err) {
       throw await this.storeTransitionRefusal(outcome.lease, err);
     }
@@ -559,9 +651,10 @@ export class EventsAdminController {
   async archive(
     @Param("id") id: string,
     @Req() req: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<EventAdminDetail> {
-    return this.namedTransition(id, req, (eventId, actorSub) =>
-      this.events.archive(eventId, actorSub),
+    return this.namedTransition(id, req, reply, (eventId, actorSub, version) =>
+      this.events.archive(eventId, actorSub, version),
     );
   }
 
@@ -571,22 +664,28 @@ export class EventsAdminController {
    * admin `sub` off the request
    * (the 003
    * session hook attaches it; the `AuthzGuard` has already refused any
-   * unauthenticated caller — EARS-8), invoke the service command, map a missing
-   * event to a 404 and the EARS-7 guard's {@link InvalidTransitionError} to a
-   * 409 state conflict (state left untouched, no audit row).
+   * unauthenticated caller — EARS-8), enforce the #1593 `If-Match` precondition,
+   * invoke the service command, map a missing event to a 404 and the EARS-7
+   * guard's {@link InvalidTransitionError} to a 409 state conflict (state left
+   * untouched, no audit row), and stamp the new validator on the response.
    */
   private async namedTransition(
     id: string,
     req: FastifyRequest,
+    reply: FastifyReply,
     run: (
       id: string,
       actorSub: string | null,
+      expectedVersion: number,
     ) => Promise<EventAdminDetail | null>,
   ): Promise<EventAdminDetail> {
+    const { version } = await withProtocolRefusalShape(async () =>
+      this.requireIfMatch(req),
+    );
     try {
-      const updated = await run(id, actorSub(req));
+      const updated = await run(id, actorSub(req), version);
       if (!updated) throw new NotFoundException("event not found");
-      return updated;
+      return this.withETag(reply, updated);
     } catch (err) {
       throw asTransitionRefusal(err);
     }
@@ -617,11 +716,20 @@ export class EventsAdminController {
   async transition(
     @Param("id") id: string,
     @Body() dto: TransitionEventRequestDto,
+    @Req() req: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<EventAdminDetail> {
+    // #1593 — the bare guarded command carries the SAME precondition as the
+    // named ones. Exempting it would leave the closed-set guard reachable by a
+    // caller holding a read of any age, which is exactly the lost update the
+    // named commands now refuse.
+    const { version } = await withProtocolRefusalShape(async () =>
+      this.requireIfMatch(req),
+    );
     try {
-      const updated = await this.events.transition(id, dto.to);
+      const updated = await this.events.transition(id, dto.to, version);
       if (!updated) throw new NotFoundException("event not found");
-      return updated;
+      return this.withETag(reply, updated);
     } catch (err) {
       throw asTransitionRefusal(err);
     }
@@ -680,6 +788,18 @@ function asTransitionRefusal(err: unknown): unknown {
       message: "illegal lifecycle transition",
       from: err.from,
       to: err.to,
+    });
+  }
+  // #1593 — the stale-validator refusal. Emitted from the same one place as the
+  // domain refusals so every command answers the same body for it, and NOT
+  // fenced-stored by `mark-ended`: unlike the two 409s it is not a property of
+  // the bound request against a row state — re-reading and retrying is exactly
+  // what the caller is being told to do, so freezing it into the record would
+  // make the correct next request unanswerable under that key.
+  if (err instanceof EventVersionConflictError) {
+    return new PreconditionFailedException({
+      code: "PRECONDITION_FAILED",
+      message: "the event changed since it was read; reload and retry",
     });
   }
   return err;

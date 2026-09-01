@@ -448,6 +448,18 @@ export const EventAdminDetailSchema = z.object({
   validTransitions: z.array(EventLifecycleStateSchema),
   /** 014 (#1339) — the operator's readiness date, or `null` when unpromised. */
   recordingExpectedBy: z.string().nullable(),
+  /**
+   * #1593 — the aggregate's optimistic-concurrency counter, and the value the
+   * admin read's `ETag` carries as `W/"<version>"` (`taxonomyETag`). It is
+   * on the BODY as well as the header for the same reason the 014 recordings
+   * detail carries it: a client that holds a parsed detail can re-derive the
+   * validator it must send back without having had to retain a transport header
+   * it never modelled. Every committed admin mutation of the aggregate — the six
+   * lifecycle transitions, the authoring `PATCH` and the stream-config `PUT` —
+   * bumps it by one, so a held validator goes stale on ANY change the detail
+   * read would have shown, not merely on a state change.
+   */
+  version: z.number().int(),
   createdAt: z.iso.datetime({ offset: true }),
   updatedAt: z.iso.datetime({ offset: true }),
 });

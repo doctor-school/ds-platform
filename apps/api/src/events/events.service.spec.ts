@@ -46,6 +46,9 @@ function baseEvent(programPdfRef: string | null): Event {
     // live record, so it is `active` with no `deleted_at`.
     recordStatus: "active",
     deletedAt: null,
+    // #1593 — the optimistic-concurrency counter; a fresh fixture is at its
+    // insert default.
+    version: 1,
     createdAt: new Date("2026-07-01T00:00:00.000Z"),
     updatedAt: new Date("2026-07-01T00:00:00.000Z"),
   };

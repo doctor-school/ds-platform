@@ -160,7 +160,15 @@ export class EventsRepository {
     return withRequestAuditContext(this.db, async (tx) => {
       const [row] = await tx
         .update(events)
-        .set({ ...patch, updatedAt: new Date() })
+        .set({
+          ...patch,
+          updatedAt: new Date(),
+          // #1593 — an authoring edit moves the aggregate the admin detail read
+          // projects, so it must invalidate any validator handed out before it.
+          // No CAS clause here: `If-Match` is required on the six LIFECYCLE
+          // commands only, so this write bumps the counter without asserting one.
+          version: sql`${events.version} + 1`,
+        })
         // A retired event is not editable — it resolves to `null` (404) exactly
         // as the reads do (#1278 §3.6 rule 3), never a silent write on a removed
         // aggregate.
@@ -212,8 +220,8 @@ export class EventsRepository {
     input: ConfigureStreamRequest,
   ): Promise<EventWithSpeakers | null> {
     // 010 EARS-3/5 — attribute the stream_config write to the acting admin.
-    await withRequestAuditContext(this.db, (tx) =>
-      tx
+    await withRequestAuditContext(this.db, async (tx) => {
+      await tx
         .insert(streamConfig)
         .values({ eventId, provider: input.provider, embedRef: input.embedRef })
         .onConflictDoUpdate({
@@ -224,8 +232,18 @@ export class EventsRepository {
             recordStatus: "active",
             deletedAt: null,
           },
-        }),
-    );
+        });
+      // #1593 — the stream config is part of the `EventAdminDetail` BODY, so a
+      // config change is a change to the resource the `ETag` validates. Bumping
+      // the event's counter in the SAME transaction is what stops a validator
+      // read before this write from still passing after it; leaving the counter
+      // on the `events` row (rather than versioning the child table) keeps ONE
+      // validator for the one aggregate the admin surface actually addresses.
+      await tx
+        .update(events)
+        .set({ version: sql`${events.version} + 1`, updatedAt: new Date() })
+        .where(and(eq(events.id, eventId), ACTIVE_EVENT));
+    });
     return this.findById(eventId);
   }
 
@@ -463,17 +481,37 @@ export class EventsRepository {
    * EARS-7 guard in `EventsService`) has already validated the move against the
    * closed transition set — this is the bare write. Returns the updated
    * aggregate, or `null` when the id does not exist.
+   *
+   * @param expectedVersion #1593 — when supplied, the write is a COMPARE-AND-SET:
+   * the row moves only while its `version` is still the one the caller read. The
+   * service pre-checks the same value, but only this clause closes the window
+   * between that read and this write, so a concurrent transition cannot be
+   * silently overwritten. Zero rows updated is therefore ambiguous here (gone, or
+   * moved) — the SERVICE disambiguates 404 from 412, not the repository.
    */
   async updateState(
     id: string,
     state: Event["state"],
+    expectedVersion?: number,
   ): Promise<EventWithSpeakers | null> {
     // 010 EARS-3/5 — attribute the bare lifecycle-state write to the acting admin.
     const [row] = await withRequestAuditContext(this.db, (tx) =>
       tx
         .update(events)
-        .set({ state, updatedAt: new Date() })
-        .where(and(eq(events.id, id), ACTIVE_EVENT))
+        .set({
+          state,
+          updatedAt: new Date(),
+          version: sql`${events.version} + 1`,
+        })
+        .where(
+          and(
+            eq(events.id, id),
+            ACTIVE_EVENT,
+            ...(expectedVersion === undefined
+              ? []
+              : [eq(events.version, expectedVersion)]),
+          ),
+        )
         .returning(),
     );
     if (!row) return null;
@@ -510,11 +548,19 @@ export class EventsRepository {
    * owner takes the whole transition down with it, so the record and the domain
    * can never disagree about whether the command applied.
    */
+  /**
+   * @param expectedVersion #1593 — when supplied, the state write is a
+   * COMPARE-AND-SET on the aggregate's `version`, so the transition, its audit
+   * row and the fence all fail together if the row moved since the caller read
+   * it. Zero rows is ambiguous (gone, or moved) and is disambiguated by the
+   * service, not here.
+   */
   async updateStateWithAudit(
     id: string,
     state: Event["state"],
     audit: TransitionAudit,
     fence?: (tx: Tx, result: EventWithSpeakers) => Promise<void>,
+    expectedVersion?: number,
   ): Promise<EventWithSpeakers | null> {
     // 010 EARS-3/EARS-5 — run the state write inside the audit-context wrapper
     // so the generic capture trigger attributes the resulting
@@ -536,8 +582,19 @@ export class EventsRepository {
           ...(state === "live"
             ? { liveAt: sql`coalesce(${events.liveAt}, now())` }
             : {}),
+          // #1593 — the committed transition invalidates every validator issued
+          // before it, inside the very transaction that applies it.
+          version: sql`${events.version} + 1`,
         })
-        .where(and(eq(events.id, id), ACTIVE_EVENT))
+        .where(
+          and(
+            eq(events.id, id),
+            ACTIVE_EVENT,
+            ...(expectedVersion === undefined
+              ? []
+              : [eq(events.version, expectedVersion)]),
+          ),
+        )
         .returning();
       if (!row) return null;
       await tx.insert(auditLedger).values({

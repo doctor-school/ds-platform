@@ -149,17 +149,20 @@ export interface LifecycleErrorOutcome {
 /**
  * Explain and recover from a refused lifecycle command (#1593).
  *
- * A conditional command has two refusal families, and they need different words
- * AND different next steps. An illegal transition (409 `INVALID_TRANSITION`) is
- * a real refusal — the sentence says so, and re-reading the event changes
- * nothing. A precondition refusal (412 `PRECONDITION_FAILED`, 428
- * `PRECONDITION_REQUIRED`) is NOT about the transition: it says the operator's
- * screen is behind the row, and the very same click succeeds once the screen
- * re-reads it. So it gets the shipped `errors.stale` sentence — resolved through
- * the same `taxonomyErrorKey` mapper every other admin surface keys off, not a
- * second copy of the code table — plus `refetch: true`, which reloads the
- * validator so the retry is one click rather than a manual browser reload with
- * the spent validator resent in between (which would loop on 412 forever).
+ * A conditional command has two refusal families, and they need different
+ * words: a precondition refusal (412 `PRECONDITION_FAILED`, 428
+ * `PRECONDITION_REQUIRED`) says the operator's screen is behind the row and
+ * gets the shipped `errors.stale` sentence, while a domain refusal (409
+ * `INVALID_TRANSITION` / `EVENT_NOT_PAST`) keeps its own cause. Both families
+ * refetch: a domain refusal on a held page is very often ALSO a symptom of the
+ * event having moved in another window (publish pressed on an event someone
+ * else already published), so leaving the screen on its stale state after the
+ * refusal strands the operator with wrong status and wrong actions — the owner
+ * hit exactly that dead end at Stage-B (2026-09-01, #1593). Only a refusal the
+ * server never classified (no mapped code — transport failure, unknown shape)
+ * skips the refetch, because there is no evidence the row is readable at all.
+ * Sentences resolve through the same `taxonomyErrorKey` mapper every other
+ * admin surface keys off, not a second copy of the code table.
  */
 export function lifecycleErrorOutcome(error: unknown): LifecycleErrorOutcome {
   const messageKey = taxonomyErrorKey(
@@ -171,7 +174,10 @@ export function lifecycleErrorOutcome(error: unknown): LifecycleErrorOutcome {
   return {
     messageKey,
     refetch:
-      code === "PRECONDITION_FAILED" || code === "PRECONDITION_REQUIRED",
+      code === "PRECONDITION_FAILED" ||
+      code === "PRECONDITION_REQUIRED" ||
+      code === "INVALID_TRANSITION" ||
+      code === "EVENT_NOT_PAST",
   };
 }
 

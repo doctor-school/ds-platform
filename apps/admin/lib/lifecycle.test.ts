@@ -146,11 +146,13 @@ describe("#1593 lifecycle refusal outcome", () => {
     }
   });
 
-  it("EARS-7: an illegal transition keeps the refusal sentence and does NOT refetch", () => {
-    expect(lifecycleErrorOutcome({ errorCode: "INVALID_TRANSITION" })).toEqual({
-      messageKey: "events.errors.transitionRefused",
-      refetch: false,
-    });
+  it("EARS-7: a domain refusal keeps its own sentence AND refetches — the screen may be refusing precisely because the event moved in another window (owner Stage-B finding, 2026-09-01)", () => {
+    for (const errorCode of ["INVALID_TRANSITION", "EVENT_NOT_PAST"]) {
+      expect(lifecycleErrorOutcome({ errorCode })).toEqual({
+        messageKey: "events.errors.transitionRefused",
+        refetch: true,
+      });
+    }
   });
 
   it("EARS-7: an unmapped or bodiless failure stays the generic refusal, no refetch", () => {

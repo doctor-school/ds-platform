@@ -165,4 +165,52 @@ test.describe("#1593 — a stale lifecycle command in the live admin", () => {
     await expect(page.getByTestId("transition-error")).toHaveCount(0);
     await shot(page, "interaction-3-retry-succeeded-desktop-light");
   });
+
+  test("#1593: a domain refusal on a stale screen also re-reads the event, so the page stops lying about the state (owner Stage-B finding)", async ({
+    page,
+    context,
+  }) => {
+    await signInAsAdmin(page);
+    await page.setViewportSize(WIDE);
+
+    const eventId = await createEvent(
+      page,
+      `Конкурентная публикация ${Date.now()}`,
+    );
+
+    // ── Tab A renders the draft and its legal `publish` offer. ─────────────
+    await page.goto(`/events/${eventId}`);
+    await expect(page.getByTestId("action-publish")).toBeVisible();
+
+    // ── Tab B publishes — the state MOVES, not just the version, so tab A's
+    //    held command is now illegal at every version and the domain guard
+    //    (409 INVALID_TRANSITION), which runs before the version check,
+    //    refuses it. This is exactly the two-window sequence the owner drove
+    //    at Stage-B (2026-09-01). ─────────────────────────────────────────────
+    const other = await context.newPage();
+    await other.setViewportSize(WIDE);
+    await other.goto(`/events/${eventId}`);
+    await expect(other.getByTestId("action-publish")).toBeVisible();
+    await other.getByTestId("action-publish").click();
+    await expect(other.getByTestId("state-published")).toBeVisible({
+      timeout: 20_000,
+    });
+    await other.close();
+
+    // ── Tab A fires the held command. The refusal keeps the domain wording —
+    //    the transition IS illegal — but the screen must re-read the event:
+    //    before the fix it kept showing «черновик» with a publish button that
+    //    could never work, a dead end the operator could only F5 out of. ─────
+    await page.getByTestId("action-publish").click();
+
+    const alert = page.getByTestId("transition-error");
+    await expect(alert).toBeVisible({ timeout: 20_000 });
+    await expect(alert).toContainText("Недопустимый переход статуса");
+    // The refetch is the point: the badge now tells the truth…
+    await expect(page.getByTestId("state-published")).toBeVisible({
+      timeout: 20_000,
+    });
+    // …and the impossible offer is gone from the bar.
+    await expect(page.getByTestId("action-publish")).toHaveCount(0);
+  });
 });

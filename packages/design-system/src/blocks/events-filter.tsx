@@ -400,6 +400,9 @@ export function EventsFilter({
   // Which applied chip was just removed; the row re-renders without it, so the
   // focus target is resolved from the NEW row, not from the removed node.
   const chipReturn = React.useRef<number | null>(null);
+  // The reset control lives INSIDE the applied block, so activating it unmounts
+  // the control itself; the focus target is resolved after that render.
+  const resetReturn = React.useRef(false);
   const rank = FILL_RANK[fill];
   const showsFormatTier = rank >= FILL_RANK.intermediate;
   const showsFullTier = rank >= FILL_RANK.full;
@@ -491,9 +494,16 @@ export function EventsFilter({
 
   // Removing an applied chip moves focus along the row (the next chip, else the
   // last one), and when the row itself disappears to the reset control or the
-  // panel region — never to `<body>`.
+  // panel region — never to `<body>`. Reset shares the same contract: it clears
+  // the whole applied block, so the panel region is the only survivor.
   React.useLayoutEffect(() => {
     const index = chipReturn.current;
+    if (resetReturn.current) {
+      resetReturn.current = false;
+      chipReturn.current = null;
+      (resetRef.current ?? panelRef.current)?.focus();
+      return;
+    }
     if (index === null) return;
     chipReturn.current = null;
     const chips = appliedRowRef.current
@@ -910,6 +920,9 @@ export function EventsFilter({
                 resetRef.current = node;
               }}
               href={resetHref}
+              onClick={() => {
+                resetReturn.current = true;
+              }}
               className="self-start text-caption font-semibold text-primary-action underline underline-offset-4"
             >
               {labels.reset}
@@ -920,7 +933,10 @@ export function EventsFilter({
                 resetRef.current = node;
               }}
               type="button"
-              onClick={onReset}
+              onClick={() => {
+                resetReturn.current = true;
+                onReset();
+              }}
               className="self-start text-caption font-semibold text-primary-action underline underline-offset-4"
             >
               {labels.reset}

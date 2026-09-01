@@ -657,4 +657,35 @@ describe("EventsFilter — the sheet is a disclosure and keeps focus (EARS-7)", 
       screen.getByRole("button", { name: `${LABELS.removeFacet}: Казань` }),
     ).toHaveFocus();
   });
+
+  it("EARS-7.9: resetting the whole set lands focus on the panel region, not the document", async () => {
+    const user = userEvent.setup();
+    function Harness() {
+      const [applied, setApplied] = React.useState<AppliedFacets>({
+        ...EMPTY,
+        format: ["webinar"],
+        city: ["kazan"],
+      });
+      return (
+        <EventsFilter
+          fill="full"
+          applied={applied}
+          appliedCount={2}
+          options={OPTIONS}
+          labels={LABELS}
+          onChange={setApplied}
+          onReset={() => setApplied(EMPTY)}
+        />
+      );
+    }
+    render(<Harness />);
+
+    // The reset control unmounts with the applied block it lives in, so the
+    // panel region is the only remaining focus target.
+    await user.click(screen.getByRole("button", { name: LABELS.reset }));
+
+    expect(screen.queryByRole("button", { name: LABELS.reset })).toBeNull();
+    expect(document.activeElement).not.toBe(document.body);
+    expect(screen.getByRole("region", { name: LABELS.panel })).toHaveFocus();
+  });
 });

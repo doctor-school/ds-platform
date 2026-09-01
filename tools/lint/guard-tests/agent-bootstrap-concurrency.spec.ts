@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  compactWorktreeLine,
   encodeProjectSlug,
   isRepoSessionDir,
   isSharedMainTree,
@@ -74,6 +75,46 @@ describe("agent-bootstrap liveParallelSessions()", () => {
     });
     expect(r.total).toBe(2);
     expect(r.inMainTree).toBe(1);
+  });
+
+  it("compacts a normal row to the directory name plus the branch", () => {
+    expect(
+      compactWorktreeLine(
+        "/home/runner/repo/.claude/worktrees/1700 8ea6e79b [tooling/1700-slug]",
+      ),
+    ).toBe("1700 [tooling/1700-slug]");
+  });
+
+  it("normalizes a backslash path and a trailing slash to the leaf name", () => {
+    expect(
+      compactWorktreeLine("C:\\repo\\.claude\\worktrees\\1700\\ abcdef1 [main]"),
+    ).toBe("1700 [main]");
+  });
+
+  it("compacts a (detached HEAD) row, keeping the parenthesized state", () => {
+    expect(compactWorktreeLine("/repo/wt 1234abc (detached HEAD)")).toBe(
+      "wt (detached HEAD)",
+    );
+  });
+
+  // The remaining three rows are UNPARSEABLE by design: the helper's contract is
+  // "never lose information to a formatting helper", so anything the strict
+  // `<path> <sha> <[branch]|(state)>` shape does not cover comes back trimmed but
+  // otherwise untouched — the annotation is preserved, never silently dropped.
+  it("returns a (bare) row untouched — it carries no HEAD sha to strip", () => {
+    expect(compactWorktreeLine("  /repo/bare-source (bare)  ")).toBe(
+      "/repo/bare-source (bare)",
+    );
+  });
+
+  it("returns a prunable row untouched, keeping the annotation visible", () => {
+    const row = "/repo/wt abcd1234 [master] prunable";
+    expect(compactWorktreeLine(row)).toBe(row);
+  });
+
+  it("returns a path containing a space untouched rather than truncating it", () => {
+    const row = "/home/my repo/wt abcd1234 [main]";
+    expect(compactWorktreeLine(row)).toBe(row);
   });
 
   it("an unknown selfId excludes nothing (over-count is safer than hiding)", () => {

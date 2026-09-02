@@ -72,9 +72,10 @@ function note(source: string, err: unknown): void {
  * Roadmap-hygiene warnings (#1729): sweep the Projects v2 board with the single
  * sanctioned paginated GraphQL scan (#984 — never `gh project item-list`) and
  * classify every OPEN Issue row against the spec §7.1 taxonomy. Bootstrap is
- * FACTS-ONLY (#1700), so each deviation lands as one `## Warnings` row with no
- * recommendation prose. Never throws: a scan failure degrades to a single
- * warning, so SessionStart still exits 0.
+ * FACTS-ONLY (#1700) and runs on EVERY SessionStart, so the findings are rolled
+ * up to ONE `## Warnings` row per rule carrying the count only — the per-Issue
+ * list lives in `pnpm backlog:triage`. Never throws: a scan failure degrades to
+ * a single warning, so SessionStart still exits 0.
  */
 async function roadmapHygieneRows(): Promise<Warn[]> {
   try {

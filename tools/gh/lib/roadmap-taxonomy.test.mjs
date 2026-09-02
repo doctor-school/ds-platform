@@ -283,11 +283,21 @@ test("formatRoadmapHygiene is silent when clean and headed with the count", () =
   assert.match(out, /- #7: no parent/);
 });
 
-test("roadmapHygieneWarnings renders facts-only bootstrap rows", () => {
-  assert.deepEqual(
-    roadmapHygieneWarnings([{ number: 7, rule: "ears-no-parent", message: "no parent" }]),
-    [{ source: "roadmap hygiene #7", message: "no parent" }],
+test("roadmapHygieneWarnings rolls up to ONE facts-only row per rule", () => {
+  const rows = roadmapHygieneWarnings([
+    { number: 7, rule: "ears-no-parent", message: "no parent" },
+    { number: 8, rule: "parent-milestone", message: "mismatch" },
+    { number: 9, rule: "parent-milestone", message: "mismatch" },
+  ]);
+  assert.equal(rows.length, 2);
+  assert.deepEqual(new Set(rows.map((r) => r.source)), new Set(["roadmap hygiene"]));
+  assert.match(
+    rows.find((r) => r.message.startsWith("parent-milestone")).message,
+    /child milestone ≠ parent milestone ×2 — see `pnpm backlog:triage`/,
   );
+  assert.match(rows.find((r) => r.message.startsWith("ears-no-parent")).message, /×1/);
+  // No Issue number leaks into the SessionStart block — that list is triage's.
+  for (const r of rows) assert.doesNotMatch(r.message, /#\d/);
   assert.deepEqual(roadmapHygieneWarnings([]), []);
 });
 

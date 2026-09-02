@@ -258,16 +258,22 @@ export function formatRoadmapHygiene(findings) {
 }
 
 /**
- * The same findings as `{source, message}` warning rows, for the FACTS-ONLY
- * bootstrap `## Warnings` block (#1700 — no recommendation prose).
+ * The findings ROLLED UP to ONE row per rule, for the FACTS-ONLY bootstrap
+ * `## Warnings` block (#1700 — no recommendation prose). Bootstrap runs on every
+ * SessionStart, so the per-Issue list would be a standing context tax: the four
+ * counts belong here, the Issue numbers belong to `pnpm backlog:triage`
+ * (`formatRoadmapHygiene`). Silent when the board is clean.
  * @param {RoadmapFinding[]} findings
  * @returns {Array<{source:string, message:string}>}
  */
 export function roadmapHygieneWarnings(findings) {
-  return (Array.isArray(findings) ? findings : []).map((f) => ({
-    source: `roadmap hygiene #${f.number}`,
-    message: f.message,
-  }));
+  const counts = roadmapRuleCounts(findings);
+  return Object.entries(counts)
+    .filter(([, n]) => n > 0)
+    .map(([rule, n]) => ({
+      source: "roadmap hygiene",
+      message: `${rule}: ${ROADMAP_RULES[rule]} ×${n} — see \`pnpm backlog:triage\``,
+    }));
 }
 
 /**

@@ -9,6 +9,8 @@ mode: inline
 
 Produce one copy-pasteable handoff for a fresh DS Platform agent. Do not ask clarifying questions. Inspect the session and live tracker state yourself.
 
+**Scope: this skill alone (#1746).** A handoff request never implies `/wrap` — no retro dispatch, no instruction/memory edits, no DEBT lines; emit the prompt and stop. `/wrap` is typed by the owner only.
+
 ## Gather
 
 - Current task: active owner goal and canonical tracker id; verify live tracker state before claiming status.

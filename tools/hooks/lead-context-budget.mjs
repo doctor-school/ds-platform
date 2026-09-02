@@ -85,7 +85,7 @@ export function softMessage(contextTokens) {
   const soft = Math.round(SOFT_THRESHOLD / 1000);
   return (
     `⚠ Контекст лида ≈${k}K ≥ ${soft}K — текущую волну довести, новую НЕ ` +
-    `начинать; волна легла → /wrap + handoff.`
+    `начинать; волна легла → handoff (skill handoff-prompt); /wrap — только по команде владельца.`
   );
 }
 
@@ -94,8 +94,9 @@ export function hardMessage(contextTokens) {
   const hard = Math.round(HARD_THRESHOLD / 1000);
   return (
     `⛔ Контекст лида ≈${k}K ≥ ${hard}K — новый диспатч заблокирован. Прими ` +
-    `результаты уже запущенных агентов, доведи хвосты PR руками → /wrap + ` +
-    `handoff; продолжение — в новой сессии. Override — только по явному ` +
+    `результаты уже запущенных агентов, доведи хвосты PR руками → handoff ` +
+    `(skill handoff-prompt; /wrap — только владелец); продолжение — в новой ` +
+    `сессии. Override — только по явному ` +
     `указанию владельца: файл ${OVERRIDE_REL}.`
   );
 }

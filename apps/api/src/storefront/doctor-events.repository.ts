@@ -78,14 +78,15 @@ export class DoctorEventsRepository {
       .where(and(...restriction));
   }
 
-  async findFeedRows(filters: DoctorFeedFilters): Promise<DoctorFeedRow[]> {
-    // A targeted read that reaches no direction has no events, full stop. Asking
-    // Postgres for `direction_id IN ()` would be the same answer through a
-    // pointless round trip.
-    if (filters.directionIds !== null && filters.directionIds.length === 0) {
-      return [];
-    }
-
+  /**
+   * The ONE selection predicate of the Doctor feed — eligibility window,
+   * targeting, `kind` and `q` — shared by {@link findFeedRows} and
+   * {@link findFirstFeedStartAfter}. It is a single builder rather than two
+   * copies on purpose: «показать ещё» may only be offered for events the very
+   * same predicate would then list, so a divergence here would re-open #1803
+   * (a control leading into an empty widening).
+   */
+  private feedWhere(filters: DoctorFeedFilters) {
     const where = [
       eq(events.recordStatus, "active"),
       inArray(events.state, [...MONTH_BROADCAST_STATES]),
@@ -113,6 +114,19 @@ export class DoctorEventsRepository {
       if (match) where.push(match);
     }
 
+    return where;
+  }
+
+  async findFeedRows(filters: DoctorFeedFilters): Promise<DoctorFeedRow[]> {
+    // A targeted read that reaches no direction has no events, full stop. Asking
+    // Postgres for `direction_id IN ()` would be the same answer through a
+    // pointless round trip.
+    if (filters.directionIds !== null && filters.directionIds.length === 0) {
+      return [];
+    }
+
+    const where = this.feedWhere(filters);
+
     const rows = await this.db
       .select({
         id: events.id,
@@ -128,6 +142,33 @@ export class DoctorEventsRepository {
       .orderBy(asc(events.startsAt), asc(events.id));
 
     return rows as DoctorFeedRow[];
+  }
+
+  /**
+   * The earliest start of a feed-eligible event inside `[fromInstant,
+   * toInstant)` under the SAME predicate {@link findFeedRows} applies — the
+   * question «is there anything at all past the rendered horizon?» (019 LD-2,
+   * #1803). `null` means the horizon may not be widened, because widening it
+   * would reveal nothing.
+   */
+  async findFirstFeedStartAfter(
+    filters: DoctorFeedFilters,
+  ): Promise<Date | null> {
+    if (filters.directionIds !== null && filters.directionIds.length === 0) {
+      return null;
+    }
+    if (filters.fromInstant.getTime() >= filters.toInstant.getTime()) {
+      return null;
+    }
+
+    const rows = await this.db
+      .select({ startsAt: events.startsAt })
+      .from(events)
+      .where(and(...this.feedWhere(filters)))
+      .orderBy(asc(events.startsAt))
+      .limit(1);
+
+    return rows[0]?.startsAt ?? null;
   }
 
   /** The lead speaker of each event, by the authored ordering (007 LD-1). */

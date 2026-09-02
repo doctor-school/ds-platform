@@ -129,3 +129,10 @@ tools/lint/guard-tests/fixtures/
 # API cost, not the coverage. Every link to anywhere else — in CHANGELOG.md files
 # included — is still checked. Tracked in DEBT.md.
 ^https://github\.com/doctor-school/ds-platform($|/.*$)
+
+# GOV.UK Ministry of Justice design-patterns site: since 2026-09 the host
+# answers 401 Unauthorized to unauthenticated clients (lychee included),
+# although the page opens in a browser. The citation in
+# apps/docs/content/design/constitution.md (filter-a-list pattern) stays
+# inline as a historical reference; verified manually, not by CI.
+^https://design-patterns\.service\.justice\.gov\.uk($|/.*$)

@@ -268,8 +268,10 @@ services:
       # `Errors.NotificationProvider.Blocked.Endpoint` (proven on CI's identical
       # recipe, #1595; the stand only still works on an older cached `latest`).
       # The compose network IS the route to them; the entries that still carry
-      # weight — the cloud-metadata endpoint and its IPv6 twin — are kept.
-      ZITADEL_HTTPCLIENT_DENYLIST: "169.254.0.0/16,fe80::/10"
+      # weight are kept — the cloud-metadata endpoint (169.254.169.254), IPv6
+      # link-local (fe80::/10) and the IPv6 unique-local range fc00::/7, which
+      # holds the IPv6 metadata address (fd00:ec2::254).
+      ZITADEL_HTTPCLIENT_DENYLIST: "169.254.0.0/16,fe80::/10,fc00::/7"
       ZITADEL_DATABASE_POSTGRES_HOST: postgres
       ZITADEL_DATABASE_POSTGRES_PORT: 5432
       ZITADEL_DATABASE_POSTGRES_DATABASE: zitadel

@@ -12,12 +12,16 @@
  *
  *  1. every variable in `REQUIRED_ENV` is present and non-empty — the direct
  *     inverse of the #1595 root cause;
- *  2. no test in an `apps/api/test` e2e spec was skipped, UNLESS the suite's own
- *     `skipIf` condition is gated on a service this CI tier deliberately does
- *     not provision (`UNPROVISIONED_ENV`) and that variable is in fact unset.
- *     The exemption is read from the spec's own skip condition, not from a
- *     hand-maintained file list, so a new IDP- or DATABASE-gated skip can never
- *     inherit someone else's exemption.
+ *  2. no test in an `apps/api/test` e2e spec was skipped, UNLESS the `skipIf`
+ *     conditions guarding THAT TEST are gated on a service this CI tier
+ *     deliberately does not provision (`UNPROVISIONED_ENV`) and that variable is
+ *     in fact unset. The exemption is read from the spec's own skip conditions,
+ *     not from a hand-maintained file list, and it is scoped to the individual
+ *     test — each skipped test is attributed to its own `it.skipIf` plus the
+ *     `describe.skipIf` blocks enclosing it. A file that mixes gates (the common
+ *     shape here: a file-level `!DATABASE_URL || !IDP_ISSUER` describe with an
+ *     inner `it.skipIf(!CENTRIFUGO_URL)`) therefore cannot let the inner
+ *     unprovisioned gate excuse an IDP- or DATABASE-gated skip.
  *
  * Input: the JSON emitted by `vitest --reporter=json --outputFile=<file>`.
  * Usage: `pnpm ci:assert-e2e-ran <report.json>`.
@@ -77,12 +81,84 @@ export function toRepoRelative(reported: string, repoRoot: string): string {
 }
 
 /**
- * Environment variables a spec's `skipIf` conditions depend on. Conditions are
- * read from the source rather than guessed: direct `process.env.NAME` reads
- * plus module-level `const NAME = …process.env.X…` aliases (the `LIVE_IDP` /
- * `CENTRIFUGO_URL` shape several suites use) resolved one level deep.
+ * A `describe`/`it`/`test` call in a spec source: its title (when it is a plain
+ * string literal), the env names its OWN `skipIf` condition reads, and its source
+ * range so enclosing blocks can be recovered by containment.
  */
-export function skipConditionEnv(source: string): Set<string> {
+export interface SkipBlock {
+  readonly kind: "suite" | "test";
+  readonly title: string | undefined;
+  readonly env: readonly string[];
+  readonly start: number;
+  readonly end: number;
+}
+
+/** Index of the closing quote of the string literal opening at `start`. */
+function endOfString(source: string, start: number): number {
+  const quote = source[start];
+  for (let i = start + 1; i < source.length; i += 1) {
+    const c = source[i];
+    if (c === "\\") {
+      i += 1;
+      continue;
+    }
+    if (quote === "`" && c === "$" && source[i + 1] === "{") {
+      let depth = 0;
+      let j = i + 1;
+      for (; j < source.length; j += 1) {
+        const d = source[j];
+        if (d === '"' || d === "'" || d === "`") {
+          j = endOfString(source, j);
+          continue;
+        }
+        if (d === "{") depth += 1;
+        else if (d === "}") {
+          depth -= 1;
+          if (depth === 0) break;
+        }
+      }
+      i = j;
+      continue;
+    }
+    if (c === quote) return i;
+  }
+  return source.length - 1;
+}
+
+/** Index just past the `)` matching the `(` at `open` (strings/comments aware). */
+function endOfCall(source: string, open: number): number {
+  let depth = 0;
+  for (let i = open; i < source.length; i += 1) {
+    const c = source[i];
+    if (c === "/" && source[i + 1] === "/") {
+      const nl = source.indexOf("\n", i);
+      if (nl < 0) return source.length;
+      i = nl;
+      continue;
+    }
+    if (c === "/" && source[i + 1] === "*") {
+      const close = source.indexOf("*/", i + 2);
+      i = close < 0 ? source.length : close + 1;
+      continue;
+    }
+    if (c === '"' || c === "'" || c === "`") {
+      i = endOfString(source, i);
+      continue;
+    }
+    if (c === "(") depth += 1;
+    else if (c === ")") {
+      depth -= 1;
+      if (depth === 0) return i + 1;
+    }
+  }
+  return source.length;
+}
+
+/**
+ * Module-level `const NAME = …process.env.X…` aliases, resolved one level deep —
+ * the `LIVE_IDP` / `CENTRIFUGO_URL` shape several suites use.
+ */
+function envAliases(source: string): Map<string, string[]> {
   const aliases = new Map<string, string[]>();
   const aliasRe = /const\s+([A-Za-z_$][\w$]*)\s*=\s*([\s\S]*?);/g;
   for (const match of source.matchAll(aliasRe)) {
@@ -91,19 +167,133 @@ export function skipConditionEnv(source: string): Set<string> {
     );
     if (names.length > 0) aliases.set(match[1], names);
   }
+  return aliases;
+}
 
+function envNamesIn(
+  condition: string,
+  aliases: Map<string, string[]>,
+): string[] {
   const found = new Set<string>();
-  const skipRe = /(?:describe|it|test)\.skipIf\(([\s\S]*?)\)\s*\(/g;
-  for (const match of source.matchAll(skipRe)) {
-    const condition = match[1];
-    for (const m of condition.matchAll(/process\.env\.([A-Z0-9_]+)/g)) {
-      found.add(m[1]);
+  for (const m of condition.matchAll(/process\.env\.([A-Z0-9_]+)/g)) {
+    found.add(m[1]);
+  }
+  for (const m of condition.matchAll(/\b([A-Za-z_$][\w$]*)\b/g)) {
+    for (const name of aliases.get(m[1]) ?? []) found.add(name);
+  }
+  return [...found];
+}
+
+/** Leading string-literal argument of a call, when it is a plain literal. */
+function titleOf(args: string): string | undefined {
+  const match = /^\s*(["'])((?:\\.|(?!\1).)*)\1/.exec(args);
+  return match?.[2];
+}
+
+const CALL_RE = /\b(describe|it|test)((?:\.[A-Za-z]+)*)\s*\(/g;
+/** Modifiers that take their own call before the title arguments. */
+const CALLABLE_MODIFIERS = new Set(["skipIf", "runIf", "each", "for"]);
+
+/**
+ * Every `describe`/`it`/`test` call in a spec, with the env its own `skipIf`
+ * reads. Blocks nest by source containment, so a test's full gate is its own env
+ * plus that of every block whose range encloses it.
+ */
+export function parseSkipBlocks(source: string): SkipBlock[] {
+  const aliases = envAliases(source);
+  const blocks: SkipBlock[] = [];
+  for (const match of source.matchAll(CALL_RE)) {
+    const start = match.index ?? 0;
+    const modifiers = (match[2] ?? "").split(".").filter(Boolean);
+    const env: string[] = [];
+    let cursor = start + match[0].length - 1;
+    let last = modifiers.at(-1);
+    let hops = 0;
+    while (last !== undefined && CALLABLE_MODIFIERS.has(last) && hops++ < 4) {
+      const close = endOfCall(source, cursor);
+      if (last === "skipIf" || last === "runIf") {
+        env.push(...envNamesIn(source.slice(cursor + 1, close - 1), aliases));
+      }
+      const rest = source.slice(close);
+      const chained = /^\s*((?:\.[A-Za-z]+)+)\s*\(/.exec(rest);
+      if (chained) {
+        last = (chained[1] ?? "").split(".").filter(Boolean).at(-1);
+        cursor = close + chained[0].length - 1;
+        continue;
+      }
+      const args = /^\s*\(/.exec(rest);
+      if (!args) {
+        cursor = -1;
+        break;
+      }
+      cursor = close + args[0].length - 1;
+      break;
     }
-    for (const m of condition.matchAll(/\b([A-Za-z_$][\w$]*)\b/g)) {
-      for (const name of aliases.get(m[1]) ?? []) found.add(name);
+    if (cursor < 0) continue;
+    const end = endOfCall(source, cursor);
+    blocks.push({
+      kind: match[1] === "describe" ? "suite" : "test",
+      title: titleOf(source.slice(cursor + 1, end - 1)),
+      env,
+      start,
+      end,
+    });
+  }
+  return blocks;
+}
+
+/** A block's own env plus that of every block enclosing it. */
+function resolvedGate(
+  blocks: readonly SkipBlock[],
+  block: SkipBlock,
+): string[] {
+  const gate = new Set(block.env);
+  for (const other of blocks) {
+    if (other === block) continue;
+    if (other.start < block.start && other.end >= block.end) {
+      for (const name of other.env) gate.add(name);
     }
   }
-  return found;
+  return [...gate];
+}
+
+/**
+ * Gate candidates for one skipped test — each an independent env set that could
+ * explain the skip. A test whose title matches exactly one `it`/`test` in the
+ * source is attributed to THAT block's gate (its own `skipIf` plus every
+ * enclosing one). A test that cannot be attributed — a dynamic/`each` title, an
+ * ambiguous one, a report entry with no matching declaration — falls back to the
+ * FILE-LEVEL gates alone, so an inner `it.skipIf` is never credited for it.
+ */
+export function gateCandidates(
+  blocks: readonly SkipBlock[],
+  title: string | undefined,
+): string[][] {
+  const matches = blocks.filter(
+    (b) => b.kind === "test" && title !== undefined && b.title === title,
+  );
+  if (matches.length === 1) return [resolvedGate(blocks, matches[0])];
+  const topLevel = blocks.filter(
+    (b) => !blocks.some((o) => o !== b && o.start < b.start && o.end >= b.end),
+  );
+  return topLevel.length > 0 ? topLevel.map((b) => [...b.env]) : [[]];
+}
+
+/**
+ * A skip is excused only when EVERY gate that could explain it names an
+ * unprovisioned service whose variable is in fact unset. One candidate that does
+ * not is enough to fail the guard — the exemption is never file-wide.
+ */
+export function isExemptSkip(
+  candidates: readonly string[][],
+  env: Record<string, string | undefined>,
+): boolean {
+  return (
+    candidates.length > 0 &&
+    candidates.every((gate) =>
+      UNPROVISIONED_ENV.some((name) => gate.includes(name) && !env[name]),
+    )
+  );
 }
 
 export interface EvaluateInput {
@@ -158,16 +348,16 @@ export function evaluate({
       );
       continue;
     }
-    const conditionEnv = skipConditionEnv(source);
-    const exempt = UNPROVISIONED_ENV.some(
-      (name) => conditionEnv.has(name) && !env[name],
+    const blocks = parseSkipBlocks(source);
+    const unexplained = skippedHere.filter(
+      (a) => !isExemptSkip(gateCandidates(blocks, a.title), env),
     );
-    if (!exempt) {
-      const names = skippedHere
+    if (unexplained.length > 0) {
+      const names = unexplained
         .map((a) => a.fullName ?? a.title ?? "<unnamed test>")
         .slice(0, 5);
       failures.push(
-        `${relative}: ${skippedHere.length} skipped test(s) with no unprovisioned-service gate — ` +
+        `${relative}: ${unexplained.length} skipped test(s) with no unprovisioned-service gate — ` +
           `the suite silently did not run: ${names.join(" | ")}`,
       );
     }

@@ -397,10 +397,13 @@ jobs:
           # 33603331092 / 33608916464 / 33610421640). The sink, the IdP and the
           # suite are all processes on one ephemeral runner, so the private
           # ranges are the only route between them; the entries that still carry
-          # weight here — the cloud-metadata endpoint (169.254.169.254, inside
-          # 169.254.0.0/16) and its IPv6 twin — are kept.
+          # weight here are kept — the cloud-metadata endpoint (169.254.169.254,
+          # inside 169.254.0.0/16), IPv6 link-local (fe80::/10) and the IPv6
+          # unique-local range fc00::/7, which holds the IPv6 metadata address
+          # (fd00:ec2::254). Both sinks are reached over IPv4 loopback, so
+          # keeping fc00::/7 denied costs this job nothing.
           docker run -d --name ds-idp --network host \
-            -e ZITADEL_HTTPCLIENT_DENYLIST=169.254.0.0/16,fe80::/10 \
+            -e ZITADEL_HTTPCLIENT_DENYLIST=169.254.0.0/16,fe80::/10,fc00::/7 \
             -v "$RUNNER_TEMP/idp-pat":/pat \
             -e ZITADEL_MASTERKEY=MasterkeyNeedsToHave32Characters \
             -e ZITADEL_EXTERNALSECURE=false \

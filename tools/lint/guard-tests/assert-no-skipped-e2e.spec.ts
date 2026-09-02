@@ -70,6 +70,25 @@ describe("assert-no-skipped-e2e", () => {
     expect(result.stderr).toContain("apps/api/test/room/chat.e2e-spec.ts");
   });
 
+  it("fails on an IDP-gated skip in a file that ALSO carries an unprovisioned gate", () => {
+    const result = run("mixed-gate-file");
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("apps/api/test/me/display-name.e2e-spec.ts");
+    // Only the outer, IDP-gated test is unexplained: the inner Centrifugo-gated
+    // one is exempt, and the exemption does not spread to the rest of the file.
+    expect(result.stderr).toContain("1 skipped test(s)");
+    expect(result.stderr).toContain(
+      "EARS-14: a gated doctor sets their display name",
+    );
+    expect(result.stderr).not.toContain("EARS-16");
+  });
+
+  it("still exempts the inner unprovisioned-gated test in that same file", () => {
+    const result = run("mixed-gate-inner-skip");
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain("assert-no-skipped-e2e: OK");
+  });
+
   it("fails loudly when a required variable is missing", () => {
     const result = run("all-ran", { IDP_SERVICE_TOKEN: "" });
     expect(result.code).toBe(1);

@@ -63,8 +63,13 @@ the vitest JSON report and fails the job when a required `IDP_*`/`DATABASE_URL`
 variable is missing, when no api e2e test executed at all, or when an e2e test
 skipped for any reason other than a service this tier deliberately does not
 provision (object storage, Centrifugo, the mail/SMS sinks) — the exemption is
-read from the suite's own `skipIf` condition, never from a file allowlist. So a
-future missing variable can no longer skip its way to a green gate.
+read from the spec's own `skipIf` conditions, never from a file allowlist, and it
+is scoped to the individual TEST: each skipped test is attributed to its own
+`it.skipIf` plus the `describe.skipIf` blocks enclosing it. A mixed-gate file —
+the common shape here, a file-level `!DATABASE_URL || !IDP_ISSUER` describe with
+an inner `it.skipIf(!CENTRIFUGO_URL)` — therefore cannot let the inner
+unprovisioned gate excuse the outer, IDP-gated tests. So a future missing
+variable can no longer skip its way to a green gate.
 
 API generation builds the production compiler output, creates the same full
 Fastify `AppModule` configured by `api-application.ts`, and scans it without

@@ -24,6 +24,12 @@
  *   days       = ceil(remaining × WINDOW_DAYS / throughput)     [calendar days]
  *   Target     = today + days
  *
+ * `remaining` is counted PER MILESTONE, not per feature, and the one resulting
+ * date is stamped on every date-carrying Issue of the milestone: the release-
+ * train reading — a release ships as one train, so every feature in it ends on
+ * release day. The alternative (each feature dated by its own EARS sub-issues)
+ * was NOT chosen; changing that is a spec §7.1 Forecast-rule change first.
+ *
  * Throughput 0, or a milestone with no EARS children at all (e.g. «Академия R2»
  * until its epic is decomposed) → the Target is UNDEFINED: nothing is written
  * and the comment says so. We never divide by zero into a date.
@@ -47,6 +53,7 @@
  */
 
 import { spawnSync } from "node:child_process";
+import { pathToFileURL } from "node:url";
 
 import {
   OWNER,
@@ -67,6 +74,10 @@ import {
 } from "./lib/roadmap-taxonomy.mjs";
 
 const GH_MAX_BUFFER = 64 * 1024 * 1024;
+
+/** `gh issue list --limit`. A silent undercount would SHORTEN a forecast rather
+ *  than fail it, so every call site WARNs when it comes back at the cap. */
+const LIST_LIMIT = 300;
 
 /** The trailing throughput window, in days (spec §7.1: «trailing 4 weeks»). */
 export const WINDOW_DAYS = 28;
@@ -298,6 +309,13 @@ function warn(msg) {
   console.error(`[roadmap:forecast] WARN: ${msg}`);
 }
 
+/** WARN when a `gh issue list` came back exactly at the cap — past it the count
+ *  is silently short and the forecast date would be silently early. */
+function atCapWarn(count, what) {
+  if (count >= LIST_LIMIT)
+    warn(`${what}: ${count} rows === the --limit ${LIST_LIMIT} cap — the count may be short`);
+}
+
 /** Run `gh` with an explicit argv array; die on failure. */
 function gh(args, { json = true } = {}) {
   const res = spawnSync("gh", args, { encoding: "utf8", maxBuffer: GH_MAX_BUFFER });
@@ -330,7 +348,7 @@ function openMilestones() {
 
 /** Open Issues of a milestone, with the fields the taxonomy + override need. */
 function milestoneIssues(milestoneTitle) {
-  return gh([
+  const rows = gh([
     "issue",
     "list",
     "--state",
@@ -338,10 +356,12 @@ function milestoneIssues(milestoneTitle) {
     "--milestone",
     milestoneTitle,
     "--limit",
-    "300",
+    String(LIST_LIMIT),
     "--json",
     "number,title,body,labels",
-  ]).map((i) => ({
+  ]);
+  atCapWarn(rows.length, `open Issues of «${milestoneTitle}»`);
+  return rows.map((i) => ({
     number: i.number,
     title: i.title,
     body: i.body ?? "",
@@ -351,7 +371,7 @@ function milestoneIssues(milestoneTitle) {
 
 /** Count of open `kind:ears-handler` Issues in the milestone. */
 function openEarsCount(milestoneTitle) {
-  return gh([
+  const rows = gh([
     "issue",
     "list",
     "--state",
@@ -361,10 +381,12 @@ function openEarsCount(milestoneTitle) {
     "--milestone",
     milestoneTitle,
     "--limit",
-    "300",
+    String(LIST_LIMIT),
     "--json",
     "number",
-  ]).length;
+  ]);
+  atCapWarn(rows.length, `open EARS of «${milestoneTitle}»`);
+  return rows.length;
 }
 
 /** Closed `kind:ears-handler` Issues of a track inside the window. */
@@ -381,10 +403,11 @@ function trackThroughput(track, window) {
     "--search",
     `closed:>=${window.since}`,
     "--limit",
-    "300",
+    String(LIST_LIMIT),
     "--json",
     "number,closedAt",
   ]);
+  atCapWarn(rows.length, `closed EARS of ${track}`);
   return rows.filter((r) => inWindow(r.closedAt, window)).length;
 }
 
@@ -509,5 +532,4 @@ function main() {
   }
 }
 
-const invokedDirectly = process.argv[1] && process.argv[1].endsWith("roadmap-forecast.mjs");
-if (invokedDirectly) main();
+if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) main();

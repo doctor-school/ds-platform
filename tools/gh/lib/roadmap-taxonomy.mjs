@@ -153,7 +153,7 @@ export const ROADMAP_RULES = Object.freeze({
   "parent-milestone": "child milestone ≠ parent milestone",
   "missing-dates": "feature-level Issue without Start/Target date",
   "ears-no-parent": "`kind:ears-handler` without a parent",
-  "track-milestone": "track label names a different track than the milestone",
+  "track-milestone": "product-track label names a different track than the milestone",
 });
 
 /**
@@ -208,10 +208,16 @@ export function roadmapFindingsFor(row) {
       message: `\`${EARS_KIND_LABEL}\` with no parent feature Issue`,
     });
 
-  // (d) The track label and the track release milestone must agree.
+  // (d) A track label must not name the OTHER product track than its release
+  //     milestone. `track:platform` is deliberately exempt: spec §7.1's
+  //     Platform-task row and `.claude/rules/repo-conventions.md` (Issue
+  //     conventions) both say platform work takes the milestone of the release
+  //     it `blocked_by`-blocks, so `track:platform` on «Академия R1 …» is the
+  //     documented shape, not a defect. Only academy ↔ Витрина / doctor ↔
+  //     Академия cross-homing is a violation.
   const msTrack = milestoneTrack(milestone);
   if (msTrack) {
-    const trackLabels = labels.filter((l) => l.startsWith("track:"));
+    const trackLabels = labels.filter((l) => l in TRACK_MILESTONE_PREFIXES);
     for (const label of trackLabels) {
       if (label !== msTrack)
         findings.push({

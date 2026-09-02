@@ -193,8 +193,7 @@ test("rule (d) fires when the track label names the other track", () => {
     targetDate: null,
   });
   assert.equal(crossed.filter((f) => f.rule === "track-milestone").length, 1);
-  // Agreement is silent; `track:platform` on a track milestone is still a
-  // mismatch (a track release is track-owned work).
+  // Agreement is silent.
   assert.deepEqual(
     roadmapFindingsFor({
       number: 41,
@@ -207,7 +206,11 @@ test("rule (d) fires when the track label names the other track", () => {
     }),
     [],
   );
-  assert.equal(
+  // `track:platform` on a track release is the DOCUMENTED shape — platform work
+  // takes the milestone of the release it `blocked_by`-blocks (spec §7.1
+  // Platform-task row; `.claude/rules/repo-conventions.md` → Issue conventions).
+  // Rule (d) is about the two PRODUCT tracks cross-homing, nothing else.
+  assert.deepEqual(
     roadmapFindingsFor({
       number: 42,
       title: "x",
@@ -216,8 +219,8 @@ test("rule (d) fires when the track label names the other track", () => {
       parent: null,
       startDate: null,
       targetDate: null,
-    }).filter((f) => f.rule === "track-milestone").length,
-    1,
+    }).filter((f) => f.rule === "track-milestone"),
+    [],
   );
   // The fallback milestone belongs to no track — never flagged.
   assert.deepEqual(

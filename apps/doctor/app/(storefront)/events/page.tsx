@@ -8,6 +8,7 @@ import {
 import { fetchDoctorEventsFeed, showMoreHref } from "@/lib/events-feed";
 import { toDoctorEventsMonthPane } from "@/lib/events-month-grid";
 import { fetchDoctorEventsMonthGrid } from "@/lib/events-month";
+import { DoctorEventsDayAnchorScroll } from "./day-anchor-scroll";
 import { DoctorEventsMonthPaneView } from "./month-pane";
 
 /**
@@ -29,13 +30,22 @@ import { DoctorEventsMonthPaneView } from "./month-pane";
  * a LINK that widens `to=`, so the extended range is shareable and the back
  * button walks the feed's own states (EARS-8, LD-2).
  *
- * 019 EARS-4 (#1519) adds the SECOND half of F-019-2 Б: the month calendar
- * stands BESIDE the day feed at the desktop breakpoint, acting as navigation
- * over the SAME targeted read. The two reads are issued in parallel and decode
- * their facets with one codec, so the grid's day counts are the feed's own
- * day-group sizes. No «Неделя / Месяц» switch is rendered — under Б there is no
- * one-view-at-a-time control to build. The month read is deliberately
+ * 019 EARS-4 (#1519) adds the SECOND half of F-019-2 Б: the month calendar and
+ * the day feed are on screen AT ONCE at the desktop breakpoint, the calendar
+ * acting as navigation over the SAME targeted read. Its placement is the
+ * canvas's, not an invention: `design-source/doctor-events.dc.html`
+ * (`miniMonthOn`) puts the mini-month as a full-width band at the top of the
+ * content column, above the day feed. The two reads are issued in parallel and
+ * decode their facets with one codec, so the grid's day counts are the feed's
+ * own day-group sizes. No «Неделя / Месяц» switch is rendered — under Б there
+ * is no one-view-at-a-time control to build. The month read is deliberately
  * non-fatal: an unavailable month drops the navigation pane, never the body.
+ *
+ * Selecting a day MOVES the body, it does not narrow it: `day` is URL state the
+ * read contract ignores by design (LD-1), and `DoctorEventsDayAnchorScroll`
+ * scrolls the feed to that day's `day-<ISO>` group. A day past the current
+ * horizon widens `to=` through the same codec «показать ещё» uses, so the day
+ * is inside the read the body scrolls to.
  *
  * Scope: the rest of the canvas composition of this screen — 017's shell
  * breadcrumbs, the facet sidebar and the «Идёт сейчас» block — belongs to
@@ -72,12 +82,15 @@ export default async function DoctorEventsPage({
 
   const { feed } = result;
   const moreHref = showMoreHref(raw, feed);
-  const pane = month.ok ? toDoctorEventsMonthPane(month.grid, raw) : null;
+  // The calendar's day links widen the horizon against the SERVED window, so
+  // the projection is handed the feed's own `from`/`to` (EARS-4 + LD-2).
+  const pane = month.ok
+    ? toDoctorEventsMonthPane(month.grid, raw, { from: feed.from, to: feed.to })
+    : null;
 
   return (
-    <div className="mx-auto w-full max-w-7xl px-4 py-10 lg:flex lg:items-start lg:gap-8">
     <section
-      className="w-full min-w-0 lg:flex-1"
+      className="mx-auto w-full min-w-0 max-w-5xl px-4 py-10"
       data-events-feed=""
       data-feed-from={feed.from}
       data-feed-to={feed.to}
@@ -85,6 +98,22 @@ export default async function DoctorEventsPage({
       <h1 className="text-heading font-extrabold">
         {DOCTOR_EVENTS_FEED_COPY.title}
       </h1>
+
+      {/* EARS-4: the canvas (`design-source/doctor-events.dc.html`,
+          `miniMonthOn`) places the mini-month as a FULL-WIDTH band inside the
+          content column ABOVE the day feed — the only aside in that canvas is
+          the LEFT 300px facet panel, which belongs to EARS-1 (#1516). The band
+          appears at the DESKTOP breakpoint only: below it the day feed is the
+          whole surface and a month grid would be a second scroll target rather
+          than navigation. */}
+      {pane === null ? null : (
+        <div className="mt-8 hidden lg:block">
+          <DoctorEventsMonthPaneView pane={pane} />
+        </div>
+      )}
+
+      <DoctorEventsDayAnchorScroll day={pane?.selectedDate ?? null} />
+
       <EventList
         items={toEventListItems(feed)}
         selectedTab="upcoming"
@@ -114,16 +143,5 @@ export default async function DoctorEventsPage({
         }
       />
     </section>
-
-      {/* EARS-4: the calendar appears at the DESKTOP breakpoint only — below it
-          the day feed is the whole surface and the month grid would be a second
-          scroll target rather than navigation. `sticky` keeps it in view while
-          the feed body scrolls, which is the entire point of «shown at once». */}
-      {pane === null ? null : (
-        <aside className="hidden lg:sticky lg:top-8 lg:block lg:w-80 lg:shrink-0">
-          <DoctorEventsMonthPaneView pane={pane} />
-        </aside>
-      )}
-    </div>
   );
 }

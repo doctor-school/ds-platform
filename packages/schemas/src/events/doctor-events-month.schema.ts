@@ -6,8 +6,8 @@ import {
   DoctorEventsFeedTargetingSchema,
   type DoctorEventsFeedQuery,
   parseDoctorEventsFeedQuery,
-  type RawQueryValue,
 } from "./doctor-events-feed.schema.js";
+import type { RawQueryValue } from "./event-listing-query.schema.js";
 
 /**
  * 019 EARS-4 (#1519) — the `MonthGrid` read contract of
@@ -52,10 +52,14 @@ export const DoctorEventsMonthSchema = z
   .regex(/^\d{4}-(0[1-9]|1[0-2])$/, "expected an ISO month (YYYY-MM)");
 
 /**
- * The month query: the feed's facet subset plus `month`. `.strict()` for the
- * same reason the feed envelope is — a facet that does not exist here must be a
- * 400 at the boundary, not a silently ignored narrowing the doctor believes was
- * applied.
+ * The month query: the feed's facet subset plus `month`. `.strict()` guards the
+ * shape of what the parser HANDS IN — a known key carrying an impossible value
+ * is a 400 at the boundary, never a silently ignored narrowing the doctor
+ * believes was applied. It is deliberately NOT a whole-URL allowlist:
+ * `parseDoctorEventsMonthQuery` picks the seven keys it understands out of the
+ * raw record first, so an unrelated query key (an analytics tag, a link
+ * decoration) is dropped rather than refused. A browser URL carries traffic
+ * this contract does not own, and 400-ing on it would break shareable links.
  */
 export const DoctorEventsMonthQuerySchema = z
   .object({

@@ -3,6 +3,7 @@ import {
   type DoctorEventsMonthGrid,
   doctorEventsMonthNextFirstDay,
   doctorEventsMonthOf,
+  encodeDoctorEventsFeedQueryEntries,
   type RawQueryValue,
 } from "@ds/schemas";
 import { encodeDoctorEventsFeedQuery } from "@/lib/events-feed";
@@ -171,20 +172,48 @@ export interface DoctorEventsMonthPane {
   /** Day-of-month → the feed URL that selects that day. In-month days only. */
   dayHrefs: Record<number, string>;
   selectedDay: number | null;
+  /** The selected ISO day, or `null` — the anchor the feed body is moved to. */
+  selectedDate: string | null;
   prevMonthHref: string;
   nextMonthHref: string;
+}
+
+/** The horizon the feed body currently covers — what a day href widens against. */
+export interface DoctorEventsFeedHorizon {
+  from: string;
+  to: string;
 }
 
 /**
  * The feed URL that selects `date` — the CURRENT query with `day` written onto
  * it, so the selection is shareable, survives the back button, and reaches the
  * api through the one codec both reads decode with (LD-1, EARS-8).
+ *
+ * `day` NEVER narrows the read (`doctor-events-feed.schema.ts`: "Never narrows
+ * the read"): it is the day the feed body is scrolled to. So the only thing a
+ * day href may change besides `day` is the HORIZON, and only in the widening
+ * direction: a day beyond the current `to` is not in the read yet, and the
+ * link widens `to` to reach it — the very mechanism «показать ещё» uses, built
+ * through the same codec entries so the key order stays the field-table order.
+ * A day BEFORE the horizon start is left alone: Release 1 reads the «Будущие»
+ * tense only (LD-10), so pulling `from` backwards would ask for a window the
+ * contract does not serve.
  */
 export function doctorEventsDayHref(
   raw: Record<string, RawQueryValue>,
   date: string,
+  horizon?: DoctorEventsFeedHorizon,
 ): string {
-  const params = encodeDoctorEventsFeedQuery(raw);
+  const widen = horizon !== undefined && date > horizon.to;
+  const params = widen
+    ? new URLSearchParams(
+        encodeDoctorEventsFeedQueryEntries({
+          ...raw,
+          from: horizon.from,
+          to: date,
+        }),
+      )
+    : encodeDoctorEventsFeedQuery(raw);
   params.set("day", date);
   params.set("month", doctorEventsMonthOf(date));
   return `/events?${params.toString()}`;
@@ -204,6 +233,7 @@ export function doctorEventsMonthHref(
 export function toDoctorEventsMonthPane(
   grid: DoctorEventsMonthGrid,
   raw: Record<string, RawQueryValue>,
+  horizon?: DoctorEventsFeedHorizon,
 ): DoctorEventsMonthPane {
   const byDate = new Map(grid.days.map((day) => [day.date, day]));
   const lead = mondayFirstIndex(`${grid.month}-01`);
@@ -233,7 +263,7 @@ export function toDoctorEventsMonthPane(
       dots: dotsFor(count, hasLive, date < grid.today),
       ariaLabel: ariaLabelFor(date, count, hasLive, today),
     });
-    dayHrefs[day] = doctorEventsDayHref(raw, date);
+    dayHrefs[day] = doctorEventsDayHref(raw, date, horizon);
   }
 
   for (let day = 1; cells.length % 7 !== 0; day += 1) {
@@ -258,6 +288,10 @@ export function toDoctorEventsMonthPane(
     weeks,
     dayHrefs,
     selectedDay,
+    selectedDate:
+      selectedDay === null
+        ? null
+        : `${grid.month}-${String(selectedDay).padStart(2, "0")}`,
     prevMonthHref: doctorEventsMonthHref(raw, doctorEventsMonthPrev(grid.month)),
     nextMonthHref: doctorEventsMonthHref(raw, doctorEventsMonthNext(grid.month)),
   };

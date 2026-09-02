@@ -47,6 +47,11 @@ export function encodeDoctorEventsMonthQuery(
 ): URLSearchParams {
   const params = new URLSearchParams();
   const parsed = parseDoctorEventsMonthQuery(raw);
+  // The STOREFRONT repairs rather than propagates: a malformed `month=` yields
+  // no month parameter, so the api answers with the current month and the
+  // doctor sees a working calendar instead of an error page. Propagating the
+  // 400 is the API boundary's job (EARS-4.7 covers it there) — a browser that
+  // arrives with a mangled query is not an api client.
   if (!parsed.success) return params;
 
   const query = parsed.data;

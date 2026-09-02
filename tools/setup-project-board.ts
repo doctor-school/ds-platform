@@ -11,22 +11,35 @@
  *
  * What it does (declarative desired state):
  *   - Creates org-level project "DS Platform" under `doctor-school` (idempotent).
- *   - Creates custom single-select field `Area` with the option set from §3.2.
+ *   - Creates custom single-select fields `Area` and `Priority` with the option
+ *     sets from §3.2, and the custom date fields `Start date` / `Target date`
+ *     that the Roadmap view draws its bars from.
  *   - Ensures the built-in `Status` field has the four target options.
+ *   - Warns loudly about retired fields (`Release`, §3.2) without deleting them:
+ *     deleting a Projects v2 field is irreversible and destroys its item values,
+ *     so retirement is a deliberate one-off operation, never a setup side effect.
+ *   - Creates the §3.4 views via the `createProjectV2View` GraphQL mutation and
+ *     sets each view's declared filter via `updateProjectV2View`; falls back to
+ *     printed UI steps when the API refuses.
  *   - Backfills every Issue + PR from `doctor-school/ds-platform` as project items,
  *     sets Status from open/closed, Area from conventional-commit heuristics. Kind
  *     is NOT set as a custom field — for Issues use the native Type field (org
  *     Settings → Issue Types), for PRs use existing labels (feature / bug / chore
  *     / refactor / docs / tooling).
- *   - Prints UI steps for the six workflows (§3.3) and four views (§3.4) — these
- *     pieces of Projects v2 are configured via the web UI; the GraphQL surface
- *     for workflow toggles is preview-only and brittle.
+ *   - Prints UI steps for the six workflows (§3.3) — the GraphQL surface for
+ *     workflow toggles is preview-only and brittle. View grouping and the
+ *     Roadmap date-field pair / milestone markers are likewise UI-only settings
+ *     and are printed; view filters are set by this script.
  *
  * Idempotency: every mutation is preceded by an existence probe; re-running
  * after a successful run is a no-op apart from the audit summary.
  *
  * Dry-run: `--dry-run` (or `-n`) prints every intended mutation without
  * executing. Use this before the first real run.
+ *
+ * Fields-only: `--fields-only` runs project resolution + fields + views and
+ * skips the backfill. Used when re-running against a live board to converge the
+ * schema without walking every Issue and PR again.
  */
 import { execa } from 'execa';
 
@@ -56,6 +69,22 @@ const AREA_OPTIONS = [
 ] as const;
 
 type AreaOption = (typeof AREA_OPTIONS)[number];
+
+/** §3.2 — ordering hint for a Todo column that outgrows one screen. */
+const PRIORITY_OPTIONS = ['Urgent', 'High', 'Medium', 'Low'] as const;
+
+/**
+ * §3.2 — the Roadmap bar endpoints. Set only on feature-level and release-gate
+ * Issues; `Start date` manually, `Target date` by `pnpm roadmap:forecast`.
+ */
+const DATE_FIELDS = ['Start date', 'Target date'] as const;
+
+/**
+ * §3.2 — fields the design has retired. Release membership is the Milestone, so
+ * a `Release` single-select is a second source of truth. The script only warns:
+ * `deleteProjectV2Field` is irreversible and drops every item value with it.
+ */
+const RETIRED_FIELDS = ['Release'] as const;
 
 const WORKFLOWS = [
   {
@@ -90,27 +119,58 @@ const WORKFLOWS = [
   },
 ];
 
-const VIEWS = [
+/**
+ * §3.4. `layout` is the GraphQL `ProjectV2ViewLayout` enum passed to
+ * `createProjectV2View`; `filter` is applied afterwards via `updateProjectV2View`
+ * (which does accept it). `groupBy` and `dates` have no mutation input and are
+ * printed for manual configuration.
+ */
+interface ViewSpec {
+  name: string;
+  description: string;
+  layout: 'BOARD_LAYOUT' | 'TABLE_LAYOUT' | 'ROADMAP_LAYOUT';
+  groupBy: string;
+  filter: string;
+  dates?: string;
+}
+
+const VIEWS: ViewSpec[] = [
+  {
+    name: 'Roadmap',
+    description:
+      'PM/owner plan surface — feature-level and release-gate bars per release. Done stays visible so a shipped release still renders its bar.',
+    layout: 'ROADMAP_LAYOUT',
+    groupBy: 'Milestone',
+    filter: '-label:kind:ears-handler',
+    dates: 'Start date → Target date, milestone markers on',
+  },
   {
     name: 'Now',
     description: 'Default landing kanban — non-archived items grouped by Status.',
-    layout: 'board',
+    layout: 'BOARD_LAYOUT',
     groupBy: 'Status',
     filter: '',
   },
   {
     name: 'By milestone',
     description: 'PM roadmap surrogate — open work grouped by Milestone.',
-    layout: 'table',
+    layout: 'TABLE_LAYOUT',
     groupBy: 'Milestone',
-    filter: 'status:!=Done',
+    filter: '-status:Done',
   },
   {
     name: 'By area',
     description: 'Module slice — open work grouped by Area.',
-    layout: 'table',
+    layout: 'TABLE_LAYOUT',
     groupBy: 'Area',
-    filter: 'status:!=Done',
+    filter: '-status:Done',
+  },
+  {
+    name: 'Closed',
+    description: 'Archive lookup — shipped work.',
+    layout: 'TABLE_LAYOUT',
+    groupBy: '',
+    filter: 'status:Done',
   },
 ];
 
@@ -120,6 +180,7 @@ const VIEWS = [
 
 const cliArgs = process.argv.slice(2);
 const DRY_RUN = cliArgs.includes('--dry-run') || cliArgs.includes('-n');
+const FIELDS_ONLY = cliArgs.includes('--fields-only');
 
 // ---------------------------------------------------------------------------
 // Logging
@@ -224,12 +285,22 @@ interface ProjectField {
   options?: Array<{ id: string; name: string }>;
 }
 
-async function listFields(projectNumber: number): Promise<ProjectField[]> {
-  const res = await ghReadJson<{ fields: ProjectField[] }>([
-    'project', 'field-list', String(projectNumber),
-    '--owner', OWNER, '--format', 'json', '--limit', '50',
+/**
+ * Reads the field set through GraphQL rather than `gh project field-list`: the
+ * CLI JSON carries only the GraphQL `type` (`ProjectV2Field` covers TEXT, DATE
+ * and NUMBER alike), while `dataType` is what `ensureDateField` must check.
+ */
+async function listFields(projectId: string): Promise<ProjectField[]> {
+  const res = await ghReadJson<{ data?: { node?: { fields?: { nodes?: ProjectField[] } } } }>([
+    'api', 'graphql',
+    '-f', `query=query($id: ID!) { node(id: $id) { ... on ProjectV2 { fields(first: 50) { nodes { ... on ProjectV2FieldCommon { id name dataType } ... on ProjectV2SingleSelectField { options { id name } } } } } } }`,
+    '-f', `id=${projectId}`,
   ]);
-  return res.ok ? res.data.fields ?? [] : [];
+  if (!res.ok) {
+    log('warn', `cannot list fields: ${res.stderr} — every field will look missing below`);
+    return [];
+  }
+  return res.data?.data?.node?.fields?.nodes ?? [];
 }
 
 async function ensureSingleSelectField(
@@ -272,6 +343,46 @@ async function ensureStatusOptions(projectNumber: number, existing: ProjectField
     return;
   }
   log('warn', `Status missing options: ${missing.join(', ')} — adjust via UI (Project → Settings → Fields → Status). Adding via API requires field-recreate which this script avoids to prevent item data loss.`);
+}
+
+async function ensureDateField(
+  projectNumber: number,
+  fieldName: string,
+  existing: ProjectField[],
+): Promise<void> {
+  const current = existing.find((f) => f.name === fieldName);
+  if (current) {
+    if (current.dataType.toUpperCase() !== 'DATE') {
+      log('warn', `field "${fieldName}" exists with dataType=${current.dataType}, expected DATE — fix via UI (Project → Settings → Fields)`);
+      return;
+    }
+    log('ok', `field "${fieldName}" already configured (date)`);
+    return;
+  }
+  log('info', `creating field "${fieldName}" (date)`);
+  const res = await ghMutate([
+    'project', 'field-create', String(projectNumber),
+    '--owner', OWNER,
+    '--name', fieldName,
+    '--data-type', 'DATE',
+  ]);
+  if (!res.ok) log('warn', `field-create failed for "${fieldName}": ${res.stderr}`);
+}
+
+/**
+ * Retired fields are reported, never deleted: `deleteProjectV2Field` is
+ * irreversible and takes every item value with it, so retiring one is a
+ * deliberate operation with a migration in front of it (§3.2).
+ */
+function warnRetiredFields(existing: ProjectField[]): void {
+  for (const name of RETIRED_FIELDS) {
+    const found = existing.find((f) => f.name === name);
+    if (!found) {
+      log('ok', `retired field "${name}" is absent, as designed`);
+      continue;
+    }
+    log('warn', `retired field "${name}" is still on the board (id ${found.id}). Release membership is the Milestone (§3.2). Migrate every item to its milestone first, then delete the field by hand via the \`deleteProjectV2Field\` GraphQL mutation — this script never deletes fields.`);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -353,7 +464,7 @@ async function setFieldValues(
   itemId: string,
   values: Record<string, string | null>,
 ): Promise<void> {
-  const fields = await listFields(projectNumber);
+  const fields = await listFields(projectId);
   for (const [fieldName, value] of Object.entries(values)) {
     if (!value) continue;
     const field = fields.find((f) => f.name === fieldName);
@@ -457,12 +568,129 @@ function printWorkflows(): void {
   }
 }
 
-function printViews(): void {
-  section('Views (UI steps)');
-  log('info', 'In the project, click the "+" next to the default view tab and create:');
+/**
+ * The UI steps a human still has to perform for a view: grouping, and for the
+ * Roadmap the date-field pair plus milestone markers. The filter is NOT part of
+ * this recipe — the script sets it via `updateProjectV2View`.
+ */
+function printViewRecipe(v: ViewSpec): void {
+  log('info', `  - "${v.name}" (${v.layout}${v.groupBy ? `, group by ${v.groupBy}` : ''})`);
+  if (v.dates) log('info', `    dates: ${v.dates}`);
+  log('info', `    ${v.description}`);
+}
+
+interface ProjectView { id: string; name: string; filter: string | null }
+
+/** GitHub returns `null` for an unset filter; the desired state spells it `''`. */
+function normalizeFilter(filter: string | null | undefined): string {
+  return (filter ?? '').trim();
+}
+
+async function listViews(projectId: string): Promise<ProjectView[] | null> {
+  const res = await ghReadJson<{ data?: { node?: { views?: { nodes?: ProjectView[] } } } }>([
+    'api', 'graphql',
+    '-f', `query=query($id: ID!) { node(id: $id) { ... on ProjectV2 { views(first: 50) { nodes { id name filter } } } } }`,
+    '-f', `id=${projectId}`,
+  ]);
+  if (!res.ok) {
+    log('warn', `cannot list views: ${res.stderr}`);
+    return null;
+  }
+  return res.data?.data?.node?.views?.nodes ?? [];
+}
+
+/** `createProjectV2View` stdout → the created view, so its filter can be set without a re-query. */
+function parseCreatedView(stdout: string): ProjectView | null {
+  try {
+    const payload = JSON.parse(stdout) as {
+      data?: { createProjectV2View?: { projectV2View?: ProjectView } };
+    };
+    return payload.data?.createProjectV2View?.projectV2View ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Sets a view's declared filter when the live one differs. `updateProjectV2View`
+ * accepts `filter` (public schema, verified against this org on 2026-09-02), so
+ * the §3.4 readability constraint — notably the Roadmap `-label:kind:ears-handler`
+ * — is reproducible from this script instead of a manual UI step.
+ */
+async function ensureViewFilter(view: ProjectView, v: ViewSpec): Promise<void> {
+  const desired = normalizeFilter(v.filter);
+  if (normalizeFilter(view.filter) === desired) {
+    log('ok', `view "${v.name}" filter already ${desired ? `\`${desired}\`` : '(none)'}`);
+    return;
+  }
+  const res = await ghMutate([
+    'api', 'graphql',
+    '-f', `query=mutation($viewId: ID!, $filter: String!) { updateProjectV2View(input: { viewId: $viewId, filter: $filter }) { projectV2View { id filter } } }`,
+    '-f', `viewId=${view.id}`,
+    '-f', `filter=${desired}`,
+  ]);
+  if (res.ok) {
+    log('ok', `view "${v.name}" filter set to ${desired ? `\`${desired}\`` : '(none)'}`);
+  } else {
+    log('warn', `updateProjectV2View(filter) refused for "${v.name}" (${res.stderr.trim()}) — set the filter \`${desired}\` by hand in the UI`);
+  }
+}
+
+/**
+ * Creates any missing §3.4 view via `createProjectV2View` and converges its
+ * filter via `updateProjectV2View`. Group-by, the Roadmap date-field pair and
+ * its milestone markers have no mutation input and are always printed as UI
+ * steps; when a mutation is refused, the view falls back to the printed recipe.
+ */
+async function ensureViews(projectId: string): Promise<void> {
+  section('Views');
+
+  if (DRY_RUN) {
+    for (const v of VIEWS) {
+      log('dry', `createProjectV2View(projectId: ${projectId}, name: "${v.name}", layout: ${v.layout}) [if missing]`);
+      log('dry', `updateProjectV2View(viewId: <"${v.name}">, filter: "${normalizeFilter(v.filter)}") [if the live filter differs]`);
+      printViewRecipe(v);
+    }
+    return;
+  }
+
+  const existing = await listViews(projectId);
+  if (existing === null) {
+    log('warn', 'view state unreadable — configure by hand in the UI:');
+    for (const v of VIEWS) {
+      printViewRecipe(v);
+      log('info', `    filter: ${normalizeFilter(v.filter) || '(none)'}`);
+    }
+    return;
+  }
+  const byName = new Map(existing.map((view) => [view.name, view]));
+
   for (const v of VIEWS) {
-    log('info', `  - "${v.name}" (${v.layout}, group by ${v.groupBy}${v.filter ? `, filter: ${v.filter}` : ''})`);
-    log('info', `    ${v.description}`);
+    let view = byName.get(v.name) ?? null;
+    if (view) {
+      log('ok', `view "${v.name}" already exists`);
+    } else {
+      const res = await ghMutate([
+        'api', 'graphql',
+        '-f', `query=mutation($projectId: ID!, $name: String!, $layout: ProjectV2ViewLayout!) { createProjectV2View(input: { projectId: $projectId, name: $name, layout: $layout }) { projectV2View { id name filter } } }`,
+        '-f', `projectId=${projectId}`,
+        '-f', `name=${v.name}`,
+        '-f', `layout=${v.layout}`,
+      ]);
+      if (res.ok) {
+        log('ok', `created view "${v.name}" (${v.layout})`);
+        view = parseCreatedView(res.data);
+      } else {
+        log('warn', `createProjectV2View refused for "${v.name}" (${res.stderr.trim()}) — create it by hand:`);
+      }
+    }
+    if (view) {
+      await ensureViewFilter(view, v);
+    } else {
+      log('info', `  "${v.name}" — set the filter by hand: ${normalizeFilter(v.filter) || '(none)'}`);
+    }
+    log('info', `  "${v.name}" — UI-only settings (grouping / dates):`);
+    printViewRecipe(v);
   }
 }
 
@@ -472,7 +700,7 @@ function printViews(): void {
 
 async function main(): Promise<void> {
   section('setup-project-board.ts');
-  log('info', `mode: ${DRY_RUN ? 'DRY-RUN (no mutations)' : 'REAL RUN'}`);
+  log('info', `mode: ${DRY_RUN ? 'DRY-RUN (no mutations)' : 'REAL RUN'}${FIELDS_ONLY ? ' (fields + views only)' : ''}`);
   log('info', `target: org=${OWNER} project="${PROJECT_TITLE}" backfill-repo=${OWNER}/${REPO}`);
   if (!DRY_RUN) {
     log('warn', 'this run mutates org-level objects. Ensure owner has signed off on dry-run output.');
@@ -493,19 +721,31 @@ async function main(): Promise<void> {
   ]);
 
   section('Fields');
-  const fields = DRY_RUN ? [] : await listFields(project.number);
+  // Reading current field state is non-mutating, so a dry-run does it too —
+  // otherwise the dry-run reports every field as missing and the retired-field
+  // warning never fires, which is exactly what a pre-flight review needs to see.
+  const fields = await listFields(project.id);
   await ensureStatusOptions(project.number, fields);
   await ensureSingleSelectField(project.number, 'Area', AREA_OPTIONS, fields);
+  await ensureSingleSelectField(project.number, 'Priority', PRIORITY_OPTIONS, fields);
+  for (const dateField of DATE_FIELDS) {
+    await ensureDateField(project.number, dateField, fields);
+  }
+  warnRetiredFields(fields);
 
   printWorkflows();
-  printViews();
+  await ensureViews(project.id);
 
-  await backfill(project.number, project.id);
+  if (FIELDS_ONLY) {
+    log('info', 'backfill skipped (--fields-only)');
+  } else {
+    await backfill(project.number, project.id);
+  }
 
   section('Summary');
   log('ok', `mode: ${DRY_RUN ? 'dry-run' : 'real-run'}`);
   log('ok', `project: ${PROJECT_TITLE} (#${project.number}) — ${project.id}`);
-  log('info', 'Workflows + views require manual UI configuration per steps above.');
+  log('info', 'Workflows require manual UI configuration per steps above; views and their filters are set by this script, only grouping / the Roadmap date pair / milestone markers are UI-only.');
   log('info', 'After UI steps: verify via `gh project view <N> --owner doctor-school --format json`.');
 }
 

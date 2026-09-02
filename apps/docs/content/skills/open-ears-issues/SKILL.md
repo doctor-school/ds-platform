@@ -29,18 +29,20 @@ mode: inline
 
    Closing G11 findings F-8 and F-19: do **not** silently substitute a generic label like `enhancement` when the project-specific label is missing. Either the label set is created up front, or `surface-decision-debt` is invoked to record the substitution as a follow-up.
 
-2. **Open the parent Issue** (if not already open) via `pnpm issue:create` under the track release milestone the feature ships in (`repo-conventions.md` → Issue conventions — e.g. «Академия R1 — Архив записей», not a per-spec name) and link to `NNN-requirements.md`. Pass the `feature` kind label (→ auto-derived **Type=Feature**) and `--milestone`; the spec folder is bound to the work by the `feature:NNN-<slug>` label, not the milestone. **Every Issue this skill opens — parent and children — carries the provenance label `source:spec`** (opened from a merged feature spec; the `source:*` taxonomy is `source:owner` | `source:spec` | `source:retro` | `source:agent`, one per Issue).
+2. **Open the parent (feature) Issue** (if not already open) via `pnpm issue:create` and link to `NNN-requirements.md`. Title it with the track prefix the roadmap taxonomy requires — `[Академия][NNN] <feature>` or `[Витрина][NNN] <feature>` (board-design spec §7.1) — and home it on the track release milestone the feature ships in (`repo-conventions.md` → Issue conventions — e.g. «Академия R1 — Архив записей», not a per-spec name). **Create that milestone before the children:** every child inherits it from this parent in step 3, so a parent with no milestone stops the run. Pass the `feature` kind label (→ auto-derived **Type=Feature**) and `--milestone`; the spec folder is bound to the work by the `feature:NNN-<slug>` label, not the milestone. **Every Issue this skill opens — parent and children — carries the provenance label `source:spec`** (opened from a merged feature spec; the `source:*` taxonomy is `source:owner` | `source:spec` | `source:retro` | `source:agent`, one per Issue).
 3. **For each EARS-N**, open a child Issue:
 
    ```bash
    pnpm issue:create \
+     --parent <parent-issue> \
      --title "[NNN] EARS-N: <description>" \
-     --milestone "<track release milestone>" \
      --label "feature,feature:NNN-<slug>,kind:ears-handler,agent-ready,source:spec,track:<academy|doctor|platform>" \
      --body "Spec: apps/docs/content/specs/features/NNN-<slug>/. Parent: #<parent-issue>."
    ```
 
-   Use **`pnpm issue:create`** (the field-gated wrapper — repo-conventions → _Issue conventions_), **never** raw `gh issue create`: it fails closed unless exactly one kind label + one `source:*` + one `track:*` + a `--milestone` are present, then adds the Issue to the board (Status=Todo) and **auto-derives** the org Type from the kind label (the `feature` kind label here → **Type=Feature**) and defaults the assignee to `@me` — so `--type`/`--assignee` are not passed here. The `feature` kind label is **required by the gate** and is additional to `kind:ears-handler` (which classifies the handler, not the org Type). Always pass `--body` (or `--body-file`) — without it the CLI opens an editor and hangs. Fill the body's **Dependencies** field (`Blocked by:` / `Blocks:`) with the human-readable graph — prose alone is **not** sufficient; it must be backed by the native links set in step 4.
+   **`--parent <P>` is mandatory for a `kind:ears-handler` child** (#1729): the wrapper fails closed without it, INHERITS the parent's release milestone (so no `--milestone` is passed here — a differing one is rejected rather than silently overriding the parent's release) and makes the sub-issue link itself.
+
+   Use **`pnpm issue:create`** (the field-gated wrapper — repo-conventions → _Issue conventions_), **never** raw `gh issue create`: it fails closed unless exactly one kind label + one `source:*` + one `track:*` are present, plus a milestone — supplied here by `--parent` inheritance rather than an explicit `--milestone` — then adds the Issue to the board (Status=Todo) and **auto-derives** the org Type from the kind label (the `feature` kind label here → **Type=Feature**) and defaults the assignee to `@me` — so `--type`/`--assignee` are not passed here. The `feature` kind label is **required by the gate** and is additional to `kind:ears-handler` (which classifies the handler, not the org Type). Always pass `--body` (or `--body-file`) — without it the CLI opens an editor and hangs. Fill the body's **Dependencies** field (`Blocked by:` / `Blocks:`) with the human-readable graph — prose alone is **not** sufficient; it must be backed by the native links set in step 4.
 
 3a. **Open integration / vertical-slice Issues — `surface: user-facing` specs only** (closing F-22). **Real-dependency done-criterion (threshold canon):** every Issue routed through the AGENTS.md §6 significance threshold carries a done-criterion naming the real dependency it waits on — closing it requires that dependency delivered and wired, never a placeholder standing in (the #1559/#1556 pattern). The "1 EARS = 1 child Issue" rule of step 3 covers **handlers only**; for a `user-facing` spec it mechanically produces a backend-only Issue set (this is exactly how 003 left the portal forms unowned). Read the spec's `surface:` frontmatter:
 
@@ -50,8 +52,8 @@ mode: inline
 3b. **Grouping — tightly-coupled EARS may share one child, but not silently.** The 1-EARS-1-Issue default of step 3 is for handlers workable independently. When several EARS have an **intersecting file-touch set and cannot be parallelized** (e.g. one shell component + one route own EARS-1…13), they MAY collapse into a single child — but only with **(a)** the title reading `EARS-a..b` and the body listing the folded `EARS-N` ids explicitly, and **(b)** a `surface-decision-debt` note recording the grouping (it is a documented deviation from the 1:1 default, AGENTS.md §6). Do **not** bundle EARS under `kind:ears-handler` without both. This touch-set rationale governs **OPEN-time** WBS grouping; `feedback_wave_plan_by_touch_set` governs the distinct **DISPATCH-time** serialization of the same intersecting set.
 
 4. **Wire the native relationships** (mandatory — prose in the body is not machine-readable, and the board ordering procedure reads only the native graph). Two relationship types, set via the GitHub REST API through `gh api`:
-   - **Sub-issue hierarchy** — attach every child as a sub-issue of the parent.
-   - **Blocked-by / blocking** — set the dependency edges between children (and on the parent where it applies).
+   - **Sub-issue hierarchy** — already wired by `pnpm issue:create --parent <P>` in step 3; the REST recipe below is the **verification / repair** side, and the creation path for a child filed before #1729.
+   - **Blocked-by / blocking** — set the dependency edges between children (and on the parent where it applies). This is the part step 3 does NOT do for you.
 
    Both endpoints take the target's **numeric database id** (not the issue number) — `gh api repos/$OWNER/$REPO/issues/<n> --jq .id`. Resolve the ids once (a `number → id` lookup); avoid a fresh round-trip per edge when wiring a whole set.
 
@@ -59,7 +61,10 @@ mode: inline
    OWNER=doctor-school; REPO=ds-platform                     # set once; reused by every call below
    id() { gh api "repos/$OWNER/$REPO/issues/$1" --jq .id; }  # number → DB id
 
-   # Attach child #C as a sub-issue of parent #P (sub_issue_id = DB id of #C):
+   # Verify the sub-issue links `issue:create --parent` already made:
+   gh api "repos/$OWNER/$REPO/issues/<P>/sub_issues" --jq '.[].number'
+
+   # Repair path only — attach child #C as a sub-issue of parent #P (sub_issue_id = DB id of #C):
    gh api --method POST "repos/$OWNER/$REPO/issues/<P>/sub_issues" -F sub_issue_id="$(id <C>)"
 
    # Mark child #B as blocked by #A (issue_id = DB id of #A, the blocker):

@@ -30,6 +30,11 @@ import {
   type ObjectStorage,
   type PutObjectInput,
 } from "../../src/storage/index.js";
+import {
+  TAXONOMY_SLUG_ATTEMPT_LIMIT,
+  taxonomySlugCandidate,
+} from "@ds/schemas";
+import { taxonomySlugBase } from "../../src/taxonomy/taxonomy-slug.js";
 import { IdempotencyService } from "../../src/taxonomy/idempotency.service.js";
 import { MediaCleanupService } from "../../src/taxonomy/media/media-cleanup.service.js";
 import { UploadReconcileService } from "../../src/taxonomy/media/upload-reconcile.service.js";
@@ -303,11 +308,13 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     });
 
     it("012 EARS-17: every deterministic post-record refusal shall be fenced-stored and replayed on an exact retry", async () => {
-      // Two 409s and one 412 — the invariant refusals of this handler. Each must
-      // COMPLETE its record with the exact status/body, so an exact retry inside
-      // the lease window replays the refusal instead of answering
-      // IDEMPOTENCY_REQUEST_IN_PROGRESS (which would tell the operator "still
-      // working" about a request that already reached its final answer).
+      // Two 409s and one 412 — the invariant refusals of this handler, each one
+      // REACHABLE through the public contract (§5.3: the slug is server-owned,
+      // so no request may name one). Each must COMPLETE its record with the
+      // exact status/body, so an exact retry inside the lease window replays the
+      // refusal instead of answering IDEMPOTENCY_REQUEST_IN_PROGRESS (which
+      // would tell the operator "still working" about a request that already
+      // reached its final answer).
       const seed = await app.inject({
         method: "POST",
         url: "/v1/admin/projects",
@@ -317,14 +324,39 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
           "content-type": "application/json",
           "idempotency-key": key(),
         },
-        payload: { kind: "school", title: `Занятый адрес ${Date.now()}` },
+        payload: {
+          kind: "school",
+          title: `Опубликованный проект ${Date.now()}`,
+        },
       });
-      const seeded = JSON.parse(seed.payload) as { id: string; slug: string };
+      const seeded = JSON.parse(seed.payload) as { id: string };
       createdProjectIds.push(seeded.id);
       await pool.query(
         "UPDATE projects SET status = 'published', first_published_at = now() WHERE id = $1",
         [seeded.id],
       );
+
+      // The ONLY reachable SLUG_CONFLICT: a create never carries a slug (the
+      // request schema is strict and slug is server-owned — a `slug` key is a
+      // 400 VALIDATION_FAILED long before any conflict check), so the allocator
+      // refuses only when the whole retained collision sequence `base`,
+      // `base-2` … `base-50` is already held. Seeding those rows directly is the
+      // cheapest way to stand the sequence up; going through the API would mean
+      // fifty creates.
+      const exhaustedTitle = `Исчерпанная последовательность ${Date.now()}`;
+      const exhaustedBase = taxonomySlugBase(exhaustedTitle, "project");
+      const sequenceHolders = await pool.query<{ id: string }>(
+        `INSERT INTO projects (slug, kind, title)
+              SELECT unnest($1::text[]), 'school', $2
+           RETURNING id`,
+        [
+          Array.from({ length: TAXONOMY_SLUG_ATTEMPT_LIMIT }, (_, index) =>
+            taxonomySlugCandidate(exhaustedBase, index + 1),
+          ),
+          "Держатель адреса",
+        ],
+      );
+      createdProjectIds.push(...sequenceHolders.rows.map((row) => row.id));
 
       const cases: {
         code: string;
@@ -334,27 +366,24 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         {
           code: "SLUG_CONFLICT",
           status: 409,
-          request: () => {
-            const k = key();
-            return app.inject({
+          request: () =>
+            app.inject({
               method: "POST",
               url: "/v1/admin/projects",
               headers: {
                 ...device,
                 ...adminHeaders(adminSid),
                 "content-type": "application/json",
-                "idempotency-key": k,
+                "idempotency-key": key(),
               },
-              payload: {
-                kind: "media",
-                title: "Другой проект",
-                slug: seeded.slug,
-              },
-            }) as never;
-          },
+              payload: { kind: "media", title: exhaustedTitle },
+            }) as never,
         },
         {
-          code: "SLUG_IMMUTABLE",
+          // The other deterministic 409 of this handler: a PATCH that would
+          // leave a PUBLISHED projection incomplete. `seeded` was published with
+          // a null description, so re-asserting that null is refused.
+          code: "PUBLISH_REQUIREMENTS_NOT_MET",
           status: 409,
           request: () =>
             app.inject({
@@ -367,7 +396,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
                 "idempotency-key": key(),
                 "if-match": 'W/"1"',
               },
-              payload: { slug: "novyy-adres-posle-publikacii" },
+              payload: { description: null },
             }) as never,
         },
         {
@@ -411,8 +440,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         expect(rows[0]!.response_body?.errorCode, c.code).toBe(c.code);
       }
 
-      // And the replay itself: re-issue the SLUG_IMMUTABLE refusal under its own
-      // key and check the second call returns the stored body verbatim.
+      // And the replay itself: re-issue the PUBLISH_REQUIREMENTS_NOT_MET refusal
+      // under its own key and check the second call returns the stored body
+      // verbatim.
       const replayKey = key();
       const send = () =>
         app.inject({
@@ -425,7 +455,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
             "idempotency-key": replayKey,
             "if-match": 'W/"1"',
           },
-          payload: { slug: "eshche-odin-adres" },
+          payload: { description: null },
         });
       const original = await send();
       const replayed = await send();

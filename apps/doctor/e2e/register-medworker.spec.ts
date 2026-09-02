@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 
 /**
  * 021 EARS-4 — the mandatory medical-worker declaration on the registration
@@ -20,6 +20,19 @@ import { test, expect } from "@playwright/test";
  * declaration, and writing the versioned dated consent row when it has it —
  * is proven in `apps/api/test/storefront/doctor-register-consents.e2e-spec.ts`.
  */
+
+/**
+ * Tick the declaration the way a user does. The DS `Checkbox` is a REAL checkbox
+ * rendered `sr-only` behind its painted box, so `.check()` on the input is
+ * intercepted by that box — exactly as a mouse would be. A user clicks the box,
+ * i.e. the wrapping `<label>`, so the spec does the same.
+ */
+async function tickDeclaration(page: Page): Promise<void> {
+  await page
+    .getByTestId("register-medworker")
+    .locator("xpath=ancestor::label[1]")
+    .click();
+}
 
 /** Copy or controls that would offer a way PAST the declaration (EARS-4). */
 const ESCAPE_HATCH_TELLS = [
@@ -114,7 +127,7 @@ test.describe("021 EARS-4: the mandatory medical-worker declaration", () => {
 
     // Ticking it clears THAT obstacle — the reason moves on to the next real
     // one rather than repeating the declaration.
-    await page.getByTestId("register-medworker").check();
+    await tickDeclaration(page);
     await expect(page.getByTestId("register-medworker")).toBeChecked();
     await expect(page.getByTestId("register-submit-reason")).not.toHaveText(
       "Отметьте, что вы медицинский работник — без этого регистрация невозможна.",
@@ -129,7 +142,7 @@ test.describe("021 EARS-4: the mandatory medical-worker declaration", () => {
     // A declaration, not a verification: nothing is requested to support it,
     // in either state of the checkbox.
     for (const state of ["unticked", "ticked"] as const) {
-      if (state === "ticked") await page.getByTestId("register-medworker").check();
+      if (state === "ticked") await tickDeclaration(page);
 
       await expect(
         page.locator('input[type="file"], [accept]'),

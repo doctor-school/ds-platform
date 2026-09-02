@@ -44,7 +44,7 @@ Before releasing ANY owner-facing report or status — interim checkpoints inclu
 2. **Third-party vendor / product names** (Vercel, Zitadel, Dependabot, Renovate, …) — first use states who they are relative to this project («Vercel — авторы Next.js, библиотеки-каркаса наших сайтов; мы у них ничего не хостим»). A vendor name with no relation stated reads as a new mystery actor (precedent: «При чём тут вообще Vercel?», 2026-08-24).
 3. **File/spec paths and artifact references** — every «решения записаны в PRD» names the concrete repo path where the owner can look; a count of pending items («17 решений») never appears without the interactive-fork protocol (CLAUDE.md → Blocked-on-owner handback) taking over — the count is not an ask.
 
-The pass is a gate, not advice: a report that skips it is unreleased. Four recorded failures of the prose-only rule (#293, #753, #983, 2026-08-24) are why this is a discrete step — the enforcing hook is tracked in #1465.
+The pass is a gate, not advice: a report that skips it is unreleased. Four recorded failures of the prose-only rule (#293, #753, #983, 2026-08-24) are why this is a discrete step. No Stop hook enforces it: the regex-based completion-report gate was retired in #1743 (seven false-fire tuning rounds; every `exit 2` re-ran the final turn on the full session context) — the skill text is the whole contract.
 
 ## Visual-delivery recipe (reused by build-ui Stage-B supplements + mid-task decision visuals)
 

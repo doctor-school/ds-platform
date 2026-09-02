@@ -9,6 +9,8 @@ mode: inline
 
 **Kind:** orchestration · **Mode:** inline (the lead agent runs this procedure itself; stage 1 is the one **dispatch** step — a fresh-context retro agent).
 
+**Entry: the owner types `/wrap` — never the agent (#1746).** The lead does not start this procedure on its own: not at a wave's end, not «before a long gap», not in answer to a handoff request (that request is skill `handoff-prompt` alone — a prompt, no retro, no instruction edits). Enforced by `tools/hooks/wrap-owner-only.mjs`: without the owner's `/wrap` in the session transcript, reading this skill, dispatching the retro agent or invoking the skill is denied.
+
 This is the procedure behind the **`/wrap`** slash command ([`.claude/commands/wrap.md`](../../../../../.claude/commands/wrap.md)) — the capstone of epic #247's feedback-improvement loop: at end of session it turns the just-finished session's deviations into durable instruction/memory fixes, runs the task lifecycle to completion, and emits a handoff. It is **connective** — each stage **invokes an existing skill** and does not restate it. If a stage's detail is wrong, fix it in the owning skill.
 
 > **This skill is the single source of the wrap procedure.** `.claude/commands/wrap.md` is only a thin entry pointer that says "read this skill and run it" — it carries no stage detail of its own, so the stages, gates, and failure modes below are never duplicated there (#758).

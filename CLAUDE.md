@@ -12,7 +12,7 @@ All conventions in [`AGENTS.md`](./AGENTS.md) apply (imported above); this file 
 
 ## Wrap cadence
 
-`/wrap` runs on owner request or before a planned long gap — not a mandatory end-of-every-session step. The `context-budget` hook (120K/160K) is advisory to the operator, never a directive to the model. The same tiers bind at the DISPATCH boundary (`lead-context-budget`, PreToolUse `Agent|Task`, #1693): ≥120K — finish the wave, start no new one; ≥160K — a new dispatch is denied (accept running agents, finish PR tails by hand, `/wrap` + handoff). Owner-only hatch: `.claude/lead-budget-override`, removed by `/wrap`.
+`/wrap` is OWNER-typed only — never agent-started, not for a «handoff» ask (= skill `handoff-prompt` alone, no retro); guard `wrap-owner-only` denies it (#1746). `context-budget` hook (120K/160K) = operator advisory only. The same tiers bind at the DISPATCH boundary (`lead-context-budget`, PreToolUse `Agent|Task`, #1693): ≥120K — finish the wave, start no new one; ≥160K — a new dispatch is denied (accept running agents, finish PR tails by hand, `/wrap` + handoff). Owner-only hatch: `.claude/lead-budget-override`, removed by `/wrap`.
 
 ## Auto-memory (load-on-demand by design)
 
@@ -63,7 +63,7 @@ A subagent's final message lands in the lead's context and is re-read until sess
 5. Briefs in English; RU only where the RU string is itself the artifact. User-facing replies stay RU.
 6. Background dispatches are checkpointed and probed with `pnpm dispatch:probe <N>` (STILL-CLEAN ≈10 min in ⇒ kill + re-dispatch on a tighter brief), never by "waiting for the notification"; owner-facing status names observed artifacts only (commit / PR # / verdict), downstream steps are phrased as plan, and every impl brief carries the dispatch-brief checklist heading (memory `feedback_orchestration_brief_full_lint_before_pr`). Any wait on CI or a workflow run follows the shared-token poller rules in skill `merge-when-green` Step 1.
 7. Impl dispatches go to `ds-implementer` (Opus, maxTurns 120). The subagent 150K/200K ROTATE contract is stated once, in AGENTS.md §6.
-8. `<subagent_tokens>` = the child's reading in the task-notification `<usage>`, taken BEFORE the round (it ignores that round's own ≈20K+ cost). SendMessage rework/re-review only while it is < 120K — impl and reviewer alike; at or above, as on a `ROTATE:` return, dispatch a FRESH agent with PR + review URL + checkpoint. Wave landed → `/wrap` + handoff → new session.
+8. `<subagent_tokens>` = the child's reading in the task-notification `<usage>`, taken BEFORE the round (it ignores that round's own ≈20K+ cost). SendMessage rework/re-review only while it is < 120K — impl and reviewer alike; at or above, as on a `ROTATE:` return, dispatch a FRESH agent with PR + review URL + checkpoint. Wave landed → handoff.
 
 ## On-demand pointers
 

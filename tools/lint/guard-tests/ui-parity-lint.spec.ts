@@ -188,6 +188,7 @@ describe("ui-parity body evidence", () => {
       baseApprovedManifest.sources[hiddenRelabelSource].approvalProvenance,
     ).toEqual([
       "https://github.com/doctor-school/ds-platform/issues/1748#issuecomment-5507821212",
+      "https://github.com/doctor-school/ds-platform/issues/1748#issuecomment-5508078479",
       "https://github.com/doctor-school/ds-platform/issues/1748#issuecomment-5506026515",
     ]);
   });

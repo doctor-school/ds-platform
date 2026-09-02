@@ -71,7 +71,20 @@ const server = createServer((request, response) => {
 
   if (url.pathname === "/v1/storefront/doctor/events") {
     const widened = url.searchParams.get("to") !== null;
-    const days = widened ? [...BASE_DAYS, WIDENED_DAY] : BASE_DAYS;
+    const served = widened ? [...BASE_DAYS, WIDENED_DAY] : BASE_DAYS;
+    // The `format` facet is honoured (every fixture card is a `webinar`) so a
+    // route-level test can prove the facet reached the SERVER through the URL
+    // rather than being applied in the browser (019 EARS-8, #1523).
+    const formats = url.searchParams.getAll("format").flatMap((v) => v.split(","));
+    const days =
+      formats.length === 0
+        ? served
+        : served
+            .map((group) => ({
+              ...group,
+              items: group.items.filter((item) => formats.includes(item.format)),
+            }))
+            .filter((group) => group.items.length > 0);
     return json(response, 200, {
       tense: "upcoming",
       from: url.searchParams.get("from") ?? DEFAULT_FROM,

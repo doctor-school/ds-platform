@@ -47,6 +47,8 @@ Stale branches: auto-deleted on merge via `--delete-branch`; PRs closed without 
 
 **Pre-commit:** simple-git-hooks runs `lint-staged` (ESLint `--fix` + Prettier). `--no-verify` is a valid escape hatch — log the reason in the PR description.
 
+**CI rerun ≠ free.** A `gh run rerun … --failed` that turns a red job green obliges a `DEBT.md` flake line in the same session (job + failing step + observed root cause, `promote-when: second occurrence of the same job`); the second occurrence of the same job is an Issue — an infra step that needs a readiness wait gets fixed, not retried.
+
 **PR template required** — kind label (`feature`/`bug`/`chore`/`refactor`/`docs`/`tooling`), `Closes #N`, author marker in the body (`author:claude` / `author:codex` / `author:human`) — a body marker, not a `gh --label`.
 
 **`track:*` on a PR is DERIVED — never hand-set (#1600).** Do not pass a track label to `gh pr create`. The `pr-track-sync` workflow reads `Closes #N`, takes the Issue's `track:*` (the Issue is the single source of truth for the axis, gated at creation by #1583) and applies it to the PR; the author types nothing. A hand-set label that contradicts the linked Issue is NOT overwritten — the check goes red (exit 2) naming both sides, because only a human knows which of the two is wrong. Nothing to derive (no `Closes #N` — Version Packages, Dependabot — or a pre-gate Issue with no track) is green and unlabeled, not an error. Consequence this closes: a track slice over the board used to drop every PR row, i.e. exactly the work in flight.

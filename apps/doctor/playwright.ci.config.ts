@@ -27,16 +27,17 @@ export default defineConfig({
   testDir: "./e2e",
   // Every backend-REQUIRING spec lives in its own tier: the specialty
   // consumption flow, the 021 EARS-2 return context and the 019 events specs
-  // (EARS-3 day groups, EARS-8 URL state) each boot the app against their own
-  // upstream double (this tier boots no api at all). Both `events-*.spec.ts`
-  // assert `[data-events-feed]`, which only exists when something answers
-  // `GET /v1/storefront/doctor/events`, so both belong to
-  // `playwright.events.config.ts` and neither can be collected here.
+  // (EARS-3 day groups, EARS-8 URL state, EARS-4 month calendar) each boot the
+  // app against their own upstream double (this tier boots no api at all).
+  // Every `events-*.spec.ts` asserts `[data-events-feed]`, which only exists
+  // when something answers `GET /v1/storefront/doctor/events`, so they all
+  // belong to `playwright.events.config.ts` and none can be collected here.
   testIgnore: [
     "specialty-consumption.spec.ts",
     "register-return-context.spec.ts",
     "events-feed.spec.ts",
     "events-url-state.spec.ts",
+    "events-month-beside-feed.spec.ts",
   ],
   fullyParallel: true,
   forbidOnly: !!process.env.CI,

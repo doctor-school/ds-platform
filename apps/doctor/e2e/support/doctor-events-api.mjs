@@ -64,13 +64,54 @@ const WIDENED_DAY = {
   items: [card("evt-4", "2026-09-20T10:00:00.000Z")],
 };
 
+/**
+ * 019 EARS-4 (#1519) — the month the calendar pane paints. `today` is a day
+ * with NO events so «сегодня» and the live marker are two independent signals
+ * the spec can assert apart: 2026-09-02 is the live day, 2026-09-04 and
+ * 2026-09-20 are planned-only days, every other day of September is empty (the
+ * contract requires EVERY day of the month to be present).
+ */
+const MONTH = "2026-09";
+const MONTH_TODAY = "2026-09-01";
+const MONTH_COUNTS = {
+  "2026-09-02": { count: 2, hasLive: true },
+  "2026-09-04": { count: 1, hasLive: false },
+  "2026-09-20": { count: 1, hasLive: false },
+};
+
+function monthDays() {
+  return Array.from({ length: 30 }, (_unused, index) => {
+    const date = `${MONTH}-${String(index + 1).padStart(2, "0")}`;
+    const read = MONTH_COUNTS[date] ?? { count: 0, hasLive: false };
+    return { date, count: read.count, hasLive: read.hasLive };
+  });
+}
+
 const server = createServer((request, response) => {
   const url = new URL(request.url ?? "/", `http://${request.headers.host}`);
 
   if (url.pathname === "/health") return json(response, 200, { ok: true });
 
+  if (url.pathname === "/v1/storefront/doctor/events/month") {
+    return json(response, 200, {
+      month: url.searchParams.get("month") ?? MONTH,
+      today: MONTH_TODAY,
+      days: monthDays(),
+      targeting: {
+        mode: "general",
+        specialtyReference: null,
+        directionIds: [],
+        adjacentDirectionIds: [],
+      },
+    });
+  }
+
   if (url.pathname === "/v1/storefront/doctor/events") {
     const widened = url.searchParams.get("to") !== null;
+    // `day` is deliberately NOT read here: the real service ignores it too
+    // (`doctor-events-feed.schema.ts` — "Never narrows the read", LD-1). A day
+    // selection is URL state that scrolls the feed body to the `day-<ISO>`
+    // anchor; teaching this double to narrow would evidence a fiction.
     const served = widened ? [...BASE_DAYS, WIDENED_DAY] : BASE_DAYS;
     // The `format` facet is honoured (every fixture card is a `webinar`) so a
     // route-level test can prove the facet reached the SERVER through the URL

@@ -13,6 +13,7 @@ import {
   FormLabel,
   FormMessage,
 } from "@ds/design-system/form";
+import { Badge } from "@ds/design-system/badge";
 import { Checkbox } from "@ds/design-system/checkbox";
 import { EmailField, PasswordField } from "@ds/design-system/fields";
 import { Input } from "@ds/design-system/input";
@@ -119,6 +120,23 @@ const MEDICAL_WORKER_DECLARATION_HELP =
   "Требование закона: часть материалов доступна только медицинским работникам.";
 const MEDICAL_WORKER_DECLARATION_UNMET =
   "Отметьте, что вы медицинский работник — без этого регистрация невозможна.";
+
+/**
+ * The label split at its LAST space, so the closing word and the «обязательно»
+ * tag can be tied into one unbreakable inline run. The canvas draws the tag
+ * trailing the label's copy (`reqTagStyle`, `display:inline-block`), and at the
+ * 390px breakpoint a plain inline tag would be pushed onto a line of its own —
+ * a tag floating under the sentence reads as a separate statement rather than a
+ * qualifier of it. Derived from the copy constant, never a second hardcoded
+ * string: the copy stays stated once.
+ */
+const DECLARATION_LABEL_LEAD = MEDICAL_WORKER_DECLARATION_LABEL.slice(
+  0,
+  MEDICAL_WORKER_DECLARATION_LABEL.lastIndexOf(" ") + 1,
+);
+const DECLARATION_LABEL_TAIL = MEDICAL_WORKER_DECLARATION_LABEL.slice(
+  MEDICAL_WORKER_DECLARATION_LABEL.lastIndexOf(" ") + 1,
+);
 
 export function RegistrationScreen({
   returnContext,
@@ -307,15 +325,31 @@ export function RegistrationScreen({
                       }
                     >
                       <span className="flex flex-col gap-1">
-                        <span className="flex flex-wrap items-center gap-2">
-                          {MEDICAL_WORKER_DECLARATION_LABEL}
+                        <span>
+                          {DECLARATION_LABEL_LEAD}
                           {/*
-                            The canvas's «обязательно» tag: the requirement is
+                            The canvas's «обязательно» tag (`reqTagStyle`,
+                            `design-source/auth.dc.html`): the requirement is
                             stated on the control itself, not inferred from an
-                            asterisk.
+                            asterisk. It is the design system's `label` badge —
+                            the filled tint plate with tint ink and the micro
+                            uppercase label — never a hand-assembled span.
+
+                            It sits INLINE in the label's own text flow (not as a
+                            flex item), tied to the label's closing word by a
+                            single unbreakable run, so at 390px it trails that
+                            word onto the wrapped line instead of dropping onto a
+                            line of its own.
                           */}
-                          <span className="border border-border px-1 text-xs uppercase text-muted-foreground">
-                            обязательно
+                          <span className="whitespace-nowrap">
+                            {DECLARATION_LABEL_TAIL}
+                            <Badge
+                              variant="label"
+                              className="ml-1.5 align-middle"
+                              data-testid="register-medworker-required-tag"
+                            >
+                              обязательно
+                            </Badge>
                           </span>
                         </span>
                         <span

@@ -91,7 +91,7 @@ The canvas **state** props are not forks — they are content-driven obligations
 
 **Out:**
 
-- **The live room itself** — feature **006**; 019 renders only the way in.
+- **The live room itself** — feature **006**: the one shared room-UI unit, mounted by a thin route on each storefront host (extraction [#1722](https://github.com/doctor-school/ds-platform/issues/1722)); 019 renders only the way into the room on the doctor storefront host.
 - **The event page** `#d-event` — feature **020**; every card and the live block link into it.
 - **Registration and consents** — feature **021**; 019 routes into it and defines the return target only.
 - **The full «Мои события» section, congress tickets and НМО check-ins** — `#d-lk` (feature **022**), features **020** / **038**. The 019 cut lists what the doctor is signed up for and links out; it renders no ticket, no QR and no check-in affordance.

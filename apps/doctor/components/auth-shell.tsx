@@ -47,9 +47,31 @@ import { AuthLayout } from "@ds/design-system/blocks";
  * below `layout:`, the clean white variant on the brand panel above it — so no
  * chip and no CSS colour-inversion is needed on the blue fill.
  */
-export function AuthShell({ children }: { children: ReactNode }) {
+export function AuthShell({
+  returnContext,
+  children,
+}: {
+  /**
+   * 021 EARS-2 (#1538) — the return-context block that FILLS the split's left
+   * half when the doctor arrived from a content gate. It stands in the brand
+   * panel's middle zone, taking the place of the value prop rather than
+   * stacking above it: the canvas draws exactly one of the two
+   * (`showBrandPanel = !gateCardOnPanel`), because the panel's job on this
+   * arrival is to name what the doctor is one step away from, not to re-pitch
+   * the platform to someone already convinced. Unsupplied ⇒ the value prop
+   * renders and nothing is reserved for the context (EARS-3).
+   */
+  returnContext?: ReactNode;
+  children: ReactNode;
+}) {
   return (
     <AuthLayout
+      /* 021 EARS-2 — the canvas WIDENS the split when the panel carries the
+         return context instead of the value prop (`shellCols = gateCardOnPanel
+         ? '1.1fr .9fr'`, design-source/auth.dc.html): the panel is then showing
+         the doctor the thing they came for, and it needs the room a card takes.
+         With no return context the shipped 50/50 split stands. */
+      split={returnContext ? "wide-aside" : "even"}
       logo={
         <Image
           src="/brand/logo.svg"
@@ -84,9 +106,11 @@ export function AuthShell({ children }: { children: ReactNode }) {
             className="h-12 w-auto self-start"
             data-testid="auth-panel-wordmark"
           />
-          {/* Zone 2 — value prop, growing into the space between mark and footer and
-              centring itself there, so the panel reads as the canvas's deliberate
-              three-zone split rather than a block with a void above it. */}
+          {/* Zone 2 — the return context when the doctor arrived from a gate,
+              otherwise the value prop. One or the other, never both: the zone is
+              the panel's single middle band, and the canvas swaps its content
+              rather than stacking two pitches into it. */}
+          {returnContext ?? (
           <div className="flex flex-1 flex-col justify-center gap-5">
             <p className="text-eyebrow font-extrabold uppercase tracking-micro text-primary-surface-muted">
               Врачи учат врачей
@@ -104,6 +128,7 @@ export function AuthShell({ children }: { children: ReactNode }) {
               Бесплатные эфиры, записи и сертификаты НМО — от практикующих врачей.
             </p>
           </div>
+          )}
           {/* Zone 3 — panel footer, verbatim from the canvas. It is the panel's own
               closing line, not site chrome: the route stays chromeless (no storefront
               header/footer/nav), and this line lives inside the brand panel, which the

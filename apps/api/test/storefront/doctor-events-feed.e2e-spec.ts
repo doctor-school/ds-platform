@@ -48,6 +48,8 @@ describe.skipIf(!process.env.DATABASE_URL)(
     let unreachableEventId = "";
     let farEventId = "";
     let lonelyEventId = "";
+    /** Far past the default horizon, on the adjacency-less direction (EARS-3.7/3.8/9.1). */
+    let lonelyFarEventId = "";
 
     const at = (dayOffset: number, hour: number) =>
       new Date(
@@ -189,6 +191,14 @@ describe.skipIf(!process.env.DATABASE_URL)(
       lonelyEventId = await makeEvent({
         title: "Специальность без смежностей",
         startsAt: at(2, 15),
+        directionId: lonelyDirection,
+      });
+      // Two horizon steps out: the nearest event beyond the default window is
+      // NOT inside `to + STEP`, so a `nextTo` that merely adds one step would
+      // hand the doctor a «показать ещё» leading to an empty widening.
+      lonelyFarEventId = await makeEvent({
+        title: "Через сорок дней",
+        startsAt: at(40, 12),
         directionId: lonelyDirection,
       });
     }, 60_000);
@@ -348,6 +358,51 @@ describe.skipIf(!process.env.DATABASE_URL)(
       // have hidden are present, so this is a degradation, not an empty feed.
       const ids = feed.days.flatMap((day) => day.items.map((item) => item.id));
       expect(ids).toContain(unreachableEventId);
+    });
+
+    it("EARS-3.7: with nothing beyond the horizon, `nextTo` is null so «показать ещё» is never offered into an empty widening", async () => {
+      // The adjacency-less specialty owns exactly two events, at +2 and +40;
+      // a window through +60 therefore has nothing left to walk to.
+      const feed = await readFeed({
+        specialtyCode: lonelyCode,
+        query: `?from=${today}&to=${addDoctorEventsFeedDays(today, 60)}`,
+      });
+
+      const ids = feed.days.flatMap((day) => day.items.map((item) => item.id));
+      expect(ids).toEqual([lonelyEventId, lonelyFarEventId]);
+      expect(feed.nextTo).toBeNull();
+    });
+
+    it("EARS-3.8: the next `to` COVERS the nearest event beyond the horizon, not merely one step on", async () => {
+      const feed = await readFeed({ specialtyCode: lonelyCode });
+      expect(feed.to).toBe(addDoctorEventsFeedDays(today, 14));
+      // One step (+28) would still fall short of the +40 event; the horizon
+      // walks whole steps until it covers it.
+      expect(feed.nextTo).toBe(addDoctorEventsFeedDays(today, 42));
+
+      const extended = await readFeed({
+        specialtyCode: lonelyCode,
+        query: `?from=${feed.from}&to=${feed.nextTo}`,
+      });
+      const ids = extended.days.flatMap((day) =>
+        day.items.map((item) => item.id),
+      );
+      expect(ids).toContain(lonelyFarEventId);
+    });
+
+    it("EARS-9.1: an empty window whose future is non-empty still offers «показать ещё»", async () => {
+      const from = addDoctorEventsFeedDays(today, 20);
+      const feed = await readFeed({
+        specialtyCode: lonelyCode,
+        query: `?from=${from}&to=${addDoctorEventsFeedDays(today, 25)}`,
+      });
+
+      expect(feed.totalCount).toBe(0);
+      expect(feed.days).toEqual([]);
+      // The emptiness is the WINDOW's, not the feed's — the +40 event is still
+      // reachable, so the control stays offered and its target covers it.
+      expect(feed.nextTo).not.toBeNull();
+      expect(feed.nextTo! > addDoctorEventsFeedDays(today, 40)).toBe(true);
     });
   },
 );

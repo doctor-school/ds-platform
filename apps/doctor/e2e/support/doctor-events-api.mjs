@@ -13,14 +13,14 @@ import { createServer } from "node:http";
  * against the real database.
  *
  * The horizon walk is modelled the way the real service behaves: a read with no
- * explicit `to` gets the default window plus a `nextTo`; a read that carries the
- * widened `to` gets the wider window, one more day group and `nextTo: null`.
+ * explicit `to` gets the default window plus a `nextTo` that COVERS the nearest
+ * fixture day beyond it; a read that already carries every fixture day gets
+ * `nextTo: null`, because there is nothing left to walk to (#1803).
  */
 const port = Number(process.env.DOCTOR_EVENTS_FAKE_API_PORT ?? 3214);
 
 const DEFAULT_FROM = "2026-09-01";
 const DEFAULT_TO = "2026-09-15";
-const WIDENED_TO = "2026-09-29";
 
 const card = (id, startsAt, overrides = {}) => ({
   id,
@@ -81,6 +81,32 @@ const MONTH_COUNTS = {
   "2026-09-04": { count: 1, hasLive: false },
   "2026-09-20": { count: 1, hasLive: false },
 };
+
+const HORIZON_STEP_DAYS = 14;
+
+const addDays = (day, days) => {
+  const shifted = new Date(`${day}T00:00:00Z`);
+  shifted.setUTCDate(shifted.getUTCDate() + days);
+  return shifted.toISOString().slice(0, 10);
+};
+
+const dayGap = (from, to) =>
+  Math.round(
+    (new Date(`${to}T00:00:00Z`).getTime() -
+      new Date(`${from}T00:00:00Z`).getTime()) /
+      86_400_000,
+  );
+
+/** `null` when no fixture day lies at or past `to`; else the covering step boundary. */
+function nextToBeyond(to) {
+  const beyond = ALL_DAYS.map((group) => group.day)
+    .filter((day) => day >= to)
+    .sort()
+    .at(0);
+  if (beyond === undefined) return null;
+  const steps = Math.floor(dayGap(to, beyond) / HORIZON_STEP_DAYS) + 1;
+  return addDays(to, steps * HORIZON_STEP_DAYS);
+}
 
 function monthDays() {
   return Array.from({ length: 30 }, (_unused, index) => {
@@ -144,8 +170,12 @@ const server = createServer((request, response) => {
       to,
       days,
       totalCount: days.reduce((sum, group) => sum + group.items.length, 0),
-      // The horizon is maximal at `WIDENED_TO`; below it there is more to walk.
-      nextTo: to < WIDENED_TO ? WIDENED_TO : null,
+      // «показать ещё» is offered only when a fixture day actually lies beyond
+      // the served window, and the `to` it names COVERS that day — the same
+      // data-aware rule the service applies (#1803). Deriving it from the mere
+      // presence of a `to` would let the route look green while production
+      // offered a control walking into an empty widening.
+      nextTo: nextToBeyond(to),
       targeting: {
         mode: "general",
         specialtyReference: null,

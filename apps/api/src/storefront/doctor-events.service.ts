@@ -86,11 +86,13 @@ export class DoctorEventsService {
       input.specialtyReference,
     );
 
+    const directionIds =
+      targeting.mode === "all"
+        ? null
+        : [...targeting.directionIds, ...targeting.adjacentDirectionIds];
+
     const rows = await this.repository.findFeedRows({
-      directionIds:
-        targeting.mode === "all"
-          ? null
-          : [...targeting.directionIds, ...targeting.adjacentDirectionIds],
+      directionIds,
       fromInstant: new Date(`${horizon.from}T00:00:00+03:00`),
       toInstant: new Date(`${horizon.to}T00:00:00+03:00`),
       kindIds: query.kind,
@@ -101,7 +103,7 @@ export class DoctorEventsService {
     const filtered = applyCardFacets(cards, query);
 
     const days = groupByDay(rows, filtered);
-    const width = doctorEventsFeedHorizonWidth(horizon.from, horizon.to);
+    const nextTo = await this.resolveNextTo({ horizon, directionIds, query });
 
     return {
       tense: query.tense,
@@ -111,18 +113,64 @@ export class DoctorEventsService {
       totalCount: filtered.length,
       // «показать ещё» is a URL edit, not a client paging state (LD-2/EARS-8):
       // the server names the next `to`, the client writes it into the address.
-      nextTo:
-        width >= DOCTOR_EVENTS_FEED_MAX_HORIZON_DAYS
-          ? null
-          : addDoctorEventsFeedDays(
-              horizon.to,
-              Math.min(
-                DOCTOR_EVENTS_FEED_HORIZON_STEP_DAYS,
-                DOCTOR_EVENTS_FEED_MAX_HORIZON_DAYS - width,
-              ),
-            ),
+      nextTo,
       targeting,
     };
+  }
+
+  /**
+   * The `to` «показать ещё» leads to — or `null` when the control must not be
+   * offered at all (#1803).
+   *
+   * The horizon width alone cannot answer this. A feed whose window simply ends
+   * says nothing about whether ANYTHING lies past it, and naming a next `to`
+   * regardless offered the doctor a control that walked into an empty widening
+   * — visibly so on the adjacency-less specialties, whose whole future may be a
+   * single event months out. So the question is asked of the data, under the
+   * SAME predicate the feed itself selects with: is there a feed-eligible event
+   * in `[to, from + MAX)`?
+   *
+   * When there is, the step is walked WHOLE rather than once: the answer is the
+   * smallest `to + k * STEP` (k ≥ 1, clamped to the maximum horizon) strictly
+   * past the day that event falls on, so the widening the doctor is handed
+   * always contains at least that event. An event inside the very next step
+   * therefore still yields today's `to + STEP`.
+   */
+  private async resolveNextTo(input: {
+    horizon: { from: string; to: string };
+    directionIds: string[] | null;
+    query: DoctorEventsFeedQuery;
+  }): Promise<string | null> {
+    const { horizon, query } = input;
+    const width = doctorEventsFeedHorizonWidth(horizon.from, horizon.to);
+    if (width >= DOCTOR_EVENTS_FEED_MAX_HORIZON_DAYS) return null;
+
+    const maxTo = addDoctorEventsFeedDays(
+      horizon.from,
+      DOCTOR_EVENTS_FEED_MAX_HORIZON_DAYS,
+    );
+    const firstStart = await this.repository.findFirstFeedStartAfter({
+      directionIds: input.directionIds,
+      fromInstant: new Date(`${horizon.to}T00:00:00+03:00`),
+      toInstant: new Date(`${maxTo}T00:00:00+03:00`),
+      kindIds: query.kind,
+      q: query.q,
+    });
+    if (firstStart === null) return null;
+
+    const gap = doctorEventsFeedHorizonWidth(
+      horizon.to,
+      doctorEventsFeedDayOf(firstStart),
+    );
+    const steps =
+      Math.floor(gap / DOCTOR_EVENTS_FEED_HORIZON_STEP_DAYS) + 1;
+    return addDoctorEventsFeedDays(
+      horizon.from,
+      Math.min(
+        width + steps * DOCTOR_EVENTS_FEED_HORIZON_STEP_DAYS,
+        DOCTOR_EVENTS_FEED_MAX_HORIZON_DAYS,
+      ),
+    );
   }
 
   /**

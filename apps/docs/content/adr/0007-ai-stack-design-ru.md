@@ -25,7 +25,7 @@ lang: ru
 | Scope ADR-0007                   | Phase 0 = AI-loop methodology (dev-time); runtime AI infra — deferred с triggers                                                                                              | §1                |
 | Coding agent harnesses Pre-pilot | Claude Code (primary, sync) + Codex (opt-in async). Cursor deferred.                                                                                                          | §2                |
 | Agent loop discipline            | SDD + TDD как hard rules; iteration-end checklist machine-checkable                                                                                                           | §3                |
-| Task tracking source             | GitHub Issues (per ADR-0006 §9), сгруппированы под product-тема milestones                                                                                                    | inherits ADR-0006 |
+| Task tracking source             | GitHub Issues (per ADR-0006 §9), сгруппированы под релизными milestone'ами трека                                                                                              | inherits ADR-0006 |
 | Session bootstrap                | `tools/agent-bootstrap.ts` — детерминистический скрипт, output = live state snapshot                                                                                          | §4                |
 | Drift guards AI-specific         | Дополнительные CI checks поверх ADR-0006 §7 (spec-link, TDD signal, EARS↔test linkage, и др.)                                                                                 | §5                |
 | LLM-assisted PR review           | Только интерактивный (три режима — subagent `/review`, параллельный Codex CLI, чистый human). Никакого автоматического reviewer-bot'а, никаких LLM API-ключей в repo secrets. | §6, AGENTS.md §4  |
@@ -43,7 +43,7 @@ lang: ru
 
 ### 2.1 Iteration unit
 
-Один iteration = одна feature-spec → один или несколько связанных PR. Источник intent — `apps/docs/content/specs/features/NNN-<slug>/{NNN-requirements.md, NNN-design.md, NNN-scenarios.feature}` (3 файла, ADR-0006 §4). Источник execution state — Issues per EARS-handler, каждый с лейблом `feature:NNN-<slug>` (он привязывает Issue к его спеке), сгруппированные под долгоживущим product-тема GitHub Milestone (ADR-0006 §9; AGENTS.md §2 — Milestone это тема, не spec-папка). Никакого `tasks.md` файла.
+Один iteration = одна feature-spec → один или несколько связанных PR. Источник intent — `apps/docs/content/specs/features/NNN-<slug>/{NNN-requirements.md, NNN-design.md, NNN-scenarios.feature}` (3 файла, ADR-0006 §4). Источник execution state — Issues per EARS-handler, каждый с лейблом `feature:NNN-<slug>` (он привязывает Issue к его спеке), сгруппированные под релизным GitHub Milestone трека, в котором они едут (ADR-0006 §9; AGENTS.md §2 — Milestone это один поставляемый релиз одного трека, не тема и не spec-папка). Никакого `tasks.md` файла.
 
 ### 2.2 Каноническая процедура — skill-каталог в `apps/docs/content/skills/<name>/SKILL.md`
 
@@ -63,7 +63,7 @@ orchestrated iteration cycle (`do-feature-iteration` оркеструет эти
 2. PLAN
    - Если parent Issue для spec'а ещё нет → создать +
      sub-issues per EARS-handler через `gh issue create`
-       --milestone "<product theme>" --label "feature:NNN-<slug>"
+       --milestone "<Трек> R<n> — <результат>" --label "feature:NNN-<slug>"
    - Если parent есть → выбрать open sub-issue или открыть новый
 
 3. RED (TDD)
@@ -245,7 +245,7 @@ async function ghPRs(): Promise<any[]> {
 
 async function readSpecMeta(featureSlug: string) {
   // feature:NNN-<slug> label slug = "NNN-slug" → spec path (NOT the milestone,
-  // which is a product theme; AGENTS.md §2)
+  // which is a track release; AGENTS.md §2)
   const specDir = resolve(
     REPO_ROOT,
     "apps/docs/content/specs/features",
@@ -424,14 +424,14 @@ main().catch((e) => {
 
 ### 5.2 CI gates — AI-specific extensions (поверх ADR-0006 §7)
 
-| Guard                     | Что ловит                                                                   | Implementation                                                                                                                                                                                                                                | Severity Phase 0        |
-| ------------------------- | --------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- |
-| **spec-link required**    | PR с лейблом `feature:NNN-<slug>`, не связанный со своей спекой как надо    | GH Action: PR body содержит `Closes #N`; каждый связанный Issue несёт (product-тема) milestone; spec folder лейбла `feature:NNN-<slug>` — `apps/docs/content/specs/features/NNN-<slug>/` — существует с `NNN-requirements.md` (или `-en.md`). | BLOCK                   |
-| **TDD signal**            | implementation-only commit без test-файла                                   | GH Action: для каждого изменённого `src/**/*.ts` — `*.test.ts` либо в diff, либо commit history показывает test-commit предшествующим. Heuristic, false positives возможны.                                                                   | WARN v1                 |
-| **EARS ↔ test linkage**   | EARS-требование без `it('EARS-N: ...')`                                     | Custom lint `tools/lint/ears-test-lint.ts`: парсит EARS IDs в `NNN-requirements.md`, проверяет наличие it-описаний с тем же ID в модуле.                                                                                                      | WARN v1 → BLOCK v2      |
-| **Gherkin coverage**      | scenarios без Playwright step реализации                                    | playwright-bdd native error — test fails если step undefined.                                                                                                                                                                                 | BLOCK (через test fail) |
-| **Spec status freshness** | Merged PR со spec:NNN, но spec status='Draft'                               | Custom lint: при merge — проверить `status: In dev` minimum.                                                                                                                                                                                  | WARN v1                 |
-| **Prior decisions cited** | Новый spec без указанных ADR в "Prior decisions" если категория ≠ docs-only | Spec lint: `NNN-requirements.md` имеет секцию с ≥1 ADR-link.                                                                                                                                                                                  | WARN v1                 |
+| Guard                     | Что ловит                                                                   | Implementation                                                                                                                                                                                                                            | Severity Phase 0        |
+| ------------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- |
+| **spec-link required**    | PR с лейблом `feature:NNN-<slug>`, не связанный со своей спекой как надо    | GH Action: PR body содержит `Closes #N`; каждый связанный Issue несёт (релизный) milestone; spec folder лейбла `feature:NNN-<slug>` — `apps/docs/content/specs/features/NNN-<slug>/` — существует с `NNN-requirements.md` (или `-en.md`). | BLOCK                   |
+| **TDD signal**            | implementation-only commit без test-файла                                   | GH Action: для каждого изменённого `src/**/*.ts` — `*.test.ts` либо в diff, либо commit history показывает test-commit предшествующим. Heuristic, false positives возможны.                                                               | WARN v1                 |
+| **EARS ↔ test linkage**   | EARS-требование без `it('EARS-N: ...')`                                     | Custom lint `tools/lint/ears-test-lint.ts`: парсит EARS IDs в `NNN-requirements.md`, проверяет наличие it-описаний с тем же ID в модуле.                                                                                                  | WARN v1 → BLOCK v2      |
+| **Gherkin coverage**      | scenarios без Playwright step реализации                                    | playwright-bdd native error — test fails если step undefined.                                                                                                                                                                             | BLOCK (через test fail) |
+| **Spec status freshness** | Merged PR со spec:NNN, но spec status='Draft'                               | Custom lint: при merge — проверить `status: In dev` minimum.                                                                                                                                                                              | WARN v1                 |
+| **Prior decisions cited** | Новый spec без указанных ADR в "Prior decisions" если категория ≠ docs-only | Spec lint: `NNN-requirements.md` имеет секцию с ≥1 ADR-link.                                                                                                                                                                              | WARN v1                 |
 
 > **Семантика `BLOCK`:** строки `BLOCK` обеспечиваются server-side. Ruleset `main` (ADR-0008 §2.6) требует зелёный контекст `ci`; упавший BLOCK-guard красит job `guards-block`, который красит агрегат `ci`, — и GitHub сам отказывает в merge, а не только Tech Lead по convention'у. Строки WARN остаются advisory: они сообщают red, не затрагивая агрегат `ci`, и именно promotion WARN→BLOCK делает guard обязывающим.
 
@@ -559,11 +559,11 @@ async function main() {
       l.name?.startsWith("feature:"),
     );
     if (!issueIsFeature) continue; // bug/chore Issue — skip spec-folder check
-    // Milestone должен присутствовать (product-тема — любой title; только
+    // Milestone должен присутствовать (релиз трека — любой title; только
     // группировка, ADR-0006 §9 / AGENTS.md §2). Его title — НЕ путь.
     if (!issue.milestone?.title) {
       throw new Error(
-        `Issue #${issueNum} has feature:* label but no milestone. Every feature-Issue sits under a product-theme milestone.`,
+        `Issue #${issueNum} has feature:* label but no milestone. Every feature-Issue sits under a track-release milestone.`,
       );
     }
     // Spec-папка — это slug лейбла feature:NNN-<slug>.
@@ -971,11 +971,11 @@ Per ADR-0006 §9 conventions (title format `[NNN] EARS-N: ...`, label `kind:ears
 
 - If no parent Issue exists for the spec: create one with `--body-file` (a `--body` flag must be provided in non-interactive contexts; `gh issue create` without it opens an editor and hangs in CI/Codex):
   gh issue create --title "Feature NNN: <name>" \
-  --milestone "<product theme>" --label "feature:NNN-<slug>" \
+  --milestone "<Трек> R<n> — <результат>" --label "feature:NNN-<slug>" \
   --body-file .github/issue_templates/feature.md
   Then for each EARS-handler from `NNN-requirements.md`:
   gh issue create --title "[NNN] EARS-N: <description>" \
-  --milestone "<product theme>" --label "feature:NNN-<slug>,kind:ears-handler,agent-ready" \
+  --milestone "<Трек> R<n> — <результат>" --label "feature:NNN-<slug>,kind:ears-handler,agent-ready" \
   --body "Spec: apps/docs/content/specs/features/NNN-<slug>/. Parent: #<parent-issue>."
 - Use superpowers:writing-plans skill only if the task is multi-step within a single Issue.
 

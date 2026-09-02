@@ -215,7 +215,7 @@ To avoid false-SSOT in Git (`tasks.md`), task execution state lives in task trac
 
 **GitHub Issues convention for feature implementation:**
 
-- **Milestone = product theme** (e.g., `Doctor onboarding v1`) — a long-lived theme that may span several feature specs (AGENTS.md §2). A Milestone is **not** a spec folder; the spec an Issue implements is bound by its `feature:NNN-<slug>` label.
+- **Milestone = one shippable release of one track** — RU-named `«<Трек> R<n> — <результат>»` (e.g. `«Академия R1 — Архив записей»`), holding 1–4 feature-level Issues, with `R<n>` numbered within a track and the two tracks never sharing a milestone (AGENTS.md §2). Milestones are **independent of specs**: a Milestone is not a spec folder and not a long-lived theme; the spec an Issue implements is bound by its `feature:NNN-<slug>` label. Work beyond the two nearest releases sits in the per-track backlog milestone («Академия · Позже» / «Витрина · Позже»); platform work takes the milestone of the release it `blocked_by`-blocks, else «Platform ops & hardening». An **epic carries no milestone** — it spans releases, so its progress is the native sub-issue bar and its axis the `track:*` label.
 - **One Issue per EARS-handler** — title `[001] EARS-3: When OIDC callback received, the system shall ...`, body contains a link to the specific EARS-ID in `NNN-requirements.md`.
 - **Labels** — `feature:NNN-<slug>` (binds the Issue to `apps/docs/content/specs/features/NNN-<slug>/`), `kind:ears-handler` / `kind:bug` / `kind:refactor` / `kind:dep-upgrade`.
 - **GitHub Project v2** — "DS Platform Implementation" board with swimlanes by feature.
@@ -224,7 +224,7 @@ To avoid false-SSOT in Git (`tasks.md`), task execution state lives in task trac
 
 - Plane Issue → GitHub: URL in description or comment.
 - GitHub Issue → Plane: URL in body, optional label `plane:DSO-N`.
-- Feature spec → its product-theme GitHub Milestone: frontmatter field `tracker: <github-milestone-url>` in `NNN-requirements.md` (several specs under one theme share the URL).
+- Feature spec → the release GitHub Milestone its Issues ship in: frontmatter field `tracker: <github-milestone-url>` in `NNN-requirements.md`. Milestones are independent of specs, so one release can carry Issues from several specs and one spec's Issues can be split across releases.
 
 **AI agent workflow:**
 

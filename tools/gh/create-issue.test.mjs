@@ -25,7 +25,15 @@ import {
   ensureTypeFlag,
   hasAssignee,
   ensureAssigneeFlag,
+  partitionArgs,
+  titleValue,
+  milestoneValue,
+  epicMilestoneError,
+  earsParentError,
+  milestoneConflictError,
+  buildSubIssueLinkArgs,
 } from "./create-issue.mjs";
+import { EARS_KIND_LABEL } from "./lib/roadmap-taxonomy.mjs";
 
 // ── collectLabels: every flag form + comma lists ────────────────────────────
 test("collectLabels handles --label, --label=, -l, and comma lists", () => {
@@ -204,4 +212,91 @@ test("ensureAssigneeFlag defaults to @me only when none is passed", () => {
   assert.equal(hasAssignee(["--assignee=someone"]), true);
   assert.deepEqual(ensureAssigneeFlag(["-a", "someone"]), ["-a", "someone"]);
   assert.deepEqual(ensureAssigneeFlag(["--assignee", "x"]), ["--assignee", "x"]);
+});
+
+// ── --parent control flag + roadmap taxonomy gates (#1729) ──────────────────
+test("partitionArgs consumes --parent without forwarding it to gh", () => {
+  const both = partitionArgs(["--no-todo", "--parent", "42", "--title", "x"]);
+  assert.equal(both.setTodo, false);
+  assert.equal(both.parent, 42);
+  assert.equal(both.parentError, null);
+  assert.deepEqual(both.passthrough, ["--title", "x"]);
+  assert.equal(partitionArgs(["--parent=42"]).parent, 42);
+  assert.equal(partitionArgs(["--parent", "#42"]).parent, 42);
+  // Absent → null, and the passthrough is untouched.
+  const none = partitionArgs(["--title", "x", "--label", "bug"]);
+  assert.equal(none.parent, null);
+  assert.deepEqual(none.passthrough, ["--title", "x", "--label", "bug"]);
+  assert.deepEqual(partitionArgs([]).passthrough, []);
+});
+
+test("partitionArgs reports a malformed --parent instead of silently dropping it", () => {
+  for (const bad of ["abc", "0", "-3", ""]) {
+    const p = partitionArgs(["--parent", bad]);
+    assert.equal(p.parent, null);
+    assert.match(p.parentError, /positive Issue number/);
+  }
+});
+
+test("titleValue / milestoneValue read every flag form", () => {
+  assert.equal(titleValue(["--title", "epic: x"]), "epic: x");
+  assert.equal(titleValue(["--title=epic: x"]), "epic: x");
+  assert.equal(titleValue(["-t", "epic: x"]), "epic: x");
+  assert.equal(titleValue(["--label", "bug"]), "");
+  assert.equal(milestoneValue(["--milestone", "R1"]), "R1");
+  assert.equal(milestoneValue(["--milestone=R1"]), "R1");
+  assert.equal(milestoneValue(["-m", "R1"]), "R1");
+  assert.equal(milestoneValue(["--label", "bug"]), null);
+});
+
+test("milestoneError exempts an epic title and an inherited --parent", () => {
+  // Epic: no milestone needed.
+  assert.equal(milestoneError(["--title", "epic: academy roadmap"]), null);
+  // Sub-issue: inherited from the parent.
+  assert.equal(milestoneError(["--title", "[012] EARS-1: x"], { parent: 42 }), null);
+  // Everything else still needs one.
+  assert.match(milestoneError(["--title", "[012] EARS-1: x"]), /needs a milestone/);
+});
+
+test("epicMilestoneError rejects a milestone on an epic container", () => {
+  assert.match(
+    epicMilestoneError(["--title", "epic: academy roadmap", "-m", "Академия R1 — Архив записей"]),
+    /must NOT carry a milestone/,
+  );
+  assert.equal(epicMilestoneError(["--title", "epic: academy roadmap"]), null);
+  // A non-epic title with a milestone is untouched by this gate.
+  assert.equal(epicMilestoneError(["--title", "[Академия][012] x", "-m", "R1"]), null);
+});
+
+test("earsParentError requires --parent for a kind:ears-handler Issue", () => {
+  assert.match(
+    earsParentError(["--label", EARS_KIND_LABEL, "--label", "feature"], null),
+    /needs --parent/,
+  );
+  assert.equal(earsParentError(["--label", EARS_KIND_LABEL], 42), null);
+  // A non-EARS Issue never needs a parent.
+  assert.equal(earsParentError(["--label", "chore"], null), null);
+});
+
+test("milestoneConflictError fails closed on a child/parent milestone divergence", () => {
+  assert.match(
+    milestoneConflictError("Витрина R1 — MVP витрины", "Академия R1 — Архив записей", 42),
+    /conflicts with parent #42/,
+  );
+  assert.equal(milestoneConflictError("R1", "R1", 42), null);
+  // No milestone passed → inheritance, not a conflict.
+  assert.equal(milestoneConflictError(null, "R1", 42), null);
+  // Parent has none → nothing to diff against (main() dies separately).
+  assert.equal(milestoneConflictError("R1", null, 42), null);
+});
+
+test("buildSubIssueLinkArgs targets the REST sub_issues endpoint with the child DB id", () => {
+  assert.deepEqual(buildSubIssueLinkArgs(42, 9876543), [
+    "api",
+    "--method",
+    "POST",
+    "repos/doctor-school/ds-platform/issues/42/sub_issues",
+    "-F",
+    "sub_issue_id=9876543",
+  ]);
 });

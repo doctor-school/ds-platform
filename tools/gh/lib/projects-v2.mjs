@@ -93,6 +93,12 @@ export function buildDeleteItemMutation(projectId, itemId) {
  * the opaque `after` cursor; `null`/omitted starts at the first page. This is the
  * ONE sanctioned board-wide read (explicit pagination, no `gh project item-list`
  * dump, #984).
+ *
+ * Issue rows carry the roadmap-taxonomy fields too (#1729): title, labels,
+ * milestone and the sub-issue `parent` (with ITS milestone, so the inheritance
+ * check needs no second call), plus the item's date field values so the
+ * «Start date» / «Target date» roadmap columns are read in the SAME scan. One
+ * board sweep feeds both the PR-board hygiene and the roadmap-hygiene sections.
  * @param {string|null} [after]
  */
 export function buildBoardItemsPageQuery(after = null) {
@@ -104,8 +110,12 @@ export function buildBoardItemsPageQuery(after = null) {
   return (
     `query{organization(login:"${OWNER}"){projectV2(number:${PROJECT_NUMBER}){` +
     `items(first:100${cursor}){pageInfo{hasNextPage endCursor} nodes{id ` +
+    `fieldValues(first:20){nodes{... on ProjectV2ItemFieldDateValue{date ` +
+    `field{... on ProjectV2FieldCommon{name}}}}} ` +
     `content{__typename ... on PullRequest{number state ` +
-    `assignees(first:1){totalCount} milestone{title}}}}}}}}`
+    `assignees(first:1){totalCount} milestone{title}} ` +
+    `... on Issue{number state title milestone{title} ` +
+    `labels(first:30){nodes{name}} parent{number milestone{title}}}}}}}}}`
   );
 }
 

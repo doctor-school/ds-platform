@@ -137,19 +137,50 @@ Feature: Minimal event admin — one operator creates, publishes, streams, runs,
     Then the transition is refused server-side
     And the admin UI never offered that transition from the "<from>" state
 
-    # Amended 2026-08-17 (source: feature 014 EARS-18): the `| published | ended |`
-    # row left this set. `published -> ended` is now a legal edge behind the
-    # MarkEventEnded backfill command (state published + scheduled end in the past +
-    # room never opened). See 007-requirements-en.md / -ru.md -> Amendment and
-    # 007-design.md -> Amendment. The shipped assertion in
-    # apps/api/test/admin/transitions.e2e-spec.ts (EARS-7.2) is updated by the
-    # feature-014 EARS-18 Issue, which owns that edit.
+    # Amended 2026-09-02 (source: #1748 + #1741): the 2026-08-17 amendment that made
+    # `published -> ended` legal behind MarkEventEnded is WITHDRAWN and never shipped,
+    # so that row is part of the refused set again. `archived` below is read as its new
+    # name `hidden` (rename, meaning unchanged). See 007-requirements-en.md / -ru.md ->
+    # Amendment - 2026-09-02 and 007-design.md -> Amendment - 2026-09-02; the full
+    # design of both machines is 014-design.md section 3.1.
     Examples:
       | from      | to        |
       | draft     | live      |
       | draft     | ended     |
+      | published | ended     |
       | archived  | published |
       | live      | published |
+
+  # Amended 2026-09-02 (source: #1748 + #1741) - annotated example, not yet a shipped
+  # assertion. It is delivered by feature 014's EARS-23...EARS-28 Issues together with
+  # the `archived` -> `hidden` rename migration; the scenarios below state the contract
+  # 007 is amended to, so the two machines can never be read as one graph with a fork.
+  @EARS-7 @amendment-2026-09-02 @failure
+  Scenario Outline: The two lifecycles are disjoint - a command of the other machine is refused
+    Given an event with origin "<origin>" in the "<state>" state
+    When the command "<command>" is invoked on it
+    Then the command is refused with 409 INVALID_TRANSITION and nothing is mutated
+    And the admin lifecycle bar never offered "<command>" for that event
+
+    Examples:
+      | origin   | state      | command                |
+      | legacy   | hidden     | PublishEvent           |
+      | legacy   | hidden     | OpenRoom               |
+      | legacy   | in_archive | CloseRoom              |
+      | legacy   | in_archive | HideEvent              |
+      | legacy   | hidden     | ConfigureStream        |
+      | platform | ended      | ArchiveLegacyBroadcast |
+      | platform | hidden     | HideLegacyBroadcast    |
+
+  @EARS-6 @amendment-2026-09-02 @happy
+  Scenario: A legacy broadcast is born hidden and enters the shown archive by an explicit command
+    Given the operator creates an archival broadcast with a title, held-at instant, duration, speakers and a recording
+    Then the event is created with origin legacy in the hidden state
+    And it appears on no public surface and has no room, stream config or presence window
+    When the operator publishes its recording and archives it
+    Then the event transitions to in_archive and is listed in the public archive exactly like an ended broadcast with a published recording
+    When the operator hides it
+    Then the event transitions back to hidden and leaves every public listing
 
   @EARS-7 @failure
   Scenario: There is no unpublish transition

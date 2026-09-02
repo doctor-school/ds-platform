@@ -7,6 +7,9 @@ import {
 } from "@ds/db";
 import { AuthModule } from "../auth/auth.module.js";
 import { isRouteScan } from "../authz/route-scan.js";
+import { DoctorEventsPublicController } from "./doctor-events.public.controller.js";
+import { DoctorEventsRepository } from "./doctor-events.repository.js";
+import { DoctorEventsService } from "./doctor-events.service.js";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
 import { DoctorRegisterPublicController } from "./doctor-register.public.controller.js";
 import { DoctorRegisterService } from "./doctor-register.service.js";
@@ -58,6 +61,7 @@ import { TargetingService } from "./targeting.service.js";
     SpecialtyChoicePublicController,
     SpecialtyChoiceMeController,
     StatisticsPublicController,
+    DoctorEventsPublicController,
   ],
   providers: [
     DoctorRegisterService,
@@ -69,6 +73,8 @@ import { TargetingService } from "./targeting.service.js";
     StatisticsService,
     TargetingRepository,
     TargetingService,
+    DoctorEventsRepository,
+    DoctorEventsService,
     // Registered as a provider (not merely referenced in `@UseFilters`) so Nest
     // owns its lifecycle in this module's context.
     SpecialtyProblemFilter,

@@ -134,46 +134,200 @@
         "required": ["familyName", "givenName"],
         "type": "object"
       },
-      "DoctorRegisterRequestDto": {
+      "DoctorEventsFeedDto": {
+        "additionalProperties": false,
         "properties": {
-          "captchaToken": {
-            "type": "string"
-          },
-          "consent": {
-            "default": [],
+          "days": {
             "items": {
               "additionalProperties": false,
               "properties": {
-                "purpose": {
-                  "minLength": 1,
+                "day": {
+                  "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
                   "type": "string"
                 },
-                "version": {
+                "items": {
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "city": {
+                        "type": "string"
+                      },
+                      "endsAt": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "format": {
+                        "enum": [
+                          "webinar",
+                          "online-meeting",
+                          "offline-meetup",
+                          "congress",
+                          "podcast"
+                        ],
+                        "type": "string"
+                      },
+                      "href": {
+                        "type": "string"
+                      },
+                      "id": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "type": "string"
+                      },
+                      "nmo": {
+                        "type": "boolean"
+                      },
+                      "pulCost": {
+                        "maximum": 9007199254740991,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "seatsLeft": {
+                        "maximum": 9007199254740991,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "signUpCount": {
+                        "maximum": 9007199254740991,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "source": {
+                        "type": "string"
+                      },
+                      "speaker": {
+                        "type": "string"
+                      },
+                      "startsAt": {
+                        "type": "string"
+                      },
+                      "state": {
+                        "enum": [
+                          "normal",
+                          "registered",
+                          "soldOut",
+                          "live",
+                          "recorded"
+                        ],
+                        "type": "string"
+                      },
+                      "title": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "href",
+                      "startsAt",
+                      "endsAt",
+                      "format",
+                      "kind",
+                      "title",
+                      "speaker",
+                      "source",
+                      "nmo",
+                      "pulCost",
+                      "signUpCount",
+                      "state"
+                    ],
+                    "type": "object"
+                  },
+                  "minItems": 1,
+                  "type": "array"
+                },
+                "label": {
                   "minLength": 1,
                   "type": "string"
                 }
               },
-              "required": ["purpose", "version"],
+              "required": ["day", "label", "items"],
               "type": "object"
             },
             "type": "array"
           },
-          "email": {
-            "format": "email",
-            "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$",
+          "from": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
             "type": "string"
           },
-          "medicalWorkerDeclaration": {
-            "const": true,
-            "type": "boolean"
+          "nextTo": {
+            "anyOf": [
+              {
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
-          "password": {
-            "maxLength": 256,
-            "minLength": 8,
+          "targeting": {
+            "additionalProperties": false,
+            "properties": {
+              "adjacentDirectionIds": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "directionIds": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "mode": {
+                "enum": ["targeted", "general", "all"],
+                "type": "string"
+              },
+              "specialtyReference": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "mode",
+              "specialtyReference",
+              "directionIds",
+              "adjacentDirectionIds"
+            ],
+            "type": "object"
+          },
+          "tense": {
+            "enum": ["upcoming", "past"],
             "type": "string"
+          },
+          "to": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "type": "string"
+          },
+          "totalCount": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
           }
         },
-        "required": ["email", "password", "medicalWorkerDeclaration"],
+        "required": [
+          "tense",
+          "from",
+          "to",
+          "days",
+          "totalCount",
+          "nextTo",
+          "targeting"
+        ],
         "type": "object"
       },
       "EligibleExpertUserListDto": {
@@ -3767,26 +3921,125 @@
         "tags": ["Readiness"]
       }
     },
-    "/v1/storefront/doctor/register": {
-      "post": {
-        "operationId": "DoctorRegisterPublicController_register",
-        "parameters": [],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/DoctorRegisterRequestDto"
-              }
+    "/v1/storefront/doctor/events": {
+      "get": {
+        "operationId": "DoctorEventsPublicController_read",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "cookie",
+            "required": true,
+            "schema": {
+              "type": "string"
             }
           },
-          "required": true
-        },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {}
+          },
+          {
+            "in": "query",
+            "name": "free",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "nmo",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "city",
+            "required": false,
+            "schema": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "specialty",
+            "required": false,
+            "schema": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "format",
+            "required": false,
+            "schema": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "to",
+            "required": false,
+            "schema": {}
+          },
+          {
+            "in": "query",
+            "name": "from",
+            "required": false,
+            "schema": {}
+          },
+          {
+            "in": "query",
+            "name": "tense",
+            "required": false,
+            "schema": {
+              "enum": ["upcoming", "past"],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "day",
+            "required": false,
+            "schema": {}
+          }
+        ],
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DoctorEventsFeedDto"
+                }
+              }
+            },
             "description": ""
           }
         },
-        "tags": ["DoctorRegisterPublic"]
+        "tags": ["DoctorEventsPublic"]
       }
     }
   },

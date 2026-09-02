@@ -1700,16 +1700,16 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/storefront/doctor/register": {
+    "/v1/storefront/doctor/events": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        get: operations["DoctorEventsPublicController_read"];
         put?: never;
-        post: operations["DoctorRegisterPublicController_register"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1746,18 +1746,43 @@ export interface components {
             /** Format: uuid */
             userId?: string;
         };
-        DoctorRegisterRequestDto: {
-            captchaToken?: string;
-            /** @default [] */
-            consent: {
-                purpose: string;
-                version: string;
+        DoctorEventsFeedDto: {
+            days: {
+                day: string;
+                items: {
+                    city?: string;
+                    endsAt: string | null;
+                    /** @enum {string} */
+                    format: "webinar" | "online-meeting" | "offline-meetup" | "congress" | "podcast";
+                    href: string;
+                    id: string;
+                    kind: string;
+                    nmo: boolean;
+                    pulCost: number;
+                    seatsLeft?: number;
+                    signUpCount: number;
+                    source: string;
+                    speaker: string;
+                    startsAt: string;
+                    /** @enum {string} */
+                    state: "normal" | "registered" | "soldOut" | "live" | "recorded";
+                    title: string;
+                }[];
+                label: string;
             }[];
-            /** Format: email */
-            email: string;
-            /** @constant */
-            medicalWorkerDeclaration: true;
-            password: string;
+            from: string;
+            nextTo: string | null;
+            targeting: {
+                adjacentDirectionIds: string[];
+                directionIds: string[];
+                /** @enum {string} */
+                mode: "targeted" | "general" | "all";
+                specialtyReference: string | null;
+            };
+            /** @enum {string} */
+            tense: "upcoming" | "past";
+            to: string;
+            totalCount: number;
         };
         EligibleExpertUserListDto: {
             data: {
@@ -4483,24 +4508,36 @@ export interface operations {
             };
         };
     };
-    DoctorRegisterPublicController_register: {
+    DoctorEventsPublicController_read: {
         parameters: {
-            query?: never;
-            header?: never;
+            query?: {
+                city?: string[];
+                day?: unknown;
+                format?: string[];
+                free?: boolean;
+                from?: unknown;
+                kind?: string[];
+                nmo?: boolean;
+                q?: unknown;
+                specialty?: string[];
+                tense?: "upcoming" | "past";
+                to?: unknown;
+            };
+            header: {
+                cookie: string;
+            };
             path?: never;
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["DoctorRegisterRequestDto"];
-            };
-        };
+        requestBody?: never;
         responses: {
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["DoctorEventsFeedDto"];
+                };
             };
         };
     };

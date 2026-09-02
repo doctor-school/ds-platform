@@ -137,6 +137,19 @@ describe.skipIf(
     return (res.json() as { id: string }[]).some((c) => c.id === id);
   }
 
+  /**
+   * The current `If-Match` validator (#1593) — every lifecycle command is
+   * conditional. Staleness itself is owned by
+   * `test/admin/optimistic-concurrency.e2e-spec.ts`.
+   */
+  async function ifMatch(id: string): Promise<Record<string, string>> {
+    const { rows } = await pool.query<{ version: number }>(
+      "SELECT version FROM events WHERE id = $1",
+      [id],
+    );
+    return { "if-match": `"${rows[0]?.version ?? 1}"` };
+  }
+
   async function transition(
     cookie: string,
     id: string,
@@ -145,7 +158,7 @@ describe.skipIf(
     const res = await app.inject({
       method: "POST",
       url: `/v1/admin/events/${id}/${command}`,
-      headers: deviceAuthHeaders(cookie),
+      headers: { ...deviceAuthHeaders(cookie), ...(await ifMatch(id)) },
     });
     expect(res.statusCode).toBe(200);
   }

@@ -160,6 +160,26 @@ export class InvalidTransitionError extends Error {
 }
 
 /**
+ * #1593 — the optimistic-concurrency refusal: the caller's `If-Match` named a
+ * version the aggregate has already moved past, so the command it was about to
+ * apply was decided against a stale read. HTTP-agnostic like every other refusal
+ * in this module — the controller maps it to a 412 `PRECONDITION_FAILED` — so
+ * the rule stays a pure domain rule, testable without a transport. Nothing is
+ * mutated and no audit row is written: a lost update is refused, never merged.
+ */
+export class EventVersionConflictError extends Error {
+  constructor(
+    readonly expected: number,
+    readonly actual: number,
+  ) {
+    super(
+      `the event changed since it was read (expected version ${expected}, found ${actual})`,
+    );
+    this.name = "EventVersionConflictError";
+  }
+}
+
+/**
  * The lifecycle states in which the stream config may be authored or corrected
  * (design §2 — the config is *authorable* in `draft` and *still correctable* in
  * `published`, i.e. the pre-air window). Once the room is live the broadcast is
@@ -303,6 +323,26 @@ function assertMarkEndedAllowed(
   if (verdict.reason === "not-past")
     throw new EventNotPastError(scheduledEnd(event));
   throw new InvalidTransitionError(from, to);
+}
+
+/**
+ * #1593 — refuse a command whose `If-Match` names a version the aggregate has
+ * already moved past. Run LAST among the guards, after the closed-set check, the
+ * command-specific precondition and the 014 EARS-18 preconditions: a request
+ * that is illegal *whatever* version it was read at is answered with the reason
+ * it is illegal (409 `INVALID_TRANSITION` / `EVENT_NOT_PAST`), not with «reload
+ * and retry» — retrying it would only produce the same domain refusal. The
+ * mirror image (a legal command against a stale read) is the 412 this raises.
+ *
+ * It is a PRE-CHECK, not the concurrency control: the repository's CAS clause is
+ * what actually closes the read-to-write window. This exists so the common case
+ * refuses before any transaction opens, with the same error either path raises.
+ */
+function assertVersion(event: Event, expectedVersion: number | undefined): void {
+  if (expectedVersion === undefined) return;
+  if (event.version !== expectedVersion) {
+    throw new EventVersionConflictError(expectedVersion, event.version);
+  }
 }
 
 /**
@@ -610,6 +650,7 @@ export class EventsService {
   async transition(
     id: string,
     to: EventLifecycleState,
+    expectedVersion?: number,
   ): Promise<EventAdminDetail | null> {
     const current = await this.repo.findById(id);
     if (!current) return null;
@@ -623,10 +664,30 @@ export class EventsService {
     // `MarkEventEnded` does, or this endpoint would be the "set any state"
     // escape hatch 014-design §3.1 rules out.
     assertMarkEndedAllowed(current.event, from, to);
+    assertVersion(current.event, expectedVersion);
 
-    const updated = await this.repo.updateState(id, to);
-    // The row existed a moment ago; a concurrent delete is the only null path.
-    return updated ? this.toDetail(updated) : null;
+    const updated = await this.repo.updateState(id, to, expectedVersion);
+    return this.resolveWriteOutcome(id, updated, expectedVersion);
+  }
+
+  /**
+   * Disambiguate a repository write that touched no row. The CAS clause and the
+   * existence clause both live in one `WHERE`, so zero rows means EITHER the
+   * aggregate is gone (404) OR it moved under the caller (412) — a distinction
+   * the repository deliberately does not make (it has no notion of either HTTP
+   * answer). Re-reading here is what keeps «not found» from being reported for a
+   * row that is merely at a newer version.
+   */
+  private async resolveWriteOutcome(
+    id: string,
+    updated: EventWithSpeakers | null,
+    expectedVersion: number | undefined,
+  ): Promise<EventAdminDetail | null> {
+    if (updated) return this.toDetail(updated);
+    if (expectedVersion === undefined) return null;
+    const still = await this.repo.findById(id);
+    if (!still) return null;
+    throw new EventVersionConflictError(expectedVersion, still.event.version);
   }
 
   /**
@@ -646,12 +707,16 @@ export class EventsService {
   async publish(
     id: string,
     actorSub: string | null,
+    expectedVersion?: number,
   ): Promise<EventAdminDetail | null> {
     return this.namedTransition(
       id,
       "published",
       EVENT_PUBLISHED_AUDIT_TYPE,
       actorSub,
+      undefined,
+      undefined,
+      expectedVersion,
     );
   }
 
@@ -673,12 +738,16 @@ export class EventsService {
   async openRoom(
     id: string,
     actorSub: string | null,
+    expectedVersion?: number,
   ): Promise<EventAdminDetail | null> {
     return this.namedTransition(
       id,
       "live",
       EVENT_WENT_LIVE_AUDIT_TYPE,
       actorSub,
+      undefined,
+      undefined,
+      expectedVersion,
     );
   }
 
@@ -697,6 +766,7 @@ export class EventsService {
   async closeRoom(
     id: string,
     actorSub: string | null,
+    expectedVersion?: number,
   ): Promise<EventAdminDetail | null> {
     return this.namedTransition(
       id,
@@ -712,6 +782,8 @@ export class EventsService {
       (_event, from) => {
         if (from !== "live") throw new InvalidTransitionError(from, "ended");
       },
+      undefined,
+      expectedVersion,
     );
   }
 
@@ -735,12 +807,16 @@ export class EventsService {
   async archive(
     id: string,
     actorSub: string | null,
+    expectedVersion?: number,
   ): Promise<EventAdminDetail | null> {
     return this.namedTransition(
       id,
       "archived",
       EVENT_ARCHIVED_AUDIT_TYPE,
       actorSub,
+      undefined,
+      undefined,
+      expectedVersion,
     );
   }
 
@@ -770,6 +846,7 @@ export class EventsService {
     id: string,
     actorSub: string | null,
     fence?: TransitionFence,
+    expectedVersion?: number,
   ): Promise<EventAdminDetail | null> {
     return this.namedTransition(
       id,
@@ -785,6 +862,7 @@ export class EventsService {
           throw new InvalidTransitionError(from, "ended");
       },
       fence,
+      expectedVersion,
     );
   }
 
@@ -801,6 +879,10 @@ export class EventsService {
    * guard and before any write; it throws to refuse, leaving the state untouched.
    * @param fence an optional writer enlisted in the transition's own transaction
    * (012-design §6 idempotency completion) — see {@link TransitionFence}.
+   * @param expectedVersion #1593 — the `If-Match` validator. Checked LAST among
+   * the guards ({@link assertVersion}) and re-asserted as a CAS clause on the
+   * write, so a stale caller is refused with a 412 and never applies a command
+   * decided against a read the aggregate has moved past.
    * @returns the updated `EventAdminDetail`, or `null` when the id does not exist.
    */
   private async namedTransition(
@@ -810,6 +892,7 @@ export class EventsService {
     actorSub: string | null,
     extraGuard?: (event: Event, from: EventLifecycleState) => void,
     fence?: TransitionFence,
+    expectedVersion?: number,
   ): Promise<EventAdminDetail | null> {
     const current = await this.repo.findById(id);
     if (!current) return null;
@@ -820,6 +903,7 @@ export class EventsService {
     }
     extraGuard?.(current.event, from);
     assertMarkEndedAllowed(current.event, from, to);
+    assertVersion(current.event, expectedVersion);
 
     const updated = await this.repo.updateStateWithAudit(
       id,
@@ -829,9 +913,9 @@ export class EventsService {
       // completion the record stores and the body the caller receives cannot
       // differ (012-design §6).
       fence && (async (tx, row) => fence(tx, await this.toDetail(row))),
+      expectedVersion,
     );
-    // The row existed a moment ago; a concurrent delete is the only null path.
-    return updated ? this.toDetail(updated) : null;
+    return this.resolveWriteOutcome(id, updated, expectedVersion);
   }
 
   /**
@@ -1063,6 +1147,9 @@ export class EventsService {
       state: e.state as EventLifecycleState,
       validTransitions: offeredTransitions(e),
       recordingExpectedBy: e.recordingExpectedBy,
+      // #1593 — the validator the `ETag` carries, on the body too so a client
+      // holding a parsed detail can re-derive it without retaining a header.
+      version: e.version,
       createdAt: e.createdAt.toISOString(),
       updatedAt: e.updatedAt.toISOString(),
     };

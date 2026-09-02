@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
 import { useTranslations } from "next-intl";
 import type { z } from "zod";
@@ -16,9 +16,13 @@ import {
 } from "@ds/design-system/form";
 import type { EventAdminDetail, SpeakerEntry } from "@ds/schemas";
 import { TokenTextarea } from "@/components/fields";
+import {
+  FORM_SAVED_RESET_OPTIONS,
+  FORM_SYNC_RESET_OPTIONS,
+  eventFormFields,
+} from "@/lib/event-form-fields";
 import { EventFormSchema, type EventFormFields } from "@/lib/form-schemas";
 import { useLocalizedResolver } from "@/lib/use-localized-resolver";
-import { instantToMskInput } from "@/lib/msk";
 
 /**
  * The authored payload the form emits (007 EARS-1/2). The МСК wall-clock is the
@@ -36,19 +40,6 @@ export interface EventFormValues {
   specialties: string[];
   partnerRef: string | null;
   programPdf: File | null;
-}
-
-function defaultFields(detail?: EventAdminDetail): EventFormFields {
-  return {
-    title: detail?.title ?? "",
-    school: detail?.school ?? "",
-    startsAtMsk: detail ? instantToMskInput(detail.startsAt) : "",
-    durationMin: detail?.durationMin ?? 60,
-    description: detail?.description ?? "",
-    partnerRef: detail?.partnerRef ?? "",
-    speakers: detail?.speakers.map((s) => ({ ...s })) ?? [],
-    specialtiesText: (detail?.specialties ?? []).join(", "),
-  };
 }
 
 const PDF_MIME = "application/pdf";
@@ -69,11 +60,20 @@ export function EventForm({
   submitLabel,
   onSubmit,
   submitting,
+  savedAt,
 }: {
   detail?: EventAdminDetail;
   submitLabel: string;
   onSubmit: (values: EventFormValues) => void;
   submitting?: boolean;
+  /**
+   * Bumped by the page each time a save LANDS (#1593). The form owns no mutation,
+   * so success is the page's fact to report; what the form does with it is
+   * re-baseline itself on the values that were saved, which is the only thing
+   * that keeps `keepDirtyValues` scoped to edits still in flight rather than to
+   * every field ever touched on this mount.
+   */
+  savedAt?: number;
 }) {
   const t = useTranslations();
   const form = useForm<EventFormFields>({
@@ -81,7 +81,17 @@ export function EventForm({
     resolver: useLocalizedResolver(
       EventFormSchema as unknown as z.ZodType<EventFormFields, EventFormFields>,
     ),
-    defaultValues: defaultFields(detail),
+    defaultValues: eventFormFields(detail),
+    // The form FOLLOWS the server aggregate (#1593). The detail page re-reads the
+    // event after every mutation and after every refused lifecycle command, and
+    // until now only the badge and the action bar acted on that re-read — the
+    // fields stayed frozen at whatever the mount saw, which made the approved
+    // stale-refusal sentence («данные на этой странице уже обновлены…») false
+    // about everything the operator was actually looking at. `values` re-projects
+    // on each refetched detail; `keepDirtyValues` means the correction lands on
+    // untouched fields only and never eats an edit in progress.
+    values: detail ? eventFormFields(detail) : undefined,
+    resetOptions: FORM_SYNC_RESET_OPTIONS,
   });
   const { fields, append, remove } = useFieldArray({
     control: form.control,
@@ -91,9 +101,19 @@ export function EventForm({
   // than by the resolver — a non-PDF is refused with the RU catalog message.
   const [programPdf, setProgramPdf] = useState<File | null>(null);
   const [pdfError, setPdfError] = useState<string | null>(null);
+  // What the last submit sent — the baseline a landed save re-bases the form on.
+  const submitted = useRef<EventFormFields | null>(null);
+
+  useEffect(() => {
+    if (!savedAt || !submitted.current) return;
+    // Keyed on the save COUNTER only (`form` is a stable RHF handle): re-running
+    // this on any other render would undo the operator's next keystrokes.
+    form.reset(submitted.current, FORM_SAVED_RESET_OPTIONS);
+  }, [savedAt, form]);
 
   function submit(fieldsValue: EventFormFields) {
     if (pdfError) return;
+    submitted.current = fieldsValue;
     onSubmit({
       title: fieldsValue.title,
       school: fieldsValue.school,

@@ -203,13 +203,23 @@ async function toHttpError(res: Response): Promise<TaxonomyHttpError> {
       detail?: unknown;
       title?: unknown;
       errorCode?: unknown;
+      code?: unknown;
       traceId?: unknown;
       errors?: unknown;
     };
     if (typeof body.message === "string") message = body.message;
     else if (typeof body.detail === "string") message = body.detail;
     else if (typeof body.title === "string") message = body.title;
+    // The stable refusal code arrives under TWO names, because the API says it
+    // two ways: the 012 taxonomy surface answers `errorCode`, the 007 events
+    // surface answers `code` (the envelope deviation recorded at `DEBT.md:79`).
+    // Reading only one of them silently collapses every refusal from the other
+    // half into the caller's generic fallback sentence — which is exactly what
+    // the #1593 stale-412 did on the live stand. `errorCode` wins when a body
+    // carries both; this seam widens to the wire, it does not pick a winner for
+    // the API.
     if (typeof body.errorCode === "string") errorCode = body.errorCode;
+    else if (typeof body.code === "string") errorCode = body.code;
     if (typeof body.traceId === "string") traceId = body.traceId;
     if (Array.isArray(body.errors)) {
       fieldErrors = body.errors as { path: string; message: string }[];

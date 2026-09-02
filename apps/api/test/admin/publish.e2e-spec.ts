@@ -152,6 +152,19 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       return { id: body.id, slug: body.slug };
     }
 
+    /**
+     * The current `If-Match` validator (#1593) — publish is conditional.
+     * Staleness itself is owned by
+     * `test/admin/optimistic-concurrency.e2e-spec.ts`.
+     */
+    async function ifMatch(id: string): Promise<Record<string, string>> {
+      const { rows } = await pool.query<{ version: number }>(
+        "SELECT version FROM events WHERE id = $1",
+        [id],
+      );
+      return { "if-match": `"${rows[0]?.version ?? 1}"` };
+    }
+
     /** POST the named publish command. */
     async function publish(cookie: string | undefined, id: string) {
       return app.inject({
@@ -159,6 +172,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         url: `/v1/admin/events/${id}/publish`,
         headers: {
           ...device,
+          ...(await ifMatch(id)),
           ...(cookie ? { ...authHeaders(cookie) } : {}),
         },
       });
@@ -273,6 +287,17 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         expect(res.statusCode, `publish must be refused from ${state}`).toBe(
           409,
         );
+        // #1593 — the refusal must carry the STABLE code, not just a 409 and an
+        // English sentence. The admin screen keys its recovery off `code`
+        // (`lib/lifecycle.lifecycleErrorOutcome`): an unclassified refusal is
+        // treated as "no evidence the row is readable" and the screen is left
+        // on its stale state, which is precisely the dead end the owner hit at
+        // Stage-B. Every other named command answers `INVALID_TRANSITION` here;
+        // publish must not be the one that says it differently.
+        expect(
+          (res.json() as { code?: string }).code,
+          `publish refusal from ${state} must name INVALID_TRANSITION`,
+        ).toBe("INVALID_TRANSITION");
         expect(await currentState(id)).toBe(state); // unchanged
         expect(await publishAuditCount(id)).toBe(0); // no terminal row
       }

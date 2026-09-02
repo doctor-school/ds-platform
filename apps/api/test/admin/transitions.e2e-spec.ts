@@ -144,6 +144,21 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       return id;
     }
 
+    /**
+     * The current `If-Match` validator (#1593) — the transition command is
+     * conditional. A row that does not exist still gets a syntactically valid
+     * validator, so an absent event answers 404 (the case below) rather than
+     * a precondition refusal. Staleness itself is owned by
+     * `test/admin/optimistic-concurrency.e2e-spec.ts`.
+     */
+    async function ifMatch(id: string): Promise<Record<string, string>> {
+      const { rows } = await pool.query<{ version: number }>(
+        "SELECT version FROM events WHERE id = $1",
+        [id],
+      );
+      return { "if-match": `"${rows[0]?.version ?? 1}"` };
+    }
+
     /** POST a transition command against the guard. */
     async function transition(
       cookie: string,
@@ -156,6 +171,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         headers: {
           ...device,
           ...authHeaders(cookie),
+          ...(await ifMatch(id)),
           "content-type": "application/json",
         },
         payload: { to },
@@ -319,6 +335,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         headers: {
           ...device,
           ...authHeaders(cookie),
+          ...(await ifMatch(id)),
           "content-type": "application/json",
         },
         payload: { to: "cancelled" },

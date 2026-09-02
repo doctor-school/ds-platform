@@ -151,13 +151,19 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         payload: mp.body,
       });
       expect(res.statusCode).toBe(201);
-      const body = res.json() as { id: string; slug: string };
+      const body = res.json() as { id: string; slug: string; version: number };
       createdEventIds.push(body.id);
       if (publish) {
         const done = await app.inject({
           method: "POST",
           url: `/v1/admin/events/${body.id}/publish`,
-          headers: { ...device, ...adminHeaders(adminSid) },
+          // `publish` is conditional (#1593); the create response is itself a
+          // detail read, so it already carries the validator to echo.
+          headers: {
+            ...device,
+            ...adminHeaders(adminSid),
+            "if-match": `"${body.version}"`,
+          },
         });
         expect(done.statusCode).toBe(200);
       }

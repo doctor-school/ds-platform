@@ -21,6 +21,11 @@ import {
 } from "@ds/schemas";
 import { TokenSelect } from "@/components/fields";
 import {
+  FORM_SAVED_RESET_OPTIONS,
+  FORM_SYNC_RESET_OPTIONS,
+  streamConfigFields,
+} from "@/lib/event-form-fields";
+import {
   StreamConfigFormSchema,
   type StreamConfigFields,
 } from "@/lib/form-schemas";
@@ -56,10 +61,12 @@ export function StreamConfigForm({
         StreamConfigFields
       >,
     ),
-    defaultValues: {
-      provider: detail.streamConfig?.provider ?? STREAM_PROVIDERS[0],
-      embedRef: detail.streamConfig?.embedRef ?? "",
-    },
+    defaultValues: streamConfigFields(detail),
+    // Same server-follows rule as the aggregate form (#1593): a stream config
+    // another operator just wrote must appear here on the page's re-read, and a
+    // reference this operator is mid-way through typing must survive it.
+    values: streamConfigFields(detail),
+    resetOptions: FORM_SYNC_RESET_OPTIONS,
   });
   const [error, setError] = useState<string | null>(null);
   const [ok, setOk] = useState(false);
@@ -80,6 +87,10 @@ export function StreamConfigForm({
       {
         onSuccess: () => {
           setOk(true);
+          // The saved values ARE the new baseline: leaving the fields dirty
+          // would make `keepDirtyValues` shield them from every later server
+          // change for the life of this mount (#1593).
+          form.reset(body, FORM_SAVED_RESET_OPTIONS);
           onConfigured();
         },
         onError: () => setError(t("events.errors.streamFailed")),

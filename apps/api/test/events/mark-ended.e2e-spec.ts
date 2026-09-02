@@ -165,11 +165,26 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       return id;
     }
 
+    /**
+     * The current `If-Match` validator (#1593) — `mark-ended` is conditional
+     * like its five siblings. Staleness itself is owned by
+     * `test/admin/optimistic-concurrency.e2e-spec.ts`; here the validator is
+     * always current so these tests stay about the EARS-18 preconditions.
+     */
+    async function ifMatch(id: string): Promise<Record<string, string>> {
+      const { rows } = await pool.query<{ version: number }>(
+        "SELECT version FROM events WHERE id = $1",
+        [id],
+      );
+      return { "if-match": `"${rows[0]?.version ?? 1}"` };
+    }
+
     /** POST the mark-ended command. A key is supplied unless one is passed explicitly. */
     async function markEnded(
       cookie: string,
       id: string,
       key: string | null = randomUUID(),
+      validator?: string,
     ) {
       return app.inject({
         method: "POST",
@@ -177,9 +192,15 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         headers: {
           ...device,
           ...authHeaders(cookie),
+          ...(validator ? { "if-match": validator } : await ifMatch(id)),
           ...(key === null ? {} : { "idempotency-key": key }),
         },
       });
+    }
+
+    /** The raw current validator string, for a retry that must repeat the exact request. */
+    async function validatorOf(id: string): Promise<string> {
+      return (await ifMatch(id))["if-match"]!;
     }
 
     /** The admin detail read — the source of the `validTransitions` the UI renders. */
@@ -394,11 +415,15 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const cookie = await session(uniqueEmail("admin"), "platform_admin");
       const id = await eligibleEvent(cookie);
       const key = randomUUID();
+      // A genuine retry repeats the request byte for byte — the SAME validator
+      // included (#1593 binds `If-Match` into the idempotency fingerprint, so a
+      // retry that silently re-read it would be a different request).
+      const validator = await validatorOf(id);
 
-      const first = await markEnded(cookie, id, key);
+      const first = await markEnded(cookie, id, key, validator);
       expect(first.statusCode).toBe(200);
 
-      const replay = await markEnded(cookie, id, key);
+      const replay = await markEnded(cookie, id, key, validator);
       expect(replay.statusCode).toBe(200);
       expect(replay.json()).toEqual(first.json());
       // The record replayed; the ledger still holds exactly one row.

@@ -86,6 +86,35 @@ describe("<AuthLayout>", () => {
     expect(formColumn?.className).toContain("layout:order-2");
   });
 
+  it("splits the shell 50/50 by default", () => {
+    const { container } = render(
+      <AuthLayout logo={<span>logo</span>} aside={<p>brand-aside</p>}>
+        <div>form</div>
+      </AuthLayout>,
+    );
+    expect(container.firstElementChild?.className).toContain("layout:grid-cols-2");
+  });
+
+  it("widens the brand panel to 1.1fr .9fr with split=\"wide-aside\" (021 return context)", () => {
+    // The canvas widens the split exactly when the panel stops carrying a value
+    // prop and starts carrying content the visitor came for (`shellCols =
+    // gateCardOnPanel ? '1.1fr .9fr'`, design-source/auth.dc.html). The ratio is a
+    // property of the layout, so it is a prop of the one block that owns the
+    // split — never an app-local grid fork.
+    const { container } = render(
+      <AuthLayout
+        logo={<span>logo</span>}
+        aside={<p>brand-aside</p>}
+        split="wide-aside"
+      >
+        <div>form</div>
+      </AuthLayout>,
+    );
+    const shell = container.firstElementChild;
+    expect(shell?.className).toContain("layout:grid-cols-[1.1fr_.9fr]");
+    expect(shell?.className).not.toContain("layout:grid-cols-2");
+  });
+
   it("omits the brand panel entirely when no aside is supplied (form-only fallback)", () => {
     render(
       <AuthLayout logo={<span>logo</span>}>

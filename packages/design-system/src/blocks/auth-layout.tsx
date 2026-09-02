@@ -46,6 +46,7 @@ import { cn } from "../lib/utils";
 export function AuthLayout({
   logo,
   aside,
+  split = "even",
   className,
   children,
 }: {
@@ -56,12 +57,31 @@ export function AuthLayout({
   /** Brand-panel content (app-supplied, localized headline / sub-copy / art).
    *  When omitted the panel is not rendered and the form fills the screen. */
   aside?: React.ReactNode;
+  /**
+   * The column ratio at `layout:` and above (#1538). `"even"` is the shipped
+   * 50/50 split every auth surface has used since #237. `"wide-aside"` widens the
+   * brand panel to `1.1fr .9fr`, which is what the canvas does when the panel
+   * stops carrying a value prop and starts carrying CONTENT the visitor came for
+   * — the 021 return-context card (`design-source/auth.dc.html`: `shellCols =
+   * gateCardOnPanel ? '1.1fr .9fr'`). It is a property of the LAYOUT, so it lives
+   * here on the one block that owns the split rather than being forked into an
+   * app-local grid. Ignored below `layout:`, where the panel is not rendered.
+   */
+  split?: "even" | "wide-aside";
   className?: string;
   /** The auth form for this surface (an `<AuthCard>`). */
   children: React.ReactNode;
 }) {
   return (
-    <div className={cn("grid min-h-screen layout:grid-cols-2", className)}>
+    <div
+      className={cn(
+        "grid min-h-screen",
+        split === "wide-aside"
+          ? "layout:grid-cols-[1.1fr_.9fr]"
+          : "layout:grid-cols-2",
+        className,
+      )}
+    >
       {/* Form column — centered, with the logo above the card. First in source order
           for a11y; flipped to the RIGHT at `layout:` (`layout:order-2`) so the brand
           panel sits on the left per the recorded #237 column-order decision.

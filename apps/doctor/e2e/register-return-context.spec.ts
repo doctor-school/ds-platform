@@ -15,20 +15,35 @@ import { test, expect, type Page } from "@playwright/test";
  *      owner's explicit condition on the Stage-A pick F-021-2 Б, asserted as a
  *      count of zero links and zero buttons so no future addition can slip one
  *      in;
- *   3. with no resolvable `from` the slot is ABSENT from the tree rather than
- *      an empty frame, and the form stays fully usable (EARS-3's honest-empty
- *      rule; EARS-3's own fuller direct-arrival copy is #1539, not this slice).
+ *   3. with no resolvable `returnTo` the slot is ABSENT from the tree rather
+ *      than an empty frame, and the form stays fully usable (EARS-3's
+ *      honest-empty rule; EARS-3's own fuller direct-arrival copy is #1539, not
+ *      this slice).
  *
  * Plus the 390 collapse of EARS-16: the same card becomes the background plate
  * ABOVE the form, and exactly one of the two renders per viewport.
  *
  * The tier boots the app against `e2e/support/return-context-api.mjs`
- * (`playwright.return-context.config.ts`) because `?from=` is resolved
+ * (`playwright.return-context.config.ts`) because `?returnTo=` is resolved
  * SERVER-side, before any byte the browser could intercept.
+ *
+ * Every arrival URL below is the CANONICAL return target 005 EARS-2 defined and
+ * `buildRegistrationHref` produces — `?returnTo=/webinars/<slug>` — so the tier
+ * exercises the same vocabulary the gate emits, never a surface-local one.
  */
 
 /** The slug the upstream double answers for; anything else is a real 404. */
 const KNOWN = "prp-pri-gonartroze";
+
+/**
+ * The canonical arrival URL for a gate hand-off, built the way the producer
+ * builds it (`apps/portal/lib/registration-handoff.ts` → `buildRegistrationHref`):
+ * a same-origin `/webinars/<slug>` return target under the `returnTo` param.
+ */
+function arrival(slug: string): string {
+  const params = new URLSearchParams({ returnTo: `/webinars/${slug}` });
+  return `/register?${params.toString()}`;
+}
 const TITLE = "PRP при гонартрозе: показания, протоколы, ошибки";
 
 /** The invariant, asserted over the whole subtree rather than element by element. */
@@ -51,7 +66,7 @@ test.describe("021 EARS-2: the return context on the wide layout", () => {
   test("021 EARS-2.1: the gate event renders in the split's left half through the shared card unit", async ({
     page,
   }) => {
-    await page.goto(`/register?from=${KNOWN}`);
+    await page.goto(arrival(KNOWN));
 
     const panel = page.getByTestId("return-context-panel");
     await expect(panel).toBeVisible();
@@ -86,14 +101,14 @@ test.describe("021 EARS-2: the return context on the wide layout", () => {
   test("021 EARS-2.2: the card carries no back-navigation control at all", async ({
     page,
   }) => {
-    await page.goto(`/register?from=${KNOWN}`);
+    await page.goto(arrival(KNOWN));
     await expectNoWayBack(page, "return-context-panel");
   });
 
   test("021 EARS-2.3: exactly one return-context render exists per viewport", async ({
     page,
   }) => {
-    await page.goto(`/register?from=${KNOWN}`);
+    await page.goto(arrival(KNOWN));
 
     await expect(page.getByTestId("return-context-panel")).toBeVisible();
     // The mobile plate is in the DOM but `display:none` at this width, so the
@@ -118,17 +133,28 @@ test.describe("021 EARS-2: the return context on the wide layout", () => {
     await expect(page.getByTestId("register-email")).toBeVisible();
   });
 
-  test("021 EARS-2.5: an unresolvable `from` is absence too, never a broken card", async ({
+  test("021 EARS-2.5: an unresolvable `returnTo` is absence too, never a broken card", async ({
     page,
   }) => {
     // A real not-found from the api — a stale, deleted or draft event, and the
     // shape a hand-typed URL takes. It must degrade to the same absence as no
     // param at all rather than surfacing an error on the door.
-    await page.goto("/register?from=net-takogo-sobytiya");
+    await page.goto(arrival("net-takogo-sobytiya"));
 
     await expect(page.getByTestId("return-context-panel")).toHaveCount(0);
     await expect(page.locator("[data-webinar-card]")).toHaveCount(0);
     await expect(page.getByTestId("registration-form-card")).toBeVisible();
+    await expect(page.getByTestId("register-email")).toBeVisible();
+
+    // And a target the shared open-redirect guard rejects (005 EARS-2,
+    // `parseReturnTarget`) never even reaches the read: no card, no error, and
+    // the door still opens. The guard is the only parser this surface has, so a
+    // cross-origin value is absence rather than a fetch of anything.
+    await page.goto(
+      `/register?returnTo=${encodeURIComponent("https://evil.example/webinars/" + KNOWN)}`,
+    );
+    await expect(page.getByTestId("return-context-panel")).toHaveCount(0);
+    await expect(page.locator("[data-webinar-card]")).toHaveCount(0);
     await expect(page.getByTestId("register-email")).toBeVisible();
   });
 });
@@ -139,7 +165,7 @@ test.describe("021 EARS-2: the 390 collapse", () => {
   test("021 EARS-2.6: at 390 the same card is the background plate above the form", async ({
     page,
   }) => {
-    await page.goto(`/register?from=${KNOWN}`);
+    await page.goto(arrival(KNOWN));
 
     const plate = page.getByTestId("return-context-plate");
     await expect(plate).toBeVisible();

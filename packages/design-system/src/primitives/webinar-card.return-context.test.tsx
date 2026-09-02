@@ -34,7 +34,7 @@ afterEach(cleanup);
 const BASE = {
   time: "19:00",
   tzLabel: "МСК",
-  dateLabel: "28 августа · чт",
+  dateLabel: "27 августа · чт",
   school: "Школа ортобиологии",
   title: "PRP при гонартрозе: показания, протоколы, ошибки",
   speakers: [{ name: "Анна Соколова" }],
@@ -72,7 +72,7 @@ describe("WebinarCard — 021 EARS-2 return context", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("Школа ортобиологии")).toBeInTheDocument();
     expect(screen.getByText("19:00")).toBeInTheDocument();
-    expect(screen.getByText("28 августа · чт")).toBeInTheDocument();
+    expect(screen.getByText("27 августа · чт")).toBeInTheDocument();
   });
 
   it("021 EARS-2: the default card stays navigable — the title is still the stretched event-page link", () => {

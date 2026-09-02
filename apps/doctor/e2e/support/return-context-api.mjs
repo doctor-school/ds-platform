@@ -3,7 +3,7 @@ import { createServer } from "node:http";
 /**
  * The upstream double for the 021 EARS-2 return-context tier (#1538).
  *
- * `/register?from=<slug>` resolves the event SERVER-SIDE, so no browser-level
+ * `/register?returnTo=/webinars/<slug>` resolves the event SERVER-SIDE, so no browser-level
  * route interception can reach it — the read happens before the first byte of
  * HTML. The tier therefore boots the doctor app against this stand-in api,
  * exactly as the specialty-consumption tier already does with
@@ -12,7 +12,7 @@ import { createServer } from "node:http";
  *
  * It answers the ONE read the surface makes — `GET /v1/public/events/:idOrSlug`
  * — with a body shaped by `PublicEventPageSchema`, and 404s everything else so
- * the unresolvable-`from` branch is exercised against a real not-found rather
+ * the unresolvable-target branch is exercised against a real not-found rather
  * than a connection error.
  */
 const port = Number(process.env.DOCTOR_FAKE_API_PORT ?? 3214);
@@ -23,8 +23,9 @@ const EVENT = {
   slug: "prp-pri-gonartroze",
   title: "PRP при гонартрозе: показания, протоколы, ошибки",
   school: "Школа ортобиологии",
-  // 2026-08-28 19:00 Europe/Moscow, carried as the canonical UTC instant.
-  startsAt: "2026-08-28T16:00:00.000Z",
+  // 2026-08-27 19:00 Europe/Moscow (a Thursday — the canvas sub-label is
+  // «27 августа · чт»), carried as the canonical UTC instant.
+  startsAt: "2026-08-27T16:00:00.000Z",
   durationMin: 90,
   description: "Разбор показаний, протоколов и типичных ошибок PRP-терапии.",
   speakers: [

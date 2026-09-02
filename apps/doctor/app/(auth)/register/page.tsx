@@ -30,7 +30,9 @@ import {
  * is the intended one-way step into the door.
  *
  * 021 EARS-2 (#1538) — THE RETURN CONTEXT. A doctor who pressed «Участвовать» on
- * a gated эфир arrives here carrying the event in the URL (`?from=<slug|id>`),
+ * a gated эфир arrives here carrying the CANONICAL return target in the URL
+ * (`?returnTo=/webinars/<slug>` — the one vocabulary 005 EARS-2 defined, read
+ * through the shared `parseReturnTarget` guard and never re-parsed locally),
  * and the route resolves it server-side against the public event read before the
  * first paint: the context is a fact about the arrival, so it must be part of the
  * document rather than something that pops in afterwards beside a form the doctor
@@ -77,8 +79,8 @@ export default async function DoctorRegisterPage({
   // A repeated param arrives as an array; the FIRST value wins rather than the
   // request being rejected — a malformed return context degrades to no context,
   // it never breaks the door.
-  const from = Array.isArray(raw) ? raw[0] : raw;
-  const returnEvent = await resolveReturnContext(from);
+  const returnTo = Array.isArray(raw) ? raw[0] : raw;
+  const returnEvent = await resolveReturnContext(returnTo);
 
   return (
     <AuthShell

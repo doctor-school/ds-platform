@@ -69,6 +69,16 @@ function ReturnEventCard({ event }: { event: ReturnContextEvent }) {
  * panel. Copy is white-on-blue through the PAIRED `primary-surface-*` tokens
  * the panel is filled with — never `primary-foreground`, which repoints in the
  * dark theme and would paint dark-on-dark (the #517 review blocker).
+ *
+ * THE CARD ITSELF IS LIGHT IN BOTH THEMES. The canvas pins this one card to
+ * `dark="{{ false }}"` (`design-source/auth.dc.html`, the `showGateCardPanel`
+ * block): the panel fill is the brand blue in either theme, so a theme-following
+ * card turns into a dark plate on a blue field in the dark theme — the canvas
+ * keeps it a light card standing ON the blue instead. The `light` class is the
+ * design system's own token scope (`styles/tokens.css`), so the whole card
+ * subtree resolves its tokens from the light palette; nothing is hardcoded and
+ * the primitive is untouched. Only the CARD is scoped — the eyebrow and the
+ * assurance line beside it stay on the panel's white-on-blue pair.
  */
 export function ReturnContextPanel({ event }: { event: ReturnContextEvent }) {
   return (
@@ -79,13 +89,16 @@ export function ReturnContextPanel({ event }: { event: ReturnContextEvent }) {
       <p className="text-eyebrow font-extrabold uppercase tracking-micro text-primary-surface-muted">
         {EYEBROW}
       </p>
-      <div className="max-w-2xl">
+      {/* The canvas caps the card at 560px; `max-w-xl` is the nearest token-backed
+          width (576px, +16px) — the token scale carries no 560 stop and an
+          arbitrary value would bypass the token pipeline. */}
+      <div className="light max-w-xl">
         <ReturnEventCard event={event} />
       </div>
       {/* The canvas's assurance line — it states plainly what happens next,
           which is EARS-2's «state plainly what the doctor will return to»
           without offering a control that acts on it now. */}
-      <p className="max-w-md text-base font-medium leading-relaxed text-primary-surface-muted">
+      <p className="max-w-md text-sm leading-relaxed text-primary-surface-muted">
         После подтверждения почты вы вернётесь сюда же — место за вами.
       </p>
     </div>

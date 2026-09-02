@@ -66,6 +66,12 @@ export function AuthShell({
 }) {
   return (
     <AuthLayout
+      /* 021 EARS-2 — the canvas WIDENS the split when the panel carries the
+         return context instead of the value prop (`shellCols = gateCardOnPanel
+         ? '1.1fr .9fr'`, design-source/auth.dc.html): the panel is then showing
+         the doctor the thing they came for, and it needs the room a card takes.
+         With no return context the shipped 50/50 split stands. */
+      split={returnContext ? "wide-aside" : "even"}
       logo={
         <Image
           src="/brand/logo.svg"

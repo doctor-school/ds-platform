@@ -5,7 +5,7 @@ import { defineConfig, devices } from "@playwright/test";
  *
  * A THIRD doctor-storefront Playwright tier, alongside the backend-free
  * `playwright.ci.config.ts` and the specialty `playwright.consumption.config.ts`,
- * for the same reason the second one exists: `/register?from=…` resolves the
+ * for the same reason the second one exists: `/register?returnTo=…` resolves the
  * event on the SERVER before the first byte of HTML, so the read cannot be
  * intercepted from the browser and the backend-free tier can only ever observe
  * the absent-context branch. The app is booted against `return-context-api.mjs`

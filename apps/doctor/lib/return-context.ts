@@ -1,15 +1,28 @@
-import { PublicEventPageSchema, type PublicEventPage } from "@ds/schemas";
+import {
+  PublicEventPageSchema,
+  parseReturnTarget,
+  type PublicEventPage,
+} from "@ds/schemas";
 
 import { API_BASE } from "./session";
 
 /**
  * 021 EARS-2 (#1538) — resolving the RETURN CONTEXT the doctor arrived with.
  *
- * A doctor who pressed «Участвовать» on a gated эфир lands on `/register` with
- * the event carried in the URL (`?from=<slug-or-id>`); the surface then shows
- * them, beside the form, exactly what they will come back to. This module is
- * the resolution half of that: URL param → the public event read → the card
- * projection the shared `WebinarCard` renders.
+ * A doctor who pressed «Участвовать» on a gated эфир lands on `/register`
+ * carrying the CANONICAL return target — `?returnTo=/webinars/<slug>`, the one
+ * vocabulary 005 EARS-2 defined and 021 LD-3 mandates — and the surface then
+ * shows them, beside the form, exactly what they will come back to. This module
+ * is the resolution half of that: `returnTo` → `parseReturnTarget` → the public
+ * event read → the card projection the shared `WebinarCard` renders.
+ *
+ * ONE RETURN VOCABULARY, ONE PARSER. The value is never read as a slug and never
+ * pattern-matched here: `parseReturnTarget` (`@ds/schemas`, 005 EARS-2) is the
+ * SINGLE entry point, and it is simultaneously the open-redirect guard and the
+ * slug extractor — it accepts a value only when it resolves to exactly
+ * `/webinars/<slug>` and hands back `{ eventSlug, returnTo }`. A storefront-local
+ * guard or a second param name would be a forked security control (021 design,
+ * «the return target»), so this module owns neither.
  *
  * WHY THE PUBLIC EVENT READ AND NOT A 021-LOCAL ENDPOINT. `GET /v1/public/
  * events/:idOrSlug` is the same `access: public` read the 020 event page uses,
@@ -21,7 +34,8 @@ import { API_BASE } from "./session";
  * simply renders the facts this read carries, and the ones it does not are
  * ABSENT rather than filled with a stand-in.
  *
- * FAILURE IS ABSENCE, NEVER AN EMPTY FRAME. No `from`, an unresolvable `from`,
+ * FAILURE IS ABSENCE, NEVER AN EMPTY FRAME. No `returnTo`, a `returnTo` the
+ * parser rejects, one naming an event that does not resolve,
  * a body that fails the contract, or an api that is down all resolve to `null`,
  * and the caller renders no slot at all (EARS-3's honest-empty rule, and the
  * requirements invariant «absent rather than rendered empty»). A registration
@@ -29,14 +43,19 @@ import { API_BASE } from "./session";
  * failure is swallowed into `null` rather than thrown into the route.
  */
 
-/** The URL search param the 019 gate hand-off carries the event in. */
-export const RETURN_CONTEXT_PARAM = "from";
+/**
+ * The canonical return-target search param (005 EARS-2 / 021 LD-3). The gate and
+ * the 003 auth round-trip already speak `returnTo`; this route reads the same
+ * name so a single URL serves both the return context shown here and the
+ * post-verification navigation, and never two params meaning one thing.
+ */
+export const RETURN_CONTEXT_PARAM = "returnTo";
 
 /** What the return-context card needs — nothing more than the card renders. */
 export interface ReturnContextEvent {
   /** Start time formatted in `Europe/Moscow`, e.g. `19:00`. */
   time: string;
-  /** «day · weekday» sub-label in `Europe/Moscow`, e.g. `28 августа · чт`. */
+  /** «day · weekday» sub-label in `Europe/Moscow`, e.g. `27 августа · чт`. */
   dateLabel: string;
   school: string;
   title: string;
@@ -73,9 +92,13 @@ export function formatMskTime(startsAt: string): string {
 
 export function formatMskDateLabel(startsAt: string): string {
   const at = new Date(startsAt);
-  // `ru-RU` short weekdays come back as «чт» already; the canvas sub-label is
-  // «28 августа · чт», so the two parts are joined, never re-cased.
-  return `${DAY_FORMAT.format(at)} · ${WEEKDAY_FORMAT.format(at)}`;
+  // Some ICU builds emit the `ru-RU` short weekday with a trailing period
+  // («чт.»), others without; `apps/portal/lib/msk.ts` strips it for exactly that
+  // reason. The canvas sub-label is «27 августа · чт», so the same
+  // normalization runs here — otherwise the two surfaces render different
+  // strings for one instant depending on the runtime's ICU.
+  const weekday = WEEKDAY_FORMAT.format(at).replace(/\.$/, "");
+  return `${DAY_FORMAT.format(at)} · ${weekday}`;
 }
 
 /** The card projection of the public event read. */
@@ -93,16 +116,19 @@ export function toReturnContextEvent(page: PublicEventPage): ReturnContextEvent 
 }
 
 /**
- * Resolve the `from` param to a card projection, or `null` when there is
+ * Resolve the raw `returnTo` value to a card projection, or `null` when there is
  * nothing honest to show. `fetchImpl` is injected for tests, exactly as
  * `fetchScaleStatistics` / `fetchSessionClaims` do it.
  */
 export async function resolveReturnContext(
-  from: string | undefined,
+  returnTo: string | undefined,
   fetchImpl: typeof fetch = fetch,
 ): Promise<ReturnContextEvent | null> {
-  const key = from?.trim();
-  if (!key) return null;
+  // The parser is the guard: an absent, cross-origin, traversal or otherwise
+  // unsafe target never reaches the read, and a safe one yields the slug.
+  const intent = parseReturnTarget(returnTo);
+  if (!intent) return null;
+  const key = intent.eventSlug;
 
   try {
     const res = await fetchImpl(

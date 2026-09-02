@@ -40,7 +40,7 @@ const fingerprint = async (page: import("@playwright/test").Page) => {
   };
 };
 
-test("019 EARS-8: a pasted URL reproduces the same feed in a fresh browser context", async ({
+test("019 EARS-8.18: a pasted URL reproduces the same feed in a fresh browser context", async ({
   browser,
 }) => {
   const first = await browser.newContext();
@@ -69,7 +69,7 @@ test("019 EARS-8: a pasted URL reproduces the same feed in a fresh browser conte
   await second.close();
 });
 
-test("019 EARS-8: the facet in the URL reaches the read rather than the browser", async ({
+test("019 EARS-8.19: the facet in the URL reaches the read rather than the browser", async ({
   page,
 }) => {
   // Every fixture card is a `webinar`; asking for a format none of them has
@@ -87,7 +87,7 @@ test("019 EARS-8: the facet in the URL reaches the read rather than the browser"
   await expect(page.locator('section[id^="day-"]')).toHaveCount(3);
 });
 
-test("019 EARS-8: the forward control carries the whole state and drops nothing", async ({
+test("019 EARS-8.20: the forward control carries the whole state and drops nothing", async ({
   page,
 }) => {
   // No `to` — the horizon is the default one, so «показать ещё» is present.
@@ -113,6 +113,22 @@ test("019 EARS-8: the forward control carries the whole state and drops nothing"
   // Only the horizon moved.
   expect(params.get("to")).toBe("2026-09-29");
 
+  // …and it moved THROUGH the codec: the widened link is in field-table order,
+  // with `from`/`to` in positions 3-4, not appended after the facets. The same
+  // state must always yield the same, comparable URL — including this one, the
+  // only link the feature itself writes.
+  expect([...params.keys()]).toEqual([
+    "day",
+    "tense",
+    "from",
+    "to",
+    "format",
+    "specialty",
+    "city",
+    "nmo",
+    "q",
+  ]);
+
   // What the shared codec did not understand is dropped, never forwarded — a
   // ranking or campaign parameter cannot ride the feed's own links.
   expect(params.has("sort")).toBe(false);
@@ -122,7 +138,7 @@ test("019 EARS-8: the forward control carries the whole state and drops nothing"
 test.describe("with JavaScript disabled", () => {
   test.use({ javaScriptEnabled: false });
 
-  test("019 EARS-8: the whole feed renders from the URL alone, with no client state", async ({
+  test("019 EARS-8.21: the whole feed renders from the URL alone, with no client state", async ({
     page,
   }) => {
     // The strongest available statement of «no feed state in client memory»:

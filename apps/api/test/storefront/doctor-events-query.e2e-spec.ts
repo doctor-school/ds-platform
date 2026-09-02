@@ -155,7 +155,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
       await app?.close();
     });
 
-    it("019 EARS-8.1: the same URL read twice yields the identical feed — the read holds no viewer memory", async () => {
+    it("019 EARS-8.13: the same URL read twice yields the identical feed — the read holds no viewer memory", async () => {
       const query = `?from=${today}&to=${addDoctorEventsFeedDays(today, 14)}&tense=upcoming`;
       const first = await readFeed(query);
       const second = await readFeed(query);
@@ -168,7 +168,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(ids).toContain(secondWebinarEventId);
     });
 
-    it("019 EARS-8.2: an unknown parameter is ignored — it cannot narrow, widen or reorder the feed", async () => {
+    it("019 EARS-8.14: an unknown parameter is ignored — it cannot narrow, widen or reorder the feed", async () => {
       const base = `?from=${today}&to=${addDoctorEventsFeedDays(today, 14)}`;
       const clean = await readFeed(base);
       const noisy = await readFeed(
@@ -182,7 +182,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(noisy).toEqual(clean);
     });
 
-    it("019 EARS-8.3: repeatable facets round-trip in both wire spellings", async () => {
+    it("019 EARS-8.15: repeatable facets round-trip in both wire spellings", async () => {
       const base = `?from=${today}&to=${addDoctorEventsFeedDays(today, 14)}`;
       const repeated = await readFeed(
         `${base}&format=webinar&format=podcast&kind=${directionId}`,
@@ -204,7 +204,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(cities.from).toBe(repeated.from);
     });
 
-    it("019 EARS-8.4: the specialty key takes a mode word and an explicit list from the same URL", async () => {
+    it("019 EARS-8.16: the specialty key takes a mode word and an explicit list from the same URL", async () => {
       const base = `?from=${today}&to=${addDoctorEventsFeedDays(today, 14)}`;
       const all = await readFeed(`${base}&specialty=all`);
       expect(all.targeting.mode).toBe("all");
@@ -217,7 +217,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(explicit.targeting.mode).not.toBe("all");
     });
 
-    it("019 EARS-8.5: an invalid value is a 400 at the boundary, not a 500 from downstream", async () => {
+    it("019 EARS-8.17: an invalid value is a 400 at the boundary, not a 500 from downstream", async () => {
       for (const query of [
         "?from=12.09.2026",
         "?tense=sideways",

@@ -96,9 +96,19 @@ export function showMoreHref(
   feed: DoctorEventsFeed,
 ): string | null {
   if (feed.nextTo === null) return null;
-  const params = encodeDoctorEventsFeedQuery(raw);
-  params.set("from", feed.from);
-  params.set("to", feed.nextTo);
+  // Widen the horizon THROUGH the codec, not with `params.set` afterwards:
+  // `set` appends when the key is absent, so a link built from a URL that
+  // carried no `from`/`to` would emit the horizon keys last instead of in
+  // field-table positions 3-4. The feature's headline property is that the same
+  // state always yields the same, comparable URL, and this is the one link the
+  // feature writes.
+  const params = new URLSearchParams(
+    encodeDoctorEventsFeedQueryEntries({
+      ...raw,
+      from: feed.from,
+      to: feed.nextTo,
+    }),
+  );
   return `/events?${params.toString()}`;
 }
 

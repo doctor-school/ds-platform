@@ -44,7 +44,7 @@ import {
  * guard, the completeness gate, and the matrix all read (EARS-10).
  *
  * Visibility policy lives in the service (004 design §2): `draft`/unknown →
- * 404; `published`/`live`/`ended`/`archived` → 200 (an archived link degrades to
+ * 404; `published`/`live`/`ended`/`hidden` → 200 (a hidden link degrades to
  * a public notice body, never a dead 404 — EARS-5). Event authoring and the
  * lifecycle transitions that move the state are feature 007; 004 reads the state
  * they leave (seam → parent #549).
@@ -170,7 +170,7 @@ export class EventsPublicController {
     access: "public",
     check: "none",
     audit: "none",
-    // EARS-5: an archived direct link resolves to a 200 archived-notice body on
+    // EARS-5: a hidden direct link resolves to a 200 hidden-notice body on
     // this same route (never a 404/redirect) — its contract is pinned here too.
     tests: ["EARS-1", "EARS-5", "EARS-10"],
   })

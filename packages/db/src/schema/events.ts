@@ -24,12 +24,12 @@ import { recordStatus } from "./lifecycle.js";
 // design §3.6): `record_status` + `deleted_at` express removal, the child FKs to
 // `events.id` are `RESTRICT`, and nothing on this aggregate is ever physically
 // deleted. `record_status` is deliberately NOT the same axis as `events.state`:
-// `state` is the 007 EARS-7 domain machine (an `archived` event is a present,
+// `state` is the 007 EARS-7 domain machine (a `hidden` event is a present,
 // readable row), `record_status` is presence-vs-removal.
 
 /**
  * The single event-lifecycle state machine (design §2, EARS-7). A real Postgres
- * enum type — a `draft → published → live → ended → archived` closed set at the
+ * enum type — a `draft → published → live → ended → hidden` closed set at the
  * DB level, mirroring the `EventLifecycleStateSchema` API contract in
  * `@ds/schemas`. The two agree on the same five values by convention (the DB
  * owns the column type; the schema owns the wire contract) — drizzle-kit emits
@@ -40,7 +40,7 @@ export const eventLifecycleState = pgEnum("event_lifecycle_state", [
   "published",
   "live",
   "ended",
-  "archived",
+  "hidden",
 ]);
 
 export const events = pgTable(

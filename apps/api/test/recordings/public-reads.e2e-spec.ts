@@ -373,8 +373,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
       // No archive mirror exists to read the same event through.
       for (const mirror of [
-        `/v1/public/archive/events/${slug}`,
-        `/v1/public/events/${slug}/archive`,
+        `/v1/public/hide/events/${slug}`,
+        `/v1/public/events/${slug}/hide`,
         `/v1/public/recordings/${slug}`,
       ]) {
         const res = await app.inject({ method: "GET", url: mirror });
@@ -382,18 +382,18 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       }
     });
 
-    it("014 EARS-4.5: an archived event shall keep its feature 004 render — the same 200 notice body, still source-free, never a post-live page", async () => {
-      const { id, slug } = await insertEvent("archived");
-      // Attached and published BEFORE archiving — the row exists, and the
-      // archived render must not turn into a post-live page because of it.
+    it("014 EARS-4.5: a hidden event shall keep its feature 004 render — the same 200 notice body, still source-free, never a post-live page", async () => {
+      const { id, slug } = await insertEvent("hidden");
+      // Attached and published BEFORE hiding — the row exists, and the
+      // hidden render must not turn into a post-live page because of it.
       await publishRecording(id, "edited");
 
       const res = await read(slug);
       expect(res.statusCode).toBe(200);
       const body = JSON.parse(res.payload) as PublicPageBody;
-      // 004 EARS-5: `archived` resolves to a 200 archived-notice body on this
+      // 004 EARS-5: `hidden` resolves to a 200 hidden-notice body on this
       // same route — never a 404 and never a redirect.
-      expect(body.state).toBe("archived");
+      expect(body.state).toBe("hidden");
       expect(res.payload).not.toContain(EDITED_REF);
       expect(res.payload).not.toContain("embedRef");
     });

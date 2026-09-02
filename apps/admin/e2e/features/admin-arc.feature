@@ -5,10 +5,10 @@
 # the operator sees and does in the running admin UI on the live dev stand — the
 # required user-facing deliverable (requirements Verification, `all` row).
 
-Feature: Minimal event admin — one operator creates, streams, runs, and archives a webinar
+Feature: Minimal event admin — one operator creates, streams, runs, and hides a webinar
 
   @EARS-1 @EARS-3 @EARS-4 @EARS-5 @EARS-6 @happy
-  Scenario: One operator runs a webinar end to end, from creation to archive
+  Scenario: One operator runs a webinar end to end, from creation to hiding
     Given a platform_admin operator in the admin app
     When the operator creates a draft event with a program PDF
     Then the event is shown in the "draft" state
@@ -20,8 +20,8 @@ Feature: Minimal event admin — one operator creates, streams, runs, and archiv
     Then the event is shown in the "live" state
     When the operator closes the room
     Then the event is shown in the "ended" state
-    When the operator archives the event
-    Then the event is shown in the "archived" state
+    When the operator hides the event
+    Then the event is shown in the "hidden" state
     And no lifecycle action is offered
 
   @EARS-7 @failure

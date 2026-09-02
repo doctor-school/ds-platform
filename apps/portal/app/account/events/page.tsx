@@ -18,7 +18,7 @@ import { EventListRouter } from "../../../components/event-list-router";
  *   • **Записи** — every registered `ended` event, month-grouped, newest first,
  *     each badged with its recording state. An ended event whose recording is not
  *     published yet still appears, carrying the «Запись готовится» badge, so a
- *     doctor never loses an эфир they attended. `archived` events appear in
+ *     doctor never loses an эфир they attended. `hidden` events appear in
  *     NEITHER tab.
  *
  * Each tab is one `GET /v1/me/events?tab=…` read; the envelope carries BOTH tabs'

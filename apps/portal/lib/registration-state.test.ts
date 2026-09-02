@@ -9,7 +9,7 @@ import { showRegisteredConfirmation } from "./registration-state";
  * pure state→render decision — a registered doctor is never shown the register
  * CTA as if unregistered, and the confirmation swap fires only for the
  * `upcoming` lifecycle status (the registered-`live` render is EARS-5's live
- * signpost; `ended`/`archived` carry no register CTA at all).
+ * signpost; `ended`/`hidden` carry no register CTA at all).
  */
 
 describe("005 EARS-4 showRegisteredConfirmation — registered-state render decision", () => {
@@ -35,14 +35,14 @@ describe("005 EARS-4 showRegisteredConfirmation — registered-state render deci
     ).toBe(false);
   });
 
-  it("EARS-4: a registered doctor on an ended/archived event (no register CTA) triggers no confirmation swap", () => {
+  it("EARS-4: a registered doctor on an ended/hidden event (no register CTA) triggers no confirmation swap", () => {
     expect(
       showRegisteredConfirmation({ registered: true, registeredAt: "x" }, "ended"),
     ).toBe(false);
     expect(
       showRegisteredConfirmation(
         { registered: true, registeredAt: "x" },
-        "archived",
+        "hidden",
       ),
     ).toBe(false);
   });

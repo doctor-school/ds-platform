@@ -19,7 +19,7 @@ one** registration, regardless of path (logged-in one-tap, guest-through-auth, o
 on `(user_id, event_id)`, not client discipline; a repeat register is an
 idempotent no-op returning the existing registration (005 EARS-3). Registration
 is offered while the event is `published` (upcoming) or `live` and refused for
-`ended`/`archived` (005 EARS-9). Every registration row is **current** — in wave 1
+`ended`/`hidden` (005 EARS-9). Every registration row is **current** — in wave 1
 there is no cancelled state, no soft-delete, and no cancel affordance; cancellation
 is a wave-2 vertical (005 Constraints).
 

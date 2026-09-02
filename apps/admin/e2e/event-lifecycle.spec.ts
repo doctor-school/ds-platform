@@ -9,7 +9,7 @@ import { signInAsAdmin } from "./support/sign-in";
  * against the API directly. This proves the operator-facing arc on the running
  * admin: the control APPEARS only on a published event whose scheduled end is
  * already past (and never on one still ahead), and clicking it actually moves the
- * event to `ended` through the real command — after which `archive`, the only
+ * event to `ended` through the real command — after which `hide`, the only
  * edge out of `ended`, is what the bar offers.
  *
  * The appearance rule is deliberately NOT re-implemented in the browser: the
@@ -116,7 +116,7 @@ test.describe("014 EARS-18 — mark an off-platform broadcast ended, in the live
     await expect(page.getByTestId("action-close")).toHaveCount(0);
   });
 
-  test("014 EARS-18: marking it ended moves the event to «Завершено» and leaves archive as the only way on", async ({
+  test("014 EARS-18: marking it ended moves the event to «Завершено» and leaves hide as the only way on", async ({
     page,
   }) => {
     await signInAsAdmin(page);
@@ -138,7 +138,7 @@ test.describe("014 EARS-18 — mark an off-platform broadcast ended, in the live
 
     // `ended` has exactly one edge out; neither `ended`-targeting command may be
     // offered again from a state that has already reached it.
-    await expect(page.getByTestId("action-archive")).toBeVisible();
+    await expect(page.getByTestId("action-hide")).toBeVisible();
     await expect(page.getByTestId("action-mark-ended")).toHaveCount(0);
     await expect(page.getByTestId("action-close")).toHaveCount(0);
     await expect(page.getByTestId("action-open")).toHaveCount(0);

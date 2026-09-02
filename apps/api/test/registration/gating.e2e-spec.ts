@@ -26,7 +26,7 @@ import {
 // OFFERED/accepted while the event is `published` (upcoming) or `live`
 // (register-during-live is a normal path leading straight toward the room — the
 // portal routing target is asserted in `apps/portal/e2e/event-page-registered.
-// spec.ts`), and REFUSED with a 4xx for `ended`/`archived`: no registration is
+// spec.ts`), and REFUSED with a 4xx for `ended`/`hidden`: no registration is
 // recorded and the offending state is echoed. Gating derives PURELY from the
 // single `EventLifecycleState` — there is NO per-event configurable cutoff beyond
 // event state (owner decision 2026-07-06): a `published` event whose start is
@@ -37,7 +37,7 @@ import {
 //
 // The gating rule itself ships with EARS-1 (`isRegistrable` + the service's
 // `EventNotRegistrableError` → 409 mapping); this handler is its EXHAUSTIVE
-// verification across the full lifecycle set, the ended/archived refusal the
+// verification across the full lifecycle set, the ended/hidden refusal the
 // EARS-1 spec deferred here. Event authoring / lifecycle transitions are owned by
 // feature 007 (tracked seam → parent #564), so this spec SEEDS events directly in
 // each target state. Runs against the dev-stand Postgres + the fake IdP for the
@@ -55,7 +55,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     const createdEmails: string[] = [];
     const createdEventIds: string[] = [];
 
-    type SeedState = "draft" | "published" | "live" | "ended" | "archived";
+    type SeedState = "draft" | "published" | "live" | "ended" | "hidden";
 
     function uniqueEmail(prefix: string): string {
       const email = `${prefix}-${Date.now()}-${Math.random()
@@ -186,8 +186,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       },
     );
 
-    // --- EARS-9.2: registration is REFUSED (4xx) for ended + archived ---
-    it.each(["ended", "archived"] as const)(
+    // --- EARS-9.2: registration is REFUSED (4xx) for ended + hidden ---
+    it.each(["ended", "hidden"] as const)(
       "EARS-9.2: when the event is %s, the system shall refuse RegisterForEvent with a 4xx and record no registration",
       async (state) => {
         const { id: eventId, slug } = await seedEvent(state);

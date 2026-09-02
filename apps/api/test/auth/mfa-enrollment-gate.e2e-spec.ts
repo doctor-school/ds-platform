@@ -56,7 +56,7 @@ const ADMIN_ROUTES: ReadonlyArray<{ method: string; url: string }> = [
   },
   {
     method: "POST",
-    url: "/v1/admin/events/00000000-0000-4000-8000-000000000000/archive",
+    url: "/v1/admin/events/00000000-0000-4000-8000-000000000000/hide",
   },
   { method: "POST", url: "/v1/admin/auth/logout" },
 ];

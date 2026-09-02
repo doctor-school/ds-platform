@@ -5,7 +5,7 @@ import AxeBuilder from "@axe-core/playwright";
  * 004 EARS-13 (contrast slice, #559) — axe-core WCAG 2 A/AA scan of the PUBLIC 004
  * webinar surfaces this integration slice owns: the guest upcoming-broadcasts
  * listing and the guest event page in each lifecycle render (upcoming / live /
- * ended / archived). It is the runtime twin of the CI `playwright-axe` BLOCK gate
+ * ended / hidden). It is the runtime twin of the CI `playwright-axe` BLOCK gate
  * (which scans the DS primitives via the showcase) retargeted onto the composed
  * 004 portal surfaces. The settled token fact it guards: text on `bg-card` uses the
  * card-safe AA token `text-primary-action` (blue.700), never `text-primary` (#270).
@@ -39,7 +39,7 @@ const SEED = {
   upcoming: process.env.E2E_WEBINAR_SLUG ?? "seed-005-upcoming",
   live: process.env.E2E_WEBINAR_SLUG_LIVE ?? "seed-005-live",
   ended: process.env.E2E_WEBINAR_SLUG_ENDED ?? "seed-005-ended",
-  archived: process.env.E2E_WEBINAR_SLUG_ARCHIVED ?? "seed-005-archived",
+  hidden: process.env.E2E_WEBINAR_SLUG_HIDDEN ?? "seed-005-hidden",
 } as const;
 
 async function scan(page: Page, theme: (typeof THEMES)[number]) {

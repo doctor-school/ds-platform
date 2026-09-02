@@ -1,0 +1,23 @@
+-- ── 007 EARS-28 / #1748: `event_lifecycle_state` value `archived` → `hidden` ──
+--
+-- The owner's 2026-09-02 amendment (007 «Amendment — 2026-09-02»): «Архивировать
+-- означает ровно одно — поместить в архив. Архив мы ПОКАЗЫВАЕМ и это легитимное
+-- название статуса.» The terminal 007 state hides an event from every public
+-- surface — the opposite of the SHOWN recordings archive — so the state is
+-- renamed to `hidden` («Скрыт») and its command to `HideEvent` («Скрыть»).
+-- The recordings archive keeps the «Архив» vocabulary untouched.
+--
+-- This is a TRUE RENAME, hand-written over the drizzle-kit diff exactly as 0026
+-- and 0030 were: the generator offers only DROP TYPE + CREATE TYPE + a cast,
+-- which fails outright on any existing `archived` row (no cast from the old
+-- label to the new enum) and would rewrite the whole column even where it did
+-- not. `ALTER TYPE … RENAME VALUE` relabels the enum in place — every existing
+-- row follows automatically, the column type, its default and every dependent
+-- object stay attached, and no row is rewritten.
+--
+-- Semantics are unchanged: `ended → hidden` is still the terminal, manual,
+-- operator-driven transition (EARS-6/EARS-7, LD-2 — no scheduler). Only the
+-- NAME moves. `audit_ledger` rows written before this migration keep their
+-- historical `event.archived` type: the ledger is append-only (ADR-0003 §6),
+-- so history is never rewritten; the constant now emits `event.hidden`.
+ALTER TYPE "public"."event_lifecycle_state" RENAME VALUE 'archived' TO 'hidden';

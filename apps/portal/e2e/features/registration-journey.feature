@@ -6,7 +6,7 @@
 # on the live dev stand — the required user-facing deliverable (requirements
 # Verification, the `all` row): guest → «Участвовать» → 003 auth → returns
 # registered → «мои события» → back to the event page, plus logged-in one-tap and
-# ended/archived gating. The whole run rides a deliberately non-Moscow browser
+# ended/hidden gating. The whole run rides a deliberately non-Moscow browser
 # timezone (playwright.config `bdd` project), so the МСК labels prove no
 # viewer-local drift globally (EARS-11), not just in one tagged step.
 #
@@ -66,14 +66,14 @@ Feature: 005 Webinar registration journey — guest through auth to «мои с�
   # --- Lifecycle gating (US-1/US-2) ---
 
   @EARS-9 @failure
-  Scenario Outline: Ended and archived events offer no register affordance
+  Scenario Outline: Ended and hidden events offer no register affordance
     Given the "<state>" event page
     Then no register affordance is offered
 
     Examples:
       | state    |
       | ended    |
-      | archived |
+      | hidden |
 
   # --- Cross-cutting: the per-user surface is authenticated (US-5) ---
 

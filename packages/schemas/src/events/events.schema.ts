@@ -18,7 +18,7 @@ export const EVENT_LIFECYCLE_STATES = [
   "published",
   "live",
   "ended",
-  "archived",
+  "hidden",
 ] as const;
 export const EventLifecycleStateSchema = z.enum(EVENT_LIFECYCLE_STATES);
 export type EventLifecycleState = z.infer<typeof EventLifecycleStateSchema>;
@@ -48,8 +48,8 @@ export const LIFECYCLE_TRANSITIONS: Record<
   draft: ["published"],
   published: ["live", "ended"],
   live: ["ended"],
-  ended: ["archived"],
-  archived: [],
+  ended: ["hidden"],
+  hidden: [],
 };
 
 /** The transitions valid from `state` (the admin surface offers only these). */
@@ -62,7 +62,7 @@ export function validTransitions(
 /**
  * The closed-set guard predicate (EARS-7). `true` iff moving `from → to` is one
  * of the five legal forward transitions. Every other move — a skip-forward, any
- * backward move, reopening `archived`, the `published → draft` unpublish the PRD
+ * backward move, reopening `hidden`, the `published → draft` unpublish the PRD
  * names none, and any self-transition — is `false`. This is the single predicate
  * the server-side guard and the read-side `validTransitions` derive from, so the
  * admin UI (which offers only valid moves) and the API refusal can never drift.
@@ -351,8 +351,8 @@ export type CreateEventRequest = z.infer<typeof CreateEventRequestSchema>;
  * replacement supersedes the stored object reference (the 004 page then serves
  * the current file). The lifecycle `state` is **never** client-supplied here — an
  * edit is not a state reversal (there is no unpublish, EARS-7); state moves only
- * through the guarded transition commands. Editing is a **pre-archive** action;
- * the server refuses an edit to an `archived` event (EARS-2, requirements Scope).
+ * through the guarded transition commands. Editing is a **pre-hide** action;
+ * the server refuses an edit to a `hidden` event (EARS-2, requirements Scope).
  */
 /** `YYYY-MM-DD` — the plaque promises a day, never an instant (014-design §2). */
 export const ISO_DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
@@ -507,14 +507,14 @@ export type EventAdminList = z.infer<typeof EventAdminListSchema>;
  * {@link EVENT_LIFECYCLE_STATES} the public read surface may render. `draft` is
  * deliberately EXCLUDED: a draft event has no public projection (a request for
  * one is not-found, EARS-6), so `draft` can never appear on a `PublicEventPage`
- * body. `archived` is present — an archived direct link resolves to a public
+ * body. `hidden` is present — a hidden direct link resolves to a public
  * notice body (EARS-5), never a 404.
  */
 export const PUBLIC_EVENT_STATES = [
   "published",
   "live",
   "ended",
-  "archived",
+  "hidden",
 ] as const;
 export const PublicEventStateSchema = z.enum(PUBLIC_EVENT_STATES);
 export type PublicEventState = z.infer<typeof PublicEventStateSchema>;
@@ -523,7 +523,7 @@ export type PublicEventState = z.infer<typeof PublicEventStateSchema>;
  * The EARS-6 event-page reachability predicate — the single SSOT the public
  * visibility policy reads. `true` iff a public event-page request for an event in
  * `state` resolves to a body, i.e. `state` is one of the publicly-renderable
- * {@link PUBLIC_EVENT_STATES} (`published`/`live`/`ended`/`archived`). `draft` is
+ * {@link PUBLIC_EVENT_STATES} (`published`/`live`/`ended`/`hidden`). `draft` is
  * the sole non-reachable state: its page is not-found, indistinguishable from a
  * non-existent id, so a hidden draft leaks no "exists but private" oracle (004
  * design §2). Derived from the same allow-list the {@link PublicEventState}
@@ -631,7 +631,7 @@ export type PublicPartner = z.infer<typeof PublicPartnerSchema>;
 /**
  * The two lifecycle states an event may carry on the upcoming listing (004
  * design §3, §4, EARS-7). Only a `published` or a currently-airing `live` event
- * is listed — `ended`/`archived` drop from the listing (EARS-9) and `draft` is
+ * is listed — `ended`/`hidden` drop from the listing (EARS-9) and `draft` is
  * never public. A card whose event has left these two states is dropped on the
  * next read, so the card's `state` is a closed two-value subset, not the full
  * public-page enum.
@@ -695,7 +695,7 @@ export type UpcomingBroadcastList = z.infer<typeof UpcomingBroadcastListSchema>;
  * EARS-15). The closed publish-VISIBLE subset `published`/`live`/`ended` — the
  * month view INCLUDES the month's already-past `ended` events (rendered as muted
  * aggregate notes), which is why `ended` is present here where the upcoming
- * card's {@link UPCOMING_BROADCAST_STATES} drops it. `draft` and `archived` are
+ * card's {@link UPCOMING_BROADCAST_STATES} drops it. `draft` and `hidden` are
  * deliberately absent: they have NO month projection (structurally, not by a
  * denylist), so a new non-visible state can never leak onto the grid.
  */

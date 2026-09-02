@@ -5,7 +5,7 @@ import { Given, Then, When } from "../support/fixtures";
  * 004 discovery-journey step definitions (#559) — the browser translation of the
  * requirements Verification `all` row: a guest opens a sponsor-distributed direct
  * link → reads the page → opens the listing → clicks a card → back, across the
- * upcoming / live / ended / archived lifecycle states, driven on the live dev
+ * upcoming / live / ended / hidden lifecycle states, driven on the live dev
  * stand. The whole journey rides a non-Moscow timezone (playwright.config `bdd`
  * project, America/New_York) so the МСК labels prove no viewer-local drift (EARS-12).
  *
@@ -25,7 +25,7 @@ const SEED = {
   upcoming: process.env.E2E_WEBINAR_SLUG ?? "seed-005-upcoming",
   live: process.env.E2E_WEBINAR_SLUG_LIVE ?? "seed-005-live",
   ended: process.env.E2E_WEBINAR_SLUG_ENDED ?? "seed-005-ended",
-  archived: process.env.E2E_WEBINAR_SLUG_ARCHIVED ?? "seed-005-archived",
+  hidden: process.env.E2E_WEBINAR_SLUG_HIDDEN ?? "seed-005-hidden",
 } as const;
 
 const PARTICIPATE = "Участвовать";
@@ -40,8 +40,8 @@ function slugForState(state: string): string {
       return SEED.live;
     case "ended":
       return SEED.ended;
-    case "archived":
-      return SEED.archived;
+    case "hidden":
+      return SEED.hidden;
     default:
       throw new Error(`unknown lifecycle state token: ${state}`);
   }
@@ -167,12 +167,12 @@ Then(
   },
 );
 
-// ── Archived direct link degrades gracefully (EARS-5) ─────────────────────────
+// ── Hidden direct link degrades gracefully (EARS-5) ─────────────────────────
 
 Given(
-  "a guest opens the seeded archived event by its direct link",
+  "a guest opens the seeded hidden event by its direct link",
   async ({ page, context, world }) => {
-    world.slug = SEED.archived;
+    world.slug = SEED.hidden;
     await context.clearCookies();
     // Capture the response so the reachable-200 assertion can read the status.
     world.lastStatus =
@@ -185,7 +185,7 @@ Given(
 );
 
 Then(
-  "the archived page is a reachable 200 on the same URL, not a 404 or a redirect",
+  "the hidden page is a reachable 200 on the same URL, not a 404 or a redirect",
   async ({ page, world }) => {
     // EARS-5 (owner variant «а»): a previously-distributed link degrades to a
     // reachable page in place — never a 404 dead-end, never a 3xx bounce.
@@ -195,11 +195,11 @@ Then(
 );
 
 Then(
-  "the «мероприятие в архиве» notice is shown with no participation CTA",
+  "the «мероприятие скрыто» notice is shown with no participation CTA",
   async ({ page }) => {
-    await expect(page.getByText("В архиве", { exact: true }).first()).toBeVisible();
+    await expect(page.getByText("Скрыт", { exact: true }).first()).toBeVisible();
     await expect(
-      page.getByText("Мероприятие в архиве").first(),
+      page.getByText("Мероприятие скрыто").first(),
     ).toBeVisible();
     // No participation affordance in any of its verbs (the fourth CTA-less render).
     await expect(

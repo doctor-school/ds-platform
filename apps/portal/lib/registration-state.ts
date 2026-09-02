@@ -101,7 +101,7 @@ export async function fetchEventRegistrationState(
  *     onward-to-room affordance is the 006 room surface (#584) — until the room
  *     ships, the signpost is textual (a `/room` link would be a dead link / 404,
  *     a banned pattern; the deferral is tracked on #584).
- *   • `none` — every other case: `ended` / `archived` (no participation CTA — 004
+ *   • `none` — every other case: `ended` / `hidden` (no participation CTA — 004
  *     owns those renders), an unregistered doctor, or a guest (004's register CTA
  *     stands). No signpost is composed onto the public page.
  */
@@ -126,7 +126,7 @@ export function resolveJoinSignpost(
     // arrives with the 006 room surface, #584).
     case "live":
       return { kind: "live" };
-    // `ended` / `archived` carry no participation CTA — no signpost (004 owns it).
+    // `ended` / `hidden` carry no participation CTA — no signpost (004 owns it).
     default:
       return { kind: "none" };
   }
@@ -140,7 +140,7 @@ export function resolveJoinSignpost(
  * {@link resolveJoinSignpost} — the register-CTA swap.
  *
  * The registered-`live` render is EARS-5's `live` signpost (the confirmation +
- * "the broadcast is on"), not this primitive; `ended` / `archived` carry no
+ * "the broadcast is on"), not this primitive; `ended` / `hidden` carry no
  * register CTA at all. So a registered doctor is never shown the register CTA as
  * if unregistered (EARS-4 invariant), and no other lifecycle affordance is
  * disturbed.

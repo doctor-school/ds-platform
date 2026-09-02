@@ -353,7 +353,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const cookie = await session(uniqueEmail("admin"), "platform_admin");
       const { id } = await createDraft(cookie);
 
-      for (const state of ["live", "ended", "archived"] as const) {
+      for (const state of ["live", "ended", "hidden"] as const) {
         await forceState(id, state);
         const res = await configureStream(cookie, id, {
           provider: "rutube",

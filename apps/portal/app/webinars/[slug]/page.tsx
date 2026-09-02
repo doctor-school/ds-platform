@@ -54,10 +54,10 @@ import { RecordingPlayer } from "./recording-player";
  *   • ended — the ended affordance with NO participation CTA (never a dead link,
  *     the exactly-one-CTA invariant).
  *
- * EARS-5: the archived «мероприятие в архиве» notice is the FOURTH render mode on
+ * EARS-5: the hidden «мероприятие скрыто» notice is the FOURTH render mode on
  * the same page shell (beyond the canvas's upcoming/live/ended) — a text notice
  * replacing the status card's CTA column, no new geometry (design §5.1). A
- * previously-distributed direct link to an archived event degrades gracefully in
+ * previously-distributed direct link to a hidden event degrades gracefully in
  * place (owner variant «а»): it renders this notice with NO participation CTA,
  * never a 404, a redirect, or a dead link.
  *
@@ -93,7 +93,7 @@ export default async function WebinarEventPage({
 }) {
   const { slug } = await params;
   const event = await fetchPublicEventPage(slug);
-  // Draft / unknown → not-found (EARS-6); the branded archived notice is EARS-5.
+  // Draft / unknown → not-found (EARS-6); the branded hidden notice is EARS-5.
   if (!event) notFound();
 
   const t = await getTranslations("webinar");
@@ -127,7 +127,7 @@ export default async function WebinarEventPage({
   // start signpost (replacing the register CTA); `live` → the confirmation + the
   // "broadcast is on" signpost (the onward room affordance is the 006 room
   // surface, #584); `none` → 004's render stands (unregistered / guest / ended /
-  // archived).
+  // hidden).
   const signpost = resolveJoinSignpost(registrationState, status);
   // 006 EARS-6 — the registered-live room front door: the room surface shipped
   // (`/webinars/:slug/room`, EARS-1..7), so the entry CTA deferred to #584 is
@@ -141,11 +141,11 @@ export default async function WebinarEventPage({
   // A logged-in, NOT-yet-registered doctor on a registrable event gets the
   // one-tap command button; a guest gets the `/register` auth handoff (EARS-2).
   const isAuthenticated = registrationState !== null;
-  // EARS-5 — archived is the fourth render mode on the SAME status-card shell: a
+  // EARS-5 — hidden is the fourth render mode on the SAME status-card shell: a
   // text notice replaces the CTA column (no button, no dead link), no new
-  // geometry. Every state now renders the status card (the archived body swaps
+  // geometry. Every state now renders the status card (the hidden body swaps
   // its own time-plate/head/sub copy + the CTA-column notice).
-  const isArchived = status === "archived";
+  const isHidden = status === "hidden";
   // 014 EARS-4 — the source-free recording signal, read from the SAME public
   // projection the rest of this render uses (`event.recording`, resolved api-side
   // by the one canonical resolver, so the page and the listing card can never
@@ -185,7 +185,7 @@ export default async function WebinarEventPage({
   // param — a hostile slug can therefore never surface an open redirect.
   const gateReturnTo = `/webinars/${encodeURIComponent(slug)}`;
   // The footer conversion band mirrors the status card's route but only for a
-  // participable event (upcoming / live); `ended` and `archived` carry none. It
+  // participable event (upcoming / live); `ended` and `hidden` carry none. It
   // is a GUEST conversion band: its CTA links to the `/register` auth handoff,
   // which would wrongly route a logged-in doctor to the signup form — an
   // authenticated doctor already has the status-card affordance above (the
@@ -197,11 +197,11 @@ export default async function WebinarEventPage({
   // from the room (`?from=room`) AND the 005 register front door is actually the
   // rendered affordance (authenticated, unregistered, registrable — the exact
   // `RegisterOneTap` condition below). A registered doctor, a guest, or an
-  // ended/archived event never sees a stale «register to join» banner.
+  // ended/hidden event never sees a stale «register to join» banner.
   const showRoomAccessGuidance =
     fromRoom &&
     isAuthenticated &&
-    !isArchived &&
+    !isHidden &&
     signpost.kind === "none" &&
     cta.kind === "register";
 
@@ -260,14 +260,14 @@ export default async function WebinarEventPage({
             </div>
             {/* Hero lifecycle badge (004 EARS-4 swap): live → the pulsing «В
                 эфире» danger tag; every other state → the pale label with its
-                state copy («Скоро» / «Эфир завершён» / «В архиве»).
+                state copy («Скоро» / «Эфир завершён» / «Скрыт»).
 
                 014 EARS-4: on an ENDED event the badge speaks about the
                 RECORDING instead — «Запись доступна» (green) or «Запись
                 готовится» (the neutral label) — because that is the one thing a
                 post-live visitor came to find out, and «Эфир завершён» merely
-                restates the date they can already read. `archived` is
-                deliberately untouched: 004 EARS-5's «В архиве» owns that render. */}
+                restates the date they can already read. `hidden` is
+                deliberately untouched: 004 EARS-5's «Скрыт» owns that render. */}
             {event.state === "live" ? (
               <Badge variant="live" className="mt-1 shrink-0">
                 {t("state.live")}
@@ -293,7 +293,7 @@ export default async function WebinarEventPage({
         {/* EARS-4/EARS-5 — the pulled-up status card overlaps the poster (canvas
             -80px). It swaps the time plate + head/sub + the single CTA per
             lifecycle state; the `ended` render passes no CTA (no dead link), and
-            the `archived` render (EARS-5) replaces the CTA column with a plain
+            the `hidden` render (EARS-5) replaces the CTA column with a plain
             text notice — no participation affordance, no new geometry. */}
         <div className="relative z-10 -mt-20">
           <WebinarStatusCard
@@ -320,13 +320,13 @@ export default async function WebinarEventPage({
                   : t(`statusCard.${status}.sub`)
             }
           >
-            {isArchived ? (
-              // The CTA column becomes a non-interactive «в архиве» notice — no
+            {isHidden ? (
+              // The CTA column becomes a non-interactive «скрыт» notice — no
               // button, no link (EARS-5, owner variant «а»). `text-primary-action`
               // (blue.700) is the card-safe AA token on `bg-card` (never
               // `text-primary`, the #270 precedent).
               <p className="text-sm font-bold text-primary-action">
-                {t("statusCard.archived.notice")}
+                {t("statusCard.hidden.notice")}
               </p>
             ) : signpost.kind === "upcoming" ? (
               // 005 EARS-5 — registered + upcoming: the register CTA is replaced by

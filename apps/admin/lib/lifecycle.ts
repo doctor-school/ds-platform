@@ -20,7 +20,7 @@ export interface LifecycleAction {
   /** The target `EventLifecycleState` this action moves the event to. */
   readonly to: EventLifecycleState;
   /** The command path segment under `/v1/admin/events/:id/` (design §7). */
-  readonly command: "publish" | "open" | "close" | "archive" | "mark-ended";
+  readonly command: "publish" | "open" | "close" | "hide" | "mark-ended";
   /** The message-catalog key (under `events.action.*`) for the button label. */
   readonly labelKey: string;
   /** A stable test id / data attribute so the e2e can address the button. */
@@ -73,17 +73,17 @@ const ACTIONS: readonly LifecycleAction[] = [
   },
   {
     from: "ended",
-    to: "archived",
-    command: "archive",
-    labelKey: "events.action.archive",
-    testId: "action-archive",
+    to: "hidden",
+    command: "hide",
+    labelKey: "events.action.hide",
+    testId: "action-hide",
   },
 ];
 
 /**
  * Derive the lifecycle actions the admin surface offers from the event's current
  * state plus the server-supplied `validTransitions` (never from a UI-local
- * guess). An empty list (a terminal `archived` event) yields no actions — the UI
+ * guess). An empty list (a terminal `hidden` event) yields no actions — the UI
  * presents no transition the current state disallows (EARS-7). An edge absent
  * from {@link ACTIONS} names no command and is simply never offered.
  *
@@ -230,7 +230,7 @@ export interface LifecycleBarContent {
  * independence is the whole point: the bar used to return the «no transitions»
  * notice early, before it ever reached the alert, so on the one screen where the
  * operator most needs the explanation — a refusal whose re-read then withdrew
- * every action, e.g. an event someone else archived — the sentence disappeared in
+ * every action, e.g. an event someone else hidden — the sentence disappeared in
  * the same frame it was raised, and the operator was left with a silent, empty
  * bar and no account of why their click did nothing.
  */

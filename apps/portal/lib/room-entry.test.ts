@@ -26,12 +26,12 @@ describe("006 EARS-6 resolveRoomEntryHref — registered-live room front-door de
     ).toBeNull();
   });
 
-  it("EARS-6: when the doctor is registered but the event is ended/archived, the system shall render no room link", () => {
+  it("EARS-6: when the doctor is registered but the event is ended/hidden, the system shall render no room link", () => {
     expect(
       resolveRoomEntryHref({ registered: true, registeredAt: "x" }, "ended", "cardio-2026"),
     ).toBeNull();
     expect(
-      resolveRoomEntryHref({ registered: true, registeredAt: "x" }, "archived", "cardio-2026"),
+      resolveRoomEntryHref({ registered: true, registeredAt: "x" }, "hidden", "cardio-2026"),
     ).toBeNull();
   });
 

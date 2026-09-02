@@ -59,8 +59,8 @@ export type MyEventRow = Omit<MyEventItem, "recording">;
  * - `recordings` — every `ended` registration, with NO temporal window: the Записи
  *   tab is the doctor's whole finished history, so a two-year-old эфир is listed.
  *
- * `archived` satisfies NEITHER predicate — feature 004's visibility policy hides an
- * archived event from every listing, so it is in neither tab and in neither count.
+ * `hidden` satisfies NEITHER predicate — feature 004's visibility policy hides an
+ * hidden event from every listing, so it is in neither tab and in neither count.
  */
 function tabMembership(tab: MyEventsTab, cutoff: Date): SQL {
   if (tab === "upcoming") {
@@ -198,8 +198,8 @@ export class RegistrationRepository {
    * the query and the projection can never disagree about what may appear) whose
    * `starts_at` is at or after `cutoff` (`now − airWindow`, so a recently-started
    * live event still lists — mirrors the 004 upcoming listing) — ordered NEAREST
-   * air date first (`starts_at ASC`). A `draft`/`ended`/`archived` registration
-   * drops by STATE, never by time (EARS-6: ended/archived never list). Joined on
+   * air date first (`starts_at ASC`). A `draft`/`ended`/`hidden` registration
+   * drops by STATE, never by time (EARS-6: ended/hidden never list). Joined on
    * `registrations.event_id` filtered to `user_id = userId`, so it returns ONLY the
    * caller's own registrations — never another doctor's (EARS-10). An empty match
    * is a valid empty list (design §5). No registrant PII, no roster — only the thin

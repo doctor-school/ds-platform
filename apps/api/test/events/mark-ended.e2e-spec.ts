@@ -300,8 +300,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       };
       expect(body.state).toBe("ended");
       // `ended` is a real lifecycle state, not a marker: the event carries on to
-      // `archived` exactly as one the platform did host.
-      expect(body.validTransitions).toEqual(["archived"]);
+      // `hidden` exactly as one the platform did host.
+      expect(body.validTransitions).toEqual(["hidden"]);
       expect(await persistedState(id)).toBe("ended");
 
       // The distinct audit id is the point: collapsing it into `event.ended`
@@ -329,7 +329,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(await auditCount(id, "event.marked_ended")).toBe(0);
     });
 
-    it.each(["draft", "live", "ended", "archived"] as const)(
+    it.each(["draft", "live", "ended", "hidden"] as const)(
       "EARS-18: the command is refused with 409 INVALID_TRANSITION from %s, leaving the state and the ledger untouched",
       async (from) => {
         const cookie = await session(uniqueEmail("admin"), "platform_admin");

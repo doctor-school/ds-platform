@@ -34,7 +34,7 @@ import {
 //     a doctor's Записи tab is their whole finished history;
 //   • an `ended` event with nothing published is still LISTED, carrying the
 //     `preparing` recording projection (that is the badge the row renders);
-//   • an `archived` registration is in NEITHER tab (feature 004 visibility);
+//   • a `hidden` registration is in NEITHER tab (feature 004 visibility);
 //   • `counts` covers both tabs on either request, so the tab bar can label its
 //     own inactive side without a second round-trip.
 //
@@ -59,7 +59,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     const createdEmails: string[] = [];
     const createdEventIds: string[] = [];
 
-    type SeedState = "published" | "live" | "ended" | "archived";
+    type SeedState = "published" | "live" | "ended" | "hidden";
 
     function uniqueEmail(prefix: string): string {
       const email = `${prefix}-${Date.now()}-${Math.random()
@@ -144,7 +144,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     /**
      * Register the doctor for an event directly. The EARS-1 command deliberately
-     * REFUSES `ended`/`archived` events, so a finished registration can only be
+     * REFUSES `ended`/`hidden` events, so a finished registration can only be
      * seeded — it is the real-world shape (registered while published, the event
      * then ended), not a shortcut around the gate.
      */
@@ -293,11 +293,11 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       });
     });
 
-    it("014 EARS-9.5: an archived registration appears in NEITHER tab", async () => {
-      const archived = await seedEvent("archived", iso(-10 * DAY), "В архиве");
+    it("014 EARS-9.5: a hidden registration appears in NEITHER tab", async () => {
+      const hidden = await seedEvent("hidden", iso(-10 * DAY), "Скрыт");
       const email = uniqueEmail("doc");
       const cookie = await doctorSession(email);
-      await seedRegistration(await userIdOf(email), archived.id);
+      await seedRegistration(await userIdOf(email), hidden.id);
 
       const upcoming = await myEvents(cookie, "upcoming");
       const recordings = await myEvents(cookie, "recordings");
@@ -311,12 +311,12 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const airing = await seedEvent("live", iso(-10 * 60 * 1000), "Сейчас");
       const past1 = await seedEvent("ended", iso(-2 * DAY), "Прошёл 1");
       const past2 = await seedEvent("ended", iso(-20 * DAY), "Прошёл 2");
-      const archived = await seedEvent("archived", iso(-30 * DAY), "Архив");
+      const hidden = await seedEvent("hidden", iso(-30 * DAY), "Скрытый");
 
       const email = uniqueEmail("doc");
       const cookie = await doctorSession(email);
       const userId = await userIdOf(email);
-      for (const ev of [soon, airing, past1, past2, archived])
+      for (const ev of [soon, airing, past1, past2, hidden])
         await seedRegistration(userId, ev.id);
 
       const expected = { upcoming: 2, recordings: 2 };

@@ -82,8 +82,8 @@ describe("007 events schema", () => {
       // opened) refine it server-side.
       expect(validTransitions("published")).toEqual(["live", "ended"]);
       expect(validTransitions("live")).toEqual(["ended"]);
-      expect(validTransitions("ended")).toEqual(["archived"]);
-      expect(validTransitions("archived")).toEqual([]);
+      expect(validTransitions("ended")).toEqual(["hidden"]);
+      expect(validTransitions("hidden")).toEqual([]);
     });
 
     it("never offers a backward move or an unpublish", () => {
@@ -99,26 +99,26 @@ describe("007 events schema", () => {
       // 014 EARS-18 — the off-platform short-circuit (see the map test above).
       expect(canTransition("published", "ended")).toBe(true);
       expect(canTransition("live", "ended")).toBe(true);
-      expect(canTransition("ended", "archived")).toBe(true);
+      expect(canTransition("ended", "hidden")).toBe(true);
     });
 
     it("EARS-7.2: refuses every skip-forward move", () => {
       expect(canTransition("draft", "live")).toBe(false);
       expect(canTransition("draft", "ended")).toBe(false);
-      expect(canTransition("draft", "archived")).toBe(false);
+      expect(canTransition("draft", "hidden")).toBe(false);
       // `published → ended` is NOT a skip-forward move since 014 EARS-18 — it is
       // a first-class edge of the map, asserted true in EARS-7.1 above.
-      expect(canTransition("published", "archived")).toBe(false);
-      expect(canTransition("live", "archived")).toBe(false);
+      expect(canTransition("published", "hidden")).toBe(false);
+      expect(canTransition("live", "hidden")).toBe(false);
     });
 
     it("EARS-7.3: refuses every backward move (no unpublish, no reopen)", () => {
       expect(canTransition("published", "draft")).toBe(false); // no unpublish
       expect(canTransition("live", "published")).toBe(false);
       expect(canTransition("ended", "live")).toBe(false);
-      expect(canTransition("archived", "ended")).toBe(false);
-      expect(canTransition("archived", "published")).toBe(false); // no reopen
-      expect(canTransition("archived", "draft")).toBe(false);
+      expect(canTransition("hidden", "ended")).toBe(false);
+      expect(canTransition("hidden", "published")).toBe(false); // no reopen
+      expect(canTransition("hidden", "draft")).toBe(false);
     });
 
     it("EARS-7.4: refuses a self-transition from every state", () => {
@@ -143,13 +143,13 @@ describe("007 events schema", () => {
       expect(isPubliclyReachable("draft")).toBe(false);
     });
 
-    it("EARS-6: published / live / ended / archived are all publicly reachable", () => {
+    it("EARS-6: published / live / ended / hidden are all publicly reachable", () => {
       expect(isPubliclyReachable("published")).toBe(true);
       expect(isPubliclyReachable("live")).toBe(true);
       expect(isPubliclyReachable("ended")).toBe(true);
-      // An archived direct link resolves to the EARS-5 notice body, never a 404 —
+      // A hidden direct link resolves to the EARS-5 notice body, never a 404 —
       // so it is reachable (the render differs, the reachability does not).
-      expect(isPubliclyReachable("archived")).toBe(true);
+      expect(isPubliclyReachable("hidden")).toBe(true);
     });
 
     it("EARS-6: the predicate is derived from the PUBLIC_EVENT_STATES allow-list (not a draft denylist)", () => {
@@ -484,14 +484,14 @@ describe("007 events schema", () => {
 // month API e2e.
 describe("004 month-calendar schema (EARS-15/EARS-16)", () => {
   describe("MONTH_BROADCAST_STATES (EARS-15 — publish-visible incl. past ended)", () => {
-    it("is exactly published/live/ended — draft and archived have no month projection", () => {
+    it("is exactly published/live/ended — draft and hidden have no month projection", () => {
       expect([...MONTH_BROADCAST_STATES]).toEqual([
         "published",
         "live",
         "ended",
       ]);
       expect(MONTH_BROADCAST_STATES).not.toContain("draft");
-      expect(MONTH_BROADCAST_STATES).not.toContain("archived");
+      expect(MONTH_BROADCAST_STATES).not.toContain("hidden");
     });
   });
 
@@ -577,13 +577,13 @@ describe("004 month-calendar schema (EARS-15/EARS-16)", () => {
       expect(MonthBroadcastEntrySchema.parse(valid)).toEqual(valid);
     });
 
-    it("rejects draft/archived — they have no month projection", () => {
+    it("rejects draft/hidden — they have no month projection", () => {
       expect(
         MonthBroadcastEntrySchema.safeParse({ ...valid, state: "draft" })
           .success,
       ).toBe(false);
       expect(
-        MonthBroadcastEntrySchema.safeParse({ ...valid, state: "archived" })
+        MonthBroadcastEntrySchema.safeParse({ ...valid, state: "hidden" })
           .success,
       ).toBe(false);
     });

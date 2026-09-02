@@ -25,7 +25,7 @@ import { deleteEventFixture } from "../setup/fixture-cleanup.js";
 // ALLOW-LIST: no operator/commercial field (raw partner ref, program storage
 // key, timestamps) and no registrant PII ever leaks. A draft event is not
 // publicly reachable (not-found, indistinguishable from an unknown id); an
-// archived event resolves to a 200 body labeled `archived` (never presented as
+// hidden event resolves to a 200 body labeled `hidden` (never presented as
 // an active event). Event authoring / lifecycle transitions are owned by feature
 // 007 (seam → parent #549), so this spec SEEDS events directly in each target
 // lifecycle state via fixtures. Runs against the dev-stand Postgres; skips when
@@ -39,7 +39,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
     const fake = new FakeIdpClient();
     const createdEventIds: string[] = [];
 
-    type SeedState = "draft" | "published" | "live" | "ended" | "archived";
+    type SeedState = "draft" | "published" | "live" | "ended" | "hidden";
 
     interface SeedOptions {
       state: SeedState;
@@ -309,14 +309,14 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(draft.statusCode).toBe(unknown.statusCode);
     });
 
-    it("EARS-10: an archived event resolves to a 200 body labeled archived, never presented as an active event", async () => {
-      const { slug } = await seedEvent({ state: "archived" });
+    it("EARS-10: a hidden event resolves to a 200 body labeled hidden, never presented as an active event", async () => {
+      const { slug } = await seedEvent({ state: "hidden" });
       const res = await app.inject({
         method: "GET",
         url: `/v1/public/events/${slug}`,
       });
       expect(res.statusCode).toBe(200);
-      expect((res.json() as { state: string }).state).toBe("archived");
+      expect((res.json() as { state: string }).state).toBe("hidden");
     });
   },
 );

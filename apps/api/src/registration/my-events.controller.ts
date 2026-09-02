@@ -24,7 +24,7 @@ import {
  *   registered `published`/`live` events nearest first; `recordings` is their FULL
  *   `ended` history newest first, each row carrying feature 014's source-free
  *   recording projection so a finished event with nothing published is still
- *   listed with the `preparing` badge. `archived` registrations are in neither tab.
+ *   listed with the `preparing` badge. `hidden` registrations are in neither tab.
  *   An empty `data` is a valid result (the surface renders the canvas empty-state).
  *   An unknown `?tab=` is a 400 — «Сертификаты» is not a tab this surface has, and
  *   answering it with the default would silently pretend otherwise.

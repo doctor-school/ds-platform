@@ -281,7 +281,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const cookie = await session(uniqueEmail("admin"), "platform_admin");
       const { id } = await createDraft(cookie);
 
-      for (const state of ["published", "live", "ended", "archived"] as const) {
+      for (const state of ["published", "live", "ended", "hidden"] as const) {
         await forceState(id, state);
         const res = await publish(cookie, id);
         expect(res.statusCode, `publish must be refused from ${state}`).toBe(
@@ -335,7 +335,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         "published",
         "live",
         "ended",
-        "archived",
+        "hidden",
       ]);
     });
   },

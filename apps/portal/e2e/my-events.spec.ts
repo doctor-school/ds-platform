@@ -90,12 +90,12 @@ test("EARS-6: the Предстоящие list shows the registered event with М
  * contract in the ACTUAL running stack (browser → portal SSR → `/v1/*` rewrite →
  * api → Postgres): the default tab on first open, the deep-linkable
  * `?tab=recordings` state, both tabs' counts on the chips, the absence of any third
- * tab, and that no `archived` event surfaces in either tab.
+ * tab, and that no `hidden` event surfaces in either tab.
  *
  * Split of duty (the same split this file already uses for freshness): the
  * CONTENT invariants of the Записи tab — the full `ended` history newest-first, the
  * «Запись готовится» badge on an ended event whose recording is not published yet,
- * `archived` in neither tab, and the 400 on an unknown tab — are owned
+ * `hidden` in neither tab, and the 400 on an unknown tab — are owned
  * authoritatively by the Vitest e2e (`apps/api/test/recordings/my-events.e2e-spec.ts`,
  * 8 pinned cases), because reaching an `ended` REGISTRATION requires a lifecycle
  * transition after the registration was taken, which no browser journey can drive
@@ -106,7 +106,7 @@ test("EARS-6: the Предстоящие list shows the registered event with М
  * Self-provisioning + live-stand-gated via `LIVE_STAND`; inert on a bare CI run.
  */
 test.describe("014 EARS-9 my-events tabs (e2e)", () => {
-  const ARCHIVED_SLUG = process.env.E2E_ARCHIVED_SLUG ?? "seed-005-archived";
+  const HIDDEN_SLUG = process.env.E2E_HIDDEN_SLUG ?? "seed-005-hidden";
 
   test("014 EARS-9: «Мои события» opens on Предстоящие, offers exactly Предстоящие|Записи, and deep-links the Записи tab", async ({
     page,
@@ -151,12 +151,12 @@ test.describe("014 EARS-9 my-events tabs (e2e)", () => {
       page.getByTestId("event-list-tabs").getByRole("tab").nth(1),
     ).toHaveAttribute("aria-selected", "true");
 
-    // An `archived` event never surfaces — in EITHER tab (014 EARS-9).
-    await expect(page.locator(`a[href="/webinars/${ARCHIVED_SLUG}"]`)).toHaveCount(
+    // A `hidden` event never surfaces — in EITHER tab (014 EARS-9).
+    await expect(page.locator(`a[href="/webinars/${HIDDEN_SLUG}"]`)).toHaveCount(
       0,
     );
     await page.goto(`${BASE}/account/events`, { waitUntil: "domcontentloaded" });
-    await expect(page.locator(`a[href="/webinars/${ARCHIVED_SLUG}"]`)).toHaveCount(
+    await expect(page.locator(`a[href="/webinars/${HIDDEN_SLUG}"]`)).toHaveCount(
       0,
     );
 

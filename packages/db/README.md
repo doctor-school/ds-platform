@@ -54,9 +54,9 @@ relationship rows; `taxonomy_status` / `recording_status`
 publication workflow; and `*_status` (`active | expired`) for the technical
 records whose inactive state is an expiry that CLEARS content rather than a
 removal. A table's DOMAIN state machine is a separate axis again: `events.state`
-(`draft → published → live → ended → archived`) says where a broadcast is in its
+(`draft → published → live → ended → hidden`) says where a broadcast is in its
 life, `events.record_status` says whether the row is part of the live domain at
-all — an `archived` event is a present, readable row.
+all — a `hidden` event is a present, readable row.
 
 | Table                       | Class                                          | Lifecycle columns                           | Why                                                                                                                                                                                                                                                                                                                                                                       |
 | --------------------------- | ---------------------------------------------- | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

@@ -30,7 +30,7 @@ import { defineBddConfig } from "playwright-bdd";
  *   IDP_ISSUER=… IDP_CLIENT_ID=… IDP_SERVICE_TOKEN=… IDP_REDIRECT_URI=… \
  *   MAILPIT_URL=http://truenas.local:8025 E2E_PORTAL_URL=http://localhost:3001 \
  *   E2E_WEBINAR_SLUG=seed-005-upcoming E2E_ONE_TAP_SLUG=seed-005-upcoming-2 \
- *   E2E_WEBINAR_SLUG_ENDED=seed-005-ended E2E_WEBINAR_SLUG_ARCHIVED=seed-005-archived \
+ *   E2E_WEBINAR_SLUG_ENDED=seed-005-ended E2E_WEBINAR_SLUG_HIDDEN=seed-005-hidden \
  *   pnpm --filter @ds/portal test:e2e --project=bdd
  * `E2E_PORTAL_URL` must point at a portal whose `/v1/*` rewrite reaches the api
  * (set `API_PROXY_TARGET` when starting that portal). We do NOT start the portal

@@ -10,7 +10,7 @@ import {
  * 005 registration-journey step definitions (#574) — the browser translation of
  * the requirements Verification `all` row: guest → «Участвовать» → 003 auth →
  * returns registered → «мои события» → back, plus logged-in one-tap and
- * ended/archived gating, driven on the live dev stand. The whole journey rides a
+ * ended/hidden gating, driven on the live dev stand. The whole journey rides a
  * non-Moscow timezone (playwright.config `bdd` project) so the МСК labels prove no
  * viewer-local drift (EARS-11).
  *
@@ -26,7 +26,7 @@ const SEED = {
   oneTap: process.env.E2E_ONE_TAP_SLUG ?? "seed-005-upcoming-2",
   live: process.env.E2E_WEBINAR_SLUG_LIVE ?? "seed-005-live",
   ended: process.env.E2E_WEBINAR_SLUG_ENDED ?? "seed-005-ended",
-  archived: process.env.E2E_WEBINAR_SLUG_ARCHIVED ?? "seed-005-archived",
+  hidden: process.env.E2E_WEBINAR_SLUG_HIDDEN ?? "seed-005-hidden",
 } as const;
 
 const CONFIRMATION = "Вы записаны";
@@ -205,13 +205,13 @@ Then(
 // ── Lifecycle gating (EARS-9) ────────────────────────────────────────────────
 
 Given("the {string} event page", async ({ page, context, world }, state: string) => {
-  world.slug = state === "archived" ? SEED.archived : SEED.ended;
+  world.slug = state === "hidden" ? SEED.hidden : SEED.ended;
   await context.clearCookies();
   await page.goto(`/webinars/${world.slug}`, { waitUntil: "domcontentloaded" });
 });
 
 Then("no register affordance is offered", async ({ page }) => {
-  // EARS-9: ended/archived events render NO participation affordance — neither the
+  // EARS-9: ended/hidden events render NO participation affordance — neither the
   // «Участвовать» register CTA/one-tap nor the footer «Записаться» band.
   await expect(
     page.getByRole("link", { name: PARTICIPATE, exact: true }),

@@ -22,7 +22,7 @@ import { deleteEventFixture } from "../setup/fixture-cleanup.js";
 // surfaces can never present a contradictory signal for one event — there is no
 // second projection to drift. A short `Cache-Control` max-age (design §4, §5.3)
 // bounds how long a just-transitioned event can look stale on either endpoint,
-// and an event whose state has moved to `ended`/`archived` drops from the
+// and an event whose state has moved to `ended`/`hidden` drops from the
 // listing on the NEXT read. Event authoring / lifecycle transitions are feature
 // 007 (seam → parent #549), so this spec SEEDS events directly in each target
 // lifecycle state via fixtures and simulates a transition by moving one seeded
@@ -38,7 +38,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
     const fake = new FakeIdpClient();
     const createdEventIds: string[] = [];
 
-    type SeedState = "draft" | "published" | "live" | "ended" | "archived";
+    type SeedState = "draft" | "published" | "live" | "ended" | "hidden";
 
     /**
      * Seed one event row (+ two ordered speakers) directly in the target
@@ -203,7 +203,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect((pageRes.json() as { state: string }).state).toBe("ended");
     });
 
-    it("EARS-9: when an event is archived, the system shall drop its card from the listing on the next read while the direct link degrades to the archived notice body", async () => {
+    it("EARS-9: when an event is hidden, the system shall drop its card from the listing on the next read while the direct link degrades to the hidden notice body", async () => {
       const { id, slug } = await seedEvent("live", -30 * 60 * 1000);
       expect(
         ((await fetchListing()).json() as { id: string }[]).some(
@@ -211,18 +211,18 @@ describe.skipIf(!process.env.DATABASE_URL)(
         ),
       ).toBe(true);
 
-      // 007 archives the event — the single `state` write.
-      await moveState(id, "archived");
+      // 007 hides the event — the single `state` write.
+      await moveState(id, "hidden");
 
       // The card drops from the listing on the next read…
       const after = (await fetchListing()).json() as { id: string }[];
       expect(after.some((c) => c.id === id)).toBe(false);
 
       // …and the previously-distributed direct link degrades to a public 200
-      // `archived` body (never a 404), consistent with the same state column.
+      // `hidden` body (never a 404), consistent with the same state column.
       const pageRes = await fetchPage(slug);
       expect(pageRes.statusCode).toBe(200);
-      expect((pageRes.json() as { state: string }).state).toBe("archived");
+      expect((pageRes.json() as { state: string }).state).toBe("hidden");
     });
 
     it("EARS-9: when either public read endpoint is queried, the system shall return a short Cache-Control max-age that bounds the staleness of a just-transitioned event", async () => {

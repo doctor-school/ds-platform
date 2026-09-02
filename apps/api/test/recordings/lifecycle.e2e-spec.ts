@@ -486,7 +486,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       );
     });
 
-    it.each(["draft", "published", "live", "archived"])(
+    it.each(["draft", "published", "live", "hidden"])(
       "014 EARS-2: publishing a recording of a %s event shall be refused with 409 EVENT_NOT_FINISHED, leaving both the recording and the event untouched",
       async (state) => {
         const eventId = await insertEvent(state);

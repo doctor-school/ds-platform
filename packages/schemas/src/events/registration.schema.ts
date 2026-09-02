@@ -14,10 +14,10 @@ import { EventLifecycleStateSchema } from "./events.schema.js";
  * The lifecycle states in which registration is **offered** (design §5). An
  * authenticated doctor may register while the event is `published` (upcoming) or
  * `live` — register-during-live is a normal path leading straight toward the
- * room. Registration is withheld for `ended`/`archived` and impossible for
+ * room. Registration is withheld for `ended`/`hidden` and impossible for
  * `draft` (not publicly reachable). Kept here as the SSOT the gate reads so the
  * offered-affordance set can never silently widen. The exhaustive gating
- * semantics (the ended/archived refusal + affordance-absent verification) are
+ * semantics (the ended/hidden refusal + affordance-absent verification) are
  * the sibling EARS-9 handler; EARS-1 accepts exactly this set.
  */
 export const REGISTRABLE_EVENT_STATES = ["published", "live"] as const;
@@ -75,8 +75,8 @@ export type MyEventsQuery = z.infer<typeof MyEventsQuerySchema>;
 /**
  * The lifecycle states a «Мои события» row can carry (014 EARS-9). The union of
  * the two tabs' membership rules: `published`/`live` on the Предстоящие side and
- * `ended` on the Записи side. `archived` is deliberately ABSENT — feature 004's
- * visibility policy hides an archived event from every listing surface, so it
+ * `ended` on the Записи side. `hidden` is deliberately ABSENT — feature 004's
+ * visibility policy hides a hidden event from every listing surface, so it
  * belongs to NEITHER tab, and leaving it out of the field type means the SQL
  * filter and the contract cannot drift apart. `draft` is unreachable: it is never
  * publicly registrable in the first place.

@@ -60,7 +60,7 @@ const REVALIDATION_EXEMPT: Readonly<Record<string, string>> = {
     "feature 007, live in prod — tracked in DEBT.md (#1304)",
   "POST /v1/admin/events/:id/close":
     "feature 007, live in prod — tracked in DEBT.md (#1304)",
-  "POST /v1/admin/events/:id/archive":
+  "POST /v1/admin/events/:id/hide":
     "feature 007, live in prod — tracked in DEBT.md (#1304)",
   "POST /v1/admin/events/:id/publish":
     "feature 007, live in prod — tracked in DEBT.md (#1304)",

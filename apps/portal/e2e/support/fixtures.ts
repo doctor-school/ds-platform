@@ -12,7 +12,7 @@ import type { BrowserContext, Page } from "@playwright/test";
 export interface JourneyWorld {
   /** The event slug the current scenario is driving (the `published` seed by default). */
   slug: string;
-  /** The last navigation HTTP status, recorded by the 004 archived-link step (EARS-5). */
+  /** The last navigation HTTP status, recorded by the 004 hidden-link step (EARS-5). */
   lastStatus?: number;
   /**
    * 006 EARS-4 heartbeat counter — a mutable box the room journey's request

@@ -28,7 +28,7 @@ import { RoomView } from "./room-view";
  *                 one-tap register front door; on register the doctor re-enters the
  *                 room (admitted on success).
  *   • not-live  → the 004 event page (the truthful lifecycle state — upcoming /
- *                 ended / archived — with no watchable room; no register banner,
+ *                 ended / hidden — with no watchable room; no register banner,
  *                 the lifecycle render is itself the truthful signal).
  *   • not-found → Next.js not-found (unknown / draft — no "exists" oracle).
  *
@@ -73,7 +73,7 @@ export default async function RoomPage({
       redirect(`${eventPage}?from=room`);
     // eslint-disable-next-line no-fallthrough -- redirect() throws; unreachable
     case "not-live":
-      // The truthful 004 lifecycle state (upcoming / ended / archived) — no room,
+      // The truthful 004 lifecycle state (upcoming / ended / hidden) — no room,
       // no register banner (the lifecycle render is the truthful signal on its own).
       redirect(eventPage);
     // eslint-disable-next-line no-fallthrough -- redirect() throws; unreachable

@@ -21,7 +21,7 @@
   },
   "event_lifecycle_state": {
     "title": "event lifecycle state",
-    "description": "The single closed state machine (draft → published → live → ended → archived) that is the one source of truth every webinar surface reads."
+    "description": "The single closed state machine (draft → published → live → ended → hidden) that is the one source of truth every webinar surface reads."
   },
   "event_registration": {
     "title": "event registration",

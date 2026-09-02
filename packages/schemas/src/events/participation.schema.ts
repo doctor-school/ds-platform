@@ -44,7 +44,7 @@ export type EventParticipationFormat = z.infer<
  *   honestly with no participation target at all (EARS-9). No waiting list
  *   exists in the model, so none can be half-built in the UI;
  * - `unavailable` — participation is not offered in this lifecycle state
- *   (`ended` / `archived`), or the live room is not reachable for this viewer.
+ *   (`ended` / `hidden`), or the live room is not reachable for this viewer.
  */
 export const PARTICIPATION_CTA_ACTIONS = [
   "register",

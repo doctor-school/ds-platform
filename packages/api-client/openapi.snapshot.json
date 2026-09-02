@@ -770,7 +770,7 @@
             "type": "string"
           },
           "state": {
-            "enum": ["published", "live", "ended", "archived"],
+            "enum": ["published", "live", "ended", "hidden"],
             "type": "string"
           },
           "title": {

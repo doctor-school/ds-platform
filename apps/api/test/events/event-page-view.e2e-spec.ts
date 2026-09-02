@@ -42,7 +42,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
     const fake = new FakeIdpClient();
     const createdEventIds: string[] = [];
 
-    type SeedState = "draft" | "published" | "live" | "ended" | "archived";
+    type SeedState = "draft" | "published" | "live" | "ended" | "hidden";
 
     interface SeedOptions {
       state: SeedState;

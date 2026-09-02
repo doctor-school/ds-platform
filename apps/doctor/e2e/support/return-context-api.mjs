@@ -35,6 +35,8 @@ const EVENT = {
   specialties: ["Травматология", "Ортопедия"],
   partners: [],
   state: "published",
+  format: "online",
+  seatsLeft: null,
   recording: {
     state: "preparing",
     primaryKind: null,

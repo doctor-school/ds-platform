@@ -1965,7 +1965,7 @@ export interface components {
             /** Format: date-time */
             startsAt: string;
             /** @enum {string} */
-            state: "published" | "live" | "ended" | "archived";
+            state: "published" | "live" | "ended" | "hidden";
             title: string;
         };
         ExpertAdminDetailDto: {

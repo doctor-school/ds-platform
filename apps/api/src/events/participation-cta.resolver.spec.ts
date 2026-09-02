@@ -97,12 +97,12 @@ describe("resolveParticipationCta (020 EARS-1)", () => {
     expect(cta.reason).toBe("Событие завершилось");
   });
 
-  it("020 EARS-1.7: an archived event is unavailable for its own stated reason, not the ended one", () => {
-    const cta = resolveParticipationCta(facts({ state: "archived" }), ACADEMY);
+  it("020 EARS-1.7: a hidden event is unavailable for its own stated reason, not the ended one", () => {
+    const cta = resolveParticipationCta(facts({ state: "hidden" }), ACADEMY);
 
     expect(cta.action).toBe("unavailable");
     expect(cta.reason).toBe(
-      "Событие в архиве — участие в нём больше не предлагается",
+      "Мероприятие скрыто — участие в нём больше не предлагается",
     );
   });
 

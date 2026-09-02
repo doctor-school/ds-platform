@@ -101,7 +101,7 @@ function registrationHref(
  *
  * The order of the branches IS the policy:
  *
- * 1. A state outside 005's registrable set (`ended` / `archived`) offers
+ * 1. A state outside 005's registrable set (`ended` / `hidden`) offers
  *    nothing — `unavailable` with the reason said in words (EARS-10: no dead
  *    CTA on a finished event).
  * 2. A registered viewer on a `live` event enters the room (EARS-7). Room
@@ -125,8 +125,8 @@ export function resolveParticipationCta(
       label: LABELS.unavailable,
       href: null,
       reason:
-        state === "archived"
-          ? "Событие в архиве — участие в нём больше не предлагается"
+        state === "hidden"
+          ? "Мероприятие скрыто — участие в нём больше не предлагается"
           : "Событие завершилось",
     };
   }

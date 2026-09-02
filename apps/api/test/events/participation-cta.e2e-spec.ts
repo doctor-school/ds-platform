@@ -62,7 +62,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     }
 
     async function seedEvent(opts: {
-      state: "draft" | "published" | "live" | "ended" | "archived";
+      state: "draft" | "published" | "live" | "ended" | "hidden";
       format?: "online" | "offline" | "hybrid";
       seatsLeft?: number | null;
     }): Promise<{ id: string; slug: string }> {

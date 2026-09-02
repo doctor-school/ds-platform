@@ -12,7 +12,7 @@ import { test, expect } from "@playwright/test";
  *     HTML and against the network the page opens, because "the guest cannot
  *     play it" is only true if neither the markup nor a subsequent request
  *     carries an embed;
- *   • ONE route serves it. There is no `/hide/*` mirror and no second
+ *   • ONE route serves it. There is no `/archive/*` mirror and no second
  *     post-live page, so a sponsor-distributed link and an in-product link are
  *     the same URL (design §8.1).
  *
@@ -197,14 +197,14 @@ test.describe("014 EARS-4 public post-live event page (e2e)", () => {
     await expect(page.getByTestId("recording-meta")).toHaveCount(0);
   });
 
-  test("014 EARS-4: ONE route serves the post-live page — no /hide mirror, no second post-live URL", async ({
+  test("014 EARS-4: ONE route serves the post-live page — no /archive mirror, no second post-live URL", async ({
     page,
     context,
   }) => {
     await context.clearCookies();
     for (const mirror of [
-      `/hide/${ENDED_SLUG}`,
-      `/webinars/${ENDED_SLUG}/hide`,
+      `/archive/${ENDED_SLUG}`,
+      `/webinars/${ENDED_SLUG}/archive`,
       `/webinars/${ENDED_SLUG}/recording`,
     ]) {
       const res = await page.goto(`${BASE}${mirror}`, {

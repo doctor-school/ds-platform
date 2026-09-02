@@ -1,7 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
 /**
- * 019 EARS-3 (#1518) — the `/events` route tier.
+ * 019 EARS-3 (#1518) + EARS-4 (#1519) — the `/events` route tier.
  *
  * A third tier rather than a case in `playwright.ci.config.ts`, because that one
  * is BACKEND-FREE by contract and `/events` cannot degrade into the assertions
@@ -20,7 +20,7 @@ const API = `http://127.0.0.1:${API_PORT}`;
 
 export default defineConfig({
   testDir: "./e2e",
-  testMatch: /events-(feed|url-state)\.spec\.ts/,
+  testMatch: /events-(feed|url-state|month-beside-feed)\.spec\.ts/,
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,

@@ -34,6 +34,47 @@ strongest-first, and never read in reverse. An own direction cannot be
 re-labelled adjacent. «Другое» returns the explicit general-selection statement
 under `mode: general`, never an empty `targeted` answer.
 
+## 019 doctor events feed and month grid
+
+`GET /v1/storefront/doctor/events` (EARS-3, #1518) and
+`GET /v1/storefront/doctor/events/month` (EARS-4, #1519) are ONE host projection
+with two shapes, not two features. Both are `access: public` and
+session-optional, both read the remembered specialty from
+`__Host-ds_specialty`, and both are served `private, max-age=30` with
+`Vary: Cookie` — a shared cache must never hand one doctor's targeted read to
+another visitor.
+
+- **The month grid is navigation over the same read.** `DoctorEventsService.month()`
+  resolves targeting with the same `resolveTargeting`, selects with the same
+  `findFeedRows`, maps with the same `toCards` and narrows with the same
+  `applyCardFacets` the day feed uses. A grid count and the feed's day-group size
+  for that day are therefore the same number by construction. The month codec
+  (`parseDoctorEventsMonthQuery`) delegates its facet half to the feed's codec,
+  so the two routes cannot disagree about what a facet means either.
+- **One aggregate query, never one per day.** The whole month is a single
+  `findFeedRows` call over `[max(first-of-month, today), first-of-next-month)`,
+  plus the per-event lookups `toCards` already batches.
+- **Every day is emitted, `count: 0` included**, so a host renders the grid
+  straight from the response — Academy's client-side month assembly
+  (`apps/portal/components/month-calendar-view.tsx`) is deliberately NOT the
+  Doctor shape (019-design §1.1, §3).
+- **«Будущие» only in release 1** (LD-10, #1525): a day already past carries
+  `count: 0` rather than a historical figure the feed beside the grid would not
+  show. There is no `tense`, `day`, `from` or `to` on the month route, and no
+  `view` parameter anywhere — F-019-2 Б renders grid and feed together and
+  builds no «Неделя / Месяц» switch.
+- **`hasLive` is 007's lifecycle state**, the same `state: "live"` the feed's
+  card carries. Nothing here compares a start time to the clock.
+- **The two empty reasons stay distinct** (LD-9): the grid carries the feed's own
+  `targeting` envelope, so «пусто по специальности» (a targeted read with no
+  adjacency rows) and «пусто по фасетам» are two different renders rather than
+  one bare zero.
+- **A malformed `month` is a 400.** Unlike the feed's `to=`, which is clamped, a
+  month has no nearest honest value a reader could be assumed to have meant.
+
+One contract serves two compositions (LD-3): the grid beside the feed (#1516)
+and the dedicated calendar page (#1520) read the SAME endpoint.
+
 ## Exported symbols
 
 `StorefrontModule` (exports `SpecialtiesService` + `StatisticsService` +

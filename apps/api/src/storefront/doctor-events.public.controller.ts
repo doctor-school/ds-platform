@@ -11,18 +11,28 @@ import {
 import { ApiOkResponse, ApiQuery } from "@nestjs/swagger";
 import {
   type DoctorEventsFeed,
+  type DoctorEventsMonthGrid,
   parseDoctorEventsFeedQuery,
+  parseDoctorEventsMonthQuery,
   type RawQueryValue,
 } from "@ds/schemas";
 import { Authz, Public } from "../authz/index.js";
-import { DoctorEventsFeedDto } from "./doctor-events.dto.js";
+import {
+  DoctorEventsFeedDto,
+  DoctorEventsMonthGridDto,
+} from "./doctor-events.dto.js";
 import { DoctorEventsService } from "./doctor-events.service.js";
 import { SpecialtyProblemFilter } from "./specialties.problem-filter.js";
 import { readSpecialtyChoiceCookie } from "./specialty-choice.cookie.js";
 
 /**
  * 019 EARS-3 (#1518) — `GET /v1/storefront/doctor/events`, the day-grouped,
- * specialty-targeted feed of the doctor storefront (019-design §7).
+ * specialty-targeted feed of the doctor storefront (019-design §7) — and
+ * EARS-4 (#1519) `GET …/events/month`, the `MonthGrid` projection of that same
+ * read. Both live on ONE controller because they are one host projection with
+ * two shapes (LD-3): same targeting, same cookie, same cache posture. The month
+ * route serves BOTH the grid standing beside the feed (#1516) and the dedicated
+ * calendar page (#1520) — one contract, two compositions.
  *
  * ## Host projection, not a second engine
  *
@@ -93,6 +103,54 @@ export class DoctorEventsPublicController {
     }
 
     return this.feed.feed({
+      query: parsed.data,
+      specialtyReference: readSpecialtyChoiceCookie(cookie),
+    });
+  }
+
+  /**
+   * `GET /v1/storefront/doctor/events/month` — the `MonthGrid` of EARS-4.
+   *
+   * There is no `view` query parameter and no `tense`: under F-019-2 Б the grid
+   * and the feed render together (no «Неделя / Месяц» switch is built), and
+   * release 1 reads «Будущие» only per LD-10. A malformed `month` is a 400
+   * Problem Details at the boundary — unlike the feed's `to=`, a month cannot be
+   * clamped to something honest, since there is no nearest month a reader could
+   * be assumed to have meant.
+   */
+  @Get("month")
+  @ApiQuery({
+    name: "month",
+    required: false,
+    description: "ISO YYYY-MM; defaults to the current МСК month",
+  })
+  @ApiQuery({ name: "format", required: false, isArray: true, type: String })
+  @ApiQuery({ name: "kind", required: false, isArray: true, type: String })
+  @ApiQuery({ name: "specialty", required: false, isArray: true, type: String })
+  @ApiQuery({ name: "city", required: false, isArray: true, type: String })
+  @ApiQuery({ name: "nmo", required: false, type: Boolean })
+  @ApiQuery({ name: "free", required: false, type: Boolean })
+  @ApiQuery({ name: "q", required: false })
+  @ApiOkResponse({ type: DoctorEventsMonthGridDto })
+  @Public()
+  @Header("Cache-Control", "private, max-age=30")
+  @Header("Vary", "Cookie")
+  @Authz({
+    access: "public",
+    check: "none",
+    audit: "none",
+    tests: ["EARS-4"],
+  })
+  month(
+    @Query() query: Record<string, RawQueryValue>,
+    @Headers("cookie") cookie?: string,
+  ): Promise<DoctorEventsMonthGrid> {
+    const parsed = parseDoctorEventsMonthQuery(query ?? {});
+    if (!parsed.success) {
+      throw new BadRequestException("invalid doctor events month query");
+    }
+
+    return this.feed.month({
       query: parsed.data,
       specialtyReference: readSpecialtyChoiceCookie(cookie),
     });

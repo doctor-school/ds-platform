@@ -225,6 +225,13 @@
       "when": 1788233341022,
       "tag": "0031_events_version",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1788332006009,
+      "tag": "0032_speaker_migration_cutover",
+      "breakpoints": true
     }
   ]
 }

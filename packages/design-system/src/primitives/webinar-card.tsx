@@ -49,8 +49,29 @@ export interface WebinarCardProps extends Omit<
 > {
   /** Canvas presentation state; `past` is the visually muted archive anatomy. */
   variant?: "upcoming" | "past";
-  /** The event page URL the card's stretched title link points to (`/webinars/:slug`, EARS-8). */
-  href: string;
+  /**
+   * The event page URL the card's stretched title link points to
+   * (`/webinars/:slug`, EARS-8). Required for every NAVIGABLE card — omit it
+   * only together with `navigable={false}`, where the card renders no link at
+   * all and an href would have nothing to point from.
+   */
+  href?: string;
+  /**
+   * Whether the card is a NAVIGATION affordance (default `true`).
+   *
+   * `false` renders the card as a pure CONTEXT plate: the title is plain text
+   * instead of the stretched link, and the secondary CTA is not rendered — so
+   * the card subtree contains no `a` and no `button` at all. That is 021
+   * EARS-2's return context (#1538): the doctor is shown what they will come
+   * back to while they fill the registration form, and the owner's explicit
+   * condition on the Stage-A pick was that this card must NOT carry a control
+   * that takes them back out of the form («на карточке не должно быть кнопки,
+   * которая уводит назад — это странный UX»). Suppressing the affordance in
+   * the primitive — rather than wrapping or re-implementing the card in the
+   * app — is what keeps ONE canonical event-card unit across the feed, the
+   * event page and this surface (ADR-0013 A1).
+   */
+  navigable?: boolean;
   /** Start time already formatted in Europe/Moscow, e.g. `19:00` (EARS-12). */
   time: string;
   /** The explicit timezone label — «МСК» (copy from the catalog, EARS-13). */
@@ -146,6 +167,7 @@ const WebinarCard = React.forwardRef<HTMLDivElement, WebinarCardProps>(
       className,
       variant = "upcoming",
       href,
+      navigable = true,
       time,
       tzLabel,
       dateLabel,
@@ -285,12 +307,20 @@ const WebinarCard = React.forwardRef<HTMLDivElement, WebinarCardProps>(
             anchors. The focus ring rides the link (keyboard target); hover paints
             via the root `group`. */}
           <h3 className="mb-4 text-lg font-bold leading-snug tracking-tight layout:text-title-lg">
-            <a
-              href={href}
-              className="text-card-foreground no-underline outline-none after:absolute after:inset-0 after:content-[''] group-hover:text-primary-action focus-visible:text-primary-action focus-visible:after:shadow-focus"
-            >
-              {title}
-            </a>
+            {navigable && href ? (
+              <a
+                href={href}
+                className="text-card-foreground no-underline outline-none after:absolute after:inset-0 after:content-[''] group-hover:text-primary-action focus-visible:text-primary-action focus-visible:after:shadow-focus"
+              >
+                {title}
+              </a>
+            ) : (
+              // Non-navigable: the title is the same typographic element with the
+              // link removed, not a disabled or `aria-disabled` anchor — a control
+              // that announces itself and does nothing is exactly the dead
+              // affordance the owner's condition rules out.
+              <span className="text-card-foreground">{title}</span>
+            )}
           </h3>
 
           {/* The ONE chip row of the canvas card. Venue (with the offline city
@@ -361,7 +391,7 @@ const WebinarCard = React.forwardRef<HTMLDivElement, WebinarCardProps>(
               </p>
             ) : null}
 
-            {past && ctaHref && ctaLabel ? (
+            {navigable && past && ctaHref && ctaLabel ? (
               <div className="relative z-10">
                 <Button asChild size="lg">
                   <a href={ctaHref}>{ctaLabel}</a>
@@ -403,7 +433,7 @@ const WebinarCard = React.forwardRef<HTMLDivElement, WebinarCardProps>(
             reachable. Rendered only for a registered + `live` event (caller passes
             the hardened `ctaHref` + the catalog label); mirrors the event-page
             enter-room CTA styling (the DS `Button`, filled primary). */}
-          {!past && ctaHref && ctaLabel ? (
+          {navigable && !past && ctaHref && ctaLabel ? (
             <div className="relative z-10 mt-5">
               <Button asChild size="lg">
                 <a href={ctaHref}>{ctaLabel}</a>

@@ -78,6 +78,16 @@ export const HIGH_STAKES_AUDIT_COVERAGE: Record<string, AuditEmissionCoverage> =
       coveredBy:
         "audit-ledger.e2e: EARS-18 register appends one auth.register row",
     },
+    // 021 EARS-4 (#1540) — the doctor-storefront registration command. It emits
+    // the SAME `Registered` row as the 003 handler above and for the same
+    // reason: the command is a thin host projection that delegates account
+    // creation to `AuthService.register`, which is where the row is appended.
+    // A second, 021-local audit event would double-count one registration.
+    "POST /v1/storefront/doctor/register": {
+      emits: ["Registered"],
+      coveredBy:
+        "audit-ledger.e2e: EARS-18 register appends one auth.register row (emitted by the delegated 003 command site)",
+    },
     "POST /v1/auth/login": {
       // Success and both failure branches (wrong_password / lock) emit here; the
       // tripping transition also emits AccountLocked (EARS-15).

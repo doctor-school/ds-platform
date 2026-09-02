@@ -13,6 +13,8 @@ import {
   FormLabel,
   FormMessage,
 } from "@ds/design-system/form";
+import { Badge } from "@ds/design-system/badge";
+import { Checkbox } from "@ds/design-system/checkbox";
 import { EmailField, PasswordField } from "@ds/design-system/fields";
 import { Input } from "@ds/design-system/input";
 
@@ -51,7 +53,9 @@ import { Input } from "@ds/design-system/input";
  *   untracked seam design §2 names by name. The mandatory access-condition
  *   consents (EARS-4/EARS-5) are likewise a precondition of the command and
  *   land in #1540/#1541, so the reason line states the real unmet condition rather
- *   than a build-status note.
+ *   than a build-status note. EARS-4 has since landed (#1540): the declaration
+ *   is on the form, and the reason line now names IT while it is unticked, and
+ *   the partner-data consent once it is not.
  *
  * • **No password policy of its own.** 021 design §7 and 003 EARS-36 make the
  *   rule length-only and forbid 021 declaring a second one. The canvas's
@@ -79,9 +83,11 @@ export type RegistrationScreenProps = {
   /** The pre-submission points promise read from configuration (EARS-9, #1545). */
   pointsPromise?: ReactNode;
   /**
-   * The two consent tiers — tier 1 carries the medical-worker declaration
-   * (EARS-4, #1540) and the two-tier consent block (EARS-5, #1541); tier 2 is
-   * the optional marketing opt-in (EARS-6, #1542).
+   * The remaining consent tiers. Tier 1's medical-worker declaration (EARS-4,
+   * #1540) is NOT a slot — it is a precondition of the command this screen
+   * owns, so it is rendered here unconditionally; `accessConditions` carries
+   * what stands beside it, the partner-data consent of the two-tier block
+   * (EARS-5, #1541). Tier 2 is the optional marketing opt-in (EARS-6, #1542).
    */
   consentTiers?: {
     /** Tier 1 — access conditions, rendered ABOVE the submit. */
@@ -95,7 +101,42 @@ type RegistrationFormValues = {
   email: string;
   password: string;
   promoCode: string;
+  /**
+   * EARS-4 — the medical-worker declaration. A precondition of the command, not
+   * a preference: there is no third state, no deferred state and no default of
+   * `true`.
+   */
+  medicalWorkerDeclaration: boolean;
 };
+
+/**
+ * EARS-4 copy, verbatim from `design-source/auth.dc.html` (:206, :207, :517).
+ * The declaration is a DECLARATION: the helper states the legal reason and asks
+ * for nothing to prove it, and nowhere on this surface is a document, file
+ * input or diploma mentioned.
+ */
+const MEDICAL_WORKER_DECLARATION_LABEL = "Я являюсь медицинским работником";
+const MEDICAL_WORKER_DECLARATION_HELP =
+  "Требование закона: часть материалов доступна только медицинским работникам.";
+const MEDICAL_WORKER_DECLARATION_UNMET =
+  "Отметьте, что вы медицинский работник — без этого регистрация невозможна.";
+
+/**
+ * The label split at its LAST space, so the closing word and the «обязательно»
+ * tag can be tied into one unbreakable inline run. The canvas draws the tag
+ * trailing the label's copy (`reqTagStyle`, `display:inline-block`), and at the
+ * 390px breakpoint a plain inline tag would be pushed onto a line of its own —
+ * a tag floating under the sentence reads as a separate statement rather than a
+ * qualifier of it. Derived from the copy constant, never a second hardcoded
+ * string: the copy stays stated once.
+ */
+const DECLARATION_LABEL_LEAD = MEDICAL_WORKER_DECLARATION_LABEL.slice(
+  0,
+  MEDICAL_WORKER_DECLARATION_LABEL.lastIndexOf(" ") + 1,
+);
+const DECLARATION_LABEL_TAIL = MEDICAL_WORKER_DECLARATION_LABEL.slice(
+  MEDICAL_WORKER_DECLARATION_LABEL.lastIndexOf(" ") + 1,
+);
 
 export function RegistrationScreen({
   returnContext,
@@ -108,10 +149,31 @@ export function RegistrationScreen({
   // blur rather than holding it back until a submit that cannot happen yet.
   const form = useForm<RegistrationFormValues>({
     mode: "onTouched",
-    defaultValues: { email: "", password: "", promoCode: "" },
+    // Never pre-ticked: a pre-ticked declaration would be the platform
+    // declaring on the doctor's behalf, which is the one thing a declaration
+    // cannot be.
+    defaultValues: {
+      email: "",
+      password: "",
+      promoCode: "",
+      medicalWorkerDeclaration: false,
+    },
   });
 
   const reasonId = `${useId()}-register-submit-reason`;
+
+  // EARS-12 — the reason beside the disabled submit names the SPECIFIC unmet
+  // condition. While the declaration is unticked that is the declaration, in the
+  // canvas's own words; once it is ticked the next real obstacle is stated
+  // instead. The submit stays disabled either way in this slice because the
+  // command is still unreachable — the partner-data consent (EARS-5, #1541) and
+  // the bot-protection client half (EARS-19, #1558) are both preconditions of it,
+  // and wiring the button past them would ship the untracked seam design §2
+  // names by name.
+  const declared = form.watch("medicalWorkerDeclaration");
+  const submitReason = declared
+    ? "Регистрацию нельзя отправить без согласия на передачу данных партнёрам — этот блок встанет на форму следующим шагом."
+    : MEDICAL_WORKER_DECLARATION_UNMET;
 
   return (
     <div
@@ -233,7 +295,79 @@ export function RegistrationScreen({
               )}
             />
 
-            {/* Tier 1 — access conditions, ABOVE the submit (EARS-5). */}
+            {/*
+              EARS-4 — the mandatory declaration, the first access condition,
+              standing ABOVE the submit with the rest of tier 1 (EARS-5).
+              Built from the design system's checkbox primitive, never a
+              hand-assembled input: the box, its checked/focus/disabled states
+              and the label association are the primitive's.
+
+              There is deliberately NO «ask later» control, no «пропустить», no
+              partial variant and no document affordance anywhere around it —
+              the declaration is the only thing asked, and it is asked once.
+            */}
+            <FormField
+              control={form.control}
+              name="medicalWorkerDeclaration"
+              rules={{ required: MEDICAL_WORKER_DECLARATION_UNMET }}
+              render={({ field }) => (
+                <FormItem data-testid="register-medworker-item">
+                  <FormControl>
+                    <Checkbox
+                      className="items-start"
+                      data-testid="register-medworker"
+                      name={field.name}
+                      ref={field.ref}
+                      checked={field.value}
+                      onBlur={field.onBlur}
+                      onChange={(event) =>
+                        field.onChange(event.target.checked)
+                      }
+                    >
+                      <span className="flex flex-col gap-1">
+                        <span>
+                          {DECLARATION_LABEL_LEAD}
+                          {/*
+                            The canvas's «обязательно» tag (`reqTagStyle`,
+                            `design-source/auth.dc.html`): the requirement is
+                            stated on the control itself, not inferred from an
+                            asterisk. It is the design system's `label` badge —
+                            the filled tint plate with tint ink and the micro
+                            uppercase label — never a hand-assembled span.
+
+                            It sits INLINE in the label's own text flow (not as a
+                            flex item), tied to the label's closing word by a
+                            single unbreakable run, so at 390px it trails that
+                            word onto the wrapped line instead of dropping onto a
+                            line of its own.
+                          */}
+                          <span className="whitespace-nowrap">
+                            {DECLARATION_LABEL_TAIL}
+                            <Badge
+                              variant="label"
+                              className="ml-1.5 align-middle"
+                              data-testid="register-medworker-required-tag"
+                            >
+                              обязательно
+                            </Badge>
+                          </span>
+                        </span>
+                        <span
+                          data-testid="register-medworker-help"
+                          className="text-sm text-muted-foreground"
+                        >
+                          {MEDICAL_WORKER_DECLARATION_HELP}
+                        </span>
+                      </span>
+                    </Checkbox>
+                  </FormControl>
+                  {/* EARS-12 — actionable, in the field where it occurred. */}
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {/* Tier 1 — the remaining access conditions, ABOVE the submit (EARS-5). */}
             {consentTiers?.accessConditions ? (
               <div data-testid="registration-consent-access">
                 {consentTiers.accessConditions}
@@ -283,8 +417,7 @@ export function RegistrationScreen({
                 data-testid="register-submit-reason"
                 className="text-sm font-medium text-muted-foreground"
               >
-                Регистрацию нельзя отправить без обязательных согласий — блок
-                условий доступа встанет на форму следующим шагом.
+                {submitReason}
               </p>
             </div>
 

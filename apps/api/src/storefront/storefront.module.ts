@@ -5,8 +5,11 @@ import {
   type DrizzleHandle,
   seedSpecialtiesMinzdrav,
 } from "@ds/db";
+import { AuthModule } from "../auth/auth.module.js";
 import { isRouteScan } from "../authz/route-scan.js";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
+import { DoctorRegisterPublicController } from "./doctor-register.public.controller.js";
+import { DoctorRegisterService } from "./doctor-register.service.js";
 import { TaxonomyModule } from "../taxonomy/taxonomy.module.js";
 import { SpecialtiesPublicController } from "./specialties.public.controller.js";
 import { SpecialtyProblemFilter } from "./specialties.problem-filter.js";
@@ -45,14 +48,19 @@ import { TargetingService } from "./targeting.service.js";
  * choose from. So the failure is logged and rethrown.
  */
 @Module({
-  imports: [TaxonomyModule],
+  // AuthModule for 021 EARS-4 (#1540): the doctor-registration command
+  // delegates to the shipped 003 registration engine (`AuthService`) instead of
+  // standing up a second credential, code or consent path (021 design §2).
+  imports: [TaxonomyModule, AuthModule],
   controllers: [
+    DoctorRegisterPublicController,
     SpecialtiesPublicController,
     SpecialtyChoicePublicController,
     SpecialtyChoiceMeController,
     StatisticsPublicController,
   ],
   providers: [
+    DoctorRegisterService,
     SpecialtiesRepository,
     SpecialtiesService,
     SpecialtyChoiceRepository,

@@ -104,7 +104,11 @@ test.describe("021 EARS-1: the chromeless registration route", () => {
     await page.goto("/register");
 
     const form = page.getByTestId("registration-form");
-    await expect(form.locator("input")).toHaveCount(3);
+    // Three things are ASKED FOR: email, password, optional promo. The consent
+    // controls are not part of that count — a checkbox is a condition of the
+    // door, not a field of the form (EARS-4/EARS-5) — so the count excludes
+    // them explicitly rather than being quietly widened as tiers land.
+    await expect(form.locator('input:not([type="checkbox"])')).toHaveCount(3);
 
     const email = page.getByTestId("register-email");
     await expect(email).toHaveAttribute("type", "email");

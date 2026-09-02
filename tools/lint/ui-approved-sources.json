@@ -78,11 +78,14 @@
       "surfacePaths": [
         "apps/admin/app/events/[id]/page.tsx",
         "apps/admin/components/lifecycle-actions.tsx",
+        "apps/admin/components/event-form.tsx",
+        "apps/admin/components/stream-config-form.tsx",
         "apps/admin/messages/ru.json"
       ],
-      "states": ["event-lifecycle-stale-refusal"],
+      "states": ["event-lifecycle-stale-refusal", "event-form-version-resync"],
       "approvalProvenance": [
-        "https://github.com/doctor-school/ds-platform/issues/1593#issuecomment-5491422263"
+        "https://github.com/doctor-school/ds-platform/issues/1593#issuecomment-5491422263",
+        "https://github.com/doctor-school/ds-platform/issues/1593#issuecomment-5503886215"
       ]
     }
   }

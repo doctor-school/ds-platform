@@ -363,20 +363,7 @@ jobs:
       - name: Start the mail and SMS sinks
         run: |
           docker run -d --name ds-mailpit --network host axllent/mailpit:latest
-          # The SMS sink stays on the bridge, unlike everything else here.
-          # Zitadel refuses to register an HTTP SMS provider whose endpoint host
-          # is an IP LITERAL (`Errors.NotificationProvider.Blocked.Endpoint`):
-          # `http://localhost:8090/` and the container's bridge address
-          # `http://172.17.0.2:8090/` were both rejected (run 33608916464). The
-          # check is lexical — it never resolves the URL — which is why the dev
-          # stand's `http://sms-sink:8090/` is accepted even though Docker DNS
-          # resolves that name to a private bridge address as well. So the runner
-          # registers the SAME name: `sms-sink` → the sink's bridge IP, in the
-          # IdP container's hosts file (`--add-host`, below) and in the runner's
-          # own `/etc/hosts` so the readiness probe exercises that exact name.
-          # The published port keeps the sink readable at `localhost:8090` from
-          # the test process.
-          docker run -d --name ds-sms-sink -p 8090:8090 \
+          docker run -d --name ds-sms-sink --network host \
             -v "$GITHUB_WORKSPACE/infra/dev-stand/sms-sink/server.mjs":/srv/server.mjs:ro \
             -e SMS_SINK_PORT=8090 \
             node:22-alpine node /srv/server.mjs
@@ -386,19 +373,6 @@ jobs:
             if curl -fsS http://localhost:8025/api/v1/info >/dev/null 2>&1 \
               && curl -fsS http://localhost:8090/healthz >/dev/null 2>&1; then
               echo "the mail and SMS sinks are serving"
-              sms_ip="$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' ds-sms-sink)"
-              if [ -z "$sms_ip" ]; then echo "the SMS sink has no bridge address"; exit 1; fi
-              # `sms-sink` is the name Zitadel is given (IP literals are blocked).
-              # It is mapped in the runner's hosts file as well as the IdP
-              # container's, so the probe below proves the name resolves and
-              # answers in the host network namespace the IdP shares.
-              echo "${sms_ip} sms-sink" | sudo tee -a /etc/hosts >/dev/null
-              if ! curl -fsS http://sms-sink:8090/healthz >/dev/null; then
-                echo "the SMS sink does not answer on its registered name"; exit 1
-              fi
-              echo "Zitadel will POST SMS to http://sms-sink:8090/ (${sms_ip})"
-              echo "SMS_SINK_IP=${sms_ip}" >> "$GITHUB_ENV"
-              echo "IDP_SMS_SINK_ENDPOINT=http://sms-sink:8090/" >> "$GITHUB_ENV"
               exit 0
             fi
             echo "waiting for the sinks ($i/30)..."; sleep 2
@@ -407,17 +381,26 @@ jobs:
           docker logs ds-mailpit; docker logs ds-sms-sink; exit 1
 
       # ─ IdP ─ identical to the `admin-e2e` block; see the commentary there,
-      # plus the `sms-sink` host entry: Zitadel resolves the SMS provider
-      # endpoint at delivery time, so the name it was registered with must map
-      # to the sink's bridge address inside the IdP container too. `--add-host`
-      # is honoured under `--network host` — Docker still writes the container's
-      # own hosts file — and mirrors the Docker-DNS name the dev stand provides.
+      # plus `ZITADEL_HTTPCLIENT_DENYLIST` — see the note on that variable below.
       - name: Prepare the PAT mount
         run: mkdir -p "$RUNNER_TEMP/idp-pat" && chmod 0777 "$RUNNER_TEMP/idp-pat"
       - name: Start the IdP (Zitadel)
         run: |
+          # ZITADEL_HTTPCLIENT_DENYLIST — Zitadel's SSRF guard. Its DEFAULT value
+          # (cmd/defaults.yaml → `HTTPClient.DenyList`) denies `localhost` plus
+          # every loopback/private/link-local CIDR, and the deny is enforced in
+          # the dialer AFTER DNS resolution (its own comment: "prevent DNS
+          # Rebinding"). So registering the SMS sink is refused with
+          # `Errors.NotificationProvider.Blocked.Endpoint` no matter how it is
+          # addressed — `localhost:8090`, the container's bridge IP and a
+          # hostname mapped to that IP were all rejected in turn (runs
+          # 33603331092 / 33608916464 / 33610421640). The sink, the IdP and the
+          # suite are all processes on one ephemeral runner, so the private
+          # ranges are the only route between them; the entries that still carry
+          # weight here — the cloud-metadata endpoint (169.254.169.254, inside
+          # 169.254.0.0/16) and its IPv6 twin — are kept.
           docker run -d --name ds-idp --network host \
-            --add-host "sms-sink:${SMS_SINK_IP}" \
+            -e ZITADEL_HTTPCLIENT_DENYLIST=169.254.0.0/16,fe80::/10 \
             -v "$RUNNER_TEMP/idp-pat":/pat \
             -e ZITADEL_MASTERKEY=MasterkeyNeedsToHave32Characters \
             -e ZITADEL_EXTERNALSECURE=false \
@@ -470,12 +453,11 @@ jobs:
       - name: Provision the IdP project, client and roles
         env:
           IDP_BASE_URL: http://localhost:9080
-          # The compose default (`mailpit:1025`) is a bridge-network service
-          # name; Mailpit shares the runner's host namespace, so SMTP is
-          # localhost. `IDP_SMS_SINK_ENDPOINT` is NOT set here — a step-level
-          # `env:` would shadow the bridge address the readiness step resolved
-          # into $GITHUB_ENV.
+          # The compose defaults (`mailpit:1025`, `http://sms-sink:8090/`) are
+          # bridge-network service names; both sinks share the runner's host
+          # namespace, so both are addressed on localhost here.
           IDP_SMTP_HOST: localhost:1025
+          IDP_SMS_SINK_ENDPOINT: http://localhost:8090/
         run: |
           set -euo pipefail
           bash infra/dev-stand/idp/provision.sh --pat-file ./idp-pat.txt \

@@ -1476,6 +1476,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/public/events/{idOrSlug}/participation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["EventsPublicController_participationCta"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/public/events/{idOrSlug}/projects": {
         parameters: {
             query?: never;
@@ -1716,6 +1732,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/storefront/doctor/events/{idOrSlug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["DoctorEventsPublicController_event"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/storefront/doctor/events/{idOrSlug}/participation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["DoctorEventsPublicController_participationCta"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/storefront/doctor/events/month": {
         parameters: {
             query?: never;
@@ -1875,6 +1923,51 @@ export interface components {
             pageSize: number;
             total: number;
         };
+        EventPageViewDto: {
+            description: string;
+            durationMin: number;
+            /** @enum {string} */
+            format: "online" | "offline" | "hybrid";
+            /** Format: uuid */
+            id: string;
+            partners: {
+                label: string;
+            }[];
+            programPdfUrl?: string;
+            recording: {
+                expectedBy: string | null;
+                posterUrl: string | null;
+                primaryKind: ("edited" | "raw") | null;
+                secondaryKind: ("edited" | "raw") | null;
+                /** @enum {string} */
+                state: "montage" | "raw-only" | "preparing";
+            };
+            school: string;
+            seatsLeft: number | null;
+            slug: string;
+            speakers: ({
+                credentials: string;
+                name: string;
+                /** @constant */
+                source: "legacy";
+            } | {
+                credentials: string;
+                /** Format: uuid */
+                expertId: string;
+                expertSlug: string;
+                name: string;
+                photoUrl: string | null;
+                role: string;
+                /** @constant */
+                source: "expert";
+            })[];
+            specialties: string[];
+            /** Format: date-time */
+            startsAt: string;
+            /** @enum {string} */
+            state: "published" | "live" | "ended" | "archived";
+            title: string;
+        };
         ExpertAdminDetailDto: {
             affiliation: string | null;
             bio: string | null;
@@ -1939,6 +2032,13 @@ export interface components {
             channel: "email" | "sms";
             code: string;
             identifier: string;
+        };
+        ParticipationCtaDto: {
+            /** @enum {string} */
+            action: "register" | "registered" | "enter-room" | "switch-to-online" | "sold-out" | "unavailable";
+            href: string | null;
+            label: string;
+            reason: string | null;
         };
         PasswordResetCompleteRequestDto: {
             code: string;
@@ -4299,6 +4399,27 @@ export interface operations {
             };
         };
     };
+    EventsPublicController_participationCta: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                idOrSlug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ParticipationCtaDto"];
+                };
+            };
+        };
+    };
     EventProjectsPublicController_projects: {
         parameters: {
             query?: never;
@@ -4599,6 +4720,48 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DoctorEventsFeedDto"];
+                };
+            };
+        };
+    };
+    DoctorEventsPublicController_event: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                idOrSlug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EventPageViewDto"];
+                };
+            };
+        };
+    };
+    DoctorEventsPublicController_participationCta: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                idOrSlug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ParticipationCtaDto"];
                 };
             };
         };

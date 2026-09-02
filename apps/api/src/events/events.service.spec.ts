@@ -39,6 +39,10 @@ function baseEvent(programPdfRef: string | null): Event {
     partnerRef: null,
     programPdfRef,
     state: "published",
+    // 020 (#1764) — attendance mode + remaining offline seats. The fixture is a
+    // plain online webinar with no seat limit, the shipped corpus's shape.
+    participationFormat: "online",
+    seatsLeft: null,
     liveAt: null,
     // 014 (#1339) — the operator's recording-readiness date; unset here.
     recordingExpectedBy: null,

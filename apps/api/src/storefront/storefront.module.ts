@@ -7,6 +7,7 @@ import {
 } from "@ds/db";
 import { AuthModule } from "../auth/auth.module.js";
 import { isRouteScan } from "../authz/route-scan.js";
+import { EventsModule } from "../events/events.module.js";
 import { DoctorEventsPublicController } from "./doctor-events.public.controller.js";
 import { DoctorEventsRepository } from "./doctor-events.repository.js";
 import { DoctorEventsService } from "./doctor-events.service.js";
@@ -54,7 +55,11 @@ import { TargetingService } from "./targeting.service.js";
   // AuthModule for 021 EARS-4 (#1540): the doctor-registration command
   // delegates to the shipped 003 registration engine (`AuthService`) instead of
   // standing up a second credential, code or consent path (021 design §2).
-  imports: [TaxonomyModule, AuthModule],
+  // 020 EARS-1 (#1764): `EventsModule` exports the ONE public event read
+  // (`EventsService`) and the ONE participation policy (`ParticipationService`)
+  // that the doctor storefront's `…/events/:idOrSlug` twin routes mount. The
+  // storefront adds a route and an envelope, never a second read model (LD-1).
+  imports: [TaxonomyModule, AuthModule, EventsModule],
   controllers: [
     DoctorRegisterPublicController,
     SpecialtiesPublicController,

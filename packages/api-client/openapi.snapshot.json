@@ -577,6 +577,224 @@
         "required": ["data", "total", "page", "pageSize"],
         "type": "object"
       },
+      "EventPageViewDto": {
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "durationMin": {
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          },
+          "format": {
+            "enum": ["online", "offline", "hybrid"],
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "partners": {
+            "items": {
+              "properties": {
+                "label": {
+                  "type": "string"
+                }
+              },
+              "required": ["label"],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "programPdfUrl": {
+            "type": "string"
+          },
+          "recording": {
+            "properties": {
+              "expectedBy": {
+                "anyOf": [
+                  {
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "posterUrl": {
+                "anyOf": [
+                  {
+                    "maxLength": 500,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "primaryKind": {
+                "anyOf": [
+                  {
+                    "enum": ["edited", "raw"],
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "secondaryKind": {
+                "anyOf": [
+                  {
+                    "enum": ["edited", "raw"],
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "state": {
+                "enum": ["montage", "raw-only", "preparing"],
+                "type": "string"
+              }
+            },
+            "required": [
+              "state",
+              "primaryKind",
+              "secondaryKind",
+              "posterUrl",
+              "expectedBy"
+            ],
+            "type": "object"
+          },
+          "school": {
+            "type": "string"
+          },
+          "seatsLeft": {
+            "anyOf": [
+              {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "slug": {
+            "type": "string"
+          },
+          "speakers": {
+            "items": {
+              "oneOf": [
+                {
+                  "properties": {
+                    "credentials": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "const": "legacy",
+                      "type": "string"
+                    }
+                  },
+                  "required": ["source", "name", "credentials"],
+                  "type": "object"
+                },
+                {
+                  "properties": {
+                    "credentials": {
+                      "type": "string"
+                    },
+                    "expertId": {
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                      "type": "string"
+                    },
+                    "expertSlug": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "photoUrl": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "role": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "const": "expert",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "source",
+                    "expertId",
+                    "expertSlug",
+                    "name",
+                    "credentials",
+                    "photoUrl",
+                    "role"
+                  ],
+                  "type": "object"
+                }
+              ]
+            },
+            "type": "array"
+          },
+          "specialties": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "startsAt": {
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+            "type": "string"
+          },
+          "state": {
+            "enum": ["published", "live", "ended", "archived"],
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "slug",
+          "title",
+          "school",
+          "startsAt",
+          "durationMin",
+          "description",
+          "speakers",
+          "specialties",
+          "partners",
+          "state",
+          "recording",
+          "format",
+          "seatsLeft"
+        ],
+        "type": "object"
+      },
       "ExpertAdminDetailDto": {
         "properties": {
           "affiliation": {
@@ -914,6 +1132,47 @@
           }
         },
         "required": ["identifier", "code", "channel"],
+        "type": "object"
+      },
+      "ParticipationCtaDto": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "enum": [
+              "register",
+              "registered",
+              "enter-room",
+              "switch-to-online",
+              "sold-out",
+              "unavailable"
+            ],
+            "type": "string"
+          },
+          "href": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "label": {
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": ["action", "label", "href", "reason"],
         "type": "object"
       },
       "PasswordResetCompleteRequestDto": {
@@ -3793,6 +4052,34 @@
         "tags": ["EventDirectionsPublic"]
       }
     },
+    "/v1/public/events/{idOrSlug}/participation": {
+      "get": {
+        "operationId": "EventsPublicController_participationCta",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "idOrSlug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ParticipationCtaDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "tags": ["EventsPublic"]
+      }
+    },
     "/v1/public/events/{idOrSlug}/projects": {
       "get": {
         "operationId": "EventProjectsPublicController_projects",
@@ -4155,6 +4442,62 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/DoctorEventsFeedDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "tags": ["DoctorEventsPublic"]
+      }
+    },
+    "/v1/storefront/doctor/events/{idOrSlug}": {
+      "get": {
+        "operationId": "DoctorEventsPublicController_event",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "idOrSlug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventPageViewDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "tags": ["DoctorEventsPublic"]
+      }
+    },
+    "/v1/storefront/doctor/events/{idOrSlug}/participation": {
+      "get": {
+        "operationId": "DoctorEventsPublicController_participationCta",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "idOrSlug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ParticipationCtaDto"
                 }
               }
             },

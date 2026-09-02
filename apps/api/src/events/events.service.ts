@@ -1114,6 +1114,12 @@ export class EventsService {
       recording: await this.recordingsProjection.resolveRecordingProjection(
         e.id,
       ),
+      // 020 EARS-1 (#1764): the attendance mode and the remaining offline seats
+      // are facts of the EVENT, so they are read here once and are identical on
+      // both storefront hosts — `seatsLeft: null` means «no seat limit», which
+      // is a different answer from `0` («мест нет»).
+      format: e.participationFormat,
+      seatsLeft: e.seatsLeft,
     };
     // Omit (not null) the field when the event carries no program PDF (EARS-2).
     // Signed at read time — the bucket is private, an unsigned URL is dead (#842).

@@ -370,3 +370,40 @@ here — see the #1593 PR body for the recorded rationale. The admin
 UI supplies the validator through the Refine data provider's `meta.version`
 (`apps/admin/lib/lifecycle.ts` → `lifecycleCommandRequest`). The list read carries
 no `version` and emits no `ETag` — a validator belongs to one addressable resource.
+
+## 020 — `EventPageView` and the participation CTA (#1764)
+
+Feature 020 gives the platform **two storefronts and one event page**: the same
+event is read on `academy.doctor.school` and on `doctor.school`, and the two must
+never be able to disagree about it. So there is no second read model here. The
+allow-list projection this module already owned was widened **in place** into
+`EventPageView` (`packages/schemas/src/events/public-page.schema.ts`;
+`PublicEventPageSchema`/`PublicEventPage` stay as aliases, so feature 004's
+consumers did not move), gaining two fields: `format` — `online` · `offline` ·
+`hybrid`, the axis that decides whether seats exist to run out of, deliberately
+NOT 019's editorial `DoctorEventFormat` catalogue vocabulary — and `seatsLeft`,
+where `null` means «no seat limit» and is a different answer from `0`. Both are
+backed by additive, back-fill-safe columns (`participation_format` defaulting to
+`online`, nullable `seats_left`). The doctor storefront's route
+`GET /v1/storefront/doctor/events/:idOrSlug` delegates to the one
+`EventsService.publicEventPage` and returns its result unchanged; the storefront
+IS the envelope (header, nav, route, copy defaults), never a field of the read.
+
+The **participation CTA** is the second half. `participation-cta.resolver.ts` is a
+pure function of (lifecycle × registration × format × seats) plus the calling
+host's route table, and it is the only place in the platform that decides which
+affordance a viewer is offered: `register`, `registered`, `enter-room`,
+`switch-to-online` (a hybrid event whose offline half is full), `sold-out` (a pure
+offline event, stated honestly — no waiting list exists in the model, so none is
+offered) or `unavailable`. It reads no database and knows no host;
+`ParticipationService` supplies the facts, taking the registration fact from
+feature 005's canonical service rather than querying `registrations` a second
+time. Because the answer varies per viewer, it is served as a **sibling** read —
+`GET /v1/public/events/:idOrSlug/participation` and its doctor twin — `@Public()`
+with an OPTIONAL principal so a guest is told «Участвовать» instead of 401, and
+`Cache-Control: private, no-store`. Folding it into the page body would have
+broken 004 EARS-1's guest/principal byte-identity and poisoned that body's shared
+`public, max-age=30` cache. A host whose room route does not exist yet passes
+`roomPath: null` and gets `enter-room` with `href: null`: the action is a fact of
+the event and the registration, the link is a fact of the host, and EARS-4
+requires an impossible affordance to be absent rather than dead.

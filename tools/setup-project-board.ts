@@ -141,7 +141,8 @@ const VIEWS: ViewSpec[] = [
       'PM/owner plan surface — feature-level and release-gate bars per release. Done stays visible so a shipped release still renders its bar.',
     layout: 'ROADMAP_LAYOUT',
     groupBy: 'Milestone',
-    filter: '-label:kind:ears-handler',
+    // `ROADMAP_LABEL` in tools/gh/lib/roadmap-taxonomy.mjs is the SSOT for this label name.
+    filter: 'label:roadmap',
     dates: 'Start date → Target date, milestone markers on',
   },
   {
@@ -614,7 +615,7 @@ function parseCreatedView(stdout: string): ProjectView | null {
 /**
  * Sets a view's declared filter when the live one differs. `updateProjectV2View`
  * accepts `filter` (public schema, verified against this org on 2026-09-02), so
- * the §3.4 readability constraint — notably the Roadmap `-label:kind:ears-handler`
+ * the §3.4 readability constraint — notably the Roadmap `label:roadmap` selector
  * — is reproducible from this script instead of a manual UI step.
  */
 async function ensureViewFilter(view: ProjectView, v: ViewSpec): Promise<void> {

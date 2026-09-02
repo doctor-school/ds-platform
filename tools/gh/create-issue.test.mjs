@@ -30,10 +30,12 @@ import {
   milestoneValue,
   epicMilestoneError,
   earsParentError,
+  ensureRoadmapLabel,
+  roadmapLabelError,
   milestoneConflictError,
   buildSubIssueLinkArgs,
 } from "./create-issue.mjs";
-import { EARS_KIND_LABEL } from "./lib/roadmap-taxonomy.mjs";
+import { EARS_KIND_LABEL, ROADMAP_LABEL } from "./lib/roadmap-taxonomy.mjs";
 
 // ── collectLabels: every flag form + comma lists ────────────────────────────
 test("collectLabels handles --label, --label=, -l, and comma lists", () => {
@@ -299,4 +301,52 @@ test("buildSubIssueLinkArgs targets the REST sub_issues endpoint with the child 
     "-F",
     "sub_issue_id=9876543",
   ]);
+});
+
+test("roadmapLabelError rejects a hand-passed roadmap label off the roadmap levels", () => {
+  // Owned levels: the label is allowed (and normally appended, not typed).
+  assert.equal(
+    roadmapLabelError(["--title", "[Академия][012] Archive", "--label", ROADMAP_LABEL]),
+    null,
+  );
+  assert.equal(
+    roadmapLabelError(["--title", "gate: Академия R1 — Архив", "--label", ROADMAP_LABEL]),
+    null,
+  );
+  // Not passed at all → nothing to gate.
+  assert.equal(roadmapLabelError(["--title", "epic: academy", "--label", "feature"]), null);
+  // Passed on a level that does not own it → fail closed.
+  for (const title of ["epic: academy", "Refactor the deploy script"]) {
+    const err = roadmapLabelError(["--title", title, `--label=${ROADMAP_LABEL}`]);
+    assert.match(err ?? "", /tooling-owned/);
+  }
+  const earsErr = roadmapLabelError([
+    "--title",
+    "[012] EARS-3: x",
+    "-l",
+    `${EARS_KIND_LABEL},${ROADMAP_LABEL}`,
+  ]);
+  assert.match(earsErr ?? "", /ears-task/);
+});
+
+test("ensureRoadmapLabel appends the label only on a roadmap level, never twice", () => {
+  assert.deepEqual(
+    ensureRoadmapLabel(["--title", "[Витрина][018] Feed", "--label", "feature"]),
+    ["--title", "[Витрина][018] Feed", "--label", "feature", "--label", ROADMAP_LABEL],
+  );
+  assert.deepEqual(
+    ensureRoadmapLabel(["--title", "gate: Витрина R1 — Лента", "--label", "chore"]),
+    ["--title", "gate: Витрина R1 — Лента", "--label", "chore", "--label", ROADMAP_LABEL],
+  );
+  // Already present → untouched.
+  const passed = ["--title", "[Академия][012] Archive", "--label", ROADMAP_LABEL];
+  assert.deepEqual(ensureRoadmapLabel(passed), passed);
+  // Non-roadmap levels stay bare.
+  for (const args of [
+    ["--title", "epic: academy", "--label", "feature"],
+    ["--title", "Refactor the deploy script", "--label", "tooling"],
+    ["--title", "[012] EARS-3: x", "--label", EARS_KIND_LABEL],
+  ]) {
+    assert.deepEqual(ensureRoadmapLabel(args), args);
+  }
 });

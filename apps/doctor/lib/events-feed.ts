@@ -6,6 +6,7 @@ import {
   type RawQueryValue,
 } from "@ds/schemas";
 import { API_BASE } from "@/lib/session";
+import { SPECIALTY_CHOICE_COOKIE_NAME } from "@/lib/specialty-choice";
 
 /**
  * 019 EARS-3 (#1518) — the storefront half of the day-grouped feed read.
@@ -17,9 +18,9 @@ import { API_BASE } from "@/lib/session";
  * query model, no local paging state and no second listing engine: «показать
  * ещё» is a LINK that widens `to=` in the address bar (EARS-15).
  *
- * The read is server-side and absolute against `API_BASE`, forwarding the
- * incoming `Cookie` header so 017's remembered specialty (`__Host-ds_specialty`)
- * reaches the targeting resolver. A guest with no remembered choice gets the
+ * The read is server-side and absolute against `API_BASE`, forwarding ONLY
+ * 017's remembered-specialty cookie (`__Host-ds_specialty`) so the targeting
+ * resolver has what it needs and nothing else travels with a public read. A guest with no remembered choice gets the
  * untargeted feed — the surface is fully readable with no account (EARS-12).
  */
 export const DOCTOR_EVENTS_FEED_PATH = "/v1/storefront/doctor/events";
@@ -62,6 +63,18 @@ export function encodeDoctorEventsFeedQuery(
   return params;
 }
 
+/**
+ * The ONLY cookie this read needs is 017's remembered specialty; the session
+ * cookie and everything else stay in the browser rather than travelling with an
+ * unauthenticated public read.
+ */
+function specialtyCookieOnly(cookie: string | null): string {
+  if (cookie === null) return "";
+  return (cookie.split(";").find(
+    (pair) => pair.trim().startsWith(`${SPECIALTY_CHOICE_COOKIE_NAME}=`),
+  ) ?? "").trim();
+}
+
 export async function fetchDoctorEventsFeed(
   headers: Headers,
   raw: Record<string, RawQueryValue>,
@@ -74,7 +87,7 @@ export async function fetchDoctorEventsFeed(
     const res = await fetchImpl(url, {
       headers: {
         accept: "application/json",
-        cookie: headers.get("cookie") ?? "",
+        cookie: specialtyCookieOnly(headers.get("cookie")),
         "user-agent": headers.get("user-agent") ?? "",
         "accept-language": headers.get("accept-language") ?? "",
       },

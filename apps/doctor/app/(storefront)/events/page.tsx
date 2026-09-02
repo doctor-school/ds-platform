@@ -1,4 +1,5 @@
 import { headers } from "next/headers";
+import { Button } from "@ds/design-system/button";
 import { EventList } from "@ds/design-system/blocks";
 import {
   DOCTOR_EVENTS_FEED_COPY,
@@ -76,13 +77,20 @@ export default async function DoctorEventsPage({
         }}
         footer={
           moreHref === null ? null : (
-            <a
-              className="mt-8 inline-flex border-2 border-foreground bg-card px-6 py-3 font-extrabold no-underline outline-none focus-visible:shadow-focus"
-              data-testid="events-feed-show-more"
-              href={moreHref}
+            // The forward affordance is a design-system primitive wrapping the
+            // LINK (`asChild`), never a hand-assembled anchor: the offset cast,
+            // the hover-translate, the press-flatten and the focus ring all come
+            // from `Button`'s `outline` variant (AGENTS.md section 6).
+            <Button
+              asChild
+              className="mt-8 no-underline"
+              size="lg"
+              variant="outline"
             >
-              {DOCTOR_EVENTS_FEED_COPY.showMore}
-            </a>
+              <a data-testid="events-feed-show-more" href={moreHref}>
+                {DOCTOR_EVENTS_FEED_COPY.showMore}
+              </a>
+            </Button>
           )
         }
       />

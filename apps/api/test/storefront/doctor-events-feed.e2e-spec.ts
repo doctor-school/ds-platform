@@ -299,5 +299,55 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(ids).toContain(farEventId);
       expect(extended.totalCount).toBeGreaterThan(first.totalCount);
     });
+
+    it("EARS-3.5: a card's own `kind` round-trips into `?kind=`, and a non-uuid `kind` is a 4xx, never a 500", async () => {
+      const feed = await readFeed({ specialtyCode: adjacentCarryingCode });
+      const card = feed.days.flatMap((day) => day.items).at(0);
+      expect(card).toBeDefined();
+      // The card's `kind` IS the facet vocabulary — feeding it back filters.
+      expect(card!.kind).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+      );
+      expect(card!.kindTitle.length).toBeGreaterThan(0);
+
+      const roundTripped = await readFeed({
+        specialtyCode: adjacentCarryingCode,
+        query: `?kind=${card!.kind}`,
+      });
+      const roundTrippedIds = roundTripped.days.flatMap((day) =>
+        day.items.map((item) => item.id),
+      );
+      expect(roundTrippedIds).toContain(card!.id);
+
+      // A hand-edited, non-uuid `kind` never reaches the uuid column.
+      const rejected = await app.inject({
+        method: "GET",
+        url: "/v1/storefront/doctor/events?kind=not-a-uuid",
+      });
+      expect(rejected.statusCode).toBeGreaterThanOrEqual(400);
+      expect(rejected.statusCode).toBeLessThan(500);
+    });
+
+    it("EARS-3.6: a stale specialty cookie degrades to the untargeted feed instead of refusing it (EARS-12)", async () => {
+      const response = await app.inject({
+        method: "GET",
+        url: "/v1/storefront/doctor/events",
+        headers: {
+          cookie: `${SPECIALTY_CHOICE_COOKIE_NAME}=${encodeURIComponent(
+            `left-the-book-${randomUUID()}`,
+          )}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const feed = DoctorEventsFeedSchema.parse(response.json());
+      expect(feed.targeting.mode).toBe("all");
+      expect(feed.targeting.specialtyReference).toBeNull();
+      expect(feed.targeting.directionIds).toEqual([]);
+      // The untargeted read is the WIDE one — the events a targeted read would
+      // have hidden are present, so this is a degradation, not an empty feed.
+      const ids = feed.days.flatMap((day) => day.items.map((item) => item.id));
+      expect(ids).toContain(unreachableEventId);
+    });
   },
 );

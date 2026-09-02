@@ -1757,6 +1757,7 @@ export interface components {
                     href: string;
                     id: string;
                     kind: string;
+                    kindTitle: string;
                     nmo: boolean;
                     pulCost: number;
                     seatsLeft?: number;

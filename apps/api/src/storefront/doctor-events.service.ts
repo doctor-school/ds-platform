@@ -17,6 +17,7 @@ import {
   type DoctorFeedRow,
   DoctorEventsRepository,
 } from "./doctor-events.repository.js";
+import { SpecialtyError } from "./specialties.errors.js";
 import { TargetingService } from "./targeting.service.js";
 
 /**
@@ -159,9 +160,18 @@ export class DoctorEventsService {
     const directionIds = new Set<string>();
     const adjacentDirectionIds = new Set<string>();
     let mode: DoctorEventsFeedTargeting["mode"] = "general";
+    let resolvedAny = false;
 
     for (const reference of references) {
-      const set = await this.targeting.resolve(reference);
+      // A reference that has left the managed book DEGRADES the read, it never
+      // refuses it. `__Host-ds_specialty` carries a one-year max-age against a
+      // managed table, so a stale remembered reference is routine rather than
+      // adversarial — and EARS-12 makes the feed fully readable with no account
+      // at all. This is the same clamp-don't-reject posture `resolveHorizon`
+      // applies to a hand-edited `to=`.
+      const set = await this.resolveOrDegrade(reference);
+      if (set === null) continue;
+      resolvedAny = true;
       if (set.mode === "targeted") mode = "targeted";
       for (const direction of set.directions) directionIds.add(direction.id);
       // An explicit `specialty=<ids>` pick is the doctor asking for THOSE
@@ -171,6 +181,18 @@ export class DoctorEventsService {
           adjacentDirectionIds.add(direction.id);
         }
       }
+    }
+
+    // Every reference left the book: report the untargeted read honestly rather
+    // than a `targeted`/`general` envelope over an empty direction set, which
+    // would render as «ничего не найдено» instead of the general feed.
+    if (!resolvedAny) {
+      return {
+        mode: "all",
+        specialtyReference: null,
+        directionIds: [],
+        adjacentDirectionIds: [],
+      };
     }
 
     for (const id of directionIds) adjacentDirectionIds.delete(id);
@@ -183,6 +205,26 @@ export class DoctorEventsService {
       directionIds: [...directionIds],
       adjacentDirectionIds: [...adjacentDirectionIds],
     };
+  }
+
+  /**
+   * Resolve one specialty reference, or `null` when it names no member of the
+   * closed book. Only that ONE semantic refusal is absorbed — every other
+   * failure (a database fault, a bug in the traversal) still propagates, so the
+   * degradation cannot hide a broken read behind a plausible-looking feed.
+   */
+  private async resolveOrDegrade(reference: string) {
+    try {
+      return await this.targeting.resolve(reference);
+    } catch (error) {
+      if (
+        error instanceof SpecialtyError &&
+        error.errorCode === "SPECIALTY_NOT_IN_BOOK"
+      ) {
+        return null;
+      }
+      throw error;
+    }
   }
 
   private async toCards(rows: DoctorFeedRow[]): Promise<DoctorEventCard[]> {
@@ -201,7 +243,10 @@ export class DoctorEventsService {
         row.startsAt.getTime() + row.durationMin * 60_000,
       ).toISOString(),
       format: "webinar" as const,
-      kind: kinds.get(row.id) ?? "",
+      // `kind` is the direction ID — the vocabulary the `?kind=` facet takes, so
+      // a card value round-trips; `kindTitle` is its display projection.
+      kind: kinds.get(row.id)?.id ?? "",
+      kindTitle: kinds.get(row.id)?.title ?? "",
       title: row.title,
       speaker: speakers.get(row.id) ?? "",
       source: row.school,

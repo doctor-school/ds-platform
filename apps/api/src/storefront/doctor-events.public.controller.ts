@@ -6,6 +6,7 @@ import {
   Headers,
   Inject,
   Query,
+  UseFilters,
 } from "@nestjs/common";
 import { ApiOkResponse, ApiQuery } from "@nestjs/swagger";
 import {
@@ -16,6 +17,7 @@ import {
 import { Authz, Public } from "../authz/index.js";
 import { DoctorEventsFeedDto } from "./doctor-events.dto.js";
 import { DoctorEventsService } from "./doctor-events.service.js";
+import { SpecialtyProblemFilter } from "./specialties.problem-filter.js";
 import { readSpecialtyChoiceCookie } from "./specialty-choice.cookie.js";
 
 /**
@@ -38,12 +40,17 @@ import { readSpecialtyChoiceCookie } from "./specialty-choice.cookie.js";
  * FULLY readable with no account, and only the action on a card to need one. The
  * cookie is read when present and its absence simply yields the untargeted read
  * — it never gates the response and no gated payload is delivered to be hidden
- * client-side.
+ * client-side. A remembered reference that has since left the managed book is
+ * therefore DEGRADED to the untargeted read in {@link DoctorEventsService},
+ * not refused; the `SpecialtyProblemFilter` here matches the three sibling
+ * storefront controllers, so anything this family does still throw leaves as
+ * RFC 7807 `application/problem+json`.
  *
  * The response varies with that cookie, so the cache is `private` — a shared
  * cache must never hand one doctor's targeted feed to another visitor.
  */
 @Controller({ path: "storefront/doctor/events", version: "1" })
+@UseFilters(SpecialtyProblemFilter)
 export class DoctorEventsPublicController {
   constructor(
     @Inject(DoctorEventsService)
@@ -66,6 +73,10 @@ export class DoctorEventsPublicController {
   @ApiOkResponse({ type: DoctorEventsFeedDto })
   @Public()
   @Header("Cache-Control", "private, max-age=30")
+  // The read varies with the specialty cookie, so the browser cache must key on
+  // it too — without this a specialty change re-serves the previous targeting
+  // from the same URL for up to 30s.
+  @Header("Vary", "Cookie")
   @Authz({
     access: "public",
     check: "none",

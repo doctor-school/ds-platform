@@ -155,13 +155,21 @@ export class DoctorEventsRepository {
     return lead;
   }
 
-  /** The published direction each event is filed under — the card's `kind` label. */
+  /**
+   * The published direction each event is filed under. Both halves are returned:
+   * the ID is the card's `kind` (the facet vocabulary), the title is its display
+   * projection — one query, one row, no second vocabulary.
+   */
   async findPrimaryDirections(
     eventIds: string[],
-  ): Promise<Map<string, string>> {
+  ): Promise<Map<string, { id: string; title: string }>> {
     if (eventIds.length === 0) return new Map();
     const rows = await this.db
-      .select({ eventId: eventDirections.eventId, title: directions.title })
+      .select({
+        eventId: eventDirections.eventId,
+        id: directions.id,
+        title: directions.title,
+      })
       .from(eventDirections)
       .innerJoin(directions, eq(directions.id, eventDirections.directionId))
       .where(
@@ -175,9 +183,11 @@ export class DoctorEventsRepository {
       )
       .orderBy(asc(eventDirections.eventId), asc(directions.title));
 
-    const primary = new Map<string, string>();
+    const primary = new Map<string, { id: string; title: string }>();
     for (const row of rows) {
-      if (!primary.has(row.eventId)) primary.set(row.eventId, row.title);
+      if (!primary.has(row.eventId)) {
+        primary.set(row.eventId, { id: row.id, title: row.title });
+      }
     }
     return primary;
   }

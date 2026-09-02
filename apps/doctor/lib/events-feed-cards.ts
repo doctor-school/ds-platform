@@ -78,7 +78,7 @@ export function toEventListItems(feed: DoctorEventsFeed): EventListItem[] {
       ...(card.speaker.length > 0
         ? { speakers: [{ name: card.speaker }] }
         : {}),
-      ...(card.kind.length > 0 ? { specialties: [card.kind] } : {}),
+      ...(card.kindTitle.length > 0 ? { specialties: [card.kindTitle] } : {}),
       ...(card.nmo ? { nmoLabel: "НМО" } : {}),
       pulCost: card.pulCost,
       freeLabel: DOCTOR_EVENTS_FEED_COPY.free,

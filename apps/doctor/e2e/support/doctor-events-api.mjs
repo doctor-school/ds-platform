@@ -28,7 +28,10 @@ const card = (id, startsAt, overrides = {}) => ({
   startsAt,
   endsAt: null,
   format: "webinar",
-  kind: "Кардиология",
+  // `kind` is the managed direction ID — the same vocabulary `?kind=` takes —
+  // and `kindTitle` is its display projection.
+  kind: "6f0f6a1c-0e5a-4d6a-9f2b-6a1c0e5a4d6a",
+  kindTitle: "Кардиология",
   title: `Событие ${id}`,
   speaker: "Иванов И. И.",
   source: "Doctor.School",

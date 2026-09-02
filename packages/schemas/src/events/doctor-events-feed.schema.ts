@@ -55,7 +55,15 @@ export const DoctorEventsFeedQuerySchema = z
     from: DoctorEventsFeedDaySchema.optional(),
     to: DoctorEventsFeedDaySchema.optional(),
     format: z.array(DoctorEventFormatSchema).default([]),
-    kind: z.array(z.string().min(1)).default([]),
+    /**
+     * The `kind` FACET is a list of managed direction IDs — the same vocabulary
+     * the card's own `kind` field carries, so a card value round-trips. The
+     * uuid constraint is load-bearing, not cosmetic: `direction_id` is a uuid
+     * column, so an unconstrained value would reach Postgres and raise `22P02`
+     * as a 500 on a public unauthenticated URL. A malformed `kind` is a 400 at
+     * the boundary instead.
+     */
+    kind: z.array(z.uuid()).default([]),
     specialty: z
       .union([
         DoctorEventsFeedSpecialtyModeSchema,

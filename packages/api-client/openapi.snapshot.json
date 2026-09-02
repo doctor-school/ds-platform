@@ -181,6 +181,9 @@
                       "kind": {
                         "type": "string"
                       },
+                      "kindTitle": {
+                        "type": "string"
+                      },
                       "nmo": {
                         "type": "boolean"
                       },
@@ -229,6 +232,7 @@
                       "endsAt",
                       "format",
                       "kind",
+                      "kindTitle",
                       "title",
                       "speaker",
                       "source",

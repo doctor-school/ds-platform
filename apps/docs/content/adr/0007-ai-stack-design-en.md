@@ -25,7 +25,7 @@ This document is the implementation detail for ADR-0007. The ADR establishes "wh
 | Scope ADR-0007                   | Phase 0 = AI-loop methodology (dev-time); runtime AI infra — deferred with triggers                                                              | §1                |
 | Coding agent harnesses Pre-pilot | Claude Code (primary, sync) + Codex (opt-in async). Cursor deferred.                                                                             | §2                |
 | Agent loop discipline            | SDD + TDD as hard rules; iteration-end checklist machine-checkable                                                                               | §3                |
-| Task tracking source             | GitHub Issues (per ADR-0006 §9), grouped under product-theme milestones                                                                          | inherits ADR-0006 |
+| Task tracking source             | GitHub Issues (per ADR-0006 §9), grouped under track-release milestones                                                                          | inherits ADR-0006 |
 | Session bootstrap                | `tools/agent-bootstrap.ts` — deterministic script, output = live state snapshot                                                                  | §4                |
 | AI-specific drift guards         | Additional CI checks on top of ADR-0006 §7 (spec-link, TDD signal, EARS↔test linkage, etc.)                                                      | §5                |
 | LLM-assisted PR review           | Interactive only (three modes — subagent `/review`, parallel Codex CLI, pure human). No automated reviewer-bot, no LLM API keys in repo secrets. | §6, AGENTS.md §4  |
@@ -43,7 +43,7 @@ This document is the implementation detail for ADR-0007. The ADR establishes "wh
 
 ### 2.1 Iteration unit
 
-One iteration = one feature spec → one or more related PRs. Source of intent — `apps/docs/content/specs/features/NNN-<slug>/{NNN-requirements.md, NNN-design.md, NNN-scenarios.feature}` (3 files, ADR-0006 §4). Source of execution state — Issues per EARS handler, each carrying the `feature:NNN-<slug>` label (which binds the Issue to its spec) and grouped under a long-lived product-theme GitHub Milestone (ADR-0006 §9; AGENTS.md §2 — the Milestone is a theme, not a spec folder). No `tasks.md` file.
+One iteration = one feature spec → one or more related PRs. Source of intent — `apps/docs/content/specs/features/NNN-<slug>/{NNN-requirements.md, NNN-design.md, NNN-scenarios.feature}` (3 files, ADR-0006 §4). Source of execution state — Issues per EARS handler, each carrying the `feature:NNN-<slug>` label (which binds the Issue to its spec) and grouped under the track-release GitHub Milestone of the release they ship in (ADR-0006 §9; AGENTS.md §2 — a Milestone is one shippable release of one track, not a theme and not a spec folder). No `tasks.md` file.
 
 ### 2.2 Canonical procedure — skill catalog at `apps/docs/content/skills/<name>/SKILL.md`
 
@@ -63,7 +63,7 @@ The orchestrated iteration cycle (`do-feature-iteration` orchestrates these):
 2. PLAN
    - If no parent Issue for the spec yet → create +
      sub-issues per EARS handler via `gh issue create`
-       --milestone "<product theme>" --label "feature:NNN-<slug>"
+       --milestone "<Трек> R<n> — <результат>" --label "feature:NNN-<slug>"
    - If parent exists → pick an open sub-issue or open a new one
      (if a gap is discovered during the work)
 
@@ -246,7 +246,7 @@ async function ghPRs(): Promise<any[]> {
 
 async function readSpecMeta(featureSlug: string) {
   // feature:NNN-<slug> label slug = "NNN-slug" → spec path (NOT the milestone,
-  // which is a product theme; AGENTS.md §2)
+  // which is a track release; AGENTS.md §2)
   const specDir = resolve(
     REPO_ROOT,
     "apps/docs/content/specs/features",
@@ -427,7 +427,7 @@ Before `git push` the agent goes through each item. If even one is false — do 
 
 | Guard                     | What it catches                                                          | Implementation                                                                                                                                                                                                                               | Severity Phase 0      |
 | ------------------------- | ------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------- |
-| **spec-link required**    | PR labeled `feature:NNN-<slug>` not properly linked to its spec          | GH Action: PR body contains `Closes #N`; each linked Issue carries a (product-theme) milestone; the `feature:NNN-<slug>` label's spec folder `apps/docs/content/specs/features/NNN-<slug>/` exists with `NNN-requirements.md` (or `-en.md`). | BLOCK                 |
+| **spec-link required**    | PR labeled `feature:NNN-<slug>` not properly linked to its spec          | GH Action: PR body contains `Closes #N`; each linked Issue carries a (track-release) milestone; the `feature:NNN-<slug>` label's spec folder `apps/docs/content/specs/features/NNN-<slug>/` exists with `NNN-requirements.md` (or `-en.md`). | BLOCK                 |
 | **TDD signal**            | implementation-only commit without a test file                           | GH Action: for each modified `src/**/*.ts` — `*.test.ts` is either in the diff, or commit history shows a test-commit preceding it. Heuristic; false positives possible.                                                                     | WARN v1               |
 | **EARS ↔ test linkage**   | EARS requirement without `it('EARS-N: ...')`                             | Custom lint `tools/lint/ears-test-lint.ts`: parses EARS IDs in `NNN-requirements.md`, checks for it-descriptions with the same ID in the module.                                                                                             | WARN v1 → BLOCK v2    |
 | **Gherkin coverage**      | scenarios without Playwright step implementation                         | playwright-bdd native error — test fails if step is undefined.                                                                                                                                                                               | BLOCK (via test fail) |
@@ -560,11 +560,11 @@ async function main() {
       l.name?.startsWith("feature:"),
     );
     if (!issueIsFeature) continue; // bug/chore Issue — skip spec-folder check
-    // Milestone must be present (a product theme — any title; grouping only,
+    // Milestone must be present (a track release — any title; grouping only,
     // ADR-0006 §9 / AGENTS.md §2). Its title is NOT a path.
     if (!issue.milestone?.title) {
       throw new Error(
-        `Issue #${issueNum} has feature:* label but no milestone. Every feature-Issue sits under a product-theme milestone.`,
+        `Issue #${issueNum} has feature:* label but no milestone. Every feature-Issue sits under a track-release milestone.`,
       );
     }
     // The spec folder is the slug of the feature:NNN-<slug> label.
@@ -972,11 +972,11 @@ Per ADR-0006 §9 conventions (title format `[NNN] EARS-N: ...`, label `kind:ears
 
 - If no parent Issue exists for the spec: create one with `--body-file` (a `--body` flag must be provided in non-interactive contexts; `gh issue create` without it opens an editor and hangs in CI/Codex):
   gh issue create --title "Feature NNN: <name>" \
-  --milestone "<product theme>" --label "feature:NNN-<slug>" \
+  --milestone "<Трек> R<n> — <результат>" --label "feature:NNN-<slug>" \
   --body-file .github/issue_templates/feature.md
   Then for each EARS-handler from `NNN-requirements.md`:
   gh issue create --title "[NNN] EARS-N: <description>" \
-  --milestone "<product theme>" --label "feature:NNN-<slug>,kind:ears-handler,agent-ready" \
+  --milestone "<Трек> R<n> — <результат>" --label "feature:NNN-<slug>,kind:ears-handler,agent-ready" \
   --body "Spec: apps/docs/content/specs/features/NNN-<slug>/. Parent: #<parent-issue>."
 - Use superpowers:writing-plans skill only if the task is multi-step within a single Issue.
 

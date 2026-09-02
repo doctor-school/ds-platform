@@ -215,7 +215,7 @@ Sequence / state / ER / C4Context — все Mermaid в MDX. Rendering — Fumad
 
 **Convention GitHub Issues для feature-implementation:**
 
-- **Milestone = product-тема** (например `Doctor onboarding v1`) — долгоживущая тема, может охватывать несколько feature-спек (AGENTS.md §2). Milestone — это **не** spec-папка; спека, которую реализует Issue, привязывается лейблом `feature:NNN-<slug>`.
+- **Milestone = один поставляемый релиз одного трека** — русское имя `«<Трек> R<n> — <результат>»` (например `«Академия R1 — Архив записей»`), 1–4 feature-level Issues, `R<n>` нумеруется внутри трека, и два трека никогда не делят milestone (AGENTS.md §2). Milestone **независим от спек**: это не spec-папка и не долгоживущая тема; спека, которую реализует Issue, привязывается лейблом `feature:NNN-<slug>`. Всё, что дальше двух ближайших релизов, лежит в backlog-milestone трека («Академия · Позже» / «Витрина · Позже»); платформенная работа берёт milestone того релиза, который она блокирует через `blocked_by`, иначе «Platform ops & hardening». У **эпика milestone нет** — он охватывает несколько релизов, его прогресс это нативный sub-issue bar, а его ось — лейбл `track:*`.
 - **One Issue per EARS-handler** — title `[001] EARS-3: When OIDC callback received, the system shall ...`, body содержит link на specific EARS-ID в `NNN-requirements.md`.
 - **Labels** — `feature:NNN-<slug>` (привязывает Issue к `apps/docs/content/specs/features/NNN-<slug>/`), `kind:ears-handler` / `kind:bug` / `kind:refactor` / `kind:dep-upgrade`.
 - **GitHub Project v2** — «DS Platform Implementation» board с swimlanes by feature.
@@ -224,7 +224,7 @@ Sequence / state / ER / C4Context — все Mermaid в MDX. Rendering — Fumad
 
 - Plane Issue → GitHub: URL в description или comment.
 - GitHub Issue → Plane: URL в body, optional label `plane:DSO-N`.
-- Feature spec → его product-тема GitHub Milestone: frontmatter поле `tracker: <github-milestone-url>` в `NNN-requirements.md` (несколько спек под одной темой делят URL).
+- Feature spec → релизный GitHub Milestone, в котором едут его Issues: frontmatter поле `tracker: <github-milestone-url>` в `NNN-requirements.md`. Milestone независим от спек, поэтому один релиз может нести Issues нескольких спек, а Issues одной спеки — разъехаться по релизам.
 
 **AI-агент workflow:**
 

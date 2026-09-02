@@ -8,7 +8,7 @@ Feature: A finished broadcast keeps its value as a recording, and the archive is
 
   Background:
     Given a finished event means EventLifecycleState is ended and nothing else
-    And an archived event keeps the feature 004 archive notice and appears in no 014 listing, tab or count
+    And a hidden event keeps the feature 004 notice and appears in no 014 listing, tab or count
     And every recording mutation carries a canonical Idempotency-Key and the target ETag
     And event_recordings rows are retained with restrictive foreign keys and no Delete route
     And the display rule is derived at read time from published non-retired recordings only
@@ -66,7 +66,7 @@ Feature: A finished broadcast keeps its value as a recording, and the archive is
       | draft     |
       | published |
       | live      |
-      | archived  |
+      | hidden    |
 
   @EARS-2 @core @failure
   Scenario: The panel offers no Delete anywhere
@@ -75,46 +75,109 @@ Feature: A finished broadcast keeps its value as a recording, and the archive is
     Then no Delete control is present
     And no HTTP Delete route exists for a recording
 
-  @EARS-18 @core @happy
-  Scenario: An off-platform broadcast is marked ended so its recording can be published
-    Given a published event whose scheduled end is in the past
-    And its room was never opened
-    When the operator marks it ended as a broadcast held outside the platform
-    Then the event state becomes ended without ever being live
-    And no room record and no presence window were created
-    And one audit row is appended
-    And a recording attached to it can now be published
+  @EARS-23 @core @happy
+  Scenario Outline: Each event is routed to exactly one lifecycle by its immutable origin
+    Given an event created with origin <origin>
+    Then its lifecycle states are drawn only from <machine>
+    And no state of the other machine is ever reachable for it
+    And every update path that tries to change origin is rejected
 
-  @EARS-18 @core @failure
-  Scenario: An event whose broadcast has not finished yet cannot be marked ended
-    Given a published event whose scheduled end is still in the future
-    When the operator invokes the mark-ended command
-    Then the request fails with 409 EVENT_NOT_PAST
+    Examples:
+      | origin   | machine                                    |
+      | platform | draft, published, live, ended, hidden      |
+      | legacy   | hidden, in_archive                         |
+
+  @EARS-24 @core @happy
+  Scenario: An archival broadcast is created through the «Архивный эфир» entry and is born hidden
+    Given the operator opens the «Архивный эфир» creation entry
+    When they submit a title, a held-at instant, a duration, speakers and a recording
+    Then a legacy event is created in state hidden
+    And no room record, no stream config and no presence window exist for it
+    And it appears on no public listing, tab or count
+    And its direct link renders the feature 004 notice
+
+  @EARS-25 @core @happy
+  Scenario: An archival broadcast with a published recording is archived
+    Given a hidden legacy event carrying a published non-retired recording
+    When the operator invokes «Архивировать» with If-Match and an Idempotency-Key
+    Then the event state becomes in_archive
+    And exactly one feature 010 audit row is appended
+
+  @EARS-25 @core @failure
+  Scenario: An archival broadcast with nothing to play cannot be archived
+    Given a hidden legacy event whose only recording is still draft
+    When the operator invokes «Архивировать»
+    Then the request fails with 409 EVENT_NOT_FINISHED
     And the event state is unchanged
 
-  @EARS-18 @core @failure
-  Scenario Outline: Mark-ended refuses every origin other than an unaired published event
-    Given an event that is <situation>
-    When the operator invokes the mark-ended command
+  @EARS-25 @core @happy
+  Scenario: An archived broadcast is hidden again
+    Given a legacy event in state in_archive
+    When the operator invokes «Скрыть» with If-Match and an Idempotency-Key
+    Then the event state becomes hidden
+    And exactly one feature 010 audit row is appended
+    And it appears in no listing, tab or count
+
+  @EARS-26 @core @happy
+  Scenario: An archived pre-platform broadcast is indistinguishable in the archive
+    Given a legacy event in state in_archive with a published edited recording
+    And an ended platform event with a published edited recording
+    When a visitor reads the public archive
+    Then both are listed in the «Прошедшие» tab and counted the same way
+    And both render the same card, the same /webinars/[slug] page and the same login-gated player
+    And neither carries an «архивный» or «старый» badge
+    And no second route and no degraded composition exists for the legacy one
+
+  @EARS-27 @core @failure
+  Scenario Outline: A broadcast command on a legacy event is refused
+    Given a legacy event in state <state>
+    When the operator invokes <command>
+    Then the request fails with 409 INVALID_TRANSITION
+    And the event state is unchanged
+    And no room record, presence window or stream config is created
+
+    Examples:
+      | state      | command         |
+      | hidden     | PublishEvent    |
+      | hidden     | OpenRoom        |
+      | in_archive | CloseRoom       |
+      | in_archive | HideEvent       |
+      | hidden     | ConfigureStream |
+
+  @EARS-27 @core @failure
+  Scenario Outline: A legacy command on a platform event is refused
+    Given a platform event in state <state>
+    When the operator invokes <command>
     Then the request fails with 409 INVALID_TRANSITION
     And the event state is unchanged
 
     Examples:
-      | situation                                |
-      | still a draft                            |
-      | live right now                           |
-      | already ended                            |
-      | archived                                 |
-      | published but whose room was opened once |
+      | state     | command                 |
+      | published | ArchiveLegacyBroadcast  |
+      | ended     | ArchiveLegacyBroadcast  |
+      | hidden    | HideLegacyBroadcast     |
 
-  @EARS-18 @core @failure
-  Scenario: A cancelled event never becomes finished through the backfill
-    Given a published event that was cancelled and archived per feature 004
-    When the operator looks for the mark-ended control
-    Then it is not offered
-    And a direct call fails with 409 INVALID_TRANSITION
-    And the event still renders the archive notice with no player
+  @EARS-27 @core @happy
+  Scenario: The lifecycle bar renders only the event's own machine
+    Given a legacy event on the admin event detail
+    When the operator reads the lifecycle bar
+    Then «Выйти в эфир» is not offered
+    And only «Архивировать» and «Скрыть» are offered, per EventAdminDetail.validTransitions
 
+  @EARS-28 @core @happy
+  Scenario: The broadcast terminal state reads «Скрыт» on every surface
+    Given the broadcast lifecycle terminal state
+    Then its contract value is hidden on the database enum, the Zod contract and the generated SDK
+    And its admin and portal label is «Скрыт» and its command label is «Скрыть»
+    And no row, contract field or label carries the value archived
+    And no dual-read compatibility shim exists
+
+  @EARS-28 @core @happy
+  Scenario: The rename changes no behaviour of the hidden state
+    Given an event in state hidden
+    Then no platform surface lists it
+    And only an admin can read it
+    And its direct link renders the feature 004 notice
   # ---------------------------------------------------------------- display rule
 
   @EARS-3 @core @happy
@@ -159,10 +222,10 @@ Feature: A finished broadcast keeps its value as a recording, and the archive is
     And no archive-only mirror route exists
 
   @EARS-4 @core @happy
-  Scenario: An archived event keeps its feature 004 render
-    Given an archived event with a published edited recording attached before archiving
+  Scenario: A hidden event keeps its feature 004 render
+    Given a hidden event with a published edited recording attached before it was hidden
     When any visitor opens its page
-    Then the feature 004 archive notice renders with no CTA and no player
+    Then the feature 004 notice renders with no CTA and no player
     And the event appears in no listing, tab or count
 
   @EARS-19 @facets @happy
@@ -291,8 +354,8 @@ Feature: A finished broadcast keeps its value as a recording, and the archive is
     And its link opens the event page showing the plaque
 
   @EARS-9 @core @failure
-  Scenario: An archived registered event appears in neither tab
-    Given a doctor registered for an event that was later archived
+  Scenario: A hidden registered event appears in neither tab
+    Given a doctor registered for an event that was later hidden
     When the doctor opens either tab of «Мои события»
     Then that event is not listed
 
@@ -316,11 +379,11 @@ Feature: A finished broadcast keeps its value as a recording, and the archive is
 
   @EARS-11 @core @happy
   Scenario: /webinars gains a past tab with counts
-    Given a mix of draft, upcoming, ended and archived events
+    Given a mix of draft, upcoming, ended and hidden events
     When any visitor opens /webinars
     Then «Предстоящие · N» and «Прошедшие · N» tabs render with correct counts
     And the past tab lists ended events newest first with their recording-state badge
-    And draft and archived events appear in neither tab and in neither count
+    And draft and hidden events appear in neither tab and in neither count
     And the listing is reachable with no account
 
   @EARS-11 @core @happy

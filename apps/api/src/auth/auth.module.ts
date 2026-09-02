@@ -64,5 +64,12 @@ import {
     { provide: SMS_BUDGET_THRESHOLDS, useValue: DEFAULT_SMS_BUDGET_THRESHOLDS },
     { provide: SMS_BUDGET_CLOCK, useValue: (() => Date.now()) satisfies Clock },
   ],
+  // 021 EARS-4 (#1540): the doctor storefront's `RegisterDoctor` command is a
+  // thin host projection over THIS engine — it adds the access-condition
+  // precondition and delegates credential creation, the verification code and
+  // the consent commit here rather than re-implementing any of them. Exporting
+  // the service is what makes that reuse possible; without it the only way to
+  // stand a storefront door up would be a second registration path.
+  exports: [AuthService],
 })
 export class AuthModule {}

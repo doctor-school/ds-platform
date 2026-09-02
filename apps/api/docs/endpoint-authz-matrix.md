@@ -131,6 +131,7 @@
 | POST /v1/events/:idOrSlug/heartbeat                             | authenticated | doctor_guest                 | policy     | —            | false   | none       | none        | EARS-4, EARS-8                     |
 | POST /v1/events/:idOrSlug/registration                          | authenticated | doctor_guest                 | fast-path  | —            | false   | none       | low-stakes  | EARS-1, EARS-3, EARS-7, EARS-10    |
 | POST /v1/public/specialty-choice                                | public        | —                            | none       | —            | false   | none       | none        | EARS-6                             |
+| POST /v1/storefront/doctor/register                             | public        | —                            | none       | —            | false   | none       | high-stakes | EARS-4                             |
 | PUT /v1/admin/events/:id/stream                                 | authenticated | platform_admin               | fast-path  | —            | false   | none       | low-stakes  | EARS-3, EARS-8                     |
 | PUT /v1/me/display-name                                         | authenticated | doctor_guest                 | fast-path  | —            | false   | none       | low-stakes  | EARS-14, EARS-16                   |
 | PUT /v1/me/specialty                                            | authenticated | doctor_guest                 | fast-path  | —            | false   | none       | low-stakes  | EARS-6, EARS-7                     |

@@ -27,7 +27,7 @@ import {
 // doctor_guest classification. The authenticated doctor's «мои события»
 // Предстоящие list: their registered UPCOMING events (published/live, future or
 // currently airing), ordered NEAREST startsAt first, each item
-// { eventId, slug, title, school, startsAt, state }. ended/archived registrations
+// { eventId, slug, title, school, startsAt, state }. ended/hidden registrations
 // and OTHER doctors' registrations are absent — the read returns only the
 // caller's own (EARS-10). An unauthenticated caller is refused (401), never
 // silently satisfied.
@@ -49,7 +49,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     const createdEmails: string[] = [];
     const createdEventIds: string[] = [];
 
-    type SeedState = "draft" | "published" | "live" | "ended" | "archived";
+    type SeedState = "draft" | "published" | "live" | "ended" | "hidden";
 
     function uniqueEmail(prefix: string): string {
       const email = `${prefix}-${Date.now()}-${Math.random()
@@ -220,7 +220,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       ]);
     });
 
-    it("EARS-6.2: ended/archived registrations are absent — only published/live upcoming events appear", async () => {
+    it("EARS-6.2: ended/hidden registrations are absent — only published/live upcoming events appear", async () => {
       const published = await seedEvent(
         "published",
         iso(1 * DAY),
@@ -233,16 +233,16 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         "Завершённый эфир",
         "Школа неврологии",
       );
-      const archived = await seedEvent(
-        "archived",
+      const hidden = await seedEvent(
+        "hidden",
         iso(-10 * DAY),
-        "Архивный эфир",
+        "Скрытый эфир",
         "Школа пульмонологии",
       );
 
       const email = uniqueEmail("doc");
       const cookie = await doctorSession(email);
-      // The gating command refuses ended/archived, so seed those registrations
+      // The gating command refuses ended/hidden, so seed those registrations
       // directly (a doctor registered while the event was live, then it ended).
       await register(cookie, published.slug);
       const userId = (
@@ -251,7 +251,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
           [email],
         )
       ).rows[0]!.id;
-      for (const ev of [ended, archived]) {
+      for (const ev of [ended, hidden]) {
         await pool.query(
           "INSERT INTO registrations (user_id, event_id) VALUES ($1,$2)",
           [userId, ev.id],

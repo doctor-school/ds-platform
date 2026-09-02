@@ -256,7 +256,7 @@ export class RecordingsService {
       }
 
       // §3: publication requires the event to be EXACTLY `ended`. `draft`,
-      // `published`, `live` and `archived` are each refused — `archived` too,
+      // `published`, `live` and `hidden` are each refused — `hidden` too,
       // because feature 004 routes a cancelled or never-aired event there and
       // handing it a player would advertise a broadcast that never happened.
       if (input.command === "publish" && lockedEvent.state !== "ended") {

@@ -7,7 +7,7 @@
 # HERE we drive the CONNECTED user journey no single handler owns — the requirements
 # Verification `all` row: a guest opens a sponsor-distributed direct link → reads
 # the page → opens the listing → clicks a card → back, across the upcoming / live /
-# ended / archived lifecycle states. The whole run rides a deliberately non-Moscow
+# ended / hidden lifecycle states. The whole run rides a deliberately non-Moscow
 # browser timezone (playwright.config `bdd` project, America/New_York), so the МСК
 # labels prove no viewer-local drift globally (EARS-12), not just in one tagged step.
 #
@@ -49,13 +49,13 @@ Feature: 004 Public webinar discovery — a guest reads an event page and scans 
       | live      | В эфире       |
       | ended     | Эфир завершён |
 
-  # --- Archived direct link degrades gracefully (US-5/US-6) ---
+  # --- Hidden direct link degrades gracefully (US-5/US-6) ---
 
   @EARS-5 @failure
-  Scenario: An archived direct link degrades to a public notice, not a dead end
-    Given a guest opens the seeded archived event by its direct link
-    Then the archived page is a reachable 200 on the same URL, not a 404 or a redirect
-    And the «мероприятие в архиве» notice is shown with no participation CTA
+  Scenario: A hidden direct link degrades to a public notice, not a dead end
+    Given a guest opens the seeded hidden event by its direct link
+    Then the hidden page is a reachable 200 on the same URL, not a 404 or a redirect
+    And the «мероприятие скрыто» notice is shown with no participation CTA
 
   # --- Cross-surface live consistency (US-4/US-6) ---
 

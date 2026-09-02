@@ -13,11 +13,11 @@ import { RegistrationRepository } from "./registration.repository.js";
 
 /**
  * The register affordance is offered only while the event is `published`
- * (upcoming) or `live` (design §5). `RegisterForEvent` on an `ended`/`archived`
+ * (upcoming) or `live` (design §5). `RegisterForEvent` on an `ended`/`hidden`
  * (or `draft`) event is refused with this error — HTTP-agnostic so the guard
  * stays a pure domain rule; the controller maps it to a 409 state conflict. No
  * registration is recorded. `state` is the offending current state. The
- * exhaustive gating semantics (affordance-absent, ended/archived verification)
+ * exhaustive gating semantics (affordance-absent, ended/hidden verification)
  * are the sibling EARS-9 handler; EARS-1 accepts published/live only.
  */
 export class EventNotRegistrableError extends Error {
@@ -123,7 +123,7 @@ export class RegistrationService {
    * Tab membership and ordering are the repository's single `tabMembership`
    * predicate: `upcoming` is `published`/`live` inside the 004 upcoming window
    * (`starts_at ≥ now − {@link AIR_WINDOW_MS}`) nearest-first, `recordings` is the
-   * doctor's FULL `ended` history newest-first, and `archived` is in neither.
+   * doctor's FULL `ended` history newest-first, and `hidden` is in neither.
    *
    * The `recording` badge is resolved through feature 014's own canonical
    * projection service (#1340) in ONE batched statement for the whole page — the

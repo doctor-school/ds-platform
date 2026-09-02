@@ -218,8 +218,8 @@ When("the operator closes the room", async ({ page }) => {
   await page.getByTestId("action-close").click();
 });
 
-When("the operator archives the event", async ({ page }) => {
-  await page.getByTestId("action-archive").click();
+When("the operator hides the event", async ({ page }) => {
+  await page.getByTestId("action-hide").click();
 });
 
 When("the caller opens the events page", async ({ page }) => {
@@ -254,7 +254,7 @@ Then("only the {string} lifecycle action is offered", async ({ page }, action: s
 });
 
 Then("no invalid transition action is offered from draft", async ({ page }) => {
-  for (const forbidden of ["action-open", "action-close", "action-archive"]) {
+  for (const forbidden of ["action-open", "action-close", "action-hide"]) {
     await expect(page.getByTestId(forbidden)).toHaveCount(0);
   }
 });

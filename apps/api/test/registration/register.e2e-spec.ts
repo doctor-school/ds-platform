@@ -34,7 +34,7 @@ import {
 // Event authoring / lifecycle transitions are owned by feature 007 (tracked seam
 // → parent #564), so this spec SEEDS events directly in each target lifecycle
 // state. The one-registration invariant + idempotent repeat (EARS-3), the broader
-// per-user reads (EARS-4/6), and the ended/archived gating detail (EARS-9) are
+// per-user reads (EARS-4/6), and the ended/hidden gating detail (EARS-9) are
 // sibling handlers. Runs against the dev-stand Postgres + the fake IdP for the
 // session; skips when DATABASE_URL or IDP_ISSUER is absent so the shared CI unit
 // job stays green (requirements Verification, row 1).
@@ -50,7 +50,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     const createdEmails: string[] = [];
     const createdEventIds: string[] = [];
 
-    type SeedState = "draft" | "published" | "live" | "ended" | "archived";
+    type SeedState = "draft" | "published" | "live" | "ended" | "hidden";
 
     function uniqueEmail(prefix: string): string {
       const email = `${prefix}-${Date.now()}-${Math.random()

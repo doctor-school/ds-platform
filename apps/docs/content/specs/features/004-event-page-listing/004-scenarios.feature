@@ -75,7 +75,7 @@ Feature: Public webinar discovery — a doctor reads an event page and scans upc
 
   # --- Visibility & archived links (US-5, US-6) ---
   # Amended 2026-09-02 (feature 007): the `archived` state below is renamed `hidden`
-  # (status "Скрыт", command "Скрыть") and `EventArchived` becomes `EventHidden`; the
+  # (status "Скрыто", command "Скрыть") and `EventArchived` becomes `EventHidden`; the
   # meaning and every assertion here are unchanged. See 007-requirements-en.md ->
   # Amendment - 2026-09-02.
 

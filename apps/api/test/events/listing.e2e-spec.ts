@@ -19,7 +19,7 @@ import { deleteEventFixture } from "../setup/fixture-cleanup.js";
 // endpoint (GET /v1/public/events?upcoming → UpcomingBroadcastCard[]). The
 // portal's /webinars listing reads this: events that are `published` or `live`
 // AND whose air date is in the future or currently airing (starts_at ≥ now −
-// airWindow), ordered NEAREST air date first. A `draft`/`ended`/`archived` event
+// airWindow), ordered NEAREST air date first. A `draft`/`ended`/`hidden` event
 // never appears; a long-past event drops out. The projection is the thinner
 // UpcomingBroadcastCard allow-list (no description, no partners, no PDF, speakers
 // = name only) — no operator/commercial field or registrant PII ever leaks
@@ -38,7 +38,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
     const fake = new FakeIdpClient();
     const createdEventIds: string[] = [];
 
-    type SeedState = "draft" | "published" | "live" | "ended" | "archived";
+    type SeedState = "draft" | "published" | "live" | "ended" | "hidden";
 
     interface SeedOptions {
       state: SeedState;
@@ -131,7 +131,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
 
     it("EARS-7: returns only published/live future-or-airing events, ordered nearest air date first", async () => {
       // Two future published + one recently-started live → all upcoming, nearest
-      // first. The excluded set (draft, ended, archived, long-past published)
+      // first. The excluded set (draft, ended, hidden, long-past published)
       // must never appear.
       const soon = await seedEvent({
         state: "published",
@@ -151,7 +151,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
       // Excluded:
       await seedEvent({ state: "draft", startsAtOffsetMs: 4 * HOUR });
       await seedEvent({ state: "ended", startsAtOffsetMs: 5 * HOUR });
-      await seedEvent({ state: "archived", startsAtOffsetMs: 6 * HOUR });
+      await seedEvent({ state: "hidden", startsAtOffsetMs: 6 * HOUR });
       await seedEvent({
         state: "published",
         startsAtOffsetMs: -2 * DAY, // long past the air window

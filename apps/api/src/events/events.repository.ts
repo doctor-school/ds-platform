@@ -135,7 +135,7 @@ export class EventsRepository {
    * and only a new one is inserted — the list is never deleted and re-created
    * (see {@link reconcileEventSpeakers}). When it is `undefined` the speaker rows
    * are left as they are. The caller (the
-   * service) has already validated the pre-archive edit window and folded any
+   * service) has already validated the pre-hide edit window and folded any
    * program-PDF replacement into `patch.programPdfRef`. Returns the updated
    * aggregate, or `null` when the id does not exist.
    */
@@ -289,8 +289,8 @@ export class EventsRepository {
    * (`starts_at ASC`). The state filter is the {@link UPCOMING_BROADCAST_STATES}
    * SSOT (the same closed set the `UpcomingBroadcastState` card type derives from,
    * so the query and the projection can never disagree about what may appear) —
-   * applied in SQL, so a `draft`/`ended`/`archived` event drops from the listing
-   * by STATE, never by time (EARS-6: draft/ended/archived never list). Speaker
+   * applied in SQL, so a `draft`/`ended`/`hidden` event drops from the listing
+   * by STATE, never by time (EARS-6: draft/ended/hidden never list). Speaker
    * rows for the matched events are read in one batched query (no N+1) and grouped
    * back by event in `position` order. An empty match is a valid empty list
    * (EARS-11).
@@ -428,7 +428,7 @@ export class EventsRepository {
    * `starts_at` falls in the half-open UTC range `[start, end)` — the МСК month
    * boundaries computed by the caller ({@link import("@ds/schemas").mskMonthRange})
    * — ordered NEAREST air date first (`starts_at ASC`). The month's already-past
-   * `ended` events are INCLUDED by design (§3); `draft`/`archived` drop by STATE,
+   * `ended` events are INCLUDED by design (§3); `draft`/`hidden` drop by STATE,
    * never by time. The month-grid entry carries no speaker/commercial field, so
    * this returns the bare event rows (the service projects the thin allow-list).
    * An empty month is a valid empty list.

@@ -87,7 +87,7 @@ export class RecordingsRepository {
    * transaction. Publication is gated on `state = ended` (§3) and the state is
    * moved by 007's own transitions, so the check has to be re-read under a lock
    * — an optimistic read alone would let a concurrent `CloseRoom` or
-   * `ArchiveEvent` decide the outcome after the fact.
+   * `HideEvent` decide the outcome after the fact.
    */
   async lockEvent(tx: Tx, id: string): Promise<Event | null> {
     const [row] = await tx

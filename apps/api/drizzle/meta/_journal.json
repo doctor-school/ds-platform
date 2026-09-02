@@ -232,6 +232,13 @@
       "when": 1788332006009,
       "tag": "0032_speaker_migration_cutover",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1788338209263,
+      "tag": "0033_events_state_hidden_rename",
+      "breakpoints": true
     }
   ]
 }

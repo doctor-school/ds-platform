@@ -2,9 +2,9 @@
 /**
  * 005 portal-integration fixture seed (#574) + 006 room-integration extension
  * (#584). Seeds one event in EACH lifecycle state the portal renders + E2E-drives
- * — `published` (upcoming), `live`, `ended`, `archived` — plus ordered speakers,
+ * — `published` (upcoming), `live`, `ended`, `hidden` — plus ordered speakers,
  * so the registered-state overlay, the one-tap / guest-through-auth registration
- * flows, «мои события», and the ended/archived gating can be driven against the
+ * flows, «мои события», and the ended/hidden gating can be driven against the
  * LIVE dev stand.
  *
  * 006 room additions (#584): the room read (`GET /v1/events/:idOrSlug/room`) LEFT
@@ -59,7 +59,7 @@ const DAY = 24 * 60 * MINUTE;
 
 interface SeedSpec {
   readonly slug: string;
-  readonly state: "published" | "live" | "ended" | "archived";
+  readonly state: "published" | "live" | "ended" | "hidden";
   readonly title: string;
   readonly school: string;
   readonly startsAt: Date;
@@ -219,14 +219,14 @@ function specs(now: number): SeedSpec[] {
       speakers: [{ name: "Проф. Н. Волкова", regalia: "д.м.н., эндокринолог" }],
     },
     {
-      slug: "seed-005-archived",
-      state: "archived",
-      title: "Архив: базовая ЭКГ для терапевта",
+      slug: "seed-005-hidden",
+      state: "hidden",
+      title: "Скрыт: базовая ЭКГ для терапевта",
       school: "Школа терапии",
       startsAt: new Date(now - 30 * DAY),
       durationMin: 60,
       description:
-        "Эфир перенесён в архив — регистрация и запись недоступны. Основы интерпретации ЭКГ.",
+        "Эфир скрыт с платформы — регистрация и запись недоступны. Основы интерпретации ЭКГ.",
       specialties: ["Терапия"],
       partnerRef: "Партнёр Фарма",
       speakers: [{ name: "Доц. С. Кузнецов", regalia: "к.м.н., терапевт" }],

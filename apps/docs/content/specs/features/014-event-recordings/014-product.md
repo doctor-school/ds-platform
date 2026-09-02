@@ -47,7 +47,7 @@ An archive nobody can browse is not an archive, so this feature also gives it a 
 - **US-19** — As a **content operator**, recording lists/selectors use pagination, immediate search/filtering, active chips, one Reset all and no actionable no-op controls.
 - **US-20** — As a **content operator**, I add an эфир that was held before the platform existed through a separate «Архивный эфир» entry — title, date held, duration, speakers, recording — and it stays invisible to everyone until I archive it, so the archive has content from day one.
 - **US-21** — As a **doctor or guest**, a pre-platform эфир in the archive looks and behaves exactly like any other past broadcast with a recording: the same card, the same «Прошедшие» tab, the same page, the same player — with nothing marking it as second-class.
-- **US-22** — As a **content operator**, when an event leaves the platform its status reads «Скрыт», not «Архивирован», because «Архив» is the thing we show to doctors — one word, one meaning.
+- **US-22** — As a **content operator**, when an event leaves the platform its status reads «Скрыто», not «Архивирован», because «Архив» is the thing we show to doctors — one word, one meaning.
 
 ## Flows
 
@@ -92,7 +92,7 @@ An archive nobody can browse is not an archive, so this feature also gives it a 
 **Operator flow for a pre-platform эфир (US-20, US-22):**
 
 1. Operator opens the separate «Архивный эфир» entry and fills in the title, the date it was held, its duration, its speakers and its recording.
-2. The эфир is created «Скрыт» — nobody outside the admin sees it while the operator finishes preparing it.
+2. The эфир is created «Скрыто» — nobody outside the admin sees it while the operator finishes preparing it.
 3. Once the recording is published, the operator presses «Архивировать» and the эфир joins the archive doctors read; «Скрыть» takes it back out.
 4. Such an эфир never had a broadcast on this platform, so its screen never offers «Выйти в эфир» — it has its own short lifecycle with exactly these two states.
 

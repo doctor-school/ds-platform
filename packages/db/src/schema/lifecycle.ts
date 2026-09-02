@@ -27,7 +27,7 @@ import { pgEnum } from "drizzle-orm/pg-core";
 // would put a `draft` state on a registration and a `published` state on a
 // stream config, neither of which is meaningful. It is likewise separate from a
 // table's DOMAIN state machine (`events.state`
-// draft→published→live→ended→archived, 007 EARS-7): an archived event is still a
+// draft→published→live→ended→hidden, 007 EARS-7): a hidden event is still a
 // present row, a retired one is a removed row, and the two axes move
 // independently — which is why the column is named `record_status`, never
 // `status`.

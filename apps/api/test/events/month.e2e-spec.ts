@@ -19,7 +19,7 @@ import { deleteEventFixture } from "../setup/fixture-cleanup.js";
 //   GET /v1/public/events/month-counts?year  → MonthlyEventCount[12]
 // The month read returns every publish-visible (published/live/ended) event
 // whose start instant (МСК month boundaries) falls in the requested month —
-// INCLUDING the month's already-past events (EARS-15); draft/archived never
+// INCLUDING the month's already-past events (EARS-15); draft/hidden never
 // appear. The projection is the thin MonthBroadcastEntry allow-list (id, slug,
 // title, school, startsAt, state) — no operator/commercial field, speakers, or
 // PII (EARS-10). The counts endpoint returns exactly 12 rows for the year,
@@ -39,7 +39,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
     const fake = new FakeIdpClient();
     const createdEventIds: string[] = [];
 
-    type SeedState = "draft" | "published" | "live" | "ended" | "archived";
+    type SeedState = "draft" | "published" | "live" | "ended" | "hidden";
 
     interface SeedOptions {
       state: SeedState;
@@ -140,10 +140,10 @@ describe.skipIf(!process.env.DATABASE_URL)(
         startsAt: "2031-07-20T09:00:00.000Z",
         title: "В эфире",
       });
-      // Excluded by state — draft/archived have no month projection.
+      // Excluded by state — draft/hidden have no month projection.
       await seedEvent({ state: "draft", startsAt: "2031-07-10T09:00:00.000Z" });
       await seedEvent({
-        state: "archived",
+        state: "hidden",
         startsAt: "2031-07-25T09:00:00.000Z",
       });
 
@@ -163,7 +163,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
       // Ascending by startsAt across the page.
       const times = body.map((e) => new Date(e.startsAt).getTime());
       expect(times).toEqual([...times].sort((a, b) => a - b));
-      // No draft/archived ever appears.
+      // No draft/hidden ever appears.
       for (const e of body) {
         expect(["published", "live", "ended"]).toContain(e.state);
       }
@@ -279,7 +279,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
       await seedEvent({ state: "live", startsAt: "2031-07-20T09:00:00.000Z" });
       await seedEvent({ state: "draft", startsAt: "2031-07-10T09:00:00.000Z" });
       await seedEvent({
-        state: "archived",
+        state: "hidden",
         startsAt: "2031-07-11T09:00:00.000Z",
       });
       await seedEvent({ state: "ended", startsAt: "2031-09-05T09:00:00.000Z" });
@@ -296,7 +296,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
         1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
       ]);
       const byMonth = new Map(body.map((r) => [r.month, r.count]));
-      // July counts only the 2 publish-visible events (draft + archived excluded).
+      // July counts only the 2 publish-visible events (draft + hidden excluded).
       expect(byMonth.get(7)).toBe(2);
       // September counts the 1 ended event.
       expect(byMonth.get(9)).toBe(1);

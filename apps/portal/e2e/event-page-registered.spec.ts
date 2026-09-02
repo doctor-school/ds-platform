@@ -189,15 +189,15 @@ test.describe("005 EARS-5 registered join signposting on the event page (e2e)", 
 /**
  * 005 EARS-9 — registration lifecycle gating on the event page. The register
  * affordance is OFFERED while the event is `published` (upcoming) or `live`, and
- * ABSENT for `ended`/`archived`:
+ * ABSENT for `ended`/`hidden`:
  *   • ended    → no «Участвовать»/«Записаться» affordance anywhere on the page
  *     (the ended render carries no participation CTA — 004 EARS-4);
- *   • archived → likewise no affordance, plus the «в архиве» notice (004 EARS-5);
+ *   • hidden → likewise no affordance, plus the «скрыт» notice (004 EARS-5);
  *   • register-during-live → a normal path: the single «Участвовать» CTA leads
  *     into REGISTRATION (one-tap when authenticated, the `/register` auth handoff
  *     for a guest) — never toward the not-yet-built 006 room (#584).
  *
- * The server-side refusal (the `RegisterForEvent` command 4xx for ended/archived)
+ * The server-side refusal (the `RegisterForEvent` command 4xx for ended/hidden)
  * is the sibling assertion in `apps/api/test/registration/gating.e2e-spec.ts`;
  * this file pins the client-side affordance-absent + register-during-live routing.
  *
@@ -207,7 +207,7 @@ test.describe("005 EARS-5 registered join signposting on the event page (e2e)", 
  * when its seeded slug is absent, so the suite stays inert on a bare stand.
  */
 const SLUG_ENDED = process.env.E2E_WEBINAR_SLUG_ENDED;
-const SLUG_ARCHIVED = process.env.E2E_WEBINAR_SLUG_ARCHIVED;
+const SLUG_HIDDEN = process.env.E2E_WEBINAR_SLUG_HIDDEN;
 
 // The leading `005 EARS-9 ` prefix is the ears-test-lint feature scope (a
 // parenthesized mid-title does NOT scope): it binds this block to feature 005.
@@ -233,17 +233,17 @@ test.describe("005 EARS-9 registration lifecycle gating on the event page (e2e)"
     ).toHaveCount(0);
   });
 
-  test("005 EARS-9: an archived event offers NO register affordance and shows the «в архиве» notice", async ({
+  test("005 EARS-9: a hidden event offers NO register affordance and shows the «скрыт» notice", async ({
     page,
     context,
   }) => {
     test.skip(
-      !SLUG_ARCHIVED,
-      "requires a seeded archived event (005↔007 fixture seam)",
+      !SLUG_HIDDEN,
+      "requires a seeded hidden event (005↔007 fixture seam)",
     );
 
     await context.clearCookies();
-    await page.goto(`${BASE}/webinars/${SLUG_ARCHIVED}`, {
+    await page.goto(`${BASE}/webinars/${SLUG_HIDDEN}`, {
       waitUntil: "domcontentloaded",
     });
 
@@ -253,8 +253,8 @@ test.describe("005 EARS-9 registration lifecycle gating on the event page (e2e)"
     await expect(
       page.getByRole("link", { name: "Записаться", exact: true }),
     ).toHaveCount(0);
-    // The archived render replaces the CTA column with a plain «в архиве» notice.
-    await expect(page.getByText("в архиве", { exact: false }).first()).toBeVisible();
+    // The hidden render replaces the CTA column with a plain «скрыт» notice.
+    await expect(page.getByText("скрыт", { exact: false }).first()).toBeVisible();
   });
 
   test("005 EARS-9: register-during-live — a guest's «Участвовать» CTA routes into the registration handoff, never the not-yet-built room", async ({

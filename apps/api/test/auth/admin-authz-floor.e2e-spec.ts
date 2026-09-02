@@ -143,9 +143,9 @@ const FLOOR_ROUTES: {
     payload: {},
   },
   {
-    endpoint: "POST /v1/admin/events/:id/archive",
+    endpoint: "POST /v1/admin/events/:id/hide",
     method: "POST",
-    url: `/v1/admin/events/${ABSENT_ID}/archive`,
+    url: `/v1/admin/events/${ABSENT_ID}/hide`,
     payload: {},
   },
   {
@@ -965,7 +965,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
       // coverage, and they are asserted by the floor-table rows above.
       // 014 EARS-18's `mark-ended` IS counted here — it is a lifecycle-transition
       // command that deliberately carries the same 007 EARS-8 classification as
-      // its `open`/`close`/`archive` siblings, so it must keep that shape too.
+      // its `open`/`close`/`hide` siblings, so it must keep that shape too.
       const events = adminRows().filter(
         (r) =>
           r.endpoint.includes(" /v1/admin/events") &&

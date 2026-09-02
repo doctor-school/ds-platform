@@ -628,22 +628,6 @@ export interface paths {
         patch: operations["EventsAdminController_update"];
         trace?: never;
     };
-    "/v1/admin/events/{id}/archive": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["EventsAdminController_archive"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/admin/events/{id}/close": {
         parameters: {
             query?: never;
@@ -654,6 +638,22 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["EventsAdminController_close"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/events/{id}/hide": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["EventsAdminController_hide"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1867,9 +1867,9 @@ export interface components {
                 /** Format: date-time */
                 startsAt: string;
                 /** @enum {string} */
-                state: "draft" | "published" | "live" | "ended" | "archived";
+                state: "draft" | "published" | "live" | "ended" | "hidden";
                 title: string;
-                validTransitions: ("draft" | "published" | "live" | "ended" | "archived")[];
+                validTransitions: ("draft" | "published" | "live" | "ended" | "hidden")[];
             }[];
             page: number;
             pageSize: number;
@@ -2014,7 +2014,7 @@ export interface components {
         };
         TransitionEventRequestDto: {
             /** @enum {string} */
-            to: "draft" | "published" | "live" | "ended" | "archived";
+            to: "draft" | "published" | "live" | "ended" | "hidden";
         };
         UpcomingBroadcastListDto: {
             /** Format: uuid */
@@ -3019,7 +3019,7 @@ export interface operations {
             };
         };
     };
-    EventsAdminController_archive: {
+    EventsAdminController_close: {
         parameters: {
             query?: never;
             header?: never;
@@ -3038,7 +3038,7 @@ export interface operations {
             };
         };
     };
-    EventsAdminController_close: {
+    EventsAdminController_hide: {
         parameters: {
             query?: never;
             header?: never;

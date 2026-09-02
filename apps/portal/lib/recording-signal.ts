@@ -51,8 +51,8 @@ export interface RecordingSignal {
  * a missing branch:
  *   • `upcoming` / `live` — the broadcast has not happened, so a recording
  *     signal would contradict the lifecycle machine the rest of the page reads;
- *   • `archived` — 004 EARS-5 owns that render whole: an archived event shows
- *     the «в архиве» notice and NOTHING else, so the recording signal must not
+ *   • `hidden` — 004 EARS-5 owns that render whole: a hidden event shows
+ *     the «скрыт» notice and NOTHING else, so the recording signal must not
  *     add a second, competing message to it (the api still answers truthfully;
  *     the page simply does not speak).
  *
@@ -188,7 +188,7 @@ export type PlayerCard =
  * Resolve the player card for this render, or `null` when the page shows no
  * player card at all (every non-`ended` state — the same silence rule
  * {@link resolveRecordingSignal} applies, so the card can never contradict the
- * lifecycle machine or 004 EARS-5's archived notice).
+ * lifecycle machine or 004 EARS-5's hidden notice).
  *
  * `playback` is the result of the AUTHENTICATED source read, and `null` there
  * covers both "not signed in" and "the read did not answer with a source"

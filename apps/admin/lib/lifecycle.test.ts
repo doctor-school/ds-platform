@@ -32,11 +32,11 @@ describe("007 EARS-7 admin lifecycle action derivation", () => {
     ).toEqual(["close"]);
     expect(
       actionsFor("ended", validTransitions("ended")).map((a) => a.command),
-    ).toEqual(["archive"]);
+    ).toEqual(["hide"]);
   });
 
-  it("EARS-7: a terminal archived event offers no lifecycle action", () => {
-    expect(actionsFor("archived", validTransitions("archived"))).toEqual([]);
+  it("EARS-7: a terminal hidden event offers no lifecycle action", () => {
+    expect(actionsFor("hidden", validTransitions("hidden"))).toEqual([]);
   });
 
   it("EARS-7: each derived action targets exactly the schema-legal next state", () => {
@@ -45,7 +45,7 @@ describe("007 EARS-7 admin lifecycle action derivation", () => {
       "published",
       "live",
       "ended",
-      "archived",
+      "hidden",
     ];
     for (const from of states) {
       const legal = validTransitions(from);
@@ -87,7 +87,7 @@ describe("007 EARS-7 admin lifecycle action derivation", () => {
 
   it("EARS-9: state label keys resolve under the events.state.* catalog namespace", () => {
     expect(stateLabelKey("live")).toBe("events.state.live");
-    expect(stateLabelKey("archived")).toBe("events.state.archived");
+    expect(stateLabelKey("hidden")).toBe("events.state.hidden");
   });
 });
 
@@ -107,7 +107,7 @@ describe("007 EARS-7 lifecycle command request", () => {
       "publish",
       "open",
       "close",
-      "archive",
+      "hide",
       "mark-ended",
     ] as const) {
       const request = lifecycleCommandRequest(detail, command);

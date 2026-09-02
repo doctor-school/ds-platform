@@ -530,7 +530,7 @@
                   "type": "string"
                 },
                 "state": {
-                  "enum": ["draft", "published", "live", "ended", "archived"],
+                  "enum": ["draft", "published", "live", "ended", "hidden"],
                   "type": "string"
                 },
                 "title": {
@@ -538,7 +538,7 @@
                 },
                 "validTransitions": {
                   "items": {
-                    "enum": ["draft", "published", "live", "ended", "archived"],
+                    "enum": ["draft", "published", "live", "ended", "hidden"],
                     "type": "string"
                   },
                   "type": "array"
@@ -1233,7 +1233,7 @@
       "TransitionEventRequestDto": {
         "properties": {
           "to": {
-            "enum": ["draft", "published", "live", "ended", "archived"],
+            "enum": ["draft", "published", "live", "ended", "hidden"],
             "type": "string"
           }
         },
@@ -2418,9 +2418,9 @@
         "tags": ["EventsAdmin"]
       }
     },
-    "/v1/admin/events/{id}/archive": {
+    "/v1/admin/events/{id}/close": {
       "post": {
-        "operationId": "EventsAdminController_archive",
+        "operationId": "EventsAdminController_close",
         "parameters": [
           {
             "in": "path",
@@ -2439,9 +2439,9 @@
         "tags": ["EventsAdmin"]
       }
     },
-    "/v1/admin/events/{id}/close": {
+    "/v1/admin/events/{id}/hide": {
       "post": {
-        "operationId": "EventsAdminController_close",
+        "operationId": "EventsAdminController_hide",
         "parameters": [
           {
             "in": "path",

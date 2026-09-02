@@ -148,7 +148,7 @@ stateDiagram-v2
   published --> hidden : HideEvent (004 — cancelled / never aired)
 ```
 
-**Machine 2 — `legacy` (this design), the owner's shape verbatim, «два состояния — "Архивирован" (отображается в Архиве) и "Скрыт"»:**
+**Machine 2 — `legacy` (this design), the owner's shape verbatim, «два состояния — "Архивирован" (отображается в Архиве) и "Скрыто"»:**
 
 ```mermaid
 stateDiagram-v2
@@ -185,7 +185,7 @@ A `legacy` эфир is **born `hidden`**: the operator creates it with a title, 
 
 **Mutual exclusion (both directions).** Every broadcast command — `PublishEvent`, `OpenRoom`, `CloseRoom`, `HideEvent`, `ConfigureStream` — invoked on a `legacy` event is refused with 409 `INVALID_TRANSITION` and no mutation; every legacy command — `ArchiveLegacyBroadcast`, `HideLegacyBroadcast` — invoked on a `platform` event is refused the same way. The admin lifecycle bar renders only the commands of the event's own machine, so the two vocabularies never appear together on one screen.
 
-**The `archived → hidden` rename (EARS-28).** The broadcast terminal state is renamed `archived → hidden`, labelled «Скрыт», with its command `ArchiveEvent → HideEvent` labelled «Скрыть». Owner ruling, 2026-09-02: «Архивировать означает ровно одно — поместить в архив. […] Архив мы ПОКАЗЫВАЕМ и это легитимное название статуса. Явно надо переименовать этот статус в "Скрыт с платформы" или что-то вроде того, но точно не "Архивирован".» The meaning is unchanged — no platform surface lists the event, it stays admin-only, and a direct link renders feature 004's notice — so this is a data migration plus a contract rename, executed as one cutover across the database enum, the Zod contract, the generated SDK and both admin and portal copy, with no dual-read shim and no compatibility alias. With the word «Архив» freed, «Архивировать» is the legacy command and means precisely «поместить в архив».
+**The `archived → hidden` rename (EARS-28).** The broadcast terminal state is renamed `archived → hidden`, labelled «Скрыто», with its command `ArchiveEvent → HideEvent` labelled «Скрыть». Owner ruling, 2026-09-02: «Архивировать означает ровно одно — поместить в архив. […] Архив мы ПОКАЗЫВАЕМ и это легитимное название статуса. Явно надо переименовать этот статус в "Скрыто с платформы" или что-то вроде того, но точно не "Архивирован".» The meaning is unchanged — no platform surface lists the event, it stays admin-only, and a direct link renders feature 004's notice — so this is a data migration plus a contract rename, executed as one cutover across the database enum, the Zod contract, the generated SDK and both admin and portal copy, with no dual-read shim and no compatibility alias. With the word «Архив» freed, «Архивировать» is the legacy command and means precisely «поместить в архив».
 
 Because feature 007 runs in production, the discriminator, the second machine and the rename are recorded across the 007 triplet as the **«Amendment — 2026-09-02»** block naming 014 as the source (AGENTS.md §6 amendment rule) rather than as an inline rewrite of its state machine — `007-design.md` §2, `007-requirements-en.md` and `007-requirements-ru.md` (inline pointers at the closed-set constraint, the transition policy, EARS-7, the invariant and verification row 7) and an annotated `007-scenarios.feature` example — so 007 does not contradict itself across files. The 2026-08-17 `published → ended` amendment is removed with it: it never reached production.
 

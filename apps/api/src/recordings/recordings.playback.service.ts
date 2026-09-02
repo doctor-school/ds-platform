@@ -55,9 +55,9 @@ export class RecordingsPlaybackService {
    * 2. The event is reachable but is not `ended`, or nothing is published ⇒
    *    200 with two nulls. `preparing` is an honest state the plaque renders,
    *    and 404-ing it would make an empty archive look like a broken link.
-   *    An `archived` event lands here too: 004 keeps its «в архиве» notice and
+   *    A `hidden` event lands here too: 004 keeps its «скрыт» notice and
    *    EARS-4.5 pins that render as source-free, so a recording attached before
-   *    the event was archived stays unplayable rather than resurrecting a
+   *    the event was hidden stays unplayable rather than resurrecting a
    *    post-live page the visitor was never meant to see.
    * 3. Otherwise the resolver-selected primary, plus the raw secondary if one
    *    is published.

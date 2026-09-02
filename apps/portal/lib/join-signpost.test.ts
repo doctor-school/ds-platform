@@ -13,7 +13,7 @@ import { resolveJoinSignpost, showRegisteredConfirmation } from "./registration-
  *     interactive onward-to-room affordance is the 006 room surface (#584) — the
  *     signpost carries NO room route until the room exists (a `/room` link would
  *     404, the #673 Stage-B rework finding);
- *   • registered + ended/archived → no signpost (004 owns those renders);
+ *   • registered + ended/hidden → no signpost (004 owns those renders);
  *   • unregistered / guest        → no signpost (the 004 register CTA).
  */
 
@@ -30,12 +30,12 @@ describe("005 EARS-5 resolveJoinSignpost — registered join-signpost render dec
     ).toEqual({ kind: "live" });
   });
 
-  it("EARS-5: when the doctor is registered on an ended/archived event, the system shall render no join signpost (004 owns that render)", () => {
+  it("EARS-5: when the doctor is registered on an ended/hidden event, the system shall render no join signpost (004 owns that render)", () => {
     expect(
       resolveJoinSignpost({ registered: true, registeredAt: "x" }, "ended"),
     ).toEqual({ kind: "none" });
     expect(
-      resolveJoinSignpost({ registered: true, registeredAt: "x" }, "archived"),
+      resolveJoinSignpost({ registered: true, registeredAt: "x" }, "hidden"),
     ).toEqual({ kind: "none" });
   });
 

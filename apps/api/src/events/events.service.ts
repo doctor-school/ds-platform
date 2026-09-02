@@ -99,8 +99,8 @@ export interface UploadedPdf {
  * Canonical `audit_ledger` event id for the `draft → published` transition
  * (EARS-4; ADR-0003 §6). The `event.<transition>` namespace mirrors the auth
  * ledger's `auth.<class>.<event>` taxonomy (ADR-0001 §7.3) for the webinar
- * aggregate; the sibling transitions (open/close/archive — EARS-5/6) add
- * `event.went_live` / `event.ended` / `event.archived` alongside it.
+ * aggregate; the sibling transitions (open/close/hide — EARS-5/6) add
+ * `event.went_live` / `event.ended` / `event.hidden` alongside it.
  */
 export const EVENT_PUBLISHED_AUDIT_TYPE = "event.published";
 
@@ -122,14 +122,14 @@ export const EVENT_WENT_LIVE_AUDIT_TYPE = "event.went_live";
 export const EVENT_ENDED_AUDIT_TYPE = "event.ended";
 
 /**
- * Canonical `audit_ledger` event id for the `ended → archived` transition — the
- * operator's manual post-broadcast archive (EARS-6, LD-2; ADR-0003 §6). Same
+ * Canonical `audit_ledger` event id for the `ended → hidden` transition — the
+ * operator's manual post-broadcast hide (EARS-6, LD-2; ADR-0003 §6). Same
  * `event.<transition>` namespace as the sibling transitions; consumed by 004
  * (the event leaves the upcoming listing and its public page degrades to the
- * archived notice). There is no scheduler — the row is written only by an
+ * hidden notice). There is no scheduler — the row is written only by an
  * explicit operator command.
  */
-export const EVENT_ARCHIVED_AUDIT_TYPE = "event.archived";
+export const EVENT_HIDDEN_AUDIT_TYPE = "event.hidden";
 
 /**
  * 014 EARS-18 — canonical `audit_ledger` event id for the `published → ended`
@@ -183,7 +183,7 @@ export class EventVersionConflictError extends Error {
  * The lifecycle states in which the stream config may be authored or corrected
  * (design §2 — the config is *authorable* in `draft` and *still correctable* in
  * `published`, i.e. the pre-air window). Once the room is live the broadcast is
- * on air and the config is locked; `ended`/`archived` are terminal. Kept as a
+ * on air and the config is locked; `ended`/`hidden` are terminal. Kept as a
  * closed set so the window can never silently widen.
  */
 export const STREAM_CONFIGURABLE_STATES: readonly EventLifecycleState[] = [
@@ -206,9 +206,9 @@ export class StreamNotConfigurableError extends Error {
 
 /**
  * The lifecycle states in which an event's authored fields may be edited (EARS-2,
- * requirements Scope). Editing is a **pre-archive** action — `draft` / `published`
+ * requirements Scope). Editing is a **pre-hide** action — `draft` / `published`
  * / `live` / `ended` are all editable (the operator corrects a detail without any
- * state reversal — there is no unpublish, EARS-7). An `archived` event has left
+ * state reversal — there is no unpublish, EARS-7). A `hidden` event has left
  * every public surface and is terminal, so it is not editable. Kept as the
  * complement of the single terminal state so the window can never silently widen.
  */
@@ -220,8 +220,8 @@ export const EVENT_EDITABLE_STATES: readonly EventLifecycleState[] = [
 ];
 
 /**
- * The EARS-2 refusal: `UpdateEvent` was called on an `archived` event, outside
- * the pre-archive edit window ({@link EVENT_EDITABLE_STATES}). HTTP-agnostic —
+ * The EARS-2 refusal: `UpdateEvent` was called on a `hidden` event, outside
+ * the pre-hide edit window ({@link EVENT_EDITABLE_STATES}). HTTP-agnostic —
  * the controller maps it to a 409 state conflict — so the rule stays a pure
  * domain rule. `state` is the offending current state; the aggregate is untouched
  * and no program PDF is replaced.
@@ -473,13 +473,13 @@ export class EventsService {
   }
 
   /**
-   * EARS-2 — `UpdateEvent`: edit an event's authored fields at any **pre-archive**
+   * EARS-2 — `UpdateEvent`: edit an event's authored fields at any **pre-hide**
    * state and, when a replacement `programPdf` rides the request, supersede the
    * stored object reference so the 004 public page serves the **current** file and
    * the superseded file is no longer served. The operator never has to unpublish
    * to correct a detail — an edit is not a state reversal (the lifecycle `state`
    * is untouched here; it moves only through the guarded transition commands,
-   * EARS-7). An edit to an `archived` event is refused with
+   * EARS-7). An edit to a `hidden` event is refused with
    * {@link EventNotEditableError} ({@link EVENT_EDITABLE_STATES}) — the aggregate
    * is untouched and no PDF is replaced. Only the fields present in `input` are
    * overwritten (an omitted key leaves that field; `partnerRef: null` explicitly
@@ -635,14 +635,14 @@ export class EventsService {
    * EARS-7 — the single closed-set lifecycle guard. Move the event `to` a new
    * state iff `current → to` is one of the four legal forward transitions
    * ({@link canTransition}); every invalid jump (skip-forward, backward, reopen
-   * `archived`, the `published → draft` unpublish the PRD names none, or a
+   * `hidden`, the `published → draft` unpublish the PRD names none, or a
    * self-transition) is refused with {@link InvalidTransitionError} — the state
    * is never mutated. Enforcement is server-side, from the same closed map the
    * read-side `validTransitions` derives, so the admin UI and the API cannot
    * disagree about what is legal.
    *
    * This is the bare guarded transition every command runs through; the named
-   * transition commands (publish / open / close / archive — EARS-4/5/6) layer
+   * transition commands (publish / open / close / hide — EARS-4/5/6) layer
    * their product side-effects and the terminal `audit_ledger` row on top of it.
    *
    * @returns the updated `EventAdminDetail`, or `null` when the id does not exist.
@@ -788,31 +788,31 @@ export class EventsService {
   }
 
   /**
-   * EARS-6 — `ArchiveEvent`: the `ended → archived` transition, the operator's
+   * EARS-6 — `HideEvent`: the `ended → hidden` transition, the operator's
    * **manual** post-broadcast action (LD-2 — no scheduler, no time-based
    * automation in wave 1 fires it). After it, the event **leaves all public
    * surfaces**: 004's upcoming listing drops it by state and its public event
-   * page degrades to the archived-notice body (004 EARS-5) — both consuming the
+   * page degrades to the hidden-notice body (004 EARS-5) — both consuming the
    * single `EventLifecycleState` this writes, never a second flag (EARS-9). Runs
    * through the same EARS-7 closed-set guard as every transition
-   * ({@link canTransition}): archive is **refused unless the event is in
+   * ({@link canTransition}): hide is **refused unless the event is in
    * `ended`** — any other origin raises {@link InvalidTransitionError} with the
    * state left untouched and no audit row. On success the state change and
    * exactly one terminal `audit_ledger` row are written atomically
    * ({@link EventsRepository.updateStateWithAudit}), keyed to the acting
-   * `platform_admin` (`actorSub`). `archived` is terminal (no reopen — EARS-7).
+   * `platform_admin` (`actorSub`). `hidden` is terminal (no reopen — EARS-7).
    *
    * @returns the updated `EventAdminDetail`, or `null` when the id does not exist.
    */
-  async archive(
+  async hide(
     id: string,
     actorSub: string | null,
     expectedVersion?: number,
   ): Promise<EventAdminDetail | null> {
     return this.namedTransition(
       id,
-      "archived",
-      EVENT_ARCHIVED_AUDIT_TYPE,
+      "hidden",
+      EVENT_HIDDEN_AUDIT_TYPE,
       actorSub,
       undefined,
       undefined,
@@ -832,7 +832,7 @@ export class EventsService {
    * room must never have been opened (`live_at IS NULL`) and the scheduled end
    * must already be past. So it can neither rewrite the history of a broadcast
    * the platform actually hosted nor pre-declare a future эфир finished, and a
-   * cancelled event keeps 004's `published → archived` route instead. It creates
+   * cancelled event keeps 004's `published → hidden` route instead. It creates
    * NO room record, NO presence window and NO recording — only the state change
    * and exactly one {@link EVENT_MARKED_ENDED_AUDIT_TYPE} `audit_ledger` row,
    * written atomically and keyed to the acting `platform_admin`.
@@ -868,7 +868,7 @@ export class EventsService {
 
   /**
    * The shared body of every named, audited transition command (publish / open /
-   * close / archive / mark-ended — EARS-4/5/6 + 014 EARS-18): load the
+   * close / hide / mark-ended — EARS-4/5/6 + 014 EARS-18): load the
    * aggregate, run the EARS-7 closed-set guard
    * ({@link canTransition}) — refusing an invalid jump with
    * {@link InvalidTransitionError}, state untouched — then write the state change
@@ -925,9 +925,9 @@ export class EventsService {
    * publicly-renderable allow-list, not a `draft` denylist): a state outside that
    * allow-list has no public projection (returns null → the controller answers
    * 404, indistinguishable from an unknown id — a hidden `draft` leaks no oracle,
-   * EARS-6). `published` / `live` / `ended` / `archived` all return the
-   * publish-safe {@link PublicEventPage} (an archived event resolves to a 200 body
-   * labeled `archived`, never a 404 — EARS-5). The projection is an ALLOW-LIST:
+   * EARS-6). `published` / `live` / `ended` / `hidden` all return the
+   * publish-safe {@link PublicEventPage} (a hidden event resolves to a 200 body
+   * labeled `hidden`, never a 404 — EARS-5). The projection is an ALLOW-LIST:
    * only publish-safe fields are read onto the body (EARS-10).
    */
   async publicEventPage(idOrSlug: string): Promise<PublicEventPage | null> {
@@ -1055,7 +1055,7 @@ export class EventsService {
       school: e.school,
       startsAt: e.startsAt.toISOString(),
       // The repo filters to published/live/ended, so the residual is the month
-      // entry subset (draft/archived have no month projection — EARS-15).
+      // entry subset (draft/hidden have no month projection — EARS-15).
       state: e.state as MonthBroadcastState,
     };
   }

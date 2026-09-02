@@ -213,7 +213,7 @@ export class EventsAdminController {
 
   /**
    * EARS-2 — `UpdateEvent` (`PATCH /v1/admin/events/:id`): edit an event's
-   * authored fields at any **pre-archive** state and, when a replacement
+   * authored fields at any **pre-hide** state and, when a replacement
    * `programPdf` rides the same multipart request, supersede the stored object
    * reference so the 004 public page serves the **current** file (the superseded
    * file is no longer served). The operator never has to unpublish to correct a
@@ -221,7 +221,7 @@ export class EventsAdminController {
    * EARS-7). `payload` is optional (a PDF-only replacement carries no field
    * edits); a present payload is validated against the `@ds/schemas` partial SSOT
    * — a bad field (e.g. a non-МСК datetime) is a 400 and nothing is mutated. An
-   * edit to an `archived` event is a 409 ({@link EventNotEditableError}). A
+   * edit to a `hidden` event is a 409 ({@link EventNotEditableError}). A
    * missing event id is a 404. `platform_admin`-only (EARS-8); like create it is a
    * `platform_admin` authoring write, not a lifecycle transition, so it owes no
    * terminal `audit_ledger` row (that obligation attaches to EARS-4/5/6).
@@ -259,7 +259,7 @@ export class EventsAdminController {
     } catch (err) {
       if (err instanceof EventNotEditableError) {
         throw new ConflictException({
-          message: "event is archived — editing is refused",
+          message: "event is hidden — editing is refused",
           state: err.state,
         });
       }
@@ -541,7 +541,7 @@ export class EventsAdminController {
     // surface's `{ code, message }` body rather than dragging 012's RFC 7807
     // filter onto a controller whose four live sibling routes answer the other
     // shape — one new route is not a licence to reshape `publish`/`open`/
-    // `close`/`archive`.
+    // `close`/`hide`.
     let expectedVersion = 0;
     const outcome = await withProtocolRefusalShape(async () => {
       const key = this.idempotency.requireKey(
@@ -624,18 +624,18 @@ export class EventsAdminController {
   }
 
   /**
-   * EARS-6 — `ArchiveEvent` (`POST /v1/admin/events/:id/archive`): the named
-   * `ended → archived` transition, the operator's **manual** post-broadcast
+   * EARS-6 — `HideEvent` (`POST /v1/admin/events/:id/hide`): the named
+   * `ended → hidden` transition, the operator's **manual** post-broadcast
    * action (LD-2 — no scheduler, no time-based automation fires it in wave 1).
-   * It runs through the EARS-7 guard (archive is refused with a 409 unless the
+   * It runs through the EARS-7 guard (hide is refused with a 409 unless the
    * event is in `ended`) and, on success, appends exactly one terminal
    * `audit_ledger` row keyed to the acting `platform_admin` (ADR-0003 §6). After
-   * archive the event leaves all public surfaces off the same
+   * hide the event leaves all public surfaces off the same
    * `EventLifecycleState` (EARS-9): 004 drops it from the upcoming listing and
-   * its public page degrades to the archived notice (004 EARS-5, a consumer
-   * slice). `archived` is terminal — there is no reopen (EARS-7).
+   * its public page degrades to the hidden notice (004 EARS-5, a consumer
+   * slice). `hidden` is terminal — there is no reopen (EARS-7).
    */
-  @Post(":id/archive")
+  @Post(":id/hide")
   @HttpCode(200)
   @Authz({
     access: "authenticated",
@@ -648,19 +648,19 @@ export class EventsAdminController {
     audit: "low-stakes",
     tests: ["EARS-6", "EARS-8"],
   })
-  async archive(
+  async hide(
     @Param("id") id: string,
     @Req() req: FastifyRequest,
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<EventAdminDetail> {
     return this.namedTransition(id, req, reply, (eventId, actorSub, version) =>
-      this.events.archive(eventId, actorSub, version),
+      this.events.hide(eventId, actorSub, version),
     );
   }
 
   /**
    * Shared body of the named, audited transition commands (publish / open /
-   * close / archive / mark-ended — EARS-4/5/6 + 014 EARS-18): resolve the acting
+   * close / hide / mark-ended — EARS-4/5/6 + 014 EARS-18): resolve the acting
    * admin `sub` off the request
    * (the 003
    * session hook attaches it; the `AuthzGuard` has already refused any
@@ -695,7 +695,7 @@ export class EventsAdminController {
    * EARS-7 — the single closed-set lifecycle transition, server-enforced. Moves
    * the event to the target state iff `current → to` is one of the four legal
    * forward moves; an in-enum-but-out-of-order target (a skip-forward, any
-   * backward move, reopening `archived`, or the `published → draft` unpublish
+   * backward move, reopening `hidden`, or the `published → draft` unpublish
    * the PRD names none) is refused with a 409 state conflict, never applied. A
    * target outside the closed enum is a 400 (the `ZodValidationPipe`, before the
    * guard). The four named transition commands + their side-effects / audit rows

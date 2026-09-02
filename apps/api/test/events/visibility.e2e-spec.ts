@@ -25,11 +25,11 @@ import { deleteEventFixture } from "../setup/fixture-cleanup.js";
 //   • `published` / `live` / `ended` — publicly rendered (the page control that
 //     proves `draft` is distinguishable only by being *reachable*, not by a
 //     different 404 shape); `published`/`live` list, `ended` drops from the list.
-//   • `archived` — the EARS-5 notice on the page (owned by #554, out of scope
+//   • `hidden` — the EARS-5 notice on the page (owned by #554, out of scope
 //     here); on the listing it never appears.
 //
 // The EARS-10 invariant this reinforces: the publish-safe projector never returns
-// a draft or archived body AS AN ACTIVE event — a draft yields no body at all
+// a draft or hidden body AS AN ACTIVE event — a draft yields no body at all
 // (404), and the upcoming-broadcasts surface (the "active broadcasts" projection)
 // only ever carries `published`/`live` cards.
 //
@@ -45,7 +45,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
     const fake = new FakeIdpClient();
     const createdEventIds: string[] = [];
 
-    type SeedState = "draft" | "published" | "live" | "ended" | "archived";
+    type SeedState = "draft" | "published" | "live" | "ended" | "hidden";
 
     interface SeedOptions {
       state: SeedState;
@@ -158,7 +158,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(byId.payload).toBe(unknownId.payload);
     });
 
-    it.each(["draft", "ended", "archived"] as const)(
+    it.each(["draft", "ended", "hidden"] as const)(
       "EARS-6.2: a %s event never appears in the upcoming-broadcasts listing projection",
       async (state) => {
         // Seeded inside the air window (future start), so its absence is due to
@@ -182,13 +182,13 @@ describe.skipIf(!process.env.DATABASE_URL)(
       },
     );
 
-    it("EARS-6.3: the active-broadcasts listing never carries a non-public body (EARS-10 invariant) — every card is published or live, never draft/ended/archived", async () => {
+    it("EARS-6.3: the active-broadcasts listing never carries a non-public body (EARS-10 invariant) — every card is published or live, never draft/ended/hidden", async () => {
       // One event in each of the five states, all inside the air window.
       await seedEvent({ state: "draft" });
       const published = await seedEvent({ state: "published" });
       const live = await seedEvent({ state: "live" });
       await seedEvent({ state: "ended" });
-      await seedEvent({ state: "archived" });
+      await seedEvent({ state: "hidden" });
 
       const res = await app.inject({
         method: "GET",

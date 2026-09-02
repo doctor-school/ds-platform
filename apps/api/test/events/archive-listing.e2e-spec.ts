@@ -22,7 +22,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
     const created: string[] = [];
 
     async function seed(
-      state: "draft" | "published" | "live" | "ended" | "archived",
+      state: "draft" | "published" | "live" | "ended" | "hidden",
       hoursAgo: number,
       overrides: { id?: string; startsAt?: string } = {},
     ) {
@@ -78,7 +78,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
       const newest = await seed("ended", -640_000);
       const older = await seed("ended", -630_000);
       await seed("draft", 3);
-      await seed("archived", 4);
+      await seed("hidden", 4);
       await seed("published", -2);
       await pool.query(
         `INSERT INTO event_recordings

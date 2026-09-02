@@ -54,11 +54,11 @@ describe("014 EARS-4 — the post-live recording signal", () => {
     expect(resolveRecordingSignal(published, "live")).toBeNull();
   });
 
-  it("014 EARS-4.5: an archived event stays silent — 004 EARS-5's «в архиве» notice owns that render alone, with no competing second message", () => {
+  it("014 EARS-4.5: a hidden event stays silent — 004 EARS-5's «скрыт» notice owns that render alone, with no competing second message", () => {
     expect(
       resolveRecordingSignal(
         projection({ state: "montage", primaryKind: "edited" }),
-        "archived",
+        "hidden",
       ),
     ).toBeNull();
   });
@@ -110,9 +110,9 @@ describe("014 EARS-7 — the «запись готовится» plaque projecti
     ).toBeNull();
   });
 
-  it("014 EARS-7.4: the plaque exists only on an ENDED event — an upcoming, live, or archived page never promises a recording", () => {
+  it("014 EARS-7.4: the plaque exists only on an ENDED event — an upcoming, live, or hidden page never promises a recording", () => {
     const preparing = projection({ expectedBy: "2026-07-18" });
-    for (const status of ["upcoming", "live", "archived"] as const) {
+    for (const status of ["upcoming", "live", "hidden"] as const) {
       expect(resolveRecordingPlaque(preparing, status, NOW)).toBeNull();
     }
   });
@@ -201,8 +201,8 @@ describe("014 EARS-5 — which of the four things the player card holds", () => 
     });
   });
 
-  it("014 EARS-5.5: the player card exists only on an ENDED event — upcoming, live and archived render no card at all", () => {
-    for (const status of ["upcoming", "live", "archived"] as const) {
+  it("014 EARS-5.5: the player card exists only on an ENDED event — upcoming, live and hidden render no card at all", () => {
+    for (const status of ["upcoming", "live", "hidden"] as const) {
       expect(resolvePlayerCard(montage, status, true, source)).toBeNull();
       expect(resolvePlayerCard(montage, status, false, null)).toBeNull();
     }

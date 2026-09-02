@@ -32,28 +32,28 @@ import {
   deleteUserFixture,
 } from "../setup/fixture-cleanup.js";
 
-// 007 EARS-6 — ArchiveEvent (POST /v1/admin/events/:id/archive). The operator's
-// post-broadcast action that transitions an `ended` event `ended → archived`,
+// 007 EARS-6 — HideEvent (POST /v1/admin/events/:id/hide). The operator's
+// post-broadcast action that transitions an `ended` event `ended → hidden`,
 // after which the event leaves all public surfaces: the 004 upcoming listing
-// drops it (state filter) and the 004 public event page reflects `archived`
-// (the archived-notice body, never a 404). Runs through the shared EARS-7
-// closed-set guard: archive is refused unless the event is `ended` — with the
+// drops it (state filter) and the 004 public event page reflects `hidden`
+// (the hidden-notice body, never a 404). Runs through the shared EARS-7
+// closed-set guard: hide is refused unless the event is `ended` — with the
 // state left untouched and NO audit row written on refusal. Each successful
 // transition appends exactly one terminal `audit_ledger` row (ADR-0003 §6):
-// `event.archived`. `platform_admin`-only (EARS-8): a doctor_guest / public
-// caller never reaches the command. Archive is a MANUAL operator action — LD-2:
+// `event.hidden`. `platform_admin`-only (EARS-8): a doctor_guest / public
+// caller never reaches the command. Hide is a MANUAL operator action — LD-2:
 // no scheduler, no time-based automation fires it in wave 1 (asserted at the
 // transition level below). Runs against dev-stand Postgres + the fake IdP
 // session; skips when absent so the shared CI unit job stays green (requirements
-// Verification, row 6). The 004 archived-notice rendering is a consumer slice
-// (004 EARS-5) — out of scope here; 007 produces the `archived` state it reads.
+// Verification, row 6). The 004 hidden-notice rendering is a consumer slice
+// (004 EARS-5) — out of scope here; 007 produces the `hidden` state it reads.
 
 // LD-2 — no scheduler, no time-based automation. This assertion runs
 // unconditionally (no DB needed): the 007 events module must carry NO
-// time-based automation primitive that could fire the `ended → archived`
+// time-based automation primitive that could fire the `ended → hidden`
 // transition without an explicit operator command. A scheduler creeping in
 // later would violate LD-2 silently; this fails the build the moment it does.
-describe("007 EARS-6 archive is manual — no scheduler / time-based path (LD-2)", () => {
+describe("007 EARS-6 hide is manual — no scheduler / time-based path (LD-2)", () => {
   it("EARS-6: no time-based automation primitive exists in the 007 events module that could fire the transition", () => {
     const here = dirname(fileURLToPath(import.meta.url));
     const eventsDir = join(here, "..", "..", "src", "events");
@@ -76,7 +76,7 @@ describe("007 EARS-6 archive is manual — no scheduler / time-based path (LD-2)
       for (const token of forbidden) {
         expect(
           source.includes(token),
-          `007 events module must not use ${token} (LD-2: archive is manual, no scheduler)`,
+          `007 events module must not use ${token} (LD-2: hide is manual, no scheduler)`,
         ).toBe(false);
       }
     }
@@ -84,7 +84,7 @@ describe("007 EARS-6 archive is manual — no scheduler / time-based path (LD-2)
 });
 
 describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
-  "007 EARS-6 archive transition (ended → archived) (e2e)",
+  "007 EARS-6 hide transition (ended → hidden) (e2e)",
   () => {
     let app: NestFastifyApplication;
     let pool: pg.Pool;
@@ -170,7 +170,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     }
 
     const validPayload = {
-      title: "ХСН: archive path",
+      title: "ХСН: hide path",
       school: "Кардиология",
       // A future МСК instant so a published event lands on the upcoming listing
       // (004 EARS-7) — the before-state of the "leaves public surfaces" drop.
@@ -215,9 +215,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       return { "if-match": `"${rows[0]?.version ?? 1}"` };
     }
 
-    /** POST a named lifecycle command (`publish` / `open` / `close` / `archive`). */
+    /** POST a named lifecycle command (`publish` / `open` / `close` / `hide`). */
     async function command(
-      verb: "publish" | "open" | "close" | "archive",
+      verb: "publish" | "open" | "close" | "hide",
       cookie: string | undefined,
       id: string,
     ) {
@@ -326,27 +326,27 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       await app.close();
     });
 
-    it("EARS-6.1: archiving an ended event transitions it to archived and appends one event.archived audit row", async () => {
+    it("EARS-6.1: hiding an ended event transitions it to hidden and appends one event.hidden audit row", async () => {
       const cookie = await session(uniqueEmail("admin"), "platform_admin");
       const { id } = await makeEnded(cookie);
-      expect(await auditCount(id, "event.archived")).toBe(0);
+      expect(await auditCount(id, "event.hidden")).toBe(0);
 
-      const res = await command("archive", cookie, id);
+      const res = await command("hide", cookie, id);
       expect(res.statusCode).toBe(200);
       const body = res.json() as {
         state: EventLifecycleState;
         validTransitions: EventLifecycleState[];
       };
-      // ended → archived through the EARS-7 guard; `archived` is terminal so the
+      // ended → hidden through the EARS-7 guard; `hidden` is terminal so the
       // read model offers no further move.
-      expect(body.state).toBe("archived");
+      expect(body.state).toBe("hidden");
       expect(body.validTransitions).toEqual([]);
-      expect(await currentState(id)).toBe("archived");
+      expect(await currentState(id)).toBe("hidden");
       // Exactly one terminal audit_ledger row (ADR-0003 §6).
-      expect(await auditCount(id, "event.archived")).toBe(1);
+      expect(await auditCount(id, "event.hidden")).toBe(1);
     });
 
-    it("EARS-6.2: an archived event leaves all public surfaces — the 004 listing drops it and the public page reflects archived", async () => {
+    it("EARS-6.2: a hidden event leaves all public surfaces — the 004 listing drops it and the public page reflects hidden", async () => {
       const cookie = await session(uniqueEmail("admin"), "platform_admin");
       const { id, slug } = await createDraft(cookie);
       // Published + future-dated ⇒ on the upcoming listing and the public page is
@@ -357,57 +357,57 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(beforePage.statusCode).toBe(200);
       expect(beforePage.body?.state).toBe("published");
 
-      // Drive the full arc to archived.
+      // Drive the full arc to hidden.
       expect((await command("open", cookie, id)).statusCode).toBe(200);
       expect((await command("close", cookie, id)).statusCode).toBe(200);
-      expect((await command("archive", cookie, id)).statusCode).toBe(200);
+      expect((await command("hide", cookie, id)).statusCode).toBe(200);
 
       // Public listing drops it (state filter — never on the listing again).
       expect(await isOnUpcomingListing(id)).toBe(false);
-      // The public read endpoint reflects `archived` — a 200 archived-notice
+      // The public read endpoint reflects `hidden` — a 200 hidden-notice
       // body per its existing contract, never a dead 404 (004 EARS-5 renders it).
       const afterPage = await publicPage(slug);
       expect(afterPage.statusCode).toBe(200);
-      expect(afterPage.body?.state).toBe("archived");
+      expect(afterPage.body?.state).toBe("hidden");
     });
 
-    it("EARS-6.3: archive is refused for every non-ended state, the state is unchanged, and no audit row is written", async () => {
+    it("EARS-6.3: hide is refused for every non-ended state, the state is unchanged, and no audit row is written", async () => {
       const cookie = await session(uniqueEmail("admin"), "platform_admin");
       const { id } = await createDraft(cookie);
 
-      for (const state of ["draft", "published", "live", "archived"] as const) {
+      for (const state of ["draft", "published", "live", "hidden"] as const) {
         await forceState(id, state);
-        const res = await command("archive", cookie, id);
-        expect(res.statusCode, `archive must be refused from ${state}`).toBe(
+        const res = await command("hide", cookie, id);
+        expect(res.statusCode, `hide must be refused from ${state}`).toBe(
           409,
         );
         expect(await currentState(id)).toBe(state); // unchanged
-        expect(await auditCount(id, "event.archived")).toBe(0); // no terminal row
+        expect(await auditCount(id, "event.hidden")).toBe(0); // no terminal row
       }
     });
 
-    it("EARS-6.4: archiving a non-existent event is a 404", async () => {
+    it("EARS-6.4: hiding a non-existent event is a 404", async () => {
       const cookie = await session(uniqueEmail("admin"), "platform_admin");
       const missing = "00000000-0000-0000-0000-000000000000";
-      expect((await command("archive", cookie, missing)).statusCode).toBe(404);
+      expect((await command("hide", cookie, missing)).statusCode).toBe(404);
     });
 
-    it("EARS-8: a doctor_guest is refused (401) on archive — the command is never reached without an admin session, state and ledger untouched", async () => {
+    it("EARS-8: a doctor_guest is refused (401) on hide — the command is never reached without an admin session, state and ledger untouched", async () => {
       const admin = await session(uniqueEmail("admin"), "platform_admin");
       const { id } = await makeEnded(admin);
       const doc = await session(uniqueEmail("doc"), "doctor_guest");
 
-      const res = await command("archive", doc, id);
+      const res = await command("hide", doc, id);
       // 011 EARS-2: refused 401, not 403 — since the admin tier, a doctor-portal cookie authenticates NO admin route, so the request never reaches the role check.
       expect(res.statusCode).toBe(401);
       expect(await currentState(id)).toBe("ended"); // untouched
-      expect(await auditCount(id, "event.archived")).toBe(0);
+      expect(await auditCount(id, "event.hidden")).toBe(0);
     });
 
-    it("EARS-8: an unauthenticated caller is refused (401) on archive", async () => {
+    it("EARS-8: an unauthenticated caller is refused (401) on hide", async () => {
       const admin = await session(uniqueEmail("admin"), "platform_admin");
       const { id } = await makeEnded(admin);
-      const res = await command("archive", undefined, id);
+      const res = await command("hide", undefined, id);
       expect(res.statusCode).toBe(401);
       expect(await currentState(id)).toBe("ended"); // untouched
     });

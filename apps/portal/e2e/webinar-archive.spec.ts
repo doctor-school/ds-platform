@@ -54,8 +54,8 @@ const PREPARING_SLUG = process.env.E2E_PREPARING_WEBINAR_SLUG;
  * the page must say «как только будет готова» rather than invent an estimate.
  */
 const PREPARING_UNDATED_SLUG = process.env.E2E_PREPARING_UNDATED_WEBINAR_SLUG;
-/** An `archived` event — the 004 EARS-5 notice must survive 014 untouched. */
-const ARCHIVED_SLUG = process.env.E2E_ARCHIVED_WEBINAR_SLUG;
+/** A `hidden` event — the 004 EARS-5 notice must survive 014 untouched. */
+const HIDDEN_SLUG = process.env.E2E_HIDDEN_WEBINAR_SLUG;
 /**
  * A real doctor account on the same stand (014 EARS-5). The signed-in half of
  * the gate cannot be faked: the whole point is that the SOURCE only exists in a
@@ -176,20 +176,27 @@ test.describe("014 EARS-4 public post-live event page (e2e)", () => {
     await expect(page.getByTestId("recording-meta")).toHaveCount(0);
   });
 
-  test("014 EARS-4: an ARCHIVED event keeps the 004 EARS-5 «в архиве» render untouched — no recording badge competing with the notice", async ({
+  test("014 EARS-4: a HIDDEN event keeps the 004 EARS-5 «скрыт» render untouched — no recording badge competing with the notice", async ({
     page,
     context,
   }) => {
-    test.skip(!ARCHIVED_SLUG, "requires an archived event slug");
+    test.skip(!HIDDEN_SLUG, "requires a hidden event slug");
     await context.clearCookies();
-    const res = await page.goto(`${BASE}/webinars/${ARCHIVED_SLUG}`, {
+    const res = await page.goto(`${BASE}/webinars/${HIDDEN_SLUG}`, {
       waitUntil: "domcontentloaded",
     });
     // Degrades in place — never a 404 or a redirect (004 EARS-5, owner variant «а»).
     expect(res?.status()).toBe(200);
-    // `exact` — the archive notice card repeats the phrase as «Мероприятие в
-    // архиве»; the hero badge is the render 004 EARS-5 owns.
-    await expect(page.getByText("В архиве", { exact: true })).toBeVisible();
+    // «Скрыто» renders TWICE on a hidden event, and both are intentional:
+    // the hero lifecycle badge (`state.hidden`) and the status-card time-plate
+    // label (`statusCard.hidden.timeLabel`). Asserting the count pins that the
+    // 004 EARS-5 render is exactly those two nodes — the recording swap must
+    // not add a third or silently drop one. `exact` keeps the notice card's
+    // «Мероприятие скрыто» out of the match.
+    const hiddenLabels = page.getByText("Скрыто", { exact: true });
+    await expect(hiddenLabels).toHaveCount(2);
+    await expect(hiddenLabels.first()).toBeVisible();
+    await expect(hiddenLabels.last()).toBeVisible();
     await expect(
       page.getByText("Регистрация недоступна", { exact: true }),
     ).toBeVisible();
@@ -287,13 +294,13 @@ test.describe("014 EARS-7 the «запись готовится» plaque (e2e)",
     await expect(page.getByText("Запись готовится")).toHaveCount(0);
   });
 
-  test("014 EARS-7: an ARCHIVED event shows no plaque — 004 EARS-5's «в архиве» notice owns that render alone", async ({
+  test("014 EARS-7: a HIDDEN event shows no plaque — 004 EARS-5's «скрыт» notice owns that render alone", async ({
     page,
     context,
   }) => {
-    test.skip(!ARCHIVED_SLUG, "requires an archived event slug");
+    test.skip(!HIDDEN_SLUG, "requires a hidden event slug");
     await context.clearCookies();
-    await page.goto(`${BASE}/webinars/${ARCHIVED_SLUG}`, {
+    await page.goto(`${BASE}/webinars/${HIDDEN_SLUG}`, {
       waitUntil: "domcontentloaded",
     });
 

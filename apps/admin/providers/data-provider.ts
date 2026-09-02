@@ -76,7 +76,7 @@ import type {
  *                   write is JSON (#1285, EARS-3).
  *
  * `deleteOne` throws for EVERY resource: 012 has no Delete route anywhere in the
- * taxonomy controller and 007's lifecycle is archive, never destroy. The provider
+ * taxonomy controller and 007's lifecycle is hide, never destroy. The provider
  * is the last place a stray Refine `useDelete()` could reach, so the refusal
  * lives here rather than relying on no page rendering the control.
  */
@@ -507,7 +507,7 @@ export const dataProvider: DataProvider = {
 
   deleteOne: async ({ resource }) => {
     // 012 exposes no DELETE route anywhere in the taxonomy controller, and 007's
-    // lifecycle is archive, never destroy (012-design §5.1, EARS-14).
+    // lifecycle is hide, never destroy (012-design §5.1, EARS-14).
     throw new Error(`delete is not supported for ${resource}`);
   },
 

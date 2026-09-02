@@ -24,7 +24,7 @@ import {
 } from "../setup/fixture-cleanup.js";
 
 // 007 EARS-2 — UpdateEvent (PATCH /v1/admin/events/:id) + replaceable program
-// PDF. A platform_admin edits an event's fields at any pre-archive state and the
+// PDF. A platform_admin edits an event's fields at any pre-hide state and the
 // public event page (004) reflects the edit; replacing the program PDF after
 // publish supersedes the stored object reference so the 004 page serves the
 // CURRENT file and the superseded file is no longer served; the operator never
@@ -399,7 +399,7 @@ describe.skipIf(
   });
 
   it("EARS-2: a lifecycle transition returns the same ACTIVE speaker projection as every other read — a retired speaker is never republished — #1278 §3.6", async () => {
-    // `updateStateWithAudit` (publish / open room / archive) answers with the
+    // `updateStateWithAudit` (publish / open room / hide) answers with the
     // event aggregate too. If it read the raw speaker list, the SAME event would
     // yield two different speaker lists depending on which command produced the
     // response, and a dropped speaker would reappear on the next transition.
@@ -595,11 +595,11 @@ describe.skipIf(
     );
   });
 
-  it("EARS-2: an edit to an archived event is refused (409) — editing is a pre-archive action", async () => {
+  it("EARS-2: an edit to a hidden event is refused (409) — editing is a pre-hide action", async () => {
     const cookie = await session(uniqueEmail("admin"), "platform_admin");
     const created = await createEvent(cookie);
     const id = created.id as string;
-    for (const to of ["published", "live", "ended", "archived"])
+    for (const to of ["published", "live", "ended", "hidden"])
       await transition(cookie, id, to);
 
     const edit = multipartBody({
@@ -619,7 +619,7 @@ describe.skipIf(
       [id],
     );
     expect(rows[0]?.title).toBe(validPayload.title);
-    expect(rows[0]?.state).toBe("archived");
+    expect(rows[0]?.state).toBe("hidden");
   });
 
   it("EARS-2: editing an unknown event id is a 404", async () => {

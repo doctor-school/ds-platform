@@ -18,9 +18,9 @@ import {
  * The lifecycle-action bar (EARS-5/6/7, design §2/§8). The offered buttons are
  * derived ONLY from the server-supplied `detail.validTransitions` (via
  * {@link actionsFor}) — the admin UI offers ONLY the transitions valid from the
- * current state, and it never invents one. A terminal `archived` event yields no
+ * current state, and it never invents one. A terminal `hidden` event yields no
  * buttons. Each fires its named command (`POST /v1/admin/events/:id/{publish|open|
- * close|archive|mark-ended}`); the server is the authority (EARS-7) — an
+ * close|hide|mark-ended}`); the server is the authority (EARS-7) — an
  * out-of-order call it refuses (409) surfaces as `transitionRefused`, the state
  * untouched. Stock DS buttons (EARS-11), RU copy (EARS-10).
  *

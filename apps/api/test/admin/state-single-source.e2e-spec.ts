@@ -24,7 +24,7 @@ import {
 
 // 007 EARS-9 — one source of truth for event state across the whole epic. The
 // `EventLifecycleState` the 007 admin commands write (create → publish → open →
-// close → archive) is EXACTLY what the 004 read models (the public event page +
+// close → hide) is EXACTLY what the 004 read models (the public event page +
 // the upcoming listing) resolve for the same event in every state — there is no
 // second visibility flag, and admin and the portal surfaces can never present a
 // contradictory state. This is the cross-cutting assertion the admin-integration
@@ -153,7 +153,7 @@ describe.skipIf(
   async function transition(
     cookie: string,
     id: string,
-    command: "publish" | "open" | "close" | "archive",
+    command: "publish" | "open" | "close" | "hide",
   ) {
     const res = await app.inject({
       method: "POST",
@@ -234,11 +234,11 @@ describe.skipIf(
     expect(await publicPageState(id)).toBe("ended");
     expect(await listedUpcoming(id)).toBe(false);
 
-    // archived — admin == public == archived (the archived notice is a 200 body,
+    // hidden — admin == public == hidden (the hidden notice is a 200 body,
     // not a 404); still absent from the listing. Admin and portal never disagree.
-    await transition(cookie, id, "archive");
-    expect(await adminState(cookie, id)).toBe("archived");
-    expect(await publicPageState(id)).toBe("archived");
+    await transition(cookie, id, "hide");
+    expect(await adminState(cookie, id)).toBe("hidden");
+    expect(await publicPageState(id)).toBe("hidden");
     expect(await listedUpcoming(id)).toBe(false);
   });
 
@@ -256,8 +256,8 @@ describe.skipIf(
       "published",
       "is_published",
       "archive",
-      "archived",
-      "is_archived",
+      "hidden",
+      "is_hidden",
       "visible_in_rg",
       "visible",
     ]) {

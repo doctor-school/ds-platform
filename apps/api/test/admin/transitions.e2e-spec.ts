@@ -24,8 +24,8 @@ import {
 } from "../setup/fixture-cleanup.js";
 
 // 007 EARS-7 — the single closed-set lifecycle state machine, server-enforced.
-// The transition guard permits ONLY draft→published→live→ended→archived; every
-// invalid jump (skip-forward, backward, reopen archived, the published→draft
+// The transition guard permits ONLY draft→published→live→ended→hidden; every
+// invalid jump (skip-forward, backward, reopen hidden, the published→draft
 // unpublish the PRD names none) is refused directly against the API with a 4xx,
 // not merely hidden in the admin UI. The read models carry `validTransitions`
 // derived from the current state so the UI offers only the currently-valid move.
@@ -217,7 +217,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       await app.close();
     });
 
-    it("EARS-7.1: the guard permits the four legal forward moves in order (draft→published→live→ended→archived)", async () => {
+    it("EARS-7.1: the guard permits the four legal forward moves in order (draft→published→live→ended→hidden)", async () => {
       const cookie = await session(uniqueEmail("admin"), "platform_admin");
       const id = await createDraft(cookie);
 
@@ -225,7 +225,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         "published",
         "live",
         "ended",
-        "archived",
+        "hidden",
       ];
       let previous: EventLifecycleState = "draft";
       for (const to of order) {
@@ -247,7 +247,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
             : to === "live"
               ? ["ended"]
               : to === "ended"
-                ? ["archived"]
+                ? ["hidden"]
                 : [];
         expect(body.validTransitions).toEqual(expectedNext);
 
@@ -264,8 +264,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const cookie = await session(uniqueEmail("admin"), "platform_admin");
       const id = await createDraft(cookie);
 
-      // From draft, only `published` is legal — a skip to live/ended/archived is refused.
-      for (const to of ["live", "ended", "archived"] as EventLifecycleState[]) {
+      // From draft, only `published` is legal — a skip to live/ended/hidden is refused.
+      for (const to of ["live", "ended", "hidden"] as EventLifecycleState[]) {
         const res = await transition(cookie, id, to);
         expect(res.statusCode, `draft→${to} must be refused`).toBe(409);
         const { rows } = await pool.query<{ state: string }>(
@@ -275,19 +275,19 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         expect(rows[0]?.state).toBe("draft"); // unchanged
       }
 
-      // From published, a skip to archived is refused. `ended` is NO LONGER a
+      // From published, a skip to hidden is refused. `ended` is NO LONGER a
       // skip: 014 EARS-18 makes `published → ended` a legal edge for an эфир the
       // platform never hosted (this fixture is past-dated and never went live,
       // so its preconditions hold). Its own refusals are asserted in
       // `test/events/mark-ended.e2e-spec.ts`, which owns that edge.
       await forceState(id, "published");
-      for (const to of ["archived"] as EventLifecycleState[]) {
+      for (const to of ["hidden"] as EventLifecycleState[]) {
         const res = await transition(cookie, id, to);
         expect(res.statusCode, `published→${to} must be refused`).toBe(409);
       }
     });
 
-    it("EARS-7.3: every backward move is refused (no published→draft unpublish, no archived reopen)", async () => {
+    it("EARS-7.3: every backward move is refused (no published→draft unpublish, no hidden reopen)", async () => {
       const cookie = await session(uniqueEmail("admin"), "platform_admin");
       const id = await createDraft(cookie);
 
@@ -304,15 +304,15 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         ).rows[0]?.state,
       ).toBe("published");
 
-      // No reopen: archived→published / archived→ended are refused.
-      await forceState(id, "archived");
+      // No reopen: hidden→published / hidden→ended are refused.
+      await forceState(id, "hidden");
       for (const to of [
         "ended",
         "published",
         "draft",
       ] as EventLifecycleState[]) {
         const res = await transition(cookie, id, to);
-        expect(res.statusCode, `archived→${to} must be refused`).toBe(409);
+        expect(res.statusCode, `hidden→${to} must be refused`).toBe(409);
       }
     });
 

@@ -46,7 +46,7 @@ The app needs a running api (`API_PROXY_TARGET`, default `http://localhost:3000`
 
 ## Browser E2E (playwright-bdd, dev-stand-gated)
 
-`e2e/` translates `007-scenarios.feature` to the admin surface via **playwright-bdd** — the full operator arc (create → publish → configure stream → open → close → archive) plus the invalid-transition, closed-provider-enum, МСК-no-drift, non-admin-refusal, and client-side-validation branches (#665: rendered RU errors for required/datetime/duration/speaker/PDF rejects and the URL-shaped embed reference). Like the portal e2e (#131) it is a **manual, dev-stand-gated** gate (NOT in CI): the session bootstrap `throw`s without the stand env.
+`e2e/` translates `007-scenarios.feature` to the admin surface via **playwright-bdd** — the full operator arc (create → publish → configure stream → open → close → hide) plus the invalid-transition, closed-provider-enum, МСК-no-drift, non-admin-refusal, and client-side-validation branches (#665: rendered RU errors for required/datetime/duration/speaker/PDF rejects and the URL-shaped embed reference). Like the portal e2e (#131) it is a **manual, dev-stand-gated** gate (NOT in CI): the session bootstrap `throw`s without the stand env.
 
 ```bash
 # Boot an api whose bot-protection is OFF (dev-stand recipe) so the 003

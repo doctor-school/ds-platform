@@ -11,7 +11,7 @@ import { buildRegistrationHref } from "./registration-handoff";
  *
  * This module is the pure state→render mapping (the copy + geometry live in the
  * page + the `WebinarStatusCard` DS primitive). It maps the publish-safe
- * projection `state` (`published | live | ended | archived`) onto the canvas
+ * projection `state` (`published | live | ended | hidden`) onto the canvas
  * `status` enum, and resolves the SINGLE primary participation CTA target:
  *
  *   • `published` (upcoming) → registration flow (feature 005) via auth (003),
@@ -22,17 +22,17 @@ import { buildRegistrationHref } from "./registration-handoff";
  *     The onward-to-room affordance for a REGISTERED doctor is the 006 room
  *     surface (#584) — until it ships, no 005 render links to `/room` (a dead
  *     link / 404 is a banned pattern; the deferral is tracked on #584).
- *   • `ended` / `archived`   → NO CTA. The `ended` render carries no dead link
- *     (EARS-4 invariant); `archived` is the EARS-5 notice (sibling handler), and
+ *   • `ended` / `hidden`   → NO CTA. The `ended` render carries no dead link
+ *     (EARS-4 invariant); `hidden` is the EARS-5 notice (sibling handler), and
  *     it too carries no participation CTA.
  */
 
 /** The canvas `status` render enum (`webinar-page.dc.html`). */
-export type CanvasStatus = "upcoming" | "live" | "ended" | "archived";
+export type CanvasStatus = "upcoming" | "live" | "ended" | "hidden";
 
 /**
  * Map the publish-safe projection `state` onto the canvas `status` render enum.
- * `published` is the canvas's `upcoming`; `live`/`ended`/`archived` map through
+ * `published` is the canvas's `upcoming`; `live`/`ended`/`hidden` map through
  * unchanged. This is the single source the page's per-state render reads, so the
  * rendered signal can never contradict the `EventLifecycleState` (EARS-4).
  */
@@ -48,7 +48,7 @@ export type PrimaryCta =
 /**
  * Resolve the SINGLE primary «Участвовать» participation CTA for an event in
  * `state` (EARS-3/EARS-4). Exactly one primary CTA on the page; the `ended` and
- * `archived` renders carry NONE (never a dead link — requirements Invariants).
+ * `hidden` renders carry NONE (never a dead link — requirements Invariants).
  *
  * Both registrable states (`published` and `live` — 005 EARS-9) resolve to the
  * REGISTRATION target: the page renders it as the one-tap command for an
@@ -65,7 +65,7 @@ export function resolvePrimaryCta(
     case "live":
       return { kind: "register", href: buildRegistrationHref(slug) };
     case "ended":
-    case "archived":
+    case "hidden":
     default:
       return { kind: "none" };
   }

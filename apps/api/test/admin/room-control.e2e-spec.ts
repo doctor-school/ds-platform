@@ -290,9 +290,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         validTransitions: EventLifecycleState[];
       };
       // live → ended through the EARS-7 guard; the read model now offers only
-      // the next currently-valid move (archive → archived).
+      // the next currently-valid move (hide → hidden).
       expect(body.state).toBe("ended");
-      expect(body.validTransitions).toEqual(["archived"]);
+      expect(body.validTransitions).toEqual(["hidden"]);
       expect(await currentState(id)).toBe("ended");
       expect(await auditCount(id, "event.ended")).toBe(1);
     });
@@ -301,7 +301,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const cookie = await session(uniqueEmail("admin"), "platform_admin");
       const { id } = await createDraft(cookie);
 
-      for (const state of ["draft", "live", "ended", "archived"] as const) {
+      for (const state of ["draft", "live", "ended", "hidden"] as const) {
         await forceState(id, state);
         const res = await command("open", cookie, id);
         expect(res.statusCode, `open must be refused from ${state}`).toBe(409);
@@ -318,7 +318,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         "draft",
         "published",
         "ended",
-        "archived",
+        "hidden",
       ] as const) {
         await forceState(id, state);
         const res = await command("close", cookie, id);

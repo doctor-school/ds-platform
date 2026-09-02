@@ -24,8 +24,8 @@ type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 
 /**
  * The publish-visible event states (§5.2). `draft` is not public at all, and
- * `archived` is deliberately excluded from a traversal LISTING: an archived
- * direct link still resolves (004 EARS-5) to an archived-notice body, but
+ * `hidden` is deliberately excluded from a traversal LISTING: a hidden
+ * direct link still resolves (004 EARS-5) to a hidden-notice body, but
  * listing it as one of a project's broadcasts would advertise a page whose
  * content has been withdrawn.
  */

@@ -45,7 +45,7 @@ state, recording }`. `?tab=` is optional and defaults to `upcoming`, so the bare
     never re-derived here, so the badge on a doctor's own row and the badge on the
     public card have one implementation. An `ended` event with nothing published
     resolves to `preparing`, which is why it is still listed and still badged.
-  - `archived` registrations are in **neither** tab and **neither** count
+  - `hidden` registrations are in **neither** tab and **neither** count
     (feature 004's visibility policy). Tab membership is one SQL predicate
     (`tabMembership`) shared by the row query and the count query, so a listed row
     and a counted row can never be different sets.

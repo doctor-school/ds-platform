@@ -36,7 +36,7 @@ import { futureMskStart } from "../setup/wall-clock.js";
 //  1. the admin detail read emits the validator, and every committed admin
 //     mutation bumps `version` by exactly one — so a held validator goes stale
 //     on ANY change the detail read would have shown, not only a state change;
-//  2. all SIX lifecycle commands (`publish` / `open` / `close` / `archive` /
+//  2. all SIX lifecycle commands (`publish` / `open` / `close` / `hide` /
 //     `mark-ended` / the bare `transition`) REQUIRE `If-Match`: absent is 428
 //     `PRECONDITION_REQUIRED`, unparseable or stale is 412
 //     `PRECONDITION_FAILED`;
@@ -238,8 +238,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         },
       },
       {
-        name: "archive",
-        path: "archive",
+        name: "hide",
+        path: "hide",
         arrange: async (cookie: string) => {
           const { id } = await createDraft(cookie);
           await forceState(id, "ended");
@@ -466,7 +466,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const held = await adminDetail(cookie, id);
       await concurrentWrite(id);
 
-      // `archive` from `draft` is illegal at EVERY version: answering 412 would
+      // `hide` from `draft` is illegal at EVERY version: answering 412 would
       // send the operator to reload a form that would refuse just the same.
       const res = await command(COMMANDS[3], cookie, id, held.etag!);
       expect(res.statusCode).toBe(409);

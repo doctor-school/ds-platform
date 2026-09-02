@@ -363,7 +363,14 @@ jobs:
       - name: Start the mail and SMS sinks
         run: |
           docker run -d --name ds-mailpit --network host axllent/mailpit:latest
-          docker run -d --name ds-sms-sink --network host \
+          # The SMS sink stays on the bridge, unlike everything else here.
+          # Zitadel refuses to register an HTTP SMS provider whose endpoint is a
+          # loopback address (`Errors.NotificationProvider.Blocked.Endpoint`), so
+          # `localhost:8090` is not addressable to it. The dev stand hands it the
+          # bridge name `sms-sink:8090`; the runner equivalent is the container's
+          # bridge IP, resolved below. The published port keeps the sink readable
+          # at `localhost:8090` from the test process.
+          docker run -d --name ds-sms-sink -p 8090:8090 \
             -v "$GITHUB_WORKSPACE/infra/dev-stand/sms-sink/server.mjs":/srv/server.mjs:ro \
             -e SMS_SINK_PORT=8090 \
             node:22-alpine node /srv/server.mjs
@@ -372,7 +379,12 @@ jobs:
           for i in $(seq 1 30); do
             if curl -fsS http://localhost:8025/api/v1/info >/dev/null 2>&1 \
               && curl -fsS http://localhost:8090/healthz >/dev/null 2>&1; then
-              echo "the mail and SMS sinks are serving"; exit 0
+              echo "the mail and SMS sinks are serving"
+              sms_ip="$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' ds-sms-sink)"
+              if [ -z "$sms_ip" ]; then echo "the SMS sink has no bridge address"; exit 1; fi
+              echo "Zitadel will POST SMS to http://${sms_ip}:8090/"
+              echo "IDP_SMS_SINK_ENDPOINT=http://${sms_ip}:8090/" >> "$GITHUB_ENV"
+              exit 0
             fi
             echo "waiting for the sinks ($i/30)..."; sleep 2
           done
@@ -437,11 +449,12 @@ jobs:
       - name: Provision the IdP project, client and roles
         env:
           IDP_BASE_URL: http://localhost:9080
-          # The compose defaults (`mailpit:1025`, `http://sms-sink:8090/`) are
-          # bridge-network service names; on the runner everything shares the
-          # host namespace, so the sinks are addressed as localhost.
+          # The compose default (`mailpit:1025`) is a bridge-network service
+          # name; Mailpit shares the runner's host namespace, so SMTP is
+          # localhost. `IDP_SMS_SINK_ENDPOINT` is NOT set here — a step-level
+          # `env:` would shadow the bridge address the readiness step resolved
+          # into $GITHUB_ENV.
           IDP_SMTP_HOST: localhost:1025
-          IDP_SMS_SINK_ENDPOINT: http://localhost:8090/
         run: |
           set -euo pipefail
           bash infra/dev-stand/idp/provision.sh --pat-file ./idp-pat.txt > ./idp-provision.out

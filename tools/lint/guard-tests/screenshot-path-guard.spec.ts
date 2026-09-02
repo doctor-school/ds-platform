@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 
 // The hook is plain ESM JS (runs under bare `node` from settings.json), so the
 // spec imports its pure seams directly — same pattern as the sibling hook specs
-// (askuserquestion-calibration-guard.spec.ts, completion-report-gate.spec.ts).
+// (askuserquestion-calibration-guard.spec.ts, dispatch-guard.spec.ts).
 import {
   SCREENSHOT_TOOL,
   SERVER_OUTPUT_DIR,

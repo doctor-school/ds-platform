@@ -1,5 +1,4 @@
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 function isPortableAbsolute(value) {
@@ -47,22 +46,4 @@ export function mutationPaths(toolName, toolInput, cwd) {
   const filePath = toolInput?.file_path;
   if (typeof filePath !== "string" || !filePath) return [];
   return [isPortableAbsolute(filePath) ? filePath : resolve(cwd, filePath)];
-}
-
-/** Prefer Codex's stable Stop field; fall back to Claude transcript parsing. */
-export function stopAssistantText(payload, extractTranscriptText) {
-  if (typeof payload?.last_assistant_message === "string") {
-    return payload.last_assistant_message.trim() || null;
-  }
-  if (!payload?.transcript_path) return null;
-  try {
-    return extractTranscriptText(readFileSync(payload.transcript_path, "utf8"));
-  } catch {
-    return null;
-  }
-}
-
-/** Codex Stop requires JSON on successful stdout; Claude accepts the same. */
-export function allowStop() {
-  process.stdout.write("{}");
 }

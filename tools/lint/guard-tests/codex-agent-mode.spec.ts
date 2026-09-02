@@ -55,49 +55,6 @@ describe("Codex project configuration", () => {
     }
   });
 
-  it.runIf(process.platform === "win32")(
-    "preserves Stop hook exit codes through the configured Windows wrappers",
-    () => {
-      const config = JSON.parse(
-        readFileSync(resolve(ROOT, ".codex/hooks.json"), "utf8"),
-      );
-      const stopHooks = config.hooks.Stop[0].hooks as Array<{
-        commandWindows: string;
-      }>;
-      expect(stopHooks).toHaveLength(2);
-
-      for (const hook of stopHooks) {
-        const blocked = spawnSync(hook.commandWindows, {
-          cwd: ROOT,
-          input: JSON.stringify({
-            session_id: "codex-stop-exit-code",
-            cwd: ROOT,
-            hook_event_name: "Stop",
-            stop_hook_active: false,
-            last_assistant_message: "PR #1615 merged.",
-          }),
-          encoding: "utf8",
-          shell: true,
-        });
-        expect(blocked.status, blocked.stderr).toBe(2);
-
-        const allowed = spawnSync(hook.commandWindows, {
-          cwd: ROOT,
-          input: JSON.stringify({
-            session_id: "codex-stop-allow",
-            cwd: ROOT,
-            hook_event_name: "Stop",
-            stop_hook_active: true,
-          }),
-          encoding: "utf8",
-          shell: true,
-        });
-        expect(allowed.status, allowed.stderr).toBe(0);
-        expect(JSON.parse(allowed.stdout)).toEqual({});
-      }
-    },
-  );
-
   it("defines read-only explorer and independent Mode (a) reviewer agents", () => {
     const projectConfig = readFileSync(
       resolve(ROOT, ".codex/config.toml"),

@@ -64,6 +64,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   buildBoardItemsPageQuery,
+  formatBoardTruncation,
   parseBoardItemsPage,
 } from "./gh/lib/projects-v2.mjs";
 import {
@@ -839,6 +840,7 @@ async function listBoardRows(): Promise<{
 }> {
   const rows: PrBoardRow[] = [];
   const issueRows: RoadmapRow[] = [];
+  const truncations: string[] = [];
   let after: string | null = null;
   // Hard page cap as a runaway guard (≈100 pages = 10k items ≫ any real board).
   for (let page = 0; page < 100; page++) {
@@ -856,6 +858,10 @@ async function listBoardRows(): Promise<{
       );
     const pageData = parseBoardItemsPage(parsed.data);
     if (!pageData) break;
+    // A connection read short makes every finding computed from it unreliable —
+    // surface it as a WARN row instead of silently under-reading (#1730).
+    for (const t of pageData.truncations)
+      truncations.push(formatBoardTruncation(t));
     for (const node of pageData.nodes) {
       const content = node?.content as
         | {
@@ -884,7 +890,7 @@ async function listBoardRows(): Promise<{
     after = pageData.endCursor;
     if (!after) break;
   }
-  return { prRows: rows, issueRows };
+  return { prRows: rows, issueRows, truncations };
 }
 
 interface NativeDep {
@@ -1386,6 +1392,8 @@ async function main(): Promise<void> {
   // paginated board scan. A scan failure degrades to a warning, never crashes.
   try {
     const board = await listBoardRows();
+    for (const t of board.truncations)
+      warnings.push({ source: "board scan", message: t });
     const prHygiene = formatPrBoardHygiene(classifyPrBoardRows(board.prRows));
     if (prHygiene) out.push(prHygiene, "");
     const roadmap = formatRoadmapHygiene(roadmapHygiene(board.issueRows));

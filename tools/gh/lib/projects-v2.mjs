@@ -101,6 +101,21 @@ export function buildDeleteItemMutation(projectId, itemId) {
  * board sweep feeds both the PR-board hygiene and the roadmap-hygiene sections.
  * @param {string|null} [after]
  */
+/**
+ * Page size of the per-item `labels` connection in the board-items query. An
+ * Issue carrying MORE labels than this is read incompletely, which silently
+ * changes how `classifyIssueTaxonomy` sees it — so the page size is a named
+ * constant and the parser compares it against the connection's `totalCount`.
+ */
+export const LABELS_PAGE_SIZE = 30;
+
+/**
+ * Page size of the per-item `fieldValues` connection. Under-reading it hides a
+ * «Start date» / «Target date» value and manufactures a false `missing-dates`
+ * finding, so it is checked the same way.
+ */
+export const FIELD_VALUES_PAGE_SIZE = 20;
+
 export function buildBoardItemsPageQuery(after = null) {
   let cursor = "";
   if (after != null) {
@@ -110,12 +125,14 @@ export function buildBoardItemsPageQuery(after = null) {
   return (
     `query{organization(login:"${OWNER}"){projectV2(number:${PROJECT_NUMBER}){` +
     `items(first:100${cursor}){pageInfo{hasNextPage endCursor} nodes{id ` +
-    `fieldValues(first:20){nodes{... on ProjectV2ItemFieldDateValue{date ` +
+    `fieldValues(first:${FIELD_VALUES_PAGE_SIZE}){totalCount ` +
+    `nodes{... on ProjectV2ItemFieldDateValue{date ` +
     `field{... on ProjectV2FieldCommon{name}}}}} ` +
     `content{__typename ... on PullRequest{number state ` +
     `assignees(first:1){totalCount} milestone{title}} ` +
     `... on Issue{number state title milestone{title} ` +
-    `labels(first:30){nodes{name}} parent{number milestone{title}}}}}}}}}`
+    `labels(first:${LABELS_PAGE_SIZE}){totalCount nodes{name}} ` +
+    `parent{number milestone{title}}}}}}}}}`
   );
 }
 
@@ -127,11 +144,55 @@ export function buildBoardItemsPageQuery(after = null) {
 export function parseBoardItemsPage(data) {
   const items = data?.organization?.projectV2?.items;
   if (!items) return null;
+  const nodes = Array.isArray(items.nodes) ? items.nodes : [];
+  const truncations = [];
+  for (const node of nodes) truncations.push(...boardNodeTruncations(node));
   return {
-    nodes: Array.isArray(items.nodes) ? items.nodes : [],
+    nodes,
+    truncations,
     hasNextPage: !!items.pageInfo?.hasNextPage,
     endCursor: items.pageInfo?.endCursor ?? null,
   };
+}
+
+/**
+ * @typedef {object} BoardConnectionTruncation
+ * @property {number|null} number   Issue/PR number the item points at, null when unknown
+ * @property {"labels"|"fieldValues"} connection
+ * @property {number} totalCount    what the API says the connection holds
+ * @property {number} pageSize      what the query actually asked for
+ */
+
+/**
+ * The connections of ONE board-items node that were read short — the API's
+ * `totalCount` exceeds the page size the query asked for. Without this the scan
+ * under-reads labels and date values in silence, and the roadmap-hygiene
+ * findings computed from it are wrong in a way nothing surfaces.
+ * @param {any} node one element of `projectV2.items.nodes`
+ * @returns {BoardConnectionTruncation[]}
+ */
+export function boardNodeTruncations(node) {
+  const number =
+    typeof node?.content?.number === "number" ? node.content.number : null;
+  const out = [];
+  const check = (connection, conn, pageSize) => {
+    const totalCount = conn?.totalCount;
+    if (typeof totalCount !== "number") return;
+    if (totalCount <= pageSize) return;
+    out.push({ number, connection, totalCount, pageSize });
+  };
+  check("fieldValues", node?.fieldValues, FIELD_VALUES_PAGE_SIZE);
+  check("labels", node?.content?.labels, LABELS_PAGE_SIZE);
+  return out;
+}
+
+/**
+ * One-line WARN text for a truncated connection — the wording triage prints.
+ * @param {BoardConnectionTruncation} t
+ */
+export function formatBoardTruncation(t) {
+  const who = typeof t?.number === "number" ? `#${t.number}` : "(unknown item)";
+  return `${who}: ${t.connection} truncated (totalCount ${t.totalCount} > page ${t.pageSize})`;
 }
 
 /**

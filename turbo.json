@@ -35,7 +35,9 @@
         "IDP_ORG_ID",
         "IDP_REDIRECT_URI",
         "IDP_SCOPES",
-        "IDP_WEBHOOK_SECRET"
+        "IDP_WEBHOOK_SECRET",
+        "MAILPIT_URL",
+        "SMS_SINK_URL"
       ]
     },
     "typecheck": {

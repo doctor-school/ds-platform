@@ -321,6 +321,11 @@ jobs:
       DATABASE_URL: postgres://ds:ds@localhost:5432/ds_test
       IDP_ISSUER: http://localhost:9080
       IDP_REDIRECT_URI: http://localhost:3000/auth/callback
+      # The three `auth/zitadel-*` suites read the delivered code back out of the
+      # sinks. Their in-test defaults point at a personal dev host that does not
+      # resolve on a runner, so the URLs are declared here, not defaulted.
+      MAILPIT_URL: http://localhost:8025
+      SMS_SINK_URL: http://localhost:8090
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -348,6 +353,31 @@ jobs:
             echo "waiting for Postgres ($i/30)..."; sleep 2
           done
           echo "Postgres did not become ready in time"; docker logs ds-postgres; exit 1
+
+      # ─ Mail + SMS sinks ─ the same two upstream images the dev stand runs
+      # (`infra/dev-stand/compose.core.yml`): Zitadel's SMTP provider and its
+      # generic HTTP SMS provider are pointed at these by `provision.sh`, and the
+      # `auth/zitadel-*` suites read the delivered code back out of them. Host
+      # network for the same reason as Postgres and the IdP — the IdP container
+      # must reach them at `localhost`.
+      - name: Start the mail and SMS sinks
+        run: |
+          docker run -d --name ds-mailpit --network host axllent/mailpit:latest
+          docker run -d --name ds-sms-sink --network host \
+            -v "$GITHUB_WORKSPACE/infra/dev-stand/sms-sink/server.mjs":/srv/server.mjs:ro \
+            -e SMS_SINK_PORT=8090 \
+            node:22-alpine node /srv/server.mjs
+      - name: Wait for the sinks to be ready
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:8025/api/v1/info >/dev/null 2>&1 \
+              && curl -fsS http://localhost:8090/healthz >/dev/null 2>&1; then
+              echo "the mail and SMS sinks are serving"; exit 0
+            fi
+            echo "waiting for the sinks ($i/30)..."; sleep 2
+          done
+          echo "the sinks did not become ready in time"
+          docker logs ds-mailpit; docker logs ds-sms-sink; exit 1
 
       # ─ IdP ─ identical to the `admin-e2e` block; see the commentary there.
       - name: Prepare the PAT mount
@@ -407,6 +437,11 @@ jobs:
       - name: Provision the IdP project, client and roles
         env:
           IDP_BASE_URL: http://localhost:9080
+          # The compose defaults (`mailpit:1025`, `http://sms-sink:8090/`) are
+          # bridge-network service names; on the runner everything shares the
+          # host namespace, so the sinks are addressed as localhost.
+          IDP_SMTP_HOST: localhost:1025
+          IDP_SMS_SINK_ENDPOINT: http://localhost:8090/
         run: |
           set -euo pipefail
           bash infra/dev-stand/idp/provision.sh --pat-file ./idp-pat.txt > ./idp-provision.out

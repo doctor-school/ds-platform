@@ -283,7 +283,9 @@ IdP to send, so a refused send never reaches the provider and never costs money.
   threshold and no account (not an existence oracle, EARS-16/§10). The per-ASN
   window is evaluated only when the edge supplies an `x-asn` header (the per-ASN
   limit is an edge/BFF concern, design §2); absent it, the budget degrades to
-  phone/IP/global.
+  phone/IP/global — which is the DEPLOYED behaviour today, since no infra layer
+  sets `x-asn` (#1655, `DEBT.md`). The per-IP counter here is keyed on the same
+  `request.ip` the EARS-13 limiter uses, i.e. the real client since #1655.
 - **State** — in-memory (correct for a single instance, proven by the unit spec +
   OTP e2e). Multi-instance sharing rides the same Redis as the session store; the
   EARS-13 `RateLimitService` (F6 #90) is the parallel request-rate limiter sharing
@@ -320,6 +322,19 @@ gate touches no other call site:
   over `RateLimitService` (per-user 10/15 min, per-IP 20/15 min, per-ASN 100/h;
   the per-user window is forgiven on a successful login or reset-complete),
   on register/login/otp/verify/reset; a refusal is a generic `429`.
+  **What the windows do in the deployed system** (#1655) — the per-IP window is
+  keyed on `request.ip`, which resolves to the REAL client: the Fastify adapter is
+  constructed with `trustProxy` set to the trusted proxy addresses
+  (`config/trust-proxy.ts`, `TRUSTED_PROXIES` — loopback + link-local + the
+  private ranges by default, i.e. the container network). `x-forwarded-for` is
+  therefore honoured from Caddy and from the doctor app's `/v1/:path*` rewrite,
+  by ADDRESS rather than by hop count, so both the 1-hop and 2-hop chains resolve
+  the same caller; a forwarded header presented by a peer OUTSIDE the trusted set
+  is ignored and that request keeps its socket address. The per-ASN window is
+  **dormant**: nothing in `infra/**` sets `x-asn` today, so `extractAsn` returns
+  undefined on every prod request and the 100/h ceiling is never evaluated. It
+  stays wired for the edge layer that will set the header (tracked in `DEBT.md`);
+  no ASN lookup is performed in the api.
 - **Timing equalization** (EARS-16) — `timing/` (see above).
 - **Login captcha-after-N-failures** (EARS-17) — `login-challenge/`:
   `LoginChallengePolicy` tallies failures per origin; `@LoginChallenged` +

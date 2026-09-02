@@ -157,6 +157,23 @@ export const ApiEnvSchema = z.looseObject({
   RATE_LIMIT_PER_IP_15MIN: z.string().optional(),
   RATE_LIMIT_PER_ASN_1H: z.string().optional(),
 
+  // #1655 client-IP resolution: the comma-separated list of reverse proxies the
+  // api trusts to have set `x-forwarded-for`. Entries are IP addresses, CIDR
+  // blocks, or the `proxy-addr` preset names `loopback` / `linklocal` /
+  // `uniquelocal`. UNSET ⇒ loopback + link-local + the private ranges, which is
+  // exactly the container-network address space, so the Compose deployment
+  // resolves the real client with no configuration. Like the rate-limit
+  // ceilings above this stays a raw optional string (NOT a parsed union) BY
+  // DESIGN: `resolveTrustProxy` (`config/trust-proxy.ts`) validates it fail-SAFE
+  // — a malformed entry is dropped with a loud warn and the remaining valid
+  // entries (or the default set) apply, so a typo can never crash api boot and
+  // can never widen the trusted set to `true` (which would believe any caller's
+  // forwarded header). Read at boot in `api-application.ts`, before Nest's DI
+  // container exists, so it is resolved from `process.env` directly rather than
+  // through this schema; the field is declared here so the var is documented
+  // and survives the looseObject passthrough.
+  TRUSTED_PROXIES: z.string().optional(),
+
   // BFF transactional-email channel (003 EARS-23, design §4) — the account-exists
   // notice on duplicate registration, DISTINCT from Zitadel's identity-credential
   // emails (verification / OTP / reset codes). Config-gated: with no

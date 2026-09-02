@@ -12,7 +12,7 @@ All conventions in [`AGENTS.md`](./AGENTS.md) apply (imported above); this file 
 
 ## Wrap cadence
 
-`/wrap` is OWNER-typed only — never agent-started, not for a «handoff» ask (= skill `handoff-prompt` alone, no retro); guard `wrap-owner-only` denies it (#1746). `context-budget` hook (120K/160K) = operator advisory only. The same tiers bind at the DISPATCH boundary (`lead-context-budget`, PreToolUse `Agent|Task`, #1693): ≥120K — finish the wave, start no new one; ≥160K — a new dispatch is denied (accept running agents, finish PR tails by hand, `/wrap` + handoff). Owner-only hatch: `.claude/lead-budget-override`, removed by `/wrap`.
+`/wrap` is OWNER-typed only — never agent-started, not for a «handoff» ask (= skill `handoff-prompt` alone, no retro); guard `wrap-owner-only` denies it (#1746). `context-budget` hook (120K/160K) = operator advisory only. The same tiers bind at the DISPATCH boundary (`lead-context-budget`, PreToolUse `Agent|Task`, #1693): ≥120K — finish the wave, start no new one; ≥160K — a new dispatch is denied (accept running agents, finish PR tails by hand, handoff). Owner-only hatch: `.claude/lead-budget-override`, removed by `/wrap`.
 
 ## Auto-memory (load-on-demand by design)
 

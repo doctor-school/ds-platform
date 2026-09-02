@@ -67,6 +67,11 @@ import {
   parseBoardItemsPage,
 } from "./gh/lib/projects-v2.mjs";
 import {
+  formatRoadmapHygiene,
+  parseIssueBoardNode,
+  roadmapHygiene,
+} from "./gh/lib/roadmap-taxonomy.mjs";
+import {
   evaluateMainSync,
   mainSyncFixCommand,
   mainSyncMessage,
@@ -218,6 +223,21 @@ export interface PrBoardRow {
   state: string;
   hasAssignee: boolean;
   hasMilestone: boolean;
+}
+
+/**
+ * One OPEN Issue row from the same board scan, carrying the roadmap-taxonomy
+ * fields (#1729). Shape mirrors `roadmap-taxonomy.mjs`'s `RoadmapRow` typedef —
+ * declared here so the .ts consumer is typed without depending on JS inference.
+ */
+export interface RoadmapRow {
+  number: number;
+  title: string;
+  labels: string[];
+  milestone: string | null;
+  parent: { number: number; milestone: string | null } | null;
+  startDate: string | null;
+  targetDate: string | null;
 }
 
 /** The two PR-board-hygiene findings derived from one board scan (#1140). */
@@ -804,15 +824,21 @@ async function listOpenIssues(): Promise<RawIssue[]> {
 }
 
 /**
- * Sweep EVERY Projects v2 PR row via the single sanctioned paginated GraphQL
- * scan (#1140) — 100 items/page, cursor-paginated to exhaustion (the board is
- * 650+ items; a sub-limit read is a false negative). NEVER `gh project
- * item-list` (banned quota sink, #984). Issue-typed items are ignored here (the
- * `## Field hygiene` section covers them). A query failure throws — the caller
- * degrades the section to a warning, never crashes the whole run.
+ * Sweep EVERY Projects v2 row via the single sanctioned paginated GraphQL scan
+ * (#1140) — 100 items/page, cursor-paginated to exhaustion (the board is 650+
+ * items; a sub-limit read is a false negative). NEVER `gh project item-list`
+ * (banned quota sink, #984). ONE sweep feeds two sections: PR rows drive the
+ * `## PR board hygiene` findings, and OPEN Issue rows — with their labels,
+ * milestone, sub-issue parent and Start/Target board dates — drive the
+ * `## Roadmap hygiene` findings (#1729). A query failure throws; the caller
+ * degrades both sections to a warning, never crashes the whole run.
  */
-async function listBoardPrRows(): Promise<PrBoardRow[]> {
+async function listBoardRows(): Promise<{
+  prRows: PrBoardRow[];
+  issueRows: RoadmapRow[];
+}> {
   const rows: PrBoardRow[] = [];
+  const issueRows: RoadmapRow[] = [];
   let after: string | null = null;
   // Hard page cap as a runaway guard (≈100 pages = 10k items ≫ any real board).
   for (let page = 0; page < 100; page++) {
@@ -840,6 +866,11 @@ async function listBoardPrRows(): Promise<PrBoardRow[]> {
             milestone?: { title?: string } | null;
           }
         | undefined;
+      if (content?.__typename === "Issue") {
+        const issueRow = parseIssueBoardNode(node) as RoadmapRow | null;
+        if (issueRow) issueRows.push(issueRow);
+        continue;
+      }
       if (content?.__typename !== "PullRequest") continue;
       if (typeof content.number !== "number") continue;
       rows.push({
@@ -853,7 +884,7 @@ async function listBoardPrRows(): Promise<PrBoardRow[]> {
     after = pageData.endCursor;
     if (!after) break;
   }
-  return rows;
+  return { prRows: rows, issueRows };
 }
 
 interface NativeDep {
@@ -1351,15 +1382,16 @@ async function main(): Promise<void> {
   );
   if (hygiene) out.push(hygiene, "");
 
-  // PR board hygiene (#1140): dead + under-fielded PR rows from the single
+  // PR board hygiene (#1140) + roadmap hygiene (#1729): both fed by the SINGLE
   // paginated board scan. A scan failure degrades to a warning, never crashes.
   try {
-    const prHygiene = formatPrBoardHygiene(
-      classifyPrBoardRows(await listBoardPrRows()),
-    );
+    const board = await listBoardRows();
+    const prHygiene = formatPrBoardHygiene(classifyPrBoardRows(board.prRows));
     if (prHygiene) out.push(prHygiene, "");
+    const roadmap = formatRoadmapHygiene(roadmapHygiene(board.issueRows));
+    if (roadmap) out.push(roadmap, "");
   } catch (e) {
-    note("PR board scan", e);
+    note("board scan", e);
   }
 
   if (warnings.length > 0) {

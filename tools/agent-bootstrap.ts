@@ -44,6 +44,15 @@ import {
   probeContextFreshness,
   renderContextFreshness,
 } from "./context-freshness";
+import {
+  buildBoardItemsPageQuery,
+  parseBoardItemsPage,
+} from "./gh/lib/projects-v2.mjs";
+import {
+  parseIssueBoardNode,
+  roadmapHygiene,
+  roadmapHygieneWarnings,
+} from "./gh/lib/roadmap-taxonomy.mjs";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -57,6 +66,51 @@ function note(source: string, err: unknown): void {
   const message =
     err instanceof Error ? err.message.split("\n")[0] : String(err);
   warnings.push({ source, message });
+}
+
+/**
+ * Roadmap-hygiene warnings (#1729): sweep the Projects v2 board with the single
+ * sanctioned paginated GraphQL scan (#984 — never `gh project item-list`) and
+ * classify every OPEN Issue row against the spec §7.1 taxonomy. Bootstrap is
+ * FACTS-ONLY (#1700) and runs on EVERY SessionStart, so the findings are rolled
+ * up to ONE `## Warnings` row per rule carrying the count only — the per-Issue
+ * list lives in `pnpm backlog:triage`. Never throws: a scan failure degrades to
+ * a single warning, so SessionStart still exits 0.
+ */
+async function roadmapHygieneRows(): Promise<Warn[]> {
+  try {
+    const rows: unknown[] = [];
+    let after: string | null = null;
+    // Hard page cap as a runaway guard (≈100 pages = 10k items ≫ any real board).
+    for (let page = 0; page < 100; page++) {
+      const { stdout } = await execa(
+        "gh",
+        ["api", "graphql", "-f", `query=${buildBoardItemsPageQuery(after)}`],
+        { cwd: REPO_ROOT },
+      );
+      const parsed = JSON.parse(stdout) as {
+        data?: unknown;
+        errors?: Array<{ message?: string }>;
+      };
+      if (Array.isArray(parsed.errors) && parsed.errors.length > 0)
+        throw new Error(
+          `GraphQL errors: ${parsed.errors.map((e) => e.message).join("; ")}`,
+        );
+      const pageData = parseBoardItemsPage(parsed.data);
+      if (!pageData) break;
+      for (const node of pageData.nodes) {
+        const row = parseIssueBoardNode(node);
+        if (row) rows.push(row);
+      }
+      if (!pageData.hasNextPage) break;
+      after = pageData.endCursor;
+      if (!after) break;
+    }
+    return roadmapHygieneWarnings(roadmapHygiene(rows));
+  } catch (e) {
+    note("roadmap hygiene board scan", e);
+    return [];
+  }
 }
 
 export interface GitState {
@@ -940,6 +994,9 @@ async function main(): Promise<void> {
     }
   }
   out.push("");
+
+  // Roadmap hygiene (#1729) — facts-only rows in the Warnings block.
+  warnings.push(...(await roadmapHygieneRows()));
 
   if (warnings.length > 0) {
     out.push("## Warnings");

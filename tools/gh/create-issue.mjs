@@ -31,7 +31,21 @@
  *
  * Control flags (consumed here, NOT forwarded to gh) — put them BEFORE the gh
  * passthrough; a passthrough VALUE equal to a control flag would be consumed too:
- *   --no-todo   add the Issue to the board but do not set Status=Todo.
+ *   --no-todo     add the Issue to the board but do not set Status=Todo.
+ *   --parent <N>  file the Issue as a sub-issue of Issue #N (#1729): the parent's
+ *                 milestone is INHERITED when the caller passes no --milestone,
+ *                 a passed milestone that differs from the parent's is rejected,
+ *                 and the sub-issue link is made after creation via the REST
+ *                 `sub_issues` endpoint (no manual follow-up step).
+ *
+ * Roadmap taxonomy gates (#1729, spec §7.1 of
+ * `2026-05-21-dsp-198-github-projects-v2-board-design.md`), all fail-closed
+ * BEFORE any gh call:
+ *   • a `kind:ears-handler` Issue REQUIRES --parent — an EARS task inherits its
+ *     feature's release milestone and is meaningless without that parent;
+ *   • an `epic: …` title needs NO milestone and REJECTS one — an epic container
+ *     spans releases, so homing it on a single milestone is a taxonomy error;
+ *   • every other Issue keeps the standing milestone requirement (#1137).
  *
  * Repo is hard-pinned to the board's repo (the Projects v2 board is repo-specific):
  * a `--repo`/`-R` in the passthrough is REJECTED rather than silently honored, so
@@ -47,6 +61,11 @@
  */
 import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
+
+import {
+  EARS_KIND_LABEL,
+  isEpicTitle,
+} from "./lib/roadmap-taxonomy.mjs";
 
 // Large payloads (board lists, GraphQL) overflow spawnSync's default 1 MiB
 // stdout buffer → ENOBUFS, which would crash silently (#315).
@@ -96,20 +115,78 @@ function gh(args, { json = true } = {}) {
 /**
  * Split argv into our own control flags and the passthrough forwarded to
  * `gh issue create` verbatim (thin wrapper — we never reimplement gh's flags).
+ * `--parent <N>` / `--parent=<N>` is consumed here and NEVER forwarded (gh
+ * issue create has no such flag); `parentError` carries a malformed value so the
+ * caller can fail closed before any gh call.
  * @param {string[]} argv
- * @returns {{ setTodo: boolean, passthrough: string[] }}
+ * @returns {{ setTodo: boolean, parent: number|null, parentError: string|null, passthrough: string[] }}
  */
 export function partitionArgs(argv) {
   const passthrough = [];
   let setTodo = true;
-  for (const a of argv) {
+  let parentRaw = null;
+  const list = argv ?? [];
+  for (let i = 0; i < list.length; i++) {
+    const a = list[i];
     if (a === "--no-todo") {
       setTodo = false;
       continue;
     }
+    if (a === "--parent") {
+      parentRaw = list[i + 1] ?? "";
+      i++;
+      continue;
+    }
+    if (a.startsWith("--parent=")) {
+      parentRaw = a.slice("--parent=".length);
+      continue;
+    }
     passthrough.push(a);
   }
-  return { setTodo, passthrough };
+  if (parentRaw === null) return { setTodo, parent: null, parentError: null, passthrough };
+  const parent = Number(String(parentRaw).replace(/^#/, ""));
+  if (!Number.isInteger(parent) || parent <= 0)
+    return {
+      setTodo,
+      parent: null,
+      parentError: `--parent expects a positive Issue number, got "${parentRaw}".`,
+      passthrough,
+    };
+  return { setTodo, parent, parentError: null, passthrough };
+}
+
+/**
+ * The `--title` / `-t` value in the gh passthrough (the roadmap taxonomy is
+ * title-shaped: `epic: …`, `gate: …`, `[Академия][NNN] …`). Empty string when
+ * absent — gh itself gates a genuinely missing title.
+ * @param {string[]} args
+ * @returns {string}
+ */
+export function titleValue(args) {
+  const list = args ?? [];
+  for (let i = 0; i < list.length; i++) {
+    const a = list[i];
+    if (a === "--title" || a === "-t") return list[i + 1] ?? "";
+    if (a.startsWith("--title=")) return a.slice("--title=".length);
+  }
+  return "";
+}
+
+/**
+ * The `--milestone` / `-m` value in the gh passthrough, or null when absent —
+ * needed to diff a caller-passed milestone against the parent's (#1729).
+ * @param {string[]} args
+ * @returns {string|null}
+ */
+export function milestoneValue(args) {
+  const list = args ?? [];
+  for (let i = 0; i < list.length; i++) {
+    const a = list[i];
+    if (a === "--milestone" || a === "-m") return list[i + 1] ?? "";
+    if (a.startsWith("--milestone=")) return a.slice("--milestone=".length);
+    if (a.startsWith("-m") && a.length > 2) return a.slice(2);
+  }
+  return null;
 }
 
 /**
@@ -290,18 +367,100 @@ export function hasMilestone(args) {
 export const FALLBACK_MILESTONE = "Platform ops & hardening";
 
 /**
- * The milestone-requirement error (#1137). Returns null when a milestone flag
- * is present, else the message to die with (names the standing fallback).
+ * The milestone-requirement error (#1137 + #1729). Returns null when a
+ * milestone flag is present, else the message to die with (names the standing
+ * fallback). Two taxonomy exemptions (spec §7.1): an `epic: …` container spans
+ * releases and carries NO milestone, and a `--parent`ed sub-issue INHERITS the
+ * parent's milestone.
  * @param {string[]} args  the gh passthrough
+ * @param {{ parent?: number|null }} [opts]
  * @returns {string|null}
  */
-export function milestoneError(args) {
+export function milestoneError(args, { parent = null } = {}) {
   if (hasMilestone(args)) return null;
+  if (isEpicTitle(titleValue(args))) return null;
+  if (parent != null) return null;
   return (
     `every new Issue needs a milestone — pass --milestone <name>, the ` +
     `track release milestone the Issue ships in; use «${FALLBACK_MILESTONE}» as the ` +
     `standing fallback for ops/process work.`
   );
+}
+
+/**
+ * An `epic: …` container Issue REJECTS a milestone (#1729, spec §7.1): an epic
+ * spans releases, so homing it on one is a taxonomy error the board's Roadmap
+ * view would then plot wrongly. Returns null when valid.
+ * @param {string[]} args  the gh passthrough
+ * @returns {string|null}
+ */
+export function epicMilestoneError(args) {
+  const title = titleValue(args);
+  if (!isEpicTitle(title)) return null;
+  if (!hasMilestone(args)) return null;
+  return (
+    `an epic container ("${title}") must NOT carry a milestone — an epic spans ` +
+    `releases (spec §7.1). Drop --milestone; its child features carry the ` +
+    `track release milestones.`
+  );
+}
+
+/**
+ * A `kind:ears-handler` Issue REQUIRES `--parent <N>` (#1729, spec §7.1): an
+ * EARS task inherits its feature Issue's release milestone, so it cannot be
+ * filed standalone. Returns null when valid.
+ * @param {string[]} args  the gh passthrough
+ * @param {number|null} parent
+ * @returns {string|null}
+ */
+export function earsParentError(args, parent) {
+  if (!collectLabels(args).includes(EARS_KIND_LABEL)) return null;
+  if (parent != null) return null;
+  return (
+    `a \`${EARS_KIND_LABEL}\` Issue needs --parent <N> — an EARS task inherits ` +
+    `its feature Issue's release milestone (spec §7.1). File the feature Issue ` +
+    `first, then pass --parent <feature Issue number>.`
+  );
+}
+
+/**
+ * The parent/child milestone conflict (#1729): when the caller passed a
+ * milestone AND a `--parent`, the two must name the same milestone — a child
+ * shipping in a different release than its parent is a taxonomy error, not a
+ * silent override. Returns null when valid.
+ * @param {string|null} passed        the caller's --milestone value
+ * @param {string|null} parentMilestone
+ * @param {number} parentNumber
+ * @returns {string|null}
+ */
+export function milestoneConflictError(passed, parentMilestone, parentNumber) {
+  if (passed == null) return null;
+  if (!parentMilestone) return null;
+  if (passed === parentMilestone) return null;
+  return (
+    `--milestone «${passed}» conflicts with parent #${parentNumber}'s milestone ` +
+    `«${parentMilestone}» — a sub-issue inherits its parent's release (spec §7.1). ` +
+    `Drop --milestone to inherit, or re-home the parent first.`
+  );
+}
+
+/**
+ * The `gh api` argv that links a created Issue as a sub-issue of its parent
+ * (#1729) — the REST `sub_issues` endpoint takes the child's DB **id**, not its
+ * number. Pure builder so the argv shape is unit-tested without a spawn.
+ * @param {number} parentNumber
+ * @param {number} childId  the child Issue's REST `id`
+ * @returns {string[]}
+ */
+export function buildSubIssueLinkArgs(parentNumber, childId) {
+  return [
+    "api",
+    "--method",
+    "POST",
+    `repos/${REPO}/issues/${parentNumber}/sub_issues`,
+    "-F",
+    `sub_issue_id=${childId}`,
+  ];
 }
 
 /**
@@ -428,10 +587,15 @@ function main() {
   const argv = process.argv.slice(2);
   if (argv.length === 0 || argv.includes("--help") || argv.includes("-h")) {
     process.stderr.write(
-      "Usage: node tools/gh/create-issue.mjs [--no-todo] --title \"<t>\" --body-file <f> --label <source:*> --label <kind> --label <track:*> --milestone <name> [--label <l> …]\n" +
+      "Usage: node tools/gh/create-issue.mjs [--no-todo] [--parent <N>] --title \"<t>\" --body-file <f> --label <source:*> --label <kind> --label <track:*> --milestone <name> [--label <l> …]\n" +
         "  Thin wrapper over `gh issue create` (flags forwarded verbatim) that also adds the\n" +
         "  new Issue to Projects v2 board #1 (doctor-school), sets Status=Todo, and confirms\n" +
         "  the item via a GraphQL node read. --no-todo adds to the board without setting Status.\n" +
+        "  --parent <N> files the Issue as a sub-issue of #N: the parent's milestone is inherited\n" +
+        "  when no --milestone is passed, a differing --milestone is rejected, and the sub-issue\n" +
+        "  link is made for you (no manual REST follow-up).\n" +
+        `  Roadmap taxonomy (#1729, spec §7.1): a \`${EARS_KIND_LABEL}\` Issue REQUIRES --parent;\n` +
+        "  an `epic: …` title needs NO milestone and rejects one (an epic spans releases).\n" +
         `  Required (fail-closed, BEFORE any gh call): exactly ONE source label (#1009) — ${SOURCE_LABELS.join(" | ")};\n` +
         `  exactly ONE kind label (#1137) — ${KIND_LABELS.join(" | ")}; exactly ONE track label (#1583) — ${TRACK_LABELS.join(" | ")};\n` +
         `  and a --milestone (fallback «${FALLBACK_MILESTONE}»).\n` +
@@ -440,7 +604,8 @@ function main() {
     process.exit(1);
   }
 
-  const { setTodo, passthrough } = partitionArgs(argv);
+  const { setTodo, parent, parentError, passthrough } = partitionArgs(argv);
+  if (parentError) die(parentError);
 
   // The board is repo-specific, so the repo pin must win. gh honors the LAST
   // --repo, so a passthrough override would silently defeat a leading pin —
@@ -462,13 +627,61 @@ function main() {
   if (kindError) die(kindError);
   const trackError = trackLabelError(passthrough);
   if (trackError) die(trackError);
-  const milestoneErr = milestoneError(passthrough);
+  //   • roadmap taxonomy (#1729, spec §7.1): EARS tasks need a parent, epics
+  //     reject a milestone, everything else still needs one (a --parent'ed
+  //     sub-issue inherits it, resolved below).
+  const earsErr = earsParentError(passthrough, parent);
+  if (earsErr) die(earsErr);
+  const epicErr = epicMilestoneError(passthrough);
+  if (epicErr) die(epicErr);
+  const milestoneErr = milestoneError(passthrough, { parent });
   if (milestoneErr) die(milestoneErr);
+
+  // Milestone inheritance (#1729): read the parent's milestone once. A passed
+  // milestone that differs from the parent's is a taxonomy error (fail closed,
+  // BEFORE creating anything); no passed milestone means we inject the parent's.
+  let inheritedMilestone = null;
+  let parentTitle = null;
+  if (parent != null) {
+    const parentIssue = gh([
+      "issue",
+      "view",
+      String(parent),
+      "--repo",
+      REPO,
+      "--json",
+      "number,title,milestone",
+    ]);
+    parentTitle = parentIssue?.title ?? null;
+    const parentMilestone = parentIssue?.milestone?.title ?? null;
+    const passedMilestone = milestoneValue(passthrough);
+    const conflict = milestoneConflictError(
+      passedMilestone,
+      parentMilestone,
+      parent,
+    );
+    if (conflict) die(conflict);
+    if (passedMilestone == null) {
+      if (!parentMilestone)
+        die(
+          `parent #${parent} has no milestone, so there is nothing to inherit — ` +
+            `home the parent on its track release milestone first (spec §7.1), ` +
+            `or pass --milestone explicitly.`,
+        );
+      inheritedMilestone = parentMilestone;
+      process.stdout.write(
+        `[create-issue] inheriting milestone «${inheritedMilestone}» from parent #${parent}\n`,
+      );
+    }
+  }
 
   // Auto-derive the org Issue Type from the kind label and default the assignee
   // to @me when the caller left them off — both overridable via an explicit
   // --type / --assignee, neither of which is ever clobbered (#1137).
-  const augmented = ensureAssigneeFlag(ensureTypeFlag(passthrough));
+  const withMilestone = inheritedMilestone
+    ? [...passthrough, "--milestone", inheritedMilestone]
+    : passthrough;
+  const augmented = ensureAssigneeFlag(ensureTypeFlag(withMilestone));
 
   // 1. Create the Issue — thin passthrough. Pin --repo AFTER the passthrough so
   //    the returned URL is guaranteed to belong to the board's repo (gh honors
@@ -486,6 +699,33 @@ function main() {
   const issueNumber = issueNumberFromUrl(url);
   if (!issueNumber) die(`could not parse an Issue number from URL: ${url}`);
   process.stdout.write(`[create-issue] created #${issueNumber} — ${url}\n`);
+
+  // 1b. Link it under its parent (#1729). The REST `sub_issues` endpoint takes
+  //     the child's DB id, not its number — resolve it, then POST the link.
+  //     A failure here is fatal: a half-filed EARS task with no parent is
+  //     exactly the taxonomy drift the gates above exist to prevent, so we die
+  //     with the manual reconcile command rather than report a green run.
+  let linkedParent = null;
+  if (parent != null) {
+    const childId = gh([
+      "api",
+      `repos/${REPO}/issues/${issueNumber}`,
+      "--jq",
+      ".id",
+    ]);
+    if (typeof childId !== "number")
+      die(
+        `could not resolve the DB id of #${issueNumber} for the sub-issue link; ` +
+          `reconcile with: gh api --method POST repos/${REPO}/issues/${parent}/sub_issues -F sub_issue_id=<id>`,
+      );
+    gh(buildSubIssueLinkArgs(parent, childId), { json: false });
+    linkedParent = parent;
+    process.stdout.write(
+      `[create-issue] linked as a sub-issue of #${parent}` +
+        (parentTitle ? ` — ${parentTitle}` : "") +
+        `\n`,
+    );
+  }
 
   // 2. Add it to the board — item-add returns the authoritative item id.
   const added = gh([
@@ -547,7 +787,10 @@ function main() {
       `  issue  = #${issueNumber}\n` +
       `  url    = ${url}\n` +
       `  item   = ${itemId}\n` +
-      `  status = ${check.status ?? "(unset)"}\n`,
+      `  status = ${check.status ?? "(unset)"}\n` +
+      (linkedParent != null
+        ? `  parent = #${linkedParent}${inheritedMilestone ? ` (milestone «${inheritedMilestone}» inherited)` : ""}\n`
+        : ""),
   );
   process.exit(0);
 }

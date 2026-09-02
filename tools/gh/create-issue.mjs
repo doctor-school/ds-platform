@@ -24,7 +24,10 @@
  * KIND_LABELS), exactly ONE `track:*` product-axis label (see TRACK_LABELS),
  * and a milestone. The org Issue Type is auto-derived from the
  * kind label (bug→Bug, feature→Feature, else Task) and the assignee defaults to
- * `@me` — both overridable via explicit `--type` / `--assignee`:
+ * `@me` — both overridable via explicit `--type` / `--assignee`. The `roadmap`
+ * label (#1806) is written here too: it is the single tooling-owned attribute
+ * the board's Roadmap view filters on, added on a feature Issue / release gate
+ * and rejected on every other taxonomy level — never hand-set:
  *   node tools/gh/create-issue.mjs --title "<t>" --body-file <f> --label source:agent --label tooling --label track:platform --milestone "Platform ops & hardening" [--label <l> …] [gh flags…]
  *   node tools/gh/create-issue.mjs --no-todo  --title "<t>" --body-file <f> …    # add to board, leave Status unset
  *   pnpm issue:create --title "<t>" --body-file <f> --label source:agent --label tooling --label track:platform -m "Platform ops & hardening"   # alias
@@ -64,7 +67,10 @@ import { pathToFileURL } from "node:url";
 
 import {
   EARS_KIND_LABEL,
+  ROADMAP_LABEL,
+  classifyIssueTaxonomy,
   isEpicTitle,
+  ownsRoadmapLabel,
 } from "./lib/roadmap-taxonomy.mjs";
 
 // Large payloads (board lists, GraphQL) overflow spawnSync's default 1 MiB
@@ -424,6 +430,54 @@ export function earsParentError(args, parent) {
 }
 
 /**
+ * The `roadmap` label is TOOLING-OWNED (#1806, spec §3.4): it selects the
+ * board's Roadmap view and belongs on exactly the two roadmap levels — a
+ * feature Issue and a release gate. Passing it by hand on anything else (an
+ * epic, an EARS task, a platform task) would plot a row the view is not meant
+ * to show, so the creation path rejects it BEFORE any gh call; on a level that
+ * owns it the label is appended for you, so passing it is never necessary.
+ * Returns null when valid.
+ * @param {string[]} args  the gh passthrough
+ * @returns {string|null}
+ */
+export function roadmapLabelError(args) {
+  const labels = collectLabels(args);
+  if (!labels.includes(ROADMAP_LABEL)) return null;
+  const kind = classifyIssueTaxonomy({ title: titleValue(args), labels });
+  if (ownsRoadmapLabel(kind)) return null;
+  return (
+    `the \`${ROADMAP_LABEL}\` label is tooling-owned and belongs only on a ` +
+    `feature Issue or a release gate — this one classifies as \`${kind}\` ` +
+    `(spec §7.1). Drop --label ${ROADMAP_LABEL}; \`pnpm issue:create\` adds it ` +
+    `itself whenever the taxonomy owns it.`
+  );
+}
+
+/** Is the `roadmap` label already present in the passthrough? */
+export function hasRoadmapLabel(args) {
+  return collectLabels(args).includes(ROADMAP_LABEL);
+}
+
+/**
+ * Append `--label roadmap` when the taxonomy owns it and the caller did not
+ * pass it (#1806). The Roadmap view filters on this ONE attribute, so writing
+ * it at creation is what keeps the view honest without anyone touching a
+ * filter. Returns a new argv array.
+ * @param {string[]} args
+ * @returns {string[]}
+ */
+export function ensureRoadmapLabel(args) {
+  const list = [...(args ?? [])];
+  if (hasRoadmapLabel(list)) return list;
+  const kind = classifyIssueTaxonomy({
+    title: titleValue(list),
+    labels: collectLabels(list),
+  });
+  if (!ownsRoadmapLabel(kind)) return list;
+  return [...list, "--label", ROADMAP_LABEL];
+}
+
+/**
  * The parent/child milestone conflict (#1729): when the caller passed a
  * milestone AND a `--parent`, the two must name the same milestone — a child
  * shipping in a different release than its parent is a taxonomy error, not a
@@ -599,7 +653,9 @@ function main() {
         `  Required (fail-closed, BEFORE any gh call): exactly ONE source label (#1009) — ${SOURCE_LABELS.join(" | ")};\n` +
         `  exactly ONE kind label (#1137) — ${KIND_LABELS.join(" | ")}; exactly ONE track label (#1583) — ${TRACK_LABELS.join(" | ")};\n` +
         `  and a --milestone (fallback «${FALLBACK_MILESTONE}»).\n` +
-        "  Issue Type is auto-derived from the kind label; assignee defaults to @me (both overridable via --type/--assignee).\n",
+        "  Issue Type is auto-derived from the kind label; assignee defaults to @me (both overridable via --type/--assignee).\n" +
+        `  The \`${ROADMAP_LABEL}\` label (#1806, spec §3.4) — the ONE attribute the board's Roadmap view filters on —\n` +
+        "  is added automatically to a feature Issue or a release gate and REJECTED on any other level; never pass it by hand.\n",
     );
     process.exit(1);
   }
@@ -634,6 +690,11 @@ function main() {
   if (earsErr) die(earsErr);
   const epicErr = epicMilestoneError(passthrough);
   if (epicErr) die(epicErr);
+  //   • the `roadmap` view selector (#1806, spec §3.4) is tooling-owned: a
+  //     hand-passed label on a non-roadmap level is rejected here; on a level
+  //     that owns it the label is appended below.
+  const roadmapErr = roadmapLabelError(passthrough);
+  if (roadmapErr) die(roadmapErr);
   const milestoneErr = milestoneError(passthrough, { parent });
   if (milestoneErr) die(milestoneErr);
 
@@ -681,7 +742,9 @@ function main() {
   const withMilestone = inheritedMilestone
     ? [...passthrough, "--milestone", inheritedMilestone]
     : passthrough;
-  const augmented = ensureAssigneeFlag(ensureTypeFlag(withMilestone));
+  const augmented = ensureRoadmapLabel(
+    ensureAssigneeFlag(ensureTypeFlag(withMilestone)),
+  );
 
   // 1. Create the Issue — thin passthrough. Pin --repo AFTER the passthrough so
   //    the returned URL is guaranteed to belong to the board's repo (gh honors

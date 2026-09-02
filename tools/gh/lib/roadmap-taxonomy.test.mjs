@@ -12,6 +12,9 @@ import {
   featureTitlePrefix,
   milestoneTrack,
   ownsBoardDates,
+  ownsRoadmapLabel,
+  ROADMAP_LABEL,
+  ROADMAP_RULES,
   roadmapFindingsFor,
   roadmapHygiene,
   roadmapRuleCounts,
@@ -274,7 +277,7 @@ test("roadmapHygiene sorts by number then rule, and counts per rule", () => {
     {
       number: 50,
       title: "[Витрина][017] MVP",
-      labels: ["track:academy"],
+      labels: ["track:academy", ROADMAP_LABEL],
       milestone: "Витрина R1 — MVP витрины",
       parent: null,
       startDate: null,
@@ -306,6 +309,8 @@ test("roadmapHygiene sorts by number then rule, and counts per rule", () => {
     "missing-start": 0,
     "ears-no-parent": 1,
     "track-milestone": 1,
+    "missing-roadmap-label": 0,
+    "stray-roadmap-label": 0,
   });
 });
 
@@ -412,4 +417,80 @@ test("parseIssueBoardNode maps an OPEN Issue node, skipping PRs and closed Issue
     null,
   );
   assert.equal(parseIssueBoardNode({}), null);
+});
+
+// ── the `roadmap` view selector (#1806) ─────────────────────────────────────
+test("ownsRoadmapLabel is true only for the two roadmap levels", () => {
+  assert.equal(ownsRoadmapLabel("feature"), true);
+  assert.equal(ownsRoadmapLabel("release-gate"), true);
+  assert.equal(ownsRoadmapLabel("ears-task"), false);
+  assert.equal(ownsRoadmapLabel("epic"), false);
+  assert.equal(ownsRoadmapLabel("platform-task"), false);
+});
+
+test("rule (e) missing-roadmap-label fires on a roadmap level lacking the label", () => {
+  const bare = (over) => ({
+    number: 1,
+    title: "[Академия][012] Archive",
+    labels: [],
+    milestone: null,
+    parent: null,
+    startDate: null,
+    targetDate: null,
+    milestoneDueOn: null,
+    subIssuesCompleted: 0,
+    boardStatus: null,
+    ...over,
+  });
+
+  const feature = roadmapFindingsFor(bare());
+  assert.equal(feature.filter((f) => f.rule === "missing-roadmap-label").length, 1);
+
+  const gate = roadmapFindingsFor(bare({ number: 2, title: "gate: Академия R1 — Архив" }));
+  assert.equal(gate.filter((f) => f.rule === "missing-roadmap-label").length, 1);
+
+  // Present → silent, in both directions.
+  const labelled = roadmapFindingsFor(bare({ labels: [ROADMAP_LABEL] }));
+  assert.equal(labelled.filter((f) => f.rule.endsWith("roadmap-label")).length, 0);
+
+  // A non-roadmap level owes nothing.
+  for (const title of ["epic: academy", "[019] Stage-B design gate", "[012] EARS-3: x"]) {
+    const other = roadmapFindingsFor(bare({ title, labels: [] }));
+    assert.equal(other.filter((f) => f.rule === "missing-roadmap-label").length, 0);
+  }
+});
+
+test("rule (e) stray-roadmap-label fires when a non-roadmap level carries it", () => {
+  const bare = (over) => ({
+    number: 3,
+    title: "epic: academy",
+    labels: [ROADMAP_LABEL],
+    milestone: null,
+    parent: { number: 9, milestone: null },
+    startDate: null,
+    targetDate: null,
+    milestoneDueOn: null,
+    subIssuesCompleted: 0,
+    boardStatus: null,
+    ...over,
+  });
+
+  for (const title of ["epic: academy", "Refactor the deploy script"]) {
+    const stray = roadmapFindingsFor(bare({ title }));
+    assert.equal(stray.filter((f) => f.rule === "stray-roadmap-label").length, 1);
+  }
+
+  const ears = roadmapFindingsFor(
+    bare({ title: "[012] EARS-3: x", labels: [ROADMAP_LABEL, EARS_KIND_LABEL] }),
+  );
+  assert.equal(ears.filter((f) => f.rule === "stray-roadmap-label").length, 1);
+
+  // A feature carrying it is correct, not stray.
+  const ok = roadmapFindingsFor(bare({ title: "[Витрина][018] Feed" }));
+  assert.equal(ok.filter((f) => f.rule === "stray-roadmap-label").length, 0);
+});
+
+test("both roadmap-label rules are named in ROADMAP_RULES", () => {
+  assert.ok(ROADMAP_RULES["missing-roadmap-label"]);
+  assert.ok(ROADMAP_RULES["stray-roadmap-label"]);
 });

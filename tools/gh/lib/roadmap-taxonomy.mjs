@@ -22,6 +22,11 @@
  *   platform-task | no prefix                | via blocked_by, else | none
  *                 |                          | «Platform ops & hardening»
  *
+ * The two roadmap levels — `feature` and `release-gate` — additionally carry the
+ * tooling-owned `roadmap` label (#1806): the ONE attribute the board's Roadmap
+ * view filters on, written by `pnpm issue:create` and audited by `pnpm
+ * backlog:triage`, never a milestone name, a title pattern or the org Type.
+ *
  * Everything here is PURE (no I/O, no process exit) so both the .mjs and the
  * .ts consumers can import it and the classifiers are unit-tested directly.
  */
@@ -31,6 +36,13 @@ export const EARS_KIND_LABEL = "kind:ears-handler";
 
 /** Title prefix of an epic container Issue. */
 export const EPIC_TITLE_PREFIX = "epic:";
+
+/**
+ * The tooling-owned label that selects the Roadmap view (#1806, spec §3.4).
+ * Written by `pnpm issue:create`, audited by `pnpm backlog:triage` — never set
+ * by hand.
+ */
+export const ROADMAP_LABEL = "roadmap";
 
 /** Title prefix of a release-gate Issue. */
 export const RELEASE_GATE_TITLE_PREFIX = "gate:";
@@ -131,6 +143,20 @@ export function ownsBoardDates(kind) {
 }
 
 /**
+ * Does this taxonomy kind carry the `roadmap` label (#1806)? The label is the
+ * ONE tooling-written attribute the board's Roadmap view filters on — never a
+ * milestone name, never a title pattern, never the org Type field (which has
+ * drifted). Exactly the two roadmap levels own it: features and release gates.
+ * Kept as its own predicate rather than an alias of `ownsBoardDates` because
+ * the two answer different questions (what the view SELECTS vs what carries
+ * dates) and may legitimately diverge later.
+ * @param {string} kind
+ */
+export function ownsRoadmapLabel(kind) {
+  return kind === "feature" || kind === "release-gate";
+}
+
+/**
  * @typedef {object} RoadmapRow  One open Issue, as seen from the board scan.
  * @property {number} number
  * @property {string} title
@@ -147,17 +173,19 @@ export function ownsBoardDates(kind) {
 /**
  * @typedef {object} RoadmapFinding
  * @property {number} number
- * @property {"parent-milestone"|"missing-target"|"missing-start"|"ears-no-parent"|"track-milestone"} rule
+ * @property {"parent-milestone"|"missing-target"|"missing-start"|"ears-no-parent"|"track-milestone"|"missing-roadmap-label"|"stray-roadmap-label"} rule
  * @property {string} message
  */
 
-/** Human labels for the five hygiene rules — one wording, both renderers. */
+/** Human labels for the hygiene rules — one wording, both renderers. */
 export const ROADMAP_RULES = Object.freeze({
   "parent-milestone": "child milestone ≠ parent milestone",
   "missing-target": "feature-level Issue on a dated milestone without a Target date",
   "missing-start": "feature-level Issue whose work has started without a Start date",
   "ears-no-parent": "`kind:ears-handler` without a parent",
   "track-milestone": "product-track label names a different track than the milestone",
+  "missing-roadmap-label": "roadmap-level Issue without the `roadmap` label",
+  "stray-roadmap-label": "`roadmap` label on an Issue that is not a roadmap level",
 });
 
 /**
@@ -260,6 +288,31 @@ export function roadmapFindingsFor(row) {
         });
     }
   }
+
+  // (e) The Roadmap view (`projects/1/views/5`) filters on the `roadmap` label
+  //     and nothing else (#1806, spec §3.4) — so the label must be present on
+  //     exactly the two roadmap levels and absent everywhere else. Both
+  //     directions are defects: a missing label silently drops the Issue off
+  //     the roadmap, a stray one plots an epic / EARS task / platform task
+  //     that the view is not meant to show.
+  const ownsLabel = ownsRoadmapLabel(kind);
+  const hasLabel = labels.includes(ROADMAP_LABEL);
+  if (ownsLabel && !hasLabel)
+    findings.push({
+      number,
+      rule: "missing-roadmap-label",
+      message:
+        `${kind} Issue without the \`${ROADMAP_LABEL}\` label — it is invisible ` +
+        `on the Roadmap view (spec §3.4)`,
+    });
+  if (!ownsLabel && hasLabel)
+    findings.push({
+      number,
+      rule: "stray-roadmap-label",
+      message:
+        `\`${ROADMAP_LABEL}\` label on a ${kind} Issue — only features and ` +
+        `release gates are roadmap levels (spec §7.1)`,
+    });
 
   return findings;
 }

@@ -96,6 +96,19 @@ routes:
   # not got, and the mandatory access-condition consents (EARS-4/5) that the
   # command validates as a precondition land in #1538. `deferred` until the
   # registration actually completes and the route carries its Stage-B verdict.
+  # 019 EARS-3 (#1518) — the day-grouped, specialty-targeted events feed. The
+  # read, the targeting and the day grouping are REAL (no placeholder card, no
+  # stubbed count), but the SCREEN is not whole: 017's breadcrumbs, the facet
+  # sidebar (#1523), the month grid beside the feed (#1519) and the «Идёт
+  # сейчас» block (#1521) land separately, and the canvas composition of the
+  # route itself is #1516. `deferred` until that composition carries its
+  # Stage-B verdict.
+  - app: doctor
+    route: /events
+    file: apps/doctor/app/(storefront)/events/page.tsx
+    status: deferred
+    issue: "#1516"
+
   - app: doctor
     route: /register
     file: apps/doctor/app/(auth)/register/page.tsx

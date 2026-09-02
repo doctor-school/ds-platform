@@ -1716,6 +1716,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/storefront/doctor/events/month": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["DoctorEventsPublicController_month"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/storefront/doctor/register": {
         parameters: {
             query?: never;
@@ -1800,6 +1816,22 @@ export interface components {
             tense: "upcoming" | "past";
             to: string;
             totalCount: number;
+        };
+        DoctorEventsMonthGridDto: {
+            days: {
+                count: number;
+                date: string;
+                hasLive: boolean;
+            }[];
+            month: string;
+            targeting: {
+                adjacentDirectionIds: string[];
+                directionIds: string[];
+                /** @enum {string} */
+                mode: "targeted" | "general" | "all";
+                specialtyReference: string | null;
+            };
+            today: string;
         };
         DoctorRegisterRequestDto: {
             captchaToken?: string;
@@ -4567,6 +4599,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DoctorEventsFeedDto"];
+                };
+            };
+        };
+    };
+    DoctorEventsPublicController_month: {
+        parameters: {
+            query?: {
+                city?: string[];
+                format?: string[];
+                free?: boolean;
+                kind?: string[];
+                /** @description ISO YYYY-MM; defaults to the current МСК month */
+                month?: unknown;
+                nmo?: boolean;
+                q?: unknown;
+                specialty?: string[];
+            };
+            header: {
+                cookie: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DoctorEventsMonthGridDto"];
                 };
             };
         };

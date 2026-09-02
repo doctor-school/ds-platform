@@ -334,6 +334,82 @@
         ],
         "type": "object"
       },
+      "DoctorEventsMonthGridDto": {
+        "additionalProperties": false,
+        "properties": {
+          "days": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "count": {
+                  "maximum": 9007199254740991,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "date": {
+                  "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                  "type": "string"
+                },
+                "hasLive": {
+                  "type": "boolean"
+                }
+              },
+              "required": ["date", "count", "hasLive"],
+              "type": "object"
+            },
+            "minItems": 28,
+            "type": "array"
+          },
+          "month": {
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+            "type": "string"
+          },
+          "targeting": {
+            "additionalProperties": false,
+            "properties": {
+              "adjacentDirectionIds": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "directionIds": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "mode": {
+                "enum": ["targeted", "general", "all"],
+                "type": "string"
+              },
+              "specialtyReference": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "mode",
+              "specialtyReference",
+              "directionIds",
+              "adjacentDirectionIds"
+            ],
+            "type": "object"
+          },
+          "today": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "type": "string"
+          }
+        },
+        "required": ["month", "today", "days", "targeting"],
+        "type": "object"
+      },
       "DoctorRegisterRequestDto": {
         "properties": {
           "captchaToken": {
@@ -4079,6 +4155,107 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/DoctorEventsFeedDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "tags": ["DoctorEventsPublic"]
+      }
+    },
+    "/v1/storefront/doctor/events/month": {
+      "get": {
+        "operationId": "DoctorEventsPublicController_month",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "cookie",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {}
+          },
+          {
+            "in": "query",
+            "name": "free",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "nmo",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "city",
+            "required": false,
+            "schema": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "specialty",
+            "required": false,
+            "schema": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "format",
+            "required": false,
+            "schema": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          {
+            "description": "ISO YYYY-MM; defaults to the current МСК month",
+            "in": "query",
+            "name": "month",
+            "required": false,
+            "schema": {}
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DoctorEventsMonthGridDto"
                 }
               }
             },

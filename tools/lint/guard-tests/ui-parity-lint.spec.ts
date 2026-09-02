@@ -35,6 +35,16 @@ const adminListPaths = [
   ...relationshipPaths,
   "apps/admin/messages/ru.json",
 ];
+const hiddenRelabelSource = "event-hidden-state-relabel-v1";
+const hiddenRelabelState = "hidden-state-relabel";
+const hiddenRelabelPaths = [
+  "apps/admin/components/lifecycle-actions.tsx",
+  "apps/admin/messages/ru.json",
+  "apps/portal/app/account/events/page.tsx",
+  "apps/portal/app/webinars/[slug]/page.tsx",
+  "apps/portal/app/webinars/[slug]/room/page.tsx",
+  "apps/portal/messages/ru.json",
+];
 const baseApprovedManifest = JSON.parse(
   readFileSync(new URL("../ui-approved-sources.json", import.meta.url), "utf8"),
 ) as ApprovedSourceManifest;
@@ -89,6 +99,11 @@ const relationshipBody = `
 ui-source-kind: approved-non-canvas
 ui-source: ${relationshipSource}
 ui-source-state: ${relationshipState}
+${webEvidence}`;
+const hiddenRelabelBody = `
+ui-source-kind: approved-non-canvas
+ui-source: ${hiddenRelabelSource}
+ui-source-state: ${hiddenRelabelState}
 ${webEvidence}`;
 const adminListBody = `
 ui-source-kind: approved-non-canvas
@@ -163,6 +178,19 @@ describe("ui-parity body evidence", () => {
     expect(
       verdict(adminListBody, adminListPaths, baseApprovedManifest).ok,
     ).toBe(true);
+  });
+
+  it("green: owner-approved hidden-state relabel scopes all six #1760 render surfaces", () => {
+    expect(
+      verdict(hiddenRelabelBody, hiddenRelabelPaths, baseApprovedManifest).ok,
+    ).toBe(true);
+    expect(
+      baseApprovedManifest.sources[hiddenRelabelSource].approvalProvenance,
+    ).toEqual([
+      "https://github.com/doctor-school/ds-platform/issues/1748#issuecomment-5507821212",
+      "https://github.com/doctor-school/ds-platform/issues/1748#issuecomment-5508078479",
+      "https://github.com/doctor-school/ds-platform/issues/1748#issuecomment-5506026515",
+    ]);
   });
 
   it("green: admin-list block-tier provenance is the owner Stage-A pick, not its consumer Issue", () => {

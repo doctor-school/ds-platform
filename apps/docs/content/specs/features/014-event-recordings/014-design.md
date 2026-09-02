@@ -1,6 +1,6 @@
 ---
 title: "014 — Event recordings and the archived-event page (Design)"
-description: "Design for retained event_recordings, the ended-only definition of a finished event plus the MarkEventEnded backfill that makes off-platform broadcasts publishable, the derived edited-over-raw projection, the two-layer public/authenticated read split that implements the login gate, the operator-dated preparing plaque, the platform-wide post-login return-to-origin mechanism, «Мои события» tabs over the registration history, and the shared event card/list/pagination unit with its URL-persisted state and facet capability."
+description: "Design for retained event_recordings, the ended-only definition of a finished event plus the separate two-state legacy broadcast lifecycle that gives pre-platform эфиры their own machine and renames the broadcast terminal state to hidden, the derived edited-over-raw projection, the two-layer public/authenticated read split that implements the login gate, the operator-dated preparing plaque, the platform-wide post-login return-to-origin mechanism, «Мои события» tabs over the registration history, and the shared event card/list/pagination unit with its URL-persisted state and facet capability."
 slug: 014-event-recordings-design
 status: In dev
 tracker: https://github.com/doctor-school/ds-platform/milestone/12
@@ -49,9 +49,9 @@ The single hard boundary in this design is the one drawn by the login gate: **`A
 
 ### 1.1 «Finished» is one state
 
-Every 014 rule keyed on «finished» reads `EventLifecycleState = ended` and nothing else. `archived` is deliberately excluded: feature 004 routes a cancelled or never-aired event `published -> archived` and renders it as a notice with no CTA, absent from every public listing (`004-design.md` visibility policy, owner variant «а»). Treating `archived` as post-live would hand a player to a broadcast that never happened and would contradict a merged contract. 014 therefore supersedes no 004 clause; the requirements carry the full state table.
+Every 014 rule keyed on «finished» reads `EventLifecycleState = ended` and nothing else. `hidden` — the broadcast terminal state renamed from `archived` by EARS-28 — is deliberately excluded: feature 004 routes a cancelled or never-aired event `published -> hidden` and renders it as a notice with no CTA, absent from every public listing (`004-design.md` visibility policy, owner variant «а»). Treating `hidden` as post-live would hand a player to a broadcast that never happened and would contradict a merged contract. 014 therefore supersedes no 004 clause; the requirements carry the full state table.
 
-That leaves one real gap, which §3.1 closes: on this platform `ended` is reachable only through `OpenRoom` + `CloseRoom`, so every эфир held before features 006/007 existed, or run off-platform, could never become finished and its recording could never be published — the archive the PRD premises would ship empty.
+That leaves one real gap, which §3.1 closes with a second lifecycle: the platform's own `ended` is unreachable for a broadcast the platform never hosted — `ended` sits behind `OpenRoom` + `CloseRoom`, so every эфир held before features 006/007 existed could never become finished and its recording could never be published. Such an эфир is not a platform event pushed into `ended` by a backfill command; it is a `legacy` event with its own two-state machine.
 
 ## 2. Data model (`wave: core`)
 
@@ -119,45 +119,75 @@ stateDiagram-v2
 
 Refusals:
 
-| Attempt                                                               | Result                                                         |
-| --------------------------------------------------------------------- | -------------------------------------------------------------- |
-| Attach a kind that already has a non-retired row                      | 409 `RECORDING_KIND_OCCUPIED` naming that row                  |
-| Publish while the event is `draft`, `published`, `live` or `archived` | 409 `EVENT_NOT_FINISHED` — publishing requires exactly `ended` |
-| Restore while the kind slot is taken by another row                   | 409 `RECORDING_KIND_OCCUPIED`                                  |
-| Any transition not on the diagram                                     | 409 `INVALID_TRANSITION`                                       |
-| Stale `If-Match`                                                      | 412 `PRECONDITION_FAILED`, no mutation                         |
-| Any Delete attempt                                                    | No route exists — 404 from the router, never a soft delete     |
+| Attempt                                                                      | Result                                                                                                             |
+| ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Attach a kind that already has a non-retired row                             | 409 `RECORDING_KIND_OCCUPIED` naming that row                                                                      |
+| Publish while a `platform` event is `draft`, `published`, `live` or `hidden` | 409 `EVENT_NOT_FINISHED` — publishing requires exactly `ended`; on a `legacy` event the gate does not apply (§3.1) |
+| Restore while the kind slot is taken by another row                          | 409 `RECORDING_KIND_OCCUPIED`                                                                                      |
+| Any transition not on the diagram                                            | 409 `INVALID_TRANSITION`                                                                                           |
+| Stale `If-Match`                                                             | 412 `PRECONDITION_FAILED`, no mutation                                                                             |
+| Any Delete attempt                                                           | No route exists — 404 from the router, never a soft delete                                                         |
 
-### 3.1 Reaching `ended` for a broadcast the platform never hosted (`wave: core`)
+### 3.1 The `legacy` broadcast lifecycle (`wave: core`)
 
-Feature 007's transition set is closed and server-enforced, and `ended` sits behind `OpenRoom` + `CloseRoom`. Every эфир held before features 006/007 existed, and every эфир run off-platform, is therefore stuck at `published` — and under the §3 publish gate its recording could never be published. That is not an edge case: it is the launch content of the archive.
+Feature 007's transition set is closed and server-enforced, and `ended` sits behind `OpenRoom` + `CloseRoom`. An эфир held before features 006/007 existed never passed through the platform's room, so it can never legally reach `ended` — and under the §3 publish gate its recording could never be published. That is not an edge case: it is the launch content of the archive.
 
-014 does **not** loosen the guard. It adds exactly one new legal edge behind one narrow operator command.
+014 does **not** loosen the guard and adds no edge to 007's machine. The owner rejected that model on 2026-09-02, before it reached production: «Трансляция не может пройти вне платформы. […] у них же должен быть отдельный жизненный цикл, а не развилка из двух вариантов в одном ЖЦ.» and «сам дизайн жизненного цикла неправильный. Если это эфир, который прошёл ДО запуска платформы, то зачем там кнопка "Выйти в эфир"? Для него должен быть другой жизненный цикл!». Instead, a **second lifecycle** stands beside 007's, selected by a discriminator.
+
+**The discriminator.** `events.origin: platform | legacy` is set once at creation and rejected by every update path (EARS-23). It picks the machine and never changes; no command moves an event between machines, and no event ever holds a state of the other machine.
+
+**Machine 1 — `platform` (feature 007, unchanged by this design):**
 
 ```mermaid
 stateDiagram-v2
-  published --> live : OpenRoom (007, unchanged)
-  live --> ended : CloseRoom (007, unchanged)
-  published --> ended : MarkEventEnded (014 — no room was ever opened)
-  ended --> archived : ArchiveEvent (007, unchanged)
-  published --> archived : ArchiveEvent (004 — cancelled / never aired, unchanged)
+  [*] --> draft
+  draft --> published : PublishEvent (007)
+  published --> live : OpenRoom (007)
+  live --> ended : CloseRoom (007)
+  ended --> hidden : HideEvent (007 — renamed from ArchiveEvent by EARS-28)
+  published --> hidden : HideEvent (004 — cancelled / never aired)
 ```
 
-`MarkEventEnded` — admin label «Отметить завершённым (трансляция прошла вне платформы)»:
+**Machine 2 — `legacy` (this design), the owner's shape verbatim, «два состояния — "Архивирован" (отображается в Архиве) и "Скрыт"»:**
 
-| Aspect        | Contract                                                                                                                                                  |
-| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Preconditions | `state = published` **and** `starts_at + duration_min` already in the past **and** the room was never opened                                              |
-| Effect        | `published → ended` in one transaction; no `live` state, no room record, no presence window, no recording                                                 |
-| Authorization | ordinary `platform_admin` on the dedicated admin session — no new role, no elevation                                                                      |
-| Protocol      | `If-Match` on the event ETag + `Idempotency-Key`, exactly like every other 007 transition                                                                 |
-| Refusals      | 409 `EVENT_NOT_PAST` when the scheduled end is still in the future; 409 `INVALID_TRANSITION` from any other origin state or when the room was ever opened |
-| Audit         | one feature-010 row, like every other lifecycle transition                                                                                                |
-| Admin UI      | derived from `EventAdminDetail.validTransitions` as 007 already does, so the control appears only when the precondition holds                             |
+```mermaid
+stateDiagram-v2
+  [*] --> hidden : created via «Архивный эфир» (born hidden)
+  hidden --> in_archive : ArchiveLegacyBroadcast («Архивировать»)
+  in_archive --> hidden : HideLegacyBroadcast («Скрыть»)
+```
 
-Two boundaries keep this from becoming a general "set any state" escape hatch: the never-opened-room condition means it can never rewrite the history of a broadcast the platform actually hosted, and the past-end condition means it can never pre-declare a future эфир finished. A cancelled or never-aired event keeps feature 004's `published → archived` route and never becomes finished by this command.
+A `legacy` эфир is **born `hidden`**: the operator creates it with a title, a held-at instant, a duration, speakers and a recording, and it appears on no public surface until it is archived by an explicit act. It never acquires a room record, a stream config, a presence window or a `live` state, so its lifecycle bar can never offer «Выйти в эфир».
 
-Because feature 007 runs in production, its extended transition set is recorded as an **amendment block** naming 014 as the source (AGENTS.md §6 amendment rule) rather than as an inline rewrite of its state machine. The amendment is mirrored across the whole 007 triplet — `007-design.md` §2, `007-requirements-en.md` and `007-requirements-ru.md` (inline pointers at the closed-set constraint, the transition policy, EARS-7, the invariant and verification row 7) and an annotated `007-scenarios.feature` example — so 007 does not contradict itself across files. The shipped `EARS-7.2` assertion in `apps/api/test/admin/transitions.e2e-spec.ts`, which currently expects 409 for `published → ended`, is a named deliverable of the EARS-18 Issue; nobody else touches it.
+`ArchiveLegacyBroadcast` — admin label «Архивировать»:
+
+| Aspect        | Contract                                                                                                                                                                   |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Preconditions | `origin = legacy` **and** `state = hidden` **and** the эфир already carries a published, non-retired recording under 014's own recording rules                             |
+| Effect        | `hidden → in_archive` in one transaction; from that instant the эфир is listed in the public archive exactly like an `ended` platform broadcast with a published recording |
+| Authorization | ordinary `platform_admin` on the dedicated admin session — no new role, no elevation                                                                                       |
+| Protocol      | `If-Match` on the event ETag + `Idempotency-Key`, exactly like every other lifecycle transition                                                                            |
+| Refusals      | 409 `EVENT_NOT_FINISHED` when no published recording exists; 409 `INVALID_TRANSITION` from any other state or on a `platform` event — no mutation in either case           |
+| Audit         | exactly one feature-010 row                                                                                                                                                |
+| Admin UI      | derived from `EventAdminDetail.validTransitions` as 007 already does, so the control appears only when the precondition holds                                              |
+
+`HideLegacyBroadcast` — admin label «Скрыть»:
+
+| Aspect        | Contract                                                                                                              |
+| ------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Preconditions | `origin = legacy` **and** `state = in_archive`                                                                        |
+| Effect        | `in_archive → hidden`; the эфир leaves every listing, tab and count, and its direct link renders feature 004's notice |
+| Authorization | ordinary `platform_admin`                                                                                             |
+| Protocol      | `If-Match` + `Idempotency-Key`                                                                                        |
+| Refusals      | 409 `INVALID_TRANSITION` from any other state or on a `platform` event, no mutation                                   |
+| Audit         | exactly one feature-010 row                                                                                           |
+| Admin UI      | derived from `EventAdminDetail.validTransitions`                                                                      |
+
+**Mutual exclusion (both directions).** Every broadcast command — `PublishEvent`, `OpenRoom`, `CloseRoom`, `HideEvent`, `ConfigureStream` — invoked on a `legacy` event is refused with 409 `INVALID_TRANSITION` and no mutation; every legacy command — `ArchiveLegacyBroadcast`, `HideLegacyBroadcast` — invoked on a `platform` event is refused the same way. The admin lifecycle bar renders only the commands of the event's own machine, so the two vocabularies never appear together on one screen.
+
+**The `archived → hidden` rename (EARS-28).** The broadcast terminal state is renamed `archived → hidden`, labelled «Скрыт», with its command `ArchiveEvent → HideEvent` labelled «Скрыть». Owner ruling, 2026-09-02: «Архивировать означает ровно одно — поместить в архив. […] Архив мы ПОКАЗЫВАЕМ и это легитимное название статуса. Явно надо переименовать этот статус в "Скрыт с платформы" или что-то вроде того, но точно не "Архивирован".» The meaning is unchanged — no platform surface lists the event, it stays admin-only, and a direct link renders feature 004's notice — so this is a data migration plus a contract rename, executed as one cutover across the database enum, the Zod contract, the generated SDK and both admin and portal copy, with no dual-read shim and no compatibility alias. With the word «Архив» freed, «Архивировать» is the legacy command and means precisely «поместить в архив».
+
+Because feature 007 runs in production, the discriminator, the second machine and the rename are recorded across the 007 triplet as the **«Amendment — 2026-09-02»** block naming 014 as the source (AGENTS.md §6 amendment rule) rather than as an inline rewrite of its state machine — `007-design.md` §2, `007-requirements-en.md` and `007-requirements-ru.md` (inline pointers at the closed-set constraint, the transition policy, EARS-7, the invariant and verification row 7) and an annotated `007-scenarios.feature` example — so 007 does not contradict itself across files. The 2026-08-17 `published → ended` amendment is removed with it: it never reached production.
 
 ## 4. The derived projection (`wave: core`)
 
@@ -247,7 +277,11 @@ All recording lists/selectors use the shared paginated combobox/list contract: e
 
 The recordings panel is an own **«Записи» tab** of the existing feature-007 event detail in `apps/admin`, which this feature turns into a tabbed detail — not a new Refine resource tree. An operator attaches a recording while looking at the event, which is where they already are; the tab keeps the recording work out of the announcement fields it has nothing to do with.
 
-The tabbed composition is the Product Lead's Stage-A pick — option B, 2026-08-17, recorded in [`014-product.md`](./014-product.md) → Approved mockup — and matches the 012 admin decision ([#1282](https://github.com/doctor-school/ds-platform/issues/1282)) so both admin verticals compose the same way. The surface stays stock Refine plus `@ds/design-system` primitives (admin carries no canvas by design, ADR-0004 §3). The new feature-007 lifecycle command «Отметить завершённым (трансляция прошла вне платформы)» sits with the other lifecycle actions on the event detail, shown only when the transition applies, and every status-changing action — that command and the panel's publish / unpublish / retire / restore alike — confirms in a modal before it fires.
+The tabbed composition is the Product Lead's Stage-A pick — option B, 2026-08-17, recorded in [`014-product.md`](./014-product.md) → Approved mockup — and matches the 012 admin decision ([#1282](https://github.com/doctor-school/ds-platform/issues/1282)) so both admin verticals compose the same way. The surface stays stock Refine plus `@ds/design-system` primitives (admin carries no canvas by design, ADR-0004 §3). Every status-changing action — the lifecycle commands and the panel's publish / unpublish / retire / restore alike — confirms in a modal before it fires.
+
+**The lifecycle bar renders the event's own machine and nothing else** (§3.1). On a `platform` event it offers 007's commands, with «Скрыть» as the terminal one; on a `legacy` event it offers exactly «Архивировать» and «Скрыть», derived from `EventAdminDetail.validTransitions` as 007 already does, so «Выйти в эфир» is never on a `legacy` эфир and the two vocabularies never share a screen.
+
+**«Архивный эфир» — a distinct admin creation entry** for a pre-platform broadcast, separate from the ordinary event-create entry. Its form takes a title, a held-at instant, a duration, speakers and a recording (upload or attach); it creates the эфир with `origin: legacy` in `hidden`, and the operator archives it by the explicit «Архивировать» command once the recording is published. The spec names the surface and its fields, not its look — the look is Stage-A/B gated at [#1741](https://github.com/doctor-school/ds-platform/issues/1741) under `build-ui-from-design-system`. The automated import of [#1742](https://github.com/doctor-school/ds-platform/issues/1742) lands events through this same creation path, never a second one.
 
 ```mermaid
 sequenceDiagram
@@ -313,7 +347,7 @@ Exactly two tabs — «Предстоящие» (default) and «Записи» �
 
 ### 8.4 `/webinars` tabs
 
-«Предстоящие · N | Прошедшие · N», mirroring the tab pattern already drawn on `project-page.dc.html` / `expert-page.dc.html`. Tab membership is `ended` for the past tab and feature 004's existing upcoming rule for the other; `draft` and `archived` are in neither tab and in neither count. The «Неделя | Месяц» views' rendering and the upcoming discovery behaviour are untouched — this is a refinement, not a redesign.
+«Предстоящие · N | Прошедшие · N», mirroring the tab pattern already drawn on `project-page.dc.html` / `expert-page.dc.html`. Tab membership for the past tab is `ended` on a `platform` event and `in_archive` on a `legacy` one — the two are indistinguishable in the tab, its count and its cards (§3.1); feature 004's existing upcoming rule fills the other. `draft` and `hidden` are in neither tab and in neither count, whichever machine they belong to. The «Неделя | Месяц» views' rendering and the upcoming discovery behaviour are untouched — this is a refinement, not a redesign.
 
 **State persistence follows LD-11** (requirements → Lead technical decisions): the selected tab, every facet value, the page cursor **and** the week/month view are query parameters of `/webinars`. One surface, one persistence rule — the week/month switcher moves onto the same mechanism rather than keeping its own, because mixed persistence on one page is a fidelity trap. The rationale (linkable filtered archive, reload and back/forward survival, and the fact that a deliberately fetch-free unit leaves the URL as the only place a server component can read the selection from) is recorded there as a lead decision, since the PRD left URL persistence to Stage A and no canvas carries it.
 
@@ -359,23 +393,25 @@ sequenceDiagram
 | GET    | `/v1/public/events/facets`                       | `public`         | facets |
 | GET    | `/v1/events/:idOrSlug/recordings`                | `authenticated`  | core   |
 | GET    | `/v1/me/events` (`tab=upcoming\|recordings`)     | `doctor_guest`   | core   |
-| POST   | `/v1/admin/events/:id/mark-ended`                | `platform_admin` | core   |
+| POST   | `/v1/admin/legacy-broadcasts`                    | `platform_admin` | core   |
+| POST   | `/v1/admin/events/:id/archive-legacy`            | `platform_admin` | core   |
+| POST   | `/v1/admin/events/:id/hide-legacy`               | `platform_admin` | core   |
 
-No Delete route exists for any 014 resource. `/v1/public/events` and `/v1/public/events/:idOrSlug` are extensions of the existing feature-004 controllers, not new ones; `/v1/me/events` extends the existing feature-005 controller and keeps that feature's `doctor_guest` classification, so the endpoint-authz matrix carries one wording for it rather than two. `/v1/admin/events/:id/mark-ended` extends the feature-007 admin controller.
+No Delete route exists for any 014 resource. `/v1/public/events` and `/v1/public/events/:idOrSlug` are extensions of the existing feature-004 controllers, not new ones; `/v1/me/events` extends the existing feature-005 controller and keeps that feature's `doctor_guest` classification, so the endpoint-authz matrix carries one wording for it rather than two. The three legacy routes extend the feature-007 admin controller: `/v1/admin/legacy-broadcasts` is the «Архивный эфир» creation entry (EARS-24), and `/v1/admin/events/:id/archive-legacy` / `…/hide-legacy` carry the two commands of the legacy machine (EARS-25).
 
 ## 11. Errors
 
 RFC 7807 Problem Details with `traceId` and an exact `errorCode`, per ADR-0002 §9.
 
-| Status | Codes                                                                                                             |
-| ------ | ----------------------------------------------------------------------------------------------------------------- |
-| 400    | `VALIDATION_FAILED`, `CURSOR_INVALID`, `IDEMPOTENCY_KEY_INVALID`                                                  |
-| 401    | `AUTHENTICATION_REQUIRED` (playback), `ADMIN_SESSION_REQUIRED` (admin)                                            |
-| 403    | `PLATFORM_ADMIN_REQUIRED`                                                                                         |
-| 404    | `RESOURCE_NOT_FOUND` (unknown/ineligible event, recording or facet id — one shape)                                |
-| 409    | `RECORDING_KIND_OCCUPIED`, `EVENT_NOT_FINISHED`, `EVENT_NOT_PAST`, `INVALID_TRANSITION`, `IDEMPOTENCY_KEY_REUSED` |
-| 412    | `PRECONDITION_FAILED`                                                                                             |
-| 428    | `IDEMPOTENCY_KEY_REQUIRED`, `PRECONDITION_REQUIRED`                                                               |
+| Status | Codes                                                                                           |
+| ------ | ----------------------------------------------------------------------------------------------- |
+| 400    | `VALIDATION_FAILED`, `CURSOR_INVALID`, `IDEMPOTENCY_KEY_INVALID`                                |
+| 401    | `AUTHENTICATION_REQUIRED` (playback), `ADMIN_SESSION_REQUIRED` (admin)                          |
+| 403    | `PLATFORM_ADMIN_REQUIRED`                                                                       |
+| 404    | `RESOURCE_NOT_FOUND` (unknown/ineligible event, recording or facet id — one shape)              |
+| 409    | `RECORDING_KIND_OCCUPIED`, `EVENT_NOT_FINISHED`, `INVALID_TRANSITION`, `IDEMPOTENCY_KEY_REUSED` |
+| 412    | `PRECONDITION_FAILED`                                                                           |
+| 428    | `IDEMPOTENCY_KEY_REQUIRED`, `PRECONDITION_REQUIRED`                                             |
 
 014 defines **no 5xx of its own**, and deliberately no `RECORDING_SOURCE_UNAVAILABLE`: the API returns an embed reference and never fetches the media, so a server status for «source unreachable» would have no producer. The portal's player boundary owns the honest «запись временно недоступна» message and its retry action (§5, EARS-7 second branch); a dead or forever-spinning player is never an acceptable rendering of it.
 
@@ -393,7 +429,7 @@ Revised shared Stage A [#1605](https://github.com/doctor-school/ds-platform/issu
 ```mermaid
 flowchart LR
   S["schema + migration (EARS-1/2)"] --> A["admin panel + readiness date"]
-  MB["mark-ended backfill (EARS-18)"] --> A
+  LEG["legacy lifecycle + hidden rename (EARS-23…EARS-28)"] --> A
   S --> R["resolver + public/auth read split (EARS-3/4/5)"]
   R --> PG["post-live page + plaque + spoiler (EARS-7/8)"]
   RT["return-to-origin mechanism (EARS-6)"] --> PG
@@ -413,6 +449,6 @@ flowchart LR
 
 The original `core` runs end to end without the 012 track. The two taxonomy `facets` boxes wait on 012's relations wave, and the revised archived-speaker projection #1608 separately waits on #1607's guarded cutover; it never reads retained source provenance.
 
-**EARS-18 comes first in practice.** Without the backfill command there is no `ended` event outside the platform's own room history, so the admin panel has nothing publishable to attach a recording to and the archive ships empty. It is cheap, it touches one command handler plus the 007 amendment, and it unblocks every downstream demonstration of the feature.
+**The rename lands first, then the legacy lifecycle.** EARS-28 is a single cutover — migration, contract, generated SDK and labels in one step — and it is sequenced before EARS-23…EARS-27 so no two names for the terminal state ever coexist in the tree. The legacy lifecycle follows immediately: without it there is nothing in the archive but the platform's own room history, so the archive the PRD premises ships empty. It touches the `origin` discriminator, two command handlers, the «Архивный эфир» create surface and the 007 amendment, and it unblocks every downstream demonstration of the feature.
 
 Two clauses are **process gates rather than code Issues** and must not be opened as implementation work: EARS-10's «the unit exists once and everyone consumes it» ownership rule (the unit's actual build lands with the first consuming surface, and the rule is verified by the unit contract test) and EARS-16's Stage-A/Stage-B gate (verified by the recorded owner artifacts).

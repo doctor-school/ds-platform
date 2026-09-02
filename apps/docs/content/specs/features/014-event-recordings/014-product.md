@@ -45,6 +45,9 @@ An archive nobody can browse is not an archive, so this feature also gives it a 
 - **US-17** — As a **content operator**, I upload/replace/remove the recording poster and the Event program PDF through file controls; I never type storage references, and recording duration is derived from video metadata rather than manual seconds.
 - **US-18** — As a **visitor**, every archived-event speaker comes from the canonical ordered event-to-expert list after migration, with no legacy/free-text fallback.
 - **US-19** — As a **content operator**, recording lists/selectors use pagination, immediate search/filtering, active chips, one Reset all and no actionable no-op controls.
+- **US-20** — As a **content operator**, I add an эфир that was held before the platform existed through a separate «Архивный эфир» entry — title, date held, duration, speakers, recording — and it stays invisible to everyone until I archive it, so the archive has content from day one.
+- **US-21** — As a **doctor or guest**, a pre-platform эфир in the archive looks and behaves exactly like any other past broadcast with a recording: the same card, the same «Прошедшие» tab, the same page, the same player — with nothing marking it as second-class.
+- **US-22** — As a **content operator**, when an event leaves the platform its status reads «Скрыт», not «Архивирован», because «Архив» is the thing we show to doctors — one word, one meaning.
 
 ## Flows
 
@@ -85,6 +88,13 @@ An archive nobody can browse is not an archive, so this feature also gives it a 
 1. Operator attaches a recording to an event and marks its kind — `raw` or `edited`.
 2. The page applies the display rule from the data alone; publishing an edited recording later promotes it without any page edit.
 3. The rule is data-driven, so a mistake is fixed by fixing the record, not by re-touching a page.
+
+**Operator flow for a pre-platform эфир (US-20, US-22):**
+
+1. Operator opens the separate «Архивный эфир» entry and fills in the title, the date it was held, its duration, its speakers and its recording.
+2. The эфир is created «Скрыт» — nobody outside the admin sees it while the operator finishes preparing it.
+3. Once the recording is published, the operator presses «Архивировать» and the эфир joins the archive doctors read; «Скрыть» takes it back out.
+4. Such an эфир never had a broadcast on this platform, so its screen never offers «Выйти в эфир» — it has its own short lifecycle with exactly these two states.
 
 **Branches:**
 

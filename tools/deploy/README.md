@@ -131,7 +131,7 @@ again, so **some prior SHAs stop being valid rollback targets permanently**.
 
 The floor is DB state, not a constant in this repo — production is the only
 thing that knows which release closed the source. `speaker_migration_cutover`
-(migration 0031) retains `minimum_compatible_release_sha` / `_ordinal`, and this
+(migration 0032) retains `minimum_compatible_release_sha` / `_ordinal`, and this
 guard is the **first step inside `rollback()`**, before the image-presence probe
 and before any `.env` rewrite or `up -d`. Nothing on the box is touched until it
 returns.
@@ -151,7 +151,7 @@ It **fails closed** — every refusal aborts the rollback with its code:
 | `TARGET_BELOW_FLOOR`        | The target predates the floor. Roll **forward** instead; this rollback cannot be made safe.                        |
 
 Three cases are allowed, each named in the verdict: `no-floor-table` (the prod
-DB predates migration 0031), `no-floor-recorded` (still `review_open` — nothing
+DB predates migration 0032), `no-floor-recorded` (still `review_open` — nothing
 has been closed, so every target is fair game) and `at-or-above-floor`.
 
 `rollback-floor.test.mjs` (`node --test`, run by `pnpm test:tools`) covers the

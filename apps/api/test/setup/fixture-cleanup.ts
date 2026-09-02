@@ -21,7 +21,7 @@ import type pg from "pg";
 /**
  * Tables whose physical removal is refused by a DATABASE trigger, not only by an
  * FK. `event_speakers` carries the 012 EARS-24 migration fence
- * (`event_speakers_migration_fence_before_write`, migration 0031): DELETE is
+ * (`event_speakers_migration_fence_before_write`, migration 0032): DELETE is
  * refused in EVERY phase because a source row is the retained provenance the
  * migration review queue is keyed by.
  *

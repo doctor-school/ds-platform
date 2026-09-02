@@ -3,10 +3,10 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import pg from "pg";
 
 // 012 EARS-24 (Issue #1633) — the speaker-cutover SSOT and the `event_speakers`
-// writer fence (migration 0031, `012-design.md` §2.3).
+// writer fence (migration 0032, `012-design.md` §2.3).
 //
 // This suite exercises the DATABASE layer only: the two BEFORE-write triggers
-// installed by 0031 and the CHECK constraints on the retained singleton. No
+// installed by 0032 and the CHECK constraints on the retained singleton. No
 // Nest boot — pg.Pool directly, same pattern as universal-edit-audit.e2e-spec.
 //
 // PHASE MONOTONICITY IS THE REASON EVERY CASE RUNS IN A ROLLBACK.
@@ -126,7 +126,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(rows[0]!.minimum_compatible_release_sha).toBeNull();
     });
 
-    it("012 EARS-24.2: both 0031 triggers are attached to their tables", async () => {
+    it("012 EARS-24.2: both 0032 triggers are attached to their tables", async () => {
       const { rows } = await pool.query<{ tgname: string; relname: string }>(
         `SELECT t.tgname, c.relname
            FROM pg_trigger t

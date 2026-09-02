@@ -251,7 +251,7 @@ export function kindLabelError(args) {
 /**
  * Validate the track-label requirement (#1583): exactly ONE `track:*` label,
  * drawn from TRACK_LABELS. The track is the permanent product axis (academy ↔
- * doctor showcase ↔ shared platform); the milestone is the product theme and
+ * doctor showcase ↔ shared platform); the milestone is the track release and
  * the epic Issue is a closable container — a track never gets an evergreen
  * epic. Returns null when valid, else the error message to die with.
  * @param {string[]} args  the gh passthrough
@@ -274,8 +274,8 @@ export function trackLabelError(args) {
 
 /**
  * Detect a milestone flag (`--milestone` / `--milestone=` / `-m`) in the gh
- * passthrough (#1137). Every new Issue is homed under a long-lived
- * product-theme milestone; «Platform ops & hardening» is the standing fallback.
+ * passthrough (#1137). Every new Issue is homed under its track release
+ * milestone; «Platform ops & hardening» is the standing fallback.
  * @param {string[]} args
  * @returns {boolean}
  */
@@ -299,7 +299,7 @@ export function milestoneError(args) {
   if (hasMilestone(args)) return null;
   return (
     `every new Issue needs a milestone — pass --milestone <name>, the ` +
-    `long-lived product-theme milestone; use «${FALLBACK_MILESTONE}» as the ` +
+    `track release milestone the Issue ships in; use «${FALLBACK_MILESTONE}» as the ` +
     `standing fallback for ops/process work.`
   );
 }

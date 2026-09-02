@@ -311,7 +311,7 @@ interface SpecMeta {
 }
 
 // The spec folder is the slug of the `feature:NNN-<slug>` label (AGENTS.md §2 —
-// the milestone is a product theme, not a spec folder). Product specs may use
+// the milestone is the track release, not a spec folder). Product specs may use
 // the bilingual `NNN-requirements-en.md` split, so accept either filename.
 async function readSpecMeta(featureSlug: string): Promise<SpecMeta | null> {
   const specDir = resolve(

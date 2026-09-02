@@ -6,8 +6,8 @@
  * ADR:  apps/docs/content/adr/0007-ai-stack-design-en.md §2.6 (CI guards surface
  *       as PR checks the human reviewer consumes; no automated reviewer-bot.)
  *
- * Milestone model (AGENTS.md §2): a Milestone is one shippable **track release**
- * (e.g. `Auth foundations v1`) that spans multiple specs — it is NOT a spec
+ * Milestone model (DSP-198 §3.2, `repo-conventions.md` → Issue conventions): a Milestone is one shippable **track release**
+ * (e.g. «Академия R1 — Архив записей») that spans multiple specs — it is NOT a spec
  * folder. The spec folder a feature PR implements is carried by the
  * `feature:NNN-<slug>` area label, not by the milestone title.
  *
@@ -191,7 +191,7 @@ async function main(): Promise<void> {
     }
     if (!issue.milestone) {
       failures.push(
-        `Linked Issue #${num} has no milestone — feature work must sit under a track release milestone (AGENTS.md §2 / ADR-0006 §9).`,
+        `Linked Issue #${num} has no milestone — feature work must sit under a track release milestone (DSP-198 §3.2 / ADR-0006 §9).`,
       );
       continue;
     }

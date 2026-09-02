@@ -29,7 +29,7 @@ mode: inline
 
    Closing G11 findings F-8 and F-19: do **not** silently substitute a generic label like `enhancement` when the project-specific label is missing. Either the label set is created up front, or `surface-decision-debt` is invoked to record the substitution as a follow-up.
 
-2. **Open the parent Issue** (if not already open) via `pnpm issue:create` under the track release milestone the feature ships in (AGENTS.md §2 — e.g. «Академия R1 — Архив записей», not a per-spec name) and link to `NNN-requirements.md`. Pass the `feature` kind label (→ auto-derived **Type=Feature**) and `--milestone`; the spec folder is bound to the work by the `feature:NNN-<slug>` label, not the milestone. **Every Issue this skill opens — parent and children — carries the provenance label `source:spec`** (opened from a merged feature spec; the `source:*` taxonomy is `source:owner` | `source:spec` | `source:retro` | `source:agent`, one per Issue).
+2. **Open the parent Issue** (if not already open) via `pnpm issue:create` under the track release milestone the feature ships in (`repo-conventions.md` → Issue conventions — e.g. «Академия R1 — Архив записей», not a per-spec name) and link to `NNN-requirements.md`. Pass the `feature` kind label (→ auto-derived **Type=Feature**) and `--milestone`; the spec folder is bound to the work by the `feature:NNN-<slug>` label, not the milestone. **Every Issue this skill opens — parent and children — carries the provenance label `source:spec`** (opened from a merged feature spec; the `source:*` taxonomy is `source:owner` | `source:spec` | `source:retro` | `source:agent`, one per Issue).
 3. **For each EARS-N**, open a child Issue:
 
    ```bash

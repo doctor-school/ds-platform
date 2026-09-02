@@ -50,6 +50,11 @@ test("the page query asks both connections for totalCount at the named page size
   const q = buildBoardItemsPageQuery();
   assert.match(q, new RegExp(`fieldValues\\(first:${FIELD_VALUES_PAGE_SIZE}\\)\\{totalCount`));
   assert.match(q, new RegExp(`labels\\(first:${LABELS_PAGE_SIZE}\\)\\{totalCount`));
+  // The missing-target / missing-start preconditions (board-design spec 3.2)
+  // are read from the milestone due date, the sub-issue rollup and the Status.
+  assert.match(q, /milestone[{]title dueOn[}]/);
+  assert.match(q, /subIssuesSummary[{]total completed[}]/);
+  assert.match(q, /on ProjectV2ItemFieldSingleSelectValue[{]name/);
 });
 
 test("a node inside both page sizes reports no truncation", () => {

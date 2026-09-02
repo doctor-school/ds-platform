@@ -139,22 +139,32 @@ export function ownsBoardDates(kind) {
  * @property {{number:number, milestone:string|null}|null} parent  sub-issue parent
  * @property {string|null} startDate         board «Start date» value (ISO), null when unset
  * @property {string|null} targetDate        board «Target date» value (ISO), null when unset
+ * @property {string|null} milestoneDueOn    milestone due date (ISO date), null when the milestone is dateless
+ * @property {number} subIssuesCompleted     how many child Issues are already closed
+ * @property {string|null} boardStatus       board «Status» single-select value, null when unset
  */
 
 /**
  * @typedef {object} RoadmapFinding
  * @property {number} number
- * @property {"parent-milestone"|"missing-dates"|"ears-no-parent"|"track-milestone"} rule
+ * @property {"parent-milestone"|"missing-target"|"missing-start"|"ears-no-parent"|"track-milestone"} rule
  * @property {string} message
  */
 
-/** Human labels for the four hygiene rules — one wording, both renderers. */
+/** Human labels for the five hygiene rules — one wording, both renderers. */
 export const ROADMAP_RULES = Object.freeze({
   "parent-milestone": "child milestone ≠ parent milestone",
-  "missing-dates": "feature-level Issue without Start/Target date",
+  "missing-target": "feature-level Issue on a dated milestone without a Target date",
+  "missing-start": "feature-level Issue whose work has started without a Start date",
   "ears-no-parent": "`kind:ears-handler` without a parent",
   "track-milestone": "product-track label names a different track than the milestone",
 });
+
+/**
+ * Board Status values that mean «work on this Issue has started» — the spec
+ * §3.2 precondition for owning a Start date.
+ */
+export const STARTED_BOARD_STATUSES = Object.freeze(["In Progress", "Review", "Done"]);
 
 /**
  * The roadmap-hygiene findings for one open Issue (spec §7.1). Pure — board
@@ -186,17 +196,40 @@ export function roadmapFindingsFor(row) {
       });
   }
 
-  // (b) Feature-level work carries the roadmap dates the Roadmap view plots.
+  // (b) Feature-level work carries the roadmap dates the Roadmap view plots —
+  //     but each date has a PRECONDITION (board-design spec §3.2), and a date
+  //     whose precondition has not fired is legitimately absent, not a defect.
+  //     Target date is a forecast derived from the release: only a milestone
+  //     that itself carries a due date can forecast one, so a feature parked on
+  //     a dateless «· Позже» backlog owes nothing. Start date is «filled when
+  //     the first child EARS Issue moves to In Progress»: it is owed only once
+  //     work has demonstrably started — a closed child, or the Issue's own
+  //     board Status past Todo.
   if (ownsBoardDates(kind)) {
-    const missing = [];
-    if (!str(row?.startDate)) missing.push("Start date");
-    if (!str(row?.targetDate)) missing.push("Target date");
-    if (missing.length > 0)
+    if (str(row?.milestoneDueOn) && !str(row?.targetDate))
       findings.push({
         number,
-        rule: "missing-dates",
-        message: `${kind} Issue without ${missing.join(" + ")} on board #1`,
+        rule: "missing-target",
+        message:
+          `${kind} Issue on milestone «${milestone ?? "(unset)"}» ` +
+          `(due ${str(row.milestoneDueOn).slice(0, 10)}) without a Target date on board #1`,
       });
+
+    if (!str(row?.startDate)) {
+      const completed =
+        typeof row?.subIssuesCompleted === "number" ? row.subIssuesCompleted : 0;
+      const status = str(row?.boardStatus) || null;
+      const started = completed > 0 || (status !== null && STARTED_BOARD_STATUSES.includes(status));
+      if (started)
+        findings.push({
+          number,
+          rule: "missing-start",
+          message:
+            `${kind} Issue with started work ` +
+            `(${completed > 0 ? `${completed} closed child Issue(s)` : `Status «${status}»`}) ` +
+            `without a Start date on board #1`,
+        });
+    }
   }
 
   // (c) An EARS task inherits its feature's milestone — it is meaningless
@@ -329,7 +362,31 @@ export function parseIssueBoardNode(node) {
         : null,
     startDate: dates.startDate,
     targetDate: dates.targetDate,
+    milestoneDueOn: str(content.milestone?.dueOn) || null,
+    subIssuesCompleted:
+      typeof content.subIssuesSummary?.completed === "number"
+        ? content.subIssuesSummary.completed
+        : 0,
+    boardStatus: boardStatusValue(node),
   };
+}
+
+/** The board «Status» single-select field name. */
+export const STATUS_FIELD = "Status";
+
+/**
+ * Read the board «Status» single-select value off a board item's `fieldValues`.
+ * @param {any} node
+ * @returns {string|null}
+ */
+export function boardStatusValue(node) {
+  const nodes = node?.fieldValues?.nodes;
+  for (const fv of Array.isArray(nodes) ? nodes : []) {
+    if (fv?.field?.name !== STATUS_FIELD) continue;
+    const name = typeof fv?.name === "string" ? fv.name : null;
+    if (name) return name;
+  }
+  return null;
 }
 
 /** The board «Start date» field name. */

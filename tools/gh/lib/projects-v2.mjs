@@ -111,8 +111,8 @@ export const LABELS_PAGE_SIZE = 30;
 
 /**
  * Page size of the per-item `fieldValues` connection. Under-reading it hides a
- * «Start date» / «Target date» value and manufactures a false `missing-dates`
- * finding, so it is checked the same way.
+ * «Start date» / «Target date» / «Status» value and manufactures a false
+ * `missing-target` / `missing-start` finding, so it is checked the same way.
  */
 export const FIELD_VALUES_PAGE_SIZE = 20;
 
@@ -127,10 +127,13 @@ export function buildBoardItemsPageQuery(after = null) {
     `items(first:100${cursor}){pageInfo{hasNextPage endCursor} nodes{id ` +
     `fieldValues(first:${FIELD_VALUES_PAGE_SIZE}){totalCount ` +
     `nodes{... on ProjectV2ItemFieldDateValue{date ` +
+    `field{... on ProjectV2FieldCommon{name}}} ` +
+    `... on ProjectV2ItemFieldSingleSelectValue{name ` +
     `field{... on ProjectV2FieldCommon{name}}}}} ` +
     `content{__typename ... on PullRequest{number state ` +
     `assignees(first:1){totalCount} milestone{title}} ` +
-    `... on Issue{number state title milestone{title} ` +
+    `... on Issue{number state title milestone{title dueOn} ` +
+    `subIssuesSummary{total completed} ` +
     `labels(first:${LABELS_PAGE_SIZE}){totalCount nodes{name}} ` +
     `parent{number milestone{title}}}}}}}}}`
   );

@@ -19,6 +19,7 @@ import {
   roadmapHygieneWarnings,
   parseIssueBoardNode,
   boardDateValues,
+  boardStatusValue,
 } from "./roadmap-taxonomy.mjs";
 
 // ── title shapes ────────────────────────────────────────────────────────────
@@ -114,42 +115,72 @@ test("rule (a) fires only when the child's milestone differs from its parent's",
   );
 });
 
-// ── rule (b): feature-level Issue without Start/Target dates ────────────────
-test("rule (b) fires for dateless features + gates only", () => {
-  const feature = {
-    number: 20,
-    title: "[Академия][012] Архив",
-    labels: ["track:academy"],
-    milestone: "Академия R1 — Архив записей",
-    parent: null,
-  };
-  const missingBoth = roadmapFindingsFor({ ...feature, startDate: null, targetDate: null });
-  assert.equal(missingBoth.filter((f) => f.rule === "missing-dates").length, 1);
-  assert.match(missingBoth[0].message, /Start date \+ Target date/);
-  const missingOne = roadmapFindingsFor({
-    ...feature,
-    startDate: "2026-09-01",
-    targetDate: null,
-  });
+// ── rule (b): the two date rules and their spec §3.2 preconditions ───────
+const feature = {
+  number: 20,
+  title: "[Академия][012] Архив",
+  labels: ["track:academy"],
+  milestone: "Академия R1 — Архив записей",
+  parent: null,
+  startDate: null,
+  targetDate: null,
+  milestoneDueOn: null,
+  subIssuesCompleted: 0,
+  boardStatus: null,
+};
+const dateRules = (row) =>
+  roadmapFindingsFor(row)
+    .filter((f) => f.rule === "missing-target" || f.rule === "missing-start")
+    .map((f) => f.rule);
+
+test("missing-target fires only when the milestone itself carries a due date", () => {
+  // Dateless milestone («· Позже» backlog) — no Target is forecastable.
+  assert.deepEqual(dateRules(feature), []);
+  // Dated milestone, no Target — the forecast is genuinely missing.
+  const dated = { ...feature, milestoneDueOn: "2026-11-30T00:00:00Z" };
+  assert.deepEqual(dateRules(dated), ["missing-target"]);
   assert.match(
-    missingOne.find((f) => f.rule === "missing-dates").message,
-    /without Target date/,
+    roadmapFindingsFor(dated).find((f) => f.rule === "missing-target").message,
+    /due 2026-11-30.*without a Target date/,
   );
+  // Target set — clean.
+  assert.deepEqual(dateRules({ ...dated, targetDate: "2026-11-20" }), []);
+});
+
+test("missing-start fires only once work has demonstrably started", () => {
+  // Nothing started — a Start date is not owed yet (spec §3.2).
+  assert.deepEqual(dateRules({ ...feature, boardStatus: "Todo" }), []);
+  assert.deepEqual(dateRules({ ...feature, subIssuesCompleted: 0 }), []);
+  // A closed child Issue proves work started.
+  assert.deepEqual(dateRules({ ...feature, subIssuesCompleted: 2 }), ["missing-start"]);
+  assert.match(
+    roadmapFindingsFor({ ...feature, subIssuesCompleted: 2 }).find(
+      (f) => f.rule === "missing-start",
+    ).message,
+    /2 closed child Issue\(s\)/,
+  );
+  // So does the Issue's own board Status past Todo.
+  for (const status of ["In Progress", "Review", "Done"])
+    assert.deepEqual(dateRules({ ...feature, boardStatus: status }), ["missing-start"]);
+  // Start already set — clean whatever the progress.
   assert.deepEqual(
-    roadmapFindingsFor({ ...feature, startDate: "2026-09-01", targetDate: "2026-10-01" })
-      .filter((f) => f.rule === "missing-dates"),
+    dateRules({ ...feature, startDate: "2026-09-01", subIssuesCompleted: 2 }),
     [],
   );
+});
+
+test("neither date rule touches deliberately dateless kinds", () => {
   // A platform task is deliberately dateless — never flagged.
   assert.deepEqual(
-    roadmapFindingsFor({
+    dateRules({
+      ...feature,
       number: 21,
       title: "bump drizzle",
       labels: ["chore", "track:platform"],
       milestone: "Platform ops & hardening",
-      parent: null,
-      startDate: null,
-      targetDate: null,
+      milestoneDueOn: "2026-11-30T00:00:00Z",
+      subIssuesCompleted: 3,
+      boardStatus: "In Progress",
     }),
     [],
   );
@@ -248,6 +279,7 @@ test("roadmapHygiene sorts by number then rule, and counts per rule", () => {
       parent: null,
       startDate: null,
       targetDate: null,
+      milestoneDueOn: "2026-12-01T00:00:00Z",
     },
     {
       number: 45,
@@ -264,13 +296,14 @@ test("roadmapHygiene sorts by number then rule, and counts per rule", () => {
     findings.map((f) => [f.number, f.rule]),
     [
       [45, "ears-no-parent"],
-      [50, "missing-dates"],
+      [50, "missing-target"],
       [50, "track-milestone"],
     ],
   );
   assert.deepEqual(roadmapRuleCounts(findings), {
     "parent-milestone": 0,
-    "missing-dates": 1,
+    "missing-target": 1,
+    "missing-start": 0,
     "ears-no-parent": 1,
     "track-milestone": 1,
   });
@@ -322,16 +355,38 @@ test("boardDateValues picks the Start/Target date field values", () => {
   assert.deepEqual(boardDateValues({}), { startDate: null, targetDate: null });
 });
 
+test("boardStatusValue picks the Status single-select value", () => {
+  assert.equal(
+    boardStatusValue({
+      fieldValues: {
+        nodes: [
+          { date: "2026-09-01", field: { name: "Start date" } },
+          { name: "Review", field: { name: "Status" } },
+          { name: "P1", field: { name: "Priority" } },
+        ],
+      },
+    }),
+    "Review",
+  );
+  assert.equal(boardStatusValue({}), null);
+});
+
 test("parseIssueBoardNode maps an OPEN Issue node, skipping PRs and closed Issues", () => {
   const node = {
     id: "PVTI_x",
-    fieldValues: { nodes: [{ date: "2026-09-01", field: { name: "Start date" } }] },
+    fieldValues: {
+      nodes: [
+        { date: "2026-09-01", field: { name: "Start date" } },
+        { name: "In Progress", field: { name: "Status" } },
+      ],
+    },
     content: {
       __typename: "Issue",
       number: 60,
       state: "OPEN",
       title: "[Академия][012] Архив",
-      milestone: { title: "Академия R1 — Архив записей" },
+      milestone: { title: "Академия R1 — Архив записей", dueOn: "2026-11-30T00:00:00Z" },
+      subIssuesSummary: { total: 4, completed: 1 },
       labels: { nodes: [{ name: "feature" }, { name: "track:academy" }] },
       parent: { number: 59, milestone: { title: "Академия R1 — Архив записей" } },
     },
@@ -344,6 +399,9 @@ test("parseIssueBoardNode maps an OPEN Issue node, skipping PRs and closed Issue
     parent: { number: 59, milestone: "Академия R1 — Архив записей" },
     startDate: "2026-09-01",
     targetDate: null,
+    milestoneDueOn: "2026-11-30T00:00:00Z",
+    subIssuesCompleted: 1,
+    boardStatus: "In Progress",
   });
   assert.equal(
     parseIssueBoardNode({ content: { __typename: "PullRequest", number: 1 } }),

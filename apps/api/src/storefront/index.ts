@@ -1,3 +1,6 @@
+export { DoctorEventsPublicController } from "./doctor-events.public.controller.js";
+export { DoctorEventsRepository } from "./doctor-events.repository.js";
+export { DoctorEventsService } from "./doctor-events.service.js";
 export { SpecialtiesPublicController } from "./specialties.public.controller.js";
 export { SpecialtiesRepository } from "./specialties.repository.js";
 export { SpecialtiesService } from "./specialties.service.js";

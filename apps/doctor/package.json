@@ -11,7 +11,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:e2e:ci": "playwright test --config=playwright.ci.config.ts && playwright test --config=playwright.consumption.config.ts && playwright test --config=playwright.return-context.config.ts"
+    "test:e2e:ci": "playwright test --config=playwright.ci.config.ts && playwright test --config=playwright.consumption.config.ts && playwright test --config=playwright.return-context.config.ts && playwright test --config=playwright.events.config.ts"
   },
   "dependencies": {
     "@ds/design-system": "workspace:*",

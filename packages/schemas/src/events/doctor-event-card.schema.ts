@@ -54,7 +54,15 @@ export const DoctorEventCardSchema = z
     startsAt: z.string(),
     endsAt: z.string().nullable(),
     format: DoctorEventFormatSchema,
+    /**
+     * The managed direction the event is filed under, as its ID — the SAME
+     * vocabulary the `kind` FACET takes, so a card value round-trips into
+     * `?kind=` instead of crashing the read (019-design section 7). Empty
+     * string exactly when no published direction is filed.
+     */
     kind: z.string(),
+    /** The direction's authored title — the display projection of `kind`. */
+    kindTitle: z.string(),
     title: z.string(),
     speaker: z.string(),
     source: z.string(),

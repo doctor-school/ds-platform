@@ -20,27 +20,39 @@ export interface EventListItem extends Omit<
 }
 
 export interface EventListLabels {
-  upcoming: string;
-  past: string;
+  /** Tense-control copy — required only while `tenseControl` is `"tabs"`. */
+  upcoming?: string;
+  past?: string;
   emptyTitle: string;
   emptyDescription?: string;
-  pagination: string;
-  previous: string;
-  next: string;
-  page: (page: number) => string;
+  /** Pagination copy — required only while `paginationMode` is `"pages"` / `"cursor"`. */
+  pagination?: string;
+  previous?: string;
+  next?: string;
+  page?: (page: number) => string;
 }
 
 export interface EventListBaseProps {
   items: readonly EventListItem[];
+  /** The tense the feed is currently reading — declared even when no control renders it. */
   selectedTab: EventListTab;
-  onTabChange: (tab: EventListTab) => void;
-  counts: Readonly<Record<EventListTab, number>>;
+  onTabChange?: (tab: EventListTab) => void;
+  counts?: Readonly<Record<EventListTab, number>>;
   labels: EventListLabels;
-  page: number;
+  page?: number;
   cursor?: string | null;
-  onPageChange: (page: number, cursor?: string | null) => void;
+  onPageChange?: (page: number, cursor?: string | null) => void;
   /** Host-owned controls that belong between the canvas tabs and the feed. */
   toolbar?: React.ReactNode;
+  /**
+   * Whether the unit renders the «Будущие / Прошедшие» tense control (#1518).
+   * `"none"` keeps the feed body and drops the control: a host whose release
+   * reads ONE tense (019 release 1 per LD-10) then reuses THIS unit instead of
+   * re-assembling a day-grouped list of its own.
+   */
+  tenseControl?: "tabs" | "none";
+  /** Host-owned control below the feed — e.g. 019's «показать ещё», which is a URL edit, not a page state. */
+  footer?: React.ReactNode;
 }
 
 /**
@@ -50,7 +62,19 @@ export interface EventListBaseProps {
  */
 export type EventListProps = EventListBaseProps &
   (
-    | { paginationMode?: "pages"; pageCount: number; hasPrevious?: never; hasNext?: never }
+    | {
+        paginationMode?: "pages";
+        pageCount: number;
+        hasPrevious?: never;
+        hasNext?: never;
+      }
+    | {
+        /** No pager at all — the host bounds the feed some other way (019's horizon). */
+        paginationMode: "none";
+        pageCount?: never;
+        hasPrevious?: never;
+        hasNext?: never;
+      }
     | {
         paginationMode: "cursor";
         hasPrevious: boolean;
@@ -66,11 +90,13 @@ export function EventList({
   onTabChange,
   counts,
   labels,
-  page,
+  page = 1,
   pageCount,
   cursor,
   onPageChange,
   toolbar,
+  tenseControl = "tabs",
+  footer,
   paginationMode = "pages",
   hasPrevious = false,
   hasNext = false,
@@ -94,10 +120,90 @@ export function EventList({
     return result;
   }, [items]);
 
+  const body = (
+    <>
+      {toolbar}
+      {groups.length === 0 ? (
+        <EmptyState
+          variant="no-records"
+          title={labels.emptyTitle}
+          description={labels.emptyDescription}
+        />
+      ) : (
+        <div
+          className={cn(
+            "flex flex-col gap-8 layout:gap-12",
+            toolbar && "mt-8 layout:mt-9",
+          )}
+        >
+          {groups.map((group) => (
+            <section key={group.key} id={`day-${group.key}`}>
+              <DayBand className="-mx-4 layout:hidden">{group.label}</DayBand>
+              <div className="hidden layout:mb-6 layout:flex layout:items-baseline layout:gap-4">
+                <span className="text-caption font-extrabold uppercase tracking-micro whitespace-nowrap">
+                  {group.label}
+                </span>
+                <span className="flex-1 border-t-2 border-foreground" />
+              </div>
+              <div className="-mx-4 flex flex-col layout:mx-0 layout:gap-7">
+                {group.items.map(
+                  ({
+                    id,
+                    groupKey: _groupKey,
+                    groupLabel: _groupLabel,
+                    ...card
+                  }) => (
+                    <WebinarCard key={id} {...card} />
+                  ),
+                )}
+              </div>
+            </section>
+          ))}
+        </div>
+      )}
+      {paginationMode === "none" ? null : paginationMode === "cursor" ? (
+        <Pagination
+          className="mt-8"
+          mode="cursor"
+          page={page}
+          hasPrevious={hasPrevious}
+          hasNext={hasNext}
+          onPageChange={(nextPage) => onPageChange?.(nextPage, cursor)}
+          navLabel={labels.pagination ?? ""}
+          previousLabel={labels.previous ?? ""}
+          nextLabel={labels.next ?? ""}
+          pageLabel={labels.page ?? ((value) => String(value))}
+        />
+      ) : (
+        <Pagination
+          className="mt-8"
+          page={page}
+          pageCount={pageCount ?? 1}
+          onPageChange={(nextPage) => onPageChange?.(nextPage, cursor)}
+          navLabel={labels.pagination ?? ""}
+          previousLabel={labels.previous ?? ""}
+          nextLabel={labels.next ?? ""}
+          pageLabel={labels.page ?? ((value) => String(value))}
+        />
+      )}
+      {footer}
+    </>
+  );
+
+  // A host reading ONE tense (019 release 1, LD-10) reuses the same feed body
+  // with no control above it — the control is dropped, never re-implemented.
+  if (tenseControl === "none") {
+    return (
+      <div className="mt-7 layout:mt-8" data-event-list-body="">
+        {body}
+      </div>
+    );
+  }
+
   return (
     <Tabs
       value={selectedTab}
-      onValueChange={(value) => onTabChange(value as EventListTab)}
+      onValueChange={(value) => onTabChange?.(value as EventListTab)}
     >
       <TabsList
         className="w-full shadow-lg layout:w-auto"
@@ -105,10 +211,10 @@ export function EventList({
         data-testid="event-list-tabs"
       >
         <TabsTrigger value="upcoming">
-          {labels.upcoming} · {counts.upcoming}
+          {labels.upcoming} · {counts?.upcoming ?? 0}
         </TabsTrigger>
         <TabsTrigger value="past">
-          {labels.past} · {counts.past}
+          {labels.past} · {counts?.past ?? 0}
         </TabsTrigger>
       </TabsList>
       <TabsContent
@@ -116,70 +222,7 @@ export function EventList({
         className="mt-7 layout:mt-8"
         data-event-list-body=""
       >
-        {toolbar}
-        {groups.length === 0 ? (
-          <EmptyState
-            variant="no-records"
-            title={labels.emptyTitle}
-            description={labels.emptyDescription}
-          />
-        ) : (
-          <div
-            className={cn(
-              "flex flex-col gap-8 layout:gap-12",
-              toolbar && "mt-8 layout:mt-9",
-            )}
-          >
-            {groups.map((group) => (
-              <section key={group.key} id={`day-${group.key}`}>
-                <DayBand className="-mx-4 layout:hidden">{group.label}</DayBand>
-                <div className="hidden layout:mb-6 layout:flex layout:items-baseline layout:gap-4">
-                  <span className="text-caption font-extrabold uppercase tracking-micro whitespace-nowrap">
-                    {group.label}
-                  </span>
-                  <span className="flex-1 border-t-2 border-foreground" />
-                </div>
-                <div className="-mx-4 flex flex-col layout:mx-0 layout:gap-7">
-                  {group.items.map(
-                    ({
-                      id,
-                      groupKey: _groupKey,
-                      groupLabel: _groupLabel,
-                      ...card
-                    }) => (
-                      <WebinarCard key={id} {...card} />
-                    ),
-                  )}
-                </div>
-              </section>
-            ))}
-          </div>
-        )}
-        {paginationMode === "cursor" ? (
-          <Pagination
-            className="mt-8"
-            mode="cursor"
-            page={page}
-            hasPrevious={hasPrevious}
-            hasNext={hasNext}
-            onPageChange={(nextPage) => onPageChange(nextPage, cursor)}
-            navLabel={labels.pagination}
-            previousLabel={labels.previous}
-            nextLabel={labels.next}
-            pageLabel={labels.page}
-          />
-        ) : (
-          <Pagination
-            className="mt-8"
-            page={page}
-            pageCount={pageCount ?? 1}
-            onPageChange={(nextPage) => onPageChange(nextPage, cursor)}
-            navLabel={labels.pagination}
-            previousLabel={labels.previous}
-            nextLabel={labels.next}
-            pageLabel={labels.page}
-          />
-        )}
+        {body}
       </TabsContent>
     </Tabs>
   );

@@ -187,9 +187,16 @@ test.describe("014 EARS-4 public post-live event page (e2e)", () => {
     });
     // Degrades in place — never a 404 or a redirect (004 EARS-5, owner variant «а»).
     expect(res?.status()).toBe(200);
-    // `exact` — the hidden notice card repeats the phrase as «Мероприятие
-    // скрыто»; the hero badge is the render 004 EARS-5 owns.
-    await expect(page.getByText("Скрыто", { exact: true })).toBeVisible();
+    // «Скрыто» renders TWICE on a hidden event, and both are intentional:
+    // the hero lifecycle badge (`state.hidden`) and the status-card time-plate
+    // label (`statusCard.hidden.timeLabel`). Asserting the count pins that the
+    // 004 EARS-5 render is exactly those two nodes — the recording swap must
+    // not add a third or silently drop one. `exact` keeps the notice card's
+    // «Мероприятие скрыто» out of the match.
+    const hiddenLabels = page.getByText("Скрыто", { exact: true });
+    await expect(hiddenLabels).toHaveCount(2);
+    await expect(hiddenLabels.first()).toBeVisible();
+    await expect(hiddenLabels.last()).toBeVisible();
     await expect(
       page.getByText("Регистрация недоступна", { exact: true }),
     ).toBeVisible();

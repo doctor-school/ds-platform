@@ -25,12 +25,14 @@ const BASE = `http://127.0.0.1:${PORT}`;
 
 export default defineConfig({
   testDir: "./e2e",
-  // Both backend-REQUIRING specs live in their own tiers: the specialty
-  // consumption flow and the 021 EARS-2 return context each boot the app
-  // against their own upstream double (this tier boots no api at all).
+  // Every backend-REQUIRING spec lives in its own tier: the specialty
+  // consumption flow, the 021 EARS-2 return context and the 019 EARS-3
+  // day-grouped events feed each boot the app against their own upstream
+  // double (this tier boots no api at all).
   testIgnore: [
     "specialty-consumption.spec.ts",
     "register-return-context.spec.ts",
+    "events-feed.spec.ts",
   ],
   fullyParallel: true,
   forbidOnly: !!process.env.CI,

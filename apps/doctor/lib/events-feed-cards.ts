@@ -1,4 +1,4 @@
-import type { EventListItem } from "@ds/design-system";
+import type { EventListItem } from "@ds/design-system/blocks";
 import type { DoctorEventCard, DoctorEventsFeed } from "@ds/schemas";
 
 /**

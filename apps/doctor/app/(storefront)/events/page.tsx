@@ -1,5 +1,5 @@
 import { headers } from "next/headers";
-import { EventList } from "@ds/design-system";
+import { EventList } from "@ds/design-system/blocks";
 import {
   DOCTOR_EVENTS_FEED_COPY,
   toEventListItems,

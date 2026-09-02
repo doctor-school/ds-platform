@@ -119,16 +119,16 @@ export class SpecialtyChoicePublicController {
    * address, so a burst here could refuse sign-in platform-wide. Scoped, this
    * route's 20 / 15 min is its own and cannot touch theirs.
    *
-   * What the ceiling actually bounds today: the window is per SOURCE ADDRESS as
-   * the api resolves it, and this deployment does not resolve the caller —
-   * `trustProxy` is unset and no layer reads `x-forwarded-for` (#1655), while
-   * guest calls arrive through the doctor app's `/v1/:path*` rewrite, so every
-   * visitor presents as one address. Until #1655 lands the effective prod
-   * behaviour is therefore ONE shared 20 / 15 min bucket for this route — enough
-   * to bound anonymous `idempotency_keys` growth, which is what D2 asked for,
-   * and not a per-caller control. The per-ASN dimension is inert in this
-   * deployment: nothing in `infra/**` sets `x-asn`. There is no per-user window
-   * either — the body carries no `identifier` / `email` / `phone` to key one on.
+   * What the ceiling actually bounds: the window is per SOURCE ADDRESS as the
+   * api resolves it, and since #1655 that IS the caller — the adapter trusts the
+   * proxy chain by ADDRESS (`config/trust-proxy.ts`), so both the direct path and
+   * the doctor app's `/v1/:path*` rewrite resolve `request.ip` to the visitor
+   * rather than collapsing every visitor onto the Caddy container. This route's
+   * 20 / 15 min is therefore a genuine per-caller control, on top of bounding
+   * anonymous `idempotency_keys` growth, which is what D2 asked for. The per-ASN
+   * dimension remains inert in this deployment: nothing in `infra/**` sets
+   * `x-asn` (tracked in `DEBT.md`). There is no per-user window either — the body
+   * carries no `identifier` / `email` / `phone` to key one on.
    * Neither `@TimingEqualized()` nor `@BotProtected()` applies: the route
    * enumerates nothing and discloses no account existence, and SmartCaptcha is
    * not deployed on prod today, so bot protection is not available to engage.

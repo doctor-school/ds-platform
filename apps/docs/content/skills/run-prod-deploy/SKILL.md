@@ -29,7 +29,9 @@ The D-decision gate, over the **whole deploy range** (`deployedSha..origin/main`
 
 8. **Release gate clear (spec §10.10)** — no OPEN Issue carries `release-blocker` (`gh issue list --label release-blocker --state open`), and no merged-undeployed PR in the range defers Stage-B to a still-OPEN batched gate (item 2's `Stage-B: batched at #<gate>` markers — read from the PR body OR a comment on a linked `Closes #N` Issue, the same accepted-source set the merge guard enforces → `gh issue view <gate> --json state`). The deploy pre-flight enforces both as a hard, fail-closed gate; bypass only via `--release-gate-exempt "<reason>"` on the owner's go.
 
-**Standing-auth** class + 1–8 green → ship autonomously. **Escalate** class — or any эфир hold — → the one-line **"ready to ship X — go?"** first, then proceed on the owner's go.
+9. **Session-invalidating changes announced** — a change in the range that re-derives the session fingerprint forces every signed-in user and operator to sign in again on deploy; ship it in a quiet window with the owner ack recorded on the PR. Standing entry: **deploy #1736 invalidates all sessions once — quiet window, owner ack 2026-09-02** (https://github.com/doctor-school/ds-platform/pull/1736#issuecomment-5505979858).
+
+**Standing-auth** class + 1–9 green → ship autonomously. **Escalate** class — or any эфир hold — → the one-line **"ready to ship X — go?"** first, then proceed on the owner's go.
 
 ## `main` stays deployable — revert by default (spec §10.10)
 

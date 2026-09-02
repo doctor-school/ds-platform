@@ -176,6 +176,18 @@ keyed by the cookie's `sid`. No token is ever in a response body (EARS-8).
 - **`session.cookie.ts`** — the `__Host-` cookie serialize/parse (HttpOnly +
   Secure + SameSite=Lax + `Path=/`, no `Domain` — origin-bound by the prefix) and
   the `hash(UA + IP/24 + accept-language)` fingerprint.
+  - **Deploy impact of #1655.** The `IP/24` term is bound ONCE at
+    `SessionService.establish` and never rebound, and prod sessions live in Redis
+    with a 30 d TTL, so they survive an api restart. Before #1655 the term was
+    derived from the Caddy container's /24 — a constant for every visitor; after it,
+    the re-derivation on the next request uses the REAL client's /24. Every session
+    established before that deploy therefore fails the fingerprint check exactly
+    once: on deploy, every signed-in user and every admin operator is signed out and
+    signs in again. No data is affected. Ongoing, the binding also evicts a session
+    when the client's own /24 changes (cellular roaming, CGNAT reassignment) — the
+    ADR-0001 §6 intent, which the constant term had made a no-op. Owner ack of the
+    one-time sign-out (2026-09-02):
+    https://github.com/doctor-school/ds-platform/pull/1736#issuecomment-5505979858
 - **`SessionStore` port** (`session.types.ts`) — the `ActiveSession` read model.
   Bound once in `session.module.ts`: the **Redis adapter**
   (`session-store.redis.ts`) when `REDIS_URL` is set (the production binding),
@@ -283,7 +295,11 @@ IdP to send, so a refused send never reaches the provider and never costs money.
   threshold and no account (not an existence oracle, EARS-16/§10). The per-ASN
   window is evaluated only when the edge supplies an `x-asn` header (the per-ASN
   limit is an edge/BFF concern, design §2); absent it, the budget degrades to
-  phone/IP/global.
+  phone/IP/global — which is the DEPLOYED behaviour today, since no infra layer
+  sets `x-asn` (#1655, `DEBT.md`) — the only source today is an untrusted client
+  header, i.e. spoofable, though supplying one only adds a dimension counted
+  against the sender. The per-IP counter here is keyed on the same
+  `request.ip` the EARS-13 limiter uses, i.e. the real client since #1655.
 - **State** — in-memory (correct for a single instance, proven by the unit spec +
   OTP e2e). Multi-instance sharing rides the same Redis as the session store; the
   EARS-13 `RateLimitService` (F6 #90) is the parallel request-rate limiter sharing
@@ -320,6 +336,23 @@ gate touches no other call site:
   over `RateLimitService` (per-user 10/15 min, per-IP 20/15 min, per-ASN 100/h;
   the per-user window is forgiven on a successful login or reset-complete),
   on register/login/otp/verify/reset; a refusal is a generic `429`.
+  **What the windows do in the deployed system** (#1655) — the per-IP window is
+  keyed on `request.ip`, which resolves to the REAL client: the Fastify adapter is
+  constructed with `trustProxy` set to the trusted proxy addresses
+  (`config/trust-proxy.ts`, `TRUSTED_PROXIES` — loopback + link-local + the
+  private ranges by default, i.e. the container network). `x-forwarded-for` is
+  therefore honoured from Caddy and from the doctor app's `/v1/:path*` rewrite,
+  by ADDRESS rather than by hop count, so both the 1-hop and 2-hop chains resolve
+  the same caller; a forwarded header presented by a peer OUTSIDE the trusted set
+  is ignored and that request keeps its socket address. The per-ASN window is
+  **dormant**: nothing in `infra/**` sets `x-asn` today, so on honest traffic
+  `extractAsn` returns undefined and the 100/h ceiling is never evaluated. The
+  header has NO trust boundary — Caddy forwards client headers verbatim, so the
+  only source today is an untrusted, spoofable client header; there is no exploit
+  (a supplied value only adds a dimension counted against the sender), but the
+  window must not be read as unreachable. It stays wired for the edge layer that
+  will set the header, which must then accept `x-asn` ONLY from the trusted proxy
+  set (tracked in `DEBT.md`); no ASN lookup is performed in the api.
 - **Timing equalization** (EARS-16) — `timing/` (see above).
 - **Login captcha-after-N-failures** (EARS-17) — `login-challenge/`:
   `LoginChallengePolicy` tallies failures per origin; `@LoginChallenged` +

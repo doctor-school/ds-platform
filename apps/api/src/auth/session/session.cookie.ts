@@ -38,13 +38,12 @@ export function ipToNet24(ip: string): string {
  * request and compare to the value bound at login; a mismatch invalidates the
  * session (a stolen cookie replayed from another device/network does not match).
  *
- * NOTE — the IP/24 component is only meaningful when Fastify resolves the real
- * client IP. Behind the v1 Caddy reverse proxy (ADR-0012), `request.ip` is the
- * proxy address unless `trustProxy` + the known hop count are configured on the
- * adapter, in which case this term collapses to a constant and the binding
- * degrades to UA + accept-language. Wiring `trustProxy` to the deployment
- * topology is deferred to that config (binding a *wrong*, spoofable IP is worse
- * than deferring); UA + accept-language still bind in the interim.
+ * The IP/24 component is only meaningful when Fastify resolves the real client
+ * IP. Since #1655 it does: the adapter is constructed with `trustProxy` set to
+ * the trusted proxy ADDRESSES (`config/trust-proxy.ts`, `TRUSTED_PROXIES`), so
+ * behind the v1 Caddy reverse proxy (ADR-0012) `request.ip` is the caller, not
+ * the proxy — and a forwarded header from an untrusted peer is ignored, so the
+ * bound value is not spoofable by the client. All three terms therefore bind.
  */
 export function computeFingerprint(input: FingerprintInput): string {
   const material = [

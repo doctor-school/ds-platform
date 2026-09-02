@@ -41,6 +41,18 @@ const config: NextConfig = {
   // Consume @ds/design-system as source (.tsx) — owned-code shadcn model
   // (ADR-0004 §6), no separate build step for the internal package.
   transpilePackages: ["@ds/design-system"],
+  // Storefront → api proxy. Client-IP note (#1655): this rewrite forwards the
+  // incoming request headers VERBATIM to the api, `x-forwarded-for` included, but
+  // it does NOT append its own hop — Next's rewrite proxy (httpxy) enriches the
+  // forwarded-* headers only under an `xfwd` option it never sets, and its
+  // fallback middleware writes them only when absent. So the api receives exactly
+  // the chain Caddy built (`<client>`, or `<client-supplied>, <client>` when the
+  // caller sent one), and the api's address-predicate `trustProxy`
+  // (apps/api/src/config/trust-proxy.ts) resolves the real client from it —
+  // identically to the direct academy/api path, which is why that config keys on
+  // trusted proxy ADDRESSES and not on a hop count. Next exposes no knob to turn
+  // the appending on; nothing is needed, since the socket peer here is the
+  // container network the api already trusts.
   async rewrites() {
     return [{ source: "/v1/:path*", destination: `${API_PROXY_TARGET}/v1/:path*` }];
   },

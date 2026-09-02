@@ -46,6 +46,7 @@
 | GET /v1/public/events                                           | public        | —                            | none       | —            | false   | none       | none        | EARS-7, EARS-10, EARS-11, EARS-15  |
 | GET /v1/public/events/:idOrSlug                                 | public        | —                            | none       | —            | false   | none       | none        | EARS-1, EARS-5, EARS-10            |
 | GET /v1/public/events/:idOrSlug/directions                      | public        | —                            | none       | —            | false   | none       | none        | EARS-11, EARS-16                   |
+| GET /v1/public/events/:idOrSlug/participation                   | public        | —                            | none       | —            | false   | none       | none        | EARS-1                             |
 | GET /v1/public/events/:idOrSlug/projects                        | public        | —                            | none       | —            | false   | none       | none        | EARS-6, EARS-16                    |
 | GET /v1/public/events/:idOrSlug/speakers                        | public        | —                            | none       | —            | false   | none       | none        | EARS-8, EARS-16                    |
 | GET /v1/public/events/month-counts                              | public        | —                            | none       | —            | false   | none       | none        | EARS-16, EARS-10                   |
@@ -61,6 +62,8 @@
 | GET /v1/public/statistics                                       | public        | —                            | none       | —            | false   | none       | none        | EARS-2                             |
 | GET /v1/ready                                                   | public        | —                            | none       | —            | false   | none       | none        | EARS-1, EARS-2                     |
 | GET /v1/storefront/doctor/events                                | public        | —                            | none       | —            | false   | none       | none        | EARS-3                             |
+| GET /v1/storefront/doctor/events/:idOrSlug                      | public        | —                            | none       | —            | false   | none       | none        | EARS-1                             |
+| GET /v1/storefront/doctor/events/:idOrSlug/participation        | public        | —                            | none       | —            | false   | none       | none        | EARS-1                             |
 | GET /v1/storefront/doctor/events/month                          | public        | —                            | none       | —            | false   | none       | none        | EARS-4                             |
 | PATCH /v1/admin/direction-adjacency/:id                         | authenticated | platform_admin               | fast-path  | —            | false   | live       | low-stakes  | EARS-8                             |
 | PATCH /v1/admin/directions/:id                                  | authenticated | platform_admin               | fast-path  | —            | false   | live       | low-stakes  | EARS-3, EARS-16, EARS-17           |

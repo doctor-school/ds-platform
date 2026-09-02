@@ -5,6 +5,8 @@ import { EventsAdminController } from "./events.admin.controller.js";
 import { EventsPublicController } from "./events.public.controller.js";
 import { EventsRepository } from "./events.repository.js";
 import { EventsService } from "./events.service.js";
+import { RegistrationModule } from "../registration/registration.module.js";
+import { ParticipationService } from "./participation.service.js";
 
 /**
  * Event module. Hosts both the 007 admin authoring surface (write side) and the
@@ -26,9 +28,18 @@ import { EventsService } from "./events.service.js";
   // `SpeakerProjectionService` — the ONE canonical merged resolver. The
   // dependency points events → taxonomy and never back: the taxonomy public
   // speaker route resolves its own event key, so there is no cycle.
-  imports: [TaxonomyModule, RecordingsModule],
+  // 020 EARS-1 (#1764): the participation policy consumes feature 005's
+  // canonical registration fact through `RegistrationService` rather than
+  // querying `registrations` a second time here. The dependency points
+  // events → registration and never back (005 reads the events table directly,
+  // importing no module), so there is no cycle.
+  imports: [TaxonomyModule, RecordingsModule, RegistrationModule],
   controllers: [EventsAdminController, EventsPublicController],
-  providers: [EventsService, EventsRepository],
-  exports: [EventsService],
+  providers: [EventsService, EventsRepository, ParticipationService],
+  // `ParticipationService` and `EventsService` are exported for the DOCTOR
+  // storefront's twin routes (020 LD-1): the doctor host mounts thin routes over
+  // these same providers, so a second read model or a second CTA resolver
+  // cannot come into existence on that side.
+  exports: [EventsService, ParticipationService],
 })
 export class EventsModule {}

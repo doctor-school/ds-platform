@@ -239,6 +239,13 @@
       "when": 1788338209263,
       "tag": "0033_events_state_hidden_rename",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1788359150439,
+      "tag": "0034_cooing_baron_strucker",
+      "breakpoints": true
     }
   ]
 }

@@ -5,6 +5,7 @@ import {
   PublicEventStateSchema,
   PublicPartnerSchema,
 } from "./events.schema.js";
+import { EventParticipationFormatSchema } from "./participation.schema.js";
 
 /**
  * The public event-page projection lives in its own module for the same reason
@@ -33,7 +34,7 @@ import {
  * null) when the event has no program PDF — the page renders the program section
  * without a download affordance rather than a broken link (EARS-2).
  */
-export const PublicEventPageSchema = z.object({
+export const EventPageViewSchema = z.object({
   id: z.uuid(),
   slug: z.string(),
   title: z.string(),
@@ -67,5 +68,40 @@ export const PublicEventPageSchema = z.object({
    * «this read does not know».
    */
   recording: RecordingProjectionSchema,
+  /**
+   * 020 EARS-1 / LD-1 (#1764) — the event's participation format
+   * (020-design §4). Present on every publicly reachable state and identical on
+   * both storefront hosts: WHERE an event happens is a fact of the event, never
+   * of the host that renders it.
+   *
+   * This carries the format VALUE only. The `FormatBlock` union with its
+   * per-format sub-blocks (the room block, the address/map/«как добраться», the
+   * hybrid «очно / онлайн» tabs and their `mode` URL codec) is EARS-8 and is
+   * tracked separately at #1771 — modelling the block here before its content
+   * exists would be the untracked seam F-22 forbids.
+   */
+  format: EventParticipationFormatSchema,
+  /**
+   * 020 LD-5 (#1764) — the remaining offline seats, or `null` when there are no
+   * seats to run out of (an `online` event, or an offline/hybrid event whose
+   * capacity the operator has not bounded). `0` and `null` are therefore
+   * DIFFERENT answers: `0` is «мест нет» and drives `switch-to-online` /
+   * `sold-out` in the participation policy, `null` is «unlimited», and a client
+   * that conflated them would invent a sold-out state for every online webinar.
+   *
+   * Never omitted: like `recording`, a missing field would leave a consumer
+   * unable to tell «no seat limit» from «this read does not know».
+   */
+  seatsLeft: z.number().int().nonnegative().nullable(),
 });
-export type PublicEventPage = z.infer<typeof PublicEventPageSchema>;
+export type EventPageView = z.infer<typeof EventPageViewSchema>;
+
+/**
+ * 020 LD-1 — `EventPageView` IS 004's `PublicEventPage`, widened in place at its
+ * canonical owner rather than forked into a 020-local read model. The two names
+ * are kept as one schema and one type so every 004/012/014 consumer keeps
+ * compiling and the identity «there is exactly one public event read» is a
+ * repository fact rather than a review promise.
+ */
+export const PublicEventPageSchema = EventPageViewSchema;
+export type PublicEventPage = EventPageView;

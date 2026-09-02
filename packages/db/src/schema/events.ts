@@ -43,6 +43,25 @@ export const eventLifecycleState = pgEnum("event_lifecycle_state", [
   "hidden",
 ]);
 
+/**
+ * 020 EARS-1 / LD-5 (#1764) — the event's **participation format**: where the
+ * doctor actually attends. A real Postgres enum mirroring
+ * `EventParticipationFormatSchema` in `@ds/schemas`, on the same
+ * DB-owns-the-column-type / schema-owns-the-wire-contract split as
+ * {@link eventLifecycleState}.
+ *
+ * It is a SEPARATE axis from 019's five-value catalogue format
+ * (`webinar` · `online-meeting` · `offline-meetup` · `congress` · `podcast`),
+ * which is editorial kind, not attendance mode: a `congress` is routinely
+ * hybrid. Folding the two together would make «are there seats to run out of» a
+ * property of an editorial label (020-design §4).
+ */
+export const eventParticipationFormat = pgEnum("event_participation_format", [
+  "online",
+  "offline",
+  "hybrid",
+]);
+
 export const events = pgTable(
   "events",
   {
@@ -63,6 +82,29 @@ export const events = pgTable(
     /** Object-storage key for the current program PDF; null until one is uploaded. */
     programPdfRef: text("program_pdf_ref"),
     state: eventLifecycleState("state").notNull().default("draft"),
+    /**
+     * 020 EARS-1 (#1764) — attendance mode. `online` is the DEFAULT and the
+     * back-fill for every row that predates this column: every event the
+     * platform has run so far was a webinar, so «online» is the truthful value
+     * for the existing corpus rather than a placeholder.
+     */
+    participationFormat: eventParticipationFormat("participation_format")
+      .notNull()
+      .default("online"),
+    /**
+     * 020 LD-5 (#1764) — the remaining offline seats. `null` means there is no
+     * seat limit to run out of (an online event, or an offline/hybrid event
+     * whose capacity the operator has not bounded) and is the back-fill for
+     * every existing row; `0` means «мест нет» and is what drives
+     * `switch-to-online` on a hybrid event and `sold-out` on a pure offline one.
+     * The two are deliberately different values — conflating them would invent a
+     * sold-out state for every online webinar.
+     *
+     * The seat TOTAL the format block renders beside it («N мест, осталось M»)
+     * lands with that block at EARS-8 / #1771: modelling a column no read
+     * projects yet would be the untracked seam F-22 forbids.
+     */
+    seatsLeft: integer("seats_left"),
     /**
      * #1593 — the optimistic-concurrency version of the event aggregate, the
      * same column `event_recordings` and every versioned taxonomy row already
@@ -132,6 +174,9 @@ export const events = pgTable(
     // applicability from the query's own restriction clauses and never consults
     // a CHECK constraint to bridge the two, so an index predicated on the other
     // column would simply never be used.
+    // 020 LD-5: seats are a count, never a negative. `null` (no limit) passes —
+    // a CHECK is not violated by an unknown.
+    check("events_seats_left_non_negative", sql`${t.seatsLeft} >= 0`),
     index("events_active_starts_at_idx")
       .on(t.startsAt)
       .where(sql`${t.recordStatus} = 'active'`),

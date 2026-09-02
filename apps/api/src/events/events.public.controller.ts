@@ -6,7 +6,9 @@ import {
   NotFoundException,
   Param,
   Query,
+  Req,
 } from "@nestjs/common";
+import type { FastifyRequest } from "fastify";
 import {
   ApiExtraModels,
   ApiOkResponse,
@@ -17,6 +19,7 @@ import {
   MONTH_PARAM,
   type MonthBroadcastEntry,
   type MonthlyEventCount,
+  type ParticipationCta,
   type PublicEventPage,
   type PublicEventListingPage,
   PublicEventListingQuerySchema,
@@ -28,9 +31,27 @@ import { EventsService } from "./events.service.js";
 import { InvalidEventListingCursorError } from "./events.service.js";
 import {
   MonthBroadcastListDto,
+  ParticipationCtaDto,
   PublicEventListingPageDto,
   UpcomingBroadcastListDto,
 } from "./events.dto.js";
+import type { ParticipationRoutes } from "./participation-cta.resolver.js";
+import { ParticipationService } from "./participation.service.js";
+
+/**
+ * 020 EARS-1 / LD-1 (#1764) — the ACADEMY host's route table, the only thing
+ * this host contributes to the shared participation policy. These are the paths
+ * `academy.doctor.school` actually serves today: the event page under
+ * `/webinars/<slug>` (004), the shipped 003 registration entry `/register` the
+ * guest «Участвовать" handoff already routes through, and the 006 room at
+ * `/webinars/<slug>/room`. The policy itself lives in
+ * `participation-cta.resolver.ts` and is identical for both hosts.
+ */
+const ACADEMY_ROUTES: ParticipationRoutes = {
+  eventPath: (slug) => `/webinars/${encodeURIComponent(slug)}`,
+  registrationEntry: "/register",
+  roomPath: (slug) => `/webinars/${encodeURIComponent(slug)}/room`,
+};
 
 /**
  * 004 public event read surface — the read side of the webinar aggregate (004
@@ -56,7 +77,10 @@ import {
  */
 @Controller({ path: "public/events", version: "1" })
 export class EventsPublicController {
-  constructor(private readonly events: EventsService) {}
+  constructor(
+    private readonly events: EventsService,
+    private readonly participation: ParticipationService,
+  ) {}
 
   /**
    * 004 EARS-7 + EARS-15 — the bare-path public read (`GET /v1/public/events`).
@@ -180,5 +204,47 @@ export class EventsPublicController {
     // hidden draft leaks no "exists but private" oracle (EARS-6, EARS-10).
     if (!found) throw new NotFoundException("event not found");
     return found;
+  }
+
+  /**
+   * 020 EARS-1 (#1764) — `GET /v1/public/events/:idOrSlug/participation`, the
+   * Academy host's thin route over the ONE participation policy (LD-2). Its
+   * doctor twin is `GET /v1/storefront/doctor/events/:idOrSlug/participation`;
+   * both call the same {@link ParticipationService} and differ only in the route
+   * table they hand it.
+   *
+   * `@Public()` with an OPTIONAL principal: a guest must be told «Участвовать»
+   * rather than 401, and a signed-in doctor must be told «Вы записаны» — the
+   * 003 session hook populates the subject when a session rides the request and
+   * leaves it absent otherwise, so one route serves both without a second
+   * authenticated variant.
+   *
+   * The answer VARIES per viewer, so unlike the page read it is `no-store`: a
+   * shared cache must never hand one doctor's registered state to another
+   * visitor. That per-viewer variance is exactly why the CTA is this sibling
+   * read rather than a field of the `public, max-age=30` page body, whose
+   * guest/principal byte-identity (004 EARS-1) stays intact.
+   */
+  @Get(":idOrSlug/participation")
+  @Public()
+  @Header("Cache-Control", "private, no-store")
+  @ApiOkResponse({ type: ParticipationCtaDto })
+  @Authz({
+    access: "public",
+    check: "none",
+    audit: "none",
+    tests: ["EARS-1"],
+  })
+  async participationCta(
+    @Param("idOrSlug") idOrSlug: string,
+    @Req() req: FastifyRequest,
+  ): Promise<ParticipationCta> {
+    const sub = (req as { user?: { sub?: string } }).user?.sub;
+    const cta = await this.participation.cta(idOrSlug, ACADEMY_ROUTES, sub);
+    // A draft/unknown event is not-found here for the same reason it is on the
+    // page read — this route must not become the «exists but private» oracle
+    // that read refuses to be (004 EARS-6).
+    if (!cta) throw new NotFoundException("event not found");
+    return cta;
   }
 }

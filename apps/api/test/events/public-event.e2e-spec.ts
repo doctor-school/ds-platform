@@ -272,6 +272,14 @@ describe.skipIf(!process.env.DATABASE_URL)(
         [
           "description",
           "durationMin",
+          // 020 EARS-1 (#1764): the participation format and the remaining
+          // seats. Both are publish-safe facts ABOUT the event that every
+          // visitor may read — «онлайн или очно» and «сколько мест осталось» are
+          // the page's own copy, not operator data — and neither varies by
+          // viewer, so the guest/principal byte-identity below is untouched. The
+          // per-viewer half of participation is the sibling
+          // `…/:idOrSlug/participation` read, deliberately not on this body.
+          "format",
           "id",
           "partners",
           "programPdfUrl",
@@ -282,6 +290,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
           // widen what a guest can play.
           "recording",
           "school",
+          "seatsLeft",
           "slug",
           "specialties",
           "speakers",

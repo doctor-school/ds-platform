@@ -5,18 +5,28 @@ import {
   Header,
   Headers,
   Inject,
+  NotFoundException,
+  Param,
   Query,
+  Req,
   UseFilters,
 } from "@nestjs/common";
 import { ApiOkResponse, ApiQuery } from "@nestjs/swagger";
+import type { FastifyRequest } from "fastify";
 import {
   type DoctorEventsFeed,
   type DoctorEventsMonthGrid,
+  type EventPageView,
+  type ParticipationCta,
   parseDoctorEventsFeedQuery,
   parseDoctorEventsMonthQuery,
   type RawQueryValue,
 } from "@ds/schemas";
 import { Authz, Public } from "../authz/index.js";
+import { EventsService } from "../events/events.service.js";
+import { EventPageViewDto, ParticipationCtaDto } from "../events/events.dto.js";
+import type { ParticipationRoutes } from "../events/participation-cta.resolver.js";
+import { ParticipationService } from "../events/participation.service.js";
 import {
   DoctorEventsFeedDto,
   DoctorEventsMonthGridDto,
@@ -59,12 +69,42 @@ import { readSpecialtyChoiceCookie } from "./specialty-choice.cookie.js";
  * The response varies with that cookie, so the cache is `private` — a shared
  * cache must never hand one doctor's targeted feed to another visitor.
  */
+/**
+ * 020 EARS-1 / LD-1 (#1764) — the DOCTOR host's route table, the only thing this
+ * host contributes to the shared participation policy (the policy itself is
+ * `apps/api/src/events/participation-cta.resolver.ts`, one implementation for
+ * both storefronts).
+ *
+ * `roomPath` is `null`: the doctor room is the thin route over the shared room
+ * UI unit extracted under #1722, which does not exist yet. A registered doctor
+ * on a live event therefore still resolves to `enter-room` — the ACTION is a
+ * fact of the event and the registration, not of the front-end — with `href:
+ * null`, so the host renders the state and no link. EARS-4 requires an
+ * impossible affordance to be ABSENT rather than dead; linking into a route that
+ * is not mounted would be precisely the dead end it forbids. When #1722 lands,
+ * this ONE line changes and nothing else does.
+ */
+const DOCTOR_ROUTES: ParticipationRoutes = {
+  eventPath: (slug) => `/events/${encodeURIComponent(slug)}`,
+  registrationEntry: "/register",
+  roomPath: null,
+};
+
 @Controller({ path: "storefront/doctor/events", version: "1" })
 @UseFilters(SpecialtyProblemFilter)
 export class DoctorEventsPublicController {
   constructor(
     @Inject(DoctorEventsService)
     private readonly feed: DoctorEventsService,
+    // 020 LD-1: the doctor host reads the ONE public event projection and the
+    // ONE participation policy of feature 004/020. It owns no read model, no
+    // second projection and no storefront-local mapping — if it did, the two
+    // hosts could disagree about the same event, which is the whole defect
+    // EARS-1 exists to prevent.
+    @Inject(EventsService)
+    private readonly events: EventsService,
+    @Inject(ParticipationService)
+    private readonly participation: ParticipationService,
   ) {}
 
   /** `GET /v1/storefront/doctor/events` — the bounded-horizon `DayGroup[]` feed. */
@@ -154,5 +194,71 @@ export class DoctorEventsPublicController {
       query: parsed.data,
       specialtyReference: readSpecialtyChoiceCookie(cookie),
     });
+  }
+
+  /**
+   * 020 EARS-1 (#1764) — `GET /v1/storefront/doctor/events/:idOrSlug`, the
+   * doctor storefront's read of ONE event.
+   *
+   * It delegates to feature 004's `EventsService.publicEventPage` and returns
+   * its result unchanged: no second read model, no second projection, no
+   * storefront-local mapping. That is what makes «the two hosts return
+   * content-identical bodies for the same event» a structural property rather
+   * than a test that has to be re-proved after every edit — there is exactly one
+   * body to return. The storefront IS the envelope (header, nav, copy defaults),
+   * and the envelope is the host's, not a field of the read.
+   *
+   * Public and cacheable on the same terms as the Academy route: the body has no
+   * per-viewer variation (the per-viewer part is the sibling `…/participation`
+   * read), so a shared cache is safe. Declared AFTER `@Get("month")` so the
+   * literal segment keeps winning over this parameter.
+   */
+  @Get(":idOrSlug")
+  @ApiOkResponse({ type: EventPageViewDto })
+  @Public()
+  @Header("Cache-Control", "public, max-age=30")
+  @Authz({
+    access: "public",
+    check: "none",
+    audit: "none",
+    tests: ["EARS-1"],
+  })
+  async event(@Param("idOrSlug") idOrSlug: string): Promise<EventPageView> {
+    const found = await this.events.publicEventPage(idOrSlug);
+    // The visibility policy is 004's and is applied in the service: a `draft` or
+    // unknown event is not-found on BOTH hosts identically, so the doctor
+    // storefront cannot become the oracle the Academy route refuses to be
+    // (004 EARS-6).
+    if (!found) throw new NotFoundException("event not found");
+    return found;
+  }
+
+  /**
+   * 020 EARS-1 / LD-2 (#1764) — `GET /v1/storefront/doctor/events/:idOrSlug/participation`,
+   * the doctor twin of the Academy participation route. Same
+   * {@link ParticipationService}, same policy function, same six actions; the
+   * only difference is {@link DOCTOR_ROUTES}, this host's own paths.
+   *
+   * `@Public()` with an OPTIONAL principal (a guest is told «Участвовать», not
+   * 401) and `no-store`, because the answer varies per viewer.
+   */
+  @Get(":idOrSlug/participation")
+  @ApiOkResponse({ type: ParticipationCtaDto })
+  @Public()
+  @Header("Cache-Control", "private, no-store")
+  @Authz({
+    access: "public",
+    check: "none",
+    audit: "none",
+    tests: ["EARS-1"],
+  })
+  async participationCta(
+    @Param("idOrSlug") idOrSlug: string,
+    @Req() req: FastifyRequest,
+  ): Promise<ParticipationCta> {
+    const sub = (req as { user?: { sub?: string } }).user?.sub;
+    const cta = await this.participation.cta(idOrSlug, DOCTOR_ROUTES, sub);
+    if (!cta) throw new NotFoundException("event not found");
+    return cta;
   }
 }

@@ -14,12 +14,12 @@ A guard can only be driven deterministically if its inputs are injectable. The
 guards expose four seams, each inert in production (the env var is unset, so the
 guard resolves real paths / spawns real `gh` exactly as before):
 
-| Seam env var          | Replaces                                   | Used by                                                                                                                                                                                                                                                                                |
-| --------------------- | ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `LINT_FIXTURE_ROOT`   | the repo root the guard scans (FS)         | interaction-states, form-error, form-rhythm, ears-naming, ears-test, no-stub, no-hardcoded-path, asset-format, spec-link, instruction-budget, events-drift, glossary-mdx, glossary-roundtrip, frontmatter-yaml, migration-index, external-anchor, db-drift, tsc-version, retained-data |
-| `LINT_GH_FIXTURE_DIR` | `gh pr/issue view` (canned JSON)           | registry-research, spec-link                                                                                                                                                                                                                                                           |
-| `LINT_MEMORY_FILE`    | the derived `~/.claude/.../MEMORY.md` path | instruction-budget                                                                                                                                                                                                                                                                     |
-| _(args)_              | CLI flags (`runGuard(..., { extraArgs })`) | —                                                                                                                                                                                                                                                                                      |
+| Seam env var          | Replaces                                   | Used by                                                                                                                                                                                                                                                                                                       |
+| --------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `LINT_FIXTURE_ROOT`   | the repo root the guard scans (FS)         | interaction-states, form-error, form-rhythm, ears-naming, ears-test, no-stub, no-hardcoded-path, asset-format, spec-link, instruction-budget, events-drift, glossary-mdx, glossary-roundtrip, frontmatter-yaml, migration-index, external-anchor, db-drift, tsc-version, retained-data, assert-no-skipped-e2e |
+| `LINT_GH_FIXTURE_DIR` | `gh pr/issue view` (canned JSON)           | registry-research, spec-link                                                                                                                                                                                                                                                                                  |
+| `LINT_MEMORY_FILE`    | the derived `~/.claude/.../MEMORY.md` path | instruction-budget                                                                                                                                                                                                                                                                                            |
+| _(args)_              | CLI flags (`runGuard(..., { extraArgs })`) | —                                                                                                                                                                                                                                                                                                             |
 
 `LINT_FIXTURE_ROOT` is set to the case dir automatically by `runGuard`; the rest
 are passed per case via `runGuard(guard, caseDir, { env })`.
@@ -47,6 +47,15 @@ Covered here (FS / gh / memory seams): `interaction-states`, `form-error`,
 `module-readme`, `tdd-signal`, `spec-status`, `prior-decisions`, `events-drift`,
 `glossary-mdx`, `glossary-roundtrip`, `frontmatter-yaml`, `migration-index`,
 `external-anchor`, `db-drift`, `tsc-version`, `retained-data`.
+
+`assert-no-skipped-e2e` (#1595) is the odd one out: it lives at
+`tools/ci/assert-no-skipped-e2e.ts`, not under `tools/lint`, and is spawned with
+the relative guard path `../ci/assert-no-skipped-e2e.ts`. It reads the vitest
+JSON report the `api-e2e` job now emits and fails the job when an IDP-gated e2e
+suite skipped, when a required `IDP_*`/`DATABASE_URL` variable is missing, or
+when no api e2e test executed at all. Its fixture cases ship both the report
+(`vitest-api.json`) and the `apps/api/test/**` spec sources the guard reads to
+decide whether a skip is explained by a service the tier does not provision.
 
 `no-hardcoded-path` (#936) is an FS-scan guard over committed `tools/**/*.{mjs,ts}`
 runtime code for machine-specific absolute path literals (drive-letter `C:/…`,

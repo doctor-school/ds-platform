@@ -260,6 +260,18 @@ services:
       # idp/provision.sh, not here. Read at init, stored on the instance. Default
       # true; do NOT disable it (that was the reverted #144 workaround).
       ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_REQUIRED: ${IDP_LOGIN_V2_REQUIRED:-true}
+      # SSRF guard, relaxed for the stand's own network. Zitadel's default
+      # `HTTPClient.DenyList` denies `localhost` plus every loopback/private/
+      # link-local CIDR and enforces it in the dialer AFTER DNS resolution, so
+      # the HTTP SMS providers below — `sms-sink` and `sms-aero-adapter`, both
+      # compose service names resolving to bridge addresses — are refused with
+      # `Errors.NotificationProvider.Blocked.Endpoint` (proven on CI's identical
+      # recipe, #1595; the stand only still works on an older cached `latest`).
+      # The compose network IS the route to them; the entries that still carry
+      # weight are kept — the cloud-metadata endpoint (169.254.169.254), IPv6
+      # link-local (fe80::/10) and the IPv6 unique-local range fc00::/7, which
+      # holds the IPv6 metadata address (fd00:ec2::254).
+      ZITADEL_HTTPCLIENT_DENYLIST: "169.254.0.0/16,fe80::/10,fc00::/7"
       ZITADEL_DATABASE_POSTGRES_HOST: postgres
       ZITADEL_DATABASE_POSTGRES_PORT: 5432
       ZITADEL_DATABASE_POSTGRES_DATABASE: zitadel

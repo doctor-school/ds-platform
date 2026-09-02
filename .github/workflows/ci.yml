@@ -303,12 +303,29 @@ jobs:
   # a migration, an entity or a suite, so this job is skipped there — a SKIPPED
   # check-run (still registered, still read as green by the merge gate), never an
   # absent one.
+  # #1595 — this job also provisions the ZITADEL IdP. Without `IDP_ISSUER` every
+  # `describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)` suite
+  # (taxonomy, room, registration, recordings, me, admin, …) collapsed to a SKIP
+  # and the check-run went green having executed none of them — a blind gate.
+  # The IdP recipe is the `admin-e2e` one verbatim (host network, ZITADEL_PORT
+  # forced to the external port, world-writable PAT bind mount); the rationale
+  # for each deviation from `infra/dev-stand/compose.core.yml` is documented
+  # once, at that job. The `assert-e2e-ran` step is the fail-loud half: a future
+  # missing variable can no longer skip its way to green.
   api-e2e:
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     env:
       DATABASE_URL: postgres://ds:ds@localhost:5432/ds_test
+      IDP_ISSUER: http://localhost:9080
+      IDP_REDIRECT_URI: http://localhost:3000/auth/callback
+      # The three `auth/zitadel-*` suites read the delivered code back out of the
+      # sinks. Their in-test defaults point at a personal dev host that does not
+      # resolve on a runner, so the URLs are declared here, not defaulted.
+      MAILPIT_URL: http://localhost:8025
+      SMS_SINK_URL: http://localhost:8090
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -317,13 +334,15 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Build the data-layer Postgres image (pgvector + pg_partman)
         run: docker build -t ds-platform/postgres:pg17-partman infra/dev-stand/postgres
+      # `--network host` (not `-p 5432:5432`), as in `admin-e2e`: the IdP
+      # container reaches Postgres at `localhost:5432` only when both share the
+      # runner's network namespace.
       - name: Start Postgres
         run: |
-          docker run -d --name ds-postgres \
+          docker run -d --name ds-postgres --network host \
             -e POSTGRES_USER=ds \
             -e POSTGRES_PASSWORD=ds \
             -e POSTGRES_DB=ds_test \
-            -p 5432:5432 \
             ds-platform/postgres:pg17-partman
       - name: Wait for Postgres to be ready
         run: |
@@ -334,7 +353,146 @@ jobs:
             echo "waiting for Postgres ($i/30)..."; sleep 2
           done
           echo "Postgres did not become ready in time"; docker logs ds-postgres; exit 1
-      - run: pnpm exec turbo run test --filter=@ds/api
+
+      # ─ Mail + SMS sinks ─ the same two upstream images the dev stand runs
+      # (`infra/dev-stand/compose.core.yml`): Zitadel's SMTP provider and its
+      # generic HTTP SMS provider are pointed at these by `provision.sh`, and the
+      # `auth/zitadel-*` suites read the delivered code back out of them. Host
+      # network for the same reason as Postgres and the IdP — the IdP container
+      # must reach them at `localhost`.
+      - name: Start the mail and SMS sinks
+        run: |
+          docker run -d --name ds-mailpit --network host axllent/mailpit:latest
+          docker run -d --name ds-sms-sink --network host \
+            -v "$GITHUB_WORKSPACE/infra/dev-stand/sms-sink/server.mjs":/srv/server.mjs:ro \
+            -e SMS_SINK_PORT=8090 \
+            node:22-alpine node /srv/server.mjs
+      - name: Wait for the sinks to be ready
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:8025/api/v1/info >/dev/null 2>&1 \
+              && curl -fsS http://localhost:8090/healthz >/dev/null 2>&1; then
+              echo "the mail and SMS sinks are serving"
+              exit 0
+            fi
+            echo "waiting for the sinks ($i/30)..."; sleep 2
+          done
+          echo "the sinks did not become ready in time"
+          docker logs ds-mailpit; docker logs ds-sms-sink; exit 1
+
+      # ─ IdP ─ identical to the `admin-e2e` block; see the commentary there,
+      # plus `ZITADEL_HTTPCLIENT_DENYLIST` — see the note on that variable below.
+      - name: Prepare the PAT mount
+        run: mkdir -p "$RUNNER_TEMP/idp-pat" && chmod 0777 "$RUNNER_TEMP/idp-pat"
+      - name: Start the IdP (Zitadel)
+        run: |
+          # ZITADEL_HTTPCLIENT_DENYLIST — Zitadel's SSRF guard. Its DEFAULT value
+          # (cmd/defaults.yaml → `HTTPClient.DenyList`) denies `localhost` plus
+          # every loopback/private/link-local CIDR, and the deny is enforced in
+          # the dialer AFTER DNS resolution (its own comment: "prevent DNS
+          # Rebinding"). So registering the SMS sink is refused with
+          # `Errors.NotificationProvider.Blocked.Endpoint` no matter how it is
+          # addressed — `localhost:8090`, the container's bridge IP and a
+          # hostname mapped to that IP were all rejected in turn (runs
+          # 33603331092 / 33608916464 / 33610421640). The sink, the IdP and the
+          # suite are all processes on one ephemeral runner, so the private
+          # ranges are the only route between them; the entries that still carry
+          # weight here are kept — the cloud-metadata endpoint (169.254.169.254,
+          # inside 169.254.0.0/16), IPv6 link-local (fe80::/10) and the IPv6
+          # unique-local range fc00::/7, which holds the IPv6 metadata address
+          # (fd00:ec2::254). Both sinks are reached over IPv4 loopback, so
+          # keeping fc00::/7 denied costs this job nothing.
+          docker run -d --name ds-idp --network host \
+            -e ZITADEL_HTTPCLIENT_DENYLIST=169.254.0.0/16,fe80::/10,fc00::/7 \
+            -v "$RUNNER_TEMP/idp-pat":/pat \
+            -e ZITADEL_MASTERKEY=MasterkeyNeedsToHave32Characters \
+            -e ZITADEL_EXTERNALSECURE=false \
+            -e ZITADEL_TLS_ENABLED=false \
+            -e ZITADEL_EXTERNALDOMAIN=localhost \
+            -e ZITADEL_EXTERNALPORT=9080 \
+            -e ZITADEL_PORT=9080 \
+            -e ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_REQUIRED=true \
+            -e ZITADEL_DATABASE_POSTGRES_HOST=localhost \
+            -e ZITADEL_DATABASE_POSTGRES_PORT=5432 \
+            -e ZITADEL_DATABASE_POSTGRES_DATABASE=zitadel \
+            -e ZITADEL_DATABASE_POSTGRES_USER_USERNAME=ds \
+            -e ZITADEL_DATABASE_POSTGRES_USER_PASSWORD=ds \
+            -e ZITADEL_DATABASE_POSTGRES_USER_SSL_MODE=disable \
+            -e ZITADEL_DATABASE_POSTGRES_ADMIN_USERNAME=ds \
+            -e ZITADEL_DATABASE_POSTGRES_ADMIN_PASSWORD=ds \
+            -e ZITADEL_DATABASE_POSTGRES_ADMIN_SSL_MODE=disable \
+            -e ZITADEL_FIRSTINSTANCE_PATPATH=/pat/pat.txt \
+            -e ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_USERNAME=ds-bootstrap \
+            -e ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_NAME=ds-bootstrap \
+            -e ZITADEL_FIRSTINSTANCE_ORG_MACHINE_PAT_EXPIRATIONDATE=2099-12-31T23:59:59Z \
+            ghcr.io/zitadel/zitadel:latest \
+            start-from-init --masterkeyFromEnv
+      # The discovery document, not just `/debug/ready`: the suites resolve the
+      # issuer through OIDC discovery, so that is the endpoint whose readiness
+      # actually gates them.
+      - name: Wait for the IdP to be ready
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:9080/.well-known/openid-configuration >/dev/null 2>&1; then
+              echo "IdP discovery is serving"; exit 0
+            fi
+            echo "waiting for the IdP ($i/60)..."; sleep 5
+          done
+          echo "the IdP did not become ready in time"; docker logs ds-idp; exit 1
+      - name: Read the bootstrap PAT
+        run: |
+          for i in $(seq 1 30); do
+            if [ -s "$RUNNER_TEMP/idp-pat/pat.txt" ]; then
+              cp "$RUNNER_TEMP/idp-pat/pat.txt" ./idp-pat.txt
+              echo "::add-mask::$(cat ./idp-pat.txt)"
+              echo "IDP_SERVICE_TOKEN=$(cat ./idp-pat.txt)" >> "$GITHUB_ENV"
+              echo "bootstrap PAT read"; exit 0
+            fi
+            echo "waiting for the bootstrap PAT ($i/30)..."; sleep 2
+          done
+          echo "the bootstrap PAT never appeared"; docker logs ds-idp; exit 1
+      # STDOUT to the file only — this repo is public and the provisioner prints
+      # the OIDC client secret; the secret is masked before it enters $GITHUB_ENV.
+      - name: Provision the IdP project, client and roles
+        env:
+          IDP_BASE_URL: http://localhost:9080
+          # The compose defaults (`mailpit:1025`, `http://sms-sink:8090/`) are
+          # bridge-network service names; both sinks share the runner's host
+          # namespace, so both are addressed on localhost here.
+          IDP_SMTP_HOST: localhost:1025
+          IDP_SMS_SINK_ENDPOINT: http://localhost:8090/
+        run: |
+          set -euo pipefail
+          bash infra/dev-stand/idp/provision.sh --pat-file ./idp-pat.txt \
+            > ./idp-provision.out 2> ./idp-provision.err || provision_rc=$?
+          cat ./idp-provision.err >&2
+          if [ -n "${provision_rc:-}" ]; then exit "$provision_rc"; fi
+          # Fail-loud half of #1595 for the SMS path: the provisioner only WARNs
+          # when the IdP rejected the HTTP SMS provider, and the price of that
+          # WARN is a six-minutes-later EARS-7 failure whose shape points at the
+          # suite rather than at the wiring. A rejected provider is a broken gate
+          # here, so it fails here.
+          if grep -q 'no HTTP SMS provider id to activate' ./idp-provision.err; then
+            echo "the IdP rejected the SMS sink provider — EARS-7 cannot deliver" >&2
+            exit 1
+          fi
+          client_secret="$(grep -E '^IDP_CLIENT_SECRET=' ./idp-provision.out | cut -d= -f2- || true)"
+          if [ -n "$client_secret" ]; then echo "::add-mask::$client_secret"; fi
+          grep -E '^IDP_(PROJECT_ID|CLIENT_ID|CLIENT_SECRET)=' ./idp-provision.out >> "$GITHUB_ENV"
+
+      # The JSON reporter runs ALONGSIDE the default one: the log stays readable
+      # and `assert-e2e-ran` gets a machine-readable record of what actually ran.
+      # Turbo forwards everything after `--` to the underlying `vitest run`, and
+      # the IDP_* variables reach it through `turbo.json` → `passThroughEnv`
+      # (turbo's env mode is strict — an undeclared variable is invisible to the
+      # task, which is how #1595 would otherwise reappear one layer down).
+      - name: Run the api test tier
+        run: |
+          pnpm exec turbo run test --filter=@ds/api -- \
+            --reporter=default --reporter=json --outputFile.json="$GITHUB_WORKSPACE/vitest-api.json"
+      - name: Assert the IDP-gated e2e suites actually ran (#1595)
+        if: ${{ !cancelled() }}
+        run: pnpm ci:assert-e2e-ran vitest-api.json
 
   # ─── Generated API drift guard (ADR-0006 §7, BLOCK) ──────────────────
   # One non-duplicative check owns both generated API artifacts: it rebuilds the

@@ -1,0 +1,29 @@
+{
+  "testResults": [
+    {
+      "name": "apps/api/test/taxonomy/directions.e2e-spec.ts",
+      "assertionResults": [
+        {
+          "title": "case 0",
+          "fullName": "taxonomy directions (e2e) > case 0",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "name": "apps/api/test/me/display-name.e2e-spec.ts",
+      "assertionResults": [
+        {
+          "title": "EARS-14: a gated doctor sets their display name",
+          "fullName": "display name (e2e) > EARS-14: a gated doctor sets their display name",
+          "status": "pending"
+        },
+        {
+          "title": "EARS-16: the saved name is broadcast over Centrifugo",
+          "fullName": "display name (e2e) > EARS-16: the saved name is broadcast over Centrifugo",
+          "status": "pending"
+        }
+      ]
+    }
+  ]
+}

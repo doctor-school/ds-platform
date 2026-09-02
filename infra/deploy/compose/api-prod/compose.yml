@@ -225,6 +225,17 @@ services:
   # by the ZITADEL_FIRSTINSTANCE_* vars in zitadel.env (README init step); leave them
   # unset for normal boots. The masterkey (ZITADEL_MASTERKEY) MUST be exactly 32 chars.
   zitadel:
+    # Bumping this pin: Zitadel's `HTTPClient.DenyList` SSRF guard refuses to
+    # register an HTTP notification provider whose endpoint resolves onto a
+    # private network (`Errors.NotificationProvider.Blocked.Endpoint`) — it broke
+    # CI in #1595. The sms-aero-adapter below IS such an endpoint (a compose
+    # service name on a private network) and delivers SMS today at v4.15.0.
+    # Whether that is because this version carries no default deny list is NOT
+    # verified. So any bump past v4.15.0 must carry the same
+    # `ZITADEL_HTTPCLIENT_DENYLIST` narrowing the CI job and the dev stand use
+    # (or move the adapter to a routable address) AND verify a real SMS
+    # end-to-end BEFORE deploy — the failure is silent: providers refuse
+    # registration and SMS-OTP simply stops delivering.
     image: ghcr.io/zitadel/zitadel:v4.15.0 # pinned in lockstep with zitadel-login
     restart: unless-stopped
     command: ["start-from-init", "--masterkeyFromEnv"]

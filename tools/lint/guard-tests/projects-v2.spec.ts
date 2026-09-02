@@ -108,11 +108,35 @@ describe("projects-v2 parseBoardItemsPage() (#1140)", () => {
         },
       },
     });
+    // `truncations` is part of the page shape, always present (empty when every
+    // connection was read complete) — callers never branch on its absence.
     expect(page).toEqual({
       nodes: [{ id: "PVTI_a" }],
+      truncations: [],
       hasNextPage: true,
       endCursor: "CUR",
     });
+  });
+
+  it("surfaces a short-read connection on the page it was read from", () => {
+    const page = parseBoardItemsPage({
+      organization: {
+        projectV2: {
+          items: {
+            pageInfo: { hasNextPage: false, endCursor: null },
+            nodes: [
+              {
+                id: "PVTI_b",
+                content: { number: 42, labels: { totalCount: 31 } },
+              },
+            ],
+          },
+        },
+      },
+    });
+    expect(page?.truncations).toEqual([
+      { number: 42, connection: "labels", totalCount: 31, pageSize: 30 },
+    ]);
   });
 
   it("returns null when the shape is absent", () => {

@@ -1,8 +1,8 @@
 ---
 title: "DSP-198 — GitHub Projects v2 board setup (Design)"
-description: "Org-level Projects v2 board 'DS Platform' as the operational + roadmap surface for ds-platform: single board with Status / Area fields plus native Type (Issues) / Labels (PRs) for classification, optional long-lived Milestones, 6 built-in workflows, 3 views, backfill of all closed items, Issue body convention, agent ordering procedure with In Progress resume, and a direct rewrite of the relevant AGENTS.md §2 line."
+description: "Org-level Projects v2 board 'DS Platform' as the operational + roadmap surface for ds-platform: single board with Status / Area / Priority fields plus native Type (Issues) / Labels (PRs) for classification, Milestone = one shippable release of one track, feature-level Start / Target dates, a Roadmap view, the roadmap level taxonomy (epic / feature / EARS task / release gate / platform task), 6 built-in workflows, backfill of all closed items, Issue body convention, agent ordering procedure with In Progress resume, and a direct rewrite of the relevant AGENTS.md §2 line."
 slug: dsp-198-github-projects-v2-board
-status: Implemented (pending UI follow-up)
+status: Implemented — revised 2026-09-02 (roadmap taxonomy, #1726)
 tracker: Plane DSP-198 (workspace `doctor-school`, project DSP)
 board_url: https://github.com/orgs/doctor-school/projects/1
 parent_issue: null
@@ -18,7 +18,7 @@ DSP-198 was carved out of DSP-193 item 4 because the `gh` CLI session running un
 The board is not merely a kanban. It is the **operational + roadmap surface** that two different audiences read:
 
 - **The coding agent** — at session start, needs to know what is actively in flight, what is unblocked, and where to resume interrupted work.
-- **The Tech Lead acting as PM** — needs to see the development plan, the current state, and progress against long-lived product themes, in order to give realistic estimates and communicate status.
+- **The Tech Lead acting as PM** — needs to see the development plan, the current state, and progress towards the next shippable release of each track, in order to give realistic estimates and communicate status.
 
 A single board with the right fields serves both. The design therefore goes beyond "create a board and link items" to include the **Issue body convention** and **agent ordering procedure** that make the board actionable as a context surface, not just a visual artifact.
 
@@ -31,27 +31,38 @@ Product trajectory for context only (not encoded as a board axis):
 | **v2**         | + VK ID, Yandex ID, Telegram OAuth. + `expert / moderator / support / investor` roles. WebAuthn / Passkeys. MFA TOTP upgrade for `moderator / support`. HIBP. Full CMS-Payload content pipeline.         | after v1             |
 | **v3**         | + Apple Sign-In, mobile App Store distribution, `clinic_admin` role, anomaly detection / impossible travel, scale-out to 1M MAU.                                                                         | after v2             |
 
-Releases as artifacts are produced **continuously** via changesets — every merged PR carrying a changeset emits a semver-tagged GitHub Release. They are not planning containers and do not appear on the board.
+**Release artifact ≠ release plan.** The deployed artifact is produced continuously: `pnpm deploy:prod` cuts a `release-YYYY.MM.DD-n` tag + GitHub Release at the deployed SHA, and per-package versions come from changesets. Those artifacts are records of what shipped; they are not planning containers and do not appear on the board.
+
+The _plan_ is carried by **Milestones**: one milestone = one shippable increment of ONE track (see §3.2). This is the axis the Roadmap view (§3.4) renders and the level taxonomy (§7.1) hangs off. The two axes never merge — a `release-*` tag says what is live, a milestone says what is next.
+
+Two product tracks exist, and they never share a milestone:
+
+| Track           | Label            | Surface                                  | Specs   |
+| --------------- | ---------------- | ---------------------------------------- | ------- |
+| **Академия**    | `track:academy`  | `academy.doctor.school`                  | 012–016 |
+| **Витрина**     | `track:doctor`   | doctor.school storefront (`apps/doctor`) | 017–021 |
+| _(non-roadmap)_ | `track:platform` | shared backend / infra / process         | —       |
 
 ## 2. Goals + non-goals
 
 ### Goals
 
 1. A single org-level Projects v2 board ships items from `doctor-school/ds-platform` and is the only place the agent reads to answer "what next".
-2. The board exposes the axes that genuinely slice work today: **Status** (daily kanban) and **Area** (which module). Work flavour is read off native fields — **Type** (built-in Issue Type on Issues) and **Labels** (the `feature` / `bug` / `chore` / `refactor` / `docs` / `tooling` labels already mandated by AGENTS.md §2 for PRs). Milestones are present built-in but are populated only when a long-lived product theme actually exists.
-3. The agent can pick the next item deterministically — including resuming In Progress work, not only starting fresh Todo items.
-4. New Issues carry a structured body sufficient for a cold-start agent to act without trawling history.
-5. The setup is **reproducible**: a script in `tools/` rebuilds the board from scratch.
+2. The board exposes the axes that genuinely slice work today: **Status** (daily kanban), **Area** (which module) and **Priority** (ordering hint inside a column). Work flavour is read off native fields — **Type** (built-in Issue Type on Issues) and **Labels** (the `feature` / `bug` / `chore` / `refactor` / `docs` / `tooling` labels already mandated by AGENTS.md §2 for PRs).
+3. **Milestone carries the release plan.** Every Issue that is part of a product track sits in the milestone of the release it ships in; the milestone is the planning container, not a filing theme.
+4. **The Roadmap view is readable by a human PM** — it shows feature-level Issues only, grouped by milestone, with Start / Target dates. EARS tasks never appear on it; they show as sub-issue progress on their parent.
+5. The agent can pick the next item deterministically — including resuming In Progress work, not only starting fresh Todo items.
+6. New Issues carry a structured body sufficient for a cold-start agent to act without trawling history.
+7. The setup is **reproducible**: a script in `tools/` rebuilds the board from scratch.
 
 ### Non-goals
 
-- Iterations / sprint cycles. Explicitly out of scope per Plane DSP-198 description (team = 1+AI, no sprint cadence).
-- A `Release` field on the board. Releases happen continuously via changesets — there is no planning value in pre-allocating items to release buckets.
+- Iterations / sprint cycles. Explicitly out of scope per Plane DSP-198 description (team = 1+AI, no sprint cadence). The release milestone is the only time container.
+- A custom `Release` single-select field on the board. Release membership is the **Milestone**, and one axis is enough — a parallel field guarantees drift. (A `Release` field existed on the board before this revision; §3.2 records its retirement.)
 - A `Phase` field on the board. Phase 0 / v1 / v2 / v3 are product-trajectory landmarks, not active filtering axes for the working set; if a future need emerges, it is added as a revision of this spec.
-- Pre-creating Milestones at setup. Milestones are created by the PM when an actual long-lived product theme emerges (e.g. "Auth foundations v1", "Directual cutover", "Doctor portal MVP"). Empty Milestone is the legitimate default.
+- Start / Target dates on EARS-handler Issues. Dates live only on feature-level and release-gate Issues (§3.2) — dating every handler is bookkeeping no one reads.
 - Cross-linking GitHub items with Plane DSP-XXX as a default pattern. Trackers stay strictly separated. DSP-198 itself is a rare exception (a Plane work-item about GitHub infrastructure).
 - Per-app / per-module separate boards. Single board with views serves the current scale; split triggers documented in §13.
-- Date fields on items for Roadmap-view timelines. Added later only if PM demands a visual timeline.
 - Custom dependency-graph visualisation. Native GitHub Issues "blocked by / blocking" is sufficient.
 - Bootstrap-script (`tools/agent-bootstrap.ts`) integration with the board — separate follow-up Issue after merge.
 
@@ -68,22 +79,42 @@ Releases as artifacts are produced **continuously** via changesets — every mer
 
 ### 3.2 Fields
 
-| Field         | Type                     | Values                                                                                                                                                                                                                                     | Filled                                                                |
-| ------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------- |
-| **Status**    | single-select (built-in) | `Todo` / `In Progress` / `Review` / `Done`                                                                                                                                                                                                 | automatic via workflows (§3.3)                                        |
-| **Type**      | built-in (Issue Type)    | Org-level Issue Types. Default set `Task / Bug / Feature` is sufficient; the org admin can extend with `chore / docs / tooling / refactor` if richer typing is wanted. **PRs do not have an Issue Type** — they are classified via Labels. | manual on Issue create                                                |
-| **Milestone** | built-in                 | Empty at setup. PM creates a Milestone when a long-lived product theme appears (spans multiple specs, lives weeks–months). Examples: `Auth foundations v1`, `Doctor portal MVP`, `Directual cutover`. **Milestones are NOT per-spec.**     | manual on Issue create, only when a relevant Milestone already exists |
-| **Labels**    | built-in                 | Surfaced on the board as a column. For PRs, the AGENTS.md §2 mandatory label (`feature` / `bug` / `chore` / `refactor` / `docs` / `tooling`) is the PR-side analogue of Issue Type.                                                        | set on the PR per AGENTS.md §2; agent / author responsibility         |
-| **Area**      | single-select (custom)   | `api` / `promo` / `portal` / `admin` / `cms` / `cms-payload` / `mobile` / `docs` / `packages` / `infra` / `tooling` / `cross-cutting`                                                                                                      | manual on Issue create                                                |
+| Field           | Type                     | Values                                                                                                                                                                                                                                                            | Filled                                                          |
+| --------------- | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| **Status**      | single-select (built-in) | `Todo` / `In Progress` / `Review` / `Done`                                                                                                                                                                                                                        | automatic via workflows (§3.3)                                  |
+| **Type**        | built-in (Issue Type)    | Org-level Issue Types. Default set `Task / Bug / Feature` is sufficient; the org admin can extend with `chore / docs / tooling / refactor` if richer typing is wanted. **PRs do not have an Issue Type** — they are classified via Labels.                        | manual on Issue create                                          |
+| **Milestone**   | built-in                 | **One shippable increment of ONE track** — the release plan (see below). Named `«<Трек> R<n> — <результат>»`, e.g. «Академия R1 — Архив записей». Backlog bucket per track: «Академия · Позже» / «Витрина · Позже». Non-roadmap work: «Platform ops & hardening». | mandatory on Issue create (`pnpm issue:create` fails closed)    |
+| **Start date**  | date (custom)            | Roadmap bar start. Set **only** on feature-level and release-gate Issues; filled when the first child EARS Issue moves to In Progress.                                                                                                                            | semi-automatic (`pnpm roadmap:forecast`), owner override        |
+| **Target date** | date (custom)            | Roadmap bar end. Set **only** on feature-level and release-gate Issues; a **forecast**, not a commitment (see below).                                                                                                                                             | semi-automatic (`pnpm roadmap:forecast`), owner override        |
+| **Priority**    | single-select (custom)   | Ordering hint used when the Todo column grows past a screen. Accepted as an addition to the original design.                                                                                                                                                      | manual, optional                                                |
+| **Labels**      | built-in                 | Surfaced on the board as a column. Carries the `track:*` axis, the kind label, `source:*` and `feature:NNN-*`. For PRs, the AGENTS.md §2 mandatory label (`feature` / `bug` / `chore` / `refactor` / `docs` / `tooling`) is the PR-side analogue of Issue Type.   | set per `.claude/rules/repo-conventions.md` → Issue conventions |
+| **Area**        | single-select (custom)   | `api` / `promo` / `portal` / `admin` / `cms` / `cms-payload` / `mobile` / `docs` / `packages` / `infra` / `tooling` / `cross-cutting`                                                                                                                             | manual on Issue create                                          |
 
-**Explicitly excluded fields:** Release, Phase, Priority, Estimate, Iteration, Start date, Target date, Plane ref, Spec slug, Kind. Rationales:
+#### Milestone semantics (the release plan)
 
-- **Release** — releases happen continuously via changesets, not as planning buckets. See §2 non-goals.
+- A milestone is **one shippable increment of one track**. It holds **1–4 feature-level Issues**; 5 or more means the release is too big and must be split.
+- The two product tracks **never share a milestone** — «Академия» and «Витрина» ship independently.
+- Name: `«<Трек> R<n> — <результат>»`. `R<n>` numbers **within a track**, so «Академия R1» and «Витрина R1» coexist. Examples: «Академия R1 — Архив записей», «Академия R2 — Новая главная», «Витрина R1 — MVP витрины».
+- Each track has one dateless backlog milestone — «Академия · Позже», «Витрина · Позже» — holding everything beyond the two nearest releases.
+- **Platform work takes the milestone of the release it blocks**, wired by a native `blocked_by` edge. Platform work that blocks nothing scheduled stays in «Platform ops & hardening», the non-roadmap bucket that never appears on the Roadmap view.
+- Every milestone owns a **release gate Issue** (`gate: <milestone name>`, §7.1) that carries the milestone's dates and the weekly forecast comment.
+
+Owner decision (2026-09-02) on naming: «Milestones и префикс трека по-русски, остальной заголовок как есть, английский — подтверждаю» — milestone names and the track prefix are Russian; the rest of an Issue title stays English.
+
+#### Date semantics (forecast, not commitment)
+
+Owner decision (2026-09-02) on where dates live: «Предпочитаю первый вариант» — Start / Target date fields exist **only** on feature-level Issues and release gate Issues (≈15 dated items at any time), never on EARS-handler Issues.
+
+- **Target date** is a _forecast_, derived from the trailing 4-week EARS-throughput of that track over the remaining open EARS children. It is recomputed by `pnpm roadmap:forecast` and re-posted **weekly as a comment on the release gate Issue**, so the forecast history is auditable.
+- **Manual override is owner-only** and is marked by an explicit body line on the Issue; the forecast script must not overwrite an overridden date.
+- **Start date** is set when the first child Issue moves to In Progress — never guessed ahead of real work.
+
+**Explicitly excluded fields:** Release, Phase, Estimate, Iteration, Plane ref, Spec slug, Kind. Rationales:
+
+- **Release** — a custom single-select `Release` field was added to the board after the original setup and is **retired by this revision**: release membership is the Milestone. Its three values migrate to milestones («Релиз 1 — архив» → «Академия R1 — Архив записей», «Релиз 2 — главная» → «Академия R2 — Новая главная», «Релиз 3 — витрина MVP» → «Витрина R1 — MVP витрины»); the migration itself is board work, not spec work.
 - **Phase** — coarse temporal landmark, not an active filter for the working set. See §2 non-goals.
-- **Priority** — drag-reorder inside the Todo column is the single source of order. A separate priority field would create a second source and the two can diverge.
-- **Estimate** — no sprint velocity tracking; 1+AI team.
-- **Iteration** — explicitly out of scope.
-- **Start / Target date** — no Roadmap-timeline view yet.
+- **Estimate** — no sprint velocity tracking; 1+AI team. Throughput is measured from closed EARS Issues instead (see date semantics above).
+- **Iteration** — explicitly out of scope; the release milestone is the time container.
 - **Plane ref** — strict tracker separation (memory `feedback_plane_github_strict_separation`).
 - **Spec slug** — when a spec-bound Issue exists, the spec link is in the body under "Spec reference" (§7); duplicating it as a field has no slicing payoff because per-spec grouping is not a board view (specs are short-lived; their work-streams roll up through Milestone when one applies).
 - **Kind** — initial design had a custom `Kind` field, but it duplicates two existing mechanisms: native Issue **Type** (for Issues) and the mandatory PR **Label** (for PRs). One source of truth per object class is cleaner than a third field that has to be kept in sync with both. Removed at clean-up after first real run.
@@ -105,15 +136,17 @@ The auto-add filter is single-repo at setup. Extending to additional org repos i
 
 ### 3.4 Views
 
-Three views configured at setup. All read from the single board.
+All views read from the single board.
 
-| View             | Audience | Layout         | Filter / Group                                                                                                          |
-| ---------------- | -------- | -------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| **Now**          | both     | Board (kanban) | Group by Status. No release/phase filter. Default landing view. Shows everything not archived.                          |
-| **By milestone** | PM       | Table          | Filter `status != Done`. Group by Milestone. Empty-Milestone bucket holds work that does not belong to a tracked theme. |
-| **By area**      | agent    | Table          | Filter `status != Done`. Group by Area. For "what is left to do in `api`" style queries.                                |
+| View             | Audience | Layout         | Filter / Group                                                                                                                                                                |
+| ---------------- | -------- | -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Roadmap**      | PM/owner | **Roadmap**    | Filter `-label:kind:ears-handler` (and `status != Done`). Group by **Milestone**. Date fields **Start date → Target date**; milestone markers on. The PM-facing plan surface. |
+| **Now**          | both     | Board (kanban) | Group by Status. No release/phase filter. Default landing view. Shows everything not archived.                                                                                |
+| **By milestone** | PM       | Table          | Filter `status != Done`. Group by Milestone. Native percent-complete per milestone for release-readiness questions.                                                           |
+| **By area**      | agent    | Table          | Filter `status != Done`. Group by Area. For "what is left to do in `api`" style queries.                                                                                      |
+| **Closed**       | both     | Table          | Filter `status = Done`. Archive lookup.                                                                                                                                       |
 
-The "By milestone" view is the PM roadmap surrogate: each Milestone tile shows native percent-complete (closed / total). For ad-hoc release-readiness questions, the PM filters this view by an in-flight Milestone (e.g. `milestone = Auth foundations v1`).
+**Roadmap readability is the design constraint.** Only feature-level Issues appear on the Roadmap view — the `-label:kind:ears-handler` filter is what makes it legible, and EARS work is visible instead as the parent feature's native sub-issue progress bar. Beyond the two nearest releases of a track, features sit in the track's «· Позже» milestone with no dates, so the timeline never renders speculative bars.
 
 ADR revisions are not promoted to a dedicated view — they are infrequent enough that an ad-hoc title search (`ADR-`) or filtering by the `docs` label is sufficient. If the ADR-revision cadence becomes load-bearing, a new view is added when this spec is next revised.
 
@@ -139,7 +172,7 @@ The setup script reads each item via `gh issue list --state all` / `gh pr list -
   - `chore(deps)` / `chore(release)` / `chore(deps-dev)` → `tooling`
   - `feat(meta)` → `cross-cutting`
   - Unknown / unparseable → left empty for manual review.
-- **Milestone** — left empty for all backfill items. The closed work to date was Phase 0 scaffolding without long-lived product themes; back-assigning Milestones retroactively has no analytic payoff.
+- **Milestone** — left empty for all backfill items. The closed work to date was Phase 0 scaffolding, predating the release milestones; back-assigning Milestones retroactively has no analytic payoff.
 - **Type / Labels** — not touched by backfill. PR labels already exist on every PR (mandated by AGENTS.md §2). Issue Types on the three closed Issues can be set manually if useful, but Done items rarely need their typing changed.
 
 The script logs every field decision in human-readable form before applying so a dry-run mode can preview the assignment.
@@ -248,11 +281,31 @@ The template is English-only (consistent with `AGENTS.md`, ADRs, and existing sp
 - Does **not** retroactively rewrite existing Issue bodies.
 - Does **not** apply to PR descriptions — PRs use the separate template documented in `AGENTS.md §2`.
 
+### 7.1 Roadmap taxonomy
+
+Five Issue levels exist. Each has exactly one place in the hierarchy, one title pattern and one dates rule — this table is the contract the board, the views and `pnpm issue:create` all read.
+
+| Level             | Org Type | Title pattern                                          | Parent                       | Milestone                                                                 | Start / Target dates | On Roadmap view              |
+| ----------------- | -------- | ------------------------------------------------------ | ---------------------------- | ------------------------------------------------------------------------- | -------------------- | ---------------------------- |
+| **Epic**          | Task     | `epic: <English title>`                                | none                         | the release it lands in, or the track's «· Позже»                         | no                   | no                           |
+| **Feature**       | Feature  | `[Академия][NNN] <English title>` / `[Витрина][NNN] …` | the epic, when one exists    | the release it ships in                                                   | **yes**              | **yes**                      |
+| **EARS task**     | Task     | `[NNN] EARS-k: <English clause>`                       | its feature                  | inherits the parent feature's                                             | no                   | no (sub-issue progress only) |
+| **Release gate**  | Task     | `gate: <milestone name>`                               | none                         | the milestone it gates                                                    | **yes**              | **yes**                      |
+| **Platform task** | Task     | `<English title>` (no track prefix)                    | none, or the blocked feature | the release it blocks (via `blocked_by`), else «Platform ops & hardening» | no                   | no                           |
+
+**Naming rule.** Russian appears in exactly three places: the milestone name, the track prefix in a feature title, and the two backlog milestone names. Everything else — the rest of the title, the body, labels, spec prose — stays English. Owner decision (2026-09-02): «Milestones и префикс трека по-русски, остальной заголовок как есть, английский — подтверждаю».
+
+**Epic rule.** An epic is a **closable initiative** — a set of Issues that ends when they drain. Owner decision (2026-09-02): «Эпик - это набор задач, который должен закрываться по мере их дренажа». There is therefore no evergreen per-track epic: the track lives in the `track:*` label and in the milestone name, never in a permanently open epic Issue. Reference examples: #1240 (Academy public surface) and #1430 (Two-site IA relaunch) — both closable, both draining.
+
+**Release gate rule.** Every milestone has exactly one gate Issue. It carries native `blocked_by` edges to every feature in the release, so "is the release ready" is answered by the native dependency graph rather than by prose. It holds the milestone's Start / Target dates and receives the weekly `pnpm roadmap:forecast` comment (§3.2). Reference examples: #1671 (архив записей) and #1672 (новая главная).
+
+**Forecast rule.** Target date = today + (open EARS children ÷ the track's trailing 4-week EARS-throughput), recomputed weekly and posted as a comment on the gate Issue. An owner override replaces the computed value and is marked by a body line on the Issue; the script never overwrites an overridden date.
+
 ## 8. AGENTS.md edits
 
 Two direct edits — no append-only / superseded-block semantics. `AGENTS.md` is a living convention doc; outdated text is replaced in place.
 
-### 8.1 Invert Milestone semantics in §2
+### 8.1 Milestone semantics in §2
 
 `AGENTS.md §2 Repository conventions` currently says, regarding feature specs:
 
@@ -260,9 +313,9 @@ Two direct edits — no append-only / superseded-block semantics. `AGENTS.md` is
 
 This is replaced by:
 
-> One spec → multiple Issues (one per EARS-handler). Milestones are used independently of specs: a Milestone tracks a long-lived product theme (`Auth foundations v1`, `Directual cutover`, `Doctor portal MVP`) that typically spans multiple specs and lives weeks–months. Specs themselves do not become Milestones.
+> One spec → multiple Issues (one per EARS-handler). Milestones are independent of specs: a Milestone is one shippable release of ONE track (1–4 features), named `«<Трек> R<n> — <результат>»`. Specs themselves do not become Milestones, and the two tracks never share a milestone.
 
-The reasoning trail (why the inversion happened) lives in this spec §2 + §3.2 + §3.4, not in `AGENTS.md`.
+The reasoning trail lives in this spec §1 + §3.2 + §3.4 + §7.1, not in `AGENTS.md`. The operating detail — the field contract and the track/milestone/epic distinction — lives in `.claude/rules/repo-conventions.md` → Issue conventions.
 
 ### 8.2 Insert §2.1 Issue conventions
 
@@ -279,16 +332,16 @@ Lives at `tools/setup-project-board.ts`. Run-once at bootstrap; kept in-repo aft
 ### 9.1 Sequence
 
 1. **Project creation.** `gh project create --owner doctor-school --title "DS Platform" --format json` → capture `PROJECT_NUMBER` and `PROJECT_ID`.
-2. **Field creation.** The only custom field is `Area`; create via `gh project field-create` (single-select). Built-in `Status` field has its option set adjusted to the four target values (script warns + defers to UI if defaults differ to avoid item data loss on re-create). Built-in `Type`, `Milestone`, `Labels` require no field creation.
+2. **Field creation.** The custom fields are `Area` (single-select), `Priority` (single-select) and `Start date` / `Target date` (date); create via `gh project field-create`. Built-in `Status` field has its option set adjusted to the four target values (script warns + defers to UI if defaults differ to avoid item data loss on re-create). Built-in `Type`, `Milestone`, `Labels` require no field creation.
 3. **Workflow activation.** For each of the six workflows in §3.3, call the GraphQL `updateProjectV2Workflow` mutation with the appropriate trigger / action payload.
-4. **View creation.** For each of the three views in §3.4, configure via UI (the GraphQL view-mutation surface is preview-only).
+4. **View creation.** For each view in §3.4, configure via UI (the GraphQL view-mutation surface is preview-only) — the `Roadmap` layout, its date-field pair and its milestone markers are UI-only settings.
 5. **Backfill.**
    - Fetch closed Issues and PRs via `gh issue list --state all --json …` / `gh pr list --state all --json …`.
    - For each item: `gh project item-add --owner doctor-school --url <html_url>`.
    - For each added item: set Status + Area per §4.2. Milestone, Type, Labels untouched.
 6. **Audit log.** Write a final summary to stdout: items processed, fields assigned, ambiguous title parses listed for manual review.
 
-The script does **not** create any Milestone objects — Milestones are created by the PM through the GitHub UI when a long-lived theme emerges.
+The script does **not** create any Milestone objects — release milestones are created per track when the release is planned (`«<Трек> R<n> — <результат>»`, §3.2), together with their gate Issue.
 
 ### 9.2 Idempotency
 
@@ -309,9 +362,9 @@ Flag `--dry-run` prints every intended mutation to stdout without executing. Use
 ## 10. Acceptance criteria
 
 1. Org-level Projects v2 board `DS Platform` exists in org `doctor-school`, visibility = private. URL recorded inline in this spec via a follow-up edit after the script's first successful run.
-2. Fields configured: `Status` (4 options), `Area` (13 options). Built-in `Type`, `Milestone`, `Labels` fields are enabled (no objects created at setup).
+2. Fields configured: `Status` (4 options), `Area` (12 options), `Priority`, `Start date`, `Target date`. Built-in `Type`, `Milestone`, `Labels` fields are enabled (no Milestone objects created at setup).
 3. All six workflows (§3.3) are enabled and active.
-4. All three views (§3.4) are configured with the correct filter / group / layout.
+4. All views (§3.4) are configured with the correct filter / group / layout — including `Roadmap` (layout roadmap, group by Milestone, filter `-label:kind:ears-handler`, dates Start → Target).
 5. All 17 closed items are linked, `Status = Done`. Area assigned per §4.2 (with unambiguous-parse failures logged for manual review). Milestone / Type / Labels untouched by backfill.
 6. `tools/setup-project-board.ts` is committed, idempotent, and supports `--dry-run`.
 7. `.github/ISSUE_TEMPLATE/default.md` is committed and surfaces in the "New issue" UI (verified manually).
@@ -323,7 +376,7 @@ Flag `--dry-run` prints every intended mutation to stdout without executing. Use
 Manual checks after the script's first successful run:
 
 - `gh project view <PROJECT_NUMBER> --owner doctor-school --format json` — fields and workflows enumerated.
-- Open the board in a browser and confirm: three views render, Todo column is empty, Done column shows the 17 backfilled items, Milestone column is empty (no Milestone objects exist yet).
+- Open the board in a browser and confirm: every §3.4 view renders, the `Roadmap` view shows no EARS-handler rows, Todo column is empty, Done column shows the 17 backfilled items.
 - Create a throwaway Issue in `doctor-school/ds-platform` — confirm auto-add fires (workflow #1) and the Issue appears in Todo. Close it; confirm workflow #2 moves it to Done. Delete it.
 
 No automated test harness — this is a one-off setup script, not a recurring pipeline.
@@ -337,7 +390,8 @@ No automated test harness — this is a one-off setup script, not a recurring pi
 | `Status` built-in field cannot have its option set fully replaced; some platforms require additive-only changes. | The script first attempts in-place update; on failure, creates a new single-select field `Status (custom)` with the four target options and migrates items. Logged as a fallback path. |
 | Backfill heuristics misclassify Area on items with non-conventional titles.                                      | Script logs every ambiguous parse; AC #5 requires manual review of these. The misclassification is recoverable via UI.                                                                 |
 | WIP > 1 in `In Progress` due to forgotten stop-state hygiene.                                                    | Documented convention only; not enforced. The ordering procedure §5 handles WIP > 1 by picking newest updated_at. A future tightening (e.g., a CI lint) is out of scope here.          |
-| PM does not create Milestones, so the "By milestone" view is permanently empty.                                  | Acceptable. Until a long-lived theme exists, "By milestone" simply renders one bucket "No milestone" — the cost is one ignored view, not broken automation.                            |
+| A release milestone grows past 4 features and the Roadmap bar becomes meaningless.                               | The 1–4-feature cap (§3.2) is the split trigger: overflow features move to the next `R<n>` of the same track, or to that track's «· Позже» bucket.                                     |
+| The weekly forecast overwrites an owner's manual Target date.                                                    | `pnpm roadmap:forecast` skips any Issue carrying the override body line (§3.2); the override is owner-only by design.                                                                  |
 
 ## 13. When to revisit / split
 
@@ -347,7 +401,7 @@ The single-board design holds until any of the following triggers fire:
 - v1 implementation crosses ~50 concurrently open items — at that point a separate `v1 — pilot` board might reduce noise on the operational view.
 - More than 100 open items concurrently — the single Todo column drag-reorder UX breaks down.
 - A second org-repo with an independent lifecycle joins the board.
-- A real demand for a Roadmap-timeline view emerges (then date fields per Milestone, and a Roadmap view added — spec revision, not redesign).
+- A third product track appears — the two-track milestone naming (`«<Трек> R<n> — …»`) and the Roadmap grouping would need re-deriving, not just extending.
 
 Each trigger reopens this spec as a revision, not as a fresh design.
 
@@ -355,8 +409,8 @@ Each trigger reopens this spec as a revision, not as a fresh design.
 
 - Bootstrap-script (`tools/agent-bootstrap.ts`) integration with the board — separate follow-up Issue.
 - Per-app split boards — see §13 triggers.
-- Date fields on items for Roadmap-view timelines — see §13.
+- Start / Target dates on EARS-handler Issues — see §3.2.
 - Sprint cycles / iterations — explicit non-goal per DSP-198 description.
 - Cross-tracker Plane DSP-XXX field — strict separation rule (`feedback_plane_github_strict_separation`).
 - Custom dependency-graph visualisation — native GH "blocked by / blocking" suffices.
-- Pre-creating Milestone objects at setup — see §3.2 and §9.1.
+- The board migration that applies this design (retire the `Release` field, create the release milestones, add the Roadmap view) and the `pnpm roadmap:forecast` tooling — separate staged Issues under epic #1726.

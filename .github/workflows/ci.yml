@@ -303,12 +303,24 @@ jobs:
   # a migration, an entity or a suite, so this job is skipped there — a SKIPPED
   # check-run (still registered, still read as green by the merge gate), never an
   # absent one.
+  # #1595 — this job also provisions the ZITADEL IdP. Without `IDP_ISSUER` every
+  # `describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)` suite
+  # (taxonomy, room, registration, recordings, me, admin, …) collapsed to a SKIP
+  # and the check-run went green having executed none of them — a blind gate.
+  # The IdP recipe is the `admin-e2e` one verbatim (host network, ZITADEL_PORT
+  # forced to the external port, world-writable PAT bind mount); the rationale
+  # for each deviation from `infra/dev-stand/compose.core.yml` is documented
+  # once, at that job. The `assert-e2e-ran` step is the fail-loud half: a future
+  # missing variable can no longer skip its way to green.
   api-e2e:
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     env:
       DATABASE_URL: postgres://ds:ds@localhost:5432/ds_test
+      IDP_ISSUER: http://localhost:9080
+      IDP_REDIRECT_URI: http://localhost:3000/auth/callback
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -317,13 +329,15 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Build the data-layer Postgres image (pgvector + pg_partman)
         run: docker build -t ds-platform/postgres:pg17-partman infra/dev-stand/postgres
+      # `--network host` (not `-p 5432:5432`), as in `admin-e2e`: the IdP
+      # container reaches Postgres at `localhost:5432` only when both share the
+      # runner's network namespace.
       - name: Start Postgres
         run: |
-          docker run -d --name ds-postgres \
+          docker run -d --name ds-postgres --network host \
             -e POSTGRES_USER=ds \
             -e POSTGRES_PASSWORD=ds \
             -e POSTGRES_DB=ds_test \
-            -p 5432:5432 \
             ds-platform/postgres:pg17-partman
       - name: Wait for Postgres to be ready
         run: |
@@ -334,7 +348,85 @@ jobs:
             echo "waiting for Postgres ($i/30)..."; sleep 2
           done
           echo "Postgres did not become ready in time"; docker logs ds-postgres; exit 1
-      - run: pnpm exec turbo run test --filter=@ds/api
+
+      # ─ IdP ─ identical to the `admin-e2e` block; see the commentary there.
+      - name: Prepare the PAT mount
+        run: mkdir -p "$RUNNER_TEMP/idp-pat" && chmod 0777 "$RUNNER_TEMP/idp-pat"
+      - name: Start the IdP (Zitadel)
+        run: |
+          docker run -d --name ds-idp --network host \
+            -v "$RUNNER_TEMP/idp-pat":/pat \
+            -e ZITADEL_MASTERKEY=MasterkeyNeedsToHave32Characters \
+            -e ZITADEL_EXTERNALSECURE=false \
+            -e ZITADEL_TLS_ENABLED=false \
+            -e ZITADEL_EXTERNALDOMAIN=localhost \
+            -e ZITADEL_EXTERNALPORT=9080 \
+            -e ZITADEL_PORT=9080 \
+            -e ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_REQUIRED=true \
+            -e ZITADEL_DATABASE_POSTGRES_HOST=localhost \
+            -e ZITADEL_DATABASE_POSTGRES_PORT=5432 \
+            -e ZITADEL_DATABASE_POSTGRES_DATABASE=zitadel \
+            -e ZITADEL_DATABASE_POSTGRES_USER_USERNAME=ds \
+            -e ZITADEL_DATABASE_POSTGRES_USER_PASSWORD=ds \
+            -e ZITADEL_DATABASE_POSTGRES_USER_SSL_MODE=disable \
+            -e ZITADEL_DATABASE_POSTGRES_ADMIN_USERNAME=ds \
+            -e ZITADEL_DATABASE_POSTGRES_ADMIN_PASSWORD=ds \
+            -e ZITADEL_DATABASE_POSTGRES_ADMIN_SSL_MODE=disable \
+            -e ZITADEL_FIRSTINSTANCE_PATPATH=/pat/pat.txt \
+            -e ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_USERNAME=ds-bootstrap \
+            -e ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_NAME=ds-bootstrap \
+            -e ZITADEL_FIRSTINSTANCE_ORG_MACHINE_PAT_EXPIRATIONDATE=2099-12-31T23:59:59Z \
+            ghcr.io/zitadel/zitadel:latest \
+            start-from-init --masterkeyFromEnv
+      # The discovery document, not just `/debug/ready`: the suites resolve the
+      # issuer through OIDC discovery, so that is the endpoint whose readiness
+      # actually gates them.
+      - name: Wait for the IdP to be ready
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:9080/.well-known/openid-configuration >/dev/null 2>&1; then
+              echo "IdP discovery is serving"; exit 0
+            fi
+            echo "waiting for the IdP ($i/60)..."; sleep 5
+          done
+          echo "the IdP did not become ready in time"; docker logs ds-idp; exit 1
+      - name: Read the bootstrap PAT
+        run: |
+          for i in $(seq 1 30); do
+            if [ -s "$RUNNER_TEMP/idp-pat/pat.txt" ]; then
+              cp "$RUNNER_TEMP/idp-pat/pat.txt" ./idp-pat.txt
+              echo "::add-mask::$(cat ./idp-pat.txt)"
+              echo "IDP_SERVICE_TOKEN=$(cat ./idp-pat.txt)" >> "$GITHUB_ENV"
+              echo "bootstrap PAT read"; exit 0
+            fi
+            echo "waiting for the bootstrap PAT ($i/30)..."; sleep 2
+          done
+          echo "the bootstrap PAT never appeared"; docker logs ds-idp; exit 1
+      # STDOUT to the file only — this repo is public and the provisioner prints
+      # the OIDC client secret; the secret is masked before it enters $GITHUB_ENV.
+      - name: Provision the IdP project, client and roles
+        env:
+          IDP_BASE_URL: http://localhost:9080
+        run: |
+          set -euo pipefail
+          bash infra/dev-stand/idp/provision.sh --pat-file ./idp-pat.txt > ./idp-provision.out
+          client_secret="$(grep -E '^IDP_CLIENT_SECRET=' ./idp-provision.out | cut -d= -f2- || true)"
+          if [ -n "$client_secret" ]; then echo "::add-mask::$client_secret"; fi
+          grep -E '^IDP_(PROJECT_ID|CLIENT_ID|CLIENT_SECRET)=' ./idp-provision.out >> "$GITHUB_ENV"
+
+      # The JSON reporter runs ALONGSIDE the default one: the log stays readable
+      # and `assert-e2e-ran` gets a machine-readable record of what actually ran.
+      # Turbo forwards everything after `--` to the underlying `vitest run`, and
+      # the IDP_* variables reach it through `turbo.json` → `passThroughEnv`
+      # (turbo's env mode is strict — an undeclared variable is invisible to the
+      # task, which is how #1595 would otherwise reappear one layer down).
+      - name: Run the api test tier
+        run: |
+          pnpm exec turbo run test --filter=@ds/api -- \
+            --reporter=default --reporter=json --outputFile.json="$GITHUB_WORKSPACE/vitest-api.json"
+      - name: Assert the IDP-gated e2e suites actually ran (#1595)
+        if: ${{ !cancelled() }}
+        run: pnpm ci:assert-e2e-ran vitest-api.json
 
   # ─── Generated API drift guard (ADR-0006 §7, BLOCK) ──────────────────
   # One non-duplicative check owns both generated API artifacts: it rebuilds the

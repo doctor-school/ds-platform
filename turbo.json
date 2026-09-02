@@ -23,7 +23,20 @@
     "test": {
       "dependsOn": ["^build"],
       "outputs": ["coverage/**"],
-      "passThroughEnv": ["DATABASE_URL", "CI"]
+      "passThroughEnv": [
+        "DATABASE_URL",
+        "CI",
+        "GITHUB_WORKSPACE",
+        "IDP_ISSUER",
+        "IDP_SERVICE_TOKEN",
+        "IDP_CLIENT_ID",
+        "IDP_CLIENT_SECRET",
+        "IDP_PROJECT_ID",
+        "IDP_ORG_ID",
+        "IDP_REDIRECT_URI",
+        "IDP_SCOPES",
+        "IDP_WEBHOOK_SECRET"
+      ]
     },
     "typecheck": {
       "dependsOn": ["^build"],

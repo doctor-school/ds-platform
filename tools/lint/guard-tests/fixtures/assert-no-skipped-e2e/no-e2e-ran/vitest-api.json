@@ -1,0 +1,10 @@
+{
+  "testResults": [
+    {
+      "name": "apps/api/src/health/health.spec.ts",
+      "assertionResults": [
+        { "title": "case 0", "fullName": "health case 0", "status": "passed" }
+      ]
+    }
+  ]
+}

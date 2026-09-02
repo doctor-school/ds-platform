@@ -1,0 +1,29 @@
+{
+  "testResults": [
+    {
+      "name": "apps/api/test/taxonomy/directions.e2e-spec.ts",
+      "assertionResults": [
+        {
+          "title": "case 0",
+          "fullName": "taxonomy case 0",
+          "status": "passed"
+        },
+        {
+          "title": "case 1",
+          "fullName": "taxonomy case 1",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "name": "apps/api/test/room/chat.e2e-spec.ts",
+      "assertionResults": [
+        {
+          "title": "case 0",
+          "fullName": "chat case 0",
+          "status": "pending"
+        }
+      ]
+    }
+  ]
+}

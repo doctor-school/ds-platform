@@ -44,8 +44,27 @@ pnpm --filter @ds/api drizzle:generate # drizzle-kit generate (schema in @ds/db)
 pnpm --filter @ds/api drizzle:migrate  # snapshot + drizzle-kit migrate
 ```
 
-`@ds/api` tests run only in the `api-e2e` CI job (real Postgres), not the shared
-unit job — see the CI test topology.
+`@ds/api` tests run only in the `api-e2e` CI job, not the shared unit job — see
+the CI test topology. That job stands up **both** dependencies the suites gate
+on: the pgvector/pg_partman Postgres image and a real **Zitadel IdP** (the same
+recipe and bootstrap env as `admin-e2e` and the dev stand, on the runner's host
+network at `http://localhost:9080`, provisioned by
+`infra/dev-stand/idp/provision.sh`). Before #1595 the job exported only
+`DATABASE_URL`, so every
+`describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)` suite —
+taxonomy, room, registration, recordings, me, admin — skipped and the check-run
+went green having executed none of them.
+
+The environment reaches vitest through `turbo.json` → `test.passThroughEnv`
+(turbo's env mode is strict: an undeclared variable is invisible to the task), and
+the run is closed by `pnpm ci:assert-e2e-ran` (`tools/ci/assert-no-skipped-e2e.ts`,
+harness `tools/lint/guard-tests/assert-no-skipped-e2e.spec.ts`). That guard reads
+the vitest JSON report and fails the job when a required `IDP_*`/`DATABASE_URL`
+variable is missing, when no api e2e test executed at all, or when an e2e test
+skipped for any reason other than a service this tier deliberately does not
+provision (object storage, Centrifugo, the mail/SMS sinks) — the exemption is
+read from the suite's own `skipIf` condition, never from a file allowlist. So a
+future missing variable can no longer skip its way to a green gate.
 
 API generation builds the production compiler output, creates the same full
 Fastify `AppModule` configured by `api-application.ts`, and scans it without
@@ -68,9 +87,10 @@ the endpoints in `~/.ds-platform/.env.local`:
 Suites that drive the IdP **bind** their `FakeIdpClient` with
 `.overrideProvider(IDP_CLIENT).useValue(fake)`; they never read it back off the
 container. `IdpModule` selects the real `ZitadelIdpClient` whenever `IDP_ISSUER`
-and `IDP_SERVICE_TOKEN` are configured — which is the normal state of a dev
-stand — so a suite that reads `IDP_CLIENT` is green on CI and red on every
-developer machine. `test/auth/idp-fake-seam.spec.ts` pins both that rule and the
+and `IDP_SERVICE_TOKEN` are configured — the normal state of a dev stand, and
+now of the `api-e2e` job too — so a suite that reads `IDP_CLIENT` back off the
+container gets the real adapter, not its own fake, everywhere the suites
+actually run. `test/auth/idp-fake-seam.spec.ts` pins both that rule and the
 fake↔real port parity.
 
 ## Owning ADRs

@@ -5,7 +5,32 @@ slug: 020-event-page-two-storefronts
 status: Draft
 surface: user-facing
 tracker: https://github.com/doctor-school/ds-platform/milestone/17
-issues: []
+issues:
+  [
+    1763,
+    1764,
+    1765,
+    1767,
+    1766,
+    1768,
+    1769,
+    1770,
+    1771,
+    1772,
+    1773,
+    1774,
+    1780,
+    1781,
+    1782,
+    1783,
+    1784,
+    1785,
+    1775,
+    1776,
+    1777,
+    1778,
+    1779,
+  ]
 prior_decisions:
   - ADR-0014 — Product-design delivery lifecycle (§2 PRD → EARS `realizes:` trace; Stage A precedes user-facing implementation; the vendored canvas is the composition source of truth)
   - "ADR-0015 — Two-storefront topology (§2 host-to-application map; §3 one application per storefront; §4 one session model across the two hosts and «the doctor sees exactly one trace of the Academy»)"

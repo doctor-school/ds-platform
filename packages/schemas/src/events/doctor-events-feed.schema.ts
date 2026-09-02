@@ -1,5 +1,10 @@
 import { z } from "zod";
 import { DoctorEventCardSchema, DoctorEventFormatSchema } from "./doctor-event-card.schema.js";
+import {
+  createEventListingQueryCodec,
+  type EventListingQueryEntry,
+  type RawQueryRecord,
+} from "./event-listing-query.schema.js";
 
 /**
  * 019 EARS-3 (#1518) — the day-grouped, specialty-targeted feed contract of
@@ -122,30 +127,36 @@ export const DoctorEventsFeedSchema = z
   .strict();
 export type DoctorEventsFeed = z.infer<typeof DoctorEventsFeedSchema>;
 
-/** A raw querystring value as Fastify / Next.js hand it over. */
-export type RawQueryValue = string | string[] | undefined;
-
-const asList = (value: RawQueryValue): string[] | undefined => {
-  if (value === undefined) return undefined;
-  const parts = (Array.isArray(value) ? value : [value])
-    .flatMap((entry) => entry.split(","))
-    .map((entry) => entry.trim())
-    .filter((entry) => entry.length > 0);
-  return parts.length > 0 ? parts : undefined;
-};
-
-const asBoolean = (value: RawQueryValue): boolean | undefined => {
-  const first = Array.isArray(value) ? value[0] : value;
-  if (first === undefined) return undefined;
-  if (first === "true" || first === "1") return true;
-  if (first === "false" || first === "0") return false;
-  return undefined;
-};
-
-const asScalar = (value: RawQueryValue): string | undefined => {
-  const first = Array.isArray(value) ? value[0] : value;
-  return first === undefined || first.length === 0 ? undefined : first;
-};
+/**
+ * The doctor host's mount of the PORTABLE codec (019-design §8 step 3, #1523).
+ *
+ * The grammar — repeatable-parameter spelling, boolean spelling, drop-unknown,
+ * the deterministic key order — lives in `event-listing-query.schema.ts` and is
+ * shared. What stays HERE is only this host's vocabulary and defaults: which
+ * keys exist, what each takes, and that a missing `tense` means `upcoming` and
+ * a missing `specialty` means `mine-and-adjacent`. The field table below is
+ * ordered, and that order IS the URL's key order.
+ */
+export const DOCTOR_EVENTS_FEED_QUERY_CODEC = createEventListingQueryCodec({
+  schema: DoctorEventsFeedQuerySchema,
+  fields: [
+    { key: "day", kind: "scalar" },
+    { key: "tense", kind: "scalar" },
+    { key: "from", kind: "scalar" },
+    { key: "to", kind: "scalar" },
+    { key: "format", kind: "list" },
+    { key: "kind", kind: "list" },
+    {
+      key: "specialty",
+      kind: "mode-or-list",
+      modes: DoctorEventsFeedSpecialtyModeSchema.options,
+    },
+    { key: "city", kind: "list" },
+    { key: "nmo", kind: "boolean" },
+    { key: "free", kind: "boolean" },
+    { key: "q", kind: "scalar" },
+  ],
+} as const);
 
 /**
  * The single query codec of 019 (019-design §3). The API controller and the
@@ -153,30 +164,22 @@ const asScalar = (value: RawQueryValue): string | undefined => {
  * EARS-15 «second listing engine» failure in its cheapest form.
  */
 export function parseDoctorEventsFeedQuery(
-  raw: Record<string, RawQueryValue>,
+  raw: RawQueryRecord,
 ): z.ZodSafeParseResult<DoctorEventsFeedQuery> {
-  const specialtyRaw = asList(raw.specialty);
-  const specialty =
-    specialtyRaw === undefined
-      ? undefined
-      : specialtyRaw.length === 1 &&
-          DoctorEventsFeedSpecialtyModeSchema.safeParse(specialtyRaw[0]).success
-        ? specialtyRaw[0]
-        : specialtyRaw;
+  return DOCTOR_EVENTS_FEED_QUERY_CODEC.parse(raw);
+}
 
-  return DoctorEventsFeedQuerySchema.safeParse({
-    day: asScalar(raw.day),
-    tense: asScalar(raw.tense),
-    from: asScalar(raw.from),
-    to: asScalar(raw.to),
-    format: asList(raw.format),
-    kind: asList(raw.kind),
-    specialty,
-    city: asList(raw.city),
-    nmo: asBoolean(raw.nmo),
-    free: asBoolean(raw.free),
-    q: asScalar(raw.q),
-  });
+/**
+ * The other half of the same round-trip (EARS-8): re-encode exactly what the
+ * codec understood, as ordered wire entries (a host turns them into its own
+ * `URLSearchParams` — this package stays platform-free). Anything it did not understand is DROPPED rather than
+ * forwarded, so a hand-edited URL can never smuggle an unknown parameter into
+ * the api read — and every host link is written by this one serialiser.
+ */
+export function encodeDoctorEventsFeedQueryEntries(
+  raw: RawQueryRecord,
+): EventListingQueryEntry[] {
+  return DOCTOR_EVENTS_FEED_QUERY_CODEC.reencode(raw);
 }
 
 const MOSCOW_TIME_ZONE = "Europe/Moscow";

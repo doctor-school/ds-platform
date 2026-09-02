@@ -2,7 +2,7 @@ import {
   DOCTOR_EVENTS_FEED_HORIZON_STEP_DAYS,
   type DoctorEventsFeed,
   DoctorEventsFeedSchema,
-  parseDoctorEventsFeedQuery,
+  encodeDoctorEventsFeedQueryEntries,
   type RawQueryValue,
 } from "@ds/schemas";
 import { API_BASE } from "@/lib/session";
@@ -31,36 +31,20 @@ export type DoctorEventsFeedResult =
   | { ok: false; reason: "unavailable" };
 
 /**
- * Re-encode the search params the shared codec understood. Anything it did not
- * understand is DROPPED rather than forwarded blindly, so a hand-edited URL can
- * never smuggle an unknown parameter into the api read.
+ * 019 EARS-8 (#1523) — the host adapter, and nothing more.
+ *
+ * Both halves of the round-trip (decode the URL, re-encode exactly what was
+ * understood) live on the ONE portable codec in `@ds/schemas`
+ * (`event-listing-query.schema.ts` + the doctor field table). The codec returns
+ * ORDERED wire entries because `@ds/schemas` is platform-free by contract; the
+ * only thing this host adds is the `URLSearchParams` those entries go into.
+ * That single line is the whole adapter — any query grammar re-implemented here
+ * would be the EARS-15 «second listing engine» failure in its cheapest form.
  */
 export function encodeDoctorEventsFeedQuery(
   raw: Record<string, RawQueryValue>,
 ): URLSearchParams {
-  const params = new URLSearchParams();
-  const parsed = parseDoctorEventsFeedQuery(raw);
-  if (!parsed.success) return params;
-
-  const query = parsed.data;
-  if (query.day) params.set("day", query.day);
-  params.set("tense", query.tense);
-  if (query.from) params.set("from", query.from);
-  if (query.to) params.set("to", query.to);
-  for (const format of query.format) params.append("format", format);
-  for (const kind of query.kind) params.append("kind", kind);
-  if (Array.isArray(query.specialty)) {
-    for (const reference of query.specialty) {
-      params.append("specialty", reference);
-    }
-  } else {
-    params.set("specialty", query.specialty);
-  }
-  for (const city of query.city) params.append("city", city);
-  if (query.nmo !== undefined) params.set("nmo", String(query.nmo));
-  if (query.free !== undefined) params.set("free", String(query.free));
-  if (query.q !== undefined) params.set("q", query.q);
-  return params;
+  return new URLSearchParams(encodeDoctorEventsFeedQueryEntries(raw));
 }
 
 /**
@@ -112,9 +96,19 @@ export function showMoreHref(
   feed: DoctorEventsFeed,
 ): string | null {
   if (feed.nextTo === null) return null;
-  const params = encodeDoctorEventsFeedQuery(raw);
-  params.set("from", feed.from);
-  params.set("to", feed.nextTo);
+  // Widen the horizon THROUGH the codec, not with `params.set` afterwards:
+  // `set` appends when the key is absent, so a link built from a URL that
+  // carried no `from`/`to` would emit the horizon keys last instead of in
+  // field-table positions 3-4. The feature's headline property is that the same
+  // state always yields the same, comparable URL, and this is the one link the
+  // feature writes.
+  const params = new URLSearchParams(
+    encodeDoctorEventsFeedQueryEntries({
+      ...raw,
+      from: feed.from,
+      to: feed.nextTo,
+    }),
+  );
   return `/events?${params.toString()}`;
 }
 

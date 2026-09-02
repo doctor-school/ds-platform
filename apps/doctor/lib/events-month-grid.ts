@@ -1,5 +1,6 @@
 import type { DotGridCell, DotKind } from "@ds/design-system/blocks";
 import {
+  addDoctorEventsFeedDays,
   type DoctorEventsMonthGrid,
   doctorEventsMonthNextFirstDay,
   doctorEventsMonthOf,
@@ -192,9 +193,11 @@ export interface DoctorEventsFeedHorizon {
  * `day` NEVER narrows the read (`doctor-events-feed.schema.ts`: "Never narrows
  * the read"): it is the day the feed body is scrolled to. So the only thing a
  * day href may change besides `day` is the HORIZON, and only in the widening
- * direction: a day beyond the current `to` is not in the read yet, and the
- * link widens `to` to reach it — the very mechanism «показать ещё» uses, built
- * through the same codec entries so the key order stays the field-table order.
+ * direction: a day AT OR BEYOND the current `to` is not in the read yet — `to`
+ * is an exclusive bound (`lt(events.startsAt, toInstant)`) — and the link
+ * widens `to` to the day AFTER the selection to reach it, the very mechanism
+ * «показать ещё» uses, built through the same codec entries so the key order
+ * stays the field-table order.
  * A day BEFORE the horizon start is left alone: Release 1 reads the «Будущие»
  * tense only (LD-10), so pulling `from` backwards would ask for a window the
  * contract does not serve.
@@ -204,13 +207,16 @@ export function doctorEventsDayHref(
   date: string,
   horizon?: DoctorEventsFeedHorizon,
 ): string {
-  const widen = horizon !== undefined && date > horizon.to;
+  const widen = horizon !== undefined && date >= horizon.to;
   const params = widen
     ? new URLSearchParams(
         encodeDoctorEventsFeedQueryEntries({
           ...raw,
           from: horizon.from,
-          to: date,
+          // `to` is EXCLUSIVE (`lt(events.startsAt, toInstant)`), so the bound
+          // that INCLUDES the selected day is the day after it — the same
+          // arithmetic the service uses to name `nextTo`.
+          to: addDoctorEventsFeedDays(date, 1),
         }),
       )
     : encodeDoctorEventsFeedQuery(raw);

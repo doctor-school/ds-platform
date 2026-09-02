@@ -294,7 +294,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     });
 
     it("014 EARS-9.5: a hidden registration appears in NEITHER tab", async () => {
-      const hidden = await seedEvent("hidden", iso(-10 * DAY), "Скрыт");
+      const hidden = await seedEvent("hidden", iso(-10 * DAY), "Скрыто");
       const email = uniqueEmail("doc");
       const cookie = await doctorSession(email);
       await seedRegistration(await userIdOf(email), hidden.id);

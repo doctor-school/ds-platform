@@ -189,7 +189,7 @@ test.describe("014 EARS-4 public post-live event page (e2e)", () => {
     expect(res?.status()).toBe(200);
     // `exact` — the hidden notice card repeats the phrase as «Мероприятие
     // скрыто»; the hero badge is the render 004 EARS-5 owns.
-    await expect(page.getByText("Скрыт", { exact: true })).toBeVisible();
+    await expect(page.getByText("Скрыто", { exact: true })).toBeVisible();
     await expect(
       page.getByText("Регистрация недоступна", { exact: true }),
     ).toBeVisible();

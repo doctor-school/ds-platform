@@ -197,7 +197,7 @@ Then(
 Then(
   "the «мероприятие скрыто» notice is shown with no participation CTA",
   async ({ page }) => {
-    await expect(page.getByText("Скрыт", { exact: true }).first()).toBeVisible();
+    await expect(page.getByText("Скрыто", { exact: true }).first()).toBeVisible();
     await expect(
       page.getByText("Мероприятие скрыто").first(),
     ).toBeVisible();

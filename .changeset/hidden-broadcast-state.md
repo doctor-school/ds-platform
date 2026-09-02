@@ -8,7 +8,7 @@
 ---
 
 007 EARS-28 / #1748 — the hidden broadcast state is renamed `archived` → `hidden`
-(«Скрыт»), and its command `ArchiveEvent` → `HideEvent` («Скрыть»).
+(«Скрыто»), and its command `ArchiveEvent` → `HideEvent` («Скрыть»).
 
 Breaking on the wire and in the SDK. The `event_lifecycle_state` enum's terminal
 value is `hidden` (`@ds/db` migration 0033 relabels the Postgres enum in place,
@@ -17,7 +17,7 @@ and every schema deriving from it (`@ds/schemas`) speak `hidden`; the admin
 transition route moves from `POST /v1/admin/events/:id/archive` to
 `…/:id/hide` and the audit type from `event.archived` to `event.hidden`
 (`@ds/api`), with `@ds/api-client` regenerated against it. `@ds/admin` shows the
-status «Скрыт» and the action «Скрыть»; `@ds/portal` renders the hidden event's
+status «Скрыто» and the action «Скрыть»; `@ds/portal` renders the hidden event's
 notice as «Мероприятие скрыто». No dual-read shim and no compatibility alias —
 the old value is gone.
 

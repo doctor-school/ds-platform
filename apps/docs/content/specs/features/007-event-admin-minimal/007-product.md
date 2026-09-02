@@ -14,7 +14,7 @@ lang: en
 
 ## Feature summary
 
-The minimal operator/director tooling that makes the other three features possible: create and edit an event (title, date/time MSK, description, speakers as text/refs, specialties, program PDF, sponsor), configure the stream link with an explicit provider, open and close the live room on air day, and move the event along its lifecycle. The lifecycle is a **single state machine** — `draft → published → live → ended → archived` — replacing the legacy scatter of booleans (`draft` / `published?` / `archive` / `visible_in_rg` / …) that made "is this event visible?" ambiguous. This is deliberately **not** the legacy 11-tab editor or the full director console: no widget authoring, no program constructor (nobody used it — operators upload the final PDF), no reporting UI. _(Amended 2026-09-02: `archived` is renamed `hidden` — status «Скрыт», command «Скрыть», meaning unchanged; an archival эфир held before the platform existed runs its own two-state lifecycle. See [`007-requirements-en.md`](./007-requirements-en.md) → Amendment — 2026-09-02.)_
+The minimal operator/director tooling that makes the other three features possible: create and edit an event (title, date/time MSK, description, speakers as text/refs, specialties, program PDF, sponsor), configure the stream link with an explicit provider, open and close the live room on air day, and move the event along its lifecycle. The lifecycle is a **single state machine** — `draft → published → live → ended → archived` — replacing the legacy scatter of booleans (`draft` / `published?` / `archive` / `visible_in_rg` / …) that made "is this event visible?" ambiguous. This is deliberately **not** the legacy 11-tab editor or the full director console: no widget authoring, no program constructor (nobody used it — operators upload the final PDF), no reporting UI. _(Amended 2026-09-02: `archived` is renamed `hidden` — status «Скрыто», command «Скрыть», meaning unchanged; an archival эфир held before the platform existed runs its own two-state lifecycle. See [`007-requirements-en.md`](./007-requirements-en.md) → Amendment — 2026-09-02.)_
 
 ## User stories
 
@@ -22,7 +22,7 @@ The minimal operator/director tooling that makes the other three features possib
 - **US-2** — As an **operator**, I edit a published event as details settle (the program PDF "often changes" — I upload the final version), and the public page reflects the edit.
 - **US-3** — As an **operator/director**, on air day I paste the stream link and pick the provider explicitly, so the room knows exactly which player to embed — no URL guessing.
 - **US-4** — As a **director**, I open the live room when the broadcast starts and close it when it ends, and those two actions are what admit viewers and bound the presence capture.
-- **US-5** — As an **operator**, I move the event through its lifecycle — publish it, and after the broadcast see it through `ended` to `archived` — with the system offering only the transitions that make sense from the current state. _(Amended 2026-09-02: `archived` is renamed `hidden` — status «Скрыт», command «Скрыть», meaning unchanged; an archival эфир held before the platform existed runs its own two-state lifecycle. See [`007-requirements-en.md`](./007-requirements-en.md) → Amendment — 2026-09-02.)_
+- **US-5** — As an **operator**, I move the event through its lifecycle — publish it, and after the broadcast see it through `ended` to `archived` — with the system offering only the transitions that make sense from the current state. _(Amended 2026-09-02: `archived` is renamed `hidden` — status «Скрыто», command «Скрыть», meaning unchanged; an archival эфир held before the platform existed runs its own two-state lifecycle. See [`007-requirements-en.md`](./007-requirements-en.md) → Amendment — 2026-09-02.)_
 
 ## Flows
 
@@ -32,18 +32,18 @@ The minimal operator/director tooling that makes the other three features possib
 2. Operator publishes → `published`: the event appears on the portal listing and its page goes publicly readable (feature 004); registration opens (feature 005).
 3. Air day: director pastes the stream URL + selects the provider (e.g. `rutube`), verifies the config, and **opens the room** → `live`: registered doctors are admitted (feature 006), presence capture runs.
 4. Broadcast over: director **closes the room** → `ended`: room admission and heartbeat acceptance stop; presence data is complete for the sponsor handover.
-5. Later: operator archives → `archived`: the event leaves public surfaces. _(Amended 2026-09-02: `archived` is renamed `hidden` — status «Скрыт», command «Скрыть», meaning unchanged; an archival эфир held before the platform existed runs its own two-state lifecycle. See [`007-requirements-en.md`](./007-requirements-en.md) → Amendment — 2026-09-02.)_
+5. Later: operator archives → `archived`: the event leaves public surfaces. _(Amended 2026-09-02: `archived` is renamed `hidden` — status «Скрыто», command «Скрыть», meaning unchanged; an archival эфир held before the platform existed runs its own two-state lifecycle. See [`007-requirements-en.md`](./007-requirements-en.md) → Amendment — 2026-09-02.)_
 
 **Key branches:**
 
 - Program PDF replaced after publish → the event page serves the new file (US-2).
 - Stream link corrected while `published` (wrong URL pasted) → room config updates before/at open.
-- Invalid lifecycle jumps (e.g. `draft → live`, reopening an `archived` event) are not offered. _(Amended 2026-09-02: `archived` is renamed `hidden` — status «Скрыт», command «Скрыть», meaning unchanged; an archival эфир held before the platform existed runs its own two-state lifecycle. See [`007-requirements-en.md`](./007-requirements-en.md) → Amendment — 2026-09-02.)_
+- Invalid lifecycle jumps (e.g. `draft → live`, reopening an `archived` event) are not offered. _(Amended 2026-09-02: `archived` is renamed `hidden` — status «Скрыто», command «Скрыть», meaning unchanged; an archival эфир held before the platform existed runs its own two-state lifecycle. See [`007-requirements-en.md`](./007-requirements-en.md) → Amendment — 2026-09-02.)_
 
 ## Product acceptance criteria
 
 - An operator can create and edit an event in the `admin` app with: title, date + time explicitly in **МСК**, description, speakers (free text and/or references), target specialties, program **PDF**, sponsor/partner.
-- Event lifecycle is one field with one closed set of states (`draft → published → live → ended → archived`); the UI offers only valid transitions from the current state — no boolean flags to reconcile. _(Amended 2026-09-02: `archived` is renamed `hidden` — status «Скрыт», command «Скрыть», meaning unchanged; an archival эфир held before the platform existed runs its own two-state lifecycle. See [`007-requirements-en.md`](./007-requirements-en.md) → Amendment — 2026-09-02.)_
+- Event lifecycle is one field with one closed set of states (`draft → published → live → ended → archived`); the UI offers only valid transitions from the current state — no boolean flags to reconcile. _(Amended 2026-09-02: `archived` is renamed `hidden` — status «Скрыто», command «Скрыть», meaning unchanged; an archival эфир held before the platform existed runs its own two-state lifecycle. See [`007-requirements-en.md`](./007-requirements-en.md) → Amendment — 2026-09-02.)_
 - Stream configuration = URL + **explicit provider choice from a closed enum**; the room (feature 006) consumes exactly this config.
 - «Open room» / «close room» are explicit director actions tied to the `live` / `ended` transitions; closing stops admission and bounds presence capture.
 - What admin shows as the event's state is exactly what the portal surfaces reflect (listing visibility, page state, room access) — one source of truth, no drift.
@@ -62,7 +62,7 @@ The minimal operator/director tooling that makes the other three features possib
 ## Open questions
 
 - Speaker representation depth for wave 1: free text is always enough for the first webinar, but when do refs to real user/speaker records become required? (owner)
-- Is `ended → archived` a manual operator action (as in legacy) or time-based? (owner) _(Amended 2026-09-02: `archived` is renamed `hidden` — status «Скрыт», command «Скрыть», meaning unchanged; an archival эфир held before the platform existed runs its own two-state lifecycle. See [`007-requirements-en.md`](./007-requirements-en.md) → Amendment — 2026-09-02.)_
+- Is `ended → archived` a manual operator action (as in legacy) or time-based? (owner) _(Amended 2026-09-02: `archived` is renamed `hidden` — status «Скрыто», command «Скрыть», meaning unchanged; an archival эфир held before the platform existed runs its own two-state lifecycle. See [`007-requirements-en.md`](./007-requirements-en.md) → Amendment — 2026-09-02.)_
 - Who exactly holds admin access in wave 1 (operator + director as one trusted group vs distinct roles)? (owner)
 
 ## Approved mockup

@@ -260,14 +260,14 @@ export default async function WebinarEventPage({
             </div>
             {/* Hero lifecycle badge (004 EARS-4 swap): live → the pulsing «В
                 эфире» danger tag; every other state → the pale label with its
-                state copy («Скоро» / «Эфир завершён» / «Скрыт»).
+                state copy («Скоро» / «Эфир завершён» / «Скрыто»).
 
                 014 EARS-4: on an ENDED event the badge speaks about the
                 RECORDING instead — «Запись доступна» (green) or «Запись
                 готовится» (the neutral label) — because that is the one thing a
                 post-live visitor came to find out, and «Эфир завершён» merely
                 restates the date they can already read. `hidden` is
-                deliberately untouched: 004 EARS-5's «Скрыт» owns that render. */}
+                deliberately untouched: 004 EARS-5's «Скрыто» owns that render. */}
             {event.state === "live" ? (
               <Badge variant="live" className="mt-1 shrink-0">
                 {t("state.live")}

@@ -171,16 +171,16 @@ Every transition command validates the **current** state and refuses an invalid 
 >
 > «сам дизайн жизненного цикла неправильный. Если это эфир, который прошёл ДО запуска платформы, то зачем там кнопка "Выйти в эфир"? Для него должен быть другой жизненный цикл!»
 
-**(a) The terminal state is renamed `archived` → `hidden`, meaning unchanged.** Enum value `hidden`, status label «Скрыт», command label «Скрыть», command `ArchiveEvent` → `HideEvent`, produced event `EventArchived` → `EventHidden`. The state still means exactly what it meant: no platform surface lists the event, it is admin-only, and a direct link renders feature 004's notice. One data migration rewrites every existing `archived` row; there is no dual-read shim and no compatibility alias — database enum, Zod contract, generated SDK, admin copy and portal copy read the new value in one cutover. The closed transition set therefore reads `draft → published → live → ended → hidden`, with the same four edges and the same server-side guard. Owner ruling, 2026-09-02:
+**(a) The terminal state is renamed `archived` → `hidden`, meaning unchanged.** Enum value `hidden`, status label «Скрыто», command label «Скрыть», command `ArchiveEvent` → `HideEvent`, produced event `EventArchived` → `EventHidden`. The state still means exactly what it meant: no platform surface lists the event, it is admin-only, and a direct link renders feature 004's notice. One data migration rewrites every existing `archived` row; there is no dual-read shim and no compatibility alias — database enum, Zod contract, generated SDK, admin copy and portal copy read the new value in one cutover. The closed transition set therefore reads `draft → published → live → ended → hidden`, with the same four edges and the same server-side guard. Owner ruling, 2026-09-02:
 
-> «Архивировать означает ровно одно — поместить в архив. […] Архив мы ПОКАЗЫВАЕМ и это легитимное название статуса. Явно надо переименовать этот статус в "Скрыт с платформы" или что-то вроде того, но точно не "Архивирован".»
+> «Архивировать означает ровно одно — поместить в архив. […] Архив мы ПОКАЗЫВАЕМ и это легитимное название статуса. Явно надо переименовать этот статус в "Скрыто с платформы" или что-то вроде того, но точно не "Архивирован".»
 
-Stage-A pick «1»: status «Скрыт», command «Скрыть».
+Stage-A pick «1»: status «Скрыто», command «Скрыть».
 
 **(b) `events.origin` selects one of two disjoint lifecycles.** Every event carries an immutable `events.origin` of `platform | legacy`, set once at creation and rejected by every update path:
 
 - `origin: platform` — feature 007's broadcast machine `draft → published → live → ended → hidden`, unchanged in shape.
-- `origin: legacy` — an эфир held before the platform existed, or outside it. Its own **closed set of exactly two states**: `in_archive` («Архивирован» — listed and rendered in the public Archive exactly like an `ended` broadcast with a published recording) ⇄ `hidden` («Скрыт», the same admin-only meaning as above). A legacy event is **born `hidden`** while the operator prepares it — title, held-at instant, duration, speakers, recording — and enters the archive by an explicit command. Owner shape, 2026-09-02: «По ЖЦ архивного эфира: два состояния — "Архивирован" (отображается в Архиве) и "Скрыт"».
+- `origin: legacy` — an эфир held before the platform existed, or outside it. Its own **closed set of exactly two states**: `in_archive` («Архивирован» — listed and rendered in the public Archive exactly like an `ended` broadcast with a published recording) ⇄ `hidden` («Скрыто», the same admin-only meaning as above). A legacy event is **born `hidden`** while the operator prepares it — title, held-at instant, duration, speakers, recording — and enters the archive by an explicit command. Owner shape, 2026-09-02: «По ЖЦ архивного эфира: два состояния — "Архивирован" (отображается в Архиве) и "Скрыто"».
 
 Its two commands, both ordinary `platform_admin` mutations with `If-Match` + `Idempotency-Key` and exactly one `audit_ledger` row:
 

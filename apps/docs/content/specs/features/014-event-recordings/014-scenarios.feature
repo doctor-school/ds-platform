@@ -165,10 +165,10 @@ Feature: A finished broadcast keeps its value as a recording, and the archive is
     And only «Архивировать» and «Скрыть» are offered, per EventAdminDetail.validTransitions
 
   @EARS-28 @core @happy
-  Scenario: The broadcast terminal state reads «Скрыт» on every surface
+  Scenario: The broadcast terminal state reads «Скрыто» on every surface
     Given the broadcast lifecycle terminal state
     Then its contract value is hidden on the database enum, the Zod contract and the generated SDK
-    And its admin and portal label is «Скрыт» and its command label is «Скрыть»
+    And its admin and portal label is «Скрыто» and its command label is «Скрыть»
     And no row, contract field or label carries the value archived
     And no dual-read compatibility shim exists
 

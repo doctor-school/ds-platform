@@ -208,7 +208,7 @@ test.describe("004 EARS-5 hidden direct-link notice (e2e)", () => {
     expect(new URL(page.url()).pathname).toBe(`/webinars/${SLUG_HIDDEN}`);
 
     // The «скрыт» hero badge + the hidden notice are present.
-    await expect(page.getByText("Скрыт", { exact: true }).first()).toBeVisible();
+    await expect(page.getByText("Скрыто", { exact: true }).first()).toBeVisible();
     await expect(page.getByText("Мероприятие скрыто").first()).toBeVisible();
   });
 

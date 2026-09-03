@@ -163,7 +163,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
           specialties: ["cardiology"],
           speakers: [{ name: "И. И. Иванов", regalia: "д.м.н." }],
           recording: {
-            kind: "full",
+            kind: "edited",
             provider: "youtube",
             embedRef: "dQw4w9WgXcQ",
           },

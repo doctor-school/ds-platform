@@ -467,6 +467,18 @@ export const UpdateEventRequestSchema = z.object({
    * the operator never entered (014-design §2).
    */
   recordingExpectedBy: RecordingExpectedBySchema.nullish(),
+  /**
+   * 014 EARS-23 (#1741) — `origin` is set once at creation and **rejected** by
+   * every update path. Declared as `z.never().optional()` rather than simply
+   * omitted: an omitted key would be STRIPPED by the object parser, and a
+   * silently ignored `{ origin: "platform" }` is not a rejection — the caller
+   * would read a 200 and believe the discriminator moved. Declaring the key with
+   * an uninhabited type keeps it out of `UpdateEventRequest` (its inferred type
+   * is `never | undefined`) while turning a present key into a 400 at the I/O
+   * boundary. The rest of the body stays non-strict: 014 does not change how any
+   * OTHER unknown key on this endpoint is treated.
+   */
+  origin: z.never().optional(),
 });
 export type UpdateEventRequest = z.infer<typeof UpdateEventRequestSchema>;
 

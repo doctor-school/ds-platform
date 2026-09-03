@@ -244,8 +244,8 @@ describe.skipIf(!process.env.DATABASE_URL)(
       // The transition map is the behavioural half of the contract: the rename
       // moved the LABEL, not the graph — `ended` still has one legal move and
       // `hidden` is still terminal.
-      expect(validTransitions("ended")).toEqual(["hidden"]);
-      expect(validTransitions("hidden")).toEqual([]);
+      expect(validTransitions("ended", "platform")).toEqual(["hidden"]);
+      expect(validTransitions("hidden", "platform")).toEqual([]);
     });
 
     it("014 EARS-28.3: behaviour is unchanged — hide still drives ended → hidden with its audit row, and the public surfaces still degrade as 004 EARS-5 pinned them", async () => {

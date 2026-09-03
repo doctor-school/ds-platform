@@ -45,6 +45,14 @@ const hiddenRelabelPaths = [
   "apps/portal/app/webinars/[slug]/room/page.tsx",
   "apps/portal/messages/ru.json",
 ];
+const legacyBarSource = "legacy-broadcast-lifecycle-bar-v1";
+const legacyBarState = "legacy-lifecycle-bar";
+const legacyBarPaths = [
+  "apps/admin/app/events/[id]/page.tsx",
+  "apps/admin/components/lifecycle-actions.tsx",
+  "apps/admin/components/state-badge.tsx",
+  "apps/admin/messages/ru.json",
+];
 const baseApprovedManifest = JSON.parse(
   readFileSync(new URL("../ui-approved-sources.json", import.meta.url), "utf8"),
 ) as ApprovedSourceManifest;
@@ -104,6 +112,11 @@ const hiddenRelabelBody = `
 ui-source-kind: approved-non-canvas
 ui-source: ${hiddenRelabelSource}
 ui-source-state: ${hiddenRelabelState}
+${webEvidence}`;
+const legacyBarBody = `
+ui-source-kind: approved-non-canvas
+ui-source: ${legacyBarSource}
+ui-source-state: ${legacyBarState}
 ${webEvidence}`;
 const adminListBody = `
 ui-source-kind: approved-non-canvas
@@ -190,6 +203,18 @@ describe("ui-parity body evidence", () => {
       "https://github.com/doctor-school/ds-platform/issues/1748#issuecomment-5507821212",
       "https://github.com/doctor-school/ds-platform/issues/1748#issuecomment-5508078479",
       "https://github.com/doctor-school/ds-platform/issues/1748#issuecomment-5506026515",
+    ]);
+  });
+
+  it("green: owner-approved legacy broadcast lifecycle bar scopes all four #1741 render surfaces", () => {
+    expect(
+      verdict(legacyBarBody, legacyBarPaths, baseApprovedManifest).ok,
+    ).toBe(true);
+    expect(
+      baseApprovedManifest.sources[legacyBarSource].approvalProvenance,
+    ).toEqual([
+      "https://github.com/doctor-school/ds-platform/issues/1741#issuecomment-5506003649",
+      "https://github.com/doctor-school/ds-platform/issues/1748#issuecomment-5507821212",
     ]);
   });
 

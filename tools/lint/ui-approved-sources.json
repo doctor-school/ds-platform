@@ -104,6 +104,20 @@
         "https://github.com/doctor-school/ds-platform/issues/1748#issuecomment-5508078479",
         "https://github.com/doctor-school/ds-platform/issues/1748#issuecomment-5506026515"
       ]
+    },
+    "legacy-broadcast-lifecycle-bar-v1": {
+      "evidenceProfiles": ["responsive-web"],
+      "surfacePaths": [
+        "apps/admin/app/events/[id]/page.tsx",
+        "apps/admin/components/lifecycle-actions.tsx",
+        "apps/admin/components/state-badge.tsx",
+        "apps/admin/messages/ru.json"
+      ],
+      "states": ["legacy-lifecycle-bar"],
+      "approvalProvenance": [
+        "https://github.com/doctor-school/ds-platform/issues/1741#issuecomment-5506003649",
+        "https://github.com/doctor-school/ds-platform/issues/1748#issuecomment-5507821212"
+      ]
     }
   }
 }

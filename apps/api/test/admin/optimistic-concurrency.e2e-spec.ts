@@ -36,10 +36,13 @@ import { futureMskStart } from "../setup/wall-clock.js";
 //  1. the admin detail read emits the validator, and every committed admin
 //     mutation bumps `version` by exactly one — so a held validator goes stale
 //     on ANY change the detail read would have shown, not only a state change;
-//  2. all SIX lifecycle commands (`publish` / `open` / `close` / `hide` /
-//     `mark-ended` / the bare `transition`) REQUIRE `If-Match`: absent is 428
-//     `PRECONDITION_REQUIRED`, unparseable or stale is 412
-//     `PRECONDITION_FAILED`;
+//  2. all SEVEN lifecycle commands — the four 007 broadcast commands (`publish` /
+//     `open` / `close` / `hide`), 014's two LEGACY commands (`archive-legacy` /
+//     `hide-legacy`, #1741) and the bare `transition` — REQUIRE `If-Match`:
+//     absent is 428 `PRECONDITION_REQUIRED`, unparseable or stale is 412
+//     `PRECONDITION_FAILED`. The protocol is a property of the fenced-command
+//     BODY, not of any one machine, so the legacy commands are covered here
+//     beside their broadcast siblings rather than in the 014 lifecycle suite;
 //  3. the refusal is TOTAL — a refused command leaves the state, the version
 //     and the ledger untouched;
 //  4. a domain refusal is decided BEFORE the validator: a command that is
@@ -112,8 +115,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       };
     }
 
-    // Derived relative to now, never a literal date: `mark-ended` is ABOUT the
-    // past/future boundary (`test/setup/wall-clock.ts`).
+    // Derived relative to now, never a literal date: an archival эфир is ABOUT a
+    // broadcast already held (`test/setup/wall-clock.ts`).
     const PAST = () => futureMskStart(-30, "19:00");
     const FUTURE = () => futureMskStart(30, "19:00");
 
@@ -207,7 +210,68 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     }
 
     /**
-     * The six conditional lifecycle commands, each with the fixture that makes
+     * 014 EARS-24/25 (#1741) — a `legacy` эфир carrying a PUBLISHED recording,
+     * i.e. one for which «Архивировать» is legal on the domain. Built through the
+     * real creation + publish routes rather than forced with SQL: the archive
+     * precondition is resolved against the recording projection, so a hand-forged
+     * row would exercise the validator against a fixture the domain would refuse.
+     */
+    async function archivableLegacy(cookie: string): Promise<string> {
+      const id = await legacyWithDraftRecording(cookie);
+      const { rows } = await pool.query<{ id: string; version: number }>(
+        "SELECT id, version FROM event_recordings WHERE event_id = $1",
+        [id],
+      );
+      expect(rows).toHaveLength(1);
+      const published = await app.inject({
+        method: "POST",
+        url: `/v1/admin/events/${id}/recordings/${rows[0]!.id}/publish`,
+        headers: {
+          ...device,
+          ...authHeaders(cookie),
+          "if-match": `W/"${rows[0]!.version}"`,
+          "idempotency-key": randomUUID(),
+        },
+      });
+      expect(published.statusCode).toBe(200);
+      return id;
+    }
+
+    /**
+     * The same эфир one step earlier: created, born `hidden`, its recording still
+     * `draft`. «Архивировать» is refused 409 `EVENT_NOT_FINISHED` here at every
+     * version — the domain refusal the fenced ordering is probed against.
+     */
+    async function legacyWithDraftRecording(cookie: string): Promise<string> {
+      const created = await app.inject({
+        method: "POST",
+        url: "/v1/admin/legacy-broadcasts",
+        headers: {
+          ...device,
+          ...authHeaders(cookie),
+          "content-type": "application/json",
+        },
+        payload: {
+          title: `Архивный эфир ${randomUUID().slice(0, 8)}`,
+          heldAtMsk: PAST(),
+          durationMin: 90,
+          specialties: ["cardiology"],
+          speakers: [{ name: "И. И. Иванов", regalia: "д.м.н." }],
+          recording: {
+            kind: "edited",
+            provider: "youtube",
+            embedRef: "dQw4w9WgXcQ",
+          },
+        },
+      });
+      expect(created.statusCode).toBe(201);
+      const id = (created.json() as { id: string }).id;
+      createdEventIds.push(id);
+      return id;
+    }
+
+    /**
+     * The seven conditional lifecycle commands, each with the fixture that makes
      * it legal — so every row exercises the validator, never a domain refusal.
      */
     const COMMANDS = [
@@ -247,12 +311,22 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         },
       },
       {
-        name: "mark-ended",
-        path: "mark-ended",
+        // 014 EARS-25 (#1741) — the legacy machine's `hidden → in_archive`. Its
+        // fenced protocol is the SAME body as its broadcast siblings; the fixture
+        // differs (a real эфир with a published recording), the contract does not.
+        name: "archive-legacy",
+        path: "archive-legacy",
+        idempotent: true,
+        arrange: async (cookie: string) => archivableLegacy(cookie),
+      },
+      {
+        // 014 EARS-25 — `in_archive → hidden`, the reversible counterpart.
+        name: "hide-legacy",
+        path: "hide-legacy",
         idempotent: true,
         arrange: async (cookie: string) => {
-          const { id } = await createDraft(cookie, PAST());
-          await forceState(id, "published");
+          const id = await archivableLegacy(cookie);
+          await forceState(id, "in_archive");
           return id;
         },
       },
@@ -474,17 +548,18 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(await persistedState(id)).toBe("draft");
     });
 
-    it("EARS-18: mark-ended decides EVENT_NOT_PAST before the validator, and its Idempotency-Key check comes first of all", async () => {
+    it("014 EARS-25: archive-legacy decides EVENT_NOT_FINISHED before the validator, and its Idempotency-Key check comes first of all", async () => {
       const cookie = await adminSession(uniqueEmail("admin"));
-      const { id } = await createDraft(cookie, FUTURE());
-      await forceState(id, "published");
+      // An эфир whose recording is still `draft` — «Архивировать» is illegal at
+      // EVERY version, which is what makes it the right probe for the ordering.
+      const id = await legacyWithDraftRecording(cookie);
       const held = await adminDetail(cookie, id);
 
       // Key shape first — a request that never bound a record cannot be judged
       // against a validator.
       const noKey = await app.inject({
         method: "POST",
-        url: `/v1/admin/events/${id}/mark-ended`,
+        url: `/v1/admin/events/${id}/archive-legacy`,
         headers: { ...device, ...authHeaders(cookie) },
       });
       expect(noKey.statusCode).toBe(428);
@@ -492,10 +567,13 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         "IDEMPOTENCY_KEY_REQUIRED",
       );
 
+      // …then the DOMAIN refusal, ahead of the stale validator: a command that
+      // is illegal whatever version it was read at answers with the reason it is
+      // illegal, never «reload and retry».
       await concurrentWrite(id);
       const res = await app.inject({
         method: "POST",
-        url: `/v1/admin/events/${id}/mark-ended`,
+        url: `/v1/admin/events/${id}/archive-legacy`,
         headers: {
           ...device,
           ...authHeaders(cookie),
@@ -504,22 +582,21 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         },
       });
       expect(res.statusCode).toBe(409);
-      expect((res.json() as { code: string }).code).toBe("EVENT_NOT_PAST");
-      expect(await persistedState(id)).toBe("published");
+      expect((res.json() as { code: string }).code).toBe("EVENT_NOT_FINISHED");
+      expect(await persistedState(id)).toBe("hidden");
     });
 
-    it("EARS-18: after a 412 the mark-ended retry must mint a NEW Idempotency-Key — the raw validator is bound into the fingerprint, so the same key with the reloaded validator is a REUSE", async () => {
+    it("014 EARS-25: after a 412 the archive-legacy retry must mint a NEW Idempotency-Key — the raw validator is bound into the fingerprint, so the same key with the reloaded validator is a REUSE", async () => {
       const cookie = await adminSession(uniqueEmail("admin"));
-      const { id } = await createDraft(cookie, PAST());
-      await forceState(id, "published");
+      const id = await archivableLegacy(cookie);
       const held = await adminDetail(cookie, id);
       await concurrentWrite(id);
 
       const key = randomUUID();
-      const markEnded = (ifMatch: string, idempotencyKey: string) =>
+      const archive = (ifMatch: string, idempotencyKey: string) =>
         app.inject({
           method: "POST",
-          url: `/v1/admin/events/${id}/mark-ended`,
+          url: `/v1/admin/events/${id}/archive-legacy`,
           headers: {
             ...device,
             ...authHeaders(cookie),
@@ -531,28 +608,28 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       // The stale validator is refused 412, and that refusal is deliberately NOT
       // fence-stored (only a deterministic domain 409 is) — it is a property of
       // the caller's read, not of the bound request.
-      const stale = await markEnded(held.etag!, key);
+      const stale = await archive(held.etag!, key);
       expect(stale.statusCode).toBe(412);
       expect((stale.json() as { code: string }).code).toBe(
         "PRECONDITION_FAILED",
       );
-      expect(await persistedState(id)).toBe("published");
+      expect(await persistedState(id)).toBe("hidden");
 
       // Reloading the validator makes the request a DIFFERENT bound request, so
       // replaying the ORIGINAL key against it is a reuse, not a retry.
       const reloaded = await adminDetail(cookie, id);
-      const reused = await markEnded(reloaded.etag!, key);
+      const reused = await archive(reloaded.etag!, key);
       expect(reused.statusCode).toBe(409);
       expect((reused.json() as { code: string }).code).toBe(
         "IDEMPOTENCY_KEY_REUSED",
       );
-      expect(await persistedState(id)).toBe("published");
+      expect(await persistedState(id)).toBe("hidden");
 
       // A fresh key plus the reloaded validator is the correct retry, and it
       // applies exactly once.
-      const retried = await markEnded(reloaded.etag!, randomUUID());
+      const retried = await archive(reloaded.etag!, randomUUID());
       expect(retried.statusCode).toBe(200);
-      expect(await persistedState(id)).toBe("ended");
+      expect(await persistedState(id)).toBe("in_archive");
     });
 
     it("EARS-7: a conditional command against a non-existent event is a 404 — the validator never leaks whether the id exists", async () => {

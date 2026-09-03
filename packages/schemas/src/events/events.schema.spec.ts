@@ -4,6 +4,7 @@ import {
   ConfigureStreamRequestSchema,
   CreateEventRequestSchema,
   EVENT_LIFECYCLE_STATES,
+  EVENT_ORIGINS,
   EventAdminListQuerySchema,
   isPubliclyReachable,
   LIFECYCLE_TRANSITIONS,
@@ -72,69 +73,109 @@ describe("007 events schema", () => {
     });
   });
 
-  describe("lifecycle transitions (EARS-7 — the closed forward set)", () => {
-    it("offers only the forward moves of the closed set", () => {
-      expect(validTransitions("draft")).toEqual(["published"]);
-      // 014 EARS-18: `published` is the ONE state with two forward moves — the
-      // normal `live` broadcast, and the off-platform `ended` short-circuit for
-      // a broadcast that already happened outside the platform. The map is the
-      // structural set; the per-event preconditions (past end, room never
-      // opened) refine it server-side.
-      expect(validTransitions("published")).toEqual(["live", "ended"]);
-      expect(validTransitions("live")).toEqual(["ended"]);
-      expect(validTransitions("ended")).toEqual(["hidden"]);
-      expect(validTransitions("hidden")).toEqual([]);
+  describe("lifecycle transitions (EARS-7 / 014 EARS-23 — two closed forward sets)", () => {
+    it("EARS-7: the platform machine offers only the forward moves of the closed set", () => {
+      expect(validTransitions("draft", "platform")).toEqual(["published"]);
+      // 014 EARS-23: `published` has exactly ONE forward move again. The
+      // `published → ended` MarkEventEnded short-circuit is GONE — an эфир the
+      // platform never hosted is a `legacy` event on its own machine, not a
+      // platform event taking a shortcut through this one.
+      expect(validTransitions("published", "platform")).toEqual(["live"]);
+      expect(validTransitions("live", "platform")).toEqual(["ended"]);
+      expect(validTransitions("ended", "platform")).toEqual(["hidden"]);
+      expect(validTransitions("hidden", "platform")).toEqual([]);
     });
 
-    it("never offers a backward move or an unpublish", () => {
-      const all = Object.values(LIFECYCLE_TRANSITIONS).flat();
+    it("014 EARS-23: `in_archive` is unreachable on the platform machine — it is machine 2's state", () => {
+      expect(validTransitions("in_archive", "platform")).toEqual([]);
+      for (const from of EVENT_LIFECYCLE_STATES) {
+        expect(validTransitions(from, "platform")).not.toContain("in_archive");
+      }
+    });
+
+    it("014 EARS-23: the legacy machine is exactly the two-state archive toggle", () => {
+      // 014-design §3.1, the owner's shape verbatim: «два состояния —
+      // "Архивирован" (отображается в Архиве) и "Скрыто"».
+      expect(validTransitions("hidden", "legacy")).toEqual(["in_archive"]);
+      expect(validTransitions("in_archive", "legacy")).toEqual(["hidden"]);
+    });
+
+    it("014 EARS-27: every 007 state is a dead end on the legacy machine — a legacy эфир has no room to open", () => {
+      for (const from of ["draft", "published", "live", "ended"] as const) {
+        expect(validTransitions(from, "legacy")).toEqual([]);
+      }
+    });
+
+    it("never offers a backward move or an unpublish, on either machine", () => {
+      const all = Object.values(LIFECYCLE_TRANSITIONS).flatMap((machine) =>
+        Object.values(machine).flat(),
+      );
       expect(all).not.toContain("draft"); // nothing transitions back to draft
     });
   });
 
   describe("canTransition (EARS-7 — the closed-set guard predicate)", () => {
     it("EARS-7.1: permits exactly the legal forward moves", () => {
-      expect(canTransition("draft", "published")).toBe(true);
-      expect(canTransition("published", "live")).toBe(true);
-      // 014 EARS-18 — the off-platform short-circuit (see the map test above).
-      expect(canTransition("published", "ended")).toBe(true);
-      expect(canTransition("live", "ended")).toBe(true);
-      expect(canTransition("ended", "hidden")).toBe(true);
+      expect(canTransition("draft", "published", "platform")).toBe(true);
+      expect(canTransition("published", "live", "platform")).toBe(true);
+      expect(canTransition("live", "ended", "platform")).toBe(true);
+      expect(canTransition("ended", "hidden", "platform")).toBe(true);
     });
 
     it("EARS-7.2: refuses every skip-forward move", () => {
-      expect(canTransition("draft", "live")).toBe(false);
-      expect(canTransition("draft", "ended")).toBe(false);
-      expect(canTransition("draft", "hidden")).toBe(false);
-      // `published → ended` is NOT a skip-forward move since 014 EARS-18 — it is
-      // a first-class edge of the map, asserted true in EARS-7.1 above.
-      expect(canTransition("published", "hidden")).toBe(false);
-      expect(canTransition("live", "hidden")).toBe(false);
+      expect(canTransition("draft", "live", "platform")).toBe(false);
+      expect(canTransition("draft", "ended", "platform")).toBe(false);
+      expect(canTransition("draft", "hidden", "platform")).toBe(false);
+      // 014 EARS-23 — `published → ended` is a skip-forward move again: the
+      // MarkEventEnded edge is gone, and CloseRoom from `live` is the only
+      // command that lands on `ended`.
+      expect(canTransition("published", "ended", "platform")).toBe(false);
+      expect(canTransition("published", "hidden", "platform")).toBe(false);
+      expect(canTransition("live", "hidden", "platform")).toBe(false);
     });
 
     it("EARS-7.3: refuses every backward move (no unpublish, no reopen)", () => {
-      expect(canTransition("published", "draft")).toBe(false); // no unpublish
-      expect(canTransition("live", "published")).toBe(false);
-      expect(canTransition("ended", "live")).toBe(false);
-      expect(canTransition("hidden", "ended")).toBe(false);
-      expect(canTransition("hidden", "published")).toBe(false); // no reopen
-      expect(canTransition("hidden", "draft")).toBe(false);
+      expect(canTransition("published", "draft", "platform")).toBe(false); // no unpublish
+      expect(canTransition("live", "published", "platform")).toBe(false);
+      expect(canTransition("ended", "live", "platform")).toBe(false);
+      expect(canTransition("hidden", "ended", "platform")).toBe(false);
+      expect(canTransition("hidden", "published", "platform")).toBe(false); // no reopen
+      expect(canTransition("hidden", "draft", "platform")).toBe(false);
     });
 
-    it("EARS-7.4: refuses a self-transition from every state", () => {
+    it("EARS-7.4: refuses a self-transition from every state, on either machine", () => {
       for (const s of EVENT_LIFECYCLE_STATES) {
-        expect(canTransition(s, s)).toBe(false);
+        expect(canTransition(s, s, "platform")).toBe(false);
+        expect(canTransition(s, s, "legacy")).toBe(false);
       }
     });
 
-    it("EARS-7.5: agrees with validTransitions across the whole matrix", () => {
-      for (const from of EVENT_LIFECYCLE_STATES) {
-        for (const to of EVENT_LIFECYCLE_STATES) {
-          expect(canTransition(from, to)).toBe(
-            validTransitions(from).includes(to),
-          );
+    it("EARS-7.5: agrees with validTransitions across the whole matrix, on either machine", () => {
+      for (const origin of EVENT_ORIGINS) {
+        for (const from of EVENT_LIFECYCLE_STATES) {
+          for (const to of EVENT_LIFECYCLE_STATES) {
+            expect(canTransition(from, to, origin)).toBe(
+              validTransitions(from, origin).includes(to),
+            );
+          }
         }
       }
+    });
+
+    it("014 EARS-27: MUTUAL EXCLUSION is a property of the map — no edge is legal on both machines", () => {
+      // A broadcast command on a `legacy` event and a legacy command on a
+      // `platform` event are both simply ABSENT edges, not a guard bolted on
+      // beside the map (014-design §3.1).
+      for (const from of EVENT_LIFECYCLE_STATES) {
+        for (const to of EVENT_LIFECYCLE_STATES) {
+          expect(
+            canTransition(from, to, "platform") &&
+              canTransition(from, to, "legacy"),
+          ).toBe(false);
+        }
+      }
+      expect(canTransition("hidden", "in_archive", "platform")).toBe(false);
+      expect(canTransition("live", "ended", "legacy")).toBe(false);
     });
   });
 
@@ -143,10 +184,13 @@ describe("007 events schema", () => {
       expect(isPubliclyReachable("draft")).toBe(false);
     });
 
-    it("EARS-6: published / live / ended / hidden are all publicly reachable", () => {
+    it("EARS-6: published / live / ended / hidden / in_archive are all publicly reachable", () => {
       expect(isPubliclyReachable("published")).toBe(true);
       expect(isPubliclyReachable("live")).toBe(true);
       expect(isPubliclyReachable("ended")).toBe(true);
+      // 014 EARS-23 — an archived legacy эфир is exactly what the public archive
+      // is FOR: its page carries the published recording.
+      expect(isPubliclyReachable("in_archive")).toBe(true);
       // A hidden direct link resolves to the EARS-5 notice body, never a 404 —
       // so it is reachable (the render differs, the reachability does not).
       expect(isPubliclyReachable("hidden")).toBe(true);
@@ -483,12 +527,16 @@ describe("007 events schema", () => {
 // EARS-15/EARS-16, design §3/§4). Framework-free unit coverage complementing the
 // month API e2e.
 describe("004 month-calendar schema (EARS-15/EARS-16)", () => {
-  describe("MONTH_BROADCAST_STATES (EARS-15 — publish-visible incl. past ended)", () => {
-    it("is exactly published/live/ended — draft and hidden have no month projection", () => {
+  describe("MONTH_BROADCAST_STATES (EARS-15 — publish-visible incl. past broadcasts)", () => {
+    it("is exactly published/live/ended/in_archive — draft and hidden have no month projection", () => {
+      // 014 EARS-23/26: an archived legacy эфир sits on the month grid beside a
+      // platform `ended` one — «same tab, same card, same count» (014-design
+      // §3.1). `hidden` is the withdrawn state on BOTH machines and stays off.
       expect([...MONTH_BROADCAST_STATES]).toEqual([
         "published",
         "live",
         "ended",
+        "in_archive",
       ]);
       expect(MONTH_BROADCAST_STATES).not.toContain("draft");
       expect(MONTH_BROADCAST_STATES).not.toContain("hidden");

@@ -137,9 +137,21 @@ const FLOOR_ROUTES: {
     payload: {},
   },
   {
-    endpoint: "POST /v1/admin/events/:id/mark-ended",
+    endpoint: "POST /v1/admin/events/:id/archive-legacy",
     method: "POST",
-    url: `/v1/admin/events/${ABSENT_ID}/mark-ended`,
+    url: `/v1/admin/events/${ABSENT_ID}/archive-legacy`,
+    payload: {},
+  },
+  {
+    endpoint: "POST /v1/admin/events/:id/hide-legacy",
+    method: "POST",
+    url: `/v1/admin/events/${ABSENT_ID}/hide-legacy`,
+    payload: {},
+  },
+  {
+    endpoint: "POST /v1/admin/legacy-broadcasts",
+    method: "POST",
+    url: "/v1/admin/legacy-broadcasts",
     payload: {},
   },
   {
@@ -963,15 +975,19 @@ describe.skipIf(!process.env.DATABASE_URL)(
       // The 007-shaped event commands: 014's recording routes (#1339) hang under
       // the same path prefix but are a different feature with its own EARS
       // coverage, and they are asserted by the floor-table rows above.
-      // 014 EARS-18's `mark-ended` IS counted here — it is a lifecycle-transition
-      // command that deliberately carries the same 007 EARS-8 classification as
-      // its `open`/`close`/`hide` siblings, so it must keep that shape too.
+      // 014 EARS-25's `archive-legacy` / `hide-legacy` ARE counted here — they
+      // are lifecycle-transition commands on the LEGACY machine, and while the
+      // machine differs the authorization does not: they carry the same 007
+      // EARS-8 classification as their `open`/`close`/`hide` siblings, so they
+      // must keep that shape too. (`POST /v1/admin/legacy-broadcasts` is the
+      // creation entry and hangs off its own path, so it is asserted by the
+      // floor-table rows above rather than counted here.)
       const events = adminRows().filter(
         (r) =>
           r.endpoint.includes(" /v1/admin/events") &&
           !r.endpoint.includes("/recordings"),
       );
-      expect(events.length).toBe(11);
+      expect(events.length).toBe(12);
       for (const row of events) {
         // 007 EARS-8's classification, unchanged: only the floor beneath it rose.
         expect(row.meta.access, row.endpoint).toBe("authenticated");

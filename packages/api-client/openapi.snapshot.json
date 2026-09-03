@@ -518,6 +518,10 @@
                   "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
                   "type": "string"
                 },
+                "origin": {
+                  "enum": ["platform", "legacy"],
+                  "type": "string"
+                },
                 "school": {
                   "type": "string"
                 },
@@ -530,7 +534,14 @@
                   "type": "string"
                 },
                 "state": {
-                  "enum": ["draft", "published", "live", "ended", "hidden"],
+                  "enum": [
+                    "draft",
+                    "published",
+                    "live",
+                    "ended",
+                    "hidden",
+                    "in_archive"
+                  ],
                   "type": "string"
                 },
                 "title": {
@@ -538,7 +549,14 @@
                 },
                 "validTransitions": {
                   "items": {
-                    "enum": ["draft", "published", "live", "ended", "hidden"],
+                    "enum": [
+                      "draft",
+                      "published",
+                      "live",
+                      "ended",
+                      "hidden",
+                      "in_archive"
+                    ],
                     "type": "string"
                   },
                   "type": "array"
@@ -552,6 +570,7 @@
                 "startsAt",
                 "durationMin",
                 "state",
+                "origin",
                 "validTransitions"
               ],
               "type": "object"
@@ -770,7 +789,7 @@
             "type": "string"
           },
           "state": {
-            "enum": ["published", "live", "ended", "hidden"],
+            "enum": ["published", "live", "ended", "hidden", "in_archive"],
             "type": "string"
           },
           "title": {
@@ -1049,6 +1068,112 @@
         "required": ["data", "total", "page", "pageSize"],
         "type": "object"
       },
+      "LegacyBroadcastCreateDto": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "default": "",
+            "maxLength": 20000,
+            "type": "string"
+          },
+          "durationMin": {
+            "exclusiveMinimum": 0,
+            "maximum": 1440,
+            "type": "integer"
+          },
+          "heldAtMsk": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}$",
+            "type": "string"
+          },
+          "recording": {
+            "additionalProperties": false,
+            "properties": {
+              "durationSec": {
+                "anyOf": [
+                  {
+                    "exclusiveMinimum": 0,
+                    "maximum": 86400,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "embedRef": {
+                "maxLength": 300,
+                "minLength": 1,
+                "type": "string"
+              },
+              "kind": {
+                "enum": ["edited", "raw"],
+                "type": "string"
+              },
+              "posterRef": {
+                "anyOf": [
+                  {
+                    "maxLength": 500,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "provider": {
+                "enum": ["rutube", "youtube", "vk", "cdnvideo"],
+                "type": "string"
+              }
+            },
+            "required": ["kind", "provider", "embedRef"],
+            "type": "object"
+          },
+          "school": {
+            "default": "",
+            "maxLength": 200,
+            "type": "string"
+          },
+          "speakers": {
+            "default": [],
+            "items": {
+              "properties": {
+                "name": {
+                  "maxLength": 200,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "regalia": {
+                  "default": "",
+                  "maxLength": 500,
+                  "type": "string"
+                }
+              },
+              "required": ["name"],
+              "type": "object"
+            },
+            "maxItems": 50,
+            "type": "array"
+          },
+          "specialties": {
+            "default": [],
+            "items": {
+              "maxLength": 100,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 100,
+            "type": "array"
+          },
+          "title": {
+            "maxLength": 300,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": ["title", "heldAtMsk", "durationMin", "recording"],
+        "type": "object"
+      },
       "LoginRequestDto": {
         "properties": {
           "captchaToken": {
@@ -1087,7 +1212,7 @@
               "type": "string"
             },
             "state": {
-              "enum": ["published", "live", "ended"],
+              "enum": ["published", "live", "ended", "in_archive"],
               "type": "string"
             },
             "title": {
@@ -1492,7 +1617,14 @@
       "TransitionEventRequestDto": {
         "properties": {
           "to": {
-            "enum": ["draft", "published", "live", "ended", "hidden"],
+            "enum": [
+              "draft",
+              "published",
+              "live",
+              "ended",
+              "hidden",
+              "in_archive"
+            ],
             "type": "string"
           }
         },
@@ -2677,6 +2809,27 @@
         "tags": ["EventsAdmin"]
       }
     },
+    "/v1/admin/events/{id}/archive-legacy": {
+      "post": {
+        "operationId": "EventsAdminController_archiveLegacy",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["EventsAdmin"]
+      }
+    },
     "/v1/admin/events/{id}/close": {
       "post": {
         "operationId": "EventsAdminController_close",
@@ -2719,9 +2872,9 @@
         "tags": ["EventsAdmin"]
       }
     },
-    "/v1/admin/events/{id}/mark-ended": {
+    "/v1/admin/events/{id}/hide-legacy": {
       "post": {
-        "operationId": "EventsAdminController_markEnded",
+        "operationId": "EventsAdminController_hideLegacy",
         "parameters": [
           {
             "in": "path",
@@ -3030,6 +3183,28 @@
           }
         },
         "tags": ["ExpertsAdmin"]
+      }
+    },
+    "/v1/admin/legacy-broadcasts": {
+      "post": {
+        "operationId": "LegacyBroadcastsAdminController_create",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LegacyBroadcastCreateDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": ["LegacyBroadcastsAdmin"]
       }
     },
     "/v1/admin/partners": {

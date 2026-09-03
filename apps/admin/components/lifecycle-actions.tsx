@@ -20,7 +20,7 @@ import {
  * {@link actionsFor}) — the admin UI offers ONLY the transitions valid from the
  * current state, and it never invents one. A terminal `hidden` event yields no
  * buttons. Each fires its named command (`POST /v1/admin/events/:id/{publish|open|
- * close|hide|mark-ended}`); the server is the authority (EARS-7) — an
+ * close|hide}`); the server is the authority (EARS-7) — an
  * out-of-order call it refuses (409) surfaces as `transitionRefused`, the state
  * untouched. Stock DS buttons (EARS-11), RU copy (EARS-10).
  *
@@ -47,9 +47,9 @@ import {
  * immediately, as before. No new visual element: the design system ships no
  * toast/notification primitive, so this is the SAME `Alert` on a timer.
  *
- * `detail.state` is passed alongside the transitions because since 014 EARS-18
- * two commands share the `ended` target — `close` from `live` and `mark-ended`
- * from `published` — so the ORIGIN is what names the command (`lib/lifecycle`).
+ * `detail.state` is passed alongside the transitions because the edge→command
+ * table is keyed on the `(from, to)` PAIR, not on the target alone — the ORIGIN
+ * state is what names the command (`lib/lifecycle`).
  */
 export function LifecycleActions({
   detail,

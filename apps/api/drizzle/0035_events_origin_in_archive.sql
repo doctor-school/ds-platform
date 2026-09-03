@@ -1,0 +1,34 @@
+-- ── 014 EARS-23 / #1741: the `legacy` broadcast lifecycle discriminator ──
+--
+-- An эфир held before features 006/007 existed never passed through the
+-- platform's room, so it can never legally reach 007's `ended` — and under the
+-- 014 §3 publish gate its recording could never be published. 014-design §3.1
+-- answers that with a SECOND lifecycle beside 007's, selected by a
+-- discriminator, rather than by loosening 007's guard (owner ruling 2026-09-02:
+-- «у них же должен быть отдельный жизненный цикл, а не развилка из двух
+-- вариантов в одном ЖЦ»).
+--
+-- Two additive changes, no rewrite of any existing row:
+--
+--   1. `event_origin` — the discriminator. `platform` is the DEFAULT, so every
+--      existing row back-fills to the truthful value (all of them came through
+--      007's own create path) with no data migration and no nullable interim
+--      state. The column is immutable by domain rule, not by a DB trigger: the
+--      update path refuses a client `origin` and the two legacy commands assert
+--      it rather than write it.
+--   2. `event_lifecycle_state` gains `in_archive` — the shown-in-the-archive
+--      state of machine 2 (`hidden ⇄ in_archive`). `ALTER TYPE … ADD VALUE`
+--      appends the label in place: no existing row is touched, the column type,
+--      its default and every dependent object stay attached, and nothing is
+--      rewritten. The new label is deliberately NOT used anywhere in this
+--      migration — Postgres forbids using a value added in the same transaction
+--      (the drizzle migrator runs each file in one), and there is nothing to
+--      back-fill: a `legacy` эфир is BORN `hidden` and only an explicit
+--      `ArchiveLegacyBroadcast` ever moves it.
+--
+-- Which states are legal for which origin is a domain rule the enum cannot
+-- express (`LIFECYCLE_TRANSITIONS` in `@ds/schemas`, enforced server-side and
+-- verified by 014 EARS-23/27), exactly as 007's forward-only order already was.
+CREATE TYPE "public"."event_origin" AS ENUM('platform', 'legacy');--> statement-breakpoint
+ALTER TYPE "public"."event_lifecycle_state" ADD VALUE 'in_archive';--> statement-breakpoint
+ALTER TABLE "events" ADD COLUMN "origin" "event_origin" DEFAULT 'platform' NOT NULL;

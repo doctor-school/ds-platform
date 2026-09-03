@@ -30,6 +30,9 @@ function baseEvent(programPdfRef: string | null): Event {
   return {
     id: "11111111-1111-4111-8111-111111111111",
     slug: "test-event-1a2b",
+    // 014 EARS-23 (#1741) — every event now declares which lifecycle machine it
+    // is on; the 007 platform fixture is `platform`.
+    origin: "platform",
     title: "Тестовое мероприятие",
     school: "Кардиология сегодня",
     startsAt: new Date("2026-07-17T16:00:00.000Z"),

@@ -1,6 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 import type { EventRecording } from "@ds/db";
 import {
+  type EventOrigin,
   type AttachRecordingRequest,
   type RecordingAdminDetail,
   type RecordingAdminList,
@@ -82,7 +83,7 @@ export class RecordingsService {
     if (!event) throw new TaxonomyError("RESOURCE_NOT_FOUND");
     const rows = await this.repo.listByEvent(eventId);
     return {
-      data: rows.map((row) => toDetail(row, event.state === "ended")),
+      data: rows.map((row) => toDetail(row, recordingPublishable(event))),
       total: rows.length,
       eventState: event.state,
       recordingExpectedBy: event.recordingExpectedBy,
@@ -157,15 +158,15 @@ export class RecordingsService {
       });
       await this.idempotency.complete(tx, input.lease, {
         status: 201,
-        body: toDetail(created, lockedEvent.state === "ended"),
+        body: toDetail(created, recordingPublishable(lockedEvent)),
         etag: taxonomyETag(created.version),
         location: `/v1/admin/events/${input.eventId}/recordings/${created.id}`,
       });
-      return { created, eventEnded: lockedEvent.state === "ended" };
+      return { created, publishable: recordingPublishable(lockedEvent) };
     });
 
     return {
-      detail: toDetail(row.created, row.eventEnded),
+      detail: toDetail(row.created, row.publishable),
       etag: taxonomyETag(row.created.version),
     };
   }
@@ -217,14 +218,14 @@ export class RecordingsService {
       if (!updated) throw stalePrecondition();
       await this.idempotency.complete(tx, input.lease, {
         status: 200,
-        body: toDetail(updated, lockedEvent.state === "ended"),
+        body: toDetail(updated, recordingPublishable(lockedEvent)),
         etag: taxonomyETag(updated.version),
       });
-      return { updated, eventEnded: lockedEvent.state === "ended" };
+      return { updated, publishable: recordingPublishable(lockedEvent) };
     });
 
     return {
-      detail: toDetail(row.updated, row.eventEnded),
+      detail: toDetail(row.updated, row.publishable),
       etag: taxonomyETag(row.updated.version),
     };
   }
@@ -259,10 +260,10 @@ export class RecordingsService {
       // `published`, `live` and `hidden` are each refused — `hidden` too,
       // because feature 004 routes a cancelled or never-aired event there and
       // handing it a player would advertise a broadcast that never happened.
-      if (input.command === "publish" && lockedEvent.state !== "ended") {
+      if (input.command === "publish" && !recordingPublishable(lockedEvent)) {
         throw new TaxonomyError(
           "EVENT_NOT_FINISHED",
-          `publishing a recording requires the event to be ended; it is ${lockedEvent.state}`,
+          `publishing a recording requires a publishable event; a ${lockedEvent.origin} event in ${lockedEvent.state} is not`,
         );
       }
       // Restoring competes for the kind slot like a fresh attach does.
@@ -300,14 +301,14 @@ export class RecordingsService {
       if (!updated) throw stalePrecondition();
       await this.idempotency.complete(tx, input.lease, {
         status: 200,
-        body: toDetail(updated, lockedEvent.state === "ended"),
+        body: toDetail(updated, recordingPublishable(lockedEvent)),
         etag: taxonomyETag(updated.version),
       });
-      return { updated, eventEnded: lockedEvent.state === "ended" };
+      return { updated, publishable: recordingPublishable(lockedEvent) };
     });
 
     return {
-      detail: toDetail(row.updated, row.eventEnded),
+      detail: toDetail(row.updated, row.publishable),
       etag: taxonomyETag(row.updated.version),
     };
   }
@@ -355,6 +356,29 @@ function pastTense(command: RecordingCommand): string {
 }
 
 /**
+ * Is this event's recording publishable at all (014-design §3 + §3.1)?
+ *
+ * On the PLATFORM machine the answer is 007's `ended` and nothing else: `draft`,
+ * `published`, `live` and `hidden` are each refused — `hidden` too, because
+ * feature 004 routes a cancelled or never-aired event there and handing it a
+ * player would advertise a broadcast that never happened.
+ *
+ * On the LEGACY machine that gate is meaningless and, left in place, unsatisfiable:
+ * an эфир held before features 006/007 existed never passed through the platform
+ * room, so it can never reach `ended` (014-design §3.1 names exactly this trap),
+ * while EARS-25 requires a PUBLISHED recording before «Архивировать» is legal.
+ * Both legacy states are legitimate archival records of a broadcast that did air,
+ * so publication is legal in either — the gate the platform machine needs has no
+ * counterpart here, and 014 widens the precondition instead of loosening 007.
+ */
+function recordingPublishable(event: {
+  state: string;
+  origin: EventOrigin;
+}): boolean {
+  return event.origin === "legacy" || event.state === "ended";
+}
+
+/**
  * The admin projection of one row. `validCommands` is derived from the §3 table
  * plus the event's own state, so the panel renders exactly the buttons the server
  * will honour — a Publish button that always 409s is a worse surface than no
@@ -362,10 +386,10 @@ function pastTense(command: RecordingCommand): string {
  */
 function toDetail(
   row: EventRecording,
-  eventEnded: boolean,
+  publishable: boolean,
 ): RecordingAdminDetail {
   const commands = validRecordingCommands(row.status as RecordingStatus).filter(
-    (command) => command !== "publish" || eventEnded,
+    (command) => command !== "publish" || publishable,
   );
   return {
     id: row.id,

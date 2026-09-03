@@ -10,6 +10,7 @@ import {
   type EventAdminListQuery,
   type EventLifecycleState,
   isPubliclyReachable,
+  type LegacyBroadcastCreateBody,
   type MonthBroadcastEntry,
   type MonthBroadcastState,
   type MonthlyEventCount,
@@ -132,16 +133,25 @@ export const EVENT_ENDED_AUDIT_TYPE = "event.ended";
 export const EVENT_HIDDEN_AUDIT_TYPE = "event.hidden";
 
 /**
- * 014 EARS-18 — canonical `audit_ledger` event id for the `published → ended`
- * transition fired by `MarkEventEnded` (014-design §3.1; ADR-0003 §6). A
- * DISTINCT type from {@link EVENT_ENDED_AUDIT_TYPE}: `event.ended` records a
- * broadcast the platform actually hosted and closed (a room was opened, a
- * presence window was bounded), while `event.marked_ended` records an operator
- * asserting that an эфир happened OFF the platform. Collapsing the two into one
- * id would make the ledger unable to answer «did we host this broadcast?» — the
- * exact question the never-opened-room precondition exists to protect.
+ * 014 EARS-25 (#1741) — canonical `audit_ledger` event id for the legacy
+ * machine's `hidden → in_archive` transition (`ArchiveLegacyBroadcast`,
+ * 014-design §3.1; ADR-0003 §6). A DISTINCT type from the 007 transitions: it
+ * records an operator PUBLISHING an эфир the platform never hosted into the
+ * archive, which is not any of «we published it», «we aired it» or «we closed
+ * the room». Collapsing it into `event.published` would make the ledger unable
+ * to answer «did we host this broadcast?».
  */
-export const EVENT_MARKED_ENDED_AUDIT_TYPE = "event.marked_ended";
+export const EVENT_ARCHIVED_LEGACY_AUDIT_TYPE = "event.archived_legacy";
+
+/**
+ * 014 EARS-25 (#1741) — canonical `audit_ledger` event id for the legacy
+ * machine's `in_archive → hidden` transition (`HideLegacyBroadcast`). DISTINCT
+ * from {@link EVENT_HIDDEN_AUDIT_TYPE}, which records 007's terminal
+ * `ended → hidden` move: this one is REVERSIBLE (the эфир can be archived
+ * again), so a ledger that used one id for both could not tell a terminal hide
+ * from a temporary one.
+ */
+export const EVENT_HIDDEN_LEGACY_AUDIT_TYPE = "event.hidden_legacy";
 
 /**
  * The EARS-7 guard's refusal: the requested move is not one of the five legal
@@ -234,18 +244,17 @@ export class EventNotEditableError extends Error {
 }
 
 /**
- * 014 EARS-18 refusal: `MarkEventEnded` was called while the event's SCHEDULED
- * end (`starts_at + duration_min`) is still in the future. HTTP-agnostic — the
- * controller maps it to a 409 `EVENT_NOT_PAST` — so the rule stays a pure domain
- * rule. Nothing is mutated and no audit row is written: an operator can never
- * pre-declare a future эфир finished (014-design §3.1).
+ * 014 EARS-25 (#1741) — the `ArchiveLegacyBroadcast` refusal: the эфир carries
+ * no PUBLISHED, non-retired recording, so there is nothing to publish into the
+ * archive. HTTP-agnostic — the controller maps it to a 409 `EVENT_NOT_FINISHED`,
+ * the same code 014 §3 already uses for «this event is not in a state where a
+ * recording may be published», read from the other direction. Nothing is
+ * mutated and no audit row is written.
  */
-export class EventNotPastError extends Error {
-  constructor(readonly scheduledEnd: Date) {
-    super(
-      `event has not reached its scheduled end (${scheduledEnd.toISOString()})`,
-    );
-    this.name = "EventNotPastError";
+export class EventNotFinishedError extends Error {
+  constructor(readonly eventId: string) {
+    super(`event ${eventId} has no published recording to archive`);
+    this.name = "EventNotFinishedError";
   }
 }
 
@@ -263,66 +272,59 @@ export type TransitionFence = (
   detail: EventAdminDetail,
 ) => Promise<void>;
 
-/** The subset of the event row the 014 EARS-18 preconditions read. */
-type MarkEndedSubject = Pick<Event, "state" | "startsAt" | "durationMin"> & {
-  liveAt: Date | null;
-};
-
 /**
- * 014 EARS-18 — the three server-side preconditions of the `published → ended`
- * off-platform edge, as ONE pure predicate (014-design §3.1):
+ * 014 EARS-27 (#1741) — the mutual-exclusion refusal every BROADCAST-machine
+ * entry point runs: a 007 command aimed at a `legacy` эфир is answered 409
+ * `INVALID_TRANSITION` with the state untouched and no audit row.
  *
- * 1. `state = published` — any other origin is not this command's business;
- * 2. the room was never opened — `live_at` is the server-stamped go-live instant
- *    (007 `OpenRoom` sets it and nothing else does), so `live_at IS NULL` is the
- *    structural proof that the platform never hosted this broadcast. A row that
- *    ever went live can therefore never have its history rewritten by this edge,
- *    even if some future path returned it to `published`;
- * 3. the scheduled end is already past — `starts_at + duration_min ≤ now`.
+ * The origin-keyed map carries most of the exclusion in its SHAPE — `draft →
+ * published`, `published → live`, `live → ended` exist on no legacy machine, so
+ * `PublishEvent` / `OpenRoom` / `CloseRoom` fall out of {@link canTransition} on
+ * their own. It does NOT carry all of it, and the two places it does not are
+ * where this guard earns its keep:
  *
- * Returned as a discriminated result rather than a boolean so the ONE evaluation
- * serves both callers that need a reason (the command, which must answer 409
- * `EVENT_NOT_PAST` vs 409 `INVALID_TRANSITION`) and the one that needs only a
- * yes/no (the read-model's `validTransitions`, which offers the control exactly
- * when the command would succeed — the design's «the control appears only when
- * the precondition holds»). A second copy of this rule for the read side would
- * be a second answer to «may this event be marked ended».
+ *  - `HideEvent` targets `hidden`, and `in_archive → hidden` IS a legal LEGACY
+ *    edge. Without the guard, 007's TERMINAL hide would apply to an archived
+ *    эфир and stamp {@link EVENT_HIDDEN_AUDIT_TYPE} on a reversible move;
+ *  - `ConfigureStream` is not a transition at all, so no map can refuse it — a
+ *    `legacy` эфир never acquires a stream config (014-design §3.1);
+ *  - the generic `POST :id/transition` writes state with no precondition and no
+ *    audit row, so both legacy edges are sealed off from it here.
+ *
+ * Applying it at every broadcast entry point rather than only where the map
+ * leaks is deliberate: exclusion that has to be re-derived per command is
+ * exclusion a future command forgets.
  */
-export function markEndedPrecondition(
-  subject: MarkEndedSubject,
-  now: Date = new Date(),
-): { ok: true } | { ok: false; reason: "invalid-transition" | "not-past" } {
-  if (subject.state !== "published" || subject.liveAt !== null) {
-    return { ok: false, reason: "invalid-transition" };
+function assertBroadcastCommandOrigin(event: Event): void {
+  if (event.origin !== "platform") {
+    throw new InvalidTransitionError(
+      event.state as EventLifecycleState,
+      event.state as EventLifecycleState,
+    );
   }
-  if (scheduledEnd(subject) > now) return { ok: false, reason: "not-past" };
-  return { ok: true };
-}
-
-/** The event's scheduled end instant — `starts_at + duration_min` (014-design §3.1). */
-export function scheduledEnd(
-  subject: Pick<Event, "startsAt" | "durationMin">,
-): Date {
-  return new Date(subject.startsAt.getTime() + subject.durationMin * 60_000);
 }
 
 /**
- * Refuse a `published → ended` move whose 014 EARS-18 preconditions do not hold,
- * with the state untouched and no audit row. A no-op for every other pair, so it
- * can sit on the shared write path of BOTH the bare EARS-7 command and the named
- * `MarkEventEnded` — one place decides whether this edge may be taken.
+ * 014 EARS-27 (#1741) — the mirror guard: a LEGACY command
+ * (`ArchiveLegacyBroadcast` / `HideLegacyBroadcast`) on a `platform` event is
+ * refused with 409 `INVALID_TRANSITION`, the state untouched.
+ *
+ * The origin-keyed map carries most of the exclusion on its own, but not all of
+ * it: `HideLegacyBroadcast` targets `hidden`, and `ended → hidden` IS a legal
+ * edge on the platform machine (007's terminal `HideEvent`). Without this guard
+ * the legacy command would apply to a platform `ended` event and stamp the
+ * ledger with {@link EVENT_HIDDEN_LEGACY_AUDIT_TYPE} — a reversible-hide id on a
+ * terminal hide, which is exactly the ambiguity the two ids exist to prevent.
+ * Two commands may share a target only while each one is pinned to its own
+ * machine.
  */
-function assertMarkEndedAllowed(
-  event: Event,
-  from: EventLifecycleState,
-  to: EventLifecycleState,
-): void {
-  if (!(from === "published" && to === "ended")) return;
-  const verdict = markEndedPrecondition(event);
-  if (verdict.ok) return;
-  if (verdict.reason === "not-past")
-    throw new EventNotPastError(scheduledEnd(event));
-  throw new InvalidTransitionError(from, to);
+function assertLegacyCommandOrigin(event: Event): void {
+  if (event.origin !== "legacy") {
+    throw new InvalidTransitionError(
+      event.state as EventLifecycleState,
+      event.state as EventLifecycleState,
+    );
+  }
 }
 
 /**
@@ -346,21 +348,48 @@ function assertVersion(event: Event, expectedVersion: number | undefined): void 
 }
 
 /**
- * The transitions the admin surface may offer for a loaded event — the pure
- * closed-set derivation ({@link validTransitions}) MINUS the 014 EARS-18 edge
- * when its preconditions do not hold. 014-design §3.1 requires the `mark-ended`
- * control to appear only when the command would succeed, and it names
- * `EventAdminDetail.validTransitions` as the derivation — so the refinement
- * belongs on the read model, not as a second precondition copy in the admin app
- * (which cannot see `live_at` at all).
+ * The transitions the admin surface may offer for a loaded event: the closed-set
+ * derivation for the event's OWN machine ({@link validTransitions} keyed by
+ * `origin`) MINUS the `hidden → in_archive` edge when its 014 EARS-25
+ * precondition does not hold.
+ *
+ * 014-design §3.1 requires «Архивировать» to appear only when the command would
+ * succeed, and it names `EventAdminDetail.validTransitions` as the derivation —
+ * so the refinement belongs on the read model, not as a second precondition copy
+ * in the admin app (which cannot see the event's recordings at all).
+ *
+ * `hasPublishedRecording` is passed IN rather than resolved here because the
+ * fact costs a query: the caller batches it for a list page and skips it
+ * entirely for any event the edge is not reachable from.
  */
-function offeredTransitions(event: Event): EventLifecycleState[] {
+function offeredTransitions(
+  event: Event,
+  hasPublishedRecording: boolean,
+): EventLifecycleState[] {
   const state = event.state as EventLifecycleState;
-  return validTransitions(state).filter(
-    (to) =>
-      !(state === "published" && to === "ended") ||
-      markEndedPrecondition(event).ok,
+  return validTransitions(state, event.origin).filter(
+    (to) => to !== "in_archive" || hasPublishedRecording,
   );
+}
+
+/**
+ * 014 EARS-23 (#1741) — may this event's authored fields be edited right now?
+ *
+ * Origin-aware because `hidden` means different things on the two machines. On
+ * `platform` it is TERMINAL — the event has left every public surface for good —
+ * so 007 EARS-2's pre-hide window ({@link EVENT_EDITABLE_STATES}) excludes it.
+ * On `legacy` it is an ordinary working state: an эфир sits there between
+ * creation and «Архивировать», and again after «Скрыть», and correcting its
+ * title or speakers in that window is exactly what the operator needs to do
+ * before publishing it to the archive. Both legacy states are therefore
+ * editable, which is also what makes «origin is rejected by every update path»
+ * a testable claim rather than an untestable one behind a 409.
+ */
+function isEditable(event: Event): boolean {
+  const state = event.state as EventLifecycleState;
+  return event.origin === "legacy"
+    ? state === "hidden" || state === "in_archive"
+    : EVENT_EDITABLE_STATES.includes(state);
 }
 
 /** Slugify a (possibly non-ASCII) title into a URL-safe, collision-resistant handle. */
@@ -504,8 +533,12 @@ export class EventsService {
     const current = await this.repo.findById(id);
     if (!current) return null;
 
+    // 014 EARS-23 — `origin` is absent from `UpdateEventRequestSchema` and from
+    // the patch key set below, so no update path can reach the column: an
+    // `origin` key on the body is dropped at the I/O boundary and never becomes
+    // a patch field. The discriminator is set once at creation, full stop.
     const state = current.event.state as EventLifecycleState;
-    if (!EVENT_EDITABLE_STATES.includes(state)) {
+    if (!isEditable(current.event)) {
       throw new EventNotEditableError(state);
     }
 
@@ -584,8 +617,27 @@ export class EventsService {
     pageSize: number;
   }> {
     const { rows, total } = await this.repo.listAdminPage(query);
+    // 014 EARS-25 (#1741) — the archive edge is offered only when the эфир has
+    // something to archive, so a page resolves recordings for the rows that can
+    // reach that edge at all (`legacy` + `hidden`) in ONE batched read, never
+    // per row and never for the rows the answer cannot change.
+    const archivable = rows.filter(
+      (row) => row.origin === "legacy" && row.state === "hidden",
+    );
+    const projections =
+      archivable.length > 0
+        ? await this.recordingsProjection.resolveRecordingProjections(
+            archivable.map((row) => row.id),
+          )
+        : undefined;
     return {
-      data: rows.map((row) => this.toListItem(row)),
+      data: rows.map((row) =>
+        this.toListItem(
+          row,
+          projections?.get(row.id)?.state !== undefined &&
+            projections.get(row.id)!.state !== "preparing",
+        ),
+      ),
       total,
       page: query.page,
       pageSize: query.pageSize,
@@ -621,6 +673,10 @@ export class EventsService {
     const current = await this.repo.findById(id);
     if (!current) return null;
 
+    // 014 EARS-27 — a `legacy` эфир never acquires a stream config. Checked
+    // BEFORE the window check so the refusal names the real reason (the command
+    // does not exist on this machine), not «not configurable while hidden».
+    assertBroadcastCommandOrigin(current.event);
     const state = current.event.state as EventLifecycleState;
     if (!STREAM_CONFIGURABLE_STATES.includes(state)) {
       throw new StreamNotConfigurableError(state);
@@ -656,14 +712,21 @@ export class EventsService {
     if (!current) return null;
 
     const from = current.event.state as EventLifecycleState;
-    if (!canTransition(from, to)) {
+    // 014 EARS-25/27 (#1741) — a `legacy` эфир has exactly TWO commands and both
+    // are NAMED routes: `ArchiveLegacyBroadcast` carries the published-recording
+    // precondition (409 `EVENT_NOT_FINISHED`) and `event.archived_legacy`,
+    // `HideLegacyBroadcast` carries `event.hidden_legacy`. This generic endpoint
+    // writes state through the bare `updateState` — no precondition, no audit
+    // row — so letting it reach either legacy edge would be precisely the
+    // «set-any-state escape hatch» 014-design §3.1 rules out: an эфир archived
+    // with no recording to show and no feature-010 row to read it back from.
+    // Refused 409 `INVALID_TRANSITION` before the version check and any write.
+    assertBroadcastCommandOrigin(current.event);
+    // Still keyed by the event's OWN machine, so a platform event cannot be
+    // jumped onto the legacy machine's states either.
+    if (!canTransition(from, to, current.event.origin)) {
       throw new InvalidTransitionError(from, to);
     }
-    // The 014 EARS-18 edge is reachable on the map but NOT unconditional: the
-    // bare EARS-7 command must enforce the same two preconditions the named
-    // `MarkEventEnded` does, or this endpoint would be the "set any state"
-    // escape hatch 014-design §3.1 rules out.
-    assertMarkEndedAllowed(current.event, from, to);
     assertVersion(current.event, expectedVersion);
 
     const updated = await this.repo.updateState(id, to, expectedVersion);
@@ -714,7 +777,7 @@ export class EventsService {
       "published",
       EVENT_PUBLISHED_AUDIT_TYPE,
       actorSub,
-      undefined,
+      assertBroadcastCommandOrigin,
       undefined,
       expectedVersion,
     );
@@ -745,7 +808,7 @@ export class EventsService {
       "live",
       EVENT_WENT_LIVE_AUDIT_TYPE,
       actorSub,
-      undefined,
+      assertBroadcastCommandOrigin,
       undefined,
       expectedVersion,
     );
@@ -773,15 +836,14 @@ export class EventsService {
       "ended",
       EVENT_ENDED_AUDIT_TYPE,
       actorSub,
-      // The mirror of `markEnded`'s guard: since 014 EARS-18 the closed set has
-      // TWO edges into `ended`, so the target alone no longer identifies the
-      // command. `close` keeps its 007 EARS-5 contract — the room it closes must
-      // be open — and a `published` event is refused here rather than silently
-      // ending through the room-control command (which writes the `event.ended`
-      // audit type and bypasses the EARS-18 preconditions + Idempotency-Key).
-      (_event, from) => {
-        if (from !== "live") throw new InvalidTransitionError(from, "ended");
-      },
+      // 014 EARS-23/27 (#1741) — no command-specific STATE precondition any more.
+      // `live → ended` is once again the ONLY edge into `ended` on the platform
+      // machine (the 014 EARS-18 `published → ended` fork is gone), so the
+      // closed-set check in {@link namedTransition} refuses every other origin
+      // state on its own. What remains is the machine guard every broadcast
+      // command carries: `CloseRoom` belongs to 007 and never applies to a
+      // `legacy` эфир.
+      assertBroadcastCommandOrigin,
       undefined,
       expectedVersion,
     );
@@ -814,35 +876,40 @@ export class EventsService {
       "hidden",
       EVENT_HIDDEN_AUDIT_TYPE,
       actorSub,
-      undefined,
+      // 014 EARS-27 (#1741) — the closed set does NOT carry this one on its own:
+      // `in_archive → hidden` is a legal LEGACY edge, so a legacy эфир sitting in
+      // `in_archive` would answer 007's terminal `HideEvent` with 200 and stamp
+      // {@link EVENT_HIDDEN_AUDIT_TYPE} on a REVERSIBLE hide — the exact ledger
+      // ambiguity the two ids exist to prevent, running mirror to the hole
+      // {@link assertLegacyCommandOrigin} closes.
+      assertBroadcastCommandOrigin,
       undefined,
       expectedVersion,
     );
   }
 
   /**
-   * 014 EARS-18 — `MarkEventEnded`: the `published → ended` transition for an
-   * эфир the platform never hosted (held before features 006/007 existed, or run
-   * off-platform). Without it every such event is stuck at `published` and its
-   * recording can never clear the 014 §3 publish gate — that is the launch
-   * content of the archive, not an edge case (014-design §3.1).
+   * 014 EARS-25 (#1741) — `ArchiveLegacyBroadcast` («Архивировать»): the legacy
+   * machine's `hidden → in_archive` transition. From that instant the эфир is
+   * listed in the public archive exactly like an `ended` platform broadcast with
+   * a published recording (EARS-26) — the same card, the same «Прошедшие» tab,
+   * the same post-live page.
    *
-   * It does NOT loosen the EARS-7 guard. On top of the closed-set check it
-   * enforces {@link markEndedPrecondition}: the origin must be `published`, the
-   * room must never have been opened (`live_at IS NULL`) and the scheduled end
-   * must already be past. So it can neither rewrite the history of a broadcast
-   * the platform actually hosted nor pre-declare a future эфир finished, and a
-   * cancelled event keeps 004's `published → hidden` route instead. It creates
-   * NO room record, NO presence window and NO recording — only the state change
-   * and exactly one {@link EVENT_MARKED_ENDED_AUDIT_TYPE} `audit_ledger` row,
-   * written atomically and keyed to the acting `platform_admin`.
+   * Two guards on top of the closed-set check, in this order:
+   *
+   * 1. the origin-keyed map itself. `hidden → in_archive` exists ONLY under
+   *    `legacy`, so the same call on a `platform` event is refused with 409
+   *    `INVALID_TRANSITION` and no mutation (EARS-27) — no guard of its own;
+   * 2. the эфир must already carry a PUBLISHED, non-retired recording — the
+   *    thing it exists to carry. Refused with 409 `EVENT_NOT_FINISHED`
+   *    otherwise, the same code 014 §3 already uses for «this event is not in a
+   *    state where a recording may be published», read from the other direction.
    *
    * @param fence the 012-design §6 idempotency completion, enlisted in the same
-   * transaction as the state change and the audit row (EARS-17): a fenced-out
-   * owner aborts the whole transition rather than double-applying it.
+   * transaction as the state change and the audit row.
    * @returns the updated `EventAdminDetail`, or `null` when the id does not exist.
    */
-  async markEnded(
+  async archiveLegacy(
     id: string,
     actorSub: string | null,
     fence?: TransitionFence,
@@ -850,25 +917,121 @@ export class EventsService {
   ): Promise<EventAdminDetail | null> {
     return this.namedTransition(
       id,
-      "ended",
-      EVENT_MARKED_ENDED_AUDIT_TYPE,
+      "in_archive",
+      EVENT_ARCHIVED_LEGACY_AUDIT_TYPE,
       actorSub,
-      // `close` and `mark-ended` share the `ended` target, so the closed-set
-      // guard alone cannot tell them apart: from `live` it would silently let
-      // `mark-ended` act as CloseRoom. The required origin is therefore part of
-      // this command's contract, not an inference from the target.
-      (event, from) => {
-        if (from !== "published")
-          throw new InvalidTransitionError(from, "ended");
+      assertLegacyCommandOrigin,
+      fence,
+      expectedVersion,
+      // Resolved INSIDE the command rather than handed in by the caller: the
+      // read model's `validTransitions` is a hint the operator's screen may have
+      // been holding for a while, and the archive gate has to be decided against
+      // the state of the recordings NOW, not against what the panel rendered.
+      async (event) => {
+        const projection =
+          await this.recordingsProjection.resolveRecordingProjection(event.id);
+        if (projection.state === "preparing") {
+          throw new EventNotFinishedError(event.id);
+        }
       },
+    );
+  }
+
+  /**
+   * 014 EARS-25 (#1741) — `HideLegacyBroadcast` («Скрыть»): the legacy machine's
+   * `in_archive → hidden` transition. The эфир leaves every listing, tab and
+   * count, and its direct link renders feature 004's notice — the same meaning
+   * `hidden` carries on the broadcast machine.
+   *
+   * Unlike 007's terminal `ended → hidden`, this move is REVERSIBLE: the эфир
+   * can be archived again, which is why it writes its own
+   * {@link EVENT_HIDDEN_LEGACY_AUDIT_TYPE} row rather than reusing
+   * {@link EVENT_HIDDEN_AUDIT_TYPE} — a ledger that used one id for both could
+   * not tell a terminal hide from a temporary one. It has no precondition beyond
+   * the origin-keyed closed set: `in_archive → hidden` exists only under
+   * `legacy`, so the same call on a `platform` event is refused 409
+   * `INVALID_TRANSITION` with no mutation.
+   *
+   * @returns the updated `EventAdminDetail`, or `null` when the id does not exist.
+   */
+  async hideLegacy(
+    id: string,
+    actorSub: string | null,
+    fence?: TransitionFence,
+    expectedVersion?: number,
+  ): Promise<EventAdminDetail | null> {
+    return this.namedTransition(
+      id,
+      "hidden",
+      EVENT_HIDDEN_LEGACY_AUDIT_TYPE,
+      actorSub,
+      assertLegacyCommandOrigin,
       fence,
       expectedVersion,
     );
   }
 
   /**
+   * 014 EARS-24 (#1741) — `CreateLegacyBroadcast`: the «Архивный эфир» creation
+   * entry. One `legacy` event authored from a title, a held-at instant, a
+   * duration, speakers and a recording, BORN `hidden` — it appears on no public
+   * surface until an explicit `ArchiveLegacyBroadcast`.
+   *
+   * `origin` and `state` are server-assigned, never read off the body (the
+   * `.strict()` schema refuses either key at the I/O boundary). The эфир
+   * acquires NO room record, NO stream config and NO presence window — not
+   * because this method omits them, but because nothing on the legacy machine
+   * can ever create them: `ConfigureStream` is refused by
+   * {@link assertBroadcastCommandOrigin} and `live` is unreachable in
+   * `LIFECYCLE_TRANSITIONS.legacy`.
+   *
+   * The event and its recording land in ONE transaction. A two-call shape —
+   * create, then attach — could leave an эфир with no recording, which is an
+   * эфир that can never be archived and therefore an untracked seam (AGENTS.md
+   * §6, F-22); the repository is what makes «an archival эфир always has
+   * something to archive» a database fact rather than a client convention.
+   *
+   * The automated import of #1742 lands its events through THIS path (EARS-24),
+   * which is why the input is one validated body rather than an argument list
+   * shaped for the admin form.
+   */
+  async createLegacyBroadcast(
+    input: LegacyBroadcastCreateBody,
+  ): Promise<EventAdminDetail> {
+    const slug = slugify(input.title);
+    const aggregate = await this.repo.insertLegacyBroadcast(
+      {
+        slug,
+        title: input.title,
+        school: input.school,
+        startsAt: mskLocalToInstant(input.heldAtMsk),
+        durationMin: input.durationMin,
+        description: input.description,
+        specialties: input.specialties,
+        partnerRef: null,
+        programPdfRef: null,
+        origin: "legacy",
+        state: "hidden",
+      },
+      input.speakers.map((sp, position) => ({
+        position,
+        name: sp.name,
+        regalia: sp.regalia,
+      })),
+      {
+        kind: input.recording.kind,
+        provider: input.recording.provider,
+        embedRef: input.recording.embedRef,
+        posterRef: input.recording.posterRef ?? null,
+        durationSec: input.recording.durationSec ?? null,
+      },
+    );
+    return this.toDetail(aggregate);
+  }
+
+  /**
    * The shared body of every named, audited transition command (publish / open /
-   * close / hide / mark-ended — EARS-4/5/6 + 014 EARS-18): load the
+   * close / hide / archive-legacy / hide-legacy — EARS-4/5/6 + 014 EARS-25): load the
    * aggregate, run the EARS-7 closed-set guard
    * ({@link canTransition}) — refusing an invalid jump with
    * {@link InvalidTransitionError}, state untouched — then write the state change
@@ -893,16 +1056,20 @@ export class EventsService {
     extraGuard?: (event: Event, from: EventLifecycleState) => void,
     fence?: TransitionFence,
     expectedVersion?: number,
+    asyncGuard?: (event: Event, from: EventLifecycleState) => Promise<void>,
   ): Promise<EventAdminDetail | null> {
     const current = await this.repo.findById(id);
     if (!current) return null;
 
     const from = current.event.state as EventLifecycleState;
-    if (!canTransition(from, to)) {
+    // 014 EARS-27: the map is keyed by ORIGIN, so a broadcast command on a
+    // `legacy` event and a legacy command on a `platform` event are both absent
+    // edges — refused here, before anything else is read or written.
+    if (!canTransition(from, to, current.event.origin)) {
       throw new InvalidTransitionError(from, to);
     }
     extraGuard?.(current.event, from);
-    assertMarkEndedAllowed(current.event, from, to);
+    await asyncGuard?.(current.event, from);
     assertVersion(current.event, expectedVersion);
 
     const updated = await this.repo.updateStateWithAudit(
@@ -1151,7 +1318,11 @@ export class EventsService {
         : null,
       streamConfig: a.streamConfig,
       state: e.state as EventLifecycleState,
-      validTransitions: offeredTransitions(e),
+      origin: e.origin,
+      validTransitions: offeredTransitions(
+        e,
+        await this.hasPublishedRecording(e),
+      ),
       recordingExpectedBy: e.recordingExpectedBy,
       // #1593 — the validator the `ETag` carries, on the body too so a client
       // holding a parsed detail can re-derive it without retaining a header.
@@ -1161,7 +1332,7 @@ export class EventsService {
     };
   }
 
-  private toListItem(e: Event): EventAdminListItem {
+  private toListItem(e: Event, hasPublishedRecording: boolean): EventAdminListItem {
     return {
       id: e.id,
       slug: e.slug,
@@ -1170,7 +1341,23 @@ export class EventsService {
       startsAt: e.startsAt.toISOString(),
       durationMin: e.durationMin,
       state: e.state as EventLifecycleState,
-      validTransitions: offeredTransitions(e),
+      origin: e.origin,
+      validTransitions: offeredTransitions(e, hasPublishedRecording),
     };
+  }
+
+  /**
+   * 014 EARS-25 (#1741) — does this event carry a published, non-retired
+   * recording right now? Only ever asked of a `legacy` эфир sitting in `hidden`,
+   * because that is the ONLY state the `hidden → in_archive` edge is reachable
+   * from (see {@link offeredTransitions}) — every other event answers `false`
+   * without a query. `preparing` is the projection's «nothing published» answer.
+   */
+  private async hasPublishedRecording(e: Event): Promise<boolean> {
+    if (e.origin !== "legacy" || e.state !== "hidden") return false;
+    const projection = await this.recordingsProjection.resolveRecordingProjection(
+      e.id,
+    );
+    return projection.state !== "preparing";
   }
 }

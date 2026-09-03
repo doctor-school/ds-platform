@@ -5,6 +5,7 @@ import { EventsAdminController } from "./events.admin.controller.js";
 import { EventsPublicController } from "./events.public.controller.js";
 import { EventsRepository } from "./events.repository.js";
 import { EventsService } from "./events.service.js";
+import { LegacyBroadcastsAdminController } from "./legacy-broadcasts.admin.controller.js";
 import { RegistrationModule } from "../registration/registration.module.js";
 import { ParticipationService } from "./participation.service.js";
 
@@ -17,7 +18,7 @@ import { ParticipationService } from "./participation.service.js";
  *
  * `TaxonomyModule` is imported for the ONE shared `Idempotency-Key` mechanism —
  * `IdempotencyService` over the single `idempotency_keys` table (012-design §6 /
- * EARS-17). 014 EARS-18's `mark-ended` command consumes it exactly as 014's
+ * EARS-17). 014 EARS-25's fenced legacy commands consume it exactly as 014's
  * recordings surface does; the 007 module introduces no second implementation.
  * Deliberately NOT `TaxonomyProblemFilter`: 007's admin surface owns its own
  * established response shape, and reshaping live routes is not this slice's call.
@@ -34,7 +35,14 @@ import { ParticipationService } from "./participation.service.js";
   // events → registration and never back (005 reads the events table directly,
   // importing no module), so there is no cycle.
   imports: [TaxonomyModule, RecordingsModule, RegistrationModule],
-  controllers: [EventsAdminController, EventsPublicController],
+  // 014 EARS-24 (#1741): the «Архивный эфир» creation entry is its own
+  // controller because it is the entry to the LEGACY machine, not a variant of
+  // `POST /v1/admin/events` (which is the entry to the platform one).
+  controllers: [
+    EventsAdminController,
+    EventsPublicController,
+    LegacyBroadcastsAdminController,
+  ],
   providers: [EventsService, EventsRepository, ParticipationService],
   // `ParticipationService` and `EventsService` are exported for the DOCTOR
   // storefront's twin routes (020 LD-1): the doctor host mounts thin routes over

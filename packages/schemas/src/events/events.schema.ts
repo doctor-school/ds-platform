@@ -19,44 +19,91 @@ export const EVENT_LIFECYCLE_STATES = [
   "live",
   "ended",
   "hidden",
+  "in_archive",
 ] as const;
 export const EventLifecycleStateSchema = z.enum(EVENT_LIFECYCLE_STATES);
 export type EventLifecycleState = z.infer<typeof EventLifecycleStateSchema>;
 
 /**
- * The closed forward transition set (design §2, extended by 014-design §3.1).
- * The ONLY legal moves are the five forward transitions; every other move is
- * refused server-side (EARS-7). Kept here as the shared SSOT so the admin UI
- * derives its offered actions (`EventAdminDetail.validTransitions`) and the
- * EARS-7 guard enforces refusal from the same map — there is no second source
- * to drift.
+ * 014 EARS-23 (#1741) — the lifecycle DISCRIMINATOR (014-design §3.1). Set once
+ * at creation and rejected by every update path: it picks which machine the
+ * event runs on and never changes, so no command moves an event between
+ * machines and no event ever holds a state of the other machine.
  *
- * `published → ended` is the 014 EARS-18 `MarkEventEnded` edge: an эфир held
- * before features 006/007 existed, or run off-platform, never passes through
- * `live`, so under the pre-014 set it was stuck at `published` and its recording
- * could never clear the 014 §3 publish gate. The edge is NOT a loosened guard —
- * the map only makes the move *reachable*; `MarkEventEnded` adds its own two
- * server-side preconditions on top (the scheduled end is already past AND the
- * room was never opened), which is what keeps it from becoming a general
- * "set any state" escape hatch. `published → live` (OpenRoom) is unchanged and
- * remains the only route for a broadcast the platform actually hosts.
+ * * `platform` — a broadcast the platform hosts end to end (feature 007);
+ * * `legacy` — an эфир held before features 006/007 existed, or run
+ *   off-platform, that exists to carry its recording into the public archive.
+ *
+ * 014 does NOT loosen 007's guard to accommodate the second kind. The owner
+ * rejected that model on 2026-09-02, before it reached production: «у них же
+ * должен быть отдельный жизненный цикл, а не развилка из двух вариантов в одном
+ * ЖЦ». A second machine stands beside 007's instead, selected by this value.
+ */
+export const EVENT_ORIGINS = ["platform", "legacy"] as const;
+export const EventOriginSchema = z.enum(EVENT_ORIGINS);
+export type EventOrigin = z.infer<typeof EventOriginSchema>;
+
+/**
+ * The closed forward transition set, keyed by {@link EventOrigin} — 007 design
+ * §2 (machine 1) and 014-design §3.1 (machine 2). The ONLY legal moves are the
+ * ones listed under the event's own origin; every other move is refused
+ * server-side (007 EARS-7 / 014 EARS-27). Kept here as the shared SSOT so the
+ * admin UI derives its offered actions (`EventAdminDetail.validTransitions`) and
+ * the server-side guard enforces refusal from the same map — there is no second
+ * source to drift, and MUTUAL EXCLUSION is a property of the map's shape rather
+ * than a guard bolted on beside it: a broadcast command on a `legacy` event and
+ * a legacy command on a `platform` event are both simply absent edges.
+ *
+ * The 2026-08-17 `published → ended` amendment (014 EARS-18 `MarkEventEnded`) is
+ * GONE with this map. It was the fork-in-one-lifecycle the owner rejected on
+ * 2026-09-02 — «сам дизайн жизненного цикла неправильный. Если это эфир,
+ * который прошёл ДО запуска платформы, то зачем там кнопка "Выйти в эфир"?» —
+ * and it never reached production, so it is removed inline rather than amended
+ * (AGENTS.md §6). An эфир the platform never hosted is now a `legacy` event on
+ * its own machine, not a `platform` event taking a shortcut through 007's.
  */
 export const LIFECYCLE_TRANSITIONS: Record<
-  EventLifecycleState,
-  readonly EventLifecycleState[]
+  EventOrigin,
+  Record<EventLifecycleState, readonly EventLifecycleState[]>
 > = {
-  draft: ["published"],
-  published: ["live", "ended"],
-  live: ["ended"],
-  ended: ["hidden"],
-  hidden: [],
+  // Machine 1 — feature 007's broadcast lifecycle, unchanged by 014 beyond the
+  // EARS-28 `archived → hidden` rename. `in_archive` is unreachable here: it is
+  // machine 2's state and a `platform` event never holds it.
+  platform: {
+    draft: ["published"],
+    published: ["live"],
+    live: ["ended"],
+    ended: ["hidden"],
+    hidden: [],
+    in_archive: [],
+  },
+  // Machine 2 — 014-design §3.1, the owner's shape verbatim: «два состояния —
+  // "Архивирован" (отображается в Архиве) и "Скрыто"». A `legacy` эфир is BORN
+  // `hidden` (there is no create-time entry edge to declare here) and only the
+  // two legacy commands move it. Every 007 state is unreachable: a `legacy`
+  // event never has a room to open, so it can never be `live` or `ended`.
+  legacy: {
+    draft: [],
+    published: [],
+    live: [],
+    ended: [],
+    hidden: ["in_archive"],
+    in_archive: ["hidden"],
+  },
 };
 
-/** The transitions valid from `state` (the admin surface offers only these). */
+/**
+ * The transitions valid from `state` on `origin`'s machine (the admin surface
+ * offers only these). `origin` is REQUIRED, not defaulted: a caller that does
+ * not know which machine the event runs on cannot be given a legal answer, and a
+ * `platform` default would silently offer «Выйти в эфир» on an archival эфир —
+ * the exact defect 014-design §3.1 exists to remove.
+ */
 export function validTransitions(
   state: EventLifecycleState,
+  origin: EventOrigin,
 ): EventLifecycleState[] {
-  return [...LIFECYCLE_TRANSITIONS[state]];
+  return [...LIFECYCLE_TRANSITIONS[origin][state]];
 }
 
 /**
@@ -70,8 +117,9 @@ export function validTransitions(
 export function canTransition(
   from: EventLifecycleState,
   to: EventLifecycleState,
+  origin: EventOrigin,
 ): boolean {
-  return LIFECYCLE_TRANSITIONS[from].includes(to);
+  return LIFECYCLE_TRANSITIONS[origin][from].includes(to);
 }
 
 /**
@@ -419,6 +467,18 @@ export const UpdateEventRequestSchema = z.object({
    * the operator never entered (014-design §2).
    */
   recordingExpectedBy: RecordingExpectedBySchema.nullish(),
+  /**
+   * 014 EARS-23 (#1741) — `origin` is set once at creation and **rejected** by
+   * every update path. Declared as `z.never().optional()` rather than simply
+   * omitted: an omitted key would be STRIPPED by the object parser, and a
+   * silently ignored `{ origin: "platform" }` is not a rejection — the caller
+   * would read a 200 and believe the discriminator moved. Declaring the key with
+   * an uninhabited type keeps it out of `UpdateEventRequest` (its inferred type
+   * is `never | undefined`) while turning a present key into a 400 at the I/O
+   * boundary. The rest of the body stays non-strict: 014 does not change how any
+   * OTHER unknown key on this endpoint is treated.
+   */
+  origin: z.never().optional(),
 });
 export type UpdateEventRequest = z.infer<typeof UpdateEventRequestSchema>;
 
@@ -445,6 +505,14 @@ export const EventAdminDetailSchema = z.object({
   /** The stream config the 006 room consumes (EARS-3); `null` until configured. */
   streamConfig: StreamConfigSchema.nullable(),
   state: EventLifecycleStateSchema,
+  /**
+   * 014 EARS-23 (#1741) — which lifecycle machine this event runs on. On the
+   * detail body because the admin lifecycle bar renders one machine's vocabulary
+   * or the other's and must never mix them; `validTransitions` below is already
+   * derived per-machine on the server, so `origin` is what lets the admin LABEL
+   * the offered moves correctly («Архивировать» vs «Скрыть»).
+   */
+  origin: EventOriginSchema,
   validTransitions: z.array(EventLifecycleStateSchema),
   /** 014 (#1339) — the operator's readiness date, or `null` when unpromised. */
   recordingExpectedBy: z.string().nullable(),
@@ -474,6 +542,7 @@ export const EventAdminListItemSchema = EventAdminDetailSchema.pick({
   startsAt: true,
   durationMin: true,
   state: true,
+  origin: true,
   validTransitions: true,
 });
 export type EventAdminListItem = z.infer<typeof EventAdminListItemSchema>;
@@ -508,13 +577,18 @@ export type EventAdminList = z.infer<typeof EventAdminListSchema>;
  * deliberately EXCLUDED: a draft event has no public projection (a request for
  * one is not-found, EARS-6), so `draft` can never appear on a `PublicEventPage`
  * body. `hidden` is present — a hidden direct link resolves to a public
- * notice body (EARS-5), never a 404.
+ * notice body (EARS-5), never a 404. `in_archive` (014 EARS-26) is
+ * present for the opposite reason: an archived legacy эфир is rendered on the
+ * SAME `/webinars/[slug]` post-live page as an `ended` platform broadcast with
+ * a published recording — same card, same tab, same player — so excluding it
+ * here would be the «second route» 014-design §3.1 forbids.
  */
 export const PUBLIC_EVENT_STATES = [
   "published",
   "live",
   "ended",
   "hidden",
+  "in_archive",
 ] as const;
 export const PublicEventStateSchema = z.enum(PUBLIC_EVENT_STATES);
 export type PublicEventState = z.infer<typeof PublicEventStateSchema>;
@@ -643,6 +717,25 @@ export type UpcomingBroadcastState = z.infer<
 >;
 
 /**
+ * 014 EARS-26 (#1741) — the states a broadcast is read under «Прошедшие»: the
+ * platform machine's terminal-but-visible `ended` AND the legacy machine's
+ * `in_archive`.
+ *
+ * ONE named set rather than two `state = 'ended'` predicates, because the whole
+ * point of the legacy machine is that an archived эфир is INDISTINGUISHABLE from
+ * an ended broadcast on every public surface (same tab, same card, same count,
+ * same page). Two independent filters would be two places to forget, and the
+ * first one forgotten is an эфир the operator archived that never appears.
+ * `hidden` is absent from both machines' side of this set — on either origin it
+ * means «off every public surface».
+ */
+export const PAST_BROADCAST_STATES = ["ended", "in_archive"] as const;
+export const PastBroadcastLifecycleStateSchema = z.enum(PAST_BROADCAST_STATES);
+export type PastBroadcastLifecycleState = z.infer<
+  typeof PastBroadcastLifecycleStateSchema
+>;
+
+/**
  * A card speaker (004 design §3) — display `name` only. The listing card's
  * choose-set is deliberately thinner than the event page's: no `credentials`, no
  * contact detail, no PII. The write model's `regalia` is not projected onto the
@@ -692,14 +785,28 @@ export type UpcomingBroadcastList = z.infer<typeof UpcomingBroadcastListSchema>;
 
 /**
  * The lifecycle states an event may carry on the month grid (004 design §3,
- * EARS-15). The closed publish-VISIBLE subset `published`/`live`/`ended` — the
- * month view INCLUDES the month's already-past `ended` events (rendered as muted
- * aggregate notes), which is why `ended` is present here where the upcoming
- * card's {@link UPCOMING_BROADCAST_STATES} drops it. `draft` and `hidden` are
- * deliberately absent: they have NO month projection (structurally, not by a
- * denylist), so a new non-visible state can never leak onto the grid.
+ * EARS-15) and on the doctor storefront feed. The closed publish-VISIBLE subset
+ * `published`/`live`/`ended`/`in_archive` — the month view INCLUDES the month's
+ * already-past events (rendered as muted aggregate notes), which is why `ended`
+ * is present here where the upcoming card's
+ * {@link UPCOMING_BROADCAST_STATES} drops it.
+ *
+ * 014 EARS-26 (#1741): `in_archive` sits beside `ended` because it is the legacy
+ * machine's SAME fact — «this эфир happened and its recording is published». An
+ * archived legacy эфир is indistinguishable from an ended broadcast on every
+ * public surface (014-design §3.1), so a grid or a feed that carried one and not
+ * the other would be the second surface that design forbids.
+ *
+ * `draft` and `hidden` are deliberately absent on BOTH machines: they have NO
+ * month projection (structurally, not by a denylist), so a new non-visible state
+ * can never leak onto the grid.
  */
-export const MONTH_BROADCAST_STATES = ["published", "live", "ended"] as const;
+export const MONTH_BROADCAST_STATES = [
+  "published",
+  "live",
+  "ended",
+  "in_archive",
+] as const;
 export const MonthBroadcastStateSchema = z.enum(MONTH_BROADCAST_STATES);
 export type MonthBroadcastState = z.infer<typeof MonthBroadcastStateSchema>;
 

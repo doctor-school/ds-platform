@@ -396,10 +396,15 @@ export class DoctorEventsService {
       nmo: false,
       pulCost: 0,
       signUpCount: signUps.get(row.id) ?? 0,
+      // 014 EARS-26 (#1741): `in_archive` is the legacy machine's «this эфир
+      // happened and its recording is published» — the same fact `ended` carries
+      // on the platform machine — so it projects to the SAME `recorded` card.
+      // A separate card state would be the second surface 014-design §3.1
+      // forbids.
       state:
         row.state === "live"
           ? "live"
-          : row.state === "ended"
+          : row.state === "ended" || row.state === "in_archive"
             ? "recorded"
             : "normal",
     }));

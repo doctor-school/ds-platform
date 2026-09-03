@@ -14,29 +14,47 @@ import {
 } from "./lifecycle";
 
 /**
- * 007 EARS-7 / EARS-9 + 014 EARS-18 — the admin lifecycle-action derivation. The
- * admin UI offers ONLY the transitions valid from the current state, and it
- * derives that offer from the SAME closed map (`@ds/schemas` `validTransitions`)
- * the server-side guard enforces — so a UI offer the API would refuse can never
- * be constructed. These assert the derivation is faithful, that the terminal
- * state offers nothing, and that the two commands sharing the `ended` target are
- * told apart by the ORIGIN state (the 014 EARS-18 redesign).
+ * 007 EARS-7 / EARS-9 — the admin lifecycle-action derivation. The admin UI
+ * offers ONLY the transitions valid from the current state, and it derives that
+ * offer from the SAME closed map (`@ds/schemas` `validTransitions`) the
+ * server-side guard enforces — so a UI offer the API would refuse can never be
+ * constructed. These assert the derivation is faithful and that the terminal
+ * state offers nothing.
+ *
+ * The bar this module feeds is the `platform` machine's (feature 007); the
+ * `legacy` machine 014 EARS-23 added has its own commands and is NOT in
+ * {@link actionsFor}'s table yet (slice 2 of #1741), so every `validTransitions`
+ * call here passes `"platform"` explicitly — the schema requires the origin and
+ * refuses to guess one.
  */
 describe("007 EARS-7 admin lifecycle action derivation", () => {
   it("EARS-7: maps each legal forward edge to its named command in state order", () => {
     expect(
-      actionsFor("draft", validTransitions("draft")).map((a) => a.command),
+      actionsFor("draft", validTransitions("draft", "platform")).map(
+        (a) => a.command,
+      ),
     ).toEqual(["publish"]);
     expect(
-      actionsFor("live", validTransitions("live")).map((a) => a.command),
+      actionsFor("published", validTransitions("published", "platform")).map(
+        (a) => a.command,
+      ),
+    ).toEqual(["open"]);
+    expect(
+      actionsFor("live", validTransitions("live", "platform")).map(
+        (a) => a.command,
+      ),
     ).toEqual(["close"]);
     expect(
-      actionsFor("ended", validTransitions("ended")).map((a) => a.command),
+      actionsFor("ended", validTransitions("ended", "platform")).map(
+        (a) => a.command,
+      ),
     ).toEqual(["hide"]);
   });
 
   it("EARS-7: a terminal hidden event offers no lifecycle action", () => {
-    expect(actionsFor("hidden", validTransitions("hidden"))).toEqual([]);
+    expect(actionsFor("hidden", validTransitions("hidden", "platform"))).toEqual(
+      [],
+    );
   });
 
   it("EARS-7: each derived action targets exactly the schema-legal next state", () => {
@@ -48,41 +66,28 @@ describe("007 EARS-7 admin lifecycle action derivation", () => {
       "hidden",
     ];
     for (const from of states) {
-      const legal = validTransitions(from);
+      const legal = validTransitions(from, "platform");
       const offered = actionsFor(from, legal).map((a) => a.to);
       // The UI offer is exactly the server's legal set — no extra, no missing.
       expect(offered.slice().sort()).toEqual([...legal].sort());
     }
   });
 
-  it("014 EARS-18: a published event offers open-room plus mark-ended, in that order", () => {
-    expect(
-      actionsFor("published", validTransitions("published")).map(
-        (a) => a.command,
-      ),
-    ).toEqual(["open", "mark-ended"]);
-  });
-
-  it("014 EARS-18: the shared `ended` target resolves by ORIGIN — close from live, mark-ended from published", () => {
-    // Same target state, two different commands: the pair is the key, so the
-    // off-platform event can never fire CloseRoom and vice versa.
+  it("014 EARS-23: `ended` is reachable only from `live` — the published→ended MarkEventEnded fork is gone from the platform machine", () => {
+    // The off-platform эфир moved onto its own `legacy` machine (#1741), so a
+    // published platform event offers open-room and nothing else, and the only
+    // command landing on `ended` is CloseRoom from `live`.
     expect(actionsFor("live", ["ended"])[0]?.command).toBe("close");
-    expect(actionsFor("published", ["ended"])[0]?.command).toBe("mark-ended");
+    expect(actionsFor("published", ["ended"])).toEqual([]);
   });
 
-  it("014 EARS-18: mark-ended is offered ONLY when the server kept `ended` in validTransitions", () => {
-    // The server drops `ended` from a published event whose scheduled end is
-    // still in the future or whose room was ever opened; the UI adds no second
-    // copy of that rule, so it simply offers nothing.
+  it("014 EARS-23: no lifecycle action names a legacy command — the legacy machine is not on this bar (slice 2)", () => {
+    expect(actionsFor("hidden", validTransitions("hidden", "legacy"))).toEqual(
+      [],
+    );
     expect(
-      actionsFor("published", ["live"]).map((a) => a.command),
-    ).toEqual(["open"]);
-  });
-
-  it("014 EARS-18: the mark-ended button carries the off-platform label key", () => {
-    const action = actionsFor("published", ["ended"])[0];
-    expect(action?.labelKey).toBe("events.action.markEnded");
-    expect(action?.testId).toBe("action-mark-ended");
+      actionsFor("in_archive", validTransitions("in_archive", "legacy")),
+    ).toEqual([]);
   });
 
   it("EARS-9: state label keys resolve under the events.state.* catalog namespace", () => {
@@ -108,7 +113,6 @@ describe("007 EARS-7 lifecycle command request", () => {
       "open",
       "close",
       "hide",
-      "mark-ended",
     ] as const) {
       const request = lifecycleCommandRequest(detail, command);
       expect(request).toEqual({
@@ -150,7 +154,7 @@ describe("#1593 lifecycle refusal outcome", () => {
   });
 
   it("EARS-7: a domain refusal keeps its own sentence AND refetches — the screen may be refusing precisely because the event moved in another window (owner Stage-B finding, 2026-09-01)", () => {
-    for (const errorCode of ["INVALID_TRANSITION", "EVENT_NOT_PAST"]) {
+    for (const errorCode of ["INVALID_TRANSITION"]) {
       expect(lifecycleErrorOutcome({ errorCode })).toEqual({
         messageKey: "events.errors.transitionRefused",
         refetch: true,

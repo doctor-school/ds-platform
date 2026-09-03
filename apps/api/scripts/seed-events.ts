@@ -50,8 +50,13 @@
  * a caller / E2E env wiring can pick the slug for each state + room scenario.
  * Exits non-zero on failure.
  */
-import { createDrizzle, events, streamConfig } from "@ds/db";
-import { and, eq } from "drizzle-orm";
+import {
+  createDrizzle,
+  eventRecordings,
+  events,
+  streamConfig,
+} from "@ds/db";
+import { and, eq, isNull } from "drizzle-orm";
 import { reconcileEventSpeakers } from "../src/events/event-speakers.reconcile.js";
 
 const MINUTE = 60_000;
@@ -59,7 +64,12 @@ const DAY = 24 * 60 * MINUTE;
 
 interface SeedSpec {
   readonly slug: string;
-  readonly state: "published" | "live" | "ended" | "hidden";
+  readonly state: "published" | "live" | "ended" | "hidden" | "in_archive";
+  /**
+   * 014 EARS-23 (#1741): which lifecycle machine this fixture sits on. Omitted
+   * ⇒ `platform`, the column default and what every 005/006 fixture is.
+   */
+  readonly origin?: "platform" | "legacy";
   readonly title: string;
   readonly school: string;
   readonly startsAt: Date;
@@ -78,6 +88,17 @@ interface SeedSpec {
   readonly stream?: {
     readonly provider: "rutube" | "youtube";
     readonly embedRef: string;
+  };
+  /**
+   * 014 EARS-24/26 (#1741): a PUBLISHED, non-retired recording. Only the legacy
+   * archive fixture carries one — an `in_archive` эфир without it is a state the
+   * product cannot reach (the archive command is gated on exactly this fact), so
+   * seeding one would be a fixture that lies about the machine.
+   */
+  readonly recording?: {
+    readonly provider: "rutube" | "youtube";
+    readonly embedRef: string;
+    readonly durationSec: number;
   };
 }
 
@@ -218,6 +239,32 @@ function specs(now: number): SeedSpec[] {
       partnerRef: "Партнёр Фарма",
       speakers: [{ name: "Проф. Н. Волкова", regalia: "д.м.н., эндокринолог" }],
     },
+    // ── 014 legacy-archive fixture (#1741) ────────────────────────────────────
+    // The ONE `legacy` эфир: an archive-only broadcast the platform never
+    // hosted, sitting in the legacy machine's `in_archive` state with a
+    // published recording. It exists so the admin lifecycle bar and the public
+    // «Прошедшие» tab can be driven against a real archived эфир — the state a
+    // `platform` fixture can never be in.
+    {
+      slug: "seed-006-legacy-archived",
+      state: "in_archive",
+      origin: "legacy",
+      title: "Архивный эфир: инсулинотерапия (до платформы)",
+      school: "Школа эндокринологии",
+      startsAt: new Date(now - 400 * DAY),
+      durationMin: 80,
+      description:
+        "Эфир проведён до запуска платформы. Доступна только запись — комнаты и регистрации у него не было.",
+      specialties: ["Эндокринология"],
+      partnerRef: "Партнёр Фарма",
+      speakers: [{ name: "Проф. Н. Волкова", regalia: "д.м.н., эндокринолог" }],
+      // No `stream` — a legacy эфир never acquires a stream config.
+      recording: {
+        provider: "rutube",
+        embedRef: "cef3a41b70985eedeefe504452a69adc",
+        durationSec: 80 * 60,
+      },
+    },
     {
       slug: "seed-005-hidden",
       state: "hidden",
@@ -266,6 +313,7 @@ async function main(): Promise<void> {
           specialties: spec.specialties,
           partnerRef: spec.partnerRef,
           state: spec.state,
+          origin: spec.origin ?? "platform",
           liveAt,
           updatedAt: new Date(),
         })
@@ -280,6 +328,7 @@ async function main(): Promise<void> {
             specialties: spec.specialties,
             partnerRef: spec.partnerRef,
             state: spec.state,
+            origin: spec.origin ?? "platform",
             liveAt,
             updatedAt: new Date(),
           },
@@ -333,6 +382,44 @@ async function main(): Promise<void> {
               eq(streamConfig.recordStatus, "active"),
             ),
           );
+      }
+
+      // 014 EARS-24/26 (#1741): upsert the fixture's PUBLISHED recording on the
+      // LD-1 at-most-one-active-per-kind slot. Keyed on (event, kind) among
+      // non-retired rows, exactly like the product path, so a re-run refreshes
+      // the same row instead of colliding with its own previous one.
+      if (spec.recording) {
+        const [existing] = await db
+          .select({ id: eventRecordings.id })
+          .from(eventRecordings)
+          .where(
+            and(
+              eq(eventRecordings.eventId, row.id),
+              eq(eventRecordings.kind, "full"),
+              isNull(eventRecordings.deletedAt),
+            ),
+          );
+        const values = {
+          provider: spec.recording.provider,
+          embedRef: spec.recording.embedRef,
+          durationSec: spec.recording.durationSec,
+          status: "published" as const,
+          // The table's `published ⇒ first_published_at IS NOT NULL` check is a
+          // product invariant, so the fixture satisfies it rather than working
+          // around it: the archive эфир's cut was published when it was seeded.
+          firstPublishedAt: new Date(),
+          updatedAt: new Date(),
+        };
+        if (existing) {
+          await db
+            .update(eventRecordings)
+            .set(values)
+            .where(eq(eventRecordings.id, existing.id));
+        } else {
+          await db
+            .insert(eventRecordings)
+            .values({ ...values, eventId: row.id, kind: "full" });
+        }
       }
 
       result[spec.slug] = spec.state;

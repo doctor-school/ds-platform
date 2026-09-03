@@ -246,6 +246,13 @@
       "when": 1788359150439,
       "tag": "0034_cooing_baron_strucker",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1788398895908,
+      "tag": "0035_events_origin_in_archive",
+      "breakpoints": true
     }
   ]
 }

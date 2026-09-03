@@ -3,6 +3,7 @@ import {
   ConfigureStreamRequestSchema,
   EventAdminListSchema,
   EventPageViewSchema,
+  LegacyBroadcastCreateBodySchema,
   ParticipationCtaSchema,
   MonthBroadcastListSchema,
   PublicEventListingPageSchema,
@@ -22,6 +23,15 @@ export class EventAdminListDto extends createZodDto(EventAdminListSchema) {}
 /** `POST /v1/admin/events/:id/transition` body — the target lifecycle state (EARS-7). */
 export class TransitionEventRequestDto extends createZodDto(
   TransitionEventRequestSchema,
+) {}
+
+/**
+ * 014 EARS-24 (#1741) — `POST /v1/admin/legacy-broadcasts` body. The SSOT schema
+ * is `.strict()`, so `origin` / `state` (both server-assigned) are a 400 at the
+ * `ZodValidationPipe`, before the handler runs and before any row is written.
+ */
+export class LegacyBroadcastCreateDto extends createZodDto(
+  LegacyBroadcastCreateBodySchema,
 ) {}
 
 /**

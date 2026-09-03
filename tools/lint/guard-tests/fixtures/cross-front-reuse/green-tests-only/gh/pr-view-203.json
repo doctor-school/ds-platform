@@ -1,0 +1,8 @@
+{
+  "number": 203,
+  "body": "chore: extend the doctor feed tests only.\n",
+  "files": [
+    { "path": "apps/doctor/components/month-pane.test.tsx" },
+    { "path": "apps/doctor/lib/e2e/support/seed.ts" }
+  ]
+}

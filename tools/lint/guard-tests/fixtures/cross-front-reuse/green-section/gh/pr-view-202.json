@@ -1,0 +1,5 @@
+{
+  "number": 202,
+  "body": "## Summary\n\nRe-seat the event page.\n\n## Cross-front reuse\n\nConsumes packages/design-system/src/blocks/event-page-shell.tsx unchanged.\n\n## Test plan\n\nvitest\n",
+  "files": [{ "path": "apps/portal/app/webinars/[slug]/page.tsx" }]
+}

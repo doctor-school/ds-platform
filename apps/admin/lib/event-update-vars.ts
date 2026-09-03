@@ -3,7 +3,7 @@ import type { UpdateEventVars } from "@/providers/data-provider";
 
 /**
  * The edit form's values → `PATCH /v1/admin/events/:id` body projection
- * (007 EARS-2, 014 EARS-24/25).
+ * (007 EARS-2, 014 EARS-24).
  *
  * It exists as a pure function rather than an inline literal on the page because
  * one field is a real CONTRACT branch, not a rename: «Школа / серия» is required

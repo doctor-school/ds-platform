@@ -180,7 +180,7 @@ export default function EventEditPage() {
                         // архивный эфир may legitimately have no «Школа / серия»,
                         // and `UpdateEventRequest.school` is `.min(1).optional()`
                         // — so the key is OMITTED rather than sent empty (014
-                        // EARS-24/25). `origin` is the server's fact, which is why
+                        // EARS-24). `origin` is the server's fact, which is why
                         // it comes from the detail and not from the form.
                         const vars = eventUpdateVars(values, {
                           legacy: detail.origin === "legacy",

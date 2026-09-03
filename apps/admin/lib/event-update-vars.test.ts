@@ -3,7 +3,7 @@ import type { EventFormValues } from "@/components/event-form";
 import { eventUpdateVars } from "./event-update-vars";
 
 /**
- * 014 EARS-24/25 (#1741) Mode-a rework — an архивный эфир authored with an EMPTY
+ * 014 EARS-24 (#1741) Mode-a rework — an архивный эфир authored with an EMPTY
  * «Школа / серия» must stay editable.
  *
  * `LegacyBroadcastCreateBody.school` is `.max(200).default("")`, so a legacy эфир
@@ -29,18 +29,18 @@ const base: EventFormValues = {
 };
 
 describe("eventUpdateVars", () => {
-  it("EARS-25.1: a legacy эфир with an empty school omits the key entirely", () => {
+  it("014 EARS-24.8: a legacy эфир with an empty school omits the key entirely", () => {
     const vars = eventUpdateVars(base, { legacy: true });
     expect("school" in vars).toBe(false);
     expect(vars.school).toBeUndefined();
   });
 
-  it("EARS-25.2: a legacy эфир whose school is only whitespace omits the key too", () => {
+  it("014 EARS-24.9: a legacy эфир whose school is only whitespace omits the key too", () => {
     const vars = eventUpdateVars({ ...base, school: "   " }, { legacy: true });
     expect("school" in vars).toBe(false);
   });
 
-  it("EARS-25.3: a legacy эфир with a school still sends it, verbatim", () => {
+  it("014 EARS-24.10: a legacy эфир with a school still sends it, verbatim", () => {
     const vars = eventUpdateVars(
       { ...base, school: "Кардиошкола" },
       { legacy: true },
@@ -48,13 +48,13 @@ describe("eventUpdateVars", () => {
     expect(vars.school).toBe("Кардиошкола");
   });
 
-  it("EARS-25.4: a platform event keeps the required rule — the empty value is sent and the api refuses it", () => {
+  it("014 EARS-24.11: a platform event keeps the required rule — the empty value is sent and the api refuses it", () => {
     const vars = eventUpdateVars(base, { legacy: false });
     expect("school" in vars).toBe(true);
     expect(vars.school).toBe("");
   });
 
-  it("EARS-25.5: every other authored field is carried through unchanged", () => {
+  it("014 EARS-24.12: every other authored field is carried through unchanged", () => {
     const values: EventFormValues = {
       ...base,
       school: "Кардиошкола",

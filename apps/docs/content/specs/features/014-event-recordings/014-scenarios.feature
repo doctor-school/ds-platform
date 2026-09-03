@@ -88,8 +88,8 @@ Feature: A finished broadcast keeps its value as a recording, and the archive is
       | legacy   | hidden, in_archive                         |
 
   @EARS-24 @core @happy
-  Scenario: An archival broadcast is created through the «Архивный эфир» entry and is born hidden
-    Given the operator opens the «Архивный эфир» creation entry
+  Scenario: An archival broadcast is created with «Это архивный эфир» checked and is born hidden
+    Given the operator opens the ordinary create-event form and checks «Это архивный эфир»
     When they submit a title, a held-at instant, a duration, speakers and a recording
     Then a legacy event is created in state hidden
     And no room record, no stream config and no presence window exist for it

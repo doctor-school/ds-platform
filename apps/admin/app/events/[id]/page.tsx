@@ -26,8 +26,8 @@ import { RecordingsPanel } from "@/components/recordings-panel";
 import { EventProjectsPanel } from "@/components/event-projects-panel";
 import { EventDirectionsPanel } from "@/components/event-directions-panel";
 import { StateBadge } from "@/components/state-badge";
+import { eventUpdateVars } from "@/lib/event-update-vars";
 import { formatMskDateTime } from "@/lib/msk";
-import type { UpdateEventVars } from "@/providers/data-provider";
 
 /**
  * Event edit page (design §8) — the single detail surface carrying the aggregate
@@ -175,17 +175,16 @@ export default function EventEditPage() {
                       onSubmit={(values) => {
                         setEditError(null);
                         setEditOk(false);
-                        const vars: UpdateEventVars = {
-                          title: values.title,
-                          school: values.school,
-                          startsAtMsk: values.startsAtMsk,
-                          durationMin: values.durationMin,
-                          description: values.description,
-                          speakers: values.speakers,
-                          specialties: values.specialties,
-                          partnerRef: values.partnerRef,
-                          programPdf: values.programPdf,
-                        };
+                        // The body is projected by `eventUpdateVars`, which owns
+                        // the one branch that is a contract and not a rename: an
+                        // архивный эфир may legitimately have no «Школа / серия»,
+                        // and `UpdateEventRequest.school` is `.min(1).optional()`
+                        // — so the key is OMITTED rather than sent empty (014
+                        // EARS-24). `origin` is the server's fact, which is why
+                        // it comes from the detail and not from the form.
+                        const vars = eventUpdateVars(values, {
+                          legacy: detail.origin === "legacy",
+                        });
                         update(
                           { resource: "events", id, values: vars },
                           {

@@ -1,4 +1,8 @@
-import { STREAM_PROVIDERS, type EventAdminDetail } from "@ds/schemas";
+import {
+  RECORDING_KINDS,
+  STREAM_PROVIDERS,
+  type EventAdminDetail,
+} from "@ds/schemas";
 import type { EventFormFields, StreamConfigFields } from "@/lib/form-schemas";
 import { instantToMskInput } from "@/lib/msk";
 
@@ -32,6 +36,19 @@ export function eventFormFields(detail?: EventAdminDetail): EventFormFields {
     // into the cached detail (and back out on the next re-projection).
     speakers: detail?.speakers.map((s) => ({ ...s })) ?? [],
     specialtiesText: (detail?.specialties ?? []).join(", "),
+    // 014 EARS-24 — «Это архивный эфир». On CREATE this is the checkbox the
+    // operator ticks; on EDIT it is not a choice at all but the server's own
+    // `origin`, projected so the edit form renders the same field variant the
+    // эфир was authored in (no partner, no PDF, a held-at date).
+    legacy: detail?.origin === "legacy",
+    // Always the empty source triple: a recording is authored WITH the эфир and
+    // afterwards belongs to the «Записи» tab, so there is nothing on the event
+    // aggregate to project back into these boxes.
+    recording: {
+      kind: RECORDING_KINDS[0],
+      provider: STREAM_PROVIDERS[0],
+      embedRef: "",
+    },
   };
 }
 

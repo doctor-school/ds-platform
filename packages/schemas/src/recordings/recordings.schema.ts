@@ -91,8 +91,9 @@ export type AttachRecordingRequest = z.infer<
 
 /**
  * `CreateLegacyBroadcast` — `POST /v1/admin/legacy-broadcasts` (014 EARS-24).
- * The «Архивный эфир» creation entry: one `legacy` event authored from a title,
- * a held-at instant, a duration, speakers and a recording, born `hidden`.
+ * Submitted by the ordinary create-event form with «Это архивный эфир» checked:
+ * one `legacy` event authored from a title, a held-at instant, a duration,
+ * speakers and a recording, born `hidden`.
  *
  * It lives HERE and not in `events.schema.ts` for the same reason the note above
  * gives for `RecordingExpectedBySchema`: one home per symbol, and this body

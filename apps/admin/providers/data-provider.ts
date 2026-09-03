@@ -13,6 +13,7 @@ import type {
   ConfigureStreamRequest,
   CreateEventExpertRequest,
   CreateEventRequest,
+  LegacyBroadcastCreateBody,
   CreateExpertRequest,
   CreatePartnerRequest,
   CreateProjectRequest,
@@ -60,6 +61,10 @@ import type {
  *
  *   events   (007)  getList → GET /v1/admin/events; create/update multipart;
  *                   custom  → stream config + the named lifecycle transitions.
+ *   legacy-broadcasts (014)  create → POST /v1/admin/legacy-broadcasts (JSON +
+ *                   Idempotency-Key). Create-only: a pre-platform эфир has no list,
+ *                   no update — once created it is an ordinary event resource.
+ *
  *   projects (012)  getList → GET /v1/admin/projects?page&pageSize&q&status&includeRetired
  *                   getOne  → GET /v1/admin/projects/:id (captures the ETag)
  *                   create  → POST  (Idempotency-Key; JSON or multipart+cover)
@@ -84,6 +89,8 @@ const ADMIN_BASE = "/v1/admin";
 
 /** Variables the create form hands the provider — the authored aggregate + an optional PDF. */
 export type CreateEventVars = CreateEventRequest & { programPdf?: File | null };
+/** Variables the legacy-эфир create form hands the provider — the 014 EARS-24 JSON body, no file part. */
+export type CreateLegacyBroadcastVars = LegacyBroadcastCreateBody;
 /** Variables the edit form hands the provider — a partial aggregate + an optional replacement PDF. */
 export type UpdateEventVars = UpdateEventRequest & { programPdf?: File | null };
 
@@ -449,6 +456,25 @@ export const dataProvider: DataProvider = {
       });
       if (!res.ok) throw await toHttpError(res);
       const data = (await res.json()) as TaxonomyDetail;
+      return { data: data as unknown as never };
+    }
+    if (resource === "legacy-broadcasts") {
+      // 014 EARS-24: a pre-platform эфир is authored in the ordinary create form
+      // with «Это архивный эфир» checked. Its body is JSON (no PDF, no partner)
+      // and the server — not the client — picks origin/state, so neither is sent.
+      const res = await fetch(`${ADMIN_BASE}/legacy-broadcasts`, {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          accept: "application/json",
+          "content-type": "application/json",
+          "idempotency-key": idempotencyKey(),
+          ...adminCsrfHeaders(),
+        },
+        body: JSON.stringify(variables as CreateLegacyBroadcastVars),
+      });
+      if (!res.ok) throw await toHttpError(res);
+      const data = (await res.json()) as EventAdminDetail;
       return { data: data as unknown as never };
     }
     if (resource !== "events") throw new Error(`unknown resource: ${resource}`);

@@ -27,7 +27,11 @@ import {
   FORM_SYNC_RESET_OPTIONS,
   eventFormFields,
 } from "@/lib/event-form-fields";
-import { EventFormSchema, type EventFormFields } from "@/lib/form-schemas";
+import {
+  EventEditFormSchema,
+  EventFormSchema,
+  type EventFormFields,
+} from "@/lib/form-schemas";
 import { useLocalizedResolver } from "@/lib/use-localized-resolver";
 
 /**
@@ -79,8 +83,6 @@ function legacySubmission(
   "legacy" | "recording" | "partnerRef" | "programPdf"
 > | null {
   if (!values.legacy) return null;
-  const posterRef = values.recording.posterRef.trim();
-  const durationText = values.recording.durationSecText.trim();
   return {
     legacy: true,
     partnerRef: null,
@@ -89,11 +91,10 @@ function legacySubmission(
       kind: values.recording.kind,
       provider: values.recording.provider,
       embedRef: values.recording.embedRef.trim(),
-      // An empty box means «нет постера» / «длительность неизвестна», and the
-      // API distinguishes an absent key from an explicit null — so the key is
-      // dropped rather than sent empty, exactly as the attach dialog does.
-      ...(posterRef.length === 0 ? {} : { posterRef }),
-      ...(durationText.length === 0 ? {} : { durationSec: Number(durationText) }),
+      // No poster and no duration: both are OPTIONAL in the SSOT body, and the
+      // owner refused authoring them by hand on Stage B (2026-09-03) — a poster
+      // is a file to upload and a duration is a fact to read off the recording's
+      // metadata, delivered by #1611 (EARS-20). Omitted keys, not empty ones.
     },
   };
 }
@@ -132,8 +133,15 @@ export function EventForm({
   const t = useTranslations();
   const form = useForm<EventFormFields>({
     mode: "onTouched",
+    // Create and edit author the same aggregate, but only the create form
+    // carries the «Запись» block — so only it may require one (#1849 review
+    // BLOCKER: the edit form of an архивный эфир refused to save against a
+    // recording it does not render).
     resolver: useLocalizedResolver(
-      EventFormSchema as unknown as z.ZodType<EventFormFields, EventFormFields>,
+      (detail ? EventEditFormSchema : EventFormSchema) as unknown as z.ZodType<
+        EventFormFields,
+        EventFormFields
+      >,
     ),
     defaultValues: eventFormFields(detail),
     // The form FOLLOWS the server aggregate (#1593). The detail page re-reads the
@@ -200,7 +208,9 @@ export function EventForm({
       programPdf,
       legacy: false,
       recording: null,
-      ...legacySubmission(fieldsValue),
+      // Only on CREATE: the route choice and the recording are authoring
+      // facts, and the detail page's update never carries either.
+      ...(detail ? null : legacySubmission(fieldsValue)),
     });
   }
 
@@ -273,7 +283,9 @@ export function EventForm({
           name="school"
           render={({ field }) => (
             <FormItem>
-              <FormLabel htmlFor="school">{t("events.fields.school")}</FormLabel>
+              <FormLabel htmlFor="school">
+                {t("events.fields.school")}
+              </FormLabel>
               <FormControl>
                 <Input id="school" {...field} />
               </FormControl>
@@ -305,9 +317,16 @@ export function EventForm({
             name="durationMin"
             render={({ field }) => (
               <FormItem>
-                <FormLabel htmlFor="durationMin">{t("events.fields.durationMin")}</FormLabel>
+                <FormLabel htmlFor="durationMin">
+                  {t("events.fields.durationMin")}
+                </FormLabel>
                 <FormControl>
-                  <Input id="durationMin" type="number" inputMode="numeric" {...field} />
+                  <Input
+                    id="durationMin"
+                    type="number"
+                    inputMode="numeric"
+                    {...field}
+                  />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -320,7 +339,9 @@ export function EventForm({
           name="description"
           render={({ field }) => (
             <FormItem>
-              <FormLabel htmlFor="description">{t("events.fields.description")}</FormLabel>
+              <FormLabel htmlFor="description">
+                {t("events.fields.description")}
+              </FormLabel>
               <FormControl>
                 <TokenTextarea id="description" {...field} />
               </FormControl>
@@ -334,7 +355,9 @@ export function EventForm({
           name="specialtiesText"
           render={({ field }) => (
             <FormItem>
-              <FormLabel htmlFor="specialties">{t("events.fields.specialties")}</FormLabel>
+              <FormLabel htmlFor="specialties">
+                {t("events.fields.specialties")}
+              </FormLabel>
               <FormControl>
                 <Input id="specialties" {...field} />
               </FormControl>
@@ -370,7 +393,10 @@ export function EventForm({
         </h2>
         <div className="flex flex-col gap-3" data-testid="speakers">
           {fields.map((row, i) => (
-            <div key={row.id} className="flex flex-col gap-3 sm:flex-row sm:items-start">
+            <div
+              key={row.id}
+              className="flex flex-col gap-3 sm:flex-row sm:items-start"
+            >
               <FormField
                 control={form.control}
                 name={`speakers.${i}.name`}
@@ -426,7 +452,9 @@ export function EventForm({
               // submit-validation (RHF applies the stale field-level result last,
               // wiping the full error set — probed live, #665). Unfocused append
               // keeps one submit click = the complete error picture.
-              onClick={() => append({ name: "", regalia: "" }, { shouldFocus: false })}
+              onClick={() =>
+                append({ name: "", regalia: "" }, { shouldFocus: false })
+              }
             >
               {t("events.fields.addSpeaker")}
             </Button>
@@ -437,50 +465,61 @@ export function EventForm({
             sponsor slot: the legacy body carries no `programPdf` part. */}
         {legacyVariant ? null : (
           <>
-          {/* Program PDF (EARS-1/2) — replaceable object-storage upload. */}
-          <h2 className="text-sm font-extrabold uppercase tracking-micro text-muted-foreground">
-            {t("events.sections.program")}
-          </h2>
-          {/* Not an RHF-controlled field (a File part, validated locally), so this is
+            {/* Program PDF (EARS-1/2) — replaceable object-storage upload. */}
+            <h2 className="text-sm font-extrabold uppercase tracking-micro text-muted-foreground">
+              {t("events.sections.program")}
+            </h2>
+            {/* Not an RHF-controlled field (a File part, validated locally), so this is
               a plain labelled block — `FormItem`/`FormLabel` require a `<FormField>`
               context (`useFormField`) and throw outside one. */}
-          <div className="flex flex-col gap-2.5">
-            <Label htmlFor="programPdf">{t("events.fields.programPdf")}</Label>
-            {detail?.programPdfUrl ? (
-              <p className="text-xs text-muted-foreground" data-testid="program-current">
-                {t("events.fields.programPdfCurrent")}:{" "}
-                <Link asChild>
-                  <a href={detail.programPdfUrl} target="_blank" rel="noreferrer">
-                    {detail.programPdfRef}
-                  </a>
-                </Link>
-              </p>
-            ) : null}
-            <Input
-              id="programPdf"
-              type="file"
-              accept={PDF_MIME}
-              data-testid="program-pdf"
-              aria-invalid={pdfError ? true : undefined}
-              onChange={(e) => {
-                const file = e.target.files?.[0] ?? null;
-                if (file && file.type !== PDF_MIME) {
-                  setProgramPdf(null);
-                  setPdfError(t("events.errors.invalidPdf"));
-                  return;
-                }
-                setProgramPdf(file);
-                setPdfError(null);
-              }}
-            />
-            {pdfError ? (
-              <FormError data-testid="program-pdf-error">{pdfError}</FormError>
-            ) : detail?.programPdfUrl ? (
-              <p className="text-xs text-muted-foreground">
-                {t("events.fields.programPdfReplaceHint")}
-              </p>
-            ) : null}
-          </div>
+            <div className="flex flex-col gap-2.5">
+              <Label htmlFor="programPdf">
+                {t("events.fields.programPdf")}
+              </Label>
+              {detail?.programPdfUrl ? (
+                <p
+                  className="text-xs text-muted-foreground"
+                  data-testid="program-current"
+                >
+                  {t("events.fields.programPdfCurrent")}:{" "}
+                  <Link asChild>
+                    <a
+                      href={detail.programPdfUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      {detail.programPdfRef}
+                    </a>
+                  </Link>
+                </p>
+              ) : null}
+              <Input
+                id="programPdf"
+                type="file"
+                accept={PDF_MIME}
+                data-testid="program-pdf"
+                aria-invalid={pdfError ? true : undefined}
+                onChange={(e) => {
+                  const file = e.target.files?.[0] ?? null;
+                  if (file && file.type !== PDF_MIME) {
+                    setProgramPdf(null);
+                    setPdfError(t("events.errors.invalidPdf"));
+                    return;
+                  }
+                  setProgramPdf(file);
+                  setPdfError(null);
+                }}
+              />
+              {pdfError ? (
+                <FormError data-testid="program-pdf-error">
+                  {pdfError}
+                </FormError>
+              ) : detail?.programPdfUrl ? (
+                <p className="text-xs text-muted-foreground">
+                  {t("events.fields.programPdfReplaceHint")}
+                </p>
+              ) : null}
+            </div>
           </>
         )}
 
@@ -525,9 +564,8 @@ export function EventForm({
                 names={{
                   provider: "recording.provider",
                   embedRef: "recording.embedRef",
-                  posterRef: "recording.posterRef",
-                  durationSecText: "recording.durationSecText",
                 }}
+                fields="source"
                 provider={form.watch("recording.provider")}
                 idPrefix="legacy-recording"
               />

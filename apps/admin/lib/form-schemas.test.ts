@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { EventFormSchema, type EventFormFields } from "./form-schemas";
+import {
+  EventEditFormSchema,
+  EventFormSchema,
+  type EventFormFields,
+} from "./form-schemas";
 
 /**
  * 014 EARS-24 (#1741) — the «Это архивный эфир» branch of the ONE create/edit
@@ -20,13 +24,7 @@ function fields(over: Partial<EventFormFields> = {}): EventFormFields {
     speakers: [],
     specialtiesText: "",
     legacy: false,
-    recording: {
-      kind: "edited",
-      provider: "rutube",
-      embedRef: "",
-      posterRef: "",
-      durationSecText: "",
-    },
+    recording: { kind: "edited", provider: "rutube", embedRef: "" },
     ...over,
   };
 }
@@ -47,13 +45,7 @@ describe("EventFormSchema — legacy эфир", () => {
     const malformed = EventFormSchema.safeParse(
       fields({
         legacy: true,
-        recording: {
-          kind: "edited",
-          provider: "rutube",
-          embedRef: "ччсапп",
-          posterRef: "",
-          durationSecText: "",
-        },
+        recording: { kind: "edited", provider: "rutube", embedRef: "ччсапп" },
       }),
     );
     expect(malformed.success).toBe(false);
@@ -69,8 +61,6 @@ describe("EventFormSchema — legacy эфир", () => {
           kind: "edited",
           provider: "rutube",
           embedRef: VALID_RUTUBE_CODE,
-          posterRef: "",
-          durationSecText: "",
         },
       }),
     );
@@ -85,15 +75,20 @@ describe("EventFormSchema — legacy эфир", () => {
     expect(
       EventFormSchema.safeParse(
         fields({
-          recording: {
-            kind: "edited",
-            provider: "rutube",
-            embedRef: "ччсапп",
-            posterRef: "",
-            durationSecText: "",
-          },
+          recording: { kind: "edited", provider: "rutube", embedRef: "ччсапп" },
         }),
       ).success,
     ).toBe(true);
+  });
+
+  it("014 EARS-24.7: editing a legacy эфир saves without a recording block", () => {
+    // On EDIT `legacy` is not a checkbox but the server's `origin`, and the
+    // «Запись» block is not rendered at all — recordings belong to the «Записи»
+    // tab by then. Requiring one here made an existing архивный эфир unsavable
+    // (#1849 review BLOCKER), so the edit schema drops the requirement while
+    // keeping every other rule (here: the optional «Школа / серия»).
+    const editing = fields({ legacy: true, school: "" });
+    expect(EventFormSchema.safeParse(editing).success).toBe(false);
+    expect(EventEditFormSchema.safeParse(editing).success).toBe(true);
   });
 });

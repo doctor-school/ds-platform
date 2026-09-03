@@ -637,6 +637,7 @@ function SourceDialog({
                 posterRef: "posterRef",
                 durationSecText: "durationSecText",
               }}
+              fields="full"
               provider={form.watch("provider")}
               idPrefix={testId}
             />

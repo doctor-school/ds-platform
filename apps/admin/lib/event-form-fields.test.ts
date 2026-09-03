@@ -65,13 +65,7 @@ describe("007 EARS-2/EARS-3 form fields projection (#1593)", () => {
       speakers: [],
       specialtiesText: "",
       legacy: false,
-      recording: {
-        kind: "edited",
-        provider: "rutube",
-        embedRef: "",
-        posterRef: "",
-        durationSecText: "",
-      },
+      recording: { kind: "edited", provider: "rutube", embedRef: "" },
     });
   });
 

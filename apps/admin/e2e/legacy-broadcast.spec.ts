@@ -73,7 +73,10 @@ async function shot(page: Page, name: string): Promise<void> {
  * `@ds/design-system` — so the dark evidence is captured by putting the app
  * under exactly that class rather than by inventing a control it does not have.
  */
-async function setPalette(page: Page, palette: "light" | "dark"): Promise<void> {
+async function setPalette(
+  page: Page,
+  palette: "light" | "dark",
+): Promise<void> {
   await page.evaluate((mode) => {
     document.documentElement.classList.toggle("dark", mode === "dark");
   }, palette);
@@ -165,8 +168,17 @@ test.describe("014 EARS-24 — «Это архивный эфир» on the admin
 
     await expect(page.getByTestId("legacy-recording")).toBeVisible();
     await expect(page.getByText(RECORDING_SECTION).first()).toBeVisible();
+    await expect(page.getByTestId("legacy-recording-kind")).toBeVisible();
     await expect(page.getByTestId("legacy-recording-provider")).toBeVisible();
     await expect(page.getByTestId("legacy-recording-embed-ref")).toBeVisible();
+    // …and NOTHING else. The owner refused authoring a poster as a storage key
+    // and a duration by hand (Stage B 2026-09-03): a poster is a file to upload
+    // and a duration is a fact to read off the recording, both delivered by
+    // #1611 (EARS-20). The block asks for the source and the source only.
+    await expect(page.getByTestId("legacy-recording-poster-ref")).toHaveCount(
+      0,
+    );
+    await expect(page.getByTestId("legacy-recording-duration")).toHaveCount(0);
     // No PDF and no partner — the legacy body carries neither.
     await expect(page.getByTestId("program-pdf")).toHaveCount(0);
     await expect(page.getByText(PROGRAM_SECTION)).toHaveCount(0);
@@ -240,6 +252,18 @@ test.describe("014 EARS-24 — «Это архивный эфир» on the admin
     await expect(page.getByTestId("action-hide-legacy")).toHaveCount(0);
 
     await shot(page, "created-legacy-detail-desktop-light");
+
+    // ── And it SAVES. The edit form renders no «Запись» block, so it must not
+    //    demand one either — the create-only requirement leaking into the edit
+    //    resolver made an existing архивный эфир permanently unsavable (#1849
+    //    review BLOCKER), with no visible error to explain the dead button.
+    await page.locator("#description").fill("Уточнили описание архива.");
+    await page.getByTestId("submit-event").click();
+    await expect(page.getByTestId("edit-ok")).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByTestId("edit-error")).toHaveCount(0);
+    await expect(page.locator("#description")).toHaveValue(
+      "Уточнили описание архива.",
+    );
 
     // ── The recording it was created WITH is on the «Записи» tab, in draft. ─
     await page.getByTestId("tab-recordings").click();

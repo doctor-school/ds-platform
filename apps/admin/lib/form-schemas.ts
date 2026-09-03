@@ -73,92 +73,107 @@ function parseSpecialties(text: string): string[] {
  * decision is one create form with a checkbox, so the checkbox is a FIELD here
  * and the recording rules are conditional rather than a parallel validator. The
  * recording sub-object is nested under `recording` so its issue paths end in the
- * very field names (`embedRef`, `posterRef`, `durationSecText`) the localized
+ * very field names (`embedRef`) the localized
  * resolver already branches on — the RU sentence an operator reads is the same
  * one the attach dialog shows, from the same SSOT refinement.
  */
-export const EventFormSchema = z
-  .object({
-    title: create.title,
-    // Validated in the refinement below, not here: «Школа / серия» is REQUIRED
-    // for a platform broadcast (`CreateEvent`) and optional for an архивный эфир
-    // (`LegacyBroadcastCreateBody` defaults it to ""), because an эфир that
-    // predates the platform routinely predates the series taxonomy too. Both
-    // rules are the SSOT's own — the branch picks which one applies.
-    school: z.string(),
-    startsAtMsk: create.startsAtMsk,
-    durationMin: create.durationMin,
-    description: create.description,
-    partnerRef: create.partnerRef,
-    speakers: create.speakers,
-    specialtiesText: z.string().superRefine((text, ctx) => {
-      const result = create.specialties.safeParse(parseSpecialties(text));
-      if (result.success) return;
-      for (const issue of result.error.issues) {
-        // A too_big at the ARRAY level (empty path) is the list-count cap → a `custom`
-        // issue the resolver maps to "too many"; a too_big on an element (numeric path)
-        // is a per-token length problem → keep the too_big code (mapped to "too long").
-        // NB: no baked `message` on either issue — an explicit issue message outranks
-        // the localized per-parse error map and would leak English (#200 precedent).
-        if (issue.code === "too_big" && issue.path.length === 0) {
-          ctx.addIssue({ code: "custom" });
-        } else {
-          ctx.addIssue({
-            code: "too_big",
-            origin: "string",
-            maximum: 100,
-            inclusive: true,
-          });
+export function eventFormSchema({
+  requireRecording,
+}: {
+  /**
+   * Whether the «Запись» block is part of THIS form — true on create with «Это
+   * архивный эфир» checked, false on the edit form of an existing эфир.
+   */
+  requireRecording: boolean;
+}) {
+  return z
+    .object({
+      title: create.title,
+      // Validated in the refinement below, not here: «Школа / серия» is REQUIRED
+      // for a platform broadcast (`CreateEvent`) and optional for an архивный эфир
+      // (`LegacyBroadcastCreateBody` defaults it to ""), because an эфир that
+      // predates the platform routinely predates the series taxonomy too. Both
+      // rules are the SSOT's own — the branch picks which one applies.
+      school: z.string(),
+      startsAtMsk: create.startsAtMsk,
+      durationMin: create.durationMin,
+      description: create.description,
+      partnerRef: create.partnerRef,
+      speakers: create.speakers,
+      specialtiesText: z.string().superRefine((text, ctx) => {
+        const result = create.specialties.safeParse(parseSpecialties(text));
+        if (result.success) return;
+        for (const issue of result.error.issues) {
+          // A too_big at the ARRAY level (empty path) is the list-count cap → a `custom`
+          // issue the resolver maps to "too many"; a too_big on an element (numeric path)
+          // is a per-token length problem → keep the too_big code (mapped to "too long").
+          // NB: no baked `message` on either issue — an explicit issue message outranks
+          // the localized per-parse error map and would leak English (#200 precedent).
+          if (issue.code === "too_big" && issue.path.length === 0) {
+            ctx.addIssue({ code: "custom" });
+          } else {
+            ctx.addIssue({
+              code: "too_big",
+              origin: "string",
+              maximum: 100,
+              inclusive: true,
+            });
+          }
+        }
+      }),
+      legacy: z.boolean(),
+      // Free-text at the object level; the CONDITIONAL rules below are what make it
+      // a real source triple, so an untouched block on a platform event is not an
+      // error the operator has to clear before saving.
+      recording: z.object({
+        kind: RecordingKindSchema,
+        provider: StreamProviderSchema,
+        embedRef: z.string(),
+      }),
+    })
+    .superRefine((values, ctx) => {
+      const school = (
+        values.legacy ? legacyCreate.school : create.school
+      ).safeParse(values.school);
+      if (!school.success) {
+        for (const issue of school.error.issues) {
+          const { message: _resolved, ...rest } = issue;
+          ctx.addIssue({ ...rest, path: ["school"] } as never);
         }
       }
-    }),
-    legacy: z.boolean(),
-    // Free-text at the object level; the CONDITIONAL rules below are what make it
-    // a real source triple, so an untouched block on a platform event is not an
-    // error the operator has to clear before saving.
-    recording: z.object({
-      kind: RecordingKindSchema,
-      provider: StreamProviderSchema,
-      embedRef: z.string(),
-      posterRef: z.string(),
-      durationSecText: z.string(),
-    }),
-  })
-  .superRefine((values, ctx) => {
-    const school = (
-      values.legacy ? legacyCreate.school : create.school
-    ).safeParse(values.school);
-    if (!school.success) {
-      for (const issue of school.error.issues) {
-        const { message: _resolved, ...rest } = issue;
-        ctx.addIssue({ ...rest, path: ["school"] } as never);
-      }
-    }
 
-    if (!values.legacy) return;
-    const result = RecordingSourceFormSchema.safeParse(values.recording);
-    if (result.success) return;
-    for (const issue of result.error.issues) {
-      // Re-pathed under `recording`, and stripped of its already-resolved
-      // `message`: an explicit message outranks the localized per-parse error
-      // map and would leak English into the form (#200 precedent). Everything
-      // else — the `custom` provider tag `params.shape` included — is carried
-      // through unchanged, which is what keeps this a fold of the SSOT rule
-      // rather than a second copy of it.
-      const { message: _resolved, path, ...rest } = issue;
-      ctx.addIssue({
-        ...rest,
-        path: ["recording", ...(path ?? [])],
-      } as never);
-    }
-  });
+      // The recording block is authored WITH the эфир and only then: on the edit
+      // form the «Записи» tab owns recordings, the block is not rendered, and a
+      // requirement here would make an existing архивный эфир unsavable.
+      if (!values.legacy || !requireRecording) return;
+      const result = RecordingSourceRefSchema.safeParse(values.recording);
+      if (result.success) return;
+      for (const issue of result.error.issues) {
+        // Re-pathed under `recording`, and stripped of its already-resolved
+        // `message`: an explicit message outranks the localized per-parse error
+        // map and would leak English into the form (#200 precedent). Everything
+        // else — the `custom` provider tag `params.shape` included — is carried
+        // through unchanged, which is what keeps this a fold of the SSOT rule
+        // rather than a second copy of it.
+        const { message: _resolved, path, ...rest } = issue;
+        ctx.addIssue({
+          ...rest,
+          path: ["recording", ...(path ?? [])],
+        } as never);
+      }
+    });
+}
+
+/** The CREATE form's schema — the recording block is part of it. */
+export const EventFormSchema = eventFormSchema({ requireRecording: true });
+
+/** The EDIT form's schema — recordings live in the «Записи» tab by then. */
+export const EventEditFormSchema = eventFormSchema({ requireRecording: false });
 
 export interface EventRecordingFields {
   kind: RecordingKind;
   provider: StreamProvider;
   embedRef: string;
-  posterRef: string;
-  durationSecText: string;
 }
 
 export interface EventFormFields {
@@ -357,10 +372,27 @@ export interface PartnerFormFields {
  * form layer and only a NON-empty value is folded back through the SSOT
  * validator; the panel converts «» to the `null`/absent the API expects.
  */
-export const RecordingSourceFormSchema = z
-  .object({
-    provider: StreamProviderSchema,
-    embedRef: EmbedRefSchema,
+const recordingSourceRef = z.object({
+  provider: StreamProviderSchema,
+  embedRef: EmbedRefSchema,
+});
+
+/**
+ * The source REFERENCE alone — provider + embed reference, with the SSOT
+ * per-provider shape refinement. It is what the create-event form's «Запись»
+ * block asks for (014 EARS-24): the owner refused a poster typed as a storage
+ * key and a hand-typed duration on Stage B (2026-09-03), and both arrive as a
+ * file upload / a metadata read in #1611 (EARS-20). Sharing the base object
+ * keeps «is this a valid rutube id» a single answer across all three surfaces.
+ */
+export const RecordingSourceRefSchema = recordingSourceRef.superRefine(
+  (values, ctx) => {
+    refineEmbedRefForProvider(ctx, values.provider, values.embedRef);
+  },
+);
+
+export const RecordingSourceFormSchema = recordingSourceRef
+  .extend({
     posterRef: z.string(),
     durationSecText: z.string(),
   })

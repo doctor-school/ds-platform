@@ -48,8 +48,6 @@ export function eventFormFields(detail?: EventAdminDetail): EventFormFields {
       kind: RECORDING_KINDS[0],
       provider: STREAM_PROVIDERS[0],
       embedRef: "",
-      posterRef: "",
-      durationSecText: "",
     },
   };
 }

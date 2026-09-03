@@ -138,7 +138,7 @@ export class EventsRepository {
     });
   }
 
-/**
+  /**
    * 014 EARS-24 (#1741) — persist a whole `legacy` эфир: the event row, its
    * ordered speaker rows AND the one `event_recordings` row it exists to carry,
    * in a SINGLE transaction.
@@ -169,7 +169,9 @@ export class EventsRepository {
           .insert(eventSpeakers)
           .values(speakers.map((s) => ({ ...s, eventId: row.id })));
       }
-      await tx.insert(eventRecordings).values({ ...recording, eventId: row.id });
+      await tx
+        .insert(eventRecordings)
+        .values({ ...recording, eventId: row.id });
       return {
         event: row,
         speakers: speakers.map((s) => ({
@@ -486,10 +488,7 @@ export class EventsRepository {
         .select({ count: sql<number>`count(*)::int` })
         .from(events)
         .where(
-          and(
-            ACTIVE_EVENT,
-            inArray(events.state, [...PAST_BROADCAST_STATES]),
-          ),
+          and(ACTIVE_EVENT, inArray(events.state, [...PAST_BROADCAST_STATES])),
         ),
     ]);
     return {

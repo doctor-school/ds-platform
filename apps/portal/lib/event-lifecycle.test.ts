@@ -31,6 +31,13 @@ describe("004 EARS-4 toCanvasStatus — projection state → canvas status enum"
   it("EARS-4: when the event is hidden, the mapping shall not contradict the machine (hidden stays hidden, never live/upcoming)", () => {
     expect(toCanvasStatus("hidden")).toBe("hidden");
   });
+
+  it("014 EARS-26: in_archive resolves to the ended canvas status — an archived legacy эфир renders exactly as an ended broadcast", () => {
+    // No separate archive artboard exists because there is no separate render:
+    // `in_archive` is an ADMIN lifecycle fact (014-design §3.1). A distinct
+    // canvas status here would be the second public surface EARS-26 forbids.
+    expect(toCanvasStatus("in_archive")).toBe("ended");
+  });
 });
 
 describe("004 EARS-4 resolvePrimaryCta — the single participation CTA target", () => {

@@ -585,7 +585,10 @@ test.describe("014 EARS-8 the raw-original spoiler (e2e)", () => {
     });
 
     await expect(page.getByTestId("recording-spoiler")).toHaveCount(0);
-    await expect(page.locator("details")).toHaveCount(0);
+    // Scoped to the event page itself: the app shell's mobile menu is its own
+    // `<details>`, so a page-wide count would assert against the chrome rather
+    // than against the absence of a secondary recording control.
+    await expect(page.locator("main details")).toHaveCount(0);
 
     const html = await page.content();
     for (const forbidden of [
@@ -622,6 +625,8 @@ test.describe("014 EARS-8 the raw-original spoiler (e2e)", () => {
     // The player is there — this is a published recording, just not two of them.
     await expect(page.getByTestId("recording-player").first()).toBeVisible();
     await expect(page.getByTestId("recording-spoiler")).toHaveCount(0);
-    await expect(page.locator("details")).toHaveCount(0);
+    // Same scoping as the guest test above — the shell's mobile menu is a
+    // `<details>` that belongs to the chrome, not to the player card.
+    await expect(page.locator("main details")).toHaveCount(0);
   });
 });

@@ -152,7 +152,7 @@ stateDiagram-v2
 
 ```mermaid
 stateDiagram-v2
-  [*] --> hidden : created via «Архивный эфир» (born hidden)
+  [*] --> hidden : created with «Это архивный эфир» checked (born hidden)
   hidden --> in_archive : ArchiveLegacyBroadcast («Архивировать»)
   in_archive --> hidden : HideLegacyBroadcast («Скрыть»)
 ```
@@ -281,7 +281,7 @@ The tabbed composition is the Product Lead's Stage-A pick — option B, 2026-08-
 
 **The lifecycle bar renders the event's own machine and nothing else** (§3.1). On a `platform` event it offers 007's commands, with «Скрыть» as the terminal one; on a `legacy` event it offers exactly «Архивировать» and «Скрыть», derived from `EventAdminDetail.validTransitions` as 007 already does, so «Выйти в эфир» is never on a `legacy` эфир and the two vocabularies never share a screen.
 
-**«Архивный эфир» — a distinct admin creation entry** for a pre-platform broadcast, separate from the ordinary event-create entry. Its form takes a title, a held-at instant, a duration, speakers and a recording (upload or attach); it creates the эфир with `origin: legacy` in `hidden`, and the operator archives it by the explicit «Архивировать» command once the recording is published. The spec names the surface and its fields, not its look — the look is Stage-A/B gated at [#1741](https://github.com/doctor-school/ds-platform/issues/1741) under `build-ui-from-design-system`. The automated import of [#1742](https://github.com/doctor-school/ds-platform/issues/1742) lands events through this same creation path, never a second one.
+**«Это архивный эфир» — a checkbox on the ordinary create-event form**, not a second entry and not a second page. There is ONE admin creation surface; checking the box switches it to the legacy variant: the date field reads «Дата и время проведения (МСК)», the partner field and the «Программа (PDF)» section disappear, and a mandatory «Запись» section appears (kind, provider, embed reference, optional poster and duration). Checked, the form posts `POST /v1/admin/legacy-broadcasts` instead of the ordinary multipart create; unchecked, the form behaves exactly as 007 authored it. The client never sends `origin` or `state` — the server selects the machine by route and creates the эфир with `origin: legacy` in `hidden`, and the operator archives it by the explicit «Архивировать» command once the recording is published. Owner decision, 2026-09-03: «Просто при создании мероприятия должна быть галочка "Это архивный эфир" и всё.» The automated import of [#1742](https://github.com/doctor-school/ds-platform/issues/1742) lands events through this same route, never a second one.
 
 ```mermaid
 sequenceDiagram

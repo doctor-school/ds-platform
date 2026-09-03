@@ -165,6 +165,18 @@ export function translateIssue(issue: ZodIssueLike, t: Translator): string {
   }
   if (has("directionId")) return t("direction");
   if (has("expectedBy")) return t("expectedBy");
+  // 014 EARS-24 (#1741): the recording block the «Это архивный эфир» checkbox
+  // opens INSIDE the event form. Its issues arrive nested (`recording.*`), which
+  // is deliberate — every branch above keys off the leaf name and therefore
+  // already speaks for the embed reference and the poster. Duration is the one
+  // leaf that must not be shared: this box holds SECONDS while the event's own
+  // «Длительность» box holds MINUTES, so the event catalog's sentence would quote
+  // the wrong unit and the wrong cap under a box the operator cannot fix by it.
+  if (has("recording") && has("durationSecText")) {
+    return issue.code === "too_big"
+      ? t("recordingDurationMax")
+      : t("recordingDuration");
+  }
   if (has("posterRef")) return t("maxLength");
   if (has("durationSecText")) {
     return issue.code === "too_big" ? t("durationMax") : t("duration");

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
 import { useTranslations } from "next-intl";
 import type { z } from "zod";
-import { Button, Input, Label, Link } from "@ds/design-system";
+import { Button, Checkbox, Input, Label, Link } from "@ds/design-system";
 import {
   Form,
   FormControl,
@@ -14,8 +14,14 @@ import {
   FormLabel,
   FormMessage,
 } from "@ds/design-system/form";
-import type { EventAdminDetail, SpeakerEntry } from "@ds/schemas";
-import { TokenTextarea } from "@/components/fields";
+import {
+  type AttachRecordingRequest,
+  type EventAdminDetail,
+  RECORDING_KINDS,
+  type SpeakerEntry,
+} from "@ds/schemas";
+import { TokenSelect, TokenTextarea } from "@/components/fields";
+import { RecordingSourceFieldSet } from "@/components/recording-source-fields";
 import {
   FORM_SAVED_RESET_OPTIONS,
   FORM_SYNC_RESET_OPTIONS,
@@ -40,9 +46,57 @@ export interface EventFormValues {
   specialties: string[];
   partnerRef: string | null;
   programPdf: File | null;
+  /**
+   * 014 EARS-24 — «Это архивный эфир». The page picks the ROUTE off this flag
+   * (`POST /v1/admin/legacy-broadcasts` vs the ordinary multipart create); the
+   * form never sends `origin`, which is server-assigned.
+   */
+  legacy: boolean;
+  /**
+   * The recording an архивный эфир is created WITH — `null` for a platform
+   * event, which carries no recording at authoring time. Already normalized to
+   * the API shape (empty optional boxes dropped, seconds parsed).
+   */
+  recording: AttachRecordingRequest | null;
 }
 
 const PDF_MIME = "application/pdf";
+
+/**
+ * The legacy half of the submitted payload (014 EARS-24).
+ *
+ * Split out of `submit` because it is where the checkbox stops being a
+ * rendering concern and becomes a CONTRACT one: an unchecked form emits exactly
+ * what it emitted before this feature existed, and a checked one emits the
+ * `LegacyBroadcastCreateBody` shape — no sponsor, no programme file, and a
+ * recording that is required rather than optional (the resolver has already
+ * refused an empty one by the time this runs).
+ */
+function legacySubmission(
+  values: EventFormFields,
+): Pick<
+  EventFormValues,
+  "legacy" | "recording" | "partnerRef" | "programPdf"
+> | null {
+  if (!values.legacy) return null;
+  const posterRef = values.recording.posterRef.trim();
+  const durationText = values.recording.durationSecText.trim();
+  return {
+    legacy: true,
+    partnerRef: null,
+    programPdf: null,
+    recording: {
+      kind: values.recording.kind,
+      provider: values.recording.provider,
+      embedRef: values.recording.embedRef.trim(),
+      // An empty box means «нет постера» / «длительность неизвестна», and the
+      // API distinguishes an absent key from an explicit null — so the key is
+      // dropped rather than sent empty, exactly as the attach dialog does.
+      ...(posterRef.length === 0 ? {} : { posterRef }),
+      ...(durationText.length === 0 ? {} : { durationSec: Number(durationText) }),
+    },
+  };
+}
 
 /**
  * The shared create/edit aggregate form (design §4, §8). Client-side validation
@@ -103,6 +157,15 @@ export function EventForm({
   const [pdfError, setPdfError] = useState<string | null>(null);
   // What the last submit sent — the baseline a landed save re-bases the form on.
   const submitted = useRef<EventFormFields | null>(null);
+  // Which FIELD VARIANT this form renders (014 EARS-24). On CREATE it follows
+  // the checkbox live; on EDIT it is the эфир's server-assigned `origin`, which
+  // no control can change — an архивный эфир cannot become a platform broadcast
+  // and vice versa, so the edit form reads the fact rather than offering it.
+  const legacyChecked = form.watch("legacy");
+  const legacyVariant = detail ? detail.origin === "legacy" : legacyChecked;
+  // The recording block exists only while the эфир is being CREATED: after that
+  // its recordings belong to the «Записи» tab, which owns publish/retire too.
+  const isCreateLegacy = !detail && legacyChecked;
 
   useEffect(() => {
     if (!savedAt || !submitted.current) return;
@@ -125,8 +188,19 @@ export function EventForm({
         .split(",")
         .map((s) => s.trim())
         .filter(Boolean),
-      partnerRef: fieldsValue.partnerRef.trim() ? fieldsValue.partnerRef.trim() : null,
+      // The legacy branch OVERRIDES both of these with nothing on purpose: an
+      // архивный эфир has neither a sponsor slot nor a programme file in its
+      // API body, and the boxes it does not render must not smuggle values a
+      // `.strict()` schema would refuse. Toggling the checkbox back restores
+      // whatever was typed — the fields keep their state, only the payload
+      // changes.
+      partnerRef: fieldsValue.partnerRef.trim()
+        ? fieldsValue.partnerRef.trim()
+        : null,
       programPdf,
+      legacy: false,
+      recording: null,
+      ...legacySubmission(fieldsValue),
     });
   }
 
@@ -141,6 +215,44 @@ export function EventForm({
         <h2 className="text-sm font-extrabold uppercase tracking-micro text-muted-foreground">
           {t("events.sections.details")}
         </h2>
+
+        {/* 014 EARS-24 — the ONE decision that shapes the rest of the form. On
+            create it is the operator's checkbox; on edit it is the server's
+            `origin`, which is not editable (an эфир cannot become a broadcast),
+            so the edit form states it as a fact instead of offering a control. */}
+        {detail ? (
+          detail.origin === "legacy" ? (
+            <p
+              className="text-sm font-bold text-foreground"
+              data-testid="legacy-badge"
+            >
+              {t("events.legacyBadge")}
+            </p>
+          ) : null
+        ) : (
+          <FormField
+            control={form.control}
+            name="legacy"
+            render={({ field }) => (
+              <FormItem>
+                <FormControl>
+                  <Checkbox
+                    id="legacy"
+                    data-testid="legacy-toggle"
+                    checked={field.value}
+                    name={field.name}
+                    onBlur={field.onBlur}
+                    onChange={(e) => field.onChange(e.target.checked)}
+                    ref={field.ref}
+                  >
+                    {t("events.fields.legacyToggle")}
+                  </Checkbox>
+                </FormControl>
+                <FormMessage>{t("events.fields.legacyToggleHint")}</FormMessage>
+              </FormItem>
+            )}
+          />
+        )}
 
         <FormField
           control={form.control}
@@ -176,7 +288,11 @@ export function EventForm({
             name="startsAtMsk"
             render={({ field }) => (
               <FormItem>
-                <FormLabel htmlFor="startsAtMsk">{t("events.fields.startsAtMsk")}</FormLabel>
+                <FormLabel htmlFor="startsAtMsk">
+                  {legacyVariant
+                    ? t("events.fields.heldAtMsk")
+                    : t("events.fields.startsAtMsk")}
+                </FormLabel>
                 <FormControl>
                   <Input id="startsAtMsk" type="datetime-local" {...field} />
                 </FormControl>
@@ -227,19 +343,26 @@ export function EventForm({
           )}
         />
 
-        <FormField
-          control={form.control}
-          name="partnerRef"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel htmlFor="partnerRef">{t("events.fields.partnerRef")}</FormLabel>
-              <FormControl>
-                <Input id="partnerRef" {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+        {/* No sponsor slot on an архивный эфир: the legacy body has no
+            `partnerRef` at all (014-design §3.1), so offering the box would be
+            offering a value the API refuses. */}
+        {legacyVariant ? null : (
+          <FormField
+            control={form.control}
+            name="partnerRef"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel htmlFor="partnerRef">
+                  {t("events.fields.partnerRef")}
+                </FormLabel>
+                <FormControl>
+                  <Input id="partnerRef" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        )}
 
         {/* Speakers — ordered free-text entries (LD-1). */}
         <h2 className="text-sm font-extrabold uppercase tracking-micro text-muted-foreground">
@@ -310,50 +433,107 @@ export function EventForm({
           </div>
         </div>
 
-        {/* Program PDF (EARS-1/2) — replaceable object-storage upload. */}
-        <h2 className="text-sm font-extrabold uppercase tracking-micro text-muted-foreground">
-          {t("events.sections.program")}
-        </h2>
-        {/* Not an RHF-controlled field (a File part, validated locally), so this is
-            a plain labelled block — `FormItem`/`FormLabel` require a `<FormField>`
-            context (`useFormField`) and throw outside one. */}
-        <div className="flex flex-col gap-2.5">
-          <Label htmlFor="programPdf">{t("events.fields.programPdf")}</Label>
-          {detail?.programPdfUrl ? (
-            <p className="text-xs text-muted-foreground" data-testid="program-current">
-              {t("events.fields.programPdfCurrent")}:{" "}
-              <Link asChild>
-                <a href={detail.programPdfUrl} target="_blank" rel="noreferrer">
-                  {detail.programPdfRef}
-                </a>
-              </Link>
-            </p>
-          ) : null}
-          <Input
-            id="programPdf"
-            type="file"
-            accept={PDF_MIME}
-            data-testid="program-pdf"
-            aria-invalid={pdfError ? true : undefined}
-            onChange={(e) => {
-              const file = e.target.files?.[0] ?? null;
-              if (file && file.type !== PDF_MIME) {
-                setProgramPdf(null);
-                setPdfError(t("events.errors.invalidPdf"));
-                return;
-              }
-              setProgramPdf(file);
-              setPdfError(null);
-            }}
-          />
-          {pdfError ? (
-            <FormError data-testid="program-pdf-error">{pdfError}</FormError>
-          ) : detail?.programPdfUrl ? (
-            <p className="text-xs text-muted-foreground">
-              {t("events.fields.programPdfReplaceHint")}
-            </p>
-          ) : null}
-        </div>
+        {/* No programme file on an архивный эфир either — same reason as the
+            sponsor slot: the legacy body carries no `programPdf` part. */}
+        {legacyVariant ? null : (
+          <>
+          {/* Program PDF (EARS-1/2) — replaceable object-storage upload. */}
+          <h2 className="text-sm font-extrabold uppercase tracking-micro text-muted-foreground">
+            {t("events.sections.program")}
+          </h2>
+          {/* Not an RHF-controlled field (a File part, validated locally), so this is
+              a plain labelled block — `FormItem`/`FormLabel` require a `<FormField>`
+              context (`useFormField`) and throw outside one. */}
+          <div className="flex flex-col gap-2.5">
+            <Label htmlFor="programPdf">{t("events.fields.programPdf")}</Label>
+            {detail?.programPdfUrl ? (
+              <p className="text-xs text-muted-foreground" data-testid="program-current">
+                {t("events.fields.programPdfCurrent")}:{" "}
+                <Link asChild>
+                  <a href={detail.programPdfUrl} target="_blank" rel="noreferrer">
+                    {detail.programPdfRef}
+                  </a>
+                </Link>
+              </p>
+            ) : null}
+            <Input
+              id="programPdf"
+              type="file"
+              accept={PDF_MIME}
+              data-testid="program-pdf"
+              aria-invalid={pdfError ? true : undefined}
+              onChange={(e) => {
+                const file = e.target.files?.[0] ?? null;
+                if (file && file.type !== PDF_MIME) {
+                  setProgramPdf(null);
+                  setPdfError(t("events.errors.invalidPdf"));
+                  return;
+                }
+                setProgramPdf(file);
+                setPdfError(null);
+              }}
+            />
+            {pdfError ? (
+              <FormError data-testid="program-pdf-error">{pdfError}</FormError>
+            ) : detail?.programPdfUrl ? (
+              <p className="text-xs text-muted-foreground">
+                {t("events.fields.programPdfReplaceHint")}
+              </p>
+            ) : null}
+          </div>
+          </>
+        )}
+
+        {/* The recording an архивный эфир exists to carry (014 EARS-24). It
+            rides the SAME request as the event, so it is a section of this form
+            rather than a follow-up step — a create that could succeed without
+            one would leave an эфир that can never be archived. Only on CREATE:
+            once the эфир exists, the «Записи» tab owns its recordings. */}
+        {isCreateLegacy ? (
+          <>
+            <h2 className="text-sm font-extrabold uppercase tracking-micro text-muted-foreground">
+              {t("events.sections.recording")}
+            </h2>
+            <div className="flex flex-col gap-5" data-testid="legacy-recording">
+              <FormField
+                control={form.control}
+                name="recording.kind"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel htmlFor="legacy-recording-kind">
+                      {t("events.fields.recordingKind")}
+                    </FormLabel>
+                    <FormControl>
+                      <TokenSelect
+                        id="legacy-recording-kind"
+                        data-testid="legacy-recording-kind"
+                        {...field}
+                      >
+                        {RECORDING_KINDS.map((kind) => (
+                          <option key={kind} value={kind}>
+                            {t(`recordings.kinds.${kind}`)}
+                          </option>
+                        ))}
+                      </TokenSelect>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <RecordingSourceFieldSet
+                control={form.control}
+                names={{
+                  provider: "recording.provider",
+                  embedRef: "recording.embedRef",
+                  posterRef: "recording.posterRef",
+                  durationSecText: "recording.durationSecText",
+                }}
+                provider={form.watch("recording.provider")}
+                idPrefix="legacy-recording"
+              />
+            </div>
+          </>
+        ) : null}
 
         <div>
           <Button type="submit" loading={submitting} data-testid="submit-event">

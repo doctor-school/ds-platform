@@ -9,13 +9,20 @@ import type { EventAdminDetail } from "@ds/schemas";
 import { AppShell } from "@/components/app-shell";
 import { BackToList } from "@/components/back-to-list";
 import { EventForm } from "@/components/event-form";
-import type { CreateEventVars } from "@/providers/data-provider";
+import type {
+  CreateEventVars,
+  CreateLegacyBroadcastVars,
+} from "@/providers/data-provider";
 
 /**
  * Create-event page (EARS-1) — the operator authors a `draft` event with the full
  * field set + program PDF; on success it routes to the event's edit page (where
  * the stream config + lifecycle actions live). Stock DS form (EARS-11), RU copy
  * (EARS-10). The multipart create rides `dataProvider.create`.
+ *
+ * 014 EARS-24 — with «Это архивный эфир» checked the same form emits a legacy
+ * body instead: JSON to `POST /v1/admin/legacy-broadcasts`, no PDF and no
+ * partner, the recording included. Both routes land on the same detail page.
  */
 export default function CreateEventPage() {
   const t = useTranslations();
@@ -42,6 +49,31 @@ export default function CreateEventPage() {
           submitting={mutation.isPending}
           onSubmit={(values) => {
             setError(null);
+            const onSuccess = (data: { data: unknown }) => {
+              const created = data.data as EventAdminDetail;
+              router.push(`/events/${created.id}`);
+            };
+            if (values.legacy && values.recording) {
+              const legacyVars: CreateLegacyBroadcastVars = {
+                title: values.title,
+                school: values.school,
+                heldAtMsk: values.startsAtMsk,
+                durationMin: values.durationMin,
+                description: values.description,
+                speakers: values.speakers,
+                specialties: values.specialties,
+                recording: values.recording,
+              };
+              create(
+                { resource: "legacy-broadcasts", values: legacyVars },
+                {
+                  onSuccess,
+                  onError: () =>
+                    setError(t("events.errors.createLegacyFailed")),
+                },
+              );
+              return;
+            }
             const vars: CreateEventVars = {
               title: values.title,
               school: values.school,
@@ -56,10 +88,7 @@ export default function CreateEventPage() {
             create(
               { resource: "events", values: vars },
               {
-                onSuccess: (data) => {
-                  const created = data.data as unknown as EventAdminDetail;
-                  router.push(`/events/${created.id}`);
-                },
+                onSuccess,
                 onError: () => setError(t("events.errors.createFailed")),
               },
             );

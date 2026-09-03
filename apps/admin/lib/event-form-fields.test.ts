@@ -64,7 +64,22 @@ describe("007 EARS-2/EARS-3 form fields projection (#1593)", () => {
       partnerRef: "",
       speakers: [],
       specialtiesText: "",
+      legacy: false,
+      recording: {
+        kind: "edited",
+        provider: "rutube",
+        embedRef: "",
+        posterRef: "",
+        durationSecText: "",
+      },
     });
+  });
+
+  it("014 EARS-24: a legacy detail projects `legacy: true`, a platform detail `false`", () => {
+    expect(eventFormFields({ ...detail, origin: "legacy" }).legacy).toBe(true);
+    expect(eventFormFields({ ...detail, origin: "platform" }).legacy).toBe(
+      false,
+    );
   });
 
   it("EARS-3: the stream fields are derived from the detail's configured provider and reference", () => {

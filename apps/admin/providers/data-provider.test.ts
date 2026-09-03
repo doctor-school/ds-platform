@@ -116,3 +116,54 @@ describe("dataProvider.custom — refusal envelopes (#1593)", () => {
     expect(error.errorCode).toBe("IDEMPOTENCY_KEY_REUSED");
   });
 });
+
+describe("dataProvider.create — legacy broadcasts (014 EARS-24, #1741)", () => {
+  it("014 EARS-24.3: legacy-broadcasts create posts JSON with Idempotency-Key and no origin/state", async () => {
+    const fetchStub = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ id: "evt-legacy-1" }), {
+          status: 201,
+          headers: { "content-type": "application/json" },
+        }),
+    );
+    globalThis.fetch = fetchStub as unknown as typeof fetch;
+
+    const result = await dataProvider.create({
+      resource: "legacy-broadcasts",
+      variables: {
+        title: "Архивный эфир",
+        school: "",
+        heldAtMsk: "2024-03-01T18:00",
+        durationMin: 90,
+        description: "",
+        speakers: [{ name: "Докладчик", regalia: "" }],
+        specialties: [],
+        recording: {
+          kind: "edited",
+          provider: "rutube",
+          embedRef: "a".repeat(32),
+        },
+      },
+    });
+
+    expect((result.data as unknown as { id: string }).id).toBe("evt-legacy-1");
+    expect(fetchStub).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchStub.mock.calls[0] as unknown as [
+      string,
+      RequestInit,
+    ];
+    expect(url).toBe("/v1/admin/legacy-broadcasts");
+    expect(init.method).toBe("POST");
+    const headers = init.headers as Record<string, string>;
+    expect(headers["content-type"]).toBe("application/json");
+    expect(headers["idempotency-key"]).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+    );
+    const body = JSON.parse(init.body as string) as Record<string, unknown>;
+    expect(Object.keys(body)).not.toContain("origin");
+    expect(Object.keys(body)).not.toContain("state");
+    expect(Object.keys(body)).not.toContain("partnerRef");
+    expect(Object.keys(body)).not.toContain("programPdf");
+    expect(body.heldAtMsk).toBe("2024-03-01T18:00");
+  });
+});

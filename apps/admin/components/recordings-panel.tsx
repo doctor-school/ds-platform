@@ -45,7 +45,7 @@ import {
   STREAM_PROVIDERS,
   type UpdateRecordingRequest,
 } from "@ds/schemas";
-import { TokenSelect } from "@/components/fields";
+import { RecordingSourceFieldSet } from "@/components/recording-source-fields";
 import {
   type RecordingExpectedByFields,
   RecordingExpectedByFormSchema,
@@ -95,10 +95,19 @@ export function RecordingsPanel({
   const [errorKey, setErrorKey] = useState<string | null>(null);
   const [noticeKey, setNoticeKey] = useState<string | null>(null);
 
+  /**
+   * A successful recording command refetches the EVENT as well as the panel:
+   * since 014 EARS-25 the `hidden → in_archive` edge is offered only while the
+   * эфир has a published recording, so publishing (or retiring) one here changes
+   * the transitions bar on the «Основное» tab. Without this the operator
+   * publishes the recording, switches tabs and finds no «Архивировать» until a
+   * manual reload — the bar would be showing a precondition that no longer holds.
+   */
   function announce(toastKey: string) {
     setErrorKey(null);
     setNoticeKey(toastKey);
     void query.refetch();
+    onEventChanged();
   }
 
   function fail(error: unknown, fallbackKey: string) {
@@ -158,10 +167,7 @@ export function RecordingsPanel({
       <ExpectedByForm
         eventId={eventId}
         value={list.recordingExpectedBy}
-        onSaved={() => {
-          announce("recordings.toast.expectedBySaved");
-          onEventChanged();
-        }}
+        onSaved={() => announce("recordings.toast.expectedBySaved")}
         onError={(error) => fail(error, "recordings.errors.expectedByFailed")}
       />
 
@@ -623,96 +629,16 @@ function SourceDialog({
             noValidate
             onSubmit={form.handleSubmit(submit)}
           >
-            <FormField
+            <RecordingSourceFieldSet
               control={form.control}
-              name="provider"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel htmlFor={`${testId}-provider`}>
-                    {t("recordings.fields.provider")}
-                  </FormLabel>
-                  <FormControl>
-                    <TokenSelect
-                      id={`${testId}-provider`}
-                      data-testid={`${testId}-provider`}
-                      {...field}
-                    >
-                      {STREAM_PROVIDERS.map((provider) => (
-                        <option key={provider} value={provider}>
-                          {t(`events.providers.${provider}`)}
-                        </option>
-                      ))}
-                    </TokenSelect>
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="embedRef"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel htmlFor={`${testId}-embed-ref`}>
-                    {t("recordings.fields.embedRef")}
-                  </FormLabel>
-                  <FormControl>
-                    <Input
-                      id={`${testId}-embed-ref`}
-                      data-testid={`${testId}-embed-ref`}
-                      {...field}
-                    />
-                  </FormControl>
-                  {/* The reference shape differs per provider (#1134) — the hint
-                      tracks the selected one, exactly as the stream form does. */}
-                  <FormMessage>
-                    {t(`events.fields.embedRefHint.${form.watch("provider")}`)}
-                  </FormMessage>
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="posterRef"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel htmlFor={`${testId}-poster-ref`}>
-                    {t("recordings.fields.posterRef")}
-                  </FormLabel>
-                  <FormControl>
-                    <Input
-                      id={`${testId}-poster-ref`}
-                      data-testid={`${testId}-poster-ref`}
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage>
-                    {t("recordings.fields.posterRefHint")}
-                  </FormMessage>
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="durationSecText"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel htmlFor={`${testId}-duration`}>
-                    {t("recordings.fields.durationSec")}
-                  </FormLabel>
-                  <FormControl>
-                    <Input
-                      id={`${testId}-duration`}
-                      data-testid={`${testId}-duration`}
-                      inputMode="numeric"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage>
-                    {t("recordings.fields.durationSecHint")}
-                  </FormMessage>
-                </FormItem>
-              )}
+              names={{
+                provider: "provider",
+                embedRef: "embedRef",
+                posterRef: "posterRef",
+                durationSecText: "durationSecText",
+              }}
+              provider={form.watch("provider")}
+              idPrefix={testId}
             />
             <div className="flex justify-end gap-2">
               <Button

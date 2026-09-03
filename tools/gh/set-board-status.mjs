@@ -19,9 +19,21 @@
  * Canon: AGENTS.md §2 + §6 ("set board Status = Done"), .claude/rules/repo-conventions.md
  * (Issue conventions), memory `feedback_project_status_done_on_merge` (board ids).
  *
+ * Queue-position guard (#1855): `In Progress` is the claim marker, so the claim
+ * is where priority is actually decided. Setting `In Progress` therefore refuses
+ * (exit 3) an Issue that sits outside its track's queue-head milestone — the open
+ * release milestone with the earliest owner-set `due_on`. Allowed without a flag:
+ * the queue head itself, «Platform ops & hardening», a `track:platform` Issue
+ * outside any track release, and an `epic:` container. Override with
+ * `--ahead-of-queue "<verbatim owner quote>"`, which proceeds AND posts the quote
+ * as the `claim:` comment so `pnpm backlog:triage` sees the claim and the reason.
+ * Rules live in tools/gh/lib/queue-position.mjs; `--resolve` prints the computed
+ * position and writes nothing.
+ *
  * Usage:
  *   node tools/gh/set-board-status.mjs <issue#> <Todo|In Progress|Review|Done>
- *   node tools/gh/set-board-status.mjs <issue#> --resolve   # read-only: print item id, no write
+ *   node tools/gh/set-board-status.mjs <issue#> "In Progress" --ahead-of-queue "<owner quote>"
+ *   node tools/gh/set-board-status.mjs <issue#> --resolve   # read-only: print item id + queue position
  *   pnpm board:status <issue#> <status>                     # alias
  *
  * Safety: every `gh` call uses an explicit argv array (no shell string) — no command
@@ -31,8 +43,10 @@
  * and the resolved values are what the mutation uses.
  *
  * Exit codes: 0 = status set (or resolved in --resolve mode); 1 = usage / resolution
- * / mutation error.
+ * / mutation error; 3 = claim refused — the Issue is ahead of its track's queue
+ * (#1855), re-run with `--ahead-of-queue "<verbatim owner quote>"` to override.
  */
+import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 
 import {
@@ -43,10 +57,25 @@ import {
   ghGraphqlResult,
   pickProjectItem,
 } from "./lib/projects-v2.mjs";
+import {
+  AHEAD_OF_QUEUE_FLAG,
+  formatQueueRefusal,
+  LITMUS_LINE,
+  parseAheadOfQueue,
+  queueHead,
+  queuePosition,
+  trackOf,
+} from "./lib/queue-position.mjs";
 
 // Re-exported so importers (guard-tests) keep resolving the shared item picker
 // from this module's public surface (#1140 moved the plumbing to lib/).
 export { pickProjectItem };
+// The queue-position rules are pure and shared with tools/backlog-triage.ts;
+// re-exported here so the guard-test suite covers them through this module.
+export { parseAheadOfQueue, queueHead, queuePosition, trackOf };
+
+/** Board status whose assignment is the claim — the only one the guard gates. */
+export const CLAIM_STATUS = "In Progress";
 
 const STATUS_FIELD = "Status";
 export const VALID_STATUS = ["Todo", "In Progress", "Review", "Done"];
@@ -80,10 +109,38 @@ export function buildProjectItemsQuery(issueNumber) {
     throw new Error(`buildProjectItemsQuery: invalid issue number ${issueNumber}`);
   return (
     `query{repository(owner:"${OWNER}",name:"${REPO}"){` +
-    `issue(number:${issueNumber}){projectItems(first:10){nodes{id ` +
+    `issue(number:${issueNumber}){title milestone{title} ` +
+    `labels(first:30){nodes{name}} projectItems(first:10){nodes{id ` +
     `project{id number title field(name:"${STATUS_FIELD}"){` +
     `... on ProjectV2SingleSelectField{id name options{id name}}}}}}}}}`
   );
+}
+
+/**
+ * Build the repository-milestones query used to compute queue heads (#1855).
+ * Only OPEN milestones matter — a closed release is a shipped release.
+ */
+export function buildMilestonesQuery() {
+  return (
+    `query{repository(owner:"${OWNER}",name:"${REPO}"){` +
+    `milestones(first:100,states:OPEN){nodes{title dueOn state}}}}`
+  );
+}
+
+/**
+ * Normalise the milestones GraphQL payload into the REST-shaped records
+ * (`title` / `due_on` / `state`) the pure queue rules consume.
+ */
+export function parseMilestones(data) {
+  const nodes = data?.repository?.milestones?.nodes;
+  if (!Array.isArray(nodes)) return [];
+  return nodes
+    .filter((n) => typeof n?.title === "string")
+    .map((n) => ({
+      title: n.title,
+      due_on: n.dueOn ?? null,
+      state: typeof n.state === "string" ? n.state.toLowerCase() : "open",
+    }));
 }
 
 /** Resolve a status option by exact name; null when absent. */
@@ -153,17 +210,46 @@ function ghGraphql(query) {
   return res.data;
 }
 
+/** Refuse the claim: exit 3, the dedicated queue-position code (#1855). */
+function refuse(msg) {
+  process.stderr.write(`[set-board-status] ${msg}\n`);
+  process.exit(3);
+}
+
+/**
+ * Post the ahead-of-queue justification as the canonical `claim:` comment so
+ * `pnpm backlog:triage` picks it up as the claim AND records the owner's reason.
+ * Explicit argv array — never a shell string.
+ */
+function postClaimComment(issueNumber, quote) {
+  const body = `claim: ahead of queue — «${quote}»`;
+  const res = spawnSync("gh", ["issue", "comment", String(issueNumber), "--body", body], {
+    encoding: "utf8",
+    shell: false,
+  });
+  if (res.status !== 0)
+    die(
+      `failed to post the ahead-of-queue claim comment on #${issueNumber}: ` +
+        `${(res.stderr || res.error?.message || "unknown error").trim()}`,
+    );
+  process.stdout.write(`[set-board-status] posted claim comment: ${body}\n`);
+}
+
 function usage() {
   process.stderr.write(
     "Usage: node tools/gh/set-board-status.mjs <issue#> <Todo|In Progress|Review|Done>\n" +
-      "       node tools/gh/set-board-status.mjs <issue#> --resolve   (read-only: resolve + print item id)\n",
+      `       node tools/gh/set-board-status.mjs <issue#> "${CLAIM_STATUS}" ${AHEAD_OF_QUEUE_FLAG} "<verbatim owner quote>"\n` +
+      "       node tools/gh/set-board-status.mjs <issue#> --resolve   (read-only: resolve + print item id + queue position)\n",
   );
   process.exit(1);
 }
 
 function main() {
   const [rawIssue, rawStatus, ...rest] = process.argv.slice(2);
-  if (!rawIssue || !rawStatus || rest.length > 0) usage();
+  if (!rawIssue || !rawStatus) usage();
+
+  const override = parseAheadOfQueue(rest);
+  if (override.error) die(override.error);
 
   const issueNumber = Number(rawIssue);
   if (!Number.isInteger(issueNumber) || issueNumber <= 0)
@@ -198,6 +284,22 @@ function main() {
   }))
     warn(w);
 
+  // 2b. Queue position (#1855) — computed for --resolve (reporting) and for the
+  // claim status (gating). One extra cheap GraphQL call, and only when needed.
+  const issueMilestone = issue.milestone?.title ?? "";
+  let position = null;
+  if (resolveOnly || rawStatus === CLAIM_STATUS) {
+    const milestones = parseMilestones(ghGraphql(buildMilestonesQuery()));
+    position = queuePosition(
+      {
+        track: trackOf(issue.labels?.nodes ?? []),
+        milestone: issueMilestone,
+        title: issue.title ?? "",
+      },
+      milestones,
+    );
+  }
+
   if (resolveOnly) {
     process.stdout.write(
       `[set-board-status] resolved (read-only, targeted per-issue query):\n` +
@@ -205,20 +307,38 @@ function main() {
         `  field     = ${STATUS_FIELD} ${statusField.id}\n` +
         `  item      = #${issueNumber} -> ${item.id}\n` +
         `  options   = ${(statusField.options ?? []).map((o) => `${o.name}:${o.id}`).join(", ")}\n` +
+        `  milestone = ${issueMilestone || "(none)"}\n` +
+        `  queue     = ${position.ok ? "OK" : "AHEAD-OF-QUEUE"} (${position.reason}); ` +
+        `head = ${position.head ?? "(none)"}\n` +
+        `  litmus    = ${LITMUS_LINE}\n` +
         `  No mutation performed (--resolve).\n`,
     );
     process.exit(0);
   }
 
+  // 3. Queue-position gate — the claim status only (#1855).
+  if (override.present && rawStatus !== CLAIM_STATUS)
+    die(`${AHEAD_OF_QUEUE_FLAG} applies only when setting "${CLAIM_STATUS}"`);
+  if (rawStatus === CLAIM_STATUS && position && !position.ok) {
+    if (!override.present) refuse(formatQueueRefusal(issueNumber, position, issueMilestone));
+    warn(
+      `#${issueNumber} is ahead of queue (head: ${position.head ?? "none"}) — ` +
+        `proceeding under ${AHEAD_OF_QUEUE_FLAG}.`,
+    );
+  }
+
   const option = resolveStatusOption(statusField.options, rawStatus);
   if (!option) die(`"${STATUS_FIELD}" has no option "${rawStatus}"`);
 
-  // 3. Mutate with the live-resolved ids.
+  // 4. Mutate with the live-resolved ids.
   ghGraphql(buildStatusMutation(project.id, item.id, statusField.id, option.id));
 
   process.stdout.write(
     `[set-board-status] OK — issue #${issueNumber} board Status set to "${rawStatus}" (item ${item.id}).\n`,
   );
+
+  // 5. An overridden claim records the owner's reason as the claim comment.
+  if (override.present && rawStatus === CLAIM_STATUS) postClaimComment(issueNumber, override.quote);
 }
 
 // Run main only when invoked directly, so the pure seams are importable in the

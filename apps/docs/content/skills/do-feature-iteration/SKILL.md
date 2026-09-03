@@ -16,6 +16,7 @@ mode: inline
 - GitHub Issue `#N` with `feature:NNN-<slug>` label and `kind:ears-handler` label.
 - Feature-spec path `apps/docs/content/specs/features/NNN-<slug>/`.
 - Branch name `feat/<N>-<slug>` (or resumable branch already in flight).
+- One PR may close **several** EARS Issues when they form one user action on the launch journey (e.g. 020 #1766+#1768+#1769+#1770); each keeps its own `it('EARS-N: …')` tests and its own `Closes #N` line.
 
 ## Procedure
 

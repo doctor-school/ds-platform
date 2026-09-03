@@ -24,6 +24,16 @@
  * absent owning subsystem), and each takeable item that an EARS prose-ref
  * unblocked carries a `prose ref resolved: EARS-N closed as #M` note.
  *
+ * Queue grouping (#1855): readiness answers "can this be worked", not "should it
+ * be worked NEXT". Takeable rows are therefore grouped by queue position —
+ * QUEUE-HEAD (the Issue sits in its track's current release milestone, the open
+ * one with the earliest owner-set `due_on`) first, then PLATFORM / EPIC, then
+ * AHEAD-OF-QUEUE rows tagged with the head they jump. Grouping is presentation
+ * only: readiness stays graph-computed, and an AHEAD-OF-QUEUE row is still listed,
+ * never hidden. The same pure rules (`tools/gh/lib/queue-position.mjs`) back the
+ * claim guard in `tools/gh/set-board-status.mjs`, which refuses `In Progress` on
+ * an AHEAD-OF-QUEUE Issue (exit 3) absent `--ahead-of-queue "<owner quote>"`.
+ *
  * `decision-debt` is NOT treated as "blocked" — it is a DEFERRED-decision label;
  * an item is takeable the moment its resolved deps are all closed (AGENTS.md §6,
  * memory `feedback_blocked_is_computed_not_labeled`).
@@ -72,6 +82,12 @@ import {
   parseIssueBoardNode,
   roadmapHygiene,
 } from "./gh/lib/roadmap-taxonomy.mjs";
+import {
+  LITMUS_LINE,
+  queueHead,
+  queuePosition,
+  trackOf,
+} from "./gh/lib/queue-position.mjs";
 import {
   evaluateMainSync,
   mainSyncFixCommand,
@@ -329,6 +345,67 @@ export interface Triage {
    * `IN-FLIGHT-ELSEWHERE (worktree|start-comment, age <a>)` instead of takeable.
    */
   claim?: ClaimSignal;
+  /**
+   * Queue position (#1855), attached by `main()` for TAKEABLE items only.
+   * Presentation grouping — readiness stays graph-computed.
+   */
+  queue?: QueueAnnotation;
+}
+
+/** Where a takeable Issue sits relative to its track's release queue (#1855). */
+export type QueuePosition =
+  | "QUEUE-HEAD"
+  | "AHEAD-OF-QUEUE"
+  | "PLATFORM"
+  | "EPIC";
+
+export interface QueueAnnotation {
+  position: QueuePosition;
+  /** The track's queue-head milestone, when the track has one. */
+  head: string | null;
+}
+
+/** A repository milestone as the queue rules consume it. */
+export interface MilestoneRecord {
+  title: string;
+  due_on: string | null;
+  state?: string;
+}
+
+/**
+ * Map a queue-position reason onto the report's position tag (#1855) — pure,
+ * so the report can be unit-tested without any `gh` call.
+ */
+export function queueAnnotationFor(
+  issue: { title: string; labels: string[]; milestone: string | null },
+  milestones: MilestoneRecord[],
+): QueueAnnotation {
+  const result = queuePosition(
+    {
+      track: trackOf(issue.labels),
+      milestone: issue.milestone ?? "",
+      title: issue.title,
+    },
+    milestones,
+  );
+  const position: QueuePosition = !result.ok
+    ? "AHEAD-OF-QUEUE"
+    : result.reason === "epic"
+      ? "EPIC"
+      : result.reason === "queue-head"
+        ? "QUEUE-HEAD"
+        : "PLATFORM";
+  return { position, head: result.head ?? null };
+}
+
+/** Per-track queue heads, for the report's summary lines (#1855). */
+export function trackQueueHeads(
+  milestones: MilestoneRecord[],
+): Array<{ track: string; head: string | null }> {
+  return ["track:doctor", "track:academy"].map((track) => ({
+    track,
+    head: queueHead(track, milestones),
+  }));
 }
 
 /** A blocker parsed out of the Issue body prose, pre-state-resolution. */
@@ -825,6 +902,34 @@ async function listOpenIssues(): Promise<RawIssue[]> {
 }
 
 /**
+ * Every OPEN repository milestone, for the queue-head computation (#1855).
+ * A failure degrades to an empty list (rows then group as PLATFORM/AHEAD by the
+ * pure rules) with a warning — the triage run never dies on it.
+ */
+async function listMilestones(): Promise<MilestoneRecord[]> {
+  const { stdout } = await execa(
+    "gh",
+    [
+      "api",
+      "repos/:owner/:repo/milestones",
+      "--paginate",
+      "-X",
+      "GET",
+      "-f",
+      "state=open",
+      "--jq",
+      "[.[] | {title, due_on, state}]",
+    ],
+    { cwd: REPO_ROOT },
+  );
+  // `--paginate` concatenates one JSON array per page.
+  return stdout
+    .split("\n")
+    .filter((line) => line.trim().length > 0)
+    .flatMap((line) => JSON.parse(line) as MilestoneRecord[]);
+}
+
+/**
  * Sweep EVERY Projects v2 row via the single sanctioned paginated GraphQL scan
  * (#1140) — 100 items/page, cursor-paginated to exhaustion (the board is 650+
  * items; a sub-limit read is a false negative). NEVER `gh project item-list`
@@ -1200,7 +1305,10 @@ function ts(): string {
   return new Date().toISOString().slice(0, 16).replace("T", " ");
 }
 
-export function formatReport(triaged: Triage[]): string {
+export function formatReport(
+  triaged: Triage[],
+  queueHeads: Array<{ track: string; head: string | null }> = [],
+): string {
   const out: string[] = [];
   const takeable = triaged
     .filter((t) => t.readiness === "takeable" && !t.claim)
@@ -1229,19 +1337,48 @@ export function formatReport(triaged: Triage[]): string {
     items.filter((t) => t.stream === stream);
   const kindTag = (t: Triage) => (t.noKindLabel ? " (no kind label)" : "");
 
+  // Queue grouping (#1855): QUEUE-HEAD / PLATFORM / EPIC rows first, then the
+  // AHEAD-OF-QUEUE ones tagged with the head they jump. Presentation only —
+  // nothing is hidden, and readiness stays graph-computed.
+  const QUEUE_ORDER: QueuePosition[] = [
+    "QUEUE-HEAD",
+    "PLATFORM",
+    "EPIC",
+    "AHEAD-OF-QUEUE",
+  ];
+  const positionOf = (t: Triage): QueuePosition => t.queue?.position ?? "PLATFORM";
+  const queueRank = (t: Triage) => QUEUE_ORDER.indexOf(positionOf(t));
+  const queueTag = (t: Triage) => {
+    if (!t.queue) return "";
+    return t.queue.position === "AHEAD-OF-QUEUE"
+      ? ` [AHEAD-OF-QUEUE (head: ${t.queue.head ?? "none"})]`
+      : ` [${t.queue.position}]`;
+  };
+
   out.push(`## Takeable (${takeable.length})`);
   out.push(
     "Rank takeable by value + readiness ONLY — owner Stage-B is a handback, not a deprioritizer (F-22; memory feedback_own_lead_decisions).",
   );
+  if (queueHeads.length > 0) {
+    for (const { track, head } of queueHeads)
+      out.push(`- queue head: ${track} → ${head ?? "(no dated open release milestone)"}`);
+    out.push(
+      `Claim litmus before taking anything: «${LITMUS_LINE}» — an AHEAD-OF-QUEUE claim needs \`--ahead-of-queue "<owner quote>"\` (#1855).`,
+    );
+  }
   for (const stream of ["product", "process"] as const) {
-    const items = byStream(takeable, stream);
+    const items = byStream(takeable, stream).sort(
+      (a, b) => queueRank(a) - queueRank(b) || a.number - b.number,
+    );
     out.push(`### ${stream === "product" ? "Product" : "Process"} (${items.length})`);
     if (items.length === 0) out.push("(none)");
     for (const t of items) {
       const tag = t.isDecisionDebt
         ? " [decision-debt — deferred decision, deps all closed]"
         : "";
-      out.push(`- #${t.number}${tag} ${truncateTitle(t.title, 80)}${kindTag(t)}`);
+      out.push(
+        `- #${t.number}${queueTag(t)}${tag} ${truncateTitle(t.title, 80)}${kindTag(t)}`,
+      );
       for (const n of t.notes) out.push(`    ↳ (${n})`);
     }
   }
@@ -1368,9 +1505,31 @@ async function main(): Promise<void> {
     if (claim) t.claim = claim;
   }
 
+  // Queue position (#1855) — takeable items only, from the open milestones and
+  // the SAME pure rules the claim guard uses.
+  let milestones: MilestoneRecord[] = [];
+  try {
+    milestones = await listMilestones();
+  } catch (e) {
+    note("gh api milestones", e);
+  }
+  const rawByNumber = new Map(issues.map((raw) => [raw.number, raw]));
+  for (const t of triaged) {
+    if (t.readiness !== "takeable") continue;
+    const raw = rawByNumber.get(t.number);
+    t.queue = queueAnnotationFor(
+      {
+        title: t.title,
+        labels: (raw?.labels ?? []).map((l) => l.name),
+        milestone: raw?.milestone?.title ?? null,
+      },
+      milestones,
+    );
+  }
+
   const out: string[] = [];
   if (staleBanner) out.push(`> ${staleBanner}`, "");
-  out.push(formatReport(triaged));
+  out.push(formatReport(triaged, milestones.length > 0 ? trackQueueHeads(milestones) : []));
 
   // Field hygiene (#1137): open Issues missing a required field. Silent when
   // every open Issue is compliant.

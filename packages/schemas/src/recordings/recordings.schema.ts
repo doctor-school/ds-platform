@@ -1,8 +1,10 @@
 import { z } from "zod";
 import {
   EmbedRefSchema,
+  MSK_LOCAL_DATETIME,
   RecordingExpectedBySchema,
   refineEmbedRefForProvider,
+  SpeakerEntrySchema,
   StreamProviderSchema,
 } from "../events/events.schema.js";
 import { TaxonomyErrorCodeSchema } from "../taxonomy/taxonomy.schema.js";
@@ -85,6 +87,66 @@ export const AttachRecordingRequestSchema = z
   });
 export type AttachRecordingRequest = z.infer<
   typeof AttachRecordingRequestSchema
+>;
+
+/**
+ * `CreateLegacyBroadcast` — `POST /v1/admin/legacy-broadcasts` (014 EARS-24).
+ * The «Архивный эфир» creation entry: one `legacy` event authored from a title,
+ * a held-at instant, a duration, speakers and a recording, born `hidden`.
+ *
+ * It lives HERE and not in `events.schema.ts` for the same reason the note above
+ * gives for `RecordingExpectedBySchema`: one home per symbol, and this body
+ * embeds {@link AttachRecordingRequestSchema}. The import direction is
+ * recordings → events and never back, so putting it on the events side would
+ * make the two `export *` barrels cycle.
+ *
+ * `state` and `origin` are ABSENT on purpose — both are server-assigned
+ * (`hidden` / `legacy`), never client-supplied, exactly as `CreateEvent` never
+ * lets a caller author `draft`. `.strict()` is what turns a hopeful
+ * `{ origin: "platform" }` into a 400 at the I/O boundary rather than a silently
+ * ignored key.
+ *
+ * The recording rides the SAME request rather than a follow-up call: 014-design
+ * §3.1 defines the эфир as existing to carry its recording, and a create that
+ * could succeed without one would leave an event that can never be archived —
+ * the untracked seam AGENTS.md §6 (F-22) forbids. It lands in `draft` like every
+ * other attached recording; publishing it is the separate act that makes
+ * «Архивировать» legal (EARS-25).
+ */
+export const LegacyBroadcastCreateBodySchema = z
+  .object({
+    title: z.string().trim().min(1).max(300),
+    /**
+     * Series / school kicker, as on `CreateEvent`. OPTIONAL here and defaulting
+     * to `""`: 014-design §3.1 names five inputs for an архивный эфир and this
+     * is not among them, because an эфир that predates the platform frequently
+     * predates the series taxonomy too. `""` is the truthful «no kicker», not a
+     * placeholder — the storefront card renders no source line for it.
+     */
+    school: z.string().trim().max(200).default(""),
+    /**
+     * The instant the эфир was ACTUALLY held, entered as МСК wall-clock
+     * (`YYYY-MM-DDTHH:mm`) and folded into the same canonical UTC instant
+     * `startsAt` carries for a platform broadcast. Named `heldAt` rather than
+     * `startsAt` because it is a historical fact, not a schedule — nothing is
+     * going to start.
+     */
+    heldAtMsk: z.string().regex(MSK_LOCAL_DATETIME),
+    durationMin: z.coerce
+      .number()
+      .int()
+      .positive()
+      .max(24 * 60),
+    description: z.string().trim().max(20_000).default(""),
+    /** Ordered free-text speakers, the same LD-1 shape `CreateEvent` takes. */
+    speakers: z.array(SpeakerEntrySchema).max(50).default([]),
+    specialties: z.array(z.string().trim().min(1).max(100)).max(100).default([]),
+    /** The recording the эфир exists to carry — created `draft` (EARS-24). */
+    recording: AttachRecordingRequestSchema,
+  })
+  .strict();
+export type LegacyBroadcastCreateBody = z.infer<
+  typeof LegacyBroadcastCreateBodySchema
 >;
 
 /**

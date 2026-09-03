@@ -28,12 +28,24 @@ import { recordStatus } from "./lifecycle.js";
 // readable row), `record_status` is presence-vs-removal.
 
 /**
- * The single event-lifecycle state machine (design §2, EARS-7). A real Postgres
- * enum type — a `draft → published → live → ended → hidden` closed set at the
- * DB level, mirroring the `EventLifecycleStateSchema` API contract in
- * `@ds/schemas`. The two agree on the same five values by convention (the DB
- * owns the column type; the schema owns the wire contract) — drizzle-kit emits
- * the `CREATE TYPE` in the migration.
+ * The event-lifecycle state vocabulary — the union of BOTH machines' states
+ * (007 design §2 EARS-7 + 014 design §3.1 EARS-23). A real Postgres enum type
+ * mirroring the `EventLifecycleStateSchema` API contract in `@ds/schemas` (the
+ * DB owns the column type; the schema owns the wire contract) — drizzle-kit
+ * emits the `CREATE TYPE` in the migration.
+ *
+ * It is deliberately ONE column and ONE type across two machines rather than a
+ * per-machine column: an event holds exactly one state at a time, and
+ * {@link eventOrigin} — not a second nullable column — says which machine that
+ * state belongs to. Which values are legal for a given row is therefore a
+ * domain rule (`@ds/schemas` `LIFECYCLE_TRANSITIONS`, enforced server-side and
+ * verified by 014 EARS-23/27), not something the enum can express:
+ *
+ * * `platform` — `draft → published → live → ended → hidden` (007);
+ * * `legacy` — `hidden ⇄ in_archive` (014 §3.1 machine 2).
+ *
+ * `hidden` is the one value both machines share, and it means the same thing in
+ * both: no public surface lists the event.
  */
 export const eventLifecycleState = pgEnum("event_lifecycle_state", [
   "draft",
@@ -41,7 +53,25 @@ export const eventLifecycleState = pgEnum("event_lifecycle_state", [
   "live",
   "ended",
   "hidden",
+  "in_archive",
 ]);
+
+/**
+ * 014 EARS-23 (#1741) — the lifecycle DISCRIMINATOR: which machine this event
+ * runs on. `platform` is a broadcast the platform hosts end to end (007);
+ * `legacy` is an эфир held before features 006/007 existed, or run off-platform,
+ * that exists only to carry its recording into the public archive.
+ *
+ * Set once at creation and rejected by every update path — no command moves an
+ * event between machines, so a `legacy` row can never acquire a room record, a
+ * stream config, a presence window or a `live` state (014-design §3.1).
+ *
+ * `platform` is the DEFAULT and the back-fill for every row that predates this
+ * column: every event authored so far came through 007's own create path, so
+ * «platform» is the truthful value for the existing corpus rather than a
+ * placeholder. The platform create paths never send `origin` at all.
+ */
+export const eventOrigin = pgEnum("event_origin", ["platform", "legacy"]);
 
 /**
  * 020 EARS-1 / LD-5 (#1764) — the event's **participation format**: where the
@@ -82,6 +112,12 @@ export const events = pgTable(
     /** Object-storage key for the current program PDF; null until one is uploaded. */
     programPdfRef: text("program_pdf_ref"),
     state: eventLifecycleState("state").notNull().default("draft"),
+    /**
+     * 014 EARS-23 (#1741) — the immutable lifecycle discriminator
+     * ({@link eventOrigin}). Never patched: the update path refuses a client
+     * `origin`, and the two legacy commands assert it rather than write it.
+     */
+    origin: eventOrigin("origin").notNull().default("platform"),
     /**
      * 020 EARS-1 (#1764) — attendance mode. `online` is the DEFAULT and the
      * back-fill for every row that predates this column: every event the

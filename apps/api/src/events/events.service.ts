@@ -10,6 +10,7 @@ import {
   type EventAdminListQuery,
   type EventLifecycleState,
   isPubliclyReachable,
+  type LegacyBroadcastCreateBody,
   type MonthBroadcastEntry,
   type MonthBroadcastState,
   type MonthlyEventCount,
@@ -239,6 +240,21 @@ export class EventNotEditableError extends Error {
   constructor(readonly state: EventLifecycleState) {
     super(`event is not editable while ${state}`);
     this.name = "EventNotEditableError";
+  }
+}
+
+/**
+ * 014 EARS-25 (#1741) — the `ArchiveLegacyBroadcast` refusal: the эфир carries
+ * no PUBLISHED, non-retired recording, so there is nothing to publish into the
+ * archive. HTTP-agnostic — the controller maps it to a 409 `EVENT_NOT_FINISHED`,
+ * the same code 014 §3 already uses for «this event is not in a state where a
+ * recording may be published», read from the other direction. Nothing is
+ * mutated and no audit row is written.
+ */
+export class EventNotFinishedError extends Error {
+  constructor(readonly eventId: string) {
+    super(`event ${eventId} has no published recording to archive`);
+    this.name = "EventNotFinishedError";
   }
 }
 
@@ -569,8 +585,27 @@ export class EventsService {
     pageSize: number;
   }> {
     const { rows, total } = await this.repo.listAdminPage(query);
+    // 014 EARS-25 (#1741) — the archive edge is offered only when the эфир has
+    // something to archive, so a page resolves recordings for the rows that can
+    // reach that edge at all (`legacy` + `hidden`) in ONE batched read, never
+    // per row and never for the rows the answer cannot change.
+    const archivable = rows.filter(
+      (row) => row.origin === "legacy" && row.state === "hidden",
+    );
+    const projections =
+      archivable.length > 0
+        ? await this.recordingsProjection.resolveRecordingProjections(
+            archivable.map((row) => row.id),
+          )
+        : undefined;
     return {
-      data: rows.map((row) => this.toListItem(row)),
+      data: rows.map((row) =>
+        this.toListItem(
+          row,
+          projections?.get(row.id)?.state !== undefined &&
+            projections.get(row.id)!.state !== "preparing",
+        ),
+      ),
       total,
       page: query.page,
       pageSize: query.pageSize,
@@ -759,15 +794,12 @@ export class EventsService {
       "ended",
       EVENT_ENDED_AUDIT_TYPE,
       actorSub,
-      // The mirror of `markEnded`'s guard: since 014 EARS-18 the closed set has
-      // TWO edges into `ended`, so the target alone no longer identifies the
-      // command. `close` keeps its 007 EARS-5 contract — the room it closes must
-      // be open — and a `published` event is refused here rather than silently
-      // ending through the room-control command (which writes the `event.ended`
-      // audit type and bypasses the EARS-18 preconditions + Idempotency-Key).
-      (_event, from) => {
-        if (from !== "live") throw new InvalidTransitionError(from, "ended");
-      },
+      // 014 EARS-23 (#1741) — no command-specific guard any more. `live → ended`
+      // is once again the ONLY edge into `ended` on the platform machine (the
+      // 014 EARS-18 `published → ended` fork is gone), so the closed-set check in
+      // {@link namedTransition} already refuses every other origin state on its
+      // own. A second copy of the same rule here would be a rule that can drift.
+      undefined,
       undefined,
       expectedVersion,
     );
@@ -949,7 +981,7 @@ export class EventsService {
 
   /**
    * The shared body of every named, audited transition command (publish / open /
-   * close / hide / mark-ended — EARS-4/5/6 + 014 EARS-18): load the
+   * close / hide / archive-legacy / hide-legacy — EARS-4/5/6 + 014 EARS-25): load the
    * aggregate, run the EARS-7 closed-set guard
    * ({@link canTransition}) — refusing an invalid jump with
    * {@link InvalidTransitionError}, state untouched — then write the state change
@@ -1236,7 +1268,11 @@ export class EventsService {
         : null,
       streamConfig: a.streamConfig,
       state: e.state as EventLifecycleState,
-      validTransitions: offeredTransitions(e),
+      origin: e.origin,
+      validTransitions: offeredTransitions(
+        e,
+        await this.hasPublishedRecording(e),
+      ),
       recordingExpectedBy: e.recordingExpectedBy,
       // #1593 — the validator the `ETag` carries, on the body too so a client
       // holding a parsed detail can re-derive it without retaining a header.
@@ -1246,7 +1282,7 @@ export class EventsService {
     };
   }
 
-  private toListItem(e: Event): EventAdminListItem {
+  private toListItem(e: Event, hasPublishedRecording: boolean): EventAdminListItem {
     return {
       id: e.id,
       slug: e.slug,
@@ -1255,7 +1291,23 @@ export class EventsService {
       startsAt: e.startsAt.toISOString(),
       durationMin: e.durationMin,
       state: e.state as EventLifecycleState,
-      validTransitions: offeredTransitions(e),
+      origin: e.origin,
+      validTransitions: offeredTransitions(e, hasPublishedRecording),
     };
+  }
+
+  /**
+   * 014 EARS-25 (#1741) — does this event carry a published, non-retired
+   * recording right now? Only ever asked of a `legacy` эфир sitting in `hidden`,
+   * because that is the ONLY state the `hidden → in_archive` edge is reachable
+   * from (see {@link offeredTransitions}) — every other event answers `false`
+   * without a query. `preparing` is the projection's «nothing published» answer.
+   */
+  private async hasPublishedRecording(e: Event): Promise<boolean> {
+    if (e.origin !== "legacy" || e.state !== "hidden") return false;
+    const projection = await this.recordingsProjection.resolveRecordingProjection(
+      e.id,
+    );
+    return projection.state !== "preparing";
   }
 }

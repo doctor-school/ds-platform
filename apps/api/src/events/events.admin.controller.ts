@@ -42,11 +42,12 @@ import {
 } from "./events.dto.js";
 import {
   EventNotEditableError,
-  EventNotPastError,
+  EventNotFinishedError,
   EventsService,
   EventVersionConflictError,
   InvalidTransitionError,
   StreamNotConfigurableError,
+  type TransitionFence,
   type UploadedPdf,
 } from "./events.service.js";
 
@@ -70,7 +71,7 @@ export class EventsAdminController {
   constructor(
     private readonly events: EventsService,
     // 014 EARS-17/EARS-18 — the ONE shared idempotency record (012-design §6),
-    // consumed by `mark-ended` exactly as 014's recordings surface consumes it.
+    // consumed by the fenced legacy commands exactly as 014's recordings surface consumes it.
     // Plain constructor injection, deliberately NOT `@Inject(IdempotencyService)`:
     // a parameter decorator makes the endpoint-authz gate's tsx transform drop
     // this class's `design:paramtypes`, so Nest then cannot resolve the
@@ -143,7 +144,7 @@ export class EventsAdminController {
    * onto THIS surface's `{ code, message }` body: the codes are the shared ones,
    * the envelope stays the events surface's own.
    *
-   * @returns the raw header (it joins the `mark-ended` idempotency fingerprint —
+   * @returns the raw header (it joins a fenced command idempotency fingerprint —
    * the same key against a different validator is a different bound request) and
    * the parsed version.
    */
@@ -480,41 +481,29 @@ export class EventsAdminController {
   }
 
   /**
-   * 014 EARS-18 — `MarkEventEnded` (`POST /v1/admin/events/:id/mark-ended`): the
-   * named `published → ended` transition for an эфир the platform never hosted —
-   * held before features 006/007 existed, or run off-platform (014-design §3.1,
-   * admin label «Отметить завершённым (трансляция прошла вне платформы)»).
-   * Without it such an event is stuck at `published` and its recording can never
-   * clear the 014 §3 publish gate.
+   * 014 EARS-25 (#1741) — `ArchiveLegacyBroadcast`
+   * (`POST /v1/admin/events/:id/archive-legacy`, admin label «Архивировать»):
+   * the LEGACY machine's `hidden → in_archive` transition. It publishes an эфир
+   * the platform never hosted into the public archive, where it renders exactly
+   * like an `ended` broadcast with a published recording (014-design §3.1).
    *
-   * Deliberately a SEPARATE route from `:id/close` even though both land on
-   * `ended`: they are different operator assertions («I closed the room I was
-   * running» vs «this эфир happened elsewhere»), they carry different
-   * preconditions, and they write different audit ids. One route switching on
-   * the event's state would make the admin's intent unrecoverable from the log.
+   * Not a state-switching variant of any 007 command: the legacy machine is a
+   * separate machine keyed by `events.origin`, so this route exists precisely
+   * BECAUSE «I closed the room I was running» and «this эфир happened before us»
+   * are different operator assertions with different audit ids. The 007
+   * `MarkEventEnded` fork this replaces is gone from the contract entirely.
    *
    * Refusals leave the state untouched and write no audit row: 409
-   * `EVENT_NOT_PAST` while the scheduled end is still in the future, 409
-   * `INVALID_TRANSITION` from any other origin state or when the room was ever
-   * opened. It creates no room record, no presence window and no recording.
+   * `EVENT_NOT_FINISHED` when the эфир carries no published, non-retired
+   * recording (there is nothing to archive), 409 `INVALID_TRANSITION` on a
+   * `platform` event or from any state other than `hidden` (EARS-27).
    *
-   * **Protocol.** A canonical-UUID `Idempotency-Key` and an `If-Match` are both
-   * REQUIRED (014-design §3.1), over the ONE retained fenced record 012-design
-   * §6 owns — the same `IdempotencyService` 014's recordings surface consumes,
-   * not a second implementation. The order is: auth (guard) → key shape →
-   * `If-Match` presence/shape → reserve/replay → command. The completion is
-   * enlisted in the transition's own transaction, so a fenced-out owner rolls the
-   * state change and the audit row back with it, and a deterministic 409 is
-   * fenced-stored so a retry replays that exact refusal instead of re-deciding it.
-   *
-   * The two headers answer different questions and neither substitutes for the
-   * other: the key makes a RETRY of this exact request safe, the validator makes
-   * the request itself conditional on the revision the operator read. So the raw
-   * `If-Match` joins the fingerprint — the same key replayed against a DIFFERENT
-   * validator is a different bound request (a reuse), not a replay of this one,
-   * exactly as 014's recordings command binds it.
+   * **Protocol** — identical to every fenced lifecycle command on this surface:
+   * a canonical-UUID `Idempotency-Key` and an `If-Match` are both REQUIRED over
+   * the ONE retained fenced record (012-design §6); see
+   * {@link fencedTransition}.
    */
-  @Post(":id/mark-ended")
+  @Post(":id/archive-legacy")
   @HttpCode(200)
   @Authz({
     access: "authenticated",
@@ -522,26 +511,115 @@ export class EventsAdminController {
     check: "fast-path",
     // Endpoint-authz AUTH-audit tier (ADR-0001 §2.5/§8): a `platform_admin`
     // write, not an auth security event — no AuthAuditLog emission (low-stakes).
-    // The domain `audit_ledger` row (`event.marked_ended`) is a separate
-    // ADR-0003 §6 obligation written atomically in the service.
+    // The domain `audit_ledger` row is a separate ADR-0003 §6 obligation written
+    // atomically in the service.
     audit: "low-stakes",
     // #1304 default-deny: a brand-new admin mutation revalidates live, exactly
     // like the 014 sibling recordings commands.
     revalidate: "live",
-    tests: ["EARS-18", "EARS-8"],
+    tests: ["EARS-25", "EARS-8"],
   })
-  async markEnded(
+  async archiveLegacy(
     @Param("id") id: string,
     @Req() req: FastifyRequest,
     @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<EventAdminDetail> {
+    return this.fencedTransition(
+      id,
+      req,
+      reply,
+      "archive-legacy",
+      (eventId, actor, fence, version) =>
+        this.events.archiveLegacy(eventId, actor, fence, version),
+    );
+  }
+
+  /**
+   * 014 EARS-25 (#1741) — `HideLegacyBroadcast`
+   * (`POST /v1/admin/events/:id/hide-legacy`, admin label «Скрыть»): the LEGACY
+   * machine's `in_archive → hidden` transition. The эфир leaves every listing,
+   * tab and count and its direct link renders 004's hidden notice.
+   *
+   * Unlike 007's terminal `ended → hidden` this move is REVERSIBLE — the эфир
+   * can be archived again — which is why it is its own route with its own audit
+   * id rather than a reuse of `:id/hide` (refused there by the origin-keyed
+   * closed set anyway, EARS-27).
+   *
+   * Its only refusal is 409 `INVALID_TRANSITION`: a `platform` event, or a
+   * `legacy` эфир not currently `in_archive`. Same fenced protocol as its
+   * sibling — see {@link fencedTransition}.
+   */
+  @Post(":id/hide-legacy")
+  @HttpCode(200)
+  @Authz({
+    access: "authenticated",
+    roles: ["platform_admin"],
+    check: "fast-path",
+    // Endpoint-authz AUTH-audit tier (ADR-0001 §2.5/§8): a `platform_admin`
+    // write, not an auth security event — no AuthAuditLog emission (low-stakes).
+    // The domain `audit_ledger` row is a separate ADR-0003 §6 obligation written
+    // atomically in the service.
+    audit: "low-stakes",
+    // #1304 default-deny: a brand-new admin mutation revalidates live, exactly
+    // like the 014 sibling recordings commands.
+    revalidate: "live",
+    tests: ["EARS-25", "EARS-8"],
+  })
+  async hideLegacy(
+    @Param("id") id: string,
+    @Req() req: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<EventAdminDetail> {
+    return this.fencedTransition(
+      id,
+      req,
+      reply,
+      "hide-legacy",
+      (eventId, actor, fence, version) =>
+        this.events.hideLegacy(eventId, actor, fence, version),
+    );
+  }
+
+  /**
+   * The shared body of a FENCED lifecycle command (014-design §3.1): a
+   * canonical-UUID `Idempotency-Key` AND an `If-Match` are both required, over
+   * the ONE retained fenced record 012-design §6 owns — the same
+   * `IdempotencyService` 014's recordings surface consumes, not a second
+   * implementation.
+   *
+   * The order is: auth (guard) → key shape → `If-Match` presence/shape →
+   * reserve/replay → command. The completion is enlisted in the transition's own
+   * transaction, so a fenced-out owner rolls the state change and the audit row
+   * back with it, and a deterministic 409 is fenced-stored so a retry replays
+   * that exact refusal instead of re-deciding it.
+   *
+   * The two headers answer different questions and neither substitutes for the
+   * other: the key makes a RETRY of this exact request safe, the validator makes
+   * the request itself conditional on the revision the operator read. So the raw
+   * `If-Match` joins the fingerprint — the same key replayed against a DIFFERENT
+   * validator is a different bound request (a reuse), not a replay of this one.
+   *
+   * `command` is the route's last segment; it keys both the recorded route and
+   * the fingerprint path, so one key cannot replay across two DIFFERENT commands
+   * on the same event.
+   */
+  private async fencedTransition(
+    id: string,
+    req: FastifyRequest,
+    reply: FastifyReply,
+    command: string,
+    run: (
+      eventId: string,
+      actor: string | null,
+      fence: TransitionFence,
+      expectedVersion: number,
+    ) => Promise<EventAdminDetail | null>,
   ): Promise<EventAdminDetail> {
     const actor = actorSub(req);
     // The protocol refusals (428 key required, 400 malformed key, 409 reuse /
     // in-progress) are 012 `TaxonomyError`s. They are re-shaped onto THIS
     // surface's `{ code, message }` body rather than dragging 012's RFC 7807
-    // filter onto a controller whose four live sibling routes answer the other
-    // shape — one new route is not a licence to reshape `publish`/`open`/
-    // `close`/`hide`.
+    // filter onto a controller whose live sibling routes answer the other shape.
     let expectedVersion = 0;
     const outcome = await withProtocolRefusalShape(async () => {
       const key = this.idempotency.requireKey(
@@ -557,13 +635,13 @@ export class EventsAdminController {
         scope: "events",
         actorId: actor,
         method: "POST",
-        route: "/v1/admin/events/:id/mark-ended",
+        route: `/v1/admin/events/:id/${command}`,
         // The command has no body, so the concrete path plus the validator IS
         // the whole bound input: the same key against a different event — or
         // against a different revision of this one — is a reuse, not a replay.
         fingerprint: this.idempotency.fingerprint({
           method: "POST",
-          path: `/v1/admin/events/${id}/mark-ended`,
+          path: `/v1/admin/events/${id}/${command}`,
           ifMatch: rawIfMatch,
         }),
       });
@@ -574,7 +652,7 @@ export class EventsAdminController {
     }
 
     try {
-      const updated = await this.events.markEnded(
+      const updated = await run(
         id,
         actor,
         (tx, detail) =>
@@ -595,10 +673,10 @@ export class EventsAdminController {
   }
 
   /**
-   * Fenced-store a DETERMINISTIC refusal of `mark-ended` so a retry replays it
+   * Fenced-store a DETERMINISTIC refusal of a fenced command so a retry replays it
    * verbatim (012-design §6 bullet 3), and return the exception to throw.
    *
-   * Only the two contracted 409s qualify: both are properties of the bound
+   * Only the contracted 409s qualify: each is a property of the bound
    * request against a row state, so an exact retry gets the same answer forever.
    * A 404 is deliberately excluded — the row may exist later, so the answer is
    * not a property of the request — and an unclassified fault is left
@@ -660,7 +738,7 @@ export class EventsAdminController {
 
   /**
    * Shared body of the named, audited transition commands (publish / open /
-   * close / hide / mark-ended — EARS-4/5/6 + 014 EARS-18): resolve the acting
+   * close / hide — EARS-4/5/6): resolve the acting
    * admin `sub` off the request
    * (the 003
    * session hook attaches it; the `AuthzGuard` has already refused any
@@ -738,9 +816,9 @@ export class EventsAdminController {
 
 /**
  * Map a domain transition refusal onto its 409, or return the error untouched
- * for the global filter. The two refusal CODES are the contract 014-design §3.1
- * names — `EVENT_NOT_PAST` (the scheduled end is still in the future) and
- * `INVALID_TRANSITION` (any other origin, or a room that was ever opened) — and
+ * for the global filter. The refusal CODES are the ones 014-design §3.1 + §11
+ * name — `EVENT_NOT_FINISHED` (nothing published to archive) and
+ * `INVALID_TRANSITION` (an edge absent from the event's own machine) — and
  * they are emitted from one place so the bare EARS-7 command and every named
  * command answer the same body for the same domain refusal.
  */
@@ -775,11 +853,14 @@ async function withProtocolRefusalShape<T>(run: () => Promise<T>): Promise<T> {
 }
 
 function asTransitionRefusal(err: unknown): unknown {
-  if (err instanceof EventNotPastError) {
+  // 014 EARS-25 (#1741) — the archive gate's refusal. The same code 014 §3
+  // already uses for «this event is not in a state where a recording may be
+  // published», read from the other direction: nothing published to archive.
+  if (err instanceof EventNotFinishedError) {
     return new ConflictException({
-      code: "EVENT_NOT_PAST",
-      message: "event has not reached its scheduled end",
-      scheduledEnd: err.scheduledEnd.toISOString(),
+      code: "EVENT_NOT_FINISHED",
+      message: "event has no published recording to archive",
+      eventId: err.eventId,
     });
   }
   if (err instanceof InvalidTransitionError) {
@@ -792,7 +873,7 @@ function asTransitionRefusal(err: unknown): unknown {
   }
   // #1593 — the stale-validator refusal. Emitted from the same one place as the
   // domain refusals so every command answers the same body for it, and NOT
-  // fenced-stored by `mark-ended`: unlike the two 409s it is not a property of
+  // fenced-stored by a fenced command: unlike the domain 409s it is not a property of
   // the bound request against a row state — re-reading and retrying is exactly
   // what the caller is being told to do, so freezing it into the record would
   // make the correct next request unanswerable under that key.

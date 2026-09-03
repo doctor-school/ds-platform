@@ -705,6 +705,25 @@ export type UpcomingBroadcastState = z.infer<
 >;
 
 /**
+ * 014 EARS-26 (#1741) — the states a broadcast is read under «Прошедшие»: the
+ * platform machine's terminal-but-visible `ended` AND the legacy machine's
+ * `in_archive`.
+ *
+ * ONE named set rather than two `state = 'ended'` predicates, because the whole
+ * point of the legacy machine is that an archived эфир is INDISTINGUISHABLE from
+ * an ended broadcast on every public surface (same tab, same card, same count,
+ * same page). Two independent filters would be two places to forget, and the
+ * first one forgotten is an эфир the operator archived that never appears.
+ * `hidden` is absent from both machines' side of this set — on either origin it
+ * means «off every public surface».
+ */
+export const PAST_BROADCAST_STATES = ["ended", "in_archive"] as const;
+export const PastBroadcastLifecycleStateSchema = z.enum(PAST_BROADCAST_STATES);
+export type PastBroadcastLifecycleState = z.infer<
+  typeof PastBroadcastLifecycleStateSchema
+>;
+
+/**
  * A card speaker (004 design §3) — display `name` only. The listing card's
  * choose-set is deliberately thinner than the event page's: no `credentials`, no
  * contact detail, no PII. The write model's `regalia` is not projected onto the
@@ -754,14 +773,28 @@ export type UpcomingBroadcastList = z.infer<typeof UpcomingBroadcastListSchema>;
 
 /**
  * The lifecycle states an event may carry on the month grid (004 design §3,
- * EARS-15). The closed publish-VISIBLE subset `published`/`live`/`ended` — the
- * month view INCLUDES the month's already-past `ended` events (rendered as muted
- * aggregate notes), which is why `ended` is present here where the upcoming
- * card's {@link UPCOMING_BROADCAST_STATES} drops it. `draft` and `hidden` are
- * deliberately absent: they have NO month projection (structurally, not by a
- * denylist), so a new non-visible state can never leak onto the grid.
+ * EARS-15) and on the doctor storefront feed. The closed publish-VISIBLE subset
+ * `published`/`live`/`ended`/`in_archive` — the month view INCLUDES the month's
+ * already-past events (rendered as muted aggregate notes), which is why `ended`
+ * is present here where the upcoming card's
+ * {@link UPCOMING_BROADCAST_STATES} drops it.
+ *
+ * 014 EARS-26 (#1741): `in_archive` sits beside `ended` because it is the legacy
+ * machine's SAME fact — «this эфир happened and its recording is published». An
+ * archived legacy эфир is indistinguishable from an ended broadcast on every
+ * public surface (014-design §3.1), so a grid or a feed that carried one and not
+ * the other would be the second surface that design forbids.
+ *
+ * `draft` and `hidden` are deliberately absent on BOTH machines: they have NO
+ * month projection (structurally, not by a denylist), so a new non-visible state
+ * can never leak onto the grid.
  */
-export const MONTH_BROADCAST_STATES = ["published", "live", "ended"] as const;
+export const MONTH_BROADCAST_STATES = [
+  "published",
+  "live",
+  "ended",
+  "in_archive",
+] as const;
 export const MonthBroadcastStateSchema = z.enum(MONTH_BROADCAST_STATES);
 export type MonthBroadcastState = z.infer<typeof MonthBroadcastStateSchema>;
 

@@ -1,12 +1,25 @@
 import { randomUUID } from "node:crypto";
 import { Inject, Injectable } from "@nestjs/common";
-import type { DrizzleHandle, Event, NewEvent, NewEventSpeaker } from "@ds/db";
-import { auditLedger, eventSpeakers, events, streamConfig } from "@ds/db";
+import type {
+  DrizzleHandle,
+  Event,
+  NewEvent,
+  NewEventRecording,
+  NewEventSpeaker,
+} from "@ds/db";
+import {
+  auditLedger,
+  eventRecordings,
+  eventSpeakers,
+  events,
+  streamConfig,
+} from "@ds/db";
 import { withRequestAuditContext } from "../audit/audit-context.tx.js";
 import {
   type ConfigureStreamRequest,
   type EventAdminListQuery,
   MONTH_BROADCAST_STATES,
+  PAST_BROADCAST_STATES,
   type StreamConfig,
   UPCOMING_BROADCAST_STATES,
 } from "@ds/schemas";
@@ -120,6 +133,52 @@ export class EventsRepository {
           position: s.position,
         })),
         // A brand-new event carries no stream config until ConfigureStream runs.
+        streamConfig: null,
+      };
+    });
+  }
+
+/**
+   * 014 EARS-24 (#1741) — persist a whole `legacy` эфир: the event row, its
+   * ordered speaker rows AND the one `event_recordings` row it exists to carry,
+   * in a SINGLE transaction.
+   *
+   * The recording is not optional and is not a second call. A two-step
+   * create-then-attach shape could leave a `legacy` event with no recording —
+   * an эфир that can never be archived (014 EARS-25's precondition), i.e. an
+   * untracked seam (AGENTS.md §6, F-22). Doing it here makes «an archival эфир
+   * always has something to archive» a database fact.
+   *
+   * The recording lands at its schema default status `draft`: creation only
+   * files the cut, publishing it stays feature 014's own EARS-2 command, and
+   * `ArchiveLegacyBroadcast` is gated on that publish having happened.
+   */
+  async insertLegacyBroadcast(
+    event: NewEvent,
+    speakers: Omit<NewEventSpeaker, "eventId">[],
+    recording: Omit<NewEventRecording, "eventId">,
+  ): Promise<EventWithSpeakers> {
+    // 010 EARS-3/5 — one audit context for the whole aggregate, so the
+    // `data.events.*`, `data.event_speakers.*` and `data.event_recordings.*`
+    // ledger rows all name the same acting admin.
+    return withRequestAuditContext(this.db, async (tx) => {
+      const [row] = await tx.insert(events).values(event).returning();
+      if (!row) throw new Error("legacy event insert returned no row");
+      if (speakers.length > 0) {
+        await tx
+          .insert(eventSpeakers)
+          .values(speakers.map((s) => ({ ...s, eventId: row.id })));
+      }
+      await tx.insert(eventRecordings).values({ ...recording, eventId: row.id });
+      return {
+        event: row,
+        speakers: speakers.map((s) => ({
+          name: s.name,
+          regalia: s.regalia ?? "",
+          position: s.position,
+        })),
+        // A `legacy` эфир never acquires a stream config: `ConfigureStream` is
+        // refused for it and `live` is unreachable on its machine.
         streamConfig: null,
       };
     });
@@ -347,7 +406,13 @@ export class EventsRepository {
     }));
   }
 
-  /** 014 EARS-11 ended-only archive, newest first, with a stable tuple cursor. */
+  /**
+   * 014 EARS-11 past archive, newest first, with a stable tuple cursor. The
+   * state filter is the {@link PAST_BROADCAST_STATES} SSOT, so an `in_archive`
+   * legacy эфир (014 EARS-26) sits in «Прошедшие» beside an `ended` platform
+   * broadcast — the tab cannot disagree with the count below, which reads the
+   * same set.
+   */
   async listPast(
     limit: number,
     after: EventListingCursor | null,
@@ -361,7 +426,13 @@ export class EventsRepository {
     const rows = await this.db
       .select()
       .from(events)
-      .where(and(ACTIVE_EVENT, eq(events.state, "ended"), cursor))
+      .where(
+        and(
+          ACTIVE_EVENT,
+          inArray(events.state, [...PAST_BROADCAST_STATES]),
+          cursor,
+        ),
+      )
       .orderBy(desc(events.startsAt), desc(events.id))
       .limit(limit);
     if (rows.length === 0) return [];
@@ -414,7 +485,12 @@ export class EventsRepository {
       this.db
         .select({ count: sql<number>`count(*)::int` })
         .from(events)
-        .where(and(ACTIVE_EVENT, eq(events.state, "ended"))),
+        .where(
+          and(
+            ACTIVE_EVENT,
+            inArray(events.state, [...PAST_BROADCAST_STATES]),
+          ),
+        ),
     ]);
     return {
       upcoming: upcomingRow[0]?.count ?? 0,

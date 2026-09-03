@@ -12,10 +12,12 @@ import { defineConfig, devices } from "@playwright/test";
  * and `playwright.axe.config.ts` is the a11y scan whose green means "no WCAG
  * violation" — a failing flow spec inside it would report as an a11y failure.
  *
- * Dev-stand-gated and MANUAL like its siblings — not in CI, not in the default
- * turbo `test` pipeline: the specs provision a real `platform_admin` against the
- * stand's Zitadel and throw when the `IDP_*` env is absent, so a stray invocation
- * fails fast rather than pretending to pass. Run against a booted admin + api:
+ * This tier RUNS IN CI: the `admin-e2e` job's «Admin flows tier» step invokes it
+ * against a database that job migrates and seeds. It is not in the default turbo
+ * `test` pipeline, and it is stand-gated wherever it runs: the specs provision a
+ * real `platform_admin` against the stand's Zitadel and throw when the `IDP_*`
+ * env is absent, so a stray invocation fails fast rather than pretending to
+ * pass. Locally, run against a booted admin + api:
  *
  *   E2E_ADMIN_URL=http://localhost:3201 IDP_ISSUER=… IDP_SERVICE_TOKEN=… \
  *   IDP_PROJECT_ID=… pnpm --filter @ds/admin test:flows

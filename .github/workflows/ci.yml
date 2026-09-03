@@ -1362,6 +1362,14 @@ jobs:
         env:
           API_PROXY_TARGET: http://localhost:3000
         run: pnpm exec turbo run build --filter=@ds/api --filter=@ds/admin
+      # The legacy эфир the 014 lifecycle flow drives (`seed-006-legacy-archived`,
+      # plus `seed-005-hidden`) cannot be authored through any admin or API path —
+      # `EventAdminCreate.origin` is `z.never()` — until 014 slice 3, so this tier
+      # needs the fixture seeded. Idempotent upsert of the `seed-005-*`/`seed-006-*`
+      # rows only; the other flow specs author their own events and are unaffected.
+      # Runs AFTER the build: the script imports the built `@ds/db` data layer.
+      - name: Seed the admin-flows fixtures
+        run: pnpm --filter @ds/api seed:events
       - name: Start the api
         env:
           PORT: "3000"

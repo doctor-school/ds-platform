@@ -37,6 +37,11 @@ import type { UpdateEventVars } from "@/providers/data-provider";
  * the offered transitions, and the current stream config all resolve from one
  * `EventLifecycleState`/aggregate. Mutations re-fetch the detail so the offered
  * transitions + badge stay exactly what the server just wrote.
+ *
+ * The page renders ONE machine's vocabulary at a time (014 EARS-27): the bar
+ * derives its buttons from the server's per-`origin` `validTransitions`, and the
+ * stream-config card — a platform-only affordance — is withheld on a `legacy`
+ * эфир, which was broadcast off-platform and has no room to configure.
  */
 export default function EventEditPage() {
   const t = useTranslations();
@@ -117,18 +122,26 @@ export default function EventEditPage() {
                   </CardContent>
                 </Card>
 
-                {/* Stream config (EARS-3). */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle>{t("events.sections.stream")}</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <StreamConfigForm
-                      detail={detail}
-                      onConfigured={() => refetch()}
-                    />
-                  </CardContent>
-                </Card>
+                {/* Stream config (EARS-3) — platform эфир only (014 EARS-27).
+                    An off-platform (`legacy`) эфир never went live through the
+                    006 room and never will: it is an archived recording that
+                    already happened elsewhere. Offering it «настроить
+                    трансляцию» would put the platform machine's vocabulary on a
+                    screen that runs the legacy one, which is exactly what
+                    EARS-27 forbids. */}
+                {detail.origin === "legacy" ? null : (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>{t("events.sections.stream")}</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <StreamConfigForm
+                        detail={detail}
+                        onConfigured={() => refetch()}
+                      />
+                    </CardContent>
+                  </Card>
+                )}
 
                 {/* Aggregate edit + program-PDF replace (EARS-2). */}
                 <Card>

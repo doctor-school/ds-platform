@@ -1,0 +1,5 @@
+{
+  "number": 201,
+  "body": "cross-front-reuse: new - no shared unit exists for the sponsor ribbon; the registry now carries an app-local row with the extraction trigger.\n",
+  "files": [{ "path": "apps/portal/components/sponsor-ribbon.tsx" }]
+}

@@ -1,5 +1,5 @@
 # PR-body-parsing guard family (Issue #651) — spec-link, ui-parity, registry-research,
-# spec-status-fresh, prior-decisions, spec-deletion, catalog-deletion,
+# cross-front-reuse, spec-status-fresh, prior-decisions, spec-deletion, catalog-deletion,
 # epic-autoclose (ADR-0007 §2.6). These guards evaluate the PR body/metadata, so they live in a DEDICATED
 # workflow that also triggers on the `edited` activity type: a post-create body
 # edit re-runs exactly these checks and never the full test/build matrix in
@@ -88,6 +88,22 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_BODY: ${{ github.event.pull_request.body }}
         run: pnpm lint:registry-research
+
+      # cross-front-reuse: a PR touching either storefront host tree
+      # (apps/portal|doctor {app,components,lib}) must name, in its body, the
+      # canonical unit it consumed — or declare new/bespoke with a rationale
+      # (AGENTS.md §6 «Cross-front capability reuse before invention» +
+      # ADR-0013 §A1; answer key: the capability-ownership registry under
+      # apps/docs/content/specs/product/two-site-ia/). WARN per the ADR-0007
+      # §2.6 new-guard posture — promote to BLOCK once stable.
+      - name: WARN · cross-front-reuse
+        id: warn_cross_front_reuse
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: pnpm lint:cross-front-reuse
 
       # spec-status-fresh: a feature:NNN-<slug> PR whose bound spec is still
       # `status: Draft` (design §5.2, `In dev` minimum). Implemented as a REAL
@@ -241,6 +257,7 @@ jobs:
         env:
           WARN_OUTCOMES: |
             registry-research=${{ steps.warn_registry_research.outcome }}
+            cross-front-reuse=${{ steps.warn_cross_front_reuse.outcome }}
             spec-status-fresh=${{ steps.warn_spec_status_fresh.outcome }}
             prior-decisions=${{ steps.warn_prior_decisions.outcome }}
             spec-deletion=${{ steps.warn_spec_deletion.outcome }}

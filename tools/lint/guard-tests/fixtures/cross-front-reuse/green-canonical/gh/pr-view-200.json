@@ -1,0 +1,8 @@
+{
+  "number": 200,
+  "body": "## Summary\n\nMount the shared month grid on the doctor storefront.\n\ncross-front reuse: consumes packages/design-system/src/blocks/month-dot-grid.tsx; apps/doctor adds only the host composition (registry row: Month calendar).\n",
+  "files": [
+    { "path": "apps/doctor/components/month-pane.tsx" },
+    { "path": "apps/doctor/lib/events-month-grid.ts" }
+  ]
+}

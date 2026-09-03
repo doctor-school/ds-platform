@@ -36,6 +36,7 @@ Any owner-facing summary: the end of a task (a merged PR, a completed engineerin
 7. **Трекер:** PR #, Issue #, board Status, what was unblocked/closed.
 8. **▸ Технически (collapsed appendix, at the END):** files, tokens, changeset, CI — full detail on request only. The report reads as a product report, not a diff.
 9. **Дальше / отложено:** next queue item, deferred items + why.
+10. **«Этого ещё нет» — только со ссылкой на проверку.** Any claim that a capability is absent — «в Академии этого нет», «на витрине такого не было», «строим с нуля» — is stated ONLY after an actual search of `apps/portal`, `apps/doctor` and `packages/`, and the report names what was searched and what the registry row says (`apps/docs/content/specs/product/two-site-ia/capability-ownership.md`). Unverified, the sentence reads to the owner as «переписываем то, что уже работает» (session c2b60e06, 2026-09-03: two of three «нет в Академии» claims in one report were false). When it IS new, say so with the evidence: «искал в portal/doctor/packages — канонической реализации нет, строка реестра заведена».
 
 ## Owner-question shape (mandatory gate)
 
@@ -69,6 +70,7 @@ A confirmation or report visual the user **cannot see** is worthless — images 
 ## Failure modes
 
 - **A closeout report built out of artefact identifiers** — PR #, migration #, route counts, EARS ids as the content of the «Что сделано» lines instead of the product entity and what a person can now do. Owner verdict on the #1741 slice-1 closeout (2026-09-03): «Это набор цифр и ни одного факта про продукт. Как нам сделать его именно продуктовым, а не номерным?» The identifiers belong in trailing parentheses or the §8 appendix, never as the line itself.
+- **An unverified «этого ещё нет» claim** — reporting a capability as absent from Academy / the doctor storefront without having searched `apps/portal`, `apps/doctor`, `packages/` and the capability-ownership registry. Two of three such claims in one report were false (session c2b60e06, 2026-09-03), and the owner reads the pattern as «переписываем то, что уже работает». The absence claim carries its evidence or it does not appear.
 - **Asking for visual confirmation while the screenshot is only in the agent's CLI** — the user cannot see `Read` images; deliver to a folder and open it.
 - **A report without the «📈 % от запланированного» section** — the owner cannot see what was done product-wise or how much of the plan landed; the ratio is a required field of the shape (owner directive 2026-07-08), not optional prose. Applies to wave/orchestration closeouts too.
 - **Engineering-jargon-first report** with no product framing and no explicit visual-to-check line — including a **wave/orchestration closeout summary**: the shape applies to every user-facing completion report (multi-Issue wave summaries too), and a mechanism-named deliverable with no product entity («гард жизненного цикла» — чего?) is this failure even when everything merged green (session 35991795).

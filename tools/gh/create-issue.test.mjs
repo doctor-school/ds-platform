@@ -34,6 +34,9 @@ import {
   roadmapLabelError,
   milestoneConflictError,
   buildSubIssueLinkArgs,
+  bodyText,
+  reuseFieldError,
+  REUSE_GATED_TRACK_LABELS,
 } from "./create-issue.mjs";
 import { EARS_KIND_LABEL, ROADMAP_LABEL } from "./lib/roadmap-taxonomy.mjs";
 
@@ -138,6 +141,45 @@ test("trackLabelError requires exactly one known track label", () => {
   // Extra non-track labels alongside exactly one track are fine.
   assert.equal(
     trackLabelError(["--label", "track:platform", "--label", "docs", "--label", "source:agent"]),
+    null,
+  );
+});
+
+// ── cross-front reuse field (#1821) ─────────────────────────────────────────
+test("bodyText reads --body, --body=, and -b inline forms", () => {
+  assert.equal(bodyText(["--body", "hello"]), "hello");
+  assert.equal(bodyText(["--body=hello"]), "hello");
+  assert.equal(bodyText(["-b", "hello"]), "hello");
+  assert.equal(bodyText([]), "");
+  // A --body-file that does not exist resolves to "" rather than throwing.
+  assert.equal(bodyText(["--body-file", "no-such-file-1821.md"]), "");
+});
+
+test("reuseFieldError requires a Reuse: line on a storefront-track Issue", () => {
+  for (const track of REUSE_GATED_TRACK_LABELS) {
+    const args = ["--label", track, "--title", "[Витрина][019] events feed"];
+    assert.match(reuseFieldError(args, "## Context\n\nno reuse answer here\n"), /Reuse: canon:/);
+    // Each sanctioned form satisfies it, bold or plain, list-marked or not.
+    assert.equal(
+      reuseFieldError(args, "Reuse: canon: packages/design-system/src/blocks/event-list.tsx\n"),
+      null,
+    );
+    assert.equal(
+      reuseFieldError(args, "**Reuse:** extract-from: apps/portal/app/webinars/room (#1722)\n"),
+      null,
+    );
+    assert.equal(reuseFieldError(args, "- Reuse: new: nothing shared covers this yet\n"), null);
+    // A field with no value, or an unknown verb, is not an answer.
+    assert.match(reuseFieldError(args, "Reuse:\n"), /Reuse: canon:/);
+    assert.match(reuseFieldError(args, "Reuse: canon:\n"), /Reuse: canon:/);
+    assert.match(reuseFieldError(args, "Reuse: maybe: something\n"), /Reuse: canon:/);
+  }
+});
+
+test("reuseFieldError exempts track:platform and epic containers", () => {
+  assert.equal(reuseFieldError(["--label", "track:platform", "--title", "x"], "no field"), null);
+  assert.equal(
+    reuseFieldError(["--label", "track:doctor", "--title", "epic: doctor storefront"], "no field"),
     null,
   );
 });

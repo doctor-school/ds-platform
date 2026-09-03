@@ -273,18 +273,27 @@ export type TransitionFence = (
 ) => Promise<void>;
 
 /**
- * 014 EARS-27 (#1741) — the mutual-exclusion refusal for a command that is not
- * a transition and therefore cannot fall out of the origin-keyed transition map
- * on its own. `ConfigureStream` is the only such command: a `legacy` эфир never
- * acquires a stream config (014-design §3.1), so configuring one is refused with
- * the same 409 `INVALID_TRANSITION` every other cross-machine command gets.
+ * 014 EARS-27 (#1741) — the mutual-exclusion refusal every BROADCAST-machine
+ * entry point runs: a 007 command aimed at a `legacy` эфир is answered 409
+ * `INVALID_TRANSITION` with the state untouched and no audit row.
  *
- * Every OTHER broadcast command (`PublishEvent`, `OpenRoom`, `CloseRoom`,
- * `HideEvent`) and both legacy commands need no guard of their own: they run
- * through {@link canTransition} against `LIFECYCLE_TRANSITIONS[origin]`, where
- * the other machine's edges simply do not exist. Mutual exclusion is a property
- * of the map's SHAPE, not a second rule bolted on beside it — which is what
- * keeps a future command from forgetting to apply it.
+ * The origin-keyed map carries most of the exclusion in its SHAPE — `draft →
+ * published`, `published → live`, `live → ended` exist on no legacy machine, so
+ * `PublishEvent` / `OpenRoom` / `CloseRoom` fall out of {@link canTransition} on
+ * their own. It does NOT carry all of it, and the two places it does not are
+ * where this guard earns its keep:
+ *
+ *  - `HideEvent` targets `hidden`, and `in_archive → hidden` IS a legal LEGACY
+ *    edge. Without the guard, 007's TERMINAL hide would apply to an archived
+ *    эфир and stamp {@link EVENT_HIDDEN_AUDIT_TYPE} on a reversible move;
+ *  - `ConfigureStream` is not a transition at all, so no map can refuse it — a
+ *    `legacy` эфир never acquires a stream config (014-design §3.1);
+ *  - the generic `POST :id/transition` writes state with no precondition and no
+ *    audit row, so both legacy edges are sealed off from it here.
+ *
+ * Applying it at every broadcast entry point rather than only where the map
+ * leaks is deliberate: exclusion that has to be re-derived per command is
+ * exclusion a future command forgets.
  */
 function assertBroadcastCommandOrigin(event: Event): void {
   if (event.origin !== "platform") {
@@ -703,8 +712,18 @@ export class EventsService {
     if (!current) return null;
 
     const from = current.event.state as EventLifecycleState;
-    // 014 EARS-27: keyed by the event's OWN machine, so this generic endpoint
-    // cannot be used to jump an event onto the other machine's states either.
+    // 014 EARS-25/27 (#1741) — a `legacy` эфир has exactly TWO commands and both
+    // are NAMED routes: `ArchiveLegacyBroadcast` carries the published-recording
+    // precondition (409 `EVENT_NOT_FINISHED`) and `event.archived_legacy`,
+    // `HideLegacyBroadcast` carries `event.hidden_legacy`. This generic endpoint
+    // writes state through the bare `updateState` — no precondition, no audit
+    // row — so letting it reach either legacy edge would be precisely the
+    // «set-any-state escape hatch» 014-design §3.1 rules out: an эфир archived
+    // with no recording to show and no feature-010 row to read it back from.
+    // Refused 409 `INVALID_TRANSITION` before the version check and any write.
+    assertBroadcastCommandOrigin(current.event);
+    // Still keyed by the event's OWN machine, so a platform event cannot be
+    // jumped onto the legacy machine's states either.
     if (!canTransition(from, to, current.event.origin)) {
       throw new InvalidTransitionError(from, to);
     }
@@ -758,7 +777,7 @@ export class EventsService {
       "published",
       EVENT_PUBLISHED_AUDIT_TYPE,
       actorSub,
-      undefined,
+      assertBroadcastCommandOrigin,
       undefined,
       expectedVersion,
     );
@@ -789,7 +808,7 @@ export class EventsService {
       "live",
       EVENT_WENT_LIVE_AUDIT_TYPE,
       actorSub,
-      undefined,
+      assertBroadcastCommandOrigin,
       undefined,
       expectedVersion,
     );
@@ -817,12 +836,14 @@ export class EventsService {
       "ended",
       EVENT_ENDED_AUDIT_TYPE,
       actorSub,
-      // 014 EARS-23 (#1741) — no command-specific guard any more. `live → ended`
-      // is once again the ONLY edge into `ended` on the platform machine (the
-      // 014 EARS-18 `published → ended` fork is gone), so the closed-set check in
-      // {@link namedTransition} already refuses every other origin state on its
-      // own. A second copy of the same rule here would be a rule that can drift.
-      undefined,
+      // 014 EARS-23/27 (#1741) — no command-specific STATE precondition any more.
+      // `live → ended` is once again the ONLY edge into `ended` on the platform
+      // machine (the 014 EARS-18 `published → ended` fork is gone), so the
+      // closed-set check in {@link namedTransition} refuses every other origin
+      // state on its own. What remains is the machine guard every broadcast
+      // command carries: `CloseRoom` belongs to 007 and never applies to a
+      // `legacy` эфир.
+      assertBroadcastCommandOrigin,
       undefined,
       expectedVersion,
     );
@@ -855,7 +876,13 @@ export class EventsService {
       "hidden",
       EVENT_HIDDEN_AUDIT_TYPE,
       actorSub,
-      undefined,
+      // 014 EARS-27 (#1741) — the closed set does NOT carry this one on its own:
+      // `in_archive → hidden` is a legal LEGACY edge, so a legacy эфир sitting in
+      // `in_archive` would answer 007's terminal `HideEvent` with 200 and stamp
+      // {@link EVENT_HIDDEN_AUDIT_TYPE} on a REVERSIBLE hide — the exact ledger
+      // ambiguity the two ids exist to prevent, running mirror to the hole
+      // {@link assertLegacyCommandOrigin} closes.
+      assertBroadcastCommandOrigin,
       undefined,
       expectedVersion,
     );

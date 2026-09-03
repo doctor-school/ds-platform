@@ -330,12 +330,16 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     it("EARS-4: the closed lifecycle enum is unchanged (publish is the only draft-originating command)", () => {
       // Guardrail against an accidental enum edit while wiring the named command.
+      // `in_archive` is the LEGACY machine's archive state (014 EARS-23, #1741);
+      // no platform command reaches it, and no legacy command reaches any of the
+      // five broadcast states — the two machines share the enum, not the edges.
       expect([...EVENT_LIFECYCLE_STATES]).toEqual([
         "draft",
         "published",
         "live",
         "ended",
         "hidden",
+        "in_archive",
       ]);
     });
   },

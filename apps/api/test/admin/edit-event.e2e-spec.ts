@@ -294,12 +294,14 @@ describe.skipIf(
     expect(body.state).toBe("published");
     // The edited instant (2026-07-17T17:30Z + 120 min) is deliberately pinned —
     // this case is about the МСК→UTC fold above — so the event's scheduled end
-    // is permanently past and its room was never opened. Since 014 EARS-18 that
-    // is exactly the published event which offers BOTH edges out: `live` (007
-    // EARS-5 OpenRoom) and `ended` (MarkEventEnded, for an эфир held off the
-    // platform). The read model offers the pair; the edit still does not
-    // unpublish.
-    expect(body.validTransitions).toEqual(["live", "ended"]);
+    // is permanently past and its room was never opened. That changes NOTHING
+    // about the edges offered: since #1741 the platform machine has a single
+    // edge out of `published` (`live`, 007 EARS-5 `OpenRoom`) whatever the
+    // clock says. An эфир held off the platform is a `legacy` event on its own
+    // machine, reached through `POST /v1/admin/legacy-broadcasts`, never by
+    // shortcutting a published platform event to `ended`. The edit still does
+    // not unpublish.
+    expect(body.validTransitions).toEqual(["live"]);
 
     // The 004 public event page reflects the edit.
     const pub = await app.inject({

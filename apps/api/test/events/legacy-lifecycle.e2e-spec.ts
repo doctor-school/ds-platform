@@ -234,6 +234,46 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       });
     }
 
+    /**
+     * Fire ONE 007 broadcast command by name. `stream` is the odd one out — a
+     * PUT with a body rather than a POST fence — but EARS-27 covers it like any
+     * other broadcast command, so the loop drives it through the same call.
+     */
+    async function broadcastCommand(cookie: string, id: string, name: string) {
+      if (name !== "stream") return eventCommand(cookie, id, name);
+      return app.inject({
+        method: "PUT",
+        url: `/v1/admin/events/${id}/stream`,
+        headers: {
+          ...device,
+          "content-type": "application/json",
+          ...authHeaders(cookie),
+        },
+        payload: { provider: "youtube", embedRef: "dQw4w9WgXcQ" },
+      });
+    }
+
+    /**
+     * POST the GENERIC guarded transition (`:id/transition`) — the bare
+     * closed-set state change that carries no precondition and no audit row.
+     */
+    async function genericTransition(
+      cookie: string,
+      id: string,
+      to: EventLifecycleState,
+    ) {
+      return app.inject({
+        method: "POST",
+        url: `/v1/admin/events/${id}/transition`,
+        headers: {
+          ...device,
+          ...authHeaders(cookie),
+          ...(await ifMatch(id)),
+        },
+        payload: { to },
+      });
+    }
+
     /** The single recording row the create transaction filed for this эфир. */
     async function recordingRow(
       eventId: string,
@@ -510,19 +550,78 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(await feedCardFor(legacy.id, heldAtMsk)).toBeUndefined();
     });
 
-    it("014 EARS-27.1: every broadcast command on a legacy эфир is refused 409 INVALID_TRANSITION with the state untouched", async () => {
+    it("014 EARS-27.1: every broadcast command on a legacy эфир is refused 409 INVALID_TRANSITION with the state untouched, from BOTH legacy states", async () => {
       const cookie = await adminSession(uniqueEmail("admin"));
       const legacy = await legacyBroadcast(cookie);
+      const commands = ["publish", "open", "close", "hide", "stream"];
 
-      for (const command of ["publish", "open", "close", "hide"]) {
-        const res = await eventCommand(cookie, legacy.id, command);
-        expect(res.statusCode, `${command} on a legacy эфир must be refused`)
-          .toBe(409);
+      // The эфир is `hidden` at birth: every broadcast target is a non-edge here,
+      // so the origin-keyed map alone would carry the refusal.
+      for (const command of commands) {
+        const res = await broadcastCommand(cookie, legacy.id, command);
+        expect(res.statusCode, `${command} on a hidden legacy эфир`).toBe(409);
         expect((res.json() as { code?: string }).code).toBe(
           "INVALID_TRANSITION",
         );
         expect((await persisted(legacy.id))?.state).toBe("hidden");
       }
+
+      // …and from `in_archive`, where it does NOT: `in_archive → hidden` is a
+      // legal LEGACY edge, so 007's terminal `HideEvent` would fall THROUGH the
+      // closed set and stamp `event.hidden` — a terminal id on a reversible
+      // move — unless the machine guard refuses it. This is the only state where
+      // the collision is reachable, which is why the loop is driven twice.
+      await publishRecording(cookie, legacy.id);
+      expect(
+        (await eventCommand(cookie, legacy.id, "archive-legacy")).statusCode,
+      ).toBe(200);
+      expect((await persisted(legacy.id))?.state).toBe("in_archive");
+
+      for (const command of commands) {
+        const res = await broadcastCommand(cookie, legacy.id, command);
+        expect(res.statusCode, `${command} on an archived legacy эфир`).toBe(
+          409,
+        );
+        expect((res.json() as { code?: string }).code).toBe(
+          "INVALID_TRANSITION",
+        );
+        expect((await persisted(legacy.id))?.state).toBe("in_archive");
+      }
+      // The ledger stays free of the 007 ids: no broadcast command ran.
+      expect(await auditCount(legacy.id, "event.hidden")).toBe(0);
+      expect(await auditCount(legacy.id, "event.published")).toBe(0);
+    });
+
+    it("014 EARS-27.3: the generic :id/transition endpoint cannot reach either legacy edge — both are refused 409 INVALID_TRANSITION", async () => {
+      const cookie = await adminSession(uniqueEmail("admin"));
+      const legacy = await legacyBroadcast(cookie);
+
+      // `hidden → in_archive` through the generic route would archive the эфир
+      // with NO published recording (bypassing the EARS-25 precondition) and NO
+      // `event.archived_legacy` row — the «set-any-state escape hatch»
+      // 014-design §3.1 rules out. A legacy эфир has exactly two commands and
+      // both are named routes.
+      const archived = await genericTransition(cookie, legacy.id, "in_archive");
+      expect(archived.statusCode).toBe(409);
+      expect((archived.json() as { code?: string }).code).toBe(
+        "INVALID_TRANSITION",
+      );
+      expect((await persisted(legacy.id))?.state).toBe("hidden");
+      expect(await auditCount(legacy.id, "event.archived_legacy")).toBe(0);
+
+      // …and the mirror: `in_archive → hidden` without `event.hidden_legacy`.
+      await publishRecording(cookie, legacy.id);
+      expect(
+        (await eventCommand(cookie, legacy.id, "archive-legacy")).statusCode,
+      ).toBe(200);
+      const hidden = await genericTransition(cookie, legacy.id, "hidden");
+      expect(hidden.statusCode).toBe(409);
+      expect((hidden.json() as { code?: string }).code).toBe(
+        "INVALID_TRANSITION",
+      );
+      expect((await persisted(legacy.id))?.state).toBe("in_archive");
+      expect(await auditCount(legacy.id, "event.hidden_legacy")).toBe(0);
+      expect(await auditCount(legacy.id, "event.hidden")).toBe(0);
     });
 
     it("014 EARS-27.2: every legacy command on a platform event is refused 409 INVALID_TRANSITION with the state untouched", async () => {

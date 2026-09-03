@@ -361,7 +361,12 @@ export class EventsAdminController {
           state: err.state,
         });
       }
-      throw err;
+      // 014 EARS-27 (#1741) — `ConfigureStream` is a BROADCAST command, so it is
+      // refused on a `legacy` эфир with the same 409 `INVALID_TRANSITION` every
+      // other cross-machine command answers. It is not a transition, so the
+      // refusal reaches here as a raw domain error rather than through the
+      // transition path; without this mapping it would surface as a 500.
+      throw asTransitionRefusal(err);
     }
   }
 
@@ -542,8 +547,10 @@ export class EventsAdminController {
    *
    * Unlike 007's terminal `ended → hidden` this move is REVERSIBLE — the эфир
    * can be archived again — which is why it is its own route with its own audit
-   * id rather than a reuse of `:id/hide` (refused there by the origin-keyed
-   * closed set anyway, EARS-27).
+   * id rather than a reuse of `:id/hide`. The origin-keyed closed set does NOT
+   * separate the two on its own — `in_archive → hidden` is a legal legacy edge,
+   * so 007's terminal hide would otherwise land here — which is why `:id/hide`
+   * carries the explicit machine guard (EARS-27).
    *
    * Its only refusal is 409 `INVALID_TRANSITION`: a `platform` event, or a
    * `legacy` эфир not currently `in_archive`. Same fenced protocol as its

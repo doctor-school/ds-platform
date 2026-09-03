@@ -10,7 +10,12 @@ import {
   DataTable,
   DayAgenda,
   EmptyState,
+  EventFormatBlock,
   EventList,
+  EventPageHero,
+  EventPageShell,
+  EventSignupCard,
+  EventSpeakerCard,
   FilterBar,
   FormActions,
   FormDerivedNote,
@@ -27,6 +32,7 @@ import {
   type DataTableColumn,
   type DotGridCell,
   type EventListTab,
+  type EventSignupCardProps,
   type MonthGridCell,
   type MonthPickerCell,
 } from "@ds/design-system/blocks";
@@ -2424,6 +2430,230 @@ function FormSectionShowcase() {
   );
 }
 
+type ShowcaseCta = EventSignupCardProps["cta"];
+
+const EVENT_PAGE_CTA: Record<ShowcaseCta["action"], ShowcaseCta> = {
+  register: {
+    action: "register",
+    label: "Участвовать",
+    href: "#register",
+    reason: null,
+  },
+  registered: {
+    action: "registered",
+    label: "Вы записаны — напомним за час",
+    href: null,
+    reason: null,
+  },
+  "enter-room": {
+    action: "enter-room",
+    label: "Войти в эфир",
+    href: "#room",
+    reason: null,
+  },
+  "switch-to-online": {
+    action: "switch-to-online",
+    label: "Смотреть онлайн",
+    href: "#online",
+    reason: "Очные места закончились — эфир открыт для всех.",
+  },
+  "sold-out": {
+    action: "sold-out",
+    label: "Мест не осталось",
+    href: null,
+    reason: "Все 40 очных мест заняты.",
+  },
+  unavailable: {
+    action: "unavailable",
+    label: "Участие закрыто",
+    href: null,
+    reason: "Событие завершилось — запись появится в архиве.",
+  },
+};
+
+const EVENT_PAGE_CONDITIONS = [
+  {
+    label: "Участие",
+    value: <span className="text-success-text">Бесплатно для врача</span>,
+  },
+  { label: "Формат", value: "Онлайн · комната эфира" },
+  { label: "Длительность", value: <span className="tabular-nums">90 минут</span> },
+  { label: "НМО", value: <Badge variant="label">2 балла</Badge> },
+];
+
+const EVENT_PAGE_PROPS: PropRow[] = [
+  {
+    name: "hero / aside / children",
+    type: "ReactNode",
+    required: false,
+    description:
+      "EventPageShell slots — the poster band, the single right column (variant А), and the left reading flow. The shell owns the grid; hosts own the copy.",
+  },
+  {
+    name: "cta",
+    type: "ParticipationCta",
+    required: true,
+    description:
+      "The server-resolved participation policy, rendered AS GIVEN. The card branches on no lifecycle, format, registration or seat state of its own (LD-2).",
+  },
+  {
+    name: "pinned",
+    type: "boolean",
+    required: false,
+    description:
+      "Canvas «Развилка 1 · вариант А» — the sign-up card sticks at top-20 on the wide canvas and unpins below the layout breakpoint.",
+  },
+  {
+    name: "proof",
+    type: "ReactNode",
+    required: false,
+    description:
+      "Social-proof slot, empty until EARS-3 (#1767) supplies its content.",
+  },
+  {
+    name: "kind",
+    type: '"online"',
+    required: true,
+    description:
+      "EventFormatBlock — a single-member union on purpose; offline and hybrid are EARS-8 (#1771), not a placeholder branch here.",
+  },
+];
+
+function EventPagePreview({
+  cta,
+  pinned = true,
+}: {
+  cta: ShowcaseCta;
+  pinned?: boolean;
+}) {
+  return (
+    <EventPageShell
+      hero={
+        <EventPageHero
+          breadcrumb={
+            <>
+              <Link href="#doctor-school" tone="on-primary">
+                Doctor.School
+              </Link>
+              <span aria-hidden="true">/</span>
+              <Link href="#specialty" tone="on-primary">
+                Травматология и ортопедия
+              </Link>
+              <span aria-hidden="true">/</span>
+              <span>Вебинар «PRP при гонартрозе»</span>
+            </>
+          }
+          kicker="Школа ортобиологии · Вебинар · Онлайн"
+          title="PRP при гонартрозе"
+          dateLine="28 августа, 19:00 (МСК) · 90 минут"
+          chips={["Травматология и ортопедия", "Ортобиология", "НМО 2 балла"]}
+          statusPlate={<Badge variant="success">Скоро · через 5 дней</Badge>}
+        />
+      }
+      aside={
+        <EventSignupCard
+          timeLabel="19:00"
+          dateLabel="28 августа"
+          weekdayLabel="пятница · МСК"
+          conditions={EVENT_PAGE_CONDITIONS}
+          cta={cta}
+          note="Нужна регистрация — вернём вас на эту страницу."
+          pinned={pinned}
+        />
+      }
+    >
+      <section>
+        <p className="text-base leading-relaxed text-muted-foreground">
+          PRP-терапия при гонартрозе: показания, доказательная база и рабочие
+          протоколы. Разбираем реальный клинический случай — от отбора пациента
+          до оценки результата через 6 месяцев.
+        </p>
+      </section>
+      <EventSpeakerCard
+        className="mt-18"
+        name="Михаил Страхов"
+        roleKicker="Травматолог-ортопед"
+        affiliation="РНИМУ им. Пирогова"
+        bio="Д.м.н., профессор кафедры травматологии и ортопедии, ведёт направление ортобиологии на платформе. Автор 40+ публикаций по регенеративным методикам."
+        initials="МС"
+        href="#expert"
+        footerLabel="12 эфиров · страница эксперта →"
+        footerHref="#expert"
+      />
+      <EventFormatBlock
+        className="mt-18"
+        kind="online"
+        roomOpensLine="Комната эфира откроется за 10 минут до начала"
+        duringLine="Во время эфира: вопрос лектору · опросы с живым графиком · отметки присутствия для НМО (90 минут и 2 отметки)"
+      />
+    </EventPageShell>
+  );
+}
+
+function EventPageSection() {
+  return (
+    <BlockSection
+      title="Event page"
+      exportsLine="EventPageShell · EventPageHero · EventSignupCard · EventSpeakerCard · EventFormatBlock"
+    >
+      <SubRow label="Preview">
+        <WideCanvas>
+          <div className="w-full" data-testid="event-page-showcase">
+            <EventPagePreview cta={EVENT_PAGE_CTA.register} />
+          </div>
+        </WideCanvas>
+      </SubRow>
+      <SubRow label="Slots / props">
+        <PropsTable rows={EVENT_PAGE_PROPS} />
+      </SubRow>
+      <SubRow label="State matrix">
+        <div className="grid gap-6" data-testid="event-page-state-matrix">
+          {(Object.keys(EVENT_PAGE_CTA) as ShowcaseCta["action"][]).map(
+            (action) => (
+              <StateCase
+                key={action}
+                label={`cta · ${action}`}
+                note={
+                  EVENT_PAGE_CTA[action].href === null
+                    ? "no target by design — the card states the fact and renders NO control (EARS-4)"
+                    : "the server resolved a target; the card renders the one control that leads to it"
+                }
+              >
+                <div className="max-w-90">
+                  <EventSignupCard
+                    timeLabel="19:00"
+                    dateLabel="28 августа"
+                    weekdayLabel="пятница · МСК"
+                    conditions={EVENT_PAGE_CONDITIONS}
+                    cta={EVENT_PAGE_CTA[action]}
+                    note="Нужна регистрация — вернём вас на эту страницу."
+                  />
+                </div>
+              </StateCase>
+            ),
+          )}
+          <StateCase
+            label="pinned · off"
+            note="the card scrolls with the page; below the layout breakpoint the pin is off in both cases and the card reads FIRST"
+          >
+            <div className="max-w-90">
+              <EventSignupCard
+                timeLabel="19:00"
+                dateLabel="28 августа"
+                weekdayLabel="пятница · МСК"
+                conditions={EVENT_PAGE_CONDITIONS}
+                cta={EVENT_PAGE_CTA.register}
+                pinned={false}
+                proof={<span>Уже записались 37 ортопедов</span>}
+              />
+            </div>
+          </StateCase>
+        </div>
+      </SubRow>
+    </BlockSection>
+  );
+}
+
 export function BlocksView() {
   return (
     <div className="flex flex-col gap-2">
@@ -2438,6 +2668,7 @@ export function BlocksView() {
       <PaginationSection />
       <EmptyStateSection />
       <EventListSection />
+      <EventPageSection />
       <FilterBarSection />
       <ComboboxSection />
       <FormSectionShowcase />

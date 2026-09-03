@@ -296,6 +296,29 @@ function assertBroadcastCommandOrigin(event: Event): void {
 }
 
 /**
+ * 014 EARS-27 (#1741) — the mirror guard: a LEGACY command
+ * (`ArchiveLegacyBroadcast` / `HideLegacyBroadcast`) on a `platform` event is
+ * refused with 409 `INVALID_TRANSITION`, the state untouched.
+ *
+ * The origin-keyed map carries most of the exclusion on its own, but not all of
+ * it: `HideLegacyBroadcast` targets `hidden`, and `ended → hidden` IS a legal
+ * edge on the platform machine (007's terminal `HideEvent`). Without this guard
+ * the legacy command would apply to a platform `ended` event and stamp the
+ * ledger with {@link EVENT_HIDDEN_LEGACY_AUDIT_TYPE} — a reversible-hide id on a
+ * terminal hide, which is exactly the ambiguity the two ids exist to prevent.
+ * Two commands may share a target only while each one is pinned to its own
+ * machine.
+ */
+function assertLegacyCommandOrigin(event: Event): void {
+  if (event.origin !== "legacy") {
+    throw new InvalidTransitionError(
+      event.state as EventLifecycleState,
+      event.state as EventLifecycleState,
+    );
+  }
+}
+
+/**
  * #1593 — refuse a command whose `If-Match` names a version the aggregate has
  * already moved past. Run LAST among the guards, after the closed-set check, the
  * command-specific precondition and the 014 EARS-18 preconditions: a request
@@ -870,7 +893,7 @@ export class EventsService {
       "in_archive",
       EVENT_ARCHIVED_LEGACY_AUDIT_TYPE,
       actorSub,
-      undefined,
+      assertLegacyCommandOrigin,
       fence,
       expectedVersion,
       // Resolved INSIDE the command rather than handed in by the caller: the
@@ -915,7 +938,7 @@ export class EventsService {
       "hidden",
       EVENT_HIDDEN_LEGACY_AUDIT_TYPE,
       actorSub,
-      undefined,
+      assertLegacyCommandOrigin,
       fence,
       expectedVersion,
     );

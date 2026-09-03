@@ -29,7 +29,7 @@ describe("<EventPageShell>", () => {
     expect(screen.getByTestId("flow-slot")).toBeInTheDocument();
   });
 
-  it("020 EARS-19: the sign-up column shall read FIRST on the narrow canvas and second on the wide one", () => {
+  it("020 EARS-4: the sign-up column shall read FIRST on the narrow canvas and second on the wide one", () => {
     render(<EventPageShell aside={<div />}>flow</EventPageShell>);
 
     const aside = screen.getByTestId("event-page-aside");

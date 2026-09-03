@@ -51,7 +51,7 @@ const browser = await chromium.launch();
 // The four render shots: the whole Event-page section (composed preview, the
 // slots/props contract, and the six-CTA state matrix) at both breakpoints in
 // both themes. At 390 the shell collapses to one column with the sign-up card
-// FIRST, which is the ordering EARS-19 asks the evidence to show.
+// FIRST, which is the ordering EARS-4 asks the evidence to show.
 for (const viewport of ["desktop", "mobile"]) {
   for (const theme of ["light", "dark"]) {
     await shoot(browser, { name: `${viewport}-${theme}`, viewport, theme });

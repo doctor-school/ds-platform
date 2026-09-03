@@ -97,7 +97,7 @@ export function EventSignupCard({
     >
       <div className="border-2 border-border bg-card shadow-lg">
         <div className="flex items-center gap-3.5 border-b-2 border-border bg-tint px-6 py-5">
-          <span className="text-4xl font-extrabold leading-none tracking-tight tabular-nums text-tint-foreground">
+          <span className="text-3xl font-extrabold leading-none tracking-tight tabular-nums text-tint-foreground">
             {timeLabel}
           </span>
           <span className="text-caption font-extrabold uppercase leading-snug tracking-wider text-tint-foreground">

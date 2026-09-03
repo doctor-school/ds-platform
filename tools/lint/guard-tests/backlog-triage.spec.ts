@@ -15,7 +15,9 @@ import {
   isStopStateComment,
   mentionsIssue,
   parseProseBlockers,
+  queueAnnotationFor,
   subsystemName,
+  trackQueueHeads,
   type ClaimComment,
   type DepRef,
   type IssueInput,
@@ -782,6 +784,85 @@ describe("backlog-triage formatReport() — IN-FLIGHT-ELSEWHERE rows (#811)", ()
     expect(report).not.toContain("In flight elsewhere");
     expect(report).not.toContain("in-flight-elsewhere");
     expect(report).toContain("1 takeable, 0 blocked");
+  });
+});
+
+describe("backlog-triage queue grouping (#1855)", () => {
+  const MILESTONES = [
+    { title: "Витрина R1 — MVP витрины", due_on: "2026-09-06T00:00:00Z", state: "open" },
+    { title: "Витрина R3 — Эфиры", due_on: "2026-09-21T00:00:00Z", state: "open" },
+    { title: "Витрина · Позже", due_on: null, state: "open" },
+    { title: "Академия R1 — Каталог", due_on: "2026-10-07T00:00:00Z", state: "open" },
+    { title: "Platform ops & hardening", due_on: null, state: "open" },
+  ];
+
+  it("queueAnnotationFor maps each rule outcome onto the report's position tag", () => {
+    expect(
+      queueAnnotationFor(
+        { title: "форма", labels: ["track:doctor"], milestone: "Витрина R1 — MVP витрины" },
+        MILESTONES,
+      ),
+    ).toEqual({ position: "QUEUE-HEAD", head: "Витрина R1 — MVP витрины" });
+
+    expect(
+      queueAnnotationFor(
+        { title: "города", labels: ["track:doctor"], milestone: "Витрина R3 — Эфиры" },
+        MILESTONES,
+      ),
+    ).toEqual({ position: "AHEAD-OF-QUEUE", head: "Витрина R1 — MVP витрины" });
+
+    expect(
+      queueAnnotationFor(
+        {
+          title: "tooling: guard",
+          labels: ["track:platform"],
+          milestone: "Platform ops & hardening",
+        },
+        MILESTONES,
+      ).position,
+    ).toBe("PLATFORM");
+
+    expect(
+      queueAnnotationFor(
+        { title: "epic: two-site IA", labels: ["track:doctor"], milestone: null },
+        MILESTONES,
+      ).position,
+    ).toBe("EPIC");
+  });
+
+  it("trackQueueHeads reports the current release milestone of each product track", () => {
+    expect(trackQueueHeads(MILESTONES)).toEqual([
+      { track: "track:doctor", head: "Витрина R1 — MVP витрины" },
+      { track: "track:academy", head: "Академия R1 — Каталог" },
+    ]);
+  });
+
+  it("formatReport prints QUEUE-HEAD rows before AHEAD-OF-QUEUE ones, tagged with the head", () => {
+    const head = classify(issue(900, ["tooling"], "форма регистрации"), []);
+    head.queue = { position: "QUEUE-HEAD", head: "Витрина R1 — MVP витрины" };
+    const ahead = classify(issue(800, ["tooling"], "справочник городов"), []);
+    ahead.queue = { position: "AHEAD-OF-QUEUE", head: "Витрина R1 — MVP витрины" };
+
+    const report = formatReport([ahead, head], trackQueueHeads(MILESTONES));
+
+    expect(report).toContain("- #900 [QUEUE-HEAD] форма регистрации");
+    expect(report).toContain(
+      "- #800 [AHEAD-OF-QUEUE (head: Витрина R1 — MVP витрины)] справочник городов",
+    );
+    // ordering: the queue head is listed above the row that jumps it
+    expect(report.indexOf("- #900")).toBeLessThan(report.indexOf("- #800"));
+    // the ahead-of-queue row is TAGGED, never hidden
+    expect(report).toContain("## Takeable (2)");
+    // per-track head summary + the litmus line
+    expect(report).toContain("queue head: track:doctor → Витрина R1 — MVP витрины");
+    expect(report).toContain("queue head: track:academy → Академия R1 — Каталог");
+    expect(report).toContain("блокирует ли это регистрацию врача");
+  });
+
+  it("no milestones (gh failure) ⇒ no queue summary and the report still renders", () => {
+    const report = formatReport([classify(issue(700, [], "free task"), [])]);
+    expect(report).not.toContain("queue head:");
+    expect(report).toContain("- #700 free task");
   });
 });
 

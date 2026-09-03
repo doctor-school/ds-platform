@@ -2,7 +2,7 @@
 title: "020 — The event page for both storefronts"
 description: "Requirements for `#d-event` / `#a-event`, the one event page that serves the doctor storefront and the Academy from a single core (D-4): the open registration-free part with its decision set and social proof, the F-020-1 А layout whose only right-column card is the sticky sign-up card while «Ведёт» sits in the left flow, the single «Участвовать» CTA entering feature 021 and returning to this exact page, the format block as the only format-varying part with the F-020-2 Б hybrid tabs and the F-020-3 Б seats-exhausted switch, room entry for a registered doctor on the doctor storefront host, the lifecycle states inherited from feature 004 plus the cancelled-or-moved state, the CON-11 medical-status gate, and the explicitly tracked wave-2 deferrals — points economy, live-эфир interaction, НМО check-ins, the ticket/QR unit, the post-event feedback block and the event-level partner link."
 slug: 020-event-page-two-storefronts
-status: Draft
+status: In dev
 surface: user-facing
 tracker: https://github.com/doctor-school/ds-platform/milestone/17
 issues:

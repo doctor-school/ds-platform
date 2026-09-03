@@ -2,7 +2,7 @@
 title: "020 — Design"
 description: "Design companion to the 020 event-page-two-storefronts requirements: the route topology of one shared event-page core under two thin storefront routes, the checked-in cross-front ownership and extraction matrix, the guest round-trip through feature 021 back to this exact URL, room entry on the doctor host, the lifecycle machine extended with cancelled-or-moved, the entity fragment behind the page, the format-block union with its URL codec, the core → policy → composition → hosts build sequence and what release 3 deliberately does not draw."
 slug: 020-event-page-two-storefronts-design
-status: Draft
+status: In dev
 lang: en
 ---
 

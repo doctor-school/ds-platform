@@ -35,6 +35,8 @@ import {
   PublicEventListingPageDto,
   UpcomingBroadcastListDto,
 } from "./events.dto.js";
+import type { AroundEventRoutes } from "./around-event.resolver.js";
+import { resolveAroundEvent } from "./around-event.resolver.js";
 import type { ParticipationRoutes } from "./participation-cta.resolver.js";
 import { ParticipationService } from "./participation.service.js";
 
@@ -51,6 +53,25 @@ const ACADEMY_ROUTES: ParticipationRoutes = {
   eventPath: (slug) => `/webinars/${encodeURIComponent(slug)}`,
   registrationEntry: "/register",
   roomPath: (slug) => `/webinars/${encodeURIComponent(slug)}/room`,
+};
+
+/**
+ * 020 EARS-2 (#1765) — the ACADEMY host's «вокруг события» table. Every entry
+ * is `null` because academy.doctor.school mounts none of these routes: there is
+ * no public school page, no public expert page and no community screen on this
+ * host today (`#d-school` / `#d-community` are unbuilt two-site-IA screens —
+ * `specs/product/two-site-ia/functional-map-ru.md` L42, L46, L106, L123). A
+ * `null` path drops the key, so the page renders the school and the speaker
+ * names as plain text: absent, never dead (EARS-2 / EARS-19).
+ */
+const ACADEMY_AROUND_ROUTES: AroundEventRoutes = {
+  // No public school page on academy.doctor.school yet (#d-school, unbuilt).
+  schoolPath: () => null,
+  // No public expert page on this host yet — `apps/admin/app/experts` is
+  // operator CRUD, not a public surface.
+  expertPath: () => null,
+  // No community screen on this host yet (#d-community, unbuilt).
+  communityPath: () => null,
 };
 
 /**
@@ -203,7 +224,10 @@ export class EventsPublicController {
     // A draft/unknown event is not-found — indistinguishable from a bad id, so a
     // hidden draft leaks no "exists but private" oracle (EARS-6, EARS-10).
     if (!found) throw new NotFoundException("event not found");
-    return found;
+    // 020 EARS-2: the host contributes its route table and nothing else; the
+    // link policy is the shared resolver. It reads no principal, so the body
+    // stays byte-identical for a guest and a signed-in doctor (EARS-1).
+    return { ...found, links: resolveAroundEvent(found, ACADEMY_AROUND_ROUTES) };
   }
 
   /**

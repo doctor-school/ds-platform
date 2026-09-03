@@ -281,6 +281,11 @@ describe.skipIf(!process.env.DATABASE_URL)(
           // `…/:idOrSlug/participation` read, deliberately not on this body.
           "format",
           "id",
+          // 020 EARS-2 (#1765): the AroundEvent `links` object. It carries only
+          // hrefs the SERVING HOST already publishes — never a viewer fact and
+          // never an operator field — so it is publish-safe and leaves the
+          // guest/principal byte-identity below intact.
+          "links",
           "partners",
           "programPdfUrl",
           // 014 EARS-4 (#1341): the source-free recording projection. It joins

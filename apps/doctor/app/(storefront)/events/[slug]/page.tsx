@@ -3,10 +3,12 @@ import { notFound } from "next/navigation";
 import { Badge } from "@ds/design-system/badge";
 import { Link } from "@ds/design-system/link";
 import {
+  EventAboutSection,
   EventFormatBlock,
   EventPageHero,
+  EventPageKicker,
   EventPageShell,
-  EventSectionHeading,
+  EventProgrammeSection,
   EventSignupCard,
   EventSpeakerCard,
   eventFormatBlockProps,
@@ -14,7 +16,8 @@ import {
   eventLifecyclePlate,
   eventPageChips,
   eventPageDateLine,
-  eventPageKicker,
+  eventPageKickerParts,
+  eventProgrammeContent,
   eventSignupCardProps,
   eventSpeakerCards,
 } from "@ds/design-system/blocks";
@@ -114,7 +117,7 @@ export default async function DoctorEventPage({
               <span>{event.title}</span>
             </>
           }
-          kicker={eventPageKicker(event)}
+          kicker={<EventPageKicker {...eventPageKickerParts(event)} />}
           title={event.title}
           dateLine={eventPageDateLine(event)}
           chips={eventPageChips(event)}
@@ -138,30 +141,20 @@ export default async function DoctorEventPage({
         ) : null
       }
     >
-      <section data-testid="event-about">
-        <EventSectionHeading>{COPY.about}</EventSectionHeading>
-        <p className="mt-7 text-base leading-relaxed text-pretty text-foreground">
-          {event.description}
-        </p>
-      </section>
+      <EventAboutSection
+        heading={COPY.about}
+        description={event.description}
+      />
 
-      {/* The programme download renders only when the operator attached one —
-          never a broken link. Routed through the DS `Link` primitive so hover
-          and focus behave identically on both storefronts (EARS-18, #1764). */}
-      {event.programPdfUrl ? (
-        <section className="mt-14" data-testid="event-programme">
-          <EventSectionHeading>{COPY.programme}</EventSectionHeading>
-          <Link
-            href={event.programPdfUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="mt-7 inline-flex items-center gap-3 border-2 border-border bg-card px-6 py-4 text-sm shadow-ghost"
-          >
-            <span aria-hidden="true">↓</span>
-            {COPY.programmeDownload}
-          </Link>
-        </section>
-      ) : null}
+      {/* 020 EARS-2 (#1765) — the programme section always renders: the
+          download when the operator attached a PDF, and otherwise the honest
+          lifecycle sentence the shared mapper picks. An omitted section and an
+          empty labelled box are both banned (EARS-19). */}
+      <EventProgrammeSection
+        heading={COPY.programme}
+        downloadLabel={COPY.programmeDownload}
+        {...eventProgrammeContent(event)}
+      />
 
       {eventSpeakerCards(event).map((speaker, index) => (
         <EventSpeakerCard key={index} className="mt-14" {...speaker} />

@@ -25,6 +25,8 @@ import {
 import { Authz, Public } from "../authz/index.js";
 import { EventsService } from "../events/events.service.js";
 import { EventPageViewDto, ParticipationCtaDto } from "../events/events.dto.js";
+import type { AroundEventRoutes } from "../events/around-event.resolver.js";
+import { resolveAroundEvent } from "../events/around-event.resolver.js";
 import type { ParticipationRoutes } from "../events/participation-cta.resolver.js";
 import { ParticipationService } from "../events/participation.service.js";
 import {
@@ -88,6 +90,24 @@ const DOCTOR_ROUTES: ParticipationRoutes = {
   eventPath: (slug) => `/events/${encodeURIComponent(slug)}`,
   registrationEntry: "/register",
   roomPath: null,
+};
+
+/**
+ * 020 EARS-2 (#1765) — the DOCTOR host's «вокруг события» table, the twin of
+ * the Academy one. Every entry is `null` for the same reason: doctor.school
+ * serves `/`, `/events`, `/events/:slug` and `/register` and nothing else —
+ * no school page, no expert page, no community screen (`#d-school` /
+ * `#d-community`, `specs/product/two-site-ia/functional-map-ru.md` L42, L46,
+ * L106, L123). A `null` path drops the key, so this page renders plain text
+ * where the link will one day be: absent, never dead (EARS-2 / EARS-19).
+ */
+const DOCTOR_AROUND_ROUTES: AroundEventRoutes = {
+  // No public school page on doctor.school yet (#d-school, unbuilt).
+  schoolPath: () => null,
+  // No public expert page on doctor.school yet (admin CRUD is not a surface).
+  expertPath: () => null,
+  // No community screen on doctor.school yet (#d-community, unbuilt).
+  communityPath: () => null,
 };
 
 @Controller({ path: "storefront/doctor/events", version: "1" })
@@ -230,7 +250,9 @@ export class DoctorEventsPublicController {
     // storefront cannot become the oracle the Academy route refuses to be
     // (004 EARS-6).
     if (!found) throw new NotFoundException("event not found");
-    return found;
+    // 020 EARS-2: the ONE link policy, handed THIS host's route table. Both
+    // hosts resolve every key absent today, so the two bodies stay identical.
+    return { ...found, links: resolveAroundEvent(found, DOCTOR_AROUND_ROUTES) };
   }
 
   /**

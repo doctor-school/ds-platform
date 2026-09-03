@@ -135,6 +135,10 @@ export const SHOWCASE_REGISTRY: ShowcaseEntry[] = [
   { id: "EventSignupCard", section: "blocks" },
   { id: "EventSpeakerCard", section: "blocks" },
   { id: "EventFormatBlock", section: "blocks" },
+  // 020 EARS-2 — the shared left-flow sections + link-aware kicker, #1765
+  { id: "EventAboutSection", section: "blocks" },
+  { id: "EventProgrammeSection", section: "blocks" },
+  { id: "EventPageKicker", section: "blocks" },
   { id: "FilterBar", section: "blocks" },
 
   // ── Events facet panel (019 EARS-7, #1522) — the ONE shared events-filter

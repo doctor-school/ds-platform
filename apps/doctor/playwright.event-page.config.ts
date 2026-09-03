@@ -18,7 +18,8 @@ import { defineConfig, devices } from "@playwright/test";
  */
 export default defineConfig({
   testDir: "./e2e",
-  testMatch: /event-page\.spec\.ts$/,
+  // 020 EARS-1 (`event-page.spec.ts`) + 020 EARS-2 (`event-page-open-part.spec.ts`).
+  testMatch: /event-page(-open-part)?\.spec\.ts$/,
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: 0,

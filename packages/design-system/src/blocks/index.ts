@@ -118,6 +118,19 @@ export { EventSpeakerCard } from "./event-speaker-card";
 export type { EventSpeakerCardProps } from "./event-speaker-card";
 export { EventFormatBlock } from "./event-format-block";
 export type { EventFormatBlockProps } from "./event-format-block";
+// 020 EARS-2 — the shared left-flow sections + the link-aware hero kicker
+// (#1765). Both storefronts mounted hand-composed copies of these until this
+// slice; they are one implementation now.
+export {
+  EventAboutSection,
+  EventPageKicker,
+  EventProgrammeSection,
+} from "./event-left-flow";
+export type {
+  EventAboutSectionProps,
+  EventPageKickerProps,
+  EventProgrammeSectionProps,
+} from "./event-left-flow";
 // 020 EARS-1/EARS-18 — the ONE view→props projection both storefronts render
 // through, so the two hosts cannot drift apart on the same event (slice 3, #1764).
 export {
@@ -128,12 +141,16 @@ export {
   eventPageChips,
   eventPageDateLine,
   eventPageKicker,
+  eventPageKickerParts,
   eventPageTimeParts,
+  eventProgrammeContent,
   eventSignupCardProps,
   eventSpeakerCards,
 } from "./event-page-view";
 export type {
   EventLifecyclePlate,
   EventPageCopy,
+  EventPageKickerParts,
   EventPageTimeParts,
+  EventProgrammeContent,
 } from "./event-page-view";

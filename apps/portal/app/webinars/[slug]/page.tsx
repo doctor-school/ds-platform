@@ -5,10 +5,12 @@ import { Badge } from "@ds/design-system/badge";
 import { Link } from "@ds/design-system/link";
 import { WebinarRecordingPlaque } from "@ds/design-system/webinar-recording-plaque";
 import {
+  EventAboutSection,
   EventFormatBlock,
   EventPageHero,
+  EventPageKicker,
   EventPageShell,
-  EventSectionHeading,
+  EventProgrammeSection,
   EventSignupCard,
   EventSpeakerCard,
   eventFormatBlockProps,
@@ -16,7 +18,8 @@ import {
   eventLifecyclePlate,
   eventPageChips,
   eventPageDateLine,
-  eventPageKicker,
+  eventPageKickerParts,
+  eventProgrammeContent,
   eventSignupCardProps,
   eventSpeakerCards,
 } from "@ds/design-system/blocks";
@@ -196,7 +199,7 @@ export default async function WebinarEventPage({
                 <span>{event.title}</span>
               </>
             }
-            kicker={eventPageKicker(event)}
+            kicker={<EventPageKicker {...eventPageKickerParts(event)} />}
             title={event.title}
             dateLine={eventPageDateLine(event)}
             chips={eventPageChips(event)}
@@ -314,30 +317,20 @@ export default async function WebinarEventPage({
           </div>
         ) : null}
 
-        <section data-testid="event-about">
-          <EventSectionHeading>{t("page.about")}</EventSectionHeading>
-          <p className="mt-7 text-base leading-relaxed text-pretty text-foreground">
-            {event.description}
-          </p>
-        </section>
+        <EventAboutSection
+          heading={t("page.about")}
+          description={event.description}
+        />
 
-        {/* 004 EARS-2 — the programme download, rendered only when the operator
-            attached one (never a broken link). `text-primary-action` is the
-            card-safe AA link token (#270), never `text-primary`. */}
-        {event.programPdfUrl ? (
-          <section className="mt-14" data-testid="event-programme">
-            <EventSectionHeading>{t("page.program")}</EventSectionHeading>
-            <Link
-              href={event.programPdfUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="mt-7 inline-flex items-center gap-3 border-2 border-border bg-card px-6 py-4 text-sm shadow-ghost"
-            >
-              <span aria-hidden="true">↓</span>
-              {t("page.programDownload")}
-            </Link>
-          </section>
-        ) : null}
+        {/* 020 EARS-2 (#1765) — the shared programme section. With a PDF it is
+            the download; without one it states the honest lifecycle sentence
+            the mapper picks, so the academy and doctor.school tell a doctor the
+            same thing about the same missing programme (EARS-18/EARS-19). */}
+        <EventProgrammeSection
+          heading={t("page.program")}
+          downloadLabel={t("page.programDownload")}
+          {...eventProgrammeContent(event)}
+        />
 
         {eventSpeakerCards(event).map((speaker, index) => (
           <EventSpeakerCard key={index} className="mt-14" {...speaker} />

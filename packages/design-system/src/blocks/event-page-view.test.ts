@@ -9,6 +9,8 @@ import {
   eventPageChips,
   eventPageDateLine,
   eventPageKicker,
+  eventPageKickerParts,
+  eventProgrammeContent,
   eventSignupCardProps,
   eventSpeakerCards,
 } from "./event-page-view";
@@ -57,6 +59,9 @@ const VIEW: EventPageView = {
   },
   format: "online",
   seatsLeft: null,
+  // 020 EARS-2 — the link set BOTH hosts resolve today: every key absent,
+  // because neither storefront mounts a school, expert or community route.
+  links: { speakerPages: [] },
 };
 
 const REGISTER_CTA: ParticipationCta = {
@@ -260,5 +265,77 @@ describe("020 EARS-1 — shared event-page view projection", () => {
       shared.conditions?.map((row) => row.label),
     );
     expect(doctor.conditions?.[0]?.value).toBe("бесплатно");
+  });
+});
+
+/**
+ * 020 EARS-2 (#1765) — the decision set the page owes a registration-free
+ * reader, and the rule that an impossible destination is ABSENT rather than
+ * dead. Both hosts run these functions, so what holds here holds on
+ * `/webinars/:slug` and `/events/:slug` alike.
+ */
+describe("020 EARS-2 — the registration-free decision set", () => {
+  it("020 EARS-2.4: eventSpeakerCards carries href only for speakers with a page; the kicker is a link only with links.school", () => {
+    // Today's reality on both hosts: no links at all.
+    const bare = eventSpeakerCards(VIEW);
+    expect(bare[0]?.href).toBeUndefined();
+    expect(bare[1]?.href).toBeUndefined();
+    expect(eventPageKickerParts(VIEW)).toEqual({
+      school: "Школа ортобиологии",
+      formatLabel: "Онлайн",
+    });
+    expect("schoolHref" in eventPageKickerParts(VIEW)).toBe(false);
+
+    // A host that HAS the routes: the expert card links, the legacy card never
+    // does (it carries no stable key), and the kicker becomes a link.
+    const linked: EventPageView = {
+      ...VIEW,
+      links: {
+        school: { label: "Школа ортобиологии", href: "/schools/ortho" },
+        speakerPages: [
+          { speakerKey: "mikhail-strakhov", href: "/experts/mikhail-strakhov" },
+        ],
+      },
+    };
+    const cards = eventSpeakerCards(linked);
+    expect(cards[0]?.href).toBe("/experts/mikhail-strakhov");
+    expect(cards[1]?.href).toBeUndefined();
+    expect(eventPageKickerParts(linked)).toEqual({
+      school: "Школа ортобиологии",
+      schoolHref: "/schools/ortho",
+      formatLabel: "Онлайн",
+    });
+    // The one-string kicker keeps reading the same either way.
+    expect(eventPageKicker(linked)).toBe("Школа ортобиологии · Онлайн");
+  });
+
+  it("020 EARS-2.4: an entry for an unknown speaker key links nobody", () => {
+    const stale: EventPageView = {
+      ...VIEW,
+      links: { speakerPages: [{ speakerKey: "someone-else", href: "/experts/x" }] },
+    };
+    expect(eventSpeakerCards(stale).every((card) => card.href === undefined)).toBe(
+      true,
+    );
+  });
+
+  it("020 EARS-2.5: the programme content is the download with a PDF and the lifecycle sentence without one", () => {
+    expect(
+      eventProgrammeContent({ ...VIEW, programPdfUrl: "https://cdn/x.pdf" }),
+    ).toEqual({ downloadHref: "https://cdn/x.pdf" });
+
+    for (const state of ["published", "live"] as const) {
+      expect(eventProgrammeContent({ ...VIEW, state })).toEqual({
+        statement: EVENT_PAGE_COPY.programmePending,
+      });
+    }
+    for (const state of ["ended", "hidden", "in_archive"] as const) {
+      expect(eventProgrammeContent({ ...VIEW, state })).toEqual({
+        statement: EVENT_PAGE_COPY.programmeNeverPublished,
+      });
+    }
+    // Never «скоро», never an empty answer (EARS-19 / NG-1).
+    expect(EVENT_PAGE_COPY.programmePending).not.toMatch(/скоро/iu);
+    expect(EVENT_PAGE_COPY.programmeNeverPublished.length).toBeGreaterThan(0);
   });
 });

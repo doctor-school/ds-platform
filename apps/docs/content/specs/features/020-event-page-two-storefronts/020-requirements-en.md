@@ -187,7 +187,7 @@ Each records a call the PRD left to engineering. They are lead decisions in the 
 - `FormatBlock` — a discriminated union over `EventFormat`: `{ kind: 'online', roomOpensAt }` · `{ kind: 'offline', address, mapRef, howToGet, seatsTotal, seatsLeft }` · `{ kind: 'hybrid', online, offline, activeTab: 'online' | 'offline' }` — the only format-varying part of the page (LD-4).
 - `SignUpProof { total, sameSpecialty, adjacentSpecialties }` — the social proof of EARS-3, rendered identically for a guest and for a signed-in doctor.
 - `MedGate { closedMaterialIds, reason, verificationStatus, confirmHref }` — the CON-11 gate of EARS-11 in its base form, `null` when the event carries no material requiring a confirmed status.
-- `AroundEvent { school?, speakerPages, communityHref? }` — the «Вокруг события» links of EARS-2; a link whose target does not exist is **absent** rather than dead.
+- `AroundEvent { school?: { label, href }, speakerPages: Array<{ speakerKey, href }>, communityHref? }` — the «Вокруг события» links of EARS-2, resolved per HOST; `speakerKey` is the 012 EARS-8 `expertSlug` (a legacy speaker has no key and therefore never a page). A link whose target does not exist is **absent** — the key is missing — rather than dead, `null`-valued or empty-stringed.
 - `EventLifecycleState` — feature 004's single machine, extended at its canonical owner with the cancelled / rescheduled value (LD-6). Not a 020-local type.
 
 ### Policies

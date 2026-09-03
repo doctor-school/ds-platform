@@ -82,6 +82,15 @@ export interface EventPageCopy {
   /** Sign-up card footnote, rendered under the CTA in the register state only. */
   signupNote: string;
   /**
+   * 020 EARS-2 (#1765) — what the «Программа» section says when the operator
+   * attached NO programme PDF. The section is never omitted and never left as
+   * an empty labelled box (EARS-19): it states the honest reason, and the
+   * reason differs by lifecycle, because «опубликуем ближе к дате» is a
+   * promise only an event that has not happened yet can keep.
+   */
+  programmePending: string;
+  programmeNeverPublished: string;
+  /**
    * The hero plate's countdown — canvas:171 «Скоро · через 5 дней». The
    * lifecycle WORD stays host copy; the countdown is a fact of `startsAt`, so
    * it is mapped once here rather than derived per host from a clock the two
@@ -115,6 +124,8 @@ export const EVENT_PAGE_COPY: EventPageCopy = {
     hybrid: "Очно и онлайн",
   },
   signupNote: "Нужна регистрация — вернём вас на эту страницу.",
+  programmePending: "Программу опубликуем ближе к дате события.",
+  programmeNeverPublished: "Программа этого события не публиковалась.",
   inPrefix: "через",
   days: ["день", "дня", "дней"],
   roomOpensLine: "Комната эфира откроется за 10 минут до начала",
@@ -155,14 +166,73 @@ export function eventPageDateLine(
 }
 
 /**
- * The hero kicker — «Школа · Онлайн». The school is the event's own field, the
- * format word is copy; neither is host knowledge.
+ * The hero kicker's PARTS — «Школа · Онлайн» split into the two facts that
+ * compose it, plus the school's destination when the host has one.
+ *
+ * 020 EARS-2 (#1765): the school is a LINK exactly when `links.school` is
+ * present, and the read model only puts it there when the serving host mounts a
+ * school page. There is no `href: null` to branch on and no disabled variant —
+ * a host with no school page renders the same words as plain text, which is
+ * what «absent rather than dead» means on this element.
+ */
+export interface EventPageKickerParts {
+  school: string;
+  /** Present only when this host has a school page to send the reader to. */
+  schoolHref?: string;
+  formatLabel: string;
+}
+
+export function eventPageKickerParts(
+  view: EventPageView,
+  copy: EventPageCopy = EVENT_PAGE_COPY,
+): EventPageKickerParts {
+  const label = view.links.school?.label ?? view.school;
+  return {
+    school: label,
+    ...(view.links.school ? { schoolHref: view.links.school.href } : {}),
+    formatLabel: copy.format[view.format],
+  };
+}
+
+/**
+ * The hero kicker as ONE string — «Школа · Онлайн». The school is the event's
+ * own field, the format word is copy; neither is host knowledge. This is the
+ * plain-text rendering; {@link eventPageKickerParts} is what a surface uses
+ * when the school may be a link.
  */
 export function eventPageKicker(
   view: EventPageView,
   copy: EventPageCopy = EVENT_PAGE_COPY,
 ): string {
-  return `${view.school} · ${copy.format[view.format]}`;
+  const parts = eventPageKickerParts(view, copy);
+  return `${parts.school} · ${parts.formatLabel}`;
+}
+
+/**
+ * 020 EARS-2 (#1765) — the «Программа» section's content decision.
+ *
+ * Exactly one of the two keys is ever set. With a PDF the section is the
+ * download; without one it is a SENTENCE, chosen by lifecycle from the view —
+ * so neither host branches on `state` and the two storefronts cannot tell a
+ * doctor different stories about the same missing programme. An empty labelled
+ * box is never a possible outcome (EARS-19).
+ */
+export interface EventProgrammeContent {
+  downloadHref?: string;
+  statement?: string;
+}
+
+export function eventProgrammeContent(
+  view: EventPageView,
+  copy: EventPageCopy = EVENT_PAGE_COPY,
+): EventProgrammeContent {
+  if (view.programPdfUrl) return { downloadHref: view.programPdfUrl };
+  // `published` / `live` are ahead of or at the air date, so the programme can
+  // still arrive. `ended` / `hidden` / `in_archive` cannot — for those the
+  // honest answer is that it was never published, not a promise about a date
+  // that has passed.
+  const upcoming = view.state === "published" || view.state === "live";
+  return { statement: upcoming ? copy.programmePending : copy.programmeNeverPublished };
 }
 
 /**
@@ -289,17 +359,34 @@ export function eventSignupCardProps(
  * and a role kicker, so the legacy card degrades to initials rather than to a
  * broken image.
  *
- * No `href` / `footerHref` is produced: the expert PAGE route is per-host and
- * neither storefront owns one in this slice, so a link here would be a dead
- * affordance. The canvas (canvas:118) carries ONE «Ведёт» label above the
- * section, so every card after the first suppresses it with an explicit
- * `null` — `undefined` would RESTORE the card's canvas default.
+ * 020 EARS-2 (#1765) — `href` comes from `links.speakerPages`, the read model's
+ * per-HOST answer to «does this speaker have a page here». A speaker with no
+ * entry gets no `href` and the card renders the name as plain text; there is no
+ * `null` href and no disabled state, because a link into a route that is not
+ * mounted is precisely the dead affordance EARS-2 forbids. Matching is by the
+ * stable `expertSlug` key alone — a legacy speaker has no identity and names are
+ * never compared (012-design §5.2).
+ *
+ * No `footerHref` is produced: the «12 эфиров · страница эксперта →» footer
+ * needs a broadcast count the public read does not carry.
+ *
+ * The canvas (canvas:118) carries ONE «Ведёт» label above the section, so every
+ * card after the first suppresses it with an explicit `null` — `undefined`
+ * would RESTORE the card's canvas default.
  */
 export function eventSpeakerCards(view: EventPageView): EventSpeakerCardProps[] {
-  return view.speakers.map((speaker, index) => ({
-    ...speakerCardProps(speaker),
-    heading: index === 0 ? undefined : null,
-  }));
+  const pages = new Map(
+    view.links.speakerPages.map((page) => [page.speakerKey, page.href]),
+  );
+  return view.speakers.map((speaker, index) => {
+    const href =
+      speaker.source === "expert" ? pages.get(speaker.expertSlug) : undefined;
+    return {
+      ...speakerCardProps(speaker),
+      ...(href ? { href } : {}),
+      heading: index === 0 ? undefined : null,
+    };
+  });
 }
 
 function speakerCardProps(

@@ -34,6 +34,9 @@ const EVENT = {
   ],
   specialties: ["Травматология", "Ортопедия"],
   partners: [],
+  // 020 EARS-2 (#1765): the required AroundEvent object. The doctor host has no
+  // expert/school/community route, so every key resolves absent.
+  links: { speakerPages: [] },
   state: "published",
   format: "online",
   seatsLeft: null,

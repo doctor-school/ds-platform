@@ -34,7 +34,52 @@ import { EventParticipationFormatSchema } from "./participation.schema.js";
  * null) when the event has no program PDF — the page renders the program section
  * without a download affordance rather than a broken link (EARS-2).
  */
-export const EventPageViewSchema = z.object({
+/**
+ * 020 EARS-2 (#1765) — `AroundEvent`, the read model's answer to «what else can
+ * a reader of THIS event reach from here», resolved per HOST.
+ *
+ * Every member is optional and a missing key means exactly one thing: that
+ * destination does not exist on the host that produced this body. There is no
+ * `null` href and no empty string anywhere in the shape, because both would let
+ * a client render an affordance that goes nowhere — the dead link EARS-2 and
+ * EARS-19 forbid («absent rather than dead»). A consumer therefore never
+ * branches on the VALUE of a link, only on whether the key is there.
+ *
+ * `speakerPages` is a LIST rather than a map keyed by name: the merged 012
+ * EARS-8 speaker union has a stable identity only on its `expert` arm
+ * (`expertSlug`), and a never-migrated legacy row has no identity at all — so a
+ * legacy speaker can never acquire a page, and names are never compared.
+ */
+export const AroundEventLinkSchema = z.object({
+  label: z.string().min(1),
+  href: z.string().min(1),
+});
+export type AroundEventLink = z.infer<typeof AroundEventLinkSchema>;
+
+export const AroundEventSpeakerPageSchema = z.object({
+  /** The speaker's stable key — `expertSlug` of the 012 EARS-8 `expert` arm. */
+  speakerKey: z.string().min(1),
+  href: z.string().min(1),
+});
+export type AroundEventSpeakerPage = z.infer<
+  typeof AroundEventSpeakerPageSchema
+>;
+
+export const AroundEventSchema = z.object({
+  /** The event's school page — absent while the host mounts no school route. */
+  school: AroundEventLinkSchema.optional(),
+  /**
+   * One entry per speaker that HAS a page on this host. A speaker with no page
+   * simply has no entry; the array is `[]` when the host mounts no expert
+   * route at all, never a list of empty hrefs.
+   */
+  speakerPages: z.array(AroundEventSpeakerPageSchema),
+  /** The event's community destination — absent while the host has none. */
+  communityHref: z.string().min(1).optional(),
+});
+export type AroundEvent = z.infer<typeof AroundEventSchema>;
+
+export const EventPageViewBaseSchema = z.object({
   id: z.uuid(),
   slug: z.string(),
   title: z.string(),
@@ -93,6 +138,25 @@ export const EventPageViewSchema = z.object({
    * unable to tell «no seat limit» from «this read does not know».
    */
   seatsLeft: z.number().int().nonnegative().nullable(),
+});
+
+/**
+ * The HOST-FREE half of the public event read — every field that is a fact of
+ * the EVENT. `EventsService.publicEventPage` produces exactly this, and it is
+ * identical on both storefronts because none of it depends on who is rendering.
+ */
+export type HostFreeEventPageView = z.infer<typeof EventPageViewBaseSchema>;
+
+/**
+ * 020 EARS-2 (#1765) — the public event read, `links` included. The `links`
+ * half is the ONLY part of the body a host contributes, and it contributes it
+ * through a route TABLE handed to one shared resolver
+ * (`apps/api/src/events/around-event.resolver.ts`), never by composing hrefs of
+ * its own. Guest and principal still receive byte-identical bodies: a link
+ * depends on the host that served the request, never on the viewer.
+ */
+export const EventPageViewSchema = EventPageViewBaseSchema.extend({
+  links: AroundEventSchema,
 });
 export type EventPageView = z.infer<typeof EventPageViewSchema>;
 

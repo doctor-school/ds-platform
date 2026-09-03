@@ -187,7 +187,7 @@ lang: ru
 - `FormatBlock` — размеченное объединение по `EventFormat`: `{ kind: 'online', roomOpensAt }` · `{ kind: 'offline', address, mapRef, howToGet, seatsTotal, seatsLeft }` · `{ kind: 'hybrid', online, offline, activeTab: 'online' | 'offline' }` — единственная зависящая от формата часть страницы (LD-4).
 - `SignUpProof { total, sameSpecialty, adjacentSpecialties }` — социальное доказательство EARS-3, одинаковое для гостя и для вошедшего врача.
 - `MedGate { closedMaterialIds, reason, verificationStatus, confirmHref }` — гейт CON-11 из EARS-11 в базовой форме; `null`, когда событие не несёт материала, требующего подтверждённого статуса.
-- `AroundEvent { school?, speakerPages, communityHref? }` — ссылки «Вокруг события» из EARS-2; ссылка, у которой нет цели, **отсутствует**, а не мертва.
+- `AroundEvent { school?: { label, href }, speakerPages: Array<{ speakerKey, href }>, communityHref? }` — ссылки «Вокруг события» из EARS-2; ссылка, у которой нет цели, **отсутствует**, а не мертва.
 - `EventLifecycleState` — единственная машина фичи 004, расширенная у её канонического владельца значением отмены/переноса (LD-6). Не локальный тип 020.
 
 ### Политики

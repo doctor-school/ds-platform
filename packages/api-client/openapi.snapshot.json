@@ -615,6 +615,47 @@
             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
             "type": "string"
           },
+          "links": {
+            "properties": {
+              "communityHref": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "school": {
+                "properties": {
+                  "href": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "label": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": ["label", "href"],
+                "type": "object"
+              },
+              "speakerPages": {
+                "items": {
+                  "properties": {
+                    "href": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "speakerKey": {
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "required": ["speakerKey", "href"],
+                  "type": "object"
+                },
+                "type": "array"
+              }
+            },
+            "required": ["speakerPages"],
+            "type": "object"
+          },
           "partners": {
             "items": {
               "properties": {
@@ -810,7 +851,8 @@
           "state",
           "recording",
           "format",
-          "seatsLeft"
+          "seatsLeft",
+          "links"
         ],
         "type": "object"
       },

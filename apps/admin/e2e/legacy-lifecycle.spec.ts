@@ -33,9 +33,14 @@ import { signInAsAdmin } from "./support/sign-in";
  * after «Скрыть» and after «Архивировать». Unset, the spec still asserts: the
  * images are evidence for a human, not the gate.
  *
- * Dev-stand-gated + MANUAL like every other `apps/admin/e2e` flow spec — the
- * bootstrap provisions a real `platform_admin` against the stand's Zitadel and
- * throws when `IDP_*` is absent. Run against a booted admin + api:
+ * Runs in CI, in the `admin-e2e` job's «Admin flows tier» step, against a
+ * database that job migrates (`drizzle:migrate:ci`) and seeds («Seed the
+ * admin-flows fixtures» = `pnpm --filter @ds/api seed:events`) — that seed step
+ * exists for this spec, because a `legacy` эфир cannot be authored through any
+ * admin or API path until 014 slice 3. Locally it runs the same way against a
+ * booted branch stand; the bootstrap provisions a real `platform_admin` against
+ * the stand's Zitadel and throws when `IDP_*` is absent, so a stray invocation
+ * fails fast rather than pretending to pass. Locally:
  *
  *   E2E_ADMIN_URL=http://localhost:3200 IDP_ISSUER=… IDP_SERVICE_TOKEN=… \
  *   IDP_PROJECT_ID=… pnpm --filter @ds/admin exec playwright test \
@@ -131,6 +136,53 @@ async function expectNoPlatformVocabulary(page: Page): Promise<void> {
   await expect(page.getByText(STREAM_SECTION)).toHaveCount(0);
 }
 
+/**
+ * Put the shared legacy fixture back into `in_archive` through the API.
+ *
+ * Deliberately NOT a «Архивировать» click: a UI restore only runs while the page
+ * is still healthy, and the page is exactly what has just failed whenever this
+ * matters — an interrupted or timed-out run would otherwise strand the stand's
+ * ONE legacy эфир in `hidden`, where a later reader of the archive sees nothing.
+ * `page.request` reuses the signed-in session's cookies and goes through the
+ * admin's same-origin `/v1/:path*` proxy, so no second auth is needed; the
+ * command carries the same fenced-write protocol headers the data provider
+ * sends (canonical `Idempotency-Key` + `If-Match: W/"<version>"`, 012-design §6).
+ * A 409 is the benign «already `in_archive`» — the fixture is in the wanted
+ * state either way — so it is tolerated; anything else is worth failing on.
+ */
+async function restoreLegacyToArchive(
+  page: Page,
+  eventId: string,
+): Promise<void> {
+  const detail = await page.request.get(`/v1/admin/events/${eventId}`);
+  if (!detail.ok()) {
+    throw new Error(
+      `legacy fixture restore could not read the event: ${detail.status()}`,
+    );
+  }
+  const { state, version } = (await detail.json()) as {
+    state: string;
+    version: number;
+  };
+  if (state === "in_archive") return;
+
+  const restored = await page.request.post(
+    `/v1/admin/events/${eventId}/archive-legacy`,
+    {
+      data: {},
+      headers: {
+        "idempotency-key": crypto.randomUUID(),
+        "if-match": `W/"${version}"`,
+      },
+    },
+  );
+  if (!restored.ok() && restored.status() !== 409) {
+    throw new Error(
+      `legacy fixture restore failed: ${restored.status()} ${await restored.text()}`,
+    );
+  }
+}
+
 test.describe.configure({ mode: "serial" });
 
 test.describe("014 EARS-25/27 — the legacy broadcast lifecycle bar in the live admin", () => {
@@ -159,7 +211,6 @@ test.describe("014 EARS-25/27 — the legacy broadcast lifecycle bar in the live
       await expectNoPlatformVocabulary(page);
 
       await shot(page, "in-archive-desktop-light");
-      await shot(page, "interaction-1-in-archive-desktop-light");
       await setPalette(page, "dark");
       await shot(page, "in-archive-desktop-dark");
       await page.setViewportSize(NARROW);
@@ -202,16 +253,15 @@ test.describe("014 EARS-25/27 — the legacy broadcast lifecycle bar in the live
       await shot(page, "interaction-3-archived-again-desktop-light");
     } finally {
       // The stand fixture is SHARED: leave the эфир in the `in_archive` state
-      // the seed defines, whatever happened above.
+      // the seed defines, whatever happened above. The restore goes through the
+      // API, not a click: a UI restore only runs if the page survived, and the
+      // page is exactly what has just failed when this matters. `page.request`
+      // carries the same session cookies through the admin's same-origin
+      // `/v1/:path*` proxy, so no second auth is needed. A 409 here is the
+      // benign «already in_archive» — the эфир is in the wanted state either
+      // way, so it is tolerated; anything else is worth seeing.
       if (!restored) {
-        await page.goto(`/events/${eventId}`);
-        const back = page.getByTestId("action-archive-legacy");
-        if (await back.isVisible().catch(() => false)) {
-          await back.click();
-          await expect(page.getByTestId("state-in_archive")).toBeVisible({
-            timeout: 20_000,
-          });
-        }
+        await restoreLegacyToArchive(page, eventId);
       }
     }
   });

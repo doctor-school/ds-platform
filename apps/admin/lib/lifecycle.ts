@@ -194,17 +194,27 @@ export interface LifecycleErrorOutcome {
  * from a detail whose state has already moved on the row, so the screen the
  * operator is reading is exactly the thing that must be replaced.
  * Sentences resolve through the same `taxonomyErrorKey` mapper every other
- * admin surface keys off, not a second copy of the code table.
+ * admin surface keys off, not a second copy of the code table — with the ONE
+ * documented exception below, `EVENT_NOT_FINISHED`, whose shared mapping is a
+ * recordings-publishing sentence that says nothing true on this bar.
  */
 export function lifecycleErrorOutcome(error: unknown): LifecycleErrorOutcome {
-  const messageKey = taxonomyErrorKey(
-    error,
-    "events.errors.transitionRefused",
-  );
   const code = (error as TaxonomyHttpError | undefined)?.errorCode;
 
   return {
-    messageKey,
+    messageKey:
+      code === "EVENT_NOT_FINISHED"
+        ? // Same sentence as the other stale-detail refusals, NOT the recordings
+          // one. `EVENT_NOT_FINISHED` reaches the BAR only through a detail whose
+          // row has already moved (the server filters the edge on the recording
+          // precondition before it ever offers the command), so what the operator
+          // needs to read is "your screen was behind, it has been re-read" — the
+          // recordings panel's «Эфир ещё не завершён. Опубликовать запись…» is
+          // about publishing a recording and names neither the cause nor the fix
+          // here. Keyed locally rather than in `taxonomyErrorKey`, so the
+          // recordings surface keeps its own sentence for the same code.
+          "events.errors.stale"
+        : taxonomyErrorKey(error, "events.errors.transitionRefused"),
     refetch:
       code === "PRECONDITION_FAILED" ||
       code === "PRECONDITION_REQUIRED" ||

@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { validTransitions } from "@ds/schemas";
+import { taxonomyErrorKey } from "./taxonomy-errors";
 import type { EventLifecycleState } from "@ds/schemas";
 import {
   REFUSAL_DISMISS_MS,
@@ -341,5 +342,31 @@ describe("014 EARS-25/27 legacy broadcast lifecycle commands", () => {
     expect(lifecycleErrorOutcome({ errorCode: "EVENT_NOT_FINISHED" }).refetch).toBe(
       true,
     );
+  });
+
+  it("014 EARS-25: an EVENT_NOT_FINISHED refusal on the BAR reads as a stale detail, not as the recordings sentence", () => {
+    // On the bar the code can only mean "the row moved under your screen", so
+    // the operator gets the same sentence every other refetching refusal gives.
+    expect(lifecycleErrorOutcome({ errorCode: "EVENT_NOT_FINISHED" })).toEqual({
+      messageKey: "events.errors.stale",
+      refetch: true,
+    });
+    // …and the recordings panel keeps its own sentence for the very same code:
+    // the override lives on the lifecycle path, not in the shared mapper.
+    expect(taxonomyErrorKey({ errorCode: "EVENT_NOT_FINISHED" }, "recordings.errors.saveFailed")).toBe(
+      "recordings.errors.eventNotFinished",
+    );
+    // Both keys are real rows in the shipped catalogue.
+    const messages = JSON.parse(
+      readFileSync(
+        fileURLToPath(new URL("../messages/ru.json", import.meta.url)),
+        "utf8",
+      ),
+    ) as {
+      events: { errors: Record<string, string> };
+      recordings: { errors: Record<string, string> };
+    };
+    expect(messages.events.errors.stale).toBeTruthy();
+    expect(messages.recordings.errors.eventNotFinished).toBeTruthy();
   });
 });

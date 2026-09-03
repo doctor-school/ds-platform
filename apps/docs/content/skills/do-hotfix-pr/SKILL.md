@@ -34,6 +34,7 @@ mode: inline
 8. **`respond-to-review`** (inline) — loop until APPROVE + green CI.
 9. **`write-iteration-summary`** (inline).
 10. **`merge-when-green`** (inline).
+11. **`report-task-outcome`** (inline) — the owner-facing closeout report. Read [../report-task-outcome/SKILL.md](../report-task-outcome/SKILL.md) at report time and write the report in its fixed shape: product-first lines, PR / migration / EARS identifiers only in trailing parentheses or the collapsed technical appendix.
 
 ### Polish lane (behavior-preserving fix to an already-approved design)
 
@@ -69,3 +70,4 @@ Skipped vs `do-feature-iteration`:
 - [../respond-to-review/SKILL.md](../respond-to-review/SKILL.md)
 - [../surface-decision-debt/SKILL.md](../surface-decision-debt/SKILL.md)
 - [../merge-when-green/SKILL.md](../merge-when-green/SKILL.md)
+- [../report-task-outcome/SKILL.md](../report-task-outcome/SKILL.md)

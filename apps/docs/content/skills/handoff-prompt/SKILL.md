@@ -14,7 +14,7 @@ Produce one copy-pasteable handoff for a fresh DS Platform agent. Do not ask cla
 ## Gather
 
 - Current task: active owner goal and canonical tracker id; verify live tracker state before claiming status.
-- Progress: only load-bearing product/work mutations, with paths or artifacts. Exclude wrap/retro mechanics.
+- Progress: product-first, per [report-task-outcome](../report-task-outcome/SKILL.md) — one line per landed unit naming the product entity and what a person (doctor / admin / sponsor) can now do; artefact paths, PR # and Issue # follow in parentheses, never as the line itself. Only load-bearing product/work mutations; exclude wrap/retro mechanics.
 - Where stopped: the last substantive work action and why it paused.
 - Next steps: concrete continuation, chunked into waves of at most three full PR cycles.
 - Decisions/gotchas and context paths: include only what the next agent needs; paths must exist. Never inline instruction files.

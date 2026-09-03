@@ -93,41 +93,40 @@ export default async function WebinarEventPage({
 }) {
   const { slug } = await params;
   const event = await fetchPublicEventPage(slug);
-  // Draft / unknown → not-found (EARS-6); the hidden event stays a reachable 200.
+  // Draft or unknown slug renders not-found; a hidden event stays a reachable 200.
   if (!event) notFound();
 
   const t = await getTranslations("webinar");
-  // 006 EARS-6 / EARS-10 — access-branch guidance: a doctor bounced from the room
-  // for being unregistered arrives with `?from=room`. The catalog-sourced guidance
-  // is surfaced above the page so the routing is a truthful, guided front door.
+  // Access-branch guidance: a doctor bounced from the room for being unregistered
+  // arrives with `?from=room`. The catalog-sourced guidance is surfaced above the
+  // page so the routing is a truthful, guided front door.
   const tRoom = await getTranslations("room");
   const fromRoom = (await searchParams).from === "room";
 
   const h = await headers();
   const session = {
     cookie: h.get("cookie") ?? "",
-    // The session is fingerprint-bound (ADR-0001 §6) — forward the same surface
-    // the browser bound at login so an authed read is not 401'd.
+    // The session is fingerprint-bound — forward the same surface the browser
+    // bound at login so an authed read is not 401'd.
     userAgent: h.get("user-agent") ?? "",
     acceptLanguage: h.get("accept-language") ?? "",
   };
 
-  // 020 EARS-1 — the ONE participation decision, resolved server-side for this
+  // The ONE participation decision, resolved server-side for this
   // viewer on this event. A `null` here would mean the event vanished between
   // the two reads; the page keeps rendering and simply carries no control.
   const cta = await fetchParticipationCta(slug, session);
-  // 005 EARS-4 — a non-null per-user state means a session rode the request. The
-  // CTA already says WHAT to render; this read survives only to gate the 014
-  // authenticated playback call and to choose the one-tap ELEMENT below.
+  // A non-null per-user state means a session rode the request. The CTA already
+  // says WHAT to render; this read survives only to gate the authenticated
+  // playback call and to choose the one-tap ELEMENT below.
   const registrationState = await fetchEventRegistrationState(slug, session);
   const isAuthenticated = registrationState !== null;
 
-  // 004 EARS-4 / 014 EARS-4 — the canvas lifecycle enum drives the hero status
-  // plate and the recording signal; it drives NO participation branch any more.
+  // The canvas lifecycle enum drives the hero status plate and the recording
+  // signal; it drives NO participation branch any more.
   const status = toCanvasStatus(event.state);
   const recordingSignal = resolveRecordingSignal(event.recording, status);
-  // 014 EARS-5 — the AUTHENTICATED source read, the ONLY source-bearing response
-  // in the feature. Issued exactly when it can produce something, so no playable
+  // The AUTHENTICATED source read, the ONLY source-bearing response on this page. Issued exactly when it can produce something, so no playable
   // source can ever reach a guest's HTML.
   const playback =
     isAuthenticated && recordingSignal?.available
@@ -139,16 +138,16 @@ export default async function WebinarEventPage({
     isAuthenticated,
     playback,
   );
-  // 014 EARS-6 — both gate actions carry THIS page as a same-origin returnTo,
+  // Both gate actions carry THIS page as a same-origin returnTo,
   // built by the shared guard so a hostile slug can never surface an open redirect.
   const gateReturnTo = `/webinars/${encodeURIComponent(slug)}`;
-  // 006 EARS-6 — the room access-branch guidance shows ONLY when the doctor
+  // The room access-branch guidance shows ONLY when the doctor
   // arrived from the room AND the register front door is actually what renders.
   const showRoomAccessGuidance =
     fromRoom && isAuthenticated && cta?.action === "register";
-  // 005 EARS-1 — the logged-in doctor's one-tap command replaces the generated
-  // link for the SAME server-resolved `register` action. A guest keeps the
-  // `/register` auth handoff the api resolved (EARS-2).
+  // The logged-in doctor's one-tap command replaces the generated link for the
+  // SAME server-resolved `register` action. A guest keeps the `/register` auth
+  // handoff the api resolved.
   const oneTap =
     cta?.action === "register" && isAuthenticated ? (
       <RegisterOneTap

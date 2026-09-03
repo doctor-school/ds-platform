@@ -9,6 +9,7 @@ import {
   type EventAdminListItem,
   type EventAdminListQuery,
   type EventLifecycleState,
+  type EventOrigin,
   isPubliclyReachable,
   type LegacyBroadcastCreateBody,
   type MonthBroadcastEntry,
@@ -163,9 +164,42 @@ export class InvalidTransitionError extends Error {
   constructor(
     readonly from: EventLifecycleState,
     readonly to: EventLifecycleState,
+    message = `illegal lifecycle transition ${from} → ${to}`,
   ) {
-    super(`illegal lifecycle transition ${from} → ${to}`);
+    super(message);
     this.name = "InvalidTransitionError";
+  }
+}
+
+/**
+ * 014 EARS-27 (#1741) — the WRONG-MACHINE refusal: the command itself does not
+ * exist on the machine this event runs on, which is a different fact from «that
+ * edge is not legal from here». Both answer the wire as 409
+ * `INVALID_TRANSITION` (it stays an `InvalidTransitionError` subclass so the
+ * controller's `instanceof` mapping is untouched and no client sees a new code),
+ * but the message and the log line now name the mismatch instead of reading
+ * «illegal lifecycle transition hidden → hidden» for a command that has no
+ * target on this machine at all.
+ *
+ * `to` is the REAL requested target wherever the caller knows it — every named
+ * command knows its own, and the generic `POST :id/transition` knows the body's.
+ * It falls back to the current state only where there is genuinely nothing
+ * better to report.
+ */
+export class WrongMachineCommandError extends InvalidTransitionError {
+  constructor(
+    /** The machine the refused command belongs to. */
+    readonly machine: EventOrigin,
+    origin: EventOrigin,
+    from: EventLifecycleState,
+    to?: EventLifecycleState,
+  ) {
+    super(
+      from,
+      to ?? from,
+      `${machine}-machine command on a ${origin} event in state ${from}`,
+    );
+    this.name = "WrongMachineCommandError";
   }
 }
 
@@ -295,11 +329,17 @@ export type TransitionFence = (
  * leaks is deliberate: exclusion that has to be re-derived per command is
  * exclusion a future command forgets.
  */
-function assertBroadcastCommandOrigin(event: Event): void {
+function assertBroadcastCommandOrigin(
+  event: Event,
+  _from?: EventLifecycleState,
+  to?: EventLifecycleState,
+): void {
   if (event.origin !== "platform") {
-    throw new InvalidTransitionError(
+    throw new WrongMachineCommandError(
+      "platform",
+      event.origin,
       event.state as EventLifecycleState,
-      event.state as EventLifecycleState,
+      to,
     );
   }
 }
@@ -318,11 +358,17 @@ function assertBroadcastCommandOrigin(event: Event): void {
  * Two commands may share a target only while each one is pinned to its own
  * machine.
  */
-function assertLegacyCommandOrigin(event: Event): void {
+function assertLegacyCommandOrigin(
+  event: Event,
+  _from?: EventLifecycleState,
+  to?: EventLifecycleState,
+): void {
   if (event.origin !== "legacy") {
-    throw new InvalidTransitionError(
+    throw new WrongMachineCommandError(
+      "legacy",
+      event.origin,
       event.state as EventLifecycleState,
-      event.state as EventLifecycleState,
+      to,
     );
   }
 }
@@ -340,7 +386,10 @@ function assertLegacyCommandOrigin(event: Event): void {
  * what actually closes the read-to-write window. This exists so the common case
  * refuses before any transaction opens, with the same error either path raises.
  */
-function assertVersion(event: Event, expectedVersion: number | undefined): void {
+function assertVersion(
+  event: Event,
+  expectedVersion: number | undefined,
+): void {
   if (expectedVersion === undefined) return;
   if (event.version !== expectedVersion) {
     throw new EventVersionConflictError(expectedVersion, event.version);
@@ -720,8 +769,10 @@ export class EventsService {
     // row — so letting it reach either legacy edge would be precisely the
     // «set-any-state escape hatch» 014-design §3.1 rules out: an эфир archived
     // with no recording to show and no feature-010 row to read it back from.
-    // Refused 409 `INVALID_TRANSITION` before the version check and any write.
-    assertBroadcastCommandOrigin(current.event);
+    // Refused 409 `INVALID_TRANSITION` before the version check and any write,
+    // and the refusal carries the REAL requested `to` from the body — this is
+    // the one entry point whose target the caller chose (#1815 review NIT A).
+    assertBroadcastCommandOrigin(current.event, from, to);
     // Still keyed by the event's OWN machine, so a platform event cannot be
     // jumped onto the legacy machine's states either.
     if (!canTransition(from, to, current.event.origin)) {
@@ -1053,7 +1104,11 @@ export class EventsService {
     to: EventLifecycleState,
     auditType: string,
     actorSub: string | null,
-    extraGuard?: (event: Event, from: EventLifecycleState) => void,
+    extraGuard?: (
+      event: Event,
+      from: EventLifecycleState,
+      to: EventLifecycleState,
+    ) => void,
     fence?: TransitionFence,
     expectedVersion?: number,
     asyncGuard?: (event: Event, from: EventLifecycleState) => Promise<void>,
@@ -1068,7 +1123,10 @@ export class EventsService {
     if (!canTransition(from, to, current.event.origin)) {
       throw new InvalidTransitionError(from, to);
     }
-    extraGuard?.(current.event, from);
+    // The command's OWN target is handed to the guard, so a wrong-machine
+    // refusal reports the move that was actually asked for rather than a
+    // self-transition placeholder (#1815 review NIT A).
+    extraGuard?.(current.event, from, to);
     await asyncGuard?.(current.event, from);
     assertVersion(current.event, expectedVersion);
 
@@ -1332,7 +1390,10 @@ export class EventsService {
     };
   }
 
-  private toListItem(e: Event, hasPublishedRecording: boolean): EventAdminListItem {
+  private toListItem(
+    e: Event,
+    hasPublishedRecording: boolean,
+  ): EventAdminListItem {
     return {
       id: e.id,
       slug: e.slug,
@@ -1355,9 +1416,8 @@ export class EventsService {
    */
   private async hasPublishedRecording(e: Event): Promise<boolean> {
     if (e.origin !== "legacy" || e.state !== "hidden") return false;
-    const projection = await this.recordingsProjection.resolveRecordingProjection(
-      e.id,
-    );
+    const projection =
+      await this.recordingsProjection.resolveRecordingProjection(e.id);
     return projection.state !== "preparing";
   }
 }

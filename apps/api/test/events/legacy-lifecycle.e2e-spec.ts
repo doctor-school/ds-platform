@@ -14,6 +14,7 @@ import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
 import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
 import { FakeIdpClient } from "../../src/auth/idp/idp.fake.js";
 import { authHeaders, establishAdminSession } from "../setup/admin-session.js";
+import { SESSION_COOKIE_NAME } from "../../src/auth/session/session.cookie.js";
 import {
   RATE_LIMIT_THRESHOLDS,
   RELAXED_RATE_LIMIT,
@@ -250,6 +251,46 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
           ...authHeaders(cookie),
         },
         payload: { provider: "youtube", embedRef: "dQw4w9WgXcQ" },
+      });
+    }
+
+    /**
+     * Register + login a plain doctor and return the SESSION cookie value. The
+     * playback read is the doctor tier, not the admin tier: `adminSession`'s
+     * upgraded handle answers the admin surface, so a row that reused it would
+     * be testing the wrong gate.
+     */
+    async function doctorSession(prefix: string): Promise<string> {
+      const email = uniqueEmail(prefix);
+      const reg = await app.inject({
+        method: "POST",
+        url: "/v1/auth/register",
+        payload: { email, password, consent },
+      });
+      expect(reg.statusCode).toBe(200);
+      const res = await app.inject({
+        method: "POST",
+        url: "/v1/auth/login",
+        headers: device,
+        payload: { identifier: email, password },
+      });
+      expect(res.statusCode).toBe(200);
+      const cookie = res.cookies.find((c) => c.name === SESSION_COOKIE_NAME);
+      expect(cookie).toBeDefined();
+      return cookie!.value;
+    }
+
+    /**
+     * 014 EARS-5/26 — the AUTHENTICATED playback read, the only route in
+     * feature 014 that hands a `provider`/`embedRef` pair to a non-admin. Any
+     * account may watch, so a plain doctor is the caller; what is under test is
+     * the STATE gate, not the role.
+     */
+    async function playback(cookie: string, id: string) {
+      return app.inject({
+        method: "GET",
+        url: `/v1/events/${id}/recordings`,
+        headers: { ...device, cookie: `${SESSION_COOKIE_NAME}=${cookie}` },
       });
     }
 
@@ -550,6 +591,60 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(await feedCardFor(legacy.id, heldAtMsk)).toBeUndefined();
     });
 
+    it("014 EARS-26.2: an in_archive legacy эфир answers the public playback read with its published primary", async () => {
+      const cookie = await adminSession(uniqueEmail("admin"));
+      const legacy = await legacyBroadcast(cookie);
+      await publishRecording(cookie, legacy.id);
+      expect(
+        (await eventCommand(cookie, legacy.id, "archive-legacy")).statusCode,
+      ).toBe(200);
+
+      // «Renders exactly as an ended platform broadcast with a published
+      // recording» is not a portal-only statement: the login-gated player is
+      // fed by THIS read, so an `in_archive` эфир that answered two nulls here
+      // would show an archived эфир with nothing to play — the storefront card
+      // present, the page empty.
+      const played = await playback(await doctorSession("doctor"), legacy.id);
+      expect(played.statusCode).toBe(200);
+      const body = played.json() as {
+        primary: { kind: string; provider: string; embedRef: string } | null;
+        secondary: unknown;
+      };
+      expect(body.primary).toMatchObject({
+        kind: "edited",
+        provider: "youtube",
+        embedRef: "dQw4w9WgXcQ",
+      });
+      expect(body.secondary).toBeNull();
+    });
+
+    it("014 EARS-26.3: a hidden legacy эфир answers the playback read with nothing to play", async () => {
+      const cookie = await adminSession(uniqueEmail("admin"));
+      const legacy = await legacyBroadcast(cookie);
+      await publishRecording(cookie, legacy.id);
+
+      // Born `hidden` with a PUBLISHED recording already attached: the state,
+      // not the recording, is what withholds the source. 004 EARS-4.5 pins the
+      // hidden render as source-free on either origin, so «hidden» must answer
+      // two nulls even though the эфир has a perfectly playable cut on file.
+      const doctor = await doctorSession("doctor");
+      const beforeArchive = await playback(doctor, legacy.id);
+      expect(beforeArchive.statusCode).toBe(200);
+      expect(beforeArchive.json()).toEqual({ primary: null, secondary: null });
+
+      // And the same after a round trip through the archive — «Скрыть» takes the
+      // source back off the page, it does not merely drop the card.
+      expect(
+        (await eventCommand(cookie, legacy.id, "archive-legacy")).statusCode,
+      ).toBe(200);
+      expect(
+        (await eventCommand(cookie, legacy.id, "hide-legacy")).statusCode,
+      ).toBe(200);
+      const afterHide = await playback(doctor, legacy.id);
+      expect(afterHide.statusCode).toBe(200);
+      expect(afterHide.json()).toEqual({ primary: null, secondary: null });
+    });
+
     it("014 EARS-27.1: every broadcast command on a legacy эфир is refused 409 INVALID_TRANSITION with the state untouched, from BOTH legacy states", async () => {
       const cookie = await adminSession(uniqueEmail("admin"));
       const legacy = await legacyBroadcast(cookie);
@@ -603,9 +698,18 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       // both are named routes.
       const archived = await genericTransition(cookie, legacy.id, "in_archive");
       expect(archived.statusCode).toBe(409);
-      expect((archived.json() as { code?: string }).code).toBe(
-        "INVALID_TRANSITION",
-      );
+      const refusal = archived.json() as {
+        code?: string;
+        from?: string;
+        to?: string;
+      };
+      expect(refusal.code).toBe("INVALID_TRANSITION");
+      // #1815 review NIT A — the envelope names the move the caller actually
+      // asked for. A wrong-machine refusal used to report `from === to === the
+      // current state`, so the operator's log read «illegal lifecycle transition
+      // hidden → hidden» for a request that named `in_archive`.
+      expect(refusal.from).toBe("hidden");
+      expect(refusal.to).toBe("in_archive");
       expect((await persisted(legacy.id))?.state).toBe("hidden");
       expect(await auditCount(legacy.id, "event.archived_legacy")).toBe(0);
 
@@ -630,8 +734,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
       for (const command of ["archive-legacy", "hide-legacy"]) {
         const res = await eventCommand(cookie, platformId, command);
-        expect(res.statusCode, `${command} on a platform event must be refused`)
-          .toBe(409);
+        expect(
+          res.statusCode,
+          `${command} on a platform event must be refused`,
+        ).toBe(409);
         expect((res.json() as { code?: string }).code).toBe(
           "INVALID_TRANSITION",
         );

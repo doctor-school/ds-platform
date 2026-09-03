@@ -2,6 +2,7 @@ import { Inject, Injectable } from "@nestjs/common";
 import {
   type EventPlayback,
   isPubliclyReachable,
+  PAST_BROADCAST_STATES,
   type PlayableRecording,
   type RecordingKind,
 } from "@ds/schemas";
@@ -52,10 +53,16 @@ export class RecordingsPlaybackService {
    *    Authenticating must not turn this route into the oracle that confirms a
    *    hidden announcement exists — the public read refuses that key too
    *    (004 EARS-6), and the two refusals have to agree.
-   * 2. The event is reachable but is not `ended`, or nothing is published ⇒
-   *    200 with two nulls. `preparing` is an honest state the plaque renders,
-   *    and 404-ing it would make an empty archive look like a broken link.
-   *    A `hidden` event lands here too: 004 keeps its «скрыт» notice and
+   * 2. The event is reachable but is not a PAST broadcast, or nothing is
+   *    published ⇒ 200 with two nulls. `preparing` is an honest state the plaque
+   *    renders, and 404-ing it would make an empty archive look like a broken
+   *    link. «Past» is the {@link PAST_BROADCAST_STATES} SSOT — `ended` on the
+   *    platform machine and `in_archive` on the legacy one (014 EARS-26,
+   *    #1741): an archived pre-platform эфир renders EXACTLY as an `ended`
+   *    broadcast with a published recording, same login-gated player, so a
+   *    second literal list here would be the one place that forgets it.
+   *    A `hidden` event lands here too — on EITHER origin: 004 keeps its «скрыт»
+   *    notice and
    *    EARS-4.5 pins that render as source-free, so a recording attached before
    *    the event was hidden stays unplayable rather than resurrecting a
    *    post-live page the visitor was never meant to see.
@@ -67,7 +74,9 @@ export class RecordingsPlaybackService {
     if (!event || !isPubliclyReachable(event.state)) {
       throw new PlaybackEventNotFoundError();
     }
-    if (event.state !== "ended") return NOTHING_TO_PLAY;
+    if (!(PAST_BROADCAST_STATES as readonly string[]).includes(event.state)) {
+      return NOTHING_TO_PLAY;
+    }
 
     const rows = await this.repository.playableRowsByEvent(event.id);
     // THE display rule is not re-decided here. `foldRecordingProjection` is the

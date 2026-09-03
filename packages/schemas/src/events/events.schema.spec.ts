@@ -45,14 +45,18 @@ const VALID_EMBED_REFS: Record<(typeof STREAM_PROVIDERS)[number], string> = {
 describe("007 events schema", () => {
   it("EARS-22: admin event search is a strict paged server contract", () => {
     expect(
-      EventAdminListQuerySchema.parse({ page: "2", pageSize: "25", q: "  Кардио  " }),
+      EventAdminListQuerySchema.parse({
+        page: "2",
+        pageSize: "25",
+        q: "  Кардио  ",
+      }),
     ).toEqual({ page: 2, pageSize: 25, q: "Кардио" });
-    expect(EventAdminListQuerySchema.safeParse({ pageSize: "101" }).success).toBe(
-      false,
-    );
-    expect(EventAdminListQuerySchema.safeParse({ status: "draft" }).success).toBe(
-      false,
-    );
+    expect(
+      EventAdminListQuerySchema.safeParse({ pageSize: "101" }).success,
+    ).toBe(false);
+    expect(
+      EventAdminListQuerySchema.safeParse({ status: "draft" }).success,
+    ).toBe(false);
   });
 
   describe("mskLocalToInstant (EARS-1/EARS-10 — one canonical instant)", () => {
@@ -176,6 +180,30 @@ describe("007 events schema", () => {
       }
       expect(canTransition("hidden", "in_archive", "platform")).toBe(false);
       expect(canTransition("live", "ended", "legacy")).toBe(false);
+    });
+  });
+
+  describe("UpdateEventRequestSchema origin rejection (014 EARS-23)", () => {
+    // The `origin: z.never().optional()` declaration was pinned only by an
+    // INFERRED type (#1815 review). A type assertion cannot tell «rejected» from
+    // «stripped», and stripping is the one outcome 014 EARS-23 rules out: a
+    // caller who reads a 200 believes the discriminator moved. These rows assert
+    // the runtime behaviour.
+    const body = { title: "Обновлённый заголовок" };
+
+    it("014 EARS-23: an update body carrying `origin` fails to parse, on either value", () => {
+      for (const origin of EVENT_ORIGINS) {
+        const result = UpdateEventRequestSchema.safeParse({ ...body, origin });
+        expect(result.success, `origin: ${origin} must be refused`).toBe(false);
+      }
+    });
+
+    it("014 EARS-23: the otherwise-identical body without `origin` parses", () => {
+      const result = UpdateEventRequestSchema.safeParse(body);
+      expect(result.success).toBe(true);
+      // …and the key is absent from the parsed output, so no update path can
+      // read a discriminator off it by accident.
+      expect(result.success && "origin" in result.data).toBe(false);
     });
   });
 
@@ -410,8 +438,10 @@ describe("007 events schema", () => {
         "550870741_456239017_94c2c100ea1976f9",
       ]) {
         expect(
-          ConfigureStreamRequestSchema.safeParse({ provider: "vk", embedRef: ref })
-            .success,
+          ConfigureStreamRequestSchema.safeParse({
+            provider: "vk",
+            embedRef: ref,
+          }).success,
           `valid vk ref must be accepted: ${ref}`,
         ).toBe(true);
       }
@@ -422,8 +452,10 @@ describe("007 events schema", () => {
         "abc_def", // non-numeric oid/id
       ]) {
         expect(
-          ConfigureStreamRequestSchema.safeParse({ provider: "vk", embedRef: ref })
-            .success,
+          ConfigureStreamRequestSchema.safeParse({
+            provider: "vk",
+            embedRef: ref,
+          }).success,
           `malformed vk ref must be rejected: ${ref}`,
         ).toBe(false);
       }
@@ -462,9 +494,10 @@ describe("007 events schema", () => {
           provider: "cdnvideo",
           embedRef: url,
         });
-        expect(result.success, `non-allowlisted URL must be rejected: ${url}`).toBe(
-          false,
-        );
+        expect(
+          result.success,
+          `non-allowlisted URL must be rejected: ${url}`,
+        ).toBe(false);
         const issue = result.success ? undefined : result.error.issues[0];
         expect(issue?.code).toBe("custom");
         expect(issue?.path).toEqual(["embedRef"]);

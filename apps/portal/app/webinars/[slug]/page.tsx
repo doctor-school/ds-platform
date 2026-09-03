@@ -196,21 +196,30 @@ export default async function WebinarEventPage({
             dateLine={eventPageDateLine(event)}
             chips={eventPageChips(event)}
             statusPlate={
-              /* 004 EARS-4 swap: live → the «В эфире» tag; 014 EARS-4 → on an
-                 ENDED event the plate speaks about the RECORDING instead, which
-                 is the one thing a post-live visitor came to find out. `hidden`
-                 keeps 004 EARS-5's «Скрыто». */
+              /* 004 EARS-4 swap: live → the «В эфире» tag; every other state
+                 carries its own lifecycle word («Скоро» / «Эфир завершён» /
+                 «Скрыто»), so the hero can never contradict the machine. 014
+                 EARS-4 then adds the RECORDING badge BESIDE it on an ended
+                 event — what a post-live visitor came to find out — rather than
+                 replacing the lifecycle signal with it. `in_archive` is a
+                 legacy эфир whose only public signal IS its recording, and it
+                 has no lifecycle word of its own (014-design §3.1). */
               event.state === "live" ? (
                 <Badge variant="live">{t("state.live")}</Badge>
-              ) : recordingSignal ? (
-                <Badge
-                  data-testid="recording-badge"
-                  variant={recordingSignal.available ? "success" : "label"}
-                >
-                  {t(`recordingBadge.${recordingSignal.badgeKey}`)}
-                </Badge>
               ) : (
-                <Badge variant="label">{t(`state.${event.state}`)}</Badge>
+                <div className="flex flex-col items-end gap-2">
+                  {event.state === "in_archive" ? null : (
+                    <Badge variant="label">{t(`state.${event.state}`)}</Badge>
+                  )}
+                  {recordingSignal ? (
+                    <Badge
+                      data-testid="recording-badge"
+                      variant={recordingSignal.available ? "success" : "label"}
+                    >
+                      {t(`recordingBadge.${recordingSignal.badgeKey}`)}
+                    </Badge>
+                  ) : null}
+                </div>
               )
             }
           />

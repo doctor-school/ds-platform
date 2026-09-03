@@ -46,7 +46,13 @@ const VIEW: EventPageView = {
   specialties: ["Травматология и ортопедия", "Ортобиология"],
   partners: [],
   state: "published",
-  recording: { status: "preparing", expectedBy: null, kind: null, posterUrl: null },
+  recording: {
+    state: "preparing",
+    primaryKind: null,
+    secondaryKind: null,
+    posterUrl: null,
+    expectedBy: null,
+  },
   format: "online",
   seatsLeft: null,
 };

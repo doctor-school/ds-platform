@@ -1,44 +1,23 @@
 /**
- * 004 EARS-3 — the event-context handoff carried by the single «Участвовать» CTA
- * into the registration flow (feature 005) through auth (feature 003).
+ * 005 EARS-2 / 014 EARS-6 — the returnTo carry across the intermediate auth
+ * navigations of the guest→auth→registered round-trip.
  *
- * 004 owns **only** the CTA and this context handoff; the registration mechanics
- * and the guest→auth→registered round-trip are owned by 005/003 (a tracked seam,
- * parent #549 / design §8). The forward-compatible contract 005's design pins
- * (§3.2) is a **safe, same-origin registration-intent**: the event slug plus a
- * same-origin `returnTo=/webinars/:slug` path — never PII, never a credential.
- * The CTA routes the visitor into the shipped 003 registration entry (`/register`)
- * carrying that returnTo; 005 consumes it to fire `RegisterForEvent` after the
- * session exists and land the doctor back on the event page, registered.
+ * The «Участвовать» href itself is NOT built here: since 020 EARS-1 (slice 3,
+ * #1764) the participation CTA — label and `/register?returnTo=/webinars/<slug>`
+ * target alike — is resolved server-side by
+ * `apps/api/src/events/participation-cta.resolver.ts`, so one owner emits it and
+ * two builders can no longer disagree. What stays portal-local is the ONWARD
+ * carry below: re-appending an already-safe returnTo to the next auth hop.
  *
- * Two invariants are baked in here rather than left to the call site:
- *   • **No hardcoded origin** (004 Constraints) — the href is a same-origin
- *     RELATIVE path; the portal origin is never spelled out in code.
- *   • **No open-redirect** (005 Constraints, EARS-2) — the returnTo is always
- *     anchored under `/webinars/`, and the slug is `encodeURIComponent`-escaped,
- *     so a hostile slug (`//evil`, `https://evil`, `../..`) can never surface a
- *     protocol-relative or cross-origin return target.
+ * The invariant baked in here rather than left to the call site: **no
+ * open-redirect** (005 Constraints, EARS-2) — a returnTo is re-appended only
+ * after it passes the same-origin guards, and always in the canonical form the
+ * guard reconstructs, never as raw input.
  */
 
 import { parseReturnTarget, parseSameOriginReturnTarget } from "@ds/schemas";
 
 import { parseRoomReturnTarget } from "./room-return";
-
-/** The shipped 003 registration entry the guest «Участвовать» path routes through. */
-const REGISTRATION_ENTRY = "/register";
-
-/**
- * Build the same-origin registration href the «Участвовать» CTA links to for an
- * event identified by `slug`, carrying the event context as a `returnTo` that
- * points back at the event's public page.
- */
-export function buildRegistrationHref(slug: string): string {
-  // Always anchored under the same-origin /webinars/ path; the slug is escaped so
-  // a leading `//` or an absolute scheme can never reach the front of returnTo.
-  const returnTo = `/webinars/${encodeURIComponent(slug)}`;
-  const params = new URLSearchParams({ returnTo });
-  return `${REGISTRATION_ENTRY}?${params.toString()}`;
-}
 
 /**
  * 005 EARS-2 / 014 EARS-6 — carry a `returnTo` ONWARD through an intermediate

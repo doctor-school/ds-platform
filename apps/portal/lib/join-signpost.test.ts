@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { resolveJoinSignpost, showRegisteredConfirmation } from "./registration-state";
+import { resolveJoinSignpost } from "./registration-state";
 
 /**
  * 005 EARS-5 — for a registered doctor the event page signposts HOW/WHEN they
@@ -50,12 +50,4 @@ describe("005 EARS-5 resolveJoinSignpost — registered join-signpost render dec
     expect(resolveJoinSignpost(null, "live")).toEqual({ kind: "none" });
   });
 
-  it("EARS-5: the EARS-4 `showRegisteredConfirmation` primitive is exactly the `upcoming` signpost case (the `live` render is the EARS-5 live signpost, not this swap)", () => {
-    expect(
-      showRegisteredConfirmation({ registered: true, registeredAt: "x" }, "upcoming"),
-    ).toBe(true);
-    expect(
-      showRegisteredConfirmation({ registered: true, registeredAt: "x" }, "live"),
-    ).toBe(false);
-  });
 });

@@ -10,8 +10,8 @@ import { z } from "zod";
 // intent lives only in the round-trip.
 //
 // This module is the framework-agnostic SSOT (ADR-0002 §3) for what a SAFE intent
-// is, consumed by the portal on BOTH sides of the handoff: the 004 CTA builds the
-// returnTo (`buildRegistrationHref`) and the 003 auth pages validate it before
+// is, consumed by the portal on BOTH sides of the handoff: the server-resolved
+// `ParticipationCta` emits the returnTo and the 003 auth pages validate it before
 // they navigate back (an attacker-supplied `/login?returnTo=…` must never become
 // an open redirect). The api unit `return-target.guard.spec.ts` pins the contract.
 

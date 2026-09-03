@@ -55,7 +55,7 @@ Given("a guest on the published event page", async ({ page, context, world }) =>
 
 When("the guest activates «Участвовать»", async ({ page }) => {
   // The public register CTA is a same-origin `/register?returnTo=/webinars/:slug`
-  // link (buildRegistrationHref) — clicking it carries the event context into 003.
+  // link (server-resolved `ParticipationCta`) — clicking it carries the event context into 003.
   const cta = page.getByRole("link", { name: PARTICIPATE, exact: true });
   await expect(cta).toBeVisible();
   await cta.click();

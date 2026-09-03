@@ -4,6 +4,7 @@ import type { EventPageView, ParticipationCta } from "@ds/schemas";
 import {
   EVENT_PAGE_COPY,
   eventFormatBlockProps,
+  eventLifecyclePlate,
   eventPageChips,
   eventPageDateLine,
   eventPageKicker,
@@ -104,6 +105,47 @@ describe("020 EARS-1 — shared event-page view projection", () => {
     expect(eventSignupCardProps(VIEW, soldOut).cta).toEqual(soldOut);
   });
 
+  it("020 EARS-1: the sign-up footnote shall render in the register state only (#1764)", () => {
+    // Canvas:201 puts «Нужна регистрация …» under the register control alone.
+    expect(eventSignupCardProps(VIEW, REGISTER_CTA).note).toBe(
+      EVENT_PAGE_COPY.signupNote,
+    );
+    for (const cta of [
+      { action: "registered", label: "Вы записаны", href: null, reason: null },
+      { action: "sold-out", label: "Мест нет", href: null, reason: null },
+      {
+        action: "unavailable",
+        label: "Участие недоступно",
+        href: null,
+        reason: "Событие завершилось",
+      },
+      {
+        action: "enter-room",
+        label: "Войти в эфир",
+        href: "/room/prp-gonartroz",
+        reason: null,
+      },
+    ] satisfies ParticipationCta[]) {
+      // A footnote about registering would contradict the words above it.
+      expect(eventSignupCardProps(VIEW, cta).note).toBeUndefined();
+    }
+  });
+
+  it("020 EARS-18: the lifecycle plate is a mapper decision, not a host one (#1764)", () => {
+    expect(eventLifecyclePlate({ ...VIEW, state: "live" })).toEqual({
+      state: "live",
+      variant: "live",
+    });
+    for (const state of ["published", "ended", "hidden"] as const) {
+      expect(eventLifecyclePlate({ ...VIEW, state })).toEqual({
+        state,
+        variant: "label",
+      });
+    }
+    // A legacy эфир has no lifecycle word of its own (014-design §3.1).
+    expect(eventLifecyclePlate({ ...VIEW, state: "in_archive" })).toBeNull();
+  });
+
   it("020 EARS-1: the sign-up conditions state format, duration and price", () => {
     expect(eventSignupCardProps(VIEW, REGISTER_CTA).conditions).toEqual([
       { label: "Формат", value: "Онлайн" },
@@ -121,12 +163,16 @@ describe("020 EARS-1 — shared event-page view projection", () => {
       affiliation: "Д.м.н., профессор",
       photoUrl: "https://cdn.example/mikhail.jpg",
       initials: "МС",
-      heading: EVENT_PAGE_COPY.speakersHeading,
     });
+    // The FIRST card keeps the canvas default heading «Ведёт» (canvas:118) by
+    // leaving it unset; every later card suppresses it with an explicit `null`,
+    // because `undefined` would RESTORE that default and print one heading per
+    // speaker.
+    expect(cards[0]?.heading).toBeUndefined();
+    expect(cards[1]?.heading).toBeNull();
     // The legacy variant degrades to initials rather than to a broken image.
     expect(cards[1]).toMatchObject({ name: "Анна Петрова", initials: "АП" });
     expect(cards[1]?.photoUrl).toBeUndefined();
-    expect(cards[1]?.heading).toBeUndefined();
   });
 
   it("020 EARS-1: no speaker card links out to an expert page neither host owns yet", () => {

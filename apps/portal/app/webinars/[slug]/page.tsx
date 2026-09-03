@@ -12,6 +12,7 @@ import {
   EventSignupCard,
   EventSpeakerCard,
   eventFormatBlockProps,
+  eventLifecyclePlate,
   eventPageChips,
   eventPageDateLine,
   eventPageKicker,
@@ -158,6 +159,7 @@ export default async function WebinarEventPage({
     ) : undefined;
 
   const formatBlock = eventFormatBlockProps(event);
+  const lifecyclePlate = eventLifecyclePlate(event);
 
   return (
     <>
@@ -204,13 +206,15 @@ export default async function WebinarEventPage({
                  replacing the lifecycle signal with it. `in_archive` is a
                  legacy эфир whose only public signal IS its recording, and it
                  has no lifecycle word of its own (014-design §3.1). */
-              event.state === "live" ? (
-                <Badge variant="live">{t("state.live")}</Badge>
+              lifecyclePlate?.variant === "live" ? (
+                <Badge variant="live">{t(`state.${lifecyclePlate.state}`)}</Badge>
               ) : (
                 <div className="flex flex-col items-end gap-2">
-                  {event.state === "in_archive" ? null : (
-                    <Badge variant="label">{t(`state.${event.state}`)}</Badge>
-                  )}
+                  {lifecyclePlate ? (
+                    <Badge variant={lifecyclePlate.variant}>
+                      {t(`state.${lifecyclePlate.state}`)}
+                    </Badge>
+                  ) : null}
                   {recordingSignal ? (
                     <Badge
                       data-testid="recording-badge"

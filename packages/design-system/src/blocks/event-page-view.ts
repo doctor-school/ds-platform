@@ -71,12 +71,9 @@ export interface EventPageCopy {
   priceFree: string;
   /** Participation-format words, shared by the kicker and the condition row. */
   format: Record<EventParticipationFormat, string>;
-  /** Sign-up card footnote under the CTA. */
+  /** Sign-up card footnote, rendered under the CTA in the register state only. */
   signupNote: string;
-  /** Speaker section heading, rendered once above the first card. */
-  speakersHeading: string;
-  /** `EventFormatBlock` (online) heading + its two lines. */
-  formatHeading: string;
+  /** `EventFormatBlock` (online) lines; its heading is the canvas default «Эфир». */
   roomOpensLine: string;
   duringLine: string;
 }
@@ -94,8 +91,6 @@ export const EVENT_PAGE_COPY: EventPageCopy = {
     hybrid: "Очно и онлайн",
   },
   signupNote: "Нужна регистрация — вернём вас на эту страницу.",
-  speakersHeading: "Спикер",
-  formatHeading: "Как это проходит",
   roomOpensLine: "Комната эфира откроется за 10 минут до начала",
   duringLine:
     "Во время эфира: вопрос лектору · опросы с живым графиком · отметки присутствия",
@@ -155,6 +150,33 @@ export function eventPageChips(view: EventPageView): readonly string[] {
 }
 
 /**
+ * The lifecycle plate the hero carries — a COMPOSITION decision, so it lives
+ * here rather than in either host (EARS-18, #1764). The mapper answers WHETHER
+ * a plate renders and with WHICH badge variant; only the word is host copy
+ * (`ru.json` on the academy, the page `COPY` on doctor.school), which is the
+ * one declared copy-defaults divergence.
+ *
+ * `in_archive` is a legacy эфир whose only public signal IS its recording and
+ * which has no lifecycle word of its own (014-design §3.1), so it gets no
+ * plate. A host may render its own 014 recording badge BESIDE this one; it may
+ * not decide the lifecycle plate itself.
+ */
+export interface EventLifecyclePlate {
+  state: Exclude<EventPageView["state"], "in_archive">;
+  variant: "live" | "label";
+}
+
+export function eventLifecyclePlate(
+  view: EventPageView,
+): EventLifecyclePlate | null {
+  if (view.state === "in_archive") return null;
+  return {
+    state: view.state,
+    variant: view.state === "live" ? "live" : "label",
+  };
+}
+
+/**
  * The sign-up card props for one viewer on one event. `cta` is passed straight
  * through from the server policy read — this function never inspects it.
  */
@@ -178,7 +200,10 @@ export function eventSignupCardProps(
     weekdayLabel: `${weekday} · ${copy.tz}`,
     conditions,
     cta,
-    note: copy.signupNote,
+    // Canvas:201 carries the footnote under the register control alone. In
+    // every other state it would contradict the words above it — «Мест нет»,
+    // «Участие недоступно», «Вы записаны» — so it is absent, not restyled.
+    note: cta.action === "register" ? copy.signupNote : undefined,
   };
 }
 
@@ -190,16 +215,14 @@ export function eventSignupCardProps(
  *
  * No `href` / `footerHref` is produced: the expert PAGE route is per-host and
  * neither storefront owns one in this slice, so a link here would be a dead
- * affordance. `heading` is set on the FIRST card only, so the section title
- * renders exactly once however many speakers an event has.
+ * affordance. The canvas (canvas:118) carries ONE «Ведёт» label above the
+ * section, so every card after the first suppresses it with an explicit
+ * `null` — `undefined` would RESTORE the card's canvas default.
  */
-export function eventSpeakerCards(
-  view: EventPageView,
-  copy: EventPageCopy = EVENT_PAGE_COPY,
-): EventSpeakerCardProps[] {
+export function eventSpeakerCards(view: EventPageView): EventSpeakerCardProps[] {
   return view.speakers.map((speaker, index) => ({
     ...speakerCardProps(speaker),
-    heading: index === 0 ? copy.speakersHeading : undefined,
+    heading: index === 0 ? undefined : null,
   }));
 }
 
@@ -244,7 +267,6 @@ export function eventFormatBlockProps(
   if (view.format !== "online") return null;
   return {
     kind: "online",
-    heading: copy.formatHeading,
     roomOpensLine: copy.roomOpensLine,
     duringLine: copy.duringLine,
   };

@@ -10,6 +10,7 @@ import {
   EventSignupCard,
   EventSpeakerCard,
   eventFormatBlockProps,
+  eventLifecyclePlate,
   eventPageChips,
   eventPageDateLine,
   eventPageKicker,
@@ -63,6 +64,14 @@ const COPY = {
   programme: "Программа",
   programmeDownload: "Скачать программу (PDF)",
   partnersEyebrow: "При поддержке",
+  /* The lifecycle words. WHICH plate renders is the mapper's decision
+     (`eventLifecyclePlate`); only the word is host copy. */
+  state: {
+    published: "Скоро",
+    live: "В эфире",
+    ended: "Эфир завершён",
+    hidden: "Скрыто",
+  },
 } as const;
 
 export default async function DoctorEventPage({
@@ -84,6 +93,7 @@ export default async function DoctorEventPage({
   if (!event) notFound();
 
   const formatBlock = eventFormatBlockProps(event);
+  const lifecyclePlate = eventLifecyclePlate(event);
 
   return (
     <EventPageShell
@@ -105,8 +115,13 @@ export default async function DoctorEventPage({
           dateLine={eventPageDateLine(event)}
           chips={eventPageChips(event)}
           statusPlate={
-            event.state === "live" ? (
-              <Badge variant="live">В эфире</Badge>
+            /* 004 EARS-4 / 020 EARS-18 — the plate decision comes from the
+               shared mapper, so an ended or hidden event carries the same
+               lifecycle signal on doctor.school as on the academy. */
+            lifecyclePlate ? (
+              <Badge variant={lifecyclePlate.variant}>
+                {COPY.state[lifecyclePlate.state]}
+              </Badge>
             ) : null
           }
         />
@@ -125,20 +140,20 @@ export default async function DoctorEventPage({
       </section>
 
       {/* The programme download renders only when the operator attached one —
-          never a broken link. `text-primary-action` is the card-safe AA link
-          token (#270), never `text-primary`. */}
+          never a broken link. Routed through the DS `Link` primitive so hover
+          and focus behave identically on both storefronts (EARS-18, #1764). */}
       {event.programPdfUrl ? (
         <section className="mt-14" data-testid="event-programme">
           <EventSectionHeading>{COPY.programme}</EventSectionHeading>
-          <a
+          <Link
             href={event.programPdfUrl}
             target="_blank"
             rel="noreferrer"
-            className="mt-7 inline-flex items-center gap-3 border-2 border-border bg-card px-6 py-4 text-sm font-bold text-primary-action no-underline shadow-ghost focus-visible:shadow-focus focus-visible:outline-none"
+            className="mt-7 inline-flex items-center gap-3 border-2 border-border bg-card px-6 py-4 text-sm shadow-ghost"
           >
             <span aria-hidden="true">↓</span>
             {COPY.programmeDownload}
-          </a>
+          </Link>
         </section>
       ) : null}
 

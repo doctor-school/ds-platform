@@ -123,6 +123,7 @@ export type { EventFormatBlockProps } from "./event-format-block";
 export {
   EVENT_PAGE_COPY,
   eventFormatBlockProps,
+  eventLifecyclePlate,
   eventPageChips,
   eventPageDateLine,
   eventPageKicker,
@@ -130,4 +131,8 @@ export {
   eventSignupCardProps,
   eventSpeakerCards,
 } from "./event-page-view";
-export type { EventPageCopy, EventPageTimeParts } from "./event-page-view";
+export type {
+  EventLifecyclePlate,
+  EventPageCopy,
+  EventPageTimeParts,
+} from "./event-page-view";

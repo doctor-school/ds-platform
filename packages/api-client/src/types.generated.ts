@@ -628,6 +628,22 @@ export interface paths {
         patch: operations["EventsAdminController_update"];
         trace?: never;
     };
+    "/v1/admin/events/{id}/archive-legacy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["EventsAdminController_archiveLegacy"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/events/{id}/close": {
         parameters: {
             query?: never;
@@ -660,7 +676,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/admin/events/{id}/mark-ended": {
+    "/v1/admin/events/{id}/hide-legacy": {
         parameters: {
             query?: never;
             header?: never;
@@ -669,7 +685,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["EventsAdminController_markEnded"];
+        post: operations["EventsAdminController_hideLegacy"];
         delete?: never;
         options?: never;
         head?: never;
@@ -798,6 +814,22 @@ export interface paths {
         get: operations["ExpertsAdminController_eligibleUsers"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/legacy-broadcasts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["LegacyBroadcastsAdminController_create"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1910,14 +1942,16 @@ export interface components {
                 durationMin: number;
                 /** Format: uuid */
                 id: string;
+                /** @enum {string} */
+                origin: "platform" | "legacy";
                 school: string;
                 slug: string;
                 /** Format: date-time */
                 startsAt: string;
                 /** @enum {string} */
-                state: "draft" | "published" | "live" | "ended" | "hidden";
+                state: "draft" | "published" | "live" | "ended" | "hidden" | "in_archive";
                 title: string;
-                validTransitions: ("draft" | "published" | "live" | "ended" | "hidden")[];
+                validTransitions: ("draft" | "published" | "live" | "ended" | "hidden" | "in_archive")[];
             }[];
             page: number;
             pageSize: number;
@@ -1965,7 +1999,7 @@ export interface components {
             /** Format: date-time */
             startsAt: string;
             /** @enum {string} */
-            state: "published" | "live" | "ended" | "hidden";
+            state: "published" | "live" | "ended" | "hidden" | "in_archive";
             title: string;
         };
         ExpertAdminDetailDto: {
@@ -2005,6 +2039,32 @@ export interface components {
             pageSize: number;
             total: number;
         };
+        LegacyBroadcastCreateDto: {
+            /** @default  */
+            description: string;
+            durationMin: number;
+            heldAtMsk: string;
+            recording: {
+                durationSec?: number | null;
+                embedRef: string;
+                /** @enum {string} */
+                kind: "edited" | "raw";
+                posterRef?: string | null;
+                /** @enum {string} */
+                provider: "rutube" | "youtube" | "vk" | "cdnvideo";
+            };
+            /** @default  */
+            school: string;
+            /** @default [] */
+            speakers: {
+                name: string;
+                /** @default  */
+                regalia: string;
+            }[];
+            /** @default [] */
+            specialties: string[];
+            title: string;
+        };
         LoginRequestDto: {
             captchaToken?: string;
             identifier: string;
@@ -2018,7 +2078,7 @@ export interface components {
             /** Format: date-time */
             startsAt: string;
             /** @enum {string} */
-            state: "published" | "live" | "ended";
+            state: "published" | "live" | "ended" | "in_archive";
             title: string;
         }[];
         OtpRequestDto: {
@@ -2114,7 +2174,7 @@ export interface components {
         };
         TransitionEventRequestDto: {
             /** @enum {string} */
-            to: "draft" | "published" | "live" | "ended" | "hidden";
+            to: "draft" | "published" | "live" | "ended" | "hidden" | "in_archive";
         };
         UpcomingBroadcastListDto: {
             /** Format: uuid */
@@ -3119,6 +3179,25 @@ export interface operations {
             };
         };
     };
+    EventsAdminController_archiveLegacy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     EventsAdminController_close: {
         parameters: {
             query?: never;
@@ -3157,7 +3236,7 @@ export interface operations {
             };
         };
     };
-    EventsAdminController_markEnded: {
+    EventsAdminController_hideLegacy: {
         parameters: {
             query?: never;
             header?: never;
@@ -3388,6 +3467,27 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["EligibleExpertUserListDto"];
                 };
+            };
+        };
+    };
+    LegacyBroadcastsAdminController_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LegacyBroadcastCreateDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

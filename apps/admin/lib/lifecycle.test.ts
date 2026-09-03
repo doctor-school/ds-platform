@@ -320,7 +320,7 @@ describe("014 EARS-25/27 legacy broadcast lifecycle commands", () => {
     }
   });
 
-  it("014 EARS-25: the legacy labels and the «Архивирован» badge exist in the shipped RU catalogue", () => {
+  it("014 EARS-25: the legacy labels and the «Архивировано» badge exist in the shipped RU catalogue", () => {
     const messages = JSON.parse(
       readFileSync(
         fileURLToPath(new URL("../messages/ru.json", import.meta.url)),
@@ -334,7 +334,7 @@ describe("014 EARS-25/27 legacy broadcast lifecycle commands", () => {
     };
     expect(messages.events.action.archiveLegacy).toBe("Архивировать");
     expect(messages.events.action.hideLegacy).toBe("Скрыть");
-    expect(messages.events.state.in_archive).toBe("Архивирован");
+    expect(messages.events.state.in_archive).toBe("Архивировано");
     expect(stateLabelKey("in_archive")).toBe("events.state.in_archive");
   });
 

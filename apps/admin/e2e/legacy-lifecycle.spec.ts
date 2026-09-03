@@ -11,7 +11,7 @@ import { signInAsAdmin } from "./support/sign-in";
  * the API e2e proves the two commands; neither can prove the thing this feature
  * is actually about, which is that ONE screen speaks ONE machine's vocabulary.
  * An archived эфир the platform never hosted is administered with «Архивировать»
- * / «Скрыть» and shows the status «Архивирован»; the platform commands
+ * / «Скрыть» and shows the status «Архивировано»; the platform commands
  * («Опубликовать», «Открыть эфир», «Закрыть эфир») and the stream-config
  * affordance never appear beside them (014-design §3.1, EARS-27). This spec
  * drives that on the running admin, in both directions of the legacy machine.
@@ -59,7 +59,7 @@ const LEGACY_TITLE = "Архивный эфир: инсулинотерапия 
 const HIDDEN_PLATFORM_TITLE = "Скрыт: базовая ЭКГ для терапевта";
 
 /** The owner-approved legacy copy (`messages/ru.json`). */
-const ARCHIVED_BADGE = "Архивирован";
+const ARCHIVED_BADGE = "Архивировано";
 const HIDDEN_BADGE = "Скрыто";
 const ARCHIVE_LABEL = "Архивировать";
 const HIDE_LABEL = "Скрыть";
@@ -186,7 +186,7 @@ async function restoreLegacyToArchive(
 test.describe.configure({ mode: "serial" });
 
 test.describe("014 EARS-25/27 — the legacy broadcast lifecycle bar in the live admin", () => {
-  test("014 EARS-25: an in_archive legacy эфир shows «Архивирован» and only «Скрыть»; «Скрыть» then leaves only «Архивировать», and «Архивировать» returns it", async ({
+  test("014 EARS-25: an in_archive legacy эфир shows «Архивировано» and only «Скрыть»; «Скрыть» then leaves only «Архивировать», and «Архивировать» returns it", async ({
     page,
   }) => {
     await signInAsAdmin(page);

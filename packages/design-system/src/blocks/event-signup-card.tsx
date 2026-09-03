@@ -22,6 +22,12 @@ import { Button } from "../primitives/button";
 export interface EventSignupCondition {
   label: React.ReactNode;
   value: React.ReactNode;
+  /**
+   * The value's emphasis. `success` is the canvas's green «Бесплатно для врача»
+   * (canvas:209) — a token pair, so it holds its AA contrast in dark as well;
+   * omitted is the default foreground every other row carries.
+   */
+  tone?: "default" | "success";
 }
 
 export interface EventSignupCardProps {
@@ -40,6 +46,18 @@ export interface EventSignupCardProps {
   proof?: React.ReactNode;
   /** Sticks to the viewport on desktop only (canvas «Развилка 1 · вариант А»). */
   pinned?: boolean;
+  /**
+   * The host's own control ELEMENT for the action the server already resolved —
+   * used when the action is a COMMAND rather than a navigation (the academy's
+   * 005 EARS-1 one-tap register, which POSTs and re-reads in place instead of
+   * routing through auth).
+   *
+   * It is a rendering slot, never a policy hook: `cta.action` alone still decides
+   * WHETHER a control renders at all, and this node is ignored in every branch
+   * that the policy says carries no target. A host therefore cannot use it to
+   * put a participation control where the server said there is none.
+   */
+  control?: React.ReactNode;
   className?: string;
 }
 
@@ -67,20 +85,25 @@ export function EventSignupCard({
   note,
   proof,
   pinned = false,
+  control: hostControl,
   className,
 }: EventSignupCardProps) {
-  const control =
-    LINKED_ACTIONS.has(cta.action) && cta.href !== null ? (
+  const linked = LINKED_ACTIONS.has(cta.action) && cta.href !== null;
+  // The host slot substitutes for the generated link ONLY inside the branch the
+  // policy already opened; it can never open one of its own.
+  const control = !linked ? null : (
+    (hostControl ?? (
       <Button asChild className="mt-3.5 w-full" data-testid="event-signup-cta">
-        <a href={cta.href}>
+        <a href={cta.href as string}>
           {cta.label}
           <span aria-hidden="true">↗</span>
         </a>
       </Button>
-    ) : null;
+    ))
+  );
 
   const statement =
-    control === null && STATEMENT_ACTIONS.has(cta.action) ? (
+    !linked && STATEMENT_ACTIONS.has(cta.action) ? (
       <p
         data-testid="event-signup-statement"
         className="mt-3.5 text-caption font-extrabold text-foreground"
@@ -117,7 +140,15 @@ export function EventSignupCard({
               className="flex items-baseline justify-between gap-3 border-b border-hairline py-2.5 last:border-b-0"
             >
               <span className="text-xs font-bold text-faint">{condition.label}</span>
-              <span className="text-caption font-extrabold text-card-foreground">
+              <span
+                data-tone={condition.tone ?? "default"}
+                className={cn(
+                  "text-caption font-extrabold",
+                  condition.tone === "success"
+                    ? "text-success-text"
+                    : "text-card-foreground",
+                )}
+              >
                 {condition.value}
               </span>
             </div>

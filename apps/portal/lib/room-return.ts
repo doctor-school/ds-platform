@@ -66,7 +66,7 @@ export function isSafeRoomReturnTarget(returnTo: unknown): boolean {
  * identified by `slug`. The slug is `encodeURIComponent`-escaped and anchored under
  * the same-origin `/webinars/` path, so a hostile slug (`//evil`, `https://evil`,
  * `../..`) can never front a protocol-relative or cross-origin target — mirroring
- * `buildRegistrationHref` (004 EARS-3 / 005 EARS-2).
+ * the server-side register href the `ParticipationCta` resolver emits (004 EARS-3 / 005 EARS-2).
  */
 export function buildRoomReturnHref(slug: string): string {
   return `/webinars/${encodeURIComponent(slug)}${ROOM_SUFFIX}`;

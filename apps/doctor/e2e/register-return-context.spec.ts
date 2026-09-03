@@ -28,7 +28,7 @@ import { test, expect, type Page } from "@playwright/test";
  * SERVER-side, before any byte the browser could intercept.
  *
  * Every arrival URL below is the CANONICAL return target 005 EARS-2 defined and
- * `buildRegistrationHref` produces — `?returnTo=/webinars/<slug>` — so the tier
+ * the server-side `ParticipationCta` resolver produces — `?returnTo=/webinars/<slug>` — so the tier
  * exercises the same vocabulary the gate emits, never a surface-local one.
  */
 
@@ -37,7 +37,7 @@ const KNOWN = "prp-pri-gonartroze";
 
 /**
  * The canonical arrival URL for a gate hand-off, built the way the producer
- * builds it (`apps/portal/lib/registration-handoff.ts` → `buildRegistrationHref`):
+ * builds it (`apps/api/src/events/participation-cta.resolver.ts` → `cta.href`):
  * a same-origin `/webinars/<slug>` return target under the `returnTo` param.
  */
 function arrival(slug: string): string {

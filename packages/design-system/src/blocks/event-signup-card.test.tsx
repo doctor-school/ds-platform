@@ -169,4 +169,61 @@ describe("<EventSignupCard>", () => {
       "Уже записались 37",
     );
   });
+
+  it("020 EARS-1: the host control shall replace the generated link only where the policy already opened one", () => {
+    render(
+      <EventSignupCard
+        {...base}
+        cta={cta()}
+        control={
+          <button type="button" data-testid="host-control">
+            Участвовать
+          </button>
+        }
+      />,
+    );
+
+    // The host's own element stands in for the generated <a>; the branch is the
+    // same one the server policy opened, so exactly ONE control renders.
+    expect(screen.getByTestId("host-control")).toBeInTheDocument();
+    expect(screen.queryByTestId("event-signup-cta")).toBeNull();
+    expect(screen.getByTestId("event-signup-card")).toHaveAttribute(
+      "data-cta-action",
+      "register",
+    );
+  });
+
+  it("020 EARS-1: the host control shall be ignored wherever the policy opened no branch — it can never put participation where the server said there is none", () => {
+    const closed: ParticipationCta[] = [
+      { action: "sold-out", label: "Мест нет", href: null, reason: null },
+      {
+        action: "unavailable",
+        label: "Участие недоступно",
+        href: null,
+        reason: "Событие завершилось",
+      },
+      { action: "enter-room", label: "Войти в эфир", href: null, reason: null },
+    ];
+
+    for (const closedCta of closed) {
+      cleanup();
+      render(
+        <EventSignupCard
+          {...base}
+          cta={closedCta}
+          control={
+            <button type="button" data-testid="host-control">
+              Участвовать
+            </button>
+          }
+        />,
+      );
+
+      expect(
+        screen.queryByTestId("host-control"),
+        `must stay absent for: ${closedCta.action}`,
+      ).toBeNull();
+      expect(screen.queryByTestId("event-signup-cta")).toBeNull();
+    }
+  });
 });

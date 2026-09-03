@@ -22,8 +22,19 @@ describe("<EventPageShell>", () => {
     expect(main.className).toContain("layout:grid-cols-[1fr_360px]");
     expect(main.className).toContain("layout:gap-12");
     expect(main.className).toContain("grid-cols-1");
-    expect(main.className).toContain("-mt-20");
     expect(main.className).toContain("max-w-content");
+    // 020 EARS-1 (#1779) — the gutter belongs to the OUTER box and the
+    // `max-w-content` measure to the grid itself. Both on one element is a
+    // border-box whose 69rem swallows the gutter, and the reading column then
+    // sits one gutter inside the hero's text column and is two gutters
+    // narrower: the geometry the owner rejected at Stage-B round 1. The lift
+    // into the poster band travels with the padded box.
+    expect(main.className).not.toContain("px-gutter");
+    expect(main.className).not.toContain("-mt-20");
+    const padded = main.parentElement;
+    expect(padded?.className).toContain("layout:px-gutter");
+    expect(padded?.className).toContain("-mt-20");
+    expect(padded?.className).not.toContain("max-w-content");
     expect(screen.getByTestId("hero-slot")).toBeInTheDocument();
     expect(screen.getByTestId("aside-slot")).toBeInTheDocument();
     expect(screen.getByTestId("flow-slot")).toBeInTheDocument();

@@ -1,86 +1,87 @@
-import Link from "next/link";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
-import { CircleCheck } from "lucide-react";
 import { Badge } from "@ds/design-system/badge";
-import { Button } from "@ds/design-system/button";
-import { Container } from "@ds/design-system/container";
-import { WebinarPageContent } from "@ds/design-system/webinar-page-content";
+import { Link } from "@ds/design-system/link";
 import { WebinarRecordingPlaque } from "@ds/design-system/webinar-recording-plaque";
-import { WebinarStatusCard } from "@ds/design-system/webinar-status-card";
+import {
+  EventFormatBlock,
+  EventPageHero,
+  EventPageShell,
+  EventSectionHeading,
+  EventSignupCard,
+  EventSpeakerCard,
+  eventFormatBlockProps,
+  eventLifecycleCountdown,
+  eventLifecyclePlate,
+  eventPageChips,
+  eventPageDateLine,
+  eventPageKicker,
+  eventSignupCardProps,
+  eventSpeakerCards,
+} from "@ds/design-system/blocks";
 import { fetchPublicEventPage } from "../../../lib/public-events";
-import { resolvePrimaryCta, toCanvasStatus } from "../../../lib/event-lifecycle";
+import { fetchParticipationCta } from "../../../lib/participation-cta";
+import { toCanvasStatus } from "../../../lib/event-lifecycle";
 import {
   resolvePlayerCard,
   resolveRecordingSignal,
 } from "../../../lib/recording-signal";
 import { fetchEventPlayback } from "../../../lib/event-playback";
 import { withReturnTarget } from "../../../lib/registration-handoff";
-import {
-  fetchEventRegistrationState,
-  resolveJoinSignpost,
-  resolveRoomEntryHref,
-} from "../../../lib/registration-state";
-import { formatMskParts } from "../../../lib/msk";
+import { fetchEventRegistrationState } from "../../../lib/registration-state";
 import { RegisterOneTap } from "./register-one-tap";
 import { RecordingGate } from "./recording-gate";
 import { RecordingPlayer } from "./recording-player";
 
 /**
- * 004 EARS-1 — the public webinar event page, server-rendered. A
- * sponsor-distributed link (`/webinars/:slug`) resolves to complete HTML for an
- * UNAUTHENTICATED recipient: no cookie is read, no client soft-wall, no gated
- * section (the retired legacy "авторизуйтесь для просмотра" overlay is a banned
- * pattern — 004 design §1). The poster header carries the school kicker, the
- * title, the target specialty chips, and the lifecycle-state hero badge; the
- * pulled-up status card + the two-column body below it are the complete decision
- * set from the `PublicEventPage` projection, laid out to `webinar-page.dc.html`.
+ * The academy storefront's mount of the ONE shared event page
+ * (`/webinars/:slug`).
  *
- * EARS-4: the page reflects the event's current lifecycle from the single
- * `EventLifecycleState`, swapping the hero badge, the status-card time plate, the
- * CTA affordance, and the footer band per the canvas `status` enum
- * (`upcoming | live | ended`) — never a signal that contradicts the machine (the
- * swap lives in `lib/event-lifecycle`; the geometry in the `WebinarStatusCard`
- * DS primitive):
- *   • upcoming (`published`) — «Участвовать» → registration (005) via auth (003),
- *     carrying a same-origin `returnTo` (EARS-3, `lib/registration-handoff`).
- *   • live — a "live now" signal + the single «Участвовать» CTA that REGISTERS
- *     (005 EARS-1/EARS-9: register-during-live is a normal path — one-tap for an
- *     authenticated doctor, the auth handoff for a guest). For a doctor already
- *     registered on the live event the CTA becomes the 006 EARS-6 ENTER-ROOM link
- *     into the shipped room surface (`/webinars/:slug/room`) — a real front door,
- *     never a dead link.
- *   • ended — the ended affordance with NO participation CTA (never a dead link,
- *     the exactly-one-CTA invariant).
+ * 020 EARS-1 / EARS-18 (#1764, slice 3) — this route no longer owns a
+ * composition. It is fetch → shared projection → the slice-2 blocks
+ * (`EventPageShell` · `EventPageHero` · `EventSignupCard` · `EventSpeakerCard` ·
+ * `EventFormatBlock`), the same five the doctor storefront mounts at
+ * `/events/:slug` from the same `EventPageView`. What this host still owns is
+ * exactly what EARS-18 permits it to own: its header shell, its route envelope
+ * (the `/webinars` breadcrumb, the `/webinars/:slug/room` targets the api
+ * resolves for it) and its copy defaults. There is no academy-local read model,
+ * no academy-local CTA resolver and no import from `apps/doctor`.
  *
- * EARS-5: the hidden «мероприятие скрыто» notice is the FOURTH render mode on
- * the same page shell (beyond the canvas's upcoming/live/ended) — a text notice
- * replacing the status card's CTA column, no new geometry (design §5.1). A
- * previously-distributed direct link to a hidden event degrades gracefully in
- * place (owner variant «а»): it renders this notice with NO participation CTA,
- * never a 404, a redirect, or a dead link.
+ * The participation control is the SERVER-resolved {@link ParticipationCta}
+ * (`GET /v1/public/events/:slug/participation`), rendered as given. The 004
+ * `resolvePrimaryCta` / `buildRegistrationHref` pair that used to compute it
+ * here is gone: eligibility is one decision and it is made once, api-side, for
+ * both storefronts (020-design §1.1). The only thing this host adds is the
+ * ELEMENT for the `register` action when a session rode the request — the 005
+ * EARS-1 one-tap command, which POSTs and re-reads in place instead of routing
+ * a signed-in doctor back through auth. It is a rendering slot on the shared
+ * card, never a second policy: the card renders it only inside the branch the
+ * server's action already opened.
  *
- * 005 EARS-4: the page also composes the AUTHENTICATED doctor's per-user
- * `EventRegistrationState` onto this 004 render — a SEPARATE authenticated read
- * (`lib/registration-state`) that forwards the request's session cookie, never
- * folded into the public `fetchPublicEventPage` projection or its shared cache
- * (the public read above stays cookie-free + content-identical for guest and
- * principal). A registered doctor is never shown the register CTA as if
- * unregistered; a guest never issues the read and sees 004's register CTA
- * unchanged.
+ * 004 EARS-1: a sponsor-distributed link resolves to complete server-rendered
+ * HTML for an UNAUTHENTICATED recipient — no cookie read, no client soft-wall,
+ * no gated section.
  *
- * 005 EARS-5: for a registered doctor the page signposts HOW/WHEN they join,
- * layered on the lifecycle render (`resolveJoinSignpost`): `upcoming` → the «вы
- * записаны» confirmation + the МСК start (the status card time plate), replacing
- * the register CTA; `live` → the confirmation + the "broadcast is on" signpost +
- * the 006 EARS-6 enter-room CTA (`resolveRoomEntryHref`) into the now-shipped room
- * surface (`/webinars/:slug/room`) — the onward affordance that landed with the
- * room, never a dead link. МСК presentation (EARS-11) reuses the shared
- * `formatMskParts` formatter; all copy resolves through the catalog (EARS-12).
+ * 004 EARS-4/EARS-5: the lifecycle render swap is the hero's status plate and
+ * the server CTA, both derived from the single `EventLifecycleState` — `ended`
+ * and `hidden` resolve to `unavailable`, so the page carries NO participation
+ * control and no dead link, and the hidden event's «мероприятие скрыто» answer
+ * is the CTA's own `reason` rather than a fourth host-local render mode.
+ *
+ * 005 EARS-4/EARS-5: the registered doctor's state is the server CTA too
+ * (`registered` → the «Вы записаны» statement; `enter-room` → the 006 room link
+ * the api resolves from this host's route table). The separate authenticated
+ * registration read survives only for what the CTA cannot answer: whether a
+ * session rode the request at all, which is what gates the 014 playback read.
+ *
+ * 014 EARS-4..EARS-7: the recording signal, the login gate, the readiness plaque
+ * and the player keep their own place in the left reading flow, source-free for
+ * a guest by construction (the authenticated playback read is never issued).
  *
  * Rendered per request (`force-dynamic`) — the page reflects a live read model
- * whose lifecycle state can change, so a static prerender would go stale.
+ * whose lifecycle state can change, so a static prerender would go stale, and
+ * the participation answer is per-viewer (`private, no-store`).
  */
 export const dynamic = "force-dynamic";
 
@@ -93,304 +94,157 @@ export default async function WebinarEventPage({
 }) {
   const { slug } = await params;
   const event = await fetchPublicEventPage(slug);
-  // Draft / unknown → not-found (EARS-6); the branded hidden notice is EARS-5.
+  // Draft or unknown slug renders not-found; a hidden event stays a reachable 200.
   if (!event) notFound();
 
   const t = await getTranslations("webinar");
-  // 006 EARS-6 / EARS-10 — access-branch guidance: a doctor bounced from the room
-  // for being unregistered arrives with `?from=room`. The catalog-sourced guidance
-  // (`room` namespace) is surfaced above the 005 register front door below, so the
-  // routing is a truthful, guided front door — not a silent redirect.
+  // Access-branch guidance: a doctor bounced from the room for being unregistered
+  // arrives with `?from=room`. The catalog-sourced guidance is surfaced above the
+  // page so the routing is a truthful, guided front door.
   const tRoom = await getTranslations("room");
   const fromRoom = (await searchParams).from === "room";
-  const { date, time } = formatMskParts(event.startsAt);
 
-  // EARS-4 — the single lifecycle render mode read from the projection state,
-  // and the single primary participation CTA target (register / room / none).
-  const status = toCanvasStatus(event.state);
-  const cta = resolvePrimaryCta(event.state, event.slug);
-
-  // 005 EARS-4 — the per-user registration state, a SEPARATE authenticated read
-  // forwarding the request's session cookie (guest → null → 004's register CTA).
-  // `resolveJoinSignpost` (below) turns it into the registered render mode; the
-  // register CTA is never shown to a registered doctor.
   const h = await headers();
-  const registrationState = await fetchEventRegistrationState(slug, {
+  const session = {
     cookie: h.get("cookie") ?? "",
-    // The session is fingerprint-bound (ADR-0001 §6) — forward the same surface
-    // the browser bound at login so the authed read is not 401'd (see the lib).
+    // The session is fingerprint-bound — forward the same surface the browser
+    // bound at login so an authed read is not 401'd.
     userAgent: h.get("user-agent") ?? "",
     acceptLanguage: h.get("accept-language") ?? "",
-  });
-  // 005 EARS-5 — the registered doctor's join signposting (how/when they join),
-  // layered on the 004 lifecycle render: `upcoming` → the confirmation + МСК
-  // start signpost (replacing the register CTA); `live` → the confirmation + the
-  // "broadcast is on" signpost (the onward room affordance is the 006 room
-  // surface, #584); `none` → 004's render stands (unregistered / guest / ended /
-  // hidden).
-  const signpost = resolveJoinSignpost(registrationState, status);
-  // 006 EARS-6 — the registered-live room front door: the room surface shipped
-  // (`/webinars/:slug/room`, EARS-1..7), so the entry CTA deferred to #584 is
-  // restored. Non-null EXACTLY when a registered doctor is on a `live` event (the
-  // same condition the room gate admits them under) → the canonical, hardened room
-  // path; `null` in every other branch, so no room link renders.
-  const roomEntryHref = resolveRoomEntryHref(registrationState, status, event.slug);
-  // 005 EARS-1 — a non-null per-user state means a session rode the request (a
-  // logged-in doctor, registered or not); `null` is a guest (no cookie) or an
-  // expired/fingerprint-mismatched session that falls back to the public render.
-  // A logged-in, NOT-yet-registered doctor on a registrable event gets the
-  // one-tap command button; a guest gets the `/register` auth handoff (EARS-2).
+  };
+
+  // The ONE participation decision, resolved server-side for this
+  // viewer on this event. A `null` here would mean the event vanished between
+  // the two reads; the page keeps rendering and simply carries no control.
+  const cta = await fetchParticipationCta(slug, session);
+  // A non-null per-user state means a session rode the request. The CTA already
+  // says WHAT to render; this read survives only to gate the authenticated
+  // playback call and to choose the one-tap ELEMENT below.
+  const registrationState = await fetchEventRegistrationState(slug, session);
   const isAuthenticated = registrationState !== null;
-  // EARS-5 — hidden is the fourth render mode on the SAME status-card shell: a
-  // text notice replaces the CTA column (no button, no dead link), no new
-  // geometry. Every state now renders the status card (the hidden body swaps
-  // its own time-plate/head/sub copy + the CTA-column notice).
-  const isHidden = status === "hidden";
-  // 014 EARS-4 — the source-free recording signal, read from the SAME public
-  // projection the rest of this render uses (`event.recording`, resolved api-side
-  // by the one canonical resolver, so the page and the listing card can never
-  // disagree). Non-null only on `ended`; the player itself is #1343, the
-  // readiness-date plaque #1344 and the raw spoiler #1345 — this slice renders
-  // the availability signal and nothing that pretends to be those.
+
+  // The canvas lifecycle enum drives the hero status plate and the recording
+  // signal; it drives NO participation branch any more.
+  const status = toCanvasStatus(event.state);
   const recordingSignal = resolveRecordingSignal(event.recording, status);
-  // 014 EARS-5 — the AUTHENTICATED source read, the ONLY source-bearing response
-  // in the feature (design §5). Issued exactly when it can produce something: a
-  // session rode the request AND the public projection already says something is
-  // published. A guest render never calls it, so no playable source can reach a
-  // guest's HTML; a `preparing` render never calls it either, because the plaque
-  // owns that card regardless of who is looking.
+  // The AUTHENTICATED source read, the ONLY source-bearing response on this page. Issued exactly when it can produce something, so no playable
+  // source can ever reach a guest's HTML.
   const playback =
     isAuthenticated && recordingSignal?.available
-      ? await fetchEventPlayback(slug, {
-          cookie: h.get("cookie") ?? "",
-          userAgent: h.get("user-agent") ?? "",
-          acceptLanguage: h.get("accept-language") ?? "",
-        })
+      ? await fetchEventPlayback(slug, session)
       : null;
-  // 014 EARS-5 / EARS-7 — WHAT the player card holds this render: exactly one of
-  // the player, the guest gate, the «запись готовится» plaque, or the honest
-  // unavailability message (design §8.1 — never two stacked, never empty). The
-  // plaque branch self-clears on the next render after the operator publishes:
-  // the page is `force-dynamic` and the mode derives purely from the projection,
-  // with no timer or cached "we already promised" flag to go stale.
   const playerCard = resolvePlayerCard(
     event.recording,
     status,
     isAuthenticated,
     playback,
   );
-  // 014 EARS-6 — both gate actions carry THIS page as a same-origin returnTo, so
-  // a guest who signs in lands back here with the player mounted. The target is
-  // built by the shared guard (`withReturnTarget`), never a hand-rolled query
-  // param — a hostile slug can therefore never surface an open redirect.
+  // Both gate actions carry THIS page as a same-origin returnTo,
+  // built by the shared guard so a hostile slug can never surface an open redirect.
   const gateReturnTo = `/webinars/${encodeURIComponent(slug)}`;
-  // The footer conversion band mirrors the status card's route but only for a
-  // participable event (upcoming / live); `ended` and `hidden` carry none. It
-  // is a GUEST conversion band: its CTA links to the `/register` auth handoff,
-  // which would wrongly route a logged-in doctor to the signup form — an
-  // authenticated doctor already has the status-card affordance above (the
-  // one-tap command when unregistered, 005 EARS-1; the registered confirmation
-  // otherwise, 005 EARS-4 — never re-offer registration to a registered doctor).
-  const showFooterBand =
-    (status === "upcoming" || status === "live") && !isAuthenticated;
-  // 006 EARS-6 — show the room access-branch guidance ONLY when the doctor arrived
-  // from the room (`?from=room`) AND the 005 register front door is actually the
-  // rendered affordance (authenticated, unregistered, registrable — the exact
-  // `RegisterOneTap` condition below). A registered doctor, a guest, or an
-  // ended/hidden event never sees a stale «register to join» banner.
+  // The room access-branch guidance shows ONLY when the doctor
+  // arrived from the room AND the register front door is actually what renders.
   const showRoomAccessGuidance =
-    fromRoom &&
-    isAuthenticated &&
-    !isHidden &&
-    signpost.kind === "none" &&
-    cta.kind === "register";
+    fromRoom && isAuthenticated && cta?.action === "register";
+  // The logged-in doctor's one-tap command replaces the generated link for the
+  // SAME server-resolved `register` action. A guest keeps the `/register` auth
+  // handoff the api resolved.
+  const oneTap =
+    cta?.action === "register" && isAuthenticated ? (
+      <RegisterOneTap
+        slug={event.slug}
+        label={cta.label}
+        errorLabel={t("cta.registerError")}
+      />
+    ) : undefined;
+
+  const formatBlock = eventFormatBlockProps(event);
+  const lifecyclePlate = eventLifecyclePlate(event);
+  /* Canvas:171 «Скоро · через 5 дней» — the lifecycle word is this host's copy,
+     the countdown is the shared mapper's fact about `startsAt` (#1779). */
+  const countdown = eventLifecycleCountdown(event);
 
   return (
-    <main className="min-h-screen bg-background text-foreground">
+    <>
       {showRoomAccessGuidance ? (
-        // A light strip above the poster (card-safe AA tokens on `bg-card` — the
+        // A light strip above the hero (card-safe AA tokens on `bg-card` — the
         // #270 precedent, `text-primary-action` = blue.700, never `text-primary`).
-        // No new geometry, no CTA of its own — the 005 register front door below is
-        // the single action.
+        // No CTA of its own — the sign-up card is the single action.
         <div
           data-testid="room-access-guidance"
-          className="border-b-2 border-border bg-card"
+          className="border-b-2 border-border bg-card px-4 py-4 layout:px-gutter"
         >
-          <Container className="py-4">
+          <div className="mx-auto max-w-content">
             <p className="text-sm font-extrabold text-primary-action">
               {tRoom("accessGuidance.title")}
             </p>
             <p className="mt-1 text-sm text-foreground">
               {tRoom("accessGuidance.body")}
             </p>
-          </Container>
+          </div>
         </div>
       ) : null}
-      <header className="bg-header text-header-foreground">
-        <Container className="pt-10 pb-28 layout:pt-16 layout:pb-36">
-          <p
-            className="text-2xs font-extrabold uppercase tracking-micro opacity-80"
-            data-testid="poster-decor"
-          >
-            {t("breadcrumb")}
-          </p>
-          <div className="mt-6 flex items-start justify-between gap-8">
-            <div className="max-w-3xl">
-              <p
-                className="text-caption font-extrabold uppercase tracking-micro opacity-90"
-                data-testid="poster-decor"
-              >
-                {event.school}
-              </p>
-              <h1 className="mt-3 text-3xl font-extrabold tracking-tight text-balance layout:text-5xl">
-                {event.title}
-              </h1>
-              {event.specialties.length > 0 ? (
-                <div className="mt-6 flex flex-wrap gap-2">
-                  {event.specialties.map((specialty) => (
-                    <span
-                      key={specialty}
-                      className="border-2 border-ring px-3 py-1.5 text-caption font-bold text-header-foreground"
+      <EventPageShell
+        hero={
+          <EventPageHero
+            breadcrumb={
+              <>
+                <Link href="/webinars" tone="on-primary">
+                  {t("breadcrumb")}
+                </Link>
+                <span aria-hidden="true">/</span>
+                <span>{event.title}</span>
+              </>
+            }
+            kicker={eventPageKicker(event)}
+            title={event.title}
+            dateLine={eventPageDateLine(event)}
+            chips={eventPageChips(event)}
+            statusPlate={
+              /* 004 EARS-4 swap: live → the «В эфире» tag; every other state
+                 carries its own lifecycle word («Скоро» / «Эфир завершён» /
+                 «Скрыто»), so the hero can never contradict the machine. 014
+                 EARS-4 then adds the RECORDING badge BESIDE it on an ended
+                 event — what a post-live visitor came to find out — rather than
+                 replacing the lifecycle signal with it. `in_archive` is a
+                 legacy эфир whose only public signal IS its recording, and it
+                 has no lifecycle word of its own (014-design §3.1). */
+              lifecyclePlate?.variant === "live" ? (
+                <Badge variant="live">{t(`state.${lifecyclePlate.state}`)}</Badge>
+              ) : (
+                <div className="flex flex-col items-end gap-2">
+                  {lifecyclePlate ? (
+                    <Badge variant={lifecyclePlate.variant}>
+                      {countdown
+                        ? `${t(`state.${lifecyclePlate.state}`)} · ${countdown}`
+                        : t(`state.${lifecyclePlate.state}`)}
+                    </Badge>
+                  ) : null}
+                  {recordingSignal ? (
+                    <Badge
+                      data-testid="recording-badge"
+                      variant={recordingSignal.available ? "success" : "label"}
                     >
-                      {specialty}
-                    </span>
-                  ))}
+                      {t(`recordingBadge.${recordingSignal.badgeKey}`)}
+                    </Badge>
+                  ) : null}
                 </div>
-              ) : null}
-            </div>
-            {/* Hero lifecycle badge (004 EARS-4 swap): live → the pulsing «В
-                эфире» danger tag; every other state → the pale label with its
-                state copy («Скоро» / «Эфир завершён» / «Скрыто»).
-
-                014 EARS-4: on an ENDED event the badge speaks about the
-                RECORDING instead — «Запись доступна» (green) or «Запись
-                готовится» (the neutral label) — because that is the one thing a
-                post-live visitor came to find out, and «Эфир завершён» merely
-                restates the date they can already read. `hidden` is
-                deliberately untouched: 004 EARS-5's «Скрыто» owns that render. */}
-            {event.state === "live" ? (
-              <Badge variant="live" className="mt-1 shrink-0">
-                {t("state.live")}
-              </Badge>
-            ) : recordingSignal ? (
-              <Badge
-                data-testid="recording-badge"
-                variant={recordingSignal.available ? "success" : "label"}
-                className="mt-1 shrink-0"
-              >
-                {t(`recordingBadge.${recordingSignal.badgeKey}`)}
-              </Badge>
-            ) : (
-              <Badge variant="label" className="mt-1 shrink-0">
-                {t(`state.${event.state}`)}
-              </Badge>
-            )}
-          </div>
-        </Container>
-      </header>
-
-      <Container className="pb-12 layout:pb-16">
-        {/* EARS-4/EARS-5 — the pulled-up status card overlaps the poster (canvas
-            -80px). It swaps the time plate + head/sub + the single CTA per
-            lifecycle state; the `ended` render passes no CTA (no dead link), and
-            the `hidden` render (EARS-5) replaces the CTA column with a plain
-            text notice — no participation affordance, no new geometry. */}
-        <div className="relative z-10 -mt-20">
-          <WebinarStatusCard
-            live={status === "live"}
-            liveLabel={t("state.live")}
-            timeLabel={t(`statusCard.${status}.timeLabel`)}
-            time={time}
-            timeSub={t(`statusCard.${status}.timeSub`, {
-              date,
-              duration: event.durationMin,
-            })}
-            head={
-              signpost.kind === "upcoming"
-                ? t("registered.upcoming.head")
-                : signpost.kind === "live"
-                  ? t("registered.live.head")
-                  : t(`statusCard.${status}.head`)
+              )
             }
-            sub={
-              signpost.kind === "upcoming"
-                ? t("registered.upcoming.sub")
-                : signpost.kind === "live"
-                  ? t("registered.live.sub")
-                  : t(`statusCard.${status}.sub`)
-            }
-          >
-            {isHidden ? (
-              // The CTA column becomes a non-interactive «скрыт» notice — no
-              // button, no link (EARS-5, owner variant «а»). `text-primary-action`
-              // (blue.700) is the card-safe AA token on `bg-card` (never
-              // `text-primary`, the #270 precedent).
-              <p className="text-sm font-bold text-primary-action">
-                {t("statusCard.hidden.notice")}
-              </p>
-            ) : signpost.kind === "upcoming" ? (
-              // 005 EARS-5 — registered + upcoming: the register CTA is replaced by
-              // a static «вы записаны» confirmation. The МСК start date/time is the
-              // status card's own time plate (`time` + `timeSub`), and the how/when
-              // signposting is the head/sub above — no second action.
-              // `text-primary-action` (blue.700) is the card-safe AA token on
-              // `bg-card` (never `text-primary`, the #270 precedent).
-              <p className="inline-flex items-center gap-2 text-sm font-bold text-primary-action">
-                <CircleCheck aria-hidden className="size-5" />
-                {t("registered.confirmation")}
-              </p>
-            ) : roomEntryHref ? (
-              // 005 EARS-5 + 006 EARS-6 — registered + live: the «вы записаны»
-              // confirmation + the "broadcast is on" signpost (the card head/sub),
-              // and now the restored ENTER-ROOM CTA. The 006 room surface shipped
-              // (`/webinars/:slug/room`, EARS-1..7), so the onward-to-room affordance
-              // deferred to #584 lands here — a real link into the room the doctor is
-              // gated into, its label catalog-sourced (EARS-10), never a dead link.
-              <div className="flex flex-col items-start gap-3">
-                <p className="inline-flex items-center gap-2 text-sm font-bold text-primary-action">
-                  <CircleCheck aria-hidden className="size-5" />
-                  {t("registered.confirmation")}
-                </p>
-                <Button asChild size="lg">
-                  <Link href={roomEntryHref}>{t("registered.live.cta")}</Link>
-                </Button>
-              </div>
-            ) : cta.kind === "register" && isAuthenticated ? (
-              // 005 EARS-1 — logged-in doctor, not yet registered on a registrable
-              // (upcoming/`published` OR `live`, EARS-9) event: the CTA is a
-              // ONE-ACTION command that POSTs `RegisterForEvent` and re-reads the
-              // state — never a trip through auth, never a navigation to the
-              // not-yet-built 006 room. The guest path keeps the `/register`
-              // handoff link below.
-              <RegisterOneTap
-                slug={event.slug}
-                label={t("cta.participate")}
-                errorLabel={t("cta.registerError")}
-              />
-            ) : cta.kind !== "none" ? (
-              <Button asChild size="lg">
-                <Link href={cta.href}>{t("cta.participate")}</Link>
-              </Button>
-            ) : null}
-            {/* 014 EARS-5 — the recording meta («Монтаж · 90 мин») deliberately
-                does NOT appear here any more. #1341 put it in this column while
-                the player position was empty; now that the player card below
-                renders the same kind + duration in every one of its four modes,
-                repeating it in the status card would be the same fact stated
-                twice on one screen (the dedup obligation recorded at #1697). */}
-          </WebinarStatusCard>
-        </div>
-
-        {/* 014 EARS-7 — the plaque sits in the player position: below the status
-            card, above the page body, exactly where the player will mount
-            (#1343). It carries the operator's readiness DAY when there is one
-            («до 18 июля») and an honest date-free line when there is not —
-            never an invented estimate (the canvas's «≈2 дня» is placeholder
-            art), and never a «Напомнить на почту» button: readiness
-            notifications are a declared 014 non-goal, so that control would be
-            a dead affordance. */}
+          />
+        }
+        aside={
+          cta ? (
+            <EventSignupCard
+              {...eventSignupCardProps(event, cta)}
+              control={oneTap}
+              pinned
+            />
+          ) : null
+        }
+      >
         {playerCard ? (
-          <div className="mt-10" data-testid="player-card">
+          <div className="mb-14" data-testid="player-card">
             {playerCard.mode === "plaque" ? (
               <div data-testid="recording-plaque">
                 <WebinarRecordingPlaque
@@ -413,9 +267,9 @@ export default async function WebinarEventPage({
                 />
               </div>
             ) : playerCard.mode === "gate" ? (
-              // A guest on a published recording: the canvas login gate. The
-              // source is not in this HTML at all — the authenticated read was
-              // never issued above — so this is a real gate, not a soft wall.
+              // A guest on a published recording: the login gate. The source is
+              // not in this HTML at all — the authenticated read was never
+              // issued above — so this is a real gate, not a soft wall.
               <RecordingGate
                 posterUrl={event.recording.posterUrl}
                 kindLabel={t(`recordingKind.${playerCard.kindKey}`)}
@@ -432,11 +286,8 @@ export default async function WebinarEventPage({
               />
             ) : (
               // The signed-in doctor's card. `RecordingPlayer` owns BOTH the
-              // mounted frame and the unavailability message with its retry (its
-              // failure boundary is a client branch — the api ships no "the embed
-              // is broken" status, design §5), so the `unavailable` mode here is
-              // the same component reached with no source: one component, one
-              // honest failed state, never a second copy of the copy.
+              // mounted frame and the unavailability message with its retry, so
+              // there is one component and one honest failed state.
               <>
                 <p
                   data-testid="recording-meta"
@@ -463,42 +314,57 @@ export default async function WebinarEventPage({
           </div>
         ) : null}
 
-        <div className="mt-16">
-          <WebinarPageContent
-            description={event.description}
-            speakers={event.speakers}
-            partners={event.partners}
-            programPdfUrl={event.programPdfUrl}
-            aboutLabel={t("page.about")}
-            programLabel={t("page.program")}
-            programDownloadLabel={t("page.programDownload")}
-            speakersLabel={t("page.speakers")}
-            sponsorEyebrow={t("page.sponsorEyebrow")}
-            sponsorNote={t("page.sponsorNote")}
-          />
-        </div>
-      </Container>
+        <section data-testid="event-about">
+          <EventSectionHeading>{t("page.about")}</EventSectionHeading>
+          <p className="mt-7 text-base leading-relaxed text-pretty text-foreground">
+            {event.description}
+          </p>
+        </section>
 
-      {/* EARS-4 — the bottom conversion band swaps per state and drops entirely
-          for `ended` (no dead CTA). Its action reuses the single CTA route with a
-          distinct footer verb, so the page keeps exactly one «Участвовать» primary
-          CTA (EARS-3 invariant): upcoming AND live → «Записаться» (registration —
-          register-during-live is a normal path, 005 EARS-9; the room is 006/#584). */}
-      {showFooterBand && cta.kind !== "none" ? (
-        <div className="bg-header text-header-foreground">
-          <Container className="flex flex-wrap items-center justify-between gap-8 py-12 layout:py-14">
-            <p className="text-2xl font-extrabold tracking-tight text-balance layout:text-3xl">
-              {t(`footer.${status}.title`)}{" "}
-              <span className="opacity-80" data-testid="poster-decor">
-                {t(`footer.${status}.sub`)}
-              </span>
+        {/* 004 EARS-2 — the programme download, rendered only when the operator
+            attached one (never a broken link). `text-primary-action` is the
+            card-safe AA link token (#270), never `text-primary`. */}
+        {event.programPdfUrl ? (
+          <section className="mt-14" data-testid="event-programme">
+            <EventSectionHeading>{t("page.program")}</EventSectionHeading>
+            <Link
+              href={event.programPdfUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-7 inline-flex items-center gap-3 border-2 border-border bg-card px-6 py-4 text-sm shadow-ghost"
+            >
+              <span aria-hidden="true">↓</span>
+              {t("page.programDownload")}
+            </Link>
+          </section>
+        ) : null}
+
+        {eventSpeakerCards(event).map((speaker, index) => (
+          <EventSpeakerCard key={index} className="mt-14" {...speaker} />
+        ))}
+
+        {formatBlock ? (
+          <EventFormatBlock className="mt-14" {...formatBlock} />
+        ) : null}
+
+        {/* The sponsor plate — the event's declared partners, stated plainly. */}
+        {event.partners.length > 0 ? (
+          <div
+            data-testid="event-partners"
+            className="mt-14 border-2 border-hairline px-7 py-6"
+          >
+            <div className="text-eyebrow font-extrabold uppercase tracking-micro text-foreground">
+              {t("page.sponsorEyebrow")}
+            </div>
+            <div className="mt-2 text-base font-bold text-foreground">
+              {event.partners.map((partner) => partner.label).join(" · ")}
+            </div>
+            <p className="mt-2 text-caption leading-relaxed text-muted-foreground">
+              {t("page.sponsorNote")}
             </p>
-            <Button asChild size="lg">
-              <Link href={cta.href}>{t(`footer.${status}.cta`)}</Link>
-            </Button>
-          </Container>
-        </div>
-      ) : null}
-    </main>
+          </div>
+        ) : null}
+      </EventPageShell>
+    </>
   );
 }

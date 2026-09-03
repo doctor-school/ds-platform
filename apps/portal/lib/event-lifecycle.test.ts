@@ -1,20 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import { resolvePrimaryCta, toCanvasStatus } from "./event-lifecycle";
+import { toCanvasStatus } from "./event-lifecycle";
 
 /**
  * 004 EARS-4 — the event-page lifecycle render swap: the page reflects the event
  * state from the single `EventLifecycleState`, never contradicting the machine.
- * This pins the pure state→render mapping — the canvas `status` enum mapping and
- * the single primary-CTA target resolution (upcoming AND live → registration
- * (005 EARS-1/EARS-9: register-during-live is a normal path; the room and its
- * navigation are 006/#584 — no render links to `/room` until it ships),
- * ended/hidden → no CTA / no dead link).
+ * This pins the pure state→render mapping — the canvas `status` enum mapping.
+ * The single primary participation CTA is server-resolved since 020 EARS-1
+ * (slice 3, #1764) and is pinned by the API + the shared block, not here.
  */
-
-const SLUG = "ahilles-plastika";
-const REGISTER_HREF = `/register?returnTo=${encodeURIComponent(`/webinars/${SLUG}`)}`;
-
 describe("004 EARS-4 toCanvasStatus — projection state → canvas status enum", () => {
   it("EARS-4: when the event is published, the system shall render the upcoming status", () => {
     expect(toCanvasStatus("published")).toBe("upcoming");
@@ -37,27 +31,5 @@ describe("004 EARS-4 toCanvasStatus — projection state → canvas status enum"
     // `in_archive` is an ADMIN lifecycle fact (014-design §3.1). A distinct
     // canvas status here would be the second public surface EARS-26 forbids.
     expect(toCanvasStatus("in_archive")).toBe("ended");
-  });
-});
-
-describe("004 EARS-4 resolvePrimaryCta — the single participation CTA target", () => {
-  it("EARS-4: when the event is upcoming (published), the CTA shall route into the registration flow carrying the event context", () => {
-    const cta = resolvePrimaryCta("published", SLUG);
-    expect(cta.kind).toBe("register");
-    expect(cta).toMatchObject({ href: REGISTER_HREF });
-  });
-
-  it("EARS-4: when the event is live, the CTA shall route into the registration flow too (005 EARS-9 register-during-live) — never toward the not-yet-built room (a 404)", () => {
-    const cta = resolvePrimaryCta("live", SLUG);
-    expect(cta.kind).toBe("register");
-    expect(cta).toMatchObject({ href: REGISTER_HREF });
-  });
-
-  it("EARS-4: when the event has ended, the system shall render no participation CTA (no dead link)", () => {
-    expect(resolvePrimaryCta("ended", SLUG)).toEqual({ kind: "none" });
-  });
-
-  it("EARS-4: when the event is hidden, the system shall render no participation CTA", () => {
-    expect(resolvePrimaryCta("hidden", SLUG)).toEqual({ kind: "none" });
   });
 });

@@ -100,8 +100,8 @@ const PRIMITIVE_IGNORE = [
 // exclusion mirrors the #314 / #309 registry-research exemption (app E2E is test
 // code, not UI source).
 //
-// Surface scope = the UI apps that consume `@ds/design-system` (portal / promo /
-// admin / the dev-only Academy review app), matching registry-research.
+// Surface scope = the UI apps that consume `@ds/design-system` (portal / doctor /
+// promo / admin / the dev-only Academy review app), matching registry-research.
 // `apps/docs`
 // (Fumadocs), `apps/cms` (Payload) and `apps/mobile`
 // (React Native — no DOM `<a>`/`next/link`) are deliberately NOT scanned: they do
@@ -112,6 +112,9 @@ const APP_GLOBS = [
   "apps/portal/app/**/*.tsx",
   "apps/portal/components/**/*.tsx",
   "apps/portal/src/**/*.tsx",
+  "apps/doctor/app/**/*.tsx",
+  "apps/doctor/components/**/*.tsx",
+  "apps/doctor/src/**/*.tsx",
   "apps/promo/app/**/*.tsx",
   "apps/promo/components/**/*.tsx",
   "apps/promo/src/**/*.tsx",

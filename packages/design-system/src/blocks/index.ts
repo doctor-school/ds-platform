@@ -103,7 +103,11 @@ export type {
   FormDerivedNoteProps,
 } from "./field-group";
 // 020 EARS-1 — event-page composition (webinar-page-variant-a.dc.html), #1764
-export { EventPageHero, EventPageShell } from "./event-page-shell";
+export {
+  EventPageHero,
+  EventPageShell,
+  EventSectionHeading,
+} from "./event-page-shell";
 export type { EventPageHeroProps, EventPageShellProps } from "./event-page-shell";
 export { EventSignupCard } from "./event-signup-card";
 export type {
@@ -114,3 +118,22 @@ export { EventSpeakerCard } from "./event-speaker-card";
 export type { EventSpeakerCardProps } from "./event-speaker-card";
 export { EventFormatBlock } from "./event-format-block";
 export type { EventFormatBlockProps } from "./event-format-block";
+// 020 EARS-1/EARS-18 — the ONE view→props projection both storefronts render
+// through, so the two hosts cannot drift apart on the same event (slice 3, #1764).
+export {
+  EVENT_PAGE_COPY,
+  eventFormatBlockProps,
+  eventLifecycleCountdown,
+  eventLifecyclePlate,
+  eventPageChips,
+  eventPageDateLine,
+  eventPageKicker,
+  eventPageTimeParts,
+  eventSignupCardProps,
+  eventSpeakerCards,
+} from "./event-page-view";
+export type {
+  EventLifecyclePlate,
+  EventPageCopy,
+  EventPageTimeParts,
+} from "./event-page-view";

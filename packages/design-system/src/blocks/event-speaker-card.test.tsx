@@ -59,4 +59,16 @@ describe("<EventSpeakerCard>", () => {
     );
     expect(screen.queryByText("МС")).toBeNull();
   });
+  it("020 EARS-1: a two-speaker section shall carry the canvas heading exactly once (#1764)", () => {
+    render(
+      <>
+        <EventSpeakerCard name="Михаил Страхов" initials="МС" />
+        <EventSpeakerCard name="Анна Петрова" initials="АП" heading={null} />
+      </>,
+    );
+
+    // `heading={null}` SUPPRESSES the label; `undefined` would restore the
+    // default «Ведёт» and print one heading per speaker.
+    expect(screen.getAllByText("Ведёт")).toHaveLength(1);
+  });
 });

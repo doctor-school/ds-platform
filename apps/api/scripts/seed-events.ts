@@ -127,13 +127,26 @@ function specs(now: number): SeedSpec[] {
       // Comfortably in the future so it renders as «Скоро» and stays registrable.
       startsAt: new Date(now + 7 * DAY),
       durationMin: 90,
+      // The 020 Stage-B fixture (#1779): this is the ONE event the owner drives
+      // the shared page on, so every field the EARS-1 read model carries is
+      // populated to a realistic length — a one-line description and a two-word
+      // regalia made the page look under-filled when the blocks were in fact
+      // rendering everything they were given.
       description:
-        "Разбор клинических рекомендаций и типичных ошибок терапии. Практические кейсы и ответы на вопросы.",
-      specialties: ["Кардиология", "Терапия"],
+        "Целевые уровни давления, выбор стартовой терапии и работа с резистентной гипертензией: показания, доказательная база и рабочие протоколы. Разбираем реальный клинический случай — от первичного приёма до оценки результата через 6 месяцев. Вопросы спикеру — прямо в чате эфира.",
+      specialties: ["Кардиология", "Терапия", "Общая врачебная практика"],
       partnerRef: "Партнёр Фарма",
       speakers: [
-        { name: "Проф. И. Соколова", regalia: "д.м.н., кардиолог" },
-        { name: "Доц. А. Петров", regalia: "к.м.н., терапевт" },
+        {
+          name: "Проф. Ирина Соколова",
+          regalia:
+            "Д.м.н., профессор кафедры кардиологии РНИМУ им. Пирогова. Автор 40+ публикаций, член Российского кардиологического общества.",
+        },
+        {
+          name: "Доц. Алексей Петров",
+          regalia:
+            "К.м.н., доцент кафедры терапии, ведёт направление амбулаторной кардиологии на платформе.",
+        },
       ],
     },
     {

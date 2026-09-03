@@ -117,26 +117,37 @@ export function EventPageShell({
   return (
     <div data-testid="event-page-shell" className={cn("bg-background", className)}>
       {hero}
-      <main
-        data-testid="event-page-main"
-        className={cn(
-          "relative z-10 mx-auto -mt-20 grid max-w-content grid-cols-1 gap-10 px-4 pb-16",
-          "layout:grid-cols-[1fr_360px] layout:gap-12 layout:px-gutter layout:pb-24",
-        )}
-      >
-        {/*
-         * DOM order keeps the reading flow first; the canvas puts the sign-up
-         * card ABOVE it on mobile (`order:-1`), so the visual order flips with
-         * `order-first` below the `layout` breakpoint only.
-         */}
-        <div className="min-w-0 pt-2 layout:pt-26">{children}</div>
-        <aside
-          data-testid="event-page-aside"
-          className="order-first min-w-0 layout:order-none"
+      {/*
+       * The body's OUTER box carries the gutter and the inner box carries
+       * `max-w-content` — the exact nesting `EventPageHero` uses. Putting both
+       * on one element would be a border-box (Tailwind preflight) whose 69rem
+       * INCLUDES the gutter, so the reading column would sit one gutter inside
+       * the hero's text column and be two gutters narrower than the canvas
+       * (owner Stage-B finding, #1779): the canvas aligns the hero text and the
+       * body flow on ONE left edge.
+       */}
+      <div className="relative z-10 -mt-20 px-4 pb-16 layout:px-gutter layout:pb-24">
+        <main
+          data-testid="event-page-main"
+          className={cn(
+            "mx-auto grid max-w-content grid-cols-1 gap-10",
+            "layout:grid-cols-[1fr_360px] layout:gap-12",
+          )}
         >
-          {aside}
-        </aside>
-      </main>
+          {/*
+           * DOM order keeps the reading flow first; the canvas puts the sign-up
+           * card ABOVE it on mobile (`order:-1`), so the visual order flips with
+           * `order-first` below the `layout` breakpoint only.
+           */}
+          <div className="min-w-0 pt-2 layout:pt-26">{children}</div>
+          <aside
+            data-testid="event-page-aside"
+            className="order-first min-w-0 layout:order-none"
+          >
+            {aside}
+          </aside>
+        </main>
+      </div>
     </div>
   );
 }

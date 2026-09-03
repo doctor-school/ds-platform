@@ -30,8 +30,12 @@ export interface EventSpeakerCardProps {
   /** «12 эфиров · страница эксперта →» — host-supplied, needs {@link footerHref}. */
   footerLabel?: React.ReactNode;
   footerHref?: string;
-  /** Canvas-fixed section label. */
-  heading?: React.ReactNode;
+  /**
+   * Canvas-fixed section label, rendered ONCE above the section. Pass `null`
+   * to suppress it on every card after the first; `undefined` keeps the
+   * canvas default «Ведёт».
+   */
+  heading?: React.ReactNode | null;
   className?: string;
 }
 
@@ -51,7 +55,9 @@ export function EventSpeakerCard({
 }: EventSpeakerCardProps) {
   return (
     <section data-testid="event-speaker-card" className={cn(className)}>
-      <EventSectionHeading className="mb-7">{heading}</EventSectionHeading>
+      {heading === null ? null : (
+        <EventSectionHeading className="mb-7">{heading}</EventSectionHeading>
+      )}
       <div className="grid grid-cols-1 border-2 border-border bg-card shadow-lg layout:grid-cols-[220px_1fr]">
         <div className="relative flex min-h-40 items-center justify-center overflow-hidden border-b-2 border-border bg-tint layout:min-h-50 layout:border-b-0 layout:border-r-2">
           {photoUrl ? (

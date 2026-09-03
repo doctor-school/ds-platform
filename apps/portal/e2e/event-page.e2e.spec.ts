@@ -121,7 +121,9 @@ test.describe("004 EARS-4 lifecycle render swap (e2e)", () => {
 
     // Hero lifecycle badge = «Скоро»; the time plate carries an explicit «МСК».
     await expect(
-      page.getByText("Скоро", { exact: true }).first(),
+      // The plate carries the Stage-B countdown suffix «Скоро · через N дней»
+      // (#1779), so the badge is matched by prefix, not by exact text.
+      page.getByText(/^Скоро(\s·\s.+)?$/).first(),
     ).toBeVisible();
     await expect(page.locator("body")).toContainText("МСК");
 

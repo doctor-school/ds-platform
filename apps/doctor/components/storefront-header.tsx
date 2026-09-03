@@ -39,21 +39,19 @@ export function StorefrontHeader({ auth }: { auth: ShellAuth }) {
         this app rather than imported across the app boundary (ADR-0015 §2 —
         static assets copy, code never crosses).
       */}
-      <NextLink
-        href="/"
-        data-testid="storefront-logo"
-        className="flex flex-none focus-visible:outline-none focus-visible:shadow-focus"
-      >
-        <Image
-          src="/brand/logo-white.svg"
-          alt="Doctor.School — на главную"
-          width={500}
-          height={164}
-          priority
-          unoptimized
-          className="block h-6.5 w-auto"
-        />
-      </NextLink>
+      <Link asChild className="flex flex-none">
+        <NextLink href="/" data-testid="storefront-logo">
+          <Image
+            src="/brand/logo-white.svg"
+            alt="Doctor.School — на главную"
+            width={500}
+            height={164}
+            priority
+            unoptimized
+            className="block h-6.5 w-auto"
+          />
+        </NextLink>
+      </Link>
 
       {/*
         LD-6 — the header search is RESERVED, not built: the input lands with the

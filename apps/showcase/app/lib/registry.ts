@@ -131,6 +131,7 @@ export const SHOWCASE_REGISTRY: ShowcaseEntry[] = [
   // 020 EARS-1 — event-page composition (webinar-page-variant-a.dc.html), #1764
   { id: "EventPageShell", section: "blocks" },
   { id: "EventPageHero", section: "blocks" },
+  { id: "EventSectionHeading", section: "blocks" },
   { id: "EventSignupCard", section: "blocks" },
   { id: "EventSpeakerCard", section: "blocks" },
   { id: "EventFormatBlock", section: "blocks" },

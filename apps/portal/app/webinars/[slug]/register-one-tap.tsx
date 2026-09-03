@@ -16,7 +16,7 @@ import { registerForEventAction } from "./register-action";
  *
  * For a doctor who already has a 003 session but is NOT yet registered, the
  * «Участвовать» CTA is a ONE-ACTION command, not a trip through the auth flow
- * (that guest path is the plain `/register` link — `buildRegistrationHref`).
+ * (that guest path is the plain `/register` link the server `ParticipationCta` emits).
  *
  * The CTA is a REAL `<form>` whose action is a server action
  * (`registerForEventAction`), so it registers with ZERO client JS: on a weak

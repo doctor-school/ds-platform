@@ -133,26 +133,6 @@ export function resolveJoinSignpost(
 }
 
 /**
- * 005 EARS-4 — the pure state→render decision: show the registered confirmation
- * (replacing the register CTA) exactly when the caller is registered AND the page
- * would otherwise render the 004 «Участвовать» REGISTER CTA for an upcoming /
- * `published` event. This is exactly the `upcoming` arm of
- * {@link resolveJoinSignpost} — the register-CTA swap.
- *
- * The registered-`live` render is EARS-5's `live` signpost (the confirmation +
- * "the broadcast is on"), not this primitive; `ended` / `hidden` carry no
- * register CTA at all. So a registered doctor is never shown the register CTA as
- * if unregistered (EARS-4 invariant), and no other lifecycle affordance is
- * disturbed.
- */
-export function showRegisteredConfirmation(
-  state: EventRegistrationState | null,
-  status: CanvasStatus,
-): boolean {
-  return resolveJoinSignpost(state, status).kind === "upcoming";
-}
-
-/**
  * 006 EARS-6 — the registered-live room front door on the event page. The room
  * surface (`/webinars/:slug/room`) shipped in EARS-1..7, so the entry CTA that was
  * deliberately deferred to #584 (rendering a `/room` link before the room existed

@@ -109,6 +109,20 @@ routes:
     status: deferred
     issue: "#1516"
 
+  # 020 EARS-1 (#1764) — the shared event page mounted on the doctor storefront.
+  # The read model, the composition blocks and the server-resolved participation
+  # CTA are REAL and shared with the academy host, but the SCREEN is not whole:
+  # the room entry (#1770), social proof, calendar add and cancel all land as
+  # their own EARS Issues, so a registered doctor on a live event gets a CTA the
+  # host cannot yet route. `deferred` on the same cut-over as its parent feed —
+  # the doctor host is not publicly reachable until ADR-0015 §7's release-time
+  # step, and the route carries no Stage-B verdict yet (batched at #1779).
+  - app: doctor
+    route: /events/[slug]
+    file: apps/doctor/app/(storefront)/events/[slug]/page.tsx
+    status: deferred
+    issue: "#1516"
+
   - app: doctor
     route: /register
     file: apps/doctor/app/(auth)/register/page.tsx

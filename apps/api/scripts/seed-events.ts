@@ -62,6 +62,21 @@ import { reconcileEventSpeakers } from "../src/events/event-speakers.reconcile.j
 const MINUTE = 60_000;
 const DAY = 24 * 60 * MINUTE;
 
+/**
+ * The recording kind the fixture's published cut occupies.
+ *
+ * Taken from the `recording_kind` enum's OWN type rather than written as a bare
+ * string: the seed previously inserted `"full"`, which is not a member of the
+ * enum (`["edited", "raw"]`), so every seed run died on
+ * `invalid input value for enum recording_kind` the moment it reached the 014
+ * legacy fixture — and nothing caught it, because this script is outside the
+ * app's `tsc` program. `edited` is the right member: it is the cut
+ * `recordings.projection` prefers for playback, which is what the archive эфир
+ * fixture exists to make playable.
+ */
+const RECORDING_KIND: (typeof eventRecordings.kind.enumValues)[number] =
+  "edited";
+
 interface SeedSpec {
   readonly slug: string;
   readonly state: "published" | "live" | "ended" | "hidden" | "in_archive";
@@ -395,7 +410,7 @@ async function main(): Promise<void> {
           .where(
             and(
               eq(eventRecordings.eventId, row.id),
-              eq(eventRecordings.kind, "full"),
+              eq(eventRecordings.kind, RECORDING_KIND),
               isNull(eventRecordings.deletedAt),
             ),
           );
@@ -418,7 +433,7 @@ async function main(): Promise<void> {
         } else {
           await db
             .insert(eventRecordings)
-            .values({ ...values, eventId: row.id, kind: "full" });
+            .values({ ...values, eventId: row.id, kind: RECORDING_KIND });
         }
       }
 

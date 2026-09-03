@@ -19,8 +19,17 @@ export interface LifecycleAction {
   readonly from: EventLifecycleState;
   /** The target `EventLifecycleState` this action moves the event to. */
   readonly to: EventLifecycleState;
-  /** The command path segment under `/v1/admin/events/:id/` (design §7). */
-  readonly command: "publish" | "open" | "close" | "hide";
+  /**
+   * The command path segment under `/v1/admin/events/:id/` (design §7, and 014
+   * design §3.1 for the two `*-legacy` commands of the second machine).
+   */
+  readonly command:
+    | "publish"
+    | "open"
+    | "close"
+    | "hide"
+    | "archive-legacy"
+    | "hide-legacy";
   /** The message-catalog key (under `events.action.*`) for the button label. */
   readonly labelKey: string;
   /** A stable test id / data attribute so the e2e can address the button. */
@@ -38,6 +47,18 @@ export interface LifecycleAction {
  * (the origin state is always known on the admin surface via
  * `EventAdminDetail.state`), and it keeps a second command landing on an already
  * occupied target from silently reintroducing the ambiguity.
+ *
+ * Since 014 EARS-25 (#1741) the table carries BOTH machines' edges: the two
+ * `legacy` rows (`hidden → in_archive` = `ArchiveLegacyBroadcast`,
+ * `in_archive → hidden` = `HideLegacyBroadcast`) sit beside the four `platform`
+ * rows. They cannot leak into each other's bar, and that is a property of the
+ * derivation rather than a branch anyone has to remember: `validTransitions` is
+ * computed per-`origin` on the SERVER, so a platform event never lists
+ * `hidden → in_archive` and a legacy one never lists `draft → published` —
+ * {@link actionsFor} therefore names a legacy command only on a legacy event and
+ * a platform command only on a platform one (EARS-27, the two vocabularies never
+ * appear together on one screen). An `origin` test in the UI would be a SECOND
+ * copy of that rule, free to drift from the server's; there is deliberately none.
  *
  * This is the ONLY place an edge is turned into a command — there is no second
  * table to drift.
@@ -70,6 +91,21 @@ const ACTIONS: readonly LifecycleAction[] = [
     command: "hide",
     labelKey: "events.action.hide",
     testId: "action-hide",
+  },
+  // ── 014 EARS-25: the legacy (off-platform) эфир machine ────────────────────
+  {
+    from: "hidden",
+    to: "in_archive",
+    command: "archive-legacy",
+    labelKey: "events.action.archiveLegacy",
+    testId: "action-archive-legacy",
+  },
+  {
+    from: "in_archive",
+    to: "hidden",
+    command: "hide-legacy",
+    labelKey: "events.action.hideLegacy",
+    testId: "action-hide-legacy",
   },
 ];
 
@@ -153,6 +189,10 @@ export interface LifecycleErrorOutcome {
  * hit exactly that dead end at Stage-B (2026-09-01, #1593). Only a refusal the
  * server never classified (no mapped code — transport failure, unknown shape)
  * skips the refetch, because there is no evidence the row is readable at all.
+ * `EVENT_NOT_FINISHED` (#1815 review NIT D) joins the refetching family for the
+ * same reason as the domain refusal: it can only be answered to a command built
+ * from a detail whose state has already moved on the row, so the screen the
+ * operator is reading is exactly the thing that must be replaced.
  * Sentences resolve through the same `taxonomyErrorKey` mapper every other
  * admin surface keys off, not a second copy of the code table.
  */
@@ -168,7 +208,8 @@ export function lifecycleErrorOutcome(error: unknown): LifecycleErrorOutcome {
     refetch:
       code === "PRECONDITION_FAILED" ||
       code === "PRECONDITION_REQUIRED" ||
-      code === "INVALID_TRANSITION",
+      code === "INVALID_TRANSITION" ||
+      code === "EVENT_NOT_FINISHED",
   };
 }
 

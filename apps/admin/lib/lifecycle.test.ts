@@ -21,11 +21,11 @@ import {
  * constructed. These assert the derivation is faithful and that the terminal
  * state offers nothing.
  *
- * The bar this module feeds is the `platform` machine's (feature 007); the
- * `legacy` machine 014 EARS-23 added has its own commands and is NOT in
- * {@link actionsFor}'s table yet (slice 2 of #1741), so every `validTransitions`
- * call here passes `"platform"` explicitly — the schema requires the origin and
- * refuses to guess one.
+ * These rows are about the `platform` machine (feature 007), so every
+ * `validTransitions` call here passes `"platform"` explicitly — the schema
+ * requires the origin and refuses to guess one. The `legacy` machine 014 EARS-23
+ * added now shares the same table and derivation; its rows live in the 014
+ * EARS-25/27 block at the end of this file.
  */
 describe("007 EARS-7 admin lifecycle action derivation", () => {
   it("EARS-7: maps each legal forward edge to its named command in state order", () => {
@@ -81,14 +81,9 @@ describe("007 EARS-7 admin lifecycle action derivation", () => {
     expect(actionsFor("published", ["ended"])).toEqual([]);
   });
 
-  it("014 EARS-23: no lifecycle action names a legacy command — the legacy machine is not on this bar (slice 2)", () => {
-    expect(actionsFor("hidden", validTransitions("hidden", "legacy"))).toEqual(
-      [],
-    );
-    expect(
-      actionsFor("in_archive", validTransitions("in_archive", "legacy")),
-    ).toEqual([]);
-  });
+  // The legacy machine now shares this bar (#1741 slice 2b); its own rows, and
+  // the mutual exclusion of the two vocabularies, are asserted in the 014
+  // EARS-25/27 block at the end of this file.
 
   it("EARS-9: state label keys resolve under the events.state.* catalog namespace", () => {
     expect(stateLabelKey("live")).toBe("events.state.live");
@@ -251,5 +246,100 @@ describe("#1593 refusal-alert dismissal", () => {
       refusal: null,
       emptyNotice: true,
     });
+  });
+});
+
+/**
+ * 014 EARS-25 / EARS-27 (#1741 slice 2b) — the SECOND lifecycle machine on the
+ * same bar. An off-platform эфир (`origin: "legacy"`) runs `hidden ⇄ in_archive`
+ * («Архивировать» / «Скрыть»), and the admin bar must render the commands of the
+ * event's OWN machine only: the two vocabularies never appear together on one
+ * screen (014-design §3.1).
+ *
+ * The mutual exclusion is not a UI branch — it falls out of the SAME derivation
+ * the platform rows use. `validTransitions` is origin-keyed on the server, so a
+ * platform event never lists `hidden → in_archive` and the edge→command table
+ * alone can never name a legacy command for it. These rows assert exactly that,
+ * from both directions.
+ */
+describe("014 EARS-25/27 legacy broadcast lifecycle commands", () => {
+  it("014 EARS-25: a hidden legacy эфир offers only «Архивировать» (archive-legacy)", () => {
+    const actions = actionsFor("hidden", validTransitions("hidden", "legacy"));
+    expect(actions.map((a) => a.command)).toEqual(["archive-legacy"]);
+    expect(actions.map((a) => a.labelKey)).toEqual([
+      "events.action.archiveLegacy",
+    ]);
+  });
+
+  it("014 EARS-25: an in_archive legacy эфир offers only «Скрыть» (hide-legacy)", () => {
+    const actions = actionsFor(
+      "in_archive",
+      validTransitions("in_archive", "legacy"),
+    );
+    expect(actions.map((a) => a.command)).toEqual(["hide-legacy"]);
+    expect(actions.map((a) => a.labelKey)).toEqual(["events.action.hideLegacy"]);
+  });
+
+  it("014 EARS-25: each legacy command posts to its own named endpoint", () => {
+    expect(
+      lifecycleCommandRequest({ id: "evt-1", version: 3 }, "archive-legacy").url,
+    ).toBe("/v1/admin/events/evt-1/archive-legacy");
+    expect(
+      lifecycleCommandRequest({ id: "evt-1", version: 3 }, "hide-legacy").url,
+    ).toBe("/v1/admin/events/evt-1/hide-legacy");
+  });
+
+  it("014 EARS-27: a platform event's transitions never yield a legacy command", () => {
+    const platformStates: EventLifecycleState[] = [
+      "draft",
+      "published",
+      "live",
+      "ended",
+      "hidden",
+      "in_archive",
+    ];
+    for (const state of platformStates) {
+      const commands = actionsFor(
+        state,
+        validTransitions(state, "platform"),
+      ).map((a) => a.command);
+      expect(commands).not.toContain("archive-legacy");
+      expect(commands).not.toContain("hide-legacy");
+    }
+  });
+
+  it("014 EARS-27: a legacy event's transitions never yield a platform command", () => {
+    for (const state of ["hidden", "in_archive"] as EventLifecycleState[]) {
+      const commands = actionsFor(state, validTransitions(state, "legacy")).map(
+        (a) => a.command,
+      );
+      for (const platformCommand of ["publish", "open", "close", "hide"]) {
+        expect(commands).not.toContain(platformCommand);
+      }
+    }
+  });
+
+  it("014 EARS-25: the legacy labels and the «Архивирован» badge exist in the shipped RU catalogue", () => {
+    const messages = JSON.parse(
+      readFileSync(
+        fileURLToPath(new URL("../messages/ru.json", import.meta.url)),
+        "utf8",
+      ),
+    ) as {
+      events: {
+        action: Record<string, string>;
+        state: Record<string, string>;
+      };
+    };
+    expect(messages.events.action.archiveLegacy).toBe("Архивировать");
+    expect(messages.events.action.hideLegacy).toBe("Скрыть");
+    expect(messages.events.state.in_archive).toBe("Архивирован");
+    expect(stateLabelKey("in_archive")).toBe("events.state.in_archive");
+  });
+
+  it("#1815 NIT D: a stale-detail EVENT_NOT_FINISHED refusal re-reads the event", () => {
+    expect(lifecycleErrorOutcome({ errorCode: "EVENT_NOT_FINISHED" }).refetch).toBe(
+      true,
+    );
   });
 });

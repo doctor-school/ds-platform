@@ -95,9 +95,11 @@ test("020 EARS-1: the page is complete HTML from the server — the CTA is in th
   const html = await res.text();
   expect(html).toContain("МСК");
   expect(html).toContain("Участвовать");
-  // The academy's own copy default — the doctor host says «О чём событие».
-  // Copy defaults are exactly what EARS-18 lets the two hosts differ on.
-  expect(html).toContain("О чём эфир");
+  // The «О чём событие» heading the owner asked for at Stage B (#1779): both
+  // hosts now default to it. Copy defaults stay per-host overridable — that is
+  // what 020 EARS-18 (#1764) lets the two hosts differ on — the academy simply
+  // no longer overrides this one.
+  expect(html).toContain("О чём событие");
 });
 
 test("020 EARS-1: an ended event renders the same composition with NO participation control (never a dead link)", async ({

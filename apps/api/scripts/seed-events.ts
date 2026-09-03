@@ -50,6 +50,7 @@
  * a caller / E2E env wiring can pick the slug for each state + room scenario.
  * Exits non-zero on failure.
  */
+import { pathToFileURL } from "node:url";
 import {
   createDrizzle,
   eventRecordings,
@@ -309,7 +310,12 @@ function specs(now: number): SeedSpec[] {
   ];
 }
 
-async function main(): Promise<void> {
+/**
+ * The seed body, exported so an e2e spec can drive it in-process (the two-run
+ * idempotency proof) without shelling out. The CLI entry below is guarded so an
+ * import never triggers a run + `process.exit`.
+ */
+export async function seedEvents(): Promise<void> {
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) {
     throw new Error(
@@ -418,7 +424,10 @@ async function main(): Promise<void> {
       // the same row instead of colliding with its own previous one.
       if (spec.recording) {
         const [existing] = await db
-          .select({ id: eventRecordings.id })
+          .select({
+            id: eventRecordings.id,
+            firstPublishedAt: eventRecordings.firstPublishedAt,
+          })
           .from(eventRecordings)
           .where(
             and(
@@ -427,26 +436,38 @@ async function main(): Promise<void> {
               isNull(eventRecordings.deletedAt),
             ),
           );
-        const values = {
+        const baseValues = {
           provider: spec.recording.provider,
           embedRef: spec.recording.embedRef,
           durationSec: spec.recording.durationSec,
           status: "published" as const,
-          // The table's `published ⇒ first_published_at IS NOT NULL` check is a
-          // product invariant, so the fixture satisfies it rather than working
-          // around it: the archive эфир's cut was published when it was seeded.
-          firstPublishedAt: new Date(),
           updatedAt: new Date(),
         };
         if (existing) {
+          // `first_published_at` is write-once (021 invariant, enforced by a
+          // trigger): re-sending a fresh instant on a row that already carries
+          // one aborts the whole seed. The re-run therefore refreshes only the
+          // mutable columns, and stamps the instant solely when the existing
+          // row has none — which the `published ⇒ first_published_at IS NOT
+          // NULL` check still requires.
           await db
             .update(eventRecordings)
-            .set(values)
+            .set(
+              existing.firstPublishedAt
+                ? baseValues
+                : { ...baseValues, firstPublishedAt: new Date() },
+            )
             .where(eq(eventRecordings.id, existing.id));
         } else {
-          await db
-            .insert(eventRecordings)
-            .values({ ...values, eventId: row.id, kind: RECORDING_KIND });
+          // The table's `published ⇒ first_published_at IS NOT NULL` check is a
+          // product invariant, so the fixture satisfies it rather than working
+          // around it: the archive эфир's cut was published when it was seeded.
+          await db.insert(eventRecordings).values({
+            ...baseValues,
+            firstPublishedAt: new Date(),
+            eventId: row.id,
+            kind: RECORDING_KIND,
+          });
         }
       }
 
@@ -471,13 +492,19 @@ async function main(): Promise<void> {
   process.stdout.write(`${JSON.stringify(contract, null, 2)}\n`);
 }
 
-main()
-  .then(() => process.exit(0))
-  .catch((err: unknown) => {
-    process.stderr.write(
-      `[seed:events] FAILED — ${
-        err instanceof Error ? (err.stack ?? err.message) : String(err)
-      }\n`,
-    );
-    process.exit(1);
-  });
+const isCliEntry =
+  process.argv[1] !== undefined &&
+  import.meta.url === pathToFileURL(process.argv[1]).href;
+
+if (isCliEntry) {
+  seedEvents()
+    .then(() => process.exit(0))
+    .catch((err: unknown) => {
+      process.stderr.write(
+        `[seed:events] FAILED — ${
+          err instanceof Error ? (err.stack ?? err.message) : String(err)
+        }\n`,
+      );
+      process.exit(1);
+    });
+}

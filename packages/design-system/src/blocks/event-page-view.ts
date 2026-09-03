@@ -71,8 +71,27 @@ export interface EventPageCopy {
   priceFree: string;
   /** Participation-format words, shared by the kicker and the condition row. */
   format: Record<EventParticipationFormat, string>;
+  /**
+   * The sign-up card's format VALUE — canvas:213 «Онлайн · комната эфира».
+   * Deliberately a second map rather than a reuse of {@link format}: the hero
+   * kicker names the format in one word, while the card's conditions row also
+   * says WHERE the doctor goes. One map for both would force the kicker to read
+   * «Школа · Онлайн · комната эфира».
+   */
+  formatDetail: Record<EventParticipationFormat, string>;
   /** Sign-up card footnote, rendered under the CTA in the register state only. */
   signupNote: string;
+  /**
+   * The hero plate's countdown — canvas:171 «Скоро · через 5 дней». The
+   * lifecycle WORD stays host copy; the countdown is a fact of `startsAt`, so
+   * it is mapped once here rather than derived per host from a clock the two
+   * would be free to read differently.
+   *
+   * `days` is the RU plural triple the `ru-RU` cardinal rule selects from —
+   * one · few · many («день» · «дня» · «дней»).
+   */
+  inPrefix: string;
+  days: readonly [one: string, few: string, many: string];
   /** `EventFormatBlock` (online) lines; its heading is the canvas default «Эфир». */
   roomOpensLine: string;
   duringLine: string;
@@ -84,13 +103,20 @@ export const EVENT_PAGE_COPY: EventPageCopy = {
   conditionFormat: "Формат",
   conditionDuration: "Длительность",
   conditionPrice: "Участие",
-  priceFree: "бесплатно для врача",
+  priceFree: "Бесплатно для врача",
   format: {
     online: "Онлайн",
     offline: "Очно",
     hybrid: "Очно и онлайн",
   },
+  formatDetail: {
+    online: "Онлайн · комната эфира",
+    offline: "Очно",
+    hybrid: "Очно и онлайн",
+  },
   signupNote: "Нужна регистрация — вернём вас на эту страницу.",
+  inPrefix: "через",
+  days: ["день", "дня", "дней"],
   roomOpensLine: "Комната эфира откроется за 10 минут до начала",
   duringLine:
     "Во время эфира: вопрос лектору · опросы с живым графиком · отметки присутствия",
@@ -176,6 +202,50 @@ export function eventLifecyclePlate(
   };
 }
 
+const RU_PLURAL = new Intl.PluralRules("ru-RU");
+
+/**
+ * The plate's countdown — «через 5 дней» (canvas:171), or `null` when there is
+ * nothing to count down to.
+ *
+ * It answers only for a `published` event: «В эфире», «Эфир завершён» and
+ * «Скрыто» are terminal or present-tense words that a countdown would
+ * contradict, and an event whose start is already past has no days left to
+ * name. The count is CALENDAR days in Moscow, not a 24-hour division of the
+ * remaining milliseconds — «через 1 день» must mean «завтра» to a reader, and
+ * an event 20 hours away tomorrow morning would otherwise round to «через 0».
+ *
+ * `now` is a parameter so the callers that must be deterministic (the tests,
+ * and any future static render) are not reading a wall clock through a back
+ * door.
+ */
+export function eventLifecycleCountdown(
+  view: EventPageView,
+  copy: EventPageCopy = EVENT_PAGE_COPY,
+  now: Date = new Date(),
+): string | null {
+  if (view.state !== "published") return null;
+  const days = mskCalendarDaysBetween(now, new Date(view.startsAt));
+  if (days <= 0) return null;
+  const form = RU_PLURAL.select(days);
+  const word =
+    form === "one" ? copy.days[0] : form === "few" ? copy.days[1] : copy.days[2];
+  return `${copy.inPrefix} ${days} ${word}`;
+}
+
+const MSK_DAY_KEY = new Intl.DateTimeFormat("en-CA", {
+  timeZone: MSK_TIME_ZONE,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+/** Whole Moscow calendar days from `from` to `to` (negative when `to` is past). */
+function mskCalendarDaysBetween(from: Date, to: Date): number {
+  const utcMidnight = (d: Date) => Date.parse(`${MSK_DAY_KEY.format(d)}T00:00:00Z`);
+  return Math.round((utcMidnight(to) - utcMidnight(from)) / 86_400_000);
+}
+
 /**
  * The sign-up card props for one viewer on one event. `cta` is passed straight
  * through from the server policy read — this function never inspects it.
@@ -186,13 +256,19 @@ export function eventSignupCardProps(
   copy: EventPageCopy = EVENT_PAGE_COPY,
 ): EventSignupCardProps {
   const { time, date, weekday } = eventPageTimeParts(view);
+  // Canvas:206-228 order — Участие · Формат · Длительность. «Участие» leads:
+  // the price is the fact that decides whether a doctor reads any of the rest,
+  // and the canvas sets it in the success tone for exactly that reason. (The
+  // canvas's fourth row, «НМО 2 балла», needs an accreditation field the public
+  // read does not carry — that is EARS-2 / #1765, and inventing it here would be
+  // the untracked seam F-22 forbids.)
   const conditions: EventSignupCondition[] = [
-    { label: copy.conditionFormat, value: copy.format[view.format] },
+    { label: copy.conditionPrice, value: copy.priceFree, tone: "success" },
+    { label: copy.conditionFormat, value: copy.formatDetail[view.format] },
     {
       label: copy.conditionDuration,
       value: `${view.durationMin} ${copy.minutes}`,
     },
-    { label: copy.conditionPrice, value: copy.priceFree },
   ];
   return {
     timeLabel: time,

@@ -4,6 +4,7 @@ import type { EventPageView, ParticipationCta } from "@ds/schemas";
 import {
   EVENT_PAGE_COPY,
   eventFormatBlockProps,
+  eventLifecycleCountdown,
   eventLifecyclePlate,
   eventPageChips,
   eventPageDateLine,
@@ -146,12 +147,69 @@ describe("020 EARS-1 — shared event-page view projection", () => {
     expect(eventLifecyclePlate({ ...VIEW, state: "in_archive" })).toBeNull();
   });
 
-  it("020 EARS-1: the sign-up conditions state format, duration and price", () => {
+  it("020 EARS-1: the sign-up conditions follow the canvas order, wording and accent (#1779)", () => {
+    // Canvas:206-228 — «Участие» leads in the success tone, and the format row
+    // says WHERE the doctor goes («Онлайн · комната эфира»), not just the
+    // one-word format the hero kicker carries. The owner's Stage-B round-1
+    // rejection was this exact row set.
     expect(eventSignupCardProps(VIEW, REGISTER_CTA).conditions).toEqual([
-      { label: "Формат", value: "Онлайн" },
+      { label: "Участие", value: "Бесплатно для врача", tone: "success" },
+      { label: "Формат", value: "Онлайн · комната эфира" },
       { label: "Длительность", value: "90 минут" },
-      { label: "Участие", value: "бесплатно для врача" },
     ]);
+  });
+
+  it("020 EARS-1: only the price row carries the success accent (#1779)", () => {
+    const rows = eventSignupCardProps(VIEW, REGISTER_CTA).conditions ?? [];
+    expect(rows.filter((row) => row.tone === "success")).toHaveLength(1);
+    expect(rows[0]?.tone).toBe("success");
+  });
+
+  it("020 EARS-1: an offline event's format row names the format without a room (#1779)", () => {
+    const rows =
+      eventSignupCardProps({ ...VIEW, format: "offline" }, REGISTER_CTA)
+        .conditions ?? [];
+    expect(rows[1]).toEqual({ label: "Формат", value: "Очно" });
+  });
+
+  it("020 EARS-1: the plate countdown is calendar days in МСК, RU-pluralised (#1779)", () => {
+    // Canvas:171 «Скоро · через 5 дней». 2026-08-23 МСК → 2026-08-28 МСК = 5.
+    const now = new Date("2026-08-23T09:00:00.000Z");
+    expect(eventLifecycleCountdown(VIEW, EVENT_PAGE_COPY, now)).toBe(
+      "через 5 дней",
+    );
+    expect(
+      eventLifecycleCountdown(
+        VIEW,
+        EVENT_PAGE_COPY,
+        new Date("2026-08-27T09:00:00.000Z"),
+      ),
+    ).toBe("через 1 день");
+    expect(
+      eventLifecycleCountdown(
+        VIEW,
+        EVENT_PAGE_COPY,
+        new Date("2026-08-26T09:00:00.000Z"),
+      ),
+    ).toBe("через 2 дня");
+  });
+
+  it("020 EARS-1: a countdown is offered only where it cannot contradict the plate word (#1779)", () => {
+    const now = new Date("2026-08-23T09:00:00.000Z");
+    // Today, and anything already started, has no days left to name.
+    expect(
+      eventLifecycleCountdown(
+        VIEW,
+        EVENT_PAGE_COPY,
+        new Date("2026-08-28T09:00:00.000Z"),
+      ),
+    ).toBeNull();
+    // «В эфире» / «Эфир завершён» / «Скрыто» are present-tense or terminal.
+    for (const state of ["live", "ended", "hidden"] as const) {
+      expect(
+        eventLifecycleCountdown({ ...VIEW, state }, EVENT_PAGE_COPY, now),
+      ).toBeNull();
+    }
   });
 
   it("020 EARS-1: speakers map from the legacy+expert union with one section heading", () => {
@@ -201,6 +259,6 @@ describe("020 EARS-1 — shared event-page view projection", () => {
     expect(doctor.conditions?.map((row) => row.label)).toEqual(
       shared.conditions?.map((row) => row.label),
     );
-    expect(doctor.conditions?.[2]?.value).toBe("бесплатно");
+    expect(doctor.conditions?.[0]?.value).toBe("бесплатно");
   });
 });

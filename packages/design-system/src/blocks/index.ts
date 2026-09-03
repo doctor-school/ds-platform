@@ -123,6 +123,7 @@ export type { EventFormatBlockProps } from "./event-format-block";
 export {
   EVENT_PAGE_COPY,
   eventFormatBlockProps,
+  eventLifecycleCountdown,
   eventLifecyclePlate,
   eventPageChips,
   eventPageDateLine,

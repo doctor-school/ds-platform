@@ -10,6 +10,7 @@ import {
   EventSignupCard,
   EventSpeakerCard,
   eventFormatBlockProps,
+  eventLifecycleCountdown,
   eventLifecyclePlate,
   eventPageChips,
   eventPageDateLine,
@@ -94,6 +95,9 @@ export default async function DoctorEventPage({
 
   const formatBlock = eventFormatBlockProps(event);
   const lifecyclePlate = eventLifecyclePlate(event);
+  /* Canvas:171 «Скоро · через 5 дней» — the lifecycle word is this host's copy,
+     the countdown is the shared mapper's fact about `startsAt` (#1779). */
+  const countdown = eventLifecycleCountdown(event);
 
   return (
     <EventPageShell
@@ -120,7 +124,9 @@ export default async function DoctorEventPage({
                lifecycle signal on doctor.school as on the academy. */
             lifecyclePlate ? (
               <Badge variant={lifecyclePlate.variant}>
-                {COPY.state[lifecyclePlate.state]}
+                {countdown
+                  ? `${COPY.state[lifecyclePlate.state]} · ${countdown}`
+                  : COPY.state[lifecyclePlate.state]}
               </Badge>
             ) : null
           }

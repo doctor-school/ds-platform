@@ -12,6 +12,7 @@ import {
   EventSignupCard,
   EventSpeakerCard,
   eventFormatBlockProps,
+  eventLifecycleCountdown,
   eventLifecyclePlate,
   eventPageChips,
   eventPageDateLine,
@@ -159,6 +160,9 @@ export default async function WebinarEventPage({
 
   const formatBlock = eventFormatBlockProps(event);
   const lifecyclePlate = eventLifecyclePlate(event);
+  /* Canvas:171 «Скоро · через 5 дней» — the lifecycle word is this host's copy,
+     the countdown is the shared mapper's fact about `startsAt` (#1779). */
+  const countdown = eventLifecycleCountdown(event);
 
   return (
     <>
@@ -211,7 +215,9 @@ export default async function WebinarEventPage({
                 <div className="flex flex-col items-end gap-2">
                   {lifecyclePlate ? (
                     <Badge variant={lifecyclePlate.variant}>
-                      {t(`state.${lifecyclePlate.state}`)}
+                      {countdown
+                        ? `${t(`state.${lifecyclePlate.state}`)} · ${countdown}`
+                        : t(`state.${lifecyclePlate.state}`)}
                     </Badge>
                   ) : null}
                   {recordingSignal ? (

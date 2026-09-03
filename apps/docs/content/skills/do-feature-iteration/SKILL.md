@@ -42,6 +42,7 @@ Execute the steps in order. Each `→` is a hard gate: the next step does not be
 10. **`respond-to-review`** (inline) — fix or reject-with-rationale per finding. Loop with step 9 until APPROVE + green CI.
 11. **`write-iteration-summary`** (inline) — Issue comment with file paths, decisions taken, decision-debt items, links.
 12. **`merge-when-green`** (inline) — invoke the canonical skill; prefer `pnpm pr:land <N>` for its full merge → Done → teardown → re-sweep tail. Per ADR-0007 §2.4 + §2.10, a positive Mode (a) verdict + green CI is sufficient; human-merge is not required.
+13. **`report-task-outcome`** (inline) — the owner-facing closeout report. Read [../report-task-outcome/SKILL.md](../report-task-outcome/SKILL.md) at report time and write the report in its fixed shape: product-first lines, PR / migration / EARS identifiers only in trailing parentheses or the collapsed technical appendix.
 
 ## Output
 
@@ -66,3 +67,4 @@ Execute the steps in order. Each `→` is a hard gate: the next step does not be
 - [../surface-decision-debt/SKILL.md](../surface-decision-debt/SKILL.md)
 - [../write-iteration-summary/SKILL.md](../write-iteration-summary/SKILL.md)
 - [../merge-when-green/SKILL.md](../merge-when-green/SKILL.md)
+- [../report-task-outcome/SKILL.md](../report-task-outcome/SKILL.md)

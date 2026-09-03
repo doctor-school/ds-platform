@@ -26,6 +26,13 @@ async function shoot(browser, { name, viewport, theme, target, after }) {
   });
   const page = await ctx.newPage();
   await page.goto(`${BASE}/blocks`, { waitUntil: "networkidle" });
+  // The catalogue re-themes by the `.dark` class on <html> (the #515 runtime page
+  // toggle), NOT by `prefers-color-scheme` — the context `colorScheme` above only
+  // aligns UA form controls. Stamp the class exactly as `a11y-axe.e2e.spec.ts`
+  // does, otherwise the "dark" shots come back byte-identical to the light ones.
+  await page
+    .locator("html")
+    .evaluate((html, isDark) => html.classList.toggle("dark", isDark), theme === "dark");
   const section = page
     .locator("section")
     .filter({ has: page.getByRole("heading", { name: "Event page" }) })

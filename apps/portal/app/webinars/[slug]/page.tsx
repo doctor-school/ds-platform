@@ -318,15 +318,15 @@ export default async function WebinarEventPage({
         {event.programPdfUrl ? (
           <section className="mt-14" data-testid="event-programme">
             <EventSectionHeading>{t("page.program")}</EventSectionHeading>
-            <a
+            <Link
               href={event.programPdfUrl}
               target="_blank"
               rel="noreferrer"
-              className="mt-7 inline-flex items-center gap-3 border-2 border-border bg-card px-6 py-4 text-sm font-bold text-primary-action no-underline shadow-ghost focus-visible:shadow-focus focus-visible:outline-none"
+              className="mt-7 inline-flex items-center gap-3 border-2 border-border bg-card px-6 py-4 text-sm shadow-ghost"
             >
               <span aria-hidden="true">↓</span>
               {t("page.programDownload")}
-            </a>
+            </Link>
           </section>
         ) : null}
 

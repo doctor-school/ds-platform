@@ -213,6 +213,52 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(body.seatsLeft).toBeNull();
     });
 
+    it("020 EARS-2.3: both hosts return links with every key absent today, and the body never varies with the viewer", async () => {
+      const { slug } = await seedEvent({ state: "published" });
+
+      const academy = await app.inject({
+        method: "GET",
+        url: `/v1/public/events/${slug}`,
+      });
+      const doctor = await app.inject({
+        method: "GET",
+        url: `/v1/storefront/doctor/events/${slug}`,
+      });
+
+      // Neither storefront mounts a school page, an expert page or a community
+      // screen today, so every destination resolves ABSENT — no key, and above
+      // all no `null` href a client could render as a dead control (EARS-2 /
+      // EARS-19). The array is empty rather than a list of empty hrefs.
+      for (const res of [academy, doctor]) {
+        const body = res.json() as {
+          links: {
+            school?: unknown;
+            speakerPages: unknown[];
+            communityHref?: unknown;
+          };
+        };
+        expect(res.statusCode).toBe(200);
+        expect(body.links).toEqual({ speakerPages: [] });
+        expect("school" in body.links).toBe(false);
+        expect("communityHref" in body.links).toBe(false);
+      }
+      // The two hosts each hand the shared resolver their OWN table, and the
+      // two tables agree today — so the bodies are still deep-equal.
+      expect(doctor.json()).toEqual(academy.json());
+
+      // The page read takes no principal at all (it is `@Public()` and is
+      // served `public, max-age=30`, which a per-viewer body would make unsafe).
+      // A request carrying a session cookie therefore returns the identical
+      // bytes — links are a fact of the HOST, never of who is reading.
+      const withSession = await app.inject({
+        method: "GET",
+        url: `/v1/public/events/${slug}`,
+        headers: { cookie: "ds_session=some-session-reference" },
+      });
+      expect(withSession.statusCode).toBe(200);
+      expect(withSession.payload).toBe(academy.payload);
+    });
+
     it("020 EARS-1: an event seeded before the widening keeps a valid body — the columns are back-fill safe", async () => {
       // A row inserted WITHOUT the two new columns is exactly what every
       // pre-migration production row is; the defaults must make it a valid

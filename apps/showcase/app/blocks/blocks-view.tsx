@@ -16,6 +16,9 @@ import {
   EventPageShell,
   EventSignupCard,
   EventSpeakerCard,
+  EventAboutSection,
+  EventProgrammeSection,
+  EventPageKicker,
   FilterBar,
   FormActions,
   FormDerivedNote,
@@ -2543,7 +2546,13 @@ function EventPagePreview({
               <span>Вебинар «PRP при гонартрозе»</span>
             </>
           }
-          kicker="Школа ортобиологии · Вебинар · Онлайн"
+          kicker={
+            <EventPageKicker
+              school="Школа ортобиологии"
+              schoolHref="#d-school"
+              formatLabel="Вебинар · Онлайн"
+            />
+          }
           title="PRP при гонартрозе"
           dateLine="28 августа, 19:00 (МСК) · 90 минут"
           chips={["Травматология и ортопедия", "Ортобиология", "НМО 2 балла"]}
@@ -2562,13 +2571,17 @@ function EventPagePreview({
         />
       }
     >
-      <section>
-        <p className="text-base leading-relaxed text-muted-foreground">
-          PRP-терапия при гонартрозе: показания, доказательная база и рабочие
-          протоколы. Разбираем реальный клинический случай — от отбора пациента
-          до оценки результата через 6 месяцев.
-        </p>
-      </section>
+      <EventAboutSection
+        heading="О чём событие"
+        description="PRP-терапия при гонартрозе: показания, доказательная база и рабочие протоколы. Разбираем реальный клинический случай — от отбора пациента до оценки результата через 6 месяцев."
+      />
+      {/* 020 EARS-2 — the no-PDF shape: the honest sentence, never an empty
+          labelled box. The download shape is the same block with a href. */}
+      <EventProgrammeSection
+        heading="Программа"
+        downloadLabel="Скачать программу (PDF)"
+        statement="Программу опубликуем ближе к дате события."
+      />
       <EventSpeakerCard
         className="mt-18"
         name="Михаил Страхов"
@@ -2594,7 +2607,7 @@ function EventPageSection() {
   return (
     <BlockSection
       title="Event page"
-      exportsLine="EventPageShell · EventPageHero · EventSignupCard · EventSpeakerCard · EventFormatBlock"
+      exportsLine="EventPageShell · EventPageHero · EventPageKicker · EventSignupCard · EventAboutSection · EventProgrammeSection · EventSpeakerCard · EventFormatBlock"
     >
       <SubRow label="Preview">
         <WideCanvas>

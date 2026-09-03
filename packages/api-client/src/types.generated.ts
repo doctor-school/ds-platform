@@ -1964,6 +1964,17 @@ export interface components {
             format: "online" | "offline" | "hybrid";
             /** Format: uuid */
             id: string;
+            links: {
+                communityHref?: string;
+                school?: {
+                    href: string;
+                    label: string;
+                };
+                speakerPages: {
+                    href: string;
+                    speakerKey: string;
+                }[];
+            };
             partners: {
                 label: string;
             }[];

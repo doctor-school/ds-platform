@@ -21,7 +21,7 @@ import {
   mskLocalToInstant,
   mskMonthRange,
   mskYearRange,
-  type PublicEventPage,
+  type HostFreeEventPageView,
   type PublicEventPageSpeaker,
   type PublicEventState,
   type UpcomingBroadcastCard,
@@ -1151,11 +1151,20 @@ export class EventsService {
    * allow-list has no public projection (returns null → the controller answers
    * 404, indistinguishable from an unknown id — a hidden `draft` leaks no oracle,
    * EARS-6). `published` / `live` / `ended` / `hidden` all return the
-   * publish-safe {@link PublicEventPage} (a hidden event resolves to a 200 body
+   * publish-safe {@link HostFreeEventPageView} (a hidden event resolves to a 200 body
    * labeled `hidden`, never a 404 — EARS-5). The projection is an ALLOW-LIST:
    * only publish-safe fields are read onto the body (EARS-10).
    */
-  async publicEventPage(idOrSlug: string): Promise<PublicEventPage | null> {
+  /**
+   * 020 EARS-2 (#1765) — the result is the HOST-FREE half of the read: every
+   * field that is a fact of the EVENT. The `links` half is resolved by the
+   * calling host route through `around-event.resolver.ts`, because «is there a
+   * school page to link to» is a fact of the storefront serving the request,
+   * not of the event — and this service knows no host.
+   */
+  async publicEventPage(
+    idOrSlug: string,
+  ): Promise<HostFreeEventPageView | null> {
     const found = await this.repo.findByIdOrSlug(idOrSlug);
     if (!found) return null;
     const state = found.event.state as EventLifecycleState;
@@ -1310,9 +1319,9 @@ export class EventsService {
   private async toPublicPage(
     a: EventWithSpeakers,
     state: EventLifecycleState,
-  ): Promise<PublicEventPage> {
+  ): Promise<HostFreeEventPageView> {
     const e = a.event;
-    const page: PublicEventPage = {
+    const page: HostFreeEventPageView = {
       id: e.id,
       slug: e.slug,
       title: e.title,

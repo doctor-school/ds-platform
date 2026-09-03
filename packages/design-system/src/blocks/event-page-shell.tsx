@@ -139,7 +139,17 @@ export function EventPageShell({
            * card ABOVE it on mobile (`order:-1`), so the visual order flips with
            * `order-first` below the `layout` breakpoint only.
            */}
-          <div className="min-w-0 pt-2 layout:pt-26">{children}</div>
+          {/*
+           * 020 EARS-2 (#1765) — the OPEN PART: everything a guest reads without
+           * registering. Addressable so the live tier can assert the whole
+           * decision set, and its guest/signed-in identity, as one subtree.
+           */}
+          <div
+            data-testid="event-page-open-part"
+            className="min-w-0 pt-2 layout:pt-26"
+          >
+            {children}
+          </div>
           <aside
             data-testid="event-page-aside"
             className="order-first min-w-0 layout:order-none"
@@ -153,10 +163,12 @@ export function EventPageShell({
 }
 
 /**
- * The canvas's section rule — an uppercase micro-label followed by a 2px hairline
- * that runs to the column edge. Shared page chrome for the left-flow sections;
- * deliberately NOT exported from `blocks/index.ts` (it is not a unit a host
- * mounts on its own, and the showcase covers it through the blocks that use it).
+ * The canvas's section rule — an uppercase micro-label followed by a 2px
+ * hairline that runs to the column edge. Shared page chrome for the left-flow
+ * sections, exported from `blocks/index.ts` and catalogued in the showcase: the
+ * sections that use it (`EventAboutSection`, `EventProgrammeSection`,
+ * `EventSpeakerCard`) compose it, and a host mounting a left-flow section of its
+ * own uses this rule rather than re-typing its two class strings.
  */
 export function EventSectionHeading({
   children,

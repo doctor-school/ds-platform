@@ -53,6 +53,16 @@ const legacyBarPaths = [
   "apps/admin/components/state-badge.tsx",
   "apps/admin/messages/ru.json",
 ];
+const legacyCreateToggleSource = "legacy-broadcast-create-toggle-v1";
+const legacyCreateToggleState = "legacy-create-toggle";
+const legacyCreateTogglePaths = [
+  "apps/admin/components/event-form.tsx",
+  "apps/admin/components/recording-source-fields.tsx",
+  "apps/admin/components/recordings-panel.tsx",
+  "apps/admin/app/events/create/page.tsx",
+  "apps/admin/app/events/[id]/page.tsx",
+  "apps/admin/messages/ru.json",
+];
 const baseApprovedManifest = JSON.parse(
   readFileSync(new URL("../ui-approved-sources.json", import.meta.url), "utf8"),
 ) as ApprovedSourceManifest;
@@ -117,6 +127,11 @@ const legacyBarBody = `
 ui-source-kind: approved-non-canvas
 ui-source: ${legacyBarSource}
 ui-source-state: ${legacyBarState}
+${webEvidence}`;
+const legacyCreateToggleBody = `
+ui-source-kind: approved-non-canvas
+ui-source: ${legacyCreateToggleSource}
+ui-source-state: ${legacyCreateToggleState}
 ${webEvidence}`;
 const adminListBody = `
 ui-source-kind: approved-non-canvas
@@ -215,6 +230,21 @@ describe("ui-parity body evidence", () => {
     ).toEqual([
       "https://github.com/doctor-school/ds-platform/issues/1741#issuecomment-5506003649",
       "https://github.com/doctor-school/ds-platform/issues/1748#issuecomment-5507821212",
+    ]);
+  });
+
+  it("green: owner-approved legacy broadcast create toggle scopes all six #1741 slice-3 render surfaces", () => {
+    expect(
+      verdict(
+        legacyCreateToggleBody,
+        legacyCreateTogglePaths,
+        baseApprovedManifest,
+      ).ok,
+    ).toBe(true);
+    expect(
+      baseApprovedManifest.sources[legacyCreateToggleSource].approvalProvenance,
+    ).toEqual([
+      "https://github.com/doctor-school/ds-platform/issues/1741#issuecomment-5522845629",
     ]);
   });
 

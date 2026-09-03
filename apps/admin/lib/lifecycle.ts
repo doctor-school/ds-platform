@@ -3,8 +3,8 @@ import type { TaxonomyHttpError } from "@/providers/data-provider";
 import { taxonomyErrorKey } from "./taxonomy-errors";
 
 /**
- * The admin lifecycle-action model (007 EARS-5/6/7, design §2, §8; extended by
- * 014 EARS-18). The admin UI offers ONLY the transitions valid from the current
+ * The admin lifecycle-action model (007 EARS-5/6/7, design §2, §8). The admin UI
+ * offers ONLY the transitions valid from the current
  * state — and it derives that offer from the server's
  * `EventAdminDetail.validTransitions`, which the server computes from the SAME
  * closed map (`@ds/schemas` `LIFECYCLE_TRANSITIONS`) its guard enforces, so the
@@ -20,7 +20,7 @@ export interface LifecycleAction {
   /** The target `EventLifecycleState` this action moves the event to. */
   readonly to: EventLifecycleState;
   /** The command path segment under `/v1/admin/events/:id/` (design §7). */
-  readonly command: "publish" | "open" | "close" | "hide" | "mark-ended";
+  readonly command: "publish" | "open" | "close" | "hide";
   /** The message-catalog key (under `events.action.*`) for the button label. */
   readonly labelKey: string;
   /** A stable test id / data attribute so the e2e can address the button. */
@@ -29,15 +29,15 @@ export interface LifecycleAction {
 
 /**
  * The single table from a legal forward EDGE to its named command (007 design §2
- * + 014-design §3.1). Keyed on the `(from, to)` PAIR, not on the target alone:
- * since 014 EARS-18 two different commands land on `ended` — `live → ended` is
- * `CloseRoom` (the director closing a room this platform ran) and
- * `published → ended` is `MarkEventEnded` (an эфир that happened off-platform).
- * They are different operator assertions, with different server preconditions
- * and different audit ids, so a target-keyed map could only name one of them and
- * would fire `close` on an event that was never live. The origin state is always
- * known on the admin surface (`EventAdminDetail.state`), so the pair is the
- * honest key.
+ * + 014-design §3.1). Keyed on the `(from, to)` PAIR, not on the target alone.
+ *
+ * Only `live → ended` (`CloseRoom`) lands on `ended` today — 014 EARS-23 moved the
+ * off-platform эфир onto its OWN machine (`hidden ⇄ in_archive`, origin `legacy`),
+ * so the `published → ended` `MarkEventEnded` fork is gone from the 007 machine
+ * entirely. The pair key stays: it is the honest key for an edge→command table
+ * (the origin state is always known on the admin surface via
+ * `EventAdminDetail.state`), and it keeps a second command landing on an already
+ * occupied target from silently reintroducing the ambiguity.
  *
  * This is the ONLY place an edge is turned into a command — there is no second
  * table to drift.
@@ -56,13 +56,6 @@ const ACTIONS: readonly LifecycleAction[] = [
     command: "open",
     labelKey: "events.action.open",
     testId: "action-open",
-  },
-  {
-    from: "published",
-    to: "ended",
-    command: "mark-ended",
-    labelKey: "events.action.markEnded",
-    testId: "action-mark-ended",
   },
   {
     from: "live",
@@ -87,12 +80,11 @@ const ACTIONS: readonly LifecycleAction[] = [
  * presents no transition the current state disallows (EARS-7). An edge absent
  * from {@link ACTIONS} names no command and is simply never offered.
  *
- * The `mark-ended` control needs NO client-side precondition check: the server
- * already drops `ended` from a `published` event's `validTransitions` unless the
- * 014 EARS-18 preconditions hold (the scheduled end is already past AND the room
- * was never opened), and `live_at` is not on the admin projection at all. So the
- * control appears exactly when the command would succeed — one authority, not a
- * second copy of the rule in the browser (014-design §3.1).
+ * No control here needs a client-side precondition check: the server computes
+ * `validTransitions` from the same closed map its guard enforces (and, since 014
+ * EARS-23, for the event's own `origin`), so a control appears exactly when the
+ * command would succeed — one authority, not a second copy of the rule in the
+ * browser (014-design §3.1).
  */
 export function actionsFor(
   state: EventLifecycleState,
@@ -153,7 +145,7 @@ export interface LifecycleErrorOutcome {
  * words: a precondition refusal (412 `PRECONDITION_FAILED`, 428
  * `PRECONDITION_REQUIRED`) says the operator's screen is behind the row and
  * gets the shipped `errors.stale` sentence, while a domain refusal (409
- * `INVALID_TRANSITION` / `EVENT_NOT_PAST`) keeps its own cause. Both families
+ * `INVALID_TRANSITION`) keeps its own cause. Both families
  * refetch: a domain refusal on a held page is very often ALSO a symptom of the
  * event having moved in another window (publish pressed on an event someone
  * else already published), so leaving the screen on its stale state after the
@@ -176,8 +168,7 @@ export function lifecycleErrorOutcome(error: unknown): LifecycleErrorOutcome {
     refetch:
       code === "PRECONDITION_FAILED" ||
       code === "PRECONDITION_REQUIRED" ||
-      code === "INVALID_TRANSITION" ||
-      code === "EVENT_NOT_PAST",
+      code === "INVALID_TRANSITION",
   };
 }
 

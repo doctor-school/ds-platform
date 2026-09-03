@@ -35,9 +35,17 @@ export type CanvasStatus = "upcoming" | "live" | "ended" | "hidden";
  * `published` is the canvas's `upcoming`; `live`/`ended`/`hidden` map through
  * unchanged. This is the single source the page's per-state render reads, so the
  * rendered signal can never contradict the `EventLifecycleState` (EARS-4).
+ *
+ * `in_archive` — the 014 terminal state of a pre-platform (legacy) эфир — renders
+ * exactly as `ended` does: a broadcast that is over, whose published recording is
+ * the only remaining affordance. The canvas has no separate archive artboard
+ * because there is no separate render; the distinction is an ADMIN lifecycle fact
+ * (014-design §3.1), not a public one.
  */
 export function toCanvasStatus(state: PublicEventState): CanvasStatus {
-  return state === "published" ? "upcoming" : state;
+  if (state === "published") return "upcoming";
+  if (state === "in_archive") return "ended";
+  return state;
 }
 
 /** The single primary participation CTA the page renders for a lifecycle state. */

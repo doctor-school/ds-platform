@@ -80,8 +80,12 @@ const TAG = "[registry-research]";
 // The artifact: a `registry-research:` marker line, or a `## Registry research`
 // section heading followed by its body. Either form is accepted.
 const MARKER_RE = /^[ \t>*-]*registry-research\s*:\s*(.*)$/im;
+// Anchored, NON-multiline: with the `m` flag the `$` in the lookahead matched
+// at end-of-LINE, so a heading followed by a blank line ended the lazy capture
+// immediately and the section read as blank (#1833). `(?:^|\n)` anchors the
+// heading to a line start without `m`, and `$` now means end-of-body only.
 const SECTION_RE =
-  /^#{1,6}\s*registry[ -]research\b[^\n]*\n([\s\S]*?)(?=\n#{1,6}\s|\n*$)/im;
+  /(?:^|\n)#{1,6}[ \t]*registry[ -]research\b[^\n]*\n([\s\S]*?)(?=\n#{1,6}[ \t]|$)/i;
 
 // A non-empty value must name a registry (adopt path) OR give a bespoke
 // rationale. We accept the two sanctioned shapes plus a loose "names a known

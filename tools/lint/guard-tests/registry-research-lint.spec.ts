@@ -143,6 +143,53 @@ describe("registry-research-lint", () => {
     expect(stderr).toContain("no registry-research artifact");
   });
 
+  it("regression (#1833): the `## Registry research` section form (blank line after the heading, a following heading) → exit 0", () => {
+    // Pre-fix SECTION_RE carried the `m` flag, so the `\n*$` lookahead matched
+    // at the blank line right after the heading: the lazy capture closed empty,
+    // the section read as blank and the guard failed closed on a valid body.
+    const { code } = runGuard(GUARD, caseDir("registry-research", "green"), {
+      env: {
+        ...prEnv("100", "green"),
+        PR_BODY: [
+          "## Summary",
+          "",
+          "Guard fix.",
+          "",
+          "## Registry research",
+          "",
+          "adopted media-dropzone from shadcn (official registry).",
+          "",
+          "## Next",
+          "",
+          "Nothing.",
+          "",
+        ].join("\n"),
+      },
+    });
+    expect(code).toBe(0);
+  });
+
+  it("regression (#1833): the section form as the LAST block of the body (no following heading) → exit 0", () => {
+    // Protects the `$` alternative of the lookahead: with no trailing heading
+    // the capture must run to end-of-body instead of failing to match.
+    const { code } = runGuard(GUARD, caseDir("registry-research", "green"), {
+      env: {
+        ...prEnv("100", "green"),
+        PR_BODY: [
+          "## Summary",
+          "",
+          "Guard fix.",
+          "",
+          "## Registry research",
+          "",
+          "adopted media-dropzone from shadcn (official registry).",
+          "",
+        ].join("\n"),
+      },
+    });
+    expect(code).toBe(0);
+  });
+
   it("skip: not a pull_request event → exit 0", () => {
     const { code, stdout } = runGuard(
       GUARD,

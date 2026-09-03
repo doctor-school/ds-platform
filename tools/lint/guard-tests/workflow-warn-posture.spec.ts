@@ -132,7 +132,7 @@ describe("pr-body-guards.yml — same posture, mixed batch (#1253)", () => {
 
   it("EARS-1253.11: every WARN guard step carries `continue-on-error: true`", () => {
     const all = warnSteps(block);
-    expect(all.length).toBe(6); // registry-research, spec-status-fresh, prior-decisions, spec-deletion, catalog-deletion, epic-autoclose
+    expect(all.length).toBe(7); // registry-research, spec-status-fresh, prior-decisions, spec-deletion, catalog-deletion, epic-autoclose, cross-front-reuse
     const missing = all
       .filter((s) => !/\n\s+continue-on-error: true\b/.test(s))
       .map((s) => /- name: (.*)/.exec(s)?.[1]);

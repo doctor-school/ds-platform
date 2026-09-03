@@ -145,10 +145,22 @@ async function checkLegacy(page: Page): Promise<void> {
   await expect(page.getByTestId("legacy-toggle")).toBeChecked();
 }
 
-/** Fill the shared half of the create form (identical on both variants). */
-async function fillShared(page: Page, title: string): Promise<void> {
+/**
+ * Fill the shared half of the create form (identical on both variants).
+ *
+ * `school` is a PARAMETER because «Школа / серия» is the one shared field whose
+ * rule differs by variant: required on a platform broadcast, optional on an
+ * архивный эфир that predates the series taxonomy. Passing `""` authors the эфир
+ * the way an operator legitimately can, which is what EARS-24.5 then has to be
+ * able to save again.
+ */
+async function fillShared(
+  page: Page,
+  title: string,
+  school = "Кардиология",
+): Promise<void> {
   await page.locator("#title").fill(title);
-  await page.locator("#school").fill("Кардиология");
+  await page.locator("#school").fill(school);
   await page.locator("#startsAtMsk").fill("2024-03-14T18:00");
   await page.locator("#durationMin").fill("75");
   // The authoring form starts with NO speaker rows — the operator adds them.
@@ -166,11 +178,12 @@ async function fillShared(page: Page, title: string): Promise<void> {
 async function createLegacyBroadcast(
   page: Page,
   title: string,
+  school?: string,
 ): Promise<string> {
   await page.goto("/events/create");
   await expect(page.getByTestId("event-form")).toBeVisible();
   await checkLegacy(page);
-  await fillShared(page, title);
+  await fillShared(page, title, school);
   await page.getByTestId("legacy-recording-provider").selectOption("rutube");
   await page.getByTestId("legacy-recording-embed-ref").fill(RUTUBE_EDITED);
   await page.getByTestId("submit-event").click();
@@ -323,6 +336,24 @@ test.describe("014 EARS-24 — «Это архивный эфир» on the admin
     await shot(page, "created-legacy-recordings-desktop-light");
 
     expect(eventId).toMatch(/^[0-9a-f-]{36}$/);
+
+    // ── And it saves with NO «Школа / серия» either. An архивный эфир that
+    //    predates the series taxonomy is created with the field blank (the legacy
+    //    body defaults it to ""), and the edit form used to send `school: ""` on
+    //    every save — which `UpdateEventRequest.school` (`.min(1).optional()`)
+    //    refuses, so that эфир could be created once and never edited again
+    //    (#1849 review BLOCKER). Absent is not blank: the key is omitted.
+    const blankSchoolTitle = `Архивный эфир без школы ${Date.now()}`;
+    await createLegacyBroadcast(page, blankSchoolTitle, "");
+    await expect(page.getByTestId("legacy-badge")).toBeVisible({
+      timeout: 20_000,
+    });
+    await expect(page.locator("#school")).toHaveValue("");
+    await page.locator("#description").fill("Архив без школы, но сохраняется.");
+    await page.getByTestId("submit-event").click();
+    await expect(page.getByTestId("edit-ok")).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByTestId("edit-error")).toHaveCount(0);
+    await expect(page.locator("#school")).toHaveValue("");
   });
 
   test("014 EARS-24.6: publish the recording → «Архивировать» → «Архивировано»", async ({

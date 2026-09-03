@@ -75,8 +75,17 @@ const DAY = 24 * 60 * MINUTE;
  * `recordings.projection` prefers for playback, which is what the archive эфир
  * fixture exists to make playable.
  */
-const RECORDING_KIND: (typeof eventRecordings.kind.enumValues)[number] =
-  "edited";
+type RecordingKind = (typeof eventRecordings.kind.enumValues)[number];
+
+const EDITED_RECORDING_KIND: RecordingKind = "edited";
+
+/**
+ * 014 EARS-8 (#1345): the raw capture — the SECOND cut the both-cuts fixture
+ * publishes. Same enum-derived typing as the montage above, for the same reason:
+ * this script is outside the app's `tsc` program, so a bare string would only
+ * fail at runtime against the `recording_kind` enum.
+ */
+const RAW_RECORDING_KIND: RecordingKind = "raw";
 
 interface SeedSpec {
   readonly slug: string;
@@ -112,6 +121,18 @@ interface SeedSpec {
    * seeding one would be a fixture that lies about the machine.
    */
   readonly recording?: {
+    readonly provider: "rutube" | "youtube";
+    readonly embedRef: string;
+    readonly durationSec: number;
+  };
+  /**
+   * 014 EARS-8 (#1345): the SECOND published cut — the raw capture — alongside
+   * `recording`'s montage. Only the both-cuts fixture carries one: the
+   * «Смотреть оригинал трансляции» spoiler exists exactly when an эфир
+   * published both kinds, so a fixture with a single cut cannot prove either
+   * half of that rule.
+   */
+  readonly rawRecording?: {
     readonly provider: "rutube" | "youtube";
     readonly embedRef: string;
     readonly durationSec: number;
@@ -268,6 +289,35 @@ function specs(now: number): SeedSpec[] {
       partnerRef: "Партнёр Фарма",
       speakers: [{ name: "Проф. Н. Волкова", regalia: "д.м.н., эндокринолог" }],
     },
+    // ── 014 both-cuts fixture (#1345) ────────────────────────────────────────
+    // The ONE эфир that published BOTH cuts: the montage `recordings.projection`
+    // resolves as primary (EARS-3) and the raw capture it resolves as secondary.
+    // It exists so the EARS-8 spoiler can be driven end-to-end — its presence
+    // here and its ABSENCE on every single-cut fixture are the two halves of the
+    // same rule, and a fixture that carried only one kind could prove neither.
+    {
+      slug: "seed-014-ended-both-cuts",
+      state: "ended",
+      title: "Итоги: два варианта записи (монтаж и оригинал)",
+      school: "Школа кардиологии",
+      startsAt: new Date(now - 3 * DAY),
+      durationMin: 124,
+      description:
+        "Завершённый эфир с двумя опубликованными записями — смонтированной версией и оригиналом трансляции без монтажа.",
+      specialties: ["Кардиология"],
+      partnerRef: "Партнёр Фарма",
+      speakers: [{ name: "Проф. И. Лебедев", regalia: "д.м.н., кардиолог" }],
+      recording: {
+        provider: "rutube",
+        embedRef: "a1b2c3d4e5f60718293a4b5c6d7e8f90",
+        durationSec: 96 * 60,
+      },
+      rawRecording: {
+        provider: "rutube",
+        embedRef: "0f9e8d7c6b5a493827160f5e4d3c2b1a",
+        durationSec: 124 * 60,
+      },
+    },
     // ── 014 legacy-archive fixture (#1741) ────────────────────────────────────
     // The ONE `legacy` эфир: an archive-only broadcast the platform never
     // hosted, sitting in the legacy machine's `in_archive` state with a
@@ -418,11 +468,25 @@ export async function seedEvents(): Promise<void> {
           );
       }
 
-      // 014 EARS-24/26 (#1741): upsert the fixture's PUBLISHED recording on the
-      // LD-1 at-most-one-active-per-kind slot. Keyed on (event, kind) among
-      // non-retired rows, exactly like the product path, so a re-run refreshes
-      // the same row instead of colliding with its own previous one.
-      if (spec.recording) {
+      // 014 EARS-24/26 (#1741) + EARS-8 (#1345): upsert the fixture's PUBLISHED
+      // cuts on the LD-1 at-most-one-active-per-kind slots. Keyed on
+      // (event, kind) among non-retired rows, exactly like the product path, so
+      // a re-run refreshes the same row instead of colliding with its own
+      // previous one. Both kinds run through ONE body — a second copy for `raw`
+      // would be a second place for the write-once `first_published_at` rule to
+      // drift out of step with the product path.
+      const cuts: {
+        kind: RecordingKind;
+        cut: NonNullable<SeedSpec["recording"]>;
+      }[] = [
+        ...(spec.recording
+          ? [{ kind: EDITED_RECORDING_KIND, cut: spec.recording }]
+          : []),
+        ...(spec.rawRecording
+          ? [{ kind: RAW_RECORDING_KIND, cut: spec.rawRecording }]
+          : []),
+      ];
+      for (const { kind, cut } of cuts) {
         const [existing] = await db
           .select({
             id: eventRecordings.id,
@@ -432,14 +496,14 @@ export async function seedEvents(): Promise<void> {
           .where(
             and(
               eq(eventRecordings.eventId, row.id),
-              eq(eventRecordings.kind, RECORDING_KIND),
+              eq(eventRecordings.kind, kind),
               isNull(eventRecordings.deletedAt),
             ),
           );
         const baseValues = {
-          provider: spec.recording.provider,
-          embedRef: spec.recording.embedRef,
-          durationSec: spec.recording.durationSec,
+          provider: cut.provider,
+          embedRef: cut.embedRef,
+          durationSec: cut.durationSec,
           status: "published" as const,
           updatedAt: new Date(),
         };
@@ -466,7 +530,7 @@ export async function seedEvents(): Promise<void> {
             ...baseValues,
             firstPublishedAt: new Date(),
             eventId: row.id,
-            kind: RECORDING_KIND,
+            kind,
           });
         }
       }
@@ -487,6 +551,10 @@ export async function seedEvents(): Promise<void> {
       E2E_ROOM_SLUG_UNAVAILABLE: "seed-006-room-unavailable",
       // The happy-path live room for the EARS-3 chat + EARS-4 heartbeat E2E.
       E2E_ROOM_SLUG_LIVE: "seed-005-live",
+    },
+    // 014 EARS-8 (#1345): the archive E2E env vars → the slug each carries.
+    archive: {
+      E2E_BOTH_CUTS_WEBINAR_SLUG: "seed-014-ended-both-cuts",
     },
   };
   process.stdout.write(`${JSON.stringify(contract, null, 2)}\n`);

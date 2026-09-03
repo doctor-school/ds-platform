@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { Badge } from "@ds/design-system/badge";
 import { Link } from "@ds/design-system/link";
+import { RecordingSpoiler } from "@ds/design-system/recording-spoiler";
 import { WebinarRecordingPlaque } from "@ds/design-system/webinar-recording-plaque";
 import {
   EventAboutSection,
@@ -312,6 +313,35 @@ export default async function WebinarEventPage({
                   unavailableBody={t("playerUnavailable.body")}
                   retryLabel={t("playerUnavailable.retry")}
                 />
+                {/* 014 EARS-8 (#1345) — the raw-original SPOILER. It exists
+                    only when the authenticated playback read carried a SECOND
+                    published cut: `secondary` is non-null exactly when both an
+                    edited and a raw recording are published, so a single-kind
+                    эфир renders no secondary affordance at all rather than an
+                    empty or disabled one. It lives on the signed-in branch by
+                    construction — `playback` is the authenticated source read,
+                    and a guest never reaches this fragment (EARS-5's
+                    no-source-bytes invariant). The block mounts its child only
+                    while open, so the second provider frame is not requested
+                    until the doctor asks for it. */}
+                {playback?.secondary ? (
+                  <RecordingSpoiler
+                    data-testid="recording-spoiler"
+                    className="mt-4"
+                    summaryLabel={t("recordingSpoiler.summary")}
+                    hint={t("recordingSpoiler.hint")}
+                  >
+                    <RecordingPlayer
+                      provider={playback.secondary.provider}
+                      embedRef={playback.secondary.embedRef}
+                      title={event.title}
+                      kindLabel={t(`recordingKind.${playback.secondary.kind}`)}
+                      unavailableTitle={t("playerUnavailable.title")}
+                      unavailableBody={t("playerUnavailable.body")}
+                      retryLabel={t("playerUnavailable.retry")}
+                    />
+                  </RecordingSpoiler>
+                ) : null}
               </>
             )}
           </div>

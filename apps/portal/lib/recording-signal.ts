@@ -21,11 +21,15 @@ import type { CanvasStatus } from "./event-lifecycle";
  * 014 EARS-7 (#1344) added the second projection below — the «запись готовится»
  * PLAQUE, which is where `expectedBy` finally gets formatted.
  *
- * Deliberately NOT here (each is its own tracked deliverable, and a stand-in
- * rendered early would be a banned stub):
- *   • the player and its guest login gate — #1343 (EARS-5);
- *   • the raw-original spoiler under a montage — #1345 (EARS-8), which is why
- *     `secondaryKind` produces no affordance.
+ * Deliberately NOT here, because neither is derivable from the source-free
+ * projection this module reads:
+ *   • the player and its guest login gate — `resolvePlayerCard` below plus
+ *     #1343's authenticated source read (EARS-5);
+ *   • the raw-original spoiler under the montage — 014 EARS-8 (#1345). It is
+ *     rendered by `app/webinars/[slug]/page.tsx` and gated on the authenticated
+ *     playback read's `secondary` cut, not on `secondaryKind`: the spoiler
+ *     needs a playable SOURCE, and this projection is source-free by design.
+ *     `secondaryKind` therefore still produces no affordance here.
  */
 export interface RecordingSignal {
   /**

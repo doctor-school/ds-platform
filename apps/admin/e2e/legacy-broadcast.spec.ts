@@ -28,7 +28,8 @@ import { signInAsAdmin } from "./support/sign-in";
  * re-run never collides with itself.
  *
  * `E2E_SHOT_DIR` opts into the render evidence the PR body cites — the create
- * form with the checkbox CHECKED at two widths × both palettes. Unset, the spec
+ * form with the checkbox CHECKED at two widths × both palettes, full-page so the
+ * «Запись» section below the fold is in frame. Unset, the spec
  * still asserts: the images are evidence for a human, not the gate.
  *
  * Dev-stand-gated + MANUAL like every other `apps/admin/e2e` flow spec — the
@@ -58,12 +59,42 @@ const HIDDEN_BADGE = "Скрыто";
 const ARCHIVED_BADGE = "Архивировано";
 const LEGACY_BADGE = "Архивный эфир";
 
-async function shot(page: Page, name: string): Promise<void> {
+/**
+ * Wait until the browser has PAINTED whatever was just changed (a palette swap,
+ * a viewport resize). `page.screenshot` does not wait for a style recalculation
+ * of its own, so without this the mobile-light shot could land mid-repaint and
+ * show the previous palette's input fills (Mode-a review of PR #1849).
+ */
+async function settle(page: Page): Promise<void> {
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            resolve();
+          });
+        });
+      }),
+  );
+}
+
+/**
+ * `fullPage` evidence captures the WHOLE create form, not the viewport slice —
+ * the «Запись» section sits below the fold at both widths, and the point of the
+ * evidence is that the kind/provider/embedRef trio is there and the poster and
+ * duration inputs are NOT (Mode-a review of PR #1849).
+ */
+async function shot(
+  page: Page,
+  name: string,
+  { fullPage = false }: { fullPage?: boolean } = {},
+): Promise<void> {
   if (!SHOT_DIR) return;
   await mkdir(SHOT_DIR, { recursive: true });
+  await settle(page);
   await page.screenshot({
     path: path.join(SHOT_DIR, `${name}.png`),
-    fullPage: false,
+    fullPage,
   });
 }
 
@@ -80,6 +111,19 @@ async function setPalette(
   await page.evaluate((mode) => {
     document.documentElement.classList.toggle("dark", mode === "dark");
   }, palette);
+  // `body` is token-painted (`background-color: var(--color-background)`), so its
+  // COMPUTED colour is the honest signal that the new palette has been applied —
+  // waiting on the class alone would return before the recalculation.
+  await page.waitForFunction((mode) => {
+    const channels = getComputedStyle(document.body).backgroundColor.match(
+      /[\d.]+/g,
+    );
+    if (!channels || channels.length < 3) return false;
+    const [r, g, b] = channels.map(Number);
+    const luminance = (r * 299 + g * 587 + b * 114) / 1000;
+    return mode === "dark" ? luminance < 128 : luminance >= 128;
+  }, palette);
+  await settle(page);
 }
 
 /**
@@ -194,13 +238,13 @@ test.describe("014 EARS-24 — «Это архивный эфир» on the admin
     );
 
     // ── Render evidence: the CHECKED create form, two widths × both palettes.
-    await shot(page, "create-legacy-desktop-light");
+    await shot(page, "create-legacy-desktop-light", { fullPage: true });
     await setPalette(page, "dark");
-    await shot(page, "create-legacy-desktop-dark");
+    await shot(page, "create-legacy-desktop-dark", { fullPage: true });
     await page.setViewportSize(NARROW);
-    await shot(page, "create-legacy-mobile-dark");
+    await shot(page, "create-legacy-mobile-dark", { fullPage: true });
     await setPalette(page, "light");
-    await shot(page, "create-legacy-mobile-light");
+    await shot(page, "create-legacy-mobile-light", { fullPage: true });
     await page.setViewportSize(WIDE);
 
     // ── And back: unchecking restores the platform variant with the typed

@@ -66,7 +66,9 @@ function parseSpecialties(text: string): string[] {
  * box; it is validated by folding the parsed tokens back through the SSOT
  * `specialties` array validator (per-token length + list-count cap) so the rule is
  * the schema's, not a re-typed constant. `partnerRef` is an optional free-text box
- * ("" when empty); `programPdf` is validated separately (a File, not a JSON field).
+ * ("" when empty) that only the PLATFORM variant of the form carries, so its rule
+ * is applied in the refinement rather than at the object level; `programPdf` is
+ * validated separately (a File, not a JSON field).
  *
  * 014 EARS-24 (#1741) adds `legacy` — «Это архивный эфир» — and the recording
  * block it makes mandatory. There is deliberately NO second schema: the owner's
@@ -98,7 +100,12 @@ export function eventFormSchema({
       startsAtMsk: create.startsAtMsk,
       durationMin: create.durationMin,
       description: create.description,
-      partnerRef: create.partnerRef,
+      // Validated in the refinement below, not here: the partner reference is a
+      // PLATFORM-only field. The legacy variant of the form does not render it
+      // (`LegacyBroadcastCreateBody` has no such key), so a value left over from
+      // before the box was checked must not fail a submit on a field the operator
+      // can no longer see or clear.
+      partnerRef: z.string(),
       speakers: create.speakers,
       specialtiesText: z.string().superRefine((text, ctx) => {
         const result = create.specialties.safeParse(parseSpecialties(text));
@@ -139,6 +146,16 @@ export function eventFormSchema({
         for (const issue of school.error.issues) {
           const { message: _resolved, ...rest } = issue;
           ctx.addIssue({ ...rest, path: ["school"] } as never);
+        }
+      }
+
+      if (!values.legacy) {
+        const partnerRef = create.partnerRef.safeParse(values.partnerRef);
+        if (!partnerRef.success) {
+          for (const issue of partnerRef.error.issues) {
+            const { message: _resolved, ...rest } = issue;
+            ctx.addIssue({ ...rest, path: ["partnerRef"] } as never);
+          }
         }
       }
 

@@ -7,6 +7,8 @@ import {
   branchWorktreeMessage,
   classifyCheckRuns,
   classifyModeAVerdict,
+  classifyRangeDiff,
+  hasMergeCommits,
   cwdGuardMessage,
   findBranchWorktree,
   isWorktreeCwd,
@@ -642,5 +644,97 @@ describe("merge-gate branchWorktreeMessage() (#836)", () => {
     const msg = branchWorktreeMessage("feat/x", "/somewhere/else");
     expect(msg).toContain("tools/dev/worktree-teardown.mjs");
     expect(msg).toContain("--delete-branch");
+  });
+});
+
+const NEWLINE = "\n";
+
+describe("merge-gate rebase-equivalence (#1865)", () => {
+  // A `ds-lander` rebase moves the head SHA without changing one patch byte —
+  // PR #1863 went d3146147 → 3771eba7 that way and its head-pinned APPROVE was
+  // re-reviewed for nothing. `classifyRangeDiff` is the pure seam the gate uses
+  // to tell that apart from a rework push.
+  const PURE_ROWS = [
+    "1:  d3146147 = 1:  3771eba7 tooling(1862): orchestration throughput",
+    "2:  aa11bb22 = 2:  cc33dd44 tooling(1862): impl-wave workflow",
+  ];
+
+  it("EARS-1865.1: all `=` rows — a pure rebase, the pinned APPROVE stays valid", () => {
+    expect(classifyRangeDiff(PURE_ROWS.join(NEWLINE) + NEWLINE)).toEqual({
+      pure: true,
+      equal: 2,
+      total: 2,
+    });
+  });
+
+  it("EARS-1865.2: one `!` row — the patch changed, so the verdict stays STALE", () => {
+    const stdout = [
+      PURE_ROWS[0],
+      "2:  aa11bb22 ! 2:  cc33dd44 tooling(1862): impl-wave workflow",
+      "    @@ tools/gh/merge-gate.mjs",
+    ].join(NEWLINE);
+    const verdict = classifyRangeDiff(stdout);
+    expect(verdict.pure).toBe(false);
+    expect(verdict).toMatchObject({ equal: 1, total: 2 });
+  });
+
+  it("EARS-1865.3: a non-rebase push — empty output or `<`/`>` rows — is NOT pure (fails closed)", () => {
+    const cases: (string | null | undefined)[] = [
+      "",
+      "   ",
+      null,
+      undefined,
+      "1:  aa11bb22 < -:  -------- tooling(1862): dropped commit",
+      "-:  -------- > 1:  cc33dd44 tooling(1862): reworked after review",
+      [
+        PURE_ROWS[0],
+        "-:  -------- > 2:  cc33dd44 tooling(1862): rework commit after the APPROVE",
+      ].join(NEWLINE),
+    ];
+    for (const stdout of cases) {
+      expect(classifyRangeDiff(stdout).pure).toBe(false);
+    }
+  });
+});
+
+describe("merge-gate classifyModeAVerdict() stays SHA-pinned (#1865)", () => {
+  it("EARS-1865.4: the classifier itself is unchanged — a rebased head is still `stale-approve`", () => {
+    // The rebase-equivalence escape lives at the gate call site, not here.
+    const body =
+      "## Mode (a) Review — PR #1865" +
+      NEWLINE +
+      NEWLINE +
+      "VERDICT: APPROVE" +
+      NEWLINE;
+    const reviews = [
+      {
+        body,
+        commit_id: "d3146147",
+        submitted_at: "2026-09-04T10:00:00Z",
+      },
+    ];
+    expect(classifyModeAVerdict(reviews, "3771eba7").state).toBe(
+      "stale-approve",
+    );
+  });
+});
+
+describe("merge-gate hasMergeCommits() (#1865)", () => {
+  // `git range-diff` compares patches and ignores merge commits, so a branch
+  // updated via GitHub's «Update branch» button can print an all-`=` range-diff
+  // while carrying content the reviewer never read. The gate runs
+  // `git rev-list --merges origin/main..<head>` first and refuses on any hit.
+  it("EARS-1865.5: any `git rev-list --merges` output disqualifies the rebase escape (fails closed)", () => {
+    expect(hasMergeCommits("")).toBe(false);
+    expect(hasMergeCommits("   " + NEWLINE + "  ")).toBe(false);
+    expect(hasMergeCommits("3771eba7f0c1a2b3c4d5e6f708192a3b4c5d6e7f")).toBe(
+      true,
+    );
+    expect(
+      hasMergeCommits(["d3146147", "3771eba7"].join(NEWLINE) + NEWLINE),
+    ).toBe(true);
+    // Unusable input (a git failure the caller could not read) is NOT clean.
+    expect(hasMergeCommits(null)).toBe(true);
+    expect(hasMergeCommits(undefined)).toBe(true);
   });
 });

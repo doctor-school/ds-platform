@@ -89,13 +89,13 @@ VERDICT: <APPROVE | REQUEST_CHANGES>
 
 The `VERDICT:` line is mandatory. `APPROVE` is allowed only when there are zero `[BLOCKER]` findings.
 
-> **Head pinning (#992):** the `gh pr review` you post must run against the **CURRENT** PR head — GitHub records the head SHA as the review's native `commit_id`, and `pnpm merge:gate <N>` pins the verdict to it (an APPROVE whose `commit_id` is not the current head reads as STALE and blocks the merge). After any rework push, a fresh review — with a fresh `VERDICT:` line — is required; the old verdict does not carry over.
+> **Head pinning (#992, #1865):** the `gh pr review` you post must run against the **CURRENT** PR head — GitHub records the head SHA as the review's native `commit_id`, and `pnpm merge:gate <N>` pins the verdict to it. After any **rework** push a fresh review — with a fresh `VERDICT:` line — is required; the old verdict does not carry over. A **pure rebase** is not a rework: when `git range-diff origin/main <approved-sha> <head-sha>` shows every commit `=` (patch-identical), the gate accepts the pinned APPROVE for the moved head and prints an audit line, so a `ds-lander` rebase does not cost a re-review. Anything the range-diff cannot prove identical — a changed, dropped, or added commit, or no comparable rows — reads as STALE and blocks the merge.
 
 **Return contract — final message to the lead (context economy, #534).** After posting the PR comment, your reply to the lead is ONLY: the `VERDICT:` line, the `[BLOCKER]` findings one line each, and the PR-comment URL — ≤20 lines total. Do not restate the full report in the reply: it already lives in the PR comment, and everything in the reply sits in the lead's context until session end.
 
 ### Re-review (rework verification)
 
-A rework push invalidates the previous verdict (#992), but it does **not** require the full two-pass review again. When the lead dispatches a re-review, the reviewer verifies the delta, not the PR.
+A rework push invalidates the previous verdict (#992), but it does **not** require the full two-pass review again. When the lead dispatches a re-review, the reviewer verifies the delta, not the PR. A push that only **rebased** the branch is not a rework and needs no re-review at all — the gate's range-diff equivalence check (#1865) carries the existing verdict across; dispatching one for a patch-identical rebase is waste.
 
 **Brief contract — the lead MUST hand all four:** the PR number; the prior review's findings **verbatim** (each `[BLOCKER]`/`[NIT]`/`[SUGGESTION]` line as posted); the commit range `<old-head>..<new-head>`; and the URL of the prior `## Mode (a) Review` comment. A dispatch missing the range or the findings list is not a re-review — return `BLOCKED: re-review brief incomplete` and let the lead re-dispatch.
 

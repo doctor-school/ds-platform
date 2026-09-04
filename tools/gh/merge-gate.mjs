@@ -30,7 +30,12 @@
  *      APPROVE: the latest PR review whose body opens `## Mode (a) Review` and
  *      carries a `VERDICT:` line must be APPROVE, and its native `commit_id`
  *      (the head the reviewer submitted against) must equal the CURRENT head
- *      SHA — a rework invalidates the verdict. Sanctioned no-Mode-a classes
+ *      SHA — a rework invalidates the verdict. A head that moved by a PURE
+ *      REBASE does not (#1865): when `git range-diff origin/main <approved>
+ *      <head>` proves every commit patch-identical (`=`), the pinned APPROVE
+ *      is accepted for the new head with an audit line. Anything else — a
+ *      `!`/`<`/`>` row, no comparable rows, a missing object, a git failure —
+ *      stays RED. Sanctioned no-Mode-a classes
  *      (AGENTS.md §3.8: pure docs / test-only / generated-regen; the Version
  *      Packages bot PR) skip the check ONLY via an explicit, loudly-printed
  *      `--mode-a-exempt "<reason>"` — no silent auto-detection.
@@ -321,6 +326,10 @@ const MODE_A_VERDICT_RE = /^VERDICT:\s*(APPROVE|REQUEST_CHANGES)\b/m;
  *   - `stale-approve`   — latest is APPROVE but `commit_id !== headSha`.
  *   - `fresh-approve`   — APPROVE with `commit_id === headSha`.
  *
+ * This classifier stays purely SHA-based: the rebase-equivalence escape (#1865)
+ * wraps `stale-approve` at the call site (`checkRebaseEquivalence`), it does not
+ * change any state produced here.
+ *
  * @param {{body?: string, commit_id?: string, submitted_at?: string|null}[]|null|undefined} reviews
  * @param {string} headSha
  * @returns {{state: "no-verdict"|"request-changes"|"stale-approve"|"fresh-approve", verdict: string|null, commitId: string|null, submittedAt: string|null}}
@@ -357,6 +366,37 @@ export function classifyModeAVerdict(reviews, headSha) {
     return { state: "request-changes", ...latest };
   if (latest.commitId !== headSha) return { state: "stale-approve", ...latest };
   return { state: "fresh-approve", ...latest };
+}
+
+/** One `git range-diff` row: `<n>:  <sha> <=|!|<|>> <n>:  <sha> <subject>`.
+ * The left/right index may be `-` (unmatched commit) and the sha `-------`. */
+const RANGE_DIFF_ROW_RE = /^\s*(?:\d+|-):\s+\S+\s+([=!<>])\s+(?:\d+|-):\s+\S+/;
+
+/**
+ * Classify a `git range-diff <base> <approvedSha> <headSha>` stdout as a pure
+ * rebase or not (#1865).
+ *
+ * A rebase that changed no patch content prints one row per commit, every row
+ * marked `=` (identical patch, different parent). Any other marker means the
+ * two ranges are NOT patch-identical: `!` = same commit, changed patch; `<` =
+ * a commit present only in the approved range (dropped); `>` = a commit present
+ * only in the new head (added — i.e. a rework push, not a bare rebase).
+ *
+ * Fails closed: zero parsed rows (empty output, an unrecognised format, a git
+ * failure whose stdout we still passed in) is NOT pure — the caller must fall
+ * through to the STALE refusal rather than accept an unexplained silence.
+ *
+ * @param {string|null|undefined} stdout  raw `git range-diff` stdout
+ * @returns {{pure: boolean, equal: number, total: number}}
+ */
+export function classifyRangeDiff(stdout) {
+  const rows = String(stdout ?? "")
+    .split(/\r?\n/)
+    .map((line) => RANGE_DIFF_ROW_RE.exec(line))
+    .filter((m) => m !== null);
+  const total = rows.length;
+  const equal = rows.filter((m) => m[1] === "=").length;
+  return { pure: total > 0 && equal === total, equal, total };
 }
 
 /**
@@ -404,6 +444,68 @@ function gh(args) {
       `failed to spawn gh: ${res.error.message} (is the gh CLI installed + on PATH?)`,
     );
   return res;
+}
+
+/** Spawn git in the current cwd (the cwd guard already pins that to the main
+ * tree); returns {status, stdout, stderr, error} — callers decide on failure. */
+function git(args) {
+  return spawnSync("git", args, {
+    encoding: "utf8",
+    maxBuffer: GH_MAX_BUFFER,
+    cwd: process.cwd(),
+  });
+}
+
+/**
+ * Rebase-equivalence probe for a `stale-approve` verdict (#1865).
+ *
+ * A `ds-lander` rebase moves the head SHA without changing a single patch, so
+ * the head-pinned APPROVE goes STALE for a diff that is byte-identical to the
+ * one the reviewer read. Re-reviewing that is pure waste. This probe accepts
+ * the old verdict ONLY when `git range-diff <base> <approved> <head>` proves
+ * every commit is patch-identical (`=`); anything else — a `!`/`<`/`>` row, an
+ * unparsable/empty output, a missing object, or a git failure — falls through
+ * to the STALE refusal.
+ *
+ * @param {string} approvedSha  head the APPROVE was pinned to
+ * @param {string} headSha      current head
+ * @returns {{accepted: boolean, reason: string, equal?: number, total?: number}}
+ */
+function checkRebaseEquivalence(approvedSha, headSha) {
+  if (!approvedSha || !headSha)
+    return { accepted: false, reason: "the approved head SHA is unknown" };
+  for (const sha of [approvedSha, headSha]) {
+    let present = git(["cat-file", "-e", `${sha}^{commit}`]);
+    if (present.error || present.status !== 0) {
+      // The pre-rebase head is normally still in the object store; fetch once
+      // in case it was pruned or the rebase happened in another clone.
+      git(["fetch", "--quiet", "origin", sha]);
+      present = git(["cat-file", "-e", `${sha}^{commit}`]);
+    }
+    if (present.error || present.status !== 0)
+      return {
+        accepted: false,
+        reason: `commit ${sha.slice(0, 12)} is not present locally (git fetch origin ${sha.slice(0, 12)} did not recover it)`,
+      };
+  }
+  const rd = git(["range-diff", "origin/main", approvedSha, headSha]);
+  if (rd.error || rd.status !== 0)
+    return {
+      accepted: false,
+      reason: `git range-diff origin/main ${approvedSha.slice(0, 12)} ${headSha.slice(0, 12)} failed: ${(rd.stderr ?? rd.error?.message ?? "").trim() || "non-zero exit"}`,
+    };
+  const { pure, equal, total } = classifyRangeDiff(rd.stdout);
+  if (!pure)
+    return {
+      accepted: false,
+      reason:
+        total === 0
+          ? "git range-diff produced no comparable commit rows (not a rebase of the reviewed range)"
+          : `git range-diff shows ${total - equal}/${total} commit(s) differing (a rework push, not a pure rebase)`,
+      equal,
+      total,
+    };
+  return { accepted: true, reason: "pure rebase", equal, total };
 }
 
 /** Resolve the PR's head SHA + branch name; refuses a non-open-PR arg (#963). */
@@ -544,13 +646,25 @@ async function main() {
       );
     }
     if (verdict.state === "stale-approve") {
-      die(
-        `RED — PR #${prNumber} head ${sha.slice(0, 12)}: latest Mode (a) APPROVE is STALE — reviewed at ` +
-          `${(verdict.commitId ?? "<unknown>").slice(0, 12)}, but the head has since moved (a rework invalidates the verdict). ${redispatch}`,
-        1,
-      );
+      // #1865: a pure rebase moves the head without changing a single patch —
+      // accept the pinned APPROVE when `git range-diff` proves that.
+      const equiv = checkRebaseEquivalence(verdict.commitId ?? "", sha);
+      if (equiv.accepted) {
+        process.stdout.write(
+          `${TAG} APPROVE at ${(verdict.commitId ?? "").slice(0, 12)} accepted for ${sha.slice(0, 12)}: ` +
+            `pure rebase, ${equiv.equal}/${equiv.total} commits = (git range-diff origin/main; #1865).\n`,
+        );
+      } else {
+        die(
+          `RED — PR #${prNumber} head ${sha.slice(0, 12)}: latest Mode (a) APPROVE is STALE — reviewed at ` +
+            `${(verdict.commitId ?? "<unknown>").slice(0, 12)}, but the head has since moved (a rework invalidates the verdict). ` +
+            `Rebase-equivalence (#1865) did not apply: ${equiv.reason}. ${redispatch}`,
+          1,
+        );
+      }
     }
-    process.stdout.write(
+    if (verdict.state === "fresh-approve")
+      process.stdout.write(
       `${TAG} Mode-a verdict OK — PR #${prNumber}: APPROVE pinned at head ${sha.slice(0, 12)} (submitted ${verdict.submittedAt ?? "<unknown>"}).\n`,
     );
   }

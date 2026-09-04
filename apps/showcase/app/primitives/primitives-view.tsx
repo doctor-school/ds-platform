@@ -62,6 +62,7 @@ import { DayBand } from "@ds/design-system/day-band";
 import { WebinarCard } from "@ds/design-system/webinar-card";
 import { WebinarPageContent } from "@ds/design-system/webinar-page-content";
 import { WebinarStatusCard } from "@ds/design-system/webinar-status-card";
+import { RecordingSpoiler } from "@ds/design-system/recording-spoiler";
 import { WebinarRecordingPlaque } from "@ds/design-system/webinar-recording-plaque";
 import { WebinarRoomLayout } from "@ds/design-system/webinar-room";
 import { Container } from "@ds/design-system/container";
@@ -2279,6 +2280,52 @@ function WebinarRecordingPlaqueSection() {
   );
 }
 
+function RecordingSpoilerSection() {
+  return (
+    <PrimitiveSection
+      title="Recording-spoiler"
+      exportsLine="RecordingSpoiler — «Смотреть оригинал трансляции» disclosure (native details/summary · body mounted only while open)"
+    >
+      <p className="text-sm text-muted-foreground">
+        The secondary-cut disclosure that sits under the post-live player when
+        an эфир published BOTH cuts (source{" "}
+        <code className="font-mono text-xs">webinar-archive.dc.html</code>, 014
+        EARS-8). It is a native{" "}
+        <code className="font-mono text-xs">
+          &lt;details&gt;/&lt;summary&gt;
+        </code>{" "}
+        so keyboard operation and the expanded/collapsed state exposed to
+        assistive tech come from the platform. The body is mounted ONLY while
+        open: the child is a provider iframe, and a collapsed{" "}
+        <code className="font-mono text-xs">&lt;details&gt;</code> would keep it
+        in the DOM fetching a recording nobody asked to watch. With a single
+        published cut the host renders nothing here — there is no empty state.
+      </p>
+      <SubRow label="hint / no hint">
+        <ThemePair
+          render={() => (
+            <div className="flex w-full flex-col gap-4">
+              <RecordingSpoiler
+                summaryLabel="Смотреть оригинал трансляции"
+                hint="без монтажа, с паузами и вопросами между блоками"
+              >
+                <div className="flex aspect-video items-center justify-center bg-header text-sm text-neutral-300">
+                  Оригинал трансляции
+                </div>
+              </RecordingSpoiler>
+              <RecordingSpoiler summaryLabel="Смотреть оригинал трансляции">
+                <div className="flex aspect-video items-center justify-center bg-header text-sm text-neutral-300">
+                  Оригинал трансляции
+                </div>
+              </RecordingSpoiler>
+            </div>
+          )}
+        />
+      </SubRow>
+    </PrimitiveSection>
+  );
+}
+
 function WebinarRoomSection() {
   // A static demo of the Twitch-model composition shell (#1123): the player is now
   // REGION CONTENT (pinned inset-0 inside the dark letterbox the layout owns, not
@@ -2538,6 +2585,7 @@ export function PrimitivesView() {
       <WebinarPageContentSection />
       <WebinarStatusCardSection />
       <WebinarRecordingPlaqueSection />
+      <RecordingSpoilerSection />
       <WebinarRoomSection />
       <ContainerSection />
     </div>

@@ -143,6 +143,11 @@ export const SHOWCASE_REGISTRY: ShowcaseEntry[] = [
 
   // ── Events facet panel (019 EARS-7, #1522) — the ONE shared events-filter
   // sidebar, catalogued at all three D-1 fill states.
+  // ── Post-live secondary-cut disclosure (014 EARS-8, #1345) — «Смотреть
+  // оригинал трансляции», catalogued with and without its hint line.
+  { id: "recording-spoiler", section: "blocks" },
+  { id: "RecordingSpoiler", section: "blocks" },
+
   { id: "events-filter", section: "blocks" },
   { id: "EventsFilter", section: "blocks" },
   { id: "Combobox", section: "blocks" },

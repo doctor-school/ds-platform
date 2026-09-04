@@ -40,6 +40,7 @@
     "./container": "./src/primitives/container.tsx",
     "./fields": "./src/primitives/fields/index.ts",
     "./events-filter": "./src/blocks/events-filter.tsx",
+    "./recording-spoiler": "./src/blocks/recording-spoiler.tsx",
     "./blocks": "./src/blocks/index.ts"
   },
   "scripts": {

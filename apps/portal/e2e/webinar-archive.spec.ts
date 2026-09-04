@@ -27,8 +27,12 @@ import { test, expect } from "@playwright/test";
  * (`app/webinars/[slug]/recording-player.test.tsx`) because nothing mounted the
  * component yet.
  *
- * Out of scope by design — its own Issue, and a placeholder standing in for it
- * here would be the banned stub: the raw-original spoiler (#1345, EARS-8).
+ * 014 EARS-8 (#1345) added the fourth describe: the «Смотреть оригинал
+ * трансляции» spoiler a signed-in doctor gets under the player when the эфир
+ * published BOTH cuts — its keyboard operation, the second frame it mounts, its
+ * total absence for a guest, and its total absence on a single-cut эфир. The
+ * last two are the same rule seen from both sides, which is why neither is left
+ * to a unit test.
  *
  * Live-stand-gated tier, mirroring `event-page-registered.spec.ts`: it needs a
  * running portal whose `/v1/*` rewrite reaches a running api + Postgres seeded
@@ -63,6 +67,13 @@ const HIDDEN_SLUG = process.env.E2E_HIDDEN_WEBINAR_SLUG;
  * through the real 003 login — a seeded cookie would prove nothing about the
  * gate the api enforces.
  */
+/**
+ * An `ended` event that published BOTH cuts — a montage and the raw capture
+ * (014 EARS-8). Its own seed fixture (`seed-014-ended-both-cuts`): the spoiler
+ * exists exactly when two kinds are published, so it cannot be driven from a
+ * fixture that carries one.
+ */
+const BOTH_CUTS_SLUG = process.env.E2E_BOTH_CUTS_WEBINAR_SLUG;
 const DOCTOR_EMAIL = process.env.E2E_DOCTOR_EMAIL;
 const DOCTOR_PASSWORD = process.env.E2E_DOCTOR_PASSWORD;
 
@@ -70,6 +81,21 @@ test.skip(
   !process.env.E2E_PORTAL_URL || !ENDED_SLUG,
   "requires a live portal + an ended event slug with a published recording",
 );
+
+/**
+ * The real 003 login, mirroring `event-page-registered.spec.ts` L70-73. Shared
+ * by the EARS-5 and EARS-8 describes: both need a REAL session, because the only
+ * thing that makes a source exist is a response the api authorized.
+ */
+async function signIn(page: import("@playwright/test").Page) {
+  await page.goto(`${BASE}/login`, { waitUntil: "domcontentloaded" });
+  await page.getByRole("textbox", { name: /почта|email/i }).fill(DOCTOR_EMAIL!);
+  await page
+    .getByRole("textbox", { name: /пароль|password/i })
+    .fill(DOCTOR_PASSWORD!);
+  await page.getByRole("button", { name: /войти|продолжить/i }).click();
+  await page.waitForURL(/\/account|\/webinars/);
+}
 
 test.describe("014 EARS-4 public post-live event page (e2e)", () => {
   test.use({ storageState: { cookies: [], origins: [] } });
@@ -329,19 +355,6 @@ test.describe("014 EARS-7 the «запись готовится» plaque (e2e)",
 test.describe("014 EARS-5 the login gate and the mounted player (e2e)", () => {
   test.use({ storageState: { cookies: [], origins: [] } });
 
-  /** The real 003 login, mirroring `event-page-registered.spec.ts` L70-73. */
-  async function signIn(page: import("@playwright/test").Page) {
-    await page.goto(`${BASE}/login`, { waitUntil: "domcontentloaded" });
-    await page
-      .getByRole("textbox", { name: /почта|email/i })
-      .fill(DOCTOR_EMAIL!);
-    await page
-      .getByRole("textbox", { name: /пароль|password/i })
-      .fill(DOCTOR_PASSWORD!);
-    await page.getByRole("button", { name: /войти|продолжить/i }).click();
-    await page.waitForURL(/\/account|\/webinars/);
-  }
-
   test("014 EARS-5: a guest gets the login gate in the player position — an account is named as the only thing in the way, and nothing about money", async ({
     page,
     context,
@@ -475,5 +488,145 @@ test.describe("014 EARS-5 the login gate and the mounted player (e2e)", () => {
     await expect(page.getByTestId("recording-plaque")).toBeVisible();
     await expect(page.getByTestId("recording-gate")).toHaveCount(0);
     await expect(page.getByTestId("recording-player")).toHaveCount(0);
+  });
+});
+
+/**
+ * 014 EARS-8 — the «Смотреть оригинал трансляции» SPOILER.
+ *
+ * The rule has two sides and both are driven here, because each is only true
+ * relative to the other: an эфир that published BOTH cuts carries the spoiler
+ * under the player, and an эфир that published ONE carries no secondary
+ * affordance at all — not a disabled one, not an explanatory one. A unit test
+ * can pin the block's own behaviour; only the page can pin which эфир gets it.
+ *
+ * The guest case is the EARS-5 no-source-bytes invariant seen from the second
+ * cut: the spoiler is fed by the AUTHENTICATED playback read, so a guest on the
+ * same URL must get neither the disclosure nor a byte of the raw source.
+ *
+ * Keyboard operation is asserted through the real tab order and a real Enter,
+ * not through a click: the affordance is a native `<summary>` precisely so the
+ * platform owns that behaviour, and a click-only test would pass just as well
+ * against a hand-rolled div that no keyboard can reach.
+ */
+test.describe("014 EARS-8 the raw-original spoiler (e2e)", () => {
+  test.use({ storageState: { cookies: [], origins: [] } });
+
+  test.skip(
+    !BOTH_CUTS_SLUG || !DOCTOR_EMAIL || !DOCTOR_PASSWORD,
+    "requires a both-cuts ended event slug and doctor credentials",
+  );
+
+  test("014 EARS-8: a signed-in doctor on a both-cuts эфир gets the labelled spoiler, collapsed — the second frame is not loaded until asked for", async ({
+    page,
+  }) => {
+    await signIn(page);
+    await page.goto(`${BASE}/webinars/${BOTH_CUTS_SLUG}`, {
+      waitUntil: "networkidle",
+    });
+
+    // The primary player is the page's main object; the spoiler sits UNDER it.
+    await expect(page.getByTestId("recording-player").first()).toBeVisible();
+
+    const spoiler = page.getByTestId("recording-spoiler");
+    await expect(spoiler).toBeVisible();
+    await expect(spoiler).toContainText("Смотреть оригинал трансляции");
+    // Collapsed at rest, and the second provider frame is genuinely absent from
+    // the DOM — a `<details>` keeps hidden children mounted, which here would
+    // mean fetching a recording nobody asked to watch.
+    expect(await spoiler.evaluate((el: HTMLDetailsElement) => el.open)).toBe(
+      false,
+    );
+    await expect(spoiler.locator("iframe")).toHaveCount(0);
+  });
+
+  test("014 EARS-8: the spoiler opens from the keyboard alone and mounts the original as a named frame", async ({
+    page,
+  }) => {
+    await signIn(page);
+    await page.goto(`${BASE}/webinars/${BOTH_CUTS_SLUG}`, {
+      waitUntil: "networkidle",
+    });
+
+    const spoiler = page.getByTestId("recording-spoiler");
+    const summary = spoiler.locator("summary");
+    await expect(summary).toBeVisible();
+
+    // In the tab order for real: focus it, step back, step forward — Tab has to
+    // land on the control itself, which is what «keyboard-operable» means.
+    await summary.focus();
+    await page.keyboard.press("Shift+Tab");
+    await page.keyboard.press("Tab");
+    await expect(summary).toBeFocused();
+
+    await page.keyboard.press("Enter");
+
+    await expect
+      .poll(async () => spoiler.evaluate((el: HTMLDetailsElement) => el.open))
+      .toBe(true);
+    // The mounted frame names the cut it plays, so a screen-reader user knows
+    // which of the two recordings they landed in.
+    const frame = spoiler.locator("iframe");
+    await expect(frame).toHaveCount(1);
+    await expect(frame).toHaveAttribute("title", /Оригинал/);
+  });
+
+  test("014 EARS-8: a GUEST on the same both-cuts эфир gets no spoiler and not one byte of the original", async ({
+    page,
+    context,
+  }) => {
+    await context.clearCookies();
+
+    const requested: string[] = [];
+    page.on("request", (r) => requested.push(r.url()));
+
+    await page.goto(`${BASE}/webinars/${BOTH_CUTS_SLUG}`, {
+      waitUntil: "networkidle",
+    });
+
+    await expect(page.getByTestId("recording-spoiler")).toHaveCount(0);
+    // Scoped to the event page itself: the app shell's mobile menu is its own
+    // `<details>`, so a page-wide count would assert against the chrome rather
+    // than against the absence of a secondary recording control.
+    await expect(page.locator("main details")).toHaveCount(0);
+
+    const html = await page.content();
+    for (const forbidden of [
+      "rutube",
+      "youtube",
+      "vk.com",
+      "embedRef",
+      "embed_ref",
+    ]) {
+      expect(
+        html.toLowerCase(),
+        `delivered HTML must not carry «${forbidden}»`,
+      ).not.toContain(forbidden.toLowerCase());
+    }
+    expect(
+      html.match(/\b[0-9a-f]{32}\b/i),
+      "delivered HTML must not carry a provider-scoped embed ref",
+    ).toBeNull();
+    await expect(page.locator("iframe, video")).toHaveCount(0);
+    expect(
+      requested.filter((u) => /rutube|youtube|vk\.com|cdnvideo/i.test(u)),
+      "the page must not reach a video provider for a guest",
+    ).toEqual([]);
+  });
+
+  test("014 EARS-8: a single-cut эфир carries NO secondary control at all — the absence is the product decision", async ({
+    page,
+  }) => {
+    await signIn(page);
+    await page.goto(`${BASE}/webinars/${ENDED_SLUG}`, {
+      waitUntil: "networkidle",
+    });
+
+    // The player is there — this is a published recording, just not two of them.
+    await expect(page.getByTestId("recording-player").first()).toBeVisible();
+    await expect(page.getByTestId("recording-spoiler")).toHaveCount(0);
+    // Same scoping as the guest test above — the shell's mobile menu is a
+    // `<details>` that belongs to the chrome, not to the player card.
+    await expect(page.locator("main details")).toHaveCount(0);
   });
 });

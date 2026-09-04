@@ -114,6 +114,8 @@ export type {
   EventSignupCardProps,
   EventSignupCondition,
 } from "./event-signup-card";
+export { RecordingSpoiler } from "./recording-spoiler";
+export type { RecordingSpoilerProps } from "./recording-spoiler";
 export { EventSpeakerCard } from "./event-speaker-card";
 export type { EventSpeakerCardProps } from "./event-speaker-card";
 export { EventFormatBlock } from "./event-format-block";

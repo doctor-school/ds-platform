@@ -159,6 +159,11 @@
       "raw": "Оригинал",
       "duration": "{duration} мин"
     },
+    "recordingSpoiler": {
+      "summary": "Смотреть оригинал трансляции",
+      "hint": "без монтажа, с паузами и вопросами между блоками",
+      "frameLabel": "Оригинал трансляции"
+    },
     "plaque": {
       "timeLabel": "Запись",
       "timeValue": "до {date}",

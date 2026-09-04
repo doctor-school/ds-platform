@@ -57,6 +57,9 @@ const GLOBS = [
   "apps/doctor/lib/**/*.{ts,tsx,jsx}",
   "apps/academy-demo/app/**/*.{ts,tsx,jsx}",
   "packages/design-system/src/**/*.{ts,tsx,jsx}",
+  // #1722 D11 — NEW coverage: the shared webinar-room unit is user-facing
+  // product source on both storefronts (`apps/portal/src` never existed, D11a).
+  "packages/room/src/**/*.{ts,tsx,jsx}",
 ];
 const IGNORE = [
   "**/*.test.{ts,tsx,jsx}",

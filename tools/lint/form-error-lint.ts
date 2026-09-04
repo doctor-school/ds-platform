@@ -74,6 +74,9 @@ const APP_GLOBS = [
   "apps/admin/components/**/*.tsx",
   "apps/admin/src/**/*.tsx",
   "apps/academy-demo/app/**/*.tsx",
+  // #1722 D11 — the room's display-name prompt is a `FormError` form and now
+  // lives in the shared unit.
+  "packages/room/src/**/*.tsx",
 ];
 const APP_IGNORE = [
   "**/*.test.{ts,tsx}",

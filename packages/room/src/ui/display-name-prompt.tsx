@@ -56,10 +56,10 @@ import type { RoomCopyStrings, RoomValidationCopy } from "../copy/room-copy";
 /** A zod v4 issue, narrowed to the fields the map branches on. */
 export interface RoomZodIssueLike {
   code: string;
-  minimum?: number | bigint;
-  maximum?: number | bigint;
-  path?: PropertyKey[];
-  message?: string;
+  minimum?: number | bigint | undefined;
+  maximum?: number | bigint | undefined;
+  path?: PropertyKey[] | undefined;
+  message?: string | undefined;
 }
 
 /**

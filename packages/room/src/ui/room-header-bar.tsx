@@ -47,9 +47,9 @@ export interface RoomHeaderBarProps {
   liveAt: string | null;
   copy: RoomCopy;
   /** D7 — the host's link component; defaults to a plain anchor. */
-  linkComponent?: RoomLinkComponent;
+  linkComponent?: RoomLinkComponent | undefined;
   /** The one chrome slot: the host's theme toggle + profile chip (D17a). */
-  userCluster?: ReactNode;
+  userCluster?: ReactNode | undefined;
 }
 
 /** The D7 default — a plain anchor, so the package hardcodes no router. */

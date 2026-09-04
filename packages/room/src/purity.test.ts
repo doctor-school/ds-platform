@@ -120,7 +120,7 @@ describe("006 packages/room purity", () => {
       BANNED_SPECIFIERS.some(({ pattern }) => pattern.test(s.statement)),
     );
     expect(hits).toHaveLength(1);
-    expect(hits[0].line).toBe(1);
+    expect(hits[0]?.line).toBe(1);
 
     // …and a single-line import is still caught, on its own line.
     const singleLine = 'import Link from "next/link";\n';
@@ -128,7 +128,7 @@ describe("006 packages/room purity", () => {
       BANNED_SPECIFIERS.some(({ pattern }) => pattern.test(s.statement)),
     );
     expect(single).toHaveLength(1);
-    expect(single[0].line).toBe(1);
+    expect(single[0]?.line).toBe(1);
 
     // A plain string mentioning a banned name is not an import — no false positive.
     expect(

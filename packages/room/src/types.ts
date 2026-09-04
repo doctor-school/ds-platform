@@ -9,7 +9,7 @@ import type { RoomCopy, RoomCopyStrings } from "./copy/room-copy";
  * The room is hosted by two storefronts with different routes, different copy
  * catalogues and different session plumbing. Everything that differs crosses this
  * boundary as a PROP; nothing in the package reads a host module, a framework
- * catalogue or `process.env` (`./purity.test.ts`).
+ * catalogue or an environment variable (`./purity.test.ts`).
  *
  * The split between the two prop shapes is the RSC boundary (D14): a server
  * component may pass {@link RoomShellServerProps} — plain data only — while the

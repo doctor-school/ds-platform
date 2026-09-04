@@ -133,6 +133,26 @@
       "approvalProvenance": [
         "https://github.com/doctor-school/ds-platform/issues/1741#issuecomment-5522845629"
       ]
+    },
+    "speaker-migration-console-v1": {
+      "evidenceProfiles": ["responsive-web"],
+      "surfacePaths": [
+        "apps/admin/app/speaker-migration/page.tsx",
+        "apps/admin/components/speaker-migration-review-dialog.tsx",
+        "apps/admin/components/speaker-migration-error-note.tsx",
+        "apps/admin/components/app-shell.tsx",
+        "apps/admin/providers/data-provider.ts",
+        "apps/admin/messages/ru.json"
+      ],
+      "states": [
+        "queue-review-open",
+        "queue-source-closed",
+        "import-refused",
+        "resolution-dialog"
+      ],
+      "approvalProvenance": [
+        "https://github.com/doctor-school/ds-platform/issues/1605#issuecomment-5452141470"
+      ]
     }
   }
 }

@@ -864,6 +864,40 @@ describe("backlog-triage queue grouping (#1855)", () => {
     expect(report).not.toContain("queue head:");
     expect(report).toContain("- #700 free task");
   });
+
+  it("no milestones ⇒ NO annotation at all, never a blanket AHEAD-OF-QUEUE (#1857)", () => {
+    // The `gh api milestones` read is best-effort and degrades to []; tagging
+    // every takeable row `[AHEAD-OF-QUEUE (head: none)]` would report a verdict
+    // the tool never computed.
+    expect(
+      queueAnnotationFor(
+        { title: "форма", labels: ["track:doctor"], milestone: "Витрина R1 — MVP витрины" },
+        [],
+      ),
+    ).toBeNull();
+    expect(
+      queueAnnotationFor({ title: "города", labels: ["track:doctor"], milestone: null }, []),
+    ).toBeNull();
+  });
+
+  it("a track with no open release milestone gets no annotation either (#1857)", () => {
+    const academyOnly = [
+      { title: "Академия R1 — Каталог", due_on: "2026-10-07T00:00:00Z", state: "open" },
+    ];
+    expect(
+      queueAnnotationFor(
+        { title: "города", labels: ["track:doctor"], milestone: "Витрина R3 — Эфиры" },
+        academyOnly,
+      ),
+    ).toBeNull();
+  });
+
+  it("an un-annotated row renders bare — no tag, no [AHEAD-OF-QUEUE] (#1857)", () => {
+    const bare = classify(issue(700, ["tooling"], "справочник городов"), []);
+    const report = formatReport([bare], []);
+    expect(report).toContain("- #700 справочник городов");
+    expect(report).not.toContain("AHEAD-OF-QUEUE");
+  });
 });
 
 describe("PR board hygiene (#1140)", () => {

@@ -375,11 +375,17 @@ export interface MilestoneRecord {
 /**
  * Map a queue-position reason onto the report's position tag (#1855) — pure,
  * so the report can be unit-tested without any `gh` call.
+ *
+ * Returns `null` when the milestones payload is empty (#1857): the `gh api
+ * milestones` read is best-effort and degrades to `[]`, and annotating every
+ * takeable row `[AHEAD-OF-QUEUE (head: none)]` on that failure would report a
+ * priority verdict the tool did not compute. No data ⇒ no annotation.
  */
 export function queueAnnotationFor(
   issue: { title: string; labels: string[]; milestone: string | null },
   milestones: MilestoneRecord[],
-): QueueAnnotation {
+): QueueAnnotation | null {
+  if (!Array.isArray(milestones) || milestones.length === 0) return null;
   const result = queuePosition(
     {
       track: trackOf(issue.labels),
@@ -388,6 +394,8 @@ export function queueAnnotationFor(
     },
     milestones,
   );
+  // A computable-but-headless track is the same non-verdict as an empty payload.
+  if (result.reason === "no-queue-data") return null;
   const position: QueuePosition = !result.ok
     ? "AHEAD-OF-QUEUE"
     : result.reason === "epic"
@@ -1517,7 +1525,7 @@ async function main(): Promise<void> {
   for (const t of triaged) {
     if (t.readiness !== "takeable") continue;
     const raw = rawByNumber.get(t.number);
-    t.queue = queueAnnotationFor(
+    const annotation = queueAnnotationFor(
       {
         title: t.title,
         labels: (raw?.labels ?? []).map((l) => l.name),
@@ -1525,6 +1533,7 @@ async function main(): Promise<void> {
       },
       milestones,
     );
+    if (annotation) t.queue = annotation;
   }
 
   const out: string[] = [];

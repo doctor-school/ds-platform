@@ -7,6 +7,8 @@ import {
   CLAIM_STATUS,
   KNOWN,
   knownIdWarnings,
+  LITMUS_LINE,
+  milestonesPageWarning,
   parseAheadOfQueue,
   parseMilestones,
   pickProjectItem,
@@ -428,5 +430,70 @@ describe("set-board-status queue query plumbing (#1855)", () => {
   it("gates only the claim status — In Progress is the claim marker", () => {
     expect(CLAIM_STATUS).toBe("In Progress");
     expect(VALID_STATUS).toContain(CLAIM_STATUS);
+  });
+});
+
+describe("set-board-status queue guard fails open on missing data (#1857)", () => {
+  it("allows a release-milestone Issue when the milestones payload is empty", () => {
+    const p = queuePosition(
+      { track: "track:doctor", milestone: "Витрина R3 — Эфиры", title: "города" },
+      [],
+    );
+    expect(p).toEqual({ ok: true, reason: "no-queue-data", head: null });
+  });
+
+  it("allows a release-milestone Issue when its own track has no open release", () => {
+    // Only the academy track has an open release here — the doctor milestone the
+    // Issue carries is closed, so no head is computable for that track.
+    const academyOnly = [{ title: "Академия R1 — Каталог", due_on: null, state: "open" }];
+    const p = queuePosition(
+      { track: "track:doctor", milestone: "Витрина R3 — Эфиры", title: "города" },
+      academyOnly,
+    );
+    expect(p).toEqual({ ok: true, reason: "no-queue-data", head: null });
+  });
+
+  it("allows a milestone-less non-epic Issue when no head can be computed", () => {
+    const p = queuePosition({ track: "track:doctor", milestone: null, title: "города" }, []);
+    expect(p).toEqual({ ok: true, reason: "no-queue-data", head: null });
+  });
+
+  it("still REFUSES when a head genuinely exists and differs — fail-open is not fail-off", () => {
+    const p = queuePosition(
+      { track: "track:doctor", milestone: "Витрина R3 — Эфиры", title: "города" },
+      MILESTONES,
+    );
+    expect(p).toMatchObject({ ok: false, reason: "ahead-of-queue" });
+    expect(p.head).toBe("Витрина R1 — MVP витрины");
+  });
+});
+
+describe("set-board-status milestonesPageWarning() (#1857)", () => {
+  it("asks for totalCount so a truncated single page cannot pass silently", () => {
+    expect(buildMilestonesQuery()).toContain("totalCount");
+  });
+
+  it("is silent when the page holds every open milestone", () => {
+    expect(
+      milestonesPageWarning({
+        repository: { milestones: { totalCount: 2, nodes: [{ title: "a" }, { title: "b" }] } },
+      }),
+    ).toBeNull();
+    expect(milestonesPageWarning({})).toBeNull();
+  });
+
+  it("warns, naming both counts, when totalCount exceeds the returned nodes", () => {
+    const w = milestonesPageWarning({
+      repository: { milestones: { totalCount: 140, nodes: [{ title: "a" }] } },
+    });
+    expect(w).toMatch(/1 of 140/);
+    expect(w).toMatch(/queue head may be wrong/);
+  });
+});
+
+describe("set-board-status LITMUS_LINE staleness is recorded (#1857)", () => {
+  it("is a constant whose docblock-recorded R1 scope is what the refusal prints", () => {
+    expect(LITMUS_LINE).toContain("регистрацию врача");
+    expect(LITMUS_LINE).toContain("ближайшего эфира");
   });
 });

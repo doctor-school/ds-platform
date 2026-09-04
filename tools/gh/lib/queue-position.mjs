@@ -15,6 +15,11 @@
  * undated milestones sort after every dated one, and a «· Позже» backlog
  * milestone is never the head.
  *
+ * The guard FAILS OPEN on missing data (#1857): a claim is refused only when a
+ * head could actually be computed and differs from the Issue's milestone. No
+ * milestones (empty payload, `gh` failure, a track with no open release) ⇒
+ * `no-queue-data`, allowed with a WARN.
+ *
  * Pure only — no `gh`, no I/O. Unit-tested in
  * tools/lint/guard-tests/set-board-status.spec.ts.
  *
@@ -28,7 +33,18 @@ import {
   milestoneTrack,
 } from "./roadmap-taxonomy.mjs";
 
-/** The one-line question a claim has to answer out loud before it is taken. */
+/**
+ * The one-line question a claim has to answer out loud before it is taken.
+ *
+ * STALENESS (recorded, #1857): this is the R1 question — it names registration
+ * and the nearest broadcast because that is what «Витрина R1 — MVP витрины»
+ * gates. It is a CONSTANT, not derived from the current head milestone's `gate:`
+ * Issue, because this module is pure by contract (no `gh`, no I/O) and deriving
+ * it would put a network read on every claim. When the queue head rolls to R2
+ * the sentence has to be rewritten by hand. Tracked as a `DEBT.md` line
+ * (2026-09-04, #1857) rather than an Issue: nothing is blocked and the wrong
+ * sentence would be advisory prose in a refusal message, never a wrong gate.
+ */
 export const LITMUS_LINE = "блокирует ли это регистрацию врача и просмотр ближайшего эфира?";
 
 /** Marker of a per-track backlog milestone («<Трек> · Позже») — never a queue head. */
@@ -110,8 +126,14 @@ export function queueHead(track, milestones) {
  *  - `queue-head`    — the Issue's milestone IS its track's queue head;
  *  - `platform-ops`  — the non-roadmap «Platform ops & hardening» milestone;
  *  - `platform-track`— a `track:platform` Issue outside any track release milestone;
- *  - `epic`          — an `epic:` container, which carries no milestone.
- * Anything else is `ahead-of-queue`.
+ *  - `epic`          — an `epic:` container, which carries no milestone;
+ *  - `no-queue-data` — no queue head could be COMPUTED for the relevant track
+ *    (an empty/failed milestones payload, or a track with no open dated release
+ *    milestone). The guard fails OPEN here (#1857): absent data is not evidence
+ *    that the Issue jumps the queue, and refusing every milestoned Issue on a
+ *    transient `gh` failure would leave the override quote as the only escape.
+ * Anything else is `ahead-of-queue` — which now requires a head that EXISTS and
+ * differs from the Issue's milestone.
  *
  * A `track:platform` Issue that DOES sit in a track release milestone (the
  * convention «platform work takes the milestone of the release it blocks»)
@@ -119,7 +141,7 @@ export function queueHead(track, milestones) {
  *
  * @param {{track?:string|null, milestone?:string|null, title?:string}} issue
  * @param {Array<{title?:string, due_on?:string|null, state?:string}>} milestones
- * @returns {{ok:boolean, reason:"queue-head"|"platform-ops"|"platform-track"|"epic"|"ahead-of-queue", head:string|null}}
+ * @returns {{ok:boolean, reason:"queue-head"|"platform-ops"|"platform-track"|"epic"|"no-queue-data"|"ahead-of-queue", head:string|null}}
  */
 export function queuePosition(issue, milestones) {
   const track = issue?.track ?? null;
@@ -132,7 +154,8 @@ export function queuePosition(issue, milestones) {
   const releaseTrack = milestoneTrack(milestone);
   if (releaseTrack) {
     const head = queueHead(releaseTrack, milestones);
-    return head && milestone === head
+    if (!head) return { ok: true, reason: "no-queue-data", head: null };
+    return milestone === head
       ? { ok: true, reason: "queue-head", head }
       : { ok: false, reason: "ahead-of-queue", head };
   }
@@ -142,7 +165,10 @@ export function queuePosition(issue, milestones) {
 
   if (track === "track:platform") return { ok: true, reason: "platform-track", head: null };
 
-  return { ok: false, reason: "ahead-of-queue", head: queueHead(track, milestones) };
+  const head = queueHead(track, milestones);
+  return head
+    ? { ok: false, reason: "ahead-of-queue", head }
+    : { ok: true, reason: "no-queue-data", head: null };
 }
 
 /**

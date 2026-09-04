@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Centrifuge, type PublicationContext } from "centrifuge";
-import { useTranslations } from "next-intl";
 import { Button, Skeleton, cn } from "@ds/design-system";
 import {
   ChatMessageTextSchema,
@@ -10,7 +9,9 @@ import {
   type RoomChatCredential,
   type RoomChatMessage,
 } from "@ds/schemas";
-import { applyPresenceCountPublication, fetchFreshChatToken } from "@ds/room";
+import { applyPresenceCountPublication } from "../model/presence-channel";
+import type { BrowserRoomApi } from "../client/room-api";
+import type { RoomCopyStrings } from "../copy/room-copy";
 import { usePresenceCountSetter } from "./room-presence";
 
 /**
@@ -41,24 +42,43 @@ import { usePresenceCountSetter } from "./room-presence";
  *
  * The text is validated by the {@link ChatMessageTextSchema} SSOT the API shares,
  * so the composer rejects EXACTLY what the server rejects (empty / whitespace-only
- * disables send; over-2000-chars is blocked). All copy resolves through the typed
- * message catalog (EARS-10) — no hardcoded user-facing string.
+ * disables send; over-2000-chars is blocked). All copy is INJECTED by the host
+ * (EARS-10) — no hardcoded user-facing string and no catalogue read.
  */
+
+/** The chat panel's slice of the room copy contract. */
+export type RoomChatCopy = Pick<
+  RoomCopyStrings,
+  | "chatHeading"
+  | "moderatorPin"
+  | "chatLoading"
+  | "chatEmpty"
+  | "chatParticipant"
+  | "chatYou"
+  | "chatNewMessages"
+  | "chatSendError"
+  | "chatReconnecting"
+  | "chatDisconnected"
+  | "composerPlaceholder"
+  | "composerSend"
+>;
 export function RoomChat({
-  slug,
+  api,
   chat,
+  copy,
   collapsed = false,
   onIncomingWhileCollapsed,
 }: {
-  slug: string;
+  /** The room's ONE browser transport — `createBrowserRoomApi({ slug })`. */
+  api: BrowserRoomApi;
   chat: RoomChatCredential;
+  copy: RoomChatCopy;
   /** Desktop collapse state (#1123) — new arrivals while folded feed the rail
    * unread badge instead of scrolling into a hidden ledger. */
   collapsed?: boolean;
   /** Reports how many messages arrived while the chat was collapsed. */
   onIncomingWhileCollapsed?: (delta: number) => void;
 }) {
-  const t = useTranslations("room");
   // EARS-5: the live presence count rides this SAME channel/connection; the chat
   // panel owns the room's only Centrifugo connection (it stays mounted even when
   // collapsed, #1123), so it routes the server-published count into the shared
@@ -133,7 +153,7 @@ export function RoomChat({
       // refresh re-fetches the grant through the SAME admission gate and the
       // connection + server-side subscription survive a webinar longer than one
       // TTL. A gate refusal throws UnauthorizedError inside → the SDK stops.
-      getToken: () => fetchFreshChatToken(slug),
+      getToken: () => api.refreshChatToken(),
     });
     const onPublication = (ctx: PublicationContext): void => {
       if (ctx.channel !== chat.channel) return;
@@ -192,7 +212,7 @@ export function RoomChat({
       centrifuge.removeListener("disconnected", onDisconnected);
       centrifuge.disconnect();
     };
-  }, [slug, chat.url, chat.token, chat.channel, setPresenceCount]);
+  }, [api, chat.url, chat.token, chat.channel, setPresenceCount]);
 
   // React to the log growing: stuck → autoscroll to newest (scrollTop 0 in the
   // reversed ledger); scrolled-up → raise the «Новые сообщения ↓» chip; collapsed
@@ -226,19 +246,12 @@ export function RoomChat({
     setSending(true);
     setFailed(false);
     try {
-      const res = await fetch(`/v1/events/${encodeURIComponent(slug)}/chat`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "content-type": "application/json", accept: "application/json" },
-        body: JSON.stringify({ text: parsed.data }),
-      });
-      if (!res.ok) {
-        setFailed(true);
-        return;
-      }
+      await api.postChatMessage(parsed.data);
       // Sent — clear the composer; the message renders when the fan-out arrives.
       setDraft("");
     } catch {
+      // A refused post (RoomApiError) and a transport failure are the same
+      // doctor-facing truth: the message did not land.
       setFailed(true);
     } finally {
       setSending(false);
@@ -248,7 +261,7 @@ export function RoomChat({
   return (
     <div data-testid="room-chat" className="flex min-h-0 flex-1 flex-col">
       <div className="flex-none border-b-2 border-hairline bg-tint px-4 py-2.5 text-caption leading-relaxed text-tint-foreground">
-        {t("moderatorPin")}
+        {copy.moderatorPin}
       </div>
       {/* Connection-state banner (#1124): a dropped/terminated live connection is
           stated truthfully — a transient drop shows «Восстанавливаем связь…»
@@ -261,7 +274,7 @@ export function RoomChat({
           data-testid="room-chat-disconnected"
           className="flex-none border-b-2 border-hairline bg-tint px-4 py-2 text-caption text-tint-foreground"
         >
-          {t("chatDisconnected")}
+          {copy.chatDisconnected}
         </div>
       ) : connection === "connecting" && hydrated ? (
         <div
@@ -269,7 +282,7 @@ export function RoomChat({
           data-testid="room-chat-reconnecting"
           className="flex-none border-b-2 border-hairline bg-tint px-4 py-2 text-caption text-tint-foreground"
         >
-          {t("chatReconnecting")}
+          {copy.chatReconnecting}
         </div>
       ) : null}
       {/* Ledger region (relative — anchors the «Новые сообщения ↓» chip). The
@@ -286,7 +299,7 @@ export function RoomChat({
           aria-busy={
             messages.length === 0 && !hydrated && connection !== "disconnected"
           }
-          aria-label={t("chatHeading")}
+          aria-label={copy.chatHeading}
           className={cn(
             "flex min-h-0 flex-1 overflow-y-auto px-3.5 py-3",
             messages.length > 0 ? "flex-col-reverse gap-2.5" : "flex-col",
@@ -306,14 +319,14 @@ export function RoomChat({
                 data-testid="room-chat-loading"
                 className="flex flex-col gap-3"
               >
-                <span className="sr-only">{t("chatLoading")}</span>
+                <span className="sr-only">{copy.chatLoading}</span>
                 <Skeleton className="h-11 w-4/5" />
                 <Skeleton className="h-11 w-3/5" />
                 <Skeleton className="h-11 w-2/3" />
               </div>
             ) : (
               <p className="m-auto text-center text-sm text-muted-foreground">
-                {t("chatEmpty")}
+                {copy.chatEmpty}
               </p>
             )
           ) : (
@@ -339,9 +352,9 @@ export function RoomChat({
                     )}
                   >
                     {own
-                      ? t("chatYou")
+                      ? copy.chatYou
                       : (message.authorName ??
-                        `${t("chatParticipant")} ${message.authorTag}`)}
+                        `${copy.chatParticipant} ${message.authorTag}`)}
                   </span>{" "}
                   {message.text}
                 </div>
@@ -358,7 +371,7 @@ export function RoomChat({
             onClick={jumpToNewest}
             className="absolute bottom-3 left-1/2 -translate-x-1/2"
           >
-            {t("chatNewMessages")}
+            {copy.chatNewMessages}
           </Button>
         ) : null}
       </div>
@@ -367,7 +380,7 @@ export function RoomChat({
           role="alert"
           className="border-t-2 border-border bg-tint px-4 py-2 text-caption text-tint-foreground"
         >
-          {t("chatSendError")}
+          {copy.chatSendError}
         </div>
       ) : null}
       <form onSubmit={submit} className="flex gap-3 border-t-2 border-border p-4">
@@ -377,8 +390,8 @@ export function RoomChat({
         <input
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          placeholder={t("composerPlaceholder")}
-          aria-label={t("composerPlaceholder")}
+          placeholder={copy.composerPlaceholder}
+          aria-label={copy.composerPlaceholder}
           maxLength={2000}
           className="min-w-0 flex-1 border-2 border-hairline bg-card px-4 py-3 text-sm text-foreground focus-visible:outline-none focus-visible:shadow-focus"
         />
@@ -386,9 +399,9 @@ export function RoomChat({
           type="submit"
           variant="default"
           disabled={!isSendable}
-          aria-label={t("composerSend")}
+          aria-label={copy.composerSend}
         >
-          {t("composerSend")}
+          {copy.composerSend}
         </Button>
       </form>
     </div>

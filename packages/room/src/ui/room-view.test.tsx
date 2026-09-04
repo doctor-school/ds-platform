@@ -1,14 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen } from "@testing-library/react";
-import type { RoomCopy } from "./room-view";
 import { PlayerFrame } from "./room-view";
 import type { RoomConfig, StreamProvider } from "@ds/schemas";
-import { PresenceHeartbeat } from "./presence-heartbeat";
-import { RoomPresenceProvider } from "./room-presence";
+import { createBrowserRoomApi } from "../client/room-api";
 import {
   PLAYER_RETRY_DELAY_MS,
   PLAYER_WATCHDOG_MS,
-} from "@ds/room";
+} from "../model/room-player-state";
+import { PresenceHeartbeat } from "./presence-heartbeat";
+import { RoomPresenceProvider } from "./room-presence";
 
 /**
  * 006 EARS-18 — the in-room player-failure states at the component tier on a fake
@@ -27,13 +27,6 @@ import {
  */
 const copy = {
   liveBadge: "В эфире",
-  onAir: "Идёт эфир",
-  chatTab: "Чат",
-  infoTab: "О эфире",
-  chatHeading: "Чат эфира",
-  chatCollapse: "Свернуть",
-  chatExpand: "Развернуть",
-  chatUnavailable: "Чат недоступен",
   unavailableTitle: "Трансляция недоступна",
   unavailableBody: "Восстанавливаем сигнал",
   playerTitle: "Трансляция эфира",
@@ -45,8 +38,7 @@ const copy = {
   playerRetrying: "Переподключаемся к трансляции…",
   playerSuspectedBody: "Похоже, трансляция не загружается. Если видео не идёт — перезапустите плеер.",
   playerRestart: "Перезапустить плеер",
-  programNow: "Эфир идёт",
-} satisfies RoomCopy;
+};
 
 function configFor(provider: StreamProvider, embedRef = "abc123"): RoomConfig {
   return { stream: { provider, embedRef } } as unknown as RoomConfig;
@@ -239,7 +231,10 @@ describe("006 EARS-18.5 presence is decoupled from player state", () => {
 
     render(
       <RoomPresenceProvider initialCount={1}>
-        <PresenceHeartbeat slug="hsn" intervalSeconds={5} />
+        <PresenceHeartbeat
+          api={createBrowserRoomApi({ slug: "hsn" })}
+          intervalSeconds={5}
+        />
         <PlayerFrame config={configFor("vk")} copy={copy} />
       </RoomPresenceProvider>,
     );

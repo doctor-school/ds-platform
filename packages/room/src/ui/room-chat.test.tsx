@@ -2,7 +2,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { RoomChatCredential, RoomChatMessage } from "@ds/schemas";
-import { RoomChat } from "./room-chat";
+import type { BrowserRoomApi } from "../client/room-api";
+import { RoomChat, type RoomChatCopy } from "./room-chat";
 
 // 006 EARS-3 — the chat pane's history bootstrap (#843). «Пока нет сообщений»
 // (`chatEmpty`) is a STATEMENT about the room, so it must never render while
@@ -12,18 +13,32 @@ import { RoomChat } from "./room-chat";
 // pane shows a distinct loading state (DS `Skeleton`); only a SETTLED read
 // with zero messages may state the room is empty.
 
-// Passthrough i18n: return the key (tests assert on stable testids / keys, not copy).
-vi.mock("next-intl", () => ({
-  useTranslations: () => (key: string) => key,
-}));
+// Passthrough copy: every injected string IS its key (#1722 — the pane reads no
+// catalogue any more, so the host contract is exercised directly and the tests keep
+// asserting on stable keys / testids rather than on RU wording).
+const copy: RoomChatCopy = {
+  chatHeading: "chatHeading",
+  moderatorPin: "moderatorPin",
+  chatLoading: "chatLoading",
+  chatEmpty: "chatEmpty",
+  chatParticipant: "chatParticipant",
+  chatYou: "chatYou",
+  chatNewMessages: "chatNewMessages",
+  chatSendError: "chatSendError",
+  chatReconnecting: "chatReconnecting",
+  chatDisconnected: "chatDisconnected",
+  composerPlaceholder: "composerPlaceholder",
+  composerSend: "composerSend",
+};
 
-// The chat-token refresh lives in the shared room unit (#1722). Mock only that one
-// export — `applyPresenceCountPublication` comes from the same barrel and must keep
-// its real implementation, which is what the EARS-5 discriminator cases exercise.
-vi.mock("@ds/room", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@ds/room")>()),
-  fetchFreshChatToken: vi.fn(),
-}));
+// The room's ONE browser transport, injected (#1722) — the chat pane no longer
+// reaches `fetch` itself, and the token refresh the SDK calls is `api.refreshChatToken`.
+const api: BrowserRoomApi = {
+  postChatMessage: vi.fn(async () => {}),
+  sendHeartbeat: vi.fn(async () => ({})),
+  refreshChatToken: vi.fn(async () => "token"),
+  setDisplayName: vi.fn(async () => {}),
+};
 
 /** Shared handle into the mocked Centrifuge SDK: captured event handlers +
  * a per-test `history` implementation (deferred so tests control settling). */
@@ -87,7 +102,7 @@ beforeEach(() => {
 
 describe("006 EARS-3 chat history bootstrap — loading is distinct from the empty-state (#843)", () => {
   it("EARS-3: while the history read is in flight, shows the loading skeleton — NEVER chatEmpty", () => {
-    render(<RoomChat slug="evt-1" chat={chat} />);
+    render(<RoomChat api={api} chat={chat} copy={copy} />);
     // In flight from mount (before and after `subscribed`).
     expect(screen.getByTestId("room-chat-loading")).toBeTruthy();
     expect(screen.queryByText("chatEmpty")).toBeNull();
@@ -105,7 +120,7 @@ describe("006 EARS-3 chat history bootstrap — loading is distinct from the emp
       new Promise((res) => {
         resolveHistory = res;
       });
-    render(<RoomChat slug="evt-1" chat={chat} />);
+    render(<RoomChat api={api} chat={chat} copy={copy} />);
     fire("subscribed", { channel: chat.channel });
     expect(screen.queryByText("chatEmpty")).toBeNull();
     act(() => resolveHistory({ publications: [] }));
@@ -122,7 +137,7 @@ describe("006 EARS-3 chat history bootstrap — loading is distinct from the emp
       new Promise((res) => {
         resolveHistory = res;
       });
-    render(<RoomChat slug="evt-1" chat={chat} />);
+    render(<RoomChat api={api} chat={chat} copy={copy} />);
     fire("subscribed", { channel: chat.channel });
     act(() => resolveHistory({ publications: [{ data: message }] }));
     await waitFor(() => expect(screen.getByText(message.text)).toBeTruthy());
@@ -136,7 +151,7 @@ describe("006 EARS-3 chat history bootstrap — loading is distinct from the emp
       new Promise((_res, rej) => {
         rejectHistory = rej;
       });
-    render(<RoomChat slug="evt-1" chat={chat} />);
+    render(<RoomChat api={api} chat={chat} copy={copy} />);
     fire("subscribed", { channel: chat.channel });
     act(() => rejectHistory(new Error("history unavailable")));
     await waitFor(() => expect(screen.getByText("chatEmpty")).toBeTruthy());
@@ -144,7 +159,7 @@ describe("006 EARS-3 chat history bootstrap — loading is distinct from the emp
   });
 
   it("EARS-3: a live publication arriving before history settles renders immediately (loading yields to content)", () => {
-    render(<RoomChat slug="evt-1" chat={chat} />);
+    render(<RoomChat api={api} chat={chat} copy={copy} />);
     fire("publication", { channel: chat.channel, data: message });
     expect(screen.getByText(message.text)).toBeTruthy();
     expect(screen.queryByTestId("room-chat-loading")).toBeNull();
@@ -166,7 +181,7 @@ describe("006 EARS-3 connection state — a dropped connection is truthful, not 
       new Promise((res) => {
         resolveHistory = res;
       });
-    render(<RoomChat slug="evt-1" chat={chat} />);
+    render(<RoomChat api={api} chat={chat} copy={copy} />);
     fire("connected", {});
     fire("subscribed", { channel: chat.channel });
     act(() => resolveHistory({ publications: [{ data: message }] }));
@@ -203,7 +218,7 @@ describe("006 EARS-3 connection state — a dropped connection is truthful, not 
   });
 
   it("EARS-3.4: the reconnecting banner never shows during the FIRST connect — the loading skeleton owns that window", () => {
-    render(<RoomChat slug="evt-1" chat={chat} />);
+    render(<RoomChat api={api} chat={chat} copy={copy} />);
     // Initial connect: connecting + not yet hydrated → skeleton, no reconnect banner.
     fire("connecting", {});
     expect(screen.getByTestId("room-chat-loading")).toBeTruthy();
@@ -231,7 +246,7 @@ describe("006 EARS-3 Twitch-minimal ledger — stick-to-bottom + new-messages ch
       new Promise((res) => {
         resolveHistory = res;
       });
-    render(<RoomChat slug="evt-1" chat={chat} {...props} />);
+    render(<RoomChat api={api} chat={chat} copy={copy} {...props} />);
     fire("connected", {});
     fire("subscribed", { channel: chat.channel });
     act(() => resolveHistory({ publications: [{ data: message }] }));
@@ -294,7 +309,7 @@ describe("006 EARS-3 Twitch-minimal ledger — stick-to-bottom + new-messages ch
 // shown to every participant (owner decision 2026-07-23, Option A). The reader's
 // OWN row stays «Вы»; a poster with no name set — and legacy history minted before
 // the `authorName` field existed (the key is simply absent) — falls back to the
-// non-PII «Участник <tag>» participant label. (i18n is mocked to echo keys, so the
+// non-PII «Участник <tag>» participant label. (The injected copy echoes keys, so the
 // fallback label renders as "chatParticipant <tag>".)
 describe("006 EARS-17 named chat authorship — the poster's real name authors their messages (#1121)", () => {
   /** Hydrate the pane with an explicit set of messages, connected. */
@@ -307,7 +322,7 @@ describe("006 EARS-17 named chat authorship — the poster's real name authors t
       new Promise((res) => {
         resolveHistory = res;
       });
-    render(<RoomChat slug="evt-1" chat={chat} {...props} />);
+    render(<RoomChat api={api} chat={chat} copy={copy} {...props} />);
     fire("connected", {});
     fire("subscribed", { channel: chat.channel });
     act(() => resolveHistory({ publications: msgs.map((m) => ({ data: m })) }));

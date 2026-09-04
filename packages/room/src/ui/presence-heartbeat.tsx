@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { PresenceHeartbeatAckSchema } from "@ds/schemas";
+import type { BrowserRoomApi } from "../client/room-api";
 import { usePresenceCountSetter } from "./room-presence";
 
 /**
@@ -22,9 +23,10 @@ function reportBeatFailure(reason: string, error?: unknown): void {
  * heartbeat immediately on entry / visible resume, then every N seconds while visible
  * (`intervalSeconds` = `RoomConfig.heartbeatIntervalSeconds`, the server-config
  * cadence delivered in the EARS-1 grant) to the gated
- * `POST /v1/events/:slug/heartbeat` endpoint — same-origin, so the `__Host-`
- * session cookie rides automatically (`credentials: "include"`; the portal
- * rewrites `/v1/*` to the BFF, next.config).
+ * `POST /v1/events/:slug/heartbeat` endpoint through the injected
+ * {@link BrowserRoomApi} — same-origin and `credentials: "include"`, so the
+ * `__Host-` session cookie rides automatically (each host rewrites `/v1/*` to its
+ * own BFF; see `../client/room-api`).
  *
  * There is NO doctor-facing affordance — no "prove you're here" control, no
  * rendered output (it returns `null`): presence is captured from mount, from
@@ -46,10 +48,11 @@ function reportBeatFailure(reason: string, error?: unknown): void {
  * as a best-effort fallback, with no extra poll.
  */
 export function PresenceHeartbeat({
-  slug,
+  api,
   intervalSeconds,
 }: {
-  slug: string;
+  /** The room's ONE browser transport — `createBrowserRoomApi({ slug })`. */
+  api: BrowserRoomApi;
   intervalSeconds: number;
 }) {
   const setPresenceCount = usePresenceCountSetter();
@@ -63,29 +66,21 @@ export function PresenceHeartbeat({
     const beat = (): void => {
       // Visibility gate: a backgrounded tab emits nothing (EARS-4).
       if (document.hidden) return;
-      void fetch(`/v1/events/${encodeURIComponent(slug)}/heartbeat`, {
-        method: "POST",
-        credentials: "include",
-        headers: { accept: "application/json" },
-        // A beat is a fire-and-forget signal; never block on the result.
-        keepalive: true,
-      })
-        .then(async (res) => {
+      void api
+        .sendHeartbeat()
+        .then((body) => {
           // Apply the ack as a best-effort fallback to primary Centrifugo count
-          // fan-out. A parse failure or refused beat leaves the last known count
-          // untouched, but no longer disappears with zero signal — #1122.
-          if (!res.ok) {
-            reportBeatFailure(`server refused the beat (HTTP ${res.status})`);
-            return;
-          }
-          const ack = PresenceHeartbeatAckSchema.safeParse(await res.json());
+          // fan-out. A parse failure leaves the last known count untouched, but no
+          // longer disappears with zero signal — #1122. A REFUSED beat rejects
+          // inside `sendHeartbeat` (RoomApiError) and lands in `catch` below.
+          const ack = PresenceHeartbeatAckSchema.safeParse(body);
           if (ack.success) setPresenceCount(ack.data.presenceCount);
           else reportBeatFailure("ack payload failed the schema contract");
         })
         .catch((error: unknown) => {
           // Presence capture is best-effort — a failed beat never reaches the
           // doctor, but it does leave a dev-visible breadcrumb (#1122).
-          reportBeatFailure("beat request failed (network/transport)", error);
+          reportBeatFailure("beat request failed (refused/network/transport)", error);
         });
     };
 
@@ -114,7 +109,7 @@ export function PresenceHeartbeat({
       stop();
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
-  }, [slug, intervalSeconds, setPresenceCount]);
+  }, [api, intervalSeconds, setPresenceCount]);
 
   return null;
 }

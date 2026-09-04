@@ -6,6 +6,7 @@
   "description": "DS Platform shared webinar-room unit — the room's pure model, browser transport, server reads and composition, hosted by both storefronts (ADR-0013 A1, feature 006 / 020).",
   "exports": {
     ".": "./src/index.ts",
+    "./ui": "./src/ui/index.ts",
     "./server": "./src/server/index.ts",
     "./embed": "./src/model/room-player.ts",
     "./display-name": "./src/client/display-name.ts"

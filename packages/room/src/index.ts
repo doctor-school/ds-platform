@@ -39,3 +39,25 @@ export {
   type BrowserRoomApi,
   type BrowserRoomApiOptions,
 } from "./client/room-api";
+
+// Composition — the whole gated room as one host-agnostic unit (006 EARS-11).
+export { RoomShell } from "./room-shell";
+export * from "./ui";
+
+// The host-injection contract (D14 / D19 / D22).
+export {
+  ROOM_COPY_CALLBACK_KEYS,
+  ROOM_COPY_KEYS,
+  readRoomCopyKey,
+} from "./copy/room-copy";
+export type {
+  RoomContext,
+  RoomCopy,
+  RoomCopyStrings,
+  RoomDisplayNamePromptCopy,
+  RoomLinkComponent,
+  RoomRoutes,
+  RoomShellProps,
+  RoomShellServerProps,
+  RoomValidationCopy,
+} from "./types";

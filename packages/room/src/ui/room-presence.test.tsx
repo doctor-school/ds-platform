@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, render, screen } from "@testing-library/react";
-import { applyPresenceCountPublication } from "@ds/room";
+import { applyPresenceCountPublication } from "../model/presence-channel";
 import {
   PresenceCount,
   RoomPresenceProvider,
@@ -16,11 +16,12 @@ import {
  * server aggregate itself is proven in `apps/api`; the two-doctor fan-out in the
  * live Playwright pair-check. Here we lock the discriminate-and-apply seam + the
  * provider wiring `room-chat.tsx` drives from its Centrifugo publication handler.
+ *
+ * #1722 — the pure discriminator moved to `../model/presence-channel.test.ts`; this
+ * is its RENDER half, now hosted by the package alongside the components it wires.
  */
-vi.mock("next-intl", () => ({
-  useTranslations: () => (key: string, opts?: { count?: number }) =>
-    opts && typeof opts.count === "number" ? `${key}:${opts.count}` : key,
-}));
+/** The host-injected ICU callback (`RoomCopy.presenceCount`) — no catalogue here. */
+const presenceLabel = (n: number) => `presenceCount:${n}`;
 
 let setCount: (n: number) => void = () => {};
 function Capture(): null {
@@ -31,7 +32,7 @@ function Capture(): null {
 function renderHeader(initialCount = 1): void {
   render(
     <RoomPresenceProvider initialCount={initialCount}>
-      <PresenceCount />
+      <PresenceCount format={presenceLabel} />
       <Capture />
     </RoomPresenceProvider>,
   );

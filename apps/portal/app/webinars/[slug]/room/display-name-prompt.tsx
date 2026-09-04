@@ -26,7 +26,7 @@ import {
 } from "@ds/design-system/form";
 import { Input } from "@ds/design-system/input";
 
-import { setDisplayName } from "@/lib/display-name-client";
+import { setDisplayName } from "@ds/room/display-name";
 import { useLocalizedResolver } from "@/lib/use-localized-resolver";
 
 /**

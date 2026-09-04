@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { StreamProvider } from "@ds/schemas";
 import { Button } from "@ds/design-system/button";
-import { resolveEmbed } from "../../../lib/room-player";
+import { resolveEmbed } from "@ds/room/embed";
 
 /**
  * 014 EARS-7 — the recording player's FAILURE BOUNDARY: the arm of the player
@@ -27,7 +27,7 @@ import { resolveEmbed } from "../../../lib/room-player";
  * `load` clears the watchdog: the frame document arrived, so «nothing ever came
  * back» is no longer the failure being watched for.
  *
- * Reuse (ADR-0013 A1): the embed URL is built by the SAME `lib/room-player`
+ * Reuse (ADR-0013 A1): the embed URL is built by the SAME `@ds/room/embed`
  * resolver the 006 room uses — one canonical provider→src mapping for the
  * platform, keyed on the explicit provider enum, never sniffed from `embedRef`.
  * The 006 `usePlayerFailureState` machine is deliberately NOT reused: it grades a

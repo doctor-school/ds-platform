@@ -1,22 +1,12 @@
 /**
- * 006 EARS-15 — derive the header-avatar initials from a doctor's REAL saved
- * display name. First letter of the FIRST word + first letter of the LAST word,
- * uppercased; a single-word name yields one initial. NEVER fabricated from an
- * email or placeholder — the caller renders no avatar when there is no saved name
- * (design §11), so this helper is only ever handed a real name; the empty-string
- * return is the defensive floor, not a rendered path.
+ * 006 EARS-15 — `initialsFromDisplayName` now lives in the shared room unit
+ * (`@ds/room`, #1722): it is room-header code, and the doctor storefront renders
+ * the same header. This module stays as the portal's stable import path for the
+ * NON-room consumers that also derive an avatar from a saved display name —
+ * `app/account/page.tsx` and `lib/header-auth.ts`.
  *
- * `Array.from(word)[0]` takes the first GRAPHEME (surrogate-safe — a name whose
- * first character is an astral codepoint keeps its whole glyph, never a lone
- * surrogate half), and `.toUpperCase()` uppercases correctly for Cyrillic.
+ * Re-exported from the `./display-name` SUBPATH, never the client barrel `.` (D20):
+ * `header-auth.ts` runs in a server component, and the barrel carries the room
+ * parts.
  */
-export function initialsFromDisplayName(name: string): string {
-  const words = name.trim().split(/\s+/).filter(Boolean);
-  if (words.length === 0) return "";
-
-  const first = Array.from(words[0])[0] ?? "";
-  if (words.length === 1) return first.toUpperCase();
-
-  const last = Array.from(words[words.length - 1])[0] ?? "";
-  return (first + last).toUpperCase();
-}
+export { initialsFromDisplayName } from "@ds/room/display-name";

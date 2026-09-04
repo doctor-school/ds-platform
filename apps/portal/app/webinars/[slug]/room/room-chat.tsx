@@ -10,8 +10,7 @@ import {
   type RoomChatCredential,
   type RoomChatMessage,
 } from "@ds/schemas";
-import { fetchFreshChatToken } from "../../../../lib/room-chat-token";
-import { applyPresenceCountPublication } from "./presence-channel";
+import { applyPresenceCountPublication, fetchFreshChatToken } from "@ds/room";
 import { usePresenceCountSetter } from "./room-presence";
 
 /**

@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import multipart from "@fastify/multipart";
 import { VersioningType } from "@nestjs/common";
 import {
   FastifyAdapter,
@@ -299,6 +300,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       app = moduleRef.createNestApplication<NestFastifyApplication>(
         new FastifyAdapter(),
       );
+      // `POST /v1/admin/events` is multipart-only; `.31` drives the free-text
+      // refusal through it, so the parser must be registered as the app does.
+      await app.register(multipart, { limits: { fileSize: 25 * 1024 * 1024 } });
       app.enableVersioning({ type: VersioningType.URI, defaultVersion: "1" });
       await app.init();
       await app.getHttpAdapter().getInstance().ready();
@@ -325,7 +329,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
                     phase_aware_release_ordinal = NULL,
                     minimum_compatible_release_sha = NULL,
                     minimum_compatible_release_ordinal = NULL,
-                    phase_advanced_at = NULL`,
+                    phase_advanced_at = NULL,
+                    source_import_completed_at = NULL`,
           ),
       );
       for (const id of createdEventIds.splice(0)) {
@@ -897,8 +902,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         ].join(CRLF),
       });
       expect(apiWrite.statusCode, apiWrite.payload).toBe(409);
+      // The 007 admin-events surface answers `{ code, message }`, not 012's RFC
+      // 7807 body — the stable code is shared, the envelope is that surface's.
       expect(JSON.parse(apiWrite.payload)).toMatchObject({
-        errorCode: "SPEAKER_MIGRATION_SOURCE_IMMUTABLE",
+        code: "SPEAKER_MIGRATION_SOURCE_IMMUTABLE",
       });
       await expect(
         pool.query("UPDATE event_speakers SET name = name WHERE id = $1", [

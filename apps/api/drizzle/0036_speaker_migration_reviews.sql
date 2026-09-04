@@ -28,12 +28,16 @@ CREATE TABLE "speaker_migration_reviews" (
       ))
 );
 --> statement-breakpoint
+ALTER TABLE "speaker_migration_cutover" DROP CONSTRAINT "speaker_migration_cutover_closed_requires_floor";--> statement-breakpoint
+ALTER TABLE "speaker_migration_cutover" ADD COLUMN "source_import_completed_at" timestamp with time zone;--> statement-breakpoint
 ALTER TABLE "speaker_migration_reviews" ADD CONSTRAINT "speaker_migration_reviews_event_id_events_id_fk" FOREIGN KEY ("event_id") REFERENCES "public"."events"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "speaker_migration_reviews" ADD CONSTRAINT "speaker_migration_reviews_resolved_expert_id_experts_id_fk" FOREIGN KEY ("resolved_expert_id") REFERENCES "public"."experts"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "speaker_migration_reviews" ADD CONSTRAINT "speaker_migration_reviews_event_expert_id_event_experts_id_fk" FOREIGN KEY ("event_expert_id") REFERENCES "public"."event_experts"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "speaker_migration_reviews" ADD CONSTRAINT "speaker_migration_reviews_source_fk" FOREIGN KEY ("event_id","source_speaker_id") REFERENCES "public"."event_speakers"("event_id","id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX "speaker_migration_reviews_event_expert_key" ON "speaker_migration_reviews" USING btree ("event_expert_id");--> statement-breakpoint
 CREATE INDEX "speaker_migration_reviews_queue_idx" ON "speaker_migration_reviews" USING btree ("disposition","created_at","source_speaker_id");--> statement-breakpoint
+ALTER TABLE "speaker_migration_cutover" ADD CONSTRAINT "speaker_migration_cutover_closed_requires_floor" CHECK ("speaker_migration_cutover"."phase" <> 'source_closed' OR ("speaker_migration_cutover"."minimum_compatible_release_sha" IS NOT NULL AND "speaker_migration_cutover"."phase_advanced_at" IS NOT NULL AND "speaker_migration_cutover"."source_import_completed_at" IS NOT NULL));
+--> statement-breakpoint
 -- ═══════════════════════════════════════════════════════════════════════════
 -- 012 EARS-24 / Issue #1607 — the legacy-speaker review queue, its immutability
 -- guard, the atomic `unmatched` enqueue trigger and the `review_open` half of
@@ -133,8 +137,22 @@ CREATE TRIGGER speaker_migration_reviews_audit AFTER INSERT OR UPDATE OR DELETE
 -- The fence BEFORE trigger has already refused the insert in `source_closed`,
 -- so reaching this trigger means the phase is `review_open` and this
 -- transaction already holds the singleton lock.
+--
+-- GATED ON THE IMPORT, not on the phase alone: `review_open` is the phase every
+-- database is seeded in, so before the owner-reviewed list is imported there is
+-- no queue for a row to join and a legacy INSERT is ordinary authoring. From
+-- `source_import_completed_at` onward every INSERT is enqueued in its own
+-- transaction — that is the window the closure transaction's exact
+-- source↔queue coverage proof depends on.
 CREATE OR REPLACE FUNCTION event_speakers_enqueue_review() RETURNS trigger AS $$
 BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM speaker_migration_cutover
+    WHERE source_import_completed_at IS NOT NULL
+  ) THEN
+    RETURN NULL;
+  END IF;
+
   INSERT INTO speaker_migration_reviews (
     source_speaker_id, event_id, source_position, source_name, source_regalia,
     content_fingerprint, original_classification, disposition

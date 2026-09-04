@@ -56,6 +56,18 @@ describe.skipIf(!process.env.DATABASE_URL)(
       }
     }
 
+    /**
+     * Open the review queue for the current transaction — the same fact the
+     * import command commits (`source_import_completed_at`), which is what arms
+     * the enqueue trigger. Before it, `review_open` is simply "the migration has
+     * not started", so authoring is untouched.
+     */
+    async function openQueue(client: pg.PoolClient): Promise<void> {
+      await client.query(
+        `UPDATE speaker_migration_cutover SET source_import_completed_at = now()`,
+      );
+    }
+
     /** Insert a throwaway event; returns its id. */
     async function insertEvent(client: pg.PoolClient): Promise<string> {
       const { rows } = await client.query<{ id: string }>(
@@ -216,15 +228,34 @@ describe.skipIf(!process.env.DATABASE_URL)(
      * retired from the expand release onward; a wrong name is fixed by
      * resolving the review onto an Expert, never by rewriting the archive.
      */
-    it("012 EARS-24.9: review_open admits INSERT, enqueues it, and then refuses UPDATE", async () => {
+    it("012 EARS-24.9: before the import the queue does not exist and authoring is unaffected", async () => {
+      const [queued, updated] = await inRollback(async (client) => {
+        const eventId = await insertEvent(client);
+        const speakerId = await insertSpeaker(client, eventId);
+        const { rowCount } = await client.query(
+          `SELECT 1 FROM speaker_migration_reviews WHERE source_speaker_id = $1`,
+          [speakerId],
+        );
+        const write = await client.query(
+          `UPDATE event_speakers SET name = 'Corrected Name' WHERE id = $1`,
+          [speakerId],
+        );
+        return [rowCount, write.rowCount];
+      });
+      expect(queued).toBe(0);
+      expect(updated).toBe(1);
+    });
+
+    it("012 EARS-24.9.1: from the import onward review_open admits INSERT, enqueues it, and then refuses UPDATE", async () => {
       const queued = await inRollback(async (client) => {
+        await openQueue(client);
         const eventId = await insertEvent(client);
         const speakerId = await insertSpeaker(client, eventId);
         const { rows } = await client.query<{
-          classification: string;
+          original_classification: string;
           disposition: string;
         }>(
-          `SELECT classification, disposition
+          `SELECT original_classification, disposition
              FROM speaker_migration_reviews
             WHERE source_speaker_id = $1`,
           [speakerId],
@@ -233,12 +264,13 @@ describe.skipIf(!process.env.DATABASE_URL)(
       });
       expect(queued).toHaveLength(1);
       expect(queued[0]).toMatchObject({
-        classification: "unmatched",
+        original_classification: "unmatched",
         disposition: "unresolved",
       });
 
       await expect(
         inRollback(async (client) => {
+          await openQueue(client);
           const eventId = await insertEvent(client);
           const speakerId = await insertSpeaker(client, eventId);
           return client.query(

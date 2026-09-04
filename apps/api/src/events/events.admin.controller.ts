@@ -111,7 +111,13 @@ export class EventsAdminController {
     // #1593 — the 201 already carries the aggregate, so it also carries the
     // validator for it: a client that creates then immediately transitions must
     // not have to re-read the detail just to obtain an `If-Match`.
-    return this.withETag(reply, await this.events.create(parsed.data, pdf));
+    // 012 EARS-24 (#1607) — once the legacy speaker source is closed the service
+    // refuses a free-text speaker list as a `TaxonomyError`; re-shape it onto
+    // THIS surface's `{ code, message }` envelope like every sibling refusal.
+    return this.withETag(
+      reply,
+      await withProtocolRefusalShape(() => this.events.create(parsed.data, pdf)),
+    );
   }
 
   /**
@@ -254,7 +260,11 @@ export class EventsAdminController {
       });
     }
     try {
-      const updated = await this.events.update(id, parsed.data, pdf);
+      // 012 EARS-24 (#1607) — a free-text speaker edit after `source_closed` is
+      // refused as a `TaxonomyError`; same envelope re-shape as create.
+      const updated = await withProtocolRefusalShape(() =>
+        this.events.update(id, parsed.data, pdf),
+      );
       if (!updated) throw new NotFoundException("event not found");
       return this.withETag(reply, updated);
     } catch (err) {

@@ -95,6 +95,22 @@ export const speakerMigrationCutover = pgTable(
     minimumCompatibleReleaseOrdinal: integer("minimum_compatible_release_ordinal"),
     /** When the phase last advanced (NULL while still `review_open`). */
     phaseAdvancedAt: timestamp("phase_advanced_at", { withTimezone: true }),
+    /**
+     * 012 EARS-24 (#1607) — when the owner-reviewed source list was imported,
+     * i.e. when the review queue actually OPENED. `review_open` is the phase a
+     * fresh database is seeded in, so the phase alone cannot say whether the
+     * queue exists yet; this timestamp can, and it is what the enqueue trigger
+     * gates on. Before the import a legacy `event_speakers` INSERT is an
+     * ordinary authoring write with no queue to join; from the import onward
+     * every INSERT is enqueued in its own transaction, which is what makes the
+     * closure transaction's exact source↔queue coverage provable.
+     *
+     * Written exactly once, by the import command, inside the same transaction
+     * that writes the reviewed rows.
+     */
+    sourceImportCompletedAt: timestamp("source_import_completed_at", {
+      withTimezone: true,
+    }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -122,7 +138,7 @@ export const speakerMigrationCutover = pgTable(
     // unreadable. It is unrepresentable, not merely avoided by the service.
     check(
       "speaker_migration_cutover_closed_requires_floor",
-      sql`${t.phase} <> 'source_closed' OR (${t.minimumCompatibleReleaseSha} IS NOT NULL AND ${t.phaseAdvancedAt} IS NOT NULL)`,
+      sql`${t.phase} <> 'source_closed' OR (${t.minimumCompatibleReleaseSha} IS NOT NULL AND ${t.phaseAdvancedAt} IS NOT NULL AND ${t.sourceImportCompletedAt} IS NOT NULL)`,
     ),
     check(
       "speaker_migration_cutover_sha_shape",

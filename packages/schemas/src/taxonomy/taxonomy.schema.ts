@@ -1778,6 +1778,13 @@ export const SpeakerMigrationStateSchema = z
     minimumCompatibleReleaseSha: z.string().nullable(),
     minimumCompatibleReleaseOrdinal: z.number().int().nullable(),
     phaseAdvancedAt: z.string().nullable(),
+    /**
+     * When the owner-reviewed list was imported, i.e. when the queue opened.
+     * `null` means the migration has not started: the phase reads `review_open`
+     * from the day the database was created, so this — not the phase — is what
+     * tells an operator (and the admin UI) whether there is a queue at all.
+     */
+    sourceImportCompletedAt: z.string().nullable(),
   })
   .strict();
 export type SpeakerMigrationState = z.infer<typeof SpeakerMigrationStateSchema>;

@@ -177,6 +177,19 @@ export class SpeakerMigrationRepository {
     return inserted;
   }
 
+  /**
+   * Stamp `source_import_completed_at` on the singleton — the moment the review
+   * queue OPENS. Runs inside the import transaction, under the same singleton
+   * lock the fence takes, so no legacy INSERT can slip between the reviewed
+   * rows landing and the enqueue trigger arming.
+   */
+  async markSourceImported(tx: Tx, id: string): Promise<void> {
+    await tx
+      .update(speakerMigrationCutover)
+      .set({ sourceImportCompletedAt: new Date(), updatedAt: new Date() })
+      .where(eq(speakerMigrationCutover.id, id));
+  }
+
   async countReviews(tx: Tx): Promise<number> {
     const [row] = await tx
       .select({ value: count() })

@@ -59,6 +59,8 @@ export class SpeakerMigrationService {
       minimumCompatibleReleaseSha: row.minimumCompatibleReleaseSha,
       minimumCompatibleReleaseOrdinal: row.minimumCompatibleReleaseOrdinal,
       phaseAdvancedAt: row.phaseAdvancedAt?.toISOString() ?? null,
+        sourceImportCompletedAt:
+          row.sourceImportCompletedAt?.toISOString() ?? null,
     };
   }
 
@@ -94,7 +96,10 @@ export class SpeakerMigrationService {
             "the legacy speaker source set is already closed",
           );
         }
-        if ((await this.repo.countReviews(tx)) > 0) {
+        // The import marker, not the row count, answers "already imported":
+        // it is true even for a source set that was empty at import time, and
+        // it is the same fact the enqueue trigger gates on.
+        if (state.sourceImportCompletedAt !== null) {
           throw new TaxonomyError(
             "RELATIONSHIP_CONFLICT",
             "the migration review queue has already been imported",
@@ -114,6 +119,10 @@ export class SpeakerMigrationService {
             "the migration import did not queue every retained source row",
           );
         }
+        // Arm the enqueue trigger in the SAME transaction as the reviewed rows:
+        // from here a legacy INSERT joins the queue, and there is no committed
+        // state in which the queue exists but new rows escape it.
+        await this.repo.markSourceImported(tx, state.id);
         const counts = await this.repo.classificationCounts(tx);
         const result: SpeakerMigrationImportResult = {
           imported: inserted,
@@ -151,6 +160,8 @@ export class SpeakerMigrationService {
           minimumCompatibleReleaseSha: row.minimumCompatibleReleaseSha,
           minimumCompatibleReleaseOrdinal: row.minimumCompatibleReleaseOrdinal,
           phaseAdvancedAt: row.phaseAdvancedAt?.toISOString() ?? null,
+        sourceImportCompletedAt:
+          row.sourceImportCompletedAt?.toISOString() ?? null,
         };
         await this.idempotency.complete(tx, input.lease, {
           status: 200,

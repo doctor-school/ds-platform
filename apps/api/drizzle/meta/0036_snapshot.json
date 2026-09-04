@@ -1,5 +1,5 @@
 {
-  "id": "fc990ddc-3847-471c-838d-67c262e8e331",
+  "id": "5fe04294-7fe8-4945-983d-bc8faebf31e8",
   "prevId": "3924c609-35a1-4c28-b46d-68af7f032c25",
   "version": "7",
   "dialect": "postgresql",
@@ -3548,6 +3548,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "source_import_completed_at": {
+          "name": "source_import_completed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -3603,7 +3609,7 @@
         },
         "speaker_migration_cutover_closed_requires_floor": {
           "name": "speaker_migration_cutover_closed_requires_floor",
-          "value": "\"speaker_migration_cutover\".\"phase\" <> 'source_closed' OR (\"speaker_migration_cutover\".\"minimum_compatible_release_sha\" IS NOT NULL AND \"speaker_migration_cutover\".\"phase_advanced_at\" IS NOT NULL)"
+          "value": "\"speaker_migration_cutover\".\"phase\" <> 'source_closed' OR (\"speaker_migration_cutover\".\"minimum_compatible_release_sha\" IS NOT NULL AND \"speaker_migration_cutover\".\"phase_advanced_at\" IS NOT NULL AND \"speaker_migration_cutover\".\"source_import_completed_at\" IS NOT NULL)"
         },
         "speaker_migration_cutover_sha_shape": {
           "name": "speaker_migration_cutover_sha_shape",

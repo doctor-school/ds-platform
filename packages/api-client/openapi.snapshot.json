@@ -3677,9 +3677,45 @@
         "tags": ["SpeakerMigrationAdmin"]
       }
     },
-    "/v1/admin/speaker-migration-reviews/cutover": {
+    "/v1/admin/speaker-migration-reviews/close-source": {
       "post": {
-        "operationId": "SpeakerMigrationAdminController_cutover",
+        "operationId": "SpeakerMigrationAdminController_closeSource",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["SpeakerMigrationAdmin"]
+      }
+    },
+    "/v1/admin/speaker-migration-reviews/import": {
+      "post": {
+        "operationId": "SpeakerMigrationAdminController_import",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["SpeakerMigrationAdmin"]
+      }
+    },
+    "/v1/admin/speaker-migration-reviews/phase-aware-release": {
+      "post": {
+        "operationId": "SpeakerMigrationAdminController_recordPhaseAwareRelease",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["SpeakerMigrationAdmin"]
+      }
+    },
+    "/v1/admin/speaker-migration-reviews/state": {
+      "get": {
+        "operationId": "SpeakerMigrationAdminController_state",
         "parameters": [],
         "responses": {
           "200": {

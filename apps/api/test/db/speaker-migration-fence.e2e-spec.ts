@@ -96,6 +96,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
             SET phase = 'source_closed',
                 minimum_compatible_release_sha = $1,
                 minimum_compatible_release_ordinal = 7,
+                source_import_completed_at = coalesce(source_import_completed_at, now()),
                 phase_advanced_at = now()`,
         [SHA_A],
       );

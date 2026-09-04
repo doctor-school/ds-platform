@@ -33,6 +33,8 @@
 | GET /v1/admin/project-partners/:id                              | authenticated | platform_admin               | fast-path  | —            | false   | none       | none        | EARS-10, EARS-16                   |
 | GET /v1/admin/projects                                          | authenticated | platform_admin               | fast-path  | —            | false   | none       | none        | EARS-1, EARS-15, EARS-16           |
 | GET /v1/admin/projects/:id                                      | authenticated | platform_admin               | fast-path  | —            | false   | none       | none        | EARS-1, EARS-16                    |
+| GET /v1/admin/speaker-migration-reviews                         | authenticated | platform_admin               | fast-path  | —            | false   | none       | none        | EARS-24                            |
+| GET /v1/admin/speaker-migration-reviews/state                   | authenticated | platform_admin               | fast-path  | —            | false   | none       | none        | EARS-24                            |
 | GET /v1/auth/session                                            | authenticated | doctor_guest, platform_admin | fast-path  | —            | false   | none       | low-stakes  | EARS-8                             |
 | GET /v1/events/:idOrSlug/recordings                             | authenticated | doctor_guest                 | fast-path  | —            | false   | none       | none        | EARS-5                             |
 | GET /v1/events/:idOrSlug/registration                           | authenticated | doctor_guest                 | fast-path  | —            | false   | none       | none        | EARS-1, EARS-10                    |
@@ -123,6 +125,10 @@
 | POST /v1/admin/projects                                         | authenticated | platform_admin               | fast-path  | —            | false   | live       | low-stakes  | EARS-1, EARS-16, EARS-17           |
 | POST /v1/admin/projects/:id/publish                             | authenticated | platform_admin               | fast-path  | —            | false   | live       | low-stakes  | EARS-1, EARS-5, EARS-16, EARS-17   |
 | POST /v1/admin/projects/:id/replace-curator                     | authenticated | platform_admin               | fast-path  | —            | false   | live       | low-stakes  | EARS-9, EARS-16, EARS-17           |
+| POST /v1/admin/speaker-migration-reviews/:sourceId/resolve      | authenticated | platform_admin               | fast-path  | —            | false   | live       | low-stakes  | EARS-24                            |
+| POST /v1/admin/speaker-migration-reviews/close-source           | authenticated | platform_admin               | fast-path  | —            | false   | live       | low-stakes  | EARS-24                            |
+| POST /v1/admin/speaker-migration-reviews/import                 | authenticated | platform_admin               | fast-path  | —            | false   | live       | low-stakes  | EARS-24                            |
+| POST /v1/admin/speaker-migration-reviews/phase-aware-release    | authenticated | platform_admin               | fast-path  | —            | false   | live       | low-stakes  | EARS-24                            |
 | POST /v1/auth/login                                             | public        | —                            | none       | —            | false   | none       | high-stakes | EARS-5, EARS-8, EARS-17            |
 | POST /v1/auth/login/otp                                         | public        | —                            | none       | —            | false   | none       | high-stakes | EARS-6, EARS-7, EARS-8             |
 | POST /v1/auth/login/otp/request                                 | public        | —                            | none       | —            | false   | none       | high-stakes | EARS-6, EARS-7, EARS-14, EARS-34   |

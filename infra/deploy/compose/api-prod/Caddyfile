@@ -2,7 +2,8 @@
 # Automatic Let's Encrypt (HTTP-01 over :80), auto-renew, no manual certs. Upstream
 # ports verified against the built code (DSO-100): api = 3000 (apps/api/src/main.ts
 # PORT default), portal = 3001 (apps/portal/Dockerfile ENV PORT=3001), admin = 3002
-# (apps/admin/Dockerfile ENV PORT=3002), centrifugo = 8000 (dev-stand parity),
+# (apps/admin/Dockerfile ENV PORT=3002), doctor = 3004 (apps/doctor/Dockerfile ENV
+# PORT=3004, #1723), centrifugo = 8000 (dev-stand parity),
 # zitadel core = 8080 (h2c), zitadel-login = 3000. Certs persist in the caddy_data
 # volume (compose.yml).
 
@@ -14,6 +15,18 @@
 # Portal (Next.js standalone) — user-facing auth screens (#1171).
 academy.doctor.school {
 	reverse_proxy portal:3001
+}
+
+# Doctor storefront (Next.js standalone) — the public doctor-facing site (#1723).
+# TEMPORARY host: the root doctor.school cut-over waits on data migration and the
+# retirement of the old site (owner decision on #1430, 2026-08-26). Automatic ACME
+# over HTTP-01 like every other vhost — which means the Beget A-record
+# `new.doctor.school` → 77.233.220.222 MUST already resolve before the deploy that
+# adds this block, or issuance fails instead of producing a working vhost
+# (infra/deploy/README.md §"Doctor storefront roll-out"). The doctor app proxies
+# /v1/* to the api internally (same-origin __Host- cookie, apps/doctor/next.config.ts).
+new.doctor.school {
+	reverse_proxy doctor:3004
 }
 
 # Admin app (Next.js + Refine standalone) — operator event/program management

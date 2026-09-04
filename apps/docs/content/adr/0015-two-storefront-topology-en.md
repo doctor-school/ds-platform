@@ -53,7 +53,7 @@ Evidence from the code as it stands (not an aspiration):
 | API      | `apps/api` is a single NestJS application (ADR-0002 §2/§4); the REST contract is generated once into `@ds/api-client` from the Zod SSOT in `packages/schemas`. There is no host-aware or tenant-aware routing anywhere in the application.                                                         | A second storefront is a new **client** of the same contract, not a fork.                                 |
 | Database | One Postgres 17 instance with one Drizzle schema in `packages/db/src/schema/*.ts` (users, events, registrations, taxonomy, event-recordings, consent-records, audit-ledger, lifecycle, presence-beats, idempotency-keys, media-cleanup-jobs). No storefront or tenant discriminator column exists. | One person row, one registration row, one ledger — OWD-1, OWD-9 and OWD-10 are satisfied by construction. |
 | Identity | One Zitadel instance at `id.doctor.school` (ADR-0001 §6); sessions are host-only cookies issued per front-end host, cross-host continuity via OIDC silent re-auth.                                                                                                                                 | One account spanning both hosts without a shared `.doctor.school` cookie.                                 |
-| Delivery | ADR-0012 §1 — one `api-prod` plane and one `data-prod` plane.                                                                                                                                                                                                                                      | The second storefront adds a front-end container and an nginx virtual host, nothing else.                 |
+| Delivery | ADR-0012 §1 — one `api-prod` plane and one `data-prod` plane.                                                                                                                                                                                                                                      | The second storefront adds a front-end container and a Caddy virtual host, nothing else.                  |
 
 The alternatives (a backend, a database or an IdP per storefront) are rejected below, each against the one-way door it breaks.
 
@@ -108,7 +108,7 @@ One row per capability the doctor storefront requires. «Fits with additions» n
 
 ### 7. Deployment shape
 
-ADR-0012 is unchanged in cluster shape: `api-prod` (API plane) and `data-prod` (persistence plane). The front-end delta is one additional container and one additional nginx virtual host: `doctor.school` → `apps/doctor`, `academy.doctor.school` → `apps/portal`, `admin.` and `cms.` as today. `app.doctor.school` is not part of that map: the legacy host was retired per Issue #1173, so a surviving bookmark or old e-mail link on it fails DNS resolution rather than redirecting (`infra/deploy/README.md` → «Portal host cutover»).
+ADR-0012 is unchanged in cluster shape: `api-prod` (API plane) and `data-prod` (persistence plane). The front-end delta is one additional container and one additional Caddy virtual host (`infra/deploy/compose/api-prod/Caddyfile` — production has terminated TLS at Caddy with automatic ACME since the 003 slice): `apps/doctor` → `new.doctor.school` today, `doctor.school` after the cut-over, `academy.doctor.school` → `apps/portal`, `admin.` and `cms.` as today. The doctor storefront launches on the **temporary** host `new.doctor.school` (public roll-out #1723); the root `doctor.school` cut-over is a later step gated on data migration and the retirement of the old site (owner decision on epic #1430, 2026-08-26). `app.doctor.school` is not part of that map: the legacy host was retired per Issue #1173, so a surviving bookmark or old e-mail link on it fails DNS resolution rather than redirecting (`infra/deploy/README.md` → «Portal host cutover»).
 
 ---
 
@@ -155,7 +155,7 @@ Rejected as a framing, adopted as a migration. `apps/promo` is scoped as an SSG 
 ### Positive
 
 - The «one backend / one database» premise is verified against the code rather than assumed: OWD-1, OWD-9 and OWD-10 hold by construction, with no synchronisation machinery to build.
-- The second storefront costs one front-end container and one nginx virtual host — the ADR-0012 cluster shape and the ADR-0002 API contract are untouched.
+- The second storefront costs one front-end container and one Caddy virtual host — the ADR-0012 cluster shape and the ADR-0002 API contract are untouched.
 - The backstage boundary of OWD-6 is a build-time separation (a different application) plus an API authorization decision, not a runtime host check.
 - The doctor storefront is the web core the mobile product needs (Q-36), sharing schemas, client and design system through `packages/*`.
 - The host map in the ADR corpus now matches production (`academy.doctor.school` = the portal), so the next session reads facts instead of drift.
@@ -175,7 +175,7 @@ Rejected as a framing, adopted as a migration. `apps/promo` is scoped as an SSG 
 | Data unity           | Databases holding person, project or points rows                  | 1                           |
 | API unity            | Backend applications serving the storefronts                      | 1 (`apps/api`)              |
 | Storefront isolation | Backstage routes reachable from the doctor host                   | 0                           |
-| Delivery delta       | Infrastructure components added by the second storefront          | 1 container + 1 nginx vhost |
+| Delivery delta       | Infrastructure components added by the second storefront          | 1 container + 1 Caddy vhost |
 | Points consistency   | Attention-points balances per person across web and mobile        | 1                           |
 | Cross-host re-auth   | Person-visible logins to move between hosts (silent re-auth path) | 0                           |
 

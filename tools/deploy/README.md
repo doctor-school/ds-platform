@@ -48,14 +48,15 @@ Pipeline, fail-closed, stops at the first red step and prints a rollback pointer
 5. **api-prod** — `build` → **pre-swap boot verify (#1410)** → `migrate --build`
    (the migrate image is rebuilt from the freshly shipped tree — a reused stale
    image would apply old migrations) → `up -d`; images SHA-tagged
-   **`ds-api:<sha>` / `ds-portal:<sha>` / `ds-admin:<sha>`**
+   **`ds-api:<sha>` / `ds-portal:<sha>` / `ds-admin:<sha>` / `ds-doctor:<sha>`**
    (DSO-127) via a `DEPLOY_SHA` `.env` the script writes beside `compose.yml`.
    Then compare the shipped `Caddyfile` and `centrifugo/config.json` with the
    files visible through the running containers and **restart only consumers
    whose bind mount is stale**. Both mounts are compared again after apply, so
    a mismatch fails the deploy instead of requiring a manual SSH step (#1175).
    5a. **Pre-swap boot verify (#1410)** — between `build` and `migrate`/`up -d`, the
-   freshly built **`ds-portal:<sha>` and `ds-admin:<sha>`** are each started as a
+   freshly built **`ds-portal:<sha>`, `ds-admin:<sha>` and `ds-doctor:<sha>`**
+   (#1723) are each started as a
    throwaway detached container (`ds-bootcheck-<svc>`, no published port, no
    compose network, always removed) with the SAME `env_file` production uses, and
    must answer **non-5xx on `/`** from inside the container within 2 min — the
@@ -70,7 +71,8 @@ Pipeline, fail-closed, stops at the first red step and prints a rollback pointer
    (`tools/ci/standalone-boot-check.mjs`), which boots the same standalone entry
    on every PR.
 6. **Truthful-success verify** — the script polls `docker inspect` on-box until
-   the RUNNING api + portal containers carry exactly `ds-*:<sha>` **and** report
+   the RUNNING api + portal + admin + doctor containers carry exactly
+   `ds-*:<sha>` **and** report
    healthy (≤ 4 min); otherwise the deploy is FAILED, never "OK". (Added after
    the DSO-127 rework: a stdin-swallowed `bash -s` script silently skipped
    `build`/`up -d` while the deploy still printed success — all remote scripts
@@ -210,13 +212,14 @@ marker parser, evaluator and formatters over fabricated probes — no subprocess
 
 ## `pnpm deploy:smoke`
 
-Probes the three public origins end to end over real TLS: `api.doctor.school`
+Probes the public origins end to end over real TLS: `api.doctor.school`
 `/v1/health` (+ optional `--expect-sha` assertion) & `/v1/ready`,
-`academy.doctor.school/`, `id.doctor.school/ui/v2/login/loginname` (the login entry —
+`academy.doctor.school/`, `admin.doctor.school/`, `new.doctor.school/` (the
+doctor storefront, #1723), `id.doctor.school/ui/v2/login/loginname` (the login entry —
 the bare `/ui/v2/login` 404s per Caddy's sub-path routing), and cert
-validity/expiry on all three hosts. Exit non-zero on any failure. Hostnames default to the prod
+validity/expiry on all five hosts. Exit non-zero on any failure. Hostnames default to the prod
 vhosts and are env-overridable (`PROD_API_HOST` / `PROD_PORTAL_HOST` /
-`PROD_ID_HOST`) for a staging clone.
+`PROD_ADMIN_HOST` / `PROD_DOCTOR_HOST` / `PROD_ID_HOST`) for a staging clone.
 
 SSH host aliases (`ds-api-prod`, `ds-data-prod` via ProxyJump) resolve from
 `~/.ssh/config`; overridable via `DS_API_PROD_SSH` / `DS_DATA_PROD_SSH`.

@@ -1,15 +1,20 @@
-# @ds/doctor — Doctor.School storefront (`doctor.school`)
+# @ds/doctor — Doctor.School storefront (`new.doctor.school`, later `doctor.school`)
 
 The doctor-facing storefront of the two-storefront topology (ADR-0015 §2): the
 public + authenticated surface a doctor lands on. Its sibling `@ds/portal` serves
-`academy.doctor.school` (the Academy backstage). This app is the **scaffold** for
-that host — the shell, the build/boot/CI wiring and the session plumbing exist;
-the product routes do not yet (ADR-0015 §2 stage 3 migrates the marketing routes
+`academy.doctor.school` (the Academy backstage). The shell, the build/boot/CI
+wiring, the session plumbing and the public routing exist; the product routes are
+still landing (ADR-0015 §2 stage 3 migrates the marketing routes
 here out of `apps/promo`).
 
-**Not publicly routed.** There is no compose service and no Caddy vhost pointing
-at it; ADR-0015 §7 makes the `doctor.school` cut-over a release-time step. The
-`Dockerfile` here is the container that step will start.
+**Publicly routed on the temporary host `new.doctor.school` (#1723).** The
+`doctor` compose service (`infra/deploy/compose/api-prod/compose.yml`, image
+`ds-doctor:<sha>`, port 3004) sits behind the Caddy vhost `new.doctor.school`,
+ships and rolls back with `pnpm deploy:prod` alongside `ds-api` / `ds-portal` /
+`ds-admin`, and is probed by `pnpm smoke:prod`. The host is **temporary**: the
+root `doctor.school` cut-over is a separate later step gated on data migration
+and the retirement of the old site (owner decision on epic #1430, 2026-08-26).
+Runbook: `infra/deploy/README.md` → «Doctor storefront roll-out».
 
 ## Stack
 

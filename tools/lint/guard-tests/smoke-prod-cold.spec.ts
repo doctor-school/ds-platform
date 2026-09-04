@@ -5,6 +5,7 @@ import {
   checkColdPage,
   checkRegisterClosed,
   findColdErrorMarker,
+  isDoctorProbeSkipped,
 } from "../../deploy/smoke-prod.mjs";
 
 /**
@@ -100,14 +101,15 @@ describe("smoke-prod checkColdPage()", () => {
   });
 
   it("rejects any non-200, including the pre-#866-green 3xx band", () => {
-    expect(() =>
-      checkColdPage({ status: 302, body: "" }),
-    ).toThrow(/→ 302/);
+    expect(() => checkColdPage({ status: 302, body: "" })).toThrow(/→ 302/);
   });
 
   it("rejects a blank/degraded 200 render missing the expected form markup", () => {
     expect(() =>
-      checkColdPage({ status: 200, body: "<!DOCTYPE html><html><body></body></html>" }),
+      checkColdPage({
+        status: 200,
+        body: "<!DOCTYPE html><html><body></body></html>",
+      }),
     ).toThrow(/markup "<input" missing/);
   });
 
@@ -252,5 +254,35 @@ describe("smoke-prod checkRegisterClosed() — #877 public self-registration sta
         url: "https://id.example/ui/v2/login/register",
       }),
     ).toThrow(/self-registration appears OPEN/);
+  });
+});
+
+/**
+ * #1723 — the doctor probes must not turn an UNRELATED `pnpm deploy:prod` (or
+ * a `--rollback`) RED while the owner-gated Beget A-record for
+ * `new.doctor.school` is still pending: an unresolvable host fails both the
+ * render and the TLS probe, `smoke-prod` exits 1, and `prod.mjs` die()s at the
+ * smoke gate for a DNS reason. The switch is an operator flag with a probe-ON
+ * default, so nobody has to remember to re-arm it after the DNS flip.
+ */
+describe("doctor probe skip switch (#1723)", () => {
+  it("probes by default — PROD_DOCTOR_HOST unset", () => {
+    expect(isDoctorProbeSkipped(undefined)).toBe(false);
+  });
+
+  it("probes against an explicit host override", () => {
+    expect(isDoctorProbeSkipped("doctor.school")).toBe(false);
+    expect(isDoctorProbeSkipped("new.doctor.school")).toBe(false);
+  });
+
+  it("skips on an explicitly EMPTY value (including whitespace)", () => {
+    expect(isDoctorProbeSkipped("")).toBe(true);
+    expect(isDoctorProbeSkipped("   ")).toBe(true);
+  });
+
+  it("skips on the literal `skip`, case- and space-insensitively", () => {
+    expect(isDoctorProbeSkipped("skip")).toBe(true);
+    expect(isDoctorProbeSkipped("SKIP")).toBe(true);
+    expect(isDoctorProbeSkipped(" Skip ")).toBe(true);
   });
 });

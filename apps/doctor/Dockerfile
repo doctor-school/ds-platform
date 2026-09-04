@@ -3,11 +3,12 @@
 # §2.3/§18; next.config.ts `output: "standalone"`). Mirrors apps/portal/Dockerfile.
 #
 # ADR-0015 §7: the deployment delta for the two-storefront topology is ONE more
-# container and ONE more vhost (doctor.school → apps/doctor, academy.doctor.school
-# → apps/portal). This image is that container. It is NOT wired into
-# infra/deploy/compose/api-prod yet, and no Caddy vhost points at it — the host
-# cut-over is a release-time step, deliberately out of the scaffold's scope, so
-# nothing here is publicly reachable.
+# container and ONE more vhost (apps/doctor → the doctor storefront,
+# academy.doctor.school → apps/portal). This image is that container, and #1723
+# wired it in: `doctor` in infra/deploy/compose/api-prod/compose.yml behind the
+# Caddy vhost new.doctor.school. That host is TEMPORARY — the root doctor.school
+# cut-over waits on data migration and the retirement of the old site (owner
+# decision on #1430, 2026-08-26).
 #
 # Built ON-BOX (no registry) with the REPO ROOT as build context. Multi-stage:
 #   1. install the whole workspace (frozen lockfile),
@@ -23,6 +24,14 @@ WORKDIR /repo
 
 FROM base AS build
 ENV NEXT_TELEMETRY_DISABLED=1
+# NEXT_PUBLIC_* are INLINED into the client bundle at BUILD time, so the Yandex
+# SmartCaptcha site key must arrive as a build-arg (not runtime env) — portal
+# precedent. Empty is the local-dev default and renders no widget; production
+# supplies the real key via the compose build arg (#1723) and `new.doctor.school`
+# must also be on the SmartCaptcha resource's allowed domains. The SERVER half
+# lives in api.env (SMARTCAPTCHA_SERVER_KEY), never here.
+ARG NEXT_PUBLIC_SMARTCAPTCHA_SITE_KEY=
+ENV NEXT_PUBLIC_SMARTCAPTCHA_SITE_KEY=$NEXT_PUBLIC_SMARTCAPTCHA_SITE_KEY
 # API_PROXY_TARGET must be present at BUILD time: Next evaluates `rewrites()`
 # during `next build` and freezes the destination into .next/routes-manifest.json
 # — runtime env cannot change it (DSO-100 on-box find on the portal image: built

@@ -4,3 +4,15 @@
  * Nothing here may import React or a host framework (see `../purity.test.ts`).
  */
 export type { RoomSession } from "./session";
+export {
+  fetchRoomConfig,
+  normalizeApiBase,
+  type RoomAccess,
+  type RoomServerReadOptions,
+} from "./room-config";
+export { fetchMyDisplayName } from "./my-display-name";
+export {
+  resolveRoomEntry,
+  type RoomEntryOutcome,
+  type RoomEntryRoutes,
+} from "./room-entry";

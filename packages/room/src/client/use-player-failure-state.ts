@@ -12,7 +12,7 @@ import {
   type PlayerFailureKind,
   type PlayerGrade,
   type PlayerStatus,
-} from "./room-player-state";
+} from "../model/room-player-state";
 
 export interface PlayerFailureState {
   readonly status: PlayerStatus;

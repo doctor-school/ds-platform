@@ -42,7 +42,7 @@ const config: NextConfig = {
   outputFileTracingRoot: path.join(configDir, "../../"),
   // Consume @ds/design-system as source (.tsx) — owned-code shadcn model,
   // no separate build step for the internal package (ADR-0004 §6).
-  transpilePackages: ["@ds/design-system"],
+  transpilePackages: ["@ds/design-system", "@ds/room"],
   // Reverse-proxy the live `/v1/*` BFF under the portal origin so the `__Host-`
   // session cookie is set/sent same-origin (see API_PROXY_TARGET above). The
   // capture covers the whole versioned api surface (`/v1/auth/*` today) so the

@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@ds/design-system": "workspace:*",
+    "@ds/room": "workspace:*",
     "@ds/schemas": "workspace:*",
     "@hookform/resolvers": "^5.9.1",
     "@yandex/smart-captcha": "2.9.1",

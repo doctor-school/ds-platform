@@ -21,10 +21,13 @@ import { RoomConfigSchema } from "@ds/schemas";
  * - a transient failure (5xx / network) throws a plain error — the SDK retries
  *   with backoff, so a blip never permanently kills the chat.
  */
-export async function fetchFreshChatToken(slug: string): Promise<string> {
+export async function fetchFreshChatToken(
+  slug: string,
+  fetchImpl: typeof fetch = globalThis.fetch,
+): Promise<string> {
   let res: Response;
   try {
-    res = await fetch(`/v1/events/${encodeURIComponent(slug)}/room`, {
+    res = await fetchImpl(`/v1/events/${encodeURIComponent(slug)}/room`, {
       credentials: "include",
       headers: { accept: "application/json" },
       cache: "no-store",

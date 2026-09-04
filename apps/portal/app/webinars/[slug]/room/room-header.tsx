@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Badge } from "@ds/design-system/badge";
 import { Link as DsLink } from "@ds/design-system/link";
-import { initialsFromDisplayName } from "../../../../lib/display-name";
+import { initialsFromDisplayName } from "@ds/room/display-name";
 import { LiveDuration, PresenceCount } from "./room-presence";
 import { HeaderUserCluster } from "@/components/header-user-cluster";
 

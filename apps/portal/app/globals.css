@@ -5,3 +5,12 @@
  * of truth lives in @ds/design-system (ADR-0004 §6.3).
  */
 @import "@ds/design-system/globals.css";
+
+/*
+ * Tailwind v4 scans only what it can see. `@ds/room` is a workspace-linked source
+ * package (#1722), so its utility classes are invisible to this app's JIT unless
+ * they are declared here — without this line the shared room renders unstyled with
+ * every test green. Declared per app (D15): the design-system entry stylesheet must
+ * not `@source` a package downstream of itself.
+ */
+@source "../../../packages/room/src";

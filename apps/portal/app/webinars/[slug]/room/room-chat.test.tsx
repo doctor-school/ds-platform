@@ -17,7 +17,11 @@ vi.mock("next-intl", () => ({
   useTranslations: () => (key: string) => key,
 }));
 
-vi.mock("../../../../lib/room-chat-token", () => ({
+// The chat-token refresh lives in the shared room unit (#1722). Mock only that one
+// export — `applyPresenceCountPublication` comes from the same barrel and must keep
+// its real implementation, which is what the EARS-5 discriminator cases exercise.
+vi.mock("@ds/room", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@ds/room")>()),
   fetchFreshChatToken: vi.fn(),
 }));
 

@@ -8,12 +8,12 @@ import { RoomPresenceProvider } from "./room-presence";
 import {
   PLAYER_RETRY_DELAY_MS,
   PLAYER_WATCHDOG_MS,
-} from "../../../../lib/room-player-state";
+} from "@ds/room";
 
 /**
  * 006 EARS-18 — the in-room player-failure states at the component tier on a fake
  * clock (design §12), TWO-GRADE model. The pure state machine is covered in
- * lib/room-player-state.test.ts; the visible overlay/banner in the live room is
+ * packages/room/src/model/room-player-state.test.ts; the visible overlay/banner in the live room is
  * driven by Playwright (live-verify wave). These lock:
  *  - 18.1 a watchdog stall with no signal raises a NON-COVERING advisory banner
  *    (SUSPECTED) over a still-visible embed, and NEVER auto-retries / re-creates it;

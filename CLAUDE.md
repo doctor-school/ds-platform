@@ -30,7 +30,7 @@ Vendor skill packs are disabled for this project (AGENTS.md §3.4) — dispatch 
 
 ## Propose Workflow (multi-agent) when the shape is known
 
-`Workflow` (deterministic scripted fan-out, ≤16 concurrent agents) is user-opt-in: never auto-run — propose with a rough scale/token estimate and await go. Triggers, all shape-knowable upfront: same-shape batch audit/sweep; an impl/review wave of ≈4+ independent, non-overlapping-touch-set Issues/PRs; a find→verify pipeline; an N-approach bake-off with a judge panel. The lead CLOSES a run by diffing the synthesis row-set against the seed ledgers it handed in — verifiers check rows that exist, nothing checks completeness. Stay on plain orchestration when a step depends on judging the prior return, or the discipline contour (worktree/Mode-a/merge/board) must run inline — Workflow subagents don't carry it.
+`Workflow` (deterministic scripted fan-out, ≤16 concurrent agents) is user-opt-in: never auto-run — propose with a rough scale/token estimate and await go. Triggers, all shape-knowable upfront: same-shape batch audit/sweep; an impl/review wave of ≈4+ independent, non-overlapping-touch-set Issues/PRs (named script `impl-wave`, `.claude/workflows/`); a find→verify pipeline; an N-approach bake-off with a judge panel. The lead CLOSES a run by diffing the synthesis rows against the seed ledgers — nothing checks completeness. Stay on plain orchestration when a step depends on judging the prior return, or the discipline contour (worktree/Mode-a/merge/board) must run inline — Workflow subagents don't carry it.
 
 ## Session plan (первый ответ сессии — canon AGENTS.md §3.2)
 
@@ -62,7 +62,7 @@ A subagent's final message lands in the lead's context and is re-read until sess
 4. Lead-only tools are never delegated: a tool absent from the subagent environment (DesignSync, …) the lead runs itself BEFORE dispatch, handing the subagent only the mechanical follow-on — dead-ending there is a guaranteed block.
 5. Briefs in English; RU only where the RU string is itself the artifact. User-facing replies stay RU.
 6. Background dispatches are checkpointed and probed with `pnpm dispatch:probe <N>` (STILL-CLEAN ≈10 min in ⇒ kill + re-dispatch on a tighter brief), never by "waiting for the notification"; owner-facing status names observed artifacts only (commit / PR # / verdict), downstream steps are phrased as plan, and every impl brief carries the dispatch-brief checklist heading (memory `feedback_orchestration_brief_full_lint_before_pr`). Any wait on CI or a workflow run follows the shared-token poller rules in skill `merge-when-green` Step 1.
-7. Impl dispatches go to `ds-implementer` (Opus, maxTurns 120). The subagent 150K/200K ROTATE contract is stated once, in AGENTS.md §6.
+7. Impl dispatches go to `ds-implementer` (Opus); PR tails → `ds-lander` (Sonnet). 150K/200K ROTATE: AGENTS.md §6.
 8. `<subagent_tokens>` = the child's reading in the task-notification `<usage>`, taken BEFORE the round (it ignores that round's own ≈20K+ cost). SendMessage rework/re-review only while it is < 120K — impl and reviewer alike; at or above, as on a `ROTATE:` return, dispatch a FRESH agent with PR + review URL + checkpoint. Wave landed → handoff.
 
 ## On-demand pointers

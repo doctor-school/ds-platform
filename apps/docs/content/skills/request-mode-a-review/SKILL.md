@@ -93,6 +93,23 @@ The `VERDICT:` line is mandatory. `APPROVE` is allowed only when there are zero 
 
 **Return contract — final message to the lead (context economy, #534).** After posting the PR comment, your reply to the lead is ONLY: the `VERDICT:` line, the `[BLOCKER]` findings one line each, and the PR-comment URL — ≤20 lines total. Do not restate the full report in the reply: it already lives in the PR comment, and everything in the reply sits in the lead's context until session end.
 
+### Re-review (rework verification)
+
+A rework push invalidates the previous verdict (#992), but it does **not** require the full two-pass review again. When the lead dispatches a re-review, the reviewer verifies the delta, not the PR.
+
+**Brief contract — the lead MUST hand all four:** the PR number; the prior review's findings **verbatim** (each `[BLOCKER]`/`[NIT]`/`[SUGGESTION]` line as posted); the commit range `<old-head>..<new-head>`; and the URL of the prior `## Mode (a) Review` comment. A dispatch missing the range or the findings list is not a re-review — return `BLOCKED: re-review brief incomplete` and let the lead re-dispatch.
+
+**Procedure.**
+
+1. For **each** prior finding, emit exactly one line: `CLOSED — <file:line + what the new code does>` or `STILL-OPEN — <why the change does not address it>`. Evidence is the new code, never the author's claim that it was fixed.
+2. Fetch and read the delta only: `git fetch origin && git diff <old-head>..<new-head>` (or `gh api repos/{owner}/{repo}/compare/<old-head>...<new-head>`). Scan it for regressions **within that delta alone** — a fix that breaks an untouched path, a stub introduced while patching, a test weakened to pass.
+3. If the delta touches a render-capable surface, re-emit the canvas-parity binding lines (`ui-source-kind:`, `ui-source:`, `ui-source-state:`, `ui-evidence-profile:`, `ui-source-applicability:`, `ui-artifacts-compared:`, `ui-comparison-result:`, and `render-delta: none` where that N/A route applies) — the merge gate re-reads them from the LATEST review, so omitting them fails the PR even when every finding is closed.
+4. Post a **fresh** `## Mode (a) Review` comment with a new `VERDICT:` line, using the same mandatory format above. Head pinning is unchanged: the review must be posted against the CURRENT head, or `pnpm merge:gate <N>` reads it as stale and blocks.
+
+**Explicitly out of scope:** the full two-pass review (pass 1 spec conformance, pass 2 code quality) is **not** repeated in re-review mode. The lead may still request a full review — and must say so in the brief — when the delta exceeds the findings' scope: new files, a changed public contract, a migration, or a rework that rewrote more than it fixed.
+
+**Return contract:** ≤20 lines — the `VERDICT:` line, one line per prior finding (`CLOSED`/`STILL-OPEN`), any new `[BLOCKER]` found in the delta, and the new PR-comment URL.
+
 ### Failure mode
 
 - Returning a free-form review without the `VERDICT:` line — the orchestration skill (`do-feature-iteration` / `do-hotfix-pr` / `do-adr-revision`) cannot parse the verdict and must re-dispatch. This is the primary enforcement for G11 finding F-14 — the agent forgot to dispatch review at all, then forgot again, until the human prompted. The verdict line is the artifact that proves review happened.

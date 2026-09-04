@@ -274,7 +274,7 @@ ${bulletsOrPlaceholder(scopeSource, "the files/surfaces this slice touches — e
 - Commit (\`${prefix}:\`). \`--no-verify\` ⇒ a one-line \`Pre-commit note:\` with the reason in the PR body at create.
 - ONE \`gh pr create --body-file\` call, FULL body: \`Closes #${n}\`, kind label \`${prefix === "feat" ? "feature" : prefix}\`, \`author:claude\` in the body, one-line summary. <fill: for a UI-touch PR add the real \`registry-research:\` verdict + a \`## Product note (RU)\`.>
 - Immediately after \`gh pr create\`, run \`pnpm pr:preflight <PR#>\` (live PR — fires the 4 PR-event-gated guards \`--static\` skips); report the verdict.
-- Do NOT self-review or merge.
+- Do NOT post a Mode (a) verdict and do NOT merge; DO run the pre-PR self-check (ds-implementer standing rule).
 
 ## Return contract (≤30 lines)
 Line 1: PR # + branch. Then: files changed, gate verdicts (\`pr:preflight --static\`, live \`pr:preflight <N>\`, any task-specific gate), deviations. Heavy detail (full reports, transcripts, DOM dumps) → the PR body or a file, never the reply.

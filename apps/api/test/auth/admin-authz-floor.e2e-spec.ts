@@ -617,6 +617,47 @@ const FLOOR_ROUTES: {
     url: `/v1/admin/events/${ABSENT_ID}/recordings/${ABSENT_ID}/publish`,
     payload: {},
   },
+  // 012 EARS-24 (#1607) — the speaker-migration review console. Same floor as
+  // its taxonomy siblings (`authenticated` + `platform_admin`, fast-path), and
+  // the floor matters MORE than on a read surface: the queue rows carry the
+  // legacy free-text speaker names and the source ids the cutover is keyed on,
+  // and the four commands are one-way phase transitions over provenance. A soft
+  // floor would let an anonymous caller read, off the 404-vs-409-vs-428
+  // difference, whether a given source is already imported or already closed.
+  {
+    endpoint: "GET /v1/admin/speaker-migration-reviews",
+    method: "GET",
+    url: "/v1/admin/speaker-migration-reviews",
+  },
+  {
+    endpoint: "GET /v1/admin/speaker-migration-reviews/state",
+    method: "GET",
+    url: "/v1/admin/speaker-migration-reviews/state",
+  },
+  {
+    endpoint: "POST /v1/admin/speaker-migration-reviews/:sourceId/resolve",
+    method: "POST",
+    url: `/v1/admin/speaker-migration-reviews/${ABSENT_ID}/resolve`,
+    payload: {},
+  },
+  {
+    endpoint: "POST /v1/admin/speaker-migration-reviews/close-source",
+    method: "POST",
+    url: "/v1/admin/speaker-migration-reviews/close-source",
+    payload: {},
+  },
+  {
+    endpoint: "POST /v1/admin/speaker-migration-reviews/import",
+    method: "POST",
+    url: "/v1/admin/speaker-migration-reviews/import",
+    payload: {},
+  },
+  {
+    endpoint: "POST /v1/admin/speaker-migration-reviews/phase-aware-release",
+    method: "POST",
+    url: "/v1/admin/speaker-migration-reviews/phase-aware-release",
+    payload: {},
+  },
 ];
 
 /** An authz refusal — never a 2xx, never a partially-served admin answer. */

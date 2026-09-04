@@ -49,26 +49,39 @@ function link(
   };
 }
 
+// The legacy half of the projection is read ONLY while the migration source is
+// open (012 EARS-24): once `source_closed` is reached the retained Expert links
+// are the whole truth, so the resolver must not even query the legacy table.
+// The double records the calls so a test can pin that branch, not just its output.
 function service(
   rows: {
     legacy?: LegacySpeakerProjectionRow[];
     links?: ExpertSpeakerProjectionRow[];
+    sourceClosed?: boolean;
   } = {},
-): SpeakerProjectionService {
+): { svc: SpeakerProjectionService; legacyCalls: () => number } {
+  let legacyCalls = 0;
   const repo = {
     publicEventIdFor: () => Promise.resolve(EVENT),
-    legacySpeakers: () => Promise.resolve(rows.legacy ?? []),
+    isSourceClosed: () => Promise.resolve(rows.sourceClosed ?? false),
+    legacySpeakers: () => {
+      legacyCalls += 1;
+      return Promise.resolve(rows.legacy ?? []);
+    },
     eligibleExpertLinks: () => Promise.resolve(rows.links ?? []),
   } as unknown as SpeakerProjectionRepository;
   const storage = {
     urlFor: (key: string) => Promise.resolve(`https://cdn.test/${key}`),
   } as unknown as ObjectStorage;
-  return new SpeakerProjectionService(repo, storage);
+  return {
+    svc: new SpeakerProjectionService(repo, storage),
+    legacyCalls: () => legacyCalls,
+  };
 }
 
 describe("012 EARS-8 — the LD-2 total order (unit; #1290)", () => {
   it("EARS-8: two same-source rows on one position are ordered by stable id ASC", async () => {
-    const svc = service({
+    const { svc } = service({
       links: [
         link("ffffffff-0000-4000-8000-000000000001", 0, "Эксперт Ж"),
         link("00000000-0000-4000-8000-000000000001", 0, "Эксперт А"),
@@ -90,7 +103,7 @@ describe("012 EARS-8 — the LD-2 total order (unit; #1290)", () => {
   });
 
   it("EARS-8: the order is stable across repeated identical reads", async () => {
-    const svc = service({
+    const { svc } = service({
       links: [link("bbbbbbbb-0000-4000-8000-000000000001", 3, "Эксперт Б")],
       legacy: [
         legacy("aaaaaaaa-0000-4000-8000-000000000001", 3, "Легаси А"),
@@ -118,7 +131,7 @@ describe("012 EARS-8 — the LD-2 total order (unit; #1290)", () => {
       null as unknown as string,
       "eeeeeeee-0000-4000-8000-000000000001",
     );
-    const svc = service({
+    const { svc } = service({
       links: [corrupted],
       legacy: [legacy("eeeeeeee-0000-4000-8000-000000000001", 0, "Легаси А")],
     });
@@ -131,7 +144,7 @@ describe("012 EARS-8 — the LD-2 total order (unit; #1290)", () => {
       ...link("aaaaaaaa-0000-4000-8000-000000000009", 0, "Эксперт Ф"),
       photoRef: "media/experts/photo.webp",
     };
-    const svc = service({
+    const { svc } = service({
       links: [withPhoto, link("bbbbbbbb-0000-4000-8000-000000000009", 1, "Эксперт Б")],
     });
 
@@ -145,7 +158,7 @@ describe("012 EARS-8 — the LD-2 total order (unit; #1290)", () => {
   });
 
   it("EARS-8: every requested event id is present in a batched resolve, empty ones included", async () => {
-    const svc = service();
+    const { svc } = service();
 
     const byEvent = await svc.resolveMany([EVENT, "22222222-2222-4222-8222-222222222222"]);
 
@@ -154,5 +167,33 @@ describe("012 EARS-8 — the LD-2 total order (unit; #1290)", () => {
       "22222222-2222-4222-8222-222222222222",
     ]);
     expect([...byEvent.values()]).toEqual([[], []]);
+  });
+
+  it("EARS-8: while the migration source is OPEN the legacy half is read and merged", async () => {
+    const { svc, legacyCalls } = service({
+      sourceClosed: false,
+      links: [link("bbbbbbbb-0000-4000-8000-000000000011", 1, "Эксперт Б")],
+      legacy: [legacy("aaaaaaaa-0000-4000-8000-000000000011", 0, "Легаси А")],
+    });
+
+    const items = await svc.resolve(EVENT);
+
+    expect(items.map((s) => s.name)).toEqual(["Легаси А", "Эксперт Б"]);
+    expect(legacyCalls()).toBe(1);
+  });
+
+  it("EARS-8: once the source is CLOSED the legacy table is never queried and only Expert links project", async () => {
+    const { svc, legacyCalls } = service({
+      sourceClosed: true,
+      links: [link("bbbbbbbb-0000-4000-8000-000000000012", 1, "Эксперт Б")],
+      // Present in the double, yet unreachable: a closed source means the
+      // retained links are the whole projection.
+      legacy: [legacy("aaaaaaaa-0000-4000-8000-000000000012", 0, "Легаси А")],
+    });
+
+    const items = await svc.resolve(EVENT);
+
+    expect(items.map((s) => s.name)).toEqual(["Эксперт Б"]);
+    expect(legacyCalls()).toBe(0);
   });
 });

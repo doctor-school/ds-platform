@@ -32,6 +32,7 @@ export const TAXONOMY_ERROR_STATUS: Readonly<
   PUBLISHED_PROJECT_REQUIRES_CURATOR: 409,
   INVALID_TRANSITION: 409,
   LEGACY_SPEAKER_CONFLICT: 409,
+  SPEAKER_MIGRATION_SOURCE_IMMUTABLE: 409,
   SPEAKER_POSITION_OCCUPIED: 409,
   CONTENT_REMOVED: 409,
   RECORDING_KIND_OCCUPIED: 409,
@@ -65,6 +66,8 @@ const TAXONOMY_ERROR_TITLE: Readonly<Record<TaxonomyErrorCode, string>> = {
   PUBLISHED_PROJECT_REQUIRES_CURATOR: "Published project requires a curator",
   INVALID_TRANSITION: "Invalid lifecycle transition",
   LEGACY_SPEAKER_CONFLICT: "Legacy speaker conflict",
+  SPEAKER_MIGRATION_SOURCE_IMMUTABLE:
+    "Retained speaker provenance is immutable",
   SPEAKER_POSITION_OCCUPIED: "Speaker position occupied",
   CONTENT_REMOVED: "Content was editorially removed",
   RECORDING_KIND_OCCUPIED: "Recording kind already occupied",
@@ -131,6 +134,7 @@ export const DETERMINISTIC_TERMINAL_ERROR_CODES: ReadonlySet<TaxonomyErrorCode> 
     "PUBLISHED_PROJECT_REQUIRES_CURATOR",
     "INVALID_TRANSITION",
     "LEGACY_SPEAKER_CONFLICT",
+    "SPEAKER_MIGRATION_SOURCE_IMMUTABLE",
     "SPEAKER_POSITION_OCCUPIED",
     "CONTENT_REMOVED",
     // 409 — 014 recording invariants (014-design §3): both are properties of the

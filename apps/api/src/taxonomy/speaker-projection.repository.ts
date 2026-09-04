@@ -55,12 +55,18 @@ export type PublicEventKey = { id: string } | { slug: string };
 export class SpeakerProjectionRepository {
   constructor(@Inject(DRIZZLE_DB) private readonly db: Db) {}
 
-  async isCutover(): Promise<boolean> {
+  /**
+   * The #1633 cutover SSOT, read as a boolean branch: the legacy source set is
+   * closed once the singleton reached `source_closed`. Read from the retained
+   * row (never a cached flag) so this process and the fence trigger cannot
+   * disagree about the phase — see `packages/db/src/schema/speaker-migration.ts`.
+   */
+  async isSourceClosed(): Promise<boolean> {
     const [row] = await this.db
-      .select({ status: speakerMigrationCutover.status })
+      .select({ phase: speakerMigrationCutover.phase })
       .from(speakerMigrationCutover)
-      .where(eq(speakerMigrationCutover.id, "speaker_migration"));
-    return row?.status === "cutover";
+      .where(eq(speakerMigrationCutover.singleton, true));
+    return row?.phase === "source_closed";
   }
 
   /**

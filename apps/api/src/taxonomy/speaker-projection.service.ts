@@ -93,9 +93,9 @@ export class SpeakerProjectionService {
     );
     if (ids.length === 0) return byEvent;
 
-    const cutover = await this.repo.isCutover();
+    const sourceClosed = await this.repo.isSourceClosed();
     const [legacy, links] = await Promise.all([
-      cutover ? Promise.resolve([]) : this.repo.legacySpeakers(ids),
+      sourceClosed ? Promise.resolve([]) : this.repo.legacySpeakers(ids),
       this.repo.eligibleExpertLinks(ids),
     ]);
 

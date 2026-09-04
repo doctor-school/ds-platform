@@ -206,17 +206,47 @@ describe.skipIf(!process.env.DATABASE_URL)(
 
     // ── review_open: writes flow, but the source set is never thinned ──────
 
-    it("012 EARS-24.9: review_open admits INSERT and UPDATE on event_speakers", async () => {
-      const updated = await inRollback(async (client) => {
+    /**
+     * REWORKED by #1607. 0032's own header deferred the review queue to this
+     * Issue, and the queue changes what `review_open` admits: migration 0036
+     * enqueues an `unmatched` review for every INSERT, and the fence's
+     * `review_open` clause then refuses UPDATE on a source row that has one.
+     * So `review_open` is «INSERT flows, and the inserted row is immediately
+     * provenance» — not «INSERT and UPDATE both flow». Free-text correction is
+     * retired from the expand release onward; a wrong name is fixed by
+     * resolving the review onto an Expert, never by rewriting the archive.
+     */
+    it("012 EARS-24.9: review_open admits INSERT, enqueues it, and then refuses UPDATE", async () => {
+      const queued = await inRollback(async (client) => {
         const eventId = await insertEvent(client);
         const speakerId = await insertSpeaker(client, eventId);
-        const { rowCount } = await client.query(
-          `UPDATE event_speakers SET name = 'Corrected Name', position = 3 WHERE id = $1`,
+        const { rows } = await client.query<{
+          classification: string;
+          disposition: string;
+        }>(
+          `SELECT classification, disposition
+             FROM speaker_migration_reviews
+            WHERE source_speaker_id = $1`,
           [speakerId],
         );
-        return rowCount;
+        return rows;
       });
-      expect(updated).toBe(1);
+      expect(queued).toHaveLength(1);
+      expect(queued[0]).toMatchObject({
+        classification: "unmatched",
+        disposition: "unresolved",
+      });
+
+      await expect(
+        inRollback(async (client) => {
+          const eventId = await insertEvent(client);
+          const speakerId = await insertSpeaker(client, eventId);
+          return client.query(
+            `UPDATE event_speakers SET name = 'Corrected Name' WHERE id = $1`,
+            [speakerId],
+          );
+        }),
+      ).rejects.toThrow(/SPEAKER_MIGRATION_SOURCE_IMMUTABLE/);
     });
 
     it("012 EARS-24.10: review_open still refuses DELETE — source rows are retained provenance", async () => {

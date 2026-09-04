@@ -506,10 +506,10 @@ export class EventsService {
     input: CreateEventRequest,
     pdf?: UploadedPdf,
   ): Promise<EventAdminDetail> {
-    if ((await this.isSpeakerCutover()) && input.speakers.length > 0) {
+    if ((await this.isSpeakerSourceClosed()) && input.speakers.length > 0) {
       throw new TaxonomyError(
-        "VALIDATION_FAILED",
-        "free-text event speakers are disabled after canonical speaker cutover",
+        "SPEAKER_MIGRATION_SOURCE_IMMUTABLE",
+        "the legacy speaker source set is closed; free-text speakers are refused",
       );
     }
     const slug = slugify(input.title);
@@ -589,13 +589,10 @@ export class EventsService {
     input: UpdateEventRequest,
     pdf?: UploadedPdf,
   ): Promise<EventAdminDetail | null> {
-    if (
-      input.speakers !== undefined &&
-      (await this.isSpeakerCutover())
-    ) {
+    if (input.speakers !== undefined && (await this.isSpeakerSourceClosed())) {
       throw new TaxonomyError(
-        "VALIDATION_FAILED",
-        "free-text event speakers are disabled after canonical speaker cutover",
+        "SPEAKER_MIGRATION_SOURCE_IMMUTABLE",
+        "the legacy speaker source set is closed; free-text speakers are refused",
       );
     }
     const current = await this.repo.findById(id);
@@ -677,8 +674,14 @@ export class EventsService {
     return this.toDetail(updated);
   }
 
-  private isSpeakerCutover(): Promise<boolean> {
-    return this.speakerMigration.isCutover();
+  /**
+   * The #1633 cutover phase, read from the retained singleton on every call.
+   * `true` once the source set is closed — from that point `event_speakers` is
+   * an immutable archive and every free-text speaker write is refused here as
+   * well as at the database fence.
+   */
+  private isSpeakerSourceClosed(): Promise<boolean> {
+    return this.speakerMigration.isSourceClosed();
   }
 
   /** `EventAdminList` — all events regardless of state (`platform_admin`-only). */
@@ -1386,9 +1389,27 @@ export class EventsService {
     return page;
   }
 
+  /**
+   * 012 EARS-24 — the admin detail's speaker list is PHASE-AWARE, not
+   * unconditionally canonical. While the cutover singleton is `review_open` the
+   * retained free-text rows are still the admin's working set (and the review
+   * queue is what an operator resolves against); only from `source_closed`
+   * onward is `event_speakers` a closed provenance archive and the canonical
+   * `event_experts` projection the single answer. Reading canonical too early
+   * would blank the admin list for every event whose speakers nobody has
+   * resolved yet.
+   */
   private async toDetail(a: EventWithSpeakers): Promise<EventAdminDetail> {
     const e = a.event;
-    const canonicalSpeakers = await this.speakerProjection.resolve(e.id);
+    const speakers = (await this.isSpeakerSourceClosed())
+      ? (await this.speakerProjection.resolve(e.id)).map((speaker) => ({
+          name: speaker.name,
+          regalia: speaker.credentials,
+        }))
+      : a.speakers
+          .slice()
+          .sort((x, y) => x.position - y.position)
+          .map((s) => ({ name: s.name, regalia: s.regalia }));
     return {
       id: e.id,
       slug: e.slug,
@@ -1397,10 +1418,7 @@ export class EventsService {
       startsAt: e.startsAt.toISOString(),
       durationMin: e.durationMin,
       description: e.description,
-      speakers: canonicalSpeakers.map((speaker) => ({
-        name: speaker.name,
-        regalia: speaker.credentials,
-      })),
+      speakers,
       specialties: e.specialties,
       partnerRef: e.partnerRef,
       programPdfRef: e.programPdfRef,

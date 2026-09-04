@@ -151,7 +151,7 @@ const PREPARING_PROJECTION = {
 };
 function speakerMigrationStub(): SpeakerMigrationService {
   return {
-    isCutover: () => Promise.resolve(false),
+    isSourceClosed: () => Promise.resolve(false),
   } as unknown as SpeakerMigrationService;
 }
 

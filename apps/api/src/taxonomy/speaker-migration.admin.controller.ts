@@ -14,6 +14,8 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 import {
   CANONICAL_UUID_REGEX,
   IDEMPOTENCY_KEY_HEADER,
+  ImportSpeakerMigrationReviewsRequestSchema,
+  RecordPhaseAwareReleaseRequestSchema,
   ResolveSpeakerMigrationReviewRequestSchema,
   SpeakerMigrationReviewListQuerySchema,
 } from "@ds/schemas";
@@ -50,6 +52,19 @@ export class SpeakerMigrationAdminController {
       throw validation("invalid speaker migration queue query", parsed.error.issues);
     }
     return this.migration.list(parsed.data);
+  }
+
+  /** The cutover SSOT as the admin surface sees it (#1633 singleton). */
+  @Get("state")
+  @Authz({
+    access: "authenticated",
+    roles: ["platform_admin"],
+    check: "fast-path",
+    audit: "none",
+    tests: ["EARS-24"],
+  })
+  state() {
+    return this.migration.state();
   }
 
   @Post(":sourceId/resolve")
@@ -97,7 +112,11 @@ export class SpeakerMigrationAdminController {
     });
   }
 
-  @Post("cutover")
+  /**
+   * Design §2.3 stage 1 — import the owner-reviewed classification artifact.
+   * The artifact is the ONLY source of classification; nothing here derives it.
+   */
+  @Post("import")
   @HttpCode(200)
   @Authz({
     access: "authenticated",
@@ -107,29 +126,123 @@ export class SpeakerMigrationAdminController {
     audit: "low-stakes",
     tests: ["EARS-24"],
   })
-  async cutover(
+  async import(
+    @Req() req: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ) {
+    const key = this.idempotency.requireKey(req.headers[IDEMPOTENCY_KEY_HEADER]);
+    const parsed = ImportSpeakerMigrationReviewsRequestSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw validation(
+        "invalid reviewed classification artifact",
+        parsed.error.issues,
+      );
+    }
+    const path = "/v1/admin/speaker-migration-reviews/import";
+    const outcome = await this.idempotency.begin({
+      key,
+      scope: "taxonomy.speaker-migration.import",
+      actorId: actorSub(req),
+      method: "POST",
+      route: path,
+      fingerprint: this.idempotency.fingerprint({
+        method: "POST",
+        path,
+        payload: parsed.data,
+      }),
+    });
+    if (replayed(outcome, reply)) return outcome.replay.body;
+    return this.migration.importReviewedRows({
+      payload: parsed.data,
+      actorId: requireActor(req),
+      lease: outcome.lease,
+    });
+  }
+
+  /**
+   * Record the expand release's SHA/ordinal (the rollback floor prerequisite the
+   * #1633 reader consumes). Explicit operator command — see the PR body's
+   * declared deviation: automating it from `tools/deploy/prod.mjs` is follow-up,
+   * and a stub value here would be exactly the hack AGENTS.md §6 forbids.
+   */
+  @Post("phase-aware-release")
+  @HttpCode(200)
+  @Authz({
+    access: "authenticated",
+    roles: ["platform_admin"],
+    check: "fast-path",
+    revalidate: "live",
+    audit: "low-stakes",
+    tests: ["EARS-24"],
+  })
+  async recordPhaseAwareRelease(
+    @Req() req: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ) {
+    const key = this.idempotency.requireKey(req.headers[IDEMPOTENCY_KEY_HEADER]);
+    const parsed = RecordPhaseAwareReleaseRequestSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw validation("invalid phase-aware release", parsed.error.issues);
+    }
+    const path = "/v1/admin/speaker-migration-reviews/phase-aware-release";
+    const outcome = await this.idempotency.begin({
+      key,
+      scope: "taxonomy.speaker-migration.phase-aware-release",
+      actorId: actorSub(req),
+      method: "POST",
+      route: path,
+      fingerprint: this.idempotency.fingerprint({
+        method: "POST",
+        path,
+        payload: parsed.data,
+      }),
+    });
+    if (replayed(outcome, reply)) return outcome.replay.body;
+    return this.migration.recordPhaseAwareRelease({
+      payload: parsed.data,
+      actorId: requireActor(req),
+      lease: outcome.lease,
+    });
+  }
+
+  /** Design §2.3 stage 2 — the guarded, serializable source closure. */
+  @Post("close-source")
+  @HttpCode(200)
+  @Authz({
+    access: "authenticated",
+    roles: ["platform_admin"],
+    check: "fast-path",
+    revalidate: "live",
+    audit: "low-stakes",
+    tests: ["EARS-24"],
+  })
+  async closeSource(
     @Req() req: FastifyRequest,
     @Res({ passthrough: true }) reply: FastifyReply,
   ) {
     const key = this.idempotency.requireKey(req.headers[IDEMPOTENCY_KEY_HEADER]);
     if (req.body !== undefined && req.body !== null) {
-      throw new TaxonomyError("VALIDATION_FAILED", "cutover has no request body");
+      throw new TaxonomyError(
+        "VALIDATION_FAILED",
+        "source closure has no request body",
+      );
     }
-    const path = "/v1/admin/speaker-migration-reviews/cutover";
+    const path = "/v1/admin/speaker-migration-reviews/close-source";
     const outcome = await this.idempotency.begin({
       key,
-      scope: "taxonomy.speaker-migration.cutover",
+      scope: "taxonomy.speaker-migration.close-source",
       actorId: actorSub(req),
       method: "POST",
       route: path,
       fingerprint: this.idempotency.fingerprint({ method: "POST", path }),
     });
     if (replayed(outcome, reply)) return outcome.replay.body;
-    return this.migration.cutover({
-      reviewerId: requireActor(req),
+    return this.migration.closeSource({
+      actorId: requireActor(req),
       lease: outcome.lease,
     });
   }
+
 }
 
 function validation(

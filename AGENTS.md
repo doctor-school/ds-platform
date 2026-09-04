@@ -101,7 +101,7 @@ The §6 discipline gates still apply, run by the lead:
 
 Per ADR-0007 §2.10. Mode (a) — same-session subagent dispatch via `request-mode-a-review` (structured APPROVE / REQUEST_CHANGES verdict). Mode (b) — parallel Codex CLI session. Mode (c) — pure human review. LLM credentials live in the human's terminal, not CI; no automated reviewer-bot.
 
-**Merge gate.** Positive Mode (a)/(b) verdict + green CI suffices; human-merge not required (Mode (c) stays human). **Close out from the MAIN tree, never from a worktree**, then run `pnpm pr:land <N>` — the single entry point for the complete tail; `pnpm merge:when-green <N>` only when that tail is intentionally completed separately. Closeout refusal (exit `4`), recovery, the `merge:when-green` split and the raw-`gh pr merge` exception: `repo-conventions.md` → Branches; the never-`--auto` rule: skill `merge-when-green`. Procedure: skills `request-mode-a-review` + `merge-when-green`.
+**Merge gate.** Positive Mode (a)/(b) verdict + green CI suffices; human-merge not required (Mode (c) stays human). **Close out from the MAIN tree, never from a worktree**: the `ds-lander` agent runs `pnpm pr:land <N>` — the single entry point for the complete tail (the lead by hand only after resolving a reason the lander returned); `pnpm merge:when-green <N>` only when that tail is intentionally completed separately. Closeout refusal (exit `4`), recovery, the `merge:when-green` split and the raw-`gh pr merge` exception: `repo-conventions.md` → Branches; the never-`--auto` rule: skill `merge-when-green`. Procedure: skills `request-mode-a-review` + `merge-when-green`.
 
 ---
 

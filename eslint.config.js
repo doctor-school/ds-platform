@@ -94,6 +94,25 @@ export default [
     },
   },
   {
+    // Workflow tool scripts (`.claude/workflows/*.js`) run inside the harness's async
+    // script context, not as standalone Node modules: the orchestration hooks are
+    // injected globals and the body may `return` its result at top level.
+    files: [".claude/workflows/*.js"],
+    languageOptions: {
+      parserOptions: { ecmaFeatures: { globalReturn: true } },
+      globals: {
+        agent: "readonly",
+        parallel: "readonly",
+        pipeline: "readonly",
+        phase: "readonly",
+        log: "readonly",
+        workflow: "readonly",
+        args: "readonly",
+        budget: "readonly",
+      },
+    },
+  },
+  {
     files: ["**/*.{ts,tsx,mts,cts}"],
     rules: {
       // Pragmatic Phase 0 narrowings; revisited in G5 via packages/eslint-config.

@@ -26,7 +26,8 @@
 //   ship        git archive <sha> → api-prod + data-prod over ssh (no registry)
 //   data-prod   up -d --build (idempotent; attestations off → no-op ≠ recreate, #486)
 //   checkpoint  pgbackrest pre-migrate incr backup  (DSO-129 — BEFORE migrate)
-//   api-prod    migrate → build (ds-api:<sha>, ds-portal:<sha>, ds-admin:<sha>) → up -d
+//   api-prod    migrate → build (ds-api:<sha>, ds-portal:<sha>, ds-admin:<sha>,
+//               ds-doctor:<sha>) → up -d
 //   config      compare running bind mounts; restart only stale consumers (#1175)
 //   retention   keep the last 3 SHA-tagged images per repo  (DSO-127)
 //   smoke       tools/deploy/smoke-prod.mjs --expect-sha <sha>  (DSO-128)
@@ -537,7 +538,8 @@ function sshCapture(host, script) {
 }
 
 // Truthful-success gate (DSO-127 rework): after `up -d`, prove the RUNNING
-// api + portal containers actually carry the deployed SHA-tagged images and
+// api + portal + admin + doctor containers actually carry the deployed
+// SHA-tagged images and
 // reach healthy — a "DEPLOY OK" line must never outrun the box's reality
 // again. Polls on-box (one ssh channel) up to ~4 min to cover the containers'
 // healthcheck start_period + retries after a real image swap.
@@ -549,13 +551,16 @@ while true; do
   api_img=$(sudo docker inspect ds-api-prod-api-1 --format '{{.Config.Image}}' 2>/dev/null || echo absent)
   portal_img=$(sudo docker inspect ds-api-prod-portal-1 --format '{{.Config.Image}}' 2>/dev/null || echo absent)
   admin_img=$(sudo docker inspect ds-api-prod-admin-1 --format '{{.Config.Image}}' 2>/dev/null || echo absent)
+  doctor_img=$(sudo docker inspect ds-api-prod-doctor-1 --format '{{.Config.Image}}' 2>/dev/null || echo absent)
   api_h=$(sudo docker inspect ds-api-prod-api-1 --format '{{.State.Health.Status}}' 2>/dev/null || echo absent)
   portal_h=$(sudo docker inspect ds-api-prod-portal-1 --format '{{.State.Health.Status}}' 2>/dev/null || echo absent)
   admin_h=$(sudo docker inspect ds-api-prod-admin-1 --format '{{.State.Health.Status}}' 2>/dev/null || echo absent)
-  state="api=$api_img($api_h) portal=$portal_img($portal_h) admin=$admin_img($admin_h)"
+  doctor_h=$(sudo docker inspect ds-api-prod-doctor-1 --format '{{.State.Health.Status}}' 2>/dev/null || echo absent)
+  state="api=$api_img($api_h) portal=$portal_img($portal_h) admin=$admin_img($admin_h) doctor=$doctor_img($doctor_h)"
   if [ "$api_img" = "ds-api:${sha}" ] && [ "$portal_img" = "ds-portal:${sha}" ] \\
-     && [ "$admin_img" = "ds-admin:${sha}" ] \\
-     && [ "$api_h" = healthy ] && [ "$portal_h" = healthy ] && [ "$admin_h" = healthy ]; then
+     && [ "$admin_img" = "ds-admin:${sha}" ] && [ "$doctor_img" = "ds-doctor:${sha}" ] \\
+     && [ "$api_h" = healthy ] && [ "$portal_h" = healthy ] && [ "$admin_h" = healthy ] \\
+     && [ "$doctor_h" = healthy ]; then
     echo "OK $state"; break
   fi
   if [ "$(date +%s)" -ge "$deadline" ]; then
@@ -573,7 +578,9 @@ done`,
       { rollbackHint: true },
     );
   }
-  ok(`api + portal + admin RUN ds-*:${sha.slice(0, 12)} and are healthy`);
+  ok(
+    `api + portal + admin + doctor RUN ds-*:${sha.slice(0, 12)} and are healthy`,
+  );
 }
 
 // PRE-SWAP boot verify (#1410). `verifyRunningSha` above is the truthful-success
@@ -588,7 +595,7 @@ done`,
 // compose healthcheck). A non-booting image aborts the deploy while the OLD
 // containers are still up and serving — the public surface never sees it.
 //
-// Scope: portal + admin, the two Next standalone images. The api is deliberately
+// Scope: portal + admin + doctor (#1723), the three Next standalone images. The api is deliberately
 // NOT probed here: it needs Postgres/Redis/Zitadel on the compose network, so a
 // detached one-shot would fail for reasons unrelated to the image and turn a
 // safety gate into a flaky one. The api keeps its compose healthcheck +
@@ -631,7 +638,8 @@ async function verifyImagesBoot(sha) {
   sudo docker rm -f "$name" >/dev/null 2>&1 || true
 }
 probe portal ds-portal 3001
-probe admin ds-admin 3002`,
+probe admin ds-admin 3002
+probe doctor ds-doctor 3004`,
   );
   console.log(
     out
@@ -642,11 +650,13 @@ probe admin ds-admin 3002`,
   const verdicts = Object.fromEntries(
     out
       .split(/\r?\n/)
-      .map((l) => l.trim().match(/^(portal|admin)=(\w+)$/))
+      .map((l) => l.trim().match(/^(portal|admin|doctor)=(\w+)$/))
       .filter(Boolean)
       .map((m) => [m[1], m[2]]),
   );
-  const bad = ["portal", "admin"].filter((s) => verdicts[s] !== "OK");
+  const bad = ["portal", "admin", "doctor"].filter(
+    (s) => verdicts[s] !== "OK",
+  );
   if (bad.length > 0) {
     die(
       `freshly built image(s) do NOT boot: ${bad
@@ -657,7 +667,10 @@ probe admin ds-admin 3002`,
     );
   }
   ok(
-    `ds-portal + ds-admin :${sha.slice(0, 12)} boot and serve / before the swap`,
+    `ds-portal + ds-admin + ds-doctor :${sha.slice(
+      0,
+      12,
+    )} boot and serve / before the swap`,
   );
 }
 
@@ -820,17 +833,18 @@ sudo docker compose exec -T pgbackrest gosu postgres pgbackrest --stanza=ds info
   // with prod untouched — no 502, and no migration applied for a build that was
   // never going to serve. (The pre-migrate pgbackrest checkpoint above still
   // anchors PITR for the migrate step itself.)
-  step(`api-prod: build ds-api/portal/admin :${sha.slice(0, 12)}…`);
+  step(`api-prod: build ds-api/portal/admin/doctor :${sha.slice(0, 12)}…`);
   t = Date.now();
   await sshScript(
     API_PROD,
     `cd ${API_COMPOSE}
 # Rewrite ONLY the DEPLOY_SHA line — this .env also carries other non-secret
-# compose-interpolation vars (SMARTCAPTCHA_SITE_KEY, #729/#186: the portal's
-# BUILD-time captcha site key) that a clobbering '>' would silently wipe,
-# baking an empty site key into the very portal image built two lines below.
+# compose-interpolation vars (SMARTCAPTCHA_SITE_KEY, #729/#186: the portal's and
+# — since #1723 — the doctor storefront's BUILD-time captcha site key) that a
+# clobbering '>' would silently wipe, baking an empty site key into the very
+# images built two lines below.
 { { [ -f .env ] && grep -v '^DEPLOY_SHA=' .env; } || true; printf 'DEPLOY_SHA=%s\\n' '${sha}'; } > .env.next && mv .env.next .env
-echo '── build ds-api:${sha.slice(0, 12)}… + ds-portal + ds-admin ──'
+echo '── build ds-api:${sha.slice(0, 12)}… + ds-portal + ds-admin + ds-doctor ──'
 # ${NO_ATTEST}: reproducible image IDs so a same-SHA re-run is a true no-op (#486).
 sudo ${NO_ATTEST} docker compose build
 `,
@@ -889,6 +903,7 @@ sudo docker compose up -d
 prune_repo ds-api ${IMAGE_RETENTION}
 prune_repo ds-portal ${IMAGE_RETENTION}
 prune_repo ds-admin ${IMAGE_RETENTION}
+prune_repo ds-doctor ${IMAGE_RETENTION}
 echo "retained ds-api tags:"; sudo docker images ds-api --format '  {{.Tag}} ({{.CreatedAt}})'
 `,
     { label: "retention" },
@@ -1079,7 +1094,7 @@ async function rollback(shaArg) {
     die(`cannot resolve ${shaArg} to a commit in the local repo`);
   }
   step(
-    `App-only rollback → ds-api:${sha.slice(0, 12)} / ds-portal:${sha.slice(0, 12)} / ds-admin:${sha.slice(0, 12)}`,
+    `App-only rollback → ds-api:${sha.slice(0, 12)} / ds-portal:${sha.slice(0, 12)} / ds-admin:${sha.slice(0, 12)} / ds-doctor:${sha.slice(0, 12)}`,
   );
 
   // ── #1633 / EARS-24: the speaker-cutover rollback compatibility floor. FIRST
@@ -1116,7 +1131,7 @@ async function rollback(shaArg) {
   // The target images must still be on the box (retention keeps the last 3).
   const present = await sshCapture(
     API_PROD,
-    `for img in ds-api:${sha} ds-portal:${sha} ds-admin:${sha}; do
+    `for img in ds-api:${sha} ds-portal:${sha} ds-admin:${sha} ds-doctor:${sha}; do
   if sudo docker image inspect "$img" >/dev/null 2>&1; then echo "$img OK"; else echo "$img MISSING"; fi
 done`,
   );

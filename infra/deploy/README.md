@@ -45,7 +45,8 @@ infra/deploy/
   zitadel.env.example /etc/ds-platform/zitadel.env template (masterkey, DB, FIRSTINSTANCE)
   data.env.example    /etc/ds-platform/data.env template (POSTGRES_PASSWORD, pgbackrest S3)
   compose/
-    api-prod/         Caddyfile + compose: caddy + api + portal + admin + centrifugo +
+    api-prod/         Caddyfile + compose: caddy + api + portal + admin + doctor +
+                      centrifugo +
                       zitadel + zitadel-login + sms-aero-adapter + a one-shot
                       `migrate` service, plus centrifugo/config.json (non-secret)
     data-prod/        compose: postgres + redis + pgbackrest, plus
@@ -356,7 +357,7 @@ http://api:3000`. A portal image built before this fix must be REBUILT.
      sudo bash -c 'set -a; . /etc/ds-platform/api.env; set +a; \
        IDP_BASE_URL=https://id.doctor.school \
        IDP_REDIRECT_URIS=https://api.doctor.school/auth/callback \
-       IDP_POST_LOGOUT_URIS=https://academy.doctor.school \
+       IDP_POST_LOGOUT_URIS=https://academy.doctor.school,https://new.doctor.school \
        EMAIL_DELIVERY_MODE=real SMS_DELIVERY_MODE=real \
        ./provision.sh --pat-file /etc/ds-platform/idp-bootstrap-pat.txt'
      # copy the emitted IDP_CLIENT_ID / IDP_CLIENT_SECRET / IDP_PROJECT_ID into api.env,
@@ -592,7 +593,10 @@ image build.
    # when S3_ENDPOINT is unset, and a fake in prod is a silent failure mode.
    ```
 
-   TLS valid on **all four** hostnames (admin.doctor.school included).
+   TLS valid on **all five** public hostnames — `api.` / `academy.` / `admin.` /
+   `id.doctor.school` plus `new.doctor.school` (the doctor storefront, #1723;
+   only after its A-record is live — see
+   [Doctor storefront roll-out](#doctor-storefront-roll-out--newdoctorschool-1723)).
 
 ## Verify-on-box
 
@@ -611,7 +615,10 @@ first `apply` (report, don't assume green):
   `/health` check, and a real wss handshake through the Caddy route.
 - `compose/data-prod/pgbackrest` — `stanza-create` + `check` succeeding against S3,
   the socket-based backup connection (local `trust`), and a real full/incr + restore.
-- Caddy ACME issuance for all three hostnames (needs the Beget A-records live first).
+- `apps/doctor/Dockerfile` (#1723) — same standalone pattern, entry expected at
+  `apps/doctor/server.js`, serving on 3004; it DOES carry a `public/` COPY.
+- Caddy ACME issuance for all five public hostnames (needs the Beget A-records
+  live first — `new.doctor.school` included, #1723).
 
 ## Rollback
 
@@ -738,10 +745,11 @@ Order — steps run in sequence; **do not reorder 4 and 5** (the reason is in 5)
    from it fails every protected auth action — registration included — for every
    user at once. In the Yandex Cloud console, **add the new
    host before the deploy that adds its vhost**, and remove a host only once it is
-   fully retired. Post-#1173 the list is `academy.doctor.school` alone: the legacy
+   fully retired. Post-#1173 the list is `academy.doctor.school` (the legacy
    `app.doctor.school` entry is dropped as part of the retirement, after its DNS
-   record is gone. The site key is unchanged either way, so **no portal rebuild is
-   needed** for this step.
+   record is gone) plus, from #1723, `new.doctor.school` — the doctor storefront
+   ships the same SmartCaptcha site key in its own image. The site key is
+   unchanged either way, so **no rebuild is needed** for this step alone.
 
 3. **Zitadel URI set — re-pass EVERY URI, not just the new one.** `provision.sh`
    sends ONE full-object `PUT` on `oidc_config`: the payload it builds carries
@@ -760,7 +768,7 @@ Order — steps run in sequence; **do not reorder 4 and 5** (the reason is in 5)
    sudo bash -c 'set -a; . /etc/ds-platform/api.env; set +a; \
      IDP_BASE_URL=https://id.doctor.school \
      IDP_REDIRECT_URIS=https://api.doctor.school/auth/callback \
-     IDP_POST_LOGOUT_URIS=https://academy.doctor.school \
+     IDP_POST_LOGOUT_URIS=https://academy.doctor.school,https://new.doctor.school \
      EMAIL_DELIVERY_MODE=real SMS_DELIVERY_MODE=real \
      ./provision.sh --pat-file /etc/ds-platform/idp-bootstrap-pat.txt'
    ```
@@ -887,9 +895,92 @@ is the one step whose omission is silent at the time and loud two weeks later: t
 retired host keeps answering until DNS is actually removed, so a stale probe stays
 green and the miss surfaces only when the name dies.
 
+## Doctor storefront roll-out — `new.doctor.school` (#1723)
+
+`apps/doctor` is the doctor-facing storefront of the two-storefront topology
+(ADR-0015 §2–§4). It launches on the **temporary** host `new.doctor.school`; the
+root `doctor.school` cut-over is a separate later step, gated on data migration
+and the retirement of the old site (owner decision on epic #1430, 2026-08-26).
+The root A-record is **not** touched here.
+
+The repo half is merged with #1723: the `doctor` compose service (image
+`ds-doctor:<sha>`, `PORT=3004` pinned explicitly per the DSO-100 portal incident,
+`/`-healthcheck, `depends_on: api`, and `doctor` added to `caddy.depends_on`), the
+Caddy vhost `new.doctor.school → doctor:3004`, `ds-doctor` as a first-class member
+of `pnpm deploy:prod` (build, pre-swap boot probe, truthful-success verify,
+retention, app-only rollback) and a `new.doctor.school` render + TLS probe in
+`pnpm smoke:prod`.
+
+**`new.doctor.school` is a free name** — this is an ADD, not a repoint like the
+`academy.` cutover — but the ordering constraint is identical: Caddy issues its
+certificate over ACME **HTTP-01**, so a vhost for a name that does not resolve to
+`api-prod` fails issuance rather than producing a working site. Steps 1 and 2 are
+out-of-band console state and MUST land **before** the deploy that adds the vhost.
+
+No user is logged out by this roll-out: nothing about `academy.doctor.school`
+changes, and the two hosts hold **separate** `__Host-ds_session` cookies by
+specification (ADR-0001 §6) — one account across both is delivered by OIDC silent
+re-auth against the single Zitadel identity, never by widening a cookie.
+
+Order:
+
+1. **[OWNER-GATED] Beget DNS — add the A-record.** In the `doctor.school` zone at
+   Beget (the zone is not at Timeweb and this tooling holds no Beget credentials —
+   §4), add `new` → `77.233.220.222` (`api_prod_public_ip`). Verify it is live
+   from two resolvers **before** deploying:
+
+   ```bash
+   nslookup new.doctor.school 8.8.8.8   # must return A 77.233.220.222
+   nslookup new.doctor.school 1.1.1.1
+   ```
+
+2. **[OWNER-GATED] Yandex Cloud SmartCaptcha — allowed domains.** Add
+   `new.doctor.school` to the `ds-platform-prod` SmartCaptcha resource's
+   allowed-domains list (console only; nothing in this repo can observe it —
+   treat it as required-and-unverified). The doctor image bakes the same PUBLIC
+   site key as the portal (`SMARTCAPTCHA_SITE_KEY` in the `.env` beside
+   `compose/api-prod/compose.yml`, inlined at build time), so a missing domain
+   entry makes the registration widget inert while the page still renders green.
+
+3. **Zitadel post-logout URI — re-pass EVERY URI.** `provision.sh` sends one
+   full-object `PUT` that **replaces** both `redirectUris` and
+   `postLogoutRedirectUris`; anything omitted is deleted. Run exactly this — the
+   `IDP_REDIRECT_URIS` value is unchanged (the callback is the api's own and is
+   host-independent) but MUST be re-passed in the same call:
+
+   ```bash
+   cd ~/ds-platform/infra/dev-stand/idp
+   sudo bash -c 'set -a; . /etc/ds-platform/api.env; set +a; \
+     IDP_BASE_URL=https://id.doctor.school \
+     IDP_REDIRECT_URIS=https://api.doctor.school/auth/callback \
+     IDP_POST_LOGOUT_URIS=https://academy.doctor.school,https://new.doctor.school \
+     EMAIL_DELIVERY_MODE=real SMS_DELIVERY_MODE=real \
+     ./provision.sh --pat-file /etc/ds-platform/idp-bootstrap-pat.txt'
+   ```
+
+   Then read the set back from Zitadel's management API (the api container's own
+   `IDP_REDIRECT_URI` is NOT the registered set — see the Portal host cutover
+   section's read-back snippet for the exact query).
+
+4. **Deploy.** `pnpm deploy:prod` builds `ds-doctor:<sha>` alongside the other
+   three, boot-probes it before the swap, and restarts Caddy because the
+   bind-mounted `Caddyfile` is stale (#1175 — `RUNTIME_CONFIG_SERVICES` already
+   covers `caddy`; no manual SSH restart). Then:
+
+   ```bash
+   curl -sSI https://new.doctor.school/ | head -1   # 200/3xx over valid TLS
+   pnpm smoke:prod                                  # doctor / + TLS probes included
+   ```
+
+5. **Release-gate sequencing.** Both `apps/doctor` routes are still `deferred` in
+   `tools/lint/prod-surface-manifest.yaml` and #1440's "no public placeholder on
+   prod" criterion binds: the compose/Caddy/tooling work above may land at any
+   time, but the **DNS flip (step 1) happens only once the release-3 surfaces
+   (017/019/020/021) are product-ready**. Gate #1704 sequences that.
+
 ## Build-cache GC on `api-prod` (#1419)
 
-`api-prod` builds the `ds-api` / `ds-portal` / `ds-admin` images **on the box**, so
+`api-prod` builds the `ds-api` / `ds-portal` / `ds-admin` / `ds-doctor` images **on the box**, so
 every `pnpm deploy:prod` adds 1–3 GB of BuildKit cache. Nothing reclaimed it: the
 cache reached **54.6 GB / 77% disk** before the 2026-08-21 manual cleanup dropped
 the box back to 28%. (SHA-tagged _images_ were already bounded — `prod.mjs` keeps

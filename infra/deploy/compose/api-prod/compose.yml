@@ -41,6 +41,11 @@ services:
         condition: service_started
       admin:
         condition: service_started
+      # Doctor storefront (#1723) — new.doctor.school. service_started, like the
+      # other Next apps: Caddy must come up and serve the other vhosts even while
+      # the doctor container is still warming.
+      doctor:
+        condition: service_started
       centrifugo:
         condition: service_started
       zitadel:
@@ -175,6 +180,58 @@ services:
           "node",
           "-e",
           "fetch('http://localhost:3002/').then(r=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # --- doctor — Next.js standalone, public storefront (new.doctor.school) ---------
+  # Two-storefront topology (ADR-0015 §2–§4, §7): apps/doctor is the doctor-facing
+  # storefront, apps/portal stays the academy. Public roll-out #1723 launches it on
+  # the TEMPORARY host new.doctor.school; the root doctor.school cut-over is a later
+  # step gated on data migration + retirement of the old site (owner decision on
+  # #1430, 2026-08-26). Same standalone pattern as portal/admin.
+  doctor:
+    build:
+      context: ../../../..
+      dockerfile: apps/doctor/Dockerfile
+      args:
+        # Yandex SmartCaptcha CLIENT key — BUILD-time inlined into the client
+        # bundle (NEXT_PUBLIC_*), same mechanism and same `.env` source as the
+        # portal's. Registration bot-protection (#1558) ships on the doctor
+        # storefront, so the key must be baked here too; `new.doctor.school` also
+        # has to be on the `ds-platform-prod` SmartCaptcha resource's allowed
+        # domains (Yandex Cloud console step — infra/deploy/README.md §"Doctor
+        # storefront roll-out"). Empty ⇒ inactive placeholder, and an image built
+        # before the key was set must be REBUILT.
+        NEXT_PUBLIC_SMARTCAPTCHA_SITE_KEY: ${SMARTCAPTCHA_SITE_KEY:-}
+        # BUILD-time on purpose (DSO-100, same as portal/admin): Next freezes
+        # `rewrites()` destinations into .next/routes-manifest.json at build time,
+        # so a runtime-only API_PROXY_TARGET is ignored and the baked localhost
+        # fallback ECONNREFUSEDs the same-origin /v1/* BFF proxy
+        # (apps/doctor/next.config.ts). Must match the api service's compose DNS.
+        API_PROXY_TARGET: http://api:3000
+    # SHA-tagged in lockstep with api/portal/admin (DSO-127) for retention +
+    # app-only rollback; `:local` fallback for the manual README path.
+    image: ds-doctor:${DEPLOY_SHA:-local}
+    restart: unless-stopped
+    env_file: [/etc/ds-platform/api.env] # API_PROXY_TARGET=http://api:3000 (same-origin BFF proxy)
+    environment:
+      # Pin explicitly (portal precedent, DSO-100): the shared api.env env_file
+      # must never leak an api PORT value into a Next app. compose `environment:`
+      # outranks env_file. 3004 matches the Dockerfile ENV + the Caddy upstream.
+      PORT: "3004"
+    depends_on:
+      api:
+        condition: service_started
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://localhost:3004/').then(r=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))",
         ]
       interval: 15s
       timeout: 5s

@@ -34,8 +34,12 @@
  *      REBASE does not (#1865): when `git range-diff origin/main <approved>
  *      <head>` proves every commit patch-identical (`=`), the pinned APPROVE
  *      is accepted for the new head with an audit line. Anything else — a
- *      `!`/`<`/`>` row, no comparable rows, a missing object, a git failure —
- *      stays RED. Sanctioned no-Mode-a classes
+ *      `!`/`<`/`>` row, no comparable rows, a merge commit above `origin/main`
+ *      («Update branch», which range-diff ignores), a missing object, a git
+ *      failure — stays RED. The escape covers THIS gate only: a PR on the
+ *      `ui-parity: N/A (no render delta)` route keeps a head-pinned
+ *      certification in the `ui-parity` CI guard and still needs a fresh
+ *      delta-only verdict after a rebase. Sanctioned no-Mode-a classes
  *      (AGENTS.md §3.8: pure docs / test-only / generated-regen; the Version
  *      Packages bot PR) skip the check ONLY via an explicit, loudly-printed
  *      `--mode-a-exempt "<reason>"` — no silent auto-detection.
@@ -400,6 +404,28 @@ export function classifyRangeDiff(stdout) {
 }
 
 /**
+ * Does a `git rev-list --merges <base>..<head>` stdout list any merge commit?
+ *
+ * `git range-diff` compares patches and silently IGNORES merge commits, so a
+ * branch updated with GitHub's «Update branch» button (a merge of `main` into
+ * the PR head, not a rebase) can print an all-`=` range-diff while carrying
+ * content the reviewer never read. Any merge commit in the range therefore
+ * disqualifies the rebase-equivalence escape before the range-diff runs.
+ *
+ * Fails closed on unusable input: a non-string (a git failure the caller could
+ * not read) counts as "merge commits present".
+ *
+ * @param {string|null|undefined} stdout  raw `git rev-list --merges` stdout
+ * @returns {boolean}
+ */
+export function hasMergeCommits(stdout) {
+  if (typeof stdout !== "string") return true;
+  return stdout
+    .split(/\r?\n/)
+    .some((line) => /^[0-9a-f]{7,40}$/i.test(line.trim()));
+}
+
+/**
  * Parse the explicit `--mode-a-exempt "<reason>"` escape flag (#992). The
  * sanctioned no-Mode-a merge classes (AGENTS.md §3.8: pure docs / test-only /
  * generated-regen; the Version Packages bot PR) skip the verdict gate ONLY via
@@ -467,6 +493,18 @@ function git(args) {
  * unparsable/empty output, a missing object, or a git failure — falls through
  * to the STALE refusal.
  *
+ * Two hardening steps precede the range-diff:
+ *   - the base is refreshed best-effort (`git fetch origin main`) so the
+ *     equivalence is not computed against a stale local `origin/main`;
+ *   - `git rev-list --merges origin/main..<head>` must be EMPTY. range-diff
+ *     ignores merge commits, so a branch updated via GitHub's «Update branch»
+ *     button (a merge, not a rebase) would otherwise read as a pure rebase.
+ *
+ * NOTE (scope): this escape covers the merge gate's own Mode-a verdict only.
+ * A PR on the `ui-parity: N/A (no render delta)` route keeps a head-pinned
+ * certification in the `ui-parity` CI guard (BLOCK), which cannot see the
+ * pre-rebase head — such a PR still needs a fresh delta-only verdict.
+ *
  * @param {string} approvedSha  head the APPROVE was pinned to
  * @param {string} headSha      current head
  * @returns {{accepted: boolean, reason: string, equal?: number, total?: number}}
@@ -488,7 +526,29 @@ function checkRebaseEquivalence(approvedSha, headSha) {
         reason: `commit ${sha.slice(0, 12)} is not present locally (git fetch origin ${sha.slice(0, 12)} did not recover it)`,
       };
   }
-  const rd = git(["range-diff", "origin/main", approvedSha, headSha]);
+  // Refresh the base best-effort: a stale local origin/main would make the
+  // comparison meaningless. A failure here is not fatal — the range-diff below
+  // still runs against whatever origin/main the clone has.
+  git(["fetch", "--quiet", "origin", "main"]);
+  const merges = git(["rev-list", "--merges", `origin/main..${headSha}`]);
+  if (merges.error || merges.status !== 0)
+    return {
+      accepted: false,
+      reason: `git rev-list --merges origin/main..${headSha.slice(0, 12)} failed: ${(merges.stderr ?? merges.error?.message ?? "").trim() || "non-zero exit"}`,
+    };
+  if (hasMergeCommits(merges.stdout))
+    return {
+      accepted: false,
+      reason:
+        "the head carries merge commit(s) above origin/main — a merge («Update branch»), not a rebase; git range-diff ignores merges, so it cannot prove equivalence",
+    };
+  const rd = git([
+    "range-diff",
+    "--no-color",
+    "origin/main",
+    approvedSha,
+    headSha,
+  ]);
   if (rd.error || rd.status !== 0)
     return {
       accepted: false,
@@ -665,8 +725,8 @@ async function main() {
     }
     if (verdict.state === "fresh-approve")
       process.stdout.write(
-      `${TAG} Mode-a verdict OK — PR #${prNumber}: APPROVE pinned at head ${sha.slice(0, 12)} (submitted ${verdict.submittedAt ?? "<unknown>"}).\n`,
-    );
+        `${TAG} Mode-a verdict OK — PR #${prNumber}: APPROVE pinned at head ${sha.slice(0, 12)} (submitted ${verdict.submittedAt ?? "<unknown>"}).\n`,
+      );
   }
 
   // 3. Bounded foreground poll against the pinned SHA.

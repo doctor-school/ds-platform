@@ -8,6 +8,7 @@ import {
   classifyCheckRuns,
   classifyModeAVerdict,
   classifyRangeDiff,
+  hasMergeCommits,
   cwdGuardMessage,
   findBranchWorktree,
   isWorktreeCwd,
@@ -700,7 +701,11 @@ describe("merge-gate classifyModeAVerdict() stays SHA-pinned (#1865)", () => {
   it("EARS-1865.4: the classifier itself is unchanged — a rebased head is still `stale-approve`", () => {
     // The rebase-equivalence escape lives at the gate call site, not here.
     const body =
-      "## Mode (a) Review — PR #1865" + NEWLINE + NEWLINE + "VERDICT: APPROVE" + NEWLINE;
+      "## Mode (a) Review — PR #1865" +
+      NEWLINE +
+      NEWLINE +
+      "VERDICT: APPROVE" +
+      NEWLINE;
     const reviews = [
       {
         body,
@@ -711,5 +716,25 @@ describe("merge-gate classifyModeAVerdict() stays SHA-pinned (#1865)", () => {
     expect(classifyModeAVerdict(reviews, "3771eba7").state).toBe(
       "stale-approve",
     );
+  });
+});
+
+describe("merge-gate hasMergeCommits() (#1865)", () => {
+  // `git range-diff` compares patches and ignores merge commits, so a branch
+  // updated via GitHub's «Update branch» button can print an all-`=` range-diff
+  // while carrying content the reviewer never read. The gate runs
+  // `git rev-list --merges origin/main..<head>` first and refuses on any hit.
+  it("EARS-1865.5: any `git rev-list --merges` output disqualifies the rebase escape (fails closed)", () => {
+    expect(hasMergeCommits("")).toBe(false);
+    expect(hasMergeCommits("   " + NEWLINE + "  ")).toBe(false);
+    expect(hasMergeCommits("3771eba7f0c1a2b3c4d5e6f708192a3b4c5d6e7f")).toBe(
+      true,
+    );
+    expect(
+      hasMergeCommits(["d3146147", "3771eba7"].join(NEWLINE) + NEWLINE),
+    ).toBe(true);
+    // Unusable input (a git failure the caller could not read) is NOT clean.
+    expect(hasMergeCommits(null)).toBe(true);
+    expect(hasMergeCommits(undefined)).toBe(true);
   });
 });

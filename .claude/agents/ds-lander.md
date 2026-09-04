@@ -90,6 +90,7 @@ Run it in the FOREGROUND. The gate inside `pr:land` is itself a bounded poll wit
 - Never `git checkout` in the primary tree — its HEAD is not yours to move (AGENTS.md §6 forbids branch manipulation in the shared main tree).
 - Never dispatch or perform a review, and never post a `## Mode (a) Review` comment.
 - Never `gh run rerun`, never re-trigger CI, never poll checks by hand — the gate inside `pr:land` is the only sanctioned wait.
+- A clean rebase does NOT invalidate the Mode (a) APPROVE (#1865), but on a `ui-parity: N/A (no render delta)` PR the `ui-parity` CI guard stays head-pinned: if it goes red after your rebase, that is a STOP + return (the lead re-dispatches a delta-only review), never a retry.
 - Never background `pr:land` — it runs in the foreground to its own terminal GREEN/RED/TIMEOUT line; a slow gate is waited out (`--timeout <sec>` when the brief passes it), never detached.
 - A missing prerequisite (no verdict, red CI, dirty base) is a STOP with the reason, not a patch (AGENTS.md §6).
 

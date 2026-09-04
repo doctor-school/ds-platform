@@ -162,7 +162,7 @@ describe("006 EARS-12/EARS-15 the host-injected room header bar", () => {
     expect(exit).toHaveAttribute("href", "/webinars/hsn-therapy");
   });
 
-  it("EARS-5/EARS-10: the live indicators render the INJECTED ICU callbacks, not a catalogue", () => {
+  it("EARS-5/10: the live indicators render the INJECTED ICU callbacks, not a catalogue", () => {
     const liveAt = new Date(Date.now() - 24 * 60_000).toISOString();
     const presenceCount = vi.fn((count: number) => `${count} врачей в комнате`);
     renderBar({ liveAt, copy: { ...copy, presenceCount } });

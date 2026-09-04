@@ -12,7 +12,7 @@ lang: en
 
 ## 1. Route topology and screen composition
 
-Two routes of `apps/doctor`, both inside feature 017's shell, both over one read contract (LD-3).
+019 owns two routes of `apps/doctor`, both inside feature 017's shell, both over one read contract (LD-3): `/events` and `/events/calendar`. The room entry a live event links into is a THIRD `apps/doctor` route, `/events/[slug]/room` (mounted at `apps/doctor/app/(room)/events/[slug]/room/`) — a sibling root route group deliberately rendered OUTSIDE the 017 shell, because the room is viewport-bounded (006 EARS-11) and a nested layout cannot remove the parent shell's `<main>`. That route is owned by feature 006 over the shared room unit `packages/room` (`@ds/room`), extraction #1722; 019 owns only the way into it.
 
 ```mermaid
 graph TD
@@ -28,7 +28,7 @@ graph TD
   Body --> Card["shared WebinarCard — base owned by Feature 004, widened by 019"]
   Month --> Body
   Card --> Event["020 — #d-event"]
-  Live --> Room["006 room UI unit — thin apps/doctor route on the doctor host (registered doctor only)"]
+  Live --> Room["006 room — thin apps/doctor route /events/[slug]/room over packages/room (registered doctor only)"]
   Live --> Event
   Mine --> Cabinet["022 — #d-lk"]
 ```
@@ -190,7 +190,7 @@ Response shape is the read-model set of the requirements' Event Model. Errors ar
 3. **Route-independent presentation and state:** EARS-4 / #1519 proves the shared Feature 004 / #1050 `MonthCalendarGrid` and `MonthDotGrid` components — it does not first create the calendar — while EARS-8 / #1523 extracts/proves the portable query codec at `packages/schemas/src/events/event-listing-query.schema.ts` with only thin host-default adapters, and EARS-9 / #1524 proves a component/state matrix. Each consumes #1518; none requires a browser route.
 4. **First published integration:** EARS-1 / #1516 consumes shell #1478, Feature 014's shared `EventList` #1346, #1519, #1523, #1524, and sequencing correction #1620. Before first publication it integrates every route-level Playwright obligation of EARS-2, EARS-3, EARS-4, EARS-7, EARS-8, and EARS-9: shared card/list/filter mounting and interactions, rendered API feed, calendar/feed navigation, URL/back/shared-link behaviour, and loading/empty/error/retry states. Only then does it publish product-complete `/events` in the declared canvas order. This is the explicit same-WBS deferral: before #1516 there is no public partial route; at #1516, later-handler content regions are absent rather than empty labelled boxes, stubs, placeholders, or «скоро» markers.
 5. **Dedicated calendar page (EARS-5)** over the same projection.
-6. **Live block (EARS-6)** adapts `RoomService` + `RegistrationService`, extracts only the cross-front `live-event-strip` presentation block, and links a registered doctor into the room on the doctor storefront host (`apps/doctor`) over the shared 006 room-UI unit (extraction #1722); it never creates a second room, room UI fork or lifecycle resolver.
+6. **Live block (EARS-6)** adapts `RoomService` + `RegistrationService`, extracts only the cross-front `live-event-strip` presentation block, and links a registered doctor into the room on the doctor storefront host at `/events/[slug]/room` (`apps/doctor/app/(room)/events/[slug]/room/`, outside the 017 shell) over the shared 006 room-UI unit `packages/room` (`@ds/room`, extraction #1722); it never creates a second room, room UI fork or lifecycle resolver.
 7. **Past tense (EARS-10)** consumes Feature 014's `RecordingsProjectionService`, portable recording schemas and the #1346 archive state; 019 owns no recording projection or archive unit.
 8. **Guest path (EARS-12)** — depends on EARS-8's addressable state and 021's return.
 9. **«Мои события» (EARS-11)** — last, behind 021 (data) and 022 (destination) per LD-8.

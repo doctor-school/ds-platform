@@ -230,11 +230,15 @@ test.describe("012 EARS-24 — provenance-safe speaker migration", () => {
       "Порог отката не установлен",
     );
 
-    // Not a JSON artifact at all — refused before anything leaves the browser.
-    await submitArtifact(page, "не json");
-    await expect(page.getByTestId("import-error")).toContainText(
-      "VALIDATION_FAILED",
+    // Not a JSON artifact at all — refused ON THE FIELD, naming the rule, and
+    // the submit never becomes available, so nothing leaves the browser.
+    await page.getByTestId("import-artifact").fill("не json");
+    await page.getByTestId("import-artifact").blur();
+    await expect(page.getByTestId("import-artifact-error")).toContainText(
+      "Это не JSON",
     );
+    await expect(page.getByTestId("import-submit")).toBeDisabled();
+    await expect(page.getByTestId("import-error")).toHaveCount(0);
 
     // A list naming a source the retained set does not contain. The server
     // answers VALIDATION_FAILED with the offending id, and the marker stays put.
@@ -284,6 +288,30 @@ test.describe("012 EARS-24 — provenance-safe speaker migration", () => {
 
     await page.goto("/");
     await openQueue(page);
+
+    // ---- artifact field: the declared rule REJECTS, then ACCEPTS ------------
+    // The rule is `ImportSpeakerMigrationReviewsRequestSchema`: JSON whose
+    // `reviewedRows` is a non-empty list of `{ sourceId, classification }`.
+    // Malformed input is named as such locally; only a well-formed artifact is
+    // allowed to reach the coverage proof on the server.
+    await page.getByTestId("import-artifact").fill("{ reviewedRows: ");
+    await page.getByTestId("import-artifact").blur();
+    await expect(page.getByTestId("import-artifact-error")).toContainText(
+      "Это не JSON",
+    );
+    await expect(page.getByTestId("import-submit")).toBeDisabled();
+    await page.getByTestId("import-artifact").fill(JSON.stringify({ rows: 1 }));
+    await page.getByTestId("import-artifact").blur();
+    await expect(page.getByTestId("import-artifact-error")).toContainText(
+      "reviewedRows",
+    );
+    await page
+      .getByTestId("import-artifact")
+      .fill(JSON.stringify({ reviewedRows: rows }));
+    await page.getByTestId("import-artifact").blur();
+    await expect(page.getByTestId("import-artifact-error")).toHaveCount(0);
+    await expect(page.getByTestId("import-artifact-hint")).toBeVisible();
+    await expect(page.getByTestId("import-submit")).toBeEnabled();
 
     // ---- import refusals against the REAL source set -----------------------
     // A row missing from the list: the artifact under-covers the source set.
@@ -481,17 +509,36 @@ test.describe("012 EARS-24 — provenance-safe speaker migration", () => {
       "Не разобрано: 0",
     );
 
-    // ---- the phase-aware release, then the guarded closure ------------------
+    // ---- release fields: the declared rules REJECT, then ACCEPT -------------
+    // Both rules are the API's own (`RecordPhaseAwareReleaseRequestSchema`):
+    // SHA `^[0-9a-f]{40}$`, ordinal integer ≥ 1. The console declares them
+    // client-side, so a typo is refused here in RU naming the rule and the
+    // submit stays disabled — the operator never spends a round trip, and the
+    // one value that gates a rollback is never sent half-typed.
+    const releaseSubmit = page.getByTestId("release-submit");
     await page.getByTestId("release-sha").fill("не sha");
-    await page.getByTestId("release-ordinal").fill("1");
-    await page.getByTestId("release-submit").click();
-    await expect(page.getByTestId("release-error")).toContainText(
-      "VALIDATION_FAILED",
+    await page.getByTestId("release-sha").blur();
+    await page.getByTestId("release-ordinal").fill("0");
+    await page.getByTestId("release-ordinal").blur();
+    await expect(page.getByTestId("release-sha-error")).toContainText(
+      "40 символов",
     );
+    await expect(page.getByTestId("release-ordinal-error")).toContainText(
+      "целое число от 1",
+    );
+    await expect(page.getByTestId("release-sha-hint")).toHaveCount(0);
+    await expect(releaseSubmit).toBeDisabled();
+
     const sha = "a".repeat(40);
     await page.getByTestId("release-sha").fill(sha);
+    await page.getByTestId("release-sha").blur();
     await page.getByTestId("release-ordinal").fill("7");
-    await page.getByTestId("release-submit").click();
+    await page.getByTestId("release-ordinal").blur();
+    await expect(page.getByTestId("release-sha-error")).toHaveCount(0);
+    await expect(page.getByTestId("release-ordinal-error")).toHaveCount(0);
+    await expect(page.getByTestId("release-sha-hint")).toBeVisible();
+    await expect(releaseSubmit).toBeEnabled();
+    await releaseSubmit.click();
     await expect(page.getByTestId("release-success")).toBeVisible();
     await expect(state.getByTestId("state-release")).toContainText(sha.slice(0, 12));
 

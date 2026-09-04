@@ -22,6 +22,7 @@ import {
   Textarea,
 } from "@ds/design-system";
 import { DataTable, FilterBar, FormSection } from "@ds/design-system/blocks";
+import { FormError } from "@ds/design-system/form";
 import {
   ImportSpeakerMigrationReviewsRequestSchema,
   SPEAKER_MIGRATION_CLASSIFICATIONS,
@@ -48,6 +49,8 @@ import {
 const PAGE_SIZE = 25;
 /** The API's own SHA shape — refused locally so a typo never costs a round trip. */
 const RELEASE_SHA = /^[0-9a-f]{40}$/;
+/** The API's `releaseOrdinal: z.number().int().min(1)`, as a typed-text rule. */
+const RELEASE_ORDINAL = /^[0-9]+$/;
 // blocks-adopted: DataTable + FilterBar + Pagination + EmptyState (official shadcn, MIT); Combobox (Kibo UI, MIT); FormSection + Dialog/AlertDialog/Tabs/Checkbox/Textarea (approved @ds/design-system blocks/primitives from #1605). No new visual class.
 
 type SpeakerMigrationClassification =
@@ -93,6 +96,7 @@ export default function SpeakerMigrationPage() {
   );
 
   const [artifact, setArtifact] = useState("");
+  const [artifactTouched, setArtifactTouched] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState<MigrationErrorState | null>(
     null,
@@ -100,7 +104,9 @@ export default function SpeakerMigrationPage() {
   const [importSuccess, setImportSuccess] = useState<string | null>(null);
 
   const [releaseSha, setReleaseSha] = useState("");
+  const [releaseShaTouched, setReleaseShaTouched] = useState(false);
   const [releaseOrdinal, setReleaseOrdinal] = useState("");
+  const [releaseOrdinalTouched, setReleaseOrdinalTouched] = useState(false);
   const [releasing, setReleasing] = useState(false);
   const [releaseError, setReleaseError] = useState<MigrationErrorState | null>(
     null,
@@ -110,6 +116,36 @@ export default function SpeakerMigrationPage() {
   const [closing, setClosing] = useState(false);
   const [closeError, setCloseError] = useState<MigrationErrorState | null>(null);
   const [closeSuccess, setCloseSuccess] = useState<string | null>(null);
+
+  // The three operator inputs of a ONE-SHOT, irreversible cutover, validated
+  // against the SAME rules the API enforces (`RecordPhaseAwareReleaseRequestSchema`
+  // and `ImportSpeakerMigrationReviewsRequestSchema` in `@ds/schemas`) so a typo
+  // is refused here, in RU, naming the rule — never as an opaque 400 after a
+  // round trip. The rules are declared, not guessed: SHA = the API's own
+  // `^[0-9a-f]{40}$`, ordinal = `int().min(1)`, artifact = JSON that the request
+  // schema itself accepts. The message shows on BLUR (`onTouched`, ADR-0013 §7),
+  // so it never fires mid-typing, and the submit stays disabled while invalid.
+  const releaseShaTrimmed = releaseSha.trim();
+  const releaseShaInvalid = !RELEASE_SHA.test(releaseShaTrimmed);
+  const releaseOrdinalTrimmed = releaseOrdinal.trim();
+  const releaseOrdinalNumber = Number(releaseOrdinalTrimmed);
+  const releaseOrdinalInvalid =
+    !RELEASE_ORDINAL.test(releaseOrdinalTrimmed) ||
+    !Number.isSafeInteger(releaseOrdinalNumber) ||
+    releaseOrdinalNumber < 1;
+  const artifactProblem = useMemo<"json" | "shape" | null>(() => {
+    const raw = artifact.trim();
+    if (raw === "") return "shape";
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      return "json";
+    }
+    return ImportSpeakerMigrationReviewsRequestSchema.safeParse(parsed).success
+      ? null
+      : "shape";
+  }, [artifact]);
 
   // Resolved rows are OUT of the default view: the queue is a worklist, and the
   // audit record of what was already decided is one checkbox away, read-only.
@@ -269,6 +305,7 @@ export default function SpeakerMigrationPage() {
       const result = await importSpeakerMigrationReviews(check.data);
       setImportSuccess(t("import.success", result));
       setArtifact("");
+      setArtifactTouched(false);
       await load();
     } catch (caught) {
       const { errorCode, fieldErrors } = readHttpError(caught);
@@ -439,14 +476,35 @@ export default function SpeakerMigrationPage() {
                     rows={6}
                     value={artifact}
                     placeholder={t("import.placeholder")}
+                    aria-invalid={
+                      artifactTouched && artifactProblem !== null
+                        ? true
+                        : undefined
+                    }
                     onChange={(event) => setArtifact(event.target.value)}
+                    onBlur={() => setArtifactTouched(true)}
                   />
+                  {artifactTouched && artifactProblem !== null ? (
+                    <FormError data-testid="import-artifact-error">
+                      {artifactProblem === "json"
+                        ? t("import.invalidJson")
+                        : t("import.invalidShape")}
+                    </FormError>
+                  ) : (
+                    <p
+                      data-testid="import-artifact-hint"
+                      className="text-xs text-muted-foreground"
+                    >
+                      {t("import.hint")}
+                    </p>
+                  )}
                 </div>
                 <div>
                   <Button
                     type="button"
                     data-testid="import-submit"
                     loading={importing}
+                    disabled={artifactProblem !== null}
                     onClick={() => void runImport()}
                   >
                     {t("import.submit")}
@@ -680,9 +738,29 @@ export default function SpeakerMigrationPage() {
                   <Input
                     id="release-sha"
                     data-testid="release-sha"
+                    inputMode="text"
+                    autoComplete="off"
+                    spellCheck={false}
+                    maxLength={40}
+                    aria-invalid={
+                      releaseShaTouched && releaseShaInvalid ? true : undefined
+                    }
                     value={releaseSha}
                     onChange={(event) => setReleaseSha(event.target.value)}
+                    onBlur={() => setReleaseShaTouched(true)}
                   />
+                  {releaseShaTouched && releaseShaInvalid ? (
+                    <FormError data-testid="release-sha-error">
+                      {t("release.shaInvalid")}
+                    </FormError>
+                  ) : (
+                    <p
+                      data-testid="release-sha-hint"
+                      className="text-xs text-muted-foreground"
+                    >
+                      {t("release.shaHint")}
+                    </p>
+                  )}
                 </div>
                 <div className="flex flex-col gap-2">
                   <Label htmlFor="release-ordinal">{t("release.ordinal")}</Label>
@@ -690,16 +768,37 @@ export default function SpeakerMigrationPage() {
                     id="release-ordinal"
                     data-testid="release-ordinal"
                     type="number"
+                    inputMode="numeric"
                     min={1}
+                    step={1}
+                    aria-invalid={
+                      releaseOrdinalTouched && releaseOrdinalInvalid
+                        ? true
+                        : undefined
+                    }
                     value={releaseOrdinal}
                     onChange={(event) => setReleaseOrdinal(event.target.value)}
+                    onBlur={() => setReleaseOrdinalTouched(true)}
                   />
+                  {releaseOrdinalTouched && releaseOrdinalInvalid ? (
+                    <FormError data-testid="release-ordinal-error">
+                      {t("release.ordinalInvalid")}
+                    </FormError>
+                  ) : (
+                    <p
+                      data-testid="release-ordinal-hint"
+                      className="text-xs text-muted-foreground"
+                    >
+                      {t("release.ordinalHint")}
+                    </p>
+                  )}
                 </div>
                 <div>
                   <Button
                     type="button"
                     data-testid="release-submit"
                     loading={releasing}
+                    disabled={releaseShaInvalid || releaseOrdinalInvalid}
                     onClick={() => void runRelease()}
                   >
                     {t("release.submit")}

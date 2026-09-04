@@ -625,12 +625,6 @@ export const speakerMigrationDisposition = pgEnum(
   ["unresolved", "existing_expert", "created_expert", "content_removed"],
 );
 
-/** Singleton lifecycle of the guarded legacy-speaker cutover. */
-export const speakerMigrationCutoverStatus = pgEnum(
-  "speaker_migration_cutover_status",
-  ["pre_cutover", "cutover"],
-);
-
 /**
  * Every retained legacy speaker has exactly one review row. Source fields are a
  * snapshot, not a second editable copy: the migration trigger pins them forever
@@ -704,32 +698,6 @@ export const speakerMigrationReviews = pgTable(
 );
 
 export type SpeakerMigrationReview = typeof speakerMigrationReviews.$inferSelect;
-
-/** One retained singleton proving whether legacy speaker boundaries are closed. */
-export const speakerMigrationCutover = pgTable(
-  "speaker_migration_cutover",
-  {
-    id: text("id").primaryKey().default("speaker_migration"),
-    status: speakerMigrationCutoverStatus("status")
-      .notNull()
-      .default("pre_cutover"),
-    completedBy: text("completed_by"),
-    completedAt: timestamp("completed_at", { withTimezone: true }),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-  },
-  (t) => [
-    check("speaker_migration_cutover_singleton", sql`${t.id} = 'speaker_migration'`),
-    check(
-      "speaker_migration_cutover_completion_shape",
-      sql`(${t.status} = 'cutover') = (${t.completedBy} IS NOT NULL AND ${t.completedAt} IS NOT NULL)`,
-    ),
-  ],
-);
 
 /**
  * `event_projects` — the retained event↔project relationship (012 EARS-6,

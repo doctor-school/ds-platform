@@ -1596,6 +1596,9 @@ export const SPEAKER_MIGRATION_CLASSIFICATIONS = [
 export const SpeakerMigrationClassificationSchema = z.enum(
   SPEAKER_MIGRATION_CLASSIFICATIONS,
 );
+export type SpeakerMigrationClassification = z.infer<
+  typeof SpeakerMigrationClassificationSchema
+>;
 
 export const SPEAKER_MIGRATION_DISPOSITIONS = [
   "unresolved",
@@ -1606,6 +1609,9 @@ export const SPEAKER_MIGRATION_DISPOSITIONS = [
 export const SpeakerMigrationDispositionSchema = z.enum(
   SPEAKER_MIGRATION_DISPOSITIONS,
 );
+export type SpeakerMigrationDisposition = z.infer<
+  typeof SpeakerMigrationDispositionSchema
+>;
 
 export const SpeakerMigrationReviewItemSchema = z
   .object({
@@ -1696,12 +1702,99 @@ export type ResolveSpeakerMigrationReviewRequest = z.infer<
   typeof ResolveSpeakerMigrationReviewRequestSchema
 >;
 
+/**
+ * Phase of the retained cutover SSOT (`speaker_migration_cutover`, #1633). The
+ * enum is mirrored, not re-declared: the database type is the SSOT and this is
+ * the wire projection of it.
+ */
+export const SPEAKER_MIGRATION_PHASES = ["review_open", "source_closed"] as const;
+export const SpeakerMigrationPhaseSchema = z.enum(SPEAKER_MIGRATION_PHASES);
+export type SpeakerMigrationPhase = z.infer<typeof SpeakerMigrationPhaseSchema>;
+
+/**
+ * The owner-reviewed classification artifact (012-design §2.3). It is an
+ * ORDERED LIST and deliberately not a map: a repeated source UUID is a real
+ * defect in the artifact that the import must SEE and reject, and a keyed map
+ * would silently collapse it into a last-one-wins value before anyone noticed.
+ * Validation therefore happens on these raw rows, before any keyed structure
+ * exists.
+ *
+ * The rows carry classification only. No name, normalized name, Expert or User
+ * record, heuristic or generated suggestion appears here or is consulted to
+ * produce one.
+ */
+export const SpeakerMigrationReviewedRowSchema = z
+  .object({
+    sourceId: TaxonomyIdSchema,
+    classification: SpeakerMigrationClassificationSchema,
+  })
+  .strict();
+export type SpeakerMigrationReviewedRow = z.infer<
+  typeof SpeakerMigrationReviewedRowSchema
+>;
+
+export const ImportSpeakerMigrationReviewsRequestSchema = z
+  .object({ reviewedRows: z.array(SpeakerMigrationReviewedRowSchema).min(1) })
+  .strict();
+export type ImportSpeakerMigrationReviewsRequest = z.infer<
+  typeof ImportSpeakerMigrationReviewsRequestSchema
+>;
+
+export const SpeakerMigrationImportResultSchema = z
+  .object({
+    imported: z.number().int().nonnegative(),
+    unmatched: z.number().int().nonnegative(),
+    ambiguous: z.number().int().nonnegative(),
+    duplicate: z.number().int().nonnegative(),
+  })
+  .strict();
+export type SpeakerMigrationImportResult = z.infer<
+  typeof SpeakerMigrationImportResultSchema
+>;
+
+/**
+ * The expand deployment records its own immutable release SHA + authoritative
+ * ordinal as the phase-aware pair. Closure copies that pair into the rollback
+ * floor, so recording it is a hard PREREQUISITE of closure, not a formality —
+ * `speaker_migration_cutover_closed_requires_floor` makes a floorless
+ * `source_closed` unrepresentable in the first place.
+ */
+export const RecordPhaseAwareReleaseRequestSchema = z
+  .object({
+    releaseSha: z.string().regex(/^[0-9a-f]{40}$/),
+    releaseOrdinal: z.number().int().min(1),
+  })
+  .strict();
+export type RecordPhaseAwareReleaseRequest = z.infer<
+  typeof RecordPhaseAwareReleaseRequestSchema
+>;
+
+export const SpeakerMigrationStateSchema = z
+  .object({
+    phase: SpeakerMigrationPhaseSchema,
+    version: z.number().int().min(1),
+    phaseAwareReleaseSha: z.string().nullable(),
+    phaseAwareReleaseOrdinal: z.number().int().nullable(),
+    minimumCompatibleReleaseSha: z.string().nullable(),
+    minimumCompatibleReleaseOrdinal: z.number().int().nullable(),
+    phaseAdvancedAt: z.string().nullable(),
+  })
+  .strict();
+export type SpeakerMigrationState = z.infer<typeof SpeakerMigrationStateSchema>;
+
+/**
+ * Closure result. It reports the FLOOR it installed, not merely a success flag:
+ * the operator needs the SHA/ordinal that `pnpm deploy:prod --rollback` will
+ * enforce from this moment on.
+ */
 export const SpeakerMigrationCutoverResultSchema = z
   .object({
-    status: z.literal("cutover"),
-    resolved: z.number().int().nonnegative(),
+    phase: z.literal("source_closed"),
+    resolvedSources: z.number().int().nonnegative(),
     contentRemoved: z.number().int().nonnegative(),
-    completedAt: z.string(),
+    minimumCompatibleReleaseSha: z.string(),
+    minimumCompatibleReleaseOrdinal: z.number().int().min(1),
+    phaseAdvancedAt: z.string(),
   })
   .strict();
 export type SpeakerMigrationCutoverResult = z.infer<

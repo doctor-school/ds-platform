@@ -1,25 +1,22 @@
 import { randomUUID } from "node:crypto";
 import { Inject, Injectable } from "@nestjs/common";
-import {
-  and,
-  asc,
-  count,
-  eq,
-  inArray,
-  sql,
-} from "drizzle-orm";
+import { and, asc, count, eq, inArray, sql } from "drizzle-orm";
 import {
   auditLedger,
   eventExperts,
   events,
+  eventSpeakers,
   experts,
   speakerMigrationCutover,
   speakerMigrationReviews,
   type DrizzleHandle,
+  type SpeakerMigrationCutover,
   type SpeakerMigrationReview,
 } from "@ds/db";
 import type {
   ResolveSpeakerMigrationReviewRequest,
+  SpeakerMigrationClassification,
+  SpeakerMigrationReviewedRow,
   SpeakerMigrationReviewListQuery,
 } from "@ds/schemas";
 import { withRequestAuditContext } from "../audit/audit-context.tx.js";
@@ -40,12 +37,41 @@ export interface ResolutionWrite {
   reviewedAt: Date;
 }
 
+export interface ImportCounts {
+  imported: number;
+  unmatched: number;
+  ambiguous: number;
+  duplicate: number;
+}
+
+/**
+ * 012 EARS-24 (#1607) — persistence for the legacy-speaker review queue and the
+ * guarded cutover.
+ *
+ * The cutover SSOT (`speaker_migration_cutover`), the `event_speakers` fence
+ * trigger and the rollback-floor guard are #1633's and are CONSUMED here: this
+ * repository reads the phase from that singleton and copies its phase-aware
+ * release pair into the floor, but never re-declares any of them.
+ */
 @Injectable()
 export class SpeakerMigrationRepository {
   constructor(@Inject(DRIZZLE_DB) private readonly db: Db) {}
 
   transaction<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
     return withRequestAuditContext(this.db, fn);
+  }
+
+  /**
+   * The closure transaction is `SERIALIZABLE` because it must PROVE a set
+   * property — exact source↔queue coverage — and then act on that proof. Under
+   * a weaker level a source row inserted concurrently would be invisible to the
+   * proof and committed after it, producing exactly the "closed set that is not
+   * closed" state design §2.3 stage 2 forbids.
+   */
+  serializableTransaction<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
+    return withRequestAuditContext(this.db, fn, {
+      isolationLevel: "serializable",
+    });
   }
 
   async list(query: SpeakerMigrationReviewListQuery): Promise<{
@@ -92,6 +118,85 @@ export class SpeakerMigrationRepository {
     return row ?? null;
   }
 
+  /** The #1633 singleton, read without a lock — for phase-aware READ branches. */
+  async state(): Promise<SpeakerMigrationCutover> {
+    const [row] = await this.db.select().from(speakerMigrationCutover);
+    if (!row) {
+      // Fail closed, exactly as the fence trigger does: an unknowable phase must
+      // never read as "open".
+      throw new Error("speaker_migration_cutover singleton is missing");
+    }
+    return row;
+  }
+
+  /** The same singleton under `FOR UPDATE` — the fence trigger takes this lock too. */
+  async lockState(tx: Tx): Promise<SpeakerMigrationCutover> {
+    const [row] = await tx.select().from(speakerMigrationCutover).for("update");
+    if (!row) throw new Error("speaker_migration_cutover singleton is missing");
+    return row;
+  }
+
+  /** Every retained source row, in a stable order. No eligibility filter: a
+   * content-removed row is a review disposition, never a reason to drop a row
+   * from provenance (design §2.3). */
+  async allSourceIds(tx: Tx): Promise<string[]> {
+    const rows = await tx
+      .select({ id: eventSpeakers.id })
+      .from(eventSpeakers)
+      .orderBy(asc(eventSpeakers.id));
+    return rows.map((r) => r.id);
+  }
+
+  /**
+   * Insert one review per reviewed row, taking `original_classification` from
+   * the artifact and every provenance column from the source row itself. The
+   * fingerprint comes from the SAME SQL function the enqueue trigger uses, so
+   * an imported row and a later inserted row are fingerprinted identically.
+   */
+  async insertReviews(
+    tx: Tx,
+    rows: readonly SpeakerMigrationReviewedRow[],
+  ): Promise<number> {
+    let inserted = 0;
+    for (const row of rows) {
+      const result = await tx.execute(sql`
+        INSERT INTO speaker_migration_reviews (
+          source_speaker_id, event_id, source_position, source_name,
+          source_regalia, content_fingerprint, original_classification,
+          disposition
+        )
+        SELECT s.id, s.event_id, s.position, s.name, s.regalia,
+               speaker_migration_content_fingerprint(s.name, s.regalia),
+               ${row.classification}::speaker_migration_classification,
+               'unresolved'
+        FROM event_speakers s
+        WHERE s.id = ${row.sourceId}
+      `);
+      inserted += Number((result as { rowCount?: number }).rowCount ?? 0);
+    }
+    return inserted;
+  }
+
+  async countReviews(tx: Tx): Promise<number> {
+    const [row] = await tx
+      .select({ value: count() })
+      .from(speakerMigrationReviews);
+    return Number(row?.value ?? 0);
+  }
+
+  async recordImportAudit(
+    tx: Tx,
+    actorId: string,
+    counts: ImportCounts,
+  ): Promise<void> {
+    await tx.insert(auditLedger).values({
+      eventId: randomUUID(),
+      eventType: "SpeakerMigrationQueueImported",
+      subjectId: actorId,
+      metadata: { ...counts, importedBy: actorId },
+    });
+  }
+
   async lockReview(
     tx: Tx,
     sourceId: string,
@@ -123,6 +228,12 @@ export class SpeakerMigrationRepository {
     return Boolean(row);
   }
 
+  /**
+   * Create the Expert the operator explicitly authored. The slug is derived from
+   * the SOURCE ROW ID, never from the typed name: a name-derived slug would be
+   * the one place in this feature where two speakers with the same spelling
+   * collide, i.e. an identity inference by the back door.
+   */
   async createExpert(
     tx: Tx,
     sourceId: string,
@@ -145,6 +256,13 @@ export class SpeakerMigrationRepository {
     return row.id;
   }
 
+  /**
+   * The ONLY refusal the spec names is the retained duplicate pair
+   * `(event_id, expert_id)` — an Expert already linked to ANOTHER event stays
+   * eligible, so no expert-level eligibility check belongs here. The position
+   * clash is a separate, ordinary `SPEAKER_POSITION_OCCUPIED` invariant of
+   * `event_experts` itself.
+   */
   async createEventExpert(
     tx: Tx,
     input: {
@@ -155,20 +273,37 @@ export class SpeakerMigrationRepository {
       position: number;
     },
   ): Promise<string> {
-    const conflicts = await tx
+    const duplicatePair = await tx
       .select({ id: eventExperts.id })
       .from(eventExperts)
       .where(
         and(
           eq(eventExperts.eventId, input.eventId),
-          sql`(${eventExperts.expertId} = ${input.expertId} OR ${eventExperts.legacySpeakerId} = ${input.sourceId} OR (${eventExperts.position} = ${input.position} AND ${eventExperts.status} = 'active'))`,
+          eq(eventExperts.expertId, input.expertId),
         ),
       )
       .limit(1);
-    if (conflicts.length > 0) {
+    if (duplicatePair.length > 0) {
+      throw new TaxonomyError(
+        "RELATIONSHIP_CONFLICT",
+        "this event already has a retained link to the selected expert",
+      );
+    }
+    const positionTaken = await tx
+      .select({ id: eventExperts.id })
+      .from(eventExperts)
+      .where(
+        and(
+          eq(eventExperts.eventId, input.eventId),
+          eq(eventExperts.position, input.position),
+          eq(eventExperts.status, "active"),
+        ),
+      )
+      .limit(1);
+    if (positionTaken.length > 0) {
       throw new TaxonomyError(
         "SPEAKER_POSITION_OCCUPIED",
-        "the selected expert, source row or event position is already linked",
+        "the requested event position is already occupied",
       );
     }
     const [row] = await tx
@@ -181,7 +316,9 @@ export class SpeakerMigrationRepository {
         position: input.position,
       })
       .returning({ id: eventExperts.id });
-    if (!row) throw new Error("speaker migration event_expert insert returned no row");
+    if (!row) {
+      throw new Error("speaker migration event_expert insert returned no row");
+    }
     return row.id;
   }
 
@@ -236,72 +373,124 @@ export class SpeakerMigrationRepository {
     return row;
   }
 
-  async isCutover(): Promise<boolean> {
+  /** Phase-aware READ branch: `true` once the legacy source set is closed. */
+  async isSourceClosed(): Promise<boolean> {
     const [row] = await this.db
-      .select({ status: speakerMigrationCutover.status })
-      .from(speakerMigrationCutover)
-      .where(eq(speakerMigrationCutover.id, "speaker_migration"));
-    return row?.status === "cutover";
+      .select({ phase: speakerMigrationCutover.phase })
+      .from(speakerMigrationCutover);
+    if (!row) throw new Error("speaker_migration_cutover singleton is missing");
+    return row.phase === "source_closed";
   }
 
-  async completeCutover(tx: Tx, reviewerId: string) {
-    const [state] = await tx
-      .select()
-      .from(speakerMigrationCutover)
-      .where(eq(speakerMigrationCutover.id, "speaker_migration"))
-      .for("update");
-    if (!state) throw new Error("speaker migration cutover singleton missing");
-    const [unresolvedRow] = await tx
-      .select({ unresolved: count() })
-      .from(speakerMigrationReviews)
-      .where(eq(speakerMigrationReviews.disposition, "unresolved"));
-    if (Number(unresolvedRow?.unresolved ?? 0) > 0) {
+  async recordPhaseAwareRelease(
+    tx: Tx,
+    input: { releaseSha: string; releaseOrdinal: number; actorId: string },
+  ): Promise<SpeakerMigrationCutover> {
+    const current = await this.lockState(tx);
+    if (
+      current.phaseAwareReleaseSha !== null &&
+      (current.phaseAwareReleaseSha !== input.releaseSha ||
+        current.phaseAwareReleaseOrdinal !== input.releaseOrdinal)
+    ) {
       throw new TaxonomyError(
         "RELATIONSHIP_CONFLICT",
-        "speaker migration cutover requires every retained source row to be resolved",
+        "a different phase-aware release pair is already recorded",
       );
     }
-    const [resolvedRow] = await tx
-      .select({ resolved: count() })
-      .from(speakerMigrationReviews)
-      .where(inArray(speakerMigrationReviews.disposition, ["existing_expert", "created_expert"]));
-    const [removedRow] = await tx
-      .select({ removed: count() })
-      .from(speakerMigrationReviews)
-      .where(eq(speakerMigrationReviews.disposition, "content_removed"));
-    const resolved = Number(resolvedRow?.resolved ?? 0);
-    const removed = Number(removedRow?.removed ?? 0);
-    if (state.status === "cutover") {
-      return {
-        resolved,
-        contentRemoved: removed,
-        completedAt: state.completedAt!,
-      };
-    }
-    const completedAt = new Date();
-    await tx
+    if (current.phaseAwareReleaseSha === input.releaseSha) return current;
+    const [row] = await tx
       .update(speakerMigrationCutover)
       .set({
-        status: "cutover",
-        completedBy: reviewerId,
-        completedAt,
-        updatedAt: completedAt,
+        phaseAwareReleaseSha: input.releaseSha,
+        phaseAwareReleaseOrdinal: input.releaseOrdinal,
       })
-      .where(eq(speakerMigrationCutover.id, "speaker_migration"));
+      .where(eq(speakerMigrationCutover.id, current.id))
+      .returning();
+    if (!row) throw new Error("phase-aware release update returned no row");
+    return row;
+  }
+
+  async countUnresolved(tx: Tx): Promise<number> {
+    const [row] = await tx
+      .select({ value: count() })
+      .from(speakerMigrationReviews)
+      .where(eq(speakerMigrationReviews.disposition, "unresolved"));
+    return Number(row?.value ?? 0);
+  }
+
+  async countByDisposition(
+    tx: Tx,
+    dispositions: ("existing_expert" | "created_expert" | "content_removed")[],
+  ): Promise<number> {
+    const [row] = await tx
+      .select({ value: count() })
+      .from(speakerMigrationReviews)
+      .where(inArray(speakerMigrationReviews.disposition, dispositions));
+    return Number(row?.value ?? 0);
+  }
+
+  /** Advance the phase and install the floor in ONE update — the
+   * `closed_requires_floor` CHECK makes any other order unrepresentable. */
+  async advanceToSourceClosed(
+    tx: Tx,
+    input: {
+      id: string;
+      sha: string;
+      ordinal: number;
+      phaseAdvancedAt: Date;
+      actorId: string;
+      resolvedSources: number;
+      contentRemoved: number;
+    },
+  ): Promise<void> {
+    const [row] = await tx
+      .update(speakerMigrationCutover)
+      .set({
+        phase: "source_closed",
+        minimumCompatibleReleaseSha: input.sha,
+        minimumCompatibleReleaseOrdinal: input.ordinal,
+        phaseAdvancedAt: input.phaseAdvancedAt,
+      })
+      .where(
+        and(
+          eq(speakerMigrationCutover.id, input.id),
+          eq(speakerMigrationCutover.phase, "review_open"),
+        ),
+      )
+      .returning({ id: speakerMigrationCutover.id });
+    if (!row) {
+      throw new TaxonomyError(
+        "RELATIONSHIP_CONFLICT",
+        "the speaker migration phase changed while closure was running",
+      );
+    }
     await tx.insert(auditLedger).values({
       eventId: randomUUID(),
-      eventType: "SpeakerMigrationCutoverCompleted",
-      subjectId: reviewerId,
+      eventType: "SpeakerMigrationSourceClosed",
+      subjectId: input.actorId,
       metadata: {
-        resolved,
-        contentRemoved: removed,
-        completedAt: completedAt.toISOString(),
+        minimumCompatibleReleaseSha: input.sha,
+        minimumCompatibleReleaseOrdinal: input.ordinal,
+        resolvedSources: input.resolvedSources,
+        contentRemoved: input.contentRemoved,
+        phaseAdvancedAt: input.phaseAdvancedAt.toISOString(),
+        closedBy: input.actorId,
       },
     });
-    return {
-      resolved,
-      contentRemoved: removed,
-      completedAt,
-    };
+  }
+
+  async classificationCounts(
+    tx: Tx,
+  ): Promise<Record<SpeakerMigrationClassification, number>> {
+    const rows = await tx
+      .select({
+        classification: speakerMigrationReviews.originalClassification,
+        value: count(),
+      })
+      .from(speakerMigrationReviews)
+      .groupBy(speakerMigrationReviews.originalClassification);
+    const counts = { unmatched: 0, ambiguous: 0, duplicate: 0 };
+    for (const row of rows) counts[row.classification] = Number(row.value);
+    return counts;
   }
 }

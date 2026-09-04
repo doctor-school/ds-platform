@@ -64,11 +64,6 @@ export function Providers({ children }: { children: ReactNode }) {
           edit: "/directions/:id",
           meta: { label: t("app.nav.directions") },
         },
-        {
-          name: "speaker-migration",
-          list: "/speaker-migration",
-          meta: { label: t("app.nav.speakerMigration") },
-        },
       ]}
       options={{
         syncWithLocation: true,

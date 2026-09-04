@@ -38,10 +38,6 @@ import type {
   UpdateProjectRequest,
   UpdateRecordingRequest,
   UpdateDirectionRequest,
-  ResolveSpeakerMigrationReviewRequest,
-  SpeakerMigrationCutoverResult,
-  SpeakerMigrationReviewList,
-  SpeakerMigrationReviewListQuery,
 } from "@ds/schemas";
 
 /**
@@ -310,60 +306,6 @@ export async function fetchRelationshipEndpointOptions({
     page?: number;
   };
   return { data: body.data, total: body.total, page: body.page ?? page };
-}
-
-/** EARS-24 retained-source review queue. This is a command surface, not CRUD. */
-export async function fetchSpeakerMigrationReviews(
-  query: SpeakerMigrationReviewListQuery,
-): Promise<SpeakerMigrationReviewList> {
-  const params = new URLSearchParams({
-    page: String(query.page),
-    pageSize: String(query.pageSize),
-  });
-  if (query.disposition) params.set("disposition", query.disposition);
-  if (query.classification)
-    params.set("classification", query.classification);
-  const res = await fetch(
-    `${ADMIN_BASE}/speaker-migration-reviews?${params.toString()}`,
-    { credentials: "include", headers: { accept: "application/json" } },
-  );
-  if (!res.ok) throw await toHttpError(res);
-  return (await res.json()) as SpeakerMigrationReviewList;
-}
-
-export async function resolveSpeakerMigrationReview(
-  sourceId: string,
-  payload: ResolveSpeakerMigrationReviewRequest,
-): Promise<void> {
-  const res = await fetch(
-    `${ADMIN_BASE}/speaker-migration-reviews/${sourceId}/resolve`,
-    {
-      method: "POST",
-      credentials: "include",
-      headers: {
-        accept: "application/json",
-        "content-type": "application/json",
-        "idempotency-key": idempotencyKey(),
-        ...adminCsrfHeaders(),
-      },
-      body: JSON.stringify(payload),
-    },
-  );
-  if (!res.ok) throw await toHttpError(res);
-}
-
-export async function cutoverSpeakerMigration(): Promise<SpeakerMigrationCutoverResult> {
-  const res = await fetch(`${ADMIN_BASE}/speaker-migration-reviews/cutover`, {
-    method: "POST",
-    credentials: "include",
-    headers: {
-      accept: "application/json",
-      "idempotency-key": idempotencyKey(),
-      ...adminCsrfHeaders(),
-    },
-  });
-  if (!res.ok) throw await toHttpError(res);
-  return (await res.json()) as SpeakerMigrationCutoverResult;
 }
 
 /** Split the authoring variables into the JSON payload and the file part. */

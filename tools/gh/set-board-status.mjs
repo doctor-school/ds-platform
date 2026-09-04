@@ -28,7 +28,9 @@
  * `--ahead-of-queue "<verbatim owner quote>"`, which proceeds AND posts the quote
  * as the `claim:` comment so `pnpm backlog:triage` sees the claim and the reason.
  * Rules live in tools/gh/lib/queue-position.mjs; `--resolve` prints the computed
- * position and writes nothing.
+ * position and writes nothing. The guard fails OPEN when no head can be computed
+ * (empty milestones payload / `gh` failure): WARN and allow, never refuse on
+ * absent data (#1857).
  *
  * Usage:
  *   node tools/gh/set-board-status.mjs <issue#> <Todo|In Progress|Review|Done>
@@ -45,6 +47,12 @@
  * Exit codes: 0 = status set (or resolved in --resolve mode); 1 = usage / resolution
  * / mutation error; 3 = claim refused — the Issue is ahead of its track's queue
  * (#1855), re-run with `--ahead-of-queue "<verbatim owner quote>"` to override.
+ *
+ * Partial success (#1857): the `claim:` comment of an overridden claim is posted
+ * AFTER the board mutation (step 5), so a comment failure exits 1 with the board
+ * ALREADY set to "In Progress". That state is board-correct and comment-missing —
+ * re-run is unnecessary for the board; post the quote as an `gh issue comment`
+ * by hand so `pnpm backlog:triage` sees the claim.
  */
 import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
@@ -72,7 +80,7 @@ import {
 export { pickProjectItem };
 // The queue-position rules are pure and shared with tools/backlog-triage.ts;
 // re-exported here so the guard-test suite covers them through this module.
-export { parseAheadOfQueue, queueHead, queuePosition, trackOf };
+export { LITMUS_LINE, parseAheadOfQueue, queueHead, queuePosition, trackOf };
 
 /** Board status whose assignment is the claim — the only one the guard gates. */
 export const CLAIM_STATUS = "In Progress";
@@ -119,11 +127,33 @@ export function buildProjectItemsQuery(issueNumber) {
 /**
  * Build the repository-milestones query used to compute queue heads (#1855).
  * Only OPEN milestones matter — a closed release is a shipped release.
+ *
+ * `first:100` is a deliberate single page, not pagination: the repo has ~10 open
+ * milestones and the roadmap model keeps that count small by construction. The
+ * query also asks for `totalCount` so a silent truncation cannot happen — see
+ * `milestonesPageWarning` (#1857).
  */
 export function buildMilestonesQuery() {
   return (
     `query{repository(owner:"${OWNER}",name:"${REPO}"){` +
-    `milestones(first:100,states:OPEN){nodes{title dueOn state}}}}`
+    `milestones(first:100,states:OPEN){totalCount nodes{title dueOn state}}}}`
+  );
+}
+
+/**
+ * Sanity check on the single-page milestones read: null when the page holds
+ * every open milestone, a WARN line when `totalCount` exceeds what came back
+ * (the queue head would then be computed from a truncated set).
+ * @returns {string|null}
+ */
+export function milestonesPageWarning(data) {
+  const page = data?.repository?.milestones;
+  const total = page?.totalCount;
+  const returned = Array.isArray(page?.nodes) ? page.nodes.length : 0;
+  if (!Number.isInteger(total) || total <= returned) return null;
+  return (
+    `open milestones truncated: ${returned} of ${total} returned by a single ` +
+    `first:100 page — the computed queue head may be wrong; paginate buildMilestonesQuery().`
   );
 }
 
@@ -289,7 +319,10 @@ function main() {
   const issueMilestone = issue.milestone?.title ?? "";
   let position = null;
   if (resolveOnly || rawStatus === CLAIM_STATUS) {
-    const milestones = parseMilestones(ghGraphql(buildMilestonesQuery()));
+    const milestonesData = ghGraphql(buildMilestonesQuery());
+    const pageWarning = milestonesPageWarning(milestonesData);
+    if (pageWarning) warn(pageWarning);
+    const milestones = parseMilestones(milestonesData);
     position = queuePosition(
       {
         track: trackOf(issue.labels?.nodes ?? []),
@@ -326,6 +359,14 @@ function main() {
         `proceeding under ${AHEAD_OF_QUEUE_FLAG}.`,
     );
   }
+  // Fail-open path (#1857): no queue head could be computed, so the guard has no
+  // evidence either way. The claim proceeds, loudly — never silently.
+  if (rawStatus === CLAIM_STATUS && position?.reason === "no-queue-data")
+    warn(
+      `no queue head could be computed for #${issueNumber} (milestone ` +
+        `${issueMilestone || "(none)"}) — allowing the claim unguarded. ` +
+        `Litmus stands: ${LITMUS_LINE}`,
+    );
 
   const option = resolveStatusOption(statusField.options, rawStatus);
   if (!option) die(`"${STATUS_FIELD}" has no option "${rawStatus}"`);
@@ -337,8 +378,18 @@ function main() {
     `[set-board-status] OK — issue #${issueNumber} board Status set to "${rawStatus}" (item ${item.id}).\n`,
   );
 
-  // 5. An overridden claim records the owner's reason as the claim comment.
-  if (override.present && rawStatus === CLAIM_STATUS) postClaimComment(issueNumber, override.quote);
+  // 5. An overridden claim records the owner's reason as the claim comment —
+  // but ONLY when the Issue really was ahead of queue (#1857). An override on an
+  // Issue the guard would have allowed anyway must not publish «ahead of queue»
+  // as a fact about it.
+  if (override.present && rawStatus === CLAIM_STATUS) {
+    if (position && !position.ok) postClaimComment(issueNumber, override.quote);
+    else
+      warn(
+        `${AHEAD_OF_QUEUE_FLAG} was passed but #${issueNumber} is not ahead of queue ` +
+          `(${position?.reason ?? "position not computed"}) — no claim comment posted.`,
+      );
+  }
 }
 
 // Run main only when invoked directly, so the pure seams are importable in the

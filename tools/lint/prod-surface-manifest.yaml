@@ -281,3 +281,16 @@ routes:
     route: /partners/[id]
     file: apps/admin/app/partners/[id]/page.tsx
     status: product-ready
+  # 012 EARS-24 (#1607): the provenance-safe speaker-migration console — the
+  # operator-run, one-shot cutover from free-text event speakers to Expert
+  # records. A single route, no create and no detail page: the queue lists every
+  # retained source row read-only, each row is resolved explicitly (existing
+  # Expert / new Expert / content removed), and the source is closed only after a
+  # recorded phase-aware release. The surface never matches, suggests or prefills
+  # a name — the reviewed artifact is produced outside the product. Driven live in
+  # `apps/admin/e2e/taxonomy-speaker-migration.spec.ts` (axe-scanned in the same
+  # spec) against a real migrated Postgres branch DB.
+  - app: admin
+    route: /speaker-migration
+    file: apps/admin/app/speaker-migration/page.tsx
+    status: product-ready

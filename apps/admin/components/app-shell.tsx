@@ -114,6 +114,17 @@ export function AppShell({ children }: { children: ReactNode }) {
                   {t("app.nav.specialties")}
                 </Link>
               </DsLink>
+              {/* The 012 EARS-24 migration console sits LAST because it is a
+                  one-time operation with a terminal end: once the source is
+                  closed it is a read-only record, not a book anyone works in. */}
+              <DsLink asChild variant="standalone">
+                <Link
+                  href="/speaker-migration"
+                  data-testid="nav-speaker-migration"
+                >
+                  {t("app.nav.speakerMigration")}
+                </Link>
+              </DsLink>
             </nav>
           </div>
           <Button

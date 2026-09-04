@@ -26,6 +26,15 @@ import type {
   ProjectAdminDetail,
   ProjectAdminListItem,
   CreateDirectionRequest,
+  ImportSpeakerMigrationReviewsRequest,
+  RecordPhaseAwareReleaseRequest,
+  ResolveSpeakerMigrationReviewRequest,
+  SpeakerMigrationCutoverResult,
+  SpeakerMigrationImportResult,
+  SpeakerMigrationReviewItem,
+  SpeakerMigrationReviewList,
+  SpeakerMigrationReviewListQuery,
+  SpeakerMigrationState,
   RecordingCommand,
   RelationshipStatus,
   TaxonomyStatus,
@@ -306,6 +315,102 @@ export async function fetchRelationshipEndpointOptions({
     page?: number;
   };
   return { data: body.data, total: body.total, page: body.page ?? page };
+}
+
+/**
+ * 012 EARS-24 — the retained-source review console.
+ *
+ * Five named commands and two reads, NOT a Refine CRUD resource: the surface has
+ * no create and no delete, its writes are stage transitions of a singleton
+ * cutover (`import` → `resolve`* → `phase-aware-release` → `close-source`), and
+ * every one of them is idempotency-keyed. Modelling it as a resource would hand
+ * a stray `useCreate()`/`useDelete()` a route that does not exist.
+ *
+ * None of these calls sends, receives or derives a name suggestion: the reviewed
+ * classification list is the ONLY input, and the operator's choice is the only
+ * thing that resolves a row.
+ */
+export async function fetchSpeakerMigrationReviews(
+  query: SpeakerMigrationReviewListQuery,
+): Promise<SpeakerMigrationReviewList> {
+  const params = new URLSearchParams({
+    page: String(query.page),
+    pageSize: String(query.pageSize),
+  });
+  if (query.disposition) params.set("disposition", query.disposition);
+  if (query.classification) params.set("classification", query.classification);
+  const res = await fetch(
+    `${ADMIN_BASE}/speaker-migration-reviews?${params.toString()}`,
+    { credentials: "include", headers: { accept: "application/json" } },
+  );
+  if (!res.ok) throw await toHttpError(res);
+  return (await res.json()) as SpeakerMigrationReviewList;
+}
+
+/** The cutover SSOT: phase, import marker, recorded release and rollback floor. */
+export async function fetchSpeakerMigrationState(): Promise<SpeakerMigrationState> {
+  const res = await fetch(`${ADMIN_BASE}/speaker-migration-reviews/state`, {
+    credentials: "include",
+    headers: { accept: "application/json" },
+  });
+  if (!res.ok) throw await toHttpError(res);
+  return (await res.json()) as SpeakerMigrationState;
+}
+
+/** Stage 1 — import the owner-reviewed classification artifact verbatim. */
+export async function importSpeakerMigrationReviews(
+  payload: ImportSpeakerMigrationReviewsRequest,
+): Promise<SpeakerMigrationImportResult> {
+  return speakerMigrationCommand("import", payload);
+}
+
+export async function resolveSpeakerMigrationReview(
+  sourceId: string,
+  payload: ResolveSpeakerMigrationReviewRequest,
+): Promise<SpeakerMigrationReviewItem> {
+  return speakerMigrationCommand(`${sourceId}/resolve`, payload);
+}
+
+/** The rollback floor closure will install — a hard prerequisite of closure. */
+export async function recordSpeakerMigrationRelease(
+  payload: RecordPhaseAwareReleaseRequest,
+): Promise<SpeakerMigrationState> {
+  return speakerMigrationCommand("phase-aware-release", payload);
+}
+
+/** Stage 2 — the guarded, terminal source closure. It carries NO request body. */
+export async function closeSpeakerMigrationSource(): Promise<SpeakerMigrationCutoverResult> {
+  return speakerMigrationCommand("close-source");
+}
+
+/**
+ * One shape for all four writes: relative path, session cookie, the EARS-10 CSRF
+ * double-submit header and a fresh Idempotency-Key (every route requires one).
+ * A body is sent only when there is one — `close-source` refuses a request that
+ * carries any body at all, so an empty object would be a 400.
+ */
+async function speakerMigrationCommand<T>(
+  path: string,
+  payload?: unknown,
+): Promise<T> {
+  const res = await fetch(
+    `${ADMIN_BASE}/speaker-migration-reviews/${path}`,
+    {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        accept: "application/json",
+        ...(payload === undefined
+          ? {}
+          : { "content-type": "application/json" }),
+        "idempotency-key": idempotencyKey(),
+        ...adminCsrfHeaders(),
+      },
+      ...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
+    },
+  );
+  if (!res.ok) throw await toHttpError(res);
+  return (await res.json()) as T;
 }
 
 /** Split the authoring variables into the JSON payload and the file part. */

@@ -17,7 +17,8 @@
 //   admin  GET https://admin.doctor.school/           → < 500 (Next renders; #729)
 //   doctor GET https://new.doctor.school/             → < 500 (the doctor
 //          storefront renders; #1723. TEMPORARY host until the doctor.school
-//          cut-over — override with PROD_DOCTOR_HOST)
+//          cut-over — override with PROD_DOCTOR_HOST; set it EMPTY or to
+//          `skip` to skip both doctor probes while the A-record is pending)
 //   chat   GET https://api.doctor.school/connection/websocket → < 500 (Caddy →
 //          centrifugo route alive; a non-upgrade GET draws Centrifugo's 400,
 //          while a down/unrouted centrifugo surfaces Caddy's 502; #729)
@@ -69,7 +70,30 @@ const ID_HOST = process.env.PROD_ID_HOST || "id.doctor.school";
 // Doctor storefront (#1723). TEMPORARY host — the root doctor.school cut-over is
 // a later step (owner decision on #1430, 2026-08-26), so this default moves when
 // that lands rather than a second host being added here.
-const DOCTOR_HOST = process.env.PROD_DOCTOR_HOST || "new.doctor.school";
+// Skip switch (#1723): the Beget A-record for the temporary host is a manual,
+// owner-gated step that lands AFTER this repo half. Until it is live, both
+// doctor probes would fail on DNS and turn every unrelated `pnpm deploy:prod`
+// — and every `--rollback` — RED at the smoke gate. So an EXPLICITLY empty or
+// `skip` PROD_DOCTOR_HOST skips them loudly; the runbook flips the switch, the
+// code default stays probe-on. Deterministic on purpose: no DNS lookup racing
+// ACME decides whether prod is considered healthy.
+// Exported for unit tests: the switch is pure string classification, so it is
+// pinned without touching process.env at import time.
+export function isDoctorProbeSkipped(rawValue) {
+  const v = (rawValue ?? "new.doctor.school").trim().toLowerCase();
+  return v === "" || v === "skip";
+}
+const DOCTOR_HOST_RAW = (
+  process.env.PROD_DOCTOR_HOST ?? "new.doctor.school"
+).trim();
+const DOCTOR_PROBES_SKIPPED = isDoctorProbeSkipped(
+  process.env.PROD_DOCTOR_HOST,
+);
+const DOCTOR_HOST = DOCTOR_PROBES_SKIPPED
+  ? "new.doctor.school"
+  : DOCTOR_HOST_RAW;
+const DOCTOR_SKIP_REASON =
+  "doctor probes skipped — host not routed yet (#1723); unset PROD_DOCTOR_HOST once the Beget A-record is live";
 // PUBLIC OIDC client id (api.env IDP_CLIENT_ID — visible in every browser
 // authorize URL, NOT a credential). Opt-in: enables the full cookie-less
 // authorize→login flow probe; unset ⇒ that one probe prints SKIP.
@@ -166,7 +190,10 @@ export function findColdErrorMarker(body) {
 // perfectly healthy cold page. The error-boundary markers above keep the #866
 // teeth either way: a blank/degraded/proxy-error body carries none of the
 // required markup and still fails.
-export function checkColdPage(res, { requireMarkup = "<input", expectPath } = {}) {
+export function checkColdPage(
+  res,
+  { requireMarkup = "<input", expectPath } = {},
+) {
   const where = res.url ? ` (${res.url})` : "";
   if (res.status !== 200)
     throw new Error(`→ ${res.status}${where} (expected 200)`);
@@ -219,8 +246,7 @@ export function checkColdPage(res, { requireMarkup = "<input", expectPath } = {}
 // liveness).
 export function checkRegisterClosed(res) {
   const where = res.url ? ` (${res.url})` : "";
-  if (res.status !== 200)
-    return `${res.status} (register surface not served)`;
+  if (res.status !== 200) return `${res.status} (register surface not served)`;
   if (res.url) {
     const landed = new URL(res.url).pathname;
     if (!landed.includes("/register"))
@@ -248,7 +274,9 @@ async function probeApiHealth() {
     throw new Error(`/v1/health body is not JSON: ${res.body.slice(0, 120)}`);
   }
   if (json.status !== "ok") throw new Error(`status=${json.status}`);
-  const shown = json.version ? ` · version=${json.version}` : " · version=(unset)";
+  const shown = json.version
+    ? ` · version=${json.version}`
+    : " · version=(unset)";
   if (EXPECT_SHA) {
     // With --expect-sha the version MUST be present AND match. `main` carries
     // the /v1/health `version` field since #481, so an ABSENT version means
@@ -267,7 +295,8 @@ async function probeApiHealth() {
 
 async function probeApiReady() {
   const res = await httpsGet(`https://${API_HOST}/v1/ready`);
-  if (res.status !== 200) throw new Error(`/v1/ready → ${res.status} (unready)`);
+  if (res.status !== 200)
+    throw new Error(`/v1/ready → ${res.status} (unready)`);
   let json;
   try {
     json = JSON.parse(res.body);
@@ -436,6 +465,7 @@ async function probeAdmin() {
 // is up AND the Caddy vhost routes to it (502 = container down, 404 = missing
 // vhost). The api keeps /v1/health; a storefront has no health endpoint.
 async function probeDoctor() {
+  if (DOCTOR_PROBES_SKIPPED) throw new SkipProbe(DOCTOR_SKIP_REASON);
   const res = await httpsGet(`https://${DOCTOR_HOST}/`);
   if (res.status >= 500) throw new Error(`/ → ${res.status}`);
   return `${res.status} (doctor storefront renders)`;
@@ -467,7 +497,13 @@ const PROBES = [
   [`TLS ${PORTAL_HOST}`, () => probeTls(PORTAL_HOST)],
   [`TLS ${ADMIN_HOST}`, () => probeTls(ADMIN_HOST)],
   [`TLS ${ID_HOST}`, () => probeTls(ID_HOST)],
-  [`TLS ${DOCTOR_HOST}`, () => probeTls(DOCTOR_HOST)],
+  [
+    `TLS ${DOCTOR_HOST}`,
+    () => {
+      if (DOCTOR_PROBES_SKIPPED) throw new SkipProbe(DOCTOR_SKIP_REASON);
+      return probeTls(DOCTOR_HOST);
+    },
+  ],
 ];
 
 function withTimeout(promise, ms) {
@@ -481,7 +517,7 @@ function withTimeout(promise, ms) {
 
 async function main() {
   console.log(
-    `prod smoke — api=${API_HOST} portal=${PORTAL_HOST} admin=${ADMIN_HOST} id=${ID_HOST} doctor=${DOCTOR_HOST}` +
+    `prod smoke — api=${API_HOST} portal=${PORTAL_HOST} admin=${ADMIN_HOST} id=${ID_HOST} doctor=${DOCTOR_PROBES_SKIPPED ? "SKIPPED (not routed yet, #1723)" : DOCTOR_HOST}` +
       (EXPECT_SHA ? ` — expect-sha=${EXPECT_SHA}` : "") +
       ` — ${new Date().toISOString()}`,
   );

@@ -176,9 +176,11 @@ nl-1` — **NOT `ru-2`** (Novosibirsk has no private network). RF-only (152-ФЗ
    join the VPC via a `local_network {id,ip,mode}` block — DSO-100 2026-07-02).
    Review the plan (region/preset/cost) before `apply`.
 4. **DNS (manual, at Beget — the zone is NOT at Timeweb):** point A-records
-   `api.` / `academy.` / `id.` / `admin.doctor.school` at the `api_prod_public_ip`
-   output (`admin.` is the wave-1 addition — Wave-1 apply order step 2;
-   `academy.` is the portal host per #1171). Those four are the intended public
+   `api.` / `academy.` / `id.` / `admin.` / `new.doctor.school` at the
+   `api_prod_public_ip` output (`admin.` is the wave-1 addition — Wave-1 apply
+   order step 2; `academy.` is the portal host per #1171; `new.` is the doctor
+   storefront's temporary host, #1723 — owner-gated and deliberately LAST, see
+   the roll-out section). Those five are the intended public
    record set — the pre-#1171 portal host is being retired in #1173 (its Caddy
    vhost is already gone from this tree; its A-record is deleted by hand, see the
    cutover section's retirement marker below).
@@ -367,7 +369,7 @@ http://api:3000`. A portal image built before this fix must be REBUILT.
 10. **Verify (definition of done, spec §10).** Drive the auth vertical in the live
     UI (`https://academy.doctor.school`, Playwright): register → **real** verification
     email (mail.ru); email-OTP login; **one supervised paid** SMS-OTP login
-    (SMS-Aero); `/me/*` behind a session; valid TLS on all three hostnames; a
+    (SMS-Aero); `/me/*` behind a session; valid TLS on every routed hostname; a
     pgbackrest basebackup + WAL in S3 with a restore dry-run (RTO ≤ 2 h).
 
 ## IdP admin-access model & login-policy posture (#877)
@@ -461,11 +463,13 @@ image build.
 
 3. **SmartCaptcha production invariant (#186).** Use the dedicated Yandex Cloud
    resource `ds-platform-prod`; never reuse the localhost-only dev keypair.
-   Keep domain validation **ON**. Post-#1173 the allowed-domains list is
-   `academy.doctor.school` alone — the portal auth surface, and the only host that
-   serves it; the legacy `app.doctor.school` entry is removed from the resource as
-   an owner-gated console step of that retirement (cutover step 2 below), which is
-   pending until the lead runs it. Creating or replacing the provider resource is
+   Keep domain validation **ON**. The allowed-domains list is
+   `academy.doctor.school` + `new.doctor.school` — the portal auth surface and the
+   doctor storefront (#1723), the two hosts that serve it; the `new.` entry is an
+   owner-gated console step of the doctor roll-out (its step 2 below) and stays
+   pending until the lead runs it. The legacy `app.doctor.school` entry is removed
+   from the resource as an owner-gated console step of the #1173 retirement
+   (cutover step 2 below), which is likewise pending until the lead runs it. Creating or replacing the provider resource is
    **[OWNER-GATED]**;
    capture its **site key** (public, build-time) and **server key** (secret), but
    never print or copy the server key into a repo file, command transcript, or
@@ -917,6 +921,25 @@ certificate over ACME **HTTP-01**, so a vhost for a name that does not resolve t
 `api-prod` fails issuance rather than producing a working site. Steps 1 and 2 are
 out-of-band console state and MUST land **before** the deploy that adds the vhost.
 
+**Until the step-1 A-record is live, the doctor smoke probes are switched OFF.**
+`tools/deploy/smoke-prod.mjs` registers a `new.doctor.school` render probe and a
+TLS probe; against a name that does not resolve both fail, `smoke:prod` exits 1
+and `tools/deploy/prod.mjs` `die()`s at the smoke gate — which would turn every
+**unrelated** `pnpm deploy:prod`, and every `--rollback`, RED for a DNS reason
+during the window this section's step-5 sequencing deliberately creates. Set
+`PROD_DOCTOR_HOST` **empty or to `skip`** and both probes print a loud `SKIP`
+line instead:
+
+```bash
+PROD_DOCTOR_HOST=skip pnpm deploy:prod     # or --rollback, or pnpm smoke:prod
+```
+
+The switch is an operator flag, not a code default: with `PROD_DOCTOR_HOST`
+unset the probes run against `new.doctor.school`, so once the A-record is live
+nobody has to remember to turn them back on — they are on unless someone opts
+out. Deliberately an explicit switch rather than a live DNS lookup: a lookup
+would race ACME issuance and make «is prod healthy» non-deterministic.
+
 No user is logged out by this roll-out: nothing about `academy.doctor.school`
 changes, and the two hosts hold **separate** `__Host-ds_session` cookies by
 specification (ADR-0001 §6) — one account across both is delivered by OIDC silent
@@ -967,10 +990,22 @@ Order:
    bind-mounted `Caddyfile` is stale (#1175 — `RUNTIME_CONFIG_SERVICES` already
    covers `caddy`; no manual SSH restart). Then:
 
+   Deploy with the doctor probes **still skipped** if step 1 has not been
+   verified yet, then flip them on once the host is routed:
+
    ```bash
+   PROD_DOCTOR_HOST=skip pnpm deploy:prod           # window before the DNS flip
+   # …after step 1 is verified from two resolvers:
+   pnpm deploy:prod                                 # probes on (default)
    curl -sSI https://new.doctor.school/ | head -1   # 200/3xx over valid TLS
    pnpm smoke:prod                                  # doctor / + TLS probes included
    ```
+
+   **What this roll-out does NOT re-point:** `MAILER_PORTAL_BASE_URL` stays
+   `academy.doctor.school`, so every transactional link (verification, OTP,
+   notifications) keeps pointing at the academy origin even after a doctor
+   registration surface ships on `new.doctor.school` (#1558/021). Re-pointing it
+   is a separate, deliberate decision — not part of the routing change.
 
 5. **Release-gate sequencing.** Both `apps/doctor` routes are still `deferred` in
    `tools/lint/prod-surface-manifest.yaml` and #1440's "no public placeholder on

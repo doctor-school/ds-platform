@@ -48,7 +48,7 @@ Two consequences the downstream EARS spec inherits:
 - **US-5** — As a **content operator**, I tag events with topics from a maintained list, so a doctor can browse the academy by subject rather than by date.
 - **US-6** — As a **content operator**, I describe a partner once — title, logo, website — and attach it to the projects it sponsors, so the partner block on a project page is data, not hand-made markup.
 - **US-7** — As a **content operator**, I retire or restore any of these entities without deleting its record or historical relationships, and I see the affected current public surfaces before I confirm the lifecycle transition.
-- **US-8** — As a **content operator**, every legacy speaker row is reconciled in one controlled migration into an ordered event-to-expert relationship, with provenance and unresolved cases audited rather than guessed.
+- **US-8** — As a **content operator**, I re-create each of the few legacy speaker rows by hand as an ordered event-to-expert link through the existing Expert form, so that no migration machinery, queue or guessed identity ever stands between the legacy row and its canonical Expert.
 - **US-9** — As a **content operator**, I find the entity I need quickly — a searchable, paginated list per entity kind — because the expert bench and the event archive both keep growing.
 - **US-10** — As a **doctor**, the projects, experts and topics I see on the public pages are the same ones the operator maintains — there is no second, stale copy of the academy's structure.
 - **US-11** — As a **product owner**, the platform can answer "which events belong to this project / this expert / this topic" and the reverse, so the catalogs and the `/webinars` filters of the later features are a query, not a new data model.
@@ -58,7 +58,7 @@ Two consequences the downstream EARS spec inherits:
 - **US-15** — As a **content operator**, I can upload, replace and remove every authored entity image or file so an accidental or outdated value is reversible.
 - **US-16** — As a **content operator**, I can attach every cross-link from either endpoint page, while one canonical relationship row remains the storage owner.
 - **US-17** — As a **content operator**, every list is paginated and every search/filter applies immediately, with active chips and one Reset all action; controls with no possible effect are not actionable.
-- **US-18** — As a **product owner**, migration from `event_speakers` is executable, provenance-preserving and auditable, with no automatic name merge and no indefinite merged projection.
+- **US-18** — As a **product owner**, I cut the platform over from `event_speakers` to `event_experts` in two releases I control — read cutover first, table drop only after I confirm the migrated speakers in production — with no automatic name merge and no indefinite merged projection.
 
 ## Flows
 

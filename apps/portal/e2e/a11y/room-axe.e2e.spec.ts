@@ -1,9 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
-import {
-  LIVE_STAND,
-  submitRegisterAndVerify,
-} from "../support/doctor-session";
+import { submitRegisterAndVerify } from "../support/doctor-session";
+import { requireLiveStandEnv } from "../support/live-stand-env";
 
 /**
  * 006 EARS-11 (#681, the decision-debt tracked out of #578 / PR #680) — repeatable
@@ -37,8 +35,23 @@ import {
  * Dev-stand-gated like the sibling 005 scan: it provisions a real 003 doctor
  * (register + Mailpit OTP verify, auto-login) carrying a `returnTo` that also
  * completes the REAL 005 registration for the seeded live room, then enters the
- * room and scans. It `test.skip`s unless the live stand env is present, so a
- * stray CI invocation is inert.
+ * room and scans. It is inert-green only on a BARE environment; a partially
+ * exported env set fails loudly (#1871).
+ *
+ * ENV SET (#1871) — export ALL of these to run this scan; exporting SOME of them
+ * fails loudly naming the missing ones (`../support/live-stand-env.ts`), while a
+ * completely bare environment stays inert-green:
+ *
+ * | variable             | value on the dev stand                |
+ * | -------------------- | ------------------------------------- |
+ * | `E2E_PORTAL_URL`     | the running portal origin             |
+ * | `IDP_ISSUER`         | the real Zitadel issuer               |
+ * | `MAILPIT_URL`        | the Mailpit REST base (OTP sink)      |
+ * | `E2E_ROOM_SLUG_LIVE` | `seed-005-live` (rutube provider)     |
+ *
+ * DOCTOR PROVISIONING: the scan SELF-SIGNS-UP a fresh doctor (register → Mailpit
+ * OTP → auto-login). Zitadel/api throttles after ~4–5 signups per window (429) —
+ * wait ~10 min between full runs rather than retrying into the throttle.
  *
  * BOTH THEMES (006 EARS-13, #702): the room header now ships the portal's theme
  * toggle — `.dark` on `<html>` is user-reachable on this very surface, so the
@@ -47,6 +60,23 @@ import {
  * dark render must introduce no new axe violations relative to light. The DS
  * primitive geometry is additionally covered (both themes) by the CI
  * `playwright-axe` gate via the showcase.
+ *
+ * STAND PRECONDITIONS (#1871) — beyond the variables above, the STAND itself must
+ * be prepared; otherwise the tier fails against a CORRECT product render:
+ *
+ * - **Saved display name.** Any REUSED account (`E2E_DOCTOR_*` / `E2E_DOCTOR2_*`)
+ *   must already have a display name saved. Without one, 006 EARS-14's JIT name
+ *   prompt renders INSTEAD of the room composition and every in-room assertion
+ *   fails. Specs that self-sign-up a fresh doctor satisfy that prompt inline
+ *   instead, so this applies only to the exported reusable pair.
+ * - **Raised rate-limit ceilings.** Boot the api with
+ *   `RATE_LIMIT_PER_USER_15MIN=1000`, `RATE_LIMIT_PER_IP_15MIN=2000` and
+ *   `RATE_LIMIT_PER_ASN_1H=5000`. The 003 EARS-13 defaults (10 per user per
+ *   15 min, 20 per IP) are an order of magnitude below the ~25 real logins one
+ *   serial run of this tier drives from a single IP: at the defaults the suite
+ *   hard-429s mid-run and every login-based test dies on `waitForURL`. These
+ *   ceilings are env-overridable BY DESIGN for exactly this window (#1076,
+ *   `apps/api/src/auth/rate-limit/rate-limit.types.ts`).
  */
 const WCAG_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"];
 const THEMES = ["light", "dark"] as const;
@@ -82,11 +112,14 @@ async function scan(page: Page, theme: (typeof THEMES)[number]) {
 
 test.describe.configure({ mode: "serial" });
 
+requireLiveStandEnv([
+  "E2E_PORTAL_URL",
+  "IDP_ISSUER",
+  "MAILPIT_URL",
+  "E2E_ROOM_SLUG_LIVE",
+]);
+
 test.describe("006 EARS-11 axe-core a11y scan of the portal room route", () => {
-  test.skip(
-    !LIVE_STAND,
-    "dev-stand env absent (E2E_PORTAL_URL / IDP_ISSUER / MAILPIT_URL) — manual gate",
-  );
 
   test("the gated live room composition passes WCAG 2 A/AA (both themes)", async ({
     page,
@@ -100,9 +133,13 @@ test.describe("006 EARS-11 axe-core a11y scan of the portal room route", () => {
     );
     await submitRegisterAndVerify(page);
     await page.waitForURL(new RegExp(`/webinars/${SLUG}(?:$|[?#])`));
-    await expect(
-      page.getByText("Вы записаны", { exact: false }).first(),
-    ).toBeVisible();
+    // A LIVE registered event renders the room-entry CTA «Войти в эфир», NOT the
+    // «Вы записаны» statement — key off the card's locale-agnostic policy
+    // attribute (#1871).
+    await expect(page.getByTestId("event-signup-card")).toHaveAttribute(
+      "data-cta-action",
+      "enter-room",
+    );
 
     await page.goto(`/webinars/${SLUG}/room`, { waitUntil: "domcontentloaded" });
     // The gate admits → the room url holds (no redirect). Since 006 EARS-14

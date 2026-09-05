@@ -30,12 +30,16 @@ export default defineConfig({
   // (EARS-3 day groups, EARS-8 URL state, EARS-4 month calendar, EARS-12 the
   // guest read path and its return) each boot the
   // app against their own upstream double (this tier boots no api at all).
+  // `register-direct.spec.ts` (021 EARS-3, #1539) needs the same api double as
+  // the return-context tier (a remembered specialty, a gate arrival), so it
+  // rides `playwright.return-context.config.ts` and is not collected here.
   // Every `events-*.spec.ts` asserts `[data-events-feed]`, which only exists
   // when something answers `GET /v1/storefront/doctor/events`, so they all
   // belong to `playwright.events.config.ts` and none can be collected here.
   testIgnore: [
     "specialty-consumption.spec.ts",
     "register-return-context.spec.ts",
+    "register-direct.spec.ts",
     "events-feed.spec.ts",
     "events-url-state.spec.ts",
     "events-month-beside-feed.spec.ts",

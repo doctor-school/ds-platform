@@ -44,7 +44,10 @@ function parseArgs(argv: string[]): Args {
   let dryRun = false;
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
-    if (arg === "--manifest") manifest = argv[++i];
+    // `pnpm --filter @ds/api recordings:backfill -- --manifest …` forwards the
+    // bare `--` separator itself, so the documented invocation must tolerate it.
+    if (arg === "--") continue;
+    else if (arg === "--manifest") manifest = argv[++i];
     else if (arg === "--actor") actor = argv[++i];
     else if (arg === "--dry-run") dryRun = true;
     else throw new Error(`unknown argument: ${arg}`);
@@ -85,13 +88,19 @@ async function main(): Promise<void> {
   }
 }
 
+// The exit CODE is set, never forced with `process.exit()`: the Nest context and
+// the pg pool are still closing their libuv handles when `main` resolves, and
+// tearing the process down mid-close aborts it on Windows - which would report a
+// clean dry-run as a failed run to whoever scripted it.
 main()
-  .then(() => process.exit(0))
+  .then(() => {
+    process.exitCode = 0;
+  })
   .catch((err: unknown) => {
     process.stderr.write(
       `[recordings:backfill] FAILED — ${
         err instanceof Error ? (err.stack ?? err.message) : String(err)
       }\n`,
     );
-    process.exit(1);
+    process.exitCode = 1;
   });

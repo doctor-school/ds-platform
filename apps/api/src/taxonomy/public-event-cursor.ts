@@ -2,11 +2,13 @@ import { sql, type SQL } from "drizzle-orm";
 import { z } from "zod";
 import { type Event, events } from "@ds/db";
 
-// 012-design §5.2 — the ONE keyset-cursor rule of the two event-ordered
-// RELATIONSHIP traversals, `/public/projects/:key/events` and
-// `/public/directions/:key/events` (012 EARS-12, #1294). The base event
-// collection and the event↔experts routes still carry their own cursor
-// arithmetic; folding them in is #1880, not a claim this module makes today.
+// 012-design §5.2 — the ONE keyset-cursor rule of every event-ordered public
+// read: the two RELATIONSHIP traversals `/public/projects/:key/events` and
+// `/public/directions/:key/events` (012 EARS-12, #1294), and the base event
+// collection `/public/events` (014 EARS-11, #1888), which pages the same
+// `(starts_at, id)` tuple in BOTH directions. The event↔experts item routes
+// still carry their own cursor arithmetic; folding them in is #1880, not a
+// claim this module makes today.
 //
 // It lives in its own module because the two directions had grown the identical
 // cursor arithmetic side by side, and the arithmetic has one non-obvious
@@ -45,6 +47,22 @@ export function afterEventCursor(after: { startsAt: string; id: string }): SQL {
   return sql`(${events.startsAt} > ${after.startsAt}::timestamptz
     OR (${events.startsAt} = ${after.startsAt}::timestamptz
         AND ${events.id} > ${after.id}::uuid))`;
+}
+
+/**
+ * `(starts_at, id) < (cursor.startsAt, cursor.id)` — the same keyset comparison
+ * mirrored for a DESCENDING page, which the newest-first archive tab of the base
+ * event collection reads (014 EARS-11). Same casting discipline as
+ * {@link afterEventCursor}: the direction of the operators is the only
+ * difference, so the exactness of the cutoff cannot drift between the two.
+ */
+export function beforeEventCursor(before: {
+  startsAt: string;
+  id: string;
+}): SQL {
+  return sql`(${events.startsAt} < ${before.startsAt}::timestamptz
+    OR (${events.startsAt} = ${before.startsAt}::timestamptz
+        AND ${events.id} < ${before.id}::uuid))`;
 }
 
 /**

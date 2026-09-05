@@ -67,6 +67,7 @@ kind)` slot and leaves the row addressable forever; `restore` is its inverse
 | `recordings.repository.ts`       | Drizzle access inside `withRequestAuditContext`; no delete method exists      |
 | `recordings.projection.ts`       | The §4 derived edited-over-raw projection (EARS-3) — single + batch forms     |
 | `recordings.module.ts`           | Imports `TaxonomyModule` for the shared protocol mechanism                    |
+| `recordings-backfill.ts`         | The EARS-29 operator-CLI driver — calls the commands above, writes nothing    |
 
 Contract: `packages/schemas/src/recordings`. Schema + migration:
 `packages/db/src/schema/event-recordings.ts`, `apps/api/drizzle/0016_*.sql` (the
@@ -77,3 +78,21 @@ hand — drizzle-kit emits neither). Tests: `apps/api/test/recordings/lifecycle.
 sweep — it drives every 014 mutation of design §10 through one table, so the
 key/ETag floor, the admin-session floor, the refusal envelope and the
 no-side-effect guarantee cannot drift apart per route.
+
+## The backfill driver (EARS-29)
+
+`recordings-backfill.ts` is the only non-HTTP caller of this module. It exists
+because the эфиры that ran before the «Записи» tab shipped have no recording row,
+and the operator fix is a manifest, not 40 clicks. The driver is a CALLER and
+nothing else: it reads the event, decides eligibility (`origin: platform` +
+`state: ended`), reads what the kind slot already holds, and then calls
+`RecordingsService.attach` / `.transition` under a per-command idempotency lease —
+the same pair the admin controller calls. It owns no SQL write, no state machine
+and no error code, and it never writes the EVENT (`live_at`, `starts_at`, `state`,
+`origin` stay as the room recorded them). Because feature 010's interceptor never
+runs outside HTTP, the driver opens `auditContextStore` itself with the operator's
+`--actor` sub and the door `system:recordings-backfill`, so no committed row
+degrades to a `db-direct` audit entry (010 EARS-4). A refused row is reported and
+the run continues; a re-run of the same manifest reports every row `skipped`.
+Entry point + operator docs: `apps/api/scripts/recordings-backfill.ts` and
+`apps/api/README.md` → Recordings backfill. Test: `apps/api/test/recordings/backfill.e2e-spec.ts`.

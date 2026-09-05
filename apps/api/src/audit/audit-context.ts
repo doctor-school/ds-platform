@@ -10,7 +10,13 @@ import type { AuditContext } from "@ds/db";
 // endpoint is attributed automatically, never "only if the author remembered
 // the wrapper" (the app-layer-capture failure mode 010-design §6 rejects).
 
-/** The per-request audit context store. Empty outside an HTTP request (jobs, migrations, psql). */
+/**
+ * The per-request audit context store. Empty outside an HTTP request (jobs,
+ * migrations, psql) — with one deliberate non-HTTP opener: the operator CLI
+ * `apps/api/scripts/recordings-backfill.ts` (014 EARS-29) runs its whole
+ * backfill inside `auditContextStore.run(…)`, so its writes are attributed to
+ * the operator instead of degrading to EARS-4 `db-direct`.
+ */
 export const auditContextStore = new AsyncLocalStorage<AuditContext>();
 
 /** The current request's audit context, or `undefined` for a context-less write (→ EARS-4 db-direct). */

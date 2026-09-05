@@ -362,7 +362,7 @@ export class EventProjectsService {
         nextCursor:
           hasMore && last
             ? encodeCursor({
-                startsAt: last.startsAt.toISOString(),
+                startsAt: last.startsAtCursor,
                 id: last.id,
               })
             : null,

@@ -232,7 +232,7 @@ describe("cut-release — cutDeployRelease (I/O seam)", () => {
     // target-SHA plumbing: gh release create targets the DEPLOYED sha, not HEAD.
     expect(
       calls.includes(
-        `gh release create release-2026.07.16-1 --generate-notes --target ${DEPLOYED_SHA} --title release-2026.07.16-1`,
+        `gh release create release-2026.07.16-1 --generate-notes --notes-start-tag release-2026.07.15-1 --target ${DEPLOYED_SHA} --title release-2026.07.16-1`,
       ),
     ).toBe(true);
   });

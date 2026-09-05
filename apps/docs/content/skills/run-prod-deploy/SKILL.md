@@ -111,6 +111,38 @@ pnpm deploy:prod --rollback <sha>   # up -d a prior SHA-tagged image; NO rebuild
 
 The target images must still be on the box (retention keeps the last 3). Rollback reverts only the app tier — the DB is untouched (expand/contract migrations keep prior app code compatible). A **bad migration** (not app code) needs a pgbackrest restore — see [`infra/deploy/README.md`](../../../../../infra/deploy/README.md) → Rollback; the DB was checkpointed pre-migrate.
 
+### 5. Hotfix procedure (`--ref <sha>`, spec §10.11)
+
+Use when prod needs ONE already-merged fix and the rest of `main` is not ready to ship. Not for unmerged work, not for a feature preview — land the fix on `main` first, always.
+
+```bash
+# 0. facts: what is actually running, and the squash SHA of the merged fix
+curl -s https://api.doctor.school/v1/health | jq -r .version    # DEPLOYED
+gh pr view <PR#> --json mergeCommit -q .mergeCommit.oid          # FIX
+
+# 1. hotfix branch cut FROM the deployed SHA (never from main)
+git fetch origin --tags
+git switch -c hotfix/<N>-<slug> <DEPLOYED>
+git cherry-pick <FIX>            # repeat for each already-merged fix, oldest first
+git push -u origin hotfix/<N>-<slug>
+
+# 2. CI for that branch (workflow_dispatch takes the same non-PR path as push:main)
+gh workflow run ci.yml --ref hotfix/<N>-<slug>
+gh run list --workflow ci.yml --branch hotfix/<N>-<slug> --limit 1   # wait for green
+
+# 3. ship exactly that commit — standalone statement, never piped
+pnpm deploy:prod --ref $(git rev-parse origin/hotfix/<N>-<slug>)
+
+# 4. record cycle (§2 above) runs unchanged; the Release is titled "… — Hotfix"
+
+# 5. delete the branch once the deploy is recorded
+git push origin --delete hotfix/<N>-<slug> && git branch -D hotfix/<N>-<slug>
+```
+
+The pre-flight refuses a target that is not a strict descendant of the LIVE deployed SHA, or that carries any commit with no equivalent on `origin/main` (`git cherry`) — i.e. anything unreviewed. A conflicted cherry-pick is a signal to re-sequence (ship the range normally, or revert per §10.10), never to hand-resolve into a commit that exists nowhere else. Detail: [`tools/deploy/README.md`](../../../../../tools/deploy/README.md) → Hotfix deploy.
+
+After a hotfix, prod sits on an off-main SHA: the bootstrap delta line is anchored on `git merge-base origin/main <deployedSha>` and says so. Get prod back on the normal train with the next ordinary `pnpm deploy:prod`.
+
 ## After a deploy — the merged-not-deployed nudge
 
 `## Project reality` (bootstrap `pnpm bootstrap`, #939) derives the latest release, the deployed SHA (GitHub Deployment ⋈ `/v1/health`), and the **merged-not-deployed delta** at SessionStart. A non-empty delta renders the explicit **D-trigger verdict** (spec §10.2/§10.3): the line carries `class standing-auth (…)` or `class escalate (…)` derived from the range's touch-set (`classifyDeployRange` in `tools/project-reality.ts` — migration / backend / infra / workflow / deploy-tooling touches escalate; uncomputable defaults to escalate). Treat it as the detection signal: run the §10.4 checklist (above) over the range and, if a releasable unit is ready, ship it (autonomously for standing-auth, else escalate "ready to ship X — go?") — or record the pending-deploy delta in the session handoff.

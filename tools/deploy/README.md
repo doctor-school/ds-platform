@@ -23,6 +23,7 @@ bootstrap) is a one-time human setup, out of the steady-state loop.
 
 ```bash
 pnpm deploy:prod                    # deploy origin/main (default)
+pnpm deploy:prod --ref <sha>        # HOTFIX: ship exactly <sha>, not all of main (#1881)
 pnpm deploy:prod --rollback <sha>   # app-only rollback to a prior SHA-tagged image
 pnpm deploy:prod --skip-ci-check    # escape hatch (loud warning)
 pnpm deploy:prod --allow-live-broadcast  # эфир-hold escape hatch (owner-approved urgent ship only)
@@ -37,7 +38,7 @@ Pipeline, fail-closed, stops at the first red step and prints a rollback pointer
    (`live-broadcast-check.mjs`, fail-closed — #1000, spec §10.4 item 7; the
    `--rollback` path skips this hold) · **release gate** (`release-gate.mjs`,
    #1662 — below). Refuses otherwise. Fixes the deployed commit to
-   `origin/main`'s SHA.
+   `origin/main`'s SHA — or, under `--ref <sha>`, to that commit (below).
 2. **Ship** — `git archive <sha>` streamed over SSH to both boxes (no registry,
    no deploy key). Streams are piped in-process → Windows-safe.
 3. **data-prod** — `docker compose up -d --build` (idempotent).
@@ -122,6 +123,43 @@ see "Release digest → Mattermost" below, #975.)
 The **deployed SHA is queryable over HTTP**: `GET /v1/health` → `{"version":…}`
 (from the api's `DEPLOY_SHA` env). `--rollback` `up -d`s an already-present prior
 image tag with **no** rebuild / migrate / DB change.
+
+### Hotfix deploy (`--ref <sha>`)
+
+`pnpm deploy:prod` ships the WHOLE `deployedSha..origin/main` range: one fix
+cannot be shipped without everything else merged since. When prod needs a single
+already-merged fix and the rest of `main` is not ready, `--ref <sha>` ships
+exactly that commit instead (#1881, release-cycle spec §10.11).
+
+The target is a `hotfix/<N>-<slug>` branch cut FROM the deployed SHA carrying
+cherry-picks of already-merged squash commits — never a feature branch. On top of
+the normal pre-flight, `--ref` mode asserts (`tools/deploy/hotfix-ref.mjs`, pure
+seams + `hotfix-ref.test.mjs`):
+
+1. **`--ref` takes a SHA**, not a branch name or tag, and never combines with
+   `--rollback` — both fail before any network call.
+2. **The commit exists on `origin`** — resolvable after `git fetch origin` AND
+   reachable from some `origin/*` branch (`git branch -r --contains`). A local-only
+   commit can never reach prod.
+3. **Strict descendant of the LIVE deployed SHA** (`/v1/health → {version}`, the
+   same ground truth the release gate uses — not the Deployment record). Rewinding
+   prod is `--rollback`, not `--ref`.
+4. **Every commit in `deployed..target` is a cherry-pick of `origin/main`** —
+   `git cherry origin/main <target> <deployed>`; any `+` line names the offending
+   commit and refuses. This is what keeps "prod runs reviewed, merged code" true.
+5. Green CI for the target SHA, the live-эфир hold and the release gate run
+   unchanged. The release gate's range is already `<live deployed>..<target>`, i.e.
+   exactly the hotfix range, because its basis is the LIVE prod SHA.
+
+CI for a hotfix branch comes from `gh workflow run ci.yml --ref hotfix/<N>-<slug>`
+(the `workflow_dispatch` trigger takes the same non-PR path as `push: main`); wait
+for that run to go green before deploying. Ship/banner lines read
+`hotfix @ <sha> (base <deployed>)`, never `origin/main`, and the release is cut
+with a `— Hotfix` title plus the cherry-picked PR list.
+
+What stays forbidden: deploying an arbitrary branch, a feature preview, or any
+commit not yet merged to `main`. `--ref` narrows the range; it does not widen what
+is deployable.
 
 ## Rollback compatibility floor (`rollback-floor.mjs`, 012 EARS-24 / #1633)
 

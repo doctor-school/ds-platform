@@ -66,6 +66,10 @@ export interface ProjectRealityProbe {
   mergedNotDeployed: number | null;
   /** First line of the error when the delta was uncomputable. */
   mergedNotDeployedError?: string;
+  /** Set when the deployed SHA is NOT on `origin/main` (a `--ref` hotfix deploy,
+   *  #1881): the delta is then anchored on `git merge-base origin/main
+   *  <deployedSha>`, and this note says so on the rendered line. */
+  deltaAnchorNote?: string;
 
   /** Changed file paths across `<deployedSha>..origin/main` (`git diff
    *  --name-only`) — the derivable input for the spec §10.3 change-class
@@ -172,23 +176,31 @@ export function classifyDeployRange(
  * delta count.
  */
 export type ProjectRealityStatus =
-  | { kind: "agree"; deployedSha: string; mergedNotDeployed: number | null }
+  | {
+      kind: "agree";
+      deployedSha: string;
+      mergedNotDeployed: number | null;
+      deltaAnchorNote?: string;
+    }
   | {
       kind: "disagree";
       deploymentSha: string;
       healthSha: string;
       mergedNotDeployed: number | null;
+      deltaAnchorNote?: string;
     }
   | {
       kind: "deployed-unrecorded";
       healthSha: string;
       mergedNotDeployed: number | null;
+      deltaAnchorNote?: string;
     }
   | {
       kind: "deployment-only";
       deploymentSha: string;
       deploymentState: string | null;
       mergedNotDeployed: number | null;
+      deltaAnchorNote?: string;
     }
   | { kind: "unreachable" };
 
@@ -237,16 +249,23 @@ export function evaluateProjectReality(
   const dep = probe.deploymentSha;
   const health = probe.healthSha;
   const delta = probe.mergedNotDeployed;
+  const note = probe.deltaAnchorNote;
 
   if (dep && health) {
     if (shaMatches(dep, health)) {
-      return { kind: "agree", deployedSha: health, mergedNotDeployed: delta };
+      return {
+        kind: "agree",
+        deployedSha: health,
+        mergedNotDeployed: delta,
+        deltaAnchorNote: note,
+      };
     }
     return {
       kind: "disagree",
       deploymentSha: dep,
       healthSha: health,
       mergedNotDeployed: delta,
+      deltaAnchorNote: note,
     };
   }
   if (!dep && health) {
@@ -254,6 +273,7 @@ export function evaluateProjectReality(
       kind: "deployed-unrecorded",
       healthSha: health,
       mergedNotDeployed: delta,
+      deltaAnchorNote: note,
     };
   }
   if (dep && !health) {
@@ -262,6 +282,7 @@ export function evaluateProjectReality(
       deploymentSha: dep,
       deploymentState: probe.deploymentState,
       mergedNotDeployed: delta,
+      deltaAnchorNote: note,
     };
   }
   return { kind: "unreachable" };
@@ -334,15 +355,16 @@ function deltaLine(
   if (n == null) {
     return "- Merged since deploy: (delta uncomputable — deployed SHA not in local history? fetch origin/main)";
   }
+  const anchor = status.deltaAnchorNote ? ` [${status.deltaAnchorNote}]` : "";
   if (n === 0) {
-    return "- Merged since deploy: none — prod is level with `origin/main` product PRs.";
+    return `- Merged since deploy: none — prod is level with \`origin/main\` product PRs.${anchor}`;
   }
   const verdict: DeployClassVerdict = deployClass ?? {
     class: "escalate",
     reasons: ["change-class unavailable — default-escalate (spec §10.3)"],
   };
   const why = verdict.reasons.slice(0, 3).join("; ");
-  const head = `- Merged since deploy: ${n} product PR(s) NOT yet on prod — D-trigger (spec §10.2): class ${verdict.class} (${why})`;
+  const head = `- Merged since deploy: ${n} product PR(s) NOT yet on prod${anchor} — D-trigger (spec §10.2): class ${verdict.class} (${why})`;
   if (verdict.class === "standing-auth") {
     return `${head} → run the §10.4 release-readiness checklist (skill run-prod-deploy), then ship via \`pnpm deploy:prod\`.`;
   }
@@ -508,7 +530,41 @@ export async function probeProjectReality(
   // 4. Merged-but-not-deployed PRODUCT-PR delta: `<deployedSha>..origin/main`
   //    filtered by the SAME heuristic the release digest uses. Basis SHA =
   //    health (reality) when present, else the Deployment record.
-  const basis = probe.healthSha ?? probe.deploymentSha;
+  //    A `--ref` HOTFIX deploy (#1881) leaves prod on a SHA that is NOT on
+  //    `origin/main`, and `<off-main sha>..origin/main` is then a range across a
+  //    fork point — it silently counts commits by comparing two divergent lines.
+  //    Anchor on `git merge-base origin/main <deployedSha>` instead (the commit
+  //    the hotfix branched from) and SAY so on the rendered line, so the delta is
+  //    never read as "prod is missing exactly these PRs" without the caveat.
+  const deployedBasis = probe.healthSha ?? probe.deploymentSha;
+  let basis = deployedBasis;
+  if (deployedBasis) {
+    try {
+      await execa(
+        "git",
+        ["merge-base", "--is-ancestor", deployedBasis, "origin/main"],
+        { cwd, timeout: 15000 },
+      );
+    } catch {
+      try {
+        const { stdout } = await execa(
+          "git",
+          ["merge-base", "origin/main", deployedBasis],
+          { cwd, timeout: 15000 },
+        );
+        const mergeBase = stdout.trim();
+        if (mergeBase) {
+          basis = mergeBase;
+          probe.deltaAnchorNote =
+            `deployed SHA is a hotfix off main; delta anchored on merge-base ${mergeBase.slice(0, 7)}`;
+        }
+      } catch {
+        // merge-base unresolvable (shallow clone / SHA absent locally) — keep the
+        // deployed SHA as the basis; the `git log` below then errors into
+        // `mergedNotDeployedError`, which renders as "delta uncomputable".
+      }
+    }
+  }
   if (basis) {
     try {
       const { stdout } = await execa(

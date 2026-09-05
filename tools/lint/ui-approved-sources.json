@@ -31,7 +31,9 @@
         "apps/admin/app/partners/[id]/page.tsx",
         "apps/admin/app/projects/[id]/page.tsx",
         "apps/admin/components/publish-action.tsx",
-        "apps/admin/messages/ru.json"
+        "apps/admin/messages/ru.json",
+        "packages/design-system/src/blocks/field-group.tsx",
+        "apps/showcase/app/blocks/blocks-view.tsx"
       ],
       "states": ["taxonomy-publish-tab"],
       "approvalProvenance": [

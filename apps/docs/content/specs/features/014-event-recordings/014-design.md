@@ -189,6 +189,53 @@ A `legacy` эфир is **born `hidden`**: the operator creates it with a title, 
 
 Because feature 007 runs in production, the discriminator, the second machine and the rename are recorded across the 007 triplet as the **«Amendment — 2026-09-02»** block naming 014 as the source (AGENTS.md §6 amendment rule) rather than as an inline rewrite of its state machine — `007-design.md` §2, `007-requirements-en.md` and `007-requirements-ru.md` (inline pointers at the closed-set constraint, the transition policy, EARS-7, the invariant and verification row 7) and an annotated `007-scenarios.feature` example — so 007 does not contradict itself across files. The 2026-08-17 `published → ended` amendment is removed with it: it never reached production.
 
+### 3.2 Recording backfill for platform-born эфиры (`wave: core`, EARS-29)
+
+The эфиры this platform ran itself are already `ended` with a real `live_at`; only their recordings are missing. The backfill is therefore **a driver over the §3 commands, not a new mechanism**: no new table, no new enum, no schema migration, no second write path. It reads a manifest — one row per event (id or slug, an `edited` and/or a `raw` source as `provider` + `embed_ref`, an optional poster) — and for each row issues the ordinary `AttachRecording` + `PublishRecording` calls with a per-row `Idempotency-Key`, exactly as an operator would through the «Записи» tab. Everything the §3 diagram, the §11 error set and feature 010's audit capture already guarantee holds unchanged, because the same handlers execute.
+
+```mermaid
+sequenceDiagram
+  participant Op as platform_admin
+  participant BF as Backfill driver
+  participant API as 014 recording commands
+  participant DB as Postgres
+  Op->>BF: run(manifest, dryRun?)
+  loop per manifest row
+    BF->>API: read event (origin, state, existing recordings)
+    alt origin != platform or state != ended
+      API-->>BF: refusal code
+      BF-->>Op: refused with that code, run continues
+    else published non-retired recording of that kind exists
+      BF-->>Op: skipped
+    else dryRun
+      BF-->>Op: would-attach
+    else
+      BF->>API: AttachRecording (kind, provider, embed_ref, poster?)
+      API->>DB: insert draft + audit row
+      BF->>API: PublishRecording
+      API->>DB: publish + audit row
+      BF-->>Op: attached+published
+    end
+  end
+  BF-->>Op: per-row report
+```
+
+Refusals and outcomes, per manifest row:
+
+| Row condition                                                    | Outcome                                                                                                                          |
+| ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `origin: platform`, `state: ended`, kind slot free               | `attached+published` — two audit rows                                                                                            |
+| The kind already has a published non-retired recording           | `skipped` — no write, no duplicate                                                                                               |
+| The kind has a non-retired **draft**                             | `published` only — attach is skipped, publish runs                                                                               |
+| `origin: platform`, state ≠ `ended` (incl. a passed `published`) | `refused(EVENT_NOT_FINISHED)` — 409, reported, the run continues                                                                 |
+| `origin: legacy`                                                 | `refused(INVALID_TRANSITION)` — 409, per EARS-27; that path is [#1879](https://github.com/doctor-school/ds-platform/issues/1879) |
+| Unknown event id or slug                                         | `refused` carrying the 404 the existing event read already returns — reported, the run continues                                 |
+| Dry-run, any of the above                                        | The same verdict as `would-attach \| skipped \| refused(<code>)`, zero mutations                                                 |
+
+**Idempotency.** The guard is the LD-1 partial unique index on `(event_id, kind) WHERE deleted_at IS NULL` plus the per-row `Idempotency-Key` — a re-run of the same manifest produces `skipped` on every row and writes nothing, and a partially failed run is safely resumed by re-running the whole manifest. The driver never writes `live_at`, `starts_at`, `state` or `origin`; the honest timestamps are the ones the room recorded.
+
+**Not decided here.** A `published` platform event whose date has passed and which never went live is refused, not repaired: its exit is the `published → hidden` edge owned by [#1814](https://github.com/doctor-school/ds-platform/issues/1814). The delivery form of the run — an admin action «Импорт записей» or an operator CLI in `apps/api` — is the Stage-A choice recorded in the requirements Scope; this design is identical under either.
+
 ## 4. The derived projection (`wave: core`)
 
 One resolver, `resolveRecordingProjection(eventId | eventIds)`, is the only place the display rule lives.
@@ -281,7 +328,7 @@ The tabbed composition is the Product Lead's Stage-A pick — option B, 2026-08-
 
 **The lifecycle bar renders the event's own machine and nothing else** (§3.1). On a `platform` event it offers 007's commands, with «Скрыть» as the terminal one; on a `legacy` event it offers exactly «Архивировать» and «Скрыть», derived from `EventAdminDetail.validTransitions` as 007 already does, so «Выйти в эфир» is never on a `legacy` эфир and the two vocabularies never share a screen.
 
-**«Это архивный эфир» — a checkbox on the ordinary create-event form**, not a second entry and not a second page. There is ONE admin creation surface; checking the box switches it to the legacy variant: the date field reads «Дата и время проведения (МСК)», the partner field and the «Программа (PDF)» section disappear, and a mandatory «Запись» section appears (kind, provider, embed reference — and those only: a poster is a file to upload and a duration is read off the recording's metadata, per §7's opening paragraph and EARS-20, never typed on this form). Checked, the form posts `POST /v1/admin/legacy-broadcasts` instead of the ordinary multipart create; unchecked, the form behaves exactly as 007 authored it. The client never sends `origin` or `state` — the server selects the machine by route and creates the эфир with `origin: legacy` in `hidden`, and the operator archives it by the explicit «Архивировать» command once the recording is published. Owner decision, 2026-09-03: «Просто при создании мероприятия должна быть галочка "Это архивный эфир" и всё.» The automated import of [#1742](https://github.com/doctor-school/ds-platform/issues/1742) lands events through this same route, never a second one.
+**«Это архивный эфир» — a checkbox on the ordinary create-event form**, not a second entry and not a second page. There is ONE admin creation surface; checking the box switches it to the legacy variant: the date field reads «Дата и время проведения (МСК)», the partner field and the «Программа (PDF)» section disappear, and a mandatory «Запись» section appears (kind, provider, embed reference — and those only: a poster is a file to upload and a duration is read off the recording's metadata, per §7's opening paragraph and EARS-20, never typed on this form). Checked, the form posts `POST /v1/admin/legacy-broadcasts` instead of the ordinary multipart create; unchecked, the form behaves exactly as 007 authored it. The client never sends `origin` or `state` — the server selects the machine by route and creates the эфир with `origin: legacy` in `hidden`, and the operator archives it by the explicit «Архивировать» command once the recording is published. Owner decision, 2026-09-03: «Просто при создании мероприятия должна быть галочка "Это архивный эфир" и всё.» The automated import of old-platform broadcasts ([#1879](https://github.com/doctor-school/ds-platform/issues/1879)) lands events through this same route, never a second one.
 
 ```mermaid
 sequenceDiagram
@@ -397,7 +444,7 @@ sequenceDiagram
 | POST   | `/v1/admin/events/:id/archive-legacy`            | `platform_admin` | core   |
 | POST   | `/v1/admin/events/:id/hide-legacy`               | `platform_admin` | core   |
 
-No Delete route exists for any 014 resource. `/v1/public/events` and `/v1/public/events/:idOrSlug` are extensions of the existing feature-004 controllers, not new ones; `/v1/me/events` extends the existing feature-005 controller and keeps that feature's `doctor_guest` classification, so the endpoint-authz matrix carries one wording for it rather than two. The three legacy routes extend the feature-007 admin controller: `/v1/admin/legacy-broadcasts` is the «Архивный эфир» creation entry (EARS-24), and `/v1/admin/events/:id/archive-legacy` / `…/hide-legacy` carry the two commands of the legacy machine (EARS-25).
+No Delete route exists for any 014 resource. `/v1/public/events` and `/v1/public/events/:idOrSlug` are extensions of the existing feature-004 controllers, not new ones; `/v1/me/events` extends the existing feature-005 controller and keeps that feature's `doctor_guest` classification, so the endpoint-authz matrix carries one wording for it rather than two. EARS-29 adds no row to this table: the backfill drives the existing `POST …/recordings` and `POST …/recordings/:rid/publish` endpoints, and its own entry point (an admin route or an `apps/api` CLI command) is pending the Stage-A delivery-form decision. The three legacy routes extend the feature-007 admin controller: `/v1/admin/legacy-broadcasts` is the «Архивный эфир» creation entry (EARS-24), and `/v1/admin/events/:id/archive-legacy` / `…/hide-legacy` carry the two commands of the legacy machine (EARS-25).
 
 ## 11. Errors
 

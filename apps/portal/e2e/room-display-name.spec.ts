@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
-import { LIVE_STAND, provisionLoggedInDoctor } from "./support/doctor-session";
+import { provisionLoggedInDoctor } from "./support/doctor-session";
+import { requireLiveStandEnv } from "./support/live-stand-env";
 
 /**
  * 006 EARS-14 / EARS-15 — the just-in-time room-entry display-name prompt and the
@@ -8,8 +9,23 @@ import { LIVE_STAND, provisionLoggedInDoctor } from "./support/doctor-session";
  * Live-stand-gated tier (mirrors `room.spec.ts` / the 005 harness): it needs a
  * running portal whose `/v1/*` rewrite reaches a running api + real Zitadel +
  * Mailpit (for `provisionLoggedInDoctor`), plus a seeded LIVE room the doctor can
- * register for (`E2E_ROOM_SLUG_LIVE`). It `test.skip`s unless that env is present,
- * so a stray CI invocation is inert.
+ * register for (`E2E_ROOM_SLUG_LIVE`). It is inert-green only on a BARE
+ * environment; a partially exported env set fails loudly (#1871).
+ *
+ * ENV SET (#1871) — export ALL of these to run this spec; exporting SOME of them
+ * fails loudly naming the missing ones (`support/live-stand-env.ts`), while a
+ * completely bare environment stays inert-green:
+ *
+ * | variable             | value on the dev stand                |
+ * | -------------------- | ------------------------------------- |
+ * | `E2E_PORTAL_URL`     | the running portal origin             |
+ * | `IDP_ISSUER`         | the real Zitadel issuer               |
+ * | `MAILPIT_URL`        | the Mailpit REST base (OTP sink)      |
+ * | `E2E_ROOM_SLUG_LIVE` | `seed-005-live`                       |
+ *
+ * DOCTOR PROVISIONING: EACH test SELF-SIGNS-UP a fresh doctor (register → Mailpit
+ * OTP → auto-login). Zitadel/api throttles after ~4–5 signups per window (429) —
+ * wait ~10 min between full runs rather than retrying into the throttle.
  *
  * State isolation: EACH test provisions a FRESH doctor via
  * `provisionLoggedInDoctor` — a brand-new 003 account collects NO name, so the JIT
@@ -22,14 +38,33 @@ import { LIVE_STAND, provisionLoggedInDoctor } from "./support/doctor-session";
  * branches on a JS media query: desktop mounts the strip and mobile mounts the
  * `room-context` block inside its «О эфире» tab, so `room-context` is not in the
  * desktop DOM at all. Both playwright projects here are Desktop Chrome.
+ *
+ * STAND PRECONDITIONS (#1871) — beyond the variables above, the STAND itself must
+ * be prepared; otherwise the tier fails against a CORRECT product render:
+ *
+ * - **Saved display name.** Any REUSED account (`E2E_DOCTOR_*` / `E2E_DOCTOR2_*`)
+ *   must already have a display name saved. Without one, 006 EARS-14's JIT name
+ *   prompt renders INSTEAD of the room composition and every in-room assertion
+ *   fails. Specs that self-sign-up a fresh doctor satisfy that prompt inline
+ *   instead, so this applies only to the exported reusable pair.
+ * - **Raised rate-limit ceilings.** Boot the api with
+ *   `RATE_LIMIT_PER_USER_15MIN=1000`, `RATE_LIMIT_PER_IP_15MIN=2000` and
+ *   `RATE_LIMIT_PER_ASN_1H=5000`. The 003 EARS-13 defaults (10 per user per
+ *   15 min, 20 per IP) are an order of magnitude below the ~25 real logins one
+ *   serial run of this tier drives from a single IP: at the defaults the suite
+ *   hard-429s mid-run and every login-based test dies on `waitForURL`. These
+ *   ceilings are env-overridable BY DESIGN for exactly this window (#1076,
+ *   `apps/api/src/auth/rate-limit/rate-limit.types.ts`).
  */
 
 const SLUG_LIVE = process.env.E2E_ROOM_SLUG_LIVE;
 
-test.skip(
-  !LIVE_STAND || !SLUG_LIVE,
-  "requires the live stand + a seeded live room the doctor can register for",
-);
+requireLiveStandEnv([
+  "E2E_PORTAL_URL",
+  "IDP_ISSUER",
+  "MAILPIT_URL",
+  "E2E_ROOM_SLUG_LIVE",
+]);
 
 /** Register the freshly-provisioned doctor for the seeded live room, then enter it. */
 async function registerAndEnterRoom(

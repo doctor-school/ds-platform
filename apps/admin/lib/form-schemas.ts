@@ -28,7 +28,6 @@ import {
   RecordingKindSchema,
   RecordingExpectedBySchema,
   refineEmbedRefForProvider,
-  type SpeakerEntry,
   type StreamProvider,
   StreamProviderSchema,
 } from "@ds/schemas";
@@ -106,7 +105,6 @@ export function eventFormSchema({
       // before the box was checked must not fail a submit on a field the operator
       // can no longer see or clear.
       partnerRef: z.string(),
-      speakers: create.speakers,
       specialtiesText: z.string().superRefine((text, ctx) => {
         const result = create.specialties.safeParse(parseSpecialties(text));
         if (result.success) return;
@@ -200,7 +198,6 @@ export interface EventFormFields {
   durationMin: number;
   description: string;
   partnerRef: string;
-  speakers: SpeakerEntry[];
   specialtiesText: string;
   /** 014 EARS-24 — «Это архивный эфир» (server-assigned `legacy` origin). */
   legacy: boolean;

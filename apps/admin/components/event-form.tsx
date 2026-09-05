@@ -18,7 +18,6 @@ import {
   type AttachRecordingRequest,
   type EventAdminDetail,
   RECORDING_KINDS,
-  type SpeakerEntry,
 } from "@ds/schemas";
 import { TokenSelect, TokenTextarea } from "@/components/fields";
 import { RecordingSourceFieldSet } from "@/components/recording-source-fields";
@@ -46,7 +45,6 @@ export interface EventFormValues {
   startsAtMsk: string;
   durationMin: number;
   description: string;
-  speakers: SpeakerEntry[];
   specialties: string[];
   partnerRef: string | null;
   programPdf: File | null;
@@ -106,8 +104,11 @@ function legacySubmission(
  * — required / bounds (МСК datetime, duration ≥ 1, ≤ 24h, field lengths, per-token
  * specialty length). The server Zod DTO stays the authority; this only surfaces the
  * error before the round-trip. Validation fires on blur (`mode: onTouched`) so it
- * never nags mid-typing. Speakers are an ordered free-text list (LD-1) with
- * add/remove; every label/hint is from the RU catalog (EARS-10). `onSubmit` receives
+ * never nags mid-typing. 012 EARS-24 (#1607): the form carries NO speaker list —
+ * since the cutover an эфир's speakers are `event_experts` links, authored in the
+ * «Эксперты мероприятия» panel, so a free-text box here would be a second,
+ * disagreeing source of the same public fact.
+ * Every label/hint is from the RU catalog (EARS-10). `onSubmit` receives
  * the assembled {@link EventFormValues} — the page wires it to the Refine mutation.
  */
 export function EventForm({
@@ -155,10 +156,6 @@ export function EventForm({
     values: detail ? eventFormFields(detail) : undefined,
     resetOptions: FORM_SYNC_RESET_OPTIONS,
   });
-  const { fields, append, remove } = useFieldArray({
-    control: form.control,
-    name: "speakers",
-  });
   // The program PDF is a File (not a JSON field), so it is validated here rather
   // than by the resolver — a non-PDF is refused with the RU catalog message.
   const [programPdf, setProgramPdf] = useState<File | null>(null);
@@ -191,7 +188,6 @@ export function EventForm({
       startsAtMsk: fieldsValue.startsAtMsk,
       durationMin: Number(fieldsValue.durationMin),
       description: fieldsValue.description,
-      speakers: fieldsValue.speakers,
       specialties: fieldsValue.specialtiesText
         .split(",")
         .map((s) => s.trim())
@@ -386,80 +382,6 @@ export function EventForm({
             )}
           />
         )}
-
-        {/* Speakers — ordered free-text entries (LD-1). */}
-        <h2 className="text-sm font-extrabold uppercase tracking-micro text-muted-foreground">
-          {t("events.sections.speakers")}
-        </h2>
-        <div className="flex flex-col gap-3" data-testid="speakers">
-          {fields.map((row, i) => (
-            <div
-              key={row.id}
-              className="flex flex-col gap-3 sm:flex-row sm:items-start"
-            >
-              <FormField
-                control={form.control}
-                name={`speakers.${i}.name`}
-                render={({ field }) => (
-                  <FormItem className="sm:flex-1">
-                    <FormControl>
-                      <Input
-                        aria-label={t("events.fields.speakerName")}
-                        placeholder={t("events.fields.speakerName")}
-                        data-testid={`speaker-name-${i}`}
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name={`speakers.${i}.regalia`}
-                render={({ field }) => (
-                  <FormItem className="sm:flex-1">
-                    <FormControl>
-                      <Input
-                        aria-label={t("events.fields.speakerRegalia")}
-                        placeholder={t("events.fields.speakerRegalia")}
-                        data-testid={`speaker-regalia-${i}`}
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => remove(i)}
-              >
-                {t("events.fields.removeSpeaker")}
-              </Button>
-            </div>
-          ))}
-          <div>
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              data-testid="add-speaker"
-              // `shouldFocus: false`: auto-focusing the appended name input makes
-              // the NEXT submit click blur it, and that blur-validation races the
-              // submit-validation (RHF applies the stale field-level result last,
-              // wiping the full error set — probed live, #665). Unfocused append
-              // keeps one submit click = the complete error picture.
-              onClick={() =>
-                append({ name: "", regalia: "" }, { shouldFocus: false })
-              }
-            >
-              {t("events.fields.addSpeaker")}
-            </Button>
-          </div>
-        </div>
 
         {/* No programme file on an архивный эфир either — same reason as the
             sponsor slot: the legacy body carries no `programPdf` part. */}

@@ -45,7 +45,6 @@ export function eventUpdateVars(
     startsAtMsk: values.startsAtMsk,
     durationMin: values.durationMin,
     description: values.description,
-    speakers: values.speakers,
     specialties: values.specialties,
     partnerRef: values.partnerRef,
     programPdf: values.programPdf,

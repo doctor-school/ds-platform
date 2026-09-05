@@ -57,6 +57,18 @@ const REQUIRED_FORM_ERRORS = [
     "Подтвердите согласие на обработку персональных данных.",
   ],
 ] as const;
+/** The 008 shell header's own traffic on `/` (#1877) — its self-profile read
+ *  and Next's RSC prefetch of its nav targets. Not the landing page's. */
+const SHELL_PREFETCH_PATHS = ["/webinars", "/account/events", "/login"];
+function isShellRequest(url: string): boolean {
+  const parsed = new URL(url);
+  if (parsed.pathname === "/v1/me/profile") return true;
+  return (
+    parsed.searchParams.has("_rsc") &&
+    SHELL_PREFETCH_PATHS.includes(parsed.pathname)
+  );
+}
+
 const SUBMISSIONS_DIRECTORY = process.env.ACADEMY_SUBMISSIONS_DIR;
 const PERSISTENCE_E2E_SAFE =
   process.env.ACADEMY_PARTNERSHIP_E2E_SAFE === "1";
@@ -168,11 +180,11 @@ test.describe("Feature 013 — static public Academy home", () => {
     await expect(page.locator("header")).toHaveCount(1);
     await expect(page.getByTestId("shell-logo")).toHaveCount(1);
     await expect(page.getByRole("contentinfo")).toBeVisible();
-    // The static page fetches nothing of its own; the sole dynamic request is
-    // the shell header's one-shot self-profile read (008 `useHeaderAuth`).
-    expect(
-      dynamicRequests.filter((url) => !url.includes("/v1/me/profile")),
-    ).toEqual([]);
+    // The static page still fetches nothing OF ITS OWN. The only dynamic
+    // traffic on `/` belongs to the mounted 008 shell header (#1877): its
+    // one-shot self-profile read (`useHeaderAuth`) and Next's RSC prefetch of
+    // its three nav targets — everything else must stay absent.
+    expect(dynamicRequests.filter((url) => !isShellRequest(url))).toEqual([]);
   });
 
   test("EARS-2: page shall render six supplied portraits and the approved repeated Project and Events rows", async ({

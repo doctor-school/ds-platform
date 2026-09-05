@@ -9,6 +9,7 @@ import {
   Combobox,
   DataTable,
   DayAgenda,
+  EmailConfirmCard,
   EmptyState,
   EventFormatBlock,
   EventList,
@@ -31,11 +32,14 @@ import {
   MonthPicker,
   OtpFocusScreen,
   Pagination,
+  PasswordRecoveryCard,
   maskDestination,
   type ComboboxOption,
   type DataTableColumn,
   type DotGridCell,
   type EventListTab,
+  type EmailConfirmCardCopy,
+  type EmailConfirmValues,
   type EventSignupCardProps,
   type LoginCardCopy,
   type LoginCardMethod,
@@ -44,6 +48,10 @@ import {
   type LoginCardPasswordValues,
   type MonthGridCell,
   type MonthPickerCell,
+  type PasswordRecoveryCardCopy,
+  type PasswordRecoveryCompleteValues,
+  type PasswordRecoveryRequestValues,
+  type PasswordRecoveryStage,
 } from "@ds/design-system/blocks";
 import { Badge } from "@ds/design-system/badge";
 import { Button } from "@ds/design-system/button";
@@ -926,12 +934,12 @@ function LoginCardSection() {
     >
       <p className="text-sm text-muted-foreground">
         The whole sign-in composition as one reusable unit: the{" "}
-        <code className="font-mono text-xs">AuthCard</code> frame, the password /
-        one-time-code tab switcher, both forms, and the code-entry stage on{" "}
-        <code className="font-mono text-xs">OtpFocusScreen</code>. The block owns
-        field composition and state presentation; copy, validation resolvers,
-        transport, routing and bot protection are all host-supplied, so both
-        storefronts project the same sign-in flow.
+        <code className="font-mono text-xs">AuthCard</code> frame, the password
+        / one-time-code tab switcher, both forms, and the code-entry stage on{" "}
+        <code className="font-mono text-xs">OtpFocusScreen</code>. The block
+        owns field composition and state presentation; copy, validation
+        resolvers, transport, routing and bot protection are all host-supplied,
+        so both storefronts project the same sign-in flow.
       </p>
 
       <SubRow label="Preview">
@@ -968,6 +976,423 @@ function LoginCardSection() {
           >
             <Canvas>
               <NeutralLoginCard defaultMethod="otp" sent />
+            </Canvas>
+          </StateCase>
+        </div>
+      </SubRow>
+    </BlockSection>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* PasswordRecoveryCard                                                 */
+/* ------------------------------------------------------------------ */
+
+const PASSWORD_RECOVERY_PROPS: PropRow[] = [
+  {
+    name: "copy",
+    type: "PasswordRecoveryCardCopy",
+    required: true,
+    description:
+      "Every visible string, grouped by step; descriptionComplete / complete.resendCountdown are functions of the masked destination / remaining seconds.",
+  },
+  {
+    name: "stage",
+    type: '"request" | "complete"',
+    required: true,
+    description:
+      "Host-controlled step. It flips to complete only once the host's protected request actually succeeded.",
+  },
+  {
+    name: "identifier",
+    type: "string",
+    required: true,
+    description:
+      "The address the code went to — seeds the complete form and is masked for display. Empty on the request step.",
+  },
+  {
+    name: "links",
+    type: "{ login: string }",
+    required: true,
+    description: "Footer link target — back to sign-in.",
+  },
+  {
+    name: "renderLink",
+    type: "(props: { href, children }) => ReactNode",
+    required: false,
+    description:
+      "Host anchor renderer, so an app keeps its own client-side navigation. Defaults to a plain anchor.",
+  },
+  {
+    name: "icon",
+    type: "ReactNode",
+    required: false,
+    description: "Card glyph — app-supplied; the package ships no icon set.",
+  },
+  {
+    name: "request",
+    type: "PasswordRecoveryRequestProps",
+    required: true,
+    description:
+      "Initiate step: app-owned resolver, submit handler, localized error, pending flag, captcha slot.",
+  },
+  {
+    name: "complete",
+    type: "PasswordRecoveryCompleteProps",
+    required: true,
+    description:
+      "Complete step: resolver, submit / resend / start-over handlers, resendNonce, the completion and resend error slots, the neutral resend notice and a captcha slot.",
+  },
+  {
+    name: "otpLength",
+    type: "number",
+    required: false,
+    description: "Fixed code length; defaults to the 6-character reset code.",
+  },
+  {
+    name: "resendCooldownSeconds",
+    type: "number",
+    required: false,
+    description: "Resend cooldown; defaults to 30 seconds.",
+  },
+];
+
+/** Neutral-realistic copy — catalogue strings only, never product copy. */
+const PASSWORD_RECOVERY_COPY: PasswordRecoveryCardCopy = {
+  title: "Reset your password",
+  titleComplete: "Choose a new password",
+  descriptionRequest: "We will send a one-time code to your email or phone.",
+  descriptionComplete: (destination) => `We sent a code to ${destination}.`,
+  backToSignIn: "Back to sign in",
+  request: {
+    identifierLabel: "Email or phone",
+    identifierPlaceholder: "you@example.com",
+    submit: "Send the code",
+  },
+  complete: {
+    codeLabel: "Reset code",
+    newPasswordLabel: "New password",
+    passwordPolicyHint: "At least 12 characters, with a digit and a symbol.",
+    submit: "Set the new password",
+    startOver: "Start over",
+    resend: "Send another code",
+    resendCountdown: (seconds) => `Send another code in ${seconds}s`,
+  },
+};
+
+/* The showcase is a VIEWER: nothing validates or transports here, so the
+   resolvers pass every value through and the handlers are inert. */
+const showcaseRecoveryRequestResolver: Resolver<
+  PasswordRecoveryRequestValues
+> = async (values) => ({ values, errors: {} });
+const showcaseRecoveryCompleteResolver: Resolver<
+  PasswordRecoveryCompleteValues
+> = async (values) => ({ values, errors: {} });
+
+/** A live `PasswordRecoveryCard` at a given stage, with inert host wiring. */
+function NeutralPasswordRecoveryCard({
+  stage = "request",
+  notice,
+}: {
+  stage?: PasswordRecoveryStage;
+  notice?: string;
+}) {
+  return (
+    <div className="w-full max-w-sm">
+      <PasswordRecoveryCard
+        copy={PASSWORD_RECOVERY_COPY}
+        stage={stage}
+        identifier={stage === "request" ? "" : "you@example.com"}
+        links={{ login: "#" }}
+        icon={<LockGlyph className="text-tint-foreground" />}
+        request={{
+          resolver: showcaseRecoveryRequestResolver,
+          onSubmit: () => {},
+        }}
+        complete={{
+          resolver: showcaseRecoveryCompleteResolver,
+          onSubmit: () => {},
+          resendNonce: 0,
+          onResend: () => {},
+          onRestart: () => {},
+          notice,
+        }}
+      />
+    </div>
+  );
+}
+
+function PasswordRecoveryCardSection() {
+  return (
+    <BlockSection
+      title="PasswordRecoveryCard"
+      exportsLine="PasswordRecoveryCard — props: copy · stage · identifier · links · renderLink? · icon? · request · complete · otpLength? · resendCooldownSeconds?"
+    >
+      <p className="text-sm text-muted-foreground">
+        The whole password-recovery composition as one reusable unit: the{" "}
+        <code className="font-mono text-xs">AuthCard</code> frame whose title
+        tracks the step, the identifier request form, and the complete step
+        where the code and the new password are submitted together — which is
+        why this surface composes the shared cooldown timer inline instead of
+        adopting <code className="font-mono text-xs">OtpFocusScreen</code>. The
+        block owns field composition and state presentation; copy, validation
+        resolvers, transport, routing and bot protection are all host-supplied.
+      </p>
+
+      <SubRow label="Preview">
+        <Canvas>
+          <NeutralPasswordRecoveryCard />
+        </Canvas>
+      </SubRow>
+
+      <SubRow label="Slots / props">
+        <PropsTable rows={PASSWORD_RECOVERY_PROPS} />
+      </SubRow>
+
+      <SubRow label="State matrix — stage and resend acknowledgement">
+        <div className="grid grid-cols-1 gap-x-10 gap-y-6 lg:grid-cols-2">
+          <StateCase
+            label="request"
+            note="the entry step — one identifier box and the send action"
+          >
+            <Canvas>
+              <NeutralPasswordRecoveryCard />
+            </Canvas>
+          </StateCase>
+          <StateCase
+            label="complete"
+            note="stage flipped by the host — code + new password, with the start-over / resend footer"
+          >
+            <Canvas>
+              <NeutralPasswordRecoveryCard stage="complete" />
+            </Canvas>
+          </StateCase>
+          <StateCase
+            label="resend acknowledged"
+            note="the host's neutral notice slot — identical copy in every case, so it discloses nothing"
+          >
+            <Canvas>
+              <NeutralPasswordRecoveryCard
+                stage="complete"
+                notice="If the account exists, another code is on its way."
+              />
+            </Canvas>
+          </StateCase>
+        </div>
+      </SubRow>
+    </BlockSection>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* EmailConfirmCard                                                     */
+/* ------------------------------------------------------------------ */
+
+const EMAIL_CONFIRM_PROPS: PropRow[] = [
+  {
+    name: "copy",
+    type: "EmailConfirmCardCopy",
+    required: true,
+    description:
+      "Every visible string; description / resendCountdown are functions of the masked destination / remaining seconds.",
+  },
+  {
+    name: "email",
+    type: "string",
+    required: false,
+    description:
+      "The address the code went to — seeds the non-rendered field the request carries. Absent on a bare deep-link.",
+  },
+  {
+    name: "destination",
+    type: "string",
+    required: true,
+    description:
+      "The already-masked label the description interpolates — the host derives it, so it can fall back when no address is known.",
+  },
+  {
+    name: "resolver",
+    type: "Resolver of EmailConfirmValues",
+    required: true,
+    description: "App-owned resolver — localized messages and the schema SSOT.",
+  },
+  {
+    name: "onSubmit",
+    type: "(values) => Promise<void> | void",
+    required: true,
+    description:
+      "Awaited by the form, so it drives the pending affordance. Transport and routing are the host's.",
+  },
+  {
+    name: "onInvalid",
+    type: "() => void",
+    required: false,
+    description:
+      "A submit blocked by validation — the host decides the message, since only it knows whether the address or the code is at fault.",
+  },
+  {
+    name: "error",
+    type: "ReactNode",
+    required: false,
+    description: "Already-localized verification error.",
+  },
+  {
+    name: "succeeded",
+    type: "boolean",
+    required: false,
+    description:
+      "Server-confirmed acceptance — the success row is presentation only and is never set optimistically.",
+  },
+  {
+    name: "links",
+    type: "{ login: string; reset: string }",
+    required: true,
+    description:
+      "Targets for the two co-equal actions offered to an already-registered owner.",
+  },
+  {
+    name: "renderLink",
+    type: "(props: { href, children }) => ReactNode",
+    required: false,
+    description:
+      "Host anchor renderer, so an app keeps its own client-side navigation. Defaults to a plain anchor.",
+  },
+  {
+    name: "icon",
+    type: "ReactNode",
+    required: false,
+    description: "Card glyph — app-supplied; the package ships no icon set.",
+  },
+  {
+    name: "resend",
+    type: "EmailConfirmResendProps",
+    required: false,
+    description:
+      "Resend wiring: nonce, handler, error, pending flag, the neutral notice and a captcha slot. Omit it and the control is hidden — a bare deep-link has nothing to resend to.",
+  },
+  {
+    name: "otpLength",
+    type: "number",
+    required: false,
+    description:
+      "Fixed code length; defaults to the 6-character registration code.",
+  },
+  {
+    name: "resendCooldownSeconds",
+    type: "number",
+    required: false,
+    description: "Resend cooldown; defaults to 30 seconds.",
+  },
+];
+
+/** Neutral-realistic copy — catalogue strings only, never product copy. */
+const EMAIL_CONFIRM_COPY: EmailConfirmCardCopy = {
+  title: "Confirm your email",
+  description: (destination) => `We sent a code to ${destination}.`,
+  newAccountHeading: "New here",
+  codeLabel: "Confirmation code",
+  submit: "Confirm",
+  codeAccepted: "Code accepted — signing you in…",
+  resend: "Send another code",
+  resendCountdown: (seconds) => `Send another code in ${seconds}s`,
+  existingAccountHeading: "Already registered",
+  existingAccountHint:
+    "If this address already has an account, sign in or reset the password instead.",
+  goToSignIn: "Sign in",
+  goToReset: "Reset password",
+};
+
+const showcaseEmailConfirmResolver: Resolver<EmailConfirmValues> = async (
+  values,
+) => ({ values, errors: {} });
+
+/** A live `EmailConfirmCard` at a given state, with inert host wiring. */
+function NeutralEmailConfirmCard({
+  succeeded = false,
+  withResend = true,
+  notice,
+}: {
+  succeeded?: boolean;
+  withResend?: boolean;
+  notice?: string;
+}) {
+  return (
+    <div className="w-full max-w-sm">
+      <EmailConfirmCard
+        copy={EMAIL_CONFIRM_COPY}
+        email="you@example.com"
+        destination={maskDestination("you@example.com")}
+        resolver={showcaseEmailConfirmResolver}
+        onSubmit={() => {}}
+        succeeded={succeeded}
+        links={{ login: "#", reset: "#" }}
+        icon={<LockGlyph className="text-tint-foreground" />}
+        resend={
+          withResend ? { nonce: 0, onResend: () => {}, notice } : undefined
+        }
+      />
+    </div>
+  );
+}
+
+function EmailConfirmCardSection() {
+  return (
+    <BlockSection
+      title="EmailConfirmCard"
+      exportsLine="EmailConfirmCard — props: copy · email? · destination · resolver · onSubmit · onInvalid? · error? · succeeded? · links · renderLink? · icon? · resend? · otpLength? · resendCooldownSeconds?"
+    >
+      <p className="text-sm text-muted-foreground">
+        The whole post-registration confirmation composition as one reusable
+        unit: the <code className="font-mono text-xs">AuthCard</code> frame, the
+        code form with its auto-submit on the final character, the success row,
+        the resend control on the shared cooldown timer, and the two co-equal
+        actions for a visitor who turns out to be already registered. The block
+        never branches on account existence — both affordances are always
+        present — and copy, validation, transport and routing are host-supplied.
+      </p>
+
+      <SubRow label="Preview">
+        <Canvas>
+          <NeutralEmailConfirmCard />
+        </Canvas>
+      </SubRow>
+
+      <SubRow label="Slots / props">
+        <PropsTable rows={EMAIL_CONFIRM_PROPS} />
+      </SubRow>
+
+      <SubRow label="State matrix — acceptance and resend">
+        <div className="grid grid-cols-1 gap-x-10 gap-y-6 lg:grid-cols-2">
+          <StateCase
+            label="awaiting the code"
+            note="the resting state — code entry, resend in cooldown, both owner actions"
+          >
+            <Canvas>
+              <NeutralEmailConfirmCard />
+            </Canvas>
+          </StateCase>
+          <StateCase
+            label="accepted"
+            note="the host confirmed the server accepted the code — a success alert, not an error"
+          >
+            <Canvas>
+              <NeutralEmailConfirmCard succeeded />
+            </Canvas>
+          </StateCase>
+          <StateCase
+            label="resend acknowledged"
+            note="the host's neutral notice slot — identical copy in every case, so it discloses nothing"
+          >
+            <Canvas>
+              <NeutralEmailConfirmCard notice="If the account exists, another code is on its way." />
+            </Canvas>
+          </StateCase>
+          <StateCase
+            label="no destination"
+            note="resend omitted by the host — a bare deep-link has nothing to resend to"
+          >
+            <Canvas>
+              <NeutralEmailConfirmCard withResend={false} />
             </Canvas>
           </StateCase>
         </div>
@@ -2908,6 +3333,8 @@ export function BlocksView() {
       <AuthCardSection />
       <AuthLayoutSection />
       <LoginCardSection />
+      <PasswordRecoveryCardSection />
+      <EmailConfirmCardSection />
       <OtpFocusScreenSection />
       <MonthCalendarGridSection />
       <MonthDotGridSection />

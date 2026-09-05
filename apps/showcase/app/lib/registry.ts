@@ -110,6 +110,8 @@ export const SHOWCASE_REGISTRY: ShowcaseEntry[] = [
   { id: "AuthCard", section: "blocks" },
   { id: "AuthLayout", section: "blocks" },
   { id: "LoginCard", section: "blocks" },
+  { id: "PasswordRecoveryCard", section: "blocks" },
+  { id: "EmailConfirmCard", section: "blocks" },
   { id: "OtpFocusScreen", section: "blocks" },
 
   // ── Month-calendar blocks (004 EARS-19, #1050) — the webinars-month.dc.html

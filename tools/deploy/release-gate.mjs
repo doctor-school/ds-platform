@@ -258,7 +258,7 @@ function capture(cmd, args, cwd) {
  * @param {string} url
  * @returns {Promise<{sha: string|null, error?: string}>}
  */
-async function probeHealthSha(url) {
+export async function probeHealthSha(url) {
   if (typeof url !== "string" || url === "") {
     return { sha: null, error: "no health URL supplied" };
   }

@@ -382,3 +382,68 @@ describe("project-reality releaseFromProbe()", () => {
     expect(r.publishedAt).toBe(null);
   });
 });
+
+// ── hotfix (`--ref`) delta anchoring — #1881 ────────────────────────────────
+// `probeProjectReality` re-anchors the merged-not-deployed delta on
+// `git merge-base origin/main <deployedSha>` when the deployed SHA is off main
+// (a `--ref` hotfix deploy) and records WHY on the probe. The subprocess seam is
+// not tested here; these cases pin the pure half: the note survives every
+// basis-bearing status variant and reaches the rendered delta line.
+describe("project-reality hotfix delta anchoring (#1881)", () => {
+  const note = "deployed SHA is a hotfix off main; delta anchored on merge-base 1455bb9";
+  const rel: ReleaseInfo = { tag: null, publishedAt: null };
+
+  it("carries the anchor note through every basis-bearing status variant", () => {
+    const variants: ProjectRealityProbe[] = [
+      probe({ deploymentSha: "b9d81e6", healthSha: "b9d81e6", mergedNotDeployed: 2, deltaAnchorNote: note }),
+      probe({ deploymentSha: "b9d81e6", healthSha: "1234567", mergedNotDeployed: 2, deltaAnchorNote: note }),
+      probe({ healthSha: "b9d81e6", mergedNotDeployed: 2, deltaAnchorNote: note }),
+      probe({ deploymentSha: "b9d81e6", deploymentState: "success", mergedNotDeployed: 2, deltaAnchorNote: note }),
+    ];
+    const kinds = variants.map((p) => evaluateProjectReality(p));
+    expect(kinds.map((s) => s.kind)).toEqual([
+      "agree",
+      "disagree",
+      "deployed-unrecorded",
+      "deployment-only",
+    ]);
+    for (const s of kinds) {
+      expect(s).toHaveProperty("deltaAnchorNote", note);
+    }
+  });
+
+  it("renders the note on a non-zero delta line", () => {
+    const text = renderProjectReality(
+      evaluateProjectReality(
+        probe({ deploymentSha: "b9d81e6", healthSha: "b9d81e6", mergedNotDeployed: 3, deltaAnchorNote: note }),
+      ),
+      rel,
+      classifyDeployRange(["apps/portal/src/page.tsx"]),
+    ).join("\n");
+    expect(text).toContain(`[${note}]`);
+    expect(text).toContain("D-trigger");
+  });
+
+  it("renders the note on a zero delta line too", () => {
+    const text = renderProjectReality(
+      evaluateProjectReality(
+        probe({ deploymentSha: "b9d81e6", healthSha: "b9d81e6", mergedNotDeployed: 0, deltaAnchorNote: note }),
+      ),
+      rel,
+    ).join("\n");
+    expect(text).toContain(`[${note}]`);
+    expect(text).toContain("prod is level");
+  });
+
+  it("omits the bracket entirely on a normal on-main deploy", () => {
+    const text = renderProjectReality(
+      evaluateProjectReality(
+        probe({ deploymentSha: "b9d81e6", healthSha: "b9d81e6", mergedNotDeployed: 3 }),
+      ),
+      rel,
+      classifyDeployRange(["apps/portal/src/page.tsx"]),
+    ).join("\n");
+    expect(text).not.toContain("[deployed SHA is a hotfix");
+    expect(text).not.toContain("[]");
+  });
+});

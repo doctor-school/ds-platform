@@ -9,6 +9,10 @@
 //
 //   Usage:
 //     pnpm deploy:prod                 deploy origin/main (default)
+//     pnpm deploy:prod --ref <sha>        HOTFIX deploy: ship exactly <sha> (a
+//                                          cherry-pick branch cut FROM the SHA
+//                                          running in prod) instead of all of
+//                                          origin/main — #1881, spec §10.11
 //     pnpm deploy:prod --rollback <sha>   app-only rollback to a prior SHA tag
 //     pnpm deploy:prod --skip-ci-check    (escape hatch; logs a loud warning)
 //     pnpm deploy:prod --allow-live-broadcast   (escape hatch for the live-эфир
@@ -18,6 +22,14 @@
 //                                          release-blocker / open batched
 //                                          Stage-B hold — #1662; reason is
 //                                          mandatory and loudly printed)
+//
+// Hotfix path (`--ref <sha>`, #1881 / spec §10.11): prod is behind main and a
+// single already-merged fix must ship WITHOUT everything else on main. The extra
+// pre-flight invariants keep "prod runs reviewed, merged code" true — the target
+// must be a strict descendant of the LIVE deployed SHA, and every commit in
+// `deployed..target` must have an equivalent commit on `origin/main` (i.e. be a
+// cherry-pick of merged work). Arbitrary-branch / feature-preview deploys stay
+// forbidden; the decision seams live in tools/deploy/hotfix-ref.mjs.
 //
 // Pipeline (deploy):
 //   pre-flight  clean tree · HEAD==origin/main · green CI for the SHA (gh)
@@ -48,11 +60,18 @@ import { envFooter } from "../ci/post-product-note.mjs";
 import { cutDeployRelease } from "../release/cut-release.mjs";
 import { createDeploymentRecord } from "./deployment-record.mjs";
 import {
+  REF_FLAG,
+  hotfixPreflightVerdict,
+  parseCherryOutput,
+  parseRefFlag,
+} from "./hotfix-ref.mjs";
+import {
   RELEASE_GATE_EXEMPT_FLAG,
   evaluateReleaseGate,
   formatReleaseGateClear,
   formatReleaseGateHold,
   parseReleaseGateExempt,
+  probeHealthSha,
   probeReleaseGate,
 } from "./release-gate.mjs";
 import { composeDigest } from "./release-notes.mjs";
@@ -225,9 +244,11 @@ function localCap(cmd, args) {
   return (r.stdout || "").trim();
 }
 
-async function preflight() {
+async function preflight(hotfixRef = null) {
   step(
-    "Pre-flight: clean tree · HEAD==origin/main · green CI · no live broadcast · release gate",
+    hotfixRef
+      ? `Pre-flight (HOTFIX ${REF_FLAG}): clean tree · target on origin · descendant of prod · cherry-picks of main · green CI · no live broadcast · release gate`
+      : "Pre-flight: clean tree · HEAD==origin/main · green CI · no live broadcast · release gate",
   );
 
   // 1. clean working tree
@@ -244,10 +265,22 @@ async function preflight() {
   //    reach prod — which is why a divergent HEAD is a loud WARNING, not a
   //    hard fail: it lets the tool run from a maintenance branch (e.g. the one
   //    that introduces this script) while still deploying exactly origin/main.
-  localCap("git", ["fetch", "origin", "main"]);
+  localCap("git", ["fetch", "origin"]);
   const head = localCap("git", ["rev-parse", "HEAD"]);
   const originMain = localCap("git", ["rev-parse", "origin/main"]);
-  if (head !== originMain) {
+
+  // 2b. HOTFIX target (#1881, spec §10.11). In `--ref` mode the deploy target is
+  //     the named commit, not origin/main — so the invariants that normally come
+  //     free from "it is on main" (reachable on origin, reviewed, merged) must be
+  //     asserted explicitly here. Fail-closed: any unresolvable fact dies.
+  const target = hotfixRef ? resolveHotfixTarget(hotfixRef) : originMain;
+  if (hotfixRef) {
+    await assertHotfixInvariants(target);
+    console.log(
+      `  ℹ HEAD (${head.slice(0, 12)}) — deploying hotfix ${target.slice(0, 12)},` +
+        ` NOT origin/main (${originMain.slice(0, 12)}).`,
+    );
+  } else if (head !== originMain) {
     console.log(
       `  ⚠ HEAD (${head.slice(0, 12)}) != origin/main (${originMain.slice(0, 12)}) —` +
         ` deploying origin/main, NOT your local HEAD.`,
@@ -256,13 +289,14 @@ async function preflight() {
     ok(`HEAD == origin/main @ ${originMain.slice(0, 12)}`);
   }
 
-  // 3. green CI for this exact SHA
+  // 3. green CI for this exact SHA (a hotfix branch gets its run from
+  //    `gh workflow run ci.yml --ref hotfix/<N>-<slug>` — see the runbook)
   if (process.argv.includes("--skip-ci-check")) {
     console.log(
       "  ⚠ --skip-ci-check: SKIPPING the green-CI gate (escape hatch)",
     );
   } else {
-    assertGreenCi(originMain);
+    assertGreenCi(target);
   }
 
   // 4. эфир gate (release-cycle spec §10.4 item 7): the <60s container
@@ -282,9 +316,98 @@ async function preflight() {
   //    merged-but-not-yet-deployed PR whose `Stage-B: batched at #<gate>` gate
   //    Issue is still open, HOLDS the deploy. Fail-closed on an UNKNOWN, like
   //    the эфир probe above; the only bypass is the explicit, printed flag.
-  await assertReleaseGate(originMain);
+  //    In `--ref` mode the gate's range is already `<live deployed>..<target>`
+  //    (the basis is the LIVE prod SHA, not main) — i.e. exactly the hotfix
+  //    range, with no extra wiring.
+  await assertReleaseGate(target);
 
-  return originMain;
+  return target;
+}
+
+// Resolve the `--ref <sha>` argument to a full commit SHA that exists on ORIGIN.
+// A SHA that is only local (or only on a fork) must never reach prod, so an
+// unresolvable or unreachable ref is fatal. `git fetch origin` (all refs) ran in
+// pre-flight step 2, so a pushed hotfix branch is present here.
+function resolveHotfixTarget(ref) {
+  const r = spawnSync("git", ["rev-parse", "--verify", `${ref}^{commit}`], {
+    encoding: "utf8",
+  });
+  if (r.status !== 0) {
+    die(
+      `${REF_FLAG} ${ref}: no such commit locally after \`git fetch origin\` —` +
+        ` push the hotfix branch to origin first (\`git push -u origin hotfix/<N>-<slug>\`).`,
+    );
+  }
+  const sha = (r.stdout || "").trim();
+
+  // `--list origin/*` on purpose: reachability from ANY remote (a fork added as
+  // a second remote) is not the invariant — reachability from `origin` is.
+  const contains = localCap("git", [
+    "branch",
+    "-r",
+    "--contains",
+    sha,
+    "--list",
+    "origin/*",
+  ]);
+  if (!contains) {
+    die(
+      `${REF_FLAG} ${sha.slice(0, 12)} is not reachable from any \`origin/*\` branch —` +
+        ` deploy ships pushed, reviewable commits only. Push the hotfix branch first.`,
+    );
+  }
+  ok(`hotfix target ${sha.slice(0, 12)} on origin (${contains.split(/\r?\n/).length} branch(es))`);
+  return sha;
+}
+
+// The two hotfix invariants (tools/deploy/hotfix-ref.mjs — pure verdict, unit
+// tested): strict descendant of the LIVE deployed SHA, and every commit in
+// `deployed..target` is a cherry-pick of a commit already on `origin/main`.
+// Ground truth for "what is running" is `/v1/health`, the same source the release
+// gate and `## Project reality` use — NOT the Deployment record, which an
+// app-only rollback leaves ahead of reality.
+async function assertHotfixInvariants(target) {
+  const health = await probeHealthSha(PROD_HEALTH_URL);
+  if (!health.sha) {
+    die(
+      `${REF_FLAG}: cannot read the live prod SHA from ${PROD_HEALTH_URL}` +
+        ` (${health.error ?? "unknown"}) — a hotfix deploy must know what it builds on.`,
+    );
+  }
+  const deployed = localCap("git", ["rev-parse", `${health.sha}^{commit}`]);
+  ok(`live prod SHA ${deployed.slice(0, 12)} (from /v1/health)`);
+
+  const isDescendant =
+    spawnSync("git", ["merge-base", "--is-ancestor", deployed, target], {
+      encoding: "utf8",
+    }).status === 0;
+
+  // `git cherry <upstream> <head> <limit>`: `-` = an equivalent commit exists on
+  // origin/main (a cherry-pick of merged work), `+` = it does not.
+  const cherry = spawnSync(
+    "git",
+    ["cherry", "origin/main", target, deployed],
+    { encoding: "utf8" },
+  );
+  if (cherry.status !== 0) {
+    die(
+      `${REF_FLAG}: \`git cherry origin/main ${target.slice(0, 12)} ${deployed.slice(0, 12)}\`` +
+        ` failed: ${(cherry.stderr || "").trim() || "(no output)"}`,
+    );
+  }
+  const { unmatched } = parseCherryOutput(cherry.stdout);
+
+  const verdict = hotfixPreflightVerdict({
+    deployedSha: deployed,
+    targetSha: target,
+    targetIsDescendant: isDescendant,
+    unmatched,
+  });
+  if (!verdict.ok) die(verdict.error);
+  ok(
+    `hotfix range ${deployed.slice(0, 12)}..${target.slice(0, 12)} —` +
+      ` every commit is a cherry-pick of origin/main`,
+  );
 }
 
 // Release-blocker + open-batched-Stage-B hold (#1662). The evidence probe and
@@ -754,8 +877,15 @@ async function shipTree(sha, host) {
 
 // --- deploy ---------------------------------------------------------------
 
-async function deploy() {
-  const sha = await preflight();
+async function deploy(hotfixRef = null) {
+  const sha = await preflight(hotfixRef);
+  // What the banners call the thing being shipped: `origin/main` for the normal
+  // train, an explicit «hotfix @ <sha>» for `--ref` (#1881) — a deploy log that
+  // says "origin/main" while shipping a cherry-pick branch is a lie the next
+  // reader would act on.
+  const targetLabel = hotfixRef
+    ? `hotfix @ ${sha.slice(0, 12)}`
+    : `origin/main @ ${sha.slice(0, 12)}`;
 
   // Capture the previously-deployed prod SHA BEFORE the build/up swap — the
   // durable deploy record IS the running api-prod container's image tag
@@ -780,7 +910,11 @@ async function deploy() {
     );
   }
 
-  step(`Ship origin/main @ ${sha.slice(0, 12)} → both boxes`);
+  const shipLabel =
+    hotfixRef && prevSha
+      ? `${targetLabel} (base ${prevSha.slice(0, 12)})`
+      : targetLabel;
+  step(`Ship ${shipLabel} → both boxes`);
   let t = Date.now();
   await shipTree(sha, API_PROD);
   ok(`archive → ${API_PROD}`, t);
@@ -957,13 +1091,13 @@ echo "build cache after prune:"; sudo docker system df --format '  {{.Type}}: {{
   }
 
   step("Cut the release at the deployed SHA (#996/§10.5 — Option A)");
-  cutReleaseAtDeployedSha(sha);
+  cutReleaseAtDeployedSha(sha, { hotfix: Boolean(hotfixRef) });
 
   step("Record the deploy as a GitHub Deployment (#927/#942)");
   await recordDeployment(prevSha, sha);
 
   console.log(
-    `\n✓ DEPLOY OK — origin/main @ ${sha.slice(0, 12)} live on prod` +
+    `\n✓ DEPLOY OK — ${shipLabel} live on prod` +
       ` (${((Date.now() - t0All) / 1000).toFixed(1)}s total).`,
   );
   console.log(`  Verify over HTTP:  curl -s ${PROD_HEALTH_URL} | jq .version`);
@@ -975,9 +1109,13 @@ echo "build cache after prune:"; sudo docker system df --format '  {{.Type}}: {{
 // freshly-cut tag. NON-FATAL by contract — the deploy has already succeeded, and
 // `cutDeployRelease` never throws (it logs + returns { cut:false } on any failure
 // or an empty range). A redeploy of an already-released SHA cuts nothing.
-function cutReleaseAtDeployedSha(sha) {
+function cutReleaseAtDeployedSha(sha, { hotfix = false } = {}) {
   try {
-    const res = cutDeployRelease({ targetSha: sha, cwd: process.cwd() });
+    const res = cutDeployRelease({
+      targetSha: sha,
+      hotfix,
+      cwd: process.cwd(),
+    });
     if (res.cut) ok(`release ${res.tag} cut at ${sha.slice(0, 12)}`);
     else console.log(`  ↷ no release cut (${res.reason})`);
   } catch (e) {
@@ -1177,13 +1315,18 @@ async function main() {
   const exemptUsage = parseReleaseGateExempt(process.argv);
   if (exemptUsage.error) die(exemptUsage.error);
 
+  // `--ref <sha>` (#1881) validates under the same contract: a bare, mistyped or
+  // `--rollback`-combined flag dies BEFORE the clean-tree / fetch / CI probes.
+  const refUsage = parseRefFlag(process.argv);
+  if (refUsage.error) die(refUsage.error);
+
   const rbIdx = process.argv.indexOf("--rollback");
   if (rbIdx !== -1) {
     const sha = process.argv[rbIdx + 1];
     if (!sha) die("--rollback requires a <sha> argument");
     await rollback(sha);
   } else {
-    await deploy();
+    await deploy(refUsage.ref);
   }
 }
 

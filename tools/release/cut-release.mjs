@@ -28,6 +28,8 @@
 
 import { spawnSync } from "node:child_process";
 
+import { extractPrNumbers } from "../deploy/release-notes.mjs";
+
 const TAG_RE = /^release-(\d{4}\.\d{2}\.\d{2})-(\d+)$/;
 
 /**
@@ -128,6 +130,77 @@ export function shouldCutDeployRelease({
   return { cut: true, reason: "new commits since the latest release" };
 }
 
+/**
+ * All `release-*` tags in `existingTags`, newest FIRST, by the same (date,
+ * ordinal) key `latestReleaseTag` maxes over. Malformed / unrelated tags are
+ * dropped. Pure, deterministic, no I/O.
+ */
+export function sortReleaseTagsDesc(existingTags) {
+  const tags = Array.isArray(existingTags) ? existingTags : [];
+  return tags
+    .map((tag) => ({ tag, parsed: parseReleaseTag(tag) }))
+    .filter((e) => e.parsed !== null)
+    .map((e) => ({
+      tag: e.tag,
+      key: `${e.parsed.date}#${String(e.parsed.ordinal).padStart(9, "0")}`,
+    }))
+    .sort((a, b) => (a.key < b.key ? 1 : a.key > b.key ? -1 : 0))
+    .map((e) => e.tag);
+}
+
+/**
+ * The BASE release tag a new release's range starts at: the newest `release-*`
+ * tag that is an ANCESTOR of the target SHA (#1881, spec §10.11) — not simply
+ * the newest tag overall.
+ *
+ * Why ancestry and not tag order. A hotfix release is cut off the DEPLOYED SHA,
+ * so it sits on a commit that is not on `origin/main`; the next ordinary
+ * `origin/main` deploy therefore has a newest-by-order tag (the hotfix one) that
+ * is NOT its ancestor. Basing on tag order there would either skip the cut (the
+ * old `releaseIsAncestor === false` → skip rule) or diff against an unrelated
+ * commit. Walking newest→oldest and taking the first ancestor gives both sides
+ * the right base: the hotfix release bases on the deployed release, and the next
+ * main release bases on the last release that IS on main.
+ *
+ * `isAncestor(tag)` is injected — the git query lives in `cutDeployRelease`, so
+ * this stays pure and unit-testable.
+ *
+ * @param {string[]} existingTags
+ * @param {(tag: string) => boolean} isAncestor
+ * @returns {string|null}
+ */
+export function pickBaseReleaseTag(existingTags, isAncestor) {
+  const probe = typeof isAncestor === "function" ? isAncestor : () => false;
+  for (const tag of sortReleaseTagsDesc(existingTags)) {
+    if (probe(tag)) return tag;
+  }
+  return null;
+}
+
+/**
+ * The GitHub Release title + notes preamble for a HOTFIX cut (#1881). A hotfix
+ * release must be identifiable at a glance in the Releases list — it does not
+ * contain everything on `main` at that moment, only the deployed base plus the
+ * cherry-picked fixes, and the PR list says exactly which. Pure.
+ *
+ * @param {{ tag: string, baseTag: string|null, prNumbers?: number[] }} facts
+ * @returns {{ title: string, notes: string }}
+ */
+export function hotfixReleaseCopy({ tag, baseTag, prNumbers = [] } = {}) {
+  const prs = Array.isArray(prNumbers) ? prNumbers : [];
+  const base = baseTag ?? "(no prior release)";
+  const picked = prs.length
+    ? prs.map((n) => `- Cherry-picked #${n}`).join("\n")
+    : "- No PR-referencing commits in the hotfix range.";
+  return {
+    title: `${tag} — Hotfix`,
+    notes:
+      `**Hotfix release.** Cut on top of \`${base}\` (the SHA running in production), NOT on \`main\`.\n` +
+      `It contains the deployed base plus the cherry-picked fixes below — nothing else merged to \`main\` since.\n\n` +
+      `${picked}\n`,
+  };
+}
+
 function log(msg) {
   process.stdout.write(`[cut-release] ${msg}\n`);
 }
@@ -152,11 +225,17 @@ function todayDateStr(now = new Date()) {
  * at pre-flight) — NOT local `HEAD`, so the tag lands on exactly what shipped even
  * when local `HEAD` differs (the deploy tool may run from a maintenance branch).
  *
- * @param {{ targetSha: string, cwd?: string, now?: Date, run?: (cmd: string, args: string[]) => { status: number|null, stdout?: string, stderr?: string } }} opts
+ * `hotfix: true` (set by the `pnpm deploy:prod --ref <sha>` path, #1881) marks the
+ * Release as a hotfix — the title carries the marker and the notes name the
+ * cherry-picked PRs, because such a release does NOT contain everything on `main`
+ * at cut time.
+ *
+ * @param {{ targetSha: string, hotfix?: boolean, cwd?: string, now?: Date, run?: (cmd: string, args: string[]) => { status: number|null, stdout?: string, stderr?: string } }} opts
  * @returns {{ cut: boolean, tag?: string, reason: string }}
  */
 export function cutDeployRelease({
   targetSha,
+  hotfix = false,
   cwd = process.cwd(),
   now = new Date(),
   run,
@@ -194,38 +273,49 @@ export function cutDeployRelease({
       return { cut: false, reason: "git tag -l failed" };
     }
     const existingTags = (tagRes.stdout || "").split(/\r?\n/).filter(Boolean);
-    const latestTag = latestReleaseTag(existingTags);
 
-    // Resolve the latest release tag's commit SHA (null when no release exists
-    // yet). `rev-list -n 1` dereferences an annotated tag to its commit.
-    let latestReleaseSha = null;
-    if (latestTag) {
-      const shaRes = exec("git", ["rev-list", "-n", "1", latestTag]);
-      if (shaRes.status !== 0) {
-        log(
-          `⚠ could not resolve SHA of ${latestTag} — skipping (green): ${(
-            shaRes.stderr || ""
-          ).trim()}`,
-        );
-        return { cut: false, reason: `cannot resolve ${latestTag}` };
-      }
-      latestReleaseSha = (shaRes.stdout || "").trim();
-    }
+    // Resolve a tag to its commit SHA (`rev-list -n 1` dereferences an annotated
+    // tag). Memoised so the newest→oldest ancestry walk resolves each tag once.
+    const shaCache = new Map();
+    const tagSha = (tag) => {
+      if (shaCache.has(tag)) return shaCache.get(tag);
+      const res = exec("git", ["rev-list", "-n", "1", tag]);
+      const sha = res.status === 0 ? (res.stdout || "").trim() : null;
+      shaCache.set(tag, sha);
+      return sha;
+    };
 
-    // Non-empty-range guard (spec §10.5): the deployed SHA must be a strict
-    // descendant of the latest release. `merge-base --is-ancestor A B` exits 0
-    // when A is an ancestor of B; only checked when the two SHAs differ (an equal
-    // SHA is an ancestor of itself, but that is the empty-range redeploy case the
-    // pure guard rejects first).
-    let releaseIsAncestor = false;
-    if (latestReleaseSha && latestReleaseSha !== targetSha) {
-      releaseIsAncestor =
-        exec("git", [
-          "merge-base",
-          "--is-ancestor",
-          latestReleaseSha,
-          targetSha,
-        ]).status === 0;
+    // BASE tag = the newest `release-*` tag that is an ANCESTOR of the target
+    // (#1881, spec §10.11) — the tag order alone is wrong once a hotfix release
+    // exists off `main`. `merge-base --is-ancestor A B` exits 0 when A is an
+    // ancestor of B; a tag at the target SHA counts (that is the redeploy case
+    // the pure guard rejects next, by an empty range).
+    const baseTag = pickBaseReleaseTag(existingTags, (tag) => {
+      const sha = tagSha(tag);
+      if (!sha) return false;
+      if (sha === targetSha) return true;
+      return (
+        exec("git", ["merge-base", "--is-ancestor", sha, targetSha]).status === 0
+      );
+    });
+    const latestReleaseSha = baseTag ? tagSha(baseTag) : null;
+
+    // Non-empty-range guard (spec §10.5): the target must be a strict descendant
+    // of the base release. With an ancestor-picked base, `releaseIsAncestor` is
+    // true by construction whenever a base was found and it is not the target
+    // itself; when NO tag is an ancestor the guard skips the cut, as before.
+    const releaseIsAncestor = Boolean(
+      latestReleaseSha && latestReleaseSha !== targetSha,
+    );
+
+    // Releases exist, but none of them is an ancestor of the target: the target
+    // is behind or on an unrelated line of history. Never cut a backwards or
+    // empty release (the pre-#1881 `releaseIsAncestor === false` branch).
+    if (!latestReleaseSha && sortReleaseTagsDesc(existingTags).length > 0) {
+      const reason =
+        "no release tag is an ancestor of the target SHA (behind / diverged)";
+      log(`no release cut — ${reason}.`);
+      return { cut: false, reason };
     }
 
     const decision = shouldCutDeployRelease({
@@ -241,18 +331,36 @@ export function cutDeployRelease({
     const tag = nextReleaseTag(existingTags, todayDateStr(now));
 
     // Cut the GitHub Release with auto-generated, categorised notes diffed since
-    // the previous release. `gh` creates the underlying git tag at --target (the
-    // deployed SHA) when it does not yet exist.
-    const rel = exec("gh", [
-      "release",
-      "create",
-      tag,
-      "--generate-notes",
-      "--target",
-      targetSha,
-      "--title",
-      tag,
-    ]);
+    // the BASE tag (`--notes-start-tag`), not since whatever tag happens to sort
+    // newest. `gh` creates the underlying git tag at --target (the deployed SHA)
+    // when it does not yet exist.
+    const args = ["release", "create", tag, "--generate-notes"];
+    if (baseTag) args.push("--notes-start-tag", baseTag);
+    args.push("--target", targetSha);
+
+    if (hotfix) {
+      // The cherry-picked PR list, from the same `(#N)` subject convention the
+      // release digest reads (shared `extractPrNumbers` — never re-parsed here).
+      let prNumbers = [];
+      if (baseTag) {
+        const logRes = exec("git", [
+          "log",
+          "--format=%s",
+          `${baseTag}..${targetSha}`,
+        ]);
+        if (logRes.status === 0) {
+          prNumbers = extractPrNumbers(
+            (logRes.stdout || "").split(/\r?\n/).filter(Boolean),
+          );
+        }
+      }
+      const copy = hotfixReleaseCopy({ tag, baseTag, prNumbers });
+      args.push("--title", copy.title, "--notes", copy.notes);
+    } else {
+      args.push("--title", tag);
+    }
+
+    const rel = exec("gh", args);
     if (rel.status !== 0) {
       log(
         `⚠ \`gh release create ${tag}\` failed — skipping (green): ${(
@@ -262,7 +370,8 @@ export function cutDeployRelease({
       return { cut: false, reason: "gh release create failed" };
     }
     log(
-      `cut release ${tag} at ${targetSha.slice(0, 12)} (${decision.reason}).`,
+      `cut ${hotfix ? "HOTFIX release" : "release"} ${tag} at ${targetSha.slice(0, 12)}` +
+        ` (base ${baseTag ?? "none"}; ${decision.reason}).`,
     );
     return { cut: true, tag, reason: decision.reason };
   } catch (e) {

@@ -1,8 +1,25 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  checksAllGreen,
   claimLabel,
   classify,
+  closesRefs,
+  findLikelyDone,
+  findOrphans,
+  findStalled,
+  findWaitForReuse,
+  formatLikelyDone,
+  formatOrphans,
+  formatReleaseRotation,
+  formatStalled,
+  formatWaitForReuse,
+  parseCapabilityRegistry,
+  parseReuseField,
+  parseStalledDays,
+  releaseRotation,
+  type OrphanInput,
+  type StalledIssue,
   classifyPrBoardRows,
   detectClaim,
   evaluateRationale,
@@ -985,6 +1002,500 @@ describe("PR board hygiene (#1140)", () => {
       );
       expect(out).toContain("### Dead rows (1)");
       expect(out).not.toContain("Under-fielded");
+    });
+  });
+});
+
+/**
+ * Grooming sections (#1873) — the deterministic half of a backlog groom.
+ * Fixture-driven: no `gh`, no filesystem, no platform-specific paths.
+ */
+describe("grooming sections (#1873)", () => {
+  describe("parseReuseField", () => {
+    it("parses canon / extract-from / new, including a multi-path value", () => {
+      expect(
+        parseReuseField(
+          "## Reuse\n\nReuse: canon: tools/backlog-triage.ts (extend), apps/docs/content/skills/x.md\n",
+        ),
+      ).toEqual([
+        { kind: "canon", path: "tools/backlog-triage.ts" },
+        { kind: "canon", path: "apps/docs/content/skills/x.md" },
+      ]);
+      expect(
+        parseReuseField("Reuse: extract-from: packages/room/src/a.tsx (#1722)"),
+      ).toEqual([
+        { kind: "extract-from", path: "packages/room/src/a.tsx", issue: 1722 },
+      ]);
+      expect(parseReuseField("Reuse: new: nothing canonical yet")).toEqual([
+        { kind: "new", path: "" },
+      ]);
+    });
+
+    it("ignores prose mentioning reuse and non-path values", () => {
+      expect(parseReuseField("We should reuse the room shell somehow.")).toEqual(
+        [],
+      );
+      expect(parseReuseField("Reuse: canon: RoomShell")).toEqual([]);
+    });
+  });
+
+  describe("parseCapabilityRegistry", () => {
+    const md = [
+      "| Capability | Canonical location | Kind | Extraction / debt |",
+      "| ---------- | ------------------ | ---- | ----------------- |",
+      "| Live room UI | `packages/room` over `apps/portal/app/webinars` | app-local | tracked by **#1722** (open) |",
+      "| Event card | `packages/design-system/src/primitives/webinar-card.tsx` | shared package | landed (#1517) |",
+    ].join("\n");
+
+    it("skips header + separator rows and collects every #N in the row", () => {
+      const rows = parseCapabilityRegistry(md);
+      expect(rows).toHaveLength(2);
+      expect(rows[0]!.capability).toBe("Live room UI");
+      expect(rows[0]!.canonical).toContain("packages/room");
+      expect(rows[0]!.issues).toEqual([1722]);
+      expect(rows[1]!.issues).toEqual([1517]);
+    });
+  });
+
+  describe("findWaitForReuse", () => {
+    const registry = parseCapabilityRegistry(
+      [
+        "| Capability | Canonical location | Kind | Extraction / debt |",
+        "| --- | --- | --- | --- |",
+        "| Live room UI | `packages/room` | shared package | tracked by #1722 (open) |",
+      ].join("\n"),
+    );
+    const building = {
+      number: 1722,
+      title: "Extract packages/room",
+      track: "track:doctor",
+      reuse: parseReuseField("Reuse: canon: packages/room"),
+      building: true,
+    };
+
+    it("holds a track:academy Issue whose canon path the doctor track is building", () => {
+      const rows = findWaitForReuse(
+        [
+          {
+            number: 1900,
+            title: "Academy room re-seat",
+            track: "track:academy",
+            reuse: parseReuseField("Reuse: canon: packages/room"),
+            building: false,
+          },
+          building,
+        ],
+        registry,
+      );
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({
+        number: 1900,
+        blocker: 1722,
+        blockerTrack: "track:doctor",
+        path: "packages/room",
+        via: "registry",
+      });
+    });
+
+    it("matches via the paired Issue's own Reuse: field when it is being built", () => {
+      const rows = findWaitForReuse(
+        [
+          {
+            number: 1900,
+            title: "Academy calendar",
+            track: "track:academy",
+            reuse: parseReuseField("Reuse: canon: packages/calendar"),
+            building: false,
+          },
+          {
+            number: 1901,
+            title: "Doctor calendar",
+            track: "track:doctor",
+            reuse: parseReuseField("Reuse: canon: packages/calendar"),
+            building: true,
+          },
+        ],
+        [],
+      );
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({ blocker: 1901, via: "reuse-field" });
+    });
+
+    it("does not hold a `new:` ref, a same-track pair, or an unclaimed twin", () => {
+      const base = { number: 1900, title: "A", building: false };
+      expect(
+        findWaitForReuse(
+          [
+            {
+              ...base,
+              track: "track:academy",
+              reuse: parseReuseField("Reuse: new: greenfield"),
+            },
+            building,
+          ],
+          registry,
+        ),
+      ).toEqual([]);
+      expect(
+        findWaitForReuse(
+          [
+            {
+              ...base,
+              track: "track:doctor",
+              reuse: parseReuseField("Reuse: canon: packages/room"),
+            },
+            building,
+          ],
+          registry,
+        ),
+      ).toEqual([]);
+      expect(
+        findWaitForReuse(
+          [
+            {
+              ...base,
+              track: "track:academy",
+              reuse: parseReuseField("Reuse: canon: packages/calendar"),
+            },
+            {
+              number: 1901,
+              title: "B",
+              track: "track:doctor",
+              reuse: parseReuseField("Reuse: canon: packages/calendar"),
+              building: false,
+            },
+          ],
+          [],
+        ),
+      ).toEqual([]);
+    });
+  });
+
+  describe("formatReport + wait-for-reuse", () => {
+    const triage = (number: number): Triage => ({
+      number,
+      title: `Issue ${number}`,
+      readiness: "takeable",
+      reasons: [],
+      notes: [],
+      isDecisionDebt: false,
+      stream: "product",
+      noKindLabel: false,
+    });
+
+    it("lists a WAIT-FOR-REUSE row in its own section and NOT under Takeable", () => {
+      const out = formatReport(
+        [triage(1900), triage(1901)],
+        [],
+        [
+          {
+            number: 1900,
+            title: "Academy room re-seat",
+            track: "track:academy",
+            path: "packages/room",
+            blocker: 1722,
+            blockerTrack: "track:doctor",
+            via: "registry",
+          },
+        ],
+      );
+      expect(out).toContain("## Wait for reuse (1)");
+      expect(out).toContain("### track:academy (1)");
+      expect(out).toContain(
+        "- #1900 WAIT-FOR-REUSE (#1722, track:doctor) via registry — `packages/room`",
+      );
+      expect(out).toContain("## Takeable (1)");
+      expect(out).toContain("- #1901");
+      expect(out).not.toContain("- #1900 Issue 1900");
+    });
+
+    it("prints exactly one `none` line for an empty section", () => {
+      expect(formatWaitForReuse([])).toContain("\nnone");
+      expect(formatOrphans([])).toContain("\nnone");
+      expect(formatStalled([])).toContain("\nnone");
+      expect(formatLikelyDone([])).toContain("\nnone");
+      expect(formatReleaseRotation([])).toContain("\nnone");
+    });
+  });
+
+  describe("findOrphans", () => {
+    const heads = [
+      { track: "track:academy", head: "Академия R1 — Архив записей" },
+      { track: "track:doctor", head: "Витрина R1 — MVP витрины" },
+    ];
+    const row = (over: Partial<OrphanInput> = {}): OrphanInput => ({
+      number: 1900,
+      title: "Some work",
+      labels: ["track:academy", "feature"],
+      milestone: "Академия R3 — Города",
+      hasNativeBlockedBy: false,
+      hasParent: false,
+      ...over,
+    });
+
+    it("flags an unattached off-head Issue with all three reason tokens", () => {
+      const out = findOrphans([row()], heads);
+      expect(out).toHaveLength(1);
+      expect(out[0]!.reasons).toEqual([
+        "no-blocker",
+        "no-parent",
+        "off-head (Академия R3 — Города)",
+      ]);
+      expect(formatOrphans(out)).toContain("### track:academy (1)");
+    });
+
+    it("never flags an attached, head-milestoned, epic/gate or headless-track Issue", () => {
+      expect(findOrphans([row({ hasNativeBlockedBy: true })], heads)).toEqual(
+        [],
+      );
+      expect(findOrphans([row({ hasParent: true })], heads)).toEqual([]);
+      expect(
+        findOrphans([row({ milestone: "Академия R1 — Архив записей" })], heads),
+      ).toEqual([]);
+      expect(findOrphans([row({ title: "epic: academy" })], heads)).toEqual([]);
+      expect(findOrphans([row({ title: "gate: design" })], heads)).toEqual([]);
+      expect(findOrphans([row()], [])).toEqual([]);
+    });
+  });
+
+  describe("closesRefs / checksAllGreen", () => {
+    it("reads every closing keyword and ignores a plain mention", () => {
+      expect(
+        closesRefs("Closes #12\nFixes #7\nResolves #99\nsee #500"),
+      ).toEqual([7, 12, 99]);
+    });
+
+    it("takes the LATEST run per check name and refuses a zero-check PR", () => {
+      expect(
+        checksAllGreen([
+          {
+            name: "ci",
+            status: "COMPLETED",
+            conclusion: "FAILURE",
+            completedAt: "2026-09-05T06:00:00Z",
+          },
+          {
+            name: "ci",
+            status: "COMPLETED",
+            conclusion: "SUCCESS",
+            completedAt: "2026-09-05T07:00:00Z",
+          },
+        ]),
+      ).toBe(true);
+      expect(
+        checksAllGreen([
+          {
+            name: "ci",
+            status: "COMPLETED",
+            conclusion: "SUCCESS",
+            completedAt: "2026-09-05T07:00:00Z",
+          },
+          { name: "guards", status: "IN_PROGRESS", conclusion: null },
+        ]),
+      ).toBe(false);
+      expect(checksAllGreen([])).toBe(false);
+    });
+  });
+
+  describe("findStalled / findLikelyDone", () => {
+    const issue = (over: Partial<StalledIssue> = {}): StalledIssue => ({
+      number: 1900,
+      title: "Some work",
+      labels: ["track:doctor"],
+      claimAgeMs: null,
+      ...over,
+    });
+    const DAY = 24 * 60 * 60 * 1000;
+    const green = [
+      {
+        name: "ci",
+        status: "COMPLETED",
+        conclusion: "SUCCESS",
+        completedAt: "2026-09-05T07:00:00Z",
+      },
+    ];
+
+    it("flags a merged `Closes #N` whose Issue is still open (c) + Likely done", () => {
+      const merged = [
+        { number: 1880, title: "feat: thing", body: "Closes #1900" },
+      ];
+      const rows = findStalled({
+        issues: [issue()],
+        openPrs: [],
+        mergedPrs: merged,
+        stalledDays: 3,
+      });
+      expect(rows).toHaveLength(1);
+      expect(rows[0]!.kind).toBe("MERGED-BUT-OPEN");
+      expect(rows[0]!.number).toBe(1900);
+      expect(formatStalled(rows)).toContain("### track:doctor (1)");
+      expect(findLikelyDone([issue()], merged)).toEqual([
+        { number: 1900, title: "Some work", track: "track:doctor", prs: [1880] },
+      ]);
+      // A closed Issue is not MERGED-BUT-OPEN — the keyword did its job.
+      expect(
+        findStalled({
+          issues: [],
+          openPrs: [],
+          mergedPrs: merged,
+          stalledDays: 3,
+        }),
+      ).toEqual([]);
+    });
+
+    it("flags a stale claim only past the threshold and only without an open PR", () => {
+      const stale = {
+        issues: [issue({ claimAgeMs: 5 * DAY })],
+        openPrs: [],
+        mergedPrs: [],
+        stalledDays: 3,
+      };
+      expect(findStalled(stale)[0]!.kind).toBe("STALE-CLAIM");
+      expect(findStalled({ ...stale, stalledDays: 7 })).toEqual([]);
+      expect(
+        findStalled({
+          ...stale,
+          openPrs: [
+            {
+              number: 42,
+              title: "feat: x",
+              body: "Closes #1900",
+              headRefOid: "abc",
+              reviews: [],
+              checks: [],
+            },
+          ],
+        }),
+      ).toEqual([]);
+    });
+
+    it("flags a head-pinned APPROVE + green PR as READY-TO-LAND; a stale pin or red CI is nothing", () => {
+      const pr = {
+        number: 1868,
+        title: "tooling: thing",
+        body: "Closes #1900",
+        headRefOid: "deadbeefcafe",
+        reviews: [
+          {
+            body: "## Mode (a) Review\n\nVERDICT: APPROVE\n",
+            commit_id: "deadbeefcafe",
+            submitted_at: "2026-09-05T07:30:00Z",
+          },
+        ],
+        checks: green,
+      };
+      const rows = findStalled({
+        issues: [issue()],
+        openPrs: [pr],
+        mergedPrs: [],
+        stalledDays: 3,
+      });
+      expect(rows.map((r) => r.kind)).toEqual(["READY-TO-LAND"]);
+      expect(rows[0]!.number).toBe(1868);
+      expect(rows[0]!.track).toBe("track:doctor");
+      expect(rows[0]!.detail).toContain("closes #1900");
+      expect(
+        findStalled({
+          issues: [issue()],
+          openPrs: [{ ...pr, headRefOid: "0000000newhead" }],
+          mergedPrs: [],
+          stalledDays: 3,
+        }),
+      ).toEqual([]);
+      expect(
+        findStalled({
+          issues: [issue()],
+          openPrs: [
+            {
+              ...pr,
+              checks: [
+                { name: "ci", status: "COMPLETED", conclusion: "FAILURE" },
+              ],
+            },
+          ],
+          mergedPrs: [],
+          stalledDays: 3,
+        }),
+      ).toEqual([]);
+    });
+  });
+
+  describe("releaseRotation", () => {
+    const milestones = [
+      {
+        title: "Витрина R1 — MVP витрины",
+        due_on: "2026-09-10T00:00:00Z",
+        state: "open",
+      },
+      {
+        title: "Витрина R2 — Профиль",
+        due_on: "2026-09-24T00:00:00Z",
+        state: "open",
+      },
+      {
+        title: "Витрина R0 — Прошлый",
+        due_on: "2026-08-01T00:00:00Z",
+        state: "open",
+      },
+      { title: "Витрина · Позже", due_on: null, state: "open" },
+    ];
+    const now = Date.parse("2026-09-05T00:00:00Z");
+
+    it("orders a track's milestones and flags EMPTY-NEXT / ALL-CLOSED-STILL-OPEN / POZHE", () => {
+      const doctor = releaseRotation(
+        milestones,
+        [
+          { milestone: "Витрина R2 — Профиль" },
+          { milestone: "Витрина · Позже" },
+          { milestone: "Витрина · Позже" },
+        ],
+        now,
+      ).find((t) => t.track === "track:doctor")!;
+      expect(doctor.head).toBe("Витрина R0 — Прошлый");
+      expect(doctor.rows.map((r) => r.title)).toEqual([
+        "Витрина R0 — Прошлый",
+        "Витрина R1 — MVP витрины",
+        "Витрина R2 — Профиль",
+        "Витрина · Позже",
+      ]);
+      expect(doctor.rows[0]!.flags).toEqual([
+        "QUEUE-HEAD",
+        "ALL-CLOSED-STILL-OPEN",
+      ]);
+      expect(doctor.rows[1]!.flags).toEqual(["EMPTY-NEXT"]);
+      expect(doctor.rows[2]!.flags).toEqual([]);
+      expect(doctor.rows[3]!.flags).toEqual(["POZHE: 2"]);
+      const out = formatReleaseRotation([doctor]);
+      expect(out).toContain("### track:doctor (head: Витрина R0 — Прошлый)");
+      expect(out).toContain("[EMPTY-NEXT]");
+    });
+
+    it("does not flag EMPTY-NEXT when the next release is filled", () => {
+      const doctor = releaseRotation(
+        milestones,
+        [{ milestone: "Витрина R1 — MVP витрины" }],
+        now,
+      ).find((t) => t.track === "track:doctor")!;
+      expect(doctor.rows[1]!.flags).toEqual([]);
+    });
+
+    it("buckets a non-track milestone under track:platform", () => {
+      expect(
+        releaseRotation(
+          [{ title: "Platform ops & hardening", due_on: null, state: "open" }],
+          [],
+          now,
+        ).map((t) => t.track),
+      ).toEqual(["track:platform"]);
+    });
+  });
+
+  describe("parseStalledDays", () => {
+    it("defaults to 3, accepts an explicit value, rejects garbage", () => {
+      expect(parseStalledDays([])).toBe(3);
+      expect(parseStalledDays(["--stalled-days", "7"])).toBe(7);
+      expect(parseStalledDays(["--stalled-days", "-2"])).toBe(3);
+      expect(parseStalledDays(["--stalled-days"])).toBe(3);
     });
   });
 });

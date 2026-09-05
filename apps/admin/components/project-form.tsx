@@ -180,7 +180,9 @@ export function ProjectForm({
           title={t("projects.fields.publicLink")}
           data-testid="project-public-link-note"
         >
-          <span data-testid="project-public-link">
+          {/* The derived URL is one unbreakable token: without an explicit break
+              it pushes the page fold at a phone width (#1674). */}
+          <span className="break-all" data-testid="project-public-link">
             {publicUrl ?? t("projects.fields.publicLinkPending")}
           </span>
           {publicUrl ? (

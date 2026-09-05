@@ -213,7 +213,22 @@ async function widestOffender(page: Page): Promise<string | null> {
         }
       }
       if (clipped) continue;
-      return `${el.tagName.toLowerCase()}.${(el.getAttribute("class") ?? "").slice(0, 140)} right=${Math.round(rect.right)}`;
+      // Name the node well enough to diagnose a CI-only failure from the log
+      // alone: its own identity, the ancestor chain of test ids it sits in, and
+      // the text it renders — a class string alone said only "some span".
+      const chain: string[] = [];
+      for (let p: Element | null = el; p; p = p.parentElement) {
+        const testId = p.getAttribute("data-testid");
+        if (testId) chain.push(testId);
+        if (chain.length >= 4) break;
+      }
+      const text = (el.textContent ?? "").trim().replace(/\s+/g, " ");
+      return [
+        `${el.tagName.toLowerCase()}.${(el.getAttribute("class") ?? "").slice(0, 140)}`,
+        `right=${Math.round(rect.right)}`,
+        `testid-chain=[${chain.join(" < ")}]`,
+        `text="${text.slice(0, 120)}"`,
+      ].join(" ");
     }
     return null;
   });

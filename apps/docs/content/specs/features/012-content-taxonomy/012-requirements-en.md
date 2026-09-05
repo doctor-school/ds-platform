@@ -57,7 +57,7 @@ lang: en
 - A content operator describes a project, expert, topic or partner once and reuses the same retained record everywhere.
 - Events relate to several projects, experts and topics through real many-to-many rows; projects relate to experts and partners in both directions.
 - An expert is one editorial record that may exist without a User or optionally link one existing User; a unique optional User reference prevents duplicate Experts for one User.
-- `event_experts` is the only authored and public speaker list, carrying event-specific role and order. `event_speakers` is legacy free-text input only, re-entered once by hand and then dropped; migration never name-merges.
+- `event_experts` is the only authored and public speaker list, carrying event-specific role and order. `event_speakers` is legacy free-text input only, dropped by the cutover release and its rows re-created once by hand afterwards; migration never name-merges.
 - Operators create, search, edit, publish, retire and restore taxonomy data in the existing Refine admin. No Delete action exists.
 - Later Academy surfaces read publish-safe taxonomy records and every relationship direction through `/v1` REST; no copy, export or synchronization step exists.
 

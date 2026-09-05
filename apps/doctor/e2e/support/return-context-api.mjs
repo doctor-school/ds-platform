@@ -10,10 +10,18 @@ import { createServer } from "node:http";
  * `specialty-choice-api.mjs`: a test DOUBLE of an upstream service, never a
  * stub inside the product code.
  *
- * It answers the ONE read the surface makes — `GET /v1/public/events/:idOrSlug`
- * — with a body shaped by `PublicEventPageSchema`, and 404s everything else so
- * the unresolvable-target branch is exercised against a real not-found rather
- * than a connection error.
+ * It answers the reads the surface makes — `GET /v1/public/events/:idOrSlug`
+ * with a body shaped by `PublicEventPageSchema`, and (021 EARS-3, #1539)
+ * `GET /v1/public/specialty-choice` with a body shaped by
+ * `SpecialtyChoiceSchema` — and 404s everything else so the unresolvable-target
+ * branch is exercised against a real not-found rather than a connection error.
+ *
+ * The specialty read is here because the LD-4 landing is also resolved on the
+ * SERVER, from the forwarded `__Host-ds_specialty` cookie, and is therefore
+ * just as unreachable from the browser as the event read. The double answers it
+ * the way `specialty-choice-api.mjs` does — the cookie names an entry or it does
+ * not — so the direct-arrival tier drives the same store the real api reads
+ * rather than a tier-local switch.
  */
 const port = Number(process.env.DOCTOR_FAKE_API_PORT ?? 3214);
 
@@ -49,10 +57,35 @@ const EVENT = {
   },
 };
 
+/**
+ * The one specialty the direct-arrival tier can remember (021 EARS-3, #1539).
+ * Shaped by `SpecialtyRefSchema`; its id is what the `__Host-ds_specialty`
+ * cookie carries, exactly as `specialty-choice-api.mjs` models the guest store.
+ */
+const SPECIALTY = {
+  id: "00000000-0000-4000-8000-000000000001",
+  code: "kardiologiya",
+  name: "Кардиология",
+  isOther: false,
+};
+
 const server = createServer((request, response) => {
   const url = new URL(request.url ?? "/", `http://${request.headers.host}`);
 
   if (url.pathname === "/health") return json(response, 200, { ok: true });
+
+  if (url.pathname === "/v1/public/specialty-choice") {
+    const remembered = /(?:^|;\s*)__Host-ds_specialty=([^;]*)/.exec(
+      request.headers.cookie ?? "",
+    );
+    return json(
+      response,
+      200,
+      remembered && decodeURIComponent(remembered[1]) === SPECIALTY.id
+        ? { specialty: SPECIALTY, storedIn: "session" }
+        : { specialty: null, storedIn: "none" },
+    );
+  }
 
   const match = /^\/v1\/public\/events\/([^/]+)$/.exec(url.pathname);
   if (match) {

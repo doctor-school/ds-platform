@@ -116,6 +116,25 @@ export function toReturnContextEvent(page: PublicEventPage): ReturnContextEvent 
 }
 
 /**
+ * The SAFE return target of an arrival — the guard's own reconstruction of the
+ * value, never the raw param — or `null` when the arrival carries none.
+ *
+ * 021 EARS-3 / LD-3 (#1539). The route publishes where this arrival will land
+ * after confirmation, and for a gate arrival that landing IS the return target.
+ * Publishing `raw` there would put an unvalidated string on the document; this
+ * named wrapper hands back what `parseReturnTarget` rebuilt from the parts it
+ * accepted, so the one vocabulary and the one open-redirect guard stay the same
+ * single entry point the module header describes. It re-parses rather than
+ * caching: the guard is pure, and a second call is cheaper than a second copy
+ * of the value living somewhere it could drift from.
+ */
+export function resolveReturnTargetPath(
+  returnTo: string | undefined,
+): string | null {
+  return parseReturnTarget(returnTo)?.returnTo ?? null;
+}
+
+/**
  * Resolve the raw `returnTo` value to a card projection, or `null` when there is
  * nothing honest to show. `fetchImpl` is injected for tests, exactly as
  * `fetchScaleStatistics` / `fetchSessionClaims` do it.

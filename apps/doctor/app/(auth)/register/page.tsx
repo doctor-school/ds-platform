@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 
 import { AuthShell } from "@/components/auth-shell";
 import { RegistrationScreen } from "@/components/registration-screen";
@@ -6,10 +7,13 @@ import {
   ReturnContextPanel,
   ReturnContextPlate,
 } from "@/components/return-context-card";
+import { resolveDirectArrivalLanding } from "@/lib/registration-landing";
 import {
   RETURN_CONTEXT_PARAM,
   resolveReturnContext,
+  resolveReturnTargetPath,
 } from "@/lib/return-context";
+import { resolveRememberedSpecialty } from "@/lib/specialty-choice";
 
 /**
  * 021 EARS-1 — `#d-register`, the doctor registration route (`doctor.school/register`,
@@ -45,7 +49,21 @@ import {
  * `null`, and then NOTHING is passed: the left half falls back to the brand
  * panel's value prop and the form column carries no plate. Absent from the tree,
  * never an empty frame (EARS-3, and the requirements invariant on this card).
- * EARS-3's own fuller direct-arrival copy is #1539 and is not built here.
+ *
+ * 021 EARS-3 (#1539) — THE DIRECT ARRIVAL. The doctor who opened the door on
+ * their own is not a degraded gate arrival; they are the ordinary case. Nothing
+ * stands in for the context they do not have — the left half is the brand value
+ * prop, the form column carries no plate — and the one thing the surface still
+ * has to decide for them is WHERE THEY LAND once registration completes, because
+ * there is by construction no target to return them to. LD-4 answers it:
+ * `lib/registration-landing.ts` maps what 017 remembers about this visitor onto
+ * the 019 events feed (`/events`) or the storefront home (`/`), and never onto
+ * the account page. The route publishes the answer as a server fact on the form
+ * (`data-registration-landing`) — the same «the whole screen is a function of
+ * the entry URL» read model the return context uses — and #1546 consumes it as
+ * the success state's primary action. ONE ATTRIBUTE, ONE VOCABULARY: when a
+ * return context DID resolve, that same attribute carries the context's safe
+ * target, the shared guard's reconstruction and never the raw param (LD-3).
  *
  * The remaining envelope slots are still unsupplied, which is the correct state
  * of this slice and not an omission: the attribution line (#1544), the points
@@ -59,9 +77,16 @@ import {
  * door does not open yet — the submit is inert pending the EARS-19 bot-protection
  * client half and the EARS-4/5 consent precondition (see the component header).
  *
- * No `headers()` read here: nothing on this screen is per-visitor — the event
- * read is `access: public` and identical for every caller, so it carries no
- * session and no fingerprint surface.
+ * ONE `headers()` READ, AND ONLY ON A DIRECT ARRIVAL. The rendered screen is
+ * not per-visitor — the event read behind the return context is `access:
+ * public` and identical for every caller — but the LD-4 landing IS: it depends
+ * on the specialty 017 remembers for whoever is at the door, which lives in
+ * their session cookie or their profile. So the request headers are read
+ * exactly once, on the branch that needs them, and are forwarded through the
+ * one shared resolver (`lib/specialty-choice.ts` → `resolveRememberedSpecialty`,
+ * the same call `app/(storefront)/page.tsx` makes) rather than inspected here.
+ * The route is therefore dynamic; a gate arrival takes the branch that reads no
+ * headers at all.
  */
 export const metadata: Metadata = {
   title: "Регистрация — Doctor.School",
@@ -80,7 +105,24 @@ export default async function DoctorRegisterPage({
   // request being rejected — a malformed return context degrades to no context,
   // it never breaks the door.
   const returnTo = Array.isArray(raw) ? raw[0] : raw;
-  const returnEvent = await resolveReturnContext(returnTo);
+  // The guard's reconstruction of the arrival's target — the ONE vocabulary,
+  // resolved before the read so the same value serves the context and the
+  // landing, and the raw param serves neither.
+  const safeTarget = resolveReturnTargetPath(returnTo);
+  const returnEvent = safeTarget
+    ? await resolveReturnContext(safeTarget)
+    : null;
+
+  // EARS-3 / LD-4 — where this arrival lands after confirmation. A gate arrival
+  // lands back on the эфир it came from; a direct arrival lands where 017's
+  // remembered specialty says, which is the only per-visitor fact on the route
+  // and the only reason it reads `headers()` (see the module header).
+  const landing =
+    safeTarget && returnEvent
+      ? safeTarget
+      : resolveDirectArrivalLanding(
+          await resolveRememberedSpecialty(await headers()),
+        );
 
   return (
     <AuthShell
@@ -89,6 +131,7 @@ export default async function DoctorRegisterPage({
       }
     >
       <RegistrationScreen
+        landing={landing}
         returnContext={
           returnEvent ? <ReturnContextPlate event={returnEvent} /> : undefined
         }

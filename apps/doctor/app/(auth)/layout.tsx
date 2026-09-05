@@ -25,8 +25,12 @@ import type { ReactNode } from "react";
  * boundary and to be the anchor for the auth routes that follow (login, verify,
  * reset), which must not drift back under the shell.
  *
- * No `headers()` read, unlike the shell layout: nothing on an auth screen is
- * per-visitor, so these routes stay statically renderable.
+ * No `headers()` read HERE, unlike the shell layout: the group adds no
+ * per-visitor element of its own, so it imposes no dynamic rendering on the
+ * routes beneath it. What an auth route itself decides per visitor is that
+ * route's business — `/register` reads the headers once to resolve 021's LD-4
+ * landing for a direct arrival (`app/(auth)/register/page.tsx`) — and the
+ * layout neither reads that state nor renders anything derived from it.
  */
 export default function AuthLayout({ children }: { children: ReactNode }) {
   return <>{children}</>;

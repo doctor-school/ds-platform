@@ -73,14 +73,21 @@
  *     implementation; the matched path is always printed.
  *   - `## Orphans`            — open, no native `blocked_by`, no sub-issue
  *     parent, milestone ≠ the track's queue head (`no-blocker`, `no-parent`,
- *     `off-head (<milestone>)`). Fails open when no head is computable (#1857).
+ *     `off-head (<milestone>)`). Fails open when no head is computable (#1857),
+ *     and the whole section degrades to one `skipped` line when the board scan
+ *     that carries the sub-issue parent probe failed.
  *   - `## Stalled`            — undelivered work to DRAIN first: `STALE-CLAIM`
  *     (claim older than `--stalled-days`, default 3, with no open PR),
  *     `READY-TO-LAND` (open PR with a head-pinned Mode-a APPROVE + green checks,
  *     unmerged — the #1867 rule, reused from `merge-gate.mjs`), `MERGED-BUT-OPEN`
  *     (a merged PR says `Closes #N`, #N still open).
- *   - `## Likely done`        — an open Issue any MERGED PR mentions (superset
- *     of Stalled (c)); verify against the diff, then close.
+ *   - `## Likely done`        — an open Issue a MERGED PR claims to DELIVER:
+ *     either it closes it (`Closes/Fixes/Resolves #N`) or it carries it as the
+ *     Conventional-Commit scope of the PR title (`type(N):` / `type(N-slug):`).
+ *     A bare `#N` mention is NOT delivery evidence — merged bodies here are
+ *     dense with roadmap/board/dependency refs, and matching them flagged 55%
+ *     of the open backlog. `epic:` / `gate:` Issues are excluded (they outlive
+ *     every PR that names them). Verify against the diff, then close.
  *   - `## Release rotation`   — per track, open milestones in queue order with
  *     their open counts and the `EMPTY-NEXT` / `ALL-CLOSED-STILL-OPEN` /
  *     `POZHE: n` flags.
@@ -1206,11 +1213,28 @@ export function findOrphans(
   return out.sort((a, b) => a.number - b.number);
 }
 
-/** Render the `## Orphans` section (#1873). */
-export function formatOrphans(rows: Orphan[]): string {
+const ORPHANS_LEAD =
+  "Open, unattached to the critical path: no native `blocked_by`, no sub-issue parent, milestone ≠ the track's queue head. Judge each one — attach to its epic, wire a technical `blocked_by` WITH a rationale, re-milestone, or ask the owner. Listing only: nothing is closed or re-linked here.";
+
+/**
+ * Render the `## Orphans` section (#1873). The sub-issue `parent` probe is the
+ * board scan; when that scan FAILED the whole section degrades to one skipped
+ * line rather than rendering with `no-parent` true for every Issue — a report
+ * telling the lead to re-link ~114 Issues that are already sub-issues is worse
+ * than no section at all (same fail-open posture as the missing queue head,
+ * #1857). The failure itself is already a `## Warnings` row.
+ */
+export function formatOrphans(rows: Orphan[], boardScanOk = true): string {
+  if (!boardScanOk) {
+    return [
+      "## Orphans (skipped)",
+      ORPHANS_LEAD,
+      "skipped — board scan failed (see Warnings); the sub-issue parent probe is unavailable, so every Issue would falsely read `no-parent`.",
+    ].join("\n");
+  }
   return formatTrackSection(
     "Orphans",
-    "Open, unattached to the critical path: no native `blocked_by`, no sub-issue parent, milestone ≠ the track's queue head. Judge each one — attach to its epic, wire a technical `blocked_by` WITH a rationale, re-milestone, or ask the owner. Listing only: nothing is closed or re-linked here.",
+    ORPHANS_LEAD,
     rows.map((r) => ({
       track: r.track,
       line: `- #${r.number} [${r.reasons.join(", ")}] ${truncateTitle(r.title, 70)}`,
@@ -1241,18 +1265,54 @@ export interface RollupCheck {
 
 const GREEN_CONCLUSIONS = new Set(["SUCCESS", "NEUTRAL", "SKIPPED"]);
 
+const NON_TERMINAL_STATES = new Set([
+  "IN_PROGRESS",
+  "QUEUED",
+  "PENDING",
+  "WAITING",
+  "REQUESTED",
+  "EXPECTED",
+]);
+
+/**
+ * Is this rollup entry still running? GitHub reports a run in flight with a
+ * non-terminal `status` AND the placeholder `completedAt: "0001-01-01T…"` —
+ * so the timestamp alone would sort an in-flight re-run BEHIND the older
+ * COMPLETED attempt it supersedes.
+ */
+export function isCheckInFlight(c: RollupCheck): boolean {
+  if (String(c?.completedAt ?? "").startsWith("0001-")) return true;
+  const status = String(c?.status ?? "").toUpperCase();
+  if (status && NON_TERMINAL_STATES.has(status)) return true;
+  const state = String(c?.state ?? "").toUpperCase();
+  return NON_TERMINAL_STATES.has(state);
+}
+
 /**
  * Keep only the LATEST run per check name. GitHub returns every attempt in the
  * rollup, so a re-run that fixed a red check still leaves the failed attempt in
- * the array — comparing the raw list would report a green PR as red.
+ * the array — comparing the raw list would report a green PR as red. Recency is
+ * keyed on `startedAt` (never on the `0001-` placeholder `completedAt` an
+ * in-flight run carries), and an in-flight attempt always wins its name: a
+ * re-run in progress must not read as the older green it is replacing.
  */
 export function latestChecks(checks: RollupCheck[]): RollupCheck[] {
   const byName = new Map<string, RollupCheck>();
   for (const c of Array.isArray(checks) ? checks : []) {
     const key = c?.name ?? "";
     const prev = byName.get(key);
-    const at = (x: RollupCheck) => x.completedAt ?? x.startedAt ?? "";
-    if (!prev || at(c) >= at(prev)) byName.set(key, c);
+    if (!prev) {
+      byName.set(key, c);
+      continue;
+    }
+    if (isCheckInFlight(prev)) continue;
+    const at = (x: RollupCheck) =>
+      x.startedAt ??
+      (String(x.completedAt ?? "").startsWith("0001-")
+        ? ""
+        : (x.completedAt ?? "")) ??
+      "";
+    if (isCheckInFlight(c) || at(c) >= at(prev)) byName.set(key, c);
   }
   return Array.from(byName.values());
 }
@@ -1263,8 +1323,13 @@ export function latestChecks(checks: RollupCheck[]): RollupCheck[] {
  * in flight is not green either.
  */
 export function checksAllGreen(checks: RollupCheck[]): boolean {
-  const latest = latestChecks(checks);
+  const all = Array.isArray(checks) ? checks : [];
+  const latest = latestChecks(all);
   if (latest.length === 0) return false;
+  // Any attempt of any check still running ⇒ the PR is not green, whatever the
+  // superseded attempts concluded (a spurious READY-TO-LAND is the worst row
+  // this report can print — the skill sends it straight to `ds-lander`).
+  if (all.some((c) => isCheckInFlight(c))) return false;
   return latest.every((c) => {
     const verdict = (c.conclusion ?? c.state ?? "").toUpperCase();
     if ((c.status ?? "COMPLETED").toUpperCase() !== "COMPLETED") return false;
@@ -1286,6 +1351,13 @@ export interface StalledOpenPr {
   }>;
   checks: RollupCheck[];
 }
+
+/**
+ * How far back the merged-PR scan looks. Printed in the `## Likely done` lead
+ * so a groom knows what was NOT looked at: an Issue whose closing PR merged
+ * beyond this horizon can never surface here.
+ */
+export const MERGED_PR_HORIZON = 100;
 
 /** A merged PR, reduced to the text the `Closes #N` scan reads. */
 export interface MergedPr {
@@ -1423,10 +1495,25 @@ export interface LikelyDone {
 }
 
 /**
- * Actuality (owner 2026-09-05): every open Issue mentioned as `#N` by a MERGED
- * PR's title or body — a superset of `findStalled` (c), because a PR often
- * delivers an Issue it never wrote `Closes` for. Candidates to VERIFY against
- * the merged diff and close; never auto-closed.
+ * The Issue number a Conventional-Commit PR title carries as its scope —
+ * `tooling(1873): …` / `feat(1722-slug): …` → `1873` / `1722`. This is the
+ * repo's own «this PR delivers that Issue» marker (AGENTS.md §2 squash title =
+ * PR title), so it is delivery evidence where a bare `#N` mention is not.
+ */
+export function titleScopeIssue(title: string): number | null {
+  const m = /^\s*[a-z]+\((\d+)(?:[^)]*)\)!?\s*:/i.exec(String(title ?? ""));
+  return m ? Number(m[1]) : null;
+}
+
+/**
+ * Actuality (owner 2026-09-05): an open Issue a MERGED PR claims to have
+ * DELIVERED — it closes it (`Closes/Fixes/Resolves #N`) or names it as the
+ * Conventional-Commit scope of its title. A bare `#N` mention is deliberately
+ * NOT enough: merged bodies in this repo carry roadmap, board and dependency
+ * references, and the mention rule flagged 106 of 191 open Issues, i.e. a list
+ * no groom can verify. `epic:` / `gate:` Issues are excluded — they are
+ * long-lived containers every slice PR names. Candidates to VERIFY against the
+ * merged diff and close; never auto-closed.
  */
 export function findLikelyDone(
   issues: StalledIssue[],
@@ -1434,8 +1521,14 @@ export function findLikelyDone(
 ): LikelyDone[] {
   const out: LikelyDone[] = [];
   for (const i of issues) {
+    const title = i.title.trim().toLowerCase();
+    if (title.startsWith("epic:") || title.startsWith("gate:")) continue;
     const prs = mergedPrs
-      .filter((p) => mentionsIssue(`${p.title}\n${p.body}`, i.number))
+      .filter(
+        (p) =>
+          closesRefs(`${p.title}\n${p.body}`).includes(i.number) ||
+          titleScopeIssue(p.title) === i.number,
+      )
       .map((p) => p.number)
       .sort((a, b) => a - b);
     if (prs.length === 0) continue;
@@ -1453,10 +1546,10 @@ export function findLikelyDone(
 export function formatLikelyDone(rows: LikelyDone[]): string {
   return formatTrackSection(
     "Likely done",
-    "Open, but a MERGED PR already mentions it. VERIFY against that PR's diff before closing (`gh pr diff <N>`), then close with a `state_reason` — the script never closes anything itself.",
+    `Open, but a MERGED PR claims to DELIVER it — it closes the Issue (\`Closes/Fixes/Resolves #N\`) or carries it as the Conventional-Commit scope of its title (\`type(N):\`). A bare \`#N\` mention is not delivery evidence and is not listed; \`epic:\` / \`gate:\` Issues are excluded. Horizon: the last ${MERGED_PR_HORIZON} merged PRs. VERIFY against that PR's diff before closing (\`gh pr diff <N>\`), then close with a \`state_reason\` — the script never closes anything itself.`,
     rows.map((r) => ({
       track: r.track,
-      line: `- #${r.number} mentioned by merged ${r.prs.map((p) => `PR #${p}`).join(", ")} — ${truncateTitle(r.title, 60)}`,
+      line: `- #${r.number} delivered by merged ${r.prs.map((p) => `PR #${p}`).join(", ")} — ${truncateTitle(r.title, 60)}`,
     })),
   );
 }
@@ -1740,7 +1833,7 @@ async function listBoardRows(): Promise<{
 async function listMergedPrs(): Promise<MergedPr[]> {
   const { stdout } = await execa(
     "gh",
-    ["pr", "list", "--state", "merged", "--limit", "100", "--json", "number,title,body"],
+    ["pr", "list", "--state", "merged", "--limit", String(MERGED_PR_HORIZON), "--json", "number,title,body"],
     { cwd: REPO_ROOT },
   );
   return JSON.parse(stdout) as MergedPr[];
@@ -2458,6 +2551,7 @@ async function main(): Promise<void> {
         })),
         queueHeads,
       ),
+      board != null,
     ),
     "",
   );

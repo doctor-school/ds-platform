@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   checksAllGreen,
   claimLabel,
+  latestChecks,
+  titleScopeIssue,
   classify,
   closesRefs,
   findLikelyDone,
@@ -1256,6 +1258,20 @@ describe("grooming sections (#1873)", () => {
       expect(findOrphans([row({ title: "gate: design" })], heads)).toEqual([]);
       expect(findOrphans([row()], [])).toEqual([]);
     });
+
+    it("degrades to ONE skipped line when the board scan (the parent probe) failed", () => {
+      // Without the board scan `hasParent` is false for every Issue, so the
+      // section would tell the lead to re-link ~114 already-parented Issues.
+      const out = findOrphans([row()], heads);
+      const degraded = formatOrphans(out, false);
+      expect(degraded).toContain("## Orphans (skipped)");
+      expect(degraded).toContain("skipped — board scan failed (see Warnings)");
+      expect(degraded).not.toContain("### track:academy");
+      expect(degraded).not.toContain("no-parent`]");
+      expect(degraded.split("\n")).toHaveLength(3);
+      // The healthy path is unchanged.
+      expect(formatOrphans(out, true)).toContain("### track:academy (1)");
+    });
   });
 
   describe("closesRefs / checksAllGreen", () => {
@@ -1294,6 +1310,62 @@ describe("grooming sections (#1873)", () => {
         ]),
       ).toBe(false);
       expect(checksAllGreen([])).toBe(false);
+    });
+
+    it("reads an in-flight re-run as NOT green even behind an older COMPLETED SUCCESS", () => {
+      // The live payload for a running check: non-terminal status AND the
+      // `0001-` placeholder `completedAt`, which sorts BEHIND the green attempt
+      // it supersedes (review finding on PR #1875).
+      const inFlight = [
+        {
+          name: "core",
+          status: "COMPLETED",
+          conclusion: "SUCCESS",
+          startedAt: "2026-09-05T06:00:00Z",
+          completedAt: "2026-09-05T06:30:00Z",
+        },
+        {
+          name: "core",
+          status: "IN_PROGRESS",
+          conclusion: null,
+          startedAt: "2026-09-05T07:00:00Z",
+          completedAt: "0001-01-01T00:00:00Z",
+        },
+      ];
+      expect(checksAllGreen(inFlight)).toBe(false);
+      expect(latestChecks(inFlight)).toHaveLength(1);
+      expect(latestChecks(inFlight)[0]!.status).toBe("IN_PROGRESS");
+      for (const state of ["QUEUED", "PENDING", "WAITING", "REQUESTED"]) {
+        expect(
+          checksAllGreen([
+            {
+              name: "core",
+              status: state,
+              conclusion: "SUCCESS",
+              startedAt: "2026-09-05T07:00:00Z",
+            },
+          ]),
+        ).toBe(false);
+      }
+      // …and a genuinely finished re-run still reads green.
+      expect(
+        checksAllGreen([
+          {
+            name: "core",
+            status: "COMPLETED",
+            conclusion: "FAILURE",
+            startedAt: "2026-09-05T06:00:00Z",
+            completedAt: "2026-09-05T06:30:00Z",
+          },
+          {
+            name: "core",
+            status: "COMPLETED",
+            conclusion: "SUCCESS",
+            startedAt: "2026-09-05T07:00:00Z",
+            completedAt: "2026-09-05T07:30:00Z",
+          },
+        ]),
+      ).toBe(true);
     });
   });
 
@@ -1417,6 +1489,46 @@ describe("grooming sections (#1873)", () => {
           stalledDays: 3,
         }),
       ).toEqual([]);
+    });
+
+    it("Likely done takes a `type(N):` title scope and REFUSES a bare mention or an epic", () => {
+      expect(titleScopeIssue("tooling(1873): thing")).toBe(1873);
+      expect(titleScopeIssue("feat(1722-slug)!: thing")).toBe(1722);
+      expect(titleScopeIssue("feat: no scope")).toBeNull();
+
+      // Positive: the Issue is the Conventional-Commit scope of a merged PR.
+      const scoped = [
+        { number: 1881, title: "feat(1900): the slice", body: "no keyword" },
+      ];
+      expect(findLikelyDone([issue()], scoped)).toEqual([
+        { number: 1900, title: "Some work", track: "track:doctor", prs: [1881] },
+      ]);
+
+      // Negative: a bare `#N` mention is roadmap/board prose, not delivery
+      // (the rule that flagged 106 of 191 open Issues — review on PR #1875).
+      expect(
+        findLikelyDone([issue()], [
+          {
+            number: 1882,
+            title: "tooling(1848): roadmap course-correction",
+            body: "board dates on the chain: #1900 stays behind #1899",
+          },
+        ]),
+      ).toEqual([]);
+
+      // Negative: an epic is a long-lived container every slice PR names.
+      expect(
+        findLikelyDone([issue({ title: "epic: academy surface" })], [
+          { number: 1883, title: "feat(1900): a slice", body: "Closes #1900" },
+        ]),
+      ).toEqual([]);
+      expect(
+        findLikelyDone([issue({ title: "gate: Stage-B for 017" })], scoped),
+      ).toEqual([]);
+
+      expect(formatLikelyDone(findLikelyDone([issue()], scoped))).toContain(
+        "delivered by merged PR #1881",
+      );
     });
   });
 

@@ -47,6 +47,26 @@ describe("006 EARS-6 room-return target guard (parseRoomReturnTarget)", () => {
     }
   });
 
+  it("019 EARS-12: a doctor-feed return target is not a room return on the academy host — no canonical room path is emitted", () => {
+    // The 019 feed shape (`/events?…&resume=<slug>`) lives on the DOCTOR host. The
+    // room guard strips `/room` and validates the remainder with the ACADEMY-scoped
+    // parser, so a hand-built `…&resume=abc/room` cannot launder itself into a
+    // "canonical room path" — and because the room check runs FIRST in
+    // `completeReturnTarget`, admitting it would have won over every later branch.
+    for (const feedShaped of [
+      "/events?tense=upcoming&resume=abc/room",
+      "/events?resume=ahilles-042/room",
+      "/events/room",
+    ]) {
+      expect(
+        parseRoomReturnTarget(feedShaped),
+        `must reject: ${feedShaped}`,
+      ).toBeNull();
+    }
+    // The bare feed target has no `/room` suffix at all — rejected a step earlier.
+    expect(parseRoomReturnTarget("/events?tense=upcoming&resume=abc")).toBeNull();
+  });
+
   it("EARS-6: rejects a non-string", () => {
     expect(parseRoomReturnTarget(null)).toBeNull();
     expect(parseRoomReturnTarget(undefined)).toBeNull();

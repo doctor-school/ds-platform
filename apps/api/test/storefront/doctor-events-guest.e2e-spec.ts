@@ -217,18 +217,19 @@ describe.skipIf(!process.env.DATABASE_URL)(
 
     it("019 EARS-12.3: the system shall deliver no gated payload to the anonymous reader", async () => {
       const anonymous = await readFeed();
-      const feed = DoctorEventsFeedSchema.parse(anonymous.json());
+      const body = anonymous.json();
+      const feed = DoctorEventsFeedSchema.parse(body);
 
       // The top-level key set is EXACTLY the public contract — no `myEvents`,
-      // no viewer block, nothing a session would have unlocked.
-      expect(Object.keys(feed).sort()).toEqual([
-        "days",
-        "from",
-        "nextTo",
-        "targeting",
-        "tense",
-        "to",
-      ]);
+      // no viewer block, nothing a session would have unlocked. The expectation
+      // is DERIVED from the contract schema rather than restated as a literal
+      // list, so the assertion cannot drift out of step with the SSOT: a key
+      // added to `DoctorEventsFeedSchema` is admitted here the moment it is
+      // declared, and a key the service emits WITHOUT declaring it is caught
+      // (the strict schema above rejects it, and this set comparison names it).
+      expect(Object.keys(body).sort()).toEqual(
+        Object.keys(DoctorEventsFeedSchema.shape).sort(),
+      );
       // `registered` is a per-viewer state; a read that carries no session can
       // never legitimately produce it.
       for (const card of feed.days.flatMap((day) => day.items)) {

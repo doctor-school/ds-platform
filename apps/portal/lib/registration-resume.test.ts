@@ -114,6 +114,24 @@ describe("005 EARS-2 guest-through-auth completion (registration resume)", () =>
     expect(registerForEvent).not.toHaveBeenCalled();
   });
 
+  it("019 EARS-12: a doctor-feed return target is not an academy intent — completeReturnTarget registers nothing and never treats it as an event page", async () => {
+    // 019's feed shape (`/events?<feed query>&resume=<slug>`) is a path on the
+    // DOCTOR host. This resume runs on the ACADEMY host, which completes only
+    // academy-shaped intents: no `RegisterForEvent` may fire for a slug this host
+    // never showed, and the value must not come back out as an event-page landing.
+    // (021's post-confirmation return on the doctor host is #1546.)
+    for (const feedShaped of [
+      "/events?tense=upcoming&resume=abc",
+      "/events?resume=ahilles-042",
+      "/events?tense=upcoming&resume=abc/room",
+    ]) {
+      const landing = await completeReturnTarget(feedShaped);
+      expect(registerForEvent, `must not register: ${feedShaped}`).not.toHaveBeenCalled();
+      // Never the 005 event page — the intent branch did not run.
+      expect(landing.startsWith("/webinars/")).toBe(false);
+    }
+  });
+
   it("EARS-2: currentReturnTarget reads the carried returnTo off the current URL query", () => {
     window.history.replaceState(
       null,

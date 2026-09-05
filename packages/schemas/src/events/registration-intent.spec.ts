@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   DOCTOR_EVENTS_FEED_RESUME_KEY,
   mintDoctorEventsFeedReturnTarget,
+  parseAcademyEventReturnTarget,
+  parseDoctorEventsFeedReturnTarget,
   parseReturnTarget,
   RegistrationIntentSchema,
 } from "./registration-intent.js";
@@ -117,6 +119,52 @@ describe("019 EARS-12 — the doctor-feed registration return target", () => {
       "/account",
     ]) {
       expect(parseReturnTarget(hostile)).toBeNull();
+    }
+  });
+  it("019 EARS-12.10: each host-scoped parser admits ONLY its own shape, while the union admits both", () => {
+    // A host completes only the intents its own surfaces can serve: the academy
+    // portal parses `/webinars/<slug>`, the doctor host parses the feed shape, and
+    // the UNION is what the api guard and the strict DTO use. Without the split, a
+    // feed-shaped target reaching the academy host would fire a registration and
+    // navigate to a path that does not exist there.
+    const academy = "/webinars/ahilles-042";
+    const feed = mintDoctorEventsFeedReturnTarget(FEED_QUERY, "kardio-forum")!;
+
+    expect(parseAcademyEventReturnTarget(academy)?.returnTo).toBe(academy);
+    expect(parseAcademyEventReturnTarget(feed)).toBeNull();
+
+    expect(parseDoctorEventsFeedReturnTarget(feed)?.returnTo).toBe(feed);
+    expect(parseDoctorEventsFeedReturnTarget(academy)).toBeNull();
+
+    expect(parseReturnTarget(academy)?.returnTo).toBe(academy);
+    expect(parseReturnTarget(feed)?.returnTo).toBe(feed);
+
+    // The per-shape parsers keep the union's value-level rejections — they narrow
+    // WHICH shapes are admitted, never how hard the value is validated.
+    for (const hostile of [
+      null,
+      undefined,
+      42,
+      "/webinars/\\evil",
+      "/events?tense=upcoming&resume=abc\\evil",
+    ]) {
+      expect(parseAcademyEventReturnTarget(hostile)).toBeNull();
+      expect(parseDoctorEventsFeedReturnTarget(hostile)).toBeNull();
+    }
+  });
+
+  it("019 EARS-12.11: a `resume` slug carrying a path separator is rejected by every parser — a slug is validated BEFORE any reconstruction", () => {
+    // The room guard strips a trailing `/room` before validating, so a
+    // `resume=<slug>/room` value must never survive as a feed target: `SLUG_RE`
+    // admits no `/`, and the value is rejected rather than reconstructed.
+    for (const smuggled of [
+      "/events?tense=upcoming&resume=abc/room",
+      "/events?resume=a/b",
+      "/events?resume=abc%2Froom",
+    ]) {
+      expect(parseReturnTarget(smuggled), `must reject: ${smuggled}`).toBeNull();
+      expect(parseDoctorEventsFeedReturnTarget(smuggled)).toBeNull();
+      expect(parseAcademyEventReturnTarget(smuggled)).toBeNull();
     }
   });
 });

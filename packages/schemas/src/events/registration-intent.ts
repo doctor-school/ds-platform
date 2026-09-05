@@ -128,6 +128,22 @@ export function parseReturnTarget(returnTo: unknown): RegistrationIntent | null 
  */
 type ReturnTargetShapeParser = (returnTo: string) => RegistrationIntent | null;
 
+/**
+ * Run ONE declared shape against a raw value, with the value-level rejections
+ * `parseReturnTarget` applies before any shape sees the input (non-string,
+ * backslash bypass). This is what makes a per-shape parser exactly as safe as
+ * the union — it differs only in WHICH shapes it admits, never in how hard it
+ * validates.
+ */
+function parseShapeStrictly(
+  parseShape: ReturnTargetShapeParser,
+  returnTo: unknown,
+): RegistrationIntent | null {
+  if (typeof returnTo !== "string") return null;
+  if (returnTo.includes("\\")) return null;
+  return parseShape(returnTo);
+}
+
 /** 1. `academy-event` — `/webinars/<slug>`, the 005 public event page. */
 function parseAcademyEventTarget(returnTo: string): RegistrationIntent | null {
   if (!returnTo.startsWith(RETURN_TARGET_PREFIX)) return null;
@@ -308,6 +324,35 @@ const RETURN_TARGET_SHAPES: readonly ReturnTargetShapeParser[] = [
   parseAcademyEventTarget,
   parseDoctorFeedTarget,
 ];
+
+/**
+ * The ACADEMY host's return-target parser: `/webinars/<slug>` and NOTHING else.
+ *
+ * A host completes only the intents its OWN surfaces can serve. The academy
+ * portal (`academy.doctor.school`) serves `/webinars/<slug>`; the doctor feed's
+ * `/events?…&resume=<slug>` is a path on a DIFFERENT host, so on the academy
+ * host it is not an intent at all — it must parse to `null` rather than send the
+ * visitor to a same-path-different-host URL (and fire `RegisterForEvent` on the
+ * way). 021's post-confirmation return on the doctor host is #1546; the union
+ * {@link parseReturnTarget} stays the guard for the doctor host and for
+ * {@link RegistrationIntentSchema}.
+ */
+export function parseAcademyEventReturnTarget(
+  returnTo: unknown,
+): RegistrationIntent | null {
+  return parseShapeStrictly(parseAcademyEventTarget, returnTo);
+}
+
+/**
+ * The DOCTOR host's feed return-target parser: `/events?<feed query>&resume=<slug>`
+ * and nothing else — the counterpart of {@link parseAcademyEventReturnTarget} for
+ * the host that owns the feed (019 EARS-12).
+ */
+export function parseDoctorEventsFeedReturnTarget(
+  returnTo: unknown,
+): RegistrationIntent | null {
+  return parseShapeStrictly(parseDoctorFeedTarget, returnTo);
+}
 
 /**
  * Mint the feed-shaped return target for `eventSlug` against the feed query the

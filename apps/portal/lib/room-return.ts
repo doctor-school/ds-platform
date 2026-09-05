@@ -1,4 +1,4 @@
-import { parseReturnTarget } from "@ds/schemas";
+import { parseAcademyEventReturnTarget } from "@ds/schemas";
 
 /**
  * 006 EARS-6 — the safe ROOM-return target that rides the 003 auth round-trip when
@@ -16,11 +16,18 @@ import { parseReturnTarget } from "@ds/schemas";
  *
  * Open-redirect safety is delegated to the hardened `@ds/schemas` slug validation:
  * the guard strips the `/room` suffix and validates the remaining
- * `/webinars/<slug>` through `parseReturnTarget`, so a cross-origin, protocol-
- * relative, backslash, or traversal target (`https://evil/…/room`, `//evil/room`,
- * `/webinars/../account/room`, `/webinars/a/b/room`) can never survive as a room
- * return. The canonical `/webinars/<slug>/room` is reconstructed from the validated
- * slug, never trusted verbatim.
+ * `/webinars/<slug>` through `parseAcademyEventReturnTarget`, so a cross-origin,
+ * protocol-relative, backslash, or traversal target (`https://evil/…/room`,
+ * `//evil/room`, `/webinars/../account/room`, `/webinars/a/b/room`) can never
+ * survive as a room return. The canonical `/webinars/<slug>/room` is reconstructed
+ * from the validated slug, never trusted verbatim.
+ *
+ * The parser is the ACADEMY-scoped shape, never the union: a room lives on the
+ * academy host under `/webinars/`. Admitting the doctor host's feed shape here
+ * would let `/events?tense=upcoming&resume=abc/room` strip its suffix, validate as
+ * a feed target, and come back out as a "canonical room path" that is neither a
+ * room nor an academy path — and this parser is consulted FIRST in
+ * `completeReturnTarget`, so it would win.
  */
 const ROOM_SUFFIX = "/room";
 
@@ -47,7 +54,7 @@ export function parseRoomReturnTarget(
   // the hardened registration-intent guard (single same-origin segment, no
   // traversal, SLUG_RE-safe). This reuses the open-redirect defence verbatim.
   const eventPath = returnTo.slice(0, -ROOM_SUFFIX.length);
-  const intent = parseReturnTarget(eventPath);
+  const intent = parseAcademyEventReturnTarget(eventPath);
   if (!intent) return null;
 
   return {

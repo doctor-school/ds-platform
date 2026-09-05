@@ -7,7 +7,7 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
 
   Background:
     Given every 012 mutation records one globally reserved retained idempotency row
-    And pre-cutover migration scenarios have retained event_speakers source ids and a real speaker_migration_reviews queue
+    And the handful of legacy event_speakers rows are re-created by hand as event_experts links before the cutover release ships
     And the admin app is running with an MFA-verified platform_admin session
     And projects, experts, topics, partners and all five joins use restrictive foreign keys
     And public reads default to published entities and active non-deleted joins
@@ -140,7 +140,7 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
     Given a valid media upload owns a fresh idempotency record
     When object storage refuses the PUT
     Then the server returns 503 MEDIA_STORAGE_UNAVAILABLE Problem Details
-    And no taxonomy entity relationship migration-review or domain audit row changes
+    And no taxonomy entity relationship or domain audit row changes
     And the same key and fingerprint replay that 503 outcome without another PUT
 
   @EARS-1 @EARS-2 @EARS-3 @EARS-4 @EARS-20 @failure
@@ -165,9 +165,9 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
     And no later generated slug may reuse alpha
 
   @EARS-2 @EARS-16 @happy
-  Scenario: Structured Expert and migration review values are audited
-    When Expert fields or a speaker_migration_reviews resolution changes
-    Then structured names and immutable provenance original classification reviewer and resolution are audited
+  Scenario: Structured Expert and speaker link values are audited
+    When Expert fields or an event_experts link created during the manual cutover change
+    Then structured names role position and the acting operator are audited as ordinary taxonomy mutations
     And only idempotency_keys and media_cleanup_jobs are parity-tested technical audit exclusions
 
   @EARS-2 @EARS-8 @EARS-14 @EARS-16 @EARS-17 @failure
@@ -831,7 +831,7 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
     Then each covered row keeps its id slug lifecycle state and relationships and receives only its reviewed family given and patronymic values
     And user_id remains null unless it was separately explicitly linked
     And an unexpected uncovered Expert aborts before any schema or row mutation
-    And no whitespace split heuristic User match or second review queue is used
+    And no whitespace split heuristic User match or review queue is used
 
   @EARS-21 @happy
   Scenario: Entity media changes are reversible
@@ -869,130 +869,42 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
     And no action with no possible effect is enabled
 
   @EARS-24 @happy
-  Scenario Outline: Duplicate-preserving reviewed rows supply every original classification
-    Given the complete owner-reviewed row artifact contains source UUID <source_uuid> with original <classification>
-    And that retained source row is included even when its legacy content is already removed
-    When migration validates the raw duplicate-preserving rows before materializing a keyed UUID map
-    And imports the exact all-retained source set
-    Then that source appears exactly once with immutable provenance and original <classification>
-    And no name matching Expert or User inference normalization equality algorithm or generated suggestion supplies classification or identity
-    When the operator <resolution>
-    Then the resolution is idempotent
-    And original classification provenance reviewer reviewed-at and resolution are audited
-    And neither the retained source nor its review can be physically deleted
-    Examples:
-      | source_uuid                          | classification | resolution                                                    |
-      | 10000000-0000-4000-8000-000000000001 | unmatched      | selects an existing Expert and sets role and order            |
-      | 10000000-0000-4000-8000-000000000002 | ambiguous      | creates an Expert with family given and patronymic names      |
-      | 10000000-0000-4000-8000-000000000003 | duplicate      | selects the canonical existing Expert and sets role and order |
-      | 10000000-0000-4000-8000-000000000004 | unmatched      | explicitly marks the source content-removed                   |
-
-  @EARS-24 @failure
-  Scenario Outline: Inexact owner-reviewed rows fail before keyed-map materialization or mutation
-    Given retained event_speakers rows and a duplicate-preserving owner-reviewed row artifact with <defect>
-    When migration attempts to install the review queue
-    Then migration fails before materializing a keyed UUID map
-    And no queue domain or audit mutation occurs
-    And no classification or identity is inferred from source content
-    Examples:
-      | defect                     |
-      | one missing source UUID    |
-      | one duplicated source UUID |
-      | one extra source UUID      |
+  Scenario: The canonical resolver returns only event_experts after the cutover
+    Given the one-off manual migration is complete and the cutover release is deployed
+    When any public or admin surface reads the speaker projection of an event
+    Then the canonical resolver returns only eligible event_experts ordered by position and stable relation id
+    And it consults no legacy free-text speaker row and no migration phase
+    And it infers no identity from a name
 
   @EARS-24 @happy
-  Scenario: A pre-cutover legacy insert is queued atomically
-    Given the durable speaker migration phase is review_open
-    When the legacy writer inserts a retained event_speakers row through the database writer fence
-    Then the same transaction inserts exactly one review with original unmatched classification
-    And either both retained rows commit or neither row commits
-
-  @EARS-24 @failure
-  Scenario Outline: An imported legacy source cannot change behind immutable provenance
-    Given a retained event_speakers source has an immutable review and content fingerprint
-    And the durable speaker migration phase is review_open
-    When an old or new application version <mutation> through the database writer fence
-    Then the mutation is rejected with 409 SPEAKER_MIGRATION_SOURCE_IMMUTABLE
-    And source provenance review resolution and domain audit remain unchanged
-    Examples:
-      | mutation            |
-      | updates its content |
-      | restores it         |
-      | retires it          |
-      | reorders it         |
-
-  @EARS-24 @happy
-  Scenario: A reusable Expert resolves speakers at different events
-    Given an existing Expert is already retained in event_experts for another event
-    When the operator selects that Expert for a reviewed source at this event
-    Then one canonical event_experts row is created for this event
+  Scenario: A manually created Expert linked with role and position appears in the public projection
+    Given the Product Lead creates the missing Expert in the admin Expert form with family given and patronymic names
+    When the Product Lead links that Expert to the event through the shared event-expert relationship command with a role and a position
+    Then exactly one retained canonical event_experts row is created by that single command
+    And the public event page speaker list shows that Expert at that position with that role
     And only a retained duplicate pair for this same event and Expert is refused
 
   @EARS-24 @failure
-  Scenario: Migration cutover refuses unresolved source rows
-    Given source closure has locked the durable phase and all retained event_speakers rows serializably
-    And every source row is queued exactly once
-    And one review remains unresolved
-    When the operator requests source closure
-    Then source closure fails and phase remains review_open
-    And no queue domain audit legacy contract or projection change occurs
-
-  @EARS-24 @failure
-  Scenario: Insert acquires the writer fence before source closure
-    Given the durable phase is review_open and every current review is resolved
-    When a controlled legacy insert acquires the writer fence first
-    And its source and unmatched review commit before source closure acquires the fence
-    Then source closure includes the new source in its closed-set check
-    And refuses to advance because that review is unresolved
-    And the committed source has exactly one retained review
+  Scenario: The free-text speakers field is absent from the event contract after the cutover
+    Given the cutover release is deployed
+    When a client submits a free-text speakers field to event create or event update
+    Then the request is rejected by the event Zod and OpenAPI contract
+    And no legacy speaker row is written
+    And speaker fields are absent from every admin write seam and from every public and admin read DTO
 
   @EARS-24 @happy
-  Scenario: Source closure acquires the writer fence before insert
-    Given the retained cutover row records the phase-aware expand release SHA and ordinal
-    And the durable phase is review_open with exact resolved source-to-review coverage
-    When controlled source closure acquires the writer fence first
-    And atomically commits source_closed plus that minimum-compatible release SHA and ordinal
-    And the blocked legacy insert resumes against source_closed
-    Then that insert is rejected without a source queue domain or audit mutation
-    And every committed source still has exactly one retained review
-
-  @EARS-24 @failure
-  Scenario Outline: The table trigger rejects old-image direct DML after source closure
-    Given the retained cutover phase is source_closed
-    And a pre-expand application image bypasses the application service
-    When it directly attempts <operation> on event_speakers
-    Then the BEFORE write trigger locks and reads the retained cutover row
-    And rejects the operation at the database boundary
-    And no source queue domain or audit mutation occurs
-    Examples:
-      | operation              |
-      | INSERT                 |
-      | UPDATE content         |
-      | UPDATE to restore      |
-      | UPDATE to retire       |
-      | UPDATE to reorder      |
-      | DELETE                 |
-
-  @EARS-24 @failure
-  Scenario: A retained pre-expand rollback is rejected before provider mutation
-    Given source closure retained minimum-compatible expand SHA expand-sha at release ordinal 42
-    And retained image pre-expand-sha has authoritative release ordinal 41
-    When the operator runs pnpm deploy:prod --rollback pre-expand-sha
-    Then the command reads the retained minimum-compatible marker and resolves the target ordinal first
-    And rejects the older target before any provider mutation
-    And the current deployment and database remain unchanged
+  Scenario: The cutover release removes the withdrawn migration machinery and keeps the legacy table
+    Given the Product Lead has confirmed that every production legacy row is already re-created as an event_experts link
+    When the cutover release is deployed and its forward migration runs
+    Then the speaker_migration_reviews table the speaker_migration_cutover singleton and both event_speakers triggers no longer exist
+    And the deploy rollback floor guard and its deploy hook and the migration fence suite are gone from the tree
+    And event_speakers and event_experts.legacy_speaker_id still exist
+    And an app-only rollback to the previous image still reads every table and column that image needs
 
   @EARS-24 @happy
-  Scenario: Staged contract deployment preserves app-only rollback safety
-    Given the backward-compatible expand image recorded its production SHA and ordinal in retained cutover state
-    And serializable source closure committed exact resolved source-to-review coverage as source_closed
-    And atomically advanced the minimum-compatible SHA and ordinal to that expand release
-    Then table triggers reject every legacy INSERT UPDATE restore retire reorder and delete
-    And old and new eligible readers resolve speakers only from ordered event_experts without a merged legacy source
-    And deploy rollback rejects an unreadable mismatched or older retained target before provider mutation
-    When the later contract image is deployed
-    Then speaker fields are absent from event create and update Zod and OpenAPI schemas
-    And every legacy mutation route and public or admin legacy read DTO and resolver branch is absent
-    And retained event_speakers and speaker_migration_reviews remain non-deletable provenance only
-    When the application alone rolls back to the phase-aware expand image
-    Then the database remains compatible and source_closed still prevents legacy writes and merged reads
+  Scenario: The contract release drops the legacy join column and the legacy table
+    Given the cutover release is live and the Product Lead has confirmed that the migrated speakers render correctly in production
+    When the contract forward migration runs
+    Then the event_experts legacy_speaker_id column its composite foreign key and its unique index no longer exist
+    And event_speakers itself no longer exists
+    And that release is the point of no return so recovery below it is a roll forward or a database restore rather than an app-only rollback

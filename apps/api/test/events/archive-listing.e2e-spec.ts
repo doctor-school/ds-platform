@@ -13,6 +13,10 @@ import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
 import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
 import { FakeIdpClient } from "../../src/auth/idp/idp.fake.js";
 import { deleteEventFixture } from "../setup/fixture-cleanup.js";
+import {
+  deleteExpertFixtures,
+  seedEventSpeakers,
+} from "../setup/speaker-fixtures.js";
 
 describe.skipIf(!process.env.DATABASE_URL)(
   "014 EARS-11 public event archive",
@@ -20,6 +24,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
     let app: NestFastifyApplication;
     let pool: pg.Pool;
     const created: string[] = [];
+    const createdExpertIds: string[] = [];
 
     async function seed(
       state: "draft" | "published" | "live" | "ended" | "hidden",
@@ -37,9 +42,10 @@ describe.skipIf(!process.env.DATABASE_URL)(
        VALUES ($1,$2,$3,'Школа',$4,60,'Описание',ARRAY['Кардиология'],$5)`,
         [id, slug, `Event ${state} ${hoursAgo}`, startsAt, state],
       );
-      await pool.query(
-        `INSERT INTO event_speakers (event_id, position, name, regalia) VALUES ($1,0,'Доктор','')`,
-        [id],
+      createdExpertIds.push(
+        ...(await seedEventSpeakers(pool, id, [
+          { familyName: "Доктор", givenName: "Д." },
+        ])),
       );
       created.push(id);
       return { id, slug };
@@ -69,6 +75,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
         ]);
         await deleteEventFixture(pool, id);
       }
+      await deleteExpertFixtures(pool, createdExpertIds.splice(0));
     });
     afterAll(async () => app.close());
 

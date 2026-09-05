@@ -16,6 +16,10 @@ import { SESSION_COOKIE_NAME } from "../../src/auth/session/session.cookie.js";
 import { OBJECT_STORAGE, type ObjectStorage } from "../../src/storage/index.js";
 import { FakeObjectStorage } from "../../src/storage/storage.fake.js";
 import { deleteEventFixture } from "../setup/fixture-cleanup.js";
+import {
+  deleteExpertFixtures,
+  seedEventSpeakers,
+} from "../setup/speaker-fixtures.js";
 
 // 004 EARS-1 + EARS-10 — the public event-page read endpoint
 // (GET /v1/public/events/:idOrSlug → PublicEventPage). A visitor opens a
@@ -38,6 +42,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
     let pool: pg.Pool;
     const fake = new FakeIdpClient();
     const createdEventIds: string[] = [];
+    const createdExpertIds: string[] = [];
 
     type SeedState = "draft" | "published" | "live" | "ended" | "hidden";
 
@@ -81,16 +86,19 @@ describe.skipIf(!process.env.DATABASE_URL)(
           opts.state,
         ],
       );
-      await pool.query(
-        `INSERT INTO event_speakers (event_id, position, name, regalia)
-         VALUES ($1,0,$2,$3), ($1,1,$4,$5)`,
-        [
-          id,
-          "Анна Соколова",
-          "Травматолог-ортопед, к.м.н.",
-          "Михаил Верещагин",
-          "Хирург, профессор",
-        ],
+      createdExpertIds.push(
+        ...(await seedEventSpeakers(pool, id, [
+          {
+            familyName: "Соколова",
+            givenName: "Анна",
+            credentials: "Травматолог-ортопед, к.м.н.",
+          },
+          {
+            familyName: "Верещагин",
+            givenName: "Михаил",
+            credentials: "Хирург, профессор",
+          },
+        ])),
       );
       createdEventIds.push(id);
       return { id, slug };
@@ -117,6 +125,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
     afterEach(async () => {
       for (const id of createdEventIds.splice(0))
         await deleteEventFixture(pool, id);
+      await deleteExpertFixtures(pool, createdExpertIds.splice(0));
     });
 
     afterAll(async () => {
@@ -145,20 +154,46 @@ describe.skipIf(!process.env.DATABASE_URL)(
         expect(body.startsAt).toBe("2026-07-16T16:00:00.000Z");
         expect(body.specialties).toEqual(["traumatology", "orthopedics"]);
         // Publish-safe speakers: name + credentials, no contact PII. Since 012
-        // EARS-8 the page carries the merged union, so a never-migrated row is
-        // explicitly tagged `source: "legacy"` (#1290).
-        expect(body.speakers).toEqual([
+        // EARS-24 the ONE speaker source is the eligible `event_experts` link,
+        // so every item is tagged `source: "expert"` and carries the expert's
+        // identity — the free-text `legacy` variant no longer exists (#1607).
+        expect(
+          body.speakers.map((s) => ({
+            source: s.source,
+            name: s.name,
+            credentials: s.credentials,
+            photoUrl: s.photoUrl,
+            role: s.role,
+          })),
+        ).toEqual([
           {
-            source: "legacy",
-            name: "Анна Соколова",
+            source: "expert",
+            name: "Соколова Анна",
             credentials: "Травматолог-ортопед, к.м.н.",
+            photoUrl: null,
+            role: "Спикер",
           },
           {
-            source: "legacy",
-            name: "Михаил Верещагин",
+            source: "expert",
+            name: "Верещагин Михаил",
             credentials: "Хирург, профессор",
+            photoUrl: null,
+            role: "Спикер",
           },
         ]);
+        // …and nothing beyond the publish-safe item keys.
+        for (const speaker of body.speakers)
+          expect(Object.keys(speaker).sort()).toEqual(
+            [
+              "credentials",
+              "expertId",
+              "expertSlug",
+              "name",
+              "photoUrl",
+              "role",
+              "source",
+            ].sort(),
+          );
         expect(body.partners).toEqual([{ label: "sponsor:acme-pharma" }]);
         expect(typeof body.programPdfUrl).toBe("string");
       },

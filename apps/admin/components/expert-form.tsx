@@ -264,9 +264,7 @@ export function ExpertForm({
                           : t("experts.fields.userEmpty")
                     }
                     showSearch
-                    disabled={
-                      userPicker.isLoading && userPicker.options.length === 0
-                    }
+                    disabled={userPicker.isLoading && userPicker.options.length === 0}
                     invalid={fieldState.invalid}
                     aria-label={t("experts.fields.user")}
                   />
@@ -450,9 +448,7 @@ export function ExpertForm({
           title={t("experts.fields.publicLink")}
           data-testid="expert-public-link-note"
         >
-          {/* The derived URL is one unbreakable token: without an explicit break
-              it pushes the page fold at a phone width (#1674). */}
-          <span className="break-all" data-testid="expert-public-link">
+          <span data-testid="expert-public-link">
             {publicUrl ?? t("experts.fields.publicLinkPending")}
           </span>
           {publicUrl ? (

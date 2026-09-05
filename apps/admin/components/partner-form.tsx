@@ -151,9 +151,7 @@ export function PartnerForm({
           title={t("partners.fields.publicLink")}
           data-testid="partner-public-link-note"
         >
-          {/* The derived URL is one unbreakable token: without an explicit break
-              it pushes the page fold at a phone width (#1674). */}
-          <span className="break-all" data-testid="partner-public-link">
+          <span data-testid="partner-public-link">
             {publicUrl ?? t("partners.fields.publicLinkPending")}
           </span>
           {publicUrl ? (

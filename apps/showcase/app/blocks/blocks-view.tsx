@@ -1704,7 +1704,7 @@ const PAGINATION_PROPS: PropRow[] = [
     type: "boolean",
     required: false,
     description:
-      'Cursor mode only, and required there: whether a page exists on each side. Both false renders nothing.',
+      "Cursor mode only, and required there: whether a page exists on each side. Both false renders nothing.",
   },
 ];
 
@@ -2597,7 +2597,10 @@ function FormSectionShowcase() {
                 </div>
               </FormFieldGroup>
               <FormDerivedNote title="Адрес страницы">
-                academy.doctor.school/napravleniya/klinicheskaya-laboratornaya-diagnostika
+                {/* An UNBROKEN slug on purpose: a hyphenated one wraps at its
+                    hyphens anyway, so only a single long token shows what the
+                    block does with a derived value at a phone width (#1674). */}
+                academy.doctor.school/napravleniya/klinicheskayalaboratornayadiagnostika
                 — адрес перестанет меняться после первой публикации.
               </FormDerivedNote>
             </FormSection>
@@ -2703,7 +2706,10 @@ const EVENT_PAGE_CONDITIONS = [
     value: <span className="text-success-text">Бесплатно для врача</span>,
   },
   { label: "Формат", value: "Онлайн · комната эфира" },
-  { label: "Длительность", value: <span className="tabular-nums">90 минут</span> },
+  {
+    label: "Длительность",
+    value: <span className="tabular-nums">90 минут</span>,
+  },
   { label: "НМО", value: <Badge variant="label">2 балла</Badge> },
 ];
 

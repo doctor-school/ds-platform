@@ -1,5 +1,75 @@
 # @ds/db
 
+## 3.0.0
+
+### Major Changes
+
+- [#1891](https://github.com/doctor-school/ds-platform/pull/1891) [`5688b56`](https://github.com/doctor-school/ds-platform/commit/5688b564e2b4850a8a0fd81813dde210e99fd827) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 012 EARS-24 — the schema drops the free-text speaker storage. The
+  `eventSpeakers` table definition is gone from `src/schema/events.ts`,
+  `legacySpeakerId` is gone from the `event_experts` link in
+  `src/schema/taxonomy.ts`, and `src/schema/speaker-migration.ts` — the phase
+  enum and cutover table of the withdrawn staged design — is deleted. Migration
+  `0036_speaker_cutover.sql` performs the drops in one release.
+
+  BREAKING: `event_speakers` and `event_experts.legacy_speaker_id` no longer
+  exist; anything reading them must source the line-up from `event_experts`.
+
+- [#1760](https://github.com/doctor-school/ds-platform/pull/1760) [`04fa58f`](https://github.com/doctor-school/ds-platform/commit/04fa58f9dcbbc0131e30bdb3cd0bb52413c05d9d) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 007 EARS-28 / [#1748](https://github.com/doctor-school/ds-platform/issues/1748) — the hidden broadcast state is renamed `archived` → `hidden`
+  («Скрыто»), and its command `ArchiveEvent` → `HideEvent` («Скрыть»).
+
+  Breaking on the wire and in the SDK. The `event_lifecycle_state` enum's terminal
+  value is `hidden` (`@ds/db` migration 0033 relabels the Postgres enum in place,
+  so every existing row follows and nothing is rewritten); `EventLifecycleState`
+  and every schema deriving from it (`@ds/schemas`) speak `hidden`; the admin
+  transition route moves from `POST /v1/admin/events/:id/archive` to
+  `…/:id/hide` and the audit type from `event.archived` to `event.hidden`
+  (`@ds/api`), with `@ds/api-client` regenerated against it. `@ds/admin` shows the
+  status «Скрыто» and the action «Скрыть»; `@ds/portal` renders the hidden event's
+  notice as «Мероприятие скрыто». No dual-read shim and no compatibility alias —
+  the old value is gone.
+
+  The word «Архив» now denotes only the SHOWN recordings archive (014): the public
+  archive listing, its badge, «Мои события» and the `/webinars` past tab are
+  untouched.
+
+- [#1815](https://github.com/doctor-school/ds-platform/pull/1815) [`d565d04`](https://github.com/doctor-school/ds-platform/commit/d565d049c4597b7ab2e30d34ec673f110abcfaf7) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 014 EARS-23…27 / [#1741](https://github.com/doctor-school/ds-platform/issues/1741) (slice 1 of 3) — an эфир held BEFORE the platform existed
+  gets its own lifecycle, and the `MarkEventEnded` fork leaves feature 007's machine.
+
+  Breaking on the wire, in the SDK and in the database. `events.origin`
+  (`platform | legacy`, `@ds/db` migration 0035, NOT NULL, default `platform`) is a
+  server-assigned discriminator that picks the state machine and is rejected by
+  every update path; `event_lifecycle_state` gains `in_archive`, reachable only on
+  the legacy machine (`hidden ↔ in_archive`). Feature 007's machine loses its
+  `published → ended` edge and the `POST /v1/admin/events/:id/mark-ended` route
+  with it; `validTransitions(state)` / `canTransition(from, to)` become
+  origin-aware (`validTransitions(state, origin)`), so every caller passes the
+  machine explicitly. Three routes are added: `POST /v1/admin/legacy-broadcasts`
+  (create, born `hidden`, carrying its recording), `POST …/:id/archive-legacy`
+  («Архивировать», requires a published non-retired recording — 409
+  `EVENT_NOT_FINISHED` otherwise) and `POST …/:id/hide-legacy` («Скрыть»). Every
+  broadcast command on a `legacy` event and every legacy command on a `platform`
+  event is refused 409 `INVALID_TRANSITION` with no mutation. Recording
+  publication is now gated per machine: `ended` on the platform machine as before,
+  either legacy state on the legacy one — an эфир that never passed through the
+  platform room can never be `ended`, and without this its recording could never be
+  published at all.
+
+  The archive projection is unchanged for readers: an `in_archive` legacy эфир is
+  the same `recorded` card a platform `ended` broadcast with a published recording
+  already was. `@ds/admin` loses the «Отметить завершённым» action, `@ds/portal`
+  renders `in_archive` exactly as `ended`; the full admin lifecycle bar and the
+  «Архивный эфир» creation form land in slices 2 and 3.
+
+### Minor Changes
+
+- [#1705](https://github.com/doctor-school/ds-platform/pull/1705) [`654f3ba`](https://github.com/doctor-school/ds-platform/commit/654f3baaf2dd8772de1820e2199baa982d539102) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 007/014 — optimistic concurrency on admin event writes: `events.version` + `ETag` / `If-Match`
+
+  The six admin state-changing commands (`publish`, `open`, `close`, `archive`, `mark-ended`, bare `transition`) now REQUIRE an `If-Match` validator. A request without one is refused `428 PRECONDITION_REQUIRED`; an unparseable or stale validator is refused `412 PRECONDITION_FAILED`. Every admin event read/write that returns a detail (`create`, `detail`, `PATCH`, `PUT :id/stream`, all six transitions) emits `ETag: W/"<version>"`, and the detail body carries `version`.
+
+  Bump rationale (`repo-conventions.md` → Bump letter, "unsure → major"): `@ds/api` **major** — an existing successful call becomes a `428` for any client that does not send the header, and `412` is a new consumer-visible refusal on endpoints that previously had neither; that is a changed request contract, not an additive one. `@ds/schemas` **major** — `EventAdminDetailSchema` gains a required `version` field, so any producer of that shape must now supply it. `@ds/db` **minor** — `events.version integer not null default 1` is purely additive (migration `0031_events_version`), no existing column changed. `@ds/admin` **minor** — the lifecycle action bar now sends the rendered version as the validator, and the event detail surface follows the re-read a refusal triggers: the refusal alert clears itself once the state it describes has been replaced, and the edit + stream forms re-project from each refetched detail while keeping fields the operator has edited. Behaviour of the operator surface is unchanged when nobody else is editing.
+
+- [#1807](https://github.com/doctor-school/ds-platform/pull/1807) [`5a8e03f`](https://github.com/doctor-school/ds-platform/commit/5a8e03f0746ffcc3b8fb7260d906785f4b7b9a0e) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 020 EARS-1 — one shared event-page core: `EventPageView` (the 004 public projection widened in place with `format` and `seatsLeft`) is now read by both storefronts, the doctor host through the new `GET /v1/storefront/doctor/events/:idOrSlug` that delegates to the same service. Participation is a single server-resolved policy — `ParticipationCta` (`register` · `registered` · `enter-room` · `switch-to-online` · `sold-out` · `unavailable`) — served as a per-viewer sibling read on each host, so neither storefront branches on lifecycle, registration, format or seats of its own.
+
 ## 2.0.0
 
 ### Major Changes

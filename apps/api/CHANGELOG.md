@@ -1,5 +1,211 @@
 # @ds/api
 
+## 4.0.0
+
+### Major Changes
+
+- [#1891](https://github.com/doctor-school/ds-platform/pull/1891) [`5688b56`](https://github.com/doctor-school/ds-platform/commit/5688b564e2b4850a8a0fd81813dde210e99fd827) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 012 EARS-24 — the event speaker line-up has a single source. `event_experts`
+  links to published experts are now the only thing any read resolves: the
+  free-text `speakers` array is gone from the event write contract and from every
+  read DTO, the dual-source projection in `speaker-projection.{service,repository}`
+  lost its legacy arm and orders on `position ASC, linkId ASC`, and
+  `storefront/doctor-events.repository.ts` (`findLeadSpeakers`) plus
+  `events/around-event.resolver.ts` read links instead of the withdrawn table.
+  The staged-migration machinery of the withdrawn design is removed with it —
+  `events/event-speakers.reconcile.ts`, the migration-phase fence and its e2e
+  spec, and the `tools/deploy` rollback floor. Migration
+  `0036_speaker_cutover.sql` drops `event_speakers`, `event_experts.legacy_speaker_id`
+  (with its FK and unique index) and the 0032 phase objects in one release.
+
+  BREAKING: a client that still sends `speakers` on an event write has the key
+  stripped (the line-up it meant to set is not set), the same key on the
+  `.strict()` legacy-broadcast create body is a hard 400, and
+  `LEGACY_SPEAKER_CONFLICT` is no longer a member of the published error-code
+  union.
+
+- [#1705](https://github.com/doctor-school/ds-platform/pull/1705) [`654f3ba`](https://github.com/doctor-school/ds-platform/commit/654f3baaf2dd8772de1820e2199baa982d539102) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 007/014 — optimistic concurrency on admin event writes: `events.version` + `ETag` / `If-Match`
+
+  The six admin state-changing commands (`publish`, `open`, `close`, `archive`, `mark-ended`, bare `transition`) now REQUIRE an `If-Match` validator. A request without one is refused `428 PRECONDITION_REQUIRED`; an unparseable or stale validator is refused `412 PRECONDITION_FAILED`. Every admin event read/write that returns a detail (`create`, `detail`, `PATCH`, `PUT :id/stream`, all six transitions) emits `ETag: W/"<version>"`, and the detail body carries `version`.
+
+  Bump rationale (`repo-conventions.md` → Bump letter, "unsure → major"): `@ds/api` **major** — an existing successful call becomes a `428` for any client that does not send the header, and `412` is a new consumer-visible refusal on endpoints that previously had neither; that is a changed request contract, not an additive one. `@ds/schemas` **major** — `EventAdminDetailSchema` gains a required `version` field, so any producer of that shape must now supply it. `@ds/db` **minor** — `events.version integer not null default 1` is purely additive (migration `0031_events_version`), no existing column changed. `@ds/admin` **minor** — the lifecycle action bar now sends the rendered version as the validator, and the event detail surface follows the re-read a refusal triggers: the refusal alert clears itself once the state it describes has been replaced, and the edit + stream forms re-project from each refetched detail while keeping fields the operator has edited. Behaviour of the operator surface is unchanged when nobody else is editing.
+
+- [#1760](https://github.com/doctor-school/ds-platform/pull/1760) [`04fa58f`](https://github.com/doctor-school/ds-platform/commit/04fa58f9dcbbc0131e30bdb3cd0bb52413c05d9d) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 007 EARS-28 / [#1748](https://github.com/doctor-school/ds-platform/issues/1748) — the hidden broadcast state is renamed `archived` → `hidden`
+  («Скрыто»), and its command `ArchiveEvent` → `HideEvent` («Скрыть»).
+
+  Breaking on the wire and in the SDK. The `event_lifecycle_state` enum's terminal
+  value is `hidden` (`@ds/db` migration 0033 relabels the Postgres enum in place,
+  so every existing row follows and nothing is rewritten); `EventLifecycleState`
+  and every schema deriving from it (`@ds/schemas`) speak `hidden`; the admin
+  transition route moves from `POST /v1/admin/events/:id/archive` to
+  `…/:id/hide` and the audit type from `event.archived` to `event.hidden`
+  (`@ds/api`), with `@ds/api-client` regenerated against it. `@ds/admin` shows the
+  status «Скрыто» and the action «Скрыть»; `@ds/portal` renders the hidden event's
+  notice as «Мероприятие скрыто». No dual-read shim and no compatibility alias —
+  the old value is gone.
+
+  The word «Архив» now denotes only the SHOWN recordings archive (014): the public
+  archive listing, its badge, «Мои события» and the `/webinars` past tab are
+  untouched.
+
+- [#1815](https://github.com/doctor-school/ds-platform/pull/1815) [`d565d04`](https://github.com/doctor-school/ds-platform/commit/d565d049c4597b7ab2e30d34ec673f110abcfaf7) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 014 EARS-23…27 / [#1741](https://github.com/doctor-school/ds-platform/issues/1741) (slice 1 of 3) — an эфир held BEFORE the platform existed
+  gets its own lifecycle, and the `MarkEventEnded` fork leaves feature 007's machine.
+
+  Breaking on the wire, in the SDK and in the database. `events.origin`
+  (`platform | legacy`, `@ds/db` migration 0035, NOT NULL, default `platform`) is a
+  server-assigned discriminator that picks the state machine and is rejected by
+  every update path; `event_lifecycle_state` gains `in_archive`, reachable only on
+  the legacy machine (`hidden ↔ in_archive`). Feature 007's machine loses its
+  `published → ended` edge and the `POST /v1/admin/events/:id/mark-ended` route
+  with it; `validTransitions(state)` / `canTransition(from, to)` become
+  origin-aware (`validTransitions(state, origin)`), so every caller passes the
+  machine explicitly. Three routes are added: `POST /v1/admin/legacy-broadcasts`
+  (create, born `hidden`, carrying its recording), `POST …/:id/archive-legacy`
+  («Архивировать», requires a published non-retired recording — 409
+  `EVENT_NOT_FINISHED` otherwise) and `POST …/:id/hide-legacy` («Скрыть»). Every
+  broadcast command on a `legacy` event and every legacy command on a `platform`
+  event is refused 409 `INVALID_TRANSITION` with no mutation. Recording
+  publication is now gated per machine: `ended` on the platform machine as before,
+  either legacy state on the legacy one — an эфир that never passed through the
+  platform room can never be `ended`, and without this its recording could never be
+  published at all.
+
+  The archive projection is unchanged for readers: an `in_archive` legacy эфир is
+  the same `recorded` card a platform `ended` broadcast with a published recording
+  already was. `@ds/admin` loses the «Отметить завершённым» action, `@ds/portal`
+  renders `in_archive` exactly as `ended`; the full admin lifecycle bar and the
+  «Архивный эфир» creation form land in slices 2 and 3.
+
+### Minor Changes
+
+- [#1739](https://github.com/doctor-school/ds-platform/pull/1739) [`98d9509`](https://github.com/doctor-school/ds-platform/commit/98d9509a65216edfd8d6c99a9074b82d011e4cd9) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 019 EARS-3 — the day-grouped, specialty-targeted doctor events feed.
+
+  Additive across the chain and breaking nowhere. `@ds/schemas` gains the
+  `doctor-events-feed` contract plus the ONE query codec both hosts decode with;
+  `@ds/api` serves `GET /v1/storefront/doctor/events` and `@ds/api-client`
+  regenerates against it; `@ds/design-system`'s `EventList` widens with the
+  optional `tenseControl` / `paginationMode: "none"` / `footer` props a host
+  reading a single tense over a bounded horizon needs (every existing caller
+  keeps its current behaviour); `@ds/doctor` gains the `/events` route.
+
+- [#1876](https://github.com/doctor-school/ds-platform/pull/1876) [`e926d75`](https://github.com/doctor-school/ds-platform/commit/e926d75c9c71037687fc25de37e41539a3ba3d6d) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 020 §6.1 / 006 EARS-2 ([#1722](https://github.com/doctor-school/ds-platform/issues/1722) slice 3) — the doctor storefront mounts the shared live room at `/events/:slug/room`.
+
+  The room is the same `@ds/room` unit the Academy runs, not a second implementation: this host adds only its session forward, its own upstream base, its own route table (all three refusal branches stay on doctor.school — this host has no login route) and its own RU copy. The route lives in a new `(room)` group so it renders outside the 017 storefront chrome.
+
+  The api's doctor route table now resolves `roomPath`, so a registered doctor on a live event gets `enter-room` with a real target on doctor.school instead of the `href: null` it carried while the route did not exist.
+
+  020 EARS-7 is now delivered whole: the participation CTA carries `presenceCount` — the live count of colleagues already in the room — on `enter-room` and `null` on every other action, read from the SAME distinct-doctor aggregate and the SAME config-derived freshness window the 006 room grant uses. The shared `EventSignupCard` renders it as one plain-RU line («В эфире уже N коллег», correct plural forms), so both storefronts gain it at once.
+
+  The doctor room header now carries the EARS-15 initials avatar (initials from the doctor's real saved display name only), and the room's `register` refusal carries `?from=room` like the Academy's.
+
+  The design system gains the header chip both storefronts wear, so neither host declares it: a new `header` variant on the `Avatar` primitive (the canvas white-on-navy chip — white square, navy ink in both themes, offset `shadow-header-chip` cast, static because the doctor chip is not a link) and a new `@ds/design-system/header-chip` entry point exporting `HEADER_CHIP_SURFACE` (the one surface constant both compose) plus `HEADER_CHIP_BASE` (that surface with the neo-brutalist press chain, for interactive chips). The Academy's profile chip and its shell «Войти» chip now IMPORT `HEADER_CHIP_BASE` instead of declaring it, so the two rooms cannot drift.
+
+  The CTA's `presenceCount` now counts COLLEAGUES: the requesting doctor's own live presence is excluded, because the line reads «В эфире уже N коллег». The 006 in-room header count is unchanged — there the number is the room population and correctly includes the viewer.
+
+- [#1890](https://github.com/doctor-school/ds-platform/pull/1890) [`8c54c06`](https://github.com/doctor-school/ds-platform/commit/8c54c06f7f4ce452eb2665d4680d1ce80fe87ad1) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - feat(019 EARS-12): the doctor feed's guest read path and its registration hand-off
+
+  The registration return-target guard becomes an explicit WHITELIST of declared
+  shapes (021 LD-3): 005's `/webinars/<slug>` is unchanged, and a second shape —
+  `/events?<feed query>&resume=<slug>` — lets a guest who chose «Участвовать» on a
+  feed card come back to the feed exactly as they left it, on that card. Every
+  accepted value is RECONSTRUCTED from the one feed codec's entries, so an
+  undeclared parameter can never ride the return target.
+
+  The doctor event card payload now carries its own `slug` beside `href`, and the
+  doctor storefront projects a card CTA per viewer: a guest is handed off to
+  `/register` with the minted return target, a doctor goes to the event page.
+
+- [#1707](https://github.com/doctor-school/ds-platform/pull/1707) [`d32a070`](https://github.com/doctor-school/ds-platform/commit/d32a07089ea8b9c36f8cb085cc610d238042a70e) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 014 EARS-5: login-gated playback — the webinar archive page serves a source-free
+  public read plus a guest gate («просмотр бесплатен, нужен аккаунт») whose sign-in
+  action carries the EARS-6 return target, and mounts the recording player for an
+  authenticated doctor.
+
+  Bump letter — `minor` (additive, no break, per repo-conventions → Bump letter):
+  `@ds/schemas` and the regenerated `@ds/api-client` gain the new playback contract
+  without changing any existing export or field shape; `@ds/api` adds a new
+  authenticated endpoint `GET /v1/events/:idOrSlug/recordings` and leaves every
+  existing route's response untouched (the public read stays source-free); `@ds/portal`
+  adds a new user-visible capability to an existing page with no removed behaviour.
+  No migration in this slice.
+
+- [#1903](https://github.com/doctor-school/ds-platform/pull/1903) [`659c615`](https://github.com/doctor-school/ds-platform/commit/659c615c9b7e487afaf479b4c9aa76122c10a3ef) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 014 EARS-29 — a `recordings:backfill` operator CLI that attaches and publishes the
+  missing recordings of platform-born эфиры through the ordinary AttachRecording +
+  PublishRecording commands, with a dry-run and a per-row report.
+
+- [#1899](https://github.com/doctor-school/ds-platform/pull/1899) [`7039a26`](https://github.com/doctor-school/ds-platform/commit/7039a263e4c22cefbb6f1e794da3eaa3f95cfe3d) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - `POST /v1/admin/legacy-broadcasts` now requires a canonical `Idempotency-Key` (014 EARS-17.1): a retried create replays the original 201 instead of authoring a second эфир
+
+- [#1807](https://github.com/doctor-school/ds-platform/pull/1807) [`5a8e03f`](https://github.com/doctor-school/ds-platform/commit/5a8e03f0746ffcc3b8fb7260d906785f4b7b9a0e) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 020 EARS-1 — one shared event-page core: `EventPageView` (the 004 public projection widened in place with `format` and `seatsLeft`) is now read by both storefronts, the doctor host through the new `GET /v1/storefront/doctor/events/:idOrSlug` that delegates to the same service. Participation is a single server-resolved policy — `ParticipationCta` (`register` · `registered` · `enter-room` · `switch-to-online` · `sold-out` · `unavailable`) — served as a per-viewer sibling read on each host, so neither storefront branches on lifecycle, registration, format or seats of its own.
+
+### Patch Changes
+
+- [#1805](https://github.com/doctor-school/ds-platform/pull/1805) [`28b7850`](https://github.com/doctor-school/ds-platform/commit/28b785045c9ce2a7d96ce65242ac635ddf52d197) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 019 LD-2 — «показать ещё» is offered only when something lies beyond the
+  horizon. `GET /v1/storefront/doctor/events` decided `nextTo` from the horizon
+  WIDTH alone, so every read below the 365-day maximum named a next `to`, even
+  when the doctor's whole future was empty — the control walked into an empty
+  widening. `nextTo` is now answered from the data, under the same predicate the
+  feed selects with: `null` when no feed-eligible event lies in
+  `[to, from + MAX_HORIZON)`, otherwise the smallest whole-step boundary that
+  COVERS the nearest such event. The response contract is unchanged.
+
+- [#1831](https://github.com/doctor-school/ds-platform/pull/1831) [`17d7ba8`](https://github.com/doctor-school/ds-platform/commit/17d7ba861219bee75220ccb1a652e2b0ee233647) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - legacy `in_archive` эфир recording is playable on the public page; wrong-machine lifecycle refusals name the real command/target
+
+- [#1898](https://github.com/doctor-school/ds-platform/pull/1898) [`a97edc2`](https://github.com/doctor-school/ds-platform/commit/a97edc21ed65c0e2f45523f3e5b0d361c783c7f8) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 014 EARS-11 — `GET /v1/public/events` paged on a cursor encoded from the
+  millisecond `Date` node-postgres returns, while `events.starts_at` is
+  `timestamptz` and stores microseconds. The truncated cutoff was strictly EARLIER
+  than the instant it came from, so the row that issued the cursor satisfied the
+  keyset predicate again and the next page served it once more — a non-terminating
+  page loop on a zero-auth route for any event whose `starts_at` carries
+  sub-millisecond digits. The listing now reuses the shared
+  `public-event-cursor` module ([#1294](https://github.com/doctor-school/ds-platform/issues/1294)): the cursor carries the instant exactly as
+  Postgres renders it and the comparison casts that text straight back to
+  `timestamptz`, in both the ascending («Предстоящие») and the descending
+  («Прошедшие») direction. The cursor is opaque by contract and the response shape
+  is unchanged; cursors issued by the previous build are refused with the same 400.
+
+- [#1850](https://github.com/doctor-school/ds-platform/pull/1850) [`dad13c3`](https://github.com/doctor-school/ds-platform/commit/dad13c3628625ef2ac5b67bcb4cc144b299ebb71) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 020 EARS-2 slice 1 — the registration-free decision set. The public event read
+  now carries `links: AroundEvent` (school / speaker pages / community), resolved
+  per host by one shared resolver from a route table each storefront owns; a
+  destination that does not exist has no key at all, so the page renders plain
+  text rather than a dead link. The «Программа» section now always renders — the
+  PDF download when one is attached, and otherwise an honest lifecycle-specific
+  statement instead of an omitted block. «О чём событие», «Программа» and the hero
+  kicker move out of the two host routes into shared `@ds/design-system` blocks.
+
+- [#1885](https://github.com/doctor-school/ds-platform/pull/1885) [`9e0fdff`](https://github.com/doctor-school/ds-platform/commit/9e0fdfff40b62e6a1fec30173f3eed8942d520a0) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 012 EARS-12 — fix a non-terminating public page loop on the event-ordered
+  relationship traversals. `GET /v1/public/projects/:key/events` and
+  `GET /v1/public/directions/:key/events` encoded their keyset cursor from the
+  millisecond-precision `Date` node-postgres returns, while `events.starts_at`
+  keeps microseconds; the truncated cutoff re-matched the row that issued the
+  cursor, so a caller paging with a bounded `limit` was served the same row
+  forever. The cursor now carries the instant as Postgres renders it.
+
+- [#1736](https://github.com/doctor-school/ds-platform/pull/1736) [`ec6b4f8`](https://github.com/doctor-school/ds-platform/commit/ec6b4f86d0f6b4b0c93ae55dc16d1fcb43c6b8c4) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - fix(1655): resolve the real client IP behind the reverse-proxy chain
+
+  The Fastify adapter is now constructed with `trustProxy` set to the trusted proxy
+  addresses (new `TRUSTED_PROXIES` env, defaulting to loopback + link-local + the
+  private ranges). Every source-address control — the EARS-13 rate-limit windows,
+  the login-challenge gate, the session/admin-session fingerprint and the
+  bot-protection guard — reads `request.ip`, which previously resolved to the Caddy
+  container for every visitor. The trusted set is a predicate over proxy addresses
+  rather than a hop count, so the 1-hop (Caddy → api) and 2-hop (Caddy → doctor
+  rewrite → api) chains both resolve the caller, and an `x-forwarded-for` presented
+  by an untrusted peer is ignored.
+
+  **Deploy impact — a one-time forced sign-out.** The session fingerprint folds the
+  client `IP/24`; it is bound once when the session is established and never
+  rebound, and prod sessions live in Redis with a 30 d TTL, so they survive the api
+  restart. Existing sessions were fingerprinted against the proxy container's /24;
+  after this deploy the term re-derives from the real client's /24, so **every
+  signed-in user and every admin operator is signed out exactly once and signs in
+  again**. No data is affected. Deploy in a quiet window. Ongoing, the binding also
+  evicts a session when the client's own /24 changes (cellular roaming, CGNAT
+  reassignment) — the ADR-0001 §6 intent, which the constant term had made a no-op.
+  Owner ack (2026-09-02):
+  https://github.com/doctor-school/ds-platform/pull/1736#issuecomment-5505979858
+
+- Updated dependencies [[`98d9509`](https://github.com/doctor-school/ds-platform/commit/98d9509a65216edfd8d6c99a9074b82d011e4cd9), [`5688b56`](https://github.com/doctor-school/ds-platform/commit/5688b564e2b4850a8a0fd81813dde210e99fd827), [`e926d75`](https://github.com/doctor-school/ds-platform/commit/e926d75c9c71037687fc25de37e41539a3ba3d6d), [`654f3ba`](https://github.com/doctor-school/ds-platform/commit/654f3baaf2dd8772de1820e2199baa982d539102), [`8c54c06`](https://github.com/doctor-school/ds-platform/commit/8c54c06f7f4ce452eb2665d4680d1ce80fe87ad1), [`04fa58f`](https://github.com/doctor-school/ds-platform/commit/04fa58f9dcbbc0131e30bdb3cd0bb52413c05d9d), [`d565d04`](https://github.com/doctor-school/ds-platform/commit/d565d049c4597b7ab2e30d34ec673f110abcfaf7), [`d32a070`](https://github.com/doctor-school/ds-platform/commit/d32a07089ea8b9c36f8cb085cc610d238042a70e), [`5688b56`](https://github.com/doctor-school/ds-platform/commit/5688b564e2b4850a8a0fd81813dde210e99fd827), [`5a8e03f`](https://github.com/doctor-school/ds-platform/commit/5a8e03f0746ffcc3b8fb7260d906785f4b7b9a0e), [`cdd7b52`](https://github.com/doctor-school/ds-platform/commit/cdd7b52c9c64d27c976c08f4060b64f0c54830bd), [`dad13c3`](https://github.com/doctor-school/ds-platform/commit/dad13c3628625ef2ac5b67bcb4cc144b299ebb71), [`c734f7b`](https://github.com/doctor-school/ds-platform/commit/c734f7b8df04c6514550da38894ffd681f702f86), [`68ba282`](https://github.com/doctor-school/ds-platform/commit/68ba2821bfede1afd2d10cef8e62974450e2c889)]:
+  - @ds/schemas@6.0.0
+  - @ds/db@3.0.0
+
 ## 3.0.0
 
 ### Major Changes

@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { cn } from "@ds/design-system/lib/utils";
 import { Link as DsLink } from "@ds/design-system/link";
-import { HEADER_CHIP_BASE } from "@ds/design-system/header-chip";
+import { HEADER_CHIP_BASE } from "@ds/design-system";
 
 import { ThemeToggle } from "@/components/theme-toggle";
 import { HeaderUserCluster } from "@/components/header-user-cluster";
@@ -50,9 +50,14 @@ import { useHeaderAuth } from "@/lib/header-auth";
  * primitive (`<DsLink asChild>`) so hover / active / focus-visible states come
  * from the primitive, not a bespoke per-call stack (AGENTS.md §6, #818/#828); the
  * white-on-blue chips (Войти / avatar) override its brand-blue default off the
- * `header-*` palette + the dark-safe `shadow-header-chip` cast — no DS Button/Avatar variant targets an
- * inverted-on-blue control (they assume a light page bg; same precedent as the
- * shared {@link ThemeToggle}). The primitive's press colour
+ * `header-*` palette + the dark-safe `shadow-header-chip` cast, composed from the
+ * design system's shared {@link HEADER_CHIP_BASE} — no DS Button variant targets
+ * an inverted-on-blue CLICKABLE (they assume a light page bg; same precedent as
+ * the shared {@link ThemeToggle}), which is why the interactive chip is that
+ * class fragment on a `Link`/`button` rather than a variant. Its static
+ * counterpart IS a variant — `Avatar variant="header"`, the same surface
+ * constant — and is what the doctor room's non-clickable chip wears. The
+ * primitive's press colour
  * (`active:text-primary-action/80`) is likewise re-anchored per surface: on the
  * blue band `primary-action` (blue.700) IS the band colour, so a press painted
  * the label invisible for the whole click-through (#1007 Stage-B round 1).

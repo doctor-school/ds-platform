@@ -4,7 +4,7 @@ import Link from "next/link";
 import { UserRound } from "lucide-react";
 import { cn } from "@ds/design-system/lib/utils";
 import { Link as DsLink } from "@ds/design-system/link";
-import { HEADER_CHIP_BASE } from "@ds/design-system/header-chip";
+import { HEADER_CHIP_BASE } from "@ds/design-system";
 
 import { ThemeToggle } from "@/components/theme-toggle";
 

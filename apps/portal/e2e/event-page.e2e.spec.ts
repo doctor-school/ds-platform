@@ -247,15 +247,16 @@ test.describe("004 EARS-5 hidden direct-link notice (e2e)", () => {
  * phone visitor nothing. The plate sits in the hero's `statusPlate` slot next to
  * the title column, so its geometry is owned by `EventPageHero`
  * (`@ds/design-system`) — this pin measures the rendered chip, per public
- * lifecycle state, at the two narrow widths the audience actually carries
- * (390 = iPhone 14/15, 360 = the common Android floor). `live` is excluded: it is
+ * lifecycle state, at the three narrow widths the audience actually carries
+ * (390 = iPhone 14/15, 360 = the common Android floor, 320 = the smallest
+ * phone viewport still in use, where the overflow measured worst). `live` is excluded: it is
  * a different plate (single `variant="live"` badge, EARS-4 swap).
  *
  * The assertion is a bounding box, not a class: `boundingBox()` resolves the real
  * post-transform rect, so the plate's `rotate-3` overflow counts as overflow.
  */
 test.describe("004 EARS-4 hero status plate — mobile viewport containment (e2e)", () => {
-  const NARROW_WIDTHS = [390, 360] as const;
+  const NARROW_WIDTHS = [390, 360, 320] as const;
 
   for (const [state, slugEnv] of [
     ["published", () => SLUG],

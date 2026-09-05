@@ -461,5 +461,42 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(await speakersEndpoint(event.slug)).toEqual([]);
       expect(await pageSpeakers(event.slug)).toEqual([]);
     });
+
+    it("012 EARS-24: canonical resolver returns only ordered eligible event_experts and reads no legacy row and no migration phase", async () => {
+      const event = await insertEvent();
+      // A retained legacy row that NOTHING matched. Before the cutover it was
+      // the visible fallback; after it, `event_speakers` is not a read source at
+      // all, so the projection must not contain it.
+      await insertSpeaker(event.id, 0, "Легаси Л. Л.");
+      const second = await insertExpert({
+        family_name: "Второй",
+        given_name: "В. В.",
+      });
+      const first = await insertExpert({
+        family_name: "Первый",
+        given_name: "П. П.",
+      });
+      await insertLink({ eventId: event.id, expertId: second, position: 2 });
+      await insertLink({ eventId: event.id, expertId: first, position: 1 });
+
+      const projection = await speakersEndpoint(event.slug);
+
+      expect(projection.map((s) => s.name)).toEqual([
+        "Первый П. П.",
+        "Второй В. В.",
+      ]);
+      expect(projection.every((s) => s.source === "expert")).toBe(true);
+      // The three shipped surfaces stay one result.
+      expect(await pageSpeakers(event.slug)).toEqual(projection);
+      expect(await cardSpeakers(event.id)).toEqual(
+        projection.map((s) => ({ name: s.name })),
+      );
+
+      // No phase is consulted because no phase SSOT exists any more.
+      const { rows } = await pool.query<{ n: string | null }>(
+        `SELECT to_regclass('public.speaker_migration_cutover') AS n`,
+      );
+      expect(rows[0]!.n).toBeNull();
+    });
   },
 );

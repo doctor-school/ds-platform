@@ -52,6 +52,23 @@ import {
  * DOCTOR PROVISIONING: the two doctors are self-signup accounts reused across
  * runs. Zitadel/api throttles after ~4–5 signups per window (429) — reuse the
  * exported credentials rather than minting a fresh pair per run.
+ *
+ * STAND PRECONDITIONS (#1871) — beyond the variables above, the STAND itself must
+ * be prepared; otherwise the tier fails against a CORRECT product render:
+ *
+ * - **Saved display name.** Any REUSED account (`E2E_DOCTOR_*` / `E2E_DOCTOR2_*`)
+ *   must already have a display name saved. Without one, 006 EARS-14's JIT name
+ *   prompt renders INSTEAD of the room composition and every in-room assertion
+ *   fails. Specs that self-sign-up a fresh doctor satisfy that prompt inline
+ *   instead, so this applies only to the exported reusable pair.
+ * - **Raised rate-limit ceilings.** Boot the api with
+ *   `RATE_LIMIT_PER_USER_15MIN=1000`, `RATE_LIMIT_PER_IP_15MIN=2000` and
+ *   `RATE_LIMIT_PER_ASN_1H=5000`. The 003 EARS-13 defaults (10 per user per
+ *   15 min, 20 per IP) are an order of magnitude below the ~25 real logins one
+ *   serial run of this tier drives from a single IP: at the defaults the suite
+ *   hard-429s mid-run and every login-based test dies on `waitForURL`. These
+ *   ceilings are env-overridable BY DESIGN for exactly this window (#1076,
+ *   `apps/api/src/auth/rate-limit/rate-limit.types.ts`).
  */
 
 const BASE = process.env.E2E_PORTAL_URL ?? "http://localhost:3001";
@@ -129,6 +146,14 @@ test.describe("006 EARS-5 realtime presence count over Centrifugo (e2e)", () => 
 
       // A's baseline (whoever is already in the window). Read it AFTER A settled so
       // A's own presence is counted; the assertion below is purely relative.
+      //
+      // Serial-run precondition: a preceding spec in the same invocation may have
+      // left doctor B inside the freshness window (its beats stop when that spec's
+      // context closes, but the LATEST beat stays fresh for `2 × N` seconds). If B
+      // is still counted here, the baseline already includes B and the `+1` below
+      // can never be observed. Wait the full window out (plus slack) so every beat
+      // that is not A's own has aged out, then read the baseline.
+      await pageA.waitForTimeout(PRESENCE_WINDOW_SECONDS * 1000 + 3_000);
       const before = await presenceValue(pageA);
 
       // Doctor B joins in a separate session. B's first beat changes the distinct-

@@ -60,6 +60,23 @@ import { requireLiveStandEnv } from "../support/live-stand-env";
  * dark render must introduce no new axe violations relative to light. The DS
  * primitive geometry is additionally covered (both themes) by the CI
  * `playwright-axe` gate via the showcase.
+ *
+ * STAND PRECONDITIONS (#1871) — beyond the variables above, the STAND itself must
+ * be prepared; otherwise the tier fails against a CORRECT product render:
+ *
+ * - **Saved display name.** Any REUSED account (`E2E_DOCTOR_*` / `E2E_DOCTOR2_*`)
+ *   must already have a display name saved. Without one, 006 EARS-14's JIT name
+ *   prompt renders INSTEAD of the room composition and every in-room assertion
+ *   fails. Specs that self-sign-up a fresh doctor satisfy that prompt inline
+ *   instead, so this applies only to the exported reusable pair.
+ * - **Raised rate-limit ceilings.** Boot the api with
+ *   `RATE_LIMIT_PER_USER_15MIN=1000`, `RATE_LIMIT_PER_IP_15MIN=2000` and
+ *   `RATE_LIMIT_PER_ASN_1H=5000`. The 003 EARS-13 defaults (10 per user per
+ *   15 min, 20 per IP) are an order of magnitude below the ~25 real logins one
+ *   serial run of this tier drives from a single IP: at the defaults the suite
+ *   hard-429s mid-run and every login-based test dies on `waitForURL`. These
+ *   ceilings are env-overridable BY DESIGN for exactly this window (#1076,
+ *   `apps/api/src/auth/rate-limit/rate-limit.types.ts`).
  */
 const WCAG_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"];
 const THEMES = ["light", "dark"] as const;

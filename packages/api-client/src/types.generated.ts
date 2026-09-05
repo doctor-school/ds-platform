@@ -2109,6 +2109,7 @@ export interface components {
             action: "register" | "registered" | "enter-room" | "switch-to-online" | "sold-out" | "unavailable";
             href: string | null;
             label: string;
+            presenceCount: number | null;
             reason: string | null;
         };
         PasswordResetCompleteRequestDto: {

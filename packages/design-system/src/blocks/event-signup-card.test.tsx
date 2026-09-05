@@ -11,6 +11,7 @@ const cta = (over: Partial<ParticipationCta> = {}): ParticipationCta => ({
   label: "Участвовать",
   href: "/register",
   reason: null,
+  presenceCount: null,
   ...over,
 });
 
@@ -195,14 +196,27 @@ describe("<EventSignupCard>", () => {
 
   it("020 EARS-1: the host control shall be ignored wherever the policy opened no branch — it can never put participation where the server said there is none", () => {
     const closed: ParticipationCta[] = [
-      { action: "sold-out", label: "Мест нет", href: null, reason: null },
+      {
+        action: "sold-out",
+        label: "Мест нет",
+        href: null,
+        reason: null,
+        presenceCount: null,
+      },
       {
         action: "unavailable",
         label: "Участие недоступно",
         href: null,
         reason: "Событие завершилось",
+        presenceCount: null,
       },
-      { action: "enter-room", label: "Войти в эфир", href: null, reason: null },
+      {
+        action: "enter-room",
+        label: "Войти в эфир",
+        href: null,
+        reason: null,
+        presenceCount: 3,
+      },
     ];
 
     for (const closedCta of closed) {
@@ -225,5 +239,50 @@ describe("<EventSignupCard>", () => {
       ).toBeNull();
       expect(screen.queryByTestId("event-signup-cta")).toBeNull();
     }
+  });
+  it("020 EARS-7: the enter-room card renders the presence count in Russian plural", () => {
+    const cases: ReadonlyArray<[number, string]> = [
+      [1, "В эфире уже 1 коллега"],
+      [2, "В эфире уже 2 коллеги"],
+      [5, "В эфире уже 5 коллег"],
+    ];
+
+    for (const [count, expected] of cases) {
+      cleanup();
+      render(
+        <EventSignupCard
+          {...base}
+          cta={cta({
+            action: "enter-room",
+            label: "Войти в эфир",
+            href: "/events/cardio-live/room",
+            presenceCount: count,
+          })}
+        />,
+      );
+
+      expect(screen.getByTestId("event-signup-presence")).toHaveTextContent(
+        expected,
+      );
+    }
+  });
+
+  it("020 EARS-7: no presence line where the count is zero or the action is not room entry", () => {
+    render(
+      <EventSignupCard
+        {...base}
+        cta={cta({
+          action: "enter-room",
+          label: "Войти в эфир",
+          href: "/events/cardio-live/room",
+          presenceCount: 0,
+        })}
+      />,
+    );
+    expect(screen.queryByTestId("event-signup-presence")).toBeNull();
+
+    cleanup();
+    render(<EventSignupCard {...base} cta={cta()} />);
+    expect(screen.queryByTestId("event-signup-presence")).toBeNull();
   });
 });

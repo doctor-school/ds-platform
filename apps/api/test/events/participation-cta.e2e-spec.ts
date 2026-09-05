@@ -246,6 +246,24 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       // storefronts differ here and nowhere else in this answer.
       expect(answer.action).toBe("enter-room");
       expect(answer.href).toBe(`/events/${slug}/room`);
+      // 020 EARS-7 — room entry CARRIES the live count of colleagues already
+      // there. No beat has been recorded for this event, so the truthful
+      // aggregate is `0`: the assertion that matters is that the field is a real
+      // integer resolved from the presence window, never `null` on the one
+      // action that is supposed to carry it.
+      expect(answer.presenceCount).toBe(0);
+    });
+
+    it("020 EARS-7: only room entry carries a presence count — every other action reports none", async () => {
+      const { slug } = await seedEvent({ state: "published" });
+      const cookie = await doctorSession();
+
+      expect((await cta(DOCTOR(slug))).presenceCount).toBeNull();
+      expect((await cta(DOCTOR(slug), cookie)).presenceCount).toBeNull();
+      await register(slug, cookie);
+      const registered = await cta(DOCTOR(slug), cookie);
+      expect(registered.action).toBe("registered");
+      expect(registered.presenceCount).toBeNull();
     });
 
     it("020 EARS-1: a hybrid event whose offline seats are exhausted switches the guest to the online half", async () => {

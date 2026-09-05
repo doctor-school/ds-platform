@@ -69,6 +69,7 @@ const REGISTER_CTA: ParticipationCta = {
   label: "Участвовать",
   href: "/register?returnTo=%2Fwebinars%2Fprp-gonartroz",
   reason: null,
+  presenceCount: null,
 };
 
 describe("020 EARS-1 — shared event-page view projection", () => {
@@ -107,6 +108,7 @@ describe("020 EARS-1 — shared event-page view projection", () => {
       label: "Мест нет",
       href: null,
       reason: "Офлайн-места закончились",
+      presenceCount: null,
     };
     expect(eventSignupCardProps(VIEW, soldOut).cta).toEqual(soldOut);
   });
@@ -117,19 +119,33 @@ describe("020 EARS-1 — shared event-page view projection", () => {
       EVENT_PAGE_COPY.signupNote,
     );
     for (const cta of [
-      { action: "registered", label: "Вы записаны", href: null, reason: null },
-      { action: "sold-out", label: "Мест нет", href: null, reason: null },
+      {
+        action: "registered",
+        label: "Вы записаны",
+        href: null,
+        reason: null,
+        presenceCount: null,
+      },
+      {
+        action: "sold-out",
+        label: "Мест нет",
+        href: null,
+        reason: null,
+        presenceCount: null,
+      },
       {
         action: "unavailable",
         label: "Участие недоступно",
         href: null,
         reason: "Событие завершилось",
+        presenceCount: null,
       },
       {
         action: "enter-room",
         label: "Войти в эфир",
         href: "/room/prp-gonartroz",
         reason: null,
+        presenceCount: 4,
       },
     ] satisfies ParticipationCta[]) {
       // A footnote about registering would contradict the words above it.

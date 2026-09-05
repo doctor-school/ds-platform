@@ -72,5 +72,10 @@ import {
       useFactory: (): RoomChatConfig | null => resolveRoomChatConfig(loadEnv()),
     },
   ],
+  // 020 EARS-7 (#1770): the participation CTA reads the live presence aggregate
+  // through the SAME repository and the SAME configured cadence the room grant
+  // uses, so both surfaces can never disagree about how many colleagues are in
+  // the room. Nothing else of the room's internals is exported.
+  exports: [PresenceRepository, ROOM_HEARTBEAT_INTERVAL_SECONDS],
 })
 export class RoomModule {}

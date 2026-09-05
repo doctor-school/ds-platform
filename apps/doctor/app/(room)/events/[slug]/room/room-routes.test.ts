@@ -18,7 +18,9 @@ describe("006 doctor room route table", () => {
 
     expect(routes.entry).toEqual({
       auth: "/events/cardio-live",
-      register: "/events/cardio-live",
+      // 020 §6.1 — the bounced-registration branch carries its provenance, the
+      // same `?from=room` the academy table ships.
+      register: "/events/cardio-live?from=room",
       notLive: "/events/cardio-live",
     });
     for (const href of Object.values(routes.entry)) {
@@ -31,6 +33,9 @@ describe("006 doctor room route table", () => {
     const routes = DOCTOR_ROOM_ROUTES("кардио/эфир");
 
     expect(routes.entry.auth).toBe(`/events/${encodeURIComponent("кардио/эфир")}`);
+    expect(routes.entry.register).toBe(
+      `/events/${encodeURIComponent("кардио/эфир")}?from=room`,
+    );
     expect(routes.room.eventPage).toBe(routes.entry.auth);
     expect(routes.room.brandHome).toBe("/");
   });

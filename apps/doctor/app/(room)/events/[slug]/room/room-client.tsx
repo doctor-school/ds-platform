@@ -10,7 +10,7 @@ import {
   type RoomCopy,
   type RoomShellServerProps,
 } from "@ds/room";
-import { ThemeToggle } from "@/components/theme-toggle";
+import { RoomUserCluster } from "./room-user-cluster";
 
 /**
  * 006 EARS-11 / EARS-14 · 020 §6.1 (#1722, slice 3) — the DOCTOR host's
@@ -27,9 +27,10 @@ import { ThemeToggle } from "@/components/theme-toggle";
  *   `next-intl`, because this app has no catalogue and no provider (the copy is
  *   an inline const — see `copy.ts`); the plural CATEGORIES are the same ones the
  *   academy's ICU messages select on, so the two rooms read identically;
- * - `userCluster` is the storefront's own {@link ThemeToggle} alone. There is no
- *   initials chip here: this host mounts no profile surface, and the shared unit
- *   renders whatever node it is handed without knowing what is in it.
+ * - `userCluster` is this host's own {@link RoomUserCluster} — the storefront
+ *   theme toggle plus the EARS-15 initials chip. The chip is a NON-link here
+ *   (doctor.school mounts no profile route, so a link would be a dead
+ *   affordance), which is the one way it differs from the academy's cluster.
  *
  * It also owns the EARS-14 branch: with no saved display name the shared prompt
  * renders INSTEAD of the room (a pre-render gate, not a fourth admission
@@ -117,11 +118,15 @@ export function RoomClient({
       displayName={displayName}
       linkComponent={Link}
       userCluster={
-        // 006 EARS-12 — this host's own chrome in the one slot the shell offers:
-        // the 017 storefront theme toggle, the SAME control its header mounts, so
-        // the room's header cannot drift from the storefront's. No profile chip —
-        // doctor.school mounts no profile surface (D17a).
-        <ThemeToggle className="order-first layout:order-none" />
+        // 006 EARS-12 / EARS-15 — this host's own chrome in the one slot the shell
+        // offers: the 017 storefront theme toggle (the SAME control its header
+        // mounts, so the room's header cannot drift from the storefront's) plus
+        // the initials chip built from the doctor's REAL saved name. The `null`
+        // name never reaches here — the EARS-14 prompt above returns first.
+        <RoomUserCluster
+          displayName={displayName}
+          avatarLabel={roomCopy.avatarLabel(displayName)}
+        />
       }
     />
   );

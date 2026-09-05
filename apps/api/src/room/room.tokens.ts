@@ -22,3 +22,23 @@ export const ROOM_HEARTBEAT_INTERVAL_SECONDS = Symbol(
  * gate-scoped subscribe-only token and to publish over the HTTP API.
  */
 export const ROOM_CHAT_CONFIG = Symbol("ROOM_CHAT_CONFIG");
+
+/**
+ * The freshness window (seconds) the live distinct-doctor presence count is
+ * derived over: two heartbeat cadences (`2 × N`). A latest beat survives one
+ * missed cadence, then ceases to count no later than `2 × N` if beats stop. This
+ * count-only grace is not proof of physical presence and adds no sponsor minutes.
+ *
+ * It is a FUNCTION of the same server-config `N` ({@link
+ * ROOM_HEARTBEAT_INTERVAL_SECONDS}) that drives the client loop, so an
+ * operator-confirmed cadence change widens the window everywhere with no code
+ * change (006 EARS-5). It lives here, next to the token, because THREE readers
+ * now derive it — the room grant, the realtime publisher and the 020 participation
+ * CTA — and three copies of `× 2` would be three chances for the count to
+ * disagree with itself about who is still in the room.
+ */
+export function presenceWindowSeconds(
+  heartbeatIntervalSeconds: number,
+): number {
+  return heartbeatIntervalSeconds * 2;
+}

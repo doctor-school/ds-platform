@@ -7,7 +7,7 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
 
   Background:
     Given every 012 mutation records one globally reserved retained idempotency row
-    And the handful of legacy event_speakers rows are re-created by hand as event_experts links before the cutover release ships
+    And the sixteen legacy event_speakers rows are re-created by hand as event_experts links after the cutover release is deployed
     And the admin app is running with an MFA-verified platform_admin session
     And projects, experts, topics, partners and all five joins use restrictive foreign keys
     And public reads default to published entities and active non-deleted joins
@@ -870,19 +870,20 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
 
   @EARS-24 @happy
   Scenario: The canonical resolver returns only event_experts after the cutover
-    Given the one-off manual migration is complete and the cutover release is deployed
+    Given the cutover release is deployed
     When any public or admin surface reads the speaker projection of an event
     Then the canonical resolver returns only eligible event_experts ordered by position and stable relation id
-    And it consults no legacy free-text speaker row and no migration phase
+    And it consults no legacy free-text speaker row and no legacy fallback
     And it infers no identity from a name
 
   @EARS-24 @happy
-  Scenario: A manually created Expert linked with role and position appears in the public projection
-    Given the Product Lead creates the missing Expert in the admin Expert form with family given and patronymic names
-    When the Product Lead links that Expert to the event through the shared event-expert relationship command with a role and a position
+  Scenario: The Tech Lead re-creates a legacy row by hand and it appears in the public projection
+    Given the cutover release is deployed and the Tech Lead works from the mapping table shown to the Product Lead
+    When the Tech Lead creates the missing Expert in the admin Expert form with family given and patronymic names and links that Expert to the event through the shared event-expert relationship command with a role and a position
     Then exactly one retained canonical event_experts row is created by that single command
     And the public event page speaker list shows that Expert at that position with that role
     And only a retained duplicate pair for this same event and Expert is refused
+    And no review queue no import script no admin migration screen and no matching heuristic takes part
 
   @EARS-24 @failure
   Scenario: The free-text speakers field is absent from the event contract after the cutover
@@ -893,18 +894,11 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
     And speaker fields are absent from every admin write seam and from every public and admin read DTO
 
   @EARS-24 @happy
-  Scenario: The cutover release removes the withdrawn migration machinery and keeps the legacy table
-    Given the Product Lead has confirmed that every production legacy row is already re-created as an event_experts link
+  Scenario: The cutover release removes the withdrawn machinery and the legacy speaker path in one migration
+    Given the cutover release carries exactly one forward migration
     When the cutover release is deployed and its forward migration runs
-    Then the speaker_migration_reviews table the speaker_migration_cutover singleton and both event_speakers triggers no longer exist
-    And the deploy rollback floor guard and its deploy hook and the migration fence suite are gone from the tree
-    And event_speakers and event_experts.legacy_speaker_id still exist
-    And an app-only rollback to the previous image still reads every table and column that image needs
-
-  @EARS-24 @happy
-  Scenario: The contract release drops the legacy join column and the legacy table
-    Given the cutover release is live and the Product Lead has confirmed that the migrated speakers render correctly in production
-    When the contract forward migration runs
-    Then the event_experts legacy_speaker_id column its composite foreign key and its unique index no longer exist
+    Then the speaker_migration_reviews table the speaker_migration_cutover singleton and both event_speakers triggers with their functions no longer exist
+    And the event_experts legacy_speaker_id column its composite foreign key and its unique index no longer exist
     And event_speakers itself no longer exists
-    And that release is the point of no return so recovery below it is a roll forward or a database restore rather than an app-only rollback
+    And legacy_speaker_id is absent from the event-expert admin contract
+    And the deploy rollback floor guard and its deploy hook and the migration fence suite are gone from the tree

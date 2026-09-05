@@ -253,6 +253,13 @@
       "when": 1788398895908,
       "tag": "0035_events_origin_in_archive",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1788598757289,
+      "tag": "0036_speaker_cutover",
+      "breakpoints": true
     }
   ]
 }

@@ -879,7 +879,7 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
   @EARS-24 @happy
   Scenario: The Tech Lead re-creates a legacy row by hand and it appears in the public projection
     Given the cutover release is deployed and the Tech Lead works from the mapping table approved by the Product Lead
-    When the Tech Lead executes direct SQL statements via psql on data-prod that insert the missing Expert with family given and patronymic names and credentials taken from the fullest legacy regalia variant and one event_experts row with the per-event role and position
+    When the Tech Lead executes direct SQL statements via psql on data-prod that insert the missing Expert with family given and patronymic names and credentials taken from the fullest legacy regalia variant and an explicitly authored canonical slug that is unique across experts and status published with a non null first published at and one event_experts row with the per-event role and position
     Then exactly one retained canonical event_experts row exists for that event and Expert
     And the public event page speaker list shows that Expert at that position with that role
     And only a retained duplicate pair for this same event and Expert is refused

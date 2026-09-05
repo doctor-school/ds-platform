@@ -29,7 +29,6 @@ import {
   count,
   desc,
   eq,
-  gt,
   gte,
   ilike,
   inArray,
@@ -38,6 +37,11 @@ import {
   sql,
 } from "drizzle-orm";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
+import {
+  afterEventCursor,
+  beforeEventCursor,
+  eventCursorInstant,
+} from "../taxonomy/public-event-cursor.js";
 import { reconcileEventSpeakers } from "./event-speakers.reconcile.js";
 
 /**
@@ -97,10 +101,16 @@ export interface EventWithSpeakers {
   streamConfig: StreamConfig | null;
 }
 
-export interface EventListingCursor {
-  startsAt: Date;
-  id: string;
-}
+/**
+ * The `(starts_at, id)` keyset position of a public-listing row. `startsAt` is
+ * the TEXT rendering `eventCursorInstant` emits — microsecond-exact — never a
+ * JavaScript `Date`, which would truncate the instant to milliseconds and make
+ * the cutoff strictly less than the row that issued it (`public-event-cursor.ts`).
+ */
+export type EventListingCursor = { startsAt: string; id: string };
+
+/** One listing aggregate plus the exact cursor token of its position. */
+export type EventListingRow = EventWithSpeakers & { startsAtCursor: string };
 
 /**
  * Drizzle data access for the 007 event aggregate (design §3). The write is one
@@ -360,15 +370,10 @@ export class EventsRepository {
     cutoff: Date,
     limit?: number,
     after: EventListingCursor | null = null,
-  ): Promise<EventWithSpeakers[]> {
-    const cursor = after
-      ? or(
-          gt(events.startsAt, after.startsAt),
-          and(eq(events.startsAt, after.startsAt), gt(events.id, after.id)),
-        )
-      : undefined;
+  ): Promise<EventListingRow[]> {
+    const cursor = after ? afterEventCursor(after) : undefined;
     const query = this.db
-      .select()
+      .select({ event: events, startsAtCursor: eventCursorInstant })
       .from(events)
       .where(
         and(
@@ -379,10 +384,11 @@ export class EventsRepository {
         ),
       )
       .orderBy(asc(events.startsAt), asc(events.id));
-    const rows = limit === undefined ? await query : await query.limit(limit);
-    if (rows.length === 0) return [];
+    const selected =
+      limit === undefined ? await query : await query.limit(limit);
+    if (selected.length === 0) return [];
 
-    const ids = rows.map((r) => r.id);
+    const ids = selected.map((r) => r.event.id);
     const speakerRows = await this.db
       .select()
       .from(eventSpeakers)
@@ -400,8 +406,9 @@ export class EventsRepository {
       list.push({ name: s.name, regalia: s.regalia, position: s.position });
       byEvent.set(s.eventId, list);
     }
-    return rows.map((event) => ({
+    return selected.map(({ event, startsAtCursor }) => ({
       event,
+      startsAtCursor,
       speakers: byEvent.get(event.id) ?? [],
       // The upcoming-listing card (004) does not read the stream config.
       streamConfig: null,
@@ -418,15 +425,10 @@ export class EventsRepository {
   async listPast(
     limit: number,
     after: EventListingCursor | null,
-  ): Promise<EventWithSpeakers[]> {
-    const cursor = after
-      ? or(
-          lt(events.startsAt, after.startsAt),
-          and(eq(events.startsAt, after.startsAt), lt(events.id, after.id)),
-        )
-      : undefined;
-    const rows = await this.db
-      .select()
+  ): Promise<EventListingRow[]> {
+    const cursor = after ? beforeEventCursor(after) : undefined;
+    const selected = await this.db
+      .select({ event: events, startsAtCursor: eventCursorInstant })
       .from(events)
       .where(
         and(
@@ -437,7 +439,7 @@ export class EventsRepository {
       )
       .orderBy(desc(events.startsAt), desc(events.id))
       .limit(limit);
-    if (rows.length === 0) return [];
+    if (selected.length === 0) return [];
 
     const speakerRows = await this.db
       .select()
@@ -446,7 +448,7 @@ export class EventsRepository {
         and(
           inArray(
             eventSpeakers.eventId,
-            rows.map((row) => row.id),
+            selected.map((row) => row.event.id),
           ),
           eq(eventSpeakers.recordStatus, "active"),
         ),
@@ -462,8 +464,9 @@ export class EventsRepository {
       });
       byEvent.set(speaker.eventId, list);
     }
-    return rows.map((event) => ({
+    return selected.map(({ event, startsAtCursor }) => ({
       event,
+      startsAtCursor,
       speakers: byEvent.get(event.id) ?? [],
       streamConfig: null,
     }));

@@ -33,10 +33,12 @@ import { OBJECT_STORAGE, type ObjectStorage } from "../storage/index.js";
 import { RecordingsProjectionService } from "../recordings/recordings.projection.js";
 import { SpeakerProjectionService } from "../taxonomy/speaker-projection.service.js";
 import {
+  type EventListingCursor,
   type EventWithSpeakers,
   EventsRepository,
   type Tx,
 } from "./events.repository.js";
+import { EVENT_CURSOR_SHAPE } from "../taxonomy/public-event-cursor.js";
 
 /**
  * The upcoming-listing air window (004 EARS-7). An event is "currently airing or
@@ -58,34 +60,33 @@ export class InvalidEventListingCursorError extends Error {
   }
 }
 
-function encodeEventListingCursor(startsAt: Date, id: string): string {
-  return Buffer.from(
-    JSON.stringify([startsAt.toISOString(), id]),
-    "utf8",
-  ).toString("base64url");
+/**
+ * The public listing cursor is the SHARED `(starts_at, id)` event tuple
+ * (`public-event-cursor.ts`) — the same opaque base64url envelope the 012
+ * relationship traversals issue, so one grammar covers every event-ordered
+ * public read. `startsAt` is the microsecond-exact text Postgres itself
+ * rendered, never a JavaScript `Date`: a millisecond-truncated cutoff is
+ * strictly LESS than the instant it came from, so the row that issued the
+ * cursor matches `starts_at > cutoff` again and the zero-auth page loop never
+ * terminates (#1888).
+ */
+function encodeEventListingCursor(cursor: EventListingCursor): string {
+  return Buffer.from(JSON.stringify(cursor), "utf8").toString("base64url");
 }
 
-function decodeEventListingCursor(
-  cursor?: string,
-): { startsAt: Date; id: string } | null {
+/**
+ * Shape-validate a caller-supplied cursor before its values become SQL
+ * operands. `EVENT_CURSOR_SHAPE` is the SSOT grammar; a cursor that fails it was
+ * not issued here, and {@link InvalidEventListingCursorError} keeps the existing
+ * 400 contract of `GET /v1/public/events` (014 EARS-11) unchanged.
+ */
+function decodeEventListingCursor(cursor?: string): EventListingCursor | null {
   if (cursor === undefined) return null;
   try {
-    const decoded: unknown = JSON.parse(
-      Buffer.from(cursor, "base64url").toString("utf8"),
+    return EVENT_CURSOR_SHAPE.parse(
+      JSON.parse(Buffer.from(cursor, "base64url").toString("utf8")),
     );
-    if (
-      !Array.isArray(decoded) ||
-      decoded.length !== 2 ||
-      typeof decoded[0] !== "string" ||
-      Number.isNaN(Date.parse(decoded[0])) ||
-      typeof decoded[1] !== "string" ||
-      !/^[0-9a-f-]{36}$/i.test(decoded[1])
-    ) {
-      throw new InvalidEventListingCursorError();
-    }
-    return { startsAt: new Date(decoded[0]), id: decoded[1] };
-  } catch (error) {
-    if (error instanceof InvalidEventListingCursorError) throw error;
+  } catch {
     throw new InvalidEventListingCursorError();
   }
 }
@@ -1207,7 +1208,7 @@ export class EventsService {
         : await this.repo.listUpcoming(cutoff, query.limit + 1, after);
     const hasMore = rows.length > query.limit;
     const pageRows = rows.slice(0, query.limit);
-    const next = hasMore ? pageRows.at(-1)?.event : undefined;
+    const next = hasMore ? pageRows.at(-1) : undefined;
     const speakers = await this.speakerProjection.resolveMany(
       pageRows.map((row) => row.event.id),
     );
@@ -1228,7 +1229,10 @@ export class EventsService {
         pagination: {
           hasMore,
           nextCursor: next
-            ? encodeEventListingCursor(next.startsAt, next.id)
+            ? encodeEventListingCursor({
+                startsAt: next.startsAtCursor,
+                id: next.event.id,
+              })
             : null,
         },
       };
@@ -1242,7 +1246,10 @@ export class EventsService {
       pagination: {
         hasMore,
         nextCursor: next
-          ? encodeEventListingCursor(next.startsAt, next.id)
+          ? encodeEventListingCursor({
+              startsAt: next.startsAtCursor,
+              id: next.event.id,
+            })
           : null,
       },
     };

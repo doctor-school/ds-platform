@@ -29,7 +29,10 @@ The webinar event module. It hosts two surfaces over one aggregate:
   cursor-paged upcoming/hide feed
   (`GET /v1/public/events?timeframe=upcoming|past` →
   `PublicEventListingPage`, 014 EARS-11: tab counts, ended-only newest-first
-  archive and one batch-resolved `RecordingProjection` per past card), the
+  archive and one batch-resolved `RecordingProjection` per past card; its
+  `(starts_at, id)` keyset cursor is the SHARED, microsecond-exact
+  `../taxonomy/public-event-cursor.ts` — never a millisecond `Date`, which
+  truncates the cutoff and re-serves the row that issued it, #1888), the
   month-range read (`GET /v1/public/events?month=YYYY-MM` →
   `MonthBroadcastEntry[]`, 004 EARS-15: every `published`/`live`/`ended` event
   whose start instant falls in the requested month — МСК month boundaries via the

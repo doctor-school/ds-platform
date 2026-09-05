@@ -552,3 +552,46 @@ Feature: A finished broadcast keeps its value as a recording, and the archive is
     And active filters are chips with one Reset all
     And the list is paginated
     And an action with no possible effect is absent or disabled
+
+  @EARS-29 @core @happy
+  Scenario: The backfill attaches and publishes recordings for platform-born events
+    Given two ended platform events each with a real live_at and no recording
+    And a manifest with one row per event naming provider and embed reference
+    When the platform_admin runs the recording backfill
+    Then each event has one published edited recording attached through the ordinary commands
+    And each recording duration was derived from provider metadata
+    And live_at starts_at and the event lifecycle state are unchanged on both events
+    And one feature 010 audit row exists per committed mutation
+    And the report lists both rows as attached and published
+
+  @EARS-29 @core @happy
+  Scenario: Re-running the same manifest changes nothing
+    Given the recording backfill has already run over a manifest
+    When the platform_admin runs the very same manifest again
+    Then every row is reported skipped
+    And no second recording row exists for any event and kind
+    And no audit row was appended
+
+  @EARS-29 @core @unhappy
+  Scenario: A published event that never went live is refused
+    Given a platform event in published whose start date has passed and which never went live
+    And a manifest row targeting that event
+    When the platform_admin runs the recording backfill
+    Then that row is refused with 409 EVENT_NOT_FINISHED
+    And the event state is still published
+    And the run continues and reports the remaining rows
+
+  @EARS-29 @core @unhappy
+  Scenario: A legacy event is not a backfill target
+    Given a legacy event in hidden
+    And a manifest row targeting that event
+    When the platform_admin runs the recording backfill
+    Then that row is refused with 409 INVALID_TRANSITION
+    And no recording was attached to the legacy event
+
+  @EARS-29 @core @happy
+  Scenario: The dry-run reports without mutating
+    Given a manifest mixing an eligible ended event an already backfilled event and a published event
+    When the platform_admin runs the recording backfill in dry-run mode
+    Then the report reads would-attach skipped and refused respectively
+    And no recording row audit row or event field changed

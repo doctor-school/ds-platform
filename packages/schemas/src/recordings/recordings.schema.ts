@@ -4,7 +4,6 @@ import {
   MSK_LOCAL_DATETIME,
   RecordingExpectedBySchema,
   refineEmbedRefForProvider,
-  SpeakerEntrySchema,
   StreamProviderSchema,
 } from "../events/events.schema.js";
 import { TaxonomyErrorCodeSchema } from "../taxonomy/taxonomy.schema.js";
@@ -92,8 +91,11 @@ export type AttachRecordingRequest = z.infer<
 /**
  * `CreateLegacyBroadcast` — `POST /v1/admin/legacy-broadcasts` (014 EARS-24).
  * Submitted by the ordinary create-event form with «Это архивный эфир» checked:
- * one `legacy` event authored from a title, a held-at instant, a duration,
- * speakers and a recording, born `hidden`.
+ * one `legacy` event authored from a title, a held-at instant, a duration and a
+ * recording, born `hidden`. Speakers are NOT part of this body: 012 EARS-24
+ * (#1607) removed the free-text list from every admin write seam, so an
+ * архивный эфир names its speakers the same way a platform one does — an
+ * `event_experts` link created from the event page.
  *
  * It lives HERE and not in `events.schema.ts` for the same reason the note above
  * gives for `RecordingExpectedBySchema`: one home per symbol, and this body
@@ -139,8 +141,6 @@ export const LegacyBroadcastCreateBodySchema = z
       .positive()
       .max(24 * 60),
     description: z.string().trim().max(20_000).default(""),
-    /** Ordered free-text speakers, the same LD-1 shape `CreateEvent` takes. */
-    speakers: z.array(SpeakerEntrySchema).max(50).default([]),
     specialties: z.array(z.string().trim().min(1).max(100)).max(100).default([]),
     /** The recording the эфир exists to carry — created `draft` (EARS-24). */
     recording: AttachRecordingRequestSchema,

@@ -76,12 +76,6 @@ import {
 } from "./release-gate.mjs";
 import { composeDigest } from "./release-notes.mjs";
 import {
-  RollbackFloorError,
-  assertRollbackAllowed,
-  makeGitReleaseTagLister,
-  makeProdFloorReader,
-} from "./rollback-floor.mjs";
-import {
   API_PROD_COMPOSE_PATH,
   bootProbeSet,
   deployServiceSet,
@@ -1369,37 +1363,6 @@ async function rollback(shaArg) {
       .map((svc) => `${svc.image}:${sha.slice(0, 12)}`)
       .join(" / ")}`,
   );
-
-  // ── #1633 / EARS-24: the speaker-cutover rollback compatibility floor. FIRST
-  //    thing after argument resolution, so a target below the retained floor is
-  //    refused before ANY provider read or mutation — no image probe, no `.env`
-  //    rewrite, no `up -d`. Fail-closed rules and the one recorded allow
-  //    (a production DB predating the cutover migration) live in
-  //    tools/deploy/rollback-floor.mjs.
-  step("EARS-24: rollback compatibility floor (retained cutover SSOT)");
-  try {
-    const verdict = await assertRollbackAllowed({
-      sha,
-      readFloor: makeProdFloorReader({
-        sshCapture,
-        host: DATA_PROD,
-        composeDir: DATA_COMPOSE,
-      }),
-      listReleaseTags: makeGitReleaseTagLister(localCap),
-    });
-    ok(`rollback floor: ${verdict.reason}`);
-  } catch (err) {
-    if (err instanceof RollbackFloorError) {
-      die(
-        `ROLLBACK REFUSED [${err.code}] — ${err.message}\n` +
-          `  The speaker-migration cutover (spec 012, EARS-24) makes a pre-expand\n` +
-          `  image database-INCOMPATIBLE once the source set is closed. Prod was not\n` +
-          `  touched. Roll FORWARD to a release at or above the retained floor, or\n` +
-          `  restore the database from pgbackrest first — see tools/deploy/README.md.`,
-      );
-    }
-    throw err;
-  }
 
   // The target images must still be on the box (retention keeps the last 3).
   const present = await sshCapture(

@@ -12,7 +12,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import { events, eventSpeakers } from "./events.js";
+import { events } from "./events.js";
 import { specialtiesMinzdrav } from "./specialties.js";
 import { users } from "./users.js";
 
@@ -515,21 +515,10 @@ export const EVENT_EXPERT_POSITION_MAX = 32767;
 /**
  * `event_experts` — the explicit expert↔event link (012 EARS-7, #1289).
  *
- * This is the ONLY seam between the first-class `experts` roster and the legacy
- * free-text `event_speakers` list of feature 007. The match is EXPLICIT: an
- * operator supplies `legacy_speaker_id`, and the composite foreign key
- * `(event_id, legacy_speaker_id) → event_speakers(event_id, id)` proves in the
- * database that the referenced speaker belongs to THIS event. A plain
- * `event_speakers.id` reference would be satisfied by a speaker of any other
- * event and is explicitly not treated as sufficient (012-design §2.1). Names are
- * never compared — no name-similarity inference exists anywhere in this feature
- * (§4 LD-2).
- *
- * Creating a match never touches the matched row: its `name`, `regalia`,
- * `record_status` and `deleted_at` are left exactly as they are (§2.3). The
- * legacy row is merely SUPPRESSED from the merged public projection while an
- * eligible published expert supersedes it (EARS-8, #1290); retiring this link
- * makes the fallback visible again.
+ * Since the EARS-24 cutover this is the SOLE source of an event's speaker
+ * projection: the free-text `event_speakers` list of feature 007 no longer
+ * exists, so there is no legacy match to express and no suppression rule to
+ * apply. A published, eligible expert linked here IS the speaker.
  *
  * `ON DELETE RESTRICT` on both endpoints plus the retained lifecycle envelope
  * means nothing here is ever physically deleted — there is no DELETE route
@@ -554,12 +543,6 @@ export const eventExperts = pgTable(
     role: text("role"),
     /** Presentation order within the event's merged visible speaker projection. */
     position: integer("position").notNull(),
-    /**
-     * The explicitly matched legacy speaker of the SAME event, or null for an
-     * unpaired expert. Unique across retained links: one legacy row can be
-     * superseded by at most one expert.
-     */
-    legacySpeakerId: uuid("legacy_speaker_id"),
     status: relationshipStatus("status").notNull().default("active"),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
     /** Optimistic-concurrency counter behind the join ETag; starts at 1, `++` per successful write. */
@@ -572,25 +555,15 @@ export const eventExperts = pgTable(
       .defaultNow(),
   },
   (t) => [
-    // The composite reference of 012-design §2.1: the pair must belong together.
-    foreignKey({
-      name: "event_experts_event_legacy_speaker_fk",
-      columns: [t.eventId, t.legacySpeakerId],
-      foreignColumns: [eventSpeakers.eventId, eventSpeakers.id],
-    }).onDelete("restrict"),
     // The logical endpoint pair spans EVERY retained row (§2.1): a retired link
     // is RESTORED, never re-created, so the same expert cannot accumulate two
     // rows on one event.
     uniqueIndex("event_experts_event_expert_key").on(t.eventId, t.expertId),
-    // One legacy speaker is superseded by at most one expert link, retained rows
-    // included. Postgres treats NULLs as distinct, so unpaired links are
-    // unconstrained here — exactly the intent.
-    uniqueIndex("event_experts_legacy_speaker_key").on(t.legacySpeakerId),
-    // The within-table backstop for the §4 visible-slot rule. Partial on
-    // `active`, mirroring `event_speakers_event_position_active_uniq`: a retired
-    // link must not squat on a slot the live projection needs. The CROSS-table
-    // collision with an unsuppressed legacy row is not expressible as an index
-    // and is refused by the service with 409 `SPEAKER_POSITION_OCCUPIED`.
+    // The visible-slot rule of §4, now enforced in full by the database:
+    // partial on `active`, so a retired link never squats on a slot the live
+    // projection needs. With `event_speakers` gone this index is the ONLY
+    // source of a slot collision — the service surfaces it as 409
+    // `SPEAKER_POSITION_OCCUPIED`.
     uniqueIndex("event_experts_event_position_active_uniq")
       .on(t.eventId, t.position)
       .where(sql`${t.status} = 'active'`),

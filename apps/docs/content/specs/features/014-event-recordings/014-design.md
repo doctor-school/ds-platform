@@ -424,7 +424,7 @@ RFC 7807 Problem Details with `traceId` and an exact `errorCode`, per ADR-0002 �
 
 ## 13. Sequencing
 
-Revised shared Stage A [#1605](https://github.com/doctor-school/ds-platform/issues/1605) completes before runtime rework. Delivery then stays within three bounded waves: **model/migration** [#1606](https://github.com/doctor-school/ds-platform/issues/1606) → [#1607](https://github.com/doctor-school/ds-platform/issues/1607) → [#1608](https://github.com/doctor-school/ds-platform/issues/1608) (EARS-21; blocked until 012's guarded cutover); **reversible media/relations** [#1609](https://github.com/doctor-school/ds-platform/issues/1609), [#1610](https://github.com/doctor-school/ds-platform/issues/1610), [#1611](https://github.com/doctor-school/ds-platform/issues/1611) (EARS-20); then **shared UX** [#1297](https://github.com/doctor-school/ds-platform/issues/1297) before [#1612](https://github.com/doctor-school/ds-platform/issues/1612) (EARS-22). The first two waves are each at most three PRs.
+Revised shared Stage A [#1605](https://github.com/doctor-school/ds-platform/issues/1605) completes before runtime rework. Delivery then stays within three bounded waves: **model/migration** [#1606](https://github.com/doctor-school/ds-platform/issues/1606) → [#1607](https://github.com/doctor-school/ds-platform/issues/1607) → [#1608](https://github.com/doctor-school/ds-platform/issues/1608) (EARS-21; blocked until 012's speaker cutover to `event_experts`); **reversible media/relations** [#1609](https://github.com/doctor-school/ds-platform/issues/1609), [#1610](https://github.com/doctor-school/ds-platform/issues/1610), [#1611](https://github.com/doctor-school/ds-platform/issues/1611) (EARS-20); then **shared UX** [#1297](https://github.com/doctor-school/ds-platform/issues/1297) before [#1612](https://github.com/doctor-school/ds-platform/issues/1612) (EARS-22). The first two waves are each at most three PRs.
 
 ```mermaid
 flowchart LR
@@ -438,7 +438,7 @@ flowchart LR
   R --> TB
   R --> ME
   TWELVE["012 relations wave"] --> FA["facet unit + AND filtering (EARS-12/13/14)"]
-  CUTOVER["012 guarded speaker cutover #1607"] --> SP["canonical archived speakers #1608 (EARS-21)"]
+  CUTOVER["012 speaker cutover to event_experts #1607"] --> SP["canonical archived speakers #1608 (EARS-21)"]
   TWELVE --> PT["projects + topics on the page (EARS-19)"]
   PG --> PT
   U --> FA
@@ -447,7 +447,7 @@ flowchart LR
   FA --> AX
 ```
 
-The original `core` runs end to end without the 012 track. The two taxonomy `facets` boxes wait on 012's relations wave, and the revised archived-speaker projection #1608 separately waits on #1607's guarded cutover; it never reads retained source provenance.
+The original `core` runs end to end without the 012 track. The two taxonomy `facets` boxes wait on 012's relations wave, and the revised archived-speaker projection #1608 separately waits on #1607's cutover, after which it simply reads `event_experts`; it never reads a legacy free-text speaker row.
 
 **The rename lands first, then the legacy lifecycle.** EARS-28 is a single cutover — migration, contract, generated SDK and labels in one step — and it is sequenced before EARS-23…EARS-27 so no two names for the terminal state ever coexist in the tree. The legacy lifecycle follows immediately: without it there is nothing in the archive but the platform's own room history, so the archive the PRD premises ships empty. It touches the `origin` discriminator, two command handlers, the «Архивный эфир» create surface and the 007 amendment, and it unblocks every downstream demonstration of the feature.
 

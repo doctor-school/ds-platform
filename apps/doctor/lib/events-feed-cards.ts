@@ -29,8 +29,22 @@ export const DOCTOR_EVENTS_FEED_COPY = {
   free: "бесплатно для врача",
   signUp: "коллег записались",
   showMore: "Показать ещё",
-  /** The card CTA of an open event — the guest hand-off and the doctor's own path share it. */
-  participate: "Участвовать",
+  /**
+   * The card CTA of an open event — the guest hand-off and the doctor's own path
+   * share it. The trailing «↗» is the canvas's own glyph
+   * (`design-source/doctor-events.dc.html` L557), not decoration: it marks the
+   * card action as the one control that LEAVES the feed.
+   */
+  participate: "Участвовать ↗",
+  /**
+   * 019 EARS-12 — the guest gate band under the day feed
+   * (`design-source/doctor-events.dc.html` L260-263, `guestGateOn`). It states
+   * the ONE thing an account is needed for and promises the exact return; it is
+   * never a gate over the READ, which stays whole for a guest.
+   */
+  guestGateTitle: "Участвовать — нужна регистрация.",
+  guestGateBody:
+    "После регистрации вы вернётесь ровно сюда, к выбранному событию.",
   emptyTitle: "На выбранном отрезке событий нет",
   emptyDescription:
     "Расширьте период кнопкой «Показать ещё» — она сдвигает границу в адресе страницы.",

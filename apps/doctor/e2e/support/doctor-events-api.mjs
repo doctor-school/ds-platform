@@ -24,6 +24,9 @@ const DEFAULT_TO = "2026-09-15";
 
 const card = (id, startsAt, overrides = {}) => ({
   id,
+  // 019 EARS-12: the slug is what the guest hand-off carries into 021 and what
+  // the `?resume=` return re-seats on, so the fixture cards must carry it.
+  slug: id,
   href: `/events/${id}`,
   startsAt,
   endsAt: null,
@@ -187,7 +190,20 @@ const server = createServer((request, response) => {
 
   // The shell reads these on every route; «unknown» is a valid answer for both.
   if (url.pathname === "/v1/auth/session") {
-    return json(response, 401, { status: 401 });
+    // 019 EARS-12 needs BOTH viewers on the same fixture: the feed read is
+    // viewer-independent, and the only difference the route may show is where a
+    // card's «Участвовать ↗» points. So the session read answers the forwarded
+    // `__Host-ds_session` cookie — present means a signed-in doctor, absent
+    // means a guest — rather than 401ing unconditionally.
+    const cookie = request.headers.cookie ?? "";
+    if (!cookie.includes("__Host-ds_session=")) {
+      return json(response, 401, { status: 401 });
+    }
+    return json(response, 200, {
+      sub: "00000000-0000-4000-8000-000000000001",
+      email: "doctor@example.test",
+      roles: ["doctor"],
+    });
   }
   if (url.pathname === "/v1/public/specialty-choice") {
     return json(response, 200, { specialty: null, storedIn: "none" });

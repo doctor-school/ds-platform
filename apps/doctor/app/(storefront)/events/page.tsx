@@ -1,6 +1,11 @@
 import { headers } from "next/headers";
+import { Alert } from "@ds/design-system/alert";
 import { Button } from "@ds/design-system/button";
 import { EventList } from "@ds/design-system/blocks";
+import {
+  DOCTOR_EVENTS_FEED_RESUME_KEY,
+  mintDoctorEventsFeedReturnTarget,
+} from "@ds/schemas";
 import {
   DOCTOR_EVENTS_FEED_COPY,
   toEventListItems,
@@ -11,6 +16,27 @@ import { fetchDoctorEventsMonthGrid } from "@/lib/events-month";
 import { resolveShellAuth } from "@/lib/shell-auth";
 import { DoctorEventsDayAnchorScroll } from "./day-anchor-scroll";
 import { DoctorEventsMonthPaneView } from "./month-pane";
+import { DoctorEventsResumeScroll } from "./resume-anchor-scroll";
+
+/**
+ * 019 EARS-12 — the slug the returning doctor is re-seated on, read from the
+ * URL 021 handed back.
+ *
+ * Validation goes through the ONE minting guard rather than a second regex: a
+ * candidate is a resume slug exactly when the guard would mint a return target
+ * for it. A value that would not round-trip is simply not a slug — the feed
+ * renders unchanged and nothing is scrolled.
+ */
+function resumeSlugOf(
+  raw: Record<string, string | string[] | undefined>,
+): string | null {
+  const value = raw[DOCTOR_EVENTS_FEED_RESUME_KEY];
+  const candidate = Array.isArray(value) ? value[0] : value;
+  if (typeof candidate !== "string") return null;
+  return mintDoctorEventsFeedReturnTarget({}, candidate) === null
+    ? null
+    : candidate;
+}
 
 /**
  * 019 EARS-3 (#1518) — `doctor.school/events`, the day-grouped, specialty-
@@ -93,6 +119,19 @@ export default async function DoctorEventsPage({
     ? toDoctorEventsMonthPane(month.grid, raw, { from: feed.from, to: feed.to })
     : null;
 
+  const items = toEventListItems(feed, {
+    viewer: shellAuth.status,
+    feedQuery: raw,
+  });
+  // EARS-12: the gate band explains the ONE thing an account is for, so it is
+  // rendered only when there is something to explain — a guest looking at a
+  // feed that actually offers a card action. A doctor never receives it at all
+  // and an empty horizon shows nothing: the band is omitted by the SERVER, so
+  // no gated markup is delivered and hidden client-side.
+  const showGuestGate =
+    shellAuth.status === "guest" &&
+    items.some((item) => item.ctaHref !== undefined);
+
   return (
     <section
       className="mx-auto w-full min-w-0 max-w-5xl px-4 py-10"
@@ -118,12 +157,12 @@ export default async function DoctorEventsPage({
       )}
 
       <DoctorEventsDayAnchorScroll day={pane?.selectedDate ?? null} />
+      {/* EARS-12: mounted AFTER the day anchor so the card wins over `?day=`
+          when a restored URL carries both. */}
+      <DoctorEventsResumeScroll slug={resumeSlugOf(raw)} />
 
       <EventList
-        items={toEventListItems(feed, {
-          viewer: shellAuth.status,
-          feedQuery: raw,
-        })}
+        items={items}
         selectedTab="upcoming"
         tenseControl="none"
         paginationMode="none"
@@ -150,6 +189,19 @@ export default async function DoctorEventsPage({
           )
         }
       />
+
+      {/* EARS-12: the guest gate band the canvas puts BELOW the day feed
+          (`design-source/doctor-events.dc.html` L260-263, `guestGateOn`) — the
+          honest statement that the READ is whole and only the card action needs
+          an account, paired with the promise the `?resume=` return keeps. It is
+          the design-system `Alert` (info), never a hand-assembled tinted div,
+          and it carries no link of its own: the action is the card's CTA. */}
+      {showGuestGate ? (
+        <Alert className="mt-8" data-testid="events-guest-gate" variant="info">
+          <b>{DOCTOR_EVENTS_FEED_COPY.guestGateTitle}</b>{" "}
+          {DOCTOR_EVENTS_FEED_COPY.guestGateBody}
+        </Alert>
+      ) : null}
     </section>
   );
 }

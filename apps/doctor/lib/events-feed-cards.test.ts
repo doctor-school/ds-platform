@@ -143,3 +143,22 @@ describe("019 EARS-12: the feed card CTA", () => {
     expect(guest.map(strip)).toEqual(doctor.map(strip));
   });
 });
+
+describe("019 EARS-12: the guest-facing catalog copy", () => {
+  it("019 EARS-12: the card action carries the canvas's own label, glyph included", () => {
+    // Pinned as a literal on purpose: the label is a CANVAS decision
+    // (`design-source/doctor-events.dc.html` L557) and the «↗» is what marks
+    // this as the one control that LEAVES the feed. A silent drift back to a
+    // bare «Участвовать» is a parity break no structural assertion would see.
+    expect(DOCTOR_EVENTS_FEED_COPY.participate).toBe("Участвовать ↗");
+  });
+
+  it("019 EARS-12: the guest gate band states the account requirement and promises the exact return", () => {
+    expect(DOCTOR_EVENTS_FEED_COPY.guestGateTitle).toBe(
+      "Участвовать — нужна регистрация.",
+    );
+    expect(DOCTOR_EVENTS_FEED_COPY.guestGateBody).toBe(
+      "После регистрации вы вернётесь ровно сюда, к выбранному событию.",
+    );
+  });
+});

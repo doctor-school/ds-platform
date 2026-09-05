@@ -1336,33 +1336,32 @@ async function rollback(shaArg) {
   // the target predates is still declared there WITH a `build:` section, so
   // Compose would rebuild it from the current on-box source and tag it with the
   // rollback SHA — a green "ROLLBACK OK" over the very code being reverted.
-  // Compare the two derived sets and refuse the crossing BEFORE any ssh.
-  // Ground truth for "what prod runs" is `/v1/health`, the same source the
-  // hotfix pre-flight and the release gate use — not the Deployment record,
-  // which an app-only rollback leaves ahead of reality. UNKNOWN is fail-closed.
-  const liveHealth = await probeHealthSha(PROD_HEALTH_URL);
-  if (!liveHealth.sha) {
-    die(
-      `--rollback: cannot read the live prod SHA from ${PROD_HEALTH_URL}` +
-        ` (${liveHealth.error ?? "unknown"}) — without it the rollback cannot` +
-        ` tell whether it crosses a service-introduction boundary.`,
-    );
-  }
-  let liveSha;
+  // Compare the two sets and refuse the crossing BEFORE any state change.
+  // Ground truth for "what `up -d` will consume" is the compose file ON THE
+  // BOX itself, read over one read-only ssh channel — NOT `/v1/health`: an
+  // emergency rollback runs exactly when the api is 502/crash-looping (the
+  // state the deploy's own rollbackHint sends the operator from), so a health
+  // precondition would make the rollback unavailable when it is needed
+  // (#1901 review). An unreadable box is a refusal (fail-closed), never
+  // "assume the sets are equal".
+  let boxCompose;
   try {
-    liveSha = localCap("git", ["rev-parse", `${liveHealth.sha}^{commit}`]);
-  } catch {
+    boxCompose = await sshCapture(API_PROD, `cat ${API_COMPOSE}/compose.yml`);
+  } catch (e) {
     die(
-      `--rollback: the live prod SHA ${liveHealth.sha} does not resolve to a` +
-        ` commit in the local repo — fetch it before rolling back.`,
+      `--rollback: cannot read ${API_COMPOSE}/compose.yml on ${API_PROD}` +
+        ` (${e.message}) — without the box's declared service set the rollback` +
+        ` cannot tell whether it crosses a service-introduction boundary.`,
     );
   }
-  ok(`live prod SHA ${liveSha.slice(0, 12)} (from /v1/health)`);
-  const liveServices = resolveTargetServiceSet(
-    liveSha,
-    `live ${liveSha.slice(0, 12)}`,
-  );
-  const boundary = rollbackBoundaryVerdict(liveServices, services);
+  let boxServices;
+  try {
+    boxServices = deployServiceSet(boxCompose, { source: "box compose" });
+  } catch (e) {
+    die(`--rollback: ${e.message}`);
+  }
+  ok(`box compose declares ${formatServiceNames(boxServices)}`);
+  const boundary = rollbackBoundaryVerdict(boxServices, services);
   if (!boundary.ok) die(`--rollback: ${boundary.reason}`);
 
   step(

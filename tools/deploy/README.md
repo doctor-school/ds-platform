@@ -189,12 +189,15 @@ runs against the compose the LAST DEPLOY left on the box — newer than the roll
 target. A service the target predates is still declared there **with a `build:`
 section**, so Compose would rebuild it from the current on-box source, tag it with
 the rollback SHA, and report «ROLLBACK OK» over exactly the code being reverted.
-So `rollback()` derives two sets — the target's compose and the LIVE prod SHA's
-(`/v1/health`, the same ground truth the hotfix pre-flight uses) — and refuses
-before any ssh when the live set declares a service the target lacks, naming it
-(`rollbackBoundaryVerdict`). An unresolvable live SHA is a refusal too. Crossing a
-service-introduction boundary backwards is a forward fix or a `--ref` deploy of a
-tree that actually declares the wanted state, never an app-only rollback.
+So `rollback()` derives two sets — the target's compose (`git show`) and the compose
+file **on the box** (`cat …/api-prod/compose.yml` over one read-only ssh channel —
+the very file `up -d` consumes) — and refuses before any state change when the box
+declares a service the target lacks, naming it (`rollbackBoundaryVerdict`). The
+live set is deliberately NOT read from `/v1/health`: an emergency rollback runs
+exactly when the api is down, so the guard must not depend on it. An unreadable
+box compose is a refusal too. Crossing a service-introduction boundary backwards
+is a forward fix or a `--ref` deploy of a tree that actually declares the wanted
+state, never an app-only rollback.
 
 ## Rollback compatibility floor (`rollback-floor.mjs`, 012 EARS-24 / #1633)
 

@@ -10,7 +10,6 @@ import {
   OtpVerifySchema,
   type LoginRequest,
   type OtpRequest,
-  type OtpVerify,
 } from "@ds/schemas";
 
 import { AuthShell } from "@/components/auth-shell";
@@ -216,7 +215,14 @@ function PortalLoginCard() {
   async function onOtpVerify(values: LoginCardOtpVerifyValues) {
     setOtpVerifyError(null);
     try {
-      await authClient.loginWithOtp(values as OtpVerify);
+      // Mapped field-by-field, not cast: the block's structural values type and
+      // the `OtpVerify` contract coincide today, and a future field on the
+      // contract must fail typecheck HERE rather than ship a silent omission.
+      await authClient.loginWithOtp({
+        identifier: values.identifier,
+        code: values.code,
+        channel: values.channel,
+      });
       // 005 EARS-2: complete the carried registration (if any) now the session
       // exists, landing on the event page — else the 008 EARS-7 front-door.
       // #1004: soft landing → signal the header's auth re-read (see above).
@@ -235,12 +241,18 @@ function PortalLoginCard() {
   }
 
   // Switching method used to unmount the whole sub-form (Radix drops the inactive
-  // `TabsContent`), clearing its errors and any issued-code stage. The block still
-  // unmounts its own state; this clears the state the host now holds, so the
-  // observable behaviour is unchanged.
+  // `TabsContent`), clearing its errors, any issued-code stage AND — because the
+  // bot-protection hooks lived inside those sub-forms — any challenge in flight.
+  // The block still unmounts its own state; this clears the state the host now
+  // holds. EARS-17: the `reset()` calls are the terminal path the unmount used to
+  // be — without them a dismissed challenge would keep its stored closure and
+  // replay it (a duplicate `requestOtp`, or a login the doctor never re-submitted)
+  // when the field remounts on return to the tab.
   function onMethodChange() {
     setPasswordError(null);
     setPasswordCaptchaError(null);
+    passwordCaptcha.reset();
+    otpCaptcha.reset();
     resetOtpStage();
   }
 

@@ -12,6 +12,7 @@ import type { FieldValues, Resolver } from "react-hook-form";
 import {
   LoginCard,
   type LoginCardCopy,
+  type LoginCardMethod,
   type LoginCardOtpRequestValues,
   type LoginCardOtpVerifyValues,
   type LoginCardPasswordValues,
@@ -74,6 +75,7 @@ function setup(
     onResend?: (values: LoginCardOtpRequestValues) => void;
     onVerify?: (values: LoginCardOtpVerifyValues) => Promise<void> | void;
     onChangeMethod?: () => void;
+    onMethodChange?: (method: LoginCardMethod) => void;
     passwordError?: React.ReactNode;
     sentIdentifier?: string | null;
     resendNonce?: number;
@@ -83,6 +85,7 @@ function setup(
     <LoginCard
       copy={copy}
       links={{ register: "/register", reset: "/reset" }}
+      onMethodChange={overrides.onMethodChange ?? vi.fn()}
       password={{
         resolver: passthrough<LoginCardPasswordValues>(),
         onSubmit: overrides.onPasswordSubmit ?? vi.fn(),
@@ -141,6 +144,22 @@ describe("<LoginCard>", () => {
     expect(screen.queryByTestId("password-login-form")).not.toBeInTheDocument();
     expect(screen.getByTestId("otp-send")).toBeInTheDocument();
     expect(screen.getByText("copy.otp.heading")).toBeInTheDocument();
+  });
+
+  // The host's whole reset story hangs on this callback: the block's own state
+  // dies with the unmounted tab, but everything the host holds (errors, the OTP
+  // stage, an in-flight bot-protection challenge) is cleared only here.
+  it("announces the selected method on every tab switch, so the host can reset the state it owns", () => {
+    const onMethodChange = vi.fn();
+    setup({ onMethodChange });
+
+    fireEvent.mouseDown(screen.getByTestId("login-method-otp"), { button: 0 });
+    expect(onMethodChange).toHaveBeenNthCalledWith(1, "otp");
+
+    fireEvent.mouseDown(screen.getByTestId("login-method-password"), {
+      button: 0,
+    });
+    expect(onMethodChange).toHaveBeenNthCalledWith(2, "password");
   });
 
   it("hands the password values to the host handler and surfaces the host's error", async () => {

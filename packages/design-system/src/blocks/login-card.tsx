@@ -206,6 +206,9 @@ export interface LoginCardProps {
    * Initially selected method tab. Defaults to `"password"` (#179: no
    * "last-used" persistence). Uncontrolled — exists so a catalogue/showcase host
    * can present the code-entry stage; the apps leave it at the default.
+   *
+   * WARNING: a product host must NOT wire this to a persisted "last used
+   * method" — #179 deliberately keeps no auth UI state across visits.
    */
   defaultMethod?: LoginCardMethod;
   /** Fixed OTP length; defaults to the 8-digit login code. */
@@ -440,9 +443,10 @@ function OtpLogin({
 
           <Form {...requestForm}>
             <form
-              onSubmit={requestForm.handleSubmit((values) =>
-                onRequest({ identifier: values.identifier, channel }),
-              )}
+              // `values.channel` — not the `channel` state — so the submitted
+              // channel is the one the resolver just validated the identifier
+              // against; the two are kept in step by the `reset` on switch above.
+              onSubmit={requestForm.handleSubmit((values) => onRequest(values))}
               className="space-y-4"
               noValidate
             >

@@ -28,6 +28,34 @@ export type {
   LoginCardOtpRequestValues,
   LoginCardOtpVerifyValues,
 } from "./login-card";
+// #1666 slice B — the ONE canonical password-recovery and email-confirmation
+// compositions. Lifted verbatim from the portal `/reset` and `/verify` pages;
+// copy, resolvers, transport, routing and the captcha element stay app glue.
+export {
+  PasswordRecoveryCard,
+  PASSWORD_RECOVERY_OTP_LENGTH,
+  PASSWORD_RECOVERY_RESEND_COOLDOWN_SECONDS,
+} from "./password-recovery-card";
+export type {
+  PasswordRecoveryCardProps,
+  PasswordRecoveryCardCopy,
+  PasswordRecoveryStage,
+  PasswordRecoveryRequestProps,
+  PasswordRecoveryRequestValues,
+  PasswordRecoveryCompleteProps,
+  PasswordRecoveryCompleteValues,
+} from "./password-recovery-card";
+export {
+  EmailConfirmCard,
+  EMAIL_CONFIRM_OTP_LENGTH,
+  EMAIL_CONFIRM_RESEND_COOLDOWN_SECONDS,
+} from "./email-confirm-card";
+export type {
+  EmailConfirmCardProps,
+  EmailConfirmCardCopy,
+  EmailConfirmResendProps,
+  EmailConfirmValues,
+} from "./email-confirm-card";
 
 // 004 EARS-19 — month-calendar presentation blocks (webinars-month.dc.html).
 export { MonthCalendarGrid } from "./month-calendar-grid";
@@ -127,7 +155,10 @@ export {
   EventPageShell,
   EventSectionHeading,
 } from "./event-page-shell";
-export type { EventPageHeroProps, EventPageShellProps } from "./event-page-shell";
+export type {
+  EventPageHeroProps,
+  EventPageShellProps,
+} from "./event-page-shell";
 export { EventSignupCard } from "./event-signup-card";
 export type {
   EventSignupCardProps,

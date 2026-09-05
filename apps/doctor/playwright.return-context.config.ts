@@ -1,7 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
 /**
- * 021 EARS-2 (#1538) — the return-context tier.
+ * 021 EARS-2 (#1538) / EARS-3 (#1539) — the register-arrival tier.
  *
  * A THIRD doctor-storefront Playwright tier, alongside the backend-free
  * `playwright.ci.config.ts` and the specialty `playwright.consumption.config.ts`,
@@ -26,7 +26,14 @@ const API = `http://127.0.0.1:${API_PORT}`;
 
 export default defineConfig({
   testDir: "./e2e",
-  testMatch: "register-return-context.spec.ts",
+  // Both halves of the arrival question run on this tier: EARS-2's gate arrival
+  // (`register-return-context.spec.ts`) and EARS-3's direct arrival
+  // (`register-direct.spec.ts`, #1539). They share the tier because they share
+  // the reason for it — the return context AND the LD-4 landing are both
+  // resolved on the server, against this same double, before the first byte of
+  // HTML — and a second config would boot a second copy of the same app on a
+  // second pair of ports to answer the same upstream.
+  testMatch: "register-{return-context,direct}.spec.ts",
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,

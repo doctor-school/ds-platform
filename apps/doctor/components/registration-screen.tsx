@@ -78,6 +78,27 @@ export type RegistrationScreenProps = {
    * #1538). Absent when they came on their own (EARS-3, #1539).
    */
   returnContext?: ReactNode;
+  /**
+   * 021 EARS-3 (#1539) — WHERE THIS ARRIVAL LANDS after confirmation, resolved
+   * on the server and published as a fact on the form element
+   * (`data-registration-landing`).
+   *
+   * The whole screen is a function of the entry URL (`021-requirements-en.md`
+   * line 195), and the landing is the part of that function the pixels do not
+   * show: a gate arrival carries its return target (the shared guard's own
+   * reconstruction — one vocabulary, LD-3), a direct arrival carries the LD-4
+   * decision (`lib/registration-landing.ts` — the 019 events feed for a doctor
+   * whose specialty 017 remembers, the storefront home otherwise, never the
+   * account page).
+   *
+   * REQUIRED, and a CONSUMED SEAM rather than decoration: the post-confirmation
+   * success state of EARS-10 (#1546) reads this value for
+   * `SuccessState.primaryAction` instead of recomputing the decision on the far
+   * side of the confirmation hop, so the landing the doctor is promised on the
+   * door is the landing they get. It is not optional precisely so that no
+   * future caller can render the door without having decided.
+   */
+  landing: string;
   /** The resolved representative/organisation line (EARS-8, #1544). */
   attribution?: ReactNode;
   /** The pre-submission points promise read from configuration (EARS-9, #1545). */
@@ -140,6 +161,7 @@ const DECLARATION_LABEL_TAIL = MEDICAL_WORKER_DECLARATION_LABEL.slice(
 
 export function RegistrationScreen({
   returnContext,
+  landing,
   attribution,
   pointsPromise,
   consentTiers,
@@ -201,6 +223,13 @@ export function RegistrationScreen({
         <Form {...form}>
           <form
             data-testid="registration-form"
+            // EARS-3 — the server's landing decision, carried on the element the
+            // command belongs to. A data attribute rather than a hidden input:
+            // nothing submits it (the request contract has no return-target
+            // field, and adding one before #1546 consumes it would be the
+            // untracked seam AGENTS.md §6 forbids), and nothing on the client
+            // recomputes it.
+            data-registration-landing={landing}
             className="flex flex-col gap-4.5"
             noValidate
             // The command is not wired in this slice (see the header note);

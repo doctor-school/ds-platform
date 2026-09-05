@@ -61,8 +61,40 @@
  * comment or create the worktree BEFORE the first edit) lives in
  * `.claude/rules/repo-conventions.md` → Issue conventions.
  *
+ * GROOMING SECTIONS (#1873) — the deterministic half of a backlog groom; the
+ * judgment + owner dialogue half is the catalog skill `groom-backlog`, which
+ * runs this command as its step 1. Five sections, each grouped by `track:*`
+ * with a one-line `none` when empty, all READ-ONLY (nothing is closed,
+ * re-milestoned or re-linked here — those are lead/owner decisions):
+ *
+ *   - `## Wait for reuse`     — an Issue whose `Reuse:` field names a capability
+ *     the PAIRED track is already building (registry row or a claimed Issue with
+ *     the same path). Removed from Takeable — AGENTS.md §6 forbids the second
+ *     implementation; the matched path is always printed.
+ *   - `## Orphans`            — open, no native `blocked_by`, no sub-issue
+ *     parent, milestone ≠ the track's queue head (`no-blocker`, `no-parent`,
+ *     `off-head (<milestone>)`). Fails open when no head is computable (#1857),
+ *     and the whole section degrades to one `skipped` line when the board scan
+ *     that carries the sub-issue parent probe failed.
+ *   - `## Stalled`            — undelivered work to DRAIN first: `STALE-CLAIM`
+ *     (claim older than `--stalled-days`, default 3, with no open PR),
+ *     `READY-TO-LAND` (open PR with a head-pinned Mode-a APPROVE + green checks,
+ *     unmerged — the #1867 rule, reused from `merge-gate.mjs`), `MERGED-BUT-OPEN`
+ *     (a merged PR says `Closes #N`, #N still open).
+ *   - `## Likely done`        — an open Issue a MERGED PR claims to DELIVER:
+ *     either it closes it (`Closes/Fixes/Resolves #N`) or it carries it as the
+ *     Conventional-Commit scope of the PR title (`type(N):` / `type(N-slug):`).
+ *     A bare `#N` mention is NOT delivery evidence — merged bodies here are
+ *     dense with roadmap/board/dependency refs, and matching them flagged 55%
+ *     of the open backlog. `epic:` / `gate:` Issues are excluded (they outlive
+ *     every PR that names them). Verify against the diff, then close.
+ *   - `## Release rotation`   — per track, open milestones in queue order with
+ *     their open counts and the `EMPTY-NEXT` / `ALL-CLOSED-STILL-OPEN` /
+ *     `POZHE: n` flags.
+ *
  * The pure resolution/classification seams (`parseProseBlockers`, `classify`,
- * `detectClaim`)
+ * `detectClaim`, `findWaitForReuse`, `findOrphans`, `findStalled`,
+ * `findLikelyDone`, `releaseRotation`)
  * are exported and unit-tested (tools/lint/guard-tests/backlog-triage.spec.ts)
  * WITHOUT firing the `gh` subprocesses — the `main()` entry point is guarded.
  *
@@ -70,6 +102,7 @@
  * Issue to "unresolved" with a printed warning, never crashes the run.
  */
 import { execa } from "execa";
+import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -78,16 +111,22 @@ import {
   parseBoardItemsPage,
 } from "./gh/lib/projects-v2.mjs";
 import {
+  TRACK_MILESTONE_PREFIXES,
   formatRoadmapHygiene,
   parseIssueBoardNode,
   roadmapHygiene,
 } from "./gh/lib/roadmap-taxonomy.mjs";
 import {
   LITMUS_LINE,
+  isLaterMilestone,
   queueHead,
   queuePosition,
   trackOf,
 } from "./gh/lib/queue-position.mjs";
+// The single definition of a head-pinned Mode (a) APPROVE (#1867) — reused, not
+// re-implemented. `merge-gate.mjs` guards its own entry point, so importing the
+// pure classifier fires no `gh` call.
+import { classifyModeAVerdict } from "./gh/merge-gate.mjs";
 import {
   evaluateMainSync,
   mainSyncFixCommand,
@@ -865,6 +904,790 @@ export function claimLabel(claim: ClaimSignal): string {
   return `IN-FLIGHT-ELSEWHERE (${claim.source}, age ${formatClaimAge(claim.ageMs)})`;
 }
 
+// ── grooming sections (#1873) — pure seams ──────────────────────────────────
+
+/** The track sub-headings every grooming section groups by (#1873). */
+export const GROOM_TRACKS = [
+  "track:academy",
+  "track:doctor",
+  "track:platform",
+] as const;
+
+/** One grouped row of a grooming section: a track bucket plus its rendered line. */
+export interface TrackRow {
+  track: string | null;
+  line: string;
+}
+
+/**
+ * Render one grooming section: `## <heading> (n)`, a one-line lead, then a
+ * `### track:*` sub-heading per non-empty bucket (an Issue with no `track:*`
+ * label falls into `track:platform`). An EMPTY section prints exactly one
+ * content line — `none` — so a groom can tell "checked, nothing found" from
+ * "not computed" (the section is omitted entirely only when its fetch failed,
+ * and then a `## Warnings` row says so).
+ */
+export function formatTrackSection(
+  heading: string,
+  lead: string,
+  rows: TrackRow[],
+): string {
+  const out = [`## ${heading} (${rows.length})`, lead];
+  if (rows.length === 0) {
+    out.push("none");
+    return out.join("\n");
+  }
+  for (const track of GROOM_TRACKS) {
+    const items = rows.filter((r) => (r.track ?? "track:platform") === track);
+    if (items.length === 0) continue;
+    out.push(`### ${track} (${items.length})`);
+    for (const i of items) out.push(i.line);
+  }
+  return out.join("\n");
+}
+
+// ── wait-for-reuse ──────────────────────────────────────────────────────────
+
+/** One `Reuse:` field entry parsed out of an Issue body (ADR-0013 A1, #1821). */
+export interface ReuseRef {
+  kind: "canon" | "extract-from" | "new";
+  /** The canonical path the entry names (empty for `new:`). */
+  path: string;
+  /** An Issue number named inside the entry — `extract-from: <path> (#N)`. */
+  issue?: number;
+}
+
+/**
+ * Reduce one `Reuse:` value chunk to a bare path: drop parentheticals
+ * (`(extend)`, `(#1234)`), markdown emphasis/backticks and trailing
+ * punctuation. Returns `""` when what is left is not a repo path.
+ */
+export function normaliseReusePath(text: string): string {
+  const t = String(text)
+    .replace(/\([^)]*\)/g, " ")
+    .replace(/[`*"']/g, "")
+    .trim()
+    .replace(/[.,;:]+$/, "")
+    .trim();
+  return t.includes("/") ? t : "";
+}
+
+/**
+ * Parse every `Reuse: <kind>: <paths>` line of an Issue body (the
+ * `.github/ISSUE_TEMPLATE/default.md` field). A value may list several
+ * comma-separated paths; each becomes its own ref. Unknown kinds are ignored —
+ * this never guesses a capability out of free prose.
+ */
+export function parseReuseField(body: string): ReuseRef[] {
+  const refs: ReuseRef[] = [];
+  const re = /^[ \t]*(?:[-*][ \t]*)?\*{0,2}Reuse\*{0,2}[ \t]*:[ \t]*(.+)$/gim;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(body ?? "")) !== null) {
+    const value = (m[1] ?? "").trim();
+    const km = /^(canon|extract-from|new)[ \t]*:[ \t]*(.*)$/i.exec(value);
+    if (!km) continue;
+    const kind = (km[1] ?? "").toLowerCase() as ReuseRef["kind"];
+    if (kind === "new") {
+      refs.push({ kind, path: "" });
+      continue;
+    }
+    for (const chunk of (km[2] ?? "").split(",")) {
+      const path = normaliseReusePath(chunk);
+      if (!path) continue;
+      const issueMatch = /#(\d+)/.exec(chunk);
+      refs.push(
+        issueMatch
+          ? { kind, path, issue: Number(issueMatch[1]) }
+          : { kind, path },
+      );
+    }
+  }
+  return refs;
+}
+
+/** One row of the capability-ownership registry, reduced to what matching needs. */
+export interface CapabilityRow {
+  capability: string;
+  /** The `Canonical location` cell verbatim (may name several paths). */
+  canonical: string;
+  /** Every `#N` Issue ref anywhere in the row. */
+  issues: number[];
+}
+
+/**
+ * Parse the single markdown table of
+ * `apps/docs/content/specs/product/two-site-ia/capability-ownership.md`.
+ * Header and separator rows are skipped; `#N` refs are collected from the WHOLE
+ * row (consumer cells carry them as often as the `Extraction / debt` cell does).
+ */
+export function parseCapabilityRegistry(md: string): CapabilityRow[] {
+  const rows: CapabilityRow[] = [];
+  for (const raw of String(md ?? "").split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line.startsWith("|") || !line.endsWith("|")) continue;
+    const cells = line
+      .slice(1, -1)
+      .split("|")
+      .map((c) => c.trim());
+    if (cells.length < 3) continue;
+    const first = cells[0] ?? "";
+    if (/^:?-{2,}/.test(first)) continue; // separator row
+    if (first.toLowerCase() === "capability") continue; // header row
+    rows.push({
+      capability: first,
+      canonical: cells[1] ?? "",
+      issues: Array.from(
+        new Set((line.match(/#(\d+)/g) ?? []).map((x) => Number(x.slice(1)))),
+      ),
+    });
+  }
+  return rows;
+}
+
+/** An open Issue as the wait-for-reuse matcher consumes it. */
+export interface ReuseCandidate {
+  number: number;
+  title: string;
+  /** The Issue's `track:*` label, or null. */
+  track: string | null;
+  reuse: ReuseRef[];
+  /** Someone is actively building it (a live claim signal / In Progress). */
+  building: boolean;
+}
+
+/** One Issue that must WAIT because the other track is already building the block. */
+export interface WaitForReuse {
+  number: number;
+  title: string;
+  track: string;
+  /** The canonical path that matched — always printed, never implied. */
+  path: string;
+  blocker: number;
+  blockerTrack: string;
+  via: "registry" | "reuse-field";
+}
+
+/** The two product tracks that must not build the same block twice (#1873). */
+const PAIRED_TRACK: Record<string, string> = {
+  "track:academy": "track:doctor",
+  "track:doctor": "track:academy",
+};
+
+/**
+ * Cross-front reuse collision (AGENTS.md §6 «Cross-front capability reuse»,
+ * owner 2026-09-05: «a block being built in one track must NOT be started in
+ * the other — wait and reuse»).
+ *
+ * Issue A (track X) declaring `Reuse: canon:<path>` / `extract-from:<path>`
+ * WAITS when some OTHER open Issue B in the paired track either
+ *   (a) is referenced by the registry row whose `Canonical location` contains
+ *       that path, or
+ *   (b) declares the same path in its own `Reuse:` field AND is actively being
+ *       built (claim signal / In Progress).
+ * A `new:` ref never collides — nothing canonical exists to wait for.
+ *
+ * Read-only: the row is REMOVED from Takeable and listed with the matched path,
+ * so the lead can confirm it is the same capability before wiring `blocked_by`.
+ */
+export function findWaitForReuse(
+  candidates: ReuseCandidate[],
+  registry: CapabilityRow[],
+): WaitForReuse[] {
+  const byNumber = new Map(candidates.map((c) => [c.number, c]));
+  const out: WaitForReuse[] = [];
+  for (const c of candidates) {
+    const other = c.track ? PAIRED_TRACK[c.track] : undefined;
+    if (!c.track || !other) continue;
+    let hit: WaitForReuse | null = null;
+    const base = { number: c.number, title: c.title, track: c.track };
+    for (const ref of c.reuse) {
+      if (ref.kind === "new" || !ref.path) continue;
+      const needle = ref.path.toLowerCase();
+      for (const row of registry) {
+        if (!row.canonical.toLowerCase().includes(needle)) continue;
+        for (const n of row.issues) {
+          const b = byNumber.get(n);
+          if (!b || b.number === c.number || b.track !== other) continue;
+          hit = {
+            ...base,
+            path: ref.path,
+            blocker: b.number,
+            blockerTrack: other,
+            via: "registry",
+          };
+          break;
+        }
+        if (hit) break;
+      }
+      if (hit) break;
+      for (const b of candidates) {
+        if (b.number === c.number || b.track !== other || !b.building) continue;
+        if (!b.reuse.some((r) => r.path && r.path.toLowerCase() === needle))
+          continue;
+        hit = {
+          ...base,
+          path: ref.path,
+          blocker: b.number,
+          blockerTrack: other,
+          via: "reuse-field",
+        };
+        break;
+      }
+      if (hit) break;
+    }
+    if (hit) out.push(hit);
+  }
+  return out.sort((a, b) => a.number - b.number);
+}
+
+/** Render the `## Wait for reuse` section (#1873). */
+export function formatWaitForReuse(rows: WaitForReuse[]): string {
+  return formatTrackSection(
+    "Wait for reuse",
+    "The paired track is already building this block — AGENTS.md §6 forbids a second implementation. These rows are REMOVED from Takeable: confirm it is the same capability, then wire `blocked_by` on the building Issue WITH a rationale (registry: `apps/docs/content/specs/product/two-site-ia/capability-ownership.md`).",
+    rows.map((r) => ({
+      track: r.track,
+      line: `- #${r.number} WAIT-FOR-REUSE (#${r.blocker}, ${r.blockerTrack}) via ${r.via} — \`${r.path}\` — ${truncateTitle(r.title, 70)}`,
+    })),
+  );
+}
+
+// ── orphans ─────────────────────────────────────────────────────────────────
+
+/** Plain-data input to `findOrphans` — every probe pre-resolved by the caller. */
+export interface OrphanInput {
+  number: number;
+  title: string;
+  labels: string[];
+  milestone: string | null;
+  /** The Issue has at least one native `blocked_by` edge. */
+  hasNativeBlockedBy: boolean;
+  /** The Issue is a native sub-issue of some parent. */
+  hasParent: boolean;
+}
+
+/** One un-attached open Issue, with the reason tokens that made it one. */
+export interface Orphan {
+  number: number;
+  title: string;
+  track: string | null;
+  reasons: string[];
+}
+
+/**
+ * Open Issues with NO attachment to the critical path (owner 2026-09-05:
+ * «критический путь понятен, нет issue-сирот»): no native `blocked_by`, no
+ * sub-issue parent, and a milestone that is not the track's queue head. Epic
+ * and gate Issues are roots by construction and never orphans.
+ *
+ * FAILS OPEN like the claim guard (#1857): a track whose queue head could not
+ * be computed yields no verdict at all, rather than declaring every Issue
+ * off-head. Read-only — attaching an orphan is the lead's / owner's call.
+ */
+export function findOrphans(
+  inputs: OrphanInput[],
+  queueHeads: Array<{ track: string; head: string | null }>,
+): Orphan[] {
+  const headByTrack = new Map(queueHeads.map((q) => [q.track, q.head]));
+  const out: Orphan[] = [];
+  for (const i of inputs) {
+    const title = i.title.trim().toLowerCase();
+    if (title.startsWith("epic:") || title.startsWith("gate:")) continue;
+    if (i.hasNativeBlockedBy || i.hasParent) continue;
+    const track = trackOf(i.labels) as string | null;
+    const head = track ? (headByTrack.get(track) ?? null) : null;
+    if (head == null) continue;
+    const milestone = i.milestone ?? "";
+    if (milestone === head) continue;
+    out.push({
+      number: i.number,
+      title: i.title,
+      track,
+      reasons: [
+        "no-blocker",
+        "no-parent",
+        `off-head (${milestone || "no milestone"})`,
+      ],
+    });
+  }
+  return out.sort((a, b) => a.number - b.number);
+}
+
+const ORPHANS_LEAD =
+  "Open, unattached to the critical path: no native `blocked_by`, no sub-issue parent, milestone ≠ the track's queue head. Judge each one — attach to its epic, wire a technical `blocked_by` WITH a rationale, re-milestone, or ask the owner. Listing only: nothing is closed or re-linked here.";
+
+/**
+ * Render the `## Orphans` section (#1873). The sub-issue `parent` probe is the
+ * board scan; when that scan FAILED the whole section degrades to one skipped
+ * line rather than rendering with `no-parent` true for every Issue — a report
+ * telling the lead to re-link ~114 Issues that are already sub-issues is worse
+ * than no section at all (same fail-open posture as the missing queue head,
+ * #1857). The failure itself is already a `## Warnings` row.
+ */
+export function formatOrphans(rows: Orphan[], boardScanOk = true): string {
+  if (!boardScanOk) {
+    return [
+      "## Orphans (skipped)",
+      ORPHANS_LEAD,
+      "skipped — board scan failed (see Warnings); the sub-issue parent probe is unavailable, so every Issue would falsely read `no-parent`.",
+    ].join("\n");
+  }
+  return formatTrackSection(
+    "Orphans",
+    ORPHANS_LEAD,
+    rows.map((r) => ({
+      track: r.track,
+      line: `- #${r.number} [${r.reasons.join(", ")}] ${truncateTitle(r.title, 70)}`,
+    })),
+  );
+}
+
+// ── stalled + likely-done ───────────────────────────────────────────────────
+
+/** Every `Closes/Fixes/Resolves #N` Issue ref in a PR title/body. */
+export function closesRefs(text: string): number[] {
+  const out = new Set<number>();
+  const re = /\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s*:?\s+#(\d+)/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(String(text ?? ""))) !== null) out.add(Number(m[1]));
+  return Array.from(out).sort((a, b) => a - b);
+}
+
+/** One `statusCheckRollup` entry, reduced to what the green test needs. */
+export interface RollupCheck {
+  name?: string;
+  status?: string | null;
+  conclusion?: string | null;
+  state?: string | null;
+  completedAt?: string | null;
+  startedAt?: string | null;
+}
+
+const GREEN_CONCLUSIONS = new Set(["SUCCESS", "NEUTRAL", "SKIPPED"]);
+
+const NON_TERMINAL_STATES = new Set([
+  "IN_PROGRESS",
+  "QUEUED",
+  "PENDING",
+  "WAITING",
+  "REQUESTED",
+  "EXPECTED",
+]);
+
+/**
+ * Is this rollup entry still running? GitHub reports a run in flight with a
+ * non-terminal `status` AND the placeholder `completedAt: "0001-01-01T…"` —
+ * so the timestamp alone would sort an in-flight re-run BEHIND the older
+ * COMPLETED attempt it supersedes.
+ */
+export function isCheckInFlight(c: RollupCheck): boolean {
+  if (String(c?.completedAt ?? "").startsWith("0001-")) return true;
+  const status = String(c?.status ?? "").toUpperCase();
+  if (status && NON_TERMINAL_STATES.has(status)) return true;
+  const state = String(c?.state ?? "").toUpperCase();
+  return NON_TERMINAL_STATES.has(state);
+}
+
+/**
+ * Keep only the LATEST run per check name. GitHub returns every attempt in the
+ * rollup, so a re-run that fixed a red check still leaves the failed attempt in
+ * the array — comparing the raw list would report a green PR as red. Recency is
+ * keyed on `startedAt` (never on the `0001-` placeholder `completedAt` an
+ * in-flight run carries), and an in-flight attempt always wins its name: a
+ * re-run in progress must not read as the older green it is replacing.
+ */
+export function latestChecks(checks: RollupCheck[]): RollupCheck[] {
+  const byName = new Map<string, RollupCheck>();
+  for (const c of Array.isArray(checks) ? checks : []) {
+    const key = c?.name ?? "";
+    const prev = byName.get(key);
+    if (!prev) {
+      byName.set(key, c);
+      continue;
+    }
+    if (isCheckInFlight(prev)) continue;
+    const at = (x: RollupCheck) =>
+      x.startedAt ??
+      (String(x.completedAt ?? "").startsWith("0001-")
+        ? ""
+        : (x.completedAt ?? "")) ??
+      "";
+    if (isCheckInFlight(c) || at(c) >= at(prev)) byName.set(key, c);
+  }
+  return Array.from(byName.values());
+}
+
+/**
+ * Are ALL of a PR's checks green? Zero registered checks is NOT green (the
+ * #836 rule the merge gate uses): nothing ran, so nothing passed. A check still
+ * in flight is not green either.
+ */
+export function checksAllGreen(checks: RollupCheck[]): boolean {
+  const all = Array.isArray(checks) ? checks : [];
+  const latest = latestChecks(all);
+  if (latest.length === 0) return false;
+  // Any attempt of any check still running ⇒ the PR is not green, whatever the
+  // superseded attempts concluded (a spurious READY-TO-LAND is the worst row
+  // this report can print — the skill sends it straight to `ds-lander`).
+  if (all.some((c) => isCheckInFlight(c))) return false;
+  return latest.every((c) => {
+    const verdict = (c.conclusion ?? c.state ?? "").toUpperCase();
+    if ((c.status ?? "COMPLETED").toUpperCase() !== "COMPLETED") return false;
+    return GREEN_CONCLUSIONS.has(verdict);
+  });
+}
+
+/** An open PR as the stalled detector consumes it. */
+export interface StalledOpenPr {
+  number: number;
+  title: string;
+  body: string;
+  headRefOid: string;
+  /** Native review records — `commit_id` is the head pin (#1867). */
+  reviews: Array<{
+    body?: string;
+    commit_id?: string;
+    submitted_at?: string | null;
+  }>;
+  checks: RollupCheck[];
+}
+
+/**
+ * How far back the merged-PR scan looks. Printed in the `## Likely done` lead
+ * so a groom knows what was NOT looked at: an Issue whose closing PR merged
+ * beyond this horizon can never surface here.
+ */
+export const MERGED_PR_HORIZON = 100;
+
+/** A merged PR, reduced to the text the `Closes #N` scan reads. */
+export interface MergedPr {
+  number: number;
+  title: string;
+  body: string;
+}
+
+/** An open Issue as the stalled / likely-done detectors consume it. */
+export interface StalledIssue {
+  number: number;
+  title: string;
+  labels: string[];
+  /** Age of the live claim signal in ms, or null when the Issue is unclaimed. */
+  claimAgeMs: number | null;
+}
+
+export type StalledKind = "STALE-CLAIM" | "READY-TO-LAND" | "MERGED-BUT-OPEN";
+
+/** One undelivered item — the work that must be DRAINED before anything new. */
+export interface StalledRow {
+  kind: StalledKind;
+  /** Issue number for (a)/(c), PR number for (b). */
+  number: number;
+  title: string;
+  track: string | null;
+  detail: string;
+}
+
+/**
+ * Nothing undelivered left behind (owner 2026-09-05): three shapes of stalled
+ * work, all read-only findings.
+ *
+ * (a) `STALE-CLAIM`     — a claim signal older than `stalledDays` with no open
+ *     PR naming the Issue: either resume it or post a stop-state comment.
+ * (b) `READY-TO-LAND`   — an open PR carrying a Mode (a) APPROVE pinned to the
+ *     CURRENT head (`commit_id === headRefOid`, the #1867 rule) with every
+ *     check green, still unmerged: hand it to `ds-lander`.
+ * (c) `MERGED-BUT-OPEN` — a merged PR says `Closes #N` and #N is still open
+ *     (the keyword did not fire, or the merge tail stopped half-way).
+ */
+export function findStalled(input: {
+  issues: StalledIssue[];
+  openPrs: StalledOpenPr[];
+  mergedPrs: MergedPr[];
+  stalledDays: number;
+  /**
+   * Head-pinned Mode-a verdict classifier — injected so the pure seam stays
+   * testable; defaults to the merge gate's own `classifyModeAVerdict` (#1867),
+   * which is the single definition of a fresh APPROVE.
+   */
+  classifyVerdict?: (
+    reviews: StalledOpenPr["reviews"],
+    headSha: string,
+  ) => { state: string };
+}): StalledRow[] {
+  const classifyVerdict = input.classifyVerdict ?? classifyModeAVerdict;
+  const issueByNumber = new Map(input.issues.map((i) => [i.number, i]));
+  const thresholdMs = Math.max(0, input.stalledDays) * 24 * 60 * 60 * 1000;
+  const rows: StalledRow[] = [];
+
+  for (const i of input.issues) {
+    if (i.claimAgeMs == null || i.claimAgeMs <= thresholdMs) continue;
+    const claimed = input.openPrs.some((p) =>
+      mentionsIssue(`${p.title}\n${p.body}`, i.number),
+    );
+    if (claimed) continue;
+    rows.push({
+      kind: "STALE-CLAIM",
+      number: i.number,
+      title: i.title,
+      track: trackOf(i.labels) as string | null,
+      detail: `claimed ${formatClaimAge(i.claimAgeMs)} ago, no open PR (threshold ${input.stalledDays}d)`,
+    });
+  }
+
+  for (const p of input.openPrs) {
+    if (classifyVerdict(p.reviews, p.headRefOid).state !== "fresh-approve")
+      continue;
+    if (!checksAllGreen(p.checks)) continue;
+    const closes = closesRefs(`${p.title}\n${p.body}`);
+    const linked = closes.map((n) => issueByNumber.get(n)).find(Boolean);
+    rows.push({
+      kind: "READY-TO-LAND",
+      number: p.number,
+      title: p.title,
+      track: linked ? (trackOf(linked.labels) as string | null) : null,
+      detail: `PR — Mode (a) APPROVE pinned to ${p.headRefOid.slice(0, 7)} + all checks green, unmerged${
+        closes.length > 0 ? ` (closes ${closes.map((n) => `#${n}`).join(", ")})` : ""
+      }`,
+    });
+  }
+
+  const seen = new Set<string>();
+  for (const p of input.mergedPrs) {
+    for (const n of closesRefs(`${p.title}\n${p.body}`)) {
+      const issue = issueByNumber.get(n);
+      if (!issue) continue; // not open ⇒ the keyword did its job
+      const key = `${p.number}:${n}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      rows.push({
+        kind: "MERGED-BUT-OPEN",
+        number: n,
+        title: issue.title,
+        track: trackOf(issue.labels) as string | null,
+        detail: `merged PR #${p.number} says \`Closes #${n}\` — Issue still open`,
+      });
+    }
+  }
+
+  return rows.sort(
+    (a, b) => a.kind.localeCompare(b.kind) || a.number - b.number,
+  );
+}
+
+/** Render the `## Stalled` section (#1873). */
+export function formatStalled(rows: StalledRow[]): string {
+  return formatTrackSection(
+    "Stalled",
+    "Undelivered work — DRAIN this before picking anything new (owner 2026-09-05). `READY-TO-LAND` → `ds-lander` (`pnpm pr:land <N>`); `MERGED-BUT-OPEN` → verify the diff, then close; `STALE-CLAIM` → resume it or post a stop-state comment. Claim ages are surfaced, never auto-suppressed.",
+    rows.map((r) => ({
+      track: r.track,
+      line: `- #${r.number} ${r.kind} — ${r.detail} — ${truncateTitle(r.title, 60)}`,
+    })),
+  );
+}
+
+/** One open Issue a merged PR already claims to have delivered. */
+export interface LikelyDone {
+  number: number;
+  title: string;
+  track: string | null;
+  prs: number[];
+}
+
+/**
+ * The Issue number a Conventional-Commit PR title carries as its scope —
+ * `tooling(1873): …` / `feat(1722-slug): …` → `1873` / `1722`. This is the
+ * repo's own «this PR delivers that Issue» marker (AGENTS.md §2 squash title =
+ * PR title), so it is delivery evidence where a bare `#N` mention is not.
+ */
+export function titleScopeIssue(title: string): number | null {
+  const m = /^\s*[a-z]+\((\d+)(?:[^)]*)\)!?\s*:/i.exec(String(title ?? ""));
+  return m ? Number(m[1]) : null;
+}
+
+/**
+ * Actuality (owner 2026-09-05): an open Issue a MERGED PR claims to have
+ * DELIVERED — it closes it (`Closes/Fixes/Resolves #N`) or names it as the
+ * Conventional-Commit scope of its title. A bare `#N` mention is deliberately
+ * NOT enough: merged bodies in this repo carry roadmap, board and dependency
+ * references, and the mention rule flagged 106 of 191 open Issues, i.e. a list
+ * no groom can verify. `epic:` / `gate:` Issues are excluded — they are
+ * long-lived containers every slice PR names. Candidates to VERIFY against the
+ * merged diff and close; never auto-closed.
+ */
+export function findLikelyDone(
+  issues: StalledIssue[],
+  mergedPrs: MergedPr[],
+): LikelyDone[] {
+  const out: LikelyDone[] = [];
+  for (const i of issues) {
+    const title = i.title.trim().toLowerCase();
+    if (title.startsWith("epic:") || title.startsWith("gate:")) continue;
+    const prs = mergedPrs
+      .filter(
+        (p) =>
+          closesRefs(`${p.title}\n${p.body}`).includes(i.number) ||
+          titleScopeIssue(p.title) === i.number,
+      )
+      .map((p) => p.number)
+      .sort((a, b) => a - b);
+    if (prs.length === 0) continue;
+    out.push({
+      number: i.number,
+      title: i.title,
+      track: trackOf(i.labels) as string | null,
+      prs,
+    });
+  }
+  return out.sort((a, b) => a.number - b.number);
+}
+
+/** Render the `## Likely done` section (#1873). */
+export function formatLikelyDone(rows: LikelyDone[]): string {
+  return formatTrackSection(
+    "Likely done",
+    `Open, but a MERGED PR claims to DELIVER it — it closes the Issue (\`Closes/Fixes/Resolves #N\`) or carries it as the Conventional-Commit scope of its title (\`type(N):\`). A bare \`#N\` mention is not delivery evidence and is not listed; \`epic:\` / \`gate:\` Issues are excluded. Horizon: the last ${MERGED_PR_HORIZON} merged PRs. VERIFY against that PR's diff before closing (\`gh pr diff <N>\`), then close with a \`state_reason\` — the script never closes anything itself.`,
+    rows.map((r) => ({
+      track: r.track,
+      line: `- #${r.number} delivered by merged ${r.prs.map((p) => `PR #${p}`).join(", ")} — ${truncateTitle(r.title, 60)}`,
+    })),
+  );
+}
+
+// ── release rotation ────────────────────────────────────────────────────────
+
+/** One rendered milestone row of the rotation table. */
+export interface RotationRow {
+  title: string;
+  due: string | null;
+  open: number;
+  flags: string[];
+}
+
+/** The rotation view of one track. */
+export interface RotationTrack {
+  track: string;
+  head: string | null;
+  rows: RotationRow[];
+}
+
+/**
+ * Milestone track membership, from the SAME Russian prefixes the queue rules
+ * use (`TRACK_MILESTONE_PREFIXES`). A milestone matching no track prefix
+ * («Platform ops & hardening») belongs to `track:platform`.
+ */
+export function milestoneTrackOf(title: string): string {
+  for (const track of ["track:academy", "track:doctor"]) {
+    const prefix = (
+      TRACK_MILESTONE_PREFIXES as Record<string, string | undefined>
+    )[track];
+    if (prefix && String(title ?? "").startsWith(prefix)) return track;
+  }
+  return "track:platform";
+}
+
+/**
+ * Release rotation (owner 2026-09-05: «каждый релиз должен быть наполнен»):
+ * per track, every OPEN milestone ordered the way the queue orders them —
+ * dated by `due_on` first, then undated, with the «· Позже» backlog last of
+ * all — carrying its open-Issue count and the rotation flags:
+ *
+ *   - `EMPTY-NEXT`            — the release right AFTER the queue head has zero
+ *     open Issues: the next release is empty and needs filling / a «Позже» lift.
+ *   - `ALL-CLOSED-STILL-OPEN` — an open milestone, past its `due_on`, with zero
+ *     open Issues: it shipped, close the milestone.
+ *   - `POZHE: <n>`            — the size of the track's «· Позже» backlog, the
+ *     pool the last question of every groom lifts from.
+ */
+export function releaseRotation(
+  milestones: MilestoneRecord[],
+  issues: Array<{ milestone: string | null }>,
+  nowMs: number = Date.now(),
+): RotationTrack[] {
+  const openByMilestone = new Map<string, number>();
+  for (const i of issues) {
+    const key = i.milestone ?? "";
+    if (!key) continue;
+    openByMilestone.set(key, (openByMilestone.get(key) ?? 0) + 1);
+  }
+  const heads = new Map(
+    trackQueueHeads(milestones).map((q) => [q.track, q.head]),
+  );
+
+  return GROOM_TRACKS.map((track) => {
+    const mine = milestones
+      .filter(
+        (m) =>
+          typeof m.title === "string" &&
+          (m.state ?? "open") === "open" &&
+          milestoneTrackOf(m.title) === track,
+      )
+      .sort((a, b) => {
+        const later = (m: MilestoneRecord) => (isLaterMilestone(m.title) ? 1 : 0);
+        if (later(a) !== later(b)) return later(a) - later(b);
+        if (a.due_on && b.due_on)
+          return a.due_on < b.due_on ? -1 : a.due_on > b.due_on ? 1 : a.title.localeCompare(b.title);
+        if (a.due_on) return -1;
+        if (b.due_on) return 1;
+        return a.title.localeCompare(b.title);
+      });
+
+    const head = heads.get(track) ?? null;
+    const headIndex = head ? mine.findIndex((m) => m.title === head) : -1;
+    // The release right after the head, skipping the «· Позже» backlog.
+    const nextTitle =
+      headIndex >= 0
+        ? (mine.slice(headIndex + 1).find((m) => !isLaterMilestone(m.title))
+            ?.title ?? null)
+        : null;
+
+    const rows: RotationRow[] = mine.map((m) => {
+      const open = openByMilestone.get(m.title) ?? 0;
+      const flags: string[] = [];
+      if (m.title === head) flags.push("QUEUE-HEAD");
+      if (m.title === nextTitle && open === 0) flags.push("EMPTY-NEXT");
+      if (isLaterMilestone(m.title)) flags.push(`POZHE: ${open}`);
+      else if (
+        open === 0 &&
+        m.due_on != null &&
+        Date.parse(m.due_on) < nowMs
+      )
+        flags.push("ALL-CLOSED-STILL-OPEN");
+      return {
+        title: m.title,
+        due: m.due_on ? m.due_on.slice(0, 10) : null,
+        open,
+        flags,
+      };
+    });
+    return { track, head, rows };
+  }).filter((t) => t.rows.length > 0);
+}
+
+/** Render the `## Release rotation` section (#1873). */
+export function formatReleaseRotation(tracks: RotationTrack[]): string {
+  const total = tracks.reduce((n, t) => n + t.rows.length, 0);
+  const out = [
+    `## Release rotation (${total})`,
+    "Open milestones per track, in queue order (dated by `due_on`, then undated, «· Позже» last). `EMPTY-NEXT` = the release after the head has nothing in it; `ALL-CLOSED-STILL-OPEN` = it shipped, close the milestone; `POZHE: n` = the backlog the last groom question lifts from. Moving a milestone is an OWNER decision — this only reports.",
+  ];
+  if (total === 0) {
+    out.push("none");
+    return out.join("\n");
+  }
+  for (const t of tracks) {
+    out.push(`### ${t.track} (head: ${t.head ?? "none"})`);
+    for (const r of t.rows) {
+      out.push(
+        `- ${r.title} — due ${r.due ?? "—"}, ${r.open} open${
+          r.flags.length > 0 ? ` [${r.flags.join(" | ")}]` : ""
+        }`,
+      );
+    }
+  }
+  return out.join("\n");
+}
+
 // ── gh I/O (only reached from main()) ───────────────────────────────────────
 
 const REPO_ROOT = resolve(fileURLToPath(new URL(".", import.meta.url)), "..");
@@ -1004,6 +1827,79 @@ async function listBoardRows(): Promise<{
     if (!after) break;
   }
   return { prRows: rows, issueRows, truncations };
+}
+
+/** Merged PRs, newest first — the `Likely done` / `MERGED-BUT-OPEN` source (#1873). */
+async function listMergedPrs(): Promise<MergedPr[]> {
+  const { stdout } = await execa(
+    "gh",
+    ["pr", "list", "--state", "merged", "--limit", String(MERGED_PR_HORIZON), "--json", "number,title,body"],
+    { cwd: REPO_ROOT },
+  );
+  return JSON.parse(stdout) as MergedPr[];
+}
+
+/** Open PRs with their head SHA and check rollup — the `READY-TO-LAND` source (#1873). */
+async function listOpenPrs(): Promise<Omit<StalledOpenPr, "reviews">[]> {
+  const { stdout } = await execa(
+    "gh",
+    [
+      "pr",
+      "list",
+      "--state",
+      "open",
+      "--limit",
+      "100",
+      "--json",
+      "number,title,body,headRefOid,statusCheckRollup",
+    ],
+    { cwd: REPO_ROOT },
+  );
+  const raw = JSON.parse(stdout) as Array<{
+    number: number;
+    title: string;
+    body?: string;
+    headRefOid?: string;
+    statusCheckRollup?: RollupCheck[] | null;
+  }>;
+  return raw.map((p) => ({
+    number: p.number,
+    title: p.title,
+    body: p.body ?? "",
+    headRefOid: p.headRefOid ?? "",
+    checks: p.statusCheckRollup ?? [],
+  }));
+}
+
+/**
+ * One PR's native reviews. The REST payload is the only source of `commit_id`
+ * (the head pin `classifyModeAVerdict` needs) — `gh pr list --json reviews`
+ * omits it. One call per OPEN PR only, so the fan-out stays small.
+ */
+async function listPrReviews(n: number): Promise<StalledOpenPr["reviews"]> {
+  const { stdout } = await execa(
+    "gh",
+    [
+      "api",
+      `repos/{owner}/{repo}/pulls/${n}/reviews?per_page=100`,
+      "--jq",
+      "[.[] | {body, commit_id, submitted_at}]",
+    ],
+    { cwd: REPO_ROOT },
+  );
+  return JSON.parse(stdout) as StalledOpenPr["reviews"];
+}
+
+/** The capability-ownership registry, parsed from the repo working tree (#1873). */
+async function readCapabilityRegistry(): Promise<CapabilityRow[]> {
+  const md = await readFile(
+    resolve(
+      REPO_ROOT,
+      "apps/docs/content/specs/product/two-site-ia/capability-ownership.md",
+    ),
+    "utf8",
+  );
+  return parseCapabilityRegistry(md);
 }
 
 interface NativeDep {
@@ -1316,10 +2212,15 @@ function ts(): string {
 export function formatReport(
   triaged: Triage[],
   queueHeads: Array<{ track: string; head: string | null }> = [],
+  waitForReuse: WaitForReuse[] = [],
 ): string {
   const out: string[] = [];
+  // A WAIT-FOR-REUSE row is NOT takeable (#1873): the paired track is already
+  // building the block, and offering it here is exactly the duplicate-build the
+  // cross-front reuse rule forbids. It is listed in its own section, never hidden.
+  const waiting = new Set(waitForReuse.map((w) => w.number));
   const takeable = triaged
-    .filter((t) => t.readiness === "takeable" && !t.claim)
+    .filter((t) => t.readiness === "takeable" && !t.claim && !waiting.has(t.number))
     .sort((a, b) => a.number - b.number);
   const inFlight = triaged
     .filter((t) => t.readiness === "takeable" && t.claim)
@@ -1335,7 +2236,7 @@ export function formatReport(
   out.push(
     `${triaged.length} open issue(s): ${takeable.length} takeable, ${
       inFlight.length > 0 ? `${inFlight.length} in-flight-elsewhere, ` : ""
-    }${blocked.length} blocked.`,
+    }${waitForReuse.length > 0 ? `${waitForReuse.length} wait-for-reuse, ` : ""}${blocked.length} blocked.`,
   );
   out.push("");
 
@@ -1390,6 +2291,11 @@ export function formatReport(
       for (const n of t.notes) out.push(`    ↳ (${n})`);
     }
   }
+  out.push("");
+
+  // Cross-front reuse collisions (#1873) — printed directly after Takeable so
+  // the rows removed from it are visible in the same breath.
+  out.push(formatWaitForReuse(waitForReuse));
   out.push("");
 
   // Parallel-session claim signal (#811): deps all closed, but another session
@@ -1452,7 +2358,26 @@ export function formatReport(
   return out.join("\n");
 }
 
+/** Default age (days) after which a claim with no open PR is a STALE-CLAIM (#1873). */
+const DEFAULT_STALLED_DAYS = 3;
+
+/**
+ * `--stalled-days <n>` — the STALE-CLAIM threshold. A missing, non-numeric or
+ * negative value falls back to the default rather than inventing a threshold.
+ */
+export function parseStalledDays(
+  argv: string[],
+  fallback = DEFAULT_STALLED_DAYS,
+): number {
+  const i = argv.indexOf("--stalled-days");
+  if (i < 0) return fallback;
+  const raw = argv[i + 1];
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 ? n : fallback;
+}
+
 async function main(): Promise<void> {
+  const stalledDays = parseStalledDays(process.argv.slice(2));
   // Freshness gate (#630): fetch origin/main first, then REFUSE if the local
   // `main` ref is behind — readiness computed from stale tool code / a stale
   // dependency graph is exactly the #624/#418 miss this command must prevent. A
@@ -1487,6 +2412,9 @@ async function main(): Promise<void> {
   const provenanceText = makeProvenanceResolver();
 
   const triaged: Triage[] = [];
+  // Native `blocked_by` presence per Issue — the orphan rule's first token
+  // (#1873), taken from the SAME resolution pass so no second graph query runs.
+  const hasNativeEdge = new Map<number, boolean>();
   for (const raw of issues) {
     const input: IssueInput = {
       number: raw.number,
@@ -1498,6 +2426,10 @@ async function main(): Promise<void> {
       resolveState,
       resolveSibling,
       provenanceText,
+    );
+    hasNativeEdge.set(
+      raw.number,
+      deps.some((d) => d.source === "native-blocked-by"),
     );
     triaged.push(classify(input, deps));
   }
@@ -1536,9 +2468,114 @@ async function main(): Promise<void> {
     if (annotation) t.queue = annotation;
   }
 
+  // ── grooming inputs (#1873) ───────────────────────────────────────────────
+  // Every fetch below is best-effort: a failure degrades ITS section to a
+  // `## Warnings` row, never kills the run (the #497 posture).
+  const queueHeads = milestones.length > 0 ? trackQueueHeads(milestones) : [];
+  const claimAgeByNumber = new Map<number, number | null>(
+    triaged.map((t) => [t.number, t.claim?.ageMs ?? null]),
+  );
+  const groomIssues: StalledIssue[] = issues.map((raw) => ({
+    number: raw.number,
+    title: raw.title,
+    labels: (raw.labels ?? []).map((l) => l.name),
+    claimAgeMs: claimAgeByNumber.get(raw.number) ?? null,
+  }));
+
+  // One board scan feeds PR hygiene, roadmap hygiene AND the orphan rule's
+  // sub-issue parent probe — never an `gh api issues/N` call per Issue.
+  let board: Awaited<ReturnType<typeof listBoardRows>> | null = null;
+  try {
+    board = await listBoardRows();
+    for (const t of board.truncations)
+      warnings.push({ source: "board scan", message: t });
+  } catch (e) {
+    note("board scan", e);
+  }
+  const parented = new Set(
+    (board?.issueRows ?? []).filter((r) => r.parent != null).map((r) => r.number),
+  );
+
+  let registry: CapabilityRow[] = [];
+  try {
+    registry = await readCapabilityRegistry();
+  } catch (e) {
+    note("capability registry", e);
+  }
+  const waitForReuse = findWaitForReuse(
+    issues.map((raw) => ({
+      number: raw.number,
+      title: raw.title,
+      track: trackOf((raw.labels ?? []).map((l) => l.name)) as string | null,
+      reuse: parseReuseField(raw.body ?? ""),
+      building: (claimAgeByNumber.get(raw.number) ?? null) != null,
+    })),
+    registry,
+  );
+
+  let mergedPrs: MergedPr[] = [];
+  try {
+    mergedPrs = await listMergedPrs();
+  } catch (e) {
+    note("gh pr list --state merged", e);
+  }
+  const openPrs: StalledOpenPr[] = [];
+  try {
+    for (const p of await listOpenPrs()) {
+      let reviews: StalledOpenPr["reviews"] = [];
+      try {
+        reviews = await listPrReviews(p.number);
+      } catch (e) {
+        note(`gh api reviews #${p.number}`, e);
+      }
+      openPrs.push({ ...p, reviews });
+    }
+  } catch (e) {
+    note("gh pr list --state open", e);
+  }
+
   const out: string[] = [];
   if (staleBanner) out.push(`> ${staleBanner}`, "");
-  out.push(formatReport(triaged, milestones.length > 0 ? trackQueueHeads(milestones) : []));
+  out.push(formatReport(triaged, queueHeads, waitForReuse));
+
+  out.push(
+    formatOrphans(
+      findOrphans(
+        issues.map((raw) => ({
+          number: raw.number,
+          title: raw.title,
+          labels: (raw.labels ?? []).map((l) => l.name),
+          milestone: raw.milestone?.title ?? null,
+          hasNativeBlockedBy: hasNativeEdge.get(raw.number) ?? false,
+          hasParent: parented.has(raw.number),
+        })),
+        queueHeads,
+      ),
+      board != null,
+    ),
+    "",
+  );
+  out.push(
+    formatStalled(
+      findStalled({
+        issues: groomIssues,
+        openPrs,
+        mergedPrs,
+        stalledDays,
+      }),
+    ),
+    "",
+  );
+  out.push(formatLikelyDone(findLikelyDone(groomIssues, mergedPrs)), "");
+  out.push(
+    formatReleaseRotation(
+      releaseRotation(
+        milestones,
+        issues.map((raw) => ({ milestone: raw.milestone?.title ?? null })),
+      ),
+    ),
+    "",
+  );
 
   // Field hygiene (#1137): open Issues missing a required field. Silent when
   // every open Issue is compliant.
@@ -1557,17 +2594,12 @@ async function main(): Promise<void> {
   if (hygiene) out.push(hygiene, "");
 
   // PR board hygiene (#1140) + roadmap hygiene (#1729): both fed by the SINGLE
-  // paginated board scan. A scan failure degrades to a warning, never crashes.
-  try {
-    const board = await listBoardRows();
-    for (const t of board.truncations)
-      warnings.push({ source: "board scan", message: t });
+  // paginated board scan run above (it also feeds the #1873 orphan rule).
+  if (board) {
     const prHygiene = formatPrBoardHygiene(classifyPrBoardRows(board.prRows));
     if (prHygiene) out.push(prHygiene, "");
     const roadmap = formatRoadmapHygiene(roadmapHygiene(board.issueRows));
     if (roadmap) out.push(roadmap, "");
-  } catch (e) {
-    note("board scan", e);
   }
 
   if (warnings.length > 0) {

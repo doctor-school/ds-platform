@@ -29,8 +29,18 @@ import { ThemeToggle } from "@/components/theme-toggle";
  * real name exists. A fabricated avatar is unreachable rather than merely
  * unwritten.
  *
- * The chip itself is the DS {@link Avatar} primitive (canvas §05 «Аватар ·
- * инициалы», 40×40 square, token-only) — adopted, not hand-assembled (ADR-0013).
+ * The chip itself is the DS {@link Avatar} primitive at its `header` variant —
+ * the canvas header chip (`design-source/webinar-room.dc.html` §header): a WHITE
+ * square with navy ink in both themes and the offset `shadow-header-chip` cast.
+ * That variant is the SHARED presentation the academy's interactive chip also
+ * composes (`HEADER_CHIP_SURFACE` in the design system), so the two storefronts
+ * carry one chip look with no app-to-app import (AGENTS.md §6 cross-front reuse).
+ * The `default` fill would paint the chip in `primary-action` — the header's own
+ * navy — i.e. invisible on the band in light and a third look in dark.
+ *
+ * DESKTOP-ONLY, like the academy room (`hidden layout:inline-flex`): the 390px
+ * canvas header carries the close glyph and the tabs and no chip, so below the
+ * `layout` breakpoint the chip is not rendered rather than squeezed in.
  */
 export interface RoomUserClusterProps {
   /** The doctor's saved display name — never `null` where the room renders. */
@@ -50,6 +60,8 @@ export function RoomUserCluster({
     <div className="flex flex-none items-center gap-2.5 order-first layout:order-none">
       <ThemeToggle />
       <Avatar
+        variant="header"
+        className="hidden layout:inline-flex"
         aria-label={avatarLabel}
         title={avatarLabel}
         data-testid="room-avatar"

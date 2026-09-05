@@ -38,6 +38,25 @@ describe("006 EARS-15: the doctor room header carries the initials avatar", () =
     expect(html).toContain("Включить тёмную тему");
   });
 
+  it("006 EARS-15.3: the chip is the shared header-chip surface, desktop-only", () => {
+    const html = renderToStaticMarkup(
+      <RoomUserCluster
+        displayName="Анна Петрова"
+        avatarLabel="Ваш профиль: Анна Петрова"
+      />,
+    );
+
+    // The `header` Avatar variant — the canvas white-on-navy chip, the same
+    // surface the academy's interactive chip composes (one DS constant). The
+    // `default` fill would be the header's own navy: invisible on the band.
+    expect(html).toContain("bg-header-foreground");
+    expect(html).toContain("text-header-chip-foreground");
+    expect(html).toContain("shadow-header-chip");
+    expect(html).not.toContain("bg-primary-action");
+    // Desktop-only, like the academy room: the 390px canvas header has no chip.
+    expect(html).toMatch(/class="[^"]*\bhidden\b[^"]*\blayout:inline-flex\b/);
+  });
+
   it("006 EARS-15.2: a single-word name yields one initial and still no fabricated glyph", () => {
     const html = renderToStaticMarkup(
       <RoomUserCluster displayName="Пирогов" avatarLabel="Ваш профиль: Пирогов" />,

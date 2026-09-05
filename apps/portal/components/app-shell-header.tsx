@@ -6,12 +6,10 @@ import { usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { cn } from "@ds/design-system/lib/utils";
 import { Link as DsLink } from "@ds/design-system/link";
+import { HEADER_CHIP_BASE } from "@ds/design-system/header-chip";
 
 import { ThemeToggle } from "@/components/theme-toggle";
-import {
-  HEADER_CHIP_BASE,
-  HeaderUserCluster,
-} from "@/components/header-user-cluster";
+import { HeaderUserCluster } from "@/components/header-user-cluster";
 import { useHeaderAuth } from "@/lib/header-auth";
 
 /**

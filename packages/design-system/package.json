@@ -26,6 +26,7 @@
     "./filter-chip": "./src/primitives/filter-chip.tsx",
     "./badge": "./src/primitives/badge.tsx",
     "./avatar": "./src/primitives/avatar.tsx",
+    "./header-chip": "./src/primitives/header-chip.ts",
     "./checkbox": "./src/primitives/checkbox.tsx",
     "./radio": "./src/primitives/radio.tsx",
     "./switch": "./src/primitives/switch.tsx",

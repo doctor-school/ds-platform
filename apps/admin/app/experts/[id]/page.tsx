@@ -70,9 +70,15 @@ export default function ExpertDetailPage() {
           </Alert>
         ) : (
           <>
-            <div className="mb-6 flex items-center gap-3">
+            {/* The heading and the status badge stack below `sm` so a long
+                title and the badge never compete for the same line at a phone
+                width (#1674, adopting the #1399/#1387 detail-header pattern). */}
+            <div
+              className="mb-6 flex flex-col items-start gap-3 sm:flex-row sm:items-center"
+              data-testid="expert-detail-header"
+            >
               <h1
-                className="text-xl font-extrabold text-foreground"
+                className="min-w-0 break-words text-xl font-extrabold text-foreground"
                 data-testid="expert-heading"
               >
                 {detail.name ?? t("experts.removedName")}

@@ -40,8 +40,10 @@ import { cn } from "../lib/utils";
 /** True while rendering inside a `FormSection` — guards the single-action-row rule. */
 const SectionContext = React.createContext(false);
 
-export interface FormSectionProps
-  extends Omit<React.FieldsetHTMLAttributes<HTMLFieldSetElement>, "title"> {
+export interface FormSectionProps extends Omit<
+  React.FieldsetHTMLAttributes<HTMLFieldSetElement>,
+  "title"
+> {
   /** The section's statement heading — rendered as a real `<legend>`. */
   legend: React.ReactNode;
   /** One line of section context (the place for what would bloat a field hint). */
@@ -67,7 +69,9 @@ export function FormSection({
       <fieldset
         {...rest}
         disabled={locked || rest.disabled}
-        aria-describedby={description ? descriptionId : rest["aria-describedby"]}
+        aria-describedby={
+          description ? descriptionId : rest["aria-describedby"]
+        }
         data-locked={locked ? "true" : undefined}
         className={cn(
           "flex flex-col gap-4 border-t border-hairline pt-6 first:border-t-0 first:pt-0",
@@ -91,8 +95,7 @@ export function FormSection({
   );
 }
 
-export interface FormFieldGroupProps
-  extends React.HTMLAttributes<HTMLDivElement> {
+export interface FormFieldGroupProps extends React.HTMLAttributes<HTMLDivElement> {
   /** `two` = a two-up row for genuinely paired short fields; collapses below `sm`. */
   columns?: "one" | "two";
 }
@@ -132,7 +135,9 @@ export function FormSeparator({
 declare const process: { env?: { NODE_ENV?: string } } | undefined;
 
 function isDevelopment(): boolean {
-  return typeof process !== "undefined" && process?.env?.NODE_ENV !== "production";
+  return (
+    typeof process !== "undefined" && process?.env?.NODE_ENV !== "production"
+  );
 }
 
 export interface FormActionsProps extends React.HTMLAttributes<HTMLDivElement> {
@@ -172,8 +177,10 @@ export function FormActions({
   );
 }
 
-export interface FormDerivedNoteProps
-  extends Omit<React.HTMLAttributes<HTMLDivElement>, "title"> {
+export interface FormDerivedNoteProps extends Omit<
+  React.HTMLAttributes<HTMLDivElement>,
+  "title"
+> {
   /** What the derived value is called («Адрес страницы»). */
   title: React.ReactNode;
   /** The derived value itself, and when it locks. */
@@ -194,7 +201,13 @@ export function FormDerivedNote({
       <span className="text-caption font-bold text-tint-foreground">
         {title}
       </span>
-      <span className="text-xs text-muted-foreground">{children}</span>
+      {/* A derived value is machine-made — a public link, a slug, an id — so it
+          is often ONE token whose only break opportunities are its hyphens. Left
+          unbroken, a long one is wider than a phone viewport and the page itself
+          side-scrolls (#1674). The break belongs to the value box, once, here. */}
+      <span className="break-all text-xs text-muted-foreground">
+        {children}
+      </span>
     </div>
   );
 }

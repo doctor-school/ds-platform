@@ -26,7 +26,9 @@ describe("form layout blocks", () => {
     );
     const group = screen.getByRole("group", { name: "Основные сведения" });
     expect(group.tagName).toBe("FIELDSET");
-    expect(group.querySelector("legend")).toHaveTextContent("Основные сведения");
+    expect(group.querySelector("legend")).toHaveTextContent(
+      "Основные сведения",
+    );
   });
 
   it("wires the section description to the group through aria-describedby", () => {
@@ -51,10 +53,9 @@ describe("form layout blocks", () => {
       </FormSection>,
     );
     expect(screen.getByLabelText("Адрес")).toBeDisabled();
-    expect(screen.getByRole("group", { name: "Адрес страницы" })).toHaveAttribute(
-      "data-locked",
-      "true",
-    );
+    expect(
+      screen.getByRole("group", { name: "Адрес страницы" }),
+    ).toHaveAttribute("data-locked", "true");
   });
 
   it("stacks fields in a single column by default and two-up only on request", () => {
@@ -86,9 +87,9 @@ describe("form layout blocks", () => {
         <button type="submit">Сохранить</button>
       </FormActions>,
     );
-    expect(container.querySelectorAll('[data-form-actions="true"]')).toHaveLength(
-      1,
-    );
+    expect(
+      container.querySelectorAll('[data-form-actions="true"]'),
+    ).toHaveLength(1);
     const buttons = screen.getAllByRole("button");
     expect(buttons[0]).toHaveTextContent("Сохранить");
     expect(buttons[1]).toHaveTextContent("Отмена");
@@ -116,5 +117,21 @@ describe("form layout blocks", () => {
     );
     expect(screen.getByText("Адрес страницы")).toBeInTheDocument();
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+  });
+
+  it("breaks a derived value that is one unbreakable token (#1674)", () => {
+    // A derived public link is a single token whose only break opportunities are
+    // its hyphens, so a long transliterated slug renders a segment wider than a
+    // phone viewport and the PAGE — not this note — starts to side-scroll. The
+    // value box therefore owns the break, at the block, for every consumer.
+    const slug = "klinicheskayalaboratornayadiagnostikaivnutrennie";
+    render(
+      <FormDerivedNote title="Адрес страницы">
+        {`academy.doctor.school/napravleniya/${slug}`}
+      </FormDerivedNote>,
+    );
+    expect(
+      screen.getByText(`academy.doctor.school/napravleniya/${slug}`),
+    ).toHaveClass("break-all");
   });
 });

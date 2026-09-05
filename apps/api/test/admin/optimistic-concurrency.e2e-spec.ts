@@ -250,6 +250,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
           ...device,
           ...authHeaders(cookie),
           "content-type": "application/json",
+          // EARS-17.1 — the create is a mutation, so it owes a canonical key.
+          "idempotency-key": randomUUID(),
         },
         payload: {
           title: `Архивный эфир ${randomUUID().slice(0, 8)}`,

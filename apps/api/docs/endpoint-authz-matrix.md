@@ -111,7 +111,7 @@
 | POST /v1/admin/events/:id/transition                            | authenticated | platform_admin               | fast-path  | —            | false   | none       | low-stakes  | EARS-7, EARS-8                     |
 | POST /v1/admin/experts                                          | authenticated | platform_admin               | fast-path  | —            | false   | live       | low-stakes  | EARS-2, EARS-16, EARS-17           |
 | POST /v1/admin/experts/:id/publish                              | authenticated | platform_admin               | fast-path  | —            | false   | live       | low-stakes  | EARS-2, EARS-5, EARS-16, EARS-17   |
-| POST /v1/admin/legacy-broadcasts                                | authenticated | platform_admin               | fast-path  | —            | false   | live       | low-stakes  | EARS-24, EARS-8                    |
+| POST /v1/admin/legacy-broadcasts                                | authenticated | platform_admin               | fast-path  | —            | false   | live       | low-stakes  | EARS-24, EARS-8, EARS-17           |
 | POST /v1/admin/partners                                         | authenticated | platform_admin               | fast-path  | —            | false   | live       | low-stakes  | EARS-4, EARS-16, EARS-17           |
 | POST /v1/admin/partners/:id/publish                             | authenticated | platform_admin               | fast-path  | —            | false   | live       | low-stakes  | EARS-4, EARS-5, EARS-16, EARS-17   |
 | POST /v1/admin/project-experts                                  | authenticated | platform_admin               | fast-path  | —            | false   | live       | low-stakes  | EARS-9, EARS-16, EARS-17           |

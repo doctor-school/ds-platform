@@ -144,7 +144,15 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       validTransitions: EventLifecycleState[];
     }
 
-    /** `POST /v1/admin/legacy-broadcasts` — the EARS-24 create entry. */
+    /**
+     * `POST /v1/admin/legacy-broadcasts` — the EARS-24 create entry.
+     *
+     * Carries an `Idempotency-Key` because EARS-17.1 makes one mandatory on this
+     * route: the create authors an эфир, so a retry without a key would author a
+     * second one. Callers that need to exercise the key floor itself pass their
+     * own through `headers` (the cross-route sweep in
+     * `test/recordings/protocol.e2e-spec.ts` owns that contract).
+     */
     async function createLegacy(
       cookie: string,
       overrides: Record<string, unknown> = {},
@@ -156,6 +164,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
           ...device,
           ...authHeaders(cookie),
           "content-type": "application/json",
+          "idempotency-key": randomUUID(),
         },
         payload: {
           title: `Архивный эфир ${randomUUID().slice(0, 8)}`,

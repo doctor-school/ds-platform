@@ -39,6 +39,90 @@ Pipeline, fail-closed, stops at the first red step and prints a rollback pointer
    `--rollback` path skips this hold) · **release gate** (`release-gate.mjs`,
    #1662 — below). Refuses otherwise. Fixes the deployed commit to
    `origin/main`'s SHA — or, under `--ref <sha>`, to that commit (below).
+2. **Ship** — `git archive <sha>` streamed over SSH to both boxes (no registry,
+   no deploy key). Streams are piped in-process → Windows-safe.
+3. **data-prod** — `docker compose up -d --build` (idempotent).
+4. **Checkpoint (DSO-129)** — pgbackrest **pre-migrate `incr` backup** (the same
+   `backup.sh` cron runs) **before** `migrate`, so a restore anchor exists at the
+   pre-migrate state. Pairs with the **expand/contract** prod migration rule
+   (README) so an app rollback never needs a DB rollback.
+5. **api-prod** — `build` → **pre-swap boot verify (#1410)** → `migrate --build`
+   (the migrate image is rebuilt from the freshly shipped tree — a reused stale
+   image would apply old migrations) → `up -d`; images SHA-tagged
+   **`ds-api:<sha>` / `ds-portal:<sha>` / `ds-admin:<sha>` / `ds-doctor:<sha>`**
+   (DSO-127) via a `DEPLOY_SHA` `.env` the script writes beside `compose.yml`.
+   Then compare the shipped `Caddyfile` and `centrifugo/config.json` with the
+   files visible through the running containers and **restart only consumers
+   whose bind mount is stale**. Both mounts are compared again after apply, so
+   a mismatch fails the deploy instead of requiring a manual SSH step (#1175).
+   5a. **Pre-swap boot verify (#1410)** — between `build` and `migrate`/`up -d`, the
+   freshly built **`ds-portal:<sha>`, `ds-admin:<sha>` and `ds-doctor:<sha>`**
+   (#1723) are each started as a
+   throwaway detached container (`ds-bootcheck-<svc>`, no published port, no
+   compose network, always removed) with the SAME `env_file` production uses, and
+   must answer **non-5xx on `/`** from inside the container within 2 min — the
+   same probe shape as the compose healthcheck. A non-booting image **aborts the
+   deploy while the OLD containers are still up and serving**, and before the DB
+   is migrated. This is the gap #1407 fell through: `next` 16.3.1 built cleanly,
+   the containers swapped, and the public surface 502'd on a crash-loop until a
+   human rolled back. The **api is deliberately not probed here** — it needs
+   Postgres/Redis/Zitadel on the compose network, so a detached one-shot would go
+   red for reasons unrelated to the image; it keeps its compose healthcheck plus
+   step 6. CI's static twin is the `standalone-boot` job
+   (`tools/ci/standalone-boot-check.mjs`), which boots the same standalone entry
+   on every PR.
+6. **Truthful-success verify** — the script polls `docker inspect` on-box until
+   the RUNNING api + portal + admin + doctor containers carry exactly
+   `ds-*:<sha>` **and** report
+   healthy (≤ 4 min); otherwise the deploy is FAILED, never "OK". (Added after
+   the DSO-127 rework: a stdin-swallowed `bash -s` script silently skipped
+   `build`/`up -d` while the deploy still printed success — all remote scripts
+   now drain stdin fully before executing.)
+7. **Retention (DSO-127)** — keeps the last **3** SHA-tagged images per repo.
+8. **Smoke (DSO-128)** — `smoke-prod.mjs --expect-sha <sha>`; the health probe
+   requires `version` to be **present and equal** to the deployed SHA (an absent
+   version is a FAIL — it means the expected build is not what's live).
+9. **GitHub Deployment record (#942)** — after a successful deploy, record a
+   `Deployment(production, sha)` + `success` status, persisting the release-notes
+   digest into the Deployment payload. **Non-fatal**: it runs only once the deploy
+   has already succeeded, so a `gh` failure prints a warning and the deploy exit
+   code stays 0. The **Mattermost digest itself is no longer posted here** — the
+   `success` status fires the `release-digest.yml` CI workflow, which posts it (see
+   below, #968).
+
+**Stall detector (#905).** Every ssh channel carries keepalive flags
+(`ServerAliveInterval=15` / `ServerAliveCountMax=4`), so a half-open TCP
+connection (NAT flush, VPN flap) dies loudly in ~60s instead of hanging the
+deploy forever. On top of that, every streamed remote step (`sshScript`) runs
+under a per-step **no-output watchdog**: **5 min** for build-class steps
+(data-prod `up -d --build`, api-prod `build` and `migrate → up`), **2 min** for
+everything else. Output flowing resets the timer — a normal long build is
+untouched. A step whose channel goes quiet past its budget is killed and the
+deploy exits non-zero with a loud
+`STALLED: <step> — no output for <N>m; remote work MAY have completed.` line.
+A stall proves only the LOCAL channel went silent — the remote docker work may
+have finished — so before any re-run or rollback, check box reality:
+
+```bash
+pnpm deploy:probe   # → LIVE health=<sha> api=ds-api:<sha>(Up_…_(healthy)) portal=… admin=…
+```
+
+One machine-parseable line: `LIVE` (health endpoint + ssh both answered),
+`DEGRADED` (one answered; the dead source prints `health=UNREACHABLE` /
+`containers=UNREACHABLE`), `UNREACHABLE` (neither). Bounded timeouts (10s
+fetch, 30s ssh) — the probe itself can never hang; exit 0 for every verdict
+(the exit code reflects whether the probe ran, not box health). Hand fallback:
+`curl -fsS https://api.doctor.school/v1/health ; ssh ds-api-prod docker ps`.
+
+The **previous prod SHA** the Deployment-record digest ranges from is read from the
+running `ds-api-prod-api-1` container's image tag (`ds-api:<sha>`) **before** the
+build/up swap — the deploy record is the running image itself, no separate state
+file. (The CI digest resolves its own prev-sha from the previous `release-*` tag —
+see "Release digest → Mattermost" below, #975.)
+
+The **deployed SHA is queryable over HTTP**: `GET /v1/health` → `{"version":…}`
+(from the api's `DEPLOY_SHA` env). `--rollback` `up -d`s an already-present prior
+image tag with **no** rebuild / migrate / DB change.
 
 ### Hotfix deploy (`--ref <sha>`)
 
@@ -75,83 +159,7 @@ with a `— Hotfix` title plus the cherry-picked PR list.
 
 What stays forbidden: deploying an arbitrary branch, a feature preview, or any
 commit not yet merged to `main`. `--ref` narrows the range; it does not widen what
-is deployable. 2. **Ship** — `git archive <sha>` streamed over SSH to both boxes (no registry,
-no deploy key). Streams are piped in-process → Windows-safe. 3. **data-prod** — `docker compose up -d --build` (idempotent). 4. **Checkpoint (DSO-129)** — pgbackrest **pre-migrate `incr` backup** (the same
-`backup.sh` cron runs) **before** `migrate`, so a restore anchor exists at the
-pre-migrate state. Pairs with the **expand/contract** prod migration rule
-(README) so an app rollback never needs a DB rollback. 5. **api-prod** — `build` → **pre-swap boot verify (#1410)** → `migrate --build`
-(the migrate image is rebuilt from the freshly shipped tree — a reused stale
-image would apply old migrations) → `up -d`; images SHA-tagged
-**`ds-api:<sha>` / `ds-portal:<sha>` / `ds-admin:<sha>` / `ds-doctor:<sha>`**
-(DSO-127) via a `DEPLOY_SHA` `.env` the script writes beside `compose.yml`.
-Then compare the shipped `Caddyfile` and `centrifugo/config.json` with the
-files visible through the running containers and **restart only consumers
-whose bind mount is stale**. Both mounts are compared again after apply, so
-a mismatch fails the deploy instead of requiring a manual SSH step (#1175).
-5a. **Pre-swap boot verify (#1410)** — between `build` and `migrate`/`up -d`, the
-freshly built **`ds-portal:<sha>`, `ds-admin:<sha>` and `ds-doctor:<sha>`**
-(#1723) are each started as a
-throwaway detached container (`ds-bootcheck-<svc>`, no published port, no
-compose network, always removed) with the SAME `env_file` production uses, and
-must answer **non-5xx on `/`** from inside the container within 2 min — the
-same probe shape as the compose healthcheck. A non-booting image **aborts the
-deploy while the OLD containers are still up and serving**, and before the DB
-is migrated. This is the gap #1407 fell through: `next` 16.3.1 built cleanly,
-the containers swapped, and the public surface 502'd on a crash-loop until a
-human rolled back. The **api is deliberately not probed here** — it needs
-Postgres/Redis/Zitadel on the compose network, so a detached one-shot would go
-red for reasons unrelated to the image; it keeps its compose healthcheck plus
-step 6. CI's static twin is the `standalone-boot` job
-(`tools/ci/standalone-boot-check.mjs`), which boots the same standalone entry
-on every PR. 6. **Truthful-success verify** — the script polls `docker inspect` on-box until
-the RUNNING api + portal + admin + doctor containers carry exactly
-`ds-*:<sha>` **and** report
-healthy (≤ 4 min); otherwise the deploy is FAILED, never "OK". (Added after
-the DSO-127 rework: a stdin-swallowed `bash -s` script silently skipped
-`build`/`up -d` while the deploy still printed success — all remote scripts
-now drain stdin fully before executing.) 7. **Retention (DSO-127)** — keeps the last **3** SHA-tagged images per repo. 8. **Smoke (DSO-128)** — `smoke-prod.mjs --expect-sha <sha>`; the health probe
-requires `version` to be **present and equal** to the deployed SHA (an absent
-version is a FAIL — it means the expected build is not what's live). 9. **GitHub Deployment record (#942)** — after a successful deploy, record a
-`Deployment(production, sha)` + `success` status, persisting the release-notes
-digest into the Deployment payload. **Non-fatal**: it runs only once the deploy
-has already succeeded, so a `gh` failure prints a warning and the deploy exit
-code stays 0. The **Mattermost digest itself is no longer posted here** — the
-`success` status fires the `release-digest.yml` CI workflow, which posts it (see
-below, #968).
-
-**Stall detector (#905).** Every ssh channel carries keepalive flags
-(`ServerAliveInterval=15` / `ServerAliveCountMax=4`), so a half-open TCP
-connection (NAT flush, VPN flap) dies loudly in ~60s instead of hanging the
-deploy forever. On top of that, every streamed remote step (`sshScript`) runs
-under a per-step **no-output watchdog**: **5 min** for build-class steps
-(data-prod `up -d --build`, api-prod `build` and `migrate → up`), **2 min** for
-everything else. Output flowing resets the timer — a normal long build is
-untouched. A step whose channel goes quiet past its budget is killed and the
-deploy exits non-zero with a loud
-`STALLED: <step> — no output for <N>m; remote work MAY have completed.` line.
-A stall proves only the LOCAL channel went silent — the remote docker work may
-have finished — so before any re-run or rollback, check box reality:
-
-```bash
-pnpm deploy:probe   # → LIVE health=<sha> api=ds-api:<sha>(Up_…_(healthy)) portal=… admin=…
-```
-
-One machine-parseable line: `LIVE` (health endpoint + ssh both answered),
-`DEGRADED` (one answered; the dead source prints `health=UNREACHABLE` /
-`containers=UNREACHABLE`), `UNREACHABLE` (neither). Bounded timeouts (10s
-fetch, 30s ssh) — the probe itself can never hang; exit 0 for every verdict
-(the exit code reflects whether the probe ran, not box health). Hand fallback:
-`curl -fsS https://api.doctor.school/v1/health ; ssh ds-api-prod docker ps`.
-
-The **previous prod SHA** the Deployment-record digest ranges from is read from the
-running `ds-api-prod-api-1` container's image tag (`ds-api:<sha>`) **before** the
-build/up swap — the deploy record is the running image itself, no separate state
-file. (The CI digest resolves its own prev-sha from the previous `release-*` tag —
-see "Release digest → Mattermost" below, #975.)
-
-The **deployed SHA is queryable over HTTP**: `GET /v1/health` → `{"version":…}`
-(from the api's `DEPLOY_SHA` env). `--rollback` `up -d`s an already-present prior
-image tag with **no** rebuild / migrate / DB change.
+is deployable.
 
 ## Rollback compatibility floor (`rollback-floor.mjs`, 012 EARS-24 / #1633)
 

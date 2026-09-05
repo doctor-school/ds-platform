@@ -83,6 +83,22 @@ describe("stage-b-lint", () => {
     expect(stderr).toContain("Stage-B");
   });
 
+  it("red (#1722): doctor-storefront render + no Stage-B marker → exit 1", () => {
+    const { code } = runGuard(GUARD, caseDir("stage-b", "red-doctor-no-marker"), {
+      env: prEnv("213", "red-doctor-no-marker"),
+    });
+    expect(code).toBe(1);
+  });
+
+  it("red (#1722): shared room-package render + no Stage-B marker → exit 1", () => {
+    const { code } = runGuard(
+      GUARD,
+      caseDir("stage-b", "red-room-package-no-marker"),
+      { env: prEnv("214", "red-room-package-no-marker") },
+    );
+    expect(code).toBe(1);
+  });
+
   it("red: portal render + a placeholder marker (`Stage-B: TBD`) → exit 1", () => {
     const { code, stderr } = runGuard(
       GUARD,

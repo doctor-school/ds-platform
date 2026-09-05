@@ -124,6 +124,19 @@ routes:
     status: deferred
     issue: "#1516"
 
+  # 006 EARS-2 · 020 §6.1 (#1722) — the live webinar room mounted on the doctor
+  # storefront. The room itself is the shared `@ds/room` unit the academy already
+  # runs in production, and this route is the thin host projection over it
+  # (session forward, own upstream, own route table, own copy) — nothing here is
+  # a placeholder. `deferred` for the same reason its parent event page is: the
+  # doctor host is not publicly reachable until ADR-0015 §7's release-time
+  # cut-over (#1516), and the route carries no Stage-B verdict of its own yet.
+  - app: doctor
+    route: /events/[slug]/room
+    file: apps/doctor/app/(room)/events/[slug]/room/page.tsx
+    status: deferred
+    issue: "#1516"
+
   - app: doctor
     route: /register
     file: apps/doctor/app/(auth)/register/page.tsx

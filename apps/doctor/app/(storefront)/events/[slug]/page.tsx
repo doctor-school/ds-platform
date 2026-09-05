@@ -45,10 +45,12 @@ import {
  * 017's remembered-specialty cookie. Participation is the server's decision
  * (`…/events/:slug/participation`, LD-2) rendered verbatim — this host computes
  * nothing from lifecycle, format, seats or registration. Concretely, a
- * registered doctor on a LIVE event gets `enter-room` with `href: null` here,
- * because doctor.school has no room route yet (#1770 EARS-4): the shared card
- * then renders NO control at all rather than a dead link, which is the whole
- * point of the policy carrying its own target.
+ * registered doctor on a LIVE event gets `enter-room` with the target the api
+ * resolved against THIS host's route table — since #1722 that is
+ * `/events/:slug/room`, this storefront's own mount of the shared room unit, and
+ * before it existed the same action carried `href: null` and the shared card
+ * rendered no control at all rather than a dead link. Either way the host
+ * computes nothing: the policy carries its own target.
  *
  * Not rendered here, deliberately: the social-proof line (EARS-3, #1767), the
  * calendar affordance (#1768), the cancel path (#1769) and the recording player

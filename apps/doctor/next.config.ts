@@ -38,9 +38,12 @@ const config: NextConfig = {
   // DETERMINISTIC — the server entry lands at apps/doctor/server.js, exactly the
   // path apps/doctor/Dockerfile COPYs and `pnpm ci:standalone-boot doctor` boots.
   outputFileTracingRoot: path.join(configDir, "../../"),
-  // Consume @ds/design-system as source (.tsx) — owned-code shadcn model
-  // (ADR-0004 §6), no separate build step for the internal package.
-  transpilePackages: ["@ds/design-system"],
+  // Consume the internal packages as source (.tsx) — owned-code shadcn model
+  // (ADR-0004 §6), no separate build step. `@ds/room` (#1722) is the shared live
+  // room unit this app mounts at /events/:slug/room; it ships TypeScript sources
+  // with "use client" boundaries, so it must be transpiled here exactly as the
+  // design system is.
+  transpilePackages: ["@ds/design-system", "@ds/room"],
   // Storefront → api proxy. Client-IP note (#1655): this rewrite forwards the
   // incoming request headers VERBATIM to the api, `x-forwarded-for` included, but
   // it does NOT append its own hop — Next's rewrite proxy (httpxy) enriches the

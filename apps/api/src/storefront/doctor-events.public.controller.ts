@@ -77,19 +77,19 @@ import { readSpecialtyChoiceCookie } from "./specialty-choice.cookie.js";
  * `apps/api/src/events/participation-cta.resolver.ts`, one implementation for
  * both storefronts).
  *
- * `roomPath` is `null`: the doctor room is the thin route over the shared room
- * UI unit extracted under #1722, which does not exist yet. A registered doctor
- * on a live event therefore still resolves to `enter-room` — the ACTION is a
- * fact of the event and the registration, not of the front-end — with `href:
- * null`, so the host renders the state and no link. EARS-4 requires an
- * impossible affordance to be ABSENT rather than dead; linking into a route that
- * is not mounted would be precisely the dead end it forbids. When #1722 lands,
- * this ONE line changes and nothing else does.
+ * `roomPath` resolves to this host's own room route, `/events/:slug/room`
+ * (#1722, 020 §6.1): the doctor storefront now MOUNTS the shared `@ds/room` unit
+ * there, the same unit the Academy runs at `/webinars/:slug/room`. A registered
+ * doctor on a live event resolves to `enter-room` on either host — the ACTION is
+ * a fact of the event and the registration, not of the front-end — and the two
+ * differ only in the target, which is exactly what this table is for. It stayed
+ * `null` while that route did not exist, because EARS-4 requires an impossible
+ * affordance to be ABSENT rather than dead.
  */
 const DOCTOR_ROUTES: ParticipationRoutes = {
   eventPath: (slug) => `/events/${encodeURIComponent(slug)}`,
   registrationEntry: "/register",
-  roomPath: null,
+  roomPath: (slug) => `/events/${encodeURIComponent(slug)}/room`,
 };
 
 /**

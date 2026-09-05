@@ -228,7 +228,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(answer.href).toBe(`/webinars/${slug}/room`);
     });
 
-    it("020 EARS-1: the doctor host resolves enter-room with an absent link while it mounts no room route", async () => {
+    it("020 EARS-7: a registered doctor on a live event gets enter-room with href /events/<slug>/room on the doctor host", async () => {
       const { slug } = await seedEvent({ state: "published" });
       const cookie = await doctorSession();
       await register(slug, cookie);
@@ -238,10 +238,14 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
       const answer = await cta(DOCTOR(slug), cookie);
 
-      // EARS-4: an impossible affordance is ABSENT, never dead — the action is a
-      // fact of the event and the registration, the link is a fact of the host.
+      // Since #1722 the doctor storefront MOUNTS the shared room unit at
+      // `/events/:slug/room`, so the same action carries this host's own target
+      // instead of the `null` it carried while the route did not exist. The
+      // ACTION was never host-specific — it is a fact of the event and the
+      // registration; only the link is a fact of the host, which is why the two
+      // storefronts differ here and nowhere else in this answer.
       expect(answer.action).toBe("enter-room");
-      expect(answer.href).toBeNull();
+      expect(answer.href).toBe(`/events/${slug}/room`);
     });
 
     it("020 EARS-1: a hybrid event whose offline seats are exhausted switches the guest to the online half", async () => {

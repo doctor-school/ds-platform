@@ -26,8 +26,13 @@
  * "classified by touched surface, not the GitHub label" rule,
  * request-mode-a-review §Scope):
  *   - PRIMARY: the diff touches non-exempt render code under `apps/portal/**`,
- *     `apps/admin/**`, or `apps/academy-demo/**` (including the permanent
- *     development review surface the owner reviews live).
+ *     `apps/admin/**`, `apps/doctor/**`, `apps/academy-demo/**` (including the
+ *     permanent development review surface the owner reviews live), or
+ *     `packages/room/**`. `apps/doctor` and `packages/room` were added in #1722:
+ *     the doctor storefront is a full second product front the owner reviews on
+ *     its own stand, and `packages/room` is the shared live-room UI unit BOTH
+ *     storefronts mount — a render change there reaches two owner-reviewed
+ *     surfaces at once, so it cannot be exempt while `apps/portal` is not.
  *   - FRONTMATTER HEURISTIC: the diff touches non-exempt render code under
  *     `packages/design-system/**` AND a linked `feature:NNN-<slug>` label
  *     resolves to a spec whose `NNN-requirements.md` frontmatter is
@@ -75,7 +80,8 @@ const REPO_ROOT = process.env.LINT_FIXTURE_ROOT
 
 // Product render surfaces the owner reviews live. A non-exempt touch here always
 // triggers the gate.
-const PRODUCT_UI_RE = /^(apps\/portal\/|apps\/admin\/|apps\/academy-demo\/)/;
+const PRODUCT_UI_RE =
+  /^(apps\/portal\/|apps\/admin\/|apps\/doctor\/|apps\/academy-demo\/|packages\/room\/)/;
 // The design-system package: a render touch here triggers only when the linked
 // spec is `surface: user-facing` (the frontmatter heuristic below).
 const DS_RE = /^packages\/design-system\//;

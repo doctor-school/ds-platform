@@ -1,0 +1,10 @@
+{
+  "number": 214,
+  "body": "## Summary\nA render change inside the shared room package, mounted by both storefronts — no Stage-B record.\n",
+  "labels": [],
+  "files": [
+    {
+      "path": "packages/room/src/ui/room-header-bar.tsx"
+    }
+  ]
+}

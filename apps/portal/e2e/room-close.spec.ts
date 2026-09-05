@@ -128,6 +128,12 @@ test.describe("006 EARS-7 room-close degrades to the truthful ended state", () =
     // The gate admits (authenticated ∧ registered ∧ live) → the room composition
     // renders: the room is watchable while it is open.
     await page.waitForURL(new RegExp(`/webinars/${SLUG_LIVE}/room$`));
+    // A SELF-SIGNED-UP doctor carries no display name, so 006 EARS-14 renders the
+    // JIT name prompt as a PRE-RENDER step and the room composition is not mounted
+    // yet (`room-display-name.spec.ts` pins that behaviour). Satisfy the prompt —
+    // it is a precondition of this EARS-7 baseline, not its subject.
+    await page.getByTestId("display-name-input").fill("Тест Врачов");
+    await page.getByTestId("display-name-submit").click();
     // Desktop Chrome project → `WebinarRoomLayout` mounts the one-line
     // `room-context-strip`; `room-context` is the MOBILE-tab mount only (#1123).
     await expect(page.getByTestId("room-context-strip")).toBeVisible();

@@ -133,9 +133,6 @@ async function createEvent(page: Page, world: AdminWorld, msk: string) {
   await page.locator("#startsAtMsk").fill(msk);
   await page.locator("#durationMin").fill("90");
   await page.locator("#description").fill("Разбор клинических рекомендаций.");
-  await page.getByTestId("add-speaker").click();
-  await page.getByTestId("speaker-name-0").fill("Иванов И.И.");
-  await page.getByTestId("speaker-regalia-0").fill("д.м.н., профессор");
   await page.locator("#specialties").fill("cardiology, therapy");
   await page.locator("#partnerRef").fill("sponsor:acme-pharma");
   await page.getByTestId("program-pdf").setInputFiles({
@@ -335,18 +332,6 @@ When("the operator enters {string} as the duration", async ({ page }, value: str
   // `mode: onTouched` — blur surfaces the inline error without a submit.
   await page.locator("#durationMin").blur();
 });
-
-When(
-  "the operator adds a speaker and leaves the name empty",
-  async ({ page }) => {
-    await page.getByTestId("add-speaker").click();
-    await expect(page.getByTestId("speaker-name-0")).toBeVisible();
-    // Re-submit: the row was added AFTER the first submit, and RHF revalidates
-    // an untouched field only on the next submit — which surfaces the required
-    // speaker-name error inline under the new row.
-    await page.getByTestId("submit-event").click();
-  },
-);
 
 When("the operator attaches a non-PDF program file", async ({ page }) => {
   await page.getByTestId("program-pdf").setInputFiles({

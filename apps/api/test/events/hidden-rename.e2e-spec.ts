@@ -31,6 +31,10 @@ import {
   deleteEventFixture,
   deleteUserFixture,
 } from "../setup/fixture-cleanup.js";
+import {
+  deleteExpertFixtures,
+  seedEventSpeakers,
+} from "../setup/speaker-fixtures.js";
 
 /**
  * 014 EARS-28 — the `archived → hidden` rename is COMPLETE and BEHAVIOUR-NEUTRAL.
@@ -65,6 +69,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
     const consent = [{ purpose: "tos", version: "2026-01" }];
     const createdEmails: string[] = [];
     const createdEventIds: string[] = [];
+    const createdExpertIds: string[] = [];
 
     function uniqueEmail(prefix: string): string {
       const email = `${prefix}-${Date.now()}-${Math.random()
@@ -132,10 +137,14 @@ describe.skipIf(!process.env.DATABASE_URL)(
           state,
         ],
       );
-      await pool.query(
-        `INSERT INTO event_speakers (event_id, position, name, regalia)
-         VALUES ($1,0,$2,$3)`,
-        [id, "Анна Соколова", "Травматолог-ортопед, к.м.н."],
+      createdExpertIds.push(
+        ...(await seedEventSpeakers(pool, id, [
+          {
+            familyName: "Соколова",
+            givenName: "Анна",
+            credentials: "Травматолог-ортопед, к.м.н.",
+          },
+        ])),
       );
       createdEventIds.push(id);
       return { id, slug };
@@ -206,6 +215,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
       // leftover never affects a later count.
       for (const id of createdEventIds.splice(0))
         await deleteEventFixture(pool, id);
+      await deleteExpertFixtures(pool, createdExpertIds.splice(0));
       for (const email of createdEmails.splice(0))
         await deleteUserFixture(pool, "email", email);
     });

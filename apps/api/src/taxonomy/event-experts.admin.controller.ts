@@ -43,7 +43,7 @@ import { TaxonomyProblemFilter } from "./taxonomy.problem-filter.js";
 //   - `eventId`/`expertId` are NOT patchable. Re-pointing a link would rewrite
 //     history the audit ledger already attributes to the original pair, so a
 //     re-point is `retire` + a new link, not an edit. The update DTO carries
-//     `role`, `position` and `legacySpeakerId` only.
+//     `role` and `position` only.
 //
 // `retire`/`restore` are plain join transitions: no `LifecycleImpact` preview
 // and no `Lifecycle-Impact-Token`. That mechanism belongs to ENTITY retire
@@ -95,8 +95,9 @@ export class EventExpertsAdminController {
 
   /**
    * EARS-7 — `POST /v1/admin/event-experts`. The ONLY way a link comes into
-   * being, and the only way a legacy speaker acquires a match: `legacySpeakerId`
-   * is operator-supplied, never inferred from a name (§2.3 / §4 LD-2).
+   * being, and since the EARS-24 cutover the ONLY way an event acquires a
+   * speaker at all: the operator names the expert explicitly, never inferred
+   * from a name (§4 LD-2).
    */
   @Post()
   @HttpCode(201)

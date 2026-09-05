@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   canTransition,
@@ -250,20 +251,22 @@ describe("007 events schema", () => {
     });
   });
 
-  describe("CreateEventRequestSchema (EARS-1 — full field set + LD-1 speakers)", () => {
+  describe("CreateEventRequestSchema (EARS-1 — full field set)", () => {
+    // 012 EARS-24 (#1607): the speaker line-up is no longer part of the event
+    // write body — it is edited as `event_experts` links — so the full field
+    // set no longer carries one.
     const base = {
       title: "Актуальная терапия",
       school: "Кардиология",
       startsAtMsk: "2026-07-17T19:00",
       durationMin: 90,
-      speakers: [{ name: "Иванов И.И.", regalia: "д.м.н." }],
       specialties: ["cardiology"],
     };
 
     it("accepts a valid full-field payload and defaults optionals", () => {
       const parsed = CreateEventRequestSchema.parse(base);
       expect(parsed.description).toBe("");
-      expect(parsed.speakers[0]?.name).toBe("Иванов И.И.");
+      expect(parsed.title).toBe("Актуальная терапия");
     });
 
     it("rejects a malformed МСК datetime", () => {
@@ -281,13 +284,33 @@ describe("007 events schema", () => {
       ).toBe(false);
     });
 
-    it("rejects a speaker with an empty name (text-only, LD-1)", () => {
-      expect(
-        CreateEventRequestSchema.safeParse({
-          ...base,
-          speakers: [{ name: "", regalia: "x" }],
-        }).success,
-      ).toBe(false);
+    it("012 EARS-24: create/update refuse the free-text speakers field", () => {
+      // The cutover release (#1607) removed the free-text list from the event
+      // contract: speakers are `event_experts` links only. The object schemas
+      // STRIP unknown keys rather than throwing, so the assertion is that the
+      // key cannot survive a parse — on create, on update, and on the admin
+      // read DTO — and that it is absent from the generated OpenAPI document,
+      // which is what an SDK consumer actually sees.
+      const created = CreateEventRequestSchema.parse({
+        ...base,
+        speakers: [{ name: "Иванов И.И.", regalia: "д.м.н." }],
+      }) as Record<string, unknown>;
+      expect("speakers" in created).toBe(false);
+
+      const updated = UpdateEventRequestSchema.parse({
+        speakers: [{ name: "Иванов И.И.", regalia: "д.м.н." }],
+      }) as Record<string, unknown>;
+      expect(updated).toEqual({});
+
+      const raw = readFileSync(
+        new URL("../../../api-client/openapi.snapshot.json", import.meta.url),
+        "utf8",
+      );
+      // Guard against a vacuous pass: the document must really be the event API.
+      expect(raw).toContain("/v1/admin/events");
+      // `regalia` is the free-text entry's distinguishing key and belongs to no
+      // other contract — its absence is the field's absence from the SDK.
+      expect(raw).not.toContain("regalia");
     });
   });
 

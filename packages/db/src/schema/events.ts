@@ -8,7 +8,6 @@ import {
   pgTable,
   text,
   timestamp,
-  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 
@@ -220,76 +219,6 @@ export const events = pgTable(
 );
 
 /**
- * Ordered free-text speaker entries (LD-1). Wave 1 is text only; the list shape
- * is deliberately extensible so a wave-2 real-record reference variant is an
- * additive migration, not a reshape. `name` / `regalia` are ORDINARY editorial
- * text — the same public regalia the speaker already publishes on conference
- * sites — so there is no digest column, no key reference and no shadow copy.
- *
- * #1278 reshape (ADR-0003 design §3.6). The old composite PK
- * `(event_id, position)` made the row's identity its ORDERING, which had two
- * consequences: a speaker who moved from position 2 to position 1 was a
- * different row, and "replace the list" could only be expressed as
- * `DELETE` + re-`INSERT` — a physical delete on every edit, forbidden by §3.6
- * rule 1. Identity now lives in a stable `id` (§3.6 rule 5) and ordering is an
- * ordinary mutable column, so an edit is a diff-based upsert:
- *
- *   * a dropped speaker is RETIRED (`record_status = 'retired'` +
- *     `deleted_at = now()`), never deleted — the historical fact that this
- *     person was announced for this broadcast survives;
- *   * `event_speakers_event_position_active_uniq` is PARTIAL
- *     (`WHERE record_status = 'active'`), so retired rows do not squat on a
- *     position the live list needs to reuse, while the live list keeps its
- *     one-speaker-per-slot invariant in the database rather than in the writer;
- *   * `event_speakers_event_id_id_uniq` gives a composite `(event_id, id)`
- *     target so a future child table can reference a speaker WITHIN its event
- *     without a second lookup to prove the pair belongs together.
- */
-export const eventSpeakers = pgTable(
-  "event_speakers",
-  {
-    /** Stable speaker-entry identity — independent of the presentation order. */
-    id: uuid("id").defaultRandom().primaryKey(),
-    eventId: uuid("event_id")
-      .notNull()
-      .references(() => events.id, { onDelete: "restrict" }),
-    /** Presentation order within the event's ACTIVE list; freely re-orderable. */
-    position: integer("position").notNull(),
-    name: text("name").notNull(),
-    regalia: text("regalia").notNull().default(""),
-    recordStatus: recordStatus("record_status").notNull().default("active"),
-    deletedAt: timestamp("deleted_at", { withTimezone: true }),
-    /**
-     * Editorial removal marker (012-design §2.1 / §2.4). Non-null means the
-     * person asked to be taken off the site: `RemoveLegacySpeakerContent`
-     * (#1306) clears `name`/`regalia`, retires the row and stamps this column,
-     * and every restore/repopulation afterwards is refused with 409
-     * `CONTENT_REMOVED`. Additive and never backfilled — an ordinary retire
-     * leaves it null, which is what distinguishes "dropped from the list" from
-     * "removed on request".
-     */
-    contentRemovedAt: timestamp("content_removed_at", { withTimezone: true }),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-  },
-  (t) => [
-    uniqueIndex("event_speakers_event_position_active_uniq")
-      .on(t.eventId, t.position)
-      .where(sql`${t.recordStatus} = 'active'`),
-    uniqueIndex("event_speakers_event_id_id_uniq").on(t.eventId, t.id),
-    check(
-      "event_speakers_retired_iff_deleted",
-      sql`(${t.recordStatus} = 'retired') = (${t.deletedAt} IS NOT NULL)`,
-    ),
-    check("event_speakers_position_non_negative", sql`${t.position} >= 0`),
-  ],
-);
-
-/**
  * The closed stream-provider enum (design §3, EARS-3). A real Postgres enum
  * mirroring `StreamProviderSchema` in `@ds/schemas` — `rutube | youtube | vk |
  * cdnvideo` (all RU-reachable, embeddable providers; vk/cdnvideo added #1134).
@@ -341,7 +270,5 @@ export const streamConfig = pgTable(
 
 export type Event = typeof events.$inferSelect;
 export type NewEvent = typeof events.$inferInsert;
-export type EventSpeaker = typeof eventSpeakers.$inferSelect;
-export type NewEventSpeaker = typeof eventSpeakers.$inferInsert;
 export type StreamConfigRow = typeof streamConfig.$inferSelect;
 export type NewStreamConfigRow = typeof streamConfig.$inferInsert;

@@ -2,27 +2,20 @@ import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import pg from "pg";
 
-import { deleteEventSpeakersFixture } from "../setup/fixture-cleanup.js";
-
-// 012 EARS-7 (#1289) — the DB half of the explicit expert↔legacy-speaker match
-// (012-design §2, §2.3, §4 LD-2, §6). Talks to Postgres directly via pg.Pool
-// (no Nest boot), the same pattern as `directions-schema.e2e-spec.ts`.
+// 012 EARS-7 (#1289) — the DB half of the expert↔event link (012-design §2,
+// §2.3, §4 LD-2, §6). Talks to Postgres directly via pg.Pool (no Nest boot),
+// the same pattern as `directions-schema.e2e-spec.ts`.
 //
 // Every assertion here is about a constraint the DATABASE enforces, not one the
 // service happens to check. That distinction matters more for this table than
-// for any of the four entities: `event_experts` is the seam between the
-// first-class `experts` roster and feature 007's free-text `event_speakers`
-// list, and the invariant that keeps the public speaker projection honest —
-// «one operator-declared match per legacy speaker, and never a match across
-// events» — has to survive a future writer that forgets to re-check it.
-//
-// The composite foreign key is the load-bearing one. `(event_id,
-// legacy_speaker_id) REFERENCES event_speakers(event_id, id)` makes «this
-// legacy speaker belongs to a DIFFERENT event» unrepresentable, rather than
-// merely refused by today's service.
+// for any of the four entities: since the EARS-24 cutover (#1607)
+// `event_experts` is the SOLE source of the public speaker projection, so the
+// invariants that keep that projection honest — one link per expert per event,
+// one ACTIVE link per slot, retired ⇔ deleted_at — have to survive a future
+// writer that forgets to re-check them.
 
 describe.skipIf(!process.env.DATABASE_URL)(
-  "012 taxonomy — event_experts schema, legacy match and slot uniqueness (e2e)",
+  "012 taxonomy — event_experts schema, link uniqueness and slot uniqueness (e2e)",
   () => {
     let pool: pg.Pool;
     const createdEventIds: string[] = [];
@@ -37,10 +30,6 @@ describe.skipIf(!process.env.DATABASE_URL)(
       // be removed while a link still points at it.
       for (const id of createdEventIds) {
         await pool.query("DELETE FROM event_experts WHERE event_id = $1", [id]);
-        // 012 EARS-24 (#1633): the migration fence refuses a raw DELETE on
-        // event_speakers in every phase — teardown goes through the one
-        // sanctioned bypass helper.
-        await deleteEventSpeakersFixture(pool, id);
         await pool.query("DELETE FROM events WHERE id = $1", [id]);
       }
       for (const id of createdExpertIds) {
@@ -85,26 +74,6 @@ describe.skipIf(!process.env.DATABASE_URL)(
       return rows[0]!.id;
     }
 
-    /** A free-text legacy speaker entry of one event. */
-    async function insertSpeaker(
-      eventId: string,
-      overrides: Record<string, unknown> = {},
-    ): Promise<string> {
-      const row = {
-        event_id: eventId,
-        position: 0,
-        name: "Петров П. П.",
-        ...overrides,
-      } as Record<string, unknown>;
-      const cols = Object.keys(row);
-      const { rows } = await pool.query<{ id: string }>(
-        `INSERT INTO event_speakers (${cols.map((c) => `"${c}"`).join(", ")})
-         VALUES (${cols.map((_, i) => `$${i + 1}`).join(", ")}) RETURNING id`,
-        cols.map((c) => row[c]),
-      );
-      return rows[0]!.id;
-    }
-
     async function insertLink(
       overrides: Record<string, unknown> = {},
     ): Promise<string> {
@@ -126,7 +95,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
       const expertId = await insertExpert();
       const id = await insertLink({ event_id: eventId, expert_id: expertId });
       const { rows } = await pool.query(
-        `SELECT event_id, expert_id, role, position, legacy_speaker_id,
+        `SELECT event_id, expert_id, role, position,
                 status, version, deleted_at
            FROM event_experts WHERE id = $1`,
         [id],
@@ -136,60 +105,10 @@ describe.skipIf(!process.env.DATABASE_URL)(
         expert_id: expertId,
         role: "Спикер",
         position: 0,
-        // A link with no declared match is the NORMAL case: most experts are
-        // not standing in for a pre-existing free-text entry.
-        legacy_speaker_id: null,
         status: "active",
         version: 1,
         deleted_at: null,
       });
-    });
-
-    it("012 EARS-7: when a declared legacy speaker belongs to a different event, the system shall reject the link", async () => {
-      // This is the invariant the composite FK exists for. Name-based inference
-      // is impossible by construction, and so is a match that crosses events —
-      // no service check can be skipped into allowing it.
-      const eventId = await insertEvent();
-      const otherEventId = await insertEvent();
-      const expertId = await insertExpert();
-      const foreignSpeakerId = await insertSpeaker(otherEventId);
-      await expect(
-        insertLink({
-          event_id: eventId,
-          expert_id: expertId,
-          legacy_speaker_id: foreignSpeakerId,
-          position: 5,
-        }),
-      ).rejects.toThrow(/event_experts_event_legacy_speaker_fk/);
-    });
-
-    it("012 EARS-7: when a legacy speaker is already matched by a retained link, the system shall reject a second match", async () => {
-      const eventId = await insertEvent();
-      const speakerId = await insertSpeaker(eventId);
-      const firstExpert = await insertExpert();
-      const secondExpert = await insertExpert();
-      await insertLink({
-        event_id: eventId,
-        expert_id: firstExpert,
-        legacy_speaker_id: speakerId,
-        position: 1,
-      });
-      // …and the holder does not have to be ACTIVE. A retired link is restored
-      // rather than re-created, so its legacy match stays reserved — otherwise a
-      // restore could find its own speaker taken.
-      await pool.query(
-        `UPDATE event_experts SET status = 'retired', deleted_at = now()
-          WHERE event_id = $1 AND expert_id = $2`,
-        [eventId, firstExpert],
-      );
-      await expect(
-        insertLink({
-          event_id: eventId,
-          expert_id: secondExpert,
-          legacy_speaker_id: speakerId,
-          position: 2,
-        }),
-      ).rejects.toThrow(/event_experts_legacy_speaker_key/);
     });
 
     it("012 EARS-7: when the same expert is linked twice to one event, the system shall reject the duplicate across retained rows", async () => {
@@ -318,7 +237,9 @@ describe.skipIf(!process.env.DATABASE_URL)(
         `SELECT conname, confdeltype FROM pg_constraint
           WHERE contype = 'f' AND conrelid = 'event_experts'::regclass`,
       );
-      expect(rows.length).toBeGreaterThanOrEqual(3);
+      // Two endpoints remain after the EARS-24 cutover removed the legacy seam:
+      // `events` and `experts`.
+      expect(rows.length).toBeGreaterThanOrEqual(2);
       for (const fk of rows) {
         expect(fk.confdeltype, `${fk.conname} must not cascade`).not.toBe("c");
       }
@@ -342,36 +263,6 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(ledger.map((r) => r.event_type)).toContain(
         "data.event_experts.insert",
       );
-    });
-
-    it("012 EARS-7: event_speakers shall carry a nullable editorial-removal marker that is null on every existing row", async () => {
-      // The #1278 groundwork attributed `content_removed_at` to `event_speakers`
-      // (012-design §2.4) but shipped without it; this migration adds it,
-      // additively and with no backfill. Null is what distinguishes «dropped
-      // from the list» from «removed at the person's request».
-      const { rows } = await pool.query<{
-        is_nullable: string;
-        column_default: string | null;
-        data_type: string;
-      }>(
-        `SELECT is_nullable, column_default, data_type
-           FROM information_schema.columns
-          WHERE table_name = 'event_speakers' AND column_name = 'content_removed_at'`,
-      );
-      expect(rows).toHaveLength(1);
-      expect(rows[0]).toMatchObject({
-        is_nullable: "YES",
-        column_default: null,
-        data_type: "timestamp with time zone",
-      });
-
-      const eventId = await insertEvent();
-      const speakerId = await insertSpeaker(eventId);
-      const { rows: fresh } = await pool.query(
-        `SELECT content_removed_at FROM event_speakers WHERE id = $1`,
-        [speakerId],
-      );
-      expect(fresh[0]).toMatchObject({ content_removed_at: null });
     });
   },
 );

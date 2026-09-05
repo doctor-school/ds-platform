@@ -163,11 +163,8 @@ async function fillShared(
   await page.locator("#school").fill(school);
   await page.locator("#startsAtMsk").fill("2024-03-14T18:00");
   await page.locator("#durationMin").fill("75");
-  // The authoring form starts with NO speaker rows — the operator adds them.
-  if ((await page.getByTestId("speaker-name-0").count()) === 0) {
-    await page.getByTestId("add-speaker").click();
-  }
-  await page.getByTestId("speaker-name-0").fill("Докладчик Архивный");
+  // 012 EARS-24 (#1607): the create form no longer carries a speaker section —
+  // speakers are authored as `event_experts` links on the saved эфир.
 }
 
 /**
@@ -246,9 +243,9 @@ test.describe("014 EARS-24 — «Это архивный эфир» on the admin
     await expect(page.locator("#title")).toHaveValue(typedTitle);
     await expect(page.locator("#school")).toHaveValue("Кардиология");
     await expect(page.locator("#durationMin")).toHaveValue("75");
-    await expect(page.getByTestId("speaker-name-0")).toHaveValue(
-      "Докладчик Архивный",
-    );
+    // 012 EARS-24 (#1607): no speaker section survives the cutover, so there is
+    // no speaker input left to preserve across the legacy toggle.
+    await expect(page.getByTestId("speaker-name-0")).toHaveCount(0);
 
     // ── Render evidence: the CHECKED create form, two widths × both palettes.
     await shot(page, "create-legacy-desktop-light", { fullPage: true });

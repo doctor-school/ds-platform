@@ -15,9 +15,8 @@ import {
   RATE_LIMIT_THRESHOLDS,
   RELAXED_RATE_LIMIT,
 } from "../setup/rate-limit.js";
-import { deleteEventSpeakersFixture } from "../setup/fixture-cleanup.js";
 
-// 012 EARS-8 (#1290) — the ONE canonical merged speaker projection over the
+// 012 EARS-8 (#1290) — the ONE canonical public speaker projection over the
 // REAL stack: Fastify + Postgres, zero auth (every route under test is a
 // classified public read).
 //
@@ -25,19 +24,16 @@ import { deleteEventSpeakersFixture } from "../setup/fixture-cleanup.js";
 // is that THREE shipped public surfaces — `GET /v1/public/events/:key/speakers`,
 // `PublicEventPage.speakers` and the thinner `UpcomingBroadcastCard.speakers` —
 // are three renderings of ONE ordered resolver result and therefore cannot
-// disagree, plus the merge policy itself:
+// disagree, plus the projection policy itself:
 //
-//   1. suppression is EXPLICIT-MATCH only. An eligible (published,
-//      non-retired) expert linked through an ACTIVE `event_experts` row
-//      supersedes exactly the legacy row its `legacy_speaker_id` names. Names
-//      are never compared, so an identically-named unmatched legacy row stays;
-//   2. a draft/retired expert, or a retired link, suppresses NOTHING — the
-//      matched legacy row remains visible as the fallback. Restoring the link
-//      suppresses the same stable legacy row again;
-//   3. the total order is LD-2's: `position ASC`, source rank (`expert` before
-//      `legacy`), stable row id ASC — deterministic even for the corrupted
-//      cross-table position collision the write path refuses but imported data
-//      can still carry.
+//   1. after the EARS-24 cutover (#1607) the projection has ONE source, the
+//      `event_experts` link table. There is no second list to merge, no match
+//      to express and no suppression rule to arbitrate;
+//   2. eligibility is re-evaluated on every READ: an ACTIVE link to a
+//      published, non-retired expert contributes an item; a draft or retired
+//      expert, or a retired link, contributes nothing — and publishing or
+//      restoring puts the item back without a write to the link;
+//   3. the total order is LD-2's: `position ASC`, then stable link id ASC.
 //
 // Fixtures are inserted with raw SQL on purpose. The admin write path already
 // refuses a colliding slot (EARS-7, #1289); this suite has to prove the READ is
@@ -45,7 +41,7 @@ import { deleteEventSpeakersFixture } from "../setup/fixture-cleanup.js";
 //
 // Skips when the stand is absent, exactly as the sibling public suites do.
 describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
-  "012 EARS-8 merged public speaker projection (e2e)",
+  "012 EARS-8 public speaker projection (e2e)",
   () => {
     let app: NestFastifyApplication;
     let pool: pg.Pool;
@@ -92,40 +88,24 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       return rows[0]!.id;
     }
 
-    async function insertSpeaker(
-      eventId: string,
-      position: number,
-      name = "Петров П. П.",
-      regalia = "к.м.н.",
-    ): Promise<string> {
-      const { rows } = await pool.query<{ id: string }>(
-        `INSERT INTO event_speakers (event_id, position, name, regalia)
-         VALUES ($1, $2, $3, $4) RETURNING id`,
-        [eventId, position, name, regalia],
-      );
-      return rows[0]!.id;
-    }
-
     async function insertLink(values: {
       eventId: string;
       expertId: string;
       position: number;
       role?: string;
-      legacySpeakerId?: string | null;
       status?: "active" | "retired";
     }): Promise<string> {
       const retired = values.status === "retired";
       const { rows } = await pool.query<{ id: string }>(
         `INSERT INTO event_experts
-           (event_id, expert_id, role, position, legacy_speaker_id, status, deleted_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
+           (event_id, expert_id, role, position, status, deleted_at)
+         VALUES ($1, $2, $3, $4, $5, $6)
          RETURNING id`,
         [
           values.eventId,
           values.expertId,
           values.role ?? "Спикер",
           values.position,
-          values.legacySpeakerId ?? null,
           values.status ?? "active",
           retired ? new Date() : null,
         ],
@@ -135,12 +115,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     // ── Request helpers ────────────────────────────────────────────────────
 
-    interface LegacyItem {
-      source: "legacy";
-      name: string;
-      credentials: string;
-    }
-    interface ExpertItem {
+    interface SpeakerItem {
       source: "expert";
       expertId: string;
       expertSlug: string;
@@ -149,7 +124,6 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       photoUrl: string | null;
       role: string;
     }
-    type SpeakerItem = LegacyItem | ExpertItem;
 
     async function speakersEndpoint(key: string): Promise<SpeakerItem[]> {
       const res = await app.inject({
@@ -204,10 +178,6 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       // Children first — every FK is RESTRICT by design.
       for (const id of createdEventIds.splice(0)) {
         await pool.query("DELETE FROM event_experts WHERE event_id = $1", [id]);
-        // 012 EARS-24 (#1633): the migration fence refuses a raw DELETE on
-        // event_speakers in every phase — teardown goes through the one
-        // sanctioned bypass helper.
-        await deleteEventSpeakersFixture(pool, id);
         await pool.query("DELETE FROM events WHERE id = $1", [id]);
       }
       for (const id of createdExpertIds.splice(0)) {
@@ -222,41 +192,33 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       await app?.close();
     });
 
-    it("EARS-8.1: an eligible linked expert supersedes ONLY its explicitly matched legacy row", async () => {
+    it("EARS-8.1: every ACTIVE link to an eligible expert appears exactly once, in slot order", async () => {
       const event = await insertEvent();
-      const matched = await insertSpeaker(event.id, 0, "Матчед М. М.");
-      // Same name, no link — names are never compared, so it must survive.
-      await insertSpeaker(event.id, 1, "Матчед М. М.");
-      const expertId = await insertExpert({
-        family_name: "Эксперт",
-        given_name: "Э. Э.",
+      const second = await insertExpert({
+        family_name: "Второй",
+        given_name: "В. В.",
       });
-      await insertLink({
-        eventId: event.id,
-        expertId,
-        position: 0,
-        legacySpeakerId: matched,
+      const first = await insertExpert({
+        family_name: "Первый",
+        given_name: "П. П.",
       });
+      await insertLink({ eventId: event.id, expertId: second, position: 1 });
+      await insertLink({ eventId: event.id, expertId: first, position: 0 });
 
       const items = await speakersEndpoint(event.slug);
 
       expect(items).toHaveLength(2);
       expect(items[0]).toMatchObject({
         source: "expert",
-        expertId,
-        name: "Эксперт Э. Э.",
+        expertId: first,
+        name: "Первый П. П.",
         role: "Спикер",
       });
-      expect(items[1]).toEqual({
-        source: "legacy",
-        name: "Матчед М. М.",
-        credentials: "к.м.н.",
-      });
+      expect(items[1]).toMatchObject({ expertId: second });
     });
 
-    it("EARS-8.2: an unpaired eligible expert is added; an ineligible expert contributes nothing", async () => {
+    it("EARS-8.2: an eligible expert is added; an ineligible expert contributes nothing", async () => {
       const event = await insertEvent();
-      await insertSpeaker(event.id, 1, "Легаси Л. Л.");
       const publishedId = await insertExpert({
         family_name: "Опубликован",
         given_name: "О. О.",
@@ -279,33 +241,27 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
       const items = await speakersEndpoint(event.slug);
 
-      expect(items.map((s) => s.name)).toEqual([
-        "Опубликован О. О.",
-        "Легаси Л. Л.",
-      ]);
+      expect(items.map((s) => s.name)).toEqual(["Опубликован О. О."]);
     });
 
-    it("EARS-8.3: a draft/retired expert cannot suppress the fallback, and retiring the link reveals it again", async () => {
+    it("EARS-8.3: eligibility is re-read on every request — publishing adds the item, retiring the link removes it, and neither writes the link", async () => {
       const event = await insertEvent();
-      const fallback = await insertSpeaker(event.id, 0, "Запасной З. З.");
       const draftId = await insertExpert({
         family_name: "Черновик",
         given_name: "Ч. Ч.",
         status: "draft",
         first_published_at: null,
       });
-      await insertLink({
+      const linkId = await insertLink({
         eventId: event.id,
         expertId: draftId,
         position: 0,
-        legacySpeakerId: fallback,
       });
 
-      expect((await speakersEndpoint(event.slug)).map((s) => s.name)).toEqual([
-        "Запасной З. З.",
-      ]);
+      // A draft expert is invisible even though the link is active.
+      expect(await speakersEndpoint(event.slug)).toEqual([]);
 
-      // Publishing the expert suppresses the SAME stable legacy row…
+      // Publishing the expert reveals it — no write touched the link…
       await pool.query(
         "UPDATE experts SET status = 'published', first_published_at = now() WHERE id = $1",
         [draftId],
@@ -314,65 +270,49 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         "Черновик Ч. Ч.",
       ]);
 
-      // …and retiring the LINK makes that same row visible again, untouched.
+      // …and retiring the LINK hides it again while the expert stays published.
       await pool.query(
-        "UPDATE event_experts SET status = 'retired', deleted_at = now() WHERE event_id = $1",
-        [event.id],
+        "UPDATE event_experts SET status = 'retired', deleted_at = now() WHERE id = $1",
+        [linkId],
       );
-      expect((await speakersEndpoint(event.slug)).map((s) => s.name)).toEqual([
-        "Запасной З. З.",
-      ]);
+      expect(await speakersEndpoint(event.slug)).toEqual([]);
 
-      // Ordinary matching never rewrote the legacy row (EARS-8: no overwrite,
-      // no retire, no name-dedup).
-      const { rows } = await pool.query<{
-        name: string;
-        regalia: string;
-        record_status: string;
-      }>(
-        "SELECT name, regalia, record_status FROM event_speakers WHERE id = $1",
-        [fallback],
+      const { rows } = await pool.query<{ status: string; position: number }>(
+        "SELECT status, position FROM event_experts WHERE id = $1",
+        [linkId],
       );
-      expect(rows[0]).toEqual({
-        name: "Запасной З. З.",
-        regalia: "к.м.н.",
-        record_status: "active",
-      });
+      expect(rows[0]).toEqual({ status: "retired", position: 0 });
     });
 
-    it("EARS-8.4: the order is position ASC, and an expert outranks a legacy row on the SAME position", async () => {
+    it("EARS-8.4: the order is position ASC and sparse slots do not reorder the list", async () => {
       const event = await insertEvent();
-      await insertSpeaker(event.id, 2, "Легаси Второй");
-      // The CROSS-table position collision: no index can express it, the writer
-      // refuses it (EARS-7) and imported data can still carry it — so the READ
-      // must stay deterministic. Source rank puts the expert first.
-      await insertSpeaker(event.id, 0, "Легаси Первый");
-      const expertId = await insertExpert({
-        family_name: "Эксперт",
+      const third = await insertExpert({ family_name: "Третий", given_name: "A" });
+      const first = await insertExpert({ family_name: "Первый", given_name: "A" });
+      const second = await insertExpert({
+        family_name: "Второй",
         given_name: "A",
       });
-      await insertLink({ eventId: event.id, expertId, position: 0 });
+      await insertLink({ eventId: event.id, expertId: third, position: 9 });
+      await insertLink({ eventId: event.id, expertId: first, position: 0 });
+      await insertLink({ eventId: event.id, expertId: second, position: 4 });
 
       const items = await speakersEndpoint(event.slug);
 
       expect(items.map((s) => s.name)).toEqual([
-        "Эксперт A",
-        "Легаси Первый",
-        "Легаси Второй",
+        "Первый A",
+        "Второй A",
+        "Третий A",
       ]);
-      // The WITHIN-table half of the same rule is a database backstop, not a
-      // policy this read can be asked to arbitrate: both partial unique indexes
-      // (`event_experts_event_position_active_uniq`,
-      // `event_speakers_event_position_active_uniq`) make two active rows of the
-      // SAME source on one position unrepresentable. The stable-id term of the
-      // LD-2 order is therefore exercised in the unit suite
-      // (`src/taxonomy/speaker-projection.service.spec.ts`), where the resolver
-      // can be handed the corrupted pair Postgres refuses to store.
+      // The tie-breaking half of the LD-2 order is a database backstop, not a
+      // policy this read can be asked to arbitrate: the partial unique index
+      // `event_experts_event_position_active_uniq` makes two ACTIVE links on one
+      // position unrepresentable. The stable-id term is therefore exercised in
+      // the unit suite (`src/taxonomy/speaker-projection.service.spec.ts`),
+      // where the resolver can be handed the corrupted pair Postgres refuses.
     });
 
-    it("EARS-8.5: the item is a STRICT union — no expert-only key on a legacy item, nullable-present photoUrl", async () => {
+    it("EARS-8.5: the item carries exactly the expert-arm key set, with photoUrl present and null", async () => {
       const event = await insertEvent();
-      await insertSpeaker(event.id, 1);
       const expertId = await insertExpert();
       await insertLink({
         eventId: event.id,
@@ -381,13 +321,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         role: "Модератор",
       });
 
-      const [expert, legacy] = await speakersEndpoint(event.slug);
+      const [expert] = await speakersEndpoint(event.slug);
 
-      expect(Object.keys(legacy!).sort()).toEqual([
-        "credentials",
-        "name",
-        "source",
-      ]);
       expect(Object.keys(expert!).sort()).toEqual([
         "credentials",
         "expertId",
@@ -398,29 +333,28 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         "source",
       ]);
       // Present and null (the initials fallback), never absent.
-      expect((expert as ExpertItem).photoUrl).toBeNull();
-      expect((expert as ExpertItem).role).toBe("Модератор");
+      expect(expert!.photoUrl).toBeNull();
+      expect(expert!.role).toBe("Модератор");
     });
 
     it("EARS-8.6: the standalone endpoint, the event page and the upcoming card agree", async () => {
       const event = await insertEvent();
-      const matched = await insertSpeaker(event.id, 0, "Матчед М. М.");
-      await insertSpeaker(event.id, 1, "Легаси Л. Л.");
       const expertId = await insertExpert({
         family_name: "Эксперт",
         given_name: "Э. Э.",
       });
-      await insertLink({
-        eventId: event.id,
-        expertId,
-        position: 0,
-        legacySpeakerId: matched,
+      const otherId = await insertExpert({
+        family_name: "Другой",
+        given_name: "Д. Д.",
       });
+      await insertLink({ eventId: event.id, expertId, position: 0 });
+      await insertLink({ eventId: event.id, expertId: otherId, position: 1 });
 
       const endpoint = await speakersEndpoint(event.slug);
       const page = await pageSpeakers(event.slug);
       const card = await cardSpeakers(event.id);
 
+      expect(endpoint).toHaveLength(2);
       expect(page).toEqual(endpoint);
       // The card is the SAME ordered result, mapped to its thinner `{ name }`.
       expect(card).toEqual(endpoint.map((s) => ({ name: s.name })));
@@ -428,7 +362,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     it("EARS-8.7: an id key resolves the same projection as its slug key", async () => {
       const event = await insertEvent();
-      await insertSpeaker(event.id, 0, "Легаси Л. Л.");
+      const expertId = await insertExpert();
+      await insertLink({ eventId: event.id, expertId, position: 0 });
 
       expect(await speakersEndpoint(event.id)).toEqual(
         await speakersEndpoint(event.slug),
@@ -437,7 +372,11 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     it("EARS-8.8/16: an unknown or non-public event is an indistinguishable 404 RESOURCE_NOT_FOUND", async () => {
       const draft = await insertEvent("draft");
-      await insertSpeaker(draft.id, 0, "Скрытый С. С.");
+      const expertId = await insertExpert({
+        family_name: "Скрытый",
+        given_name: "С. С.",
+      });
+      await insertLink({ eventId: draft.id, expertId, position: 0 });
 
       for (const key of [draft.slug, draft.id, randomUUID(), "no-such-event"]) {
         const res = await app.inject({
@@ -460,6 +399,39 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
       expect(await speakersEndpoint(event.slug)).toEqual([]);
       expect(await pageSpeakers(event.slug)).toEqual([]);
+    });
+
+    it("012 EARS-24: the canonical resolver reads links only, and no migration-phase SSOT survives to consult", async () => {
+      const event = await insertEvent();
+      const second = await insertExpert({
+        family_name: "Второй",
+        given_name: "В. В.",
+      });
+      const first = await insertExpert({
+        family_name: "Первый",
+        given_name: "П. П.",
+      });
+      await insertLink({ eventId: event.id, expertId: second, position: 2 });
+      await insertLink({ eventId: event.id, expertId: first, position: 1 });
+
+      const projection = await speakersEndpoint(event.slug);
+
+      expect(projection.map((s) => s.name)).toEqual([
+        "Первый П. П.",
+        "Второй В. В.",
+      ]);
+      expect(projection.every((s) => s.source === "expert")).toBe(true);
+      // The three shipped surfaces stay one result.
+      expect(await pageSpeakers(event.slug)).toEqual(projection);
+      expect(await cardSpeakers(event.id)).toEqual(
+        projection.map((s) => ({ name: s.name })),
+      );
+
+      // No phase is consulted because no phase SSOT exists any more.
+      const { rows } = await pool.query<{ n: string | null }>(
+        `SELECT to_regclass('public.speaker_migration_cutover') AS n`,
+      );
+      expect(rows[0]!.n).toBeNull();
     });
   },
 );

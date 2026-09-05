@@ -33,8 +33,8 @@ import { OBJECT_STORAGE, type ObjectStorage } from "../storage/index.js";
 import { RecordingsProjectionService } from "../recordings/recordings.projection.js";
 import { SpeakerProjectionService } from "../taxonomy/speaker-projection.service.js";
 import {
+  type EventAggregate,
   type EventListingCursor,
-  type EventWithSpeakers,
   EventsRepository,
   type Tx,
 } from "./events.repository.js";
@@ -497,7 +497,9 @@ export class EventsService {
    * EARS-1 — create an event in `draft` with the full field set. The МСК
    * wall-clock is folded into ONE canonical UTC instant; the program PDF (when
    * present) is uploaded to object storage and only its reference lands on the
-   * aggregate. Speakers persist as an ordered free-text list (LD-1).
+   * aggregate. Speakers are NOT part of this payload: since 012 EARS-24 the
+   * only speaker source is the `event_experts` link table, curated through the
+   * event-experts admin panel.
    */
   async create(
     input: CreateEventRequest,
@@ -520,11 +522,6 @@ export class EventsService {
         programPdfRef,
         state: "draft",
       },
-      input.speakers.map((s, position) => ({
-        position,
-        name: s.name,
-        regalia: s.regalia,
-      })),
     );
 
     return this.toDetail(aggregate);
@@ -562,8 +559,7 @@ export class EventsService {
    * {@link EventNotEditableError} ({@link EVENT_EDITABLE_STATES}) — the aggregate
    * is untouched and no PDF is replaced. Only the fields present in `input` are
    * overwritten (an omitted key leaves that field; `partnerRef: null` explicitly
-   * clears it); a present `speakers` list replaces the stored ordered list
-   * wholesale. The МСК re-entry is re-folded into one canonical instant, the
+   * clears it). The МСК re-entry is re-folded into one canonical instant, the
    * single SSOT conversion ({@link mskLocalToInstant}).
    *
    * **GC-on-supersede (#627).** Once the reference swap is durably committed,
@@ -624,13 +620,7 @@ export class EventsService {
     if (pdf)
       patch.programPdfRef = await this.storeProgramPdf(current.event.slug, pdf);
 
-    const speakers = input.speakers?.map((s, position) => ({
-      position,
-      name: s.name,
-      regalia: s.regalia,
-    }));
-
-    const updated = await this.repo.updateEvent(id, patch, speakers);
+    const updated = await this.repo.updateEvent(id, patch);
     // The row existed a moment ago; a concurrent delete is the only null path.
     if (!updated) return null;
 
@@ -795,7 +785,7 @@ export class EventsService {
    */
   private async resolveWriteOutcome(
     id: string,
-    updated: EventWithSpeakers | null,
+    updated: EventAggregate | null,
     expectedVersion: number | undefined,
   ): Promise<EventAdminDetail | null> {
     if (updated) return this.toDetail(updated);
@@ -1026,7 +1016,7 @@ export class EventsService {
   /**
    * 014 EARS-24 (#1741) — `CreateLegacyBroadcast`: the «Архивный эфир» creation
    * entry. One `legacy` event authored from a title, a held-at instant, a
-   * duration, speakers and a recording, BORN `hidden` — it appears on no public
+   * duration and a recording, BORN `hidden` — it appears on no public
    * surface until an explicit `ArchiveLegacyBroadcast`.
    *
    * `origin` and `state` are server-assigned, never read off the body (the
@@ -1065,11 +1055,6 @@ export class EventsService {
         origin: "legacy",
         state: "hidden",
       },
-      input.speakers.map((sp, position) => ({
-        position,
-        name: sp.name,
-        regalia: sp.regalia,
-      })),
       {
         kind: input.recording.kind,
         provider: input.recording.provider,
@@ -1302,7 +1287,7 @@ export class EventsService {
   }
 
   private toUpcomingCard(
-    a: EventWithSpeakers,
+    a: EventAggregate,
     merged: PublicEventPageSpeaker[],
   ): UpcomingBroadcastCard {
     const e = a.event;
@@ -1324,7 +1309,7 @@ export class EventsService {
   }
 
   private async toPublicPage(
-    a: EventWithSpeakers,
+    a: EventAggregate,
     state: EventLifecycleState,
   ): Promise<HostFreeEventPageView> {
     const e = a.event;
@@ -1370,7 +1355,7 @@ export class EventsService {
     return page;
   }
 
-  private async toDetail(a: EventWithSpeakers): Promise<EventAdminDetail> {
+  private async toDetail(a: EventAggregate): Promise<EventAdminDetail> {
     const e = a.event;
     return {
       id: e.id,
@@ -1380,10 +1365,6 @@ export class EventsService {
       startsAt: e.startsAt.toISOString(),
       durationMin: e.durationMin,
       description: e.description,
-      speakers: a.speakers
-        .slice()
-        .sort((x, y) => x.position - y.position)
-        .map((s) => ({ name: s.name, regalia: s.regalia })),
       specialties: e.specialties,
       partnerRef: e.partnerRef,
       programPdfRef: e.programPdfRef,

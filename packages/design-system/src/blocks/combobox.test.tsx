@@ -251,6 +251,40 @@ describe("<Combobox>", () => {
     await dismiss();
   });
 
+  it("keys highlight and selection by VALUE, so two options sharing a label never move together (#1607)", async () => {
+    // A people book is the real case: two experts can legitimately carry the
+    // same printed name and are told apart only by their id. cmdk keys an item
+    // by its `value`, so a label there would fuse the twins — hovering one lit
+    // both, and a click committed whichever the DOM ordered first.
+    const onValueChange = vi.fn();
+    const twins: ComboboxOption[] = [
+      { value: "expert-1", label: "Иванов И. И.", description: "Кардиология" },
+      { value: "expert-2", label: "Иванов И. И.", description: "Неврология" },
+    ];
+    render(
+      <Combobox
+        options={twins}
+        onValueChange={onValueChange}
+        placeholder="Выберите эксперта"
+        emptyLabel="Ничего не найдено"
+      />,
+    );
+    await userEvent.click(screen.getByRole("combobox"));
+    const items = await screen.findAllByRole("option");
+    expect(items).toHaveLength(2);
+
+    const [first, second] = items as [HTMLElement, HTMLElement];
+    await userEvent.hover(second);
+    await waitFor(() =>
+      expect(second).toHaveAttribute("data-selected", "true"),
+    );
+    expect(first).toHaveAttribute("data-selected", "false");
+
+    await userEvent.click(second);
+    expect(onValueChange).toHaveBeenCalledWith("expert-2");
+    expect(onValueChange).toHaveBeenCalledTimes(1);
+  });
+
   it("delegates filtering to a remote option source when search is controlled by the app", async () => {
     const onSearchChange = vi.fn();
     render(

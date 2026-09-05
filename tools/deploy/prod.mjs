@@ -76,10 +76,10 @@ import {
 } from "./release-gate.mjs";
 import { composeDigest } from "./release-notes.mjs";
 import {
-  RollbackFloorError,
   assertRollbackAllowed,
-  makeGitReleaseTagLister,
-  makeProdFloorReader,
+  makeGitCutoverMigrationProbe,
+  makeProdCutoverReader,
+  RollbackFloorError,
 } from "./rollback-floor.mjs";
 import {
   API_PROD_COMPOSE_PATH,
@@ -1370,32 +1370,33 @@ async function rollback(shaArg) {
       .join(" / ")}`,
   );
 
-  // ── #1633 / EARS-24: the speaker-cutover rollback compatibility floor. FIRST
-  //    thing after argument resolution, so a target below the retained floor is
-  //    refused before ANY provider read or mutation — no image probe, no `.env`
-  //    rewrite, no `up -d`. Fail-closed rules and the one recorded allow
-  //    (a production DB predating the cutover migration) live in
-  //    tools/deploy/rollback-floor.mjs.
-  step("EARS-24: rollback compatibility floor (retained cutover SSOT)");
+  // ── #1607 / EARS-24: the speaker-cutover rollback compatibility floor. FIRST
+  //    thing after argument resolution, so a target below the floor is refused
+  //    before ANY provider read or mutation — no image probe, no `.env` rewrite,
+  //    no `up -d`. The floor is keyed on migration 0036 (prod dropped
+  //    `event_speakers`; the target's tree must carry the migration that dropped
+  //    it). Fail-closed rules and the one recorded allow (a production DB that
+  //    has not applied 0036) live in tools/deploy/rollback-floor.mjs.
+  step("EARS-24: rollback compatibility floor (speaker cutover, migration 0036)");
   try {
     const verdict = await assertRollbackAllowed({
       sha,
-      readFloor: makeProdFloorReader({
+      readProdCutoverState: makeProdCutoverReader({
         sshCapture,
         host: DATA_PROD,
         composeDir: DATA_COMPOSE,
       }),
-      listReleaseTags: makeGitReleaseTagLister(localCap),
+      targetCarriesMigration: makeGitCutoverMigrationProbe(localCap),
     });
     ok(`rollback floor: ${verdict.reason}`);
   } catch (err) {
     if (err instanceof RollbackFloorError) {
       die(
         `ROLLBACK REFUSED [${err.code}] — ${err.message}\n` +
-          `  The speaker-migration cutover (spec 012, EARS-24) makes a pre-expand\n` +
-          `  image database-INCOMPATIBLE once the source set is closed. Prod was not\n` +
-          `  touched. Roll FORWARD to a release at or above the retained floor, or\n` +
-          `  restore the database from pgbackrest first — see tools/deploy/README.md.`,
+          `  The speaker cutover (spec 012, EARS-24) makes a pre-cutover image\n` +
+          `  database-INCOMPATIBLE once migration 0036 has dropped \`event_speakers\`.\n` +
+          `  Prod was not touched. Roll FORWARD to a release at or above the floor,\n` +
+          `  or restore the database from pgbackrest first — see tools/deploy/README.md.`,
       );
     }
     throw err;

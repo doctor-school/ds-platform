@@ -37,8 +37,26 @@ const EVENT = {
   durationMin: 90,
   description: "Разбор показаний, протоколов и типичных ошибок PRP-терапии.",
   speakers: [
-    { source: "legacy", name: "Анна Соколова", credentials: "к.м.н." },
-    { source: "legacy", name: "Михаил Верещагин", credentials: "травматолог" },
+    // 012 EARS-24 (#1607): after the cutover the page-speaker union has exactly
+    // one arm — an `event_experts` link — so the double serves expert rows.
+    {
+      source: "expert",
+      expertId: "00000000-0000-4000-8000-00000000e001",
+      expertSlug: "anna-sokolova",
+      name: "Анна Соколова",
+      credentials: "к.м.н.",
+      photoUrl: null,
+      role: "Спикер",
+    },
+    {
+      source: "expert",
+      expertId: "00000000-0000-4000-8000-00000000e002",
+      expertSlug: "mihail-vereshchagin",
+      name: "Михаил Верещагин",
+      credentials: "травматолог",
+      photoUrl: null,
+      role: "Спикер",
+    },
   ],
   specialties: ["Травматология", "Ортопедия"],
   partners: [],

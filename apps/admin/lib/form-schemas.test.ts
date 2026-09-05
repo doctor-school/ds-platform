@@ -21,7 +21,6 @@ function fields(over: Partial<EventFormFields> = {}): EventFormFields {
     durationMin: 60,
     description: "",
     partnerRef: "",
-    speakers: [],
     specialtiesText: "",
     legacy: false,
     recording: { kind: "edited", provider: "rutube", embedRef: "" },

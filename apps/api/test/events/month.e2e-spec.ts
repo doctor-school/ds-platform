@@ -13,6 +13,10 @@ import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
 import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
 import { FakeIdpClient } from "../../src/auth/idp/idp.fake.js";
 import { deleteEventFixture } from "../setup/fixture-cleanup.js";
+import {
+  deleteExpertFixtures,
+  seedEventSpeakers,
+} from "../setup/speaker-fixtures.js";
 
 // 004 EARS-15 + EARS-16 — the public month-calendar read side. Two endpoints:
 //   GET /v1/public/events?month=YYYY-MM      → MonthBroadcastEntry[]
@@ -38,6 +42,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
     let pool: pg.Pool;
     const fake = new FakeIdpClient();
     const createdEventIds: string[] = [];
+    const createdExpertIds: string[] = [];
 
     type SeedState = "draft" | "published" | "live" | "ended" | "hidden";
 
@@ -78,16 +83,19 @@ describe.skipIf(!process.env.DATABASE_URL)(
           opts.state,
         ],
       );
-      await pool.query(
-        `INSERT INTO event_speakers (event_id, position, name, regalia)
-         VALUES ($1,0,$2,$3), ($1,1,$4,$5)`,
-        [
-          id,
-          "Анна Соколова",
-          "Травматолог-ортопед, к.м.н.",
-          "Михаил Верещагин",
-          "Хирург, профессор",
-        ],
+      createdExpertIds.push(
+        ...(await seedEventSpeakers(pool, id, [
+          {
+            familyName: "Соколова",
+            givenName: "Анна",
+            credentials: "Травматолог-ортопед, к.м.н.",
+          },
+          {
+            familyName: "Верещагин",
+            givenName: "Михаил",
+            credentials: "Хирург, профессор",
+          },
+        ])),
       );
       createdEventIds.push(id);
       return { id, slug, startsAt: opts.startsAt };
@@ -114,6 +122,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
     afterEach(async () => {
       for (const id of createdEventIds.splice(0))
         await deleteEventFixture(pool, id);
+      await deleteExpertFixtures(pool, createdExpertIds.splice(0));
     });
 
     afterAll(async () => {

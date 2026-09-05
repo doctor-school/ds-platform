@@ -60,7 +60,6 @@ export default function CreateEventPage() {
                 heldAtMsk: values.startsAtMsk,
                 durationMin: values.durationMin,
                 description: values.description,
-                speakers: values.speakers,
                 specialties: values.specialties,
                 recording: values.recording,
               };
@@ -80,7 +79,6 @@ export default function CreateEventPage() {
               startsAtMsk: values.startsAtMsk,
               durationMin: values.durationMin,
               description: values.description,
-              speakers: values.speakers,
               specialties: values.specialties,
               partnerRef: values.partnerRef,
               programPdf: values.programPdf,

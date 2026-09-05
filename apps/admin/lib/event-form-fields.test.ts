@@ -29,7 +29,6 @@ const detail = {
   durationMin: 90,
   description: "Описание",
   partnerRef: "partner-1",
-  speakers: [{ name: "Докладчик", regalia: "д.м.н." }],
   specialties: ["cardiology", "therapy"],
   streamConfig: { provider: "rutube", embedRef: "abc123" },
 } as unknown as EventAdminDetail;
@@ -47,10 +46,9 @@ describe("007 EARS-2/EARS-3 form fields projection (#1593)", () => {
     expect(fields.specialtiesText).toBe("cardiology, therapy");
   });
 
-  it("EARS-2: speakers are COPIED, so a refetched projection can never alias the rows the form is editing", () => {
+  it("012 EARS-24: the projection carries no free-text speaker list — event experts are the only speaker source", () => {
     const fields = eventFormFields(detail);
-    expect(fields.speakers).toEqual([{ name: "Докладчик", regalia: "д.м.н." }]);
-    expect(fields.speakers[0]).not.toBe(detail.speakers[0]);
+    expect(fields).not.toHaveProperty("speakers");
   });
 
   it("EARS-2: with no detail (the create surface) the projection is the empty authoring form, never undefined fields", () => {
@@ -62,7 +60,6 @@ describe("007 EARS-2/EARS-3 form fields projection (#1593)", () => {
       durationMin: 60,
       description: "",
       partnerRef: "",
-      speakers: [],
       specialtiesText: "",
       legacy: false,
       recording: { kind: "edited", provider: "rutube", embedRef: "" },

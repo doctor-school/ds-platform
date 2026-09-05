@@ -692,10 +692,9 @@ const EventExpertPositionSchema = z
 /**
  * `POST /v1/admin/event-experts` — link one expert to one event (EARS-7).
  *
- * `legacySpeakerId` is the EXPLICIT match and the only way a link ever acquires
- * one: there is no name field here, because the command never infers a match
- * from a name. Omitting it creates an unpaired link, which is a different
- * outcome, not a degraded one.
+ * Since the EARS-24 cutover (#1607) this link IS the event's speaker: there is
+ * no free-text list left to pair it with, so the command carries no name field
+ * and no legacy match.
  */
 export const CreateEventExpertRequestSchema = z
   .object({
@@ -703,7 +702,6 @@ export const CreateEventExpertRequestSchema = z
     expertId: TaxonomyIdSchema,
     role: EventExpertRoleSchema,
     position: EventExpertPositionSchema,
-    legacySpeakerId: TaxonomyIdSchema.nullish(),
   })
   .strict();
 export type CreateEventExpertRequest = z.infer<
@@ -712,9 +710,7 @@ export type CreateEventExpertRequest = z.infer<
 
 /**
  * `PATCH /v1/admin/event-experts/:id` — edit the SAME row. Omission means
- * unchanged; an explicit `null` on `legacySpeakerId` UNMATCHES the link, which
- * is a deliberate editorial act (the suppressed legacy row becomes visible
- * again) and therefore distinguishable from omission.
+ * unchanged.
  *
  * Neither endpoint is patchable: re-pointing a link at another event or another
  * expert would silently rewrite history on a row the audit ledger already
@@ -724,7 +720,6 @@ export const UpdateEventExpertRequestSchema = z
   .object({
     role: EventExpertRoleSchema.optional(),
     position: EventExpertPositionSchema.optional(),
-    legacySpeakerId: TaxonomyIdSchema.nullable().optional(),
   })
   .strict();
 export type UpdateEventExpertRequest = z.infer<
@@ -739,7 +734,6 @@ export const EventExpertAdminDetailSchema = z.object({
   /** Null only after §2.4's editorial removal cleared it (#1306). */
   role: z.string().nullable(),
   position: z.number().int(),
-  legacySpeakerId: TaxonomyIdSchema.nullable(),
   status: RelationshipStatusSchema,
   version: z.number().int().positive(),
   createdAt: z.string(),
@@ -756,7 +750,6 @@ export const EventExpertAdminListItemSchema = EventExpertAdminDetailSchema.pick(
     expertId: true,
     role: true,
     position: true,
-    legacySpeakerId: true,
     status: true,
     version: true,
     updatedAt: true,
@@ -1620,7 +1613,6 @@ export const TAXONOMY_ERROR_CODES = [
   "PUBLISH_REQUIREMENTS_NOT_MET",
   "PUBLISHED_PROJECT_REQUIRES_CURATOR",
   "INVALID_TRANSITION",
-  "LEGACY_SPEAKER_CONFLICT",
   "SPEAKER_POSITION_OCCUPIED",
   "CONTENT_REMOVED",
   // 409 — 014 recordings (014-design §3/§11)

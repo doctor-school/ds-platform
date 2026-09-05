@@ -13,6 +13,10 @@ import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
 import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
 import { FakeIdpClient } from "../../src/auth/idp/idp.fake.js";
 import { deleteEventFixture } from "../setup/fixture-cleanup.js";
+import {
+  deleteExpertFixtures,
+  seedEventSpeakers,
+} from "../setup/speaker-fixtures.js";
 
 // 004 EARS-5 — the hidden direct-link degrade. A sponsor-distributed direct
 // link to an event that has since been `hidden` (a link already in the wild)
@@ -41,6 +45,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
     let pool: pg.Pool;
     const fake = new FakeIdpClient();
     const createdEventIds: string[] = [];
+    const createdExpertIds: string[] = [];
 
     type SeedState = "draft" | "hidden";
 
@@ -73,10 +78,14 @@ describe.skipIf(!process.env.DATABASE_URL)(
           state,
         ],
       );
-      await pool.query(
-        `INSERT INTO event_speakers (event_id, position, name, regalia)
-         VALUES ($1,0,$2,$3)`,
-        [id, "Анна Соколова", "Травматолог-ортопед, к.м.н."],
+      createdExpertIds.push(
+        ...(await seedEventSpeakers(pool, id, [
+          {
+            familyName: "Соколова",
+            givenName: "Анна",
+            credentials: "Травматолог-ортопед, к.м.н.",
+          },
+        ])),
       );
       createdEventIds.push(id);
       return { id, slug };
@@ -103,6 +112,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
     afterEach(async () => {
       for (const id of createdEventIds.splice(0))
         await deleteEventFixture(pool, id);
+      await deleteExpertFixtures(pool, createdExpertIds.splice(0));
     });
 
     afterAll(async () => {

@@ -10,13 +10,15 @@ import {
   isNull,
   lt,
   or,
+  sql,
 } from "drizzle-orm";
 import type { DrizzleHandle } from "@ds/db";
 import {
   directions,
   eventDirections,
+  eventExperts,
   events,
-  eventSpeakers,
+  experts,
   registrations,
 } from "@ds/db";
 import { MONTH_BROADCAST_STATES } from "@ds/schemas";
@@ -171,26 +173,47 @@ export class DoctorEventsRepository {
     return rows[0]?.startsAt ?? null;
   }
 
-  /** The lead speaker of each event, by the authored ordering (007 LD-1). */
+  /**
+   * The lead speaker of each event, by the authored ordering (007 LD-1).
+   *
+   * 012 EARS-24 (#1607) — the single speaker source is the `event_experts` link
+   * table. The eligibility predicate mirrors the canonical projection
+   * (`SpeakerProjectionRepository.eligibleExpertLinks`) exactly: an ACTIVE link
+   * to a `published`, non-retired, non-removed expert. An expert whose display
+   * name cannot be assembled is not a public speaker and is skipped, so a
+   * corrupted row degrades to «no lead speaker», never to a half-rendered one.
+   * The order is the projection's: `position ASC`, then the stable link id.
+   */
   async findLeadSpeakers(eventIds: string[]): Promise<Map<string, string>> {
     if (eventIds.length === 0) return new Map();
     const rows = await this.db
       .select({
-        eventId: eventSpeakers.eventId,
-        name: eventSpeakers.name,
-        position: eventSpeakers.position,
+        eventId: eventExperts.eventId,
+        name: sql<
+          string | null
+        >`CASE WHEN ${experts.familyName} IS NULL OR ${experts.givenName} IS NULL THEN NULL ELSE concat_ws(' ', ${experts.familyName}, ${experts.givenName}, ${experts.patronymic}) END`,
       })
-      .from(eventSpeakers)
+      .from(eventExperts)
+      .innerJoin(experts, eq(experts.id, eventExperts.expertId))
       .where(
         and(
-          inArray(eventSpeakers.eventId, eventIds),
-          eq(eventSpeakers.recordStatus, "active"),
+          inArray(eventExperts.eventId, eventIds),
+          eq(eventExperts.status, "active"),
+          isNull(eventExperts.deletedAt),
+          eq(experts.status, "published"),
+          isNull(experts.deletedAt),
+          isNull(experts.contentRemovedAt),
         ),
       )
-      .orderBy(asc(eventSpeakers.eventId), asc(eventSpeakers.position));
+      .orderBy(
+        asc(eventExperts.eventId),
+        asc(eventExperts.position),
+        asc(eventExperts.id),
+      );
 
     const lead = new Map<string, string>();
     for (const row of rows) {
+      if (row.name === null) continue;
       if (!lead.has(row.eventId)) lead.set(row.eventId, row.name);
     }
     return lead;

@@ -260,9 +260,14 @@ export function Combobox({
         >
           <CommandPrimitive
             shouldFilter={!onSearchChange}
-            // Filtering is over the LABEL, never the stored value.
-            filter={(itemValue, search) =>
-              itemValue.toLocaleLowerCase().includes(search.toLocaleLowerCase())
+            // Filtering is over the LABEL (carried as a cmdk keyword), never
+            // the stored value.
+            filter={(itemValue, search, keywords) =>
+              (keywords ?? [itemValue]).some((keyword) =>
+                keyword
+                  .toLocaleLowerCase()
+                  .includes(search.toLocaleLowerCase()),
+              )
                 ? 1
                 : 0
             }
@@ -288,9 +293,12 @@ export function Combobox({
               {options.map((option) => (
                 <CommandPrimitive.Item
                   key={option.value}
-                  // cmdk matches on this string — the LABEL, so the operator
-                  // searches by what they can read.
-                  value={option.label}
+                  // cmdk keys highlight/selection by `value`, so it must be the
+                  // UNIQUE option value — two options sharing a label would
+                  // otherwise highlight together. Search still runs over the
+                  // label, carried here as a cmdk keyword.
+                  value={option.value}
+                  keywords={[option.label]}
                   // cmdk types this as a plain `boolean`, so under
                   // `exactOptionalPropertyTypes` an absent flag has to become `false`
                   // rather than `undefined`.

@@ -2,7 +2,7 @@
 /**
  * 005 portal-integration fixture seed (#574) + 006 room-integration extension
  * (#584). Seeds one event in EACH lifecycle state the portal renders + E2E-drives
- * — `published` (upcoming), `live`, `ended`, `hidden` — plus ordered speakers,
+ * — `published` (upcoming), `live`, `ended`, `hidden` —
  * so the registered-state overlay, the one-tap / guest-through-auth registration
  * flows, «мои события», and the ended/hidden gating can be driven against the
  * LIVE dev stand.
@@ -58,7 +58,6 @@ import {
   streamConfig,
 } from "@ds/db";
 import { and, eq, isNull } from "drizzle-orm";
-import { reconcileEventSpeakers } from "../src/events/event-speakers.reconcile.js";
 
 const MINUTE = 60_000;
 const DAY = 24 * 60 * MINUTE;
@@ -102,7 +101,6 @@ interface SeedSpec {
   readonly description: string;
   readonly specialties: string[];
   readonly partnerRef: string;
-  readonly speakers: { readonly name: string; readonly regalia: string }[];
   /**
    * 006 (#584): the event's stream config the room's EARS-2 player is
    * instantiated from. Omitted → no `stream_config` row is written (and any
@@ -158,18 +156,6 @@ function specs(now: number): SeedSpec[] {
         "Целевые уровни давления, выбор стартовой терапии и работа с резистентной гипертензией: показания, доказательная база и рабочие протоколы. Разбираем реальный клинический случай — от первичного приёма до оценки результата через 6 месяцев. Вопросы спикеру — прямо в чате эфира.",
       specialties: ["Кардиология", "Терапия", "Общая врачебная практика"],
       partnerRef: "Партнёр Фарма",
-      speakers: [
-        {
-          name: "Проф. Ирина Соколова",
-          regalia:
-            "Д.м.н., профессор кафедры кардиологии РНИМУ им. Пирогова. Автор 40+ публикаций, член Российского кардиологического общества.",
-        },
-        {
-          name: "Доц. Алексей Петров",
-          regalia:
-            "К.м.н., доцент кафедры терапии, ведёт направление амбулаторной кардиологии на платформе.",
-        },
-      ],
     },
     {
       // A SECOND registrable event so the logged-in one-tap path (EARS-1) can be
@@ -185,7 +171,6 @@ function specs(now: number): SeedSpec[] {
         "Практический разбор схем иммунотерапии и управления нежелательными явлениями. Регистрация открыта.",
       specialties: ["Онкология"],
       partnerRef: "Партнёр Фарма",
-      speakers: [{ name: "Проф. Д. Лебедев", regalia: "д.м.н., онколог" }],
     },
     {
       // A THIRD registrable event — a spare unregistered `published` event for
@@ -200,7 +185,6 @@ function specs(now: number): SeedSpec[] {
         "Ранние маркеры и алгоритмы диагностики. Регистрация открыта.",
       specialties: ["Ревматология"],
       partnerRef: "Партнёр Фарма",
-      speakers: [{ name: "Проф. О. Зайцева", regalia: "д.м.н., ревматолог" }],
     },
     {
       slug: "seed-005-live",
@@ -214,7 +198,6 @@ function specs(now: number): SeedSpec[] {
         "Живой разбор пациентов с острой неврологической симптоматикой. Регистрация во время эфира открыта.",
       specialties: ["Неврология"],
       partnerRef: "Партнёр Фарма",
-      speakers: [{ name: "Проф. Е. Морозова", regalia: "д.м.н., невролог" }],
       // 006 (#584): the happy-path live room — SLUG_LIVE for the EARS-3 chat +
       // EARS-4 heartbeat E2E — carries a `rutube` stream config so the room read
       // resolves a non-null player instead of "stream unavailable". The embedRef
@@ -242,7 +225,6 @@ function specs(now: number): SeedSpec[] {
         "Живой разбор клинических случаев. Тестовая комната с YouTube-плеером для интеграционной проверки.",
       specialties: ["Кардиология"],
       partnerRef: "Партнёр Фарма",
-      speakers: [{ name: "Проф. И. Соколова", regalia: "д.м.н., кардиолог" }],
       stream: { provider: "youtube", embedRef: "dQw4w9WgXcQ" },
     },
     {
@@ -256,7 +238,6 @@ function specs(now: number): SeedSpec[] {
         "Живой разбор клинических случаев. Тестовая комната с Rutube-плеером для интеграционной проверки.",
       specialties: ["Пульмонология"],
       partnerRef: "Партнёр Фарма",
-      speakers: [{ name: "Доц. А. Петров", regalia: "к.м.н., пульмонолог" }],
       stream: {
         provider: "rutube",
         embedRef: "b9e7d1a4c2f5e8039a6b1c4d7e0f3a25",
@@ -273,7 +254,6 @@ function specs(now: number): SeedSpec[] {
         "Живая комната без stream config — проверяет правдивое состояние «поток недоступен» вместо угаданного плеера.",
       specialties: ["Терапия"],
       partnerRef: "Партнёр Фарма",
-      speakers: [{ name: "Доц. С. Кузнецов", regalia: "к.м.н., терапевт" }],
       // No `stream` → no stream_config row → the room renders "stream unavailable".
     },
     {
@@ -287,7 +267,6 @@ function specs(now: number): SeedSpec[] {
         "Завершённый эфир — регистрация закрыта. Разбор коморбидных состояний при сахарном диабете 2 типа.",
       specialties: ["Эндокринология"],
       partnerRef: "Партнёр Фарма",
-      speakers: [{ name: "Проф. Н. Волкова", regalia: "д.м.н., эндокринолог" }],
     },
     // ── 014 both-cuts fixture (#1345) ────────────────────────────────────────
     // The ONE эфир that published BOTH cuts: the montage `recordings.projection`
@@ -306,7 +285,6 @@ function specs(now: number): SeedSpec[] {
         "Завершённый эфир с двумя опубликованными записями — смонтированной версией и оригиналом трансляции без монтажа.",
       specialties: ["Кардиология"],
       partnerRef: "Партнёр Фарма",
-      speakers: [{ name: "Проф. И. Лебедев", regalia: "д.м.н., кардиолог" }],
       recording: {
         provider: "rutube",
         embedRef: "a1b2c3d4e5f60718293a4b5c6d7e8f90",
@@ -336,7 +314,6 @@ function specs(now: number): SeedSpec[] {
         "Эфир проведён до запуска платформы. Доступна только запись — комнаты и регистрации у него не было.",
       specialties: ["Эндокринология"],
       partnerRef: "Партнёр Фарма",
-      speakers: [{ name: "Проф. Н. Волкова", regalia: "д.м.н., эндокринолог" }],
       // No `stream` — a legacy эфир never acquires a stream config.
       recording: {
         provider: "rutube",
@@ -355,7 +332,6 @@ function specs(now: number): SeedSpec[] {
         "Эфир скрыт с платформы — регистрация и запись недоступны. Основы интерпретации ЭКГ.",
       specialties: ["Терапия"],
       partnerRef: "Партнёр Фарма",
-      speakers: [{ name: "Доц. С. Кузнецов", regalia: "к.м.н., терапевт" }],
     },
   ];
 }
@@ -419,19 +395,10 @@ export async function seedEvents(): Promise<void> {
         })
         .returning({ id: events.id });
 
-      // #1278 — reconcile this event's speaker list instead of replacing it
-      // wholesale: the seed is re-run constantly, and a delete-then-insert would
-      // physically destroy retained rows on every run (ADR-0003 design §3.6
-      // rule 1). Re-running with an unchanged spec is a no-op on the stored rows.
-      await reconcileEventSpeakers(
-        db,
-        row.id,
-        spec.speakers.map((s, position) => ({
-          position,
-          name: s.name,
-          regalia: s.regalia,
-        })),
-      );
+      // 012 EARS-24 (#1607) — the seed no longer writes speakers. Since the
+      // cutover an event's speaker list is `event_experts` links to published
+      // experts, authored in the admin console; there is no free-text list to
+      // reconcile and the seed deliberately does not fabricate expert records.
 
       // 006 (#584): upsert the stream config by its `event_id` PK. A spec without
       // `stream` (e.g. the "unavailable" fixture) RETIRES any prior row so the

@@ -24,7 +24,6 @@ const AUDITED_TABLES = [
   "users",
   "consent_records",
   "events",
-  "event_speakers",
   "stream_config",
   "registrations",
   // 012 EARS-1 (#1283) — the first taxonomy entity table.
@@ -33,10 +32,6 @@ const AUDITED_TABLES = [
   // decides which person the public speaker projection shows, so it is domain
   // truth and carries the capture trigger like any authored row.
   "event_experts",
-  // 012 EARS-24 (#1633) — the speaker-cutover SSOT. Advancing the phase or
-  // raising the rollback floor is a deploy-affecting editorial decision, so the
-  // singleton carries the capture trigger like any other authored row.
-  "speaker_migration_cutover",
 ] as const;
 
 /** Design §5 allowlist — tables that must NOT carry the capture trigger. */
@@ -264,10 +259,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
 
     // The capture trigger reads each table's real primary key rather than
     // assuming a column called `id`. `stream_config` is the standing proof: its
-    // PK is `event_id`. (Until #1278 this case used `event_speakers`, then the
-    // only audited table with a composite PK; #1278 moved its identity onto a
-    // surrogate `id` so a speaker can be retired and its position reused, and no
-    // audited table carries a composite PK any more.)
+    // PK is `event_id`. No audited table carries a composite PK any more.
     it("010 EARS-6: metadata.pk is read from the table's real primary key, not a hardcoded id column", async () => {
       const eventId = await insertEvent();
       await pool.query(
@@ -285,9 +277,8 @@ describe.skipIf(!process.env.DATABASE_URL)(
     });
 
     it("010 EARS-6: the pk extractor returns EVERY column of a multi-column primary key", async () => {
-      // No audited table carries a composite PK any more (#1278 moved
-      // `event_speakers` onto a surrogate `id`), so the multi-column arm is
-      // proven against the extractor itself rather than through a trigger:
+      // No audited table carries a composite PK any more, so the multi-column
+      // arm is proven against the extractor itself rather than through a trigger:
       // `audit_ledger` is composite-keyed on `(id, created_at)` and is the one
       // table deliberately NOT audited (it cannot audit itself), which makes it
       // a subject with no trigger side effects.

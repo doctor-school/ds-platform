@@ -171,7 +171,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
           heldAtMsk: mskStamp(-10),
           durationMin: 90,
           specialties: ["cardiology"],
-          speakers: [{ name: "И. И. Иванов", regalia: "д.м.н." }],
+          // 012 EARS-24 (#1607): the archived эфир carries no free-text speaker
+          // list — the body is `.strict()`, so the withdrawn key is a 400. Its
+          // line-up, like a platform broadcast's, is `event_experts` links.
           recording: {
             kind: "edited",
             provider: "youtube",

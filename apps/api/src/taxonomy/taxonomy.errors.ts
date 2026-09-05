@@ -31,7 +31,6 @@ export const TAXONOMY_ERROR_STATUS: Readonly<
   PUBLISH_REQUIREMENTS_NOT_MET: 409,
   PUBLISHED_PROJECT_REQUIRES_CURATOR: 409,
   INVALID_TRANSITION: 409,
-  LEGACY_SPEAKER_CONFLICT: 409,
   SPEAKER_POSITION_OCCUPIED: 409,
   CONTENT_REMOVED: 409,
   RECORDING_KIND_OCCUPIED: 409,
@@ -64,7 +63,6 @@ const TAXONOMY_ERROR_TITLE: Readonly<Record<TaxonomyErrorCode, string>> = {
   PUBLISH_REQUIREMENTS_NOT_MET: "Publication requirements not met",
   PUBLISHED_PROJECT_REQUIRES_CURATOR: "Published project requires a curator",
   INVALID_TRANSITION: "Invalid lifecycle transition",
-  LEGACY_SPEAKER_CONFLICT: "Legacy speaker conflict",
   SPEAKER_POSITION_OCCUPIED: "Speaker position occupied",
   CONTENT_REMOVED: "Content was editorially removed",
   RECORDING_KIND_OCCUPIED: "Recording kind already occupied",
@@ -130,7 +128,6 @@ export const DETERMINISTIC_TERMINAL_ERROR_CODES: ReadonlySet<TaxonomyErrorCode> 
     "PUBLISH_REQUIREMENTS_NOT_MET",
     "PUBLISHED_PROJECT_REQUIRES_CURATOR",
     "INVALID_TRANSITION",
-    "LEGACY_SPEAKER_CONFLICT",
     "SPEAKER_POSITION_OCCUPIED",
     "CONTENT_REMOVED",
     // 409 — 014 recording invariants (014-design §3): both are properties of the
@@ -194,7 +191,6 @@ export function markReplayable<E>(error: E, lease: ReplayLeaseRef): E {
 const SLOT_UNIQUE_CONSTRAINTS: ReadonlyMap<string, TaxonomyErrorCode> = new Map(
   [
     ["event_experts_event_position_active_uniq", "SPEAKER_POSITION_OCCUPIED"],
-    ["event_speakers_event_position_active_uniq", "SPEAKER_POSITION_OCCUPIED"],
   ] as const,
 );
 

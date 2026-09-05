@@ -185,11 +185,9 @@ export function translateIssue(issue: ZodIssueLike, t: Translator): string {
   // МСК wall-clock — an empty or malformed datetime both surface here (regex).
   if (has("startsAtMsk")) return t("dateTime");
 
-  // Speaker name — required when a speaker row is present.
-  if (has("speakers")) {
-    if (has("name") && issue.code === "too_small") return t("speakerName");
-    return t("maxLength");
-  }
+  // 012 EARS-24 (#1607): the event form carries no free-text speaker list any
+  // more — speakers are `event_experts` links — so no `speakers.*` issue path
+  // can reach this resolver and there is no speaker-specific message.
 
   // Target specialties (the parsed comma list) — a `custom` issue flags "too many
   // specialties" (list-count cap); any other issue flags a per-token length problem.

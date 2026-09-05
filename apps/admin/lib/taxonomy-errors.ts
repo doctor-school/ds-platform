@@ -63,8 +63,6 @@ export function taxonomyErrorKey(
     switch (code) {
       case "SPEAKER_POSITION_OCCUPIED":
         return "eventExperts.errors.positionOccupied";
-      case "LEGACY_SPEAKER_CONFLICT":
-        return "eventExperts.errors.legacyConflict";
       case "RELATIONSHIP_CONFLICT":
         return "eventExperts.errors.relationshipConflict";
       case "CONTENT_REMOVED":

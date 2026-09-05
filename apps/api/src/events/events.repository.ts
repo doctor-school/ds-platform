@@ -5,12 +5,10 @@ import type {
   Event,
   NewEvent,
   NewEventRecording,
-  NewEventSpeaker,
 } from "@ds/db";
 import {
   auditLedger,
   eventRecordings,
-  eventSpeakers,
   events,
   streamConfig,
 } from "@ds/db";
@@ -42,7 +40,6 @@ import {
   beforeEventCursor,
   eventCursorInstant,
 } from "../taxonomy/public-event-cursor.js";
-import { reconcileEventSpeakers } from "./event-speakers.reconcile.js";
 
 /**
  * The terminal `audit_ledger` row a named lifecycle transition appends (EARS-4;
@@ -67,24 +64,18 @@ export type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 
 /**
  * #1278 (ADR-0003 design §3.6 rule 3) — every default read is the ACTIVE
- * projection. Retired rows stay in the table forever (a removed speaker, a
- * de-configured stream, a retired event are historical facts), so the product
- * read paths have to say so explicitly.
+ * projection. Retired rows stay in the table forever (a de-configured stream, a
+ * retired event are historical facts), so the product read paths have to say so
+ * explicitly.
  *
  * The predicate is `record_status = 'active'` and NOT the equivalent
  * `deleted_at IS NULL`, and the partial indexes (`events_active_starts_at_idx`,
- * the speaker slot index, …) are built on the SAME expression on purpose:
- * Postgres proves a partial index applicable from the query's own restriction
- * clauses alone and will not derive one predicate from the other through the
+ * …) are built on the SAME expression on purpose: Postgres proves a partial
+ * index applicable from the query own restriction clauses alone and will not
+ * derive one predicate from the other through the
  * `retired ⇔ deleted_at IS NOT NULL` CHECK. Writing the two sides differently
  * silently costs every one of these reads its index.
  */
-const activeSpeakersOf = (eventId: string) =>
-  and(
-    eq(eventSpeakers.eventId, eventId),
-    eq(eventSpeakers.recordStatus, "active"),
-  );
-
 const activeStreamOf = (eventId: string) =>
   and(
     eq(streamConfig.eventId, eventId),
@@ -93,10 +84,17 @@ const activeStreamOf = (eventId: string) =>
 
 const ACTIVE_EVENT = eq(events.recordStatus, "active");
 
-/** One event aggregate with its ordered speaker rows and (optional) stream config. */
-export interface EventWithSpeakers {
+/**
+ * One event aggregate with its (optional) stream config.
+ *
+ * 012 EARS-24 (#1607) — it carries NO speaker list any more. Speakers are
+ * `event_experts` links resolved by the one canonical projection
+ * (`SpeakerProjectionService`); the free-text speaker list left the contract
+ * with the cutover release, so an aggregate that still carried it would be a
+ * second, disagreeing source of the same public fact.
+ */
+export interface EventAggregate {
   event: Event;
-  speakers: { name: string; regalia: string; position: number }[];
   /** The `{ provider, embedRef }` the 006 room consumes (EARS-3); `null` until configured. */
   streamConfig: StreamConfig | null;
 }
@@ -110,38 +108,24 @@ export interface EventWithSpeakers {
 export type EventListingCursor = { startsAt: string; id: string };
 
 /** One listing aggregate plus the exact cursor token of its position. */
-export type EventListingRow = EventWithSpeakers & { startsAtCursor: string };
+export type EventListingRow = EventAggregate & { startsAtCursor: string };
 
 /**
- * Drizzle data access for the 007 event aggregate (design §3). The write is one
- * transaction — the event row plus its ordered speaker rows land together or not
- * at all, so a partial aggregate is never persisted.
+ * Drizzle data access for the 007 event aggregate (design §3). Every write is
+ * one transaction, so a partial aggregate is never persisted.
  */
 @Injectable()
 export class EventsRepository {
   constructor(@Inject(DRIZZLE_DB) private readonly db: Db) {}
 
-  async insert(
-    event: NewEvent,
-    speakers: Omit<NewEventSpeaker, "eventId">[],
-  ): Promise<EventWithSpeakers> {
+  async insert(event: NewEvent): Promise<EventAggregate> {
     // 010 EARS-3/5 — the capture trigger attributes the resulting data.* rows to
-    // the request's actor/source (admin-ui) via the audit-context wrapper.
+    // the request actor/source (admin-ui) via the audit-context wrapper.
     return withRequestAuditContext(this.db, async (tx) => {
       const [row] = await tx.insert(events).values(event).returning();
       if (!row) throw new Error("event insert returned no row");
-      if (speakers.length > 0) {
-        await tx
-          .insert(eventSpeakers)
-          .values(speakers.map((s) => ({ ...s, eventId: row.id })));
-      }
       return {
         event: row,
-        speakers: speakers.map((s) => ({
-          name: s.name,
-          regalia: s.regalia ?? "",
-          position: s.position,
-        })),
         // A brand-new event carries no stream config until ConfigureStream runs.
         streamConfig: null,
       };
@@ -149,9 +133,8 @@ export class EventsRepository {
   }
 
   /**
-   * 014 EARS-24 (#1741) — persist a whole `legacy` эфир: the event row, its
-   * ordered speaker rows AND the one `event_recordings` row it exists to carry,
-   * in a SINGLE transaction.
+   * 014 EARS-24 (#1741) — persist a whole `legacy` эфир: the event row AND the
+   * one `event_recordings` row it exists to carry, in a SINGLE transaction.
    *
    * The recording is not optional and is not a second call. A two-step
    * create-then-attach shape could leave a `legacy` event with no recording —
@@ -165,30 +148,19 @@ export class EventsRepository {
    */
   async insertLegacyBroadcast(
     event: NewEvent,
-    speakers: Omit<NewEventSpeaker, "eventId">[],
     recording: Omit<NewEventRecording, "eventId">,
-  ): Promise<EventWithSpeakers> {
+  ): Promise<EventAggregate> {
     // 010 EARS-3/5 — one audit context for the whole aggregate, so the
-    // `data.events.*`, `data.event_speakers.*` and `data.event_recordings.*`
-    // ledger rows all name the same acting admin.
+    // `data.events.*` and `data.event_recordings.*` ledger rows all name the
+    // same acting admin.
     return withRequestAuditContext(this.db, async (tx) => {
       const [row] = await tx.insert(events).values(event).returning();
       if (!row) throw new Error("legacy event insert returned no row");
-      if (speakers.length > 0) {
-        await tx
-          .insert(eventSpeakers)
-          .values(speakers.map((s) => ({ ...s, eventId: row.id })));
-      }
       await tx
         .insert(eventRecordings)
         .values({ ...recording, eventId: row.id });
       return {
         event: row,
-        speakers: speakers.map((s) => ({
-          name: s.name,
-          regalia: s.regalia ?? "",
-          position: s.position,
-        })),
         // A `legacy` эфир never acquires a stream config: `ConfigureStream` is
         // refused for it and `live` is unreachable on its machine.
         streamConfig: null,
@@ -197,15 +169,13 @@ export class EventsRepository {
   }
 
   /**
-   * EARS-2 — edit one event's authored fields and (optionally) replace its
-   * ordered speaker list, in a single transaction so a partial edit is never
-   * persisted. `patch` carries only the columns to overwrite (an omitted column
-   * is untouched); `updated_at` is always bumped. When `speakers` is provided the
-   * stored list is RECONCILED against the authored one (#1278, ADR-0003 design
-   * §3.6): a departing speaker is retired, a returning one is restored in place
-   * and only a new one is inserted — the list is never deleted and re-created
-   * (see {@link reconcileEventSpeakers}). When it is `undefined` the speaker rows
-   * are left as they are. The caller (the
+   * EARS-2 — edit one event authored fields in a single transaction so a partial
+   * edit is never persisted. `patch` carries only the columns to overwrite (an
+   * omitted column is untouched); `updated_at` is always bumped.
+   *
+   * 012 EARS-24 (#1607) — speakers are NOT part of this command any more: they
+   * are `event_experts` links authored through the shared relationship command
+   * (EARS-7/EARS-22), not a free-text list this write replaces. The caller (the
    * service) has already validated the pre-hide edit window and folded any
    * program-PDF replacement into `patch.programPdfRef`. Returns the updated
    * aggregate, or `null` when the id does not exist.
@@ -226,8 +196,7 @@ export class EventsRepository {
         | "recordingExpectedBy"
       >
     >,
-    speakers?: Omit<NewEventSpeaker, "eventId">[],
-  ): Promise<EventWithSpeakers | null> {
+  ): Promise<EventAggregate | null> {
     return withRequestAuditContext(this.db, async (tx) => {
       const [row] = await tx
         .update(events)
@@ -247,26 +216,12 @@ export class EventsRepository {
         .returning();
       if (!row) return null;
 
-      if (speakers) {
-        await reconcileEventSpeakers(tx, id, speakers);
-      }
-
-      const speakerRows = await tx
-        .select()
-        .from(eventSpeakers)
-        .where(activeSpeakersOf(id))
-        .orderBy(asc(eventSpeakers.position));
       const [streamRow] = await tx
         .select()
         .from(streamConfig)
         .where(activeStreamOf(id));
       return {
         event: row,
-        speakers: speakerRows.map((s) => ({
-          name: s.name,
-          regalia: s.regalia,
-          position: s.position,
-        })),
         streamConfig: streamRow
           ? { provider: streamRow.provider, embedRef: streamRow.embedRef }
           : null,
@@ -289,7 +244,7 @@ export class EventsRepository {
   async upsertStreamConfig(
     eventId: string,
     input: ConfigureStreamRequest,
-  ): Promise<EventWithSpeakers | null> {
+  ): Promise<EventAggregate | null> {
     // 010 EARS-3/5 — attribute the stream_config write to the acting admin.
     await withRequestAuditContext(this.db, async (tx) => {
       await tx
@@ -361,10 +316,10 @@ export class EventsRepository {
    * SSOT (the same closed set the `UpcomingBroadcastState` card type derives from,
    * so the query and the projection can never disagree about what may appear) —
    * applied in SQL, so a `draft`/`ended`/`hidden` event drops from the listing
-   * by STATE, never by time (EARS-6: draft/ended/hidden never list). Speaker
-   * rows for the matched events are read in one batched query (no N+1) and grouped
-   * back by event in `position` order. An empty match is a valid empty list
-   * (EARS-11).
+   * by STATE, never by time (EARS-6: draft/ended/hidden never list). Speakers are
+   * NOT read here: the card speaker names come from the one canonical
+   * `event_experts` projection, resolved for the whole page in two bounded
+   * queries by the service. An empty match is a valid empty list (EARS-11).
    */
   async listUpcoming(
     cutoff: Date,
@@ -386,30 +341,9 @@ export class EventsRepository {
       .orderBy(asc(events.startsAt), asc(events.id));
     const selected =
       limit === undefined ? await query : await query.limit(limit);
-    if (selected.length === 0) return [];
-
-    const ids = selected.map((r) => r.event.id);
-    const speakerRows = await this.db
-      .select()
-      .from(eventSpeakers)
-      .where(
-        and(
-          inArray(eventSpeakers.eventId, ids),
-          eq(eventSpeakers.recordStatus, "active"),
-        ),
-      )
-      .orderBy(asc(eventSpeakers.position));
-
-    const byEvent = new Map<string, EventWithSpeakers["speakers"]>();
-    for (const s of speakerRows) {
-      const list = byEvent.get(s.eventId) ?? [];
-      list.push({ name: s.name, regalia: s.regalia, position: s.position });
-      byEvent.set(s.eventId, list);
-    }
     return selected.map(({ event, startsAtCursor }) => ({
       event,
       startsAtCursor,
-      speakers: byEvent.get(event.id) ?? [],
       // The upcoming-listing card (004) does not read the stream config.
       streamConfig: null,
     }));
@@ -439,35 +373,9 @@ export class EventsRepository {
       )
       .orderBy(desc(events.startsAt), desc(events.id))
       .limit(limit);
-    if (selected.length === 0) return [];
-
-    const speakerRows = await this.db
-      .select()
-      .from(eventSpeakers)
-      .where(
-        and(
-          inArray(
-            eventSpeakers.eventId,
-            selected.map((row) => row.event.id),
-          ),
-          eq(eventSpeakers.recordStatus, "active"),
-        ),
-      )
-      .orderBy(asc(eventSpeakers.position));
-    const byEvent = new Map<string, EventWithSpeakers["speakers"]>();
-    for (const speaker of speakerRows) {
-      const list = byEvent.get(speaker.eventId) ?? [];
-      list.push({
-        name: speaker.name,
-        regalia: speaker.regalia,
-        position: speaker.position,
-      });
-      byEvent.set(speaker.eventId, list);
-    }
     return selected.map(({ event, startsAtCursor }) => ({
       event,
       startsAtCursor,
-      speakers: byEvent.get(event.id) ?? [],
       streamConfig: null,
     }));
   }
@@ -571,7 +479,7 @@ export class EventsRepository {
     id: string,
     state: Event["state"],
     expectedVersion?: number,
-  ): Promise<EventWithSpeakers | null> {
+  ): Promise<EventAggregate | null> {
     // 010 EARS-3/5 — attribute the bare lifecycle-state write to the acting admin.
     const [row] = await withRequestAuditContext(this.db, (tx) =>
       tx
@@ -593,18 +501,8 @@ export class EventsRepository {
         .returning(),
     );
     if (!row) return null;
-    const speakerRows = await this.db
-      .select()
-      .from(eventSpeakers)
-      .where(activeSpeakersOf(id))
-      .orderBy(asc(eventSpeakers.position));
     return {
       event: row,
-      speakers: speakerRows.map((s) => ({
-        name: s.name,
-        regalia: s.regalia,
-        position: s.position,
-      })),
       streamConfig: await this.loadStreamConfig(id),
     };
   }
@@ -637,9 +535,9 @@ export class EventsRepository {
     id: string,
     state: Event["state"],
     audit: TransitionAudit,
-    fence?: (tx: Tx, result: EventWithSpeakers) => Promise<void>,
+    fence?: (tx: Tx, result: EventAggregate) => Promise<void>,
     expectedVersion?: number,
-  ): Promise<EventWithSpeakers | null> {
+  ): Promise<EventAggregate | null> {
     // 010 EARS-3/EARS-5 — run the state write inside the audit-context wrapper
     // so the generic capture trigger attributes the resulting
     // `data.events.update` row to the acting admin (`subject_id` = sub) with a
@@ -682,22 +580,12 @@ export class EventsRepository {
         // No PD — only the aggregate id + the from/to states (ADR-0003 §6).
         metadata: { aggregateId: id, from: audit.from, to: state },
       });
-      const speakerRows = await tx
-        .select()
-        .from(eventSpeakers)
-        .where(activeSpeakersOf(id))
-        .orderBy(asc(eventSpeakers.position));
       const [streamRow] = await tx
         .select()
         .from(streamConfig)
         .where(activeStreamOf(id));
-      const result: EventWithSpeakers = {
+      const result: EventAggregate = {
         event: row,
-        speakers: speakerRows.map((s) => ({
-          name: s.name,
-          regalia: s.regalia,
-          position: s.position,
-        })),
         streamConfig: streamRow
           ? { provider: streamRow.provider, embedRef: streamRow.embedRef }
           : null,
@@ -711,13 +599,13 @@ export class EventsRepository {
     });
   }
 
-  async findById(id: string): Promise<EventWithSpeakers | null> {
+  async findById(id: string): Promise<EventAggregate | null> {
     const [row] = await this.db
       .select()
       .from(events)
       .where(and(eq(events.id, id), ACTIVE_EVENT));
     if (!row) return null;
-    return this.withSpeakers(row);
+    return this.withStream(row);
   }
 
   /**
@@ -726,7 +614,7 @@ export class EventsRepository {
    * `idOrSlug` matches the slug only — never fed to the uuid `id` column, whose
    * comparison would raise on a malformed value.
    */
-  async findByIdOrSlug(idOrSlug: string): Promise<EventWithSpeakers | null> {
+  async findByIdOrSlug(idOrSlug: string): Promise<EventAggregate | null> {
     const where = UUID_RE.test(idOrSlug)
       ? or(eq(events.id, idOrSlug), eq(events.slug, idOrSlug))
       : eq(events.slug, idOrSlug);
@@ -735,22 +623,12 @@ export class EventsRepository {
       .from(events)
       .where(and(where, ACTIVE_EVENT));
     if (!row) return null;
-    return this.withSpeakers(row);
+    return this.withStream(row);
   }
 
-  private async withSpeakers(row: Event): Promise<EventWithSpeakers> {
-    const speakerRows = await this.db
-      .select()
-      .from(eventSpeakers)
-      .where(activeSpeakersOf(row.id))
-      .orderBy(asc(eventSpeakers.position));
+  private async withStream(row: Event): Promise<EventAggregate> {
     return {
       event: row,
-      speakers: speakerRows.map((s) => ({
-        name: s.name,
-        regalia: s.regalia,
-        position: s.position,
-      })),
       streamConfig: await this.loadStreamConfig(row.id),
     };
   }

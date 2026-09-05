@@ -34,7 +34,6 @@ const VIEW: HostFreeEventPageView = {
   durationMin: 90,
   description: "Разбор трёх случаев.",
   speakers: [
-    { source: "legacy", name: "Иван Петров", credentials: "К.м.н." },
     {
       source: "expert",
       expertId: "22222222-2222-4222-8222-222222222222",
@@ -95,11 +94,8 @@ describe("resolveAroundEvent", () => {
     expect(resolveAroundEvent(VIEW, NO_ROUTES)).toEqual({ speakerPages: [] });
   });
 
-  it("020 EARS-2.2: an event with no expert speakers yields an empty page list, never a null entry", () => {
-    const legacyOnly: HostFreeEventPageView = {
-      ...VIEW,
-      speakers: [{ source: "legacy", name: "Иван Петров", credentials: "К.м.н." }],
-    };
-    expect(resolveAroundEvent(legacyOnly, FULL_ROUTES).speakerPages).toEqual([]);
+  it("020 EARS-2.2: an event with no speakers yields an empty page list, never a null entry", () => {
+    const noSpeakers: HostFreeEventPageView = { ...VIEW, speakers: [] };
+    expect(resolveAroundEvent(noSpeakers, FULL_ROUTES).speakerPages).toEqual([]);
   });
 });

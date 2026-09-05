@@ -43,10 +43,9 @@ export interface AroundEventRoutes {
 /**
  * Resolve the {@link AroundEvent} link set for one event on one host.
  *
- * Only the `expert` arm of the 012 EARS-8 speaker union is considered: a
- * never-migrated `legacy` row has no stable key, so there is nothing a page
- * route could be built from and nothing a client could match a card against.
- * Names are never compared (012-design §5.2).
+ * Every speaker of the 012 EARS-8 projection is an `expert` since the EARS-24
+ * cutover (#1607), so each one carries the stable slug a page route is built
+ * from. Names are never compared (012-design §5.2).
  */
 export function resolveAroundEvent(
   view: HostFreeEventPageView,
@@ -58,7 +57,6 @@ export function resolveAroundEvent(
   if (schoolHref) links.school = { label: view.school, href: schoolHref };
 
   for (const speaker of view.speakers) {
-    if (speaker.source !== "expert") continue;
     const href = routes.expertPath({
       slug: speaker.expertSlug,
       name: speaker.name,

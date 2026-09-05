@@ -142,10 +142,9 @@ describe.skipIf(
     startsAtMsk: "2026-07-17T19:00",
     durationMin: 90,
     description: "Разбор клинических рекомендаций.",
-    speakers: [
-      { name: "Иванов И.И.", regalia: "д.м.н., профессор" },
-      { name: "Петрова А.С.", regalia: "к.м.н." },
-    ],
+    // 012 EARS-24 (#1607): the event write body carries no speaker list — the
+    // line-up is edited as `event_experts` links and covered by the taxonomy
+    // suites, so an edit cannot replace it and this payload cannot seed it.
     specialties: ["cardiology", "therapy"],
     partnerRef: "sponsor:acme-pharma",
   };
@@ -265,7 +264,6 @@ describe.skipIf(
         description: "Уточнённая программа.",
         startsAtMsk: "2026-07-17T20:30",
         durationMin: 120,
-        speakers: [{ name: "Сидоров П.П.", regalia: "д.м.н." }],
       }),
     });
     const res = await app.inject({
@@ -283,10 +281,8 @@ describe.skipIf(
     expect(body.durationMin).toBe(120);
     // …МСК re-entry folded into one canonical instant (20:30 МСК == 17:30Z).
     expect(body.startsAt).toBe("2026-07-17T17:30:00.000Z");
-    // …speakers replaced as an ordered list.
-    expect(body.speakers).toEqual([
-      { name: "Сидоров П.П.", regalia: "д.м.н." },
-    ]);
+    // …the read DTO carries no speaker list at all (012 EARS-24).
+    expect("speakers" in body).toBe(false);
     // …an omitted field is untouched.
     expect(body.school).toBe(validPayload.school);
     expect(body.specialties).toEqual(["cardiology", "therapy"]);
@@ -312,197 +308,6 @@ describe.skipIf(
     const page = pub.json() as Record<string, unknown>;
     expect(page.title).toBe("Актуальная терапия ХСН — обновлено");
     expect(page.startsAt).toBe("2026-07-17T17:30:00.000Z");
-  });
-
-  /** The event's speaker rows as stored — retired ones included, order stable. */
-  async function speakerRows(id: string): Promise<
-    {
-      id: string;
-      name: string;
-      position: number;
-      record_status: string;
-      deleted_at: Date | null;
-    }[]
-  > {
-    const { rows } = await pool.query<{
-      id: string;
-      name: string;
-      position: number;
-      record_status: string;
-      deleted_at: Date | null;
-    }>(
-      `SELECT id, name, position, record_status, deleted_at
-         FROM event_speakers WHERE event_id = $1
-        ORDER BY record_status, position`,
-      [id],
-    );
-    return rows;
-  }
-
-  it("EARS-2: dropping a speaker RETIRES the row (never deletes it) and re-adding that speaker RESTORES the same row — #1278 §3.6", async () => {
-    const cookie = await session(uniqueEmail("admin"), "platform_admin");
-    const created = await createEvent(cookie);
-    const id = created.id as string;
-
-    const before = await speakerRows(id);
-    expect(before).toHaveLength(2);
-    const retiredId = before.find((r) => r.name === "Петрова А.С.")!.id;
-
-    // Drop the second speaker.
-    const drop = multipartBody({
-      payload: JSON.stringify({ speakers: [validPayload.speakers[0]] }),
-    });
-    const dropped = await app.inject({
-      method: "PATCH",
-      url: `/v1/admin/events/${id}`,
-      headers: admHeaders(cookie, drop.contentType),
-      payload: drop.body,
-    });
-    expect(dropped.statusCode).toBe(200);
-    // The API answers with the ACTIVE list only…
-    expect((dropped.json() as Record<string, unknown>).speakers).toEqual([
-      validPayload.speakers[0],
-    ]);
-    // …while the departed speaker's row is still there, retired, with the same id.
-    const after = await speakerRows(id);
-    expect(after).toHaveLength(2);
-    const retired = after.find((r) => r.id === retiredId)!;
-    expect(retired.record_status).toBe("retired");
-    expect(retired.deleted_at).not.toBeNull();
-    expect(retired.name).toBe("Петрова А.С.");
-
-    // Re-adding the same person restores THAT row (§3.6 rule 2), with the new
-    // regalia — never a second row for the same speaker.
-    const readd = multipartBody({
-      payload: JSON.stringify({
-        speakers: [
-          validPayload.speakers[0],
-          { name: "Петрова А.С.", regalia: "д.м.н." },
-        ],
-      }),
-    });
-    const restored = await app.inject({
-      method: "PATCH",
-      url: `/v1/admin/events/${id}`,
-      headers: admHeaders(cookie, readd.contentType),
-      payload: readd.body,
-    });
-    expect(restored.statusCode).toBe(200);
-    expect((restored.json() as Record<string, unknown>).speakers).toEqual([
-      validPayload.speakers[0],
-      { name: "Петрова А.С.", regalia: "д.м.н." },
-    ]);
-    const final = await speakerRows(id);
-    expect(final).toHaveLength(2);
-    const back = final.find((r) => r.id === retiredId)!;
-    expect(back.record_status).toBe("active");
-    expect(back.deleted_at).toBeNull();
-    expect(back.position).toBe(1);
-  });
-
-  it("EARS-2: a lifecycle transition returns the same ACTIVE speaker projection as every other read — a retired speaker is never republished — #1278 §3.6", async () => {
-    // `updateStateWithAudit` (publish / open room / hide) answers with the
-    // event aggregate too. If it read the raw speaker list, the SAME event would
-    // yield two different speaker lists depending on which command produced the
-    // response, and a dropped speaker would reappear on the next transition.
-    const cookie = await session(uniqueEmail("admin"), "platform_admin");
-    const created = await createEvent(cookie);
-    const id = created.id as string;
-
-    const drop = multipartBody({
-      payload: JSON.stringify({ speakers: [validPayload.speakers[0]] }),
-    });
-    const dropped = await app.inject({
-      method: "PATCH",
-      url: `/v1/admin/events/${id}`,
-      headers: admHeaders(cookie, drop.contentType),
-      payload: drop.body,
-    });
-    expect(dropped.statusCode).toBe(200);
-    const rowsAfterDrop = await speakerRows(id);
-    expect(rowsAfterDrop).toHaveLength(2);
-    expect(
-      rowsAfterDrop.filter((r) => r.record_status === "retired"),
-    ).toHaveLength(1);
-
-    const published = await app.inject({
-      method: "POST",
-      url: `/v1/admin/events/${id}/transition`,
-      headers: {
-        ...admHeaders(cookie, "application/json"),
-        ...(await ifMatch(id)),
-      },
-      payload: { to: "published" },
-    });
-    expect(published.statusCode).toBe(200);
-    expect((published.json() as Record<string, unknown>).speakers).toEqual([
-      validPayload.speakers[0],
-    ]);
-  });
-
-  it("EARS-2: a NEW speaker may take the slot a retired one held, and re-ordering the same people keeps their rows — #1278 §3.6", async () => {
-    const cookie = await session(uniqueEmail("admin"), "platform_admin");
-    const created = await createEvent(cookie);
-    const id = created.id as string;
-    const original = await speakerRows(id);
-    const ivanovId = original.find((r) => r.name === "Иванов И.И.")!.id;
-
-    // Иванов leaves slot 0 and a different person takes it: the partial unique
-    // index lets the retained (retired) row and the new active one coexist.
-    const replace = multipartBody({
-      payload: JSON.stringify({
-        speakers: [
-          { name: "Сидоров П.П.", regalia: "д.м.н." },
-          validPayload.speakers[1],
-        ],
-      }),
-    });
-    const res = await app.inject({
-      method: "PATCH",
-      url: `/v1/admin/events/${id}`,
-      headers: admHeaders(cookie, replace.contentType),
-      payload: replace.body,
-    });
-    expect(res.statusCode).toBe(200);
-    const rows = await speakerRows(id);
-    expect(rows).toHaveLength(3);
-    expect(rows.filter((r) => r.record_status === "active")).toHaveLength(2);
-    const retiredIvanov = rows.find((r) => r.id === ivanovId)!;
-    expect(retiredIvanov.record_status).toBe("retired");
-    expect(retiredIvanov.position).toBe(0);
-    expect(
-      rows.find(
-        (r) => r.name === "Сидоров П.П." && r.record_status === "active",
-      )?.position,
-    ).toBe(0);
-
-    // A pure re-ordering of the CURRENT list moves positions on the same rows —
-    // no row is created, none is retired (the transient unique collision the
-    // partial index would raise is sequenced by the reconcile, not by luck).
-    const activeIds = new Map(
-      rows
-        .filter((r) => r.record_status === "active")
-        .map((r) => [r.name, r.id] as const),
-    );
-    const reorder = multipartBody({
-      payload: JSON.stringify({
-        speakers: [validPayload.speakers[1], { name: "Сидоров П.П." }],
-      }),
-    });
-    const reordered = await app.inject({
-      method: "PATCH",
-      url: `/v1/admin/events/${id}`,
-      headers: admHeaders(cookie, reorder.contentType),
-      payload: reorder.body,
-    });
-    expect(reordered.statusCode).toBe(200);
-    const afterReorder = await speakerRows(id);
-    expect(afterReorder).toHaveLength(3);
-    const active = afterReorder.filter((r) => r.record_status === "active");
-    expect(active).toHaveLength(2);
-    for (const row of active) expect(row.id).toBe(activeIds.get(row.name));
-    expect(active.find((r) => r.name === "Петрова А.С.")?.position).toBe(0);
-    expect(active.find((r) => r.name === "Сидоров П.П.")?.position).toBe(1);
   });
 
   it("EARS-2: replacing the program PDF supersedes the stored reference — the 004 page serves the current file, the superseded file is no longer served", async () => {

@@ -1991,12 +1991,7 @@ export interface components {
             school: string;
             seatsLeft: number | null;
             slug: string;
-            speakers: ({
-                credentials: string;
-                name: string;
-                /** @constant */
-                source: "legacy";
-            } | {
+            speakers: {
                 credentials: string;
                 /** Format: uuid */
                 expertId: string;
@@ -2006,7 +2001,7 @@ export interface components {
                 role: string;
                 /** @constant */
                 source: "expert";
-            })[];
+            }[];
             specialties: string[];
             /** Format: date-time */
             startsAt: string;
@@ -2067,12 +2062,6 @@ export interface components {
             };
             /** @default  */
             school: string;
-            /** @default [] */
-            speakers: {
-                name: string;
-                /** @default  */
-                regalia: string;
-            }[];
             /** @default [] */
             specialties: string[];
             title: string;

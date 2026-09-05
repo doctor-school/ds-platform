@@ -15,13 +15,6 @@ import { signInAsAdmin } from "./support/sign-in";
  * reject branches for every field kind ride along and must surface RU inline
  * errors BEFORE any request leaves the browser.
  *
- * NOT driven here, because no control produces them: the legacy-speaker MATCH
- * (`LEGACY_SPEAKER_CONFLICT`, the cross-event id and the already-matched row) and
- * the UNMATCH round-trip. Choosing a legacy speaker needs an admin read of the
- * event's retained speaker rows, which no route exposes yet — that control is
- * tracked at #1426, `blocked_by` #1306. What ships here is the matched/unmatched
- * BADGE, whose unmatched state is asserted below.
- *
  * Dev-stand-gated + MANUAL like every other `apps/admin/e2e` flow spec — the
  * bootstrap provisions a real `platform_admin` against the stand's Zitadel and
  * throws when `IDP_*` is absent. Run against a booted admin + api:
@@ -209,9 +202,10 @@ test.describe("012 EARS-7 — event↔expert links in the live admin", () => {
     await expect(row).toContainText(firstExpert.name);
     await expect(row).toContainText("Модератор");
     await expect(row).toContainText("Активна");
-    // No legacy speaker was chosen (no control ships — #1426), so the badge must
-    // say so rather than leaving the state unnamed.
-    await expect(row).toContainText("Не сопоставлен");
+    // 012 EARS-24 (#1607): after the cutover `event_experts` IS the single
+    // source of an эфир's speakers — there is no legacy free-text list left to
+    // map onto, so the row carries no mapping badge at all.
+    await expect(row).not.toContainText("сопоставл");
 
     // ── Server refusal 1: the slot is taken (SPEAKER_POSITION_OCCUPIED) ────
     await openAddDialog(page, secondExpert.name);

@@ -34,7 +34,6 @@ export function eventFormFields(detail?: EventAdminDetail): EventFormFields {
     // Copied, not aliased: the field array mutates these rows in place, and a
     // projection that shared them with the fetched DTO would let an edit leak
     // into the cached detail (and back out on the next re-projection).
-    speakers: detail?.speakers.map((s) => ({ ...s })) ?? [],
     specialtiesText: (detail?.specialties ?? []).join(", "),
     // 014 EARS-24 — «Это архивный эфир». On CREATE this is the checkbox the
     // operator ticks; on EDIT it is not a choice at all but the server's own

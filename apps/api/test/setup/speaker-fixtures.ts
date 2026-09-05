@@ -5,7 +5,7 @@ import type pg from "pg";
  * 012 EARS-24 (#1607) — speaker fixtures for the post-cutover world.
  *
  * Before the cutover release a suite that needed "this event has speakers"
- * inserted free-text `event_speakers` rows. That table no longer exists: the
+ * inserted free-text speaker rows. That table no longer exists: the
  * ONLY speaker source is an ACTIVE `event_experts` link to an ELIGIBLE
  * (published, non-retired) `experts` row. Every suite that seeds speakers now
  * seeds that pair, so the shape is written down once, here, rather than

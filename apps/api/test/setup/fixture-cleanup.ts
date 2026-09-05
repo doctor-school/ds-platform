@@ -23,8 +23,8 @@ const EVENT_CHILDREN = [
   "presence_beats",
   "registrations",
   // 012 EARS-24 — `event_experts` is the ONLY speaker source since the cutover
-  // release; the free-text `event_speakers` table and its migration fence are
-  // gone, so teardown needs no trigger bypass any more.
+  // release; the free-text speaker table and its migration fence are gone, so
+  // teardown needs no trigger bypass any more.
   "event_experts",
   "stream_config",
   "event_recordings",

@@ -326,7 +326,7 @@ stream-config **form** (stock Refine) + its browser E2E are the integration slic
   first, with speaker rows batched in one query — no N+1), `listMonthBroadcasts()`
   (the publish-visible read inside a `[start, end)` МСК month window, `starts_at ASC`)
   and `monthlyCounts()` (the МСК-month-grouped count of publish-visible events
-  inside a year window) over the `events` / `event_speakers` tables.
+  inside a year window) over the `events` / `event_experts` tables.
 
 ## Endpoints
 

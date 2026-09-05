@@ -516,7 +516,7 @@ export const EVENT_EXPERT_POSITION_MAX = 32767;
  * `event_experts` — the explicit expert↔event link (012 EARS-7, #1289).
  *
  * Since the EARS-24 cutover this is the SOLE source of an event's speaker
- * projection: the free-text `event_speakers` list of feature 007 no longer
+ * projection: the free-text speaker list of feature 007 no longer
  * exists, so there is no legacy match to express and no suppression rule to
  * apply. A published, eligible expert linked here IS the speaker.
  *
@@ -561,7 +561,7 @@ export const eventExperts = pgTable(
     uniqueIndex("event_experts_event_expert_key").on(t.eventId, t.expertId),
     // The visible-slot rule of §4, now enforced in full by the database:
     // partial on `active`, so a retired link never squats on a slot the live
-    // projection needs. With `event_speakers` gone this index is the ONLY
+    // projection needs. With the free-text speaker list gone this index is the ONLY
     // source of a slot collision — the service surfaces it as 409
     // `SPEAKER_POSITION_OCCUPIED`.
     uniqueIndex("event_experts_event_position_active_uniq")

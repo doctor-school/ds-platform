@@ -11,8 +11,8 @@ import { DRIZZLE_DB } from "../database/database.tokens.js";
 // not N: the §5.2 «no N+1 composition» rule applies to the upcoming-broadcast
 // listing exactly as it does to the 015 catalog.
 //
-// 012 EARS-24 (#1607) — the cutover: `event_speakers` no longer exists, so the
-// projection has a SINGLE source, the `event_experts` link table.
+// 012 EARS-24 (#1607) — the cutover: the free-text speaker list no longer
+// exists, so the projection has a SINGLE source, the `event_experts` link table.
 //
 // Every eligibility predicate is repeated HERE, in SQL, rather than trusted from
 // the write path: the projection is a query policy, not a migration job, and an

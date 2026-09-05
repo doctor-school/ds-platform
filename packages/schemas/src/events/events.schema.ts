@@ -636,8 +636,8 @@ export type PublicExpertSpeaker = z.infer<typeof PublicExpertSpeakerSchema>;
  *
  * After the 012 EARS-24 cutover (#1607) the union has exactly ONE arm: an
  * `event_experts` link. The withdrawn `legacy` arm is gone with the free-text
- * `event_speakers` read path — the one-off manual re-entry, not a merge branch,
- * is what carries the historical rows across. The discriminator is KEPT so an
+ * speaker read path — the one-off manual re-entry, not a merge branch, is what
+ * carries the historical rows across. The discriminator is KEPT so an
  * SDK consumer written against the merged union keeps narrowing on `source`.
  *
  * Ordering is LD-2's total order: `position ASC`, then stable link id ASC — the

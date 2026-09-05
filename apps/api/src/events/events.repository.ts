@@ -89,9 +89,9 @@ const ACTIVE_EVENT = eq(events.recordStatus, "active");
  *
  * 012 EARS-24 (#1607) — it carries NO speaker list any more. Speakers are
  * `event_experts` links resolved by the one canonical projection
- * (`SpeakerProjectionService`); the free-text `event_speakers` list left the
- * contract with the cutover release, so an aggregate that still carried it
- * would be a second, disagreeing source of the same public fact.
+ * (`SpeakerProjectionService`); the free-text speaker list left the contract
+ * with the cutover release, so an aggregate that still carried it would be a
+ * second, disagreeing source of the same public fact.
  */
 export interface EventAggregate {
   event: Event;

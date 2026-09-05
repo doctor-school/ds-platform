@@ -98,6 +98,79 @@ container gets the real adapter, not its own fake, everywhere the suites
 actually run. `test/auth/idp-fake-seam.spec.ts` pins both that rule and the
 fake↔real port parity.
 
+## Recordings backfill (014 EARS-29)
+
+`pnpm --filter @ds/api recordings:backfill` attaches and publishes the missing
+recordings of **platform-born** эфиры in bulk. It is a driver over the ordinary
+014 commands (`AttachRecording` + `PublishRecording`) — no second write path, no
+direct row insert — so the slot guard, the duration derivation and the feature-010
+audit rows are exactly the ones the «Записи» admin tab produces.
+
+The manifest is a JSON array, one entry per event, each carrying an `edited`
+and/or a `raw` source:
+
+```json
+[
+  {
+    "event": "kardiologiya-2026-04-12",
+    "edited": {
+      "provider": "rutube",
+      "embed_ref": "0123…",
+      "duration_sec": 5400
+    },
+    "raw": {
+      "provider": "rutube",
+      "embed_ref": "fedc…",
+      "poster": "posters/kardio.jpg"
+    }
+  },
+  {
+    "event": "3f1c…-uuid",
+    "edited": { "provider": "rutube", "embed_ref": "89ab…" }
+  }
+]
+```
+
+`event` is the event **id or slug**; `poster` and `duration_sec` are optional.
+The whole manifest is validated before the first write, so a typo in row 40
+never leaves rows 1–39 committed.
+
+Run it with the target environment injected (there is no dotenv autoload):
+
+```bash
+set -a; source ~/.ds-platform/.env.local; set +a
+# 1. dry run — prints the verdict of every row, writes nothing
+pnpm --filter @ds/api recordings:backfill --   --manifest ./backfill.json --actor <zitadel-sub> --dry-run
+# 2. the real run
+pnpm --filter @ds/api recordings:backfill --   --manifest ./backfill.json --actor <zitadel-sub>
+```
+
+`--actor` is the Zitadel `sub` of the operator running it and is **required**:
+every committed row is attributed to them in the audit ledger, through the door
+`system:recordings-backfill`. Stdout is one JSON object per manifest row plus a
+final summary line.
+
+Reading the per-row `outcome`:
+
+| Outcome              | Meaning                                                                                      |
+| -------------------- | -------------------------------------------------------------------------------------------- |
+| `attached+published` | The kind slot was free; a draft was attached and published (two audit rows).                 |
+| `published`          | The kind already held a non-retired **draft**; only the publish ran.                         |
+| `skipped`            | The kind already carries a published recording. Nothing was written — re-runs are safe.      |
+| `would-attach`       | Dry-run only: this row would be written. `detail` says whether that is an attach or publish. |
+| `refused`            | The row was rejected and the run continued; `code` carries the refusal.                      |
+
+The refusal codes are the ones the commands themselves raise:
+`EVENT_NOT_FINISHED` (a platform event that is not `ended`, a passed `published`
+one included — moving it is [#1814](https://github.com/doctor-school/ds-platform/issues/1814), not this tool),
+`INVALID_TRANSITION` (a `legacy` event — the old-platform import is
+[#1879](https://github.com/doctor-school/ds-platform/issues/1879)) and
+`RESOURCE_NOT_FOUND` (no event with that id or slug). The backfill never writes
+`live_at`, `starts_at`, `state` or `origin`.
+
+Running it against **production** is a separate, owner-gated operation — the
+manifest is reviewed and the dry-run output accepted before the real run.
+
 ## Owning ADRs
 
 - **ADR-0002** — backend core stack (NestJS + Zod + REST + SDK).

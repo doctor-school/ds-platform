@@ -68,11 +68,11 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     afterEach(async () => {
       for (const id of createdEventIds.splice(0)) {
-        await pool.query(
-          `DELETE FROM audit_ledger WHERE metadata->'pk'->>'id' IN
-             (SELECT id::text FROM event_recordings WHERE event_id = $1)`,
-          [id],
-        );
+        // The audit rows of these recordings are NOT cleaned up: `audit_ledger`
+        // is append-only by ADR-0003 §2.7 and the DB rule refuses a DELETE.
+        // Nothing points back at them - the ledger addresses its subject through
+        // `metadata->'pk'->>'id'`, not a foreign key - so the fixture rows go
+        // and the ledger keeps its honest history, which is the point of it.
         await pool.query("DELETE FROM event_recordings WHERE event_id = $1", [
           id,
         ]);

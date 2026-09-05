@@ -32,18 +32,22 @@ export function projectedSpeakerName(speaker: SpeakerFixture): string {
 }
 
 /**
- * Seed `speakers` as published experts linked to `eventId` at positions
- * `0..n-1`. Returns the created expert ids so the suite can sweep them in its
- * teardown (`deleteExpertFixtures`) — `deleteEventFixture` removes the LINKS
- * but cannot know which experts the suite owns.
+ * Seed `speakers` as published experts linked to `eventId` at consecutive
+ * positions from `startPosition` (a slot is unique per active link, so a suite
+ * that seeds in two calls passes the next free slot). Returns the created
+ * expert ids so the suite can sweep them in its teardown
+ * (`deleteExpertFixtures`) — `deleteEventFixture` removes the LINKS but cannot
+ * know which experts the suite owns.
  */
 export async function seedEventSpeakers(
   pool: pg.Pool,
   eventId: string,
   speakers: SpeakerFixture[],
+  startPosition = 0,
 ): Promise<string[]> {
   const expertIds: string[] = [];
-  for (const [position, speaker] of speakers.entries()) {
+  for (const [index, speaker] of speakers.entries()) {
+    const position = startPosition + index;
     const { rows } = await pool.query<{ id: string }>(
       `INSERT INTO experts
          (slug, family_name, given_name, credentials, status, first_published_at)

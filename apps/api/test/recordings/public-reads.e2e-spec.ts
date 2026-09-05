@@ -26,6 +26,10 @@ import {
   deleteEventFixture,
   deleteUserFixture,
 } from "../setup/fixture-cleanup.js";
+import {
+  deleteExpertFixtures,
+  seedEventSpeakers,
+} from "../setup/speaker-fixtures.js";
 
 // 014 EARS-4 (#1341) — the PUBLIC read behind the post-live event page, over the
 // real stack. Two promises are under test here and they pull in opposite
@@ -90,6 +94,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     let pool: pg.Pool;
     const fake = new FakeIdpClient();
     const createdEventIds: string[] = [];
+    const createdExpertIds: string[] = [];
     const createdEmails: string[] = [];
     const password = "Aa1!ufficiently-long-pw";
     const device = { "user-agent": "Test/1.0", "accept-language": "en-US" };
@@ -135,12 +140,29 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       return { id, slug };
     }
 
-    /** One legacy speaker row — the 004 projection's speaker source. */
-    async function insertSpeaker(eventId: string, name: string, pos: number) {
-      await pool.query(
-        `INSERT INTO event_speakers (event_id, name, regalia, position)
-         VALUES ($1, $2, $3, $4)`,
-        [eventId, name, "Травматолог-ортопед, к.м.н.", pos],
+    /**
+     * One speaker — since 012 EARS-24 that is an eligible expert linked through
+     * `event_experts`, the projection's ONLY source.
+     */
+    async function insertSpeaker(
+      eventId: string,
+      familyName: string,
+      givenName: string,
+      pos: number,
+    ) {
+      createdExpertIds.push(
+        ...(await seedEventSpeakers(
+          pool,
+          eventId,
+          [
+            {
+              familyName,
+              givenName,
+              credentials: "Травматолог-ортопед, к.м.н.",
+            },
+          ],
+          pos,
+        )),
       );
     }
 
@@ -247,6 +269,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       for (const email of createdEmails.splice(0)) {
         await deleteUserFixture(pool, "email", email);
       }
+      await deleteExpertFixtures(pool, createdExpertIds.splice(0));
     });
 
     afterAll(async () => {
@@ -257,8 +280,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const { id, slug } = await insertEvent("ended", {
         programPdfRef: "programs/1341.pdf",
       });
-      await insertSpeaker(id, "Анна Соколова", 1);
-      await insertSpeaker(id, "Михаил Верещагин", 2);
+      await insertSpeaker(id, "Соколова", "Анна", 1);
+      await insertSpeaker(id, "Верещагин", "Михаил", 2);
       await publishRecording(id, "edited");
 
       // No cookie, no auth header — the read is issued exactly as a sponsor-link
@@ -280,8 +303,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       // renders in МСК — present and parseable, never a pre-formatted string.
       expect(Number.isNaN(Date.parse(body.startsAt))).toBe(false);
       expect(body.speakers.map((s) => s.name)).toEqual([
-        "Анна Соколова",
-        "Михаил Верещагин",
+        "Соколова Анна",
+        "Верещагин Михаил",
       ]);
       // The program PDF is a SIGNED, dereferenceable URL — «present when
       // present» is the promise, and a bare storage key would render as a dead

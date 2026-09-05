@@ -1,5 +1,12 @@
 import type { EventListItem } from "@ds/design-system/blocks";
-import type { DoctorEventCard, DoctorEventsFeed } from "@ds/schemas";
+import {
+  mintDoctorEventsFeedReturnTarget,
+  type DoctorEventCard,
+  type DoctorEventsFeed,
+  type RawQueryRecord,
+} from "@ds/schemas";
+
+import { RETURN_CONTEXT_PARAM } from "./return-context";
 
 /**
  * 019 EARS-3 (#1518) — the host projection of the feed payload onto the SHARED
@@ -22,6 +29,8 @@ export const DOCTOR_EVENTS_FEED_COPY = {
   free: "бесплатно для врача",
   signUp: "коллег записались",
   showMore: "Показать ещё",
+  /** The card CTA of an open event — the guest hand-off and the doctor's own path share it. */
+  participate: "Участвовать",
   emptyTitle: "На выбранном отрезке событий нет",
   emptyDescription:
     "Расширьте период кнопкой «Показать ещё» — она сдвигает границу в адресе страницы.",
@@ -60,7 +69,63 @@ const FORMAT_LABEL: Record<DoctorEventCard["format"], string> = {
   podcast: "Подкаст",
 };
 
-export function toEventListItems(feed: DoctorEventsFeed): EventListItem[] {
+/**
+ * 019 EARS-12 (#1527) — the READER the projection is rendering for, and the feed
+ * query they are reading it under.
+ *
+ * Both are needed for one decision only: what a card's «Участвовать» points at.
+ * The feed READ itself stays viewer-independent (LD-8) — the payload a guest and
+ * a doctor receive is byte-identical — so the viewer never reaches the api; it
+ * reaches exactly this projection.
+ */
+export interface DoctorEventsFeedViewerContext {
+  viewer: "guest" | "doctor";
+  /** The route's raw search params — the query the minted return target restores. */
+  feedQuery: RawQueryRecord;
+}
+
+/**
+ * The CTA of one card (019 EARS-12).
+ *
+ * - A GUEST is handed off to registration with the canonical return target the
+ *   ONE guard mints (`/register?returnTo=…`): they come back to this feed, with
+ *   this query, on this card. The target is never hand-assembled here — a
+ *   host-local string build would be a second, unguarded return vocabulary
+ *   (021 LD-3); when the mint refuses, the card simply carries no CTA.
+ * - A DOCTOR goes to the event page, where the participation policy is resolved
+ *   server-side (020). 019 introduces no participation COMMAND of its own.
+ * - `registered` carries no CTA: the card's own «вы записаны» marker owns that
+ *   state. `soldOut` and `recorded` carry none either — there is nothing open to
+ *   join.
+ */
+function ctaOf(
+  card: DoctorEventCard,
+  context: DoctorEventsFeedViewerContext,
+): { ctaHref: string; ctaLabel: string } | Record<string, never> {
+  if (card.state !== "normal" && card.state !== "live") return {};
+
+  if (context.viewer === "doctor") {
+    return {
+      ctaHref: card.href,
+      ctaLabel: DOCTOR_EVENTS_FEED_COPY.participate,
+    };
+  }
+
+  const returnTo = mintDoctorEventsFeedReturnTarget(
+    context.feedQuery,
+    card.slug,
+  );
+  if (returnTo === null) return {};
+  return {
+    ctaHref: `/register?${RETURN_CONTEXT_PARAM}=${encodeURIComponent(returnTo)}`,
+    ctaLabel: DOCTOR_EVENTS_FEED_COPY.participate,
+  };
+}
+
+export function toEventListItems(
+  feed: DoctorEventsFeed,
+  context: DoctorEventsFeedViewerContext,
+): EventListItem[] {
   return feed.days.flatMap((day) =>
     day.items.map((card) => ({
       id: card.id,
@@ -95,6 +160,7 @@ export function toEventListItems(feed: DoctorEventsFeed): EventListItem[] {
             recordingLabel: DOCTOR_EVENTS_FEED_COPY.recorded,
           }
         : {}),
+      ...ctaOf(card, context),
     })),
   );
 }

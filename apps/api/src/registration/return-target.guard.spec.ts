@@ -87,3 +87,84 @@ describe("005 EARS-2 registration-intent return-target guard", () => {
     }
   });
 });
+
+// 019 EARS-12 — the SECOND declared shape of the same guard: a guest who chose
+// «Участвовать» on a doctor-feed card must come back to the feed exactly as they
+// left it, on that card. 021 LD-3 mandates that this widening be an explicit
+// WHITELIST of shapes rather than a looser pattern, so the rejection table below
+// is the load-bearing half of the increment — the accepted value is always the
+// RECONSTRUCTION built from the feed codec's own entries plus `resume`, never
+// the raw input.
+//
+// The describe title OPENS with `019 EARS-12 ` — the ears-test-lint scope prefix.
+describe("019 EARS-12 doctor-feed return target", () => {
+  const CANONICAL =
+    "/events?day=2026-09-10&tense=upcoming&specialty=mine-and-adjacent&resume=my-event";
+  /** A literal backslash, spelled by code point so no escape survives an edit. */
+  const BACKSLASH = String.fromCharCode(92);
+
+  it("EARS-12: when a guest resumes from the feed, the system shall accept the feed-shaped target and reconstruct it with resume last", () => {
+    const intent = parseReturnTarget(
+      "/events?tense=upcoming&day=2026-09-10&resume=my-event",
+    );
+    expect(intent).toEqual({ eventSlug: "my-event", returnTo: CANONICAL });
+    // Reconstruction, not echo: the input's key order is replaced by the
+    // codec's declared order and `resume` is appended last.
+    expect(parseReturnTarget(CANONICAL)?.returnTo).toBe(CANONICAL);
+  });
+
+  it("EARS-12: an undeclared query key is DROPPED by the codec and never rides the return target", () => {
+    const intent = parseReturnTarget(
+      "/events?resume=my-event&returnTo=https://evil.example&utm_source=x",
+    );
+    expect(intent?.eventSlug).toBe("my-event");
+    expect(intent?.returnTo).toBe(
+      "/events?tense=upcoming&specialty=mine-and-adjacent&resume=my-event",
+    );
+    expect(intent?.returnTo).not.toContain("evil.example");
+    expect(intent?.returnTo).not.toContain("utm_source");
+  });
+
+  it("EARS-12: the system shall reject every feed-shaped target that is not exactly the declared shape", () => {
+    for (const hostile of [
+      // No `resume` — a plain feed URL is not a registration intent.
+      "/events?tense=upcoming",
+      // A traversal or multi-segment slug, raw and percent-encoded.
+      "/events?resume=../x",
+      "/events?resume=a/b",
+      "/events?resume=%2e%2e%2faccount",
+      "/events?resume=%2fevil",
+      // An ambiguous intent: `resume` twice.
+      "/events?resume=a&resume=b",
+      // The path is not exactly `/events`.
+      "/events/x?resume=a",
+      "/events/?resume=a",
+      "/eventsx?resume=a",
+      "/events%2f..?resume=a",
+      // Cross-origin and protocol-relative.
+      "//evil.example/events?resume=a",
+      "https://evil.example/events?resume=a",
+      "javascript:/events?resume=a",
+      // A backslash bypass and a fragment payload.
+      `/events?resume=a${BACKSLASH}..`,
+      "/events?resume=a#frag",
+      // No query at all, and a query the ONE feed codec itself rejects.
+      "/events",
+      "/events?kind=not-a-uuid&resume=a",
+      // Unbounded length.
+      `/events?q=${"a".repeat(600)}&resume=a`,
+    ]) {
+      expect(parseReturnTarget(hostile), `must reject: ${hostile}`).toBeNull();
+      expect(isSafeReturnTarget(hostile)).toBe(false);
+    }
+  });
+
+  it("EARS-12: the intent DTO carries the feed target and still refuses a PII/credential payload", () => {
+    const base = { eventSlug: "my-event", returnTo: CANONICAL };
+    expect(RegistrationIntentSchema.parse(base)).toEqual(base);
+    expect(
+      RegistrationIntentSchema.safeParse({ ...base, email: "a@example.test" })
+        .success,
+    ).toBe(false);
+  });
+});

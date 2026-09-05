@@ -380,6 +380,10 @@ export class DoctorEventsService {
 
     return rows.map((row) => ({
       id: row.id,
+      // The slug travels as its own field AND as the minted `href`: 019 EARS-12
+      // builds the guest `?resume=<slug>` return target from it, and a host that
+      // had to slice it back out of `href` would be re-deriving an identifier.
+      slug: row.slug,
       href: `/events/${row.slug}`,
       startsAt: row.startsAt.toISOString(),
       endsAt: new Date(

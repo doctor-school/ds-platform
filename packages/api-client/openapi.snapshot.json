@@ -202,6 +202,9 @@
                         "minimum": 0,
                         "type": "integer"
                       },
+                      "slug": {
+                        "type": "string"
+                      },
                       "source": {
                         "type": "string"
                       },
@@ -227,6 +230,7 @@
                     },
                     "required": [
                       "id",
+                      "slug",
                       "href",
                       "startsAt",
                       "endsAt",

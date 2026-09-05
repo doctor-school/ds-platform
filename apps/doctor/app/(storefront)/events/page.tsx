@@ -8,6 +8,7 @@ import {
 import { fetchDoctorEventsFeed, showMoreHref } from "@/lib/events-feed";
 import { toDoctorEventsMonthPane } from "@/lib/events-month-grid";
 import { fetchDoctorEventsMonthGrid } from "@/lib/events-month";
+import { resolveShellAuth } from "@/lib/shell-auth";
 import { DoctorEventsDayAnchorScroll } from "./day-anchor-scroll";
 import { DoctorEventsMonthPaneView } from "./month-pane";
 
@@ -61,9 +62,13 @@ export default async function DoctorEventsPage({
   const requestHeaders = await headers();
   // One round trip, not two: the calendar is navigation over the same read and
   // must never make the body wait on it.
-  const [result, month] = await Promise.all([
+  // EARS-12: the feed READ is viewer-independent — a guest and a doctor receive
+  // the same payload — so the session is resolved BESIDE the reads, never inside
+  // them, and only to decide where a card's «Участвовать» points.
+  const [result, month, shellAuth] = await Promise.all([
     fetchDoctorEventsFeed(requestHeaders, raw),
     fetchDoctorEventsMonthGrid(requestHeaders, raw),
+    resolveShellAuth(requestHeaders),
   ]);
 
   if (!result.ok) {
@@ -115,7 +120,10 @@ export default async function DoctorEventsPage({
       <DoctorEventsDayAnchorScroll day={pane?.selectedDate ?? null} />
 
       <EventList
-        items={toEventListItems(feed)}
+        items={toEventListItems(feed, {
+          viewer: shellAuth.status,
+          feedQuery: raw,
+        })}
         selectedTab="upcoming"
         tenseControl="none"
         paginationMode="none"

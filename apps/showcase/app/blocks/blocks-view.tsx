@@ -2667,36 +2667,42 @@ const EVENT_PAGE_CTA: Record<ShowcaseCta["action"], ShowcaseCta> = {
     label: "Участвовать",
     href: "#register",
     reason: null,
+    presenceCount: null,
   },
   registered: {
     action: "registered",
     label: "Вы записаны — напомним за час",
     href: null,
     reason: null,
+    presenceCount: null,
   },
   "enter-room": {
     action: "enter-room",
     label: "Войти в эфир",
     href: "#room",
     reason: null,
+    presenceCount: 3,
   },
   "switch-to-online": {
     action: "switch-to-online",
     label: "Смотреть онлайн",
     href: "#online",
     reason: "Очные места закончились — эфир открыт для всех.",
+    presenceCount: null,
   },
   "sold-out": {
     action: "sold-out",
     label: "Мест не осталось",
     href: null,
     reason: "Все 40 очных мест заняты.",
+    presenceCount: null,
   },
   unavailable: {
     action: "unavailable",
     label: "Участие закрыто",
     href: null,
     reason: "Событие завершилось — запись появится в архиве.",
+    presenceCount: null,
   },
 };
 

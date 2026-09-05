@@ -1328,6 +1328,18 @@
           "label": {
             "type": "string"
           },
+          "presenceCount": {
+            "anyOf": [
+              {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "reason": {
             "anyOf": [
               {
@@ -1339,7 +1351,7 @@
             ]
           }
         },
-        "required": ["action", "label", "href", "reason"],
+        "required": ["action", "label", "href", "reason", "presenceCount"],
         "type": "object"
       },
       "PasswordResetCompleteRequestDto": {

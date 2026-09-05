@@ -93,10 +93,18 @@ export class PresenceRepository {
    * sponsor minutes. `DISTINCT user_id` coalesces concurrent tabs to one. It is an
    * **aggregate** — a single integer, never a per-doctor identity or the roster —
    * so it exposes no PII (EARS-8).
+   *
+   * `excludeUserId` drops ONE doctor from the aggregate — the viewer themself,
+   * for the 020 EARS-7 «В эфире уже N коллег» line, where «коллеги» means OTHER
+   * people and a doctor who re-opens the event page from inside the room must
+   * not be counted among them. The 006 in-room header count passes nothing and
+   * so keeps counting self, which is correct there: it is «N врачей в комнате»,
+   * the room population, and the viewer is part of it.
    */
   async countLivePresence(
     eventId: string,
     windowSeconds: number,
+    excludeUserId?: string | null,
   ): Promise<number> {
     const result = await this.db.execute<{ count: number }>(
       sql`
@@ -104,6 +112,7 @@ export class PresenceRepository {
         FROM ${presenceBeats}
         WHERE ${presenceBeats.eventId} = ${eventId}
           AND ${presenceBeats.beatAt} >= now() - make_interval(secs => ${windowSeconds})
+          ${excludeUserId ? sql`AND ${presenceBeats.userId} <> ${excludeUserId}` : sql``}
       `,
     );
     return Number(result.rows[0]?.count ?? 0);

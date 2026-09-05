@@ -16,7 +16,37 @@ import { Button } from "../primitives/button";
  * disabled (EARS-4): `sold-out` and `unavailable` dead-end in words, and
  * `enter-room` without an `href` renders no control at all rather than a dead
  * one.
+ *
+ * The ONE derived string it paints is the 020 EARS-7 presence line under a room
+ * entry — «room entry carrying the presence count of colleagues already there».
+ * It is derived, not decided: the server sends the integer, and only the RU
+ * plural FORM of that integer is resolved here, because a plural form is a
+ * property of the number and cannot be pre-rendered for an unknown count. That is
+ * also why this is the block's only local copy — every other string still arrives
+ * from the host or from the server-resolved policy.
  */
+
+/** RU plural categories for the presence line, resolved once per module. */
+const RU_PLURAL = new Intl.PluralRules("ru-RU");
+
+/**
+ * «В эфире уже N коллег» — the 020 EARS-7 presence line. At `0` it returns
+ * `null` and NO line renders: «уже 0 коллег» is a discouraging non-fact, and the
+ * aggregate is a live window that can legitimately read empty a moment before the
+ * doctor walks in. The count is an integer aggregate only — never a roster, never
+ * per-doctor identity (006 EARS-8).
+ */
+function presenceLine(count: number): string | null {
+  if (count <= 0) return null;
+  switch (RU_PLURAL.select(count)) {
+    case "one":
+      return `В эфире уже ${count} коллега`;
+    case "few":
+      return `В эфире уже ${count} коллеги`;
+    default:
+      return `В эфире уже ${count} коллег`;
+  }
+}
 
 /** One «Участие · Формат · Длительность · НМО» row; the value is host-rendered. */
 export interface EventSignupCondition {
@@ -102,6 +132,14 @@ export function EventSignupCard({
     ))
   );
 
+  // 020 EARS-7 — the presence line belongs to room entry and to nothing else:
+  // `presenceCount` is `null` on every other action by contract, so no other
+  // branch can grow a count of its own.
+  const presence =
+    cta.action === "enter-room" && cta.presenceCount !== null
+      ? presenceLine(cta.presenceCount)
+      : null;
+
   const statement =
     !linked && STATEMENT_ACTIONS.has(cta.action) ? (
       <p
@@ -154,6 +192,14 @@ export function EventSignupCard({
             </div>
           ))}
           {control}
+          {presence ? (
+            <p
+              data-testid="event-signup-presence"
+              className="mt-3 text-caption font-extrabold leading-relaxed text-card-foreground"
+            >
+              {presence}
+            </p>
+          ) : null}
           {statement}
           {cta.reason ? (
             <p

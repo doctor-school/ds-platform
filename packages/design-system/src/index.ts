@@ -84,6 +84,10 @@ export {
 } from "./primitives/filter-chip";
 export { Badge, badgeVariants, type BadgeProps } from "./primitives/badge";
 export { Avatar, avatarVariants, type AvatarProps } from "./primitives/avatar";
+export {
+  HEADER_CHIP_SURFACE,
+  HEADER_CHIP_BASE,
+} from "./primitives/header-chip";
 export { Checkbox, type CheckboxProps } from "./primitives/checkbox";
 export { Radio, type RadioProps } from "./primitives/radio";
 export { Switch, type SwitchProps } from "./primitives/switch";

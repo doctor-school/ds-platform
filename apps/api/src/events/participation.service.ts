@@ -8,6 +8,11 @@ import {
   RegistrationService,
   UnknownSubjectError,
 } from "../registration/registration.service.js";
+import { PresenceRepository } from "../room/presence.repository.js";
+import {
+  ROOM_HEARTBEAT_INTERVAL_SECONDS,
+  presenceWindowSeconds,
+} from "../room/room.tokens.js";
 import { EventsRepository } from "./events.repository.js";
 import {
   type ParticipationRoutes,
@@ -38,6 +43,21 @@ import {
  * a second query against `registrations` here); the host supplies only its route
  * table. The decision itself is the one pure
  * {@link resolveParticipationCta} function.
+ *
+ * ## The presence count (020 EARS-7)
+ *
+ * «Room entry carrying the presence count of colleagues already there» is a
+ * LIVE fact, not policy, so it is read HERE rather than inside the pure
+ * resolver: the resolver decides the action, and the one action that means «the
+ * room is open to you» is then enriched with the same distinct-doctor aggregate
+ * the 006 room grant carries, over the same `2 × N` freshness window derived from
+ * the same server-config cadence — MINUS the viewer themself, because the line
+ * reads «В эфире уже N коллег» and a colleague is someone other than you (the
+ * 006 in-room header count deliberately keeps counting self: there it is the
+ * room population). Reading it after the decision rather than
+ * before is deliberate — it keeps the lifecycle ∧ registration condition stated
+ * exactly once (a pre-fetch would have to re-state it here to avoid a query on
+ * every guest page view) and costs no query on any other action.
  */
 @Injectable()
 export class ParticipationService {
@@ -45,6 +65,10 @@ export class ParticipationService {
     @Inject(EventsRepository) private readonly events: EventsRepository,
     @Inject(RegistrationService)
     private readonly registration: RegistrationService,
+    @Inject(PresenceRepository)
+    private readonly presence: PresenceRepository,
+    @Inject(ROOM_HEARTBEAT_INTERVAL_SECONDS)
+    private readonly heartbeatIntervalSeconds: number,
   ) {}
 
   /**
@@ -66,7 +90,7 @@ export class ParticipationService {
     const state = found.event.state as EventLifecycleState;
     if (!isPubliclyReachable(state)) return null;
 
-    return resolveParticipationCta(
+    const cta = resolveParticipationCta(
       {
         slug: found.event.slug,
         state,
@@ -76,6 +100,24 @@ export class ParticipationService {
       },
       routes,
     );
+
+    // 020 EARS-7 — only room entry carries the count, and only then is the
+    // aggregate queried. It is an integer over the live heartbeat window, never
+    // a roster and never per-doctor identity (006 EARS-8).
+    if (cta.action !== "enter-room") return cta;
+    // The copy says «коллег» — OTHER doctors. `enter-room` is only ever reached
+    // by a registered principal, so `sub` is present; the viewer's own beats
+    // (they may be reading this page from inside the room, or on a second tab)
+    // are excluded rather than counted as company.
+    const viewerUserId = sub ? await this.presence.findUserIdBySub(sub) : null;
+    return {
+      ...cta,
+      presenceCount: await this.presence.countLivePresence(
+        found.event.id,
+        presenceWindowSeconds(this.heartbeatIntervalSeconds),
+        viewerUserId,
+      ),
+    };
   }
 
   /**

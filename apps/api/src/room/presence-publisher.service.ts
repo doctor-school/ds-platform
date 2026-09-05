@@ -1,7 +1,10 @@
 import { Inject, Injectable, type OnModuleDestroy } from "@nestjs/common";
 import { CentrifugoChatGateway } from "./chat.gateway.js";
 import { PresenceRepository } from "./presence.repository.js";
-import { ROOM_HEARTBEAT_INTERVAL_SECONDS } from "./room.tokens.js";
+import {
+  ROOM_HEARTBEAT_INTERVAL_SECONDS,
+  presenceWindowSeconds as derivePresenceWindowSeconds,
+} from "./room.tokens.js";
 
 /** Never schedule a fire in the past / immediately — a small floor so a just-
  * expired window still yields one clean macrotask hop, never a hot re-arm loop. */
@@ -64,11 +67,11 @@ export class PresencePublisher implements OnModuleDestroy {
     private readonly heartbeatIntervalSeconds: number,
   ) {}
 
-  /** The freshness window the count is derived over — two heartbeat cadences, the
-   * SAME `2 × N` {@link RoomService} reads (an operator-confirmed different cadence
-   * widens both with no code change). */
+  /** The freshness window the count is derived over — the ONE `2 × N` derivation
+   * shared with {@link RoomService} and the 020 participation CTA (an
+   * operator-confirmed different cadence widens all three with no code change). */
   private windowSeconds(): number {
-    return this.heartbeatIntervalSeconds * 2;
+    return derivePresenceWindowSeconds(this.heartbeatIntervalSeconds);
   }
 
   /**

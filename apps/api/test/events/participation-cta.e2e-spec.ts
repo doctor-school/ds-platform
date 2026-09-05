@@ -8,7 +8,7 @@ import { VersioningType } from "@nestjs/common";
 import multipart from "@fastify/multipart";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import type pg from "pg";
-import { ParticipationCtaSchema } from "@ds/schemas";
+import { type ParticipationCta, ParticipationCtaSchema } from "@ds/schemas";
 import { AppModule } from "../../src/app.module.js";
 import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
 import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
@@ -95,8 +95,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     }
 
     /** Register + login a doctor_guest; return the session cookie value. */
-    async function doctorSession(): Promise<string> {
-      const email = uniqueEmail("cta");
+    async function doctorSession(email = uniqueEmail("cta")): Promise<string> {
       const reg = await app.inject({
         method: "POST",
         url: "/v1/auth/register",
@@ -132,7 +131,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     async function cta(
       url: string,
       cookie?: string,
-    ): Promise<{ action: string; label: string; href: string | null; reason: string | null }> {
+    ): Promise<ParticipationCta> {
       const res = await app.inject({
         method: "GET",
         url,
@@ -228,7 +227,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(answer.href).toBe(`/webinars/${slug}/room`);
     });
 
-    it("020 EARS-1: the doctor host resolves enter-room with an absent link while it mounts no room route", async () => {
+    it("020 EARS-7: a registered doctor on a live event gets enter-room with href /events/<slug>/room on the doctor host", async () => {
       const { slug } = await seedEvent({ state: "published" });
       const cookie = await doctorSession();
       await register(slug, cookie);
@@ -238,10 +237,92 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
       const answer = await cta(DOCTOR(slug), cookie);
 
-      // EARS-4: an impossible affordance is ABSENT, never dead — the action is a
-      // fact of the event and the registration, the link is a fact of the host.
+      // Since #1722 the doctor storefront MOUNTS the shared room unit at
+      // `/events/:slug/room`, so the same action carries this host's own target
+      // instead of the `null` it carried while the route did not exist. The
+      // ACTION was never host-specific — it is a fact of the event and the
+      // registration; only the link is a fact of the host, which is why the two
+      // storefronts differ here and nowhere else in this answer.
       expect(answer.action).toBe("enter-room");
-      expect(answer.href).toBeNull();
+      expect(answer.href).toBe(`/events/${slug}/room`);
+      // 020 EARS-7 — room entry CARRIES the live count of colleagues already
+      // there. No beat has been recorded for this event, so the truthful
+      // aggregate is `0`: the assertion that matters is that the field is a real
+      // integer resolved from the presence window, never `null` on the one
+      // action that is supposed to carry it.
+      expect(answer.presenceCount).toBe(0);
+    });
+
+    it("020 EARS-7: the count is COLLEAGUES — the viewer's own live presence is excluded", async () => {
+      const { id, slug } = await seedEvent({ state: "published" });
+      const viewerEmail = uniqueEmail("cta-presence-viewer");
+      const colleagueEmail = uniqueEmail("cta-presence-colleague");
+      const viewer = await doctorSession(viewerEmail);
+      const colleague = await doctorSession(colleagueEmail);
+      await register(slug, viewer);
+      await register(slug, colleague);
+      await pool.query(`UPDATE events SET state = 'live' WHERE slug = $1`, [
+        slug,
+      ]);
+
+      const userId = async (email: string): Promise<string> =>
+        (
+          await pool.query<{ id: string }>(
+            "SELECT id FROM users WHERE email = $1",
+            [email],
+          )
+        ).rows[0].id;
+
+      // BOTH doctors are live in the room right now — a fresh beat each, well
+      // inside the 2 × N window (a scoped raw insert stands in for the room's
+      // heartbeat loop, which is 006's surface, not this read's).
+      for (const email of [viewerEmail, colleagueEmail]) {
+        await pool.query(
+          "INSERT INTO presence_beats (user_id, event_id, beat_at) VALUES ($1,$2, now())",
+          [await userId(email), id],
+        );
+      }
+
+      // The line reads «В эфире уже N коллег» — colleagues are OTHER doctors, so
+      // each viewer is told about the one other person, never counted as their
+      // own company. The room's in-room header count (006 EARS-5) is a different
+      // number by design: it is the room population and includes self.
+      expect((await cta(DOCTOR(slug), viewer)).presenceCount).toBe(1);
+      expect((await cta(DOCTOR(slug), colleague)).presenceCount).toBe(1);
+    });
+
+    it("020 EARS-7: a doctor alone in the room is told of no colleagues, not of themself", async () => {
+      const { id, slug } = await seedEvent({ state: "published" });
+      const soloEmail = uniqueEmail("cta-presence-solo");
+      const solo = await doctorSession(soloEmail);
+      await register(slug, solo);
+      await pool.query(`UPDATE events SET state = 'live' WHERE slug = $1`, [
+        slug,
+      ]);
+      const soloUser = (
+        await pool.query<{ id: string }>(
+          "SELECT id FROM users WHERE email = $1",
+          [soloEmail],
+        )
+      ).rows[0].id;
+      await pool.query(
+        "INSERT INTO presence_beats (user_id, event_id, beat_at) VALUES ($1,$2, now())",
+        [soloUser, id],
+      );
+
+      expect((await cta(DOCTOR(slug), solo)).presenceCount).toBe(0);
+    });
+
+    it("020 EARS-7: only room entry carries a presence count — every other action reports none", async () => {
+      const { slug } = await seedEvent({ state: "published" });
+      const cookie = await doctorSession();
+
+      expect((await cta(DOCTOR(slug))).presenceCount).toBeNull();
+      expect((await cta(DOCTOR(slug), cookie)).presenceCount).toBeNull();
+      await register(slug, cookie);
+      const registered = await cta(DOCTOR(slug), cookie);
+      expect(registered.action).toBe("registered");
+      expect(registered.presenceCount).toBeNull();
     });
 
     it("020 EARS-1: a hybrid event whose offline seats are exhausted switches the guest to the online half", async () => {

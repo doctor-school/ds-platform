@@ -75,6 +75,13 @@ export type ParticipationCtaAction = z.infer<
  *   control — EARS-4: where participation is impossible the CTA is ABSENT, not
  *   disabled). It is resolved relative to the host that asked, which is why the
  *   route is per-host even though the policy is one.
+ * - `presenceCount` is the live aggregate of colleagues ALREADY in the room —
+ *   the 020 EARS-7 half of «room entry carrying the presence count of colleagues
+ *   already there». It is a fact, not policy: a non-negative integer on
+ *   `enter-room` and `null` on every other action, where «how many are in the
+ *   room» is not a question the CTA answers. It is the SAME distinct-doctor
+ *   aggregate the 006 room grant carries (EARS-8) — an integer, never per-doctor
+ *   identity and never a roster.
  * - `reason` states WHY in plain words when the action is not the plain
  *   `register` (the switch, the sold-out, the unavailable) and is `null` when
  *   the action speaks for itself. It is never an error code and never a
@@ -86,6 +93,7 @@ export const ParticipationCtaSchema = z
     label: z.string(),
     href: z.string().nullable(),
     reason: z.string().nullable(),
+    presenceCount: z.number().int().nonnegative().nullable(),
   })
   .strict();
 export type ParticipationCta = z.infer<typeof ParticipationCtaSchema>;

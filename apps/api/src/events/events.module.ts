@@ -7,6 +7,7 @@ import { EventsRepository } from "./events.repository.js";
 import { EventsService } from "./events.service.js";
 import { LegacyBroadcastsAdminController } from "./legacy-broadcasts.admin.controller.js";
 import { RegistrationModule } from "../registration/registration.module.js";
+import { RoomModule } from "../room/room.module.js";
 import { ParticipationService } from "./participation.service.js";
 
 /**
@@ -34,7 +35,14 @@ import { ParticipationService } from "./participation.service.js";
   // querying `registrations` a second time here. The dependency points
   // events → registration and never back (005 reads the events table directly,
   // importing no module), so there is no cycle.
-  imports: [TaxonomyModule, RecordingsModule, RegistrationModule],
+  // 020 EARS-7 (#1770): the participation CTA's `presenceCount` is the SAME
+  // live distinct-doctor aggregate the 006 room grant carries, read through
+  // `PresenceRepository` over the same config-derived window — never a second
+  // count query with its own window literal. The dependency points
+  // events → room and never back (the room module reads the events table
+  // through its own thin repository and imports no event module), so there is
+  // no cycle.
+  imports: [TaxonomyModule, RecordingsModule, RegistrationModule, RoomModule],
   // 014 EARS-24 (#1741): the «Архивный эфир» creation entry is its own
   // controller because it is the entry to the LEGACY machine, not a variant of
   // `POST /v1/admin/events` (which is the entry to the platform one).

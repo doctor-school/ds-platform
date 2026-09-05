@@ -1,0 +1,10 @@
+{
+  "number": 213,
+  "body": "## Summary\nThe doctor storefront's mount of the shared room unit — a new visible surface with no Stage-B record.\n",
+  "labels": [],
+  "files": [
+    {
+      "path": "apps/doctor/app/(room)/events/[slug]/room/room-client.tsx"
+    }
+  ]
+}

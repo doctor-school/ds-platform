@@ -112,6 +112,12 @@ function registrationHref(
  *    shape (LD-5): a hybrid event with its offline half full switches the
  *    doctor to online, a pure offline event with no seats says «мест нет» with
  *    no target at all and NO waiting list, and everything else registers.
+ *
+ * `presenceCount` is `null` in every branch: the live in-room aggregate is a
+ * DATABASE read and this function holds no I/O. The `enter-room` branch is
+ * enriched with the real count by {@link ParticipationService}, so the policy
+ * still decides the action exactly once and the count is fetched exactly where
+ * the action already says it is needed (020 EARS-7).
  */
 export function resolveParticipationCta(
   facts: ParticipationFacts,
@@ -128,6 +134,7 @@ export function resolveParticipationCta(
         state === "hidden"
           ? "Мероприятие скрыто — участие в нём больше не предлагается"
           : "Событие завершилось",
+      presenceCount: null,
     };
   }
 
@@ -137,6 +144,12 @@ export function resolveParticipationCta(
       label: LABELS["enter-room"],
       href: routes.roomPath ? routes.roomPath(slug) : null,
       reason: null,
+      // The live aggregate is I/O, and this function is pure by design: the
+      // caller enriches THIS action with the real count (see
+      // `ParticipationService.cta`). Emitting `null` here keeps «which action»
+      // the single decision of the policy and «how many are in the room» a fact
+      // resolved once, with no second branch on lifecycle ∧ registration.
+      presenceCount: null,
     };
   }
 
@@ -146,6 +159,7 @@ export function resolveParticipationCta(
       label: LABELS.registered,
       href: null,
       reason: null,
+      presenceCount: null,
     };
   }
 
@@ -156,6 +170,7 @@ export function resolveParticipationCta(
         label: LABELS["switch-to-online"],
         href: registrationHref(routes, slug),
         reason: "Очные места закончились — участвовать можно онлайн",
+        presenceCount: null,
       };
     }
     return {
@@ -165,6 +180,7 @@ export function resolveParticipationCta(
       // No waiting list exists in the model, so none may be offered here
       // (EARS-9): the honest statement is the whole affordance.
       reason: "Очные места закончились, лист ожидания не ведётся",
+      presenceCount: null,
     };
   }
 
@@ -173,5 +189,6 @@ export function resolveParticipationCta(
     label: LABELS.register,
     href: registrationHref(routes, slug),
     reason: null,
+    presenceCount: null,
   };
 }

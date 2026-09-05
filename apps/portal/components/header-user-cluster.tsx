@@ -4,6 +4,7 @@ import Link from "next/link";
 import { UserRound } from "lucide-react";
 import { cn } from "@ds/design-system/lib/utils";
 import { Link as DsLink } from "@ds/design-system/link";
+import { HEADER_CHIP_BASE } from "@ds/design-system";
 
 import { ThemeToggle } from "@/components/theme-toggle";
 
@@ -17,26 +18,16 @@ import { ThemeToggle } from "@/components/theme-toggle";
  * call site parameterizes only what genuinely differs (the initials, the chip's
  * responsive visibility, the surrounding gap), never the look.
  *
- * The chip is the canvas white-on-blue neo-brutalist chip (`background:#fff`,
- * navy `#114D9E` ink in BOTH themes — `header-chip-foreground`), an icon-LINK to
- * `/account` (EARS-5/6: never a dropdown, no «Выйти»). Its offset shadow casts in
- * `shadow-header-chip` — the theme-INVARIANT dark ink offset (`header-chip-shadow`
- * = neutral.900 both themes), NOT the generic `shadow-btn`, whose `border` cast
- * flips to WHITE in dark and rendered the chip a white square with a white shadow
- * on the navy band (#1145). Interaction chain mirrors the DS Button neo-brutalist
- * press: rest → hover sinks 1px (`shadow-header-chip-hover`) → press sinks 2px and
- * drops the shadow, ink pinned full-strength on press (the primitive's press tint
- * goes near-white on the white chip in dark).
+ * The chip is the canvas white-on-blue neo-brutalist chip, here as an icon-LINK
+ * to `/account` (EARS-5/6: never a dropdown, no «Выйти»). Its presentation is
+ * NOT declared here: the surface and the press chain live in the design system
+ * as `HEADER_CHIP_SURFACE` / {@link HEADER_CHIP_BASE}, the single source both
+ * storefronts compose from (AGENTS.md §6 cross-front reuse) — the doctor room's
+ * static chip is the same surface as the `header` Avatar variant. The #1145
+ * dark-shadow lesson is recorded on that constant.
  */
 
-/** The white-on-header neo-brutalist chip base — shared by the avatar chip here
- *  and the shell's «Войти» chip / mobile ≡ (one source of truth for the
- *  dark-safe `shadow-header-chip` cast, #1145). Size/padding/weight compose on
- *  top per chip. */
-export const HEADER_CHIP_BASE =
-  "inline-flex flex-none items-center justify-center bg-header-foreground text-header-chip-foreground shadow-header-chip hover:no-underline hover:translate-x-px hover:translate-y-px hover:shadow-header-chip-hover active:translate-x-0.5 active:translate-y-0.5 active:shadow-none active:text-header-chip-foreground";
-
-/** The initials-avatar chip — the base at the canvas 40px square. */
+/** The initials-avatar chip — the shared base at the canvas 40px square. */
 const AVATAR_CHIP = cn(HEADER_CHIP_BASE, "size-10 text-sm font-extrabold");
 
 /** A doctor with no saved display name gets a neutral silhouette icon (#997) —

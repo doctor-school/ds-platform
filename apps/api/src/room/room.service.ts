@@ -16,7 +16,10 @@ import { PresencePublisher } from "./presence-publisher.service.js";
 import { PresenceRepository } from "./presence.repository.js";
 import { resolveRoomStream } from "./provider-enum.js";
 import { RoomRepository, type EventForRoom } from "./room.repository.js";
-import { ROOM_HEARTBEAT_INTERVAL_SECONDS } from "./room.tokens.js";
+import {
+  ROOM_HEARTBEAT_INTERVAL_SECONDS,
+  presenceWindowSeconds as derivePresenceWindowSeconds,
+} from "./room.tokens.js";
 
 /**
  * The event whose room was requested does not exist. HTTP-agnostic so the gate
@@ -173,15 +176,12 @@ export class RoomService {
   }
 
   /**
-   * The freshness window (seconds) for the live distinct-doctor count is two
-   * heartbeat cadences (`2 × N`): a latest beat survives one missed cadence, then
-   * ceases to count no later than `2 × N` if beats stop. This count-only grace is
-   * not proof of physical presence and adds no sponsor minutes. It derives from the
-   * SAME server-config `N` that drives the client loop, so an operator-confirmed
-   * cadence change widens the count window with no code change (EARS-5).
+   * The freshness window (seconds) for the live distinct-doctor count — the ONE
+   * `2 × N` derivation shared with the realtime publisher and the 020
+   * participation CTA (see `presenceWindowSeconds` in `room.tokens.ts`).
    */
   private presenceWindowSeconds(): number {
-    return this.heartbeatIntervalSeconds * 2;
+    return derivePresenceWindowSeconds(this.heartbeatIntervalSeconds);
   }
 
   /**

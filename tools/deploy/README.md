@@ -157,6 +157,20 @@ for that run to go green before deploying. Ship/banner lines read
 `hotfix @ <sha> (base <deployed>)`, never `origin/main`, and the release is cut
 with a `— Hotfix` title plus the cherry-picked PR list.
 
+**The per-service verify set comes from the TARGET tree** (`service-set.mjs`,
+#1896). Which SHA-tagged images the deploy builds, boot-probes before the swap
+(#1410), asserts running afterwards (`verifyRunningSha`) and smokes is parsed out
+of `git show <target>:infra/deploy/compose/api-prod/compose.yml` — the same
+compose the on-box build consumes — not out of the local checkout. A hotfix based
+on a SHA that predates a service therefore verifies only the services that exist
+there: a base older than the `ds-doctor` storefront (#1860) builds and verifies
+`api + portal + admin` and skips the doctor smoke probes, instead of demanding a
+fourth image that cannot exist at that SHA (the first live `--ref` run died on
+exactly that: `doctor=NOSTART`). The derivation is fail-closed — an unreadable,
+empty or port-less set dies before any ssh, never "probe nothing". Image
+retention stays box-wide on purpose: it must reclaim old tags of every repo the
+box has ever built, including one absent from the hotfix target's compose.
+
 What stays forbidden: deploying an arbitrary branch, a feature preview, or any
 commit not yet merged to `main`. `--ref` narrows the range; it does not widen what
 is deployable.

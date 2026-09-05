@@ -878,12 +878,13 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
 
   @EARS-24 @happy
   Scenario: The Tech Lead re-creates a legacy row by hand and it appears in the public projection
-    Given the cutover release is deployed and the Tech Lead works from the mapping table shown to the Product Lead
-    When the Tech Lead creates the missing Expert in the admin Expert form with family given and patronymic names and links that Expert to the event through the shared event-expert relationship command with a role and a position
-    Then exactly one retained canonical event_experts row is created by that single command
+    Given the cutover release is deployed and the Tech Lead works from the mapping table approved by the Product Lead
+    When the Tech Lead executes direct SQL statements via psql on data-prod that insert the missing Expert with family given and patronymic names and credentials taken from the fullest legacy regalia variant and one event_experts row with the per-event role and position
+    Then exactly one retained canonical event_experts row exists for that event and Expert
     And the public event page speaker list shows that Expert at that position with that role
     And only a retained duplicate pair for this same event and Expert is refused
-    And no review queue no import script no admin migration screen and no matching heuristic takes part
+    And the feature-010 audit_row_change trigger records those statements with app.actor_sub naming the Tech Lead and app.source manual
+    And no admin Expert form no review queue no import script no admin migration screen and no matching heuristic takes part
 
   @EARS-24 @failure
   Scenario: The free-text speakers field is absent from the event contract after the cutover

@@ -808,7 +808,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
           // distinguish «absent» from «none».
           for (const nullable of ["coverUrl", "photoUrl", "logoUrl"]) {
             if (route.keys.includes(nullable)) {
-              expect(item, `${route.name} ${nullable}`).toHaveProperty(nullable);
+              expect(item, `${route.name} ${nullable}`).toHaveProperty(
+                nullable,
+              );
             }
           }
           // The embedded partner is itself the exact §5.2 summary.
@@ -1009,7 +1011,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       ];
 
       for (const { from, to } of donors) {
-        const issued = (await readPage(`${from}?limit=1`)).pagination.nextCursor;
+        const issued = (await readPage(`${from}?limit=1`)).pagination
+          .nextCursor;
         expect(issued, `${from} issued a cursor`).toBeTruthy();
 
         const res = await publicGet(
@@ -1020,6 +1023,46 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
           (JSON.parse(res.payload) as { errorCode: string }).errorCode,
           `${from} → ${to}`,
         ).toBe("CURSOR_INVALID");
+      }
+    });
+
+    it("012 EARS-12.6: when a tampered cursor carries an instant Postgres cannot read, the system shall refuse it with 400 CURSOR_INVALID rather than let the driver raise a 500", async () => {
+      const graph = await seedGraph();
+
+      // The cursor's `startsAt` is handed to Postgres as `$1::timestamptz`, so
+      // "V8 can parse it" is the WRONG acceptance test: these two strings
+      // satisfy `Date.parse` and are rejected by Postgres (`22008` year zero,
+      // `22007` a non-ISO rendering), which would escape the Problem filter as
+      // an opaque 500 on a zero-auth route. Only the exact grammar the encoder
+      // emits is a cursor.
+      const forged = [
+        "0000-01-01T00:00:00Z",
+        "Mon Jan 01 2020 00:00:00 GMT+0000 (Coordinated Universal Time)",
+      ];
+      const routes = [
+        `/v1/public/projects/${graph.p1}/events`,
+        `/v1/public/directions/${graph.d1}/events`,
+      ];
+
+      for (const route of routes) {
+        for (const startsAt of forged) {
+          const cursor = Buffer.from(
+            JSON.stringify({ startsAt, id: graph.e1.id }),
+            "utf8",
+          ).toString("base64url");
+
+          const res = await publicGet(
+            `${route}?limit=1&cursor=${encodeURIComponent(cursor)}`,
+          );
+          expect(
+            res.statusCode,
+            `${route} <- ${startsAt}: ${res.payload}`,
+          ).toBe(400);
+          expect(
+            (JSON.parse(res.payload) as { errorCode: string }).errorCode,
+            `${route} <- ${startsAt}`,
+          ).toBe("CURSOR_INVALID");
+        }
       }
     });
   },

@@ -29,6 +29,7 @@ import {
   LifecycleImpactService,
   type LifecycleImpactTuple,
 } from "./lifecycle-impact.service.js";
+import { EVENT_CURSOR_SHAPE } from "./public-event-cursor.js";
 import { PublicProjectSummaryService } from "./public-project-summary.service.js";
 import {
   markReplayable,
@@ -518,25 +519,18 @@ function encodeCursor(value: Record<string, string>): string {
 }
 
 /**
- * The two §5.2 order tuples, as shapes rather than casts.
+ * The title-ordered §5.2 tuple, as a shape rather than a cast.
  *
  * A cursor is caller-supplied bytes on a ZERO-AUTH route, so "decodes to an
- * object" is not enough: the decoded VALUES become SQL operands. An `id` that is
- * not a UUID reaches a `uuid` column as Postgres `22P02`, and a `startsAt` that
- * is not a real instant reaches the driver's `toISOString()` as a `RangeError` —
- * both 500s for what EARS-12/EARS-16 contract as 400 `CURSOR_INVALID`. Parsing
- * the tuple here refuses it before any query runs.
+ * object" is not enough: the decoded VALUES become SQL operands, and an `id`
+ * that is not a UUID reaches a `uuid` column as Postgres `22P02` — a 500 for
+ * what EARS-12/EARS-16 contract as 400 `CURSOR_INVALID`. Parsing the tuple here
+ * refuses it before any query runs. The event-ordered tuple is the shared
+ * `EVENT_CURSOR_SHAPE` (`public-event-cursor.ts`), so both event traversals
+ * inherit one grammar.
  */
 const PROJECT_CURSOR_SHAPE = z
   .object({ title: z.string(), id: z.uuid() })
-  .strict();
-const EVENT_CURSOR_SHAPE = z
-  .object({
-    startsAt: z
-      .string()
-      .refine((value) => !Number.isNaN(Date.parse(value)), "not an instant"),
-    id: z.uuid(),
-  })
   .strict();
 
 function decodeCursor<T>(

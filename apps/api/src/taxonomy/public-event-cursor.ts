@@ -1,4 +1,5 @@
 import { sql, type SQL } from "drizzle-orm";
+import { z } from "zod";
 import { type Event, events } from "@ds/db";
 
 // 012-design §5.2 — the ONE keyset-cursor rule of every public traversal that
@@ -38,11 +39,48 @@ export type PublicEventRow = Event & { startsAtCursor: string };
  * Both operands are cast explicitly — the cursor's text would otherwise meet a
  * `timestamptz` / `uuid` column as `text`.
  */
-export function afterEventCursor(after: {
-  startsAt: string;
-  id: string;
-}): SQL {
+export function afterEventCursor(after: { startsAt: string; id: string }): SQL {
   return sql`(${events.startsAt} > ${after.startsAt}::timestamptz
     OR (${events.startsAt} = ${after.startsAt}::timestamptz
         AND ${events.id} > ${after.id}::uuid))`;
 }
+
+/**
+ * The grammar `eventCursorInstant` emits, as the ONLY accepted `startsAt`.
+ *
+ * `to_char(… 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')` renders exactly four year digits,
+ * zero-padded fields and six fractional digits, so a cursor that deviates was
+ * not issued here. That distinction is load-bearing rather than cosmetic: the
+ * value is handed back to Postgres as `$n::timestamptz`, so "V8 could parse it"
+ * is the wrong acceptance test — `Date.parse` accepts strings Postgres refuses
+ * (`0000-01-01T00:00:00Z` → `22008` year zero, a `Date.prototype.toString`
+ * rendering → `22007` bad format), and such a string would surface on a
+ * ZERO-AUTH route as an opaque 500 instead of the 400 `CURSOR_INVALID` that
+ * EARS-12/EARS-16 contract.
+ *
+ * Year `0000` is excluded because Postgres has no year zero; every other
+ * `0001`–`9999` instant is inside its `timestamptz` range. The trailing
+ * `Date.parse` check rejects the field combinations the regex cannot see
+ * (month 13, 31 February).
+ */
+const EVENT_CURSOR_INSTANT =
+  /^(?!0000)\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/;
+
+/**
+ * The §5.2 event order tuple as a shape: an instant in exactly the cursor
+ * grammar plus the tie-breaking UUID. A cursor is caller-supplied bytes, and
+ * its decoded values become SQL operands — parsing the tuple refuses a tampered
+ * one before any query runs.
+ */
+export const EVENT_CURSOR_SHAPE = z
+  .object({
+    startsAt: z
+      .string()
+      .refine(
+        (value) =>
+          EVENT_CURSOR_INSTANT.test(value) && !Number.isNaN(Date.parse(value)),
+        "not a cursor instant issued by this API",
+      ),
+    id: z.uuid(),
+  })
+  .strict();

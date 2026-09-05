@@ -6,6 +6,7 @@ import { useForm, type FieldValues, type Resolver } from "react-hook-form";
 import {
   AuthCard,
   AuthLayout,
+  AuthShell,
   Combobox,
   DataTable,
   DayAgenda,
@@ -598,6 +599,153 @@ function AuthLayoutSection() {
               <AuthLayout className="min-h-0" logo={<NeutralLogo />}>
                 <NestedAuthCard />
               </AuthLayout>
+            </div>
+          </StateCase>
+        </div>
+      </SubRow>
+    </BlockSection>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* AuthShell                                                            */
+/* ------------------------------------------------------------------ */
+
+const AUTH_SHELL_PROPS: PropRow[] = [
+  {
+    name: "logo",
+    type: "ReactNode",
+    required: false,
+    description:
+      "Brand lockup above the form card (host asset). Rendered below the layout breakpoint only — above it the panel mark is the single logo per viewport.",
+  },
+  {
+    name: "panelMark",
+    type: "ReactNode",
+    required: false,
+    description:
+      "The panel's own decorative mark (host asset, empty alt). The block pins it top-left; the asset keeps the host's own attributes.",
+  },
+  {
+    name: "copy",
+    type: "{ eyebrow; headline; subcopy; footer }",
+    required: true,
+    description:
+      "The three-zone panel copy, host-supplied and already localized — the package holds no strings.",
+  },
+  {
+    name: "returnContext",
+    type: "ReactNode",
+    required: false,
+    description:
+      "021 EARS-2 — stands in the panel's middle zone INSTEAD of the value prop and widens the split to 1.1fr .9fr.",
+  },
+  {
+    name: "children",
+    type: "ReactNode",
+    required: true,
+    description:
+      "The auth form for this surface (a LoginCard / PasswordRecoveryCard / EmailConfirmCard), plus any host chrome under it.",
+  },
+];
+
+/** Neutral, product-free panel copy — the shell holds no strings of its own. */
+const NEUTRAL_SHELL_COPY = {
+  eyebrow: "Eyebrow label",
+  headline: "A short headline for the brand panel",
+  subcopy: "One supporting line of sub-copy beneath the headline.",
+  footer: "Footer line · © Acme 2026",
+};
+
+/** Neutral white panel mark for the `panelMark` slot. */
+function NeutralPanelMark() {
+  return (
+    <div className="flex items-center gap-2 font-semibold text-primary-surface-foreground">
+      <LockGlyph className="size-6 text-primary-surface-foreground" />
+      <span>Acme</span>
+    </div>
+  );
+}
+
+function AuthShellSection() {
+  return (
+    <BlockSection
+      title="AuthShell"
+      exportsLine="AuthShell — slots: logo? · panelMark? · copy (eyebrow/headline/subcopy/footer) · returnContext? · children (auth card)"
+    >
+      <p className="text-sm text-muted-foreground">
+        The canvas auth FRAME — the three-zone brand panel (mark ·{" "}
+        <code className="font-mono text-xs">flex-1</code> value prop · footer)
+        composed onto <code className="font-mono text-xs">AuthLayout</code>. It
+        is the one canonical frame both storefronts project (#1666): each host
+        supplies its brand assets, its localized copy and its own policy (the
+        portal&apos;s authenticated-redirect guard and captcha disclosure) and
+        nothing else. The block&apos;s{" "}
+        <code className="font-mono text-xs">min-h-screen</code> (inherited from
+        the layout) is neutralised to{" "}
+        <code className="font-mono text-xs">min-h-0</code> here so it sizes to
+        content at catalogue scale.
+      </p>
+
+      <SubRow label="Preview">
+        <div className="overflow-hidden rounded-lg border border-border">
+          <AuthShell
+            className="min-h-0"
+            logo={<NeutralLogo />}
+            panelMark={<NeutralPanelMark />}
+            copy={NEUTRAL_SHELL_COPY}
+          >
+            <NestedAuthCard />
+          </AuthShell>
+        </div>
+      </SubRow>
+
+      <SubRow label="Slots / props">
+        <PropsTable rows={AUTH_SHELL_PROPS} />
+      </SubRow>
+
+      <SubRow label="State matrix — value prop vs returnContext">
+        <div className="flex flex-col gap-6">
+          <StateCase
+            label="resting"
+            note="the value prop fills the middle zone; even 50/50 split"
+          >
+            <div className="overflow-hidden rounded-lg border border-border">
+              <AuthShell
+                className="min-h-0"
+                logo={<NeutralLogo />}
+                panelMark={<NeutralPanelMark />}
+                copy={NEUTRAL_SHELL_COPY}
+              >
+                <NestedAuthCard />
+              </AuthShell>
+            </div>
+          </StateCase>
+          <StateCase
+            label="returnContext"
+            note="021 EARS-2 — the context replaces the value prop and widens the panel to 1.1fr .9fr"
+          >
+            <div className="overflow-hidden rounded-lg border border-border">
+              <AuthShell
+                className="min-h-0"
+                logo={<NeutralLogo />}
+                panelMark={<NeutralPanelMark />}
+                copy={NEUTRAL_SHELL_COPY}
+                returnContext={
+                  <div className="flex flex-1 flex-col justify-center">
+                    <div className="rounded-lg bg-card p-6 text-card-foreground">
+                      <p className="text-sm text-muted-foreground">
+                        Return-context card
+                      </p>
+                      <p className="text-lg font-semibold">
+                        What the visitor came for
+                      </p>
+                    </div>
+                  </div>
+                }
+              >
+                <NestedAuthCard />
+              </AuthShell>
             </div>
           </StateCase>
         </div>
@@ -3332,6 +3480,7 @@ export function BlocksView() {
     <div className="flex flex-col gap-2">
       <AuthCardSection />
       <AuthLayoutSection />
+      <AuthShellSection />
       <LoginCardSection />
       <PasswordRecoveryCardSection />
       <EmailConfirmCardSection />

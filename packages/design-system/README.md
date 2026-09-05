@@ -64,6 +64,7 @@ the consuming app's CSS even though they live outside the app tree.
 | `Form` (`./form`)                   | RHF binding — field primitives, `FormError` (submit error), and focusable linked `FormErrorSummary` for long forms (>3 fields) (ADR-0004 §9; ADR-0013 §7)                                                                                                                         |
 | `InputOTP` (`./input-otp`)          | One-time-code field for email-OTP / SMS-OTP (EARS-6/7)                                                                                                                                                                                                                            |
 | `EventList` (`./blocks`)            | Controlled, fetch-free cross-front event feed — tabs, grouped webinar cards, empty state, and cursor-aware pagination; host apps own data and URL state                                                                                                                           |
+| `AuthShell` (`./blocks`)            | The canvas auth FRAME — `AuthLayout` plus the three-zone brand panel (mark pinned top-left · value prop · footer line), with the 021 return-context swap that also widens the split; one canonical frame both storefronts project, brand assets / copy / app policy stay app glue (#1666)                          |
 | `LoginCard` (`./blocks`)            | Whole sign-in composition — `AuthCard` frame, password / one-time-code tabs, both forms, and the code-entry stage on `OtpFocusScreen`; one canonical block both storefronts project (#1666)                                                                                       |
 | `PasswordRecoveryCard` (`./blocks`) | Whole password-recovery composition — stage-tracking `AuthCard` frame, the identifier request form, and the complete step submitting code + new password together with the shared resend cooldown; one canonical block both storefronts project (#1666)                           |
 | `EmailConfirmCard` (`./blocks`)     | Whole post-registration confirmation composition — code entry with auto-submit, the server-confirmed success row, the resend control, and the two co-equal already-registered actions (never branches on account existence); one canonical block both storefronts project (#1666) |
@@ -71,7 +72,7 @@ the consuming app's CSS even though they live outside the app tree.
 Forms follow the ADR-0004 §9 pattern: **RHF + `@hookform/resolvers/zod` + shadcn
 `<Form>`**, with the Zod schema imported from the SSOT (`@ds/schemas`, once the
 auth schemas land in F1/F2). Field-tier components take a bound RHF field and own
-nothing above it. Block-tier auth compositions (`LoginCard`,
+nothing above it. Block-tier auth compositions (`AuthShell`, `LoginCard`,
 `PasswordRecoveryCard`, `EmailConfirmCard`) own field
 composition, the field-level schemas from `./fields`, and state presentation
 (pending / error / stage); the host app owns copy, the validation resolver,

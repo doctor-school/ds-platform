@@ -1038,6 +1038,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const forged = [
         "0000-01-01T00:00:00Z",
         "Mon Jan 01 2020 00:00:00 GMT+0000 (Coordinated Universal Time)",
+        // In the cursor's own grammar, yet not a day that exists: V8 rolls it
+        // over to 2 March, Postgres answers `22008`.
+        "2020-02-31T00:00:00.000000Z",
       ];
       const routes = [
         `/v1/public/projects/${graph.p1}/events`,

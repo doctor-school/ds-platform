@@ -2,9 +2,11 @@ import { sql, type SQL } from "drizzle-orm";
 import { z } from "zod";
 import { type Event, events } from "@ds/db";
 
-// 012-design §5.2 — the ONE keyset-cursor rule of every public traversal that
-// orders events, shared by `/public/projects/:key/events` and
-// `/public/directions/:key/events` (012 EARS-12, #1294).
+// 012-design §5.2 — the ONE keyset-cursor rule of the two event-ordered
+// RELATIONSHIP traversals, `/public/projects/:key/events` and
+// `/public/directions/:key/events` (012 EARS-12, #1294). The base event
+// collection and the event↔experts routes still carry their own cursor
+// arithmetic; folding them in is #1880, not a claim this module makes today.
 //
 // It lives in its own module because the two directions had grown the identical
 // cursor arithmetic side by side, and the arithmetic has one non-obvious
@@ -59,28 +61,48 @@ export function afterEventCursor(after: { startsAt: string; id: string }): SQL {
  * EARS-12/EARS-16 contract.
  *
  * Year `0000` is excluded because Postgres has no year zero; every other
- * `0001`–`9999` instant is inside its `timestamptz` range. The trailing
- * `Date.parse` check rejects the field combinations the regex cannot see
- * (month 13, 31 February).
+ * `0001`–`9999` instant is inside its `timestamptz` range.
+ *
+ * The regex cannot see the calendar, and neither can `Date.parse`: V8 ROLLS
+ * impossible days over rather than refusing them (`2020-02-31` becomes 2 March,
+ * `2021-02-29` becomes 1 March, hour `24` becomes the next midnight), while
+ * Postgres answers `22008`. So the second half is a ROUND TRIP instead: the
+ * millisecond prefix of the value must come back byte-for-byte out of
+ * `Date.prototype.toISOString`, which only a real instant does. The three
+ * microsecond digits the round trip drops are already pinned by the regex.
  */
 const EVENT_CURSOR_INSTANT =
   /^(?!0000)\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/;
 
 /**
+ * True only for a string this API's encoder could have produced: the exact
+ * grammar, and a date the calendar actually has.
+ */
+function isEventCursorInstant(value: string): boolean {
+  if (!EVENT_CURSOR_INSTANT.test(value)) return false;
+  const instant = new Date(value);
+  if (Number.isNaN(instant.getTime())) return false;
+  return instant.toISOString() === `${value.slice(0, 23)}Z`;
+}
+
+/**
  * The §5.2 event order tuple as a shape: an instant in exactly the cursor
  * grammar plus the tie-breaking UUID. A cursor is caller-supplied bytes, and
- * its decoded values become SQL operands — parsing the tuple refuses a tampered
- * one before any query runs.
+ * its decoded values become SQL operands — parsing the tuple refuses a
+ * malformed one before any query runs.
+ *
+ * This is SHAPE-level validation, not authentication: the cursor is unsigned,
+ * so a hand-built value in the right grammar is accepted as a legitimate
+ * position. That is not a leak — these routes are zero-auth reads of published
+ * rows, and a caller can walk the same rows page by page anyway. What the shape
+ * buys is that no caller-chosen string ever reaches Postgres as an operand it
+ * cannot read.
  */
 export const EVENT_CURSOR_SHAPE = z
   .object({
     startsAt: z
       .string()
-      .refine(
-        (value) =>
-          EVENT_CURSOR_INSTANT.test(value) && !Number.isNaN(Date.parse(value)),
-        "not a cursor instant issued by this API",
-      ),
+      .refine(isEventCursorInstant, "not a cursor instant issued by this API"),
     id: z.uuid(),
   })
   .strict();

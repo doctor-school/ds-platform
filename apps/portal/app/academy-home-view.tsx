@@ -17,7 +17,6 @@ import {
 } from "./fixtures";
 import { LeadDemoFields } from "./lead-demo-fields";
 import { submitAcademyPartnership } from "./academy-partnership-action";
-import { ThemeToggle } from "./theme-toggle";
 import styles from "./academy-home.module.css";
 
 function SectionIntro({
@@ -47,71 +46,6 @@ function SectionIntro({
         </Link>
       ) : null}
     </div>
-  );
-}
-
-function AcademyHeader() {
-  return (
-    <header id="top" className="bg-header text-header-foreground">
-      <Container className="flex min-h-19 items-center justify-between gap-controls py-4">
-        <Link
-          href="#top"
-          aria-label="Doctor.School — наверх"
-          className="shrink-0 text-header-foreground active:text-header-foreground"
-        >
-          <Image
-            src="/brand/logo-white.svg"
-            alt="Doctor.School"
-            width={500}
-            height={164}
-            priority
-            className="h-7 w-auto"
-          />
-        </Link>
-
-        <div className="flex items-center gap-controls">
-          <nav
-            aria-label="Основная навигация"
-            className="hidden items-center gap-7 text-sm layout:flex"
-          >
-            {[
-              ["Эфиры", "#events"],
-              ["Проекты", "#projects"],
-              ["Эксперты", "#experts"],
-            ].map(([label, href]) => (
-              <Link
-                key={href}
-                href={href}
-                className="text-hero-muted hover:text-header-foreground active:text-header-foreground"
-              >
-                {label}
-              </Link>
-            ))}
-          </nav>
-          <ThemeToggle />
-          <Button
-            type="button"
-            variant="outline"
-            disabled
-            className="hidden layout:inline-flex"
-          >
-            Войти
-          </Button>
-          <Button
-            type="button"
-            size="icon"
-            variant="outline"
-            disabled
-            aria-label="Меню пока недоступно в демо"
-            className="layout:hidden"
-          >
-            <span aria-hidden="true" className="text-xl">
-              ≡
-            </span>
-          </Button>
-        </div>
-      </Container>
-    </header>
   );
 }
 
@@ -600,7 +534,6 @@ function AcademyFooter() {
 export function AcademyHomeView() {
   return (
     <div lang="ru" className="min-h-screen bg-background text-foreground">
-      <AcademyHeader />
       <main>
         <AcademyHero />
         <WhatSection />

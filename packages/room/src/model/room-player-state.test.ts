@@ -27,22 +27,58 @@ describe("006 EARS-18 player-failure state machine — pure logic", () => {
     expect(mapYouTubeErrorCode(2)).toBe("generic");
   });
 
-  // EARS-18.2 — vk (live) and cdnvideo expose no parent-observable API: they are
-  // watchdog-only, so they can only ever reach the SUSPECTED grade.
-  it("EARS-18.2: vk and cdnvideo are watchdog-only (no parent-observable API)", () => {
+  // EARS-18.2 — cdnvideo is the ONLY structurally silent provider (its bundles emit
+  // no parent-directed message at all — probe, design §3.1), so it is watchdog-only
+  // and can only ever reach the SUSPECTED grade. vk IS parent-observable once the
+  // embed src carries `js_api=1` (#1314): its `inited` / `started` / `timeupdate`
+  // traffic arrives from https://vk.com.
+  it("EARS-18.2: cdnvideo is watchdog-only; vk is parent-observable (js_api=1)", () => {
     expect(PROVIDER_HAS_PARENT_API.youtube).toBe(true);
     expect(PROVIDER_HAS_PARENT_API.rutube).toBe(true);
-    expect(PROVIDER_HAS_PARENT_API.vk).toBe(false);
+    expect(PROVIDER_HAS_PARENT_API.vk).toBe(true);
     expect(PROVIDER_HAS_PARENT_API.cdnvideo).toBe(false);
-    // No provider-event path is even parsed for a watchdog-only provider.
-    expect(
-      parseProviderSignal("vk", {
-        origin: "https://vk.com",
-        data: { type: "player:changeState", data: { state: "playing" } },
-      }),
-    ).toBeNull();
+    // No provider-event path is even parsed for the watchdog-only provider.
     expect(
       parseProviderSignal("cdnvideo", { origin: "https://playercdn.cdnvideo.ru", data: {} }),
+    ).toBeNull();
+  });
+
+  // EARS-18.2 — the VK JS API signals (probe 2026-08-20, design §3.1): `inited` is
+  // the handshake, `started` and a `timeupdate` with `state: "playing"` are playing
+  // signals, a `timeupdate` with `state: "unstarted"` is only the handshake. VK
+  // exposes NO error event — a stall shows as an absent/non-advancing timeupdate, so
+  // the parser must never synthesize one.
+  it("EARS-18.2: parses VK inited, started and timeupdate signals from the VK origin", () => {
+    const vk = "https://vk.com";
+    expect(parseProviderSignal("vk", { origin: vk, data: { event: "inited" } })).toEqual({
+      kind: "ready",
+    });
+    expect(parseProviderSignal("vk", { origin: vk, data: { type: "inited" } })).toEqual({
+      kind: "ready",
+    });
+    expect(parseProviderSignal("vk", { origin: vk, data: { event: "started" } })).toEqual({
+      kind: "playing",
+    });
+    expect(
+      parseProviderSignal("vk", {
+        origin: vk,
+        data: '{"event":"timeupdate","state":"playing","time":12.5}',
+      }),
+    ).toEqual({ kind: "playing" });
+    expect(
+      parseProviderSignal("vk", {
+        origin: vk,
+        data: { event: "timeupdate", state: "unstarted", time: 0 },
+      }),
+    ).toEqual({ kind: "buffering" });
+    // VK has no error event — nothing is ever mapped to a CONFIRMED error.
+    expect(parseProviderSignal("vk", { origin: vk, data: { event: "error" } })).toBeNull();
+    // The origin guard stays strict.
+    expect(
+      parseProviderSignal("vk", {
+        origin: "https://evil.example",
+        data: { event: "timeupdate", state: "playing" },
+      }),
     ).toBeNull();
   });
 
@@ -190,5 +226,48 @@ describe("006 EARS-18 player-failure state machine — pure logic", () => {
     expect(recovered.grade).toBeNull();
     expect(recovered.failure).toBeNull();
     expect(recovered.everReady).toBe(true);
+  });
+
+  // EARS-18.3 — the advisory time box: a SUSPECTED failure the room can never prove
+  // must not nag indefinitely over a stream that is most likely playing fine. The
+  // `timebox` action withdraws the banner into the `unverified` state — the grade
+  // stays SUSPECTED, the embed is never re-created (embedKey untouched), and the
+  // only exit is the gesture-gated restart.
+  it("EARS-18.3: the advisory time box moves a suspected failure to unverified without touching the embed", () => {
+    const suspected = playerReducer(INITIAL_PLAYER_STATE, { type: "watchdog" });
+    const boxed = playerReducer(suspected, { type: "timebox" });
+    expect(boxed.status).toBe("unverified");
+    expect(boxed.grade).toBe("suspected");
+    expect(boxed.embedKey).toBe(0); // never re-created on a timer (gesture-gated)
+    expect(boxed.attempt).toBe(0);
+    expect(boxed.everReady).toBe(false); // monotonic — still nothing ever observed
+  });
+
+  // EARS-18.3 — the time box is inert anywhere else: it must never withdraw a
+  // CONFIRMED covering overlay, nor disturb a healthy `loading`/`playing` state.
+  it("EARS-18.3: the time box is a no-op outside a suspected failure", () => {
+    const loading = playerReducer(INITIAL_PLAYER_STATE, { type: "timebox" });
+    expect(loading).toBe(INITIAL_PLAYER_STATE);
+    const readied = playerReducer(INITIAL_PLAYER_STATE, { type: "handshake" });
+    const confirmed = playerReducer(
+      { ...readied, attempt: PLAYER_MAX_AUTO_RETRIES },
+      { type: "watchdog" },
+    );
+    expect(confirmed.status).toBe("failed");
+    expect(confirmed.grade).toBe("confirmed");
+    expect(playerReducer(confirmed, { type: "timebox" })).toBe(confirmed);
+  });
+
+  // EARS-18.3 — from `unverified` the ONLY exit is the explicit doctor gesture, which
+  // re-creates the embed with a fresh watchdog (never a timer, never on mount).
+  it("EARS-18.3: the gesture-gated restart re-creates the embed from unverified", () => {
+    const boxed = playerReducer(
+      playerReducer(INITIAL_PLAYER_STATE, { type: "watchdog" }),
+      { type: "timebox" },
+    );
+    const restarted = playerReducer(boxed, { type: "restart" });
+    expect(restarted.status).toBe("loading");
+    expect(restarted.grade).toBeNull();
+    expect(restarted.embedKey).toBe(boxed.embedKey + 1);
   });
 });

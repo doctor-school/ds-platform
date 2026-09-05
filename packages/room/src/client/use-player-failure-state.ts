@@ -4,6 +4,7 @@ import { useCallback, useEffect, useReducer } from "react";
 import type { StreamProvider } from "@ds/schemas";
 import {
   INITIAL_PLAYER_STATE,
+  PLAYER_ADVISORY_TIMEBOX_MS,
   PLAYER_RETRY_DELAY_MS,
   PLAYER_WATCHDOG_MS,
   PROVIDER_HAS_PARENT_API,
@@ -34,12 +35,18 @@ export interface PlayerFailureState {
  *   provider-agnostic detection floor (a cross-origin iframe is opaque, and
  *   `iframe.onload` fires even on a provider error page, so it is never a success
  *   signal). The timeout is cleared on every status change (orphan-timer safe).
- * - **Provider events (EARS-18.2).** For youtube/rutube, a window `message` listener
- *   parses the provider's own signals ({@link parseProviderSignal}, origin-guarded)
- *   to clear the watchdog on `playing` and surface provider errors; vk/cdnvideo
- *   register no listener (watchdog-only).
+ * - **Provider events (EARS-18.2).** For youtube, rutube and vk (whose embed src
+ *   carries `js_api=1`, #1314), a window `message` listener parses the provider's own
+ *   signals ({@link parseProviderSignal}, origin-guarded) to clear the watchdog on
+ *   `playing` and surface provider errors; cdnvideo registers no listener — it is
+ *   structurally silent and therefore watchdog-only.
  * - **Bounded retry (EARS-18.3).** On `retrying`, a `PLAYER_RETRY_DELAY_MS` timer
  *   re-creates the embed; the budget is bounded in the reducer.
+ * - **Advisory time box (EARS-18.3).** For cdnvideo ONLY — the permanently
+ *   unobservable provider — a standing SUSPECTED advisory withdraws itself after
+ *   `PLAYER_ADVISORY_TIMEBOX_MS` into `unverified` (banner gone, embed untouched,
+ *   gesture-gated restart only). Every other SUSPECTED case keeps its banner, because
+ *   a real signal can still arrive for it.
  * - **Recovery (EARS-18.4).** A `playing` signal at any point clears the overlay.
  */
 export function usePlayerFailureState(provider: StreamProvider): PlayerFailureState {
@@ -60,6 +67,16 @@ export function usePlayerFailureState(provider: StreamProvider): PlayerFailureSt
     const timer = setTimeout(() => dispatch({ type: "retry" }), PLAYER_RETRY_DELAY_MS);
     return () => clearTimeout(timer);
   }, [status, attempt]);
+
+  // Advisory time box (EARS-18.3) — cdnvideo ONLY: a SUSPECTED advisory the room can
+  // never resolve withdraws itself rather than nagging over a probably-healthy stream.
+  // Cleared on any status change (orphan-timer safe); it never touches the embed.
+  useEffect(() => {
+    if (provider !== "cdnvideo") return;
+    if (status !== "failed" || grade !== "suspected") return;
+    const timer = setTimeout(() => dispatch({ type: "timebox" }), PLAYER_ADVISORY_TIMEBOX_MS);
+    return () => clearTimeout(timer);
+  }, [provider, status, grade]);
 
   // Provider-event layering — only where the provider exposes a parent-observable API.
   useEffect(() => {

@@ -24,7 +24,7 @@ routes keep their existing application behavior.
 ```
 app/
 ├── @chrome/
-│   ├── page.tsx                 # no app shell on public /
+│   ├── page.tsx                 # persistent AppShellHeader on public /
 │   └── [...catchAll]/page.tsx   # persistent AppShellHeader elsewhere
 ├── globals.css                  # shared tokens + Tailwind
 ├── layout.tsx                   # root providers, theme baseline, chrome slot

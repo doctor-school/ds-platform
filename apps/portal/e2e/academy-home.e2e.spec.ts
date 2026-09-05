@@ -57,6 +57,18 @@ const REQUIRED_FORM_ERRORS = [
     "Подтвердите согласие на обработку персональных данных.",
   ],
 ] as const;
+/** The 008 shell header's own traffic on `/` (#1877) — its self-profile read
+ *  and Next's RSC prefetch of its nav targets. Not the landing page's. */
+const SHELL_PREFETCH_PATHS = ["/webinars", "/account/events", "/login"];
+function isShellRequest(url: string): boolean {
+  const parsed = new URL(url);
+  if (parsed.pathname === "/v1/me/profile") return true;
+  return (
+    parsed.searchParams.has("_rsc") &&
+    SHELL_PREFETCH_PATHS.includes(parsed.pathname)
+  );
+}
+
 const SUBMISSIONS_DIRECTORY = process.env.ACADEMY_SUBMISSIONS_DIR;
 const PERSISTENCE_E2E_SAFE =
   process.env.ACADEMY_PARTNERSHIP_E2E_SAFE === "1";
@@ -163,10 +175,16 @@ test.describe("Feature 013 — static public Academy home", () => {
           ),
       )
       .toEqual(SECTION_ORDER);
+    // #1877 — the root route mounts the persistent 008 app-shell header like
+    // every other portal route; the page body itself owns no header any more.
     await expect(page.locator("header")).toHaveCount(1);
-    await expect(page.getByTestId("shell-logo")).toHaveCount(0);
+    await expect(page.getByTestId("shell-logo")).toHaveCount(1);
     await expect(page.getByRole("contentinfo")).toBeVisible();
-    expect(dynamicRequests).toEqual([]);
+    // The static page still fetches nothing OF ITS OWN. The only dynamic
+    // traffic on `/` belongs to the mounted 008 shell header (#1877): its
+    // one-shot self-profile read (`useHeaderAuth`) and Next's RSC prefetch of
+    // its three nav targets — everything else must stay absent.
+    expect(dynamicRequests.filter((url) => !isShellRequest(url))).toEqual([]);
   });
 
   test("EARS-2: page shall render six supplied portraits and the approved repeated Project and Events rows", async ({
@@ -607,14 +625,38 @@ test.describe("Feature 013 — static public Academy home", () => {
     }
   });
 
-  test("parallel chrome keeps the existing app-shell header on non-root routes", async ({
+  test("#1877: parallel chrome mounts the app-shell header on / and on non-root routes", async ({
     page,
   }) => {
     await page.route("**/v1/auth/session", (route) =>
       route.fulfill({ status: 401, body: "" }),
     );
-    await page.route("**/v1/me/profile", (route) => route.abort());
+    await page.route("**/v1/me/profile", (route) =>
+      route.fulfill({ status: 401, body: "" }),
+    );
 
+    await page.goto("/");
+
+    const header = page.locator("header");
+    await expect(page.getByTestId("shell-logo")).toBeVisible();
+    await expect(header).toHaveCount(1);
+    // A guest gets the real «Войти» way-in — the interim stub's disabled
+    // bespoke buttons are gone (#1877).
+    await expect(page.getByTestId("shell-login")).toHaveAttribute(
+      "href",
+      "/login",
+    );
+    await expect(header.locator("button[disabled]")).toHaveCount(0);
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    const menu = page.getByTestId("shell-mobile-menu");
+    await menu.locator("summary").click();
+    await expect(page.getByTestId("shell-mobile-broadcasts")).toBeVisible();
+    await expect(page.getByTestId("shell-mobile-broadcasts")).toHaveText(
+      "Эфиры",
+    );
+
+    await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto("/account");
 
     await expect(page.getByTestId("shell-logo")).toBeVisible();

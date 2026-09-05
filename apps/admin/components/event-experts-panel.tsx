@@ -234,9 +234,9 @@ type DoneHandler = (toastKey: string) => void;
 type ErrorHandler = (error: unknown, fallbackKey: string) => void;
 
 /**
- * One link — the expert, the authored role, the slot it holds in the merged
- * speaker projection, its legacy-match state, and the actions its CURRENT status
- * allows (retire on an active row, restore on a retired one; never both).
+ * One link — the expert, the authored role, the slot it holds in the event's
+ * speaker projection, and the actions its CURRENT status allows (retire on an
+ * active row, restore on a retired one; never both).
  */
 function LinkRow({
   mode,
@@ -269,11 +269,6 @@ function LinkRow({
         </h3>
         <Badge variant="label" data-testid={`event-expert-status-${row.id}`}>
           {t(`eventExperts.statuses.${row.status}`)}
-        </Badge>
-        <Badge variant="label" data-testid={`event-expert-legacy-${row.id}`}>
-          {row.legacySpeakerId
-            ? t("eventExperts.legacy.matched")
-            : t("eventExperts.legacy.unmatched")}
         </Badge>
       </div>
 
@@ -314,9 +309,6 @@ function LinkRow({
           onDone={onDone}
           onError={onError}
         />
-        {row.legacySpeakerId && !retiredRow ? (
-          <UnmatchButton row={row} onDone={onDone} onError={onError} />
-        ) : null}
       </div>
     </section>
   );
@@ -454,80 +446,6 @@ function CommandButton({
 }
 
 /**
- * Drop the explicit legacy-speaker match (`legacySpeakerId: null`).
- *
- * An explicit `null` is the documented UNMATCH — distinguishable from omission,
- * which means «unchanged» (012-design §5.1). It is a visible editorial act: the
- * suppressed legacy speaker row becomes visible on the event page again, which
- * is why it confirms rather than firing from a bare click.
- */
-function UnmatchButton({
-  row,
-  onDone,
-  onError,
-}: {
-  row: EventExpertAdminListItem;
-  onDone: DoneHandler;
-  onError: ErrorHandler;
-}) {
-  const t = useTranslations();
-  const [open, setOpen] = useState(false);
-  const { mutate, mutation } = useCustomMutation();
-  const testId = `event-expert-${row.id}-unmatch`;
-
-  return (
-    <AlertDialog open={open} onOpenChange={setOpen}>
-      <AlertDialogTrigger asChild>
-        <Button variant="outline" size="sm" data-testid={testId}>
-          {t("eventExperts.legacy.unmatch")}
-        </Button>
-      </AlertDialogTrigger>
-      <AlertDialogContent data-testid={`${testId}-confirm`}>
-        <AlertDialogHeader>
-          <AlertDialogTitle>
-            {t("eventExperts.legacy.unmatchTitle")}
-          </AlertDialogTitle>
-          <AlertDialogDescription>
-            {t("eventExperts.legacy.unmatchBody")}
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
-          <AlertDialogAction
-            data-testid={`${testId}-submit`}
-            disabled={mutation.isPending}
-            onClick={(event) => {
-              event.preventDefault();
-              const body: UpdateEventExpertRequest = { legacySpeakerId: null };
-              mutate(
-                {
-                  url: eventExpertsUrl.row(row.id),
-                  method: "patch",
-                  values: body,
-                  meta: { version: row.version },
-                },
-                {
-                  onSuccess: () => {
-                    setOpen(false);
-                    onDone("eventExperts.toast.unmatched");
-                  },
-                  onError: (error) => {
-                    setOpen(false);
-                    onError(error, "eventExperts.errors.updateFailed");
-                  },
-                },
-              );
-            }}
-          >
-            {t("eventExperts.legacy.unmatch")}
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
-  );
-}
-
-/**
  * Create a link (no row) or edit one (row present) — one form, because both
  * author the same pair of editorial values.
  *
@@ -597,11 +515,6 @@ function LinkDialog({
       return;
     }
 
-    // `legacySpeakerId` is deliberately absent, not empty: omitting it creates an
-    // UNPAIRED link, which is a different outcome, not a degraded one. Choosing a
-    // legacy speaker needs an admin read of the event's retained speaker rows,
-    // which no route exposes yet (#1306 owns that surface) — so the panel never
-    // offers a box that could only be filled with a hand-typed UUID.
     const body: CreateEventExpertRequest = {
       eventId: mode === "event" ? entityId : selectedEventId,
       expertId: mode === "expert" ? entityId : values.expertId,
@@ -757,10 +670,6 @@ function LinkDialog({
                 </FormItem>
               )}
             />
-
-            <p className="text-sm text-muted-foreground">
-              {t("eventExperts.legacy.hint")}
-            </p>
 
             <div className="flex justify-end gap-2">
               <Button

@@ -38,8 +38,8 @@
 //   ship        git archive <sha> → api-prod + data-prod over ssh (no registry)
 //   data-prod   up -d --build (idempotent; attestations off → no-op ≠ recreate, #486)
 //   checkpoint  pgbackrest pre-migrate incr backup  (DSO-129 — BEFORE migrate)
-//   api-prod    migrate → build (ds-api:<sha>, ds-portal:<sha>, ds-admin:<sha>,
-//               ds-doctor:<sha>) → up -d
+//   api-prod    migrate → build the SHA-tagged images of the TARGET tree's
+//               compose (ds-<svc>:<sha>; derived, #1896) → up -d
 //   config      compare running bind mounts; restart only stale consumers (#1175)
 //   retention   keep the last 3 SHA-tagged images per repo  (DSO-127)
 //   smoke       tools/deploy/smoke-prod.mjs --expect-sha <sha>  (DSO-128)
@@ -81,6 +81,15 @@ import {
   makeGitReleaseTagLister,
   makeProdFloorReader,
 } from "./rollback-floor.mjs";
+import {
+  API_PROD_COMPOSE_PATH,
+  bootProbeSet,
+  deployServiceSet,
+  formatServiceImages,
+  formatServiceNames,
+  rollbackBoundaryVerdict,
+  shellVarName,
+} from "./service-set.mjs";
 
 // Prod health endpoint — the status record's `log_url` and the verify-over-HTTP
 // pointer (#942/#927). Kept in one place so the record and the printed hint agree.
@@ -660,30 +669,74 @@ function sshCapture(host, script) {
   });
 }
 
+// Container-name prefix compose derives from the project name (`name:
+// ds-api-prod` in the api-prod compose file): `<project>-<service>-1`.
+const CONTAINER_PREFIX = "ds-api-prod-";
+
+// #1896: the per-service verify set of a deploy is READ from the TARGET tree's
+// compose file, not from the local checkout. `--ref <sha>` ships that commit's
+// tree, so its compose is what the on-box `docker compose build` consumes and
+// therefore the only truthful source for "which SHA-tagged images must boot and
+// must be running afterwards". Fail-closed: an unreadable or empty derivation
+// dies here, before any ssh — never "probe nothing".
+function resolveTargetServiceSet(sha, label = sha.slice(0, 12)) {
+  let composeText;
+  try {
+    composeText = localCap("git", ["show", `${sha}:${API_PROD_COMPOSE_PATH}`]);
+  } catch (e) {
+    die(
+      `cannot read ${API_PROD_COMPOSE_PATH} at ${label} — the deploy cannot know` +
+        ` which services it must verify:\n  ${e.message}`,
+    );
+  }
+  try {
+    const services = deployServiceSet(composeText, { source: label });
+    // Validate the boot-probe subset NOW (ports pinned, non-empty) so a broken
+    // compose fails during pre-flight, not two build-minutes into the deploy.
+    const probed = bootProbeSet(services);
+    console.log(
+      `  ℹ service set derived from ${label}: ${formatServiceNames(services)}` +
+        ` (boot-probed: ${formatServiceNames(probed)})`,
+    );
+    return services;
+  } catch (e) {
+    die(`${e.message}`);
+  }
+}
+
 // Truthful-success gate (DSO-127 rework): after `up -d`, prove the RUNNING
-// api + portal + admin + doctor containers actually carry the deployed
-// SHA-tagged images and
-// reach healthy — a "DEPLOY OK" line must never outrun the box's reality
-// again. Polls on-box (one ssh channel) up to ~4 min to cover the containers'
-// healthcheck start_period + retries after a real image swap.
-async function verifyRunningSha(sha) {
+// containers of the TARGET's service set actually carry the deployed SHA-tagged
+// images and reach healthy — a "DEPLOY OK" line must never outrun the box's
+// reality again. Polls on-box (one ssh channel) up to ~4 min to cover the
+// containers' healthcheck start_period + retries after a real image swap.
+//
+// `services` is derived from the deploy TARGET's compose file (#1896), never
+// from the local checkout: a `--ref` hotfix based on a SHA that predates a
+// service must not be asserted against that service (it cannot exist there).
+async function verifyRunningSha(sha, services) {
+  const reads = services
+    .map(
+      (s) =>
+        `  ${shellVarName(s.name)}_img=$(sudo docker inspect ${CONTAINER_PREFIX}${s.name}-1 --format '{{.Config.Image}}' 2>/dev/null || echo absent)\n` +
+        `  ${shellVarName(s.name)}_h=$(sudo docker inspect ${CONTAINER_PREFIX}${s.name}-1 --format '{{.State.Health.Status}}' 2>/dev/null || echo absent)`,
+    )
+    .join("\n");
+  const state = services
+    .map((s) => `${s.name}=$${shellVarName(s.name)}_img($${shellVarName(s.name)}_h)`)
+    .join(" ");
+  const condition = services
+    .map(
+      (s) =>
+        `[ "$${shellVarName(s.name)}_img" = "${s.image}:${sha}" ] && [ "$${shellVarName(s.name)}_h" = healthy ]`,
+    )
+    .join(" \\\n     && ");
   const out = await sshCapture(
     API_PROD,
     `deadline=$(( $(date +%s) + 240 ))
 while true; do
-  api_img=$(sudo docker inspect ds-api-prod-api-1 --format '{{.Config.Image}}' 2>/dev/null || echo absent)
-  portal_img=$(sudo docker inspect ds-api-prod-portal-1 --format '{{.Config.Image}}' 2>/dev/null || echo absent)
-  admin_img=$(sudo docker inspect ds-api-prod-admin-1 --format '{{.Config.Image}}' 2>/dev/null || echo absent)
-  doctor_img=$(sudo docker inspect ds-api-prod-doctor-1 --format '{{.Config.Image}}' 2>/dev/null || echo absent)
-  api_h=$(sudo docker inspect ds-api-prod-api-1 --format '{{.State.Health.Status}}' 2>/dev/null || echo absent)
-  portal_h=$(sudo docker inspect ds-api-prod-portal-1 --format '{{.State.Health.Status}}' 2>/dev/null || echo absent)
-  admin_h=$(sudo docker inspect ds-api-prod-admin-1 --format '{{.State.Health.Status}}' 2>/dev/null || echo absent)
-  doctor_h=$(sudo docker inspect ds-api-prod-doctor-1 --format '{{.State.Health.Status}}' 2>/dev/null || echo absent)
-  state="api=$api_img($api_h) portal=$portal_img($portal_h) admin=$admin_img($admin_h) doctor=$doctor_img($doctor_h)"
-  if [ "$api_img" = "ds-api:${sha}" ] && [ "$portal_img" = "ds-portal:${sha}" ] \\
-     && [ "$admin_img" = "ds-admin:${sha}" ] && [ "$doctor_img" = "ds-doctor:${sha}" ] \\
-     && [ "$api_h" = healthy ] && [ "$portal_h" = healthy ] && [ "$admin_h" = healthy ] \\
-     && [ "$doctor_h" = healthy ]; then
+${reads}
+  state="${state}"
+  if ${condition}; then
     echo "OK $state"; break
   fi
   if [ "$(date +%s)" -ge "$deadline" ]; then
@@ -702,7 +755,10 @@ done`,
     );
   }
   ok(
-    `api + portal + admin + doctor RUN ds-*:${sha.slice(0, 12)} and are healthy`,
+    `${formatServiceNames(services)} RUN ds-*:${sha.slice(
+      0,
+      12,
+    )} and are healthy`,
   );
 }
 
@@ -718,15 +774,21 @@ done`,
 // compose healthcheck). A non-booting image aborts the deploy while the OLD
 // containers are still up and serving — the public surface never sees it.
 //
-// Scope: portal + admin + doctor (#1723), the three Next standalone images. The api is deliberately
-// NOT probed here: it needs Postgres/Redis/Zitadel on the compose network, so a
-// detached one-shot would fail for reasons unrelated to the image and turn a
-// safety gate into a flaky one. The api keeps its compose healthcheck +
-// `verifyRunningSha`.
+// Scope: every SHA-tagged service of the TARGET tree except the api (#1896) —
+// the Next standalone images, with the port each one listens on read from the
+// same compose file. The api is deliberately NOT probed here: it needs
+// Postgres/Redis/Zitadel on the compose network, so a detached one-shot would
+// fail for reasons unrelated to the image and turn a safety gate into a flaky
+// one. The api keeps its compose healthcheck + `verifyRunningSha`.
+//
+// The set is derived, never hard-coded: the first live `--ref` hotfix built on a
+// base predating the `doctor` storefront, and a hard-coded probe demanded an
+// image that cannot exist at that SHA (`doctor=NOSTART`, #1896).
 //
 // No published ports, no compose network, unique container names, always removed
 // — the probe cannot collide with or disturb the live stack.
-async function verifyImagesBoot(sha) {
+async function verifyImagesBoot(sha, services) {
+  const probed = bootProbeSet(services);
   const out = await sshCapture(
     API_PROD,
     `probe() {
@@ -760,9 +822,7 @@ async function verifyImagesBoot(sha) {
   fi
   sudo docker rm -f "$name" >/dev/null 2>&1 || true
 }
-probe portal ds-portal 3001
-probe admin ds-admin 3002
-probe doctor ds-doctor 3004`,
+${probed.map((s) => `probe ${s.name} ${s.image} ${s.port}`).join("\n")}`,
   );
   console.log(
     out
@@ -770,16 +830,15 @@ probe doctor ds-doctor 3004`,
       .map((l) => `      ${l}`)
       .join("\n"),
   );
+  const names = probed.map((s) => s.name);
   const verdicts = Object.fromEntries(
     out
       .split(/\r?\n/)
-      .map((l) => l.trim().match(/^(portal|admin|doctor)=(\w+)$/))
-      .filter(Boolean)
+      .map((l) => l.trim().match(/^([A-Za-z0-9._-]+)=(\w+)$/))
+      .filter((m) => m && names.includes(m[1]))
       .map((m) => [m[1], m[2]]),
   );
-  const bad = ["portal", "admin", "doctor"].filter(
-    (s) => verdicts[s] !== "OK",
-  );
+  const bad = names.filter((s) => verdicts[s] !== "OK");
   if (bad.length > 0) {
     die(
       `freshly built image(s) do NOT boot: ${bad
@@ -790,7 +849,7 @@ probe doctor ds-doctor 3004`,
     );
   }
   ok(
-    `ds-portal + ds-admin + ds-doctor :${sha.slice(
+    `${formatServiceImages(probed)} :${sha.slice(
       0,
       12,
     )} boot and serve / before the swap`,
@@ -879,6 +938,12 @@ async function shipTree(sha, host) {
 
 async function deploy(hotfixRef = null) {
   const sha = await preflight(hotfixRef);
+  // #1896: everything per-service below (build banner, pre-swap boot probe,
+  // truthful-success verify, smoke scope) is derived from THIS set.
+  const services = resolveTargetServiceSet(
+    sha,
+    hotfixRef ? `hotfix ${sha.slice(0, 12)}` : "origin/main",
+  );
   // What the banners call the thing being shipped: `origin/main` for the normal
   // train, an explicit «hotfix @ <sha>» for `--ref` (#1881) — a deploy log that
   // says "origin/main" while shipping a cherry-pick branch is a lie the next
@@ -967,7 +1032,9 @@ sudo docker compose exec -T pgbackrest gosu postgres pgbackrest --stanza=ds info
   // with prod untouched — no 502, and no migration applied for a build that was
   // never going to serve. (The pre-migrate pgbackrest checkpoint above still
   // anchors PITR for the migrate step itself.)
-  step(`api-prod: build ds-api/portal/admin/doctor :${sha.slice(0, 12)}…`);
+  step(
+    `api-prod: build ${formatServiceImages(services, "/")} :${sha.slice(0, 12)}…`,
+  );
   t = Date.now();
   await sshScript(
     API_PROD,
@@ -978,7 +1045,7 @@ sudo docker compose exec -T pgbackrest gosu postgres pgbackrest --stanza=ds info
 # clobbering '>' would silently wipe, baking an empty site key into the very
 # images built two lines below.
 { { [ -f .env ] && grep -v '^DEPLOY_SHA=' .env; } || true; printf 'DEPLOY_SHA=%s\\n' '${sha}'; } > .env.next && mv .env.next .env
-echo '── build ds-api:${sha.slice(0, 12)}… + ds-portal + ds-admin + ds-doctor ──'
+echo '── build ${sha.slice(0, 12)}… : ${formatServiceImages(services)} ──'
 # ${NO_ATTEST}: reproducible image IDs so a same-SHA re-run is a true no-op (#486).
 sudo ${NO_ATTEST} docker compose build
 `,
@@ -989,7 +1056,7 @@ sudo ${NO_ATTEST} docker compose build
   step("#1410: PRE-SWAP boot verify (old containers still serving)");
   // No `t = Date.now()` here: verifyImagesBoot() prints its own `ok(...)` line
   // and takes no elapsed argument, so timing it would be a dead assignment.
-  await verifyImagesBoot(sha);
+  await verifyImagesBoot(sha, services);
 
   step("api-prod: migrate → up -d");
   t = Date.now();
@@ -1015,7 +1082,7 @@ sudo docker compose up -d
   ok("Caddy + Centrifugo run with the shipped configs", t);
 
   step("Verify the RUNNING containers carry the deployed SHA");
-  await verifyRunningSha(sha);
+  await verifyRunningSha(sha, services);
 
   step(`DSO-127: image retention (keep last ${IMAGE_RETENTION} SHA tags/repo)`);
   t = Date.now();
@@ -1034,6 +1101,10 @@ sudo docker compose up -d
         [ -n "$tag" ] && sudo docker rmi "$repo:$tag" >/dev/null 2>&1 || true
       done
 }
+# NOT target-derived on purpose (#1896): retention must reclaim tags of every
+# repo the box has EVER built, including one absent from a hotfix target's
+# compose — pruning only the target's set would leak that repo's old tags.
+# \`prune_repo\` is a no-op for a repo with no images.
 prune_repo ds-api ${IMAGE_RETENTION}
 prune_repo ds-portal ${IMAGE_RETENTION}
 prune_repo ds-admin ${IMAGE_RETENTION}
@@ -1045,7 +1116,7 @@ echo "retained ds-api tags:"; sudo docker images ds-api --format '  {{.Tag}} ({{
   ok("old images pruned", t);
 
   step("DSO-128: prod smoke (--expect-sha)");
-  await runSmoke(sha);
+  await runSmoke(sha, services);
 
   // #1419: build-cache GC. The on-box build leaves 1-3 GB of BuildKit cache per
   // deploy and nothing ever reclaimed it — api-prod reached 54.6 GB of cache /
@@ -1197,12 +1268,36 @@ async function recordDeployment(prevSha, sha) {
   }
 }
 
-function runSmoke(sha) {
+// `services` is the TARGET-derived set (#1896): a hotfix based on a SHA that
+// predates the doctor storefront ships no `ds-doctor` image and no doctor vhost,
+// so probing new.doctor.school would red a healthy deploy. Reuse the smoke's own
+// documented opt-out (`PROD_DOCTOR_HOST=skip`, #1723) rather than a second
+// mechanism.
+//
+// The `ds-doctor` string stays LITERAL on purpose: it is not a service list but
+// the one end of the smoke's own `service -> env opt-out` contract, whose other
+// end (`PROD_DOCTOR_HOST`) lives in `smoke-prod.mjs`. Deriving it would mean
+// inventing a naming convention between the two files. When a SECOND optional
+// vhost appears, export that mapping from `smoke-prod.mjs` and read it here —
+// do not grow this into a second hard-coded service list (#1896).
+function runSmoke(sha, services) {
+  const shipsDoctor = (services ?? []).some((s) => s.image === "ds-doctor");
+  if (!shipsDoctor) {
+    console.log(
+      `  ℹ the deploy target ships no ds-doctor image — the doctor storefront` +
+        ` probes are skipped for this smoke (#1896).`,
+    );
+  }
   return new Promise((resolve) => {
     const child = spawn(
       process.execPath,
       [join(import.meta.dirname, "smoke-prod.mjs"), "--expect-sha", sha],
-      { stdio: "inherit" },
+      {
+        stdio: "inherit",
+        env: shipsDoctor
+          ? process.env
+          : { ...process.env, PROD_DOCTOR_HOST: "skip" },
+      },
     );
     child.on("close", (code) => {
       if (code === 0) {
@@ -1231,8 +1326,48 @@ async function rollback(shaArg) {
   } catch {
     die(`cannot resolve ${shaArg} to a commit in the local repo`);
   }
+  // #1896: the rollback target's OWN compose says which SHA-tagged images that
+  // commit produced — rolling back below a service's introduction must not
+  // demand an image that never existed at that SHA.
+  const services = resolveTargetServiceSet(sha, `rollback ${sha.slice(0, 12)}`);
+
+  // …but a rollback ships NO tree: the `up -d` below runs against the compose
+  // the LAST DEPLOY left on the box, which is newer than the target. A service
+  // the target predates is still declared there WITH a `build:` section, so
+  // Compose would rebuild it from the current on-box source and tag it with the
+  // rollback SHA — a green "ROLLBACK OK" over the very code being reverted.
+  // Compare the two sets and refuse the crossing BEFORE any state change.
+  // Ground truth for "what `up -d` will consume" is the compose file ON THE
+  // BOX itself, read over one read-only ssh channel — NOT `/v1/health`: an
+  // emergency rollback runs exactly when the api is 502/crash-looping (the
+  // state the deploy's own rollbackHint sends the operator from), so a health
+  // precondition would make the rollback unavailable when it is needed
+  // (#1901 review). An unreadable box is a refusal (fail-closed), never
+  // "assume the sets are equal".
+  let boxCompose;
+  try {
+    boxCompose = await sshCapture(API_PROD, `cat ${API_COMPOSE}/compose.yml`);
+  } catch (e) {
+    die(
+      `--rollback: cannot read ${API_COMPOSE}/compose.yml on ${API_PROD}` +
+        ` (${e.message}) — without the box's declared service set the rollback` +
+        ` cannot tell whether it crosses a service-introduction boundary.`,
+    );
+  }
+  let boxServices;
+  try {
+    boxServices = deployServiceSet(boxCompose, { source: "box compose" });
+  } catch (e) {
+    die(`--rollback: ${e.message}`);
+  }
+  ok(`box compose declares ${formatServiceNames(boxServices)}`);
+  const boundary = rollbackBoundaryVerdict(boxServices, services);
+  if (!boundary.ok) die(`--rollback: ${boundary.reason}`);
+
   step(
-    `App-only rollback → ds-api:${sha.slice(0, 12)} / ds-portal:${sha.slice(0, 12)} / ds-admin:${sha.slice(0, 12)} / ds-doctor:${sha.slice(0, 12)}`,
+    `App-only rollback → ${services
+      .map((svc) => `${svc.image}:${sha.slice(0, 12)}`)
+      .join(" / ")}`,
   );
 
   // ── #1633 / EARS-24: the speaker-cutover rollback compatibility floor. FIRST
@@ -1269,7 +1404,7 @@ async function rollback(shaArg) {
   // The target images must still be on the box (retention keeps the last 3).
   const present = await sshCapture(
     API_PROD,
-    `for img in ds-api:${sha} ds-portal:${sha} ds-admin:${sha} ds-doctor:${sha}; do
+    `for img in ${services.map((svc) => `${svc.image}:${sha}`).join(" ")}; do
   if sudo docker image inspect "$img" >/dev/null 2>&1; then echo "$img OK"; else echo "$img MISSING"; fi
 done`,
   );
@@ -1294,10 +1429,10 @@ sudo docker compose up -d
   );
 
   step("Verify the RUNNING containers carry the rollback SHA");
-  await verifyRunningSha(sha);
+  await verifyRunningSha(sha, services);
 
   step("DSO-128: prod smoke (--expect-sha)");
-  await runSmoke(sha);
+  await runSmoke(sha, services);
 
   console.log(
     `\n✓ ROLLBACK OK — app tier reverted to ${sha.slice(0, 12)}.` +

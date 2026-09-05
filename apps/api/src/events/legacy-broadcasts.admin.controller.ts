@@ -41,10 +41,14 @@ import { withProtocolRefusalShape } from "./protocol-refusal-shape.js";
 @Controller({ path: "admin/legacy-broadcasts", version: "1" })
 export class LegacyBroadcastsAdminController {
   constructor(
-    private readonly events: EventsService,
+    @Inject(EventsService) private readonly events: EventsService,
     // 014 EARS-17 — the ONE shared idempotency record (012-design §6), the same
     // `IdempotencyService` the recordings surface and 014's fenced legacy
-    // commands consume. This module introduces no second implementation.
+    // commands consume. Every parameter carries an explicit `@Inject` token: a
+    // single parameter decorator makes the endpoint-authz gate's tsx transform
+    // drop this class's `design:paramtypes`, so undecorated siblings would fail
+    // to resolve at boot (see `EventsAdminController`'s constructor note).
+    @Inject(IdempotencyService)
     private readonly idempotency: IdempotencyService,
     @Inject(DRIZZLE_DB) private readonly db: DrizzleHandle["db"],
   ) {}

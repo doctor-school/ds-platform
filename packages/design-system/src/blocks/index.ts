@@ -9,6 +9,25 @@ export { AuthCard } from "./auth-card";
 export { OtpFocusScreen } from "./otp-focus-screen";
 export { useResendCountdown } from "./use-resend-countdown";
 export { maskDestination } from "./mask-destination";
+// #1666 slice A — the ONE canonical sign-in composition both storefronts mount
+// (AGENTS.md §6 cross-front reuse). Lifted verbatim from the portal `/login` page;
+// copy, resolvers, transport, routing and the captcha element stay app glue.
+export {
+  LoginCard,
+  LOGIN_OTP_LENGTH,
+  LOGIN_RESEND_COOLDOWN_SECONDS,
+} from "./login-card";
+export type {
+  LoginCardProps,
+  LoginCardCopy,
+  LoginCardPasswordProps,
+  LoginCardPasswordValues,
+  LoginCardOtpProps,
+  LoginCardOtpChannel,
+  LoginCardMethod,
+  LoginCardOtpRequestValues,
+  LoginCardOtpVerifyValues,
+} from "./login-card";
 
 // 004 EARS-19 — month-calendar presentation blocks (webinars-month.dc.html).
 export { MonthCalendarGrid } from "./month-calendar-grid";

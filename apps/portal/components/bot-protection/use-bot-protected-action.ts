@@ -66,6 +66,15 @@ export function useBotProtectedAction(options: {
 
   return {
     request,
+    /**
+     * EARS-17 dismissal: terminate the in-flight attempt and return to idle.
+     * A host that tears down the surface owning the challenge (switching the
+     * login method, closing the dialog) MUST call this — the stored closure is
+     * dropped and `requestKey` goes back to `null`, so a field that remounts
+     * later cannot re-run the challenge nor replay the abandoned action, and the
+     * pending affordance does not survive onto a freshly emptied form.
+     */
+    reset: finish,
     pending,
     fieldProps: { requestKey, onToken, onError },
   };

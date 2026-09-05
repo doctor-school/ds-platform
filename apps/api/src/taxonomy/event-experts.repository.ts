@@ -1,7 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { and, asc, count, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import type { DrizzleHandle, EventExpert } from "@ds/db";
-import { eventExperts, events, eventSpeakers, experts } from "@ds/db";
+import { eventExperts, events, experts } from "@ds/db";
 import type { AdminEventExpertListQuery } from "@ds/schemas";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
 import { withRequestAuditContext } from "../audit/audit-context.tx.js";
@@ -35,27 +35,17 @@ export interface ExpertLifecycle {
   contentRemovedAt: Date | null;
 }
 
-/** One active legacy speaker row of the event, as the projection sees it. */
-export interface LegacySpeakerRow {
-  id: string;
-  position: number;
-  recordStatus: "active" | "retired";
-  contentRemovedAt: Date | null;
-}
-
 export interface EventExpertInsert {
   eventId: string;
   expertId: string;
   role: string;
   position: number;
-  legacySpeakerId: string | null;
 }
 
 /** The field patch a PATCH applies. `undefined` means unchanged. */
 export interface EventExpertPatch {
   role?: string;
   position?: number;
-  legacySpeakerId?: string | null;
   status?: "active" | "retired";
   deletedAt?: Date | null;
 }
@@ -100,8 +90,8 @@ export class EventExpertsRepository {
 
   /**
    * Step 2 of the §2.3 lock order: lock the parent event. Taken AFTER the expert
-   * locks so a legacy-only 007 write, which begins at the event boundary, and a
-   * 012 link write cannot hold each other's next lock.
+   * locks so a 007 write, which begins at the event boundary, and a 012 link
+   * write cannot hold each other's next lock.
    */
   async lockEvent(tx: Tx, eventId: string): Promise<{ id: string } | null> {
     const [row] = await tx
@@ -110,19 +100,6 @@ export class EventExpertsRepository {
       .where(eq(events.id, eventId))
       .for("update");
     return row ?? null;
-  }
-
-  /** Every legacy speaker row of the event — re-read under the event lock. */
-  async speakersOfEvent(tx: Tx, eventId: string): Promise<LegacySpeakerRow[]> {
-    return tx
-      .select({
-        id: eventSpeakers.id,
-        position: eventSpeakers.position,
-        recordStatus: eventSpeakers.recordStatus,
-        contentRemovedAt: eventSpeakers.contentRemovedAt,
-      })
-      .from(eventSpeakers)
-      .where(eq(eventSpeakers.eventId, eventId));
   }
 
   /** Every expert link of the event — re-read under the event lock. */

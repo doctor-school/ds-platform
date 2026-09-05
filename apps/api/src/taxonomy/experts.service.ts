@@ -20,7 +20,6 @@ import {
 import {
   type ExpertEventSlot,
   ExpertsRepository,
-  type LegacySlotOccupant,
 } from "./experts.repository.js";
 import {
   type IdempotencyLease,
@@ -324,20 +323,17 @@ export class ExpertsService {
   }
 
   /**
-   * `draft → published`, which is a change to the MERGED SPEAKER PROJECTION of
-   * every event this expert is linked to (012-design §4), not just to one row.
+   * `draft → published`, which is a change to the SPEAKER PROJECTION of every
+   * event this expert is linked to (012-design §4), not just to one row.
    *
    * An active `event_experts` link is invisible while its expert is a draft:
    * `eligibleExpertLinks` filters on `experts.status = 'published'`. Publishing
-   * therefore makes every one of this expert's slots appear at once — and a slot
-   * a legacy `event_speakers` row still visibly occupies would give the event
-   * page two speakers in position N. That is refused with
-   * `SPEAKER_POSITION_OCCUPIED` BEFORE any write, so the projection is never
-   * momentarily double-booked and the expert's own row is never left half-moved.
-   *
-   * The exception is an EXPLICIT merge: a link carrying `legacy_speaker_id`
-   * suppresses exactly that legacy row, so the position it names is the same
-   * person, not a collision.
+   * therefore makes every one of this expert's slots appear at once. Since the
+   * EARS-24 cutover (#1607) `event_experts` is the ONLY speaker source, and two
+   * active links can never share a position (the partial unique index
+   * `event_experts_event_position_active_uniq` forbids it regardless of anyone's
+   * publication state), so publication itself can no longer double-book a
+   * position.
    *
    * Lock order is «parent events ascending, then the expert» — the same
    * ascending-id discipline §3.2 fixes for the project vertical, for the same
@@ -406,14 +402,6 @@ export class ExpertsService {
           blockers,
         );
       }
-
-      // 5. Recompute the combined projection over the locked events and refuse a
-      //    slot a visible legacy speaker already holds.
-      const legacy = await this.repo.activeLegacySpeakers(
-        tx,
-        confirmed.map((slot) => slot.eventId),
-      );
-      assertNoOccupiedSpeakerPosition(confirmed, legacy);
 
       const moved = await this.repo.transitionVersioned(
         tx,
@@ -618,7 +606,7 @@ function publishRequirementBlockers(
   return blockers;
 }
 
-/** Two slot sets are the same when every (link, event, position, merge) matches. */
+/** Two slot sets are the same when every (link, event, position) triple matches. */
 function sameSlotSet(
   a: readonly ExpertEventSlot[],
   b: readonly ExpertEventSlot[],
@@ -632,38 +620,8 @@ function sameSlotSet(
       other !== undefined &&
       slot.linkId === other.linkId &&
       slot.eventId === other.eventId &&
-      slot.position === other.position &&
-      slot.legacySpeakerId === other.legacySpeakerId
+      slot.position === other.position
     );
   });
 }
 
-/**
- * Refuse a publish that would land an expert on a position a VISIBLE legacy
- * speaker still holds (012-design §4 / `SPEAKER_POSITION_OCCUPIED`).
- *
- * Two active `event_experts` links can never share a position — the partial
- * unique index `event_experts_event_position_active_uniq` forbids it regardless
- * of anybody's publication state — so the only collision publication itself can
- * create is against `event_speakers`. A link that explicitly names the legacy
- * row at that position is a MERGE, and the merged row is suppressed rather than
- * rendered twice, so it is not a collision.
- */
-function assertNoOccupiedSpeakerPosition(
-  slots: readonly ExpertEventSlot[],
-  legacy: readonly LegacySlotOccupant[],
-): void {
-  const occupied = new Map<string, LegacySlotOccupant>();
-  for (const row of legacy) {
-    occupied.set(`${row.eventId}:${row.position}`, row);
-  }
-  for (const slot of slots) {
-    const holder = occupied.get(`${slot.eventId}:${slot.position}`);
-    if (!holder) continue;
-    if (holder.id === slot.legacySpeakerId) continue;
-    throw new TaxonomyError(
-      "SPEAKER_POSITION_OCCUPIED",
-      "another visible speaker already holds this position on the event",
-    );
-  }
-}

@@ -22,22 +22,18 @@ import { markReplayable, TaxonomyError } from "./taxonomy.errors.js";
 
 // 012 EARS-7 (#1289) — the explicit expert↔event link commands.
 //
-// The whole point of this handler is that the seam between the first-class
-// `experts` roster and feature 007's free-text `event_speakers` list is
-// OPERATOR-DECLARED. There is no name comparison anywhere in this file, and
-// there is no code path that could add one: the only way a link acquires a
-// legacy match is an explicit `legacySpeakerId` the operator supplied, proven to
-// belong to this event by the composite foreign key AND re-proven here under the
-// lock (012-design §2.3, §4 LD-2).
+// Since the 012 EARS-24 cutover (#1607) `event_experts` is the ONLY speaker
+// source of an event: there is no free-text list to reconcile against and no
+// name comparison anywhere in this file.
 //
 // Every command follows the same §2.3 order, and the order is the correctness
 // argument rather than a style choice:
 //
 //   1. lock the affected expert rows, ascending by stable id;
 //   2. lock the parent event;
-//   3. re-read expert lifecycle, `event_experts` and `event_speakers`;
-//   4. recompute the WOULD-BE visible projection and refuse a collision with
-//      409 `SPEAKER_POSITION_OCCUPIED`;
+//   3. re-read `event_experts` under those locks;
+//   4. recompute the WOULD-BE slot occupancy and refuse a collision with 409
+//      `SPEAKER_POSITION_OCCUPIED`;
 //   5. write, bump `version`, complete the fenced idempotency record.
 //
 // Steps 3–4 are what makes an optimistic pre-flight read unnecessary and, more
@@ -69,17 +65,6 @@ export interface EventExpertCommandResult {
 }
 
 /**
- * One row of the would-be visible speaker projection (012-design §4 LD-2). Only
- * `position` participates in the collision rule; `source` and `id` exist so a
- * refusal can be reasoned about in a test without re-deriving it.
- */
-interface VisibleRow {
-  source: "expert" | "legacy";
-  id: string;
-  position: number;
-}
-
-/**
  * The slot-relevant shape of one expert link — the candidate state of the event's
  * links AFTER the command under evaluation, before it is written.
  */
@@ -87,7 +72,6 @@ interface LinkSlot {
   id: string;
   expertId: string;
   position: number;
-  legacySpeakerId: string | null;
   status: "active" | "retired";
 }
 
@@ -142,7 +126,6 @@ export class EventExpertsService {
         expertId: row.expertId,
         role: row.role,
         position: row.position,
-        legacySpeakerId: row.legacySpeakerId,
         status: row.status,
         version: row.version,
         updatedAt: row.updatedAt.toISOString(),
@@ -173,7 +156,6 @@ export class EventExpertsService {
     input: CreateEventExpertInput,
   ): Promise<EventExpertCommandResult> {
     const { eventId, expertId, role, position } = input.payload;
-    const legacySpeakerId = input.payload.legacySpeakerId ?? null;
 
     const row = await this.repo.transaction(async (tx) => {
       // §2.3 step 1–2: experts (ascending id), then the parent event.
@@ -184,9 +166,8 @@ export class EventExpertsService {
         throw new TaxonomyError("RESOURCE_NOT_FOUND");
       }
 
-      // §2.3 step 3: re-read both child tables under the locks.
+      // §2.3 step 3: re-read the link table under the locks.
       const links = await this.repo.linksOfEvent(tx, eventId);
-      const speakers = await this.repo.speakersOfEvent(tx, eventId);
 
       // The logical pair spans retained rows: an existing retired link is
       // RESTORED, never duplicated by a second create.
@@ -196,28 +177,22 @@ export class EventExpertsService {
           "this expert is already linked to this event; restore that link instead of creating a second one",
         );
       }
-      this.assertLegacyMatch(legacySpeakerId, speakers, links, null);
-
-      const eligibility = await this.eligibility(tx, links, expert);
       const nextLinks: LinkSlot[] = [
         ...links,
         {
           id: PENDING_ROW_ID,
           expertId,
           position,
-          legacySpeakerId,
           status: "active",
         },
       ];
       assertNoLinkSlotCollision(nextLinks);
-      assertNoSlotCollision(projection(nextLinks, speakers, eligibility));
 
       const created = await this.repo.insert(tx, {
         eventId,
         expertId,
         role,
         position,
-        legacySpeakerId,
       });
       await this.idempotency.complete(tx, input.lease, {
         status: 201,
@@ -261,31 +236,19 @@ export class EventExpertsService {
       }
 
       const links = await this.repo.linksOfEvent(tx, current.eventId);
-      const speakers = await this.repo.speakersOfEvent(tx, current.eventId);
 
       const nextPosition = input.payload.position ?? current.position;
-      const nextLegacyId =
-        input.payload.legacySpeakerId === undefined
-          ? current.legacySpeakerId
-          : input.payload.legacySpeakerId;
-      if (nextLegacyId !== current.legacySpeakerId) {
-        this.assertLegacyMatch(nextLegacyId, speakers, links, current.id);
-      }
-
-      const eligibility = await this.eligibility(tx, links, expert);
       const nextLinks: LinkSlot[] = links.map((link) =>
         link.id === current.id
           ? {
               id: link.id,
               expertId: link.expertId,
               position: nextPosition,
-              legacySpeakerId: nextLegacyId,
               status: link.status,
             }
           : link,
       );
       assertNoLinkSlotCollision(nextLinks);
-      assertNoSlotCollision(projection(nextLinks, speakers, eligibility));
 
       const updated = await this.repo.updateVersioned(
         tx,
@@ -295,9 +258,6 @@ export class EventExpertsService {
           ...(input.payload.role !== undefined ? { role: input.payload.role } : {}),
           ...(input.payload.position !== undefined
             ? { position: input.payload.position }
-            : {}),
-          ...(input.payload.legacySpeakerId !== undefined
-            ? { legacySpeakerId: input.payload.legacySpeakerId }
             : {}),
         },
       );
@@ -320,13 +280,8 @@ export class EventExpertsService {
 
   /**
    * Retire and restore share one body because they share the whole protocol:
-   * the same lock order, the same re-read, the same projection revalidation.
-   *
-   * Revalidating on RETIRE is not defensive padding. Retiring a matched link
-   * un-suppresses its legacy row, which becomes visible again at ITS own
-   * position — a slot another active link may already hold. Retiring a link can
-   * therefore create a collision, and refusing it here is what keeps the public
-   * projection single-valued.
+   * the same lock order, the same re-read, the same slot revalidation. A RESTORE
+   * makes the link active again, so it must prove the slot it reclaims is free.
    *
    * This is a plain join transition: no `LifecycleImpact` preview and no
    * `Lifecycle-Impact-Token` (EARS-13/14's preview mechanism is #1288's, and no
@@ -368,13 +323,10 @@ export class EventExpertsService {
       }
 
       const links = await this.repo.linksOfEvent(tx, current.eventId);
-      const speakers = await this.repo.speakersOfEvent(tx, current.eventId);
-      const eligibility = await this.eligibility(tx, links, expert);
       const nextLinks: LinkSlot[] = links.map((link) =>
         link.id === current.id ? { ...link, status: nextStatus } : link,
       );
       assertNoLinkSlotCollision(nextLinks);
-      assertNoSlotCollision(projection(nextLinks, speakers, eligibility));
 
       const updated = await this.repo.updateVersioned(
         tx,
@@ -402,63 +354,6 @@ export class EventExpertsService {
     return { detail: toDetail(row), etag: taxonomyETag(row.version) };
   }
 
-  /**
-   * Prove an explicitly supplied legacy id is a match this API may store
-   * (EARS-7). Two independent refusals, both 409 `LEGACY_SPEAKER_CONFLICT`:
-   *
-   * - the speaker must be a retained row of THIS event. The composite FK already
-   *   guarantees it, but a DB constraint violation surfaces as a 500-shaped
-   *   fault, and "you named a speaker of another event" deserves a stable
-   *   `errorCode` a client can act on;
-   * - it must not already be matched by another retained link — retired links
-   *   included, because a retired link is restored rather than re-created and
-   *   restoring it must not find its legacy row taken.
-   */
-  private assertLegacyMatch(
-    legacySpeakerId: string | null,
-    speakers: LegacySpeakerRow[],
-    links: Array<Pick<EventExpert, "id" | "legacySpeakerId">>,
-    exceptLinkId: string | null,
-  ): void {
-    if (legacySpeakerId === null) return;
-    const speaker = speakers.find((s) => s.id === legacySpeakerId);
-    if (!speaker) {
-      throw new TaxonomyError(
-        "LEGACY_SPEAKER_CONFLICT",
-        "the named legacy speaker does not belong to this event",
-      );
-    }
-    const taken = links.some(
-      (link) =>
-        link.legacySpeakerId === legacySpeakerId && link.id !== exceptLinkId,
-    );
-    if (taken) {
-      throw new TaxonomyError(
-        "LEGACY_SPEAKER_CONFLICT",
-        "another expert link already matches this legacy speaker",
-      );
-    }
-  }
-
-  /**
-   * Which experts of this event are currently ELIGIBLE to appear — published and
-   * non-retired (§4 LD-2). The locked expert's own freshly-read state wins over
-   * the batch read: it is the row this command holds.
-   */
-  private async eligibility(
-    tx: TaxonomyTx,
-    links: Array<Pick<EventExpert, "expertId">>,
-    locked: ExpertLifecycle,
-  ): Promise<Map<string, boolean>> {
-    const rows = await this.repo.expertLifecycles(
-      tx,
-      links.map((link) => link.expertId),
-    );
-    const map = new Map<string, boolean>();
-    for (const row of rows) map.set(row.id, isEligible(row));
-    map.set(locked.id, isEligible(locked));
-    return map;
-  }
 }
 
 /**
@@ -467,11 +362,6 @@ export class EventExpertsService {
  * same function the other commands use, rather than from a near-copy.
  */
 const PENDING_ROW_ID = "__pending__";
-
-/** Published and non-retired — the only state in which an expert link is shown. */
-function isEligible(expert: ExpertLifecycle): boolean {
-  return expert.status === "published" && expert.deletedAt === null;
-}
 
 /**
  * Refuse to link or restore against a person who asked to be taken off the site
@@ -488,64 +378,15 @@ function assertLinkable(expert: ExpertLifecycle): void {
 }
 
 /**
- * The would-be visible speaker projection of one event (012-design §4 LD-2).
- *
- * An active link whose expert is eligible occupies its own `position` AND
- * suppresses its explicitly matched legacy row. Everything else — a link to a
- * draft/retired expert, a retired link — is invisible and suppresses nothing, so
- * the legacy fallback stays. A draft or retired expert can never hide a legacy
- * speaker: that is what keeps the public page from silently losing a name.
- */
-function projection(
-  links: readonly LinkSlot[],
-  speakers: LegacySpeakerRow[],
-  eligibility: Map<string, boolean>,
-): VisibleRow[] {
-  const visibleLinks = links.filter(
-    (link) => link.status === "active" && eligibility.get(link.expertId) === true,
-  );
-  const suppressed = new Set(
-    visibleLinks
-      .map((link) => link.legacySpeakerId)
-      .filter((id): id is string => id !== null),
-  );
-  return [
-    ...visibleLinks.map<VisibleRow>((link) => ({
-      source: "expert",
-      id: link.id,
-      position: link.position,
-    })),
-    ...speakers
-      .filter(
-        (speaker) =>
-          speaker.recordStatus === "active" && !suppressed.has(speaker.id),
-      )
-      .map<VisibleRow>((speaker) => ({
-        source: "legacy",
-        id: speaker.id,
-        position: speaker.position,
-      })),
-  ];
-}
-
-/**
- * One deterministic slot per visible row (012-design §4). The within-table
- * partial unique indexes are the DB backstop; a CROSS-table collision between an
- * expert link and an unsuppressed legacy row is not expressible as an index, so
- * it is refused here.
- */
-/**
- * The SAME-table half of the §4 slot rule, mirroring the partial unique index
+ * The §4 slot rule, mirroring the partial unique index
  * `event_experts_event_position_active_uniq` exactly.
  *
- * `projection()` hides an active link whose expert is not eligible (draft or
- * soft-deleted) — such a link shows nothing on the site, so it cannot collide
- * with anything VISIBLE. The index is eligibility-blind, though: EVERY active row
- * holds its `(event_id, position)` slot no matter who it points at. Checking only
- * the visible projection therefore let a second link claim a slot an
- * invisible-but-active link already owned, and the insert died on the index
- * instead of answering 409 — the exact defect the browser flow hit, since experts
- * authored in the admin start out unpublished.
+ * The rule is eligibility-BLIND, exactly as the index is: EVERY active row holds
+ * its `(event_id, position)` slot no matter whether its expert is published yet.
+ * Checking only the publicly visible subset would let a second link claim a slot
+ * an invisible-but-active link already owned, and the insert would die on the
+ * index instead of answering 409 — the exact defect the browser flow hit, since
+ * experts authored in the admin start out unpublished.
  */
 function assertNoLinkSlotCollision(links: readonly LinkSlot[]): void {
   const seen = new Set<number>();
@@ -561,19 +402,6 @@ function assertNoLinkSlotCollision(links: readonly LinkSlot[]): void {
   }
 }
 
-function assertNoSlotCollision(rows: VisibleRow[]): void {
-  const seen = new Set<number>();
-  for (const row of rows) {
-    if (seen.has(row.position)) {
-      throw new TaxonomyError(
-        "SPEAKER_POSITION_OCCUPIED",
-        "another visible speaker already holds this position on the event",
-      );
-    }
-    seen.add(row.position);
-  }
-}
-
 /** The admin projection of one link. */
 function toDetail(row: EventExpert): EventExpertAdminDetail {
   return {
@@ -582,7 +410,6 @@ function toDetail(row: EventExpert): EventExpertAdminDetail {
     expertId: row.expertId,
     role: row.role,
     position: row.position,
-    legacySpeakerId: row.legacySpeakerId,
     status: row.status,
     version: row.version,
     createdAt: row.createdAt.toISOString(),

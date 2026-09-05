@@ -194,7 +194,6 @@ export function markReplayable<E>(error: E, lease: ReplayLeaseRef): E {
 const SLOT_UNIQUE_CONSTRAINTS: ReadonlyMap<string, TaxonomyErrorCode> = new Map(
   [
     ["event_experts_event_position_active_uniq", "SPEAKER_POSITION_OCCUPIED"],
-    ["event_speakers_event_position_active_uniq", "SPEAKER_POSITION_OCCUPIED"],
   ] as const,
 );
 

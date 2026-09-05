@@ -12,7 +12,7 @@ import {
   sql,
 } from "drizzle-orm";
 import type { DrizzleHandle, Expert } from "@ds/db";
-import { eventExperts, events, eventSpeakers, experts, users } from "@ds/db";
+import { eventExperts, events, experts, users } from "@ds/db";
 import type {
   AdminTaxonomyListQuery,
   EligibleExpertUserOption,
@@ -70,15 +70,6 @@ export interface ExpertLifecyclePatch {
 /** One ACTIVE `event_experts` link of the expert whose visibility is changing. */
 export interface ExpertEventSlot {
   linkId: string;
-  eventId: string;
-  position: number;
-  /** The legacy row this link explicitly MERGES with, if any (012-design §4). */
-  legacySpeakerId: string | null;
-}
-
-/** One ACTIVE legacy `event_speakers` row, as a slot occupant. */
-export interface LegacySlotOccupant {
-  id: string;
   eventId: string;
   position: number;
 }
@@ -254,7 +245,6 @@ export class ExpertsRepository {
         linkId: eventExperts.id,
         eventId: eventExperts.eventId,
         position: eventExperts.position,
-        legacySpeakerId: eventExperts.legacySpeakerId,
       })
       .from(eventExperts)
       .where(
@@ -284,33 +274,6 @@ export class ExpertsRepository {
       .orderBy(asc(events.id))
       .for("update");
     return rows.map((row) => row.id);
-  }
-
-  /**
-   * The ACTIVE legacy speakers of the locked events, with the SAME predicates
-   * the public projection applies (`record_status = 'active'`, not editorially
-   * removed). Repeated here rather than trusted from the write path, for the
-   * §3.3 reason: an imported or manually corrupted row must fail closed.
-   */
-  async activeLegacySpeakers(
-    tx: Tx | Db,
-    eventIds: string[],
-  ): Promise<LegacySlotOccupant[]> {
-    if (eventIds.length === 0) return [];
-    return tx
-      .select({
-        id: eventSpeakers.id,
-        eventId: eventSpeakers.eventId,
-        position: eventSpeakers.position,
-      })
-      .from(eventSpeakers)
-      .where(
-        and(
-          inArray(eventSpeakers.eventId, eventIds),
-          eq(eventSpeakers.recordStatus, "active"),
-          isNull(eventSpeakers.contentRemovedAt),
-        ),
-      );
   }
 
   async list(

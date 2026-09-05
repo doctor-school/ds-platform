@@ -11,7 +11,6 @@ import {
 import {
   EventExpertsRepository,
   type ExpertLifecycle,
-  type LegacySpeakerRow,
   type TaxonomyTx,
 } from "./event-experts.repository.js";
 import {

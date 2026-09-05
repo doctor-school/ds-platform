@@ -8,7 +8,7 @@ import type {
 } from "../storage/index.js";
 import type {
   EventsRepository,
-  EventWithSpeakers,
+  EventAggregate,
 } from "./events.repository.js";
 import type { SpeakerProjectionService } from "../taxonomy/speaker-projection.service.js";
 import type { RecordingsProjectionService } from "../recordings/recordings.projection.js";
@@ -61,8 +61,8 @@ function baseEvent(programPdfRef: string | null): Event {
   };
 }
 
-function aggregate(event: Event): EventWithSpeakers {
-  return { event, speakers: [], streamConfig: null };
+function aggregate(event: Event): EventAggregate {
+  return { event, streamConfig: null };
 }
 
 /** In-memory storage recording call order; `delete` optionally throws. */
@@ -97,14 +97,14 @@ class RecordingStorage implements ObjectStorage {
 }
 
 /** A repo stub whose `updateEvent` records the commit point and echoes the patch. */
-function repoStub(current: EventWithSpeakers, ops: string[]) {
+function repoStub(current: EventAggregate, ops: string[]) {
   return {
     findById: vi.fn(() => Promise.resolve(current)),
     updateEvent: vi.fn(
       (
         _id: string,
         patch: { programPdfRef?: string | null },
-      ): Promise<EventWithSpeakers> => {
+      ): Promise<EventAggregate> => {
         ops.push("commit");
         return Promise.resolve(
           aggregate({

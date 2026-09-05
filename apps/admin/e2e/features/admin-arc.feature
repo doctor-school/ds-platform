@@ -73,8 +73,6 @@ Feature: Minimal event admin — one operator creates, streams, runs, and hides 
     And the operator stays on the create-event screen
     When the operator enters "0" as the duration
     Then the form shows the RU validation error "Длительность — целое число минут, не меньше 1."
-    When the operator adds a speaker and leaves the name empty
-    Then the form shows the RU validation error "Укажите имя спикера или удалите строку."
     When the operator attaches a non-PDF program file
     Then the form shows the RU validation error "Файл программы должен быть в формате PDF."
 

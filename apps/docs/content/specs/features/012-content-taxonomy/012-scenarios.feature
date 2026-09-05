@@ -883,7 +883,7 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
     Then exactly one retained canonical event_experts row exists for that event and Expert
     And the public event page speaker list shows that Expert at that position with that role
     And only a retained duplicate pair for this same event and Expert is refused
-    And the feature-010 audit_row_change trigger records those statements with app.actor_sub naming the Tech Lead and app.source manual
+    And the feature-010 audit_row_change trigger records those statements with app.actor_sub naming the Tech Lead and app.source manual-dba
     And no admin Expert form no review queue no import script no admin migration screen and no matching heuristic takes part
 
   @EARS-24 @failure

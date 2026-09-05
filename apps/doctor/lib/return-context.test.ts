@@ -103,6 +103,37 @@ describe("021 EARS-2: resolveReturnContext", () => {
     },
   );
 
+  it("019 EARS-12: a feed-shaped returnTo resolves the resumed card through the same one read", async () => {
+    const { impl, calls } = stubFetch(EVENT);
+    // The value the feed's guest CTA mints — the whole feed query rides along,
+    // and the resumed event is named by `resume=`.
+    const resolved = await resolveReturnContext(
+      "/events?day=2026-08-27&tense=upcoming&specialty=mine-and-adjacent" +
+        "&resume=prp-pri-gonartroze",
+      impl,
+    );
+
+    // 021 EARS-2 needed NO change for the 019 shape: the guard hands back the
+    // same `{ eventSlug, returnTo }`, so the resolution reads by slug exactly as
+    // it does for the academy shape.
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toContain("/v1/public/events/prp-pri-gonartroze");
+    expect(resolved!.title).toBe(EVENT.title);
+  });
+
+  it("019 EARS-12: a feed-shaped target the guard refuses never reaches the read", async () => {
+    for (const hostile of [
+      "/events?tense=upcoming",
+      "/events?resume=a/b",
+      "/events/x?resume=prp-pri-gonartroze",
+      "https://evil.example/events?resume=prp-pri-gonartroze",
+    ]) {
+      const { impl, calls } = stubFetch(EVENT);
+      await expect(resolveReturnContext(hostile, impl)).resolves.toBeNull();
+      expect(calls, `must not read for: ${hostile}`).toHaveLength(0);
+    }
+  });
+
   it("021 EARS-2: a safe target naming an unknown event is absence, not a throw", async () => {
     const { impl } = stubFetch(
       { status: 404, message: "event not found" },

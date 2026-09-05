@@ -13,6 +13,7 @@ import {
 
 const BASE = {
   id: "evt_1",
+  slug: "kardio-forum",
   href: "/events/kardio-forum",
   startsAt: "2026-09-14T16:00:00.000Z",
   endsAt: null,
@@ -77,6 +78,15 @@ describe("019 EARS-2 — DoctorEventCard payload", () => {
 
   it("019 EARS-2.6: zero cost is a valid Pul cost — the free-for-the-doctor reading", () => {
     expect(DoctorEventCardSchema.parse({ ...BASE, pulCost: 0 }).pulCost).toBe(0);
+  });
+
+  it("019 EARS-12: the card carries its own slug, so a host never slices it out of href", () => {
+    const { slug: _dropped, ...withoutSlug } = BASE;
+    expect(DoctorEventCardSchema.safeParse(withoutSlug).success).toBe(false);
+
+    const card = DoctorEventCardSchema.parse(BASE);
+    expect(card.slug).toBe("kardio-forum");
+    expect(card.href).toBe(`/events/${card.slug}`);
   });
 
   it("019 EARS-2.7: no field may state who finances the event, and none may carry roubles", () => {

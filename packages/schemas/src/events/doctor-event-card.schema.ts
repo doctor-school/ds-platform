@@ -50,6 +50,14 @@ export type DoctorEventCardState = z.infer<typeof DoctorEventCardStateSchema>;
 export const DoctorEventCardSchema = z
   .object({
     id: z.string(),
+    /**
+     * The event's public slug — the SAME identifier `href` is minted from, but
+     * carried as its own field so a host never has to parse an identifier back
+     * out of a URL. 019 EARS-12 needs it: the guest CTA mints a
+     * `?resume=<slug>` return target, and a slug re-derived by string-slicing
+     * `href` would be a second, unvalidated identifier path.
+     */
+    slug: z.string(),
     href: z.string(),
     startsAt: z.string(),
     endsAt: z.string().nullable(),

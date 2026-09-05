@@ -15,7 +15,10 @@
  * guard reconstructs, never as raw input.
  */
 
-import { parseReturnTarget, parseSameOriginReturnTarget } from "@ds/schemas";
+import {
+  parseAcademyEventReturnTarget,
+  parseSameOriginReturnTarget,
+} from "@ds/schemas";
 
 import { parseRoomReturnTarget } from "./room-return";
 
@@ -40,7 +43,7 @@ export function withReturnTarget(
   // surface keeps their origin across the hop instead of silently losing it here.
   const safe =
     parseRoomReturnTarget(rawReturnTo)?.returnTo ??
-    parseReturnTarget(rawReturnTo)?.returnTo ??
+    parseAcademyEventReturnTarget(rawReturnTo)?.returnTo ??
     parseSameOriginReturnTarget(rawReturnTo);
   if (!safe) return path;
   const sep = path.includes("?") ? "&" : "?";

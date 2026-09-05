@@ -27,7 +27,8 @@ export default defineConfig({
   testDir: "./e2e",
   // Every backend-REQUIRING spec lives in its own tier: the specialty
   // consumption flow, the 021 EARS-2 return context and the 019 events specs
-  // (EARS-3 day groups, EARS-8 URL state, EARS-4 month calendar) each boot the
+  // (EARS-3 day groups, EARS-8 URL state, EARS-4 month calendar, EARS-12 the
+  // guest read path and its return) each boot the
   // app against their own upstream double (this tier boots no api at all).
   // Every `events-*.spec.ts` asserts `[data-events-feed]`, which only exists
   // when something answers `GET /v1/storefront/doctor/events`, so they all
@@ -38,6 +39,7 @@ export default defineConfig({
     "events-feed.spec.ts",
     "events-url-state.spec.ts",
     "events-month-beside-feed.spec.ts",
+    "events-guest.spec.ts",
   ],
   fullyParallel: true,
   forbidOnly: !!process.env.CI,

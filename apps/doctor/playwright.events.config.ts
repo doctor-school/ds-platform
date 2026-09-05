@@ -20,7 +20,7 @@ const API = `http://127.0.0.1:${API_PORT}`;
 
 export default defineConfig({
   testDir: "./e2e",
-  testMatch: /events-(feed|url-state|month-beside-feed)\.spec\.ts/,
+  testMatch: /events-(feed|url-state|month-beside-feed|guest)\.spec\.ts/,
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,

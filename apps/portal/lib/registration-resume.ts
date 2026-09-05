@@ -1,6 +1,6 @@
 "use client";
 
-import { parseReturnTarget } from "@ds/schemas";
+import { parseAcademyEventReturnTarget } from "@ds/schemas";
 
 import { registerForEvent } from "./registration-client";
 import { resolveReturnTarget } from "./return-to-origin";
@@ -11,8 +11,14 @@ import { parseRoomReturnTarget } from "./room-return";
  *
  * A guest who activated «Участвовать» is taken through the shipped 003
  * login/signup flow carrying a safe, same-origin registration-intent (the event
- * slug + a `/webinars/<slug>` returnTo — the `@ds/schemas` `parseReturnTarget`
- * guard). This module is the RESUME side of that handoff, run by the auth pages
+ * slug + a `/webinars/<slug>` returnTo — the `@ds/schemas`
+ * `parseAcademyEventReturnTarget` guard). The parser is HOST-SCOPED on purpose:
+ * this host completes only academy-shaped intents, so the doctor feed's
+ * `/events?…&resume=<slug>` (019 EARS-12) is not an intent here — it fires no
+ * `RegisterForEvent` and is never treated as an event page. 021's
+ * post-confirmation return on the doctor host is its own work (#1546).
+ *
+ * This module is the RESUME side of that handoff, run by the auth pages
  * the moment a session is established (`/login` password + OTP success, `/verify`
  * post-registration auto-login): it fires the SAME `RegisterForEvent` (EARS-1) and
  * lands the doctor back on that event page in the registered state — no re-search,
@@ -35,8 +41,9 @@ import { parseRoomReturnTarget } from "./room-return";
  * never a dead dashboard; supersedes the #769 `/account/events` default.
  *
  * The return-target MECHANISM is feature 014’s (014 EARS-6, #1342): the shipped
- * same-origin guards below (`parseReturnTarget` / `parseRoomReturnTarget`) are
- * consumed as-is — 013 adds no second redirect rule (013 design §6, LD-12).
+ * same-origin guards below (`parseAcademyEventReturnTarget` /
+ * `parseRoomReturnTarget`) are consumed as-is — 013 adds no second redirect rule
+ * (013 design §6, LD-12).
  */
 const DEFAULT_LANDING = "/webinars";
 
@@ -58,7 +65,7 @@ export function currentReturnTarget(): string | null {
  *   • no / an unsafe target → the default discovery listing landing (`/webinars`,
  *     008 EARS-7 as amended by 013 EARS-15) — never an open redirect (an
  *     attacker-supplied cross-origin `returnTo` is dropped by the
- *     `parseReturnTarget` guard before it can be navigated to).
+ *     `parseAcademyEventReturnTarget` guard before it can be navigated to).
  *
  * The register call is best-effort: if it throws (a transient error, a gating
  * refusal), the doctor is still landed on the event page — the per-user
@@ -95,7 +102,7 @@ export async function completeReturnTarget(
   const roomReturn = parseRoomReturnTarget(carried);
   if (roomReturn) return roomReturn.returnTo;
 
-  const intent = parseReturnTarget(carried);
+  const intent = parseAcademyEventReturnTarget(carried);
   if (!intent) {
     // 014 EARS-6 — any OTHER safe same-origin origin page is honoured as-is: no
     // registration fires (there is no event to register for), the visitor is

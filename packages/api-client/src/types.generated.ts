@@ -1874,6 +1874,7 @@ export interface components {
                     pulCost: number;
                     seatsLeft?: number;
                     signUpCount: number;
+                    slug: string;
                     source: string;
                     speaker: string;
                     startsAt: string;

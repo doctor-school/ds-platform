@@ -1,7 +1,7 @@
 "use client";
 
 import { type ReactNode, useState } from "react";
-import { useForm, type FieldValues } from "react-hook-form";
+import { useForm, type FieldValues, type Resolver } from "react-hook-form";
 
 import {
   AuthCard,
@@ -25,6 +25,7 @@ import {
   FormFieldGroup,
   FormSection,
   FormSeparator,
+  LoginCard,
   MonthCalendarGrid,
   MonthDotGrid,
   MonthPicker,
@@ -36,6 +37,11 @@ import {
   type DotGridCell,
   type EventListTab,
   type EventSignupCardProps,
+  type LoginCardCopy,
+  type LoginCardMethod,
+  type LoginCardOtpRequestValues,
+  type LoginCardOtpVerifyValues,
+  type LoginCardPasswordValues,
   type MonthGridCell,
   type MonthPickerCell,
 } from "@ds/design-system/blocks";
@@ -750,6 +756,223 @@ function OtpFocusDemo({
         )}
       />
     </Form>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* LoginCard                                                            */
+/* ------------------------------------------------------------------ */
+
+const LOGIN_CARD_PROPS: PropRow[] = [
+  {
+    name: "copy",
+    type: "LoginCardCopy",
+    required: true,
+    description:
+      "Every visible string, grouped by sub-form; otp.sentTo / otp.resendCountdown are functions of the destination / remaining seconds.",
+  },
+  {
+    name: "links",
+    type: "{ register: string; reset: string }",
+    required: true,
+    description: "Footer link targets — sign-up and password reset.",
+  },
+  {
+    name: "renderLink",
+    type: "(props: { href, children }) => ReactNode",
+    required: false,
+    description:
+      "Host anchor renderer, so an app keeps its own client-side navigation. Defaults to a plain anchor.",
+  },
+  {
+    name: "icon",
+    type: "ReactNode",
+    required: false,
+    description: "Card glyph — app-supplied; the package ships no icon set.",
+  },
+  {
+    name: "password",
+    type: "LoginCardPasswordProps",
+    required: true,
+    description:
+      "Password method: app-owned resolver, submit handler, localized error, pending flag, captcha slot.",
+  },
+  {
+    name: "otp",
+    type: "LoginCardOtpProps",
+    required: true,
+    description:
+      "One-time-code method: per-channel request resolvers, verify resolver, request/resend/verify/change-method handlers, sentIdentifier stage flag, resendNonce.",
+  },
+  {
+    name: "onMethodChange",
+    type: "(method: LoginCardMethod) => void",
+    required: false,
+    description:
+      "Tab-switch signal — the host resets the state it owns (errors, pending, the code stage).",
+  },
+  {
+    name: "defaultMethod",
+    type: '"password" | "otp"',
+    required: false,
+    description: 'Initially selected tab. Defaults to "password".',
+  },
+  {
+    name: "otpLength",
+    type: "number",
+    required: false,
+    description: "Fixed code length; defaults to the 8-digit login code.",
+  },
+  {
+    name: "resendCooldownSeconds",
+    type: "number",
+    required: false,
+    description: "Resend cooldown; defaults to 30 seconds.",
+  },
+];
+
+/** Neutral-realistic copy — catalogue strings only, never product copy. */
+const LOGIN_CARD_COPY: LoginCardCopy = {
+  title: "Sign in",
+  description: "Enter your details to continue.",
+  createAccount: "Create an account",
+  forgotPassword: "Forgot your password?",
+  methodSwitcherLabel: "Sign-in method",
+  methodPassword: "Password",
+  methodOtp: "One-time code",
+  password: {
+    formLabel: "Sign in with a password",
+    identifierLabel: "Email or phone",
+    identifierPlaceholder: "you@example.com",
+    passwordLabel: "Password",
+    submit: "Sign in",
+  },
+  otp: {
+    formLabel: "Sign in with a one-time code",
+    heading: "Sign in without a password",
+    description: "We send a one-time code to your email or phone.",
+    channelGroupLabel: "Where to send the code",
+    channelEmail: "Email",
+    channelSms: "SMS",
+    emailLabel: "Email",
+    emailPlaceholder: "you@example.com",
+    phoneLabel: "Phone",
+    phonePlaceholder: "+10000000000",
+    sendCode: "Send code",
+    verifyTitle: "Enter the code",
+    sentTo: (destination) => `We sent a code to ${destination}.`,
+    codeLabel: "One-time code",
+    verifySubmit: "Sign in",
+    resend: "Send another code",
+    resendCountdown: (seconds) => `Send another code in ${seconds}s`,
+    changeMethod: "Use a different method",
+  },
+};
+
+/* The showcase is a VIEWER: nothing validates or transports here, so the
+   resolvers pass every value through and the handlers are inert. */
+const showcasePasswordResolver: Resolver<LoginCardPasswordValues> = async (
+  values,
+) => ({ values, errors: {} });
+const showcaseOtpRequestResolver: Resolver<LoginCardOtpRequestValues> = async (
+  values,
+) => ({ values, errors: {} });
+const showcaseOtpVerifyResolver: Resolver<LoginCardOtpVerifyValues> = async (
+  values,
+) => ({ values, errors: {} });
+
+/** A live `LoginCard` at a given method / stage, with inert host wiring. */
+function NeutralLoginCard({
+  defaultMethod = "password",
+  sent = false,
+}: {
+  defaultMethod?: LoginCardMethod;
+  sent?: boolean;
+}) {
+  return (
+    <div className="w-full max-w-sm">
+      <LoginCard
+        copy={LOGIN_CARD_COPY}
+        links={{ register: "#", reset: "#" }}
+        icon={<LockGlyph className="text-tint-foreground" />}
+        defaultMethod={defaultMethod}
+        password={{
+          resolver: showcasePasswordResolver,
+          onSubmit: () => {},
+        }}
+        otp={{
+          requestResolvers: {
+            email: showcaseOtpRequestResolver,
+            sms: showcaseOtpRequestResolver,
+          },
+          verifyResolver: showcaseOtpVerifyResolver,
+          sentIdentifier: sent ? "you@example.com" : null,
+          resendNonce: 0,
+          onRequest: () => {},
+          onResend: () => {},
+          onVerify: () => {},
+          onChangeMethod: () => {},
+        }}
+      />
+    </div>
+  );
+}
+
+function LoginCardSection() {
+  return (
+    <BlockSection
+      title="LoginCard"
+      exportsLine="LoginCard — props: copy · links · renderLink? · icon? · password · otp · onMethodChange? · defaultMethod? · otpLength? · resendCooldownSeconds?"
+    >
+      <p className="text-sm text-muted-foreground">
+        The whole sign-in composition as one reusable unit: the{" "}
+        <code className="font-mono text-xs">AuthCard</code> frame, the password /
+        one-time-code tab switcher, both forms, and the code-entry stage on{" "}
+        <code className="font-mono text-xs">OtpFocusScreen</code>. The block owns
+        field composition and state presentation; copy, validation resolvers,
+        transport, routing and bot protection are all host-supplied, so both
+        storefronts project the same sign-in flow.
+      </p>
+
+      <SubRow label="Preview">
+        <Canvas>
+          <NeutralLoginCard />
+        </Canvas>
+      </SubRow>
+
+      <SubRow label="Slots / props">
+        <PropsTable rows={LOGIN_CARD_PROPS} />
+      </SubRow>
+
+      <SubRow label="State matrix — method and stage">
+        <div className="grid grid-cols-1 gap-x-10 gap-y-6 lg:grid-cols-2">
+          <StateCase
+            label="password"
+            note="the default method — identifier + password, submit"
+          >
+            <Canvas>
+              <NeutralLoginCard />
+            </Canvas>
+          </StateCase>
+          <StateCase
+            label="code request"
+            note="one-time-code tab, no code issued yet — channel choice + destination"
+          >
+            <Canvas>
+              <NeutralLoginCard defaultMethod="otp" />
+            </Canvas>
+          </StateCase>
+          <StateCase
+            label="code sent"
+            note="sentIdentifier set — the focus screen replaces the request form"
+          >
+            <Canvas>
+              <NeutralLoginCard defaultMethod="otp" sent />
+            </Canvas>
+          </StateCase>
+        </div>
+      </SubRow>
+    </BlockSection>
   );
 }
 
@@ -2672,6 +2895,7 @@ export function BlocksView() {
     <div className="flex flex-col gap-2">
       <AuthCardSection />
       <AuthLayoutSection />
+      <LoginCardSection />
       <OtpFocusScreenSection />
       <MonthCalendarGridSection />
       <MonthDotGridSection />

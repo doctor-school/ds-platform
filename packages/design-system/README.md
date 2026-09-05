@@ -53,22 +53,26 @@ the consuming app's CSS even though they live outside the app tree.
 
 ## Component set (003 auth forms)
 
-| Export                             | Purpose                                                                                                                                                        |
-| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Button` (`./button`)              | `cva` variants — primary / on-primary / outline / ghost / destructive / link                                                                                   |
-| `Link` (`./link`)                  | Nav/footer link — `standalone` / `inline`, semantic `tone="on-primary"`, full interaction states, and `asChild` routing composition (#324)                     |
-| `Input` (`./input`)                | Text/email/password field                                                                                                                                      |
-| `NativeSelect` (`./native-select`) | Native single-select — official shadcn/ui composition, Input-parity shell, quiet decorative chevron, browser-owned keyboard/type-ahead/mobile picker semantics |
-| `Label` (`./label`)                | Radix label primitive                                                                                                                                          |
-| `Card` (`./card`)                  | `Card` + `Header`/`Title`/`Description`/`Content`/`Footer` — the auth-form shell                                                                               |
-| `Form` (`./form`)                  | RHF binding — field primitives, `FormError` (submit error), and focusable linked `FormErrorSummary` for long forms (>3 fields) (ADR-0004 §9; ADR-0013 §7)      |
-| `InputOTP` (`./input-otp`)         | One-time-code field for email-OTP / SMS-OTP (EARS-6/7)                                                                                                         |
-| `EventList` (`./blocks`)           | Controlled, fetch-free cross-front event feed — tabs, grouped webinar cards, empty state, and cursor-aware pagination; host apps own data and URL state        |
+| Export                             | Purpose                                                                                                                                                                                     |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Button` (`./button`)              | `cva` variants — primary / on-primary / outline / ghost / destructive / link                                                                                                                |
+| `Link` (`./link`)                  | Nav/footer link — `standalone` / `inline`, semantic `tone="on-primary"`, full interaction states, and `asChild` routing composition (#324)                                                  |
+| `Input` (`./input`)                | Text/email/password field                                                                                                                                                                   |
+| `NativeSelect` (`./native-select`) | Native single-select — official shadcn/ui composition, Input-parity shell, quiet decorative chevron, browser-owned keyboard/type-ahead/mobile picker semantics                              |
+| `Label` (`./label`)                | Radix label primitive                                                                                                                                                                       |
+| `Card` (`./card`)                  | `Card` + `Header`/`Title`/`Description`/`Content`/`Footer` — the auth-form shell                                                                                                            |
+| `Form` (`./form`)                  | RHF binding — field primitives, `FormError` (submit error), and focusable linked `FormErrorSummary` for long forms (>3 fields) (ADR-0004 §9; ADR-0013 §7)                                   |
+| `InputOTP` (`./input-otp`)         | One-time-code field for email-OTP / SMS-OTP (EARS-6/7)                                                                                                                                      |
+| `EventList` (`./blocks`)           | Controlled, fetch-free cross-front event feed — tabs, grouped webinar cards, empty state, and cursor-aware pagination; host apps own data and URL state                                     |
+| `LoginCard` (`./blocks`)           | Whole sign-in composition — `AuthCard` frame, password / one-time-code tabs, both forms, and the code-entry stage on `OtpFocusScreen`; one canonical block both storefronts project (#1666) |
 
 Forms follow the ADR-0004 §9 pattern: **RHF + `@hookform/resolvers/zod` + shadcn
 `<Form>`**, with the Zod schema imported from the SSOT (`@ds/schemas`, once the
-auth schemas land in F1/F2). The resolver + schema live in the consuming app, not
-here.
+auth schemas land in F1/F2). Field-tier components take a bound RHF field and own
+nothing above it. Block-tier auth compositions (`LoginCard`) own field
+composition, the field-level schemas from `./fields`, and state presentation
+(pending / error / stage); the host app owns copy, the validation resolver,
+transport, routing and env.
 
 ### Surface-safe primary-surface contracts
 

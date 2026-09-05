@@ -5,6 +5,11 @@ import { eventProjects, events, projects } from "@ds/db";
 import type { EventProjectAdminListQuery } from "@ds/schemas";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
 import { withRequestAuditContext } from "../audit/audit-context.tx.js";
+import {
+  afterEventCursor,
+  eventCursorInstant,
+  type PublicEventRow,
+} from "./public-event-cursor.js";
 
 // 012 EARS-6 (#1288) — Drizzle data access for the `event_projects` join, the
 // first relationship aggregate of the feature. Same posture as the entity
@@ -420,7 +425,7 @@ export class EventProjectsRepository {
     projectId: string,
     limit: number,
     after: { startsAt: string; id: string } | null,
-  ): Promise<Event[]> {
+  ): Promise<PublicEventRow[]> {
     const filters = [
       eq(eventProjects.projectId, projectId),
       eq(eventProjects.status, "active"),
@@ -428,21 +433,18 @@ export class EventProjectsRepository {
       inArray(events.state, [...PUBLIC_EVENT_STATES]),
     ];
     if (after) {
-      const cutoff = new Date(after.startsAt);
-      filters.push(
-        or(
-          gt(events.startsAt, cutoff),
-          and(eq(events.startsAt, cutoff), gt(events.id, after.id)),
-        )!,
-      );
+      filters.push(afterEventCursor(after));
     }
     const rows = await this.db
-      .select({ event: events })
+      .select({ event: events, startsAtCursor: eventCursorInstant })
       .from(eventProjects)
       .innerJoin(events, eq(events.id, eventProjects.eventId))
       .where(and(...filters))
       .orderBy(asc(events.startsAt), asc(events.id))
       .limit(limit);
-    return rows.map((row) => row.event);
+    return rows.map((row) => ({
+      ...row.event,
+      startsAtCursor: row.startsAtCursor,
+    }));
   }
 }

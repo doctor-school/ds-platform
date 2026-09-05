@@ -14,6 +14,11 @@ import { directions, eventDirections, events } from "@ds/db";
 import type { EventDirectionAdminListQuery } from "@ds/schemas";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
 import { withRequestAuditContext } from "../audit/audit-context.tx.js";
+import {
+  afterEventCursor,
+  eventCursorInstant,
+  type PublicEventRow,
+} from "./public-event-cursor.js";
 import { PUBLIC_EVENT_STATES } from "./event-projects.repository.js";
 
 // 012 EARS-11 (#1293) — Drizzle data access for the `event_directions` join. Same
@@ -406,7 +411,7 @@ export class EventDirectionsRepository {
     directionId: string,
     limit: number,
     after: { startsAt: string; id: string } | null,
-  ): Promise<Event[]> {
+  ): Promise<PublicEventRow[]> {
     const filters = [
       eq(eventDirections.directionId, directionId),
       eq(eventDirections.status, "active"),
@@ -414,21 +419,18 @@ export class EventDirectionsRepository {
       inArray(events.state, [...PUBLIC_EVENT_STATES]),
     ];
     if (after) {
-      const cutoff = new Date(after.startsAt);
-      filters.push(
-        or(
-          gt(events.startsAt, cutoff),
-          and(eq(events.startsAt, cutoff), gt(events.id, after.id)),
-        )!,
-      );
+      filters.push(afterEventCursor(after));
     }
     const rows = await this.db
-      .select({ event: events })
+      .select({ event: events, startsAtCursor: eventCursorInstant })
       .from(eventDirections)
       .innerJoin(events, eq(events.id, eventDirections.eventId))
       .where(and(...filters))
       .orderBy(asc(events.startsAt), asc(events.id))
       .limit(limit);
-    return rows.map((row) => row.event);
+    return rows.map((row) => ({
+      ...row.event,
+      startsAtCursor: row.startsAtCursor,
+    }));
   }
 }

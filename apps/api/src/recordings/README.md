@@ -72,4 +72,8 @@ Contract: `packages/schemas/src/recordings`. Schema + migration:
 `packages/db/src/schema/event-recordings.ts`, `apps/api/drizzle/0016_*.sql` (the
 audit trigger and the set-once `first_published_at` trigger are appended there by
 hand — drizzle-kit emits neither). Tests: `apps/api/test/recordings/lifecycle.e2e-spec.ts` (EARS-1/EARS-2/EARS-17),
-`apps/api/test/recordings/projection.spec.ts` (EARS-3).
+`apps/api/test/recordings/projection.spec.ts` (EARS-3);
+`apps/api/test/recordings/protocol.e2e-spec.ts` (EARS-17) is the CROSS-route
+sweep — it drives every 014 mutation of design §10 through one table, so the
+key/ETag floor, the admin-session floor, the refusal envelope and the
+no-side-effect guarantee cannot drift apart per route.

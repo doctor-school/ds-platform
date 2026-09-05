@@ -52,8 +52,9 @@ import {
 //   3. only the dedicated MFA-verified admin session with a LIVE `platform_admin`
 //      grant — 401 `ADMIN_SESSION_REQUIRED`, 403 `PLATFORM_ADMIN_REQUIRED`
 //   4. public announcement reads zero-auth, playback reads `authenticated`
-//   5. every failure an RFC 7807 document with `traceId` and an exact
-//      `errorCode`, and never a 5xx
+//   5. every failure an exact `errorCode` at an exact status, never a 5xx —
+//      and, on the routes served by `TaxonomyProblemFilter`, one full RFC 7807
+//      document with `traceId` (see the `envelope` column below)
 //   6. every COMMITTED mutation appends a feature-010 `audit_ledger` row
 //
 // Refusals are asserted against a SNAPSHOT rather than a hand-picked column:
@@ -66,7 +67,25 @@ import {
 // `recordingExpectedBy` FIELD to feature 007's multipart event edit — it is not
 // itself a mutating RECORDING endpoint, so the idempotency/ETag floor is not its
 // contract. It is swept here for the parts of EARS-17 that DO bind it: the admin
-// session requirement and the RFC 7807 refusal shape.
+// session requirement and the refusal shape.
+//
+// THE ENVELOPE SPLIT (a real, recorded gap — DEBT.md, 2026-09-05). EARS-17
+// clause 5 asks every refusal to be an RFC 7807 document. That holds on the
+// routes `TaxonomyProblemFilter` serves — the whole recordings controller. It
+// does NOT hold on the 014 mutations hosted by feature 007's events module
+// (`PATCH /v1/admin/events/:id`, `archive-legacy`, `hide-legacy`,
+// `POST /v1/admin/legacy-broadcasts`): that module deliberately does not mount
+// the filter, because doing so would silently reshape its live sibling routes,
+// so its protocol refusals answer the surface's own `{ code, message }` body.
+// Nor on the refusals the shared #1304 authority tier serves outside the
+// filter's range (playback, `/v1/me/events`), which carry the `errorCode` but no
+// `traceId` and no problem media type.
+//
+// Rather than pretend, each route declares its `envelope`, and the suite asserts
+// what is actually STABLE on that surface: `problem` gets the full document,
+// `admin007` gets exact status + exact code + no side effect. Splitting one
+// controller's envelope per method would be worse than the gap; the
+// promote-when is recorded on the DEBT.md line.
 
 const RUTUBE_REF = "0123456789abcdef0123456789abcdef";
 /** Uppercase hex — a UUID by RFC, NOT canonical text per `CANONICAL_UUID_REGEX`. */
@@ -87,6 +106,15 @@ interface Snapshot {
   strayEvents: number;
 }
 
+/**
+ * Which refusal body this route's surface answers with — see the envelope-split
+ * note in the header. `problem` = a full RFC 7807 document served by
+ * `TaxonomyProblemFilter`; `admin007` = feature 007's `{ code, message }` (and,
+ * for the authority tier, `{ errorCode }`) body, where the STABLE contract is
+ * the status and the code string.
+ */
+type Envelope = "problem" | "admin007";
+
 interface RouteCase {
   /** Test-title fragment: the route as an operator names it. */
   name: string;
@@ -104,6 +132,17 @@ interface RouteCase {
    * but not the 014 write protocol — see the header note.
    */
   protocolFloor: boolean;
+  /** The refusal body shape this route's surface actually answers with. */
+  envelope: Envelope;
+  /**
+   * A fixture on which this command is a LEGAL transition, so the `If-Match`
+   * validator is reached at all. Only the stale-precondition case needs it: the
+   * version check runs LAST among the guards, so a command refused earlier by
+   * its own domain guard would answer that refusal instead of the 412 EARS-17.2
+   * is about. Every other case short-circuits in the protocol preamble and is
+   * fine with the default `seed()`.
+   */
+  eligibleFixture?: () => Promise<Fixture>;
 }
 
 describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
@@ -232,6 +271,72 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       };
     }
 
+    /** The `version` the events row is currently at, for a fresh `If-Match`. */
+    async function eventVersion(eventId: string): Promise<number> {
+      const { rows } = await pool.query<{ version: number }>(
+        "SELECT version FROM events WHERE id = $1",
+        [eventId],
+      );
+      return Number(rows[0]!.version);
+    }
+
+    /**
+     * A `legacy` эфир in `hidden` whose recording is PUBLISHED — i.e. one on
+     * which `archive-legacy` is a legal move, so the command reaches its
+     * `If-Match` check instead of being refused earlier by the origin guard or
+     * the archive gate. See {@link RouteCase.eligibleFixture}.
+     */
+    async function archivableLegacyFixture(): Promise<Fixture> {
+      const created = await app.inject({
+        method: "POST",
+        url: "/v1/admin/legacy-broadcasts",
+        headers: {
+          ...ADMIN_DEVICE,
+          ...adminHeaders(adminSid),
+          "content-type": "application/json",
+          "idempotency-key": key(),
+        },
+        payload: legacyPayload(`p1349-${randomUUID()}`),
+      });
+      expect(created.statusCode).toBe(201);
+      const eventId = (JSON.parse(created.payload) as { id: string }).id;
+      createdEventIds.push(eventId);
+      const { rows } = await pool.query<{ id: string; version: number }>(
+        "SELECT id, version FROM event_recordings WHERE event_id = $1",
+        [eventId],
+      );
+      const recording = rows[0]!;
+      const published = await app.inject({
+        method: "POST",
+        url: `/v1/admin/events/${eventId}/recordings/${recording.id}/publish`,
+        headers: {
+          ...ADMIN_DEVICE,
+          ...adminHeaders(adminSid),
+          "idempotency-key": key(),
+          "if-match": `W/"${Number(recording.version)}"`,
+        },
+      });
+      expect(published.statusCode).toBe(200);
+      return { eventId, recordingId: recording.id };
+    }
+
+    /** The same эфир, already `in_archive` — the state `hide-legacy` moves from. */
+    async function hideableLegacyFixture(): Promise<Fixture> {
+      const f = await archivableLegacyFixture();
+      const archived = await app.inject({
+        method: "POST",
+        url: `/v1/admin/events/${f.eventId}/archive-legacy`,
+        headers: {
+          ...ADMIN_DEVICE,
+          ...adminHeaders(adminSid),
+          "idempotency-key": key(),
+          "if-match": `W/"${await eventVersion(f.eventId)}"`,
+        },
+      });
+      expect(archived.statusCode).toBe(200);
+      return f;
+    }
+
     // ── The 014 mutation table (014-design §10, core wave) ──────────────────
 
     const MUTATIONS: RouteCase[] = [
@@ -246,6 +351,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         }),
         conditional: false,
         protocolFloor: true,
+        envelope: "problem",
       },
       {
         name: "PATCH /v1/admin/events/:id/recordings/:rid",
@@ -255,6 +361,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         payload: () => ({ durationSec: 4200 }),
         conditional: true,
         protocolFloor: true,
+        envelope: "problem",
       },
       ...(["publish", "unpublish", "retire", "restore"] as const).map(
         (command): RouteCase => ({
@@ -264,6 +371,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
             `/v1/admin/events/${f.eventId}/recordings/${f.recordingId}/${command}`,
           conditional: true,
           protocolFloor: true,
+          envelope: "problem",
         }),
       ),
       {
@@ -273,6 +381,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         payload: () => legacyPayload(`p1349-${randomUUID()}`),
         conditional: false,
         protocolFloor: true,
+        envelope: "admin007",
       },
       {
         name: "POST /v1/admin/events/:id/archive-legacy",
@@ -280,6 +389,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         url: (f) => `/v1/admin/events/${f.eventId}/archive-legacy`,
         conditional: true,
         protocolFloor: true,
+        envelope: "admin007",
+        eligibleFixture: () => archivableLegacyFixture(),
       },
       {
         name: "POST /v1/admin/events/:id/hide-legacy",
@@ -287,6 +398,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         url: (f) => `/v1/admin/events/${f.eventId}/hide-legacy`,
         conditional: true,
         protocolFloor: true,
+        envelope: "admin007",
+        eligibleFixture: () => hideableLegacyFixture(),
       },
       {
         name: "PATCH /v1/admin/events/:id (recordingExpectedBy)",
@@ -294,6 +407,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         url: (f) => `/v1/admin/events/${f.eventId}`,
         conditional: true,
         protocolFloor: false,
+        envelope: "admin007",
       },
     ];
 
@@ -353,20 +467,45 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       res: { statusCode: number; headers: Record<string, unknown>; payload: string },
       status: number,
       errorCode: string,
+      envelope: Envelope = "problem",
     ): void {
       expect(res.statusCode).toBe(status);
+      // 014 defines no 5xx of its own: a protocol refusal is always a verdict.
       expect(res.statusCode).toBeLessThan(500);
+      const body = JSON.parse(res.payload) as Record<string, unknown>;
+      if (envelope === "admin007") {
+        // The stable half of the contract on the 007-hosted surfaces: the exact
+        // status, plus the exact code string under whichever of that surface's
+        // body shapes served it — `{ code, message }` for a protocol refusal
+        // re-shaped by `withProtocolRefusalShape`, `{ errorCode, … }` for a
+        // #1304 authority verdict.
+        //
+        // The ANONYMOUS/doctor-tier 401 is the one refusal that carries no code
+        // at all here: `AuthzGuard` throws a bare `UnauthorizedException`, and
+        // outside `TaxonomyProblemFilter`'s range nothing maps it onto
+        // `ADMIN_SESSION_REQUIRED` (the recordings controller gets that mapping
+        // from the filter). Same root cause as the media-type gap, same DEBT.md
+        // line — so the assertion is exactly as strong as the contract really
+        // is: the status and the no-side-effect guarantee always, the code
+        // whenever the surface publishes one.
+        const code = body.code ?? body.errorCode;
+        if (code !== undefined) expect(code).toBe(errorCode);
+        return;
+      }
       expect(String(res.headers["content-type"])).toContain(
         "application/problem+json",
       );
-      const body = JSON.parse(res.payload) as Record<string, unknown>;
       expect(body).toMatchObject({ status, errorCode });
       expect(typeof body.type).toBe("string");
       expect(body.type).not.toBe("");
       expect(typeof body.title).toBe("string");
       expect(body.title).not.toBe("");
-      expect(typeof body.detail).toBe("string");
-      expect(body.detail).not.toBe("");
+      // RFC 7807 §3.1 makes `detail` OPTIONAL — the #1304 authority problems
+      // deliberately omit it rather than echo a subject, session id or role.
+      if (body.detail !== undefined) {
+        expect(typeof body.detail).toBe("string");
+        expect(body.detail).not.toBe("");
+      }
       expect(typeof body.traceId).toBe("string");
       expect(body.traceId).not.toBe("");
     }
@@ -417,7 +556,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     ): Promise<void> {
       const before = await snapshot(f);
       const res = await call(route, f, opts);
-      expectProblem(res, status, errorCode);
+      expectProblem(res, status, errorCode, route.envelope);
       expect(await snapshot(f)).toEqual(before);
     }
 
@@ -544,7 +683,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       });
 
       it(`014 EARS-17.2: ${route.name} with a stale or unusable If-Match shall be refused 412 PRECONDITION_FAILED and change nothing`, async () => {
-        const f = await seed();
+        // The validator is checked LAST among the guards, so this case — and
+        // only this case — needs a fixture on which the command is otherwise
+        // legal; anywhere else the domain refusal would answer first.
+        const f = await (route.eligibleFixture?.() ?? seed());
         await expectRefusedWithoutSideEffect(
           route,
           f,
@@ -573,7 +715,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         (r) => r.protocolFloor && r.conditional,
       )) {
         const res = await call(route, f, { idempotencyKey: "", ifMatch: "" });
-        expectProblem(res, 428, "IDEMPOTENCY_KEY_REQUIRED");
+        expectProblem(res, 428, "IDEMPOTENCY_KEY_REQUIRED", route.envelope);
       }
     });
 
@@ -694,11 +836,19 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         method: "GET",
         url: `/v1/events/${f.eventId}/recordings`,
       });
-      expectProblem(anon, 401, "AUTHENTICATION_REQUIRED");
+      // Served by Nest's default filter (the playback controller mounts no
+      // `TaxonomyProblemFilter`), so the stable contract here is status + code.
+      expectProblem(anon, 401, "AUTHENTICATION_REQUIRED", "admin007");
       const authed = await app.inject({
         method: "GET",
         url: `/v1/events/${f.eventId}/recordings`,
-        headers: { cookie: `${SESSION_COOKIE_NAME}=${doctorSid}` },
+        // The doctor session is DEVICE-bound (it was established with these
+        // headers), so the playback read has to present them too — a cookie
+        // replayed from another device is not the same principal.
+        headers: {
+          ...ADMIN_DEVICE,
+          cookie: `${SESSION_COOKIE_NAME}=${doctorSid}`,
+        },
       });
       expect(authed.statusCode).toBe(200);
     });

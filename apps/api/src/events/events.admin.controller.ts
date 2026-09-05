@@ -5,7 +5,6 @@ import {
   Controller,
   Get,
   HttpCode,
-  HttpException,
   NotFoundException,
   Param,
   Patch,
@@ -50,6 +49,7 @@ import {
   type TransitionFence,
   type UploadedPdf,
 } from "./events.service.js";
+import { withProtocolRefusalShape } from "./protocol-refusal-shape.js";
 
 const MAX_PDF_BYTES = 25 * 1024 * 1024;
 
@@ -836,27 +836,6 @@ export class EventsAdminController {
  */
 function actorSub(req: FastifyRequest): string | null {
   return (req as { user?: { sub?: string } }).user?.sub ?? null;
-}
-
-/**
- * Run the 012 idempotency protocol preamble and re-shape its `TaxonomyError`
- * refusals onto the 007 admin surface's `{ code, message }` body — same status,
- * same stable code, this controller's envelope. The alternative (applying
- * `TaxonomyProblemFilter` here) would silently reshape four live sibling routes,
- * which that filter's own doc rules out.
- */
-async function withProtocolRefusalShape<T>(run: () => Promise<T>): Promise<T> {
-  try {
-    return await run();
-  } catch (err) {
-    if (err instanceof TaxonomyError) {
-      throw new HttpException(
-        { code: err.errorCode, message: err.detail ?? err.message },
-        err.getStatus(),
-      );
-    }
-    throw err;
-  }
 }
 
 function asTransitionRefusal(err: unknown): unknown {

@@ -38,7 +38,7 @@ describe("006 EARS-2 resolveEmbed — provider enum → embed frame, never URL-s
     const embed = resolveEmbed(stream);
     expect(embed.kind).toBe("vk");
     expect(embed).toMatchObject({
-      src: "https://vk.com/video_ext.php?oid=-9944999&id=456239622&hash=5ee41bc00ebc765a",
+      src: "https://vk.com/video_ext.php?oid=-9944999&id=456239622&hash=5ee41bc00ebc765a&js_api=1",
     });
   });
 
@@ -49,9 +49,29 @@ describe("006 EARS-2 resolveEmbed — provider enum → embed frame, never URL-s
     const embed = resolveEmbed(stream);
     expect(embed.kind).toBe("vk");
     expect(embed).toMatchObject({
-      src: "https://vk.com/video_ext.php?oid=-9944999&id=456239622",
+      src: "https://vk.com/video_ext.php?oid=-9944999&id=456239622&js_api=1",
     });
     if (embed.kind === "vk") expect(embed.src).not.toContain("hash");
+  });
+
+  // 006 EARS-18.2 — `js_api=1` is a CONTRACT of the design (§3.1), not an optional
+  // tweak: a VK live embed emits parent postMessage traffic (`inited` / `started` /
+  // `timeupdate`) ONLY when the src carries it. Without it the parent observes zero
+  // events, the watchdog fires on a healthy stream and the room shows a false
+  // "не загружается" advisory over playing video (the #1314 false positive). Every
+  // vk src — with or without a hash — must carry it.
+  it("EARS-18.2: builds EVERY VK embed src with js_api=1 so the parent can observe the player", () => {
+    const withHash = resolveEmbed({
+      provider: "vk",
+      embedRef: "-9944999_456239622_5ee41bc00ebc765a",
+    } as StreamConfig);
+    const bare = resolveEmbed({
+      provider: "vk",
+      embedRef: "-9944999_456239622",
+    } as StreamConfig);
+    if (withHash.kind !== "vk" || bare.kind !== "vk") throw new Error("expected vk embeds");
+    expect(withHash.src).toContain("js_api=1");
+    expect(bare.src).toContain("js_api=1");
   });
 
   it("EARS-2: builds the CDNVideo embed frame from the provisioned player URL verbatim", () => {

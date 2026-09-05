@@ -42,9 +42,13 @@ const VIEW: EventPageView = {
       role: "Травматолог-ортопед",
     },
     {
-      source: "legacy",
+      source: "expert",
+      expertId: "33333333-3333-4333-8333-333333333333",
+      expertSlug: "anna-petrova",
       name: "Анна Петрова",
       credentials: "К.м.н.",
+      photoUrl: null,
+      role: "Ревматолог",
     },
   ],
   specialties: ["Травматология и ортопедия", "Ортобиология"],
@@ -233,7 +237,7 @@ describe("020 EARS-1 — shared event-page view projection", () => {
     }
   });
 
-  it("020 EARS-1: speakers map from the legacy+expert union with one section heading", () => {
+  it("020 EARS-1: speakers map from the expert projection with one section heading", () => {
     const cards = eventSpeakerCards(VIEW);
     expect(cards).toHaveLength(2);
     expect(cards[0]).toMatchObject({
@@ -249,7 +253,7 @@ describe("020 EARS-1 — shared event-page view projection", () => {
     // speaker.
     expect(cards[0]?.heading).toBeUndefined();
     expect(cards[1]?.heading).toBeNull();
-    // The legacy variant degrades to initials rather than to a broken image.
+    // A speaker with no photo degrades to initials rather than to a broken image.
     expect(cards[1]).toMatchObject({ name: "Анна Петрова", initials: "АП" });
     expect(cards[1]?.photoUrl).toBeUndefined();
   });
@@ -302,8 +306,8 @@ describe("020 EARS-2 — the registration-free decision set", () => {
     });
     expect("schoolHref" in eventPageKickerParts(VIEW)).toBe(false);
 
-    // A host that HAS the routes: the expert card links, the legacy card never
-    // does (it carries no stable key), and the kicker becomes a link.
+    // A host that HAS the routes: only the speaker whose key is listed links,
+    // the other one never does, and the kicker becomes a link.
     const linked: EventPageView = {
       ...VIEW,
       links: {

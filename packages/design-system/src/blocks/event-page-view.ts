@@ -364,8 +364,7 @@ export function eventSignupCardProps(
  * entry gets no `href` and the card renders the name as plain text; there is no
  * `null` href and no disabled state, because a link into a route that is not
  * mounted is precisely the dead affordance EARS-2 forbids. Matching is by the
- * stable `expertSlug` key alone — a legacy speaker has no identity and names are
- * never compared (012-design §5.2).
+ * stable `expertSlug` key alone — names are never compared (012-design §5.2).
  *
  * No `footerHref` is produced: the «12 эфиров · страница эксперта →» footer
  * needs a broadcast count the public read does not carry.
@@ -379,8 +378,7 @@ export function eventSpeakerCards(view: EventPageView): EventSpeakerCardProps[] 
     view.links.speakerPages.map((page) => [page.speakerKey, page.href]),
   );
   return view.speakers.map((speaker, index) => {
-    const href =
-      speaker.source === "expert" ? pages.get(speaker.expertSlug) : undefined;
+    const href = pages.get(speaker.expertSlug);
     return {
       ...speakerCardProps(speaker),
       ...(href ? { href } : {}),
@@ -397,7 +395,6 @@ function speakerCardProps(
     affiliation: speaker.credentials,
     initials: initialsOf(speaker.name),
   } satisfies EventSpeakerCardProps;
-  if (speaker.source === "legacy") return base;
   return {
     ...base,
     roleKicker: speaker.role,

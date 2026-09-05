@@ -20,7 +20,6 @@ const base: EventFormValues = {
   startsAtMsk: "2026-09-03T10:00",
   durationMin: 60,
   description: "",
-  speakers: [],
   specialties: [],
   partnerRef: null,
   programPdf: null,
@@ -59,7 +58,6 @@ describe("eventUpdateVars", () => {
       ...base,
       school: "Кардиошкола",
       description: "Описание",
-      speakers: [{ name: "Иванов", regalia: "Кардиолог" }],
       specialties: ["cardiology"],
       partnerRef: "ACME",
     };
@@ -69,7 +67,6 @@ describe("eventUpdateVars", () => {
       startsAtMsk: "2026-09-03T10:00",
       durationMin: 60,
       description: "Описание",
-      speakers: [{ name: "Иванов", regalia: "Кардиолог" }],
       specialties: ["cardiology"],
       partnerRef: "ACME",
       programPdf: null,

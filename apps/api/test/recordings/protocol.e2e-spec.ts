@@ -814,6 +814,72 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(rows.map((r) => r.event_type)).toContain("data.events.insert");
     });
 
+    // ── 17.1b — the REPLAY half of the key contract ────────────────────────
+
+    /** How many эфир rows carry this exact title — the «second эфир» probe. */
+    async function eventsTitled(title: string): Promise<number> {
+      const { rows } = await pool.query<{ count: string }>(
+        "SELECT count(*) FROM events WHERE title = $1",
+        [title],
+      );
+      return Number(rows[0]!.count);
+    }
+
+    async function createLegacy(
+      payload: Record<string, unknown>,
+      idempotencyKey: string,
+    ) {
+      return app.inject({
+        method: "POST",
+        url: "/v1/admin/legacy-broadcasts",
+        headers: {
+          ...ADMIN_DEVICE,
+          ...adminHeaders(adminSid),
+          "content-type": "application/json",
+          "idempotency-key": idempotencyKey,
+        },
+        payload,
+      });
+    }
+
+    it("014 EARS-17.1: an exact retry of a legacy-broadcast create shall replay the stored 201 instead of authoring a second эфир", async () => {
+      // The refusal cases above prove the key is DEMANDED; this one proves what
+      // demanding it buys — the guarantee the changeset states to users. Without
+      // the handler's replay branch the retry authors a second эфир and the
+      // count below is 2. Mirrors `lifecycle.e2e-spec.ts` on the attach route.
+      const payload = legacyPayload(`p1349-${randomUUID()}`);
+      const title = payload.title as string;
+      const k = key();
+      const first = await createLegacy(payload, k);
+      expect(first.statusCode).toBe(201);
+      const created = JSON.parse(first.payload) as { id: string };
+      createdEventIds.push(created.id);
+      expect(await eventsTitled(title)).toBe(1);
+
+      const retry = await createLegacy(payload, k);
+      expect(retry.statusCode).toBe(201);
+      expect(JSON.parse(retry.payload)).toEqual(JSON.parse(first.payload));
+      expect(retry.headers.etag).toBe(first.headers.etag);
+      expect(await eventsTitled(title)).toBe(1);
+    });
+
+    it("014 EARS-17.1: the same Idempotency-Key with a DIFFERENT эфир shall be refused 409 IDEMPOTENCY_KEY_REUSED and author nothing", async () => {
+      // §11 `IDEMPOTENCY_KEY_REUSED`: the key binds to the fingerprint of the
+      // validated body, so a client that reuses a spent key for another эфир is
+      // told so rather than silently handed the first эфир's 201.
+      const first = legacyPayload(`p1349-${randomUUID()}`);
+      const k = key();
+      const created201 = await createLegacy(first, k);
+      expect(created201.statusCode).toBe(201);
+      createdEventIds.push((JSON.parse(created201.payload) as { id: string }).id);
+
+      const other = legacyPayload(`p1349-${randomUUID()}`);
+      const otherTitle = other.title as string;
+      const reused = await createLegacy(other, k);
+      expectProblem(reused, 409, "IDEMPOTENCY_KEY_REUSED", "admin007");
+      expect(await eventsTitled(otherTitle)).toBe(0);
+    });
+
     // ── 17.4 — the read floor ──────────────────────────────────────────────
 
     it("014 EARS-17.4: the public announcement reads shall answer an anonymous caller", async () => {

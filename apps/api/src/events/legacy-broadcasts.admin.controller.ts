@@ -125,10 +125,19 @@ export class LegacyBroadcastsAdminController {
     // verbatim instead of authoring a second эфир. Completed on the pool right
     // after the create commits rather than enlisted in its transaction: the
     // insert is owned by `EventsRepository.insertLegacyBroadcast`, which takes
-    // no fence parameter, so the record is closed from here. A process death in
-    // the gap leaves the record `processing` — the retry is refused as
-    // in-progress rather than double-applied, the same fail-safe direction the
-    // fenced commands take.
+    // no fence parameter, so the record is closed from here.
+    //
+    // The guarantee that buys is BOUNDED, not absolute. A process death in the
+    // gap leaves the record `processing`, so a retry is refused as in-progress
+    // — but only for the `IDEMPOTENCY_LEASE_MS` window (60 s). Once the lease
+    // lapses, `IdempotencyService.begin` CAS-takes the stale record over and
+    // this handler re-executes the insert, authoring a second эфир; and a
+    // `complete()` that is fenced out throws `IdempotencyFenceError`, which
+    // `withProtocolRefusalShape` does not map, so the caller sees a 500 on a
+    // create that DID commit. Both windows close when the record is enlisted in
+    // the insert transaction — thread a fence through
+    // `EventsService.createLegacyBroadcast` once PR #1898 releases that file
+    // (DEBT.md, 2026-09-05).
     await this.idempotency.complete(this.db, outcome.lease, {
       status: 201,
       body: detail,

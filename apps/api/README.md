@@ -140,9 +140,9 @@ Run it with the target environment injected (there is no dotenv autoload):
 ```bash
 set -a; source ~/.ds-platform/.env.local; set +a
 # 1. dry run — prints the verdict of every row, writes nothing
-pnpm --filter @ds/api recordings:backfill --   --manifest ./backfill.json --actor <zitadel-sub> --dry-run
+pnpm --filter @ds/api recordings:backfill -- --manifest ./backfill.json --actor <zitadel-sub> --dry-run
 # 2. the real run
-pnpm --filter @ds/api recordings:backfill --   --manifest ./backfill.json --actor <zitadel-sub>
+pnpm --filter @ds/api recordings:backfill -- --manifest ./backfill.json --actor <zitadel-sub>
 ```
 
 `--actor` is the Zitadel `sub` of the operator running it and is **required**:

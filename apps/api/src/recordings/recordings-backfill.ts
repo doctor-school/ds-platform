@@ -285,7 +285,13 @@ async function runTarget(
 
     // 4. The writes — the ordinary commands, nothing else.
     if (held) {
-      const published = await publish(deps, event.id, held.id, held.version, options);
+      const published = await publish(
+        deps,
+        event.id,
+        held.id,
+        held.version,
+        options,
+      );
       return {
         ...base,
         outcome: "published",
@@ -329,27 +335,26 @@ async function runTarget(
   }
 }
 
-function publish(
+async function publish(
   deps: BackfillDeps,
   eventId: string,
   recordingId: string,
   expectedVersion: number,
   options: BackfillOptions,
 ): Promise<RecordingCommandResult> {
-  return lease(deps, options, {
+  const acquired = await lease(deps, options, {
     method: "POST",
     route: "/v1/admin/events/:eventId/recordings/:recordingId/publish",
     path: `/v1/admin/events/${eventId}/recordings/${recordingId}/publish`,
     payload: null,
-  }).then((acquired) =>
-    deps.recordings.transition({
-      eventId,
-      recordingId,
-      command: "publish",
-      expectedVersion,
-      lease: acquired,
-    }),
-  );
+  });
+  return deps.recordings.transition({
+    eventId,
+    recordingId,
+    command: "publish",
+    expectedVersion,
+    lease: acquired,
+  });
 }
 
 /**

@@ -15,12 +15,15 @@ import type { StreamProvider } from "@ds/schemas";
  *   `player:error`), OR a watchdog stall AFTER a handshake was established (a real
  *   signal loss). The room covers the embed with a specific truthful status,
  *   auto-retries a bounded number of times, then offers the manual restart.
- * - **SUSPECTED** — a watchdog stall with NO positive signal ever observed (vk +
- *   cdnvideo always, since they expose no parent API; youtube/rutube when no
- *   handshake ever arrived). The room can NOT prove the stream failed — a healthy
- *   video may simply be unobservable — so it renders a NON-COVERING advisory banner
- *   beside the still-visible, still-interactive embed and does NOT auto-retry (an
- *   auto re-create would interrupt a possibly-healthy stream). Restart is manual only.
+ * - **SUSPECTED** — a watchdog stall with NO positive signal ever observed (cdnvideo
+ *   always, since it is structurally silent; youtube/rutube/vk when no handshake ever
+ *   arrived). The room can NOT prove the stream failed — a healthy video may simply be
+ *   unobservable — so it renders a NON-COVERING advisory banner beside the
+ *   still-visible, still-interactive embed and does NOT auto-retry (an auto re-create
+ *   would interrupt a possibly-healthy stream). Restart is manual only. For the
+ *   permanently-unobservable cdnvideo the advisory is additionally TIME-BOXED
+ *   ({@link PLAYER_ADVISORY_TIMEBOX_MS}) into the `unverified` state, so a
+ *   healthy-but-silent stream is not nagged indefinitely (EARS-18.3).
  */
 
 /**
@@ -43,12 +46,32 @@ export const PLAYER_MAX_AUTO_RETRIES = 2;
 export const PLAYER_RETRY_DELAY_MS = 4_000;
 
 /**
+ * Advisory time box (EARS-18.3) — how long a SUSPECTED advisory banner may stand for
+ * a PERMANENTLY-unobservable provider (cdnvideo) before it withdraws itself into the
+ * `unverified` state, leaving only the gesture-gated «Перезапустить плеер». A silent
+ * provider means an indefinitely-shown advisory would sit over a stream that is most
+ * likely playing fine. Named design constant (design §3.1, default ~60 s — a
+ * lead-chosen starting default, tunable after the first live cdnvideo эфир). The time
+ * box is cdnvideo-ONLY: every other SUSPECTED case (a failed youtube/rutube/vk
+ * handshake) keeps its banner, because for those a real signal can still arrive and a
+ * self-withdrawing banner would hide an observable failure.
+ */
+export const PLAYER_ADVISORY_TIMEBOX_MS = 60_000;
+
+/**
  * The runtime player state (design §3.1 state machine). `loading` covers the mount
  * window before the first playing signal (the provider renders its own spinner);
  * `retrying`/`failed` carry a {@link PlayerGrade} that decides covering-overlay
- * (confirmed) vs non-covering-banner (suspected); `playing` clears everything.
+ * (confirmed) vs non-covering-banner (suspected); `unverified` is the post-time-box
+ * SUSPECTED state (banner withdrawn, embed untouched, gesture-gated restart only);
+ * `playing` clears everything.
  */
-export type PlayerStatus = "loading" | "playing" | "failed" | "retrying";
+export type PlayerStatus =
+  | "loading"
+  | "playing"
+  | "failed"
+  | "retrying"
+  | "unverified";
 
 /**
  * The failure grade (design §3.1). `confirmed` = an observed provider error or a
@@ -70,14 +93,19 @@ export type PlayerFailureKind = "embedding-disabled" | "unavailable" | "generic"
 
 /**
  * Which providers expose a parent-observable API for the LIVE embed (design §3.1
- * table). `youtube`/`rutube` do (postMessage); `vk` (`js_api` does not work for
- * live broadcasts) and `cdnvideo` (Clappr, same-origin script only) do NOT — those
- * are watchdog-only, and can therefore only ever reach the SUSPECTED grade.
+ * table). `youtube` (IFrame Player API) and `rutube` (postMessage JSON API) do.
+ * `vk` does TOO — conditionally: a VK live embed emits parent `postMessage` traffic
+ * only when its src carries `js_api=1`, which {@link resolveEmbed} now always builds
+ * (#1314; a live probe 2026-08-20 recorded `inited` ~t+4.5 s, `started` on play and a
+ * recurring `timeupdate`). `cdnvideo` does NOT and never will: its served bundles emit
+ * NO parent-directed message of any kind and render errors inside the iframe only — a
+ * structural capability constraint verified by probe, so cdnvideo is watchdog-only and
+ * can therefore only ever reach the SUSPECTED grade.
  */
 export const PROVIDER_HAS_PARENT_API: Record<StreamProvider, boolean> = {
   youtube: true,
   rutube: true,
-  vk: false,
+  vk: true,
   cdnvideo: false,
 };
 
@@ -85,6 +113,7 @@ export const PROVIDER_HAS_PARENT_API: Record<StreamProvider, boolean> = {
 const PROVIDER_ORIGIN: Partial<Record<StreamProvider, string>> = {
   youtube: "https://www.youtube.com",
   rutube: "https://rutube.ru",
+  vk: "https://vk.com",
 };
 
 /**
@@ -138,7 +167,13 @@ function asRecord(data: unknown): Record<string, unknown> | null {
  *   (code → {@link mapYouTubeErrorCode}).
  * - **rutube** — the postMessage JSON API: `player:ready` (ready),
  *   `player:changeState` `state: "playing"`, and `player:error` (generic).
- * - **vk / cdnvideo** — no parent-observable API → always `null` (watchdog-only).
+ * - **vk** — the VK Video player JS API (only with `js_api=1` in the src, #1314):
+ *   `inited` (ready — the handshake), `started` (playing), and the recurring
+ *   `timeupdate` whose top-level `state` is `"playing"` (playing) or `"unstarted"`
+ *   (handshake only, not playing). VK exposes NO error event — a stall shows as an
+ *   absent/non-advancing `timeupdate` and is graded by the watchdog — so this branch
+ *   never synthesizes one.
+ * - **cdnvideo** — no parent-observable API → always `null` (watchdog-only).
  */
 export function parseProviderSignal(
   provider: StreamProvider,
@@ -185,6 +220,31 @@ export function parseProviderSignal(
     return null;
   }
 
+  if (provider === "vk") {
+    // The event name key: VK's own docs (dev.vk.com «VK Video player JS API») were
+    // unreachable from the build environment, and the 2026-08-20 probe recorded the
+    // event NAMES (`inited` / `started` / `timeupdate`) without pinning the key, so
+    // both documented spellings are accepted. This widens nothing dangerous — the
+    // strict https://vk.com origin guard above is what makes a signal trustworthy,
+    // and an unknown name still falls through to `null`.
+    const name =
+      typeof msg.event === "string"
+        ? msg.event
+        : typeof msg.type === "string"
+          ? msg.type
+          : undefined;
+    if (name === "inited") return { kind: "ready" };
+    if (name === "started") return { kind: "playing" };
+    if (name === "timeupdate") {
+      const state = typeof msg.state === "string" ? msg.state : undefined;
+      if (state === "playing") return { kind: "playing" };
+      // `unstarted` proves only that the API is talking — the handshake, not play.
+      if (state === "unstarted") return { kind: "buffering" };
+    }
+    // No VK error event exists: never synthesize a CONFIRMED failure for vk.
+    return null;
+  }
+
   return null;
 }
 
@@ -222,6 +282,8 @@ export const INITIAL_PLAYER_STATE: PlayerState = {
  * - `watchdog` — the watchdog elapsed with no playing signal (EARS-18.1).
  * - `error` — an observed provider error → always CONFIRMED (EARS-18.2).
  * - `retry` — the bounded auto-retry timer fired (EARS-18.3): re-create the embed.
+ * - `timebox` — the advisory time box elapsed (EARS-18.3, cdnvideo only): withdraw
+ *   the SUSPECTED banner into `unverified`, leaving the gesture-gated restart.
  * - `restart` — the manual «Перезапустить плеер» affordance (EARS-18.3).
  */
 export type PlayerAction =
@@ -230,6 +292,7 @@ export type PlayerAction =
   | { type: "watchdog" }
   | { type: "error"; failure: PlayerFailureKind }
   | { type: "retry" }
+  | { type: "timebox" }
   | { type: "restart" };
 
 /** Enter a CONFIRMED failure: auto-retry while the bounded budget remains, else the
@@ -256,8 +319,9 @@ function enterConfirmedFailure(
  * stall — covering overlay + bounded auto-retry). An `error` is always CONFIRMED. A
  * duplicate `watchdog`/`error` while already `failed`/`retrying` is ignored so a
  * burst cannot exhaust the budget in one tick. `retry` re-creates the embed (bumps
- * `embedKey`); `restart` resets the budget + re-creates the embed (keeping the
- * monotonic `everReady`); `playing` clears everything (EARS-18.4).
+ * `embedKey`); `timebox` withdraws a standing SUSPECTED advisory into `unverified`
+ * without touching the embed (EARS-18.3); `restart` resets the budget + re-creates the
+ * embed (keeping the monotonic `everReady`); `playing` clears everything (EARS-18.4).
  */
 export function playerReducer(state: PlayerState, action: PlayerAction): PlayerState {
   switch (action.type) {
@@ -280,6 +344,13 @@ export function playerReducer(state: PlayerState, action: PlayerAction): PlayerS
     case "retry":
       if (state.status !== "retrying") return state;
       return { ...state, status: "loading", embedKey: state.embedKey + 1 };
+    case "timebox":
+      // EARS-18.3 — only a standing SUSPECTED advisory is time-boxed; a CONFIRMED
+      // overlay and every healthy status are untouched. The embed is NOT re-created
+      // (that needs an explicit doctor gesture) and the grade stays `suspected`, so
+      // the room never claims to have learned something it did not observe.
+      if (state.status !== "failed" || state.grade !== "suspected") return state;
+      return { ...state, status: "unverified" };
     case "restart":
       return {
         status: "loading",

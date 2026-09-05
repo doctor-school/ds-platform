@@ -48,7 +48,11 @@ function parseVkTriple(
  * - `vk` — re-composes VK's `video_ext.php?oid&id` embed endpoint from the ref,
  *   appending `&hash` only when the ref carried one (canonical host `vk.com`; the
  *   hash is optional per VK's current «Встроить» dialog; live streams use the same
- *   shape, #1134).
+ *   shape, #1134), and ALWAYS `&js_api=1` — a contract of the design (§3.1), not an
+ *   optional tweak: a VK embed emits parent `postMessage` traffic (`inited` /
+ *   `started` / `timeupdate`) ONLY with it. Without it the parent observes zero
+ *   events, the EARS-18 watchdog fires on a healthy stream and the room shows a
+ *   false «Похоже, трансляция не загружается» advisory over playing video (#1314).
  * - `cdnvideo` — the embedRef IS the whole provisioned Aloha-player URL
  *   (host-allowlisted at the 007 SSOT boundary), embedded verbatim (#1134).
  */
@@ -59,7 +63,8 @@ const EMBED_SRC: Record<StreamProvider, (embedRef: string) => string> = {
     const t = parseVkTriple(embedRef);
     if (!t) return "";
     const base = `https://vk.com/video_ext.php?oid=${t.oid}&id=${t.id}`;
-    return t.hash ? `${base}&hash=${t.hash}` : base;
+    // `js_api=1` LAST so it rides every vk src, hash or no hash (EARS-18.2, #1314).
+    return `${t.hash ? `${base}&hash=${t.hash}` : base}&js_api=1`;
   },
   cdnvideo: (url) => url,
 };

@@ -76,6 +76,12 @@ import {
 } from "./release-gate.mjs";
 import { composeDigest } from "./release-notes.mjs";
 import {
+  assertRollbackAllowed,
+  makeGitCutoverMigrationProbe,
+  makeProdCutoverReader,
+  RollbackFloorError,
+} from "./rollback-floor.mjs";
+import {
   API_PROD_COMPOSE_PATH,
   bootProbeSet,
   deployServiceSet,
@@ -1363,6 +1369,38 @@ async function rollback(shaArg) {
       .map((svc) => `${svc.image}:${sha.slice(0, 12)}`)
       .join(" / ")}`,
   );
+
+  // ── #1607 / EARS-24: the speaker-cutover rollback compatibility floor. FIRST
+  //    thing after argument resolution, so a target below the floor is refused
+  //    before ANY provider read or mutation — no image probe, no `.env` rewrite,
+  //    no `up -d`. The floor is keyed on migration 0036 (prod dropped
+  //    `event_speakers`; the target's tree must carry the migration that dropped
+  //    it). Fail-closed rules and the one recorded allow (a production DB that
+  //    has not applied 0036) live in tools/deploy/rollback-floor.mjs.
+  step("EARS-24: rollback compatibility floor (speaker cutover, migration 0036)");
+  try {
+    const verdict = await assertRollbackAllowed({
+      sha,
+      readProdCutoverState: makeProdCutoverReader({
+        sshCapture,
+        host: DATA_PROD,
+        composeDir: DATA_COMPOSE,
+      }),
+      targetCarriesMigration: makeGitCutoverMigrationProbe(localCap),
+    });
+    ok(`rollback floor: ${verdict.reason}`);
+  } catch (err) {
+    if (err instanceof RollbackFloorError) {
+      die(
+        `ROLLBACK REFUSED [${err.code}] — ${err.message}\n` +
+          `  The speaker cutover (spec 012, EARS-24) makes a pre-cutover image\n` +
+          `  database-INCOMPATIBLE once migration 0036 has dropped \`event_speakers\`.\n` +
+          `  Prod was not touched. Roll FORWARD to a release at or above the floor,\n` +
+          `  or restore the database from pgbackrest first — see tools/deploy/README.md.`,
+      );
+    }
+    throw err;
+  }
 
   // The target images must still be on the box (retention keeps the last 3).
   const present = await sshCapture(

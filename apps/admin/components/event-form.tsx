@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useForm, useFieldArray } from "react-hook-form";
+import { useForm } from "react-hook-form";
 import { useTranslations } from "next-intl";
 import type { z } from "zod";
 import { Button, Checkbox, Input, Label, Link } from "@ds/design-system";

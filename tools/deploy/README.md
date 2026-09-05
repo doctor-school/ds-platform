@@ -16,6 +16,7 @@ bootstrap) is a one-time human setup, out of the steady-state loop.
 | `release-notes.mjs`        | `deploy:release-notes` | Aggregated PROD release note to Mattermost (#868); render+POST seam fired from CI on `deployment_status: success` (`release-digest.yml`, #968).                    |
 | `live-broadcast-check.mjs` | `deploy:check-live`    | Read-only live-эфир probe (`GET /v1/public/events`, spec §10.4 item 7): `CLEAR` exit 0 / `LIVE`+`UNKNOWN` exit 1 (fail-closed); also a `prod.mjs` pre-flight hold. |
 | `deploy-probe.mjs`         | `deploy:probe`         | One-line box-reality probe (#905): health SHA + running api/portal/admin images/status over ssh; the STALLED watchdog message routes here.                         |
+| `rollback-floor.mjs`       | —                      | Rollback compatibility-floor guard (012 EARS-24, #1607): refuses a `--rollback` target that predates migration 0036 once prod has applied it (see below).          |
 | `release-gate.mjs`         | —                      | Release-blocker + open-batched-Stage-B pre-flight hold (#1662): probe + pure verdict consumed by `prod.mjs` (see below).                                           |
 
 ## `pnpm deploy:prod`
@@ -197,6 +198,46 @@ exactly when the api is down, so the guard must not depend on it. An unreadable
 box compose is a refusal too. Crossing a service-introduction boundary backwards
 is a forward fix or a `--ref` deploy of a tree that actually declares the wanted
 state, never an app-only rollback.
+
+## Rollback compatibility floor (`rollback-floor.mjs`, 012 EARS-24 / #1607)
+
+`--rollback` swaps the app image while the database stays where it is. That is
+safe only while the older image can still read what the newer one wrote. The
+speaker cutover breaks that symmetry once and for all: migration
+`0036_speaker_cutover.sql` DROPS `event_speakers`, so a pre-cutover image reads a
+table that no longer exists and **some prior SHAs stop being valid rollback
+targets permanently**.
+
+The floor is keyed on that migration, on both sides of the comparison — the
+earlier design keyed it on a database singleton (`speaker_migration_cutover`)
+that the same migration drops, so that SSOT cannot survive its own cutover:
+
+- **prod side** — `public.event_speakers` is ABSENT ⇔ 0036 has been applied
+  (one read-only `to_regclass` probe on data-prod);
+- **target side** — the rollback target's tree carries
+  `apps/api/drizzle/0036_speaker_cutover.sql` ⇔ its image knows the post-cutover
+  schema (`git cat-file -e <sha>:<path>`, resolved at deploy time — no constant
+  to update by hand).
+
+No release-tag ranking is involved: an untagged but post-cutover target is judged
+on the property that actually matters. The guard is the **first step inside
+`rollback()`**, before the image-presence probe and before any `.env` rewrite or
+`up -d`. Nothing on the box is touched until it returns.
+
+It **fails closed** — every refusal aborts the rollback with its code:
+
+| Code                      | Meaning                                                                                                                 |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `FLOOR_UNREADABLE`        | The prod probe could not answer whether `event_speakers` still exists. An unknown state is never treated as "no floor". |
+| `TARGET_STATE_UNRESOLVED` | The target commit could not be inspected locally, so it cannot be proven at or above the floor.                         |
+| `TARGET_BELOW_FLOOR`      | The target's tree has no migration 0036. Roll **forward** instead; this rollback cannot be made safe.                   |
+
+Two cases are allowed, each named in the verdict: `cutover-not-applied` (prod
+still has `event_speakers` — the floor does not exist there yet) and
+`at-or-above-floor`.
+
+`rollback-floor.test.mjs` (`node --test`, run by `pnpm test:tools`) covers the
+whole decision table against injected readers — no ssh, psql or provider calls.
 
 ## Release gate (`release-gate.mjs`, #1662)
 

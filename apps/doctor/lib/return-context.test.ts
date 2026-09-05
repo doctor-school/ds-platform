@@ -25,8 +25,17 @@ const EVENT = {
   startsAt: "2026-08-27T16:00:00.000Z",
   durationMin: 90,
   description: "Разбор показаний, протоколов и типичных ошибок PRP-терапии.",
+  // 012 EARS-24 (#1607): the page-speaker union carries the expert arm only.
   speakers: [
-    { source: "legacy", name: "Анна Соколова", credentials: "к.м.н." },
+    {
+      source: "expert",
+      expertId: "00000000-0000-4000-8000-00000000e001",
+      expertSlug: "anna-sokolova",
+      name: "Анна Соколова",
+      credentials: "к.м.н.",
+      photoUrl: null,
+      role: "Спикер",
+    },
   ],
   specialties: ["Травматология"],
   partners: [],

@@ -11,7 +11,6 @@ import {
 import {
   EventExpertsRepository,
   type ExpertLifecycle,
-  type TaxonomyTx,
 } from "./event-experts.repository.js";
 import {
   type IdempotencyLease,

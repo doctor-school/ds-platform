@@ -831,7 +831,7 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
     Then each covered row keeps its id slug lifecycle state and relationships and receives only its reviewed family given and patronymic values
     And user_id remains null unless it was separately explicitly linked
     And an unexpected uncovered Expert aborts before any schema or row mutation
-    And no whitespace split heuristic User match or second review queue is used
+    And no whitespace split heuristic User match or review queue is used
 
   @EARS-21 @happy
   Scenario: Entity media changes are reversible
@@ -893,9 +893,18 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
     And speaker fields are absent from every admin write seam and from every public and admin read DTO
 
   @EARS-24 @happy
-  Scenario: The forward migration drops the migration objects and the legacy table
+  Scenario: The cutover release removes the withdrawn migration machinery and keeps the legacy table
     Given the Product Lead has confirmed that every production legacy row is already re-created as an event_experts link
-    When the cutover forward migration runs
-    Then the speaker_migration_reviews queue the speaker_migration_cutover singleton and both event_speakers triggers no longer exist
-    And event_speakers itself is dropped as the last step of that migration
-    And an app-only rollback to the previous image still reads the database without a legacy speaker table
+    When the cutover release is deployed and its forward migration runs
+    Then the speaker_migration_reviews table the speaker_migration_cutover singleton and both event_speakers triggers no longer exist
+    And the deploy rollback floor guard and its deploy hook and the migration fence suite are gone from the tree
+    And event_speakers and event_experts.legacy_speaker_id still exist
+    And an app-only rollback to the previous image still reads every table and column that image needs
+
+  @EARS-24 @happy
+  Scenario: The contract release drops the legacy join column and the legacy table
+    Given the cutover release is live and the Product Lead has confirmed that the migrated speakers render correctly in production
+    When the contract forward migration runs
+    Then the event_experts legacy_speaker_id column its composite foreign key and its unique index no longer exist
+    And event_speakers itself no longer exists
+    And that release is the point of no return so recovery below it is a roll forward or a database restore rather than an app-only rollback

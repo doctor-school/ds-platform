@@ -1212,7 +1212,7 @@ const EMAIL_CONFIRM_PROPS: PropRow[] = [
   },
   {
     name: "resolver",
-    type: "Resolver<EmailConfirmValues>",
+    type: "Resolver of EmailConfirmValues",
     required: true,
     description: "App-owned resolver — localized messages and the schema SSOT.",
   },

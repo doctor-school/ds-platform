@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
-import { LIVE_STAND, provisionLoggedInDoctor } from "./support/doctor-session";
+import { provisionLoggedInDoctor } from "./support/doctor-session";
+import { requireLiveStandEnv } from "./support/live-stand-env";
 
 /**
  * 006 EARS-14 / EARS-15 — the just-in-time room-entry display-name prompt and the
@@ -8,8 +9,23 @@ import { LIVE_STAND, provisionLoggedInDoctor } from "./support/doctor-session";
  * Live-stand-gated tier (mirrors `room.spec.ts` / the 005 harness): it needs a
  * running portal whose `/v1/*` rewrite reaches a running api + real Zitadel +
  * Mailpit (for `provisionLoggedInDoctor`), plus a seeded LIVE room the doctor can
- * register for (`E2E_ROOM_SLUG_LIVE`). It `test.skip`s unless that env is present,
- * so a stray CI invocation is inert.
+ * register for (`E2E_ROOM_SLUG_LIVE`). It is inert-green only on a BARE
+ * environment; a partially exported env set fails loudly (#1871).
+ *
+ * ENV SET (#1871) — export ALL of these to run this spec; exporting SOME of them
+ * fails loudly naming the missing ones (`support/live-stand-env.ts`), while a
+ * completely bare environment stays inert-green:
+ *
+ * | variable             | value on the dev stand                |
+ * | -------------------- | ------------------------------------- |
+ * | `E2E_PORTAL_URL`     | the running portal origin             |
+ * | `IDP_ISSUER`         | the real Zitadel issuer               |
+ * | `MAILPIT_URL`        | the Mailpit REST base (OTP sink)      |
+ * | `E2E_ROOM_SLUG_LIVE` | `seed-005-live`                       |
+ *
+ * DOCTOR PROVISIONING: EACH test SELF-SIGNS-UP a fresh doctor (register → Mailpit
+ * OTP → auto-login). Zitadel/api throttles after ~4–5 signups per window (429) —
+ * wait ~10 min between full runs rather than retrying into the throttle.
  *
  * State isolation: EACH test provisions a FRESH doctor via
  * `provisionLoggedInDoctor` — a brand-new 003 account collects NO name, so the JIT
@@ -26,10 +42,12 @@ import { LIVE_STAND, provisionLoggedInDoctor } from "./support/doctor-session";
 
 const SLUG_LIVE = process.env.E2E_ROOM_SLUG_LIVE;
 
-test.skip(
-  !LIVE_STAND || !SLUG_LIVE,
-  "requires the live stand + a seeded live room the doctor can register for",
-);
+requireLiveStandEnv([
+  "E2E_PORTAL_URL",
+  "IDP_ISSUER",
+  "MAILPIT_URL",
+  "E2E_ROOM_SLUG_LIVE",
+]);
 
 /** Register the freshly-provisioned doctor for the seeded live room, then enter it. */
 async function registerAndEnterRoom(

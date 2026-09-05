@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { requireLiveStandEnv } from "./support/live-stand-env";
 
 /**
  * 006 EARS-3 — live chat over Centrifugo (gated read + real-time post). Two gated
@@ -13,9 +14,33 @@ import { test, expect, type Page } from "@playwright/test";
  * Live-stand-gated tier (mirrors `room.spec.ts` / the 005 harness): it needs a
  * running portal whose `/v1/*` rewrite reaches a running api + Postgres seeded
  * with a LIVE event both test doctors are registered for, plus real 003 logins for
- * TWO distinct doctors. It `test.skip`s unless the dev-stand env is present, so a
- * stray CI invocation is inert. The full both-breakpoints × both-themes fidelity +
- * Stage-B live confirmation is owned by the 006 integration slice (#584).
+ * TWO distinct doctors. It is inert-green only on a BARE environment; a partially
+ * exported env set fails loudly (#1871). The full both-breakpoints × both-themes
+ * fidelity + Stage-B live confirmation is owned by the 006 integration slice
+ * (#584).
+ *
+ * ENV SET (#1871) — export ALL of these to run this spec; exporting SOME of them
+ * fails loudly naming the missing ones (`support/live-stand-env.ts`), while a
+ * completely bare environment stays inert-green:
+ *
+ * | variable                | value on the dev stand                      |
+ * | ----------------------- | ------------------------------------------- |
+ * | `E2E_PORTAL_URL`        | the running portal origin                   |
+ * | `E2E_DOCTOR_EMAIL`      | doctor A, registered for the chat room      |
+ * | `E2E_DOCTOR_PASSWORD`   | doctor A's password                         |
+ * | `E2E_DOCTOR2_EMAIL`     | doctor B, registered for the same room      |
+ * | `E2E_DOCTOR2_PASSWORD`  | doctor B's password                         |
+ * | `E2E_ROOM_CHAT_SLUG`    | `seed-005-live` (falls back to the room     |
+ * |                         | spec's `E2E_ROOM_SLUG_LIVE`/`_YOUTUBE`)     |
+ *
+ * OPTIONAL — the token-expiry test only: `E2E_CHAT_TOKEN_TTL_SECONDS` must MIRROR
+ * the api's `CHAT_TOKEN_TTL_SECONDS` and be ≤ 30 (boot the api with e.g.
+ * `CHAT_TOKEN_TTL_SECONDS=8`); the api default 3600 cannot be waited out, so that
+ * ONE test skips with a named reason while the rest of the file runs.
+ *
+ * DOCTOR PROVISIONING: the two doctors are self-signup accounts reused across
+ * runs. Zitadel/api throttles after ~4–5 signups per window (429) — reuse the
+ * exported credentials rather than minting a fresh pair per run.
  */
 
 const BASE = process.env.E2E_PORTAL_URL ?? "http://localhost:3001";
@@ -30,15 +55,14 @@ const SLUG_LIVE =
   process.env.E2E_ROOM_SLUG_LIVE ??
   process.env.E2E_ROOM_SLUG_YOUTUBE;
 
-test.skip(
-  !process.env.E2E_PORTAL_URL ||
-    !DOCTOR_A_EMAIL ||
-    !DOCTOR_A_PASSWORD ||
-    !DOCTOR_B_EMAIL ||
-    !DOCTOR_B_PASSWORD ||
-    !SLUG_LIVE,
-  "requires a live portal + two doctors registered for the seeded live room",
-);
+requireLiveStandEnv([
+  "E2E_PORTAL_URL",
+  "E2E_DOCTOR_EMAIL",
+  "E2E_DOCTOR_PASSWORD",
+  "E2E_DOCTOR2_EMAIL",
+  "E2E_DOCTOR2_PASSWORD",
+  "E2E_ROOM_CHAT_SLUG",
+]);
 
 /** Log a doctor in through the real 003 flow (identifier + password). */
 async function login(

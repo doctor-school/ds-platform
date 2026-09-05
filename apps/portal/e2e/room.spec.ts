@@ -1,4 +1,8 @@
 import { test, expect, type Page } from "@playwright/test";
+import {
+  requireLiveStandEnv,
+  requireShortHeartbeat,
+} from "./support/live-stand-env";
 
 /**
  * 006 EARS-2 — a gated doctor's webinar room renders the player + chat aside to
@@ -15,10 +19,35 @@ import { test, expect, type Page } from "@playwright/test";
  * harness, PR #673): it needs a running portal whose `/v1/*` rewrite reaches a
  * running api + Postgres seeded with LIVE events carrying a seeded stream config
  * (the 006↔007 fixture seam — stream-config authoring is feature 007) + a roster
- * registration for the test doctor, plus a real 003 login. It `test.skip`s unless
- * the dev-stand env is present, so a stray CI invocation is inert. The full
+ * registration for the test doctor, plus a real 003 login. It is inert-green only
+ * on a BARE environment; a partially exported env set fails loudly (#1871). The full
  * both-breakpoints × both-themes fidelity + Stage-B live confirmation is owned by
  * the 006 integration slice (#584).
+ *
+ * ENV SET (#1871) — export ALL of these to run this spec; exporting SOME of them
+ * fails loudly naming the missing ones (`support/live-stand-env.ts`), while a
+ * completely bare environment stays inert-green:
+ *
+ * | variable                    | value on the dev stand                       |
+ * | --------------------------- | -------------------------------------------- |
+ * | `E2E_PORTAL_URL`            | the running portal origin                    |
+ * | `E2E_DOCTOR_EMAIL`          | a doctor registered for the seeded rooms     |
+ * | `E2E_DOCTOR_PASSWORD`       | that doctor's password                       |
+ * | `E2E_ROOM_SLUG_YOUTUBE`     | `seed-006-room-youtube`                      |
+ * | `E2E_ROOM_SLUG_RUTUBE`      | `seed-006-room-rutube`                       |
+ * | `E2E_ROOM_SLUG_UNAVAILABLE` | `seed-006-room-unavailable`                  |
+ * | `E2E_ROOM_SLUG_LIVE`        | `seed-005-live`                              |
+ * | `E2E_ROOM_HEARTBEAT_SECONDS`| the api's cadence, ≤ 10 (see below)          |
+ *
+ * API PRECONDITION: the api under test MUST be booted with
+ * `ROOM_HEARTBEAT_INTERVAL_SECONDS=2` (its default is 60). EARS-4 waits multiples
+ * of the cadence, so the default cadence pushes them past the 120 s Playwright
+ * timeout; `E2E_ROOM_HEARTBEAT_SECONDS` must MIRROR the api value and is capped
+ * at 10 — a larger value fails loudly by name instead of timing out.
+ *
+ * DOCTOR PROVISIONING: doctors are self-signup (register → Mailpit OTP →
+ * auto-login). Zitadel/api throttles after ~4–5 signups per window (429) — wait
+ * ~10 min or reuse existing credentials rather than minting new ones per run.
  */
 
 const BASE = process.env.E2E_PORTAL_URL ?? "http://localhost:3001";
@@ -36,12 +65,18 @@ const SLUG_UNAVAILABLE = process.env.E2E_ROOM_SLUG_UNAVAILABLE;
 // live-verify api is booted with a SHORT N so the cadence is observable in a test
 // window — the test reads that same value from E2E_ROOM_HEARTBEAT_SECONDS.
 const SLUG_LIVE = process.env.E2E_ROOM_SLUG_LIVE ?? SLUG_YOUTUBE;
-const HEARTBEAT_SECONDS = Number(process.env.E2E_ROOM_HEARTBEAT_SECONDS ?? "2");
 
-test.skip(
-  !process.env.E2E_PORTAL_URL || !DOCTOR_EMAIL || !DOCTOR_PASSWORD,
-  "requires a live portal + a doctor registered for the seeded live rooms",
-);
+requireLiveStandEnv([
+  "E2E_PORTAL_URL",
+  "E2E_DOCTOR_EMAIL",
+  "E2E_DOCTOR_PASSWORD",
+  "E2E_ROOM_SLUG_YOUTUBE",
+  "E2E_ROOM_SLUG_RUTUBE",
+  "E2E_ROOM_SLUG_UNAVAILABLE",
+  "E2E_ROOM_SLUG_LIVE",
+  "E2E_ROOM_HEARTBEAT_SECONDS",
+]);
+const HEARTBEAT_SECONDS = requireShortHeartbeat();
 
 /** Log the doctor in through the real 003 flow (identifier + password). */
 async function login(page: Page): Promise<void> {
@@ -60,7 +95,6 @@ test.describe("006 EARS-2 room composition + embed player from the provider enum
   test("006 EARS-2: a gated doctor's room renders the YouTube embed frame + the chat aside composition", async ({
     page,
   }) => {
-    test.skip(!SLUG_YOUTUBE, "requires a seeded live YouTube-provider room");
     await login(page);
     await page.goto(`${BASE}/webinars/${SLUG_YOUTUBE}/room`, {
       waitUntil: "domcontentloaded",
@@ -78,13 +112,12 @@ test.describe("006 EARS-2 room composition + embed player from the provider enum
     // player + chat aside shell). Chat BEHAVIOUR is EARS-3 (#579) — this is the
     // composition shell only.
     await expect(page.getByTestId("room-chat").first()).toBeVisible();
-    await expect(page.getByTestId("room-context").first()).toBeVisible();
+    await expect(page.getByTestId("room-context-strip")).toBeVisible();
   });
 
   test("006 EARS-2: a gated doctor's room renders the Rutube embed frame from the enum", async ({
     page,
   }) => {
-    test.skip(!SLUG_RUTUBE, "requires a seeded live Rutube-provider room");
     await login(page);
     await page.goto(`${BASE}/webinars/${SLUG_RUTUBE}/room`, {
       waitUntil: "domcontentloaded",
@@ -103,10 +136,6 @@ test.describe("006 EARS-2 room composition + embed player from the provider enum
   test("006 EARS-2: an unconfigured/unknown provider renders the truthful 'stream unavailable' state, not a guessed embed", async ({
     page,
   }) => {
-    test.skip(
-      !SLUG_UNAVAILABLE,
-      "requires a seeded live room with NO stream config",
-    );
     await login(page);
     await page.goto(`${BASE}/webinars/${SLUG_UNAVAILABLE}/room`, {
       waitUntil: "domcontentloaded",
@@ -141,10 +170,6 @@ test.describe("006 EARS-4 server-authoritative heartbeat presence (e2e)", () => 
   test("006 EARS-4: the room fires an authenticated heartbeat on the N-second cadence with no doctor action", async ({
     page,
   }) => {
-    test.skip(
-      !SLUG_LIVE,
-      "requires a seeded live room the doctor is registered for",
-    );
     const heartbeats = trackHeartbeats(page);
     await login(page);
     await page.goto(`${BASE}/webinars/${SLUG_LIVE}/room`, {
@@ -182,10 +207,6 @@ test.describe("006 EARS-4 server-authoritative heartbeat presence (e2e)", () => 
   test("006 EARS-4: hidden pauses beats; returning visible emits an immediate beat", async ({
     page,
   }) => {
-    test.skip(
-      !SLUG_LIVE,
-      "requires a seeded live room the doctor is registered for",
-    );
     const heartbeats = trackHeartbeats(page);
     await login(page);
     await page.goto(`${BASE}/webinars/${SLUG_LIVE}/room`, {

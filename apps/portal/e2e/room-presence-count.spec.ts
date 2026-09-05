@@ -1,4 +1,8 @@
 import { test, expect, type Page } from "@playwright/test";
+import {
+  requireLiveStandEnv,
+  requireShortHeartbeat,
+} from "./support/live-stand-env";
 
 /**
  * 006 EARS-5 — the live in-room presence counter, REALTIME push over Centrifugo.
@@ -18,9 +22,36 @@ import { test, expect, type Page } from "@playwright/test";
  * `apps/api/src/room/presence-publisher.service.spec.ts`; the client
  * discriminate-and-apply seam by `presence-channel.test.tsx`.
  *
- * Live-stand-gated tier (mirrors `room-chat.spec.ts`): it `test.skip`s unless the
- * dev-stand env is present, so a stray CI invocation is inert. The presence count
- * is a DESKTOP header element (canvas), so the contexts run a desktop viewport.
+ * Live-stand-gated tier (mirrors `room-chat.spec.ts`): it is inert-green only on a
+ * BARE environment; a partially exported env set fails loudly (#1871). The presence
+ * count is a DESKTOP header element (canvas), so the contexts run a desktop
+ * viewport.
+ *
+ * ENV SET (#1871) — export ALL of these to run this spec; exporting SOME of them
+ * fails loudly naming the missing ones (`support/live-stand-env.ts`), while a
+ * completely bare environment stays inert-green:
+ *
+ * | variable                     | value on the dev stand                   |
+ * | ---------------------------- | ---------------------------------------- |
+ * | `E2E_PORTAL_URL`             | the running portal origin                |
+ * | `E2E_DOCTOR_EMAIL`           | doctor A, registered for the live room   |
+ * | `E2E_DOCTOR_PASSWORD`        | doctor A's password                      |
+ * | `E2E_DOCTOR2_EMAIL`          | doctor B, registered for the same room   |
+ * | `E2E_DOCTOR2_PASSWORD`       | doctor B's password                      |
+ * | `E2E_ROOM_CHAT_SLUG`         | `seed-005-live`                          |
+ * | `E2E_ROOM_HEARTBEAT_SECONDS` | the api's cadence, ≤ 10 (see below)      |
+ *
+ * API PRECONDITION: the api under test MUST be booted with
+ * `ROOM_HEARTBEAT_INTERVAL_SECONDS=2` (its default is 60). The join-raises-count
+ * and age-out waits are multiples of that cadence, so the default cadence pushes
+ * them past the 120 s Playwright timeout; `E2E_ROOM_HEARTBEAT_SECONDS` must MIRROR
+ * the api value and is capped at 10 — a larger value fails loudly by name instead
+ * of timing out. The presence freshness window defaults to `2 ×` that cadence and
+ * can be overridden with `E2E_ROOM_PRESENCE_WINDOW_SECONDS`.
+ *
+ * DOCTOR PROVISIONING: the two doctors are self-signup accounts reused across
+ * runs. Zitadel/api throttles after ~4–5 signups per window (429) — reuse the
+ * exported credentials rather than minting a fresh pair per run.
  */
 
 const BASE = process.env.E2E_PORTAL_URL ?? "http://localhost:3001";
@@ -32,22 +63,24 @@ const SLUG_LIVE =
   process.env.E2E_ROOM_CHAT_SLUG ??
   process.env.E2E_ROOM_SLUG_LIVE ??
   process.env.E2E_ROOM_SLUG_YOUTUBE;
+requireLiveStandEnv([
+  "E2E_PORTAL_URL",
+  "E2E_DOCTOR_EMAIL",
+  "E2E_DOCTOR_PASSWORD",
+  "E2E_DOCTOR2_EMAIL",
+  "E2E_DOCTOR2_PASSWORD",
+  "E2E_ROOM_CHAT_SLUG",
+  "E2E_ROOM_HEARTBEAT_SECONDS",
+]);
+// The server-side heartbeat cadence, capped at 10 s so the age-out waits below fit
+// inside the 120 s Playwright timeout (#1871): the api's own default is 60 s, which
+// silently turned these tests into opaque timeouts.
+const HEARTBEAT_SECONDS = requireShortHeartbeat();
 // The presence freshness window (2 × heartbeat cadence) bounds when stopped beats
-// age out server-side. Export it (seconds) to enable the age-out assertion;
-// with the 60 s default the window is 120 s — too long to wait in most runs — so
-// the age-out case is skipped unless a shorter cadence is configured and surfaced.
+// age out server-side. It derives from the cadence by default; override only when
+// the api's window is not exactly 2 × N.
 const PRESENCE_WINDOW_SECONDS = Number(
-  process.env.E2E_ROOM_PRESENCE_WINDOW_SECONDS ?? "0",
-);
-
-test.skip(
-  !process.env.E2E_PORTAL_URL ||
-    !DOCTOR_A_EMAIL ||
-    !DOCTOR_A_PASSWORD ||
-    !DOCTOR_B_EMAIL ||
-    !DOCTOR_B_PASSWORD ||
-    !SLUG_LIVE,
-  "requires a live portal + two doctors registered for the seeded live room",
+  process.env.E2E_ROOM_PRESENCE_WINDOW_SECONDS ?? String(HEARTBEAT_SECONDS * 2),
 );
 
 test.use({ viewport: { width: 1280, height: 800 } });
@@ -114,10 +147,6 @@ test.describe("006 EARS-5 realtime presence count over Centrifugo (e2e)", () => 
       // Closing B stops this client's beats but does not itself change the count.
       // The broad E2E observes the decreased result after stopped-beat age-out;
       // exact timer/no-A-beat causality belongs to the #1139 harness + publisher unit.
-      test.skip(
-        !PRESENCE_WINDOW_SECONDS || PRESENCE_WINDOW_SECONDS > 40,
-        "age-out assertion needs a short E2E_ROOM_PRESENCE_WINDOW_SECONDS (2 × a short heartbeat cadence)",
-      );
       const afterJoin = await presenceValue(pageA);
       await ctxB.close();
       await expect

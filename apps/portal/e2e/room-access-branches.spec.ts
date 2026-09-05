@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { LIVE_STAND } from "./support/doctor-session";
+import { requireLiveStandEnv } from "./support/live-stand-env";
 import { fetchOtpCode } from "./support/mailpit";
 import { NOTIFICATION_SUBJECTS } from "./support/notification-subjects";
 
@@ -25,10 +25,26 @@ import { NOTIFICATION_SUBJECTS } from "./support/notification-subjects";
  * real Zitadel + Mailpit, seeded with a LIVE event (`seed-005-live`) and an
  * upcoming event (`seed-005-upcoming`) — the 005/006↔007 fixture seam. Each branch
  * SELF-PROVISIONS its own doctor through the real 003 register→verify→auto-login
- * flow (no operator-seeded credentials), so the whole suite runs on `LIVE_STAND` +
- * the seeds alone. It `test.skip`s unless the live stand env is present, so a stray
- * CI invocation is inert. Stage-B (canvas fidelity, both breakpoints × both themes)
- * is batched at #584.
+ * flow (no operator-seeded credentials), so the whole suite runs on the live-stand
+ * env + the seeds alone. It is inert-green only on a BARE environment; a partially
+ * exported env set fails loudly (#1871). Stage-B (canvas fidelity, both breakpoints
+ * × both themes) is batched at #584.
+ *
+ * ENV SET (#1871) — export ALL of these to run this spec; exporting SOME of them
+ * fails loudly naming the missing ones (`support/live-stand-env.ts`), while a
+ * completely bare environment stays inert-green:
+ *
+ * | variable                   | value on the dev stand                 |
+ * | -------------------------- | -------------------------------------- |
+ * | `E2E_PORTAL_URL`           | the running portal origin              |
+ * | `IDP_ISSUER`               | the real Zitadel issuer                |
+ * | `MAILPIT_URL`              | the Mailpit REST base (OTP sink)       |
+ * | `E2E_ROOM_SLUG_LIVE`       | `seed-005-live`                        |
+ * | `E2E_WEBINAR_SLUG_NOT_LIVE`| `seed-005-upcoming`                    |
+ *
+ * DOCTOR PROVISIONING: every branch SELF-SIGNS-UP a fresh doctor (register →
+ * Mailpit OTP → auto-login). Zitadel/api throttles after ~4–5 signups per window
+ * (429) — wait ~10 min between full runs rather than retrying into the throttle.
  */
 
 const BASE = process.env.E2E_PORTAL_URL ?? "http://localhost:3001";
@@ -44,10 +60,32 @@ const SLUG_NOT_LIVE =
   process.env.E2E_WEBINAR_SLUG ??
   "seed-005-upcoming";
 
-test.skip(
-  !LIVE_STAND,
-  "dev-stand env absent (E2E_PORTAL_URL / IDP_ISSUER / MAILPIT_URL) — manual gate",
-);
+requireLiveStandEnv([
+  "E2E_PORTAL_URL",
+  "IDP_ISSUER",
+  "MAILPIT_URL",
+  "E2E_ROOM_SLUG_LIVE",
+  "E2E_WEBINAR_SLUG_NOT_LIVE",
+]);
+
+/**
+ * Assert the event page shows the REGISTERED state for the doctor (#1871).
+ *
+ * The visible copy differs per lifecycle state — a LIVE registered event renders
+ * the room-entry CTA «Войти в эфир», an upcoming one the «Вы записаны» statement —
+ * so a `getByText("Вы записаны")` assertion silently missed the live branch. Key
+ * off the card's `data-cta-action` policy attribute instead: locale-agnostic
+ * (#177) and the exact discriminator the signup card renders from.
+ */
+async function expectRegistered(
+  page: Page,
+  lifecycle: "live" | "not-live",
+): Promise<void> {
+  await expect(page.getByTestId("event-signup-card")).toHaveAttribute(
+    "data-cta-action",
+    lifecycle === "live" ? "enter-room" : "registered",
+  );
+}
 
 const rand = (): string => Math.random().toString(36).slice(2, 8);
 
@@ -147,9 +185,7 @@ test.describe("006 EARS-6 denied-access routing (auth/register/not-live front do
       returnTo: `/webinars/${SLUG_LIVE}`,
     });
     await page.waitForURL(new RegExp(`/webinars/${SLUG_LIVE}(?:$|[?#])`));
-    await expect(
-      page.getByText("Вы записаны", { exact: false }).first(),
-    ).toBeVisible();
+    await expectRegistered(page, "live");
 
     // Log the doctor out and hit the room as a GUEST.
     await context.clearCookies();
@@ -200,9 +236,7 @@ test.describe("006 EARS-6 denied-access routing (auth/register/not-live front do
 
     // The doctor registers (one-tap, register-during-live is a normal path)…
     await registerCta.click();
-    await expect(
-      page.getByText("Вы записаны", { exact: false }).first(),
-    ).toBeVisible();
+    await expectRegistered(page, "live");
 
     // …and is now ADMITTED: a fresh navigation to the room grants and renders it.
     await page.goto(`${BASE}/webinars/${SLUG_LIVE}/room`, {
@@ -218,9 +252,7 @@ test.describe("006 EARS-6 denied-access routing (auth/register/not-live front do
     // A freshly provisioned doctor, registered for an UPCOMING (not-`live`) event.
     await registerDoctor(page, { returnTo: `/webinars/${SLUG_NOT_LIVE}` });
     await page.waitForURL(new RegExp(`/webinars/${SLUG_NOT_LIVE}(?:$|[?#])`));
-    await expect(
-      page.getByText("Вы записаны", { exact: false }).first(),
-    ).toBeVisible();
+    await expectRegistered(page, "not-live");
 
     // Reaching the room of the not-`live` event is refused (409 not-live) and
     // routed to the truthful 004 lifecycle state on the event page — NOT the
@@ -230,11 +262,9 @@ test.describe("006 EARS-6 denied-access routing (auth/register/not-live front do
     });
     await page.waitForURL(new RegExp(`/webinars/${SLUG_NOT_LIVE}$`));
     await expect(page.getByTestId("room-access-guidance")).toHaveCount(0);
-    // The truthful registered-upcoming lifecycle state holds (the «вы записаны»
-    // confirmation), and no room composition renders.
-    await expect(
-      page.getByText("Вы записаны", { exact: false }).first(),
-    ).toBeVisible();
+    // The truthful registered-upcoming lifecycle state holds (the `registered`
+    // statement, no room-entry control), and no room composition renders.
+    await expectRegistered(page, "not-live");
     await expectNoRoom(page);
   });
 });

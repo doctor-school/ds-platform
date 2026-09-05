@@ -38,6 +38,19 @@ interface Args {
   dryRun: boolean;
 }
 
+/**
+ * Read the value of `--flag <value>`, refusing a value that is itself a flag:
+ * `--manifest --dry-run` would otherwise silently take `--dry-run` as the path
+ * and fail with a confusing ENOENT instead of naming the missing value.
+ */
+function value(argv: string[], index: number, flag: string): string {
+  const raw = argv[index];
+  if (raw === undefined || raw.startsWith("--")) {
+    throw new Error(`${flag} needs a value`);
+  }
+  return raw;
+}
+
 function parseArgs(argv: string[]): Args {
   let manifest: string | undefined;
   let actor: string | undefined;
@@ -47,8 +60,8 @@ function parseArgs(argv: string[]): Args {
     // `pnpm --filter @ds/api recordings:backfill -- --manifest …` forwards the
     // bare `--` separator itself, so the documented invocation must tolerate it.
     if (arg === "--") continue;
-    else if (arg === "--manifest") manifest = argv[++i];
-    else if (arg === "--actor") actor = argv[++i];
+    else if (arg === "--manifest") manifest = value(argv, ++i, "--manifest");
+    else if (arg === "--actor") actor = value(argv, ++i, "--actor");
     else if (arg === "--dry-run") dryRun = true;
     else throw new Error(`unknown argument: ${arg}`);
   }
@@ -57,6 +70,13 @@ function parseArgs(argv: string[]): Args {
   // them in the feature-010 ledger, and an unattributed backfill is exactly the
   // `db-direct` write 010 EARS-4 exists to make visible.
   if (!actor) throw new Error("--actor <zitadel-sub> is required");
+  // Shape only — the sub lands verbatim in `audit_ledger.subject_id`, so a value
+  // carrying whitespace or a stray quote is a copy-paste accident, not a sub.
+  // Existence is NOT checked here: that is an IdP round-trip this CLI has no
+  // client for (would be its own Issue).
+  if (!/^[A-Za-z0-9:._@-]{3,}$/.test(actor)) {
+    throw new Error(`--actor does not look like an IdP subject: ${actor}`);
+  }
   return { manifest, actor, dryRun };
 }
 

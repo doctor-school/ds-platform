@@ -103,8 +103,8 @@ fake↔real port parity.
 `pnpm --filter @ds/api recordings:backfill` attaches and publishes the missing
 recordings of **platform-born** эфиры in bulk. It is a driver over the ordinary
 014 commands (`AttachRecording` + `PublishRecording`) — no second write path, no
-direct row insert — so the slot guard, the duration derivation and the feature-010
-audit rows are exactly the ones the «Записи» admin tab produces.
+direct row insert — so the slot guard and the feature-010 audit rows are exactly
+the ones the «Записи» admin tab produces.
 
 The manifest is a JSON array, one entry per event, each carrying an `edited`
 and/or a `raw` source:
@@ -115,8 +115,7 @@ and/or a `raw` source:
     "event": "kardiologiya-2026-04-12",
     "edited": {
       "provider": "rutube",
-      "embed_ref": "0123…",
-      "duration_sec": 5400
+      "embed_ref": "0123…"
     },
     "raw": {
       "provider": "rutube",
@@ -131,7 +130,11 @@ and/or a `raw` source:
 ]
 ```
 
-`event` is the event **id or slug**; `poster` and `duration_sec` are optional.
+`event` is the event **id or slug**; `poster` is optional. There is no duration
+field: per 014-design §7 a recording's duration is derived from provider
+metadata and never operator-authored, so a backfilled recording carries no
+duration until EARS-20 ([#1611](https://github.com/doctor-school/ds-platform/issues/1611))
+derives it.
 The whole manifest is validated before the first write, so a typo in row 40
 never leaves rows 1–39 committed.
 

@@ -20,9 +20,11 @@ import {
 // This module is a DRIVER over the §3 commands and nothing else. It owns no
 // state machine, no table, no enum, no error code and no SQL write: every row it
 // commits goes through `RecordingsService.attach` + `RecordingsService.transition`
-// exactly as the «Записи» tab does, so the LD-1 slot guard, the EARS-20 duration
-// derivation, the feature-010 audit capture and the §11 error set all apply
-// unchanged. Grep this file for `UPDATE`/`INSERT`: there is none.
+// exactly as the «Записи» tab does, so the LD-1 slot guard, the feature-010 audit
+// capture and the §11 error set all apply unchanged. Duration is deliberately
+// NOT in the manifest: §7 makes it metadata-derived and never operator-authored,
+// so a backfilled row carries `duration_sec = NULL` until EARS-20 (#1611) lands.
+// Grep this file for `UPDATE`/`INSERT`: there is none.
 //
 // Three properties are worth stating out loud, because they are what the spec
 // asks for and what the e2e suite proves:
@@ -58,7 +60,6 @@ const ManifestSourceSchema = z
     provider: z.string(),
     embed_ref: z.string(),
     poster: z.string().nullish(),
-    duration_sec: z.union([z.string(), z.number()]).nullish(),
   })
   .strict();
 
@@ -162,9 +163,6 @@ export function parseBackfillManifest(input: unknown): BackfillManifest {
         provider: source.provider,
         embedRef: source.embed_ref,
         ...(source.poster != null ? { posterRef: source.poster } : {}),
-        ...(source.duration_sec != null
-          ? { durationSec: source.duration_sec }
-          : {}),
       });
       if (!parsed.success) {
         throw new Error(
@@ -220,6 +218,9 @@ async function runTarget(
   options: BackfillOptions,
 ): Promise<BackfillEntry> {
   const base = { event: target.event, kind: target.kind };
+  // Set once the attach has COMMITTED, so a publish that throws afterwards
+  // reports which slot now holds the orphan draft instead of an id-less refusal.
+  let committed: string | undefined;
   try {
     // 1. The event read. Unknown id or slug is the ordinary 404 of the existing
     //    read — reported, never invented here.
@@ -310,6 +311,7 @@ async function runTarget(
         payload: target.payload,
       }),
     });
+    committed = attached.detail.id;
     await publish(
       deps,
       event.id,
@@ -328,6 +330,7 @@ async function runTarget(
         ...base,
         outcome: "refused",
         code: err.errorCode,
+        ...(committed ? { recordingId: committed } : {}),
         ...(err.detail ? { detail: err.detail } : {}),
       };
     }

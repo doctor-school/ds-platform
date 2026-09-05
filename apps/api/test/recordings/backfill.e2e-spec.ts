@@ -113,7 +113,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     }
 
     function source(embedRef = RUTUBE_REF) {
-      return { provider: "rutube", embed_ref: embedRef, duration_sec: 5400 };
+      return { provider: "rutube", embed_ref: embedRef };
     }
 
     async function run(
@@ -167,7 +167,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       return rows;
     }
 
-    it("014 EARS-29: when the operator runs the backfill over ended platform-born эфиры, the system shall attach and publish one recording per row through the ordinary commands, leaving every lifecycle field untouched", async () => {
+    it("014 EARS-29.1: when the operator runs the backfill over ended platform-born эфиры, the system shall attach and publish one recording per row through the ordinary commands, leaving every lifecycle field untouched", async () => {
       const first = await insertEvent();
       const second = await insertEvent();
       const before = await eventFacts(first.id);
@@ -190,7 +190,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         expect(rows[0]).toMatchObject({
           kind: "edited",
           status: "published",
-          duration_sec: 5400,
+          // §7: duration is metadata-derived, never operator-authored — the
+          // manifest carries none, so the backfilled row stays NULL until
+          // EARS-20 (#1611) derives it.
+          duration_sec: null,
           deleted_at: null,
         });
       }
@@ -218,7 +221,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       }
     });
 
-    it("014 EARS-29: when the very same manifest is re-run, the system shall report every row skipped and write neither a second recording nor an audit row", async () => {
+    it("014 EARS-29.2: when the very same manifest is re-run, the system shall report every row skipped and write neither a second recording nor an audit row", async () => {
       const event = await insertEvent();
       const manifest = [{ event: event.id, edited: source() }];
       await run(manifest);
@@ -232,7 +235,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(await auditRows(recordingId)).toHaveLength(auditBefore.length);
     });
 
-    it("014 EARS-29: when a manifest row targets a published event whose date has passed, the system shall refuse it with EVENT_NOT_FINISHED, leave the event published and continue the run", async () => {
+    it("014 EARS-29.3: when a manifest row targets a published event whose date has passed, the system shall refuse it with EVENT_NOT_FINISHED, leave the event published and continue the run", async () => {
       const stale = await insertEvent({ state: "published", live: false });
       const eligible = await insertEvent();
 
@@ -251,7 +254,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(report.entries[1]!.outcome).toBe("attached+published");
     });
 
-    it("014 EARS-29: when a manifest row targets a legacy event or an unknown id, the system shall refuse it with INVALID_TRANSITION per EARS-27 or the event read's own 404 and attach nothing", async () => {
+    it("014 EARS-29.4: when a manifest row targets a legacy event or an unknown id, the system shall refuse it with INVALID_TRANSITION per EARS-27 or the event read's own 404 and attach nothing", async () => {
       const legacy = await insertEvent({ state: "hidden", origin: "legacy" });
       const unknownSlug = `rec-1892-missing-${randomUUID()}`;
 
@@ -272,7 +275,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       });
     });
 
-    it("014 EARS-29: when the backfill runs in dry-run, the system shall report would-attach, skipped and refused per row and mutate nothing", async () => {
+    it("014 EARS-29.5: when the backfill runs in dry-run, the system shall report would-attach, skipped and refused per row and mutate nothing", async () => {
       const fresh = await insertEvent();
       const done = await insertEvent();
       const stale = await insertEvent({ state: "published", live: false });
@@ -302,7 +305,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect((await eventFacts(fresh.id)).state).toBe("ended");
     });
 
-    it("014 EARS-29: when the kind already carries a non-retired draft, the system shall publish that row and never attach a second one", async () => {
+    it("014 EARS-29.6: when the kind already carries a non-retired draft, the system shall publish that row and never attach a second one", async () => {
       const event = await insertEvent();
       await run([{ event: event.id, edited: source() }]);
       const attachedId = (await recordings(event.id))[0]!.id;

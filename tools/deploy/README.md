@@ -175,6 +175,27 @@ What stays forbidden: deploying an arbitrary branch, a feature preview, or any
 commit not yet merged to `main`. `--ref` narrows the range; it does not widen what
 is deployable.
 
+One case still needs the full train rather than `--ref`: **removing a service.**
+The pre-flight only lets the target be a strict descendant of the live SHA, so a
+shrinking service set means the service was deliberately deleted — its container
+then survives as a compose orphan while the shipped older Caddyfile stops routing
+it, and the derived smoke no longer probes it. The deploy goes green with a public
+vhost dark. Ship a service removal on `origin/main`, never as a hotfix.
+
+## The app-only rollback boundary (`--rollback`, #1896)
+
+A rollback ships **no tree**: it re-tags and restarts, so `docker compose up -d`
+runs against the compose the LAST DEPLOY left on the box — newer than the rollback
+target. A service the target predates is still declared there **with a `build:`
+section**, so Compose would rebuild it from the current on-box source, tag it with
+the rollback SHA, and report «ROLLBACK OK» over exactly the code being reverted.
+So `rollback()` derives two sets — the target's compose and the LIVE prod SHA's
+(`/v1/health`, the same ground truth the hotfix pre-flight uses) — and refuses
+before any ssh when the live set declares a service the target lacks, naming it
+(`rollbackBoundaryVerdict`). An unresolvable live SHA is a refusal too. Crossing a
+service-introduction boundary backwards is a forward fix or a `--ref` deploy of a
+tree that actually declares the wanted state, never an app-only rollback.
+
 ## Rollback compatibility floor (`rollback-floor.mjs`, 012 EARS-24 / #1633)
 
 `--rollback` swaps the app image while the database stays where it is. That is

@@ -37,6 +37,18 @@ export const BOOT_PROBE_EXCLUDED = Object.freeze(["api"]);
 /** `image: ds-<repo>:${DEPLOY_SHA}` / `${DEPLOY_SHA:-local}` — the deploy-tagged shape. */
 const SHA_TAGGED_IMAGE_RE = /^(ds-[a-z0-9][a-z0-9-]*):\$\{DEPLOY_SHA(?::-[^}]*)?\}$/;
 
+/**
+ * Service names the generated verify shell can carry: lowercase, digit- and
+ * dash-bearing, never leading with a digit. Enforced in `deployServiceSet` so a
+ * compose rename can never emit a broken `docker inspect` script on prod.
+ */
+export const SERVICE_NAME_RE = /^[a-z][a-z0-9-]*$/;
+
+/** A service name as a shell variable prefix (`sms-aero` → `sms_aero`). */
+export function shellVarName(name) {
+  return String(name ?? "").replace(/[^A-Za-z0-9]/g, "_");
+}
+
 /** Raised for an empty or unusable derivation — the caller must fail closed. */
 export class ServiceSetError extends Error {
   constructor(message) {
@@ -119,15 +131,73 @@ export function deployServiceSet(composeText, { source } = {}) {
         ` Refusing to deploy: a deploy that verifies nothing is not verified.`,
     );
   }
-  const dupes = services
+  // The deploy generates shell that turns each service name into a variable
+  // prefix (`shVar` in prod.mjs). Reject a name that cannot survive that
+  // transform STRUCTURALLY — a leading digit emits an invalid assignment, and
+  // two names differing only in `.` vs `-` would collapse onto one variable and
+  // silently compare the same container twice. Safe-by-construction beats
+  // safe-by-current-content.
+  const illegal = services
     .map((s) => s.name)
+    .filter((n) => !SERVICE_NAME_RE.test(n));
+  if (illegal.length > 0) {
+    throw new ServiceSetError(
+      `service name(s) unusable in the generated verify shell in` +
+        ` ${API_PROD_COMPOSE_PATH}${at}: ${illegal.join(", ")} —` +
+        ` expected \`[a-z][a-z0-9-]*\`.`,
+    );
+  }
+  // Dedupe on the SHELL-VARIABLE form, not the raw name: `a.b` and `a-b` are
+  // distinct compose services but one shell variable.
+  const dupes = services
+    .map((s) => shellVarName(s.name))
     .filter((n, i, all) => all.indexOf(n) !== i);
   if (dupes.length > 0) {
     throw new ServiceSetError(
-      `duplicate service name(s) in ${API_PROD_COMPOSE_PATH}${at}: ${dupes.join(", ")}`,
+      `duplicate (or shell-variable-colliding) service name(s) in` +
+        ` ${API_PROD_COMPOSE_PATH}${at}: ${dupes.join(", ")}`,
     );
   }
   return services;
+}
+
+/**
+ * The app-only rollback boundary (#1896). `rollback()` re-tags and restarts
+ * containers; it does NOT ship a tree, so `docker compose up -d` runs against
+ * the compose ALREADY on the box — the one the last deploy shipped, which is
+ * newer than the rollback target. A service the target predates is therefore
+ * still declared on the box with a `build:` section, and Compose would happily
+ * REBUILD it from the newer on-box source and tag it with the old SHA: a green
+ * "ROLLBACK OK" while that surface serves exactly the code being reverted.
+ *
+ * So an app-only rollback may not cross a service-introduction boundary. Pure
+ * verdict over the two derived sets; the caller dies on `ok: false` before any
+ * ssh. The live set SHRINKING relative to the target (a service removed between
+ * target and prod) is fine — nothing on the box would be rebuilt.
+ *
+ * @param {{ name: string }[]} liveServices set derived from the LIVE prod SHA
+ * @param {{ name: string }[]} targetServices set derived from the rollback target
+ * @returns {{ ok: boolean, extra: string[], reason: string|null }}
+ */
+export function rollbackBoundaryVerdict(liveServices, targetServices) {
+  const targetNames = new Set((targetServices ?? []).map((s) => s.name));
+  const extra = (liveServices ?? [])
+    .map((s) => s.name)
+    .filter((n) => !targetNames.has(n));
+  if (extra.length === 0) return { ok: true, extra: [], reason: null };
+  return {
+    ok: false,
+    extra,
+    reason:
+      `an app-only rollback cannot cross a service-introduction boundary:` +
+      ` prod currently runs service(s) the rollback target does not declare —` +
+      ` ${extra.join(", ")}. Their containers are declared on the box with a` +
+      ` \`build:\` section, so \`docker compose up -d\` would REBUILD them from` +
+      ` the current on-box source and tag the result with the rollback SHA:` +
+      ` "ROLLBACK OK" while that surface serves the very code being reverted.` +
+      ` Ship a forward fix, or \`pnpm deploy:prod --ref <sha>\` a tree that` +
+      ` actually declares the state you want.`,
+  };
 }
 
 /**

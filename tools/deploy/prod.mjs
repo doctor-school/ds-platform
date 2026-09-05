@@ -87,6 +87,8 @@ import {
   deployServiceSet,
   formatServiceImages,
   formatServiceNames,
+  rollbackBoundaryVerdict,
+  shellVarName,
 } from "./service-set.mjs";
 
 // Prod health endpoint — the status record's `log_url` and the verify-over-HTTP
@@ -671,9 +673,6 @@ function sshCapture(host, script) {
 // ds-api-prod` in the api-prod compose file): `<project>-<service>-1`.
 const CONTAINER_PREFIX = "ds-api-prod-";
 
-/** A compose service name usable as a shell variable prefix (`sms-aero` → `sms_aero`). */
-const shVar = (name) => name.replace(/[^A-Za-z0-9]/g, "_");
-
 // #1896: the per-service verify set of a deploy is READ from the TARGET tree's
 // compose file, not from the local checkout. `--ref <sha>` ships that commit's
 // tree, so its compose is what the on-box `docker compose build` consumes and
@@ -694,10 +693,10 @@ function resolveTargetServiceSet(sha, label = sha.slice(0, 12)) {
     const services = deployServiceSet(composeText, { source: label });
     // Validate the boot-probe subset NOW (ports pinned, non-empty) so a broken
     // compose fails during pre-flight, not two build-minutes into the deploy.
-    bootProbeSet(services);
+    const probed = bootProbeSet(services);
     console.log(
       `  ℹ service set derived from ${label}: ${formatServiceNames(services)}` +
-        ` (boot-probed: ${formatServiceNames(bootProbeSet(services))})`,
+        ` (boot-probed: ${formatServiceNames(probed)})`,
     );
     return services;
   } catch (e) {
@@ -718,17 +717,17 @@ async function verifyRunningSha(sha, services) {
   const reads = services
     .map(
       (s) =>
-        `  ${shVar(s.name)}_img=$(sudo docker inspect ${CONTAINER_PREFIX}${s.name}-1 --format '{{.Config.Image}}' 2>/dev/null || echo absent)\n` +
-        `  ${shVar(s.name)}_h=$(sudo docker inspect ${CONTAINER_PREFIX}${s.name}-1 --format '{{.State.Health.Status}}' 2>/dev/null || echo absent)`,
+        `  ${shellVarName(s.name)}_img=$(sudo docker inspect ${CONTAINER_PREFIX}${s.name}-1 --format '{{.Config.Image}}' 2>/dev/null || echo absent)\n` +
+        `  ${shellVarName(s.name)}_h=$(sudo docker inspect ${CONTAINER_PREFIX}${s.name}-1 --format '{{.State.Health.Status}}' 2>/dev/null || echo absent)`,
     )
     .join("\n");
   const state = services
-    .map((s) => `${s.name}=$${shVar(s.name)}_img($${shVar(s.name)}_h)`)
+    .map((s) => `${s.name}=$${shellVarName(s.name)}_img($${shellVarName(s.name)}_h)`)
     .join(" ");
   const condition = services
     .map(
       (s) =>
-        `[ "$${shVar(s.name)}_img" = "${s.image}:${sha}" ] && [ "$${shVar(s.name)}_h" = healthy ]`,
+        `[ "$${shellVarName(s.name)}_img" = "${s.image}:${sha}" ] && [ "$${shellVarName(s.name)}_h" = healthy ]`,
     )
     .join(" \\\n     && ");
   const out = await sshCapture(
@@ -1274,6 +1273,13 @@ async function recordDeployment(prevSha, sha) {
 // so probing new.doctor.school would red a healthy deploy. Reuse the smoke's own
 // documented opt-out (`PROD_DOCTOR_HOST=skip`, #1723) rather than a second
 // mechanism.
+//
+// The `ds-doctor` string stays LITERAL on purpose: it is not a service list but
+// the one end of the smoke's own `service -> env opt-out` contract, whose other
+// end (`PROD_DOCTOR_HOST`) lives in `smoke-prod.mjs`. Deriving it would mean
+// inventing a naming convention between the two files. When a SECOND optional
+// vhost appears, export that mapping from `smoke-prod.mjs` and read it here —
+// do not grow this into a second hard-coded service list (#1896).
 function runSmoke(sha, services) {
   const shipsDoctor = (services ?? []).some((s) => s.image === "ds-doctor");
   if (!shipsDoctor) {
@@ -1324,6 +1330,41 @@ async function rollback(shaArg) {
   // commit produced — rolling back below a service's introduction must not
   // demand an image that never existed at that SHA.
   const services = resolveTargetServiceSet(sha, `rollback ${sha.slice(0, 12)}`);
+
+  // …but a rollback ships NO tree: the `up -d` below runs against the compose
+  // the LAST DEPLOY left on the box, which is newer than the target. A service
+  // the target predates is still declared there WITH a `build:` section, so
+  // Compose would rebuild it from the current on-box source and tag it with the
+  // rollback SHA — a green "ROLLBACK OK" over the very code being reverted.
+  // Compare the two derived sets and refuse the crossing BEFORE any ssh.
+  // Ground truth for "what prod runs" is `/v1/health`, the same source the
+  // hotfix pre-flight and the release gate use — not the Deployment record,
+  // which an app-only rollback leaves ahead of reality. UNKNOWN is fail-closed.
+  const liveHealth = await probeHealthSha(PROD_HEALTH_URL);
+  if (!liveHealth.sha) {
+    die(
+      `--rollback: cannot read the live prod SHA from ${PROD_HEALTH_URL}` +
+        ` (${liveHealth.error ?? "unknown"}) — without it the rollback cannot` +
+        ` tell whether it crosses a service-introduction boundary.`,
+    );
+  }
+  let liveSha;
+  try {
+    liveSha = localCap("git", ["rev-parse", `${liveHealth.sha}^{commit}`]);
+  } catch {
+    die(
+      `--rollback: the live prod SHA ${liveHealth.sha} does not resolve to a` +
+        ` commit in the local repo — fetch it before rolling back.`,
+    );
+  }
+  ok(`live prod SHA ${liveSha.slice(0, 12)} (from /v1/health)`);
+  const liveServices = resolveTargetServiceSet(
+    liveSha,
+    `live ${liveSha.slice(0, 12)}`,
+  );
+  const boundary = rollbackBoundaryVerdict(liveServices, services);
+  if (!boundary.ok) die(`--rollback: ${boundary.reason}`);
+
   step(
     `App-only rollback → ${services
       .map((svc) => `${svc.image}:${sha.slice(0, 12)}`)

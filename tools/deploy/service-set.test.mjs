@@ -18,6 +18,8 @@ import {
   formatServiceImages,
   formatServiceNames,
   parseDeployServices,
+  rollbackBoundaryVerdict,
+  shellVarName,
 } from "./service-set.mjs";
 
 const REPO_ROOT = join(import.meta.dirname, "..", "..");
@@ -201,4 +203,65 @@ test("1896: human labels render the derived set, not a hard-coded list", () => {
     formatServiceImages(preDoctor, " / "),
     "ds-api / ds-portal / ds-admin",
   );
+});
+
+// ── the app-only rollback boundary (Mode (a) BLOCKER on PR #1901) ──────────
+//
+// A rollback ships no tree: `docker compose up -d` runs against the compose the
+// LAST DEPLOY left on the box. A service the target predates is still declared
+// there with a `build:` section, so Compose would rebuild it from the current
+// on-box source under the rollback SHA and report success over the code being
+// reverted. The crossing must be refused before any ssh.
+
+const svc = (...names) => names.map((name) => ({ name }));
+
+test("1896: rollback across equal service sets is allowed", () => {
+  const verdict = rollbackBoundaryVerdict(
+    svc("api", "portal", "admin", "doctor"),
+    svc("api", "portal", "admin", "doctor"),
+  );
+  assert.equal(verdict.ok, true);
+  assert.deepEqual(verdict.extra, []);
+  assert.equal(verdict.reason, null);
+});
+
+test("1896: rollback below a service introduction is refused, naming the extras", () => {
+  // Live prod runs the doctor storefront (#1860); the target predates it.
+  const verdict = rollbackBoundaryVerdict(
+    svc("api", "portal", "admin", "doctor"),
+    svc("api", "portal", "admin"),
+  );
+  assert.equal(verdict.ok, false);
+  assert.deepEqual(verdict.extra, ["doctor"]);
+  assert.match(verdict.reason, /doctor/);
+  assert.match(verdict.reason, /service-introduction boundary/);
+  // The message must point at the sanctioned alternatives, not at a hack.
+  assert.match(verdict.reason, /forward fix/);
+  assert.match(verdict.reason, /--ref/);
+});
+
+test("1896: rollback to a tree declaring MORE services is allowed", () => {
+  // A service removed between the target and prod leaves nothing on the box to
+  // rebuild wrongly — the reverse direction is not a boundary crossing.
+  const verdict = rollbackBoundaryVerdict(
+    svc("api", "portal"),
+    svc("api", "portal", "admin", "doctor"),
+  );
+  assert.equal(verdict.ok, true);
+  assert.deepEqual(verdict.extra, []);
+});
+
+test("1896: service names that would break the generated verify shell are rejected", () => {
+  // A leading digit emits an invalid shell assignment (`3d_img=...`).
+  const leadingDigit =
+    'services:\n  3d:\n    image: ds-3d:${DEPLOY_SHA}\n    environment:\n      PORT: "3005"\n';
+  assert.throws(() => deployServiceSet(leadingDigit), ServiceSetError);
+  // `edge.web` and `edge-web` are distinct compose services but ONE shell variable -
+  // without this guard the generated condition would compare `edge_web` twice and
+  // silently never assert one of the two containers.
+  const dotted = "services:\n  edge.web:\n    image: ds-edge-web:${DEPLOY_SHA}\n";
+  assert.throws(() => deployServiceSet(dotted), ServiceSetError);
+  assert.equal(shellVarName("sms-aero"), "sms_aero");
+  // The real compose passes the guard.
+  assert.ok(deployServiceSet(currentCompose).length > 0);
 });

@@ -98,6 +98,10 @@ const SCAN_GLOBS = [
   "apps/admin/components/**/*.tsx",
   "apps/admin/src/**/*.tsx",
   "apps/academy-demo/app/**/*.tsx",
+  // #1722 D11 — the room's player/chat surfaces moved into the shared unit; the
+  // AA contract follows the code, so an opacity-dimmed foreground introduced there
+  // is caught exactly as it was while the composition lived under `apps/portal/app`.
+  "packages/room/src/**/*.tsx",
 ];
 const SCAN_IGNORE = [
   "**/*.test.{ts,tsx}",

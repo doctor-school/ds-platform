@@ -444,9 +444,6 @@ importers:
       '@yandex/smart-captcha':
         specifier: 2.9.1
         version: 2.9.1(react@19.2.8)
-      centrifuge:
-        specifier: ^5.7.1
-        version: 5.7.1
       lucide-react:
         specifier: ^1.33.0
         version: 1.33.0(react@19.2.8)

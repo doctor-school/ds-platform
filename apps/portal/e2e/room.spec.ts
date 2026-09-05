@@ -8,7 +8,7 @@ import { test, expect, type Page } from "@playwright/test";
  * the truthful "stream unavailable" state (never a guessed embed). The provider is
  * read from the enum, never sniffed from the URL — that structural half is pinned
  * by the unit tests (`apps/api/src/room/provider-enum.spec.ts`,
- * `apps/portal/lib/room-player.test.ts`); this browser spec pins the rendered
+ * `packages/room/src/model/room-player.test.ts`); this browser spec pins the rendered
  * composition + the per-provider embed frame on the live stand.
  *
  * Live-stand-gated tier (mirrors `event-page-registered.spec.ts` / the 005

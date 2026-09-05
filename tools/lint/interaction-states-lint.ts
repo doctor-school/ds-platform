@@ -122,6 +122,10 @@ const APP_GLOBS = [
   "apps/admin/components/**/*.tsx",
   "apps/admin/src/**/*.tsx",
   "apps/academy-demo/app/**/*.tsx",
+  // #1722 D11 — the shared webinar-room unit paints interactive chrome (header
+  // links, chat composer, tabs) that used to sit under `apps/portal/app`; the
+  // "route through the DS primitives, keep hover/focus states" contract follows it.
+  "packages/room/src/**/*.tsx",
 ];
 const APP_IGNORE = [
   "**/*.test.{ts,tsx}",

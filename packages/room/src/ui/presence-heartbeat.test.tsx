@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, render, screen } from "@testing-library/react";
+import { createBrowserRoomApi } from "../client/room-api";
 import { PresenceHeartbeat } from "./presence-heartbeat";
 import { PresenceCount, RoomPresenceProvider } from "./room-presence";
 
@@ -8,7 +9,7 @@ import { PresenceCount, RoomPresenceProvider } from "./room-presence";
  * EVERY accepted heartbeat ack, with NO page reload, and a FAILED beat must leave
  * a diagnostic breadcrumb instead of vanishing silently.
  *
- * This wires the three real modules exactly as `page.tsx` does
+ * This wires the three real modules exactly as {@link RoomShell} does
  * ({@link RoomPresenceProvider} + {@link PresenceCount} + {@link PresenceHeartbeat})
  * and drives the N-second beat grid with fake timers. The server aggregate itself
  * (distinct-doctor count, tab-coalescing, freshness-window age-out) is proven by
@@ -17,10 +18,8 @@ import { PresenceCount, RoomPresenceProvider } from "./room-presence";
  * when the realtime Centrifugo publication is unavailable — and the cadence
  * mechanism that made #1122 read as "frozen without a reload" before #1141.
  */
-vi.mock("next-intl", () => ({
-  useTranslations: () => (key: string, opts?: { count?: number }) =>
-    opts && typeof opts.count === "number" ? `${key}:${opts.count}` : key,
-}));
+/** The host-injected ICU callback (`RoomCopy.presenceCount`) — no catalogue here. */
+const presenceLabel = (n: number) => `presenceCount:${n}`;
 
 const slug = "hsn-therapy";
 const eventId = "6f9b2f1e-8f1a-4b7e-9c3d-2a1b3c4d5e6f";
@@ -37,7 +36,7 @@ function ack(presenceCount: number): Response {
   } as unknown as Response;
 }
 
-/** A refused beat (server-side gate / closed room) — `res.ok` false. */
+/** A refused beat (server-side gate / closed room) — `sendHeartbeat` rejects. */
 function nonOk(status: number): Response {
   return {
     ok: false,
@@ -57,8 +56,11 @@ function badShape(): Response {
 function renderRoom(intervalSeconds = 60): void {
   render(
     <RoomPresenceProvider initialCount={1}>
-      <PresenceCount />
-      <PresenceHeartbeat slug={slug} intervalSeconds={intervalSeconds} />
+      <PresenceCount format={presenceLabel} />
+      <PresenceHeartbeat
+        api={createBrowserRoomApi({ slug })}
+        intervalSeconds={intervalSeconds}
+      />
     </RoomPresenceProvider>,
   );
 }
@@ -191,7 +193,7 @@ describe("006 EARS-5 heartbeat-ack fallback for the live presence count (#1122/#
     const fetchMock = vi
       .fn<typeof fetch>()
       .mockRejectedValueOnce(new Error("network down")) // mount beat — .catch path
-      .mockResolvedValueOnce(nonOk(503)) // refused beat — !res.ok path
+      .mockResolvedValueOnce(nonOk(503)) // refused beat — RoomApiError rejection
       .mockResolvedValueOnce(badShape()) // schema drift — safeParse failure path
       .mockResolvedValueOnce(ack(4)); // a good beat still lands
     vi.stubGlobal("fetch", fetchMock);

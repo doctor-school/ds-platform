@@ -3,10 +3,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { Badge } from "@ds/design-system/badge";
 import { WebinarRoomLayout } from "@ds/design-system/webinar-room";
-import { useTranslations } from "next-intl";
-import { resolveEmbed, usePlayerFailureState } from "@ds/room";
 import type { RoomConfig } from "@ds/schemas";
-import { RoomChat } from "./room-chat";
+import { resolveEmbed } from "../model/room-player";
+import { usePlayerFailureState } from "../client/use-player-failure-state";
+import type { BrowserRoomApi } from "../client/room-api";
+import type { RoomCopyStrings } from "../copy/room-copy";
+import type { RoomContext } from "../types";
+import { RoomChat, type RoomChatCopy } from "./room-chat";
 import { usePresenceCount } from "./room-presence";
 
 /**
@@ -26,41 +29,61 @@ import { usePresenceCount } from "./room-presence";
  * chat-column header from {@link usePresenceCount} (the same aggregate the room
  * header reads) via a plain prop — the DS package imports no portal context.
  *
- * All copy is injected from the message catalog (EARS-10) — no hardcoded
- * user-facing string.
+ * All copy is INJECTED by the host (EARS-10) — no hardcoded user-facing string and
+ * no catalogue read.
+ *
+ * D19 — the view's copy slice is PACKAGE-INTERNAL ({@link RoomViewCopy}); the ONE
+ * exported contract a host implements is `RoomCopy` in `../copy/room-copy`, and the
+ * view simply consumes the subset it paints (the `chatUnread` tally among them, an
+ * ICU callback because its argument is live client state).
  */
-export interface RoomCopy {
-  liveBadge: string;
-  onAir: string;
-  chatTab: string;
-  infoTab: string;
-  chatHeading: string;
-  chatCollapse: string;
-  chatExpand: string;
-  chatUnavailable: string;
-  unavailableTitle: string;
-  unavailableBody: string;
-  playerTitle: string;
-  playerRefresh: string;
+export type RoomViewCopy = Pick<
+  RoomCopyStrings,
+  | "liveBadge"
+  | "onAir"
+  | "chatTab"
+  | "infoTab"
+  | "chatCollapse"
+  | "chatExpand"
+  | "chatUnavailable"
+  | "unavailableTitle"
+  | "unavailableBody"
+  | "playerTitle"
+  | "playerRefresh"
   // 006 EARS-18 — the in-room player-FAILURE overlay copy (a mounted embed that
   // never starts playing), distinct from the config-absent `unavailable*` state.
-  playerFailedTitle: string;
-  playerFailedBody: string;
-  playerEmbeddingDisabled: string;
-  playerUnavailable: string;
-  playerRetrying: string;
-  // 006 EARS-18 — the SUSPECTED-grade non-covering advisory copy (watchdog stall with
-  // no observable signal — a possibly-healthy but unobservable stream).
-  playerSuspectedBody: string;
-  playerRestart: string;
-  programNow: string;
-}
+  | "playerFailedTitle"
+  | "playerFailedBody"
+  | "playerEmbeddingDisabled"
+  | "playerUnavailable"
+  | "playerRetrying"
+  // 006 EARS-18 — the SUSPECTED-grade non-covering advisory copy (watchdog stall
+  // with no observable signal — a possibly-healthy but unobservable stream).
+  | "playerSuspectedBody"
+  | "playerRestart"
+  | "programNow"
+> &
+  RoomChatCopy & {
+    /** «N новых сообщений» — the collapsed-chat unread tally (EARS-3). */
+    chatUnread: (count: number) => string;
+  };
 
-export interface RoomContext {
-  school: string;
-  title: string;
-  speakers: string;
-}
+/** The player region's own copy slice — the failure/unavailable overlays. */
+type PlayerCopy = Pick<
+  RoomViewCopy,
+  | "liveBadge"
+  | "unavailableTitle"
+  | "unavailableBody"
+  | "playerTitle"
+  | "playerRefresh"
+  | "playerFailedTitle"
+  | "playerFailedBody"
+  | "playerEmbeddingDisabled"
+  | "playerUnavailable"
+  | "playerRetrying"
+  | "playerSuspectedBody"
+  | "playerRestart"
+>;
 
 /** The fixed-white outline restart control — the same «Перезапустить плеер» affordance
  *  in both the CONFIRMED overlay and the SUSPECTED banner (EARS-18.3). primitives-first-ok:
@@ -107,7 +130,7 @@ function PlayerFailureOverlay({
 }: {
   status: "failed" | "retrying";
   failure: "embedding-disabled" | "unavailable" | "generic" | null;
-  copy: RoomCopy;
+  copy: PlayerCopy;
   onRestart: () => void;
 }) {
   const title =
@@ -142,7 +165,7 @@ function PlayerFailureOverlay({
  * re-create would interrupt a possibly-healthy stream). Soft truthful copy + the same
  * manual «Перезапустить плеер». A later playing signal clears it (EARS-18.4).
  */
-function PlayerSuspectedBanner({ copy, onRestart }: { copy: RoomCopy; onRestart: () => void }) {
+function PlayerSuspectedBanner({ copy, onRestart }: { copy: PlayerCopy; onRestart: () => void }) {
   return (
     <div
       data-testid="room-player-suspected"
@@ -168,7 +191,7 @@ function postYouTubeListening(iframe: HTMLIFrameElement) {
   );
 }
 
-export function PlayerFrame({ config, copy }: { config: RoomConfig; copy: RoomCopy }) {
+export function PlayerFrame({ config, copy }: { config: RoomConfig; copy: PlayerCopy }) {
   const embed = resolveEmbed(config.stream);
   // 006 EARS-18 — the runtime player-failure state machine. Hooks run unconditionally
   // (a config-absent `unavailable` embed still calls it with a harmless provider);
@@ -289,7 +312,7 @@ function EventContext({
   copy,
 }: {
   context: RoomContext;
-  copy: RoomCopy;
+  copy: Pick<RoomViewCopy, "programNow">;
 }) {
   return (
     <div data-testid="room-context">
@@ -316,7 +339,7 @@ function EventContext({
  * chat credential (`config.chat` is null, i.e. Centrifugo is not configured on
  * this runtime). It is a truthful state, NOT a disabled composer placeholder.
  */
-function ChatUnavailable({ copy }: { copy: RoomCopy }) {
+function ChatUnavailable({ copy }: { copy: Pick<RoomViewCopy, "chatUnavailable"> }) {
   return (
     <div data-testid="room-chat" className="flex min-h-0 flex-1 flex-col">
       <div className="flex flex-1 items-center justify-center px-4 py-8 text-center text-sm text-muted-foreground">
@@ -327,17 +350,17 @@ function ChatUnavailable({ copy }: { copy: RoomCopy }) {
 }
 
 export function RoomView({
-  slug,
+  api,
   config,
   context,
   copy,
 }: {
-  slug: string;
+  /** The room's ONE browser transport — `createBrowserRoomApi({ slug })`. */
+  api: BrowserRoomApi;
   config: RoomConfig;
   context: RoomContext;
-  copy: RoomCopy;
+  copy: RoomViewCopy;
 }) {
-  const t = useTranslations("room");
   const presenceCount = usePresenceCount();
   // Desktop chat collapse + the unread counter (messages missed while folded).
   // Owned here so the DS shell stays presentation-only and RoomChat — which holds
@@ -356,7 +379,7 @@ export function RoomView({
       chatHeading={copy.chatHeading}
       chatCount={presenceCount}
       chatUnread={unread}
-      chatUnreadLabel={t("chatUnread", { count: unread })}
+      chatUnreadLabel={copy.chatUnread(unread)}
       collapseLabel={copy.chatCollapse}
       expandLabel={copy.chatExpand}
       onChatCollapsedChange={(next) => {
@@ -369,8 +392,9 @@ export function RoomView({
       chat={
         config.chat ? (
           <RoomChat
-            slug={slug}
+            api={api}
             chat={config.chat}
+            copy={copy}
             collapsed={collapsed}
             onIncomingWhileCollapsed={onIncomingWhileCollapsed}
           />

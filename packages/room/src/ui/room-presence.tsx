@@ -7,7 +7,6 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { useTranslations } from "next-intl";
 
 /**
  * 006 EARS-5 / EARS-10 — the room header's LIVE indicators, realizing the two
@@ -24,10 +23,11 @@ import { useTranslations } from "next-intl";
  *   `OpenRoom`) — never the scheduled `startsAt`. A legacy live row with no `liveAt`
  *   renders no suffix (truthful, never back-filled from the schedule).
  *
- * All copy resolves through the typed message catalog (EARS-10) — Russian
- * pluralization for «врач/врача/врачей» via ICU `plural`; «мин» is the invariant
- * abbreviation (it does not inflect, so it is a plain interpolation, matching the
- * canvas «· 24 мин»).
+ * Neither component reads a catalogue: the room unit is host-agnostic (EARS-10,
+ * ADR-0013 A1), so both ICU-parameterised strings arrive as INJECTED `format`
+ * callbacks built by the host from its own catalogue — Russian pluralization for
+ * «врач/врача/врачей» stays in the host's ICU `plural`, and «мин» stays the
+ * invariant abbreviation it interpolates (canvas «· 24 мин»).
  */
 
 const PresenceContext = createContext<{
@@ -75,13 +75,19 @@ export function usePresenceCountSetter(): (n: number) => void {
  * renders nothing while the count is 0 — a lone doctor sees it appear as «1 врач…»
  * the moment their own first beat lands, never a «0 врачей» flash.
  */
-export function PresenceCount({ className }: { className?: string }) {
-  const t = useTranslations("room");
+export function PresenceCount({
+  className,
+  format,
+}: {
+  className?: string;
+  /** Host-built «N врачей в комнате» — `RoomCopy.presenceCount`. */
+  format: (count: number) => string;
+}) {
   const count = usePresenceCount();
   if (count <= 0) return null;
   return (
     <span data-testid="room-presence-count" className={className}>
-      {t("presenceCount", { count })}
+      {format(count)}
     </span>
   );
 }
@@ -97,8 +103,14 @@ function elapsedMinutes(liveAtMs: number): number {
  * coarse 15 s tick (a minute counter needs no per-second churn). `null` `liveAt` →
  * no suffix at all (a legacy live row: truthful, never faked from the schedule).
  */
-export function LiveDuration({ liveAt }: { liveAt: string | null }) {
-  const t = useTranslations("room");
+export function LiveDuration({
+  liveAt,
+  format,
+}: {
+  liveAt: string | null;
+  /** Host-built «· N мин» — `RoomCopy.liveDuration`. */
+  format: (minutes: number) => string;
+}) {
   const liveAtMs = liveAt ? Date.parse(liveAt) : NaN;
   const valid = Number.isFinite(liveAtMs);
   const [minutes, setMinutes] = useState(() =>
@@ -118,7 +130,7 @@ export function LiveDuration({ liveAt }: { liveAt: string | null }) {
   if (!valid) return null;
   return (
     <span data-testid="room-live-duration">
-      {t("liveDuration", { minutes })}
+      {format(minutes)}
     </span>
   );
 }

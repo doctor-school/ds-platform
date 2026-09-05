@@ -76,6 +76,8 @@ const SCAN_GLOBS = [
   "apps/admin/components/**/*.tsx",
   "apps/admin/src/**/*.tsx",
   "apps/academy-demo/app/**/*.tsx",
+  // #1722 D11 — same form, same rhythm contract, now in the shared unit.
+  "packages/room/src/**/*.tsx",
 ];
 const SCAN_IGNORE = [
   "**/*.test.{ts,tsx}",

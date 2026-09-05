@@ -1,6 +1,6 @@
 import type { RoomConfig } from "@ds/schemas";
 
-import type { ForwardedSession } from "./registration-state";
+import type { RoomSession } from "./session";
 
 /**
  * 006 EARS-1 (consumed) / EARS-2 — the authenticated server-side read of the
@@ -23,10 +23,24 @@ import type { ForwardedSession } from "./registration-state";
  *   • 404 → `not-found` (unknown event / draft)                  → not-found.
  *
  * Per-caller (the grant is caller-scoped) ⇒ `cache: "no-store"`, never shared.
+ *
+ * The API base is INJECTED (`options.apiBase`), never read from the ambient environment
+ * here: this module is hosted by two storefront processes with their own
+ * upstream configuration, and a shared unit that reads the ambient environment is
+ * wrong on whichever host did not set it (`../purity.test.ts` bans the read).
+ * `fetchImpl` exists so the four refusal branches are unit-testable; no caller
+ * passes it in production.
  */
-const API_BASE = (
-  process.env.API_PROXY_TARGET ?? "http://localhost:3000"
-).replace(/\/$/, "");
+export interface RoomServerReadOptions {
+  /** The host's upstream API origin (its own `API_PROXY_TARGET`). */
+  readonly apiBase: string;
+  readonly fetchImpl?: typeof fetch;
+}
+
+/** Normalise an injected base: no trailing slash, so paths concatenate cleanly. */
+export function normalizeApiBase(apiBase: string): string {
+  return apiBase.replace(/\/$/, "");
+}
 
 export type RoomAccess =
   | { readonly kind: "granted"; readonly config: RoomConfig }
@@ -37,14 +51,16 @@ export type RoomAccess =
 
 export async function fetchRoomConfig(
   idOrSlug: string,
-  session: ForwardedSession,
+  session: RoomSession,
+  { apiBase, fetchImpl }: RoomServerReadOptions,
 ): Promise<RoomAccess> {
   // No session cookie rode the request → a guest; the gate would 401 anyway, so
   // short-circuit to the auth branch without issuing the read.
   if (!session.cookie) return { kind: "auth" };
 
-  const res = await fetch(
-    `${API_BASE}/v1/events/${encodeURIComponent(idOrSlug)}/room`,
+  const doFetch = fetchImpl ?? globalThis.fetch;
+  const res = await doFetch(
+    `${normalizeApiBase(apiBase)}/v1/events/${encodeURIComponent(idOrSlug)}/room`,
     {
       headers: {
         accept: "application/json",

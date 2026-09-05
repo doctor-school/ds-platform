@@ -1,6 +1,8 @@
 import type { MyDisplayName } from "@ds/schemas";
 
-import type { ForwardedSession } from "./registration-state";
+import type { RoomServerReadOptions } from "./room-config";
+import { normalizeApiBase } from "./room-config";
+import type { RoomSession } from "./session";
 
 /**
  * 006 EARS-14 / EARS-16 — the authenticated server-side read of the calling
@@ -19,15 +21,17 @@ import type { ForwardedSession } from "./registration-state";
  * Per-caller ⇒ `cache: "no-store"`, never shared. The caller already holds a
  * granted room session, so a non-ok is a REAL error (not a silent skip) — it
  * throws, matching room-config's `!res.ok` contract.
+ *
+ * The API base is injected for the same reason the grant read's is — a shared
+ * unit takes its upstream from its host, never from the ambient environment.
  */
-const API_BASE = (
-  process.env.API_PROXY_TARGET ?? "http://localhost:3000"
-).replace(/\/$/, "");
 
 export async function fetchMyDisplayName(
-  session: ForwardedSession,
+  session: RoomSession,
+  { apiBase, fetchImpl }: RoomServerReadOptions,
 ): Promise<string | null> {
-  const res = await fetch(`${API_BASE}/v1/me/display-name`, {
+  const doFetch = fetchImpl ?? globalThis.fetch;
+  const res = await doFetch(`${normalizeApiBase(apiBase)}/v1/me/display-name`, {
     headers: {
       accept: "application/json",
       cookie: session.cookie,

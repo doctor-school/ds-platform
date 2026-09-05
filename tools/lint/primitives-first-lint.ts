@@ -142,6 +142,10 @@ const APP_GLOBS = [
   "apps/admin/components/**/*.tsx",
   "apps/admin/src/**/*.tsx",
   "apps/academy-demo/app/**/*.tsx",
+  // #1722 D11 — the shared webinar-room unit renders product UI on both
+  // storefronts; the primitives contract follows the composition out of
+  // `apps/portal/app` into the package.
+  "packages/room/src/**/*.tsx",
 ];
 const APP_IGNORE = [
   "**/*.test.{ts,tsx}",

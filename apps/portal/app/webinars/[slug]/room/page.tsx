@@ -1,43 +1,43 @@
 import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
-import { fetchMyDisplayName } from "../../../../lib/my-display-name";
+import {
+  fetchMyDisplayName,
+  fetchRoomConfig,
+  resolveRoomEntry,
+} from "@ds/room/server";
 import { fetchPublicEventPage } from "../../../../lib/public-events";
-import { fetchRoomConfig } from "../../../../lib/room-config";
-import { buildRoomReturnHref } from "../../../../lib/room-return";
-import { DisplayNamePrompt } from "./display-name-prompt";
-import { PresenceHeartbeat } from "./presence-heartbeat";
-import { RoomHeader } from "./room-header";
-import { RoomPresenceProvider } from "./room-presence";
-import { RoomView } from "./room-view";
+import { buildRoomCopyStrings } from "./copy";
+import { RoomClient } from "./room-client";
+import { PORTAL_ROOM_ROUTES } from "./room-routes";
 
 /**
- * 006 EARS-2 — the webinar room surface, `/webinars/:slug/room`. Server-rendered:
- * it consumes the EARS-1 server-side `RoomAccess` grant (it does NOT re-implement
- * the gate) and renders the room composition ONLY where the grant exists.
+ * 006 EARS-2 — the ACADEMY webinar-room route, `/webinars/:slug/room`.
  *
- * The grant's three refusals route TRUTHFULLY (never a soft wall over a rendered
- * player — this is the EARS-6 denied-access routing, «the front door»):
- *   • auth      → the 003 login flow, carrying a same-origin `returnTo` back to
- *                 THIS room url so the gate RE-RUNS on return (re-evaluated); on
- *                 success the doctor lands on the room again, admitted iff now
- *                 registered ∧ live, else re-routed by the same three branches. No
- *                 registration is fired on the visitor's behalf (`room-return`).
- *   • register  → the 004/005 event page carrying `?from=room`, which surfaces the
- *                 catalog-sourced access-branch guidance (EARS-10) above the 005
- *                 one-tap register front door; on register the doctor re-enters the
- *                 room (admitted on success).
- *   • not-live  → the 004 event page (the truthful lifecycle state — upcoming /
- *                 ended / hidden — with no watchable room; no register banner,
- *                 the lifecycle render is itself the truthful signal).
- *   • not-found → Next.js not-found (unknown / draft — no "exists" oracle).
+ * Since #1722 the room itself is the shared `@ds/room` unit (ADR-0013 A1): this
+ * page is the academy's thin HOST projection over it and owns exactly four
+ * things — the session forward, its own upstream base, its own route table and
+ * its own copy. The composition, the transport and the entry resolution are the
+ * shared unit's, identical on the doctor storefront.
  *
- * The embed player is instantiated from the grant's explicit provider enum
- * (EARS-2) inside {@link RoomView}; an unknown/absent provider renders the
- * truthful "stream unavailable" state. Rendered per request (the grant is
- * per-caller + the lifecycle can change) — never statically prerendered.
+ * It consumes the EARS-1 server-side grant (it does NOT re-implement the gate)
+ * and renders the room ONLY where the grant exists. `resolveRoomEntry` closes the
+ * outcome set to render / redirect / not-found, so the three EARS-6 refusals
+ * route TRUTHFULLY through the academy targets in {@link PORTAL_ROOM_ROUTES} —
+ * the 003 login carrying a same-origin room `returnTo`, the 004/005 event page
+ * with `?from=room`, and the bare event page for a non-live lifecycle — and the
+ * page cannot fall through to rendering a room the gate refused.
+ *
+ * Only SERIALIZABLE props cross into the client (D14): the grant, the event
+ * context, the plain copy strings and the route table. The functions the room
+ * needs — `next/link`, the four ICU callbacks, `router.refresh` and the header
+ * cluster — are built inside {@link RoomClient}. Rendered per request (the grant
+ * is per-caller and the lifecycle changes), never statically prerendered.
  */
 export const dynamic = "force-dynamic";
+
+/** The same env-driven upstream every other portal server read uses. */
+const API_BASE = process.env.API_PROXY_TARGET ?? "http://localhost:3000";
 
 export default async function RoomPage({
   params,
@@ -54,113 +54,40 @@ export default async function RoomPage({
     userAgent: h.get("user-agent") ?? "",
     acceptLanguage: h.get("accept-language") ?? "",
   };
-  const access = await fetchRoomConfig(slug, session);
 
-  const roomReturn = buildRoomReturnHref(slug);
-  const eventPage = `/webinars/${encodeURIComponent(slug)}`;
-  switch (access.kind) {
-    case "auth":
-      // Carry a `returnTo` back to THIS room url so the gate re-evaluates on
-      // return — after login (or signup) the doctor lands on the room again, not on
-      // `/account` (the room return is guard-parsed by `completeReturnTarget`, which
-      // routes to the room and fires no registration).
-      redirect(`/login?returnTo=${encodeURIComponent(roomReturn)}`);
-    // eslint-disable-next-line no-fallthrough -- redirect() throws; unreachable
-    case "register":
-      // Guide an authenticated-but-unregistered doctor to the 005 register front
-      // door on the event page; `?from=room` surfaces the access-branch guidance
-      // (EARS-10) so the doctor understands why they were routed here.
-      redirect(`${eventPage}?from=room`);
-    // eslint-disable-next-line no-fallthrough -- redirect() throws; unreachable
-    case "not-live":
-      // The truthful 004 lifecycle state (upcoming / ended / hidden) — no room,
-      // no register banner (the lifecycle render is the truthful signal on its own).
-      redirect(eventPage);
-    // eslint-disable-next-line no-fallthrough -- redirect() throws; unreachable
-    case "not-found":
-      notFound();
-  }
+  const routes = PORTAL_ROOM_ROUTES(slug);
+  const access = await fetchRoomConfig(slug, session, { apiBase: API_BASE });
+  const entry = resolveRoomEntry(access, routes.entry);
+  if (entry.kind === "redirect") redirect(entry.href);
+  if (entry.kind === "not-found") notFound();
 
   // Granted — compose the room. The event context (school / title / speakers) is
   // the public 004 projection; a live event always has one.
   const event = await fetchPublicEventPage(slug);
   if (!event) notFound();
 
-  // 006 EARS-14 — the JIT display-name step, a PRE-RENDER gate BEFORE the room is
-  // composed (not a fourth admission condition — the server gate above is
-  // unchanged). A gated doctor with no saved name is prompted ONCE; the prompt PUTs
-  // the name and refreshes, so on the next read this is non-null and the room
-  // renders. Self-only read (EARS-16) — served to the owner's session alone.
-  const displayName = await fetchMyDisplayName(session);
-  if (displayName === null) return <DisplayNamePrompt />;
+  // 006 EARS-14/EARS-16 — the doctor's own saved name, a self-only read. `null`
+  // routes the client wrapper to the JIT prompt instead of the room.
+  const displayName = await fetchMyDisplayName(session, { apiBase: API_BASE });
 
   const t = await getTranslations("room");
-  const speakers = event.speakers.map((s) => s.name).join(" · ");
+  const tv = await getTranslations("errors.validation");
 
   return (
-    // 006 EARS-11 (#1123) — the Twitch-model room is VIEWPORT-BOUNDED: the shell
-    // fills the viewport height (`h-dvh`) and clips its overflow, so the page never
-    // scrolls; the header is `flex-none` and the room body ({@link RoomView}) flexes
-    // to the remaining height, where only the chat ledger scrolls.
-    <main className="flex h-dvh flex-col overflow-hidden bg-background text-foreground">
-      {/* 006 EARS-5 — the live room-presence count («N врачей в комнате») is a
-          server aggregate shared through the client provider to the header. The
-          EARS-1 grant seeds it, Centrifugo publications are the primary realtime
-          refresh, and heartbeat acks are only a best-effort fallback. */}
-      <RoomPresenceProvider initialCount={access.config.presenceCount}>
-        {/* 006 EARS-2 / EARS-5 / EARS-11 — the room's top app-header bar (canvas
-            header, ADR-0013 canvas-wins): brand-home wordmark + reused live pill
-            with the «· N мин» duration on the left, the live presence count +
-            truthful exit on the right. `flex-none` so the room body flexes to full
-            height below it (mobile full-height). */}
-        <RoomHeader
-          eventHref={eventPage}
-          liveAt={access.config.liveAt}
-          displayName={displayName}
-          copy={{
-            brandHome: t("brandHome"),
-            liveBadge: t("liveBadge"),
-            exit: t("exit"),
-            themeToggle: t("themeToggle"),
-            avatarLabel: t("avatarLabel", { name: displayName }),
-          }}
-        />
-        {/* EARS-4 — the visibility-gated server-authoritative heartbeat loop. No
-            rendered affordance; it POSTs immediately on entry / visible resume,
-            then every N seconds while visible (N from the grant). Its ack updates
-            the provider only as a fallback to primary Centrifugo fan-out (EARS-5). */}
-        <PresenceHeartbeat
-          slug={slug}
-          intervalSeconds={access.config.heartbeatIntervalSeconds}
-        />
-        <RoomView
-          slug={slug}
-          config={access.config}
-          context={{ school: event.school, title: event.title, speakers }}
-          copy={{
-            liveBadge: t("liveBadge"),
-            onAir: t("onAir"),
-            chatTab: t("chatTab"),
-            infoTab: t("infoTab"),
-            chatHeading: t("chatHeading"),
-            chatCollapse: t("chatCollapse"),
-            chatExpand: t("chatExpand"),
-            chatUnavailable: t("chatUnavailable"),
-            unavailableTitle: t("unavailableTitle"),
-            unavailableBody: t("unavailableBody"),
-            playerTitle: t("playerTitle"),
-            playerRefresh: t("playerRefresh"),
-            playerFailedTitle: t("playerFailedTitle"),
-            playerFailedBody: t("playerFailedBody"),
-            playerEmbeddingDisabled: t("playerEmbeddingDisabled"),
-            playerUnavailable: t("playerUnavailable"),
-            playerRetrying: t("playerRetrying"),
-            playerSuspectedBody: t("playerSuspectedBody"),
-            playerRestart: t("playerRestart"),
-            programNow: t("programNow"),
-          }}
-        />
-      </RoomPresenceProvider>
-    </main>
+    <RoomClient
+      slug={slug}
+      config={entry.config}
+      context={{
+        school: event.school,
+        title: event.title,
+        speakers: event.speakers.map((s) => s.name).join(" · "),
+      }}
+      copy={buildRoomCopyStrings(
+        (key) => t(key as never),
+        (key) => tv(key as never),
+      )}
+      routes={routes.room}
+      displayName={displayName}
+    />
   );
 }

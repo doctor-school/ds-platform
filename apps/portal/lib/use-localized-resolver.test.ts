@@ -25,6 +25,16 @@ import { translateIssue, type ZodIssueLike } from "./use-localized-resolver";
  *
  * The translator is the identity function, so assertions read the `errors.validation.*`
  * KEY (`passwordComplexity`, `email`, …), independent of the RU copy.
+ *
+ * SCOPE NOTE (#1722, D18a): from the room extraction the `SetDisplayNameRequestSchema`
+ * cases below no longer guard the ROOM's display-name prompt. That prompt moved to
+ * the host-agnostic `packages/room/src/ui/display-name-prompt.tsx`, which maps zod
+ * issues through the copy its host injects (`RoomValidationCopy`) rather than through
+ * this resolver, and its own drift guard is
+ * `packages/room/src/ui/display-name-prompt.test.tsx`. The cases stay here because the
+ * schema is still portal-consumed elsewhere and because they pin the SHARED
+ * issue-code→key mapping both surfaces mirror — but a room-only regression is caught
+ * there, not here.
  */
 const key = (k: string) => k;
 

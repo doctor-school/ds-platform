@@ -3,13 +3,13 @@ import pg from "pg";
 
 // 012 EARS-24 (Issue #1607) — the CUTOVER release, database layer.
 //
-// EARS-24 withdrew the migration machinery of `0032_speaker_migration_cutover`:
-// no review queue, no cutover-state SSOT, no table trigger. Migration 0036 drops
-// every object 0032 created. None of them ever reached production, so this
-// release is app-only reversible — which is exactly why it must ALSO leave
-// `event_speakers` and `event_experts.legacy_speaker_id` standing: the image
-// running in production still reads them. Dropping those is the deliberate
-// point of no return of the LATER contract release.
+// EARS-24 withdrew the migration machinery of `0032_speaker_migration_cutover`
+// (no review queue, no cutover-state SSOT, no table trigger) AND the free-text
+// speaker design it was built to migrate. One release, one migration: 0036 drops
+// every object 0032 created, the `legacy_speaker_id` seam on `event_experts`
+// (column, foreign key, unique index) and the free-text speaker table itself.
+// `event_experts` is the single source of the speaker projection afterwards; the
+// handful of production rows are re-entered by hand after the deploy.
 //
 // pg.Pool directly, no Nest boot — same pattern as universal-edit-audit.e2e-spec.
 // Every assertion is a catalog read, so nothing here writes or needs cleanup.
@@ -72,9 +72,26 @@ describe.skipIf(!process.env.DATABASE_URL)(
       return rows.length > 0;
     }
 
-    it("012 EARS-24: after the cutover migration the 0032 objects are gone while event_speakers and event_experts.legacy_speaker_id remain", async () => {
+    async function constraintExists(name: string): Promise<boolean> {
+      const { rows } = await pool.query(
+        `SELECT 1 FROM pg_constraint c
+           JOIN pg_namespace n ON n.oid = c.connamespace
+          WHERE n.nspname = 'public' AND c.conname = $1`,
+        [name],
+      );
+      return rows.length > 0;
+    }
+
+    async function indexExists(name: string): Promise<boolean> {
+      const { rows } = await pool.query(
+        `SELECT 1 FROM pg_indexes WHERE schemaname = 'public' AND indexname = $1`,
+        [name],
+      );
+      return rows.length > 0;
+    }
+
+    it("012 EARS-24: after the cutover migration no object of the withdrawn design, no event_experts.legacy_speaker_id and no event_speakers table exist", async () => {
       // 1. Every object migration 0032 created is gone.
-      expect(await relationExists("speaker_migration_reviews")).toBe(false);
       expect(await relationExists("speaker_migration_cutover")).toBe(false);
       expect(await typeExists("speaker_migration_phase")).toBe(false);
       for (const fn of [
@@ -91,12 +108,28 @@ describe.skipIf(!process.env.DATABASE_URL)(
         expect(await triggerExists(trg)).toBe(false);
       }
 
-      // 2. The rollback surface the running production image reads is UNTOUCHED
-      //    — the contract release, not this one, drops these.
-      expect(await relationExists("event_speakers")).toBe(true);
+      // 2. The `legacy_speaker_id` seam on `event_experts` is gone whole —
+      //    column, the composite foreign key and the unique index.
       expect(await columnExists("event_experts", "legacy_speaker_id")).toBe(
-        true,
+        false,
       );
+      expect(
+        await constraintExists("event_experts_event_legacy_speaker_fk"),
+      ).toBe(false);
+      expect(await indexExists("event_experts_legacy_speaker_key")).toBe(false);
+
+      // 3. The free-text speaker table itself is gone.
+      expect(await relationExists("event_speakers")).toBe(false);
+
+      // 4. `event_experts` — the single remaining source — still stands, with
+      //    the slot-collision index that is now the only one of its kind.
+      expect(await relationExists("event_experts")).toBe(true);
+      expect(
+        await indexExists("event_experts_event_position_active_uniq"),
+      ).toBe(true);
+
+      // 5. The shared feature-010 audit function is NOT collateral damage.
+      expect(await functionExists("audit_row_change")).toBe(true);
     });
   },
 );

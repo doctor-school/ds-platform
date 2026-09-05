@@ -17,36 +17,30 @@ import {
   RATE_LIMIT_THRESHOLDS,
   RELAXED_RATE_LIMIT,
 } from "../setup/rate-limit.js";
-import { deleteUserFixture, deleteEventSpeakersFixture } from "../setup/fixture-cleanup.js";
+import { deleteUserFixture } from "../setup/fixture-cleanup.js";
 import { asSlotConflict } from "../../src/taxonomy/taxonomy.errors.js";
 
-// 012 EARS-7 (#1289) — the explicit expert↔legacy-speaker match over the REAL
-// stack: Fastify + the 011 admin session + Postgres.
+// 012 EARS-7 (#1289) — the admin expert↔event link over the REAL stack:
+// Fastify + the 011 admin session + Postgres.
 //
 // What this suite has to prove is narrower and sharper than «the CRUD works».
-// The link is the seam between the first-class `experts` roster and feature
-// 007's free-text `event_speakers` list, and the product invariant is that the
-// PUBLIC speaker projection of an event stays single-valued and never silently
-// loses a name. Three rules carry that:
+// Since the EARS-24 cutover (#1607) the link is the SOLE source of an event's
+// public speaker projection, and the product invariant is that the projection
+// stays single-valued and never silently loses a name. Two rules carry that:
 //
-//   1. a match is OPERATOR-DECLARED. There is no name comparison anywhere, so
-//      the only rejects are «that speaker is not this event's» and «that
-//      speaker is already matched»;
-//   2. an ACTIVE link to an ELIGIBLE (published, non-retired) expert occupies
-//      its position and suppresses its matched legacy row. A draft or retired
-//      expert suppresses nothing — which is exactly why a draft link may sit on
-//      a slot a legacy row still holds;
-//   3. the combined projection — expert links plus unsuppressed legacy rows —
-//      has one row per position. That collision is CROSS-table, so no index can
-//      express it and the service refuses it under the §2.3 locks.
+//   1. one link per expert per event, retained rows included — a retired link
+//      is RESTORED, never re-created, so its row must stay reserved;
+//   2. one ACTIVE link per position. The rule is ELIGIBILITY-BLIND: two draft
+//      experts still collide, because the index that enforces it is, and an
+//      operator authoring a roster before publishing must be told at the point
+//      of the mistake rather than after the publish flips it visible.
 //
-// Rule 3 is what the «relation-create races expert publish» case below is
-// about, and it is the reason the check lives inside the transaction rather
-// than in an optimistic pre-flight read.
+// Rule 2 is why the check lives inside the transaction, under the §2.3 locks,
+// rather than in an optimistic pre-flight read.
 //
 // Skips when the stand is absent, exactly as the sibling admin suites do.
 describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
-  "012 EARS-7 explicit expert-to-legacy-speaker match (e2e)",
+  "012 EARS-7 admin expert-to-event link (e2e)",
   () => {
     let app: NestFastifyApplication;
     let pool: pg.Pool;
@@ -137,18 +131,6 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       return insertExpert({ status: "draft", first_published_at: null });
     }
 
-    async function insertSpeaker(
-      eventId: string,
-      position: number,
-    ): Promise<string> {
-      const { rows } = await pool.query<{ id: string }>(
-        `INSERT INTO event_speakers (event_id, position, name)
-         VALUES ($1, $2, $3) RETURNING id`,
-        [eventId, position, "Петров П. П."],
-      );
-      return rows[0]!.id;
-    }
-
     // ── Request helpers ────────────────────────────────────────────────────
 
     interface Mutation {
@@ -216,7 +198,6 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expertId: string;
       role: string | null;
       position: number;
-      legacySpeakerId: string | null;
       status: "active" | "retired";
       version: number;
       createdAt: string;
@@ -292,10 +273,6 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       // Children first — every FK is RESTRICT by design.
       for (const id of createdEventIds.splice(0)) {
         await pool.query("DELETE FROM event_experts WHERE event_id = $1", [id]);
-        // 012 EARS-24 (#1633): the migration fence refuses a raw DELETE on
-        // event_speakers in every phase — teardown goes through the one
-        // sanctioned bypass helper.
-        await deleteEventSpeakersFixture(pool, id);
         await pool.query("DELETE FROM events WHERE id = $1", [id]);
       }
       for (const id of createdExpertIds.splice(0)) {
@@ -318,7 +295,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     // ── Accept branches ────────────────────────────────────────────────────
 
-    it("012 EARS-7: when a platform_admin links an expert to an event without naming a legacy speaker, the system shall persist one retained active link at version 1 with an ETag and a Location", async () => {
+    it("012 EARS-7: when a platform_admin links an expert to an event, the system shall persist one retained active link at version 1 with an ETag and a Location", async () => {
       const eventId = await insertEvent();
       const expertId = await insertExpert();
       const res = await createLink({
@@ -331,9 +308,6 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         expertId,
         role: "Модератор",
         position: 2,
-        // No match declared: the link stands on its own, and every legacy row
-        // of the event keeps its place.
-        legacySpeakerId: null,
         status: "active",
         version: 1,
       });
@@ -343,26 +317,6 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(res.headers.etag).toBe('W/"1"');
       expect(res.headers.location).toBe(`/v1/admin/event-experts/${detail.id}`);
       expect(detail.createdAt).toBe(detail.updatedAt);
-    });
-
-    it("012 EARS-7: when the operator explicitly names a retained legacy speaker of the same event, the system shall record the match", async () => {
-      const eventId = await insertEvent();
-      const expertId = await insertExpert();
-      // The legacy row sits at position 4; the link that MATCHES it takes over
-      // that slot, so the projection stays single-valued rather than showing
-      // the same person twice.
-      const legacySpeakerId = await insertSpeaker(eventId, 4);
-      const res = await createLink({
-        payload: {
-          eventId,
-          expertId,
-          role: "Спикер",
-          position: 4,
-          legacySpeakerId,
-        },
-      });
-      expect(res.statusCode).toBe(201);
-      expect(body(res)).toMatchObject({ legacySpeakerId, position: 4 });
     });
 
     it("012 EARS-7: when a link is retired and then restored, the system shall keep the same row, bump its version and answer the exact admin DTO", async () => {
@@ -397,7 +351,6 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         "eventId",
         "expertId",
         "id",
-        "legacySpeakerId",
         "position",
         "role",
         "status",
@@ -470,150 +423,6 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     });
 
     // ── Reject branches ────────────────────────────────────────────────────
-
-    it("012 EARS-7: when the named legacy speaker belongs to a different event, the system shall refuse the link", async () => {
-      // The composite FK makes this unrepresentable, but a raw constraint
-      // violation is a 500-shaped fault. The operator gets a stable errorCode
-      // instead, because «you named a speaker of another broadcast» is an
-      // authoring mistake with an obvious fix.
-      const eventId = await insertEvent();
-      const otherEventId = await insertEvent();
-      const expertId = await insertExpert();
-      const foreignSpeakerId = await insertSpeaker(otherEventId, 0);
-      const res = await createLink({
-        payload: {
-          eventId,
-          expertId,
-          role: "Спикер",
-          position: 7,
-          legacySpeakerId: foreignSpeakerId,
-        },
-      });
-      expect(res.statusCode).toBe(409);
-      expect(problem(res).errorCode).toBe("LEGACY_SPEAKER_CONFLICT");
-      const { rows } = await pool.query(
-        "SELECT id FROM event_experts WHERE event_id = $1",
-        [eventId],
-      );
-      expect(rows).toHaveLength(0);
-    });
-
-    it("012 EARS-7: when a legacy speaker is already matched by a retained link, the system shall refuse a second match — retired holders included", async () => {
-      const eventId = await insertEvent();
-      const first = await insertExpert();
-      const second = await insertExpert();
-      const legacySpeakerId = await insertSpeaker(eventId, 0);
-      const held = await seedLink({
-        eventId,
-        expertId: first,
-        position: 0,
-        legacySpeakerId,
-      });
-
-      const clash = await createLink({
-        payload: {
-          eventId,
-          expertId: second,
-          role: "Спикер",
-          position: 1,
-          legacySpeakerId,
-        },
-      });
-      expect(clash.statusCode).toBe(409);
-      expect(problem(clash).errorCode).toBe("LEGACY_SPEAKER_CONFLICT");
-
-      // A RETIRED link still holds its match: it is restored rather than
-      // re-created, and a restore must never find its own speaker taken.
-      await transitionLink(held.detail.id, "retire", { ifMatch: held.etag });
-      const afterRetire = await createLink({
-        payload: {
-          eventId,
-          expertId: second,
-          role: "Спикер",
-          position: 1,
-          legacySpeakerId,
-        },
-      });
-      expect(afterRetire.statusCode).toBe(409);
-      expect(problem(afterRetire).errorCode).toBe("LEGACY_SPEAKER_CONFLICT");
-    });
-
-    it("012 EARS-7: when a visible link would land on a slot an unsuppressed legacy speaker holds, the system shall refuse the combined collision", async () => {
-      // The cross-table case no index can express: the link's own position is
-      // free among links, and the legacy row's position is free among speakers,
-      // but the COMBINED projection would show two names in slot 3.
-      const eventId = await insertEvent();
-      const expertId = await insertExpert();
-      await insertSpeaker(eventId, 3);
-      const res = await createLink({
-        payload: { eventId, expertId, role: "Спикер", position: 3 },
-      });
-      expect(res.statusCode).toBe(409);
-      expect(problem(res).errorCode).toBe("SPEAKER_POSITION_OCCUPIED");
-
-      // Declaring the match is what makes slot 3 legitimately available: the
-      // link then SUPPRESSES the row it stands in for, rather than doubling it.
-      const legacySpeakerId = (
-        await pool.query<{ id: string }>(
-          "SELECT id FROM event_speakers WHERE event_id = $1 AND position = 3",
-          [eventId],
-        )
-      ).rows[0]!.id;
-      const matched = await createLink({
-        payload: {
-          eventId,
-          expertId,
-          role: "Спикер",
-          position: 3,
-          legacySpeakerId,
-        },
-      });
-      expect(matched.statusCode).toBe(201);
-    });
-
-    it("012 EARS-7: when a link create races the publish of its expert, the system shall let whichever transaction commits first decide, and refuse the loser's collision", async () => {
-      // The Issue-named race, made deterministic by committing the two halves
-      // in each order rather than by hoping for an interleaving.
-      //
-      // A DRAFT expert is invisible, so its link occupies no slot: creating one
-      // on a legacy-held position is legitimate.
-      const eventId = await insertEvent();
-      const draftExpert = await insertDraftExpert();
-      await insertSpeaker(eventId, 5);
-      const linkFirst = await createLink({
-        payload: {
-          eventId,
-          expertId: draftExpert,
-          role: "Спикер",
-          position: 5,
-        },
-      });
-      expect(linkFirst.statusCode).toBe(201);
-
-      // Now the OTHER order on a fresh event: the publish commits first, so the
-      // expert is already eligible when the link command takes the §2.3 locks
-      // and re-reads. The create sees a visible collision and refuses — this is
-      // exactly what the in-transaction re-read buys over an optimistic
-      // pre-flight check, which would have read the expert while still draft.
-      const secondEventId = await insertEvent();
-      const racingExpert = await insertDraftExpert();
-      await insertSpeaker(secondEventId, 5);
-      await pool.query(
-        `UPDATE experts SET status = 'published', first_published_at = now()
-          WHERE id = $1`,
-        [racingExpert],
-      );
-      const publishFirst = await createLink({
-        payload: {
-          eventId: secondEventId,
-          expertId: racingExpert,
-          role: "Спикер",
-          position: 5,
-        },
-      });
-      expect(publishFirst.statusCode).toBe(409);
-      expect(problem(publishFirst).errorCode).toBe("SPEAKER_POSITION_OCCUPIED");
-    });
 
     it("012 EARS-7: when a second link lands on a position an ACTIVE link already holds, the system shall refuse it as an occupied slot even while both experts are still invisible", async () => {
       // The browser path, and the defect it exposed. An expert authored in the
@@ -750,8 +559,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         { position: 1.5 },
         { eventId: "not-a-uuid" },
         // Strict objects: an unknown key is a contract mismatch, not a value to
-        // ignore — an operator who misspells `legacySpeakerId` must be told.
-        { legacySpeakerID: randomUUID() },
+        // ignore — an operator who misspells `expertId` must be told.
+        { expertID: randomUUID() },
       ];
       for (const override of bad) {
         const res = await createLink({

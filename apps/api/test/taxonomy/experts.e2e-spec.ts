@@ -20,7 +20,7 @@ import {
   RATE_LIMIT_THRESHOLDS,
   RELAXED_RATE_LIMIT,
 } from "../setup/rate-limit.js";
-import { deleteUserFixture, deleteEventSpeakersFixture } from "../setup/fixture-cleanup.js";
+import { deleteUserFixture } from "../setup/fixture-cleanup.js";
 import { registerUniqueFakeUserFixture } from "../setup/fixture-registration.js";
 import {
   BOT_PROTECTION,
@@ -291,10 +291,6 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     afterEach(async () => {
       for (const id of createdEventIds.splice(0)) {
         await pool.query("DELETE FROM event_experts WHERE event_id = $1", [id]);
-        // 012 EARS-24 (#1633): the migration fence refuses a raw DELETE on
-        // event_speakers in every phase — teardown goes through the one
-        // sanctioned bypass helper.
-        await deleteEventSpeakersFixture(pool, id);
         await pool.query("DELETE FROM events WHERE id = $1", [id]);
       }
       for (const id of createdExpertIds.splice(0)) {
@@ -1329,14 +1325,14 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(rows[0]!.subject_id).not.toBeNull();
     });
 
-    // ── 012 EARS-5: publish completeness + the speaker slot rule (#1287) ──
+    // ── 012 EARS-5: publish completeness (#1287) ──
     //
     // Publishing an expert is the moment their event links become PUBLICLY
-    // visible, so it is also the moment a slot collision with a legacy speaker
-    // can first appear. Two active `event_experts` links can never share a
-    // position — `event_experts_event_position_active_uniq` forbids it whatever
-    // anybody's publication state — so `event_speakers` is the only collision
-    // publication itself can create, and that is what these cases drive.
+    // visible. Since the EARS-24 cutover (#1607) publication can no longer
+    // CREATE a slot collision: links are the only speaker source and
+    // `event_experts_event_position_active_uniq` already forbids two active
+    // links on one position whatever anybody's publication state, so the
+    // refusal happens at the link write, not at the publish.
 
     async function insertEvent(): Promise<string> {
       const { rows } = await pool.query<{ id: string }>(
@@ -1348,28 +1344,15 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       return rows[0]!.id;
     }
 
-    async function insertLegacySpeaker(
-      eventId: string,
-      position: number,
-    ): Promise<string> {
-      const { rows } = await pool.query<{ id: string }>(
-        `INSERT INTO event_speakers (event_id, position, name)
-           VALUES ($1, $2, $3) RETURNING id`,
-        [eventId, position, "Петров П. П."],
-      );
-      return rows[0]!.id;
-    }
-
     async function linkExpertToEvent(
       eventId: string,
       expertId: string,
       position: number,
-      legacySpeakerId: string | null = null,
     ): Promise<void> {
       await pool.query(
-        `INSERT INTO event_experts (event_id, expert_id, role, position, legacy_speaker_id)
-           VALUES ($1, $2, 'Докладчик', $3, $4)`,
-        [eventId, expertId, position, legacySpeakerId],
+        `INSERT INTO event_experts (event_id, expert_id, role, position)
+           VALUES ($1, $2, 'Докладчик', $3)`,
+        [eventId, expertId, position],
       );
     }
 
@@ -1504,43 +1487,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       });
     });
 
-    it("012 EARS-5.9: when publishing would land the expert on a position a visible legacy speaker holds, the system shall refuse with SPEAKER_POSITION_OCCUPIED", async () => {
+    it("012 EARS-5.9: when the expert holds an event slot no other ACTIVE link claims, publishing shall succeed — links are the only speaker source since the cutover", async () => {
       const body = await created(await createJson({ payload: validPayload() }));
       const eventId = await insertEvent();
-      await insertLegacySpeaker(eventId, 3);
       await linkExpertToEvent(eventId, body.id, 3);
-
-      const res = await publishExpert(body.id, 1);
-      expect(res.statusCode).toBe(409);
-      expect(problem(res).errorCode).toBe("SPEAKER_POSITION_OCCUPIED");
-      expect(await expertRow(body.id)).toMatchObject({
-        status: "draft",
-        version: 1,
-      });
-    });
-
-    it("012 EARS-5.9: when the occupying legacy speaker is the one the link explicitly merges, the system shall publish — a merge is not a collision", async () => {
-      const body = await created(await createJson({ payload: validPayload() }));
-      const eventId = await insertEvent();
-      const legacyId = await insertLegacySpeaker(eventId, 4);
-      // `legacy_speaker_id` names the row being superseded: the expert IS that
-      // speaker, so the position is not contested, it is inherited.
-      await linkExpertToEvent(eventId, body.id, 4, legacyId);
-
-      const res = await publishExpert(body.id, 1);
-      expect(res.statusCode).toBe(200);
-      expect(JSON.parse(res.payload)).toMatchObject({ status: "published" });
-    });
-
-    it("012 EARS-5.9: when a content-removed legacy speaker holds the position, the system shall publish — an invisible occupant contests nothing", async () => {
-      const body = await created(await createJson({ payload: validPayload() }));
-      const eventId = await insertEvent();
-      const legacyId = await insertLegacySpeaker(eventId, 5);
-      await pool.query(
-        "UPDATE event_speakers SET content_removed_at = now() WHERE id = $1",
-        [legacyId],
-      );
-      await linkExpertToEvent(eventId, body.id, 5);
 
       const res = await publishExpert(body.id, 1);
       expect(res.statusCode).toBe(200);

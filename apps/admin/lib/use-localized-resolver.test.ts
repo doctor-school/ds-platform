@@ -49,7 +49,6 @@ describe("translateIssue — admin form RU error mapping (#665)", () => {
       durationMin: Number.NaN,
       description: "",
       partnerRef: "",
-      speakers: [{ name: "", regalia: "" }],
       specialtiesText: "",
     });
     expect(keys.length).toBeGreaterThan(0);
@@ -57,7 +56,6 @@ describe("translateIssue — admin form RU error mapping (#665)", () => {
     expect(keys).toContain("required"); // title / school
     expect(keys).toContain("dateTime"); // startsAtMsk
     expect(keys).toContain("duration"); // durationMin
-    expect(keys).toContain("speakerName"); // speakers.0.name
   });
 
   it("maps the duration over-cap and length bounds distinctly", () => {

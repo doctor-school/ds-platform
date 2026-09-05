@@ -202,9 +202,10 @@ test.describe("012 EARS-7 — event↔expert links in the live admin", () => {
     await expect(row).toContainText(firstExpert.name);
     await expect(row).toContainText("Модератор");
     await expect(row).toContainText("Активна");
-    // No legacy speaker was chosen (no control ships — #1426), so the badge must
-    // say so rather than leaving the state unnamed.
-    await expect(row).toContainText("Не сопоставлен");
+    // 012 EARS-24 (#1607): after the cutover `event_experts` IS the single
+    // source of an эфир's speakers — there is no legacy free-text list left to
+    // map onto, so the row carries no mapping badge at all.
+    await expect(row).not.toContainText("сопоставл");
 
     // ── Server refusal 1: the slot is taken (SPEAKER_POSITION_OCCUPIED) ────
     await openAddDialog(page, secondExpert.name);

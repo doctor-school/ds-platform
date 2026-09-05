@@ -36,6 +36,9 @@ export default defineConfig({
   // Every `events-*.spec.ts` asserts `[data-events-feed]`, which only exists
   // when something answers `GET /v1/storefront/doctor/events`, so they all
   // belong to `playwright.events.config.ts` and none can be collected here.
+  // The 006 room tier (#1912) is dev-stand-gated in a stronger sense still: it
+  // needs a real api + Postgres + a provisioned doctor session, so it rides
+  // `playwright.room.config.ts` and is never collected by a backend-free run.
   testIgnore: [
     "specialty-consumption.spec.ts",
     "register-return-context.spec.ts",
@@ -44,6 +47,8 @@ export default defineConfig({
     "events-url-state.spec.ts",
     "events-month-beside-feed.spec.ts",
     "events-guest.spec.ts",
+    "room.spec.ts",
+    "a11y/room-axe.e2e.spec.ts",
   ],
   fullyParallel: true,
   forbidOnly: !!process.env.CI,

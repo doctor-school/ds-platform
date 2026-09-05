@@ -83,7 +83,7 @@ export default async function RootLayout({
         <ThemeWatcher />
         <NextIntlClientProvider locale={locale} messages={messages}>
           {/* The route-owned `@chrome` slot supplies the persistent app shell on
-              application routes and no shell on the public Academy home. */}
+              every route, the public Academy home at `/` included (#1877). */}
           {chrome}
           {children}
         </NextIntlClientProvider>

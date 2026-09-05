@@ -1,5 +1,73 @@
 # @ds/doctor
 
+## 0.4.0
+
+### Minor Changes
+
+- [#1739](https://github.com/doctor-school/ds-platform/pull/1739) [`98d9509`](https://github.com/doctor-school/ds-platform/commit/98d9509a65216edfd8d6c99a9074b82d011e4cd9) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 019 EARS-3 — the day-grouped, specialty-targeted doctor events feed.
+
+  Additive across the chain and breaking nowhere. `@ds/schemas` gains the
+  `doctor-events-feed` contract plus the ONE query codec both hosts decode with;
+  `@ds/api` serves `GET /v1/storefront/doctor/events` and `@ds/api-client`
+  regenerates against it; `@ds/design-system`'s `EventList` widens with the
+  optional `tenseControl` / `paginationMode: "none"` / `footer` props a host
+  reading a single tense over a bounded horizon needs (every existing caller
+  keeps its current behaviour); `@ds/doctor` gains the `/events` route.
+
+- [#1876](https://github.com/doctor-school/ds-platform/pull/1876) [`e926d75`](https://github.com/doctor-school/ds-platform/commit/e926d75c9c71037687fc25de37e41539a3ba3d6d) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 020 §6.1 / 006 EARS-2 ([#1722](https://github.com/doctor-school/ds-platform/issues/1722) slice 3) — the doctor storefront mounts the shared live room at `/events/:slug/room`.
+
+  The room is the same `@ds/room` unit the Academy runs, not a second implementation: this host adds only its session forward, its own upstream base, its own route table (all three refusal branches stay on doctor.school — this host has no login route) and its own RU copy. The route lives in a new `(room)` group so it renders outside the 017 storefront chrome.
+
+  The api's doctor route table now resolves `roomPath`, so a registered doctor on a live event gets `enter-room` with a real target on doctor.school instead of the `href: null` it carried while the route did not exist.
+
+  020 EARS-7 is now delivered whole: the participation CTA carries `presenceCount` — the live count of colleagues already in the room — on `enter-room` and `null` on every other action, read from the SAME distinct-doctor aggregate and the SAME config-derived freshness window the 006 room grant uses. The shared `EventSignupCard` renders it as one plain-RU line («В эфире уже N коллег», correct plural forms), so both storefronts gain it at once.
+
+  The doctor room header now carries the EARS-15 initials avatar (initials from the doctor's real saved display name only), and the room's `register` refusal carries `?from=room` like the Academy's.
+
+  The design system gains the header chip both storefronts wear, so neither host declares it: a new `header` variant on the `Avatar` primitive (the canvas white-on-navy chip — white square, navy ink in both themes, offset `shadow-header-chip` cast, static because the doctor chip is not a link) and a new `@ds/design-system/header-chip` entry point exporting `HEADER_CHIP_SURFACE` (the one surface constant both compose) plus `HEADER_CHIP_BASE` (that surface with the neo-brutalist press chain, for interactive chips). The Academy's profile chip and its shell «Войти» chip now IMPORT `HEADER_CHIP_BASE` instead of declaring it, so the two rooms cannot drift.
+
+  The CTA's `presenceCount` now counts COLLEAGUES: the requesting doctor's own live presence is excluded, because the line reads «В эфире уже N коллег». The 006 in-room header count is unchanged — there the number is the room population and correctly includes the viewer.
+
+- [#1890](https://github.com/doctor-school/ds-platform/pull/1890) [`8c54c06`](https://github.com/doctor-school/ds-platform/commit/8c54c06f7f4ce452eb2665d4680d1ce80fe87ad1) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - feat(019 EARS-12): the doctor feed's guest read path and its registration hand-off
+
+  The registration return-target guard becomes an explicit WHITELIST of declared
+  shapes (021 LD-3): 005's `/webinars/<slug>` is unchanged, and a second shape —
+  `/events?<feed query>&resume=<slug>` — lets a guest who chose «Участвовать» on a
+  feed card come back to the feed exactly as they left it, on that card. Every
+  accepted value is RECONSTRUCTED from the one feed codec's entries, so an
+  undeclared parameter can never ride the return target.
+
+  The doctor event card payload now carries its own `slug` beside `href`, and the
+  doctor storefront projects a card CTA per viewer: a guest is handed off to
+  `/register` with the minted return target, a doctor goes to the event page.
+
+- [#1909](https://github.com/doctor-school/ds-platform/pull/1909) [`2cb756f`](https://github.com/doctor-school/ds-platform/commit/2cb756f48e7ebd1f1ed1fe3d226e93dcc7363111) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 021 EARS-3 — direct arrival on the doctor registration door: no return context is rendered when the doctor came on their own, and the LD-4 landing (019 events feed when a specialty is remembered, storefront home otherwise, never the account page) is resolved on the server and published on the form.
+
+- [#1832](https://github.com/doctor-school/ds-platform/pull/1832) [`439e749`](https://github.com/doctor-school/ds-platform/commit/439e74902873f9c3bb0900e73ad393f7c192be1e) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 020 EARS-1: one shared event page on both storefronts (doctor `/events/[slug]`, academy `/webinars/[slug]`)
+
+- [#1761](https://github.com/doctor-school/ds-platform/pull/1761) [`e254c92`](https://github.com/doctor-school/ds-platform/commit/e254c925b93e451edc4a05c3083f58c3b56151c5) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 019 EARS-4 — the month calendar now stands beside the day feed on `/events` at the desktop breakpoint, acting as navigation over the same targeted read: «сегодня» and live days are marked, and selecting a day writes it into the URL and moves the feed body without reloading the shell.
+
+- [#1737](https://github.com/doctor-school/ds-platform/pull/1737) [`222667b`](https://github.com/doctor-school/ds-platform/commit/222667baccba9cfcf0b7671a582f68127db4c99c) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 021 EARS-2 — the registration surface shows the doctor what they will return to.
+
+  A doctor who arrives from a content gate (`/register?from=<event>`) now sees that эфир in the left half of the auth split, rendered through the one shared `WebinarCard` unit, and as the background plate above the form on a phone. The card carries no control that navigates back out of the form: `WebinarCard` gains a `navigable` prop whose `false` reading renders the card as a pure context plate — plain title, no CTA, no link or button anywhere in its subtree. With no resolvable return context nothing is rendered in its place.
+
+### Patch Changes
+
+- [#1850](https://github.com/doctor-school/ds-platform/pull/1850) [`dad13c3`](https://github.com/doctor-school/ds-platform/commit/dad13c3628625ef2ac5b67bcb4cc144b299ebb71) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 020 EARS-2 slice 1 — the registration-free decision set. The public event read
+  now carries `links: AroundEvent` (school / speaker pages / community), resolved
+  per host by one shared resolver from a route table each storefront owns; a
+  destination that does not exist has no key at all, so the page renders plain
+  text rather than a dead link. The «Программа» section now always renders — the
+  PDF download when one is attached, and otherwise an honest lifecycle-specific
+  statement instead of an omitted block. «О чём событие», «Программа» and the hero
+  kicker move out of the two host routes into shared `@ds/design-system` blocks.
+
+- [#1758](https://github.com/doctor-school/ds-platform/pull/1758) [`68ba282`](https://github.com/doctor-school/ds-platform/commit/68ba2821bfede1afd2d10cef8e62974450e2c889) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 019 EARS-8 ([#1523](https://github.com/doctor-school/ds-platform/issues/1523)): extract the portable event-listing query codec to `packages/schemas/src/events/event-listing-query.schema.ts`. The wire grammar (repeatable-parameter and boolean spelling, drop-unknown, deterministic key order) and the encode/decode round-trip now live in one shared unit; `doctor-events-feed.schema.ts` mounts it with the doctor vocabulary and defaults, and `apps/doctor/lib/events-feed.ts` keeps only the one-line `URLSearchParams` host adapter. `showMoreHref` now widens the horizon THROUGH the codec, so the «показать ещё» link is emitted in field-table order even when the incoming URL carried no `from`/`to` (it previously appended the horizon keys last). No rendered pixel changes — the same URLs decode and re-encode identically.
+- Updated dependencies [[`bd198c3`](https://github.com/doctor-school/ds-platform/commit/bd198c33d326750623b73ecea4e9cd6239abab32), [`98d9509`](https://github.com/doctor-school/ds-platform/commit/98d9509a65216edfd8d6c99a9074b82d011e4cd9), [`5688b56`](https://github.com/doctor-school/ds-platform/commit/5688b564e2b4850a8a0fd81813dde210e99fd827), [`5688b56`](https://github.com/doctor-school/ds-platform/commit/5688b564e2b4850a8a0fd81813dde210e99fd827), [`e926d75`](https://github.com/doctor-school/ds-platform/commit/e926d75c9c71037687fc25de37e41539a3ba3d6d), [`6484a11`](https://github.com/doctor-school/ds-platform/commit/6484a11ff00db3e4ced30227c64ed5b251bf5c4d), [`654f3ba`](https://github.com/doctor-school/ds-platform/commit/654f3baaf2dd8772de1820e2199baa982d539102), [`8c54c06`](https://github.com/doctor-school/ds-platform/commit/8c54c06f7f4ce452eb2665d4680d1ce80fe87ad1), [`f3ad99f`](https://github.com/doctor-school/ds-platform/commit/f3ad99fdf399cf7cfec87292ca2d0ed22fb34cfc), [`04fa58f`](https://github.com/doctor-school/ds-platform/commit/04fa58f9dcbbc0131e30bdb3cd0bb52413c05d9d), [`d565d04`](https://github.com/doctor-school/ds-platform/commit/d565d049c4597b7ab2e30d34ec673f110abcfaf7), [`d32a070`](https://github.com/doctor-school/ds-platform/commit/d32a07089ea8b9c36f8cb085cc610d238042a70e), [`9ea994f`](https://github.com/doctor-school/ds-platform/commit/9ea994fb52a731be7a183181f8753367386de3bf), [`8f5ea39`](https://github.com/doctor-school/ds-platform/commit/8f5ea39ead9446fef812425d5f4e3ae9bd723495), [`29aca1e`](https://github.com/doctor-school/ds-platform/commit/29aca1efe2e468cd5ab02ea87176e5e64ea2c3c6), [`f9d3e5b`](https://github.com/doctor-school/ds-platform/commit/f9d3e5b6eec35814298f2a843b209b60f4fb4177), [`5688b56`](https://github.com/doctor-school/ds-platform/commit/5688b564e2b4850a8a0fd81813dde210e99fd827), [`439e749`](https://github.com/doctor-school/ds-platform/commit/439e74902873f9c3bb0900e73ad393f7c192be1e), [`5a8e03f`](https://github.com/doctor-school/ds-platform/commit/5a8e03f0746ffcc3b8fb7260d906785f4b7b9a0e), [`cdd7b52`](https://github.com/doctor-school/ds-platform/commit/cdd7b52c9c64d27c976c08f4060b64f0c54830bd), [`dad13c3`](https://github.com/doctor-school/ds-platform/commit/dad13c3628625ef2ac5b67bcb4cc144b299ebb71), [`dfe3a50`](https://github.com/doctor-school/ds-platform/commit/dfe3a5098073a4d57d4656d21dd8e5b801748970), [`c734f7b`](https://github.com/doctor-school/ds-platform/commit/c734f7b8df04c6514550da38894ffd681f702f86), [`222667b`](https://github.com/doctor-school/ds-platform/commit/222667baccba9cfcf0b7671a582f68127db4c99c), [`68ba282`](https://github.com/doctor-school/ds-platform/commit/68ba2821bfede1afd2d10cef8e62974450e2c889)]:
+  - @ds/design-system@5.4.0
+  - @ds/schemas@6.0.0
+  - @ds/room@0.1.0
+
 ## 0.3.1
 
 ### Patch Changes

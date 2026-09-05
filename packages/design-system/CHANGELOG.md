@@ -1,5 +1,93 @@
 # @ds/design-system
 
+## 5.4.0
+
+### Minor Changes
+
+- [#1739](https://github.com/doctor-school/ds-platform/pull/1739) [`98d9509`](https://github.com/doctor-school/ds-platform/commit/98d9509a65216edfd8d6c99a9074b82d011e4cd9) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 019 EARS-3 — the day-grouped, specialty-targeted doctor events feed.
+
+  Additive across the chain and breaking nowhere. `@ds/schemas` gains the
+  `doctor-events-feed` contract plus the ONE query codec both hosts decode with;
+  `@ds/api` serves `GET /v1/storefront/doctor/events` and `@ds/api-client`
+  regenerates against it; `@ds/design-system`'s `EventList` widens with the
+  optional `tenseControl` / `paginationMode: "none"` / `footer` props a host
+  reading a single tense over a bounded horizon needs (every existing caller
+  keeps its current behaviour); `@ds/doctor` gains the `/events` route.
+
+- [#1876](https://github.com/doctor-school/ds-platform/pull/1876) [`e926d75`](https://github.com/doctor-school/ds-platform/commit/e926d75c9c71037687fc25de37e41539a3ba3d6d) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 020 §6.1 / 006 EARS-2 ([#1722](https://github.com/doctor-school/ds-platform/issues/1722) slice 3) — the doctor storefront mounts the shared live room at `/events/:slug/room`.
+
+  The room is the same `@ds/room` unit the Academy runs, not a second implementation: this host adds only its session forward, its own upstream base, its own route table (all three refusal branches stay on doctor.school — this host has no login route) and its own RU copy. The route lives in a new `(room)` group so it renders outside the 017 storefront chrome.
+
+  The api's doctor route table now resolves `roomPath`, so a registered doctor on a live event gets `enter-room` with a real target on doctor.school instead of the `href: null` it carried while the route did not exist.
+
+  020 EARS-7 is now delivered whole: the participation CTA carries `presenceCount` — the live count of colleagues already in the room — on `enter-room` and `null` on every other action, read from the SAME distinct-doctor aggregate and the SAME config-derived freshness window the 006 room grant uses. The shared `EventSignupCard` renders it as one plain-RU line («В эфире уже N коллег», correct plural forms), so both storefronts gain it at once.
+
+  The doctor room header now carries the EARS-15 initials avatar (initials from the doctor's real saved display name only), and the room's `register` refusal carries `?from=room` like the Academy's.
+
+  The design system gains the header chip both storefronts wear, so neither host declares it: a new `header` variant on the `Avatar` primitive (the canvas white-on-navy chip — white square, navy ink in both themes, offset `shadow-header-chip` cast, static because the doctor chip is not a link) and a new `@ds/design-system/header-chip` entry point exporting `HEADER_CHIP_SURFACE` (the one surface constant both compose) plus `HEADER_CHIP_BASE` (that surface with the neo-brutalist press chain, for interactive chips). The Academy's profile chip and its shell «Войти» chip now IMPORT `HEADER_CHIP_BASE` instead of declaring it, so the two rooms cannot drift.
+
+  The CTA's `presenceCount` now counts COLLEAGUES: the requesting doctor's own live presence is excluded, because the line reads «В эфире уже N коллег». The 006 in-room header count is unchanged — there the number is the room population and correctly includes the viewer.
+
+- [#1816](https://github.com/doctor-school/ds-platform/pull/1816) [`6484a11`](https://github.com/doctor-school/ds-platform/commit/6484a11ff00db3e4ced30227c64ed5b251bf5c4d) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 020 EARS-1: event-page composition blocks (EventPageShell/Hero, EventSignupCard,
+  EventSpeakerCard, EventFormatBlock) from the variant-А canvas. The composed
+  event page becomes one canonical unit in `@ds/design-system` that both
+  storefronts mount, instead of a host-local composition in `apps/portal`. The
+  sign-up card renders the server-resolved `ParticipationCta` policy object
+  verbatim and computes no eligibility client-side; `EventFormatBlock` covers the
+  online format only, with offline and hybrid tracked at [#1771](https://github.com/doctor-school/ds-platform/issues/1771).
+
+- [#1717](https://github.com/doctor-school/ds-platform/pull/1717) [`9ea994f`](https://github.com/doctor-school/ds-platform/commit/9ea994fb52a731be7a183181f8753367386de3bf) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Add `EventsFilter` (019 EARS-7) — the one shared events facet panel, exported from `@ds/design-system/blocks` and `@ds/design-system/events-filter`. It carries the full REQ-138 facet set (format, kind, specialty defaulting to «моя и смежные», city for offline events, «только с НМО», «бесплатно по Pul», name search), keeps every applied facet visible as a removable chip with a working reset and a stated applied count, and declares the three D-1 fill states (`wave-1` / `intermediate` / `full`) so a consumer mounting fewer facets breaks neither the panel nor the host grid. Presentational by contract: values in, the next `AppliedFacets` out — the URL/query codec stays a separate unit.
+
+- [#1858](https://github.com/doctor-school/ds-platform/pull/1858) [`8f5ea39`](https://github.com/doctor-school/ds-platform/commit/8f5ea39ead9446fef812425d5f4e3ae9bd723495) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 014 EARS-8 — new `RecordingSpoiler` block (`@ds/design-system/recording-spoiler`): the «Смотреть оригинал трансляции» disclosure that carries an event's secondary recording cut under the main player. Native `<details>/<summary>` so keyboard operation and the expanded/collapsed a11y state come from the platform; the body is mounted only while open, so a provider frame inside it is never fetched for a collapsed spoiler.
+
+- [#1902](https://github.com/doctor-school/ds-platform/pull/1902) [`29aca1e`](https://github.com/doctor-school/ds-platform/commit/29aca1efe2e468cd5ab02ea87176e5e64ea2c3c6) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - [#1666](https://github.com/doctor-school/ds-platform/issues/1666) slice B — `PasswordRecoveryCard` and `EmailConfirmCard` join the blocks
+  tier, so password recovery and post-registration email confirmation each have
+  ONE canonical implementation both storefronts project (AGENTS.md §6 cross-front
+  capability reuse, ADR-0013 A1). Both compositions were lifted verbatim out of the
+  portal `/reset` and `/verify` pages — same elements, order, classes, test ids,
+  aria and state presentation — with the app glue replaced by props: copy, the
+  validation resolvers, BFF transport, the enumeration-safe outcome mapping, the
+  bot-protection element and routing all stay host-supplied. The portal pages are
+  now thin host projections; no rendered output changes.
+
+- [#1832](https://github.com/doctor-school/ds-platform/pull/1832) [`439e749`](https://github.com/doctor-school/ds-platform/commit/439e74902873f9c3bb0900e73ad393f7c192be1e) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 020 EARS-1: one shared event page on both storefronts (doctor `/events/[slug]`, academy `/webinars/[slug]`)
+
+- [#1850](https://github.com/doctor-school/ds-platform/pull/1850) [`dad13c3`](https://github.com/doctor-school/ds-platform/commit/dad13c3628625ef2ac5b67bcb4cc144b299ebb71) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 020 EARS-2 slice 1 — the registration-free decision set. The public event read
+  now carries `links: AroundEvent` (school / speaker pages / community), resolved
+  per host by one shared resolver from a route table each storefront owns; a
+  destination that does not exist has no key at all, so the page renders plain
+  text rather than a dead link. The «Программа» section now always renders — the
+  PDF download when one is attached, and otherwise an honest lifecycle-specific
+  statement instead of an omitted block. «О чём событие», «Программа» and the hero
+  kicker move out of the two host routes into shared `@ds/design-system` blocks.
+
+- [#1889](https://github.com/doctor-school/ds-platform/pull/1889) [`dfe3a50`](https://github.com/doctor-school/ds-platform/commit/dfe3a5098073a4d57d4656d21dd8e5b801748970) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Add the `LoginCard` block to `@ds/design-system/blocks` — the whole sign-in
+  composition (AuthCard frame, password / one-time-code tabs, both forms, and the
+  code-entry stage on `OtpFocusScreen`) as one canonical unit both storefronts
+  project. The portal `/login` page becomes a thin projection that supplies copy,
+  resolvers, transport and routing; no visible change.
+
+- [#1711](https://github.com/doctor-school/ds-platform/pull/1711) [`c734f7b`](https://github.com/doctor-school/ds-platform/commit/c734f7b8df04c6514550da38894ffd681f702f86) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 019 EARS-2 — widen the shared `WebinarCard` to the full doctor-feed vocabulary, built strictly to the approved canvas (`design-source/doctor-events.dc.html`). The format/kind reads from the time-plate kicker («Вебинар», «Разбор», «Doctor Club», «Подкаст», «Конгресс»), and the card's ONE chip row carries the venue with the offline city, НМО, the cost in Pul (a zero cost renders «бесплатно для врача», never a rouble string), the sign-up count in every card state, and the remaining seats — zero seats re-wording that chip to «мест не осталось». A congress date span rides the time-plate sub-label. The format is pure catalog copy, so the primitive holds no format union and takes no dependency on the read contract; `@ds/schemas` gains `DoctorEventFormatSchema` / `DoctorEventCardSchema` as the SoT of that vocabulary and of the card payload. All additive — existing 004/006/014 callers are unchanged.
+
+- [#1737](https://github.com/doctor-school/ds-platform/pull/1737) [`222667b`](https://github.com/doctor-school/ds-platform/commit/222667baccba9cfcf0b7671a582f68127db4c99c) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 021 EARS-2 — the registration surface shows the doctor what they will return to.
+
+  A doctor who arrives from a content gate (`/register?from=<event>`) now sees that эфир in the left half of the auth split, rendered through the one shared `WebinarCard` unit, and as the background plate above the form on a phone. The card carries no control that navigates back out of the form: `WebinarCard` gains a `navigable` prop whose `false` reading renders the card as a pure context plate — plain title, no CTA, no link or button anywhere in its subtree. With no resolvable return context nothing is rendered in its place.
+
+### Patch Changes
+
+- [#1884](https://github.com/doctor-school/ds-platform/pull/1884) [`bd198c3`](https://github.com/doctor-school/ds-platform/commit/bd198c33d326750623b73ecea4e9cd6239abab32) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Admin expert / project / partner detail screens fit a 390px phone viewport: the heading and the status badge stack below `sm` (the [#1387](https://github.com/doctor-school/ds-platform/issues/1387)/[#1399](https://github.com/doctor-school/ds-platform/issues/1399) pattern) and the heading wraps instead of widening its flex line. The `FormDerivedNote` block breaks its derived value, so a long public link no longer pushes the page fold on a phone.
+
+- [#1891](https://github.com/doctor-school/ds-platform/pull/1891) [`5688b56`](https://github.com/doctor-school/ds-platform/commit/5688b564e2b4850a8a0fd81813dde210e99fd827) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Combobox: key cmdk items by the option `value` instead of the label, carrying the label as a search keyword. Two options sharing a label (two experts with the same printed name) no longer highlight together on hover or keyboard, and selecting one commits its own value. Fixes the Stage-B defect reported on [#1607](https://github.com/doctor-school/ds-platform/issues/1607) in the «Привязать эксперта к мероприятию» dialog.
+
+- [#1891](https://github.com/doctor-school/ds-platform/pull/1891) [`5688b56`](https://github.com/doctor-school/ds-platform/commit/5688b564e2b4850a8a0fd81813dde210e99fd827) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 012 EARS-24 — `eventSpeakerCards` follows the narrowed projection: the speaker
+  union now has exactly one arm (`source: "expert"`), so every card carries an
+  expert identity — the href is looked up by `expertSlug` unconditionally and the
+  legacy branch that suppressed the role kicker is dead code and removed. The
+  block's own exported props are unchanged; only the input type it consumes from
+  `@ds/schemas` narrowed.
+- Updated dependencies [[`98d9509`](https://github.com/doctor-school/ds-platform/commit/98d9509a65216edfd8d6c99a9074b82d011e4cd9), [`e926d75`](https://github.com/doctor-school/ds-platform/commit/e926d75c9c71037687fc25de37e41539a3ba3d6d), [`654f3ba`](https://github.com/doctor-school/ds-platform/commit/654f3baaf2dd8772de1820e2199baa982d539102), [`8c54c06`](https://github.com/doctor-school/ds-platform/commit/8c54c06f7f4ce452eb2665d4680d1ce80fe87ad1), [`04fa58f`](https://github.com/doctor-school/ds-platform/commit/04fa58f9dcbbc0131e30bdb3cd0bb52413c05d9d), [`d565d04`](https://github.com/doctor-school/ds-platform/commit/d565d049c4597b7ab2e30d34ec673f110abcfaf7), [`d32a070`](https://github.com/doctor-school/ds-platform/commit/d32a07089ea8b9c36f8cb085cc610d238042a70e), [`5688b56`](https://github.com/doctor-school/ds-platform/commit/5688b564e2b4850a8a0fd81813dde210e99fd827), [`5a8e03f`](https://github.com/doctor-school/ds-platform/commit/5a8e03f0746ffcc3b8fb7260d906785f4b7b9a0e), [`cdd7b52`](https://github.com/doctor-school/ds-platform/commit/cdd7b52c9c64d27c976c08f4060b64f0c54830bd), [`dad13c3`](https://github.com/doctor-school/ds-platform/commit/dad13c3628625ef2ac5b67bcb4cc144b299ebb71), [`c734f7b`](https://github.com/doctor-school/ds-platform/commit/c734f7b8df04c6514550da38894ffd681f702f86), [`68ba282`](https://github.com/doctor-school/ds-platform/commit/68ba2821bfede1afd2d10cef8e62974450e2c889)]:
+  - @ds/schemas@6.0.0
+
 ## 5.3.0
 
 ### Minor Changes

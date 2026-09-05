@@ -1,5 +1,83 @@
 # @ds/admin
 
+## 3.0.0
+
+### Major Changes
+
+- [#1760](https://github.com/doctor-school/ds-platform/pull/1760) [`04fa58f`](https://github.com/doctor-school/ds-platform/commit/04fa58f9dcbbc0131e30bdb3cd0bb52413c05d9d) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 007 EARS-28 / [#1748](https://github.com/doctor-school/ds-platform/issues/1748) — the hidden broadcast state is renamed `archived` → `hidden`
+  («Скрыто»), and its command `ArchiveEvent` → `HideEvent` («Скрыть»).
+
+  Breaking on the wire and in the SDK. The `event_lifecycle_state` enum's terminal
+  value is `hidden` (`@ds/db` migration 0033 relabels the Postgres enum in place,
+  so every existing row follows and nothing is rewritten); `EventLifecycleState`
+  and every schema deriving from it (`@ds/schemas`) speak `hidden`; the admin
+  transition route moves from `POST /v1/admin/events/:id/archive` to
+  `…/:id/hide` and the audit type from `event.archived` to `event.hidden`
+  (`@ds/api`), with `@ds/api-client` regenerated against it. `@ds/admin` shows the
+  status «Скрыто» and the action «Скрыть»; `@ds/portal` renders the hidden event's
+  notice as «Мероприятие скрыто». No dual-read shim and no compatibility alias —
+  the old value is gone.
+
+  The word «Архив» now denotes only the SHOWN recordings archive (014): the public
+  archive listing, its badge, «Мои события» and the `/webinars` past tab are
+  untouched.
+
+- [#1815](https://github.com/doctor-school/ds-platform/pull/1815) [`d565d04`](https://github.com/doctor-school/ds-platform/commit/d565d049c4597b7ab2e30d34ec673f110abcfaf7) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 014 EARS-23…27 / [#1741](https://github.com/doctor-school/ds-platform/issues/1741) (slice 1 of 3) — an эфир held BEFORE the platform existed
+  gets its own lifecycle, and the `MarkEventEnded` fork leaves feature 007's machine.
+
+  Breaking on the wire, in the SDK and in the database. `events.origin`
+  (`platform | legacy`, `@ds/db` migration 0035, NOT NULL, default `platform`) is a
+  server-assigned discriminator that picks the state machine and is rejected by
+  every update path; `event_lifecycle_state` gains `in_archive`, reachable only on
+  the legacy machine (`hidden ↔ in_archive`). Feature 007's machine loses its
+  `published → ended` edge and the `POST /v1/admin/events/:id/mark-ended` route
+  with it; `validTransitions(state)` / `canTransition(from, to)` become
+  origin-aware (`validTransitions(state, origin)`), so every caller passes the
+  machine explicitly. Three routes are added: `POST /v1/admin/legacy-broadcasts`
+  (create, born `hidden`, carrying its recording), `POST …/:id/archive-legacy`
+  («Архивировать», requires a published non-retired recording — 409
+  `EVENT_NOT_FINISHED` otherwise) and `POST …/:id/hide-legacy` («Скрыть»). Every
+  broadcast command on a `legacy` event and every legacy command on a `platform`
+  event is refused 409 `INVALID_TRANSITION` with no mutation. Recording
+  publication is now gated per machine: `ended` on the platform machine as before,
+  either legacy state on the legacy one — an эфир that never passed through the
+  platform room can never be `ended`, and without this its recording could never be
+  published at all.
+
+  The archive projection is unchanged for readers: an `in_archive` legacy эфир is
+  the same `recorded` card a platform `ended` broadcast with a published recording
+  already was. `@ds/admin` loses the «Отметить завершённым» action, `@ds/portal`
+  renders `in_archive` exactly as `ended`; the full admin lifecycle bar and the
+  «Архивный эфир» creation form land in slices 2 and 3.
+
+### Minor Changes
+
+- [#1891](https://github.com/doctor-school/ds-platform/pull/1891) [`5688b56`](https://github.com/doctor-school/ds-platform/commit/5688b564e2b4850a8a0fd81813dde210e99fd827) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 012 EARS-24 — the event form has one place to name speakers. The free-text
+  «Спикеры» section is removed from `components/event-form.tsx` (and from the
+  create page's defaults, the form schema, the field list and the update vars);
+  the experts panel no longer renders the legacy match/unmatch affordances, and
+  the `LEGACY_SPEAKER_CONFLICT` copy is retired from `messages/ru.json` along with
+  the removed section's strings. The line-up is edited solely through the
+  `event_experts` panel.
+
+- [#1705](https://github.com/doctor-school/ds-platform/pull/1705) [`654f3ba`](https://github.com/doctor-school/ds-platform/commit/654f3baaf2dd8772de1820e2199baa982d539102) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 007/014 — optimistic concurrency on admin event writes: `events.version` + `ETag` / `If-Match`
+
+  The six admin state-changing commands (`publish`, `open`, `close`, `archive`, `mark-ended`, bare `transition`) now REQUIRE an `If-Match` validator. A request without one is refused `428 PRECONDITION_REQUIRED`; an unparseable or stale validator is refused `412 PRECONDITION_FAILED`. Every admin event read/write that returns a detail (`create`, `detail`, `PATCH`, `PUT :id/stream`, all six transitions) emits `ETag: W/"<version>"`, and the detail body carries `version`.
+
+  Bump rationale (`repo-conventions.md` → Bump letter, "unsure → major"): `@ds/api` **major** — an existing successful call becomes a `428` for any client that does not send the header, and `412` is a new consumer-visible refusal on endpoints that previously had neither; that is a changed request contract, not an additive one. `@ds/schemas` **major** — `EventAdminDetailSchema` gains a required `version` field, so any producer of that shape must now supply it. `@ds/db` **minor** — `events.version integer not null default 1` is purely additive (migration `0031_events_version`), no existing column changed. `@ds/admin` **minor** — the lifecycle action bar now sends the rendered version as the validator, and the event detail surface follows the re-read a refusal triggers: the refusal alert clears itself once the state it describes has been replaced, and the edit + stream forms re-project from each refetched detail while keeping fields the operator has edited. Behaviour of the operator surface is unchanged when nobody else is editing.
+
+- [#1849](https://github.com/doctor-school/ds-platform/pull/1849) [`27f3102`](https://github.com/doctor-school/ds-platform/commit/27f3102c3bc09d10b4ecda9a6d3d2ad9e58a004e) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - create-event form gains «Это архивный эфир»: a legacy эфир is authored in the same form and born hidden with its recording
+
+- [#1834](https://github.com/doctor-school/ds-platform/pull/1834) [`62a8433`](https://github.com/doctor-school/ds-platform/commit/62a8433e0bdeaba617a6ce20516ef08066a0ebfa) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - admin lifecycle bar drives the legacy broadcast machine: «Архивировать» / «Скрыть», state «Архивировано»
+
+### Patch Changes
+
+- [#1884](https://github.com/doctor-school/ds-platform/pull/1884) [`bd198c3`](https://github.com/doctor-school/ds-platform/commit/bd198c33d326750623b73ecea4e9cd6239abab32) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Admin expert / project / partner detail screens fit a 390px phone viewport: the heading and the status badge stack below `sm` (the [#1387](https://github.com/doctor-school/ds-platform/issues/1387)/[#1399](https://github.com/doctor-school/ds-platform/issues/1399) pattern) and the heading wraps instead of widening its flex line. The `FormDerivedNote` block breaks its derived value, so a long public link no longer pushes the page fold on a phone.
+- Updated dependencies [[`bd198c3`](https://github.com/doctor-school/ds-platform/commit/bd198c33d326750623b73ecea4e9cd6239abab32), [`98d9509`](https://github.com/doctor-school/ds-platform/commit/98d9509a65216edfd8d6c99a9074b82d011e4cd9), [`5688b56`](https://github.com/doctor-school/ds-platform/commit/5688b564e2b4850a8a0fd81813dde210e99fd827), [`5688b56`](https://github.com/doctor-school/ds-platform/commit/5688b564e2b4850a8a0fd81813dde210e99fd827), [`e926d75`](https://github.com/doctor-school/ds-platform/commit/e926d75c9c71037687fc25de37e41539a3ba3d6d), [`6484a11`](https://github.com/doctor-school/ds-platform/commit/6484a11ff00db3e4ced30227c64ed5b251bf5c4d), [`654f3ba`](https://github.com/doctor-school/ds-platform/commit/654f3baaf2dd8772de1820e2199baa982d539102), [`8c54c06`](https://github.com/doctor-school/ds-platform/commit/8c54c06f7f4ce452eb2665d4680d1ce80fe87ad1), [`04fa58f`](https://github.com/doctor-school/ds-platform/commit/04fa58f9dcbbc0131e30bdb3cd0bb52413c05d9d), [`d565d04`](https://github.com/doctor-school/ds-platform/commit/d565d049c4597b7ab2e30d34ec673f110abcfaf7), [`d32a070`](https://github.com/doctor-school/ds-platform/commit/d32a07089ea8b9c36f8cb085cc610d238042a70e), [`9ea994f`](https://github.com/doctor-school/ds-platform/commit/9ea994fb52a731be7a183181f8753367386de3bf), [`8f5ea39`](https://github.com/doctor-school/ds-platform/commit/8f5ea39ead9446fef812425d5f4e3ae9bd723495), [`29aca1e`](https://github.com/doctor-school/ds-platform/commit/29aca1efe2e468cd5ab02ea87176e5e64ea2c3c6), [`5688b56`](https://github.com/doctor-school/ds-platform/commit/5688b564e2b4850a8a0fd81813dde210e99fd827), [`439e749`](https://github.com/doctor-school/ds-platform/commit/439e74902873f9c3bb0900e73ad393f7c192be1e), [`5a8e03f`](https://github.com/doctor-school/ds-platform/commit/5a8e03f0746ffcc3b8fb7260d906785f4b7b9a0e), [`cdd7b52`](https://github.com/doctor-school/ds-platform/commit/cdd7b52c9c64d27c976c08f4060b64f0c54830bd), [`dad13c3`](https://github.com/doctor-school/ds-platform/commit/dad13c3628625ef2ac5b67bcb4cc144b299ebb71), [`dfe3a50`](https://github.com/doctor-school/ds-platform/commit/dfe3a5098073a4d57d4656d21dd8e5b801748970), [`c734f7b`](https://github.com/doctor-school/ds-platform/commit/c734f7b8df04c6514550da38894ffd681f702f86), [`222667b`](https://github.com/doctor-school/ds-platform/commit/222667baccba9cfcf0b7671a582f68127db4c99c), [`68ba282`](https://github.com/doctor-school/ds-platform/commit/68ba2821bfede1afd2d10cef8e62974450e2c889)]:
+  - @ds/design-system@5.4.0
+  - @ds/schemas@6.0.0
+  - @ds/api-client@2.0.0
+
 ## 2.0.0
 
 ### Major Changes

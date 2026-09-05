@@ -142,10 +142,9 @@ describe.skipIf(
     startsAtMsk: "2026-07-17T19:00",
     durationMin: 90,
     description: "Разбор клинических рекомендаций.",
-    speakers: [
-      { name: "Иванов И.И.", regalia: "д.м.н., профессор" },
-      { name: "Петрова А.С.", regalia: "к.м.н." },
-    ],
+    // 012 EARS-24 (#1607): the event write body carries no speaker list — the
+    // line-up is edited as `event_experts` links and covered by the taxonomy
+    // suites, so an edit cannot replace it and this payload cannot seed it.
     specialties: ["cardiology", "therapy"],
     partnerRef: "sponsor:acme-pharma",
   };
@@ -265,7 +264,6 @@ describe.skipIf(
         description: "Уточнённая программа.",
         startsAtMsk: "2026-07-17T20:30",
         durationMin: 120,
-        speakers: [{ name: "Сидоров П.П.", regalia: "д.м.н." }],
       }),
     });
     const res = await app.inject({
@@ -283,10 +281,8 @@ describe.skipIf(
     expect(body.durationMin).toBe(120);
     // …МСК re-entry folded into one canonical instant (20:30 МСК == 17:30Z).
     expect(body.startsAt).toBe("2026-07-17T17:30:00.000Z");
-    // …speakers replaced as an ordered list.
-    expect(body.speakers).toEqual([
-      { name: "Сидоров П.П.", regalia: "д.м.н." },
-    ]);
+    // …the read DTO carries no speaker list at all (012 EARS-24).
+    expect("speakers" in body).toBe(false);
     // …an omitted field is untouched.
     expect(body.school).toBe(validPayload.school);
     expect(body.specialties).toEqual(["cardiology", "therapy"]);
@@ -312,14 +308,6 @@ describe.skipIf(
     const page = pub.json() as Record<string, unknown>;
     expect(page.title).toBe("Актуальная терапия ХСН — обновлено");
     expect(page.startsAt).toBe("2026-07-17T17:30:00.000Z");
-  });
-
-  it("MARK-C", async () => {
-    const active = [] as { id: string; name: string; position: number }[];
-    expect(active).toHaveLength(2);
-    for (const row of active) expect(row.id).toBe(activeIds.get(row.name));
-    expect(active.find((r) => r.name === "Петрова А.С.")?.position).toBe(0);
-    expect(active.find((r) => r.name === "Сидоров П.П.")?.position).toBe(1);
   });
 
   it("EARS-2: replacing the program PDF supersedes the stored reference — the 004 page serves the current file, the superseded file is no longer served", async () => {

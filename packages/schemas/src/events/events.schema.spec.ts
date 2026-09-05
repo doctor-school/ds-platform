@@ -251,20 +251,22 @@ describe("007 events schema", () => {
     });
   });
 
-  describe("CreateEventRequestSchema (EARS-1 — full field set + LD-1 speakers)", () => {
+  describe("CreateEventRequestSchema (EARS-1 — full field set)", () => {
+    // 012 EARS-24 (#1607): the speaker line-up is no longer part of the event
+    // write body — it is edited as `event_experts` links — so the full field
+    // set no longer carries one.
     const base = {
       title: "Актуальная терапия",
       school: "Кардиология",
       startsAtMsk: "2026-07-17T19:00",
       durationMin: 90,
-      speakers: [{ name: "Иванов И.И.", regalia: "д.м.н." }],
       specialties: ["cardiology"],
     };
 
     it("accepts a valid full-field payload and defaults optionals", () => {
       const parsed = CreateEventRequestSchema.parse(base);
       expect(parsed.description).toBe("");
-      expect(parsed.speakers[0]?.name).toBe("Иванов И.И.");
+      expect(parsed.title).toBe("Актуальная терапия");
     });
 
     it("rejects a malformed МСК datetime", () => {

@@ -258,7 +258,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
           heldAtMsk: PAST(),
           durationMin: 90,
           specialties: ["cardiology"],
-          speakers: [{ name: "И. И. Иванов", regalia: "д.м.н." }],
+          // 012 EARS-24 (#1607): the `.strict()` legacy-broadcast body no longer
+          // accepts a free-text speaker list — sending one is a 400.
           recording: {
             kind: "edited",
             provider: "youtube",

@@ -26,8 +26,9 @@ import {
 
 // 007 EARS-1 — CreateEvent (POST /v1/admin/events) + EARS-8 authz. A
 // platform_admin creates an event in `draft` with the full field set; the МСК
-// entry is stored as one canonical instant; speakers persist as an ordered
-// free-text list; the program PDF lands in object storage and the reference is
+// entry is stored as one canonical instant; the body carries NO speaker list
+// since the 012 EARS-24 cutover (#1607) — the line-up is `event_experts` links,
+// authored separately; the program PDF lands in object storage and the reference is
 // on the aggregate; a draft event is reachable only through the platform_admin
 // admin reads (an unauthenticated / doctor_guest caller is refused, never
 // silently satisfied). Runs against the dev-stand Postgres + MinIO + the fake
@@ -142,10 +143,6 @@ describe.skipIf(
     startsAtMsk: "2026-07-17T19:00",
     durationMin: 90,
     description: "Разбор клинических рекомендаций.",
-    speakers: [
-      { name: "Иванов И.И.", regalia: "д.м.н., профессор" },
-      { name: "Петрова А.С.", regalia: "к.м.н." },
-    ],
     specialties: ["cardiology", "therapy"],
     partnerRef: "sponsor:acme-pharma",
   };
@@ -186,7 +183,7 @@ describe.skipIf(
     await app.close();
   });
 
-  it("EARS-1: when a platform_admin submits the create-event form, the system creates a draft event with the full field set, the МСК entry as one canonical instant, ordered free-text speakers, and the program PDF in object storage", async () => {
+  it("EARS-1: when a platform_admin submits the create-event form, the system creates a draft event with the full field set, the МСК entry as one canonical instant, and the program PDF in object storage", async () => {
     const cookie = await session(uniqueEmail("admin"), "platform_admin");
     const mp = multipartBody(
       { payload: JSON.stringify(validPayload) },
@@ -225,11 +222,8 @@ describe.skipIf(
     // МСК → one canonical instant: 19:00 МСК (UTC+3) == 16:00Z.
     expect(body.startsAt).toBe("2026-07-17T16:00:00.000Z");
 
-    // Speakers persist as an ordered free-text list.
-    expect(body.speakers).toEqual([
-      { name: "Иванов И.И.", regalia: "д.м.н., профессор" },
-      { name: "Петрова А.С.", regalia: "к.м.н." },
-    ]);
+    // 012 EARS-24: the created aggregate carries no free-text speaker list.
+    expect("speakers" in body).toBe(false);
 
     // The program PDF landed in object storage and the reference is on the aggregate.
     expect(typeof body.programPdfRef).toBe("string");
@@ -386,7 +380,7 @@ describe.skipIf(
     expect(list.statusCode).toBe(401);
   });
 
-  it("EARS-1: an unknown provider / malformed payload is rejected (the МСК field and speakers are validated)", async () => {
+  it("EARS-1: an unknown provider / malformed payload is rejected (the МСК field is validated)", async () => {
     const cookie = await session(uniqueEmail("admin"), "platform_admin");
     const bad = multipartBody({
       payload: JSON.stringify({

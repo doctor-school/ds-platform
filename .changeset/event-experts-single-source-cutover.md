@@ -15,6 +15,8 @@ spec, and the `tools/deploy` rollback floor. Migration
 `0036_speaker_cutover.sql` drops `event_speakers`, `event_experts.legacy_speaker_id`
 (with its FK and unique index) and the 0032 phase objects in one release.
 
-BREAKING: a client that still sends `speakers` on an event write now gets a
-hard 400 (`.strict()`), and `LEGACY_SPEAKER_CONFLICT` is no longer a member of
-the published error-code union.
+BREAKING: a client that still sends `speakers` on an event write has the key
+stripped (the line-up it meant to set is not set), the same key on the
+`.strict()` legacy-broadcast create body is a hard 400, and
+`LEGACY_SPEAKER_CONFLICT` is no longer a member of the published error-code
+union.

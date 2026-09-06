@@ -26,6 +26,8 @@
  *      from substring-matching check NAMES.
  *   4. Head pinning — after a green board the head SHA is re-resolved; a head
  *      that moved mid-poll (force-push, new commit) is RED, not green.
+ *      After polling, the current live main must also be an ancestor of that
+ *      head. Another session landing while CI runs requires rebase/recheck.
  *   5. Mode-a verdict gate (#992) — requires a head-SHA-pinned Mode (a)
  *      APPROVE: the latest PR review whose body opens `## Mode (a) Review` and
  *      carries a `VERDICT:` line must be APPROVE, and its native `commit_id`
@@ -790,6 +792,56 @@ function fetchReviews(prNumber) {
   }
 }
 
+/** Final live-base check. Fetch objects only: never move main or local refs. */
+function assertCurrentMainAncestry(headSha) {
+  const refuse = (reason) =>
+    die(
+      `RED — cannot prove current main is included in head ${headSha.slice(0, 12)}: ${reason}. Fetch/rebase the PR onto current main, push and recheck CI/review, then re-run the gate. Do NOT merge.`,
+      1,
+    );
+  const response = gh(["api", "repos/{owner}/{repo}/git/ref/heads/main"]);
+  if (response.status !== 0)
+    refuse(`live main lookup failed: ${(response.stderr ?? "").trim()}`);
+  let mainSha;
+  try {
+    mainSha = JSON.parse(response.stdout)?.object?.sha;
+  } catch {
+    refuse("live main lookup returned invalid JSON");
+  }
+  if (!/^[a-f0-9]{40}$/i.test(mainSha ?? ""))
+    refuse("live main lookup returned no valid commit SHA");
+  for (const sha of [mainSha, headSha]) {
+    // Pin the native API result, not a possibly stale origin/main or FETCH_HEAD.
+    // Fetch head too if a different session pushed it and this clone lacks it.
+    let present = git(["cat-file", "-e", `${sha}^{commit}`]);
+    if (sha === mainSha || present.error || present.status !== 0) {
+      const fetched = git([
+        "fetch",
+        "--quiet",
+        "--no-tags",
+        "--no-write-fetch-head",
+        "origin",
+        sha,
+      ]);
+      if (fetched.error || fetched.status !== 0)
+        refuse(`fetch of ${sha.slice(0, 12)} failed`);
+      present = git(["cat-file", "-e", `${sha}^{commit}`]);
+    }
+    if (present.error || present.status !== 0)
+      refuse(`commit ${sha.slice(0, 12)} is unavailable after fetch`);
+  }
+  const ancestry = git(["merge-base", "--is-ancestor", mainSha, headSha]);
+  if (ancestry.error || ancestry.status !== 0)
+    refuse(
+      ancestry.status === 1 && !ancestry.error
+        ? `main advanced to ${mainSha.slice(0, 12)} outside the PR ancestry`
+        : `git ancestry check failed for main ${mainSha.slice(0, 12)}`,
+    );
+  process.stdout.write(
+    `${TAG} Current main ${mainSha.slice(0, 12)} is included in the checked head.\n`,
+  );
+}
+
 async function main() {
   const args = process.argv.slice(2);
   const rawPr = args[0];
@@ -932,6 +984,8 @@ async function main() {
       }
       // A review can be dismissed or revoked while CI runs without moving the head.
       assertCurrentReview();
+      // Main can advance while CI runs even when head/review are unchanged.
+      assertCurrentMainAncestry(sha);
       process.stdout.write(
         `${TAG} GREEN — PR #${prNumber} head ${sha.slice(0, 12)}: ${runs.length} check-run(s) registered, all non-skipped terminal-successful (${attempt} poll(s)). OK to merge.\n`,
       );

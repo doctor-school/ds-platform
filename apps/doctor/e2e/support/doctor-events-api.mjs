@@ -119,10 +119,75 @@ function monthDays() {
   });
 }
 
+/**
+ * 019 EARS-6 — the «Идёт сейчас» scenario this double serves.
+ *
+ * Liveness is a SERVER fact in production, so it is a server fact here too: the
+ * route may not be able to make the block appear or vanish by waiting, only by
+ * asking again. The test-only `POST /__e2e/live` flips the scenario so a spec can
+ * prove the block CLEARS ITSELF on the next bounded read — the one behaviour a
+ * fixed fixture could never evidence.
+ *
+ *   registered   — a live эфир this viewer holds a registration for (room entry)
+ *   unregistered — the same эфир, guest/unregistered entry (the event page)
+ *   none         — nothing targeted is live: the body is `null` and the block
+ *                  must be ABSENT from the tree, not hidden
+ */
+let liveScenario = "none";
+
+const LIVE_SLUG = "prp-questions";
+const LIVE_STRIP = {
+  eventId: "00000000-0000-4000-8000-0000000000f1",
+  slug: LIVE_SLUG,
+  title: "Эфир «Вопросы по PRP»",
+  school: "Школа ортобиологии",
+  href: `/events/${LIVE_SLUG}`,
+  endsAt: `${MONTH_TODAY}T17:30:00.000Z`,
+  presenceCount: 412,
+  viewerIsRegistered: false,
+};
+
+/**
+ * The entry policy is the SERVER's: a registered viewer — proven by the
+ * forwarded `__Host-ds_session` cookie AND the `registered` scenario — is sent
+ * to the room; everyone else gets the event page. The route never derives this,
+ * which is exactly what the guest spec asserts.
+ */
+function liveBody(cookie) {
+  if (liveScenario === "none") return null;
+  const signedIn = (cookie ?? "").includes("__Host-ds_session=");
+  const registered = liveScenario === "registered" && signedIn;
+  return registered
+    ? { ...LIVE_STRIP, href: `/events/${LIVE_SLUG}/room`, viewerIsRegistered: true }
+    : LIVE_STRIP;
+}
+
 const server = createServer((request, response) => {
   const url = new URL(request.url ?? "/", `http://${request.headers.host}`);
 
   if (url.pathname === "/health") return json(response, 200, { ok: true });
+
+  // Test-only control: flip the live scenario mid-run so a spec can prove the
+  // block clears itself on the next read rather than on a reload.
+  if (url.pathname === "/__e2e/live" && request.method === "POST") {
+    let body = "";
+    request.on("data", (chunk) => (body += chunk));
+    request.on("end", () => {
+      try {
+        liveScenario = JSON.parse(body || "{}").scenario ?? "none";
+      } catch {
+        liveScenario = "none";
+      }
+      json(response, 200, { scenario: liveScenario });
+    });
+    return undefined;
+  }
+
+  // 019 EARS-6 — declared BEFORE the `:idOrSlug` shape for the same reason the
+  // real controller declares it first: `live` is a literal route, not a slug.
+  if (url.pathname === "/v1/storefront/doctor/events/live") {
+    return json(response, 200, liveBody(request.headers.cookie));
+  }
 
   if (url.pathname === "/v1/storefront/doctor/events/month") {
     return json(response, 200, {

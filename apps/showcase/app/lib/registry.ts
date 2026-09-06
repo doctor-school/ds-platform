@@ -139,6 +139,9 @@ export const SHOWCASE_REGISTRY: ShowcaseEntry[] = [
   { id: "EventSignupCard", section: "blocks" },
   { id: "EventSpeakerCard", section: "blocks" },
   { id: "EventFormatBlock", section: "blocks" },
+  // 019 EARS-6 — the «Идёт сейчас» strip above the doctor events feed
+  // (doctor-events.dc.html L164-175, вариант А), #1521.
+  { id: "LiveEventStrip", section: "blocks" },
   // 020 EARS-2 — the shared left-flow sections + link-aware kicker, #1765
   { id: "EventAboutSection", section: "blocks" },
   { id: "EventProgrammeSection", section: "blocks" },

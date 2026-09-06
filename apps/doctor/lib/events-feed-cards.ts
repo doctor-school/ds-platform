@@ -2,6 +2,7 @@ import type { EventListItem } from "@ds/design-system/blocks";
 import {
   mintDoctorEventsFeedReturnTarget,
   type DoctorEventCard,
+  type DoctorEventsLiveStrip,
   type DoctorEventsFeed,
   type RawQueryRecord,
 } from "@ds/schemas";
@@ -51,6 +52,19 @@ export const DOCTOR_EVENTS_FEED_COPY = {
   errorTitle: "Не удалось загрузить ленту событий",
   errorDescription: "Повторите попытку — остальная часть страницы работает.",
   retry: "Повторить",
+  /**
+   * 019 EARS-6 — the «Идёт сейчас» strip above the feed
+   * (`design-source/doctor-events.dc.html` L164-175, вариант А). The two action
+   * labels mirror the entry the SERVER resolved: `viewerIsRegistered` picks the
+   * label, it never picks the destination.
+   */
+  liveBadge: "Идёт сейчас",
+  liveEnterRoom: "Войти в комнату эфира",
+  liveOpenEvent: "Открыть страницу события",
+  /** «412 в комнате» — numeral-neutral by design, so no plural form can go wrong. */
+  liveInRoom: "в комнате",
+  /** «до 20:30 МСК» — the end of the running эфир, rendered, never compared. */
+  liveUntil: "до",
 } as const;
 
 const TIME_FORMAT = new Intl.DateTimeFormat("ru-RU", {
@@ -177,4 +191,41 @@ export function toEventListItems(
       ...ctaOf(card, context),
     })),
   );
+}
+
+/**
+ * 019 EARS-6 — the host projection of the live strip onto the SHARED
+ * `LiveEventStrip` props (`@ds/design-system/blocks`).
+ *
+ * Like every other projection in this file it owns only the Russian copy and the
+ * МСК rendering. In particular it does NOT decide where the action leads: `href`
+ * arrives already resolved by the api against 020's participation policy, and
+ * `viewerIsRegistered` only picks which of the two labels to paint. Nothing here
+ * reads a start time — the block has none to read (LD-6).
+ */
+export function doctorLiveStripProps(strip: DoctorEventsLiveStrip): {
+  liveLabel: string;
+  title: string;
+  titleHref: string;
+  meta: string;
+  actionLabel: string;
+  actionHref: string;
+} {
+  const copy = DOCTOR_EVENTS_FEED_COPY;
+  const segments = [
+    `${strip.presenceCount} ${copy.liveInRoom}`,
+    strip.school,
+    `${copy.liveUntil} ${TIME_FORMAT.format(new Date(strip.endsAt))} ${copy.tz}`,
+  ].filter((segment) => segment.length > 0);
+
+  return {
+    liveLabel: copy.liveBadge,
+    title: strip.title,
+    titleHref: `/events/${strip.slug}`,
+    meta: segments.join(" · "),
+    actionLabel: strip.viewerIsRegistered
+      ? copy.liveEnterRoom
+      : copy.liveOpenEvent,
+    actionHref: strip.href,
+  };
 }

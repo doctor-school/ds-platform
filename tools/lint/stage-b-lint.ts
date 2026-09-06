@@ -222,7 +222,7 @@ async function main(): Promise<void> {
         `Gate #${num} does not name PR #${pr.number} in Stage-B-deferred-prs`,
       );
     records.push(
-      ...(gate.comments ?? []).filter((c) => /^Stage-B:/im.test(c.body)),
+      ...(gate.comments ?? []).filter((c) => /^Stage-B:/im.test(c.body)), // no-hardcoded-path-ok: approval marker regex, not a filesystem path
     );
     const source = stageBField(gates[num], "source");
     if (source.startsWith("https:")) {

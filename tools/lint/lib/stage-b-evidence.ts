@@ -6,11 +6,11 @@ export interface StageBRecord {
   url?: string;
 }
 type Verdict = { ok: boolean; reason: string };
-const marker = /^\s*Stage-?B:\s*(.*?)\s*$/gim;
+const marker = /^\s*Stage-?B:\s*(.*?)\s*$/gim; // no-hardcoded-path-ok: approval marker regex, not a filesystem path
 const meaningful = (value: string) =>
   value.length > 0 && !/^(?:n\/a|none|tbd|pending|todo|<.*>)$/i.test(value);
 const utc = (value: string) =>
-  /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{3})?Z$/.test(value) &&
+  /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{3})?Z$/.test(value) && // no-hardcoded-path-ok: ISO UTC timestamp regex, not a filesystem path
   Number.isFinite(Date.parse(value));
 export const stageBField = (body: string, name: string) =>
   body.match(new RegExp(`^Stage-B-${name}:\\s*(.+)$`, "mi"))?.[1]?.trim() ?? "";

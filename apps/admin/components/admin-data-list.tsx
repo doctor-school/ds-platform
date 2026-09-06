@@ -35,8 +35,10 @@ import {
  *   • filters apply INSTANTLY — the text field debounces inside `FilterBar`
  *     (≈400ms) and every facet fires on change; there is no submit control;
  *   • the applied set renders as removable chips with «Сбросить всё»;
- *   • the whole ROW opens the record, so a single-action list gets no «Действия»
- *     column — the callers here all have exactly one action;
+ *   • the whole ROW opens the record where the caller passes `rowHref`, so such a
+ *     list needs no «Действия» column; a caller with a per-row COMMAND SET and no
+ *     record route (the 014 recordings history) renders that set as a column
+ *     instead — both shapes are supported, the row link is not a requirement;
  *   • below `md` the rows become record cards, so a phone never scrolls sideways.
  */
 

@@ -351,6 +351,8 @@ sequenceDiagram
 
 Panel contract: inside the «Записи» tab, one row per kind with its status chip, the source and poster fields, the action set from §3 behind modal confirmation, and the event-level readiness-date field beside it. No Delete control exists anywhere in the panel; retire is the terminal action and it is reversible.
 
+**The two named slots and the history are two different reads of one envelope** (EARS-22). The admin collection read is paginated and filterable (`page` / `pageSize` / `q` / `status` / `kind` / `includeRetired`; §10) and answers `{ data, total, slots, eventState, recordingExpectedBy }`: `data` is the filtered history page, while `slots` is the server's UNFILTERED current row per kind — so no search term or facet can ever empty the operator's primary surface. `includeRetired` defaults to `false`, so retained rows are out of the default admin read exactly as in 012. The filters apply instantly per the shared list contract above, which means the panel must stay MOUNTED across those refetches: the previous page is kept on screen while the next loads, and the busy state renders inside the history region alone.
+
 ## 8. Portal surfaces (`wave: core`)
 
 The archived-event speaker projection consumes only 012's canonical eligible `event_experts` ordered by relation position after migration. It has no `event_speakers` fallback and performs no name matching.

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { useCustom, useCustomMutation, useUpdate } from "@refinedev/core";
+import { keepPreviousData } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import type { z } from "zod";
 import {
@@ -123,6 +124,14 @@ export function RecordingsPanel({
       includeRetired: listQuery.includeRetired,
     }),
     method: "get",
+    /**
+     * Every keystroke of the instant search is a NEW query key, and a pending
+     * key would blank `query.data`. `keepPreviousData` keeps the previous page
+     * on screen while the next one loads, so the panel — the two unfiltered
+     * slot cards and the FilterBar with its draft text and keyboard focus —
+     * never unmounts between debounce commits (014 EARS-22).
+     */
+    queryOptions: { placeholderData: keepPreviousData },
   });
   const [errorKey, setErrorKey] = useState<string | null>(null);
   const [noticeKey, setNoticeKey] = useState<string | null>(null);
@@ -147,18 +156,16 @@ export function RecordingsPanel({
     setErrorKey(taxonomyErrorKey(error, fallbackKey));
   }
 
-  if (query.isLoading) {
-    return (
-      <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
-    );
-  }
-
   // The QUERY is the source of presence, not `result`: Refine's `result.data`
   // substitutes a frozen `{}` when the query has no answer, so a check against it
   // reads "loaded" for a failed read and then trips over `list.eventState` /
   // `list.data`.
   const list = query.data?.data;
-  if (!list) {
+  // A hard read failure is the ONE case that replaces the panel: there is no
+  // event state, no slots and no history to show. The very first load renders
+  // the panel shell with an in-region loading line instead — never an early
+  // return, or the FilterBar would remount under the operator's cursor.
+  if (!list && !query.isLoading) {
     return (
       <Alert variant="danger" data-testid="recordings-error">
         {t("recordings.errors.loadFailed")}
@@ -166,7 +173,7 @@ export function RecordingsPanel({
     );
   }
 
-  const ended = list.eventState === "ended";
+  const ended = list?.eventState === "ended";
 
   const statusLabels: Record<RecordingStatus, string> = {
     draft: t("recordings.statuses.draft"),
@@ -285,16 +292,20 @@ export function RecordingsPanel({
         {t("recordings.description")}
       </p>
 
-      <Alert
-        variant={ended ? "success" : "info"}
-        data-testid="recordings-event-state"
-      >
-        {ended
-          ? t("recordings.eventStateReady")
-          : t("recordings.eventStateNotice", {
-              state: t(`events.state.${list.eventState}`),
-            })}
-      </Alert>
+      {list ? (
+        <Alert
+          variant={ended ? "success" : "info"}
+          data-testid="recordings-event-state"
+        >
+          {ended
+            ? t("recordings.eventStateReady")
+            : t("recordings.eventStateNotice", {
+                state: t(`events.state.${list.eventState}`),
+              })}
+        </Alert>
+      ) : (
+        <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
+      )}
 
       {errorKey ? (
         <Alert variant="danger" data-testid="recordings-command-error">
@@ -306,29 +317,36 @@ export function RecordingsPanel({
         </Alert>
       ) : null}
 
-      <ExpectedByForm
-        eventId={eventId}
-        value={list.recordingExpectedBy}
-        onSaved={() => announce("recordings.toast.expectedBySaved")}
-        onError={(error) => fail(error, "recordings.errors.expectedByFailed")}
-      />
+      {list ? (
+        <>
+          <ExpectedByForm
+            eventId={eventId}
+            value={list.recordingExpectedBy}
+            onSaved={() => announce("recordings.toast.expectedBySaved")}
+            onError={(error) =>
+              fail(error, "recordings.errors.expectedByFailed")
+            }
+          />
 
-      {/* The two named slots come from `slots` — the server's UNFILTERED
-          projection of the current row per kind. Deriving them from `data`
-          would let a search box or a facet empty the operator's PRIMARY
-          surface, which is a different thing from filtering the history. */}
-      {RECORDING_KINDS.map((slotKind) => (
-        <KindSlot
-          key={slotKind}
-          eventId={eventId}
-          kind={slotKind}
-          row={
-            list.slots.find((candidate) => candidate.kind === slotKind) ?? null
-          }
-          onDone={announce}
-          onError={fail}
-        />
-      ))}
+          {/* The two named slots come from `slots` — the server's UNFILTERED
+              projection of the current row per kind. Deriving them from `data`
+              would let a search box or a facet empty the operator's PRIMARY
+              surface, which is a different thing from filtering the history. */}
+          {RECORDING_KINDS.map((slotKind) => (
+            <KindSlot
+              key={slotKind}
+              eventId={eventId}
+              kind={slotKind}
+              row={
+                list.slots.find((candidate) => candidate.kind === slotKind) ??
+                null
+              }
+              onDone={announce}
+              onError={fail}
+            />
+          ))}
+        </>
+      ) : null}
 
       {/* 014 EARS-22 — the full history through the ONE admin list composition
           every other list mounts: instant search and facets, removable chips,
@@ -359,9 +377,9 @@ export function RecordingsPanel({
             label: (row) => t(`recordings.kinds.${row.kind}`),
           }}
           columns={historyColumns}
-          rows={list.data}
+          rows={list?.data ?? []}
           getRowKey={(row) => row.id}
-          total={list.total}
+          total={list?.total ?? 0}
           isLoading={query.isFetching}
           error={query.isError ? t("recordings.errors.loadFailed") : null}
           query={listQuery}

@@ -417,4 +417,45 @@ test.describe("014 EARS-1/EARS-2 — retained recordings in the live admin", () 
       page.locator('[data-testid^="recording-row-"][data-testid$="-restore"]'),
     ).toHaveCount(0);
   });
+
+  test("014 EARS-22: typing into the history search never unmounts the panel — focus, draft text and both slot cards survive the debounce", async ({
+    page,
+  }) => {
+    await signInAsAdmin(page);
+    await createEvent(page, `Запись — instant search ${Date.now()}`);
+    await openRecordingsTab(page);
+    await attach(page, "edited", RUTUBE_EDITED);
+    await attach(page, "raw", RUTUBE_RAW);
+
+    const filters = page.getByTestId("recordings-history-filters");
+    const table = page.getByTestId("recordings-history-table");
+    const search = filters.getByRole("searchbox");
+    await expect(table).toContainText(RUTUBE_RAW);
+
+    // Character-by-character, slower than the 400 ms debounce is short: several
+    // commits land WHILE the operator is still typing, so each one refetches an
+    // uncached list key. `keepPreviousData` is what keeps the panel mounted
+    // through them — without it the early loading return blew away the
+    // FilterBar's draft state and the caret mid-word.
+    const typed = RUTUBE_EDITED.slice(0, 12);
+    await search.click();
+    await search.pressSequentially(typed, { delay: 60 });
+
+    // The list HAS updated (so a refetch really happened) and the operator is
+    // still typing into the same, never-remounted input.
+    await expect(table).toContainText(RUTUBE_EDITED);
+    await expect(table).not.toContainText(RUTUBE_RAW);
+    await expect(search).toBeFocused();
+    await expect(search).toHaveValue(typed);
+
+    // The two unfiltered slot cards are the primary surface — a search that
+    // matches one of them must never empty the other, and neither may blink out
+    // while the history reloads.
+    await expect(page.getByTestId("recording-embed-ref-edited")).toContainText(
+      RUTUBE_EDITED,
+    );
+    await expect(page.getByTestId("recording-embed-ref-raw")).toContainText(
+      RUTUBE_RAW,
+    );
+  });
 });

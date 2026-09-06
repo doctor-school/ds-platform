@@ -1,6 +1,6 @@
 ---
 title: "Feature 028 — Legal documents & contacts (PRD)"
-description: "Product requirements for the legally public surface of both storefronts: a documents section and a contacts page on doctor.school and on the Academy, serving one shared body of content from one legal entity. Thin slice 1 (R1) publishes the personal-data policy, the exact consent texts feature 021 links from its checkboxes, contacts with the operator's requisites, and the educational-licence block; contracts, the constitution and the teal-model documents follow in slice 2 (R3) with feature 037. Source of the 028 EARS triplet (ADR-0014)."
+description: "Product requirements for the legally public surface of both storefronts: a «Документы и контакты» page on doctor.school and on the Academy — documents, contacts and requisites as blocks of one page — serving one shared body of content from one legal entity. Thin slice 1 (R1) publishes the personal-data policy, the exact consent texts feature 021 links from its checkboxes, contacts with the operator's requisites, and the educational-licence block; contracts, the constitution and the teal-model documents follow in slice 2 (R3) with feature 037. Source of the 028 EARS triplet (ADR-0014)."
 slug: two-site-ia-028-legal-pages-product
 epic: ../../product/two-site-ia/brief.md
 status: Draft
@@ -20,7 +20,7 @@ The owner's framing (2026-09-06) is that this is **not a legal-documents project
 
 Three product decisions shape the surface.
 
-**One feature, both storefronts, shared content** (owner, 2026-08-22, F-5). `doctor.school` and the Academy each get their own documents section and their own contacts page (`#d-docs` / `#a-docs`, REQ-136), but the document bodies are authored once and served identically on both hosts. A doctor and a regulator read the same policy; there is no per-host legal fork.
+**One feature, both storefronts, shared content** (owner, 2026-08-22, F-5). `doctor.school` and the Academy each get their own «Документы и контакты» page (`#d-docs` / `#a-docs`, REQ-136) — documents, contacts and requisites are blocks of that one page per the vendored canvases — but the document bodies are authored once and served identically on both hosts. A doctor and a regulator read the same policy; there is no per-host legal fork.
 
 **One legal entity on the documents: ООО «Ивекскон»** (owner, 2026-09-06). The legacy site shows two entities — ООО «Ивекскон» as the personal-data operator, with full requisites, and АНО ДПО «Академия Доктор Скул (Школа)» as the licence holder, with every requisite field left blank. Slice 1 publishes «Ивекскон» as the operator behind the platform's requisites. Which entity is named as the **licensee** — and therefore whose licence number appears in the licence block — is a live owner-and-lawyer question (Q-31, tied to the НМО provider question), and the licence block's content is an **owner-input dependency**, not a technical one.
 
@@ -33,7 +33,7 @@ What is being replaced is not a working surface. The legacy site's legal routes 
 - **US-1** — As a **guest doctor stopped at a consent checkbox**, the document named next to the checkbox opens as a real page on the site I am already on, so I can read what I am agreeing to before I agree to it.
 - **US-2** — As a **doctor**, the consent text I am shown at registration is **the same text** that is published as a document, word for word — not a summary of it.
 - **US-3** — As a **doctor**, I can find the platform's documents without having come from a checkbox — there is a visible way in from any page.
-- **US-4** — As a **doctor**, each document tells me **which version I am reading and from what date it applies**, so «I agreed to the policy» means something specific.
+- **US-4** — As a **doctor**, each document tells me **from what date the edition I am reading applies** («редакция от …»), so «I agreed to the policy» means something specific.
 - **US-5** — As a **doctor**, I can see how the platform handles my personal data — what is collected, on what basis, for how long, and how I ask for it to be changed or withdrawn — in plain language rather than as a legal wall.
 - **US-6** — As a **doctor**, I read the same policy whether I opened it from `doctor.school` or from the Academy; the platform does not appear to have two different sets of rules.
 - **US-7** — As a **registering doctor**, opening a document does not lose my half-filled registration form.
@@ -41,12 +41,12 @@ What is being replaced is not a working surface. The legacy site's legal routes 
 - **US-9** — As an **expert, partner or investor evaluating the Academy**, I can see that the organisation behind it is a real one — a named legal entity with requisites, an address, a phone number and an email — before I hand over anything.
 - **US-10** — As a **regulator or a checking visitor**, I can establish **who the personal-data operator is**, from the site itself, without a support request.
 - **US-11** — As a **checking visitor**, I can see the platform's **educational licence** — its number, the authority that issued it, and a way to confirm it in the official registry.
-- **US-12** — As a **visitor with a question**, the contacts page gives me a working way to reach a human — support email, phone, and what each channel is for.
+- **US-12** — As a **visitor with a question**, the contacts block of the documents page gives me a working way to reach a human — support email, phone, the platform's channels, and what each one is for.
 - **US-13** — As a **doctor on a phone**, documents are readable at 390 as well as at 1440 — long legal text does not become an unusable wall on mobile.
 - **US-14** — As a **visitor using a screen reader**, a document page is navigable by its headings and structure rather than being one undifferentiated block of text.
 - **US-15** — As a **doctor**, every link I follow from a consent or a footer lands on a **document on this platform**; nothing hands me off to the old site.
 - **US-16** — As the **platform team**, I can publish a corrected version of a document without breaking the links that consent records and the registration form already point at.
-- **US-17** — As the **platform team**, when a doctor asks «what exactly did I agree to», I can point at a stable URL for that document and that version.
+- **US-17** — As the **platform team**, when a doctor asks «what exactly did I agree to», I can point at a stable URL for that document and name the edition that was current then.
 - **US-18** — As the **platform team**, adding the R3 documents (contracts, constitution, teal-model documents, payment terms) means adding entries to a section that already exists, not building a second legal surface.
 
 ## Flows
@@ -65,39 +65,40 @@ What is being replaced is not a working surface. The legacy site's legal routes 
 
 **Finding the documents without a checkbox (US-3, US-6):**
 
-1. A visitor on either storefront reaches the documents section from a persistent entry point in the shell.
-2. The section lists every published document with its title and effective date; each opens at its own stable URL.
+1. A visitor on either storefront reaches the «Документы и контакты» page from the footer entry point its shell already carries.
+2. The page lists every published document with its title and its edition date, and marks a recently re-published one with an «обновлено» chip; each document opens at its own stable URL.
 3. The same list, with the same bodies, is reachable on the other storefront under that host's own section.
 
 **Establishing who is behind the platform (US-9, US-10, US-11, US-12):**
 
-1. A regulator, partner or curious visitor opens the contacts page on either storefront.
+1. A regulator, partner or curious visitor opens the «Документы и контакты» page on either storefront and reaches its contacts block.
 2. They find the operating legal entity — ООО «Ивекскон» — with its requisites (ИНН, ОГРН, legal address), support email and phone, and what each contact channel is for.
-3. The licence block presents the educational licence and how to verify it in the official registry. _(Its content is an owner/lawyer input — see Open questions → Q-31.)_
+3. The licence row in the documents list, together with the licence number in the requisites line at the foot of the page, presents the educational licence and how to verify it in the official registry. _(Its content is an owner/lawyer input — see Open questions → Q-31.)_
 
 **Publishing a corrected document (US-4, US-16, US-17):**
 
 1. The platform team corrects a document's text.
-2. It is published as a **new version with a new effective date**; the document's URL does not change, so consent copy, footers and stored consent references keep working.
-3. A reader always sees which version is current; what a doctor consented to earlier remains identifiable. _(How the superseded text stays retrievable is 037's consent-record concern, not this surface's.)_
+2. It is published as a **new edition with a new «редакция от» date**, and its row carries the «обновлено» chip; the document's URL does not change, so consent copy, footers and stored consent references keep working.
+3. A reader always sees which edition is current; what a doctor consented to earlier remains identifiable. _(How the superseded text stays retrievable is 037's consent-record concern, not this surface's.)_
 
 **Branches:**
 
 - **A document has no approved content yet** (the licence block before the owner supplies it) — the surface does not publish an empty or placeholder legal page; the entry is absent until there is real content. A dev placeholder standing in for a legal text is never acceptable.
-- **A visitor opens a document URL directly**, with no site context — the page is complete on its own: title, date, version, body, and a way back to the section.
+- **A visitor opens a document URL directly**, with no site context — the page is complete on its own: title, edition date, body, and a way back to the «Документы и контакты» page.
 
 ## Product acceptance criteria
 
 ### Slice 1 (R1) — what this feature ships now
 
-- Each storefront — `doctor.school` (`apps/doctor`) and the Academy (`apps/portal`) — has **its own documents section** (owner-settled, F-5 / REQ-136) and **its own contacts page** (**agent-proposed — unconfirmed**), rendered in that host's existing shell (017 / 008), while the **document bodies are one shared set of content** rather than two per-host copies.
-- Every document is reachable at a **stable per-document URL** that does not change when its text is corrected; consent checkboxes and the Academy lead form link a **specific document**, never the index (**agent-proposed — unconfirmed**; the index + per-document-URL IA is settled at Stage A).
+- Each storefront — `doctor.school` (`apps/doctor`) and the Academy (`apps/portal`) — has **its own «Документы и контакты» page** (owner-settled, F-5 / REQ-136; canvases `#d-docs` / `#a-docs`) carrying the documents list, the contacts block and the requisites line, rendered in that host's existing shell (017 / 008), while the **document bodies are one shared set of content** rather than two per-host copies.
+- The R1 list on **both** hosts holds exactly two published entries — **Лицензия на образовательную деятельность** and **Политика персональных данных и согласия** — plus whatever rows the 021 consent texts are split into (fork 2 of prompt 21). «Пользовательское соглашение» and «Правила начисления очков», drawn on the canvases, are slice 2 (owner, 2026-09-06) and appear in neither list nor footer in R1.
+- Every document is reachable at a **stable per-document URL** that does not change when its text is corrected; consent checkboxes and the Academy lead form link a **specific document**, never the index. The index page and its row unit are canvas-settled; the per-document URL itself is a lead proposal — **not drawn on any canvas — settled by the document-page Stage A**.
 - The **personal-data policy** is published, sourced from the legacy text (152-ФЗ policy) and naming **ООО «Ивекскон»** as the operator.
 - The **exact texts of the 021 consents** are published as documents — the medical-worker declaration, the partner-data-sharing consent and the marketing-communications consent — and the wording a doctor sees at registration matches the published document word for word.
 - The **photo/video distribution consent** text (present in the legacy material) is published as a document on this surface. Whether any R1 surface links it is an open question; publication does not itself create a link.
-- **Contacts and requisites** are published on both storefronts: the operating entity, ИНН, ОГРН, legal address, support email and phone, and what each channel is for.
-- A **licence block** presents the educational licence — number, issuing authority, a way to verify it in the official registry, and the scan — as one identifiable element of the surface. Its content is an **owner/lawyer input** (Q-31); until it is supplied the block is absent, never a placeholder.
-- Every document page states its **title and effective date**; nothing is published undated. Whether a **version marker** is shown to the reader at all, and in what form, is **agent-proposed — unconfirmed**.
+- **Contacts and requisites** are published as blocks of that page on both storefronts: the operating entity, ИНН, ОГРН, legal address, support email and phone, and what each channel is for. Contacts are **channels only — no support form** (canvas-settled: mailto plus Telegram / ВКонтакте / YouTube chips).
+- The **licence block** is the «Лицензия на образовательную деятельность» row in the documents list plus the licence number in the requisites line (canvas-settled), presenting the licence — number, issuing authority, a way to verify it in the official registry, and the scan. Its content is an **owner/lawyer input** (Q-31); until it is supplied the row is absent, never a placeholder.
+- Every document page states its **title and edition date** («редакция от <дата>»); nothing is published undated. A re-published document carries the «обновлено» chip in the index; no numeric version number is shown to the reader (canvas `d-docs · документы`).
 - **No surface of the platform links to the legacy site.** The `ACADEMY_PRIVACY_POLICY_URL` used by the Academy partnership lead form points at the platform's own policy document, and no document, footer or consent line references `doctor.school/index/*`.
 - Documents are **readable at 390 and 1440**, in light and dark, using design-system primitives and typography — a legal text is a reading surface, not a bespoke layout.
 - Document pages meet the platform's accessibility bar for a public page (the `playwright-axe` gate): real heading structure, meaningful document order, links that name their destination.
@@ -109,11 +110,37 @@ What is being replaced is not a working surface. The legacy site's legal routes 
 - **Contracts and public documents**, the **constitution** and the **teal-model documents** REQ-74 names are published in the same section, with the same versioning and the same two-host projection.
 - **Payment and refund terms** are published once paid flows exist; the legacy `pay-info` text is a source, but its 2023 price table is stale data and is not carried over.
 - Document composition and retention wording follow the **accepted personal-data lifecycle** delivered by **037** — which is why slice 2, and only slice 2, is `blocked_by` 037.
+- **«Пользовательское соглашение»** is published in slice 2 (owner, 2026-09-06). Both canvases draw it as a ready row and the doctor footer links it, but the legacy export carries no terms/public-offer text at all: R1 shows neither the row nor the footer link («hide the block until content»), and the text is an owner/lawyer input for R3.
+- **«Правила начисления очков»** is published in slice 2 (owner, 2026-09-06) — 028 only publishes it; the rules themselves are written by feature **025** and delivered there. No R1 row on either host.
 - Adding these documents requires **no second legal surface**: they are entries in the section slice 1 already built.
 
 ## Approved-mockup reference
 
-**Pending Stage A.** This is a `user-facing` surface, so its look and behaviour are an owner decision: `author-design-mockup` fills this slot with the approved canvas reference and the fork table before implementation, and the rendered result is re-confirmed on the live stand before merge (AGENTS.md §6 — design-approval gate). Nothing in this PRD's prose is a layout decision.
+**Stage-A baseline: the owner-drawn canvases, vendored 2026-08-24 (#1450).** Two artboard sets carry this surface:
+
+- `design-source/doctor-docs.dc.html` — screen `#d-docs`, the doctor storefront (`apps/doctor`), in the 017 shell.
+- `design-source/academy-docs.dc.html` — screen `#a-docs`, the Academy (`apps/portal`), in the 008 shell.
+
+**Forks.**
+
+| Fork                            | Prop               | Options                                                      | Decision                                                                                                                            |
+| ------------------------------- | ------------------ | ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Развилка 1 · состав документов  | `docsVariant`      | А — общий список · Б — проекция витрины · В — с группировкой | **Б «проекция витрины»** — the canvas default, i.e. the decision: each host lists its own projection of one shared legal set (F-5). |
+| Composition of the R3 contracts | `contractsVariant` | —                                                            | Slice 2 (R3); not decided in R1.                                                                                                    |
+
+**Canvas-settled decisions.**
+
+- **One page per host, «Документы и контакты».** H1 «Документы и контакты»; sections by `data-screen-label` — doctor `d-docs · постер-шапка`, `· документы`, `· согласия`, `· контакты`, `· реквизиты`, `· футер`; Academy `a-docs · постер-шапка`, `· документы`, `· контакты`, `· выходы`, `· реквизиты`, `· футер`. Contacts and requisites are blocks of that page, not a separate contacts page.
+- **Fork 1 projection.** `docsVariant: Б` means each host lists its own projection of ONE shared legal set (F-5): the doctor artboard draws Лицензия на образовательную деятельность · Политика персональных данных и согласия · Пользовательское соглашение, the Academy artboard the licence, the privacy policy, the contracts and the constitution. **In R1 both lists hold only two entries** — Лицензия and Политика персональных данных и согласия (plus whatever rows fork 2 of prompt 21 splits the 021 consent texts into); every other drawn row is slice 2.
+- **Document-link row unit** (`d-docs · документы`): title + optional «обновлено» chip + note + «редакция от <дата>» + →. The reader-visible version marker IS the edition date plus that chip; no numeric version number is drawn.
+- **Consents explainer** (`d-docs · согласия`, «Про согласия»): consents are separate by purpose — partner data, public display, mailing — and what was given and when is visible in the cabinet, which the block links. Explanation only; consents are not managed on this page.
+- **Contacts are channels, no form** (`d-docs · контакты` / `a-docs · контакты`): `support@doctor.school` / `academy@doctor.school` as mailto, plus Telegram / ВКонтакте / YouTube chips. The doctor page carries a «клиникам и организациям → Academy.Doctor.School ↗» exit; `a-docs · выходы` carries the two CJM exits (Инвесторам → `#a-invest`, Экспертам → `#a-apply`).
+- **Requisites are one faint tabular line** at the foot of the page (`· реквизиты`): «<юрлицо> · ИНН … · Лицензия на образовательную деятельность № …». The canvas placeholder names another entity; the CONTENT is the owner decision recorded above (ООО «Ивекскон»), the LAYOUT is the canvas decision.
+- **The licence block is a documents-list row**, not a separate panel — plus the licence number in the requisites line. Canvas note (doctor): «На её основании Doctor.School выдаёт сертификаты и передаёт сведения в НМО»; canvas comment on the Academy screen: `Q-31: лицензиат и эмитент — сама платформа, без оговорок`. The Q-31 wording stays an owner/lawyer input; the layout is settled.
+- **Both shells carry a footer entry point.** `d-docs · футер` links «Пользовательское соглашение», «Политика обработки персональных данных» and «Контакты»; `a-docs · футер` carries the «Документы и контакты» nav link and «doctor.school — врачам». In R1 the footer links only what R1 publishes — the «Пользовательское соглашение» link appears with its document, in slice 2.
+- **The pending row state «готовится»** is drawn (the constitution on the Academy host) but is NOT used in slice 1: the owner rule «hide the block until content» (2026-08-27) keeps a slice-1 document with no approved text absent altogether. The «готовится» row is reserved for documents the owner explicitly announces (slice 2, R3).
+
+**The document reading page — the owner's pick (2026-09-06, verbatim «A»).** The reading page is not drawn on any canvas yet: every document row on `#d-docs` / `#a-docs` points at `href="#"`. The owner picked option А — ONE artboard «Документ» for both storefronts, drawn by the owner in Claude Design from the prompt [`21-document-ru.md`](../../product/two-site-ia/design-prompts-ru/21-document-ru.md) (this is the «Б — страница документа внутри витрины» answer to fork 2 of prompts 19/20). The canvas reference is filled into this section at vendoring. Its own forks — the 021 consent-text split, the table-of-contents placement and the licence-scan form — are decided inside that prompt. The rendered result is still re-confirmed on the live stand before merge (AGENTS.md §6 — design-approval gate).
 
 ## Out of scope
 
@@ -125,22 +152,22 @@ What is being replaced is not a working surface. The legacy site's legal routes 
 - **A self-service consent-withdrawal toggle** — 021 fixes withdrawal as a manager-handled request; this surface publishes the text, it does not operate the lifecycle.
 - **An admin authoring UI for documents.** How the platform team edits document text (repo-managed content vs CMS) is a design-level mechanism question, not a product decision of this PRD.
 - **Legal drafting itself.** The platform publishes what the owner and the lawyer approve; 028 does not author legal language.
-- **Corporate «about us» marketing content** — the contacts page carries identity and requisites, not a company story.
+- **Corporate «about us» marketing content** — the contacts and requisites blocks carry identity and requisites, not a company story.
 
 ## Open questions
 
-Items marked **agent-proposed** are this PRD's own proposals and are **unconfirmed by the owner**; they are UX mechanics offered by best practice, not owner forks, and Stage A is where they are settled.
+Everything below is either an **owner call** or an owner/lawyer input; the phrase **not drawn on any canvas** marks the items the vendored `#d-docs` / `#a-docs` artboards do not answer. Decisions the canvases DO settle are recorded in «Approved-mockup reference», not here.
 
 - **Q-31 (owner + lawyer, open): who is the licensee / НМО provider.** Two entities exist in the legacy material — ООО «Ивекскон» (personal-data operator, full requisites) and АНО ДПО «Академия Доктор Скул (Школа)» (licence entity, requisites blank). The operating entity on the documents is decided (Ивекскон); **which entity is named as licensee on the published block is not**. Accepted **ADR-0016 §7** already records the partial answer — Doctor.School holds the educational licence and is the issuer of record — so the open part is narrower: the entity naming. This is an **owner-input dependency** of slice 1, deliberately not modelled as a `blocked_by` edge.
-- **Agent-proposed — the IA.** An index page «Документы» on each storefront listing every document, plus one stable URL per document, with consent checkboxes and the lead form linking a specific document and never the index; a «Контакты» page carrying requisites on each storefront. Unconfirmed.
-- **Agent-proposed — per-document title, effective date and version on the page.** The 021 consent records are versioned; nothing on the legacy site is (its policy is explicitly evergreen, «действует бессрочно до замены новой версией»). Whether the reader is shown a version marker at all, and in what form, is unconfirmed. **US-4** and **US-17** rest on this proposal: if Stage A drops the visible version marker, both ids are retired, never reused.
-- **Agent-proposed — entry points.** A footer link in both shells, alongside the consent-checkbox links. **The footer as an element is itself agent-proposed** — whether either shell gets one, and what else it holds, is an owner/Stage-A call.
-- **Agent-proposed — one authoring, two hosts.** Content authored once and served on both storefronts. The **mechanism** (repo-managed text vs CMS-managed content) is a design-level open question, not a product decision.
-- **Agent-proposed — the photo/video consent's placement.** The text is hosted by 028 as a document; whether any R1 surface links it is open.
-- **Agent-proposed — payment/refund terms excluded from slice 1** on the grounds that R1 has no paid flows. Unconfirmed as a scope call.
-- **The versioning mechanism.** «Version and effective date» is a product outcome; whether superseded versions stay publicly readable, and where the historical text a doctor consented to lives (here, or in 037's consent record), is unresolved.
-- **Whether the licence scan is a file, an image or a registry deep link**, and whether a scan is published at all before the licensee question is settled.
-- **Whether the contacts page carries a form** or only channels. The legacy contacts copy describes a «Служба технической поддержки портала»; whether the new surface reproduces a support form or lists channels is open.
+- **The document reading page — not drawn on any canvas yet.** The owner picked option А (2026-09-06) and draws the artboard «Документ» from prompt [`21-document-ru.md`](../../product/two-site-ia/design-prompts-ru/21-document-ru.md); until that canvas is vendored, the page's composition — title, edition date, table of contents, body, back link — stays open.
+- **Whether each 021 consent is its own document row and URL — not drawn on any canvas.** The canvas index draws ONE row, «Политика персональных данных и согласия». Sections of that one document versus separate rows with their own URLs is fork 2 of prompt 21.
+- **The photo/video consent's placement — not drawn on any canvas.** 028 hosts the text as content; neither host's canvas draws a row or a link for it, and it is settled with the same document-composition fork in prompt 21.
+- **The consent-checkbox link targets — not drawn on any canvas.** The `auth.dc.html` canvas draws no document links, so which document each 021 checkbox opens is settled together with the document page (prompt 21).
+- **The per-document stable URL** — a lead proposal, **not drawn on any canvas**; settled by the document-page Stage A, because it depends on that page existing.
+- **One authoring, two hosts — the mechanism.** That content is authored once and projected on both storefronts is settled; whether the text is repo-managed or CMS-managed is a design-level question, **not drawn on any canvas**.
+- **The versioning mechanism.** The reader-visible marker is settled (edition date + «обновлено» chip); whether superseded editions stay publicly readable, and where the historical text a doctor consented to lives (here or in 037's consent record), is unresolved and **not drawn on any canvas**.
+- **Whether the licence scan is a file, an image or a registry deep link**, and whether a scan is published at all before the licensee question is settled — **not drawn on any canvas**: it is fork 3 of prompt 21.
+- **Payment/refund terms excluded from slice 1** on the grounds that R1 has no paid flows — a lead scope call, **not drawn on any canvas**.
 
 ## Prior art — source system
 

@@ -61,6 +61,9 @@ test-results/
 # read/written by the dispatch-guard PreToolUse hook — machine state, not repo content
 .claude/dispatch-guard-state/
 
+# Local privacy-minimized hook invocation evidence (#1919).
+.claude/hook-observations/
+
 # Owner-only escape hatch for the lead context budget (#1693): its presence lifts
 # the 120K/160K dispatch tiers for the CURRENT session — live marker, never a
 # committed setting (created on an explicit owner instruction, removed by /wrap)

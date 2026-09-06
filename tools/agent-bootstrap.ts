@@ -23,6 +23,8 @@ import { readFile, rm, writeFile } from "node:fs/promises";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import matter from "gray-matter";
+import { scanHarnessSessions } from "./agent/session-activity.mjs";
+import { gitWorktreeRoots } from "./hooks/worktree-path-guard.mjs";
 import {
   evaluateMainSync,
   mainSyncFixCommand,
@@ -417,6 +419,7 @@ async function readSpecMeta(featureSlug: string): Promise<SpecMeta | null> {
 /** One Claude session log: its session id, mtime, and which tree it runs in. */
 export interface SessionLog {
   id: string;
+  harness?: "claude" | "codex";
   mtimeMs: number;
   inSharedMainTree: boolean;
   /** Absolute path to the `.jsonl` log — lets the PreToolUse guard re-check
@@ -599,44 +602,20 @@ async function concurrency(): Promise<Concurrency> {
   let liveInMainTree = 0;
   let liveList: SessionLog[] = [];
   try {
-    const { readdir, stat } = await import("node:fs/promises");
-    const { homedir } = await import("node:os");
-    const projectsDir = resolve(homedir(), ".claude", "projects");
-    const mainSlug = encodeProjectSlug(mainRoot);
-    const selfId = process.env["CLAUDE_CODE_SESSION_ID"] ?? "";
+    const selfId =
+      process.env["DS_HOOK_SESSION_ID"] ||
+      process.env["CODEX_SESSION_ID"] ||
+      process.env["CODEX_THREAD_ID"] ||
+      process.env["CLAUDE_CODE_SESSION_ID"] ||
+      "";
     const nowMs = Date.now();
-
-    const dirs = (await readdir(projectsDir, { withFileTypes: true }))
-      .filter((d) => d.isDirectory() && isRepoSessionDir(d.name, mainSlug))
-      .map((d) => d.name);
-
-    const logs: SessionLog[] = [];
-    for (const dir of dirs) {
-      // The bare main slug = the primary tree; a `…-claude-worktrees-…` suffix
-      // = a linked worktree session.
-      const inMain = dir === mainSlug;
-      const full = resolve(projectsDir, dir);
-      let entries: string[] = [];
-      try {
-        entries = (await readdir(full)).filter((f) => f.endsWith(".jsonl"));
-      } catch {
-        continue;
-      }
-      for (const f of entries) {
-        try {
-          const logPath = resolve(full, f);
-          const s = await stat(logPath);
-          logs.push({
-            id: f.replace(/\.jsonl$/, ""),
-            mtimeMs: s.mtimeMs,
-            inSharedMainTree: inMain,
-            logPath,
-          });
-        } catch {
-          // Log vanished mid-scan — ignore.
-        }
-      }
-    }
+    const roots = gitWorktreeRoots(REPO_ROOT);
+    const scan = scanHarnessSessions({
+      roots: roots.length ? roots : [mainRoot],
+      nowMs,
+    });
+    for (const warning of scan.warnings) note("session-log scan", warning);
+    const logs: SessionLog[] = scan.logs;
 
     const counts = liveParallelSessions(logs, {
       nowMs,
@@ -979,7 +958,7 @@ async function main(): Promise<void> {
   const withSpec = activeSpecs.filter((x) => x.spec !== null);
   if (withSpec.length === 0) {
     out.push(
-      "(no active spec — start a new one via superpowers:brainstorming)",
+      "(no active spec — route the task via AGENTS.md section 3 and the project skill catalog)",
     );
   } else {
     for (const { issue, spec } of withSpec) {

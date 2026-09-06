@@ -17,12 +17,12 @@
     ],
     "PreToolUse": [
       {
-        "matcher": "apply_patch|Edit|Write|MultiEdit",
+        "matcher": "^(apply_patch|Edit|Write|MultiEdit|Bash|exec_command)$",
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$(git rev-parse --show-toplevel)/tools/hooks/worktree-path-guard.mjs\"",
-            "commandWindows": "powershell -NoProfile -Command \"node ((git rev-parse --show-toplevel) + '/tools/hooks/worktree-path-guard.mjs')\"",
+            "command": "node \"$(git rev-parse --show-toplevel)/tools/hooks/run-project-hook.mjs\" worktree-path-guard",
+            "commandWindows": "powershell -NoProfile -Command \"node ((git rev-parse --show-toplevel) + '/tools/hooks/run-project-hook.mjs') worktree-path-guard\"",
             "timeout": 10
           }
         ]
@@ -32,8 +32,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$(git rev-parse --show-toplevel)/tools/hooks/dispatch-guard.mjs\"",
-            "commandWindows": "powershell -NoProfile -Command \"node ((git rev-parse --show-toplevel) + '/tools/hooks/dispatch-guard.mjs')\"",
+            "command": "node \"$(git rev-parse --show-toplevel)/tools/hooks/run-project-hook.mjs\" dispatch-guard",
+            "commandWindows": "powershell -NoProfile -Command \"node ((git rev-parse --show-toplevel) + '/tools/hooks/run-project-hook.mjs') dispatch-guard\"",
             "timeout": 10
           }
         ]
@@ -43,8 +43,41 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$(git rev-parse --show-toplevel)/tools/hooks/screenshot-path-guard.mjs\"",
-            "commandWindows": "powershell -NoProfile -Command \"node ((git rev-parse --show-toplevel) + '/tools/hooks/screenshot-path-guard.mjs')\"",
+            "command": "node \"$(git rev-parse --show-toplevel)/tools/hooks/run-project-hook.mjs\" screenshot-path-guard",
+            "commandWindows": "powershell -NoProfile -Command \"node ((git rev-parse --show-toplevel) + '/tools/hooks/run-project-hook.mjs') screenshot-path-guard\"",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "^(spawn_agent|Agent|Task)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$(git rev-parse --show-toplevel)/tools/hooks/run-project-hook.mjs\" lead-context-budget",
+            "commandWindows": "powershell -NoProfile -Command \"node ((git rev-parse --show-toplevel) + '/tools/hooks/run-project-hook.mjs') lead-context-budget\"",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$(git rev-parse --show-toplevel)/tools/hooks/run-project-hook.mjs\" subagent-context-budget",
+            "commandWindows": "powershell -NoProfile -Command \"node ((git rev-parse --show-toplevel) + '/tools/hooks/run-project-hook.mjs') subagent-context-budget\"",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "^(spawn_agent|followup_task|Agent|Task|Read|Skill|Bash|exec_command)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$(git rev-parse --show-toplevel)/tools/hooks/run-project-hook.mjs\" wrap-owner-only",
+            "commandWindows": "powershell -NoProfile -Command \"node ((git rev-parse --show-toplevel) + '/tools/hooks/run-project-hook.mjs') wrap-owner-only\"",
             "timeout": 10
           }
         ]
@@ -55,8 +88,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$(git rev-parse --show-toplevel)/tools/hooks/context-budget.mjs\"",
-            "commandWindows": "powershell -NoProfile -Command \"node ((git rev-parse --show-toplevel) + '/tools/hooks/context-budget.mjs')\"",
+            "command": "node \"$(git rev-parse --show-toplevel)/tools/hooks/run-project-hook.mjs\" context-budget",
+            "commandWindows": "powershell -NoProfile -Command \"node ((git rev-parse --show-toplevel) + '/tools/hooks/run-project-hook.mjs') context-budget\"",
             "timeout": 10
           }
         ]

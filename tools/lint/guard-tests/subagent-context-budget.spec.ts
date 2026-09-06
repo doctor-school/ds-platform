@@ -60,11 +60,10 @@ function usageLine(contextTokens: number): string {
  * `<projects>/<slug>/<session>/subagents/agent-<agent_id>.jsonl`.
  * `withSubagent: false` builds the lead-only variant (no `subagents/` dir).
  */
-function fixture(opts: {
-  lead: number;
-  subagent?: number;
-  agentId?: string;
-}): { session: string; leadPath: string } {
+function fixture(opts: { lead: number; subagent?: number; agentId?: string }): {
+  session: string;
+  leadPath: string;
+} {
   const dir = mkdtempSync(join(tmpdir(), "subagent-ctx-"));
   const session = "sess-1";
   const leadPath = join(dir, `${session}.jsonl`);
@@ -371,7 +370,7 @@ describe("subagent-context-budget end-to-end (real hook process)", () => {
         tool_input: {},
         transcript_path: leadPath,
       }),
-    ).toBe("");
+    ).toContain("unavailable");
   });
 
   it("is silent for the same payload with no agent_id (the lead's own call)", () => {
@@ -386,12 +385,12 @@ describe("subagent-context-budget end-to-end (real hook process)", () => {
     ).toBe("");
   });
 
-  it("fail-open: malformed stdin and a missing transcript produce no output", () => {
+  it("malformed stdin and missing transcript report unavailable telemetry", () => {
     const bad = execFileSync(process.execPath, [HOOK], {
       input: "{not json",
       encoding: "utf8",
     });
-    expect(bad.trim()).toBe("");
+    expect(bad.trim()).toContain("unavailable");
     expect(
       runHook({
         session_id: "sess-1",
@@ -400,6 +399,6 @@ describe("subagent-context-budget end-to-end (real hook process)", () => {
         tool_input: {},
         transcript_path: "/definitely/not/here.jsonl",
       }),
-    ).toBe("");
+    ).toContain("unavailable");
   });
 });

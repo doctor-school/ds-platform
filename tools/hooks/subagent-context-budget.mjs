@@ -1,52 +1,9 @@
 #!/usr/bin/env node
-/**
- * PreToolUse hook: SUBAGENT context budget — rotate at soft, fence at hard
- * (owner decision, 2026-08-18, #1374).
- *
- * Why: the 2026-08-10..18 token retro showed child agents cost ≈2× the lead;
- * 16 subagents crossed 200K context and the worst peaked at 586K over 323
- * turns, where ≈78% of its cost was cache-read (per-turn cost is linear in
- * context). Nothing limited subagents: no hook, no `maxTurns`, no rotation
- * rule. This hook makes the limit deterministic at the tool-call boundary.
- *
- * Contract (differs from the LEAD advisory `context-budget.mjs`, which is
- * operator-visible only and must NEVER talk to the model — this one DOES talk
- * to the model, because its addressee is a subagent, not the human):
- *   - Acts ONLY inside a subagent: stdin must carry `agent_id`. No `agent_id`
- *     ⇒ the call is the lead's ⇒ exit 0 with no output.
- *   - VERIFIED PreToolUse stdin shape inside a subagent (probed live in this
- *     CLI version, 2026-08-18, from a real `ds-explorer` dispatch):
- *       {"session_id":"<LEAD session id>",
- *        "transcript_path":"<projects>/<slug>/<LEAD session id>.jsonl",
- *        "cwd":"…","agent_id":"a803ac1b8bab61dc0","agent_type":"ds-explorer",
- *        "hook_event_name":"PreToolUse","tool_name":"Read",
- *        "tool_input":{…},"tool_use_id":"…"}
- *     i.e. `transcript_path` is the LEAD's transcript, and there is NO
- *     `agent_transcript_path` field on PreToolUse here. Measuring
- *     `transcript_path` would apply subagent thresholds to the LEAD's context
- *     and deny every dispatched agent from its first tool call.
- *   - Context size = the SUBAGENT's OWN transcript only, resolved by
- *     `resolveSubagentTranscript()`: `agent_transcript_path` when a future CLI
- *     supplies it, else the derived sibling
- *     `<dirname(transcript_path)>/<session_id>/subagents/agent-<agent_id>.jsonl`
- *     (verified to exist on disk). A path not under a `subagents/` segment, or
- *     a path that does not exist, ⇒ SILENT — never fall back to the lead
- *     transcript. The last assistant usage block (input + cache_read +
- *     cache_creation) is computed by the shared `contextTokensFromJsonl`
- *     imported from `context-budget.mjs` (single definition; never duplicate
- *     the parse), over the TAIL of the file (the runs this hook targets write
- *     tens of MB and the parse scans from the end anyway).
- *   - ≥ SOFT_THRESHOLD → `additionalContext` ROTATE directive, emitted at the
- *     FIRST crossing and then again every +SOFT_REPEAT_STEP (per-agent state
- *     file, so a chatty agent is not nagged on every tool call).
- *   - ≥ HARD_THRESHOLD → `permissionDecision: "deny"` for every tool except the
- *     checkpoint-and-hand-back allow-list (`isAllowedUnderHardCap`), on EVERY
- *     call (no cadence — the fence must not have gaps).
- *
- * Thresholds are owner-tunable constants (see below). FAIL-OPEN: any parse /
- * IO / logic error exits 0 with no output — a budget probe must never wedge a
- * legitimate tool call.
- */
+/** PreToolUse child budget. Claude retains 150K/200K and +25K cadence.
+ * Codex uses 70%/85% of its own reported effective model window. A Codex
+ * child transcript must identify that agent; never charge the parent's usage.
+ * Missing identity/usage/window is unavailable, not zero. Hard-cap recovery
+ * permits bounded git commands and the child's own checkpoint file. */
 import {
   closeSync,
   existsSync,
@@ -60,8 +17,19 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { contextTokensFromJsonl } from "./context-budget.mjs";
-import { projectRoot } from "./hook-compat.mjs";
+import {
+  contextReadingFromJsonl,
+  codexBudgetDecision,
+  codexBudgetMessage,
+} from "./context-budget.mjs";
+import {
+  projectRoot,
+  actorIdentity,
+  shellCommand,
+  telemetryUnavailable,
+  mutationPaths,
+} from "./hook-compat.mjs";
+import { codexSessionMetadata } from "../agent/session-activity.mjs";
 
 /** Soft cap: the subagent is told to checkpoint and hand back (ROTATE).
  * Owner-tunable (owner decision 2026-08-18: 150K). */
@@ -137,6 +105,19 @@ export function checkpointPath(agentId) {
  */
 export function resolveSubagentTranscript(payload, exists = existsSync) {
   const explicit = payload?.agent_transcript_path;
+  // Codex uses parent session_id; accept a provided path ONLY after matching
+  // session_meta.id to the child id. There is no stable derived Codex path.
+  if (process.env.DS_HOOK_HARNESS === "codex") {
+    const candidate = explicit || payload?.transcript_path;
+    if (!candidate || !payload?.agent_id || !exists(candidate)) return null;
+    try {
+      return codexSessionMetadata(candidate)?.id === payload.agent_id
+        ? candidate
+        : null;
+    } catch {
+      return null;
+    }
+  }
   let candidate =
     typeof explicit === "string" && explicit.trim() ? explicit : "";
   if (!candidate) {
@@ -191,15 +172,27 @@ export function readTail(path, maxBytes = TAIL_BYTES) {
  * push, inspect) and writing its own checkpoint file. Everything else is
  * denied — at 200K every further turn re-reads the whole context.
  */
-export function isAllowedUnderHardCap(toolName, toolInput) {
-  if (toolName === "Bash") {
-    const command = String(toolInput?.command ?? "").trim();
+export function isAllowedUnderHardCap(toolName, toolInput, agentId = null) {
+  if (toolName === "Bash" || toolName === "exec_command") {
+    const command = String(shellCommand(toolInput) ?? "").trim();
     // Chained / substituted commands are rejected: the prefix must describe the
     // WHOLE command, else `git status && pnpm build` routes around the fence.
-    if (/[;&|`]|\$\(|\n/.test(command)) return false;
+    if (/[;&|`<>]|\$|[\r\n]/.test(command)) return false;
     return (
-      command.startsWith("git ") || command.startsWith("pnpm pr:preflight")
+      /^git\s+(?:status|diff|log|show|rev-parse|add|commit|push)\b/.test(
+        command,
+      ) || /^pnpm pr:preflight(?:\s|$)/.test(command)
     );
+  }
+  if (agentId && /^(Write|apply_patch)$/.test(toolName)) {
+    try {
+      const paths = mutationPaths(toolName, toolInput, checkpointDir());
+      return (
+        paths.length === 1 && resolve(paths[0]) === checkpointPath(agentId)
+      );
+    } catch {
+      return false;
+    }
   }
   if (toolName === "Write") {
     const filePath = String(toolInput?.file_path ?? "");
@@ -243,10 +236,11 @@ export function hardMessage(contextTokens, path) {
  * - ≥ SOFT, already notified this step  → `{ action: "silent" }`
  * The returned `state` (when present) is what the caller must persist.
  */
-export function decide({ contextTokens, toolName, toolInput, state }) {
+export function decide({ contextTokens, toolName, toolInput, state, agentId }) {
   const ctx = Number.isFinite(contextTokens) ? contextTokens : 0;
   if (ctx >= HARD_THRESHOLD) {
-    if (isAllowedUnderHardCap(toolName, toolInput)) return { action: "silent" };
+    if (isAllowedUnderHardCap(toolName, toolInput, agentId))
+      return { action: "silent" };
     return { action: "deny" };
   }
   if (ctx < SOFT_THRESHOLD) return { action: "silent" };
@@ -265,15 +259,44 @@ function main() {
     if (!agentId) process.exit(0);
     const transcriptPath = resolveSubagentTranscript(payload);
     // No transcript of OUR OWN ⇒ nothing this hook is allowed to measure.
-    if (!transcriptPath) process.exit(0);
-    const contextTokens = contextTokensFromJsonl(readTail(transcriptPath));
+    if (!transcriptPath) throw new Error("missing child transcript");
+    const reading = contextReadingFromJsonl(readTail(transcriptPath));
+    const contextTokens = reading.tokens;
+    if (
+      process.env.DS_HOOK_HARNESS === "codex" ||
+      reading.harness === "codex"
+    ) {
+      const action = codexBudgetDecision(reading);
+      if (action === "unavailable") throw new Error("missing telemetry");
+      if (
+        action === "silent" ||
+        (action === "deny" &&
+          isAllowedUnderHardCap(payload.tool_name, payload.tool_input, agentId))
+      )
+        process.exit(0);
+      const msg =
+        codexBudgetMessage(reading, action) +
+        ` Return ROTATE: ${checkpointPath(agentId)}.`;
+      const output = { hookEventName: "PreToolUse", additionalContext: msg };
+      if (action === "deny")
+        Object.assign(output, {
+          permissionDecision: "deny",
+          permissionDecisionReason: msg,
+        });
+      process.stdout.write(
+        JSON.stringify({ systemMessage: msg, hookSpecificOutput: output }),
+      );
+      process.exit(0);
+    }
+    if (contextTokens === null) throw new Error("missing telemetry");
     const projectDir = projectRoot(payload);
-    const statePath = stateFilePath(projectDir, agentId);
+    const statePath = stateFilePath(projectDir, actorIdentity(payload));
     const decision = decide({
       contextTokens,
       toolName: payload.tool_name,
       toolInput: payload.tool_input,
       state: readState(statePath),
+      agentId,
     });
     if (decision.action === "silent") process.exit(0);
     const path = checkpointPath(agentId);
@@ -307,6 +330,7 @@ function main() {
     );
     process.exit(0);
   } catch {
+    process.stdout.write(JSON.stringify(telemetryUnavailable("Subagent")));
     process.exit(0); // fail-open: never wedge a legitimate tool call on a bug
   }
 }

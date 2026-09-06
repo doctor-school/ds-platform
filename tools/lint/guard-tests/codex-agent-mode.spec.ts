@@ -157,7 +157,7 @@ describe("Codex apply_patch compatibility", () => {
     });
     expect(result.status).toBe(2);
     expect(result.stderr).toContain("SHARED main tree");
-    expect(result.stderr).toContain(escaped);
+    expect(result.stderr).toContain("cannot verify git worktree identity");
   });
 });
 
@@ -189,7 +189,6 @@ describe("canonical Codex hook payloads (spawned end-to-end)", () => {
     ).toBe("");
     expect(run("apply_patch", patch).stdout).toBe("");
   });
-
 });
 
 describe("Codex context-budget fallback", () => {

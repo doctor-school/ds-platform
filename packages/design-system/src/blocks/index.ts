@@ -239,3 +239,14 @@ export type {
 // liveness, the entry policy and the presence count are server-resolved.
 export { LiveEventStrip } from "./live-event-strip";
 export type { LiveEventStripProps } from "./live-event-strip";
+
+// 003 EARS-27/28 (#1958) — the ONE canonical account-profile surface both
+// storefronts mount. Lifted verbatim out of `apps/portal/app/account/page.tsx`:
+// the Academy keeps its `next-intl` copy and transport, the doctor storefront
+// projects the same composition with RU literal copy until feature 022 (#1791)
+// replaces it with the full doctor cabinet.
+export { AccountProfileCard } from "./account-profile-card";
+export type {
+  AccountProfileCardProps,
+  AccountProfileCardCopy,
+} from "./account-profile-card";

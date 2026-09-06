@@ -3,6 +3,9 @@
 import type {
   DoctorRegisterRequest,
   DoctorRegisterResponse,
+  MyDisplayName,
+  MyProfile,
+  SetDisplayNameRequest,
   VerifyRequest,
   VerifyResendRequest,
   VerifyResendResponse,
@@ -121,4 +124,74 @@ export function resendVerification(
     body,
     captchaToken,
   );
+}
+
+/**
+ * 003 EARS-27 (#1958) — the account-profile self-read behind `/account`.
+ *
+ * The SHIPPED 003 route, not a storefront copy: `GET /v1/me/profile` is the same
+ * read the Academy calls, reached here through this origin's rewrite so the
+ * `__Host-ds_session` cookie of `doctor.school` rides it. `null` on a 401 (no or
+ * expired session) mirrors the portal client, so the caller runs the EARS-9
+ * silent-refresh-then-redirect dance without try/catch noise; any other non-2xx
+ * throws {@link StorefrontAuthError}.
+ */
+export async function getMyProfile(): Promise<MyProfile | null> {
+  const res = await fetch(`${BASE}/me/profile`, {
+    method: "GET",
+    credentials: "include",
+    headers: { accept: "application/json" },
+  });
+  if (res.status === 401) return null;
+  if (!res.ok) {
+    const error = await safeError(res);
+    throw new StorefrontAuthError(res.status, error.message, error.code);
+  }
+  return (await res.json()) as MyProfile;
+}
+
+/**
+ * 006 EARS-14 (#1958) — persist the display name through the EXISTING write.
+ *
+ * `PUT /v1/me/display-name` is the one write behind the inline edit on both
+ * storefronts; the storefront adds no second endpoint and no second validation —
+ * the api re-checks the `@ds/schemas` SSOT rule server-side.
+ */
+export async function setDoctorDisplayName(
+  body: SetDisplayNameRequest,
+): Promise<MyDisplayName> {
+  const res = await fetch(`${BASE}/me/display-name`, {
+    method: "PUT",
+    credentials: "include",
+    headers: { "content-type": "application/json", accept: "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const error = await safeError(res);
+    throw new StorefrontAuthError(res.status, error.message, error.code);
+  }
+  return (await res.json()) as MyDisplayName;
+}
+
+/**
+ * 003 EARS-10 (#1958) — revoke this origin's session server-side.
+ *
+ * `__Host-` cookies are origin-locked (ADR-0015 §4), so signing out of
+ * `doctor.school` revokes the doctor-host session only; the Academy session, if
+ * one exists, is a separate cookie against the same Zitadel identity. The caller
+ * decides where the doctor lands afterwards.
+ */
+export function logoutStorefront(): Promise<unknown> {
+  return post<Record<string, never>, unknown>("auth/logout", {});
+}
+
+/**
+ * 003 EARS-9 (#1958) — rotate this origin's session server-side.
+ *
+ * The SHIPPED 003 route again (`POST /v1/auth/refresh`); it exists here so the
+ * storefront can run the same silent-refresh-then-retry dance the Academy runs
+ * before it ever sends a doctor back to the door.
+ */
+export function refreshStorefrontSession(): Promise<unknown> {
+  return post<Record<string, never>, unknown>("auth/refresh", {});
 }

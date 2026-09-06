@@ -170,3 +170,56 @@ for (const [state, drive] of [
     expect(summary, `axe violations on /register (${state})`).toEqual([]);
   });
 }
+
+/**
+ * #1933 — the sign-in route joins the gate the day it ships, exactly as
+ * `/register` did. The card is the shared `<LoginCard>` block, but a block is
+ * only as accessible as the page that composes it: the method tablist, the
+ * heading hierarchy under the auth frame and the `role="alert"` error linkage
+ * are page-level facts, and only a composed-page scan can see them. Two states,
+ * for the reason the registration block states — a resting form and a rejected
+ * one fail differently. The route takes no backend read that can fail the
+ * render, so no route mock is needed for the resting state; the error state
+ * fulfills the sign-in POST with a 401 at the network edge.
+ */
+for (const [state, drive] of [
+  ["resting", async () => {}],
+  [
+    "error",
+    async (page: import("@playwright/test").Page) => {
+      await page.route("**/v1/auth/login", (route) =>
+        route.fulfill({
+          status: 401,
+          contentType: "application/json",
+          body: JSON.stringify({ statusCode: 401, message: "Unauthorized" }),
+        }),
+      );
+      const form = page.getByTestId("password-login-form");
+      await form.getByLabel("Почта или телефон").fill("doctor@clinic.ru");
+      await form.getByLabel("Пароль", { exact: true }).fill("wrong-password-123");
+      await page.getByTestId("password-login-submit").click();
+      await expect(form.getByRole("alert")).toBeVisible();
+    },
+  ],
+] as const) {
+  test(`017 #1933 /login passes WCAG 2 A/AA + one-h1 check (${state})`, async ({
+    page,
+  }) => {
+    await page.goto("/login");
+    await drive(page);
+
+    const h1 = page.locator("h1");
+    await expect(h1, "h1 count on /login").toHaveCount(1);
+    await expect(h1, "h1 text on /login").not.toHaveText(/^\s*$/);
+
+    const results = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze();
+
+    const summary = results.violations.map((v) => ({
+      id: v.id,
+      impact: v.impact,
+      help: v.help,
+      nodes: v.nodes.map((n) => n.target).flat(),
+    }));
+    expect(summary, `axe violations on /login (${state})`).toEqual([]);
+  });
+}

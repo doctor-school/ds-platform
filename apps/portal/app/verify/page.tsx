@@ -20,7 +20,6 @@ import { takePendingRegistration } from "@/lib/pending-registration";
 import { withReturnTarget } from "@/lib/registration-handoff";
 import { completeReturnTarget } from "@/lib/registration-resume";
 import { useLocalizedResolver } from "@/lib/use-localized-resolver";
-import { useResendCooldown } from "@/lib/use-resend-cooldown";
 
 import {
   botProtectionFailureMessage,
@@ -32,6 +31,7 @@ import {
   type EmailConfirmCardCopy,
   type EmailConfirmValues,
   useBotProtectedAction,
+  useResendCooldown,
 } from "@ds/design-system/blocks";
 
 /*

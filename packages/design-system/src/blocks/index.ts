@@ -13,6 +13,11 @@ export { AuthShell } from "./auth-shell";
 export type { AuthShellProps, AuthShellCopy } from "./auth-shell";
 export { OtpFocusScreen } from "./otp-focus-screen";
 export { useResendCountdown } from "./use-resend-countdown";
+// The app-side half of the same resend contract (#227/#267), lifted out of
+// `apps/portal/lib/` in 021 EARS-19 (#1558): hold the nonce, bump it on a
+// successful resend, route a failure to the host's error channel. The transport
+// is always the caller's — each surface resends against a different endpoint.
+export { useResendCooldown } from "./use-resend-cooldown";
 export { maskDestination } from "./mask-destination";
 // #1666 slice A — the ONE canonical sign-in composition both storefronts mount
 // (AGENTS.md §6 cross-front reuse). Lifted verbatim from the portal `/login` page;

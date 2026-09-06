@@ -1,15 +1,32 @@
 "use client";
 
-import { useId, type ReactNode } from "react";
-import { useForm } from "react-hook-form";
+import { useCallback, useId, useState, type ReactNode } from "react";
+import {
+  useForm,
+  type Resolver,
+  type ResolverResult,
+} from "react-hook-form";
 
-import type { ConsentItem, ConsentTier } from "@ds/schemas";
+import type { ConsentAcceptance, ConsentItem, ConsentTier } from "@ds/schemas";
 import {
   MARKETING_COMMUNICATIONS_PURPOSE,
   PARTNER_DATA_SHARING_PURPOSE,
+  VerifyRequestSchema,
 } from "@ds/schemas";
 
-import { AuthCard } from "@ds/design-system/blocks";
+import {
+  AuthCard,
+  BotProtectionField,
+  botProtectionFailureMessage,
+  EmailConfirmCard,
+  isBotProtectionRejected,
+  isBotProtectionRequired,
+  maskDestination,
+  useBotProtectedAction,
+  useResendCooldown,
+  type EmailConfirmCardCopy,
+  type EmailConfirmValues,
+} from "@ds/design-system/blocks";
 import { Button } from "@ds/design-system/button";
 import {
   Form,
@@ -23,6 +40,16 @@ import { Badge } from "@ds/design-system/badge";
 import { Checkbox } from "@ds/design-system/checkbox";
 import { EmailField, PasswordField } from "@ds/design-system/fields";
 import { Input } from "@ds/design-system/input";
+
+import {
+  BOT_PROTECTION_MESSAGES,
+  botProtectionSiteKey,
+} from "@/lib/bot-protection";
+import {
+  registerDoctor,
+  resendVerification,
+  verifyEmail,
+} from "@/lib/storefront-auth-client";
 
 /**
  * 021 EARS-1 — the doctor registration screen (`design-source/auth.dc.html`,
@@ -196,15 +223,68 @@ const CONSENT_MANAGER_NOTE =
   "Согласия раздельные и фиксируются с датой. Изменить или отозвать согласие можно через менеджера платформы.";
 
 /**
- * The reason the submit is still inert once BOTH access conditions are ticked.
+ * 021 EARS-19 (#1558) — the version of the consent WORDING this screen renders,
+ * carried on every granted purpose the command sends.
  *
- * Product-shaped, not a build note: what the doctor is waiting for is the
- * bot-protection challenge the door has to run before it can accept a
- * registration (003 EARS-17 / 021 EARS-19, #1558). Naming the Issue or the
- * sprint here would make the form report on the team instead of on itself.
+ * The access-condition rows do not keep it: the service re-stamps the
+ * declaration and the partner-data purposes with its own
+ * `MEDICAL_WORKER_DECLARATION_VERSION` / `PARTNER_DATA_SHARING_VERSION`
+ * (`doctor-register.service.ts`), because a client-supplied version would let a
+ * record claim a wording the surface never rendered — presence in the array is
+ * the grant, the version is the server's to stamp. The optional marketing
+ * purpose has no server-side stamp yet (its record semantics are #1542's), so
+ * for that row this IS the recorded version until #1542 moves the stamp across.
  */
-const BOT_PROTECTION_PENDING =
-  "Защита от ботов подключается — отправка станет доступна после неё.";
+const CONSENT_WORDING_VERSION = "2026-09";
+
+/**
+ * The command's own failure copy (021 EARS-12 / 003 EARS-16).
+ *
+ * Deliberately generic and identical for a brand-new and an already-registered
+ * address: the BFF answers both with the same `pending_verification`, and a
+ * screen that said anything more specific here would re-introduce on-screen the
+ * account-existence signal the contract removes.
+ */
+const REGISTER_FAILED =
+  "Не удалось завершить регистрацию. Попробуйте ещё раз.";
+
+/**
+ * The post-submit «письмо отправлено» copy, verbatim from the shipped 003
+ * catalog (`apps/portal/messages/ru.json` → `verify.*`) — the Academy already
+ * confirms an email with these words, and 021 invents none of its own.
+ *
+ * ONE line is deliberately NOT the portal's: the portal's «Код принят —
+ * входим…» promises the auto-login replay it performs with a held password.
+ * The doctor storefront holds no password and replays no login (#1546 owns
+ * where a confirmed doctor lands), so promising a sign-in here would be copy
+ * asserting a mechanism this surface does not have.
+ */
+const CONFIRM_COPY: EmailConfirmCardCopy = {
+  title: "Проверьте почту",
+  description: (destination) => (
+    <>
+      Мы отправили код на <strong>{destination}</strong>. Введите его, чтобы
+      завершить регистрацию.
+    </>
+  ),
+  newAccountHeading: "Новый аккаунт — введите код",
+  codeLabel: "Код из письма",
+  submit: "Подтвердить",
+  codeAccepted: "Код принят — почта подтверждена.",
+  resend: "Отправить снова",
+  resendCountdown: (seconds) => `Отправить снова · ${seconds} с`,
+  existingAccountHeading: "Уже регистрировались?",
+  existingAccountHint: "Войдите в существующий аккаунт или сбросьте пароль.",
+  goToSignIn: "Войти",
+  goToReset: "Сбросить пароль",
+};
+
+const CONFIRM_CODE_INVALID = "Введите код из письма.";
+const CONFIRM_FAILED = "Код не подошёл. Попробуйте ещё раз.";
+const CONFIRM_RESEND_FAILED =
+  "Не удалось отправить код повторно. Попробуйте ещё раз.";
+const CONFIRM_RESEND_ACKNOWLEDGED = (destination: string) =>
+  `Если регистрация ещё не подтверждена, мы повторно отправили код на ${destination}.`;
 
 /** The item of a tier carrying this purpose, or `undefined` when unsupplied. */
 function findConsentItem(
@@ -270,11 +350,123 @@ export function RegistrationScreen({
   // the server still refuses without that purpose — so the reason names the
   // unmet access condition rather than a bot-protection step that is not the
   // first obstacle (EARS-12).
+  // Both access conditions granted, the command is reachable: there is no third
+  // obstacle any more. The bot-protection challenge is not one — it is INVISIBLE
+  // and runs inside the submit (003 EARS-17), so a doctor who has met the two
+  // stated conditions presses an ENABLED button and the challenge happens on the
+  // way. `null` is the enabled state, and the reason paragraph is then absent
+  // rather than empty (EARS-3's honest-empty rule, same as every other slot).
   const submitReason = !declared
     ? MEDICAL_WORKER_DECLARATION_UNMET
     : !partnerDataItem || !partnerDataGranted
       ? PARTNER_DATA_UNMET
-      : BOT_PROTECTION_PENDING;
+      : null;
+
+  /**
+   * 021 EARS-19 — the challenge failure and the command failure are two
+   * different statements, and both are FORM-level: neither belongs on the email,
+   * the password or a consent box, none of which the doctor got wrong. They are
+   * held apart so a fresh challenge clears the challenge line without erasing a
+   * command failure the doctor still has to read.
+   */
+  const [captchaError, setCaptchaError] = useState<string | null>(null);
+  const [commandError, setCommandError] = useState<string | null>(null);
+  /**
+   * The address the code went to — `null` while the door is still the form.
+   * Set only after the BFF ACCEPTED the command, so the post-submit state never
+   * asserts an email the server did not send.
+   */
+  const [pendingEmail, setPendingEmail] = useState<string | null>(null);
+
+  const captcha = useBotProtectedAction({
+    onVerified: () => setCaptchaError(null),
+    onChallengeError: (failure) =>
+      setCaptchaError(
+        botProtectionFailureMessage(failure, BOT_PROTECTION_MESSAGES),
+      ),
+    onActionError: (error) => {
+      // 003 EARS-17 — a token the guard refused, or a request that arrived
+      // without one. Reported as the challenge statement (and NOT as a
+      // registration failure), because retrying the challenge is what fixes it.
+      if (isBotProtectionRejected(error) || isBotProtectionRequired(error)) {
+        setCaptchaError(
+          isBotProtectionRejected(error)
+            ? BOT_PROTECTION_MESSAGES.rejected
+            : BOT_PROTECTION_MESSAGES.required,
+        );
+        return;
+      }
+      setCommandError(REGISTER_FAILED);
+    },
+  });
+
+  /**
+   * `RegisterDoctor` (021 design §2) — the command this screen owns, run behind
+   * the invisible challenge: `request()` mounts one fresh widget instance, and
+   * the pending closure below resumes with the minted token (or, with no site
+   * key configured, tokenless — exactly matching the guard's no-op when the
+   * provider is disabled).
+   */
+  const onValid = useCallback(
+    (values: RegistrationFormValues) => {
+      setCaptchaError(null);
+      setCommandError(null);
+      const email = values.email.trim();
+      captcha.request(async (captchaToken) => {
+        // EARS-7 — an ungranted optional purpose is ABSENT from the array;
+        // there is no `granted: false` shape. The declaration is not listed
+        // either: the service derives its row from the flag, so listing it
+        // here would be a second, untrusted claim about the same tick.
+        const consent: ConsentAcceptance[] = [];
+        if (partnerDataItem) {
+          consent.push({
+            purpose: PARTNER_DATA_SHARING_PURPOSE,
+            version: CONSENT_WORDING_VERSION,
+          });
+        }
+        if (marketingItem && values.marketingCommunications) {
+          consent.push({
+            purpose: MARKETING_COMMUNICATIONS_PURPOSE,
+            version: CONSENT_WORDING_VERSION,
+          });
+        }
+        await registerDoctor(
+          {
+            email,
+            password: values.password,
+            // EARS-4 — a literal, not the watched value: the submit is
+            // unreachable while the declaration is unticked, so the command
+            // that does leave this screen always carries the granted one.
+            medicalWorkerDeclaration: true,
+            consent,
+          },
+          captchaToken,
+        );
+        // 003 EARS-16 / 021 EARS-13 — the response is IDENTICAL for a new and
+        // an already-registered address, so there is exactly one next state and
+        // no branch to make on it.
+        setPendingEmail(email);
+      });
+    },
+    [captcha, marketingItem, partnerDataItem],
+  );
+
+  // 021 EARS-19 — a command that succeeded never shows nothing. The door becomes
+  // the canonical 003 confirmation state, and the form's own surroundings do NOT
+  // travel with it: the return context, the attribution line and the points
+  // promise are pre-submission framing of a decision the doctor has now made,
+  // and re-rendering them beside «Проверьте почту» would put a call to action
+  // next to a screen whose only action is the code.
+  if (pendingEmail) {
+    return (
+      <div
+        data-testid="registration-screen"
+        className="flex w-full flex-col gap-4.5"
+      >
+        <RegistrationConfirmation email={pendingEmail} />
+      </div>
+    );
+  }
 
   return (
     <div
@@ -311,9 +503,10 @@ export function RegistrationScreen({
             data-registration-landing={landing}
             className="flex flex-col gap-4.5"
             noValidate
-            // The command is not wired in this slice (see the header note);
-            // the browser must not fall back to a native GET submission.
-            onSubmit={(event) => event.preventDefault()}
+            // 021 EARS-19 — `RegisterDoctor`, run through react-hook-form so a
+            // client-side validation miss surfaces in the field it belongs to
+            // rather than as a form-level failure.
+            onSubmit={form.handleSubmit(onValid)}
           >
             <FormField
               control={form.control}
@@ -565,8 +758,15 @@ export function RegistrationScreen({
               <Button
                 type="submit"
                 className="w-full"
-                disabled
-                aria-describedby={reasonId}
+                // Disabled ONLY while a stated condition is unmet; once both
+                // access conditions are granted the command is reachable and the
+                // button is live. The in-flight guard is the challenge's own
+                // `pending` — one registration attempt at a time, never two
+                // tokens for one form.
+                disabled={submitReason !== null || captcha.pending}
+                {...(submitReason === null
+                  ? {}
+                  : { "aria-describedby": reasonId })}
                 data-testid="register-submit"
               >
                 Зарегистрироваться
@@ -579,13 +779,51 @@ export function RegistrationScreen({
                     two access-condition consents (EARS-4/EARS-5), which the
                     command validates as a precondition.
                   */}
-              <p
-                id={reasonId}
-                data-testid="register-submit-reason"
-                className="text-sm font-medium text-muted-foreground"
-              >
-                {submitReason}
-              </p>
+              {submitReason ? (
+                <p
+                  id={reasonId}
+                  data-testid="register-submit-reason"
+                  className="text-sm font-medium text-muted-foreground"
+                >
+                  {submitReason}
+                </p>
+              ) : null}
+
+              {/*
+                003 EARS-17 / 021 EARS-12 — the challenge and command failures,
+                stated at FORM level. `role="alert"` so a doctor who pressed the
+                button and is looking at it hears why nothing happened; never a
+                `FormMessage` on a field, because no field is wrong.
+              */}
+              {captchaError ? (
+                <p
+                  role="alert"
+                  data-testid="register-captcha-error"
+                  className="text-sm font-medium text-destructive"
+                >
+                  {captchaError}
+                </p>
+              ) : null}
+              {commandError ? (
+                <p
+                  role="alert"
+                  data-testid="register-command-error"
+                  className="text-sm font-medium text-destructive"
+                >
+                  {commandError}
+                </p>
+              ) : null}
+
+              {/*
+                The invisible challenge itself. It renders nothing until a
+                submit requests it and nothing at all without a site key — the
+                dev-stand and CI default, where the pending action resumes
+                tokenless and the guard no-ops in the same way.
+              */}
+              <BotProtectionField
+                sitekey={botProtectionSiteKey()}
+                {...captcha.fieldProps}
+              />
             </div>
 
             {/*
@@ -659,6 +897,160 @@ export function RegistrationScreen({
         </Form>
       </AuthCard>
     </div>
+  );
+}
+
+/**
+ * The RHF resolver for the confirmation code, hand-rolled over the 003
+ * `VerifyRequestSchema` SSOT.
+ *
+ * Hand-rolled and not `@hookform/resolvers/zod`: the doctor storefront does not
+ * carry that dependency, and adding a package to translate three lines of issue
+ * mapping would be the heavier change. It stays a projection of the SCHEMA all
+ * the same — the shape is never re-declared here, only its issues are given the
+ * screen's Russian wording, which is exactly the split the block's `resolver`
+ * prop exists for (copy is the host's, the contract is `@ds/schemas`').
+ */
+const confirmResolver: Resolver<EmailConfirmValues> = (values) => {
+  const parsed = VerifyRequestSchema.safeParse(values);
+  const result: ResolverResult<EmailConfirmValues> = parsed.success
+    ? { values: parsed.data, errors: {} }
+    : {
+        values: {},
+        errors: { code: { type: "validate", message: CONFIRM_CODE_INVALID } },
+      };
+  return result;
+};
+
+/**
+ * 021 EARS-19 / 003 EARS-3 + EARS-25 — the post-submit state, and the SECOND
+ * bot-protected surface this Issue owns.
+ *
+ * The composition is not written here: `<EmailConfirmCard>` is the ONE canonical
+ * email-confirmation block both storefronts mount (#1902, AGENTS.md §6
+ * cross-front reuse), so this is a host projection of it — RU copy, the resolver
+ * above, and the transport. The engine is 003's shipped one, unchanged: the code
+ * goes to `/v1/auth/verify` and a resend to `@BotProtected("verify-resend")`
+ * `/v1/auth/verify/resend`, which is why every resend mints its own token
+ * through the same challenge the registration submit ran.
+ *
+ * Its own `useBotProtectedAction`, separate from the registration form's: the
+ * form is gone by the time this renders, and a resend is a different protected
+ * action with a different failure channel.
+ *
+ * WHAT THIS SLICE DOES NOT DECIDE (#1549, EARS-13): the co-equal
+ * already-registered affordances the block renders point at this storefront's
+ * own `/login` and `/reset` — same-site relative, never a hand-off to the
+ * Academy origin, which is a separate site. Whether those two routes exist yet,
+ * and the enumeration-safe parity assertions around them, belong to #1549.
+ * #1546 (EARS-10) owns where a confirmed doctor lands after «Код принят».
+ */
+function RegistrationConfirmation({ email }: { email: string }) {
+  const [error, setError] = useState<string | null>(null);
+  const [succeeded, setSucceeded] = useState(false);
+  const [captchaError, setCaptchaError] = useState<string | null>(null);
+  const [resendError, setResendError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  const destination = maskDestination(email);
+
+  const captcha = useBotProtectedAction({
+    onVerified: () => setCaptchaError(null),
+    onChallengeError: (failure) =>
+      setCaptchaError(
+        botProtectionFailureMessage(failure, BOT_PROTECTION_MESSAGES),
+      ),
+    onActionError: () => setResendError(CONFIRM_RESEND_FAILED),
+  });
+
+  const { resendNonce, onResend } = useResendCooldown({
+    resend: async (captchaToken) => {
+      await resendVerification({ identifier: email }, captchaToken);
+    },
+    onError: (err) => {
+      if (isBotProtectionRejected(err)) {
+        setCaptchaError(BOT_PROTECTION_MESSAGES.rejected);
+        return;
+      }
+      if (isBotProtectionRequired(err)) {
+        setCaptchaError(BOT_PROTECTION_MESSAGES.required);
+        return;
+      }
+      setResendError(CONFIRM_RESEND_FAILED);
+    },
+    onBeforeResend: () => {
+      setResendError(null);
+      setNotice(null);
+    },
+    // 003 EARS-16 — the acknowledgement is conditionally phrased, so it is the
+    // same sentence for a registrant, a stranger and an already-verified owner.
+    onSuccess: () => setNotice(CONFIRM_RESEND_ACKNOWLEDGED(destination)),
+  });
+
+  async function onSubmit(values: EmailConfirmValues) {
+    setError(null);
+    try {
+      // Mapped field by field rather than cast: a future field on the 003
+      // contract must fail typecheck here instead of shipping a silent omission.
+      await verifyEmail({ email: values.email, code: values.code });
+      setSucceeded(true);
+    } catch {
+      setSucceeded(false);
+      setError(CONFIRM_FAILED);
+    }
+  }
+
+  return (
+    <EmailConfirmCard
+      icon={<ConfirmationGlyph />}
+      copy={CONFIRM_COPY}
+      email={email}
+      destination={destination}
+      resolver={confirmResolver}
+      onSubmit={onSubmit}
+      onInvalid={() => setError(CONFIRM_CODE_INVALID)}
+      error={error}
+      succeeded={succeeded}
+      // Same-site, relative: the doctor storefront is its own site and hands a
+      // visitor off to no other one.
+      links={{ login: "/login", reset: "/reset" }}
+      resend={{
+        nonce: resendNonce,
+        onResend: () => captcha.request(onResend),
+        error: captchaError ?? resendError,
+        pending: captcha.pending,
+        notice,
+        captchaSlot: (
+          <BotProtectionField
+            sitekey={botProtectionSiteKey()}
+            {...captcha.fieldProps}
+          />
+        ),
+      }}
+    />
+  );
+}
+
+/**
+ * The confirmation card's glyph — an envelope, drawn inline for the same reason
+ * the registration glyph is: `apps/doctor` ships no icon dependency. Decorative
+ * only; the heading carries the meaning.
+ */
+function ConfirmationGlyph() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      aria-hidden
+      focusable="false"
+    >
+      <path
+        d="M3 5h18v14H3zM3 6l9 7 9-7"
+        strokeWidth="2"
+        strokeLinecap="square"
+      />
+    </svg>
   );
 }
 

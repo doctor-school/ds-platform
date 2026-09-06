@@ -19,7 +19,6 @@ import {
   ResetIdentifierFormSchema,
 } from "@/lib/identifier-validation";
 import { useLocalizedResolver } from "@/lib/use-localized-resolver";
-import { useResendCooldown } from "@/lib/use-resend-cooldown";
 
 import {
   botProtectionFailureMessage,
@@ -32,6 +31,7 @@ import {
   type PasswordRecoveryCompleteValues,
   type PasswordRecoveryRequestValues,
   useBotProtectedAction,
+  useResendCooldown,
 } from "@ds/design-system/blocks";
 
 /*

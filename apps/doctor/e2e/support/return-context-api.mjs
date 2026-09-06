@@ -90,6 +90,19 @@ const SPECIALTY = {
   isOther: false,
 };
 
+/**
+ * The guest participation policy for the fixture event (020 LD-2). The double
+ * serves the SERVER-RESOLVED object the page renders; it never lets the host
+ * branch on lifecycle or registration, which is the whole point of the contract.
+ */
+const PARTICIPATION_CTA = {
+  action: "register",
+  label: "Участвовать",
+  href: `/register?returnTo=${encodeURIComponent(`/events/${EVENT.slug}`)}`,
+  reason: null,
+  presenceCount: null,
+};
+
 const server = createServer((request, response) => {
   const url = new URL(request.url ?? "/", `http://${request.headers.host}`);
 
@@ -106,6 +119,33 @@ const server = createServer((request, response) => {
         ? { specialty: SPECIALTY, storedIn: "session" }
         : { specialty: null, storedIn: "none" },
     );
+  }
+
+  // 021 #1945 — the LANDING the tier now follows. After sign-in the doctor is
+  // taken to this host's own `/events/<slug>` page (020-design §1), which reads
+  // the DOCTOR storefront envelope on the server — so the double has to answer
+  // that pair too, or the landing would render a 404 and the tier would call a
+  // broken redirect green. The page body is the same `EventPageView` the public
+  // read serves (`PublicEventPageSchema === EventPageViewSchema`), so the one
+  // fixture answers both envelopes rather than drifting into two.
+  const participation = /^\/v1\/storefront\/doctor\/events\/([^/]+)\/participation$/.exec(
+    url.pathname,
+  );
+  if (participation) {
+    const key = decodeURIComponent(participation[1]);
+    if (key !== EVENT.slug && key !== EVENT.id) {
+      return json(response, 404, { status: 404, message: "event not found" });
+    }
+    return json(response, 200, PARTICIPATION_CTA);
+  }
+
+  const storefront = /^\/v1\/storefront\/doctor\/events\/([^/]+)$/.exec(
+    url.pathname,
+  );
+  if (storefront) {
+    const key = decodeURIComponent(storefront[1]);
+    if (key === EVENT.slug || key === EVENT.id) return json(response, 200, EVENT);
+    return json(response, 404, { status: 404, message: "event not found" });
   }
 
   const match = /^\/v1\/public\/events\/([^/]+)$/.exec(url.pathname);

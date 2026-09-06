@@ -1,5 +1,7 @@
 import {
+  DOCTOR_EVENT_RETURN_TARGET_PREFIX,
   PublicEventPageSchema,
+  RETURN_TARGET_PREFIX,
   parseReturnTarget,
   type PublicEventPage,
 } from "@ds/schemas";
@@ -161,4 +163,42 @@ export async function resolveReturnContext(
   } catch {
     return null;
   }
+}
+
+/**
+ * The doctor host's own LANDING for an arrival's return target — the path this
+ * app NAVIGATES to once the door is passed — or `null` when the arrival carries
+ * no safe target.
+ *
+ * 021 #1945. The canonical return target and the host landing are two different
+ * facts, and this module keeps them apart. `resolveReturnTargetPath` above hands
+ * back the guard's canonical reconstruction: it is the value that rides on into
+ * `/register` and is re-parsed on the other side, so it must stay in the ONE
+ * vocabulary 005 EARS-2 defined. But the academy shape of that vocabulary,
+ * `/webinars/<slug>`, is a path on `academy.doctor.school`; the doctor storefront
+ * serves the same эфир at `/events/<slug>` (020-design §1 route table — the
+ * `/webinars/*` prefix is not routed on this host at all). Navigating a doctor
+ * to the canonical target verbatim therefore landed them on a 404 after a
+ * perfectly successful sign-in.
+ *
+ * The re-homing lives HERE, in the doctor projection, and nowhere else: the
+ * guard's whitelist is a fact about which values are SAFE, shared by both hosts,
+ * while «where does this host serve that эфир» is a fact about this host's route
+ * table — the thin host projection AGENTS.md §6 asks for, not a second parser.
+ * `parseReturnTarget` stays the single entry point, so a hostile, cross-origin
+ * or traversal value is `null` here for exactly the reasons it is `null` there.
+ *
+ * A target that is ALREADY a doctor-host path — 020's `/events/<slug>` or 019's
+ * `/events?<feed query>&resume=<slug>` — is served by this app as it stands and
+ * passes through verbatim; only the academy shape is re-homed, by rebuilding the
+ * path from the slug the guard validated rather than by rewriting the string.
+ */
+export function resolveReturnLandingPath(
+  returnTo: string | undefined,
+): string | null {
+  const intent = parseReturnTarget(returnTo);
+  if (!intent) return null;
+  return intent.returnTo.startsWith(RETURN_TARGET_PREFIX)
+    ? `${DOCTOR_EVENT_RETURN_TARGET_PREFIX}${intent.eventSlug}`
+    : intent.returnTo;
 }

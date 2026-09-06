@@ -12,13 +12,24 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { CORRECTION_RE, isHandoff } from "./extract.mjs";
 import { SELF_CATCH } from "./transcripts.mjs";
+import {
+  codexSessionsRoot,
+  readRecords,
+  rolloutMeta,
+  parentThread,
+  walkJsonl,
+} from "./codex-rollout.mjs";
 
 const REPO_ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "..",
   "..",
 );
-export const PORTABLE_SCHEMA = "ds-platform-retro/v1";
+export const PORTABLE_SCHEMA = "ds-platform-retro/v2";
+export const SUPPORTED_PORTABLE_SCHEMAS = [
+  "ds-platform-retro/v1",
+  PORTABLE_SCHEMA,
+];
 const SAFE_SESSION_ID_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
 
 // Codex journals project instructions as a role=user response_item even though
@@ -54,23 +65,168 @@ function toolSummary(input) {
 }
 
 export function codexRolloutToPortable(jsonl, sourcePath = null) {
-  const records = [];
-  for (const line of String(jsonl).split(/\r?\n/)) {
-    if (!line.trim()) continue;
-    try {
-      records.push(JSON.parse(line));
-    } catch {
-      // A partial final line must not erase the rest of an otherwise valid run.
-    }
-  }
-  const meta =
-    records.find((entry) => entry?.type === "session_meta")?.payload ?? {};
+  const records = readRecords(jsonl);
+  const meta = rolloutMeta(records);
   const isSubagent =
     meta.thread_source === "subagent" || Boolean(meta.source?.subagent);
   const events = [];
+  const calls = new Map();
+  const answerIds = new Set();
+  // Pair mirrors one-for-one across channels; repeated owner text in the same
+  // channel is a distinct turn. Response-item text is the preferred source.
+  const messageCounts = new Map();
+  for (const entry of records) {
+    const p = entry?.payload;
+    if (entry.type !== "response_item" || p?.type !== "message") continue;
+    const text = textBlocks(
+      p.content,
+      new Set(["input_text", "output_text", "text"]),
+    );
+    const key = `${p.role}:${text}`;
+    messageCounts.set(key, (messageCounts.get(key) ?? 0) + 1);
+  }
+  const addAnswers = (payload, ts) => {
+    const id = payload.call_id ?? payload.request_id;
+    const call = calls.get(id);
+    if (
+      !call ||
+      !/^(?:request_user_input|request_user_input_async)$/.test(call.name) ||
+      answerIds.has(id)
+    )
+      return;
+    let result = payload.output ?? payload;
+    if (typeof result === "string") {
+      try {
+        result = JSON.parse(result);
+      } catch {
+        return;
+      }
+    }
+    if (!result || typeof result !== "object") return;
+    if (
+      call.name === "request_user_input_async" &&
+      typeof result.request_id === "string"
+    )
+      calls.set(result.request_id, call);
+    // Async tools return a receipt before the owner submits. A default or an
+    // unsubmitted answer-shaped receipt is never consent evidence.
+    if (
+      result.submitted === false ||
+      (result.status &&
+        !["submitted", "completed", "answered"].includes(result.status))
+    )
+      return;
+    if (
+      call.name === "request_user_input_async" &&
+      result.submitted !== true &&
+      !["submitted", "answered"].includes(result.status)
+    )
+      return;
+    if (
+      !result.answers ||
+      typeof result.answers !== "object" ||
+      Array.isArray(result.answers)
+    )
+      return;
+    const answers = Object.values(result.answers).flatMap((value) =>
+      Array.isArray(value?.answers)
+        ? value.answers.filter((answer) => typeof answer === "string")
+        : [],
+    );
+    if (!answers.length) return;
+    answerIds.add(id);
+    if (call.callId) answerIds.add(call.callId);
+    events.push({
+      role: "user",
+      ts,
+      text: answers.join("\n"),
+      source: "request_user_input",
+      callId: id,
+      evidence: "submitted_answers",
+    });
+  };
 
   for (const entry of records) {
     const payload = entry?.payload;
+    if (entry?.type === "event_msg" && payload?.type === "item_completed") {
+      const item = payload.item;
+      if (!item) continue;
+      const ts = entry.timestamp ?? null;
+      if (item.type === "UserMessage" || item.type === "AgentMessage") {
+        const role = item.type === "UserMessage" ? "user" : "assistant";
+        const text =
+          typeof item.text === "string"
+            ? item.text.trim()
+            : typeof item.message === "string"
+              ? item.message.trim()
+              : textBlocks(
+                  item.content,
+                  new Set(["input_text", "output_text", "text"]),
+                );
+        const key = `${role}:${text}`;
+        if (messageCounts.get(key)) {
+          messageCounts.set(key, messageCounts.get(key) - 1);
+          continue;
+        }
+        if (
+          text &&
+          !(role === "user" && isCodexInjectedInstructionEnvelope(text))
+        )
+          events.push({ role, ts, text, evidence: "item_completed" });
+      } else if (item.type === "CommandExecution") {
+        const event = {
+          role: "tool",
+          ts,
+          name: "exec_command",
+          input: { cmd: item.command, cwd: item.cwd ?? null },
+          callId: item.id ?? null,
+          status: item.status ?? null,
+          exitCode: item.exit_code ?? null,
+          evidence: "item_completed",
+        };
+        const call = calls.get(item.id);
+        if (call) Object.assign(call, event);
+        else events.push(event);
+      } else if (item.type === "SubAgentActivity") {
+        events.push({
+          role: "subagent",
+          ts,
+          callId: item.id ?? null,
+          kind: item.kind ?? null,
+          agentThreadId: item.agent_thread_id ?? null,
+          agentPath: item.agent_path ?? null,
+          evidence: "item_completed",
+        });
+      } else if (item.type === "CollabAgentToolCall") {
+        const update = {
+          status: item.status ?? null,
+          receiverThreadIds: item.receiver_thread_ids ?? [],
+          senderThreadId: item.sender_thread_id ?? null,
+          agentsStates: item.agents_states ?? null,
+          evidence: "item_completed",
+        };
+        const call = calls.get(item.id);
+        if (call) Object.assign(call, update);
+        else
+          events.push({
+            role: "tool",
+            ts,
+            name: item.tool ?? item.type,
+            namespace: "collaboration",
+            callId: item.id ?? null,
+            input: null,
+            ...update,
+          });
+      }
+      continue;
+    }
+    if (
+      entry?.type === "event_msg" &&
+      payload?.type === "request_user_input_response"
+    ) {
+      addAnswers(payload, entry.timestamp ?? null);
+      continue;
+    }
     if (entry?.type !== "response_item" || !payload) continue;
     if (payload.type === "message" && payload.role === "user") {
       const text = textBlocks(payload.content, new Set(["input_text", "text"]));
@@ -105,12 +261,23 @@ export function codexRolloutToPortable(jsonl, sourcePath = null) {
       payload.type === "function_call" ||
       payload.type === "custom_tool_call"
     ) {
-      events.push({
+      const event = {
         role: "tool",
         ts: entry.timestamp ?? null,
         name: payload.name ?? payload.type,
         input: payload.arguments ?? payload.input ?? null,
-      });
+        namespace: payload.namespace ?? null,
+        callId: payload.call_id ?? null,
+        evidence: "call",
+        status: "requested",
+      };
+      events.push(event);
+      if (payload.call_id) calls.set(payload.call_id, event);
+    } else if (
+      payload.type === "function_call_output" ||
+      payload.type === "custom_tool_call_output"
+    ) {
+      addAnswers(payload, entry.timestamp ?? null);
     }
   }
 
@@ -120,6 +287,8 @@ export function codexRolloutToPortable(jsonl, sourcePath = null) {
     harness: "codex",
     session: meta.id ?? meta.session_id ?? null,
     sourcePath,
+    parentThreadId: parentThread(meta),
+    historyMode: meta.history_mode ?? null,
     kind: isSubagent
       ? "sdk"
       : events.some((event) => event.role === "user")
@@ -134,7 +303,11 @@ export function codexRolloutToPortable(jsonl, sourcePath = null) {
 }
 
 export function validatePortableSession(value) {
-  if (!value || value.schema !== PORTABLE_SCHEMA || value.harness !== "codex") {
+  if (
+    !value ||
+    !SUPPORTED_PORTABLE_SCHEMAS.includes(value.schema) ||
+    value.harness !== "codex"
+  ) {
     throw new Error(
       `portable input must use schema ${PORTABLE_SCHEMA} and harness codex`,
     );
@@ -152,16 +325,6 @@ export function validatePortableSession(value) {
     );
   }
   return value;
-}
-
-function walkJsonl(dir, out = []) {
-  if (!fs.existsSync(dir)) return out;
-  for (const item of fs.readdirSync(dir, { withFileTypes: true })) {
-    const itemPath = path.join(dir, item.name);
-    if (item.isDirectory()) walkJsonl(itemPath, out);
-    else if (item.isFile() && item.name.endsWith(".jsonl")) out.push(itemPath);
-  }
-  return out;
 }
 
 export function findCodexRollout(sessionsRoot, sessionId) {
@@ -208,7 +371,7 @@ export function writeCodexCorpus(portableInput, outDir) {
             text,
             handoff,
             imageOnly: Boolean(event.imageOnly),
-            source: "typed",
+            source: event.source ?? "typed",
             correction:
               !handoff &&
               (Boolean(event.imageOnly) || CORRECTION_RE.test(text)),
@@ -272,7 +435,11 @@ export function writeCodexCorpus(portableInput, outDir) {
         }
       } else if (event.role === "tool") {
         transcriptLines.push(
-          `  [T] ${event.name}: ${toolSummary(event.input)}`,
+          `  [T] ${event.namespace ? `${event.namespace}.` : ""}${event.name}: ${toolSummary(event.input)}${event.evidence ? ` [${event.evidence}; status=${event.status ?? "UNKNOWN"}${event.exitCode != null ? `; exit=${event.exitCode}` : ""}]` : ""}`,
+        );
+      } else if (event.role === "subagent") {
+        transcriptLines.push(
+          `  [S] ${event.kind ?? "UNKNOWN"}: ${event.agentThreadId ?? "UNKNOWN"} ${event.agentPath ?? ""}`,
         );
       }
     }
@@ -380,14 +547,11 @@ function main() {
       JSON.parse(fs.readFileSync(path.resolve(args.portableInput), "utf8")),
     );
   } else {
-    const home = process.env.USERPROFILE ?? process.env.HOME;
+    const sessionsRoot = codexSessionsRoot();
     const rollout = args.rollout
       ? path.resolve(args.rollout)
-      : args.session && home
-        ? findCodexRollout(
-            path.resolve(home, ".codex", "sessions"),
-            args.session,
-          )
+      : args.session && sessionsRoot
+        ? findCodexRollout(sessionsRoot, args.session)
         : null;
     if (!rollout)
       throw new Error(

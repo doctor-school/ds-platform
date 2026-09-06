@@ -97,6 +97,255 @@ Never claim a check passed when it did not.
 }
 
 describe("Codex retro portable adapter", () => {
+  it("EARS-7: records completed nested execution, preserves dispatch namespace and does not execute JS text", () => {
+    const rows = [
+      {
+        type: "response_item",
+        payload: {
+          type: "custom_tool_call",
+          name: "exec",
+          call_id: "outer",
+          input: 'if (false) await tools.exec_command({cmd:"never"})',
+        },
+      },
+      {
+        type: "response_item",
+        payload: {
+          type: "function_call",
+          name: "spawn_agent",
+          namespace: "collaboration",
+          call_id: "spawn",
+          arguments: "{}",
+        },
+      },
+      {
+        type: "event_msg",
+        payload: {
+          type: "item_completed",
+          item: {
+            type: "CommandExecution",
+            id: "cmd1",
+            command: "pnpm lint",
+            cwd: "/repo",
+            status: "completed",
+            exit_code: 0,
+            stdout: "PASS",
+            stderr: "",
+          },
+        },
+      },
+      {
+        type: "event_msg",
+        payload: {
+          type: "item_completed",
+          item: {
+            type: "SubAgentActivity",
+            id: "child1",
+            kind: "spawn",
+            agent_thread_id: "child",
+            agent_path: "/root/child",
+          },
+        },
+      },
+      {
+        type: "event_msg",
+        payload: {
+          type: "item_completed",
+          item: {
+            type: "CollabAgentToolCall",
+            id: "spawn",
+            tool: "spawn_agent",
+            status: "completed",
+            receiver_thread_ids: ["child"],
+          },
+        },
+      },
+    ];
+    const portable = codexRolloutToPortable(
+      rows.map((row) => JSON.stringify(row)).join("\n"),
+    );
+    expect(portable.schema).toBe("ds-platform-retro/v2");
+    const tools = portable.events.filter((event) => event.role === "tool");
+    expect(tools).toHaveLength(3);
+    expect(tools.find((event) => event.name === "spawn_agent")).toMatchObject({
+      namespace: "collaboration",
+      status: "completed",
+      receiverThreadIds: ["child"],
+    });
+    expect(tools.find((event) => event.name === "exec_command")).toMatchObject({
+      input: { cmd: "pnpm lint", cwd: "/repo" },
+      exitCode: 0,
+      evidence: "item_completed",
+    });
+    expect(
+      portable.events.filter((event) => event.role === "subagent"),
+    ).toHaveLength(1);
+  });
+
+  it("EARS-8: includes matched submitted answers, never async acknowledgements or suggested defaults", () => {
+    const rows = [
+      {
+        type: "response_item",
+        payload: {
+          type: "function_call",
+          name: "request_user_input",
+          call_id: "q",
+          arguments: JSON.stringify({
+            questions: [{ question: "Question is not evidence" }],
+          }),
+        },
+      },
+      {
+        type: "response_item",
+        payload: {
+          type: "function_call_output",
+          call_id: "q",
+          output: JSON.stringify({
+            answers: { choice: { answers: ["почему опять без проверки?"] } },
+          }),
+        },
+      },
+      {
+        type: "response_item",
+        payload: {
+          type: "function_call",
+          name: "request_user_input_async",
+          call_id: "async",
+          arguments: "{}",
+        },
+      },
+      {
+        type: "response_item",
+        payload: {
+          type: "function_call_output",
+          call_id: "async",
+          output: JSON.stringify({
+            status: "pending",
+            default: "GO",
+            answers: { choice: { answers: ["GO"] } },
+          }),
+        },
+      },
+      {
+        type: "response_item",
+        payload: {
+          type: "function_call_output",
+          call_id: "unmatched",
+          output: JSON.stringify({
+            answers: { choice: { answers: ["fabricated"] } },
+          }),
+        },
+      },
+    ];
+    const portable = codexRolloutToPortable(
+      `${fixture()}${rows.map((row) => JSON.stringify(row)).join("\n")}`,
+    );
+    const answers = portable.events.filter(
+      (event) => event.source === "request_user_input",
+    );
+    expect(answers).toHaveLength(1);
+    expect(answers[0]).toMatchObject({
+      role: "user",
+      text: "почему опять без проверки?",
+      callId: "q",
+    });
+    const out = mkdtempSync(join(tmpdir(), "codex-answers-"));
+    dirs.push(out);
+    expect(writeCodexCorpus(portable, out).totalHumanMsgs).toBe(2);
+  });
+
+  it("EARS-9: deduplicates mirrored messages but retains repeated owner turns and event-only text", () => {
+    const message = {
+      type: "response_item",
+      payload: {
+        type: "message",
+        role: "user",
+        content: [{ type: "input_text", text: "repeat" }],
+      },
+    };
+    const mirror = {
+      type: "event_msg",
+      payload: {
+        type: "item_completed",
+        item: {
+          type: "UserMessage",
+          content: [{ type: "input_text", text: "repeat" }],
+        },
+      },
+    };
+    const other = {
+      type: "event_msg",
+      payload: {
+        type: "item_completed",
+        item: { type: "AgentMessage", text: "event-only reply" },
+      },
+    };
+    const portable = codexRolloutToPortable(
+      [message, mirror, message, mirror, other]
+        .map((row) => JSON.stringify(row))
+        .join("\n"),
+    );
+    expect(
+      portable.events.filter((event) => event.role === "user"),
+    ).toHaveLength(2);
+    expect(
+      portable.events.find((event) => event.role === "assistant")?.text,
+    ).toBe("event-only reply");
+  });
+
+  it("EARS-10: still accepts v1 portable input without inventing execution evidence", () => {
+    const value = {
+      ...codexRolloutToPortable(fixture()),
+      schema: "ds-platform-retro/v1",
+    };
+    expect(validatePortableSession(value).schema).toBe("ds-platform-retro/v1");
+  });
+  it("EARS-13: requires explicit submission for async replies associated with receipt request IDs", () => {
+    // Compatibility fixture for a supported explicit response envelope, not a
+    // claim that every host emits this event shape.
+    const rows = [
+      {
+        type: "response_item",
+        payload: {
+          type: "function_call",
+          name: "request_user_input_async",
+          call_id: "async",
+          arguments: "{}",
+        },
+      },
+      {
+        type: "response_item",
+        payload: {
+          type: "function_call_output",
+          call_id: "async",
+          output: JSON.stringify({
+            status: "pending",
+            request_id: "receipt",
+            answers: { choice: { answers: ["default"] } },
+          }),
+        },
+      },
+      {
+        type: "event_msg",
+        payload: {
+          type: "request_user_input_response",
+          request_id: "receipt",
+          submitted: true,
+          answers: { choice: { answers: ["owner response"] } },
+        },
+      },
+    ];
+    const portable = codexRolloutToPortable(
+      rows.map((row) => JSON.stringify(row)).join("\n"),
+    );
+    expect(portable.events.filter((event) => event.role === "user")).toEqual([
+      expect.objectContaining({
+        text: "owner response",
+        source: "request_user_input",
+      }),
+    ]);
+  });
+
   it("normalizes a root rollout without pretending it is Claude", () => {
     const portable = codexRolloutToPortable(fixture(), "rollout.jsonl");
     expect(portable.schema).toBe(PORTABLE_SCHEMA);

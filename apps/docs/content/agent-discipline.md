@@ -41,6 +41,8 @@ The design product remains Claude Design. No applicable live connector means STO
 
 Roles: `ds-explorer` read-only scout; `ds-implementer` isolated implementation/spec author; `ds-reviewer` independent verdict, no fixes; `ds-lander` main-tree canonical tail only. Codex profiles omit model/effort and inherit supported parent settings. Claude routing stays in its overlay. If a named role is unavailable, a capable general agent receives the complete role contract; missing dispatch blocks required independent review, never author self-certification.
 
+Profiles on disk are not roles loaded in the current session. New profiles require fresh-session discovery; until then use an available general agent with the exact narrow role brief, preserving independent review/landing and inherited supported settings.
+
 Briefs name ownership, worktree, spec/ADR anchors, required focused checks + full `pnpm lint` before PR, and ≤30-line returns. Use `pnpm dispatch:brief <N>` and its checklist heading. Tell workers they are not alone and must preserve others' edits. One wave, available slots and ≤4–5 independent non-overlapping Issues; ≤2 dispatch layers. Heavy evidence goes to files/PR comments; reviewer return ≤20 lines.
 
 **Codex tiers:** observed current input / reported `model_context_window`: ≥70% finish the wave and checkpoint; ≥85% no new dispatch, rotate to a fresh agent. These are project headroom bands, not model limits. Never use cumulative lifetime usage. Missing input/window or a token event older than 30 minutes is advisory `unavailable`, not zero, exhaustion or full enforcement. Claude fixed tiers remain in CLAUDE.md. Never fabricate `<subagent_tokens>`.

@@ -80,6 +80,11 @@ describe("EARS-1920: final live base ancestry", () => {
     let attempted = false;
     expect(() =>
       landPr(1923, [], {
+        resolveContext: () => ({
+          ok: true,
+          issues: [1920],
+          branch: "tooling/1920-test",
+        }),
         gate: () => ({ status: result.status }),
         merge: () => {
           attempted = true;

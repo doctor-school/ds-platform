@@ -4,6 +4,7 @@ import { type ReactNode, useState } from "react";
 import { useForm, type FieldValues, type Resolver } from "react-hook-form";
 
 import {
+  AccountProfileCard,
   AuthCard,
   AuthLayout,
   AuthShell,
@@ -36,6 +37,7 @@ import {
   Pagination,
   PasswordRecoveryCard,
   maskDestination,
+  type AccountProfileCardCopy,
   type ComboboxOption,
   type DataTableColumn,
   type DotGridCell,
@@ -55,6 +57,7 @@ import {
   type PasswordRecoveryRequestValues,
   type PasswordRecoveryStage,
 } from "@ds/design-system/blocks";
+import type { MyProfile } from "@ds/schemas";
 import { Badge } from "@ds/design-system/badge";
 import { Button } from "@ds/design-system/button";
 import { Input } from "@ds/design-system/input";
@@ -3565,9 +3568,201 @@ function EventPageSection() {
   );
 }
 
+/* ------------------------------------------------------------------ */
+/* AccountProfileCard (003 EARS-27/28, #1958)                          */
+/* ------------------------------------------------------------------ */
+
+/** Neutral RU copy — the Academy `messages/ru.json` `account` block, verbatim. */
+const ACCOUNT_PROFILE_COPY: AccountProfileCardCopy = {
+  title: "Личный кабинет",
+  subtitle: "Ваши данные и настройки входа",
+  sections: {
+    profile: "Профиль",
+    security: "Безопасность",
+    session: "Сессия",
+  },
+  nameLabel: "Имя",
+  nameEmpty: "Не указано",
+  nameEdit: "Изменить",
+  nameAdd: "Добавить",
+  nameSave: "Сохранить",
+  nameCancel: "Отмена",
+  nameInputLabel: "Отображаемое имя",
+  emailLabel: "Электронная почта",
+  emailVerified: "Подтверждена",
+  phoneLabel: "Телефон",
+  phoneEmpty: "Не указан",
+  passwordLabel: "Пароль",
+  passwordChange: "Изменить пароль",
+  passwordHelper: "Мы отправим ссылку для смены пароля",
+  eventsLabel: "События",
+  eventsTitle: "Мои события",
+  eventsHelper: "Регистрации и записи прошедших эфиров",
+  signOut: "Выйти",
+};
+
+const FILLED_PROFILE: MyProfile = {
+  email: "you@example.com",
+  emailVerified: true,
+  phone: "+7 999 000-00-00",
+  phoneVerified: true,
+  displayName: "Анна Петрова",
+};
+
+const SPARSE_PROFILE: MyProfile = {
+  email: "you@example.com",
+  emailVerified: false,
+  phone: null,
+  phoneVerified: null,
+  displayName: null,
+};
+
+const ACCOUNT_PROFILE_PROPS: PropRow[] = [
+  {
+    name: "profile",
+    type: "MyProfile",
+    required: true,
+    description:
+      "The 003 EARS-27 read model, CONTROLLED by the host: the block never mutates it, so the DOM can never show a name the write did not persist.",
+  },
+  {
+    name: "copy",
+    type: "AccountProfileCardCopy",
+    required: true,
+    description:
+      "Every RU string the surface renders. The Academy passes next-intl messages, the doctor storefront RU literals.",
+  },
+  {
+    name: "initials",
+    type: "string | null",
+    required: false,
+    description:
+      "Avatar initials, derived by the host (each app owns its derivation); null renders the empty avatar.",
+  },
+  {
+    name: "passwordHref",
+    type: "string | null",
+    required: false,
+    description:
+      "Target of the change-password row. null HIDES the row — the honest-empty contract, never a link to a route the host does not have.",
+  },
+  {
+    name: "eventsHref",
+    type: "string | null",
+    required: false,
+    description:
+      "Target of the «Мои события» row. null HIDES the whole session-events row on hosts that do not project that surface yet.",
+  },
+  {
+    name: "renderLink",
+    type: "(props: { href, className, children }) => ReactNode",
+    required: false,
+    description:
+      "Host router seam — the Academy and the doctor storefront both pass their framework Link; the default renders a plain anchor.",
+  },
+  {
+    name: "onSaveDisplayName",
+    type: "(displayName: string) => Promise<void>",
+    required: true,
+    description:
+      "The host's PUT /v1/me/display-name write. Resolving leaves edit mode; rejecting keeps it open with the mapped error.",
+  },
+  {
+    name: "resolveSaveError",
+    type: "(error: unknown) => string",
+    required: true,
+    description:
+      "Host error mapping — the block renders the returned string in its FormError, and owns no message vocabulary of its own.",
+  },
+  {
+    name: "onSignOut",
+    type: "() => void | Promise<void>",
+    required: true,
+    description:
+      "The EARS-10 logout transport AND where it routes: the Academy to /login, the doctor storefront to the storefront landing.",
+  },
+];
+
+/* The showcase is a VIEWER: nothing transports here, so the write resolves
+   inertly and the error mapper is never reached. */
+const inertSaveDisplayName = async () => {};
+const inertResolveSaveError = () => "Не удалось сохранить имя";
+
+/** A live `AccountProfileCard` with inert host wiring. */
+function NeutralAccountProfileCard({
+  profile,
+  initials,
+  passwordHref = "/reset",
+  eventsHref = "/account/events",
+}: {
+  profile: MyProfile;
+  initials?: string | null;
+  passwordHref?: string | null;
+  eventsHref?: string | null;
+}) {
+  return (
+    <AccountProfileCard
+      profile={profile}
+      copy={ACCOUNT_PROFILE_COPY}
+      initials={initials}
+      passwordHref={passwordHref}
+      eventsHref={eventsHref}
+      onSaveDisplayName={inertSaveDisplayName}
+      resolveSaveError={inertResolveSaveError}
+      onSignOut={() => {}}
+    />
+  );
+}
+
+function AccountProfileCardSection() {
+  return (
+    <BlockSection
+      title="AccountProfileCard"
+      exportsLine="AccountProfileCard, AccountProfileCardCopy, AccountProfileCardProps — the ONE account-profile composition both storefronts mount (003 EARS-27/28)"
+    >
+      <SubRow label="Preview">
+        <WideCanvas>
+          <NeutralAccountProfileCard profile={FILLED_PROFILE} initials="АП" />
+        </WideCanvas>
+      </SubRow>
+
+      <SubRow label="Slots / props">
+        <PropsTable rows={ACCOUNT_PROFILE_PROPS} />
+      </SubRow>
+
+      <SubRow label="State matrix">
+        <div className="grid gap-6">
+          <StateCase
+            label="empty identity"
+            note="displayName / phone null — the explicit empty states, and an unverified email drops the badge"
+          >
+            <WideCanvas>
+              <NeutralAccountProfileCard profile={SPARSE_PROFILE} />
+            </WideCanvas>
+          </StateCase>
+          <StateCase
+            label="rows hidden"
+            note="passwordHref / eventsHref null — a host that does not project those surfaces renders no dead link"
+          >
+            <WideCanvas>
+              <NeutralAccountProfileCard
+                profile={FILLED_PROFILE}
+                initials="АП"
+                passwordHref={null}
+                eventsHref={null}
+              />
+            </WideCanvas>
+          </StateCase>
+        </div>
+      </SubRow>
+    </BlockSection>
+  );
+}
+
 export function BlocksView() {
   return (
     <div className="flex flex-col gap-2">
+      <AccountProfileCardSection />
       <AuthCardSection />
       <AuthLayoutSection />
       <AuthShellSection />

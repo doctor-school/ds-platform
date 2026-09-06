@@ -107,6 +107,11 @@ export const SHOWCASE_REGISTRY: ShowcaseEntry[] = [
   { id: "IdentifierField", section: "primitives" },
 
   // ── Blocks (spec §3.3) — `./blocks` components.
+  // 003 EARS-27/28 (#1958) — the ONE account-profile composition both storefronts
+  // mount; catalogued at the subpath id and the component name (the block ships a
+  // `./account-profile-card` subpath export beside the barrel).
+  { id: "account-profile-card", section: "blocks" },
+  { id: "AccountProfileCard", section: "blocks" },
   { id: "AuthCard", section: "blocks" },
   { id: "AuthLayout", section: "blocks" },
   { id: "AuthShell", section: "blocks" },

@@ -216,6 +216,15 @@ const REGISTER_COPY = {
   // (003 EARS-37, decision Б), read from the FieldSpec SSOT so the hint the
   // doctor reads cannot drift from the rule that rejects them.
   passwordPolicyHint: registerFieldHint("password") ?? undefined,
+  // 003 EARS-38 (#1663): the reveal control ships with `<PasswordField>`; this
+  // door owns only its RU labels, stated here rather than inherited silently so
+  // the storefront's copy stays in one place.
+  passwordRevealLabels: {
+    show: "Показать",
+    hide: "Скрыть",
+    showAria: "Показать пароль",
+    hideAria: "Скрыть пароль",
+  },
   submit: "Зарегистрироваться",
   accessGroupHeading: ACCESS_CONDITIONS_HEADING,
 } as const;

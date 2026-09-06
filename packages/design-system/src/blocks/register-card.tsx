@@ -6,7 +6,11 @@ import { useForm, type RegisterOptions, type Resolver } from "react-hook-form";
 import { Badge } from "../primitives/badge";
 import { Button } from "../primitives/button";
 import { Checkbox } from "../primitives/checkbox";
-import { EmailField, PasswordField } from "../primitives/fields";
+import {
+  EmailField,
+  PasswordField,
+  type PasswordRevealLabels,
+} from "../primitives/fields";
 import {
   Form,
   FormControl,
@@ -129,6 +133,12 @@ export interface RegisterCardCopy {
   passwordLabel: string;
   /** The length baseline ONLY — 003 EARS-36 forbids a surface declaring a second password policy. */
   passwordPolicyHint?: string;
+  /**
+   * 003 EARS-38 (#1663) — the show-password control belongs to `<PasswordField>`;
+   * the block only carries the host's localized labels down to it. Omitted, the
+   * primitive falls back to its own RU defaults, so the toggle is never absent.
+   */
+  passwordRevealLabels?: PasswordRevealLabels;
   submit: React.ReactNode;
   /** Accessible name of the access consent group, and its visible heading bar. */
   accessGroupHeading?: React.ReactNode;
@@ -446,6 +456,9 @@ export function RegisterCard({
                   purpose="new"
                   label={copy.passwordLabel}
                   {...(copy.passwordPolicyHint === undefined ? {} : { policyHint: copy.passwordPolicyHint })}
+                  {...(copy.passwordRevealLabels === undefined
+                    ? {}
+                    : { revealLabels: copy.passwordRevealLabels })}
                   {...testIdProps2(testIds?.password)}
                 />
               )}

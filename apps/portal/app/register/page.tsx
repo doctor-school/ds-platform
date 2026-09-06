@@ -167,6 +167,15 @@ function RegisterProjection() {
         emailPlaceholder: tc("emailPlaceholder"),
         passwordLabel: tc("password"),
         passwordPolicyHint: tc("passwordPolicy"),
+        // 003 EARS-38 (#1663): the reveal control is the primitive's; this door
+        // only supplies its localized labels, unchanged from the hand-assembled
+        // form this projection replaced.
+        passwordRevealLabels: {
+          show: tc("passwordShow"),
+          hide: tc("passwordHide"),
+          showAria: tc("passwordShowAria"),
+          hideAria: tc("passwordHideAria"),
+        },
         submit: t("submit"),
       }}
       icon={<UserPlus className="text-primary" aria-hidden />}
@@ -201,7 +210,7 @@ function RegisterProjection() {
       pending={captcha.pending}
       submitBlock="error-first"
       spacing="sm"
-      testIds={{ submit: "register-submit" }}
+      testIds={{ password: "register-password", submit: "register-submit" }}
     />
   );
 }

@@ -287,6 +287,37 @@ describe("<RegisterCard>", () => {
     });
   });
 
+  it("003 EARS-38: the password field's reveal toggle renders with the host's supplied labels", async () => {
+    const user = userEvent.setup();
+    renderCard({
+      copy: {
+        ...COPY,
+        passwordRevealLabels: {
+          show: "Show",
+          hide: "Hide",
+          showAria: "Show the password",
+          hideAria: "Hide the password",
+        },
+      },
+    });
+
+    const input = screen.getByTestId("register-password");
+    const toggle = screen.getByTestId("register-password-reveal");
+
+    // The control is the primitive's; the block only carries the labels down.
+    expect(input).toHaveAttribute("type", "password");
+    expect(toggle).toHaveTextContent("Show");
+    expect(toggle).toHaveAttribute("aria-label", "Show the password");
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
+
+    await user.click(toggle);
+
+    expect(input).toHaveAttribute("type", "text");
+    expect(toggle).toHaveTextContent("Hide");
+    expect(toggle).toHaveAttribute("aria-label", "Hide the password");
+    expect(toggle).toHaveAttribute("aria-pressed", "true");
+  });
+
   it("publishes the host data-* facts on the form element (021 EARS-3 landing decision)", () => {
     renderCard({ formDataAttributes: { "data-registration-landing": "webinar" } });
     expect(screen.getByTestId("registration-form")).toHaveAttribute(

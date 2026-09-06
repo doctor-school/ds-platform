@@ -1,7 +1,7 @@
 ---
 slug: privacy-policy
 title: Политика персональных данных
-edition: 2026-01-15
+edition: "2026-01-15"
 kind: policy
 ---
 

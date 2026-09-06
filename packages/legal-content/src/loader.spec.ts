@@ -62,7 +62,7 @@ describe("@ds/legal-content loader", () => {
 
     writeFileSync(
       file,
-      source.replace("edition: 2026-01-15", "edition: 2026-03-01"),
+      source.replace('edition: "2026-01-15"', 'edition: "2026-03-01"'),
       "utf8",
     );
 
@@ -93,6 +93,14 @@ describe("@ds/legal-content loader", () => {
     expect(() =>
       loadDocument("bad-edition", { documentsDir: fixtures("bad-edition") }),
     ).toThrowError(/bad-edition\.md/);
+  });
+
+  it("028 V-1: an unquoted edition is rejected with the quoting instruction", () => {
+    expect(() =>
+      loadDocument("unquoted-edition", {
+        documentsDir: fixtures("unquoted-edition"),
+      }),
+    ).toThrowError(/must be quoted/);
   });
 
   it("028 V-1: a kind outside policy | consent is rejected", () => {

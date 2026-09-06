@@ -64,7 +64,7 @@ Hard requirements:
 | Module README                                | `apps/*/src/<module>/README.md` (директория модуля = прямой потомок `apps/<app>/src/` с файлом `*.module.ts`) | Rendered Fumadocs + lint проверяет наличие README (exports ↔ README в v2)                                 |
 | Prose narrative (Vision, OKRs, PRD)          | `apps/docs/content/product/*.md`                                                                              | Markdown в Git (IDE / PR) + Fumadocs render                                                               |
 | Operations (runbooks, monitoring)            | `apps/docs/content/operations/`                                                                               | Fumadocs render                                                                                           |
-| AI constitution                              | `AGENTS.md` (root) + `CLAUDE.md` (Claude-Code overrides)                                                      | Читается AI первым при старте сессии                                                                      |
+| AI constitution                              | `AGENTS.md` + [portable agent discipline](../agent-discipline.md); `CLAUDE.md` (Claude only)                  | Читается AI первым при старте сессии                                                                      |
 
 «Копировать значение между Master'ами запрещено» — это лучший indicator потенциального drift'а. Если значение появляется в двух местах, второе должно быть автогенерированным артефактом, а не ручной копией.
 
@@ -148,11 +148,11 @@ Outputs Spec-Driven Development:
 
 ### 5. AI Constitution: AGENTS.md + CLAUDE.md split
 
-`AGENTS.md` в корне DS-Platform repo — **universal constitution** для всех AI-агентов (Claude/Cursor/Cody/GPT-Codex). Содержит: stack list, doc-структуру repo, обязательные «Before any task» / «During implementation» / «After implementation» чеклисты, PR требования, forbidden actions (silent arch changes, hardcoded glossary IDs, etc.). Иммутабельный по существу — обновляется только при добавлении нового слоя архитектуры. Structure follows reference doc §4.1.
+[`AGENTS.md`](../../../../AGENTS.md) — общая конституция для каждого агента в репозитории, включая Claude Code и Codex. В ней находятся индекс чтения перед действиями, выбор типа задачи, обязательные gates и канонические пути артефактов. Обязательный общий startup-reference [portable agent discipline](../agent-discipline.md) задаёт план сессии, сопоставление доступных инструментов, правила dispatch/context, авторизации и памяти. Процедуры задач живут только в [проектном каталоге скиллов](../skills/); выбранный скилл читается напрямую по пути.
 
-`CLAUDE.md` — Claude-Code-specific overlay. Содержит: ссылку на AGENTS.md как baseline, MCP server config, Claude-Code skill preferences (pp-plane CLI первым), tool-allowlist, hook patterns, slash-command shortcuts. Может меняться часто.
+[`CLAUDE.md`](../../../../CLAUDE.md) — тонкий overlay Claude Code для runtime/context, выбора моделей и привязки auto-memory. Codex читает общий контракт и собственные настроенные роли; он не импортирует этот overlay или Claude rules автоматически. Реальные возможности определяют конфигурация и наблюдаемая доступность инструментов; текст инструкции не доказывает, что hook активен.
 
-`.cursor/rules/` — добавляется когда/если Cursor войдёт в команду.
+Инструкции развиваются через ревьюируемые PR по мере изменения рабочей дисциплины. У каждого правила сохраняется один канонический источник; у парных ADR — EN/RU parity; эффективный startup-бюджет проверяется `pnpm lint:instruction-budget`. Выбор amendment или inline rewrite подчиняется AGENTS.md §6 и `do-adr-revision`; статус Accepted сам по себе не делает решение на бумаге неизменяемым. Design spec §9 ссылается на действующие файлы инструкций, не поддерживая второй исполняемый шаблон. Overlay для другого harness добавляется только при его использовании и проверенном сопоставлении возможностей.
 
 ### 6. Glossary mechanism: file-per-term glossary + 3-layer validation + roundtrip check
 
@@ -209,7 +209,7 @@ Sequence / state / ER / C4Context — все Mermaid в MDX. Rendering — Fumad
 
 | Что трекаем                                                                            | Где                                               | Почему                                                                                                                                                     |
 | -------------------------------------------------------------------------------------- | ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Stack ADRs, infra milestones, product/PM decisions, hiring, fundraising                | Plane workspace `doctor-school` (DSP/DSC/DSM/DSO) | Strategic-уровень, cross-team, Product Lead работает в Plane native, CLAUDE.md pp-plane-first rule                                                         |
+| Stack ADRs, infra milestones, product/PM decisions, hiring, fundraising                | Plane workspace `doctor-school` (DSP/DSC/DSM/DSO) | Strategic-уровень, cross-team, Product Lead работает в Plane native, AGENTS.md §3.7                                                                        |
 | Implementation tasks для DS Platform code (EARS handlers, bugs, refactors, deps, perf) | **GitHub Issues** в DS Platform repo              | PR-native (auto-close, mention, sub-issues, GitHub Projects v2), AI работает с `gh` CLI в репо, лейблы `feature:NNN-<slug>` привязывают Issues к их спекам |
 | Cross-cutting initiatives (release planning, infrastructure milestone)                 | Plane parent + GitHub Milestone children          | Strategic owner = Plane, implementation детали = GitHub                                                                                                    |
 
@@ -231,7 +231,7 @@ Sequence / state / ER / C4Context — все Mermaid в MDX. Rendering — Fumad
 - Старт сессии в DS Platform repo: `gh issue view N` → реад linked feature spec → реализация → PR auto-close on merge.
 - AI agent НЕ открывает Plane для code-level work — это бы создало friction. Plane open'ится только для strategic context (например, читать DSO-ADR при референсе).
 
-**Plane CLI rule:** `AGENTS.md` / `CLAUDE.md` фиксируют правило: «`gh` CLI первый для code-level Issues; pp-plane — только для cross-tracker references (Plane DSO-XXX из ADR/spec)».
+**Plane CLI rule:** Общие правила входа в Plane и работы через CLI задаёт AGENTS.md §3.7. Code-level работа остаётся в GitHub; стратегическая/cross-team работа ведётся в Plane. Перед действиями с Issues читается [repository conventions](../../../../.claude/rules/repo-conventions.md); `pnpm issue:create` — единственный путь создания GitHub Issues. Claude-specific привязки не переопределяют это разделение трекеров.
 
 ### 10. Repository topology в monorepo
 

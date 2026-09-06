@@ -1095,7 +1095,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(stale.statusCode).toBe(412);
       expect(problem(stale).errorCode).toBe("PRECONDITION_FAILED");
 
-      const garbage = await publishPartner(body.id, 1, { ifMatch: "not-an-etag" });
+      const garbage = await publishPartner(body.id, 1, {
+        ifMatch: "not-an-etag",
+      });
       expect([412, 428]).toContain(garbage.statusCode);
 
       const noKey = await publishPartner(body.id, 1, { idempotencyKey: null });
@@ -1107,11 +1109,50 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       });
     });
 
+    it("012 EARS-17: when a publish quotes an If-Match a committed edit has already superseded, the system shall answer 412 with zero row and zero audit mutation, and a re-read shall still publish it", async () => {
+      const body = await created(await createJson({ payload: validPayload() }));
+
+      // Real drift rather than a fabricated validator: the edit lands, so the
+      // etag the second operator is still holding describes the previous row.
+      const patched = await app.inject({
+        method: "PATCH",
+        url: `/v1/admin/partners/${body.id}`,
+        headers: {
+          ...device,
+          ...adminHeaders(adminSid),
+          "content-type": "application/json",
+          "idempotency-key": key(),
+          "if-match": 'W/"1"',
+        },
+        payload: { title: "Партнёр после правки" },
+      });
+      expect(patched.statusCode, patched.payload).toBe(200);
+
+      const before = await auditRowCount(body.id);
+      const stale = await publishPartner(body.id, 1);
+      expect(stale.statusCode).toBe(412);
+      expect(problem(stale).errorCode).toBe("PRECONDITION_FAILED");
+      const unmoved = await partnerRow(body.id);
+      expect(unmoved).toMatchObject({ status: "draft", version: 2 });
+      expect(unmoved.first_published_at).toBeNull();
+      expect(await auditRowCount(body.id)).toBe(before);
+
+      // The refusal is not a dead end: the current validator still publishes.
+      const fresh = await publishPartner(body.id, 2);
+      expect(fresh.statusCode, fresh.payload).toBe(200);
+      expect(await partnerRow(body.id)).toMatchObject({
+        status: "published",
+        version: 3,
+      });
+    });
+
     it("012 EARS-5.13: when the exact publish request is retried, the system shall replay the stored outcome instead of transitioning twice", async () => {
       const body = await created(await createJson({ payload: validPayload() }));
       const reused = key();
 
-      const first = await publishPartner(body.id, 1, { idempotencyKey: reused });
+      const first = await publishPartner(body.id, 1, {
+        idempotencyKey: reused,
+      });
       expect(first.statusCode).toBe(200);
       const replay = await publishPartner(body.id, 1, {
         idempotencyKey: reused,

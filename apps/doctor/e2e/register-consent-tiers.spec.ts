@@ -175,12 +175,13 @@ test.describe("021 EARS-5: the two-tier consent block", () => {
     await expect(declaration).toBeChecked();
     await expect(reason).toContainText("передачу данных партнёрам");
 
-    // With BOTH granted, the reason names what is actually left: the door's
-    // bot-protection challenge (#1558). Never a build-status note.
+    // With BOTH granted, nothing is left to state: 021 EARS-19 (#1558) wired the
+    // command behind an INVISIBLE challenge that runs inside the submit, so the
+    // challenge is not an obstacle the doctor must clear first. The reason line
+    // is ABSENT rather than re-worded, and the door opens.
     await partnerData.locator("xpath=ancestor::label[1]").click();
     await expect(partnerData).toBeChecked();
-    await expect(reason).toContainText("Защита от ботов");
-    // Still a precondition of the command, so the submit stays inert.
-    await expect(page.getByTestId("register-submit")).toBeDisabled();
+    await expect(reason).toHaveCount(0);
+    await expect(page.getByTestId("register-submit")).toBeEnabled();
   });
 });

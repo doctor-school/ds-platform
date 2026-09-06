@@ -11,12 +11,9 @@ import { type RegisterRequest } from "@ds/schemas";
 
 import { AuthShell } from "@/components/auth-shell";
 import {
-  BotProtectionField,
-  botProtectionFailureMessage,
-  isBotProtectionRejected,
-  isBotProtectionRequired,
-  useBotProtectedAction,
-} from "@/components/bot-protection";
+  botProtectionMessages,
+  botProtectionSiteKey,
+} from "@/lib/bot-protection";
 import { EmailField, PasswordField } from "@ds/design-system/fields";
 import { authClient } from "@/lib/auth-client";
 import { authErrorMessage } from "@/lib/auth-error-message";
@@ -31,7 +28,14 @@ import { useLocalizedResolver } from "@/lib/use-localized-resolver";
 
 import { Button } from "@ds/design-system/button";
 import { Link as DsLink } from "@ds/design-system/link";
-import { AuthCard } from "@ds/design-system/blocks";
+import {
+  AuthCard,
+  botProtectionFailureMessage,
+  BotProtectionField,
+  isBotProtectionRejected,
+  isBotProtectionRequired,
+  useBotProtectedAction,
+} from "@ds/design-system/blocks";
 import { Form, FormField, FormError } from "@ds/design-system/form";
 
 /*
@@ -79,7 +83,9 @@ function RegisterCard() {
   const captcha = useBotProtectedAction({
     onVerified: () => setCaptchaError(null),
     onChallengeError: (failure) =>
-      setCaptchaError(botProtectionFailureMessage(failure, te)),
+      setCaptchaError(
+        botProtectionFailureMessage(failure, botProtectionMessages(te)),
+      ),
     onActionError: (err) => {
       if (isBotProtectionRejected(err)) {
         setCaptchaError(te("captchaRejected"));
@@ -198,7 +204,10 @@ function RegisterCard() {
 
           <p className="text-xs text-muted-foreground">{t("consent")}</p>
 
-          <BotProtectionField {...captcha.fieldProps} />
+          <BotProtectionField
+            sitekey={botProtectionSiteKey()}
+            {...captcha.fieldProps}
+          />
           <FormError>{captchaError ?? error}</FormError>
           <Button
             type="submit"

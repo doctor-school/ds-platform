@@ -253,6 +253,95 @@ export async function withSlotConflictMapping<T>(
 }
 
 /**
+ * Pair/slot-uniqueness indexes on the RELATIONSHIP tables whose violation is an
+ * ordinary 409 `RELATIONSHIP_CONFLICT`, not a bug.
+ *
+ * Same defense-in-depth argument as `SLOT_UNIQUE_CONSTRAINTS`, applied to the
+ * join tables: each service pre-checks the pair (and the primary slot) inside
+ * the command transaction, but two concurrent creates of the SAME pair both
+ * pass that check before either has inserted, so the index is what actually
+ * decides the winner — 012-design §6, "unique constraints remain the final race
+ * guard". Unmapped, that `23505` reaches the loser as an opaque 500 for what the
+ * contract says is a 409. The message deliberately matches the pre-check's own
+ * "already exists, restore it instead" wording, so the caller cannot tell which
+ * of the two guards answered.
+ */
+const RELATION_UNIQUE_CONSTRAINTS: ReadonlyMap<string, string> = new Map([
+  [
+    "direction_adjacency_pair_key",
+    "this adjacency edge already exists; edit its kind or weight instead",
+  ],
+  [
+    "direction_specialties_pair_key",
+    "this specialty is already linked to this direction",
+  ],
+  [
+    "event_directions_pair_key",
+    "this event is already tagged with this direction",
+  ],
+  ["event_projects_pair_key", "this project is already related to this event"],
+  [
+    "project_partners_pair_key",
+    "this partner is already listed on this project; restore that relation instead of creating a second one",
+  ],
+  [
+    "project_partners_project_primary_active_uniq",
+    "this project already has a primary partner; clear that flag before setting another",
+  ],
+]);
+
+/**
+ * Classify a driver failure as a relationship-uniqueness conflict, or `null` if
+ * it is anything else. Same cause-chain walk and same last-resort message probe
+ * as `asSlotConflict`, for the same reason: drizzle wraps the driver error and
+ * some driver versions omit the structured `constraint` field.
+ */
+export function asRelationConflict(error: unknown): TaxonomyError | null {
+  for (let node: unknown = error, depth = 0; node && depth < 5; depth += 1) {
+    const candidate = node as {
+      code?: unknown;
+      constraint?: unknown;
+      constraint_name?: unknown;
+      message?: unknown;
+      cause?: unknown;
+    };
+    if (candidate.code === "23505") {
+      const named = [candidate.constraint, candidate.constraint_name].find(
+        (value): value is string => typeof value === "string",
+      );
+      const matched =
+        (named && RELATION_UNIQUE_CONSTRAINTS.get(named)) ??
+        (typeof candidate.message === "string"
+          ? [...RELATION_UNIQUE_CONSTRAINTS].find(([index]) =>
+              (candidate.message as string).includes(index),
+            )?.[1]
+          : undefined);
+      if (matched) return new TaxonomyError("RELATIONSHIP_CONFLICT", matched);
+      return null;
+    }
+    node = candidate.cause;
+  }
+  return null;
+}
+
+/**
+ * Run a relationship write and re-throw a pair/primary-slot index violation as
+ * its 409. Everything else propagates untouched — an unexpected constraint
+ * failure must stay loud.
+ */
+export async function withRelationConflictMapping<T>(
+  run: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await run();
+  } catch (error) {
+    const conflict = asRelationConflict(error);
+    if (conflict) throw conflict;
+    throw error;
+  }
+}
+
+/**
  * Classify a driver failure as a SERIALIZABLE abort (SQLSTATE `40001`), or
  * `null` if it is anything else. Same cause-chain walk as `asSlotConflict`,
  * for the same reason: drizzle wraps the driver error.

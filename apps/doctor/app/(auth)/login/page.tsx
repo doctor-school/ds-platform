@@ -11,6 +11,7 @@ import { resolveDirectArrivalLanding } from "@/lib/registration-landing";
 import {
   RETURN_CONTEXT_PARAM,
   resolveReturnContext,
+  resolveReturnLandingPath,
   resolveReturnTargetPath,
 } from "@/lib/return-context";
 import { resolveRememberedSpecialty } from "@/lib/specialty-choice";
@@ -83,16 +84,21 @@ export default async function DoctorLoginPage({
   // it never breaks the door.
   const returnTo = Array.isArray(raw) ? raw[0] : raw;
   // The guard reconstruction of the arrival target — the ONE vocabulary,
-  // resolved before the read so the same value serves the context, the landing
-  // and the hand-off into `/register`, and the raw param serves none of them.
+  // resolved before the read so the same value serves the context and the
+  // hand-off into `/register`, and the raw param serves neither.
   const safeTarget = resolveReturnTargetPath(returnTo);
+  // WHERE this host takes them afterwards. Not the canonical target verbatim:
+  // the academy serves the эфир at `/webinars/<slug>` and this storefront serves
+  // it at `/events/<slug>` (020-design §1), so the landing is the doctor-host
+  // projection of the SAME guard output (#1945).
+  const landingTarget = resolveReturnLandingPath(returnTo);
   const returnEvent = safeTarget
     ? await resolveReturnContext(safeTarget)
     : null;
 
   const landing =
-    safeTarget && returnEvent
-      ? safeTarget
+    landingTarget && returnEvent
+      ? landingTarget
       : resolveDirectArrivalLanding(
           await resolveRememberedSpecialty(await headers()),
         );

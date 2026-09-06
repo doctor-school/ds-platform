@@ -535,10 +535,11 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
           selectorUser(`A ${String(index).padStart(2, "0")} ${marker}`),
         ),
       );
-      const orderedCandidates = candidates.sort((a, b) =>
-        a.displayName.localeCompare(b.displayName) ||
-        a.identifier.localeCompare(b.identifier) ||
-        a.id.localeCompare(b.id),
+      const orderedCandidates = candidates.sort(
+        (a, b) =>
+          a.displayName.localeCompare(b.displayName) ||
+          a.identifier.localeCompare(b.identifier) ||
+          a.id.localeCompare(b.id),
       );
 
       const firstPage = await app.inject({
@@ -1359,7 +1360,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     async function publishExpert(
       id: string,
       version: number,
-      overrides: { ifMatch?: string | null; idempotencyKey?: string | null } = {},
+      overrides: {
+        ifMatch?: string | null;
+        idempotencyKey?: string | null;
+      } = {},
     ) {
       const ifMatch =
         overrides.ifMatch === undefined ? `W/"${version}"` : overrides.ifMatch;
@@ -1514,6 +1518,43 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(await expertRow(body.id)).toMatchObject({
         status: "draft",
         version: 1,
+      });
+    });
+
+    it("012 EARS-17: when a publish quotes an If-Match a committed edit has already superseded, the system shall answer 412 with zero row and zero audit mutation, and a re-read shall still publish it", async () => {
+      const body = await created(await createJson({ payload: validPayload() }));
+
+      // Real drift rather than a fabricated validator: the edit lands, so the
+      // etag the second operator is still holding describes the previous row.
+      const patched = await app.inject({
+        method: "PATCH",
+        url: `/v1/admin/experts/${body.id}`,
+        headers: {
+          ...device,
+          ...adminHeaders(adminSid),
+          "content-type": "application/json",
+          "idempotency-key": key(),
+          "if-match": 'W/"1"',
+        },
+        payload: { professionalRole: "Кардиолог-аритмолог" },
+      });
+      expect(patched.statusCode, patched.payload).toBe(200);
+
+      const before = await auditRowCount(body.id);
+      const stale = await publishExpert(body.id, 1);
+      expect(stale.statusCode).toBe(412);
+      expect(problem(stale).errorCode).toBe("PRECONDITION_FAILED");
+      const unmoved = await expertRow(body.id);
+      expect(unmoved).toMatchObject({ status: "draft", version: 2 });
+      expect(unmoved.first_published_at).toBeNull();
+      expect(await auditRowCount(body.id)).toBe(before);
+
+      // The refusal is not a dead end: the current validator still publishes.
+      const fresh = await publishExpert(body.id, 2);
+      expect(fresh.statusCode, fresh.payload).toBe(200);
+      expect(await expertRow(body.id)).toMatchObject({
+        status: "published",
+        version: 3,
       });
     });
 

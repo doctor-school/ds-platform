@@ -987,5 +987,195 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       });
       expect(res.statusCode, res.payload).toBe(201);
     }
+
+    // ── 012 EARS-17: key reuse and the feature-010 trail ───────────────────
+    //
+    // 012-design §6 binds EVERY mutating admin route to the same safeguards,
+    // and line 343 calls the coordination joins "audited as the ordinary
+    // taxonomy mutations they are". So the proof belongs ON this join table,
+    // not inferred from the shared service the handler happens to call.
+
+    /** The 010 ledger rows of one retained row, addressed by `metadata->'pk'`. */
+    async function auditTrail(
+      id: string,
+    ): Promise<{ event_type: string; subject_id: string | null }[]> {
+      const { rows } = await pool.query<{
+        event_type: string;
+        subject_id: string | null;
+      }>(
+        `SELECT event_type, subject_id FROM audit_ledger
+          WHERE metadata -> 'pk' ->> 'id' = $1`,
+        [id],
+      );
+      return rows;
+    }
+
+    it("012 EARS-17: when the same Idempotency-Key carries a different relation payload, the system shall refuse with IDEMPOTENCY_KEY_REUSED before any domain or audit write", async () => {
+      const projectId = await insertProject();
+      const firstPartner = await insertPartner();
+      const secondPartner = await insertPartner();
+      const k = key();
+
+      const first = await createRelation({
+        payload: { projectId, partnerId: firstPartner, isPrimary: false },
+        idempotencyKey: k,
+      });
+      expect(first.statusCode, first.payload).toBe(201);
+
+      const reused = await createRelation({
+        payload: { projectId, partnerId: secondPartner, isPrimary: false },
+        idempotencyKey: k,
+      });
+      expect(reused.statusCode).toBe(409);
+      expect(problem(reused).errorCode).toBe("IDEMPOTENCY_KEY_REUSED");
+
+      // The refusal lands BEFORE the write: the relation the second call
+      // described exists in neither the domain table nor the 010 trail.
+      const { rows } = await pool.query(
+        "SELECT id FROM project_partners WHERE project_id = $1 AND partner_id = $2",
+        [projectId, secondPartner],
+      );
+      expect(rows).toHaveLength(0);
+    });
+
+    it("012 EARS-17: when a relation is created, edited and retired, feature 010 shall hold exactly one attributed audit row per change", async () => {
+      const projectId = await insertProject();
+      const partnerId = await insertPartner();
+      const { detail, etag } = await seedRelation(projectId, partnerId, false);
+
+      const afterCreate = await auditTrail(detail.id);
+      expect(afterCreate.map((r) => r.event_type)).toEqual([
+        "data.project_partners.insert",
+      ]);
+      // Attribution is the point of the trail: an unattributed row is a change
+      // nobody can be asked about.
+      expect(afterCreate[0]!.subject_id).not.toBeNull();
+
+      const promoted = await patchRelation(detail.id, {
+        payload: { isPrimary: true },
+        ifMatch: etag,
+      });
+      expect(promoted.statusCode, promoted.payload).toBe(200);
+
+      const retired = await transitionRelation(detail.id, "retire", {
+        ifMatch: promoted.headers.etag as string,
+      });
+      expect(retired.statusCode, retired.payload).toBe(200);
+
+      const afterRetire = await auditTrail(detail.id);
+      // One update per committed change — the promotion and the retirement,
+      // neither collapsed into one row nor duplicated.
+      expect(
+        afterRetire.filter(
+          (r) => r.event_type === "data.project_partners.update",
+        ),
+      ).toHaveLength(2);
+      expect(afterRetire.every((r) => r.subject_id !== null)).toBe(true);
+    });
+
+    it("012 EARS-17: when a retire quotes an If-Match a committed edit has already superseded, the system shall answer 412 with zero row and zero audit mutation, and a re-read shall still retire it", async () => {
+      const projectId = await insertProject();
+      const partnerId = await insertPartner();
+      const { detail, etag } = await seedRelation(projectId, partnerId, false);
+
+      // Real drift rather than a fabricated validator: the edit lands, so the
+      // etag the second operator is still holding describes the previous row.
+      const promoted = await patchRelation(detail.id, {
+        payload: { isPrimary: true },
+        ifMatch: etag,
+      });
+      expect(promoted.statusCode, promoted.payload).toBe(200);
+
+      const before = await auditTrail(detail.id);
+      const stale = await transitionRelation(detail.id, "retire", {
+        ifMatch: etag,
+      });
+      expect(stale.statusCode).toBe(412);
+      expect(problem(stale).errorCode).toBe("PRECONDITION_FAILED");
+      expect(await relationRow(detail.id)).toMatchObject({
+        status: "active",
+        is_primary: true,
+        version: 2,
+      });
+      expect(await auditTrail(detail.id)).toHaveLength(before.length);
+
+      // The refusal is not a dead end: the current validator still moves it.
+      const fresh = await transitionRelation(detail.id, "retire", {
+        ifMatch: promoted.headers.etag as string,
+      });
+      expect(fresh.statusCode, fresh.payload).toBe(200);
+      expect(body(fresh)).toMatchObject({ status: "retired", version: 3 });
+    });
+
+    it("012 EARS-17: when the same project↔partner pair is created concurrently under distinct keys, exactly one call shall win and the losers shall get 409, never an opaque 500", async () => {
+      const projectId = await insertProject();
+      const partnerId = await insertPartner();
+
+      // DISTINCT Idempotency-Keys on purpose: the record layer cannot collapse
+      // these into a replay, so all three reach the domain transaction and
+      // §6's "unique constraints remain the final race guard" is what has to
+      // hold — `pairTaken` passes in all three before any of them has inserted.
+      const responses = await Promise.all([
+        createRelation({ payload: { projectId, partnerId } }),
+        createRelation({ payload: { projectId, partnerId } }),
+        createRelation({ payload: { projectId, partnerId } }),
+      ]);
+      expect(
+        responses.map((r) => r.statusCode).sort(),
+        responses.map((r) => r.payload).join("\n"),
+      ).toEqual([201, 409, 409]);
+
+      const winner = responses.find((r) => r.statusCode === 201)!;
+      for (const loser of responses.filter((r) => r.statusCode === 409)) {
+        expect(problem(loser).errorCode).toBe("RELATIONSHIP_CONFLICT");
+      }
+
+      const { rows } = await pool.query(
+        "SELECT id FROM project_partners WHERE project_id = $1 AND partner_id = $2",
+        [projectId, partnerId],
+      );
+      expect(rows).toHaveLength(1);
+      // §6: "invariant failures and serialization aborts write no domain audit
+      // row" — the winner leaves exactly one insert row, the losers none.
+      expect(await auditRows(body(winner).id)).toBe(1);
+    });
+
+    it("012 EARS-17: when two partners claim the primary slot on one project concurrently, exactly one shall take it and the loser shall get 409, never an opaque 500", async () => {
+      // The EARS-10 refusal above is sequential — the incumbent is already
+      // committed when the challenger arrives, so only the pre-check is
+      // exercised. Here neither claim is committed when the other reads, which
+      // is the interleaving the partial `…_project_primary_active_uniq` index
+      // exists to settle.
+      const projectId = await insertProject();
+      const first = await insertPartner();
+      const second = await insertPartner();
+
+      const responses = await Promise.all([
+        createRelation({
+          payload: { projectId, partnerId: first, isPrimary: true },
+        }),
+        createRelation({
+          payload: { projectId, partnerId: second, isPrimary: true },
+        }),
+      ]);
+      expect(
+        responses.map((r) => r.statusCode).sort(),
+        responses.map((r) => r.payload).join("\n"),
+      ).toEqual([201, 409]);
+
+      const winner = responses.find((r) => r.statusCode === 201)!;
+      const loser = responses.find((r) => r.statusCode === 409)!;
+      expect(problem(loser).errorCode).toBe("RELATIONSHIP_CONFLICT");
+
+      // Exactly one active primary, and the loser left no row at all — the slot
+      // is decided, never shared and never silently demoted.
+      const { rows } = await pool.query<{ id: string; is_primary: boolean }>(
+        "SELECT id, is_primary FROM project_partners WHERE project_id = $1 AND status = 'active' AND is_primary = true",
+        [projectId],
+      );
+      expect(rows).toHaveLength(1);
+      expect(rows[0]!.id).toBe(body(winner).id);
+      expect(await auditRows(body(winner).id)).toBe(1);
+    });
   },
 );

@@ -1,5 +1,14 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { aliasedTable, and, asc, count, desc, eq, isNull, sql } from "drizzle-orm";
+import {
+  aliasedTable,
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  isNull,
+  sql,
+} from "drizzle-orm";
 import type { Direction, DirectionAdjacency, DrizzleHandle } from "@ds/db";
 import { directionAdjacency, directions } from "@ds/db";
 import type {
@@ -8,6 +17,7 @@ import type {
 } from "@ds/schemas";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
 import { withRequestAuditContext } from "../audit/audit-context.tx.js";
+import { withRelationConflictMapping } from "./taxonomy.errors.js";
 
 // #1483 (ADR-0016 §2.8, 017-design §5) — Drizzle data access for the DIRECTED
 // `direction_adjacency` self-relation. Both endpoints are `directions`, so every
@@ -105,9 +115,14 @@ export class DirectionAdjacencyRepository {
       weight?: number | undefined;
     },
   ): Promise<DirectionAdjacency> {
-    const [row] = await tx.insert(directionAdjacency).values(values).returning();
-    if (!row) throw new Error("direction_adjacency insert returned no row");
-    return row;
+    return withRelationConflictMapping(async () => {
+      const [row] = await tx
+        .insert(directionAdjacency)
+        .values(values)
+        .returning();
+      if (!row) throw new Error("direction_adjacency insert returned no row");
+      return row;
+    });
   }
 
   async findById(id: string): Promise<DirectionAdjacency | null> {

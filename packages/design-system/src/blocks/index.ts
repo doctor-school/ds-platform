@@ -13,6 +13,11 @@ export { AuthShell } from "./auth-shell";
 export type { AuthShellProps, AuthShellCopy } from "./auth-shell";
 export { OtpFocusScreen } from "./otp-focus-screen";
 export { useResendCountdown } from "./use-resend-countdown";
+// The app-side half of the same resend contract (#227/#267), lifted out of
+// `apps/portal/lib/` in 021 EARS-19 (#1558): hold the nonce, bump it on a
+// successful resend, route a failure to the host's error channel. The transport
+// is always the caller's — each surface resends against a different endpoint.
+export { useResendCooldown } from "./use-resend-cooldown";
 export { maskDestination } from "./mask-destination";
 // #1666 slice A — the ONE canonical sign-in composition both storefronts mount
 // (AGENTS.md §6 cross-front reuse). Lifted verbatim from the portal `/login` page;
@@ -61,6 +66,24 @@ export type {
   EmailConfirmResendProps,
   EmailConfirmValues,
 } from "./email-confirm-card";
+
+// 003 EARS-17 / 021 EARS-19 (#1558) — the ONE canonical bot-protection client
+// half both storefronts mount. Lifted out of `apps/portal/components/bot-protection/`
+// (the owner's «это же copy/paste» call, recorded on #1558): the widget adapter,
+// the resume-one-action orchestration and the error predicates are one
+// implementation now. App glue stays with the host — the site key it was built
+// with, its localized failure copy and its transport.
+export { SmartCaptcha } from "./smart-captcha";
+export type { SmartCaptchaProps, BotProtectionFailure } from "./smart-captcha";
+export { BotProtectionField } from "./bot-protection-field";
+export type { BotProtectionFieldProps } from "./bot-protection-field";
+export { useBotProtectedAction } from "./use-bot-protected-action";
+export {
+  botProtectionFailureMessage,
+  isBotProtectionRejected,
+  isBotProtectionRequired,
+} from "./bot-protection-error";
+export type { BotProtectionMessages } from "./bot-protection-error";
 
 // 004 EARS-19 — month-calendar presentation blocks (webinars-month.dc.html).
 export { MonthCalendarGrid } from "./month-calendar-grid";

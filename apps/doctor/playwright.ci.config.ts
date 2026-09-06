@@ -30,7 +30,8 @@ export default defineConfig({
   // (EARS-3 day groups, EARS-8 URL state, EARS-4 month calendar, EARS-12 the
   // guest read path and its return) each boot the
   // app against their own upstream double (this tier boots no api at all).
-  // `register-direct.spec.ts` (021 EARS-3, #1539) needs the same api double as
+  // `register-direct.spec.ts` (021 EARS-3, #1539) and `login-return-context.spec.ts`
+  // (021 #1945 — the sign-in landing resolves `?returnTo=` server-side) need the same api double as
   // the return-context tier (a remembered specialty, a gate arrival), so it
   // rides `playwright.return-context.config.ts` and is not collected here.
   // Every `events-*.spec.ts` asserts `[data-events-feed]`, which only exists
@@ -46,6 +47,7 @@ export default defineConfig({
     "specialty-consumption.spec.ts",
     "register-return-context.spec.ts",
     "register-direct.spec.ts",
+    "login-return-context.spec.ts",
     "events-*.spec.ts",
     "room.spec.ts",
     "a11y/room-axe.e2e.spec.ts",

@@ -686,5 +686,128 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(problem(res).errorCode).toBe("UNSUPPORTED_MEDIA_TYPE");
       expect(expertId).toBeTypeOf("string");
     });
+
+    // ── 012 EARS-17: key reuse and the feature-010 trail ───────────────────
+    //
+    // 012-design §6 binds EVERY mutating admin route to the same safeguards,
+    // and line 343 names these very links "audited as the ordinary taxonomy
+    // mutations they are". So the proof belongs ON this join table, not
+    // inferred from the shared service the handler happens to call.
+
+    /** The 010 ledger rows of one retained row, addressed by `metadata->'pk'`. */
+    async function auditTrail(
+      id: string,
+    ): Promise<{ event_type: string; subject_id: string | null }[]> {
+      const { rows } = await pool.query<{
+        event_type: string;
+        subject_id: string | null;
+      }>(
+        `SELECT event_type, subject_id FROM audit_ledger
+          WHERE metadata -> 'pk' ->> 'id' = $1`,
+        [id],
+      );
+      return rows;
+    }
+
+    it("012 EARS-17: when the same Idempotency-Key carries a different link payload, the system shall refuse with IDEMPOTENCY_KEY_REUSED before any domain or audit write", async () => {
+      const eventId = await insertEvent();
+      const firstExpert = await insertExpert();
+      const secondExpert = await insertExpert();
+      const k = key();
+
+      const first = await createLink({
+        payload: {
+          eventId,
+          expertId: firstExpert,
+          role: "Спикер",
+          position: 0,
+        },
+        idempotencyKey: k,
+      });
+      expect(first.statusCode, first.payload).toBe(201);
+
+      const reused = await createLink({
+        payload: {
+          eventId,
+          expertId: secondExpert,
+          role: "Модератор",
+          position: 1,
+        },
+        idempotencyKey: k,
+      });
+      expect(reused.statusCode).toBe(409);
+      expect(problem(reused).errorCode).toBe("IDEMPOTENCY_KEY_REUSED");
+
+      // The refusal lands BEFORE the write: the link the second call described
+      // exists in neither the domain table nor the 010 trail.
+      const { rows } = await pool.query(
+        "SELECT id FROM event_experts WHERE event_id = $1 AND expert_id = $2",
+        [eventId, secondExpert],
+      );
+      expect(rows).toHaveLength(0);
+    });
+
+    it("012 EARS-17: when a link is created, edited and retired, feature 010 shall hold exactly one attributed audit row per change", async () => {
+      const { detail, etag } = await seedLink();
+
+      const afterCreate = await auditTrail(detail.id);
+      expect(afterCreate.map((r) => r.event_type)).toEqual([
+        "data.event_experts.insert",
+      ]);
+      // Attribution is the point of the trail: an unattributed row is a change
+      // nobody can be asked about.
+      expect(afterCreate[0]!.subject_id).not.toBeNull();
+
+      const patched = await patchLink(detail.id, {
+        payload: { role: "Модератор" },
+        ifMatch: etag,
+      });
+      expect(patched.statusCode, patched.payload).toBe(200);
+
+      const retired = await transitionLink(detail.id, "retire", {
+        ifMatch: patched.headers.etag as string,
+      });
+      expect(retired.statusCode, retired.payload).toBe(200);
+
+      const afterRetire = await auditTrail(detail.id);
+      // One update per committed change — the edit and the retirement, neither
+      // collapsed into one row nor duplicated.
+      expect(
+        afterRetire.filter((r) => r.event_type === "data.event_experts.update"),
+      ).toHaveLength(2);
+      expect(afterRetire.every((r) => r.subject_id !== null)).toBe(true);
+    });
+
+    it("012 EARS-17: when a retire quotes an If-Match a committed edit has already superseded, the system shall answer 412 with zero row and zero audit mutation, and a re-read shall still retire it", async () => {
+      const { detail, etag } = await seedLink();
+
+      // Real drift rather than a fabricated validator: the edit lands, so the
+      // etag the second operator is still holding describes the previous row.
+      const patched = await patchLink(detail.id, {
+        payload: { role: "Модератор" },
+        ifMatch: etag,
+      });
+      expect(patched.statusCode, patched.payload).toBe(200);
+
+      const before = await auditTrail(detail.id);
+      const stale = await transitionLink(detail.id, "retire", {
+        ifMatch: etag,
+      });
+      expect(stale.statusCode).toBe(412);
+      expect(problem(stale).errorCode).toBe("PRECONDITION_FAILED");
+      expect(body(await readLink(detail.id))).toMatchObject({
+        status: "active",
+        role: "Модератор",
+        version: 2,
+      });
+      expect(await auditTrail(detail.id)).toHaveLength(before.length);
+
+      // The refusal is not a dead end: the current validator still moves it.
+      const fresh = await transitionLink(detail.id, "retire", {
+        ifMatch: patched.headers.etag as string,
+      });
+      expect(fresh.statusCode, fresh.payload).toBe(200);
+      expect(body(fresh)).toMatchObject({ status: "retired", version: 3 });
+    });
   },
 );

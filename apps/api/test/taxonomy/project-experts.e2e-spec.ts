@@ -552,7 +552,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       await seedRelation(projectId, await insertExpert(), "curator");
       const candidateExpert = await insertExpert();
       const past = await seedRelation(projectId, candidateExpert, "member");
-      await transitionRelation(past.detail.id, "retire", { ifMatch: past.etag });
+      await transitionRelation(past.detail.id, "retire", {
+        ifMatch: past.etag,
+      });
       await publishProject(projectId);
 
       const res = await replaceCurator(projectId, {
@@ -846,9 +848,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         `/v1/public/projects/${rows[0]!.slug}/experts`,
       );
       expect(
-        (JSON.parse(bySlug.payload) as { data: Array<{ id: string }> }).data.map(
-          (r) => r.id,
-        ),
+        (
+          JSON.parse(bySlug.payload) as { data: Array<{ id: string }> }
+        ).data.map((r) => r.id),
       ).toEqual([first, second]);
     });
 
@@ -936,6 +938,132 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         expect(res.statusCode, cursor).toBe(400);
         expect(problem(res).errorCode).toBe("CURSOR_INVALID");
       }
+    });
+
+    // ── 012 EARS-17: key reuse and the feature-010 trail ───────────────────
+    //
+    // 012-design §6 binds EVERY mutating admin route to the same safeguards,
+    // and line 343 calls the coordination joins "audited as the ordinary
+    // taxonomy mutations they are". So the proof belongs ON this join table,
+    // not inferred from the shared service the handler happens to call.
+
+    /** The 010 ledger rows of one retained row, addressed by `metadata->'pk'`. */
+    async function auditTrail(
+      id: string,
+    ): Promise<{ event_type: string; subject_id: string | null }[]> {
+      const { rows } = await pool.query<{
+        event_type: string;
+        subject_id: string | null;
+      }>(
+        `SELECT event_type, subject_id FROM audit_ledger
+          WHERE metadata -> 'pk' ->> 'id' = $1`,
+        [id],
+      );
+      return rows;
+    }
+
+    it("012 EARS-17: when the same Idempotency-Key carries a different relation payload, the system shall refuse with IDEMPOTENCY_KEY_REUSED before any domain or audit write", async () => {
+      const projectId = await insertProject();
+      const firstExpert = await insertExpert();
+      const secondExpert = await insertExpert();
+      const k = key();
+
+      const first = await createRelation({
+        payload: { projectId, expertId: firstExpert, role: "member" },
+        idempotencyKey: k,
+      });
+      expect(first.statusCode, first.payload).toBe(201);
+
+      const reused = await createRelation({
+        payload: { projectId, expertId: secondExpert, role: "member" },
+        idempotencyKey: k,
+      });
+      expect(reused.statusCode).toBe(409);
+      expect(problem(reused).errorCode).toBe("IDEMPOTENCY_KEY_REUSED");
+
+      // The refusal lands BEFORE the write: the relation the second call
+      // described exists in neither the domain table nor the 010 trail.
+      const { rows } = await pool.query(
+        "SELECT id FROM project_experts WHERE project_id = $1 AND expert_id = $2",
+        [projectId, secondExpert],
+      );
+      expect(rows).toHaveLength(0);
+    });
+
+    it("012 EARS-17: when a relation is created, edited and retired, feature 010 shall hold exactly one attributed audit row per change", async () => {
+      const projectId = await insertProject();
+      const expertId = await insertExpert();
+      const { detail, etag } = await seedRelation(
+        projectId,
+        expertId,
+        "member",
+      );
+
+      const afterCreate = await auditTrail(detail.id);
+      expect(afterCreate.map((r) => r.event_type)).toEqual([
+        "data.project_experts.insert",
+      ]);
+      // Attribution is the point of the trail: an unattributed row is a change
+      // nobody can be asked about.
+      expect(afterCreate[0]!.subject_id).not.toBeNull();
+
+      const promoted = await patchRelation(detail.id, {
+        payload: { role: "curator" },
+        ifMatch: etag,
+      });
+      expect(promoted.statusCode, promoted.payload).toBe(200);
+
+      const retired = await transitionRelation(detail.id, "retire", {
+        ifMatch: promoted.headers.etag as string,
+      });
+      expect(retired.statusCode, retired.payload).toBe(200);
+
+      const afterRetire = await auditTrail(detail.id);
+      // One update per committed change — the promotion and the retirement,
+      // neither collapsed into one row nor duplicated.
+      expect(
+        afterRetire.filter(
+          (r) => r.event_type === "data.project_experts.update",
+        ),
+      ).toHaveLength(2);
+      expect(afterRetire.every((r) => r.subject_id !== null)).toBe(true);
+    });
+
+    it("012 EARS-17: when a retire quotes an If-Match a committed edit has already superseded, the system shall answer 412 with zero row and zero audit mutation, and a re-read shall still retire it", async () => {
+      const projectId = await insertProject();
+      const expertId = await insertExpert();
+      const { detail, etag } = await seedRelation(
+        projectId,
+        expertId,
+        "member",
+      );
+      // Real drift rather than a fabricated validator: the edit lands, so the
+      // etag the second operator is still holding describes the previous row.
+      const edited = await patchRelation(detail.id, {
+        payload: { role: "curator" },
+        ifMatch: etag,
+      });
+      expect(edited.statusCode, edited.payload).toBe(200);
+
+      const before = await auditTrail(detail.id);
+      const stale = await transitionRelation(detail.id, "retire", {
+        ifMatch: etag,
+      });
+      expect(stale.statusCode).toBe(412);
+      expect(problem(stale).errorCode).toBe("PRECONDITION_FAILED");
+      expect(await relationRow(detail.id)).toMatchObject({
+        status: "active",
+        role: "curator",
+        version: 2,
+      });
+      expect(await auditTrail(detail.id)).toHaveLength(before.length);
+
+      // The refusal is not a dead end: the current validator still moves it.
+      const fresh = await transitionRelation(detail.id, "retire", {
+        ifMatch: edited.headers.etag as string,
+      });
+      expect(fresh.statusCode, fresh.payload).toBe(200);
+      expect(body(fresh)).toMatchObject({ status: "retired", version: 3 });
     });
   },
 );

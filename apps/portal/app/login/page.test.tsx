@@ -40,11 +40,11 @@ type CaptchaProps = {
 };
 let captchaMode: "bypass" | "manual" = "bypass";
 let captchaProps: CaptchaProps | undefined;
-vi.mock("@/components/bot-protection", async () => {
+vi.mock("@ds/design-system/blocks", async () => {
   const React = await import("react");
   const actual = await vi.importActual<
-    typeof import("@/components/bot-protection")
-  >("@/components/bot-protection");
+    typeof import("@ds/design-system/blocks")
+  >("@ds/design-system/blocks");
   return {
     ...actual,
     BotProtectionField: (props: CaptchaProps) => {

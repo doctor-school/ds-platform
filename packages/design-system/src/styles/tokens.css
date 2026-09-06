@@ -166,6 +166,7 @@
   --shadow-base: 2px 2px 0 var(--color-elevation-soft);
   --shadow-md: 4px 4px 0 var(--color-elevation);
   --shadow-lg: 6px 6px 0 var(--color-elevation);
+  --shadow-live: 6px 6px 0 var(--color-live);
   --shadow-focus: 0 0 0 3px rgba(107, 177, 247, 0.5);
   --shadow-focus-inset: inset 0 0 0 3px rgba(107, 177, 247, 0.5);
   --shadow-btn: 4px 4px 0 var(--color-border);
@@ -427,6 +428,7 @@
   --shadow-base: var(--shadow-base);
   --shadow-md: var(--shadow-md);
   --shadow-lg: var(--shadow-lg);
+  --shadow-live: var(--shadow-live);
   --shadow-focus: var(--shadow-focus);
   --shadow-focus-inset: var(--shadow-focus-inset);
   --shadow-btn: var(--shadow-btn);

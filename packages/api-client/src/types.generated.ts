@@ -1812,6 +1812,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/storefront/doctor/events/live": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["DoctorEventsPublicController_live"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/storefront/doctor/events/month": {
         parameters: {
             query?: never;
@@ -1919,6 +1935,17 @@ export interface components {
             tense: "upcoming" | "past";
             to: string;
             totalCount: number;
+        };
+        DoctorEventsLiveDto: {
+            /** Format: date-time */
+            endsAt: string;
+            eventId: string;
+            href: string;
+            presenceCount: number;
+            school: string;
+            slug: string;
+            title: string;
+            viewerIsRegistered: boolean;
         };
         DoctorEventsMonthGridDto: {
             days: {
@@ -4909,6 +4936,27 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ParticipationCtaDto"];
+                };
+            };
+        };
+    };
+    DoctorEventsPublicController_live: {
+        parameters: {
+            query?: never;
+            header: {
+                cookie: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DoctorEventsLiveDto"] | null;
                 };
             };
         };

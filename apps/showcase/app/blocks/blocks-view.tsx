@@ -18,6 +18,7 @@ import {
   EventPageShell,
   EventSignupCard,
   EventSpeakerCard,
+  LiveEventStrip,
   EventAboutSection,
   EventProgrammeSection,
   EventPageKicker,
@@ -3411,6 +3412,95 @@ function EventPagePreview({
   );
 }
 
+const LIVE_EVENT_STRIP_PROPS: PropRow[] = [
+  {
+    name: "liveLabel",
+    type: "ReactNode",
+    required: true,
+    description:
+      "Badge copy («Идёт сейчас»). Host-owned; the block hardcodes no RU string.",
+  },
+  {
+    name: "title / titleHref",
+    type: "ReactNode / string",
+    required: true,
+    description: "The running event and the link to its own page.",
+  },
+  {
+    name: "meta",
+    type: "ReactNode",
+    required: true,
+    description:
+      "One server-composed line — presence count · school · end time. The host owns the separators, the plural form and the МСК suffix.",
+  },
+  {
+    name: "actionLabel / actionHref",
+    type: "ReactNode / string",
+    required: true,
+    description:
+      "The server-resolved entry: the room for a registered doctor, the event page for everyone else. The block decides nothing.",
+  },
+];
+
+function LiveEventStripSection() {
+  return (
+    <BlockSection
+      title="LiveEventStrip"
+      exportsLine="LiveEventStrip — the «Идёт сейчас» strip above the doctor events feed (019 EARS-6)"
+    >
+      <p className="text-sm text-muted-foreground">
+        Presentation only. Liveness, the entry policy and the presence count are
+        resolved by the server and arrive as finished strings and hrefs — the
+        block never reads a start time, so it cannot disagree with the room about
+        whether an эфир is running. There is no empty variant: when nothing is
+        live the host renders nothing, because an empty red frame would announce
+        an эфир that does not exist.
+      </p>
+      <SubRow label="State matrix">
+        <div className="grid gap-6">
+          <StateCase
+            label="registered doctor"
+            note="the action leads into the room"
+          >
+            <WideCanvas>
+              <div className="w-full">
+                <LiveEventStrip
+                  liveLabel="Идёт сейчас"
+                  title="Эфир «Вопросы по PRP»"
+                  titleHref="#event"
+                  meta="412 в комнате · Школа ортобиологии · до 20:30 МСК"
+                  actionLabel="Войти в комнату эфира"
+                  actionHref="#room"
+                />
+              </div>
+            </WideCanvas>
+          </StateCase>
+          <StateCase
+            label="guest / not registered"
+            note="the same strip, but the action leads to the event page — never the room"
+          >
+            <WideCanvas>
+              <div className="w-full">
+                <LiveEventStrip
+                  liveLabel="Идёт сейчас"
+                  title="Эфир «Вопросы по PRP»"
+                  titleHref="#event"
+                  meta="412 в комнате · Школа ортобиологии · до 20:30 МСК"
+                  actionLabel="Открыть страницу события"
+                  actionHref="#event"
+                />
+              </div>
+            </WideCanvas>
+          </StateCase>
+        </div>
+      </SubRow>
+      <SubRow label="Slots / props">
+        <PropsTable rows={LIVE_EVENT_STRIP_PROPS} />
+      </SubRow>
+    </BlockSection>
+  );
+}
+
 function EventPageSection() {
   return (
     <BlockSection
@@ -3494,6 +3584,7 @@ export function BlocksView() {
       <EmptyStateSection />
       <EventListSection />
       <EventPageSection />
+      <LiveEventStripSection />
       <FilterBarSection />
       <ComboboxSection />
       <FormSectionShowcase />

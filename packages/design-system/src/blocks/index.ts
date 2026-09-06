@@ -234,3 +234,8 @@ export type {
   EventPageTimeParts,
   EventProgrammeContent,
 } from "./event-page-view";
+// 019 EARS-6 — the «Идёт сейчас» strip above the doctor events feed
+// (doctor-events.dc.html L164-175, F-019-3 вариант А), #1521. Presentation only:
+// liveness, the entry policy and the presence count are server-resolved.
+export { LiveEventStrip } from "./live-event-strip";
+export type { LiveEventStripProps } from "./live-event-strip";

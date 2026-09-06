@@ -11,10 +11,12 @@ import {
   toEventListItems,
 } from "@/lib/events-feed-cards";
 import { fetchDoctorEventsFeed, showMoreHref } from "@/lib/events-feed";
+import { fetchDoctorEventsLive } from "@/lib/events-live";
 import { toDoctorEventsMonthPane } from "@/lib/events-month-grid";
 import { fetchDoctorEventsMonthGrid } from "@/lib/events-month";
 import { resolveShellAuth } from "@/lib/shell-auth";
 import { DoctorEventsDayAnchorScroll } from "./day-anchor-scroll";
+import { EventsLiveBlock } from "./live-block";
 import { DoctorEventsMonthPaneView } from "./month-pane";
 import { DoctorEventsResumeScroll } from "./resume-anchor-scroll";
 
@@ -74,10 +76,19 @@ function resumeSlugOf(
  * horizon widens `to=` through the same codec «показать ещё» uses, so the day
  * is inside the read the body scrolls to.
  *
+ * 019 EARS-6 (#1521) adds the «Идёт сейчас» block at the top of the content
+ * column (canvas `liveBlockOn`, вариант А). It is a THIRD read issued in the
+ * same round trip, and it is the one read on this screen where WHO is asking
+ * changes the answer: the api resolves the entry (room vs event page) against
+ * 020's participation policy, so the session travels with it. Liveness is never
+ * derived here — the block has no `startsAt` to derive it from — and nothing
+ * live means NO block in the tree rather than an empty frame. Its bounded
+ * 30-second refresh lives in the client half (`./live-block`).
+ *
  * Scope: the rest of the canvas composition of this screen — 017's shell
- * breadcrumbs, the facet sidebar and the «Идёт сейчас» block — belongs to
- * EARS-1 (#1516), EARS-7 (#1523) and EARS-6 (#1521). The route stays `deferred`
- * in `tools/lint/prod-surface-manifest.yaml` until those land.
+ * breadcrumbs and the facet sidebar — belongs to EARS-1 (#1516) and EARS-7
+ * (#1523). The route stays `deferred` in
+ * `tools/lint/prod-surface-manifest.yaml` until those land.
  */
 export default async function DoctorEventsPage({
   searchParams,
@@ -91,10 +102,15 @@ export default async function DoctorEventsPage({
   // EARS-12: the feed READ is viewer-independent — a guest and a doctor receive
   // the same payload — so the session is resolved BESIDE the reads, never inside
   // them, and only to decide where a card's «Участвовать» points.
-  const [result, month, shellAuth] = await Promise.all([
+  // EARS-6: the live read is the exception to the line above — it is
+  // viewer-DEPENDENT, because the api resolves the room-vs-event-page entry
+  // against this viewer's registration. It joins the same round trip and, like
+  // the month read, is non-fatal: no live strip never costs the feed.
+  const [result, month, shellAuth, live] = await Promise.all([
     fetchDoctorEventsFeed(requestHeaders, raw),
     fetchDoctorEventsMonthGrid(requestHeaders, raw),
     resolveShellAuth(requestHeaders),
+    fetchDoctorEventsLive(requestHeaders),
   ]);
 
   if (!result.ok) {
@@ -142,6 +158,14 @@ export default async function DoctorEventsPage({
       <h1 className="text-heading font-extrabold">
         {DOCTOR_EVENTS_FEED_COPY.title}
       </h1>
+
+      {/* EARS-6: the canvas puts the «Идёт сейчас» strip FIRST in the content
+          column (`design-source/doctor-events.dc.html` L164-175,
+          `liveBlockOn`) — above the mini-month band and above the day feed,
+          because a running эфир outranks navigation. The server read gives the
+          first paint; the client half re-reads it on a bounded cadence so it
+          clears itself when the room closes. */}
+      <EventsLiveBlock initial={live} />
 
       {/* EARS-4: the canvas (`design-source/doctor-events.dc.html`,
           `miniMonthOn`) places the mini-month as a FULL-WIDTH band inside the

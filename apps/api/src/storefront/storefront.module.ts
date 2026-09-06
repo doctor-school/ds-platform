@@ -8,6 +8,7 @@ import {
 import { AuthModule } from "../auth/auth.module.js";
 import { isRouteScan } from "../authz/route-scan.js";
 import { EventsModule } from "../events/events.module.js";
+import { RoomModule } from "../room/room.module.js";
 import { DoctorEventsPublicController } from "./doctor-events.public.controller.js";
 import { DoctorEventsRepository } from "./doctor-events.repository.js";
 import { DoctorEventsService } from "./doctor-events.service.js";
@@ -59,7 +60,11 @@ import { TargetingService } from "./targeting.service.js";
   // (`EventsService`) and the ONE participation policy (`ParticipationService`)
   // that the doctor storefront's `…/events/:idOrSlug` twin routes mount. The
   // storefront adds a route and an envelope, never a second read model (LD-1).
-  imports: [TaxonomyModule, AuthModule, EventsModule],
+  // 019 EARS-6 (#1521): `RoomModule` exports the ONE live presence aggregate
+  // and the configured heartbeat cadence it is derived over, so the «Идёт
+  // сейчас» strip counts «N в комнате» with the same query the room grant and
+  // the 020 participation CTA use — never a storefront-local head count.
+  imports: [TaxonomyModule, AuthModule, EventsModule, RoomModule],
   controllers: [
     DoctorRegisterPublicController,
     SpecialtiesPublicController,

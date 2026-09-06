@@ -1,0 +1,34 @@
+{
+  "name": "@ds/legal-content",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Legal document content (Markdown + frontmatter) and its loader — SSOT for feature 028 legal pages. Node-only; consumed by both storefronts and the shared reading component.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "src",
+    "documents"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "clean": "rm -rf dist .tsbuildinfo"
+  },
+  "dependencies": {
+    "gray-matter": "^4.0.3",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.11"
+  }
+}

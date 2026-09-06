@@ -1,6 +1,7 @@
 import Image from "next/image";
 import NextLink from "next/link";
 import { Link } from "@ds/design-system/link";
+import { academyHref } from "@/lib/academy";
 import styles from "./storefront-footer.module.css";
 
 /**
@@ -34,7 +35,7 @@ const DOCUMENT_LINKS = [
 ] as const;
 
 /** LD-4 — the one Academy crossing on the doctor storefront. */
-const ACADEMY_HREF = "https://academy.doctor.school/";
+const ACADEMY_HREF = academyHref("/");
 
 export function StorefrontFooter() {
   return (

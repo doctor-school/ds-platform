@@ -6,7 +6,11 @@ import {
   refineEmbedRefForProvider,
   StreamProviderSchema,
 } from "../events/events.schema.js";
-import { TaxonomyErrorCodeSchema } from "../taxonomy/taxonomy.schema.js";
+import {
+  ADMIN_LIST_PAGE_SIZE_DEFAULT,
+  ADMIN_LIST_PAGE_SIZE_MAX,
+  TaxonomyErrorCodeSchema,
+} from "../taxonomy/taxonomy.schema.js";
 
 // 014 EARS-1 / EARS-2 (#1339) — the admin contract for retained event recordings
 // (014-design §2, §3, §10, §11). API SSOT per ADR-0002 §3: `apps/api` validates at
@@ -305,14 +309,73 @@ export const RecordingAdminDetailSchema = z.object({
 export type RecordingAdminDetail = z.infer<typeof RecordingAdminDetailSchema>;
 
 /**
- * `GET /v1/admin/events/:id/recordings` — every retained row of the event,
- * retired ones included (they stay addressable, §3), plus the event facts the
- * panel needs to explain what it may and may not do: the lifecycle state that
- * gates publication and the operator's readiness date.
+ * 014 EARS-22 (#1612) — the query the recording admin list accepts.
+ *
+ * It is the SHARED admin list query of 012-design §5.1
+ * (`AdminTaxonomyListQuerySchema`: `page` / `pageSize` / `q` / `status` /
+ * `includeRetired`) with two substitutions and no new mechanics, because EARS-22
+ * is explicitly «the shared control», not a recording-shaped variant of one:
+ *
+ *   • `status` speaks the RECORDING lifecycle (`RecordingStatusSchema`), not the
+ *     taxonomy triple — the vocabulary is the resource's, the parameter is not;
+ *   • `kind` is the one resource facet 014 has (`edited` / `raw`, §2).
+ *
+ * `q` is a case-insensitive substring over `embed_ref`, the only free text a
+ * recording carries. Provider and kind are closed vocabularies and are filtered,
+ * never searched — typing «rutube» into a text box that silently matched an enum
+ * would make the facet and the search two answers to the same question.
+ *
+ * `includeRetired` defaults to FALSE, as it does on every other admin list: the
+ * default read is the operator's working set and «показать отозванные» is an
+ * explicit act. Retired rows stay addressable either way (§3) — this filters a
+ * read, it does not hide a row from the API.
+ */
+export const RecordingAdminListQuerySchema = z
+  .object({
+    page: z.coerce.number().int().positive().default(1),
+    pageSize: z.coerce
+      .number()
+      .int()
+      .positive()
+      .max(ADMIN_LIST_PAGE_SIZE_MAX)
+      .default(ADMIN_LIST_PAGE_SIZE_DEFAULT),
+    /** Case-insensitive substring over the row's `embedRef`. */
+    q: z.string().trim().max(160).optional(),
+    status: RecordingStatusSchema.optional(),
+    kind: RecordingKindSchema.optional(),
+    includeRetired: z
+      .union([z.boolean(), z.enum(["true", "false"])])
+      .transform((v) => v === true || v === "true")
+      .default(false),
+  })
+  .strict();
+export type RecordingAdminListQuery = z.infer<
+  typeof RecordingAdminListQuerySchema
+>;
+
+/**
+ * `GET /v1/admin/events/:id/recordings` — one filtered, paginated page of the
+ * event's retained rows plus the event facts the panel needs to explain what it
+ * may and may not do: the lifecycle state that gates publication and the
+ * operator's readiness date.
+ *
+ * `slots` is the reason this stays ONE request. The panel is two named kind slots
+ * (§7) ON TOP OF a filterable history, and the two answer different questions:
+ * the slots are «what is live for `edited` and `raw` right now», the page is
+ * «what am I looking at under these filters». Deriving the slots from a filtered
+ * page would make a search box able to empty the operator's primary surface, and
+ * fetching them separately would make the panel two round-trips deep for one
+ * screen. So the server projects them unfiltered, always, alongside the page.
  */
 export const RecordingAdminListSchema = z.object({
+  /** The filtered page, ordered kind → created (§3 retained rows included). */
   data: z.array(RecordingAdminDetailSchema),
+  /** Rows matching the FILTER, not the page — the pager's denominator. */
   total: z.number().int().nonnegative(),
+  page: z.number().int().positive(),
+  pageSize: z.number().int().positive(),
+  /** The current non-retired row of each kind, unfiltered by the query. */
+  slots: z.array(RecordingAdminDetailSchema),
   /** Publication requires exactly `ended` (§3) — the panel says so up front. */
   eventState: z.string(),
   recordingExpectedBy: z.string().nullable(),

@@ -232,12 +232,37 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       return JSON.parse(res.payload) as RecordingBody;
     }
 
-    async function list(eventId: string, sid?: string) {
+    async function list(
+      eventId: string,
+      sid?: string,
+      query: Record<string, string> = {},
+    ) {
+      const qs = new URLSearchParams(query).toString();
       return app.inject({
         method: "GET",
-        url: `/v1/admin/events/${eventId}/recordings`,
+        url: `/v1/admin/events/${eventId}/recordings${qs ? `?${qs}` : ""}`,
         headers: { ...device, ...adminHeaders(sid ?? adminSid) },
       });
+    }
+
+    /** The EARS-22 list body: the filtered page, its envelope and the slots. */
+    interface ListBody {
+      data: RecordingBody[];
+      total: number;
+      page: number;
+      pageSize: number;
+      slots: RecordingBody[];
+      eventState: string;
+      recordingExpectedBy: string | null;
+    }
+
+    async function listed(
+      eventId: string,
+      query: Record<string, string> = {},
+    ): Promise<ListBody> {
+      const res = await list(eventId, undefined, query);
+      expect(res.statusCode).toBe(200);
+      return JSON.parse(res.payload) as ListBody;
     }
 
     function problem(res: { payload: string }): {
@@ -353,9 +378,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       // The event itself was NOT touched by attaching a recording.
       expect(await eventState(eventId)).toBe("ended");
 
-      const listed = await list(eventId);
-      expect(listed.statusCode).toBe(200);
-      const listBody = JSON.parse(listed.payload) as {
+      const listRes = await list(eventId);
+      expect(listRes.statusCode).toBe(200);
+      const listBody = JSON.parse(listRes.payload) as {
         data: RecordingBody[];
         total: number;
         eventState: string;
@@ -518,11 +543,11 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       );
       expect(second.status).toBe("draft");
       // … and NOTHING was removed: both rows are still there and the retired one
-      // is still addressable through the list.
+      // is still addressable through the list. Since EARS-22 the default read is
+      // the operator's working set, so asking for the retired row is the
+      // explicit act `includeRetired=true` — a filtered READ, never a lost row.
       expect(await rowCount(eventId)).toBe(2);
-      const listBody = JSON.parse((await list(eventId)).payload) as {
-        data: RecordingBody[];
-      };
+      const listBody = await listed(eventId, { includeRetired: "true" });
       expect(listBody.data.map((r) => r.id).sort()).toEqual(
         [first.id, second.id].sort(),
       );
@@ -680,6 +705,165 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         "data.event_recordings.insert",
       );
       expect(rows[0]!.subject_id).not.toBeNull();
+    });
+
+    // ── EARS-22 — the shared list contract on the recording list ───────────
+    //
+    // The clause is about ONE control used everywhere ("when an operator uses
+    // any recording list … the shared control shall paginate; apply text search
+    // and every filter immediately …"). Immediacy is a browser property and is
+    // proven in `apps/admin/e2e/recordings.spec.ts`; what the API owes is the
+    // half a browser cannot fake — that the predicate runs in SQL, that `total`
+    // counts the FILTERED set rather than the page, and that the panel's two
+    // kind slots survive a filter that empties the page.
+
+    /**
+     * Three rows on one event: a retired `edited`, its live successor, and a
+     * live `raw`. The retire-then-reattach is not a contrivance — the partial
+     * unique index means it is the ONLY way an event accumulates history, which
+     * is exactly the pile EARS-22 exists to make navigable.
+     */
+    async function seedRows(eventId: string): Promise<{
+      retiredEdited: RecordingBody;
+      liveEdited: RecordingBody;
+      liveRaw: RecordingBody;
+    }> {
+      const first = await attached(eventId, attachPayload());
+      const retire = await command(eventId, first.id, "retire", {
+        version: first.version,
+      });
+      expect(retire.statusCode).toBe(200);
+      const liveEdited = await attached(
+        eventId,
+        attachPayload({ embedRef: RUTUBE_REF_2 }),
+      );
+      const liveRaw = await attached(
+        eventId,
+        attachPayload({
+          kind: "raw",
+          provider: "youtube",
+          embedRef: YOUTUBE_REF,
+        }),
+      );
+      return { retiredEdited: first, liveEdited, liveRaw };
+    }
+
+    it("014 EARS-22.1: when an operator opens the recording list, the system shall answer one paginated page that excludes retired rows by default and carries the unfiltered kind slots", async () => {
+      const eventId = await insertEvent("ended");
+      const { liveEdited, liveRaw } = await seedRows(eventId);
+
+      const body = await listed(eventId);
+      expect(body.page).toBe(1);
+      expect(body.pageSize).toBe(20);
+      // The retired predecessor is filtered OUT of the default read — it is
+      // still addressable, it is simply not the operator's working set.
+      expect(body.total).toBe(2);
+      expect(body.data.map((row) => row.id).sort()).toEqual(
+        [liveEdited.id, liveRaw.id].sort(),
+      );
+      // The two slots are what the panel renders above the history.
+      expect(body.slots.map((row) => row.kind).sort()).toEqual([
+        "edited",
+        "raw",
+      ]);
+      expect(body.eventState).toBe("ended");
+    });
+
+    it("014 EARS-22.2: when the operator asks for retired rows, the system shall include them and count them in the filtered total", async () => {
+      const eventId = await insertEvent("ended");
+      const { retiredEdited } = await seedRows(eventId);
+
+      const body = await listed(eventId, { includeRetired: "true" });
+      expect(body.total).toBe(3);
+      expect(body.data.map((row) => row.id)).toContain(retiredEdited.id);
+    });
+
+    it("014 EARS-22.3: when a status filter is applied, the system shall return only that status and shall still return the unfiltered kind slots", async () => {
+      const eventId = await insertEvent("ended");
+      const { retiredEdited } = await seedRows(eventId);
+
+      const body = await listed(eventId, { status: "retired" });
+      expect(body.total).toBe(1);
+      expect(body.data).toHaveLength(1);
+      expect(body.data[0]!.id).toBe(retiredEdited.id);
+      // A filter that empties the history must not empty the primary surface.
+      expect(body.slots).toHaveLength(2);
+    });
+
+    it("014 EARS-22.4: when the kind facet is applied, the system shall return only that kind", async () => {
+      const eventId = await insertEvent("ended");
+      const { liveRaw } = await seedRows(eventId);
+
+      const body = await listed(eventId, { kind: "raw" });
+      expect(body.total).toBe(1);
+      expect(body.data[0]!.id).toBe(liveRaw.id);
+      expect(body.data[0]!.kind).toBe("raw");
+    });
+
+    it("014 EARS-22.5: when text search is applied, the system shall match a case-insensitive substring of the embed reference and combine with the other filters", async () => {
+      const eventId = await insertEvent("ended");
+      const { retiredEdited, liveEdited } = await seedRows(eventId);
+
+      const hit = await listed(eventId, {
+        q: RUTUBE_REF_2.slice(4, 14).toUpperCase(),
+      });
+      expect(hit.total).toBe(1);
+      expect(hit.data[0]!.id).toBe(liveEdited.id);
+
+      // Search and `includeRetired` are one predicate, not two passes.
+      const retiredHit = await listed(eventId, {
+        q: RUTUBE_REF.slice(4, 14),
+        includeRetired: "true",
+      });
+      expect(retiredHit.total).toBe(1);
+      expect(retiredHit.data[0]!.id).toBe(retiredEdited.id);
+
+      const miss = await listed(eventId, { q: "no-such-reference" });
+      expect(miss.total).toBe(0);
+      expect(miss.data).toHaveLength(0);
+    });
+
+    it("014 EARS-22.6: when the list is paginated, the system shall page in SQL and report the filtered total rather than the page length", async () => {
+      const eventId = await insertEvent("ended");
+      await seedRows(eventId);
+
+      const first = await listed(eventId, {
+        includeRetired: "true",
+        pageSize: "2",
+      });
+      expect(first.data).toHaveLength(2);
+      expect(first.total).toBe(3);
+      expect(first.page).toBe(1);
+      expect(first.pageSize).toBe(2);
+
+      const second = await listed(eventId, {
+        includeRetired: "true",
+        pageSize: "2",
+        page: "2",
+      });
+      expect(second.data).toHaveLength(1);
+      expect(second.total).toBe(3);
+      expect(second.page).toBe(2);
+      // The pages partition the set — no row is served twice.
+      const ids = [...first.data, ...second.data].map((row) => row.id);
+      expect(new Set(ids).size).toBe(3);
+    });
+
+    it("014 EARS-22.7: when the list query is malformed, the system shall refuse with VALIDATION_FAILED and return no page", async () => {
+      const eventId = await insertEvent("ended");
+      await seedRows(eventId);
+
+      for (const bad of [
+        { status: "archived" },
+        { kind: "montage" },
+        { page: "0" },
+        { pageSize: "5000" },
+        { sortBy: "title" },
+      ]) {
+        const res = await list(eventId, undefined, bad);
+        expect(res.statusCode).toBe(400);
+        expect(problem(res).errorCode).toBe("VALIDATION_FAILED");
+      }
     });
   },
 );

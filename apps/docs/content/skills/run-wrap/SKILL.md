@@ -40,7 +40,7 @@ Dispatch [`run-session-retro`](../run-session-retro/SKILL.md) **in single-sessio
 
 Before dispatch, inspect the generated `summary.json` and compact transcript for the expected task marker and `harness`. Brief the agent with the fixed id, harness command, and `run-session-retro` path.
 
-**Token ledger (stage-1 input).** Run the active harness token-ledger command documented in `tools/retro/README.md` and hand its output to the retro agent. Apply only that harness's observed effective-context policy from portable agent discipline. Claude absolute thresholds do not classify Codex context; absent/stale usage or window is an evidence gap, never zero. A wrap whose stage-1 input omits the ledger cannot surface over-budget dispatches at all. A free-form narrative without the schema'd findings array + corpus header + consolidation note is invalid — re-dispatch.
+**Token ledger (stage-1 input).** Run the active harness token-ledger command documented in `tools/retro/README.md` and hand its output to the retro agent: Codex `pnpm retro:tokens --harness codex <id>` (or `--rollout <file>`); Claude `pnpm retro:tokens <id>`. Apply only that harness's observed effective-context policy from portable agent discipline. Claude absolute thresholds do not classify Codex context; absent/stale usage or window is an evidence gap, never zero. A wrap whose stage-1 input omits the ledger cannot surface over-budget dispatches at all. A free-form narrative without the schema'd findings array + corpus header + consolidation note is invalid — re-dispatch.
 
 > The retro writes its digests into the gitignored `.audit-tmp/` (the extractor default). **Never** stage or commit `.audit-tmp/`.
 

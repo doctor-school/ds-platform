@@ -54,15 +54,15 @@ ADR фиксирует:
 
 ### 2.2 Coding agent harnesses Pre-pilot
 
-- **Primary: Claude Code** (sync, terminal-attached в VSC). Текущий рабочий режим Tech Lead, сохраняется без изменений.
-- **Opt-in async: Codex (cloud)** — активируется по решению Tech Lead запустить первую параллельную задачу. AGENTS.md уже совместим с Codex (универсальный constitution из ADR-0006).
+- **Поддерживаемые локальные harness: Claude Code и Codex.** Оба выполняют одну проектную дисциплину интерактивной разработки и ревью. Claude-specific bindings живут в `CLAUDE.md`; профили ролей Codex — в `.codex/agents/` и наследуют поддерживаемые настройки модели родителя.
+- **Необязательный async: Codex cloud.** Tech Lead подключает его отдельно, когда нужна async-задача; локальная работа Codex не зависит от cloud integration, GitHub App или label-trigger.
 - **Deferred: Cursor.** Trigger: наём второго инженера с inline-AI workflow preference.
 
-Все harness'ы проходят один и тот же orchestrated iteration cycle (см. §2.4).
+Все harness проходят единый orchestrated iteration cycle (§2.4) и читают [portable agent discipline](../agent-discipline.md) при входе и после compaction. AGENTS.md универсален; общие инструкции и skills сопоставляют capabilities с фактически доступными tools, permissions, настройками модели и telemetry. Codex не загружает CLAUDE.md или Claude rules неявно. Отсутствующие обязательные capabilities остаются явными prerequisites; configured hooks не доказывают trusted или observed enforcement. Авторизация владельца сохраняется в одобренном scope; Stage A/B, destructive-infra и release gates сохраняют явные требования к evidence.
 
 ### 2.3 SDD + TDD как hard rules
 
-- **SDD:** никакого production-кода без feature-spec'а в `apps/docs/content/specs/features/NNN-<slug>/` (3 файла: requirements/design/scenarios — формат из ADR-0006 §4). Если spec'а нет — агент сначала пишет через superpowers:brainstorming.
+- **SDD:** никакого production-кода без feature-spec'а в `apps/docs/content/specs/features/NNN-<slug>/` (3 файла: requirements/design/scenarios — формат из ADR-0006 §4). Если spec отсутствует, агент проходит проектный skill `author-feature-spec`; user-facing фича без PRD начинается с `do-product-discovery` (ADR-0014).
 - **TDD:** никакого production-кода без failing test'а. One Vitest test per EARS-требование, naming `it('EARS-N: ...', ...)`. Playwright tests генерируются из `NNN-scenarios.feature` через `playwright-bdd`.
 - **Узкие исключения** (typo / doc-only / dep-bumps / regenerated artifacts) документируются в PR description.
 
@@ -70,7 +70,7 @@ Enforcement: AGENTS.md hard rules + machine-checkable CI guards (§2.6).
 
 ### 2.4 Цикл итерации — делегирован skill'у `do-feature-iteration`
 
-Каждая итерация реализации проходит оркестрованный цикл: READ relevant ADRs → verify base CI green → RED (failing test) → GREEN (минимум кода) → REFACTOR → iteration-end checklist (dispatch, verdict-gated) → surface decision-debt → PR open → Mode (a) review dispatch (verdict-gated) → respond-to-review до APPROVE + green CI → iteration summary → merge через `pnpm pr:land <N>` (pre-merge gate → `gh pr merge <N> --squash --delete-branch` → board Status = Done → teardown ветки). Положительный verdict Mode (a) или Mode (b) + green CI достаточен для merge; Mode (c)-ревью остаются single human decision.
+Каждая итерация реализации проходит оркестрованный цикл: READ relevant ADRs → verify base CI green → RED (failing test) → GREEN (минимум кода) → REFACTOR → iteration-end checklist (dispatch, verdict-gated) → surface decision-debt → PR open → Mode (a) review dispatch (verdict-gated) → respond-to-review до APPROVE + green CI → iteration summary → merge через `pnpm pr:land <N>` (pre-merge gate → `gh pr merge <N> --squash --delete-branch` → board Status = Done → teardown ветки). Положительный verdict Mode (a) или Mode (b) + green CI достаточен для merge; Mode (c)-ревью остаются single human decision. Применимые owner gates (включая Stage A до реализации UI и Stage B до merge) остаются обязательными.
 
 Procedural source of truth — **`apps/docs/content/skills/do-feature-iteration/SKILL.md`**. Orchestration skill несёт discipline-gate'ы (verdict checklist'а, verdict review, обязательная invocation decision-debt), которые inline narrative checklist обеспечить не может: агент, читающий narrative bullet list, молча пропустит, а агент, который не может пройти дальше без артефакта от subagent'а, пропустить не может. Конкретно:
 
@@ -78,7 +78,7 @@ Procedural source of truth — **`apps/docs/content/skills/do-feature-iteration/
 - **`request-mode-a-review`** работает в dispatch-mode; subagent-ревьювер возвращает строку `VERDICT: <APPROVE | REQUEST_CHANGES>`. Lead agent не может invocate'нуть `merge-when-green`, пока последний verdict — `REQUEST_CHANGES` или отсутствует.
 - **`surface-decision-debt`** обязателен перед `write-iteration-summary`. Output может быть `[]`, но invocation сам по себе обязателен.
 
-Цепочка `superpowers:*` заменена единственным разрешённым исключением — `superpowers:brainstorming` для spec-authoring — и каталогом discipline-skill'ов в `apps/docs/content/skills/` (процедуры абсорбированы: TDD живёт внутри `do-feature-iteration`, review dispatch — внутри `request-mode-a-review`).
+Разрешён только проектный каталог `apps/docs/content/skills/`. Vendored `brainstorming` — ограниченный шаг spec/product authoring, а не внешний pack или отдельная plan-writing цепочка. TDD живёт внутри `do-feature-iteration`; review dispatch — внутри `request-mode-a-review`.
 
 ### 2.5 Session bootstrap — `tools/agent-bootstrap.ts`
 
@@ -89,10 +89,10 @@ Procedural source of truth — **`apps/docs/content/skills/do-feature-iteration/
 Per-harness integration:
 
 - **Claude Code:** SessionStart hook в `.claude/settings.json`, output идёт в `additionalContext`.
-- **Codex:** AGENTS.md «Before any task» первый шаг — execute bootstrap.
+- **Codex:** AGENTS.md §3.5 и portable agent discipline требуют `pnpm bootstrap`, если активный harness не предоставил snapshot. Вывод команды читается явно; Claude SessionStart injection не предполагается.
 - **Manual:** `pnpm bootstrap` alias.
 
-Sketch и edge cases — design spec §4.
+Rollup — derived context, а не истина о доске: сверять открытые Issues/Projects, ошибки fetch сохранять как unavailable evidence. Sketch и edge cases — design spec §4.
 
 ### 2.6 AI-specific CI drift guards (поверх ADR-0006 §7)
 
@@ -135,9 +135,9 @@ Subagent возвращает `VERDICT: N of 14 — <PASS | BLOCKED on #X>`. Fai
 
 ### 2.8 Prompt-caching policy
 
-Hard rule в AGENTS.md для всех runtime LLM-вызовов (будущие Content Pipeline и т.д.):
+Design policy для проектных runtime LLM clients (будущие Content Pipeline и т.д.); кеширование интерактивного harness контролирует активный клиент:
 
-- `cache_control: ephemeral` на 3 stable tier-блоках (Anthropic limit = 4 breakpoints; используется 3 из 4): (1) AGENTS.md+CLAUDE.md concat, (2) active spec 3 файла concat, (3) ADRs sorted concat. Один breakpoint остаётся free для будущего расширения (modules README, persona configs и т.п.).
+- `cache_control: ephemeral` на 3 stable tier-блоках (Anthropic limit = 4 breakpoints; используется 3 из 4): (1) AGENTS.md + portable agent discipline + applicable harness overlay, (2) active spec 3 файла concat, (3) ADRs sorted concat. Один breakpoint остаётся free для будущего расширения (modules README, persona configs и т.п.).
 - **Tier 4 = volatile glossary entries**, intentionally uncached: glossary размещается **last** в payload, **без** `cache_control` — это сохраняет cache hit на tiers 1–3 при изменении glossary (новые термины добавляются по ходу разработки; если бы glossary имел свой breakpoint, каждое изменение инвалидировало бы весь prefix).
 - НЕ кешировать также: user dialogue / current task instructions (по определению volatile).
 - **Стабильный prefix order** обеспечивается общим `packages/llm-utils/buildContext.ts` helper'ом
@@ -157,7 +157,7 @@ Cost-tracking ведётся в собственной консоли vendor'а 
   - **Mode (b)** — параллельная Codex CLI сессия независимо ревьюит PR.
   - **Mode (c)** — чистый human review, без LLM-ассиста.
 - Все три режима интерактивные, session-driven, и используют собственные LLM credentials человека в его терминале. Никаких API-ключей в GitHub repo secrets.
-- Merge после положительного Mode (a) или Mode (b) verdict + green CI разрешён без отдельного human approval — через обязательную invocation `pnpm pr:land <N>`, которая оборачивает `gh pr merge <N> --squash --delete-branch`. `--auto` не используется: ruleset `main` требует ровно один check (`ci`), поэтому auto-merge влил бы PR по одному контексту `ci` — без привязки к head SHA и без Mode (a) verdict'а, которые ruleset выразить не может (skill `merge-when-green`). Вместо этого CI гейтится in-band через `merge:gate` — опрос check-runs, привязанный к head SHA, плюс head-pinned Mode (a) APPROVE — который `pr:land` выполняет первой стадией. Mode (c)-ревью остаются single human decision.
+- Merge после положительного Mode (a) или Mode (b) verdict + green CI разрешён без отдельного human approval — через обязательную invocation `pnpm pr:land <N>`, которая оборачивает `gh pr merge <N> --squash --delete-branch`. `--auto` не используется: ruleset `main` требует ровно один check (`ci`), поэтому auto-merge влил бы PR по одному контексту `ci` — без привязки к head SHA и без Mode (a) verdict'а, которые ruleset выразить не может (skill `merge-when-green`). Вместо этого CI гейтится in-band через `merge:gate` — опрос check-runs, привязанный к head SHA, плюс head-pinned Mode (a) APPROVE — который `pr:land` выполняет первой стадией. Mode (c)-ревью остаются single human decision. Применимые owner gates (включая Stage A до реализации UI и Stage B до merge) остаются обязательными.
 - Write-доступ в prod-DB запрещён.
 - Direct push в main запрещён.
 - Auto-chores (lint-fix, devDep bumps, doc-sync) идут тем же review-путём, что и feature-PR.
@@ -165,7 +165,7 @@ Cost-tracking ведётся в собственной консоли vendor'а 
 **Триггеры пересмотра Phase 3** (auto-merge low-risk PR за feature flag) — deferred без target date. Revisit требует **все три** условия:
 
 (i) Продукт в руках пользователей (post-Pre-pilot).
-(ii) >50 PR данных review-loop'а (вручную залогированные выходы interactive `/review` skill'а ИЛИ automated reviewer-bot пересмотрен и построен).
+(ii) >50 PR данных review-loop'а (вручную залогированные выходы interactive `request-mode-a-review` skill'а ИЛИ automated reviewer-bot пересмотрен и построен).
 (iii) У Tech Lead'а есть пропускная способность на tuning loop.
 
 До тех пор Phase 2 baseline (human-driven review через modes a/b/c + lint guards + merge агентом после положительного verdict'а, с CI, гейтящимся in-band через `merge:gate`) — это операционный режим.
@@ -203,13 +203,13 @@ Cost-tracking ведётся в собственной консоли vendor'а 
 
 ### Positive
 
-- **Текущий workflow Tech Lead (sync Claude Code в VSC) не меняется** — Phase 0 опирается на этот режим как primary. SessionStart hook добавляется прозрачно через `.claude/settings.json`.
+- **Локальные Claude Code и Codex используют единый контракт исполнения** — capabilities и evidence сопоставляются по harness; Claude сохраняет SessionStart injection через `.claude/settings.json`.
 - **Любой агент orienting за <2 KB context** — bootstrap скрипт даёт детерминистический snapshot, фрагментация state между сессиями минимизирована.
 - **SDD/TDD enforce'ятся machine-checkable** — не только rhetorical в AGENTS.md, но реальные CI gates ловят skip-discipline.
 - **Интерактивные режимы ревью используют собственные LLM credentials человека** — никаких API-ключей в repo secrets, никакого headless CI-вызова paid LLM API в Phase 0, никакого многомесячного reviewer-bot tuning loop'а в velocity-ограниченное pre-pilot окно.
 - **Phase 0 не требует runtime инфры** — Hetzner/LiteLLM/PII/OTel deferred с явными triggers, нет premature optimization.
 - **Prompt-caching экономит ~60-80% input tokens** на second+ calls в интерактивных сессиях.
-- **Codex активируется opt-in** — не блокирует Phase 0 start; когда Tech Lead ready параллелить — instant pickup без re-arch.
+- **Codex cloud остаётся необязательным** — доступ и setup проверяются отдельно; локальная разработка и независимое Codex-ревью не ждут cloud activation.
 - **Vendor lock minimized** — AGENTS.md универсален, Bootstrap vendor-agnostic, любой harness (Cursor, GitHub Copilot Workspace, Devin) подключается тем же интерфейсом.
 
 ### Negative
@@ -235,7 +235,7 @@ Cost-tracking ведётся в собственной консоли vendor'а 
 | -------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **LiteLLM Proxy в Phase 0** (Zone-AI VM сразу)                                                     | Premature: dev-time агенты звонят свои APIs напрямую (Anthropic, OpenAI) через свои клиенты. Gateway полезен только для runtime AI features (Content Pipeline). Деплой Hetzner VM сейчас = ops overhead без value. Deferred §2.11.                                                                              |
 | **Northflank / Daytona managed sandbox**                                                           | Vendor-lock + RF-доступность под вопросом (US/EU providers) + payment friction. Self-host k8s namespace на Timeweb (когда понадобится) — proven RF path. Deferred §2.11.                                                                                                                                        |
-| **Только Claude Code (no Codex)**                                                                  | Vendor lock-in без диверсификации; Mode (b) parallel-Codex review-путь теряет смысл. С Codex как opt-in async — best of both.                                                                                                                                                                                   |
+| **Только Claude Code (no Codex)**                                                                  | Vendor lock-in без диверсификации; Mode (b) parallel-Codex review-путь теряет смысл. Локальный Codex даёт второй поддерживаемый harness; cloud async остаётся необязательным.                                                                                                                                   |
 | **Multi-agent с самого старта (Claude + Cursor + Codex + Devin)**                                  | Overhead: 3+ configs, 3+ cost streams, 3+ sandbox specifics. Не оправдано для team-of-1+AI. Cursor deferred с явным trigger.                                                                                                                                                                                    |
 | **Phase 1 read-only autonomy**                                                                     | Слишком консервативно: Tech Lead уже работает в Phase 2 mode (agents write PR), downgrade был бы регрессией.                                                                                                                                                                                                    |
 | **Headless CI-driven reviewer-bot в Phase 0**                                                      | Требует repo-secret credentials + месяцы precision/recall tuning'а, которые конкурируют с product-development в pre-pilot velocity-ограниченное окно. Интерактивные режимы (a/b/c) под собственными LLM credentials человека покрывают то же review-свойство с нулевой CI-сложностью. Revisit triggers — §2.10. |
@@ -254,7 +254,7 @@ Cost-tracking ведётся в собственной консоли vendor'а 
 | ID      | Q                                                                                                                                                                                            | Где решается                                                                                      |
 | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
 | OQ-AI3  | TDD signal lint false-positive rate в реальности                                                                                                                                             | Phase 1 после 10 PR в Vitest scope                                                                |
-| OQ-AI6  | Codex GitHub App config specifics                                                                                                                                                            | На момент Tech Lead activate'а Codex                                                              |
+| OQ-AI6  | Детали необязательной Codex cloud integration                                                                                                                                                | При подключении cloud async (§2.11); не prerequisite локального Codex                             |
 | OQ-AI7  | Глубокий dual-LLM pattern для untrusted-content AI features                                                                                                                                  | На момент trigger'а §2.11; зависит от первой runtime AI feature (Content Pipeline). См. ADR-0010. |
 | OQ-AI9  | OTel GenAI collector deployment topology — single или HA                                                                                                                                     | На момент trigger'а §2.11                                                                         |
 | OQ-AI10 | PII-filter NER (spaCy Russian) trigger threshold                                                                                                                                             | После measurement на synthetic corpus в момент trigger'а §2.11                                    |

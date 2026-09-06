@@ -20,17 +20,38 @@ import {
 export const MEDICAL_WORKER_DECLARATION_PURPOSE = "medical-worker-declaration";
 
 /**
+ * 021 EARS-5 — the mandatory partner-data consent, the SECOND access condition.
+ *
+ * It is an access condition and not a preference: 021 design §4 records it in
+ * the same tier as the declaration, with the same "record when withheld →
+ * command refused" rule. The literal lives here for the same reason the
+ * declaration's does — the form, the guard and the consent row must name one
+ * string.
+ */
+export const PARTNER_DATA_SHARING_PURPOSE = "partner-data-sharing";
+
+/**
+ * 021 EARS-6 (#1542) — the OPTIONAL marketing opt-in.
+ *
+ * Named here so the storefront's tier-2 control and the future record write
+ * agree on one purpose string, and deliberately ABSENT from the required list
+ * below: its record semantics (a row only when granted, no row at all when
+ * withheld) are #1542's to land.
+ */
+export const MARKETING_COMMUNICATIONS_PURPOSE = "marketing-communications";
+
+/**
  * Purposes the 021 registration command refuses to proceed without (021 design
  * §4: "Record when withheld → **command refused**").
  *
- * Release 1 carries the EARS-4 declaration alone. The `partner-data-sharing`
- * access condition joins it with the two-tier consent block (EARS-5, #1541) —
- * which is why this is a LIST with one entry rather than a single constant: the
- * guard below is already shaped for the second purpose, so adding it is a data
- * change and not a rewrite of the refusal path.
+ * Both access conditions of the EARS-5 two-tier block: the EARS-4 declaration
+ * and the partner-data consent. The list — not two single constants — is what
+ * lets the guard state the rule once and refuse on whichever is missing; the
+ * marketing opt-in is not here because withholding it refuses nothing.
  */
 export const REQUIRED_DOCTOR_REGISTER_CONSENT_PURPOSES = [
   MEDICAL_WORKER_DECLARATION_PURPOSE,
+  PARTNER_DATA_SHARING_PURPOSE,
 ] as const;
 
 /**
@@ -46,6 +67,101 @@ export const REQUIRED_DOCTOR_REGISTER_CONSENT_PURPOSES = [
  */
 export const MEDICAL_WORKER_DECLARATION_REQUIRED_CODE =
   "medical_worker_declaration_required";
+
+/**
+ * Stable, client-readable code for an EARS-5 refusal — the partner-data consent
+ * withheld.
+ *
+ * A SECOND code rather than a shared «an access condition is missing» one: 021
+ * EARS-12 requires a refusal to be actionable **in the field where it
+ * occurred**, and the two access conditions are two different checkboxes. One
+ * generic code would leave the client guessing which box to point at, and
+ * widening the declaration's code to cover this purpose would make it say
+ * something untrue. The enumeration-safety reasoning of the declaration code
+ * applies here unchanged: it describes the submitted request, fires identically
+ * for every email, and is raised before any IdP call.
+ */
+export const PARTNER_DATA_SHARING_REQUIRED_CODE =
+  "partner_data_sharing_required";
+
+/**
+ * Which refusal code each required purpose raises. The guard reads this map
+ * instead of branching, so a third access condition would be a data change
+ * here and nowhere else.
+ */
+export const DOCTOR_REGISTER_CONSENT_REFUSAL_CODES: Readonly<
+  Record<string, string>
+> = {
+  [MEDICAL_WORKER_DECLARATION_PURPOSE]:
+    MEDICAL_WORKER_DECLARATION_REQUIRED_CODE,
+  [PARTNER_DATA_SHARING_PURPOSE]: PARTNER_DATA_SHARING_REQUIRED_CODE,
+};
+
+/**
+ * 021 EARS-5 / design §4 — the EXACT composition of the data shared with
+ * partners, and what is excluded from it.
+ *
+ * These arrays are the source of the statement the doctor reads, not a
+ * documentation echo of a sentence written elsewhere: design §4 requires the
+ * statement to be "data-driven, not a copy blob", so that changing the shared
+ * composition changes the rendered statement and the recorded purpose together
+ * rather than leaving a stale sentence on the door. A hardcoded Russian
+ * sentence in `apps/doctor` is exactly the divergence this pair prevents.
+ */
+export const PARTNER_DATA_COMPOSITION = [
+  "ФИО",
+  "специальность",
+  "город",
+  "место работы",
+] as const;
+
+export const PARTNER_DATA_EXCLUDED = ["контакты"] as const;
+
+/**
+ * Render the partner-data statement FROM the composition — the canvas sentence
+ * of `design-source/auth.dc.html` (`#d-register`, вариант Б), assembled rather
+ * than transcribed.
+ *
+ * The canvas draws: «Согласен на передачу партнёрам платформы данных: ФИО,
+ * специальность, город, место работы. Контакты не передаются.» Only the frame
+ * of that sentence is copy; the two lists inside it are data.
+ */
+export function formatPartnerDataStatement(
+  composition: readonly string[] = PARTNER_DATA_COMPOSITION,
+  excluded: readonly string[] = PARTNER_DATA_EXCLUDED,
+): string {
+  const shared = composition.join(", ");
+  const withheld = excluded.join(", ");
+  const capitalised = withheld.charAt(0).toUpperCase() + withheld.slice(1);
+  return `Согласен на передачу партнёрам платформы данных: ${shared}. ${capitalised} не передаются.`;
+}
+
+/**
+ * One consent line as the screen reads it (021 requirements — `ConsentItem`).
+ *
+ * `statement` is what the doctor reads; `dataComposition` / `excluded` are what
+ * it was built from, carried alongside so the surface can render the lists
+ * structurally (and a test can assert them) without re-splitting a sentence.
+ */
+export const ConsentItemSchema = z.strictObject({
+  purpose: z.string().min(1),
+  required: z.boolean(),
+  statement: z.string().min(1),
+  dataComposition: z.array(z.string().min(1)).optional(),
+  excluded: z.array(z.string().min(1)).optional(),
+});
+export type ConsentItem = z.infer<typeof ConsentItemSchema>;
+
+/**
+ * One rendered tier of the F-021-1 «вариант Б» block (021 requirements —
+ * `ConsentTier`). Exactly two tiers exist: the access conditions framed above
+ * the submit, and the optional marketing opt-in standing below it.
+ */
+export const ConsentTierSchema = z.strictObject({
+  tier: z.enum(["access-conditions", "marketing"]),
+  items: z.array(ConsentItemSchema).min(1),
+});
+export type ConsentTier = z.infer<typeof ConsentTierSchema>;
 
 /**
  * `RegisterDoctor` — the 021 registration command (021 design §2).

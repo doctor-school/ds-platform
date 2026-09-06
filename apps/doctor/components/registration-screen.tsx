@@ -3,6 +3,12 @@
 import { useId, type ReactNode } from "react";
 import { useForm } from "react-hook-form";
 
+import type { ConsentItem, ConsentTier } from "@ds/schemas";
+import {
+  MARKETING_COMMUNICATIONS_PURPOSE,
+  PARTNER_DATA_SHARING_PURPOSE,
+} from "@ds/schemas";
+
 import { AuthCard } from "@ds/design-system/blocks";
 import { Button } from "@ds/design-system/button";
 import {
@@ -28,8 +34,9 @@ import { Input } from "@ds/design-system/input";
  * centring, the `layout:` collapse) belongs to `<AuthShell>`, which the route
  * wraps this in. The card is surrounded by four things this slice does not own:
  * the return context
- * (#1538), the attribution line (#1544), the points promise (#1545) and the two
- * consent tiers (#1541/#1542). They arrive here as props, and — per EARS-3's
+ * (#1538), the attribution line (#1544) and the points promise (#1545); the two
+ * consent tiers (#1541) arrive as the read model the screen renders controls
+ * from, not as pre-rendered nodes. They arrive here as props, and — per EARS-3's
  * honest-empty rule — a slot that is not supplied renders NOTHING: no wrapper, no
  * reserved frame, no dashed placeholder. That is why every slot below is guarded
  * by a truthiness check rather than always rendered with `children` inside; an
@@ -53,9 +60,10 @@ import { Input } from "@ds/design-system/input";
  *   untracked seam design §2 names by name. The mandatory access-condition
  *   consents (EARS-4/EARS-5) are likewise a precondition of the command and
  *   land in #1540/#1541, so the reason line states the real unmet condition rather
- *   than a build-status note. EARS-4 has since landed (#1540): the declaration
- *   is on the form, and the reason line now names IT while it is unticked, and
- *   the partner-data consent once it is not.
+ *   than a build-status note. Both have since landed (#1540, #1541): the two
+ *   access conditions are on the form, the reason line names whichever of them
+ *   is unticked, and once both are granted it names the bot-protection
+ *   challenge — the last real precondition, and the only one still unbuilt.
  *
  * • **No password policy of its own.** 021 design §7 and 003 EARS-36 make the
  *   rule length-only and forbid 021 declaring a second one. The canvas's
@@ -104,18 +112,21 @@ export type RegistrationScreenProps = {
   /** The pre-submission points promise read from configuration (EARS-9, #1545). */
   pointsPromise?: ReactNode;
   /**
-   * The remaining consent tiers. Tier 1's medical-worker declaration (EARS-4,
-   * #1540) is NOT a slot — it is a precondition of the command this screen
-   * owns, so it is rendered here unconditionally; `accessConditions` carries
-   * what stands beside it, the partner-data consent of the two-tier block
-   * (EARS-5, #1541). Tier 2 is the optional marketing opt-in (EARS-6, #1542).
+   * The F-021-1 «вариант Б» consent block, as DATA (021 requirements —
+   * `RegistrationScreen { …, consentTiers: ConsentTier[] }`).
+   *
+   * Deliberately not `ReactNode` slots, which is how this prop was shaped while
+   * the tiers were unbuilt (#1540): every consent line is a control of THIS
+   * form — the submit's precondition, its react-hook-form field and its
+   * validation message all live here — so a pre-rendered node handed in from
+   * the server route could not be one. The route supplies the read model
+   * (purposes, required flags, the composition-derived statements from the
+   * `@ds/schemas` SSOT); the screen renders the controls.
+   *
+   * Absent, the screen still renders the EARS-4 declaration — that one is a
+   * precondition of the command this screen owns, never a slot.
    */
-  consentTiers?: {
-    /** Tier 1 — access conditions, rendered ABOVE the submit. */
-    accessConditions?: ReactNode;
-    /** Tier 2 — the optional marketing opt-in, rendered BELOW the submit. */
-    marketing?: ReactNode;
-  };
+  consentTiers?: readonly ConsentTier[];
 };
 
 type RegistrationFormValues = {
@@ -128,6 +139,19 @@ type RegistrationFormValues = {
    * `true`.
    */
   medicalWorkerDeclaration: boolean;
+  /**
+   * EARS-5 — the partner-data consent. The SECOND access condition, with
+   * exactly the same standing as the declaration: no third state, no default of
+   * `true`, and no path that completes registration without it.
+   */
+  partnerDataSharing: boolean;
+  /**
+   * EARS-6 — the optional marketing opt-in. Collected here so the tier-2
+   * control is a real field of the form rather than an unbound decoration; its
+   * RECORD semantics (a row only when granted, no row at all when withheld)
+   * belong to #1542 and are not asserted by this slice.
+   */
+  marketingCommunications: boolean;
 };
 
 /**
@@ -159,6 +183,56 @@ const DECLARATION_LABEL_TAIL = MEDICAL_WORKER_DECLARATION_LABEL.slice(
   MEDICAL_WORKER_DECLARATION_LABEL.lastIndexOf(" ") + 1,
 );
 
+/**
+ * EARS-5 copy, verbatim from `design-source/auth.dc.html` (`#d-register`,
+ * «согласия · вариант Б»).
+ *
+ * The tier-1 heading is what makes the two tiers distinguishable by RENDERING
+ * rather than by wording: the canvas frames the access conditions in a bordered
+ * group under this label and leaves the marketing line outside it. The
+ * statements themselves are NOT here — they arrive as data from the
+ * `@ds/schemas` SSOT, built from the declared data composition (design §4).
+ * These constants are the surrounding UI copy the canvas draws around them.
+ */
+const ACCESS_CONDITIONS_HEADING = "Условия доступа";
+const PARTNER_DATA_HELP =
+  "Это условие бесплатного для врача обучения: без согласия часть материалов недоступна.";
+const PARTNER_DATA_UNMET =
+  "Отметьте согласие на передачу данных партнёрам — без него регистрация невозможна.";
+const MARKETING_HELP =
+  "Необязательно. Письма отправляет внешний сервис рассылок.";
+const MARKETING_OPTIONAL_TAG = "необязательно";
+
+/**
+ * EARS-7 — the withdrawal statement, rendered as part of the block and with NO
+ * self-service control beside it: a change or withdrawal is a request handled
+ * by a platform manager (feature 037's manager-side operation), and a toggle
+ * here would promise a mechanism this surface does not have.
+ */
+const CONSENT_MANAGER_NOTE =
+  "Согласия раздельные и фиксируются с датой. Изменить или отозвать согласие можно через менеджера платформы.";
+
+/**
+ * The reason the submit is still inert once BOTH access conditions are ticked.
+ *
+ * Product-shaped, not a build note: what the doctor is waiting for is the
+ * bot-protection challenge the door has to run before it can accept a
+ * registration (003 EARS-17 / 021 EARS-19, #1558). Naming the Issue or the
+ * sprint here would make the form report on the team instead of on itself.
+ */
+const BOT_PROTECTION_PENDING =
+  "Защита от ботов подключается — отправка станет доступна после неё.";
+
+/** The item of a tier carrying this purpose, or `undefined` when unsupplied. */
+function findConsentItem(
+  tiers: readonly ConsentTier[] | undefined,
+  purpose: string,
+): ConsentItem | undefined {
+  return tiers
+    ?.flatMap((tier) => tier.items)
+    .find((item) => item.purpose === purpose);
+}
+
 export function RegistrationScreen({
   returnContext,
   landing,
@@ -179,23 +253,41 @@ export function RegistrationScreen({
       password: "",
       promoCode: "",
       medicalWorkerDeclaration: false,
+      // EARS-5 / EARS-6 — neither is pre-ticked, for the same reason: a
+      // pre-ticked box is the platform consenting on the doctor's behalf.
+      partnerDataSharing: false,
+      marketingCommunications: false,
     },
   });
+
+  const partnerDataItem = findConsentItem(
+    consentTiers,
+    PARTNER_DATA_SHARING_PURPOSE,
+  );
+  const marketingItem = findConsentItem(
+    consentTiers,
+    MARKETING_COMMUNICATIONS_PURPOSE,
+  );
 
   const reasonId = `${useId()}-register-submit-reason`;
 
   // EARS-12 — the reason beside the disabled submit names the SPECIFIC unmet
   // condition. While the declaration is unticked that is the declaration, in the
   // canvas's own words; once it is ticked the next real obstacle is stated
-  // instead. The submit stays disabled either way in this slice because the
-  // command is still unreachable — the partner-data consent (EARS-5, #1541) and
-  // the bot-protection client half (EARS-19, #1558) are both preconditions of it,
-  // and wiring the button past them would ship the untracked seam design §2
-  // names by name.
+  // instead — first the partner-data consent (EARS-5), then, with both access
+  // conditions granted, the bot-protection challenge the door still has to run
+  // (003 EARS-17 / 021 EARS-19, #1558). The submit stays disabled through all
+  // three because the command remains unreachable until that last one lands,
+  // and wiring the button past it would ship the untracked seam design §2 names
+  // by name. The reason line never says «следующим шагом» about a consent that
+  // IS on the form.
   const declared = form.watch("medicalWorkerDeclaration");
-  const submitReason = declared
-    ? "Регистрацию нельзя отправить без согласия на передачу данных партнёрам — этот блок встанет на форму следующим шагом."
-    : MEDICAL_WORKER_DECLARATION_UNMET;
+  const partnerDataGranted = form.watch("partnerDataSharing");
+  const submitReason = !declared
+    ? MEDICAL_WORKER_DECLARATION_UNMET
+    : partnerDataItem && !partnerDataGranted
+      ? PARTNER_DATA_UNMET
+      : BOT_PROTECTION_PENDING;
 
   return (
     <div
@@ -325,6 +417,30 @@ export function RegistrationScreen({
             />
 
             {/*
+              EARS-5 — TIER 1, the access conditions, framed together ABOVE the
+              submit (F-021-1 «Б», the owner's pick).
+
+              The frame is the whole point of the variant: the two tiers are
+              distinguishable by their RENDERING and not by wording alone, so
+              tier 1 is a bordered group under its own «Условия доступа» heading
+              and tier 2 stands outside it, below the submit. The canvas draws
+              exactly this — a 2px structural border with a tinted heading bar —
+              and the alternatives the owner rejected are structurally absent:
+              there is no flat single list (variant А) because these two lines
+              are inside a frame the marketing line is not in, and no
+              expandable-disclosure of the data composition (variant В) because
+              the composition is rendered in full, in the statement, with
+              nothing to open.
+            */}
+            <div
+              data-testid="registration-consent-access"
+              className="border-2 border-border"
+            >
+              <p className="border-b-2 border-border bg-muted px-3.5 py-2.5 text-xs font-extrabold uppercase tracking-widest">
+                {ACCESS_CONDITIONS_HEADING}
+              </p>
+              <div className="flex flex-col gap-3.5 px-3.5 py-4">
+            {/*
               EARS-4 — the mandatory declaration, the first access condition,
               standing ABOVE the submit with the rest of tier 1 (EARS-5).
               Built from the design system's checkbox primitive, never a
@@ -396,12 +512,56 @@ export function RegistrationScreen({
               )}
             />
 
-            {/* Tier 1 — the remaining access conditions, ABOVE the submit (EARS-5). */}
-            {consentTiers?.accessConditions ? (
-              <div data-testid="registration-consent-access">
-                {consentTiers.accessConditions}
+                {/*
+                  EARS-5 — the partner-data consent, the SECOND access
+                  condition. Same primitive as the declaration, same standing,
+                  same frame; what differs is that its STATEMENT is not written
+                  here. It arrives as data built from the declared composition
+                  (`@ds/schemas` → `formatPartnerDataStatement`), so changing
+                  what is shared changes the sentence the doctor reads and the
+                  recorded purpose together — design §4's "data-driven, not a
+                  copy blob".
+                */}
+                {partnerDataItem ? (
+                  <FormField
+                    control={form.control}
+                    name="partnerDataSharing"
+                    rules={{ required: PARTNER_DATA_UNMET }}
+                    render={({ field }) => (
+                      <FormItem data-testid="register-partner-data-item">
+                        <FormControl>
+                          <Checkbox
+                            className="items-start"
+                            data-testid="register-partner-data"
+                            name={field.name}
+                            ref={field.ref}
+                            checked={field.value}
+                            onBlur={field.onBlur}
+                            onChange={(event) =>
+                              field.onChange(event.target.checked)
+                            }
+                          >
+                            <span className="flex flex-col gap-1">
+                              <span data-testid="register-partner-data-statement">
+                                {partnerDataItem.statement}
+                              </span>
+                              <span
+                                data-testid="register-partner-data-help"
+                                className="text-sm text-muted-foreground"
+                              >
+                                {PARTNER_DATA_HELP}
+                              </span>
+                            </span>
+                          </Checkbox>
+                        </FormControl>
+                        {/* EARS-12 — actionable, in the field where it occurred. */}
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                ) : null}
               </div>
-            ) : null}
+            </div>
 
             {/* EARS-9 — the promise, read from configuration by #1545. */}
             {pointsPromise ? (
@@ -450,11 +610,72 @@ export function RegistrationScreen({
               </p>
             </div>
 
-            {/* Tier 2 — the optional marketing opt-in, BELOW the submit. */}
-            {consentTiers?.marketing ? (
+            {/*
+              EARS-5 — TIER 2, the optional marketing opt-in, standing
+              SEPARATELY BELOW the submit and outside tier 1's frame. Its
+              optionality is stated on the control («необязательно») and carried
+              by its rendering: it is not in the group the submit depends on.
+              EARS-6 (#1542) owns the guarantees about what its state does and
+              does not change downstream.
+            */}
+            {marketingItem ? (
               <div data-testid="registration-consent-marketing">
-                {consentTiers.marketing}
+                <FormField
+                  control={form.control}
+                  name="marketingCommunications"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormControl>
+                        <Checkbox
+                          className="items-start"
+                          data-testid="register-marketing"
+                          name={field.name}
+                          ref={field.ref}
+                          checked={field.value}
+                          onBlur={field.onBlur}
+                          onChange={(event) =>
+                            field.onChange(event.target.checked)
+                          }
+                        >
+                          <span className="flex flex-col gap-1">
+                            <span className="text-muted-foreground">
+                              {marketingItem.statement}
+                              <Badge
+                                variant="label"
+                                className="ml-1.5 align-middle"
+                                data-testid="register-marketing-optional-tag"
+                              >
+                                {MARKETING_OPTIONAL_TAG}
+                              </Badge>
+                            </span>
+                            <span
+                              data-testid="register-marketing-help"
+                              className="text-sm text-muted-foreground"
+                            >
+                              {MARKETING_HELP}
+                            </span>
+                          </span>
+                        </Checkbox>
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
               </div>
+            ) : null}
+
+            {/*
+              EARS-7 — the withdrawal statement that belongs to the block, and
+              the ONLY thing this surface says about changing a consent: a
+              request handled by a platform manager. No toggle, no «отозвать»
+              control, nowhere on the screen.
+            */}
+            {consentTiers?.length ? (
+              <p
+                data-testid="registration-consent-manager-note"
+                className="text-xs text-muted-foreground"
+              >
+                {CONSENT_MANAGER_NOTE}
+              </p>
             ) : null}
           </form>
         </Form>

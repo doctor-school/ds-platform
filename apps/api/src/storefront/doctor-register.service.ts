@@ -9,8 +9,10 @@ import type {
   DoctorRegisterResponse,
 } from "@ds/schemas";
 import {
+  DOCTOR_REGISTER_CONSENT_REFUSAL_CODES,
   MEDICAL_WORKER_DECLARATION_PURPOSE,
   MEDICAL_WORKER_DECLARATION_REQUIRED_CODE,
+  PARTNER_DATA_SHARING_PURPOSE,
   REQUIRED_DOCTOR_REGISTER_CONSENT_PURPOSES,
 } from "@ds/schemas";
 
@@ -23,6 +25,18 @@ import { AuthService } from "../auth/auth.service.js";
  * changes when the canvas copy of the declaration changes, never silently.
  */
 export const MEDICAL_WORKER_DECLARATION_VERSION = "2026-09";
+
+/**
+ * The version stamped on the partner-data consent (021 EARS-5). Same rule as
+ * the declaration's: it is the version of the WORDING the doctor read, which is
+ * assembled from `PARTNER_DATA_COMPOSITION` — so a change to the shared
+ * composition is a change to this constant, and the two never drift apart
+ * silently.
+ *
+ * Server-stamped rather than trusted from the payload: a client-supplied
+ * version would let the recorded row claim a wording the surface never rendered.
+ */
+export const PARTNER_DATA_SHARING_VERSION = "2026-09";
 
 /**
  * 021 `RegisterDoctor` — the doctor-storefront registration command (021 design
@@ -75,9 +89,17 @@ export class DoctorRegisterService {
       (purpose) => !consent.some((entry) => entry.purpose === purpose),
     );
     if (missing.length > 0) {
+      // 021 EARS-12 — actionable IN THE FIELD where it occurred: the code names
+      // the FIRST missing access condition in declared order, so the client can
+      // point at one checkbox rather than at the block. `missingConsentPurposes`
+      // still carries every missing purpose, so a client that wants to mark both
+      // boxes has the data without a second round trip.
+      const first = missing[0] as string;
       throw new UnprocessableEntityException({
-        code: MEDICAL_WORKER_DECLARATION_REQUIRED_CODE,
-        message: "the medical-worker declaration is required",
+        code:
+          DOCTOR_REGISTER_CONSENT_REFUSAL_CODES[first] ??
+          MEDICAL_WORKER_DECLARATION_REQUIRED_CODE,
+        message: `the ${first} consent is required`,
         missingConsentPurposes: missing,
       });
     }
@@ -109,9 +131,16 @@ export class DoctorRegisterService {
   private accessConditionConsents(
     req: DoctorRegisterRequest,
   ): ConsentAcceptance[] {
-    const supplied = req.consent.filter(
-      (entry) => entry.purpose !== MEDICAL_WORKER_DECLARATION_PURPOSE,
-    );
+    const supplied = req.consent
+      .filter((entry) => entry.purpose !== MEDICAL_WORKER_DECLARATION_PURPOSE)
+      // 021 EARS-5 — the partner-data row carries the SERVER's wording version,
+      // never the caller's claim about which wording was on screen. Presence in
+      // the array is the grant; the version is ours to stamp.
+      .map((entry) =>
+        entry.purpose === PARTNER_DATA_SHARING_PURPOSE
+          ? { ...entry, version: PARTNER_DATA_SHARING_VERSION }
+          : entry,
+      );
     return req.medicalWorkerDeclaration
       ? [
           {

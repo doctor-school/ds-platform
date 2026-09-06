@@ -1,6 +1,15 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 
+import type { ConsentTier } from "@ds/schemas";
+import {
+  MARKETING_COMMUNICATIONS_PURPOSE,
+  PARTNER_DATA_COMPOSITION,
+  PARTNER_DATA_EXCLUDED,
+  PARTNER_DATA_SHARING_PURPOSE,
+  formatPartnerDataStatement,
+} from "@ds/schemas";
+
 import { AuthShell } from "@/components/auth-shell";
 import { RegistrationScreen } from "@/components/registration-screen";
 import {
@@ -65,12 +74,16 @@ import { resolveRememberedSpecialty } from "@/lib/specialty-choice";
  * return context DID resolve, that same attribute carries the context's safe
  * target, the shared guard's reconstruction and never the raw param (LD-3).
  *
+ * 021 EARS-5 (#1541) — THE TWO-TIER CONSENT BLOCK. The route supplies the read
+ * model (`CONSENT_TIERS` below) and the screen renders the controls; see that
+ * constant for why the composition is assembled here rather than in the
+ * component.
+ *
  * The remaining envelope slots are still unsupplied, which is the correct state
- * of this slice and not an omission: the attribution line (#1544), the points
- * promise (#1545) and the two consent tiers (#1541/#1542, with the medical-worker
- * declaration at #1540) are separate EARS handlers under the same honest-empty
- * rule. `RegistrationScreen` enforces it; passing nothing is how the enforcement
- * is exercised.
+ * of this slice and not an omission: the attribution line (#1544) and the points
+ * promise (#1545) are separate EARS handlers under the honest-empty rule.
+ * `RegistrationScreen` enforces it; passing nothing is how the enforcement is
+ * exercised.
  *
  * The route stays registered `deferred` in `tools/lint/prod-surface-manifest.yaml`
  * against the epic tracking the full build: the form composition is real, but the
@@ -88,6 +101,50 @@ import { resolveRememberedSpecialty } from "@/lib/specialty-choice";
  * The route is therefore dynamic; a gate arrival takes the branch that reads no
  * headers at all.
  */
+/**
+ * 021 EARS-5 — the F-021-1 «вариант Б» read model, assembled on the server from
+ * the API-contract SSOT and handed to the screen as data.
+ *
+ * It is built HERE and not inside the component for the reason design §4 gives:
+ * the statement the doctor reads and the purpose that is recorded must come
+ * from one source, so the composition arrays travel with the statement they
+ * produced. A component that hardcoded the sentence would let the two drift the
+ * moment the shared composition changes.
+ *
+ * Exactly two tiers, in their rendered order: the access conditions that stand
+ * above the submit, and the optional opt-in that stands below it. The
+ * medical-worker declaration is an access condition too (design §4's table) but
+ * is not listed here — it is a precondition of the command the screen owns and
+ * is rendered unconditionally, so putting it in this list would give it two
+ * homes.
+ */
+const CONSENT_TIERS: readonly ConsentTier[] = [
+  {
+    tier: "access-conditions",
+    items: [
+      {
+        purpose: PARTNER_DATA_SHARING_PURPOSE,
+        required: true,
+        statement: formatPartnerDataStatement(),
+        dataComposition: [...PARTNER_DATA_COMPOSITION],
+        excluded: [...PARTNER_DATA_EXCLUDED],
+      },
+    ],
+  },
+  {
+    tier: "marketing",
+    items: [
+      {
+        purpose: MARKETING_COMMUNICATIONS_PURPOSE,
+        required: false,
+        // Canvas copy (`#d-register`, «согласия · вариант Б»). No composition
+        // to declare: the opt-in shares nothing, it subscribes.
+        statement: "Хочу получать письма о новых школах и событиях",
+      },
+    ],
+  },
+];
+
 export const metadata: Metadata = {
   title: "Регистрация — Doctor.School",
   description:
@@ -132,6 +189,7 @@ export default async function DoctorRegisterPage({
     >
       <RegistrationScreen
         landing={landing}
+        consentTiers={CONSENT_TIERS}
         returnContext={
           returnEvent ? <ReturnContextPlate event={returnEvent} /> : undefined
         }

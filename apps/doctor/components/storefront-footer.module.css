@@ -2,10 +2,13 @@
  * Footer brand-mark theme swap (canvas `d-home · футер`: `logoSrc` is the colour
  * wordmark on the light page and the white one on the dark page).
  *
- * A CSS module rather than a `dark:` utility on purpose: the theme's source of
- * truth is `<html class="dark">`, while Tailwind's stock `dark:` variant keys off
- * `prefers-color-scheme` — it would swap the mark against the wrong theme. This is
- * the same mechanism the sibling storefront footer uses.
+ * A CSS module rather than a `dark:` utility: the theme's source of truth is
+ * `<html class="dark">`, and Tailwind's stock `dark:` variant keys off
+ * `prefers-color-scheme`, which would swap the mark against the wrong theme. As
+ * of #1955 `app/globals.css` declares `@custom-variant dark` app-locally, so
+ * `dark:` now follows the class in this app too and a utility would work here —
+ * the module stays because it is the same mechanism the sibling storefront
+ * footer uses, and converting it is not this fix's scope (DEBT.md 2026-09-06).
  */
 .logoColor {
   display: block;

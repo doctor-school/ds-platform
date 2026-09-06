@@ -22,7 +22,8 @@ import { test, expect, type Page } from "@playwright/test";
  */
 
 /** The RU generic the host maps a rejected credential to (`lib/auth-error-message.ts`). */
-const WRONG_PASSWORD_COPY = "Не удалось войти. Проверьте почту или телефон и пароль.";
+const WRONG_PASSWORD_COPY =
+  "Не удалось войти. Проверьте почту или телефон и пароль.";
 
 const MOBILE = { width: 390, height: 844 };
 const DESKTOP = { width: 1280, height: 900 };
@@ -88,7 +89,10 @@ test("017 #1933: the sign-up door carries the arrival context onward", async ({
 
   await expect(
     page.getByRole("link", { name: "Создать аккаунт" }),
-  ).toHaveAttribute("href", "/register?returnTo=%2Fwebinars%2Fprp-pri-gonartroze");
+  ).toHaveAttribute(
+    "href",
+    "/register?returnTo=%2Fwebinars%2Fprp-pri-gonartroze",
+  );
 });
 
 test("017 #1933: a rejected credential renders the block's own error", async ({
@@ -111,9 +115,62 @@ test("017 #1933: a rejected credential renders the block's own error", async ({
 
   // `role="alert"` is the design system's `<FormError>` — the assertion is that
   // the message arrives through the BLOCK, carrying the host's RU mapping.
-  const alert = form.getByRole("alert").filter({ hasText: WRONG_PASSWORD_COPY });
+  const alert = form
+    .getByRole("alert")
+    .filter({ hasText: WRONG_PASSWORD_COPY });
   await expect(alert).toBeVisible();
 
   // Still on the door: a failed sign-in must not navigate anywhere.
   await expect(page).toHaveURL(/\/login$/);
+});
+
+/**
+ * #1955 — the wordmark on the auth door follows the THEME.
+ *
+ * Below the `layout:` breakpoint the brand panel is not rendered at all and the
+ * form column carries the colour lockup instead (`components/auth-shell.tsx`).
+ * That lockup is the dark-ink `logo.svg`, and the storefront's dark theme paints
+ * the page behind it near-black — so a doctor who had chosen dark met a wordmark
+ * that had all but disappeared into the background. The fix renders BOTH assets
+ * and lets the theme pick, which is what these cases pin: exactly one of the
+ * pair is ever shown, and which one follows the `.dark` class the storefront's
+ * own toggle sets (`lib/theme.ts`), not the operating system's preference.
+ */
+async function chooseDarkTheme(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    window.localStorage.setItem("ds-theme", "dark");
+  });
+}
+
+test("017 #1955: the light auth wordmark shows on the light door, and only it", async ({
+  page,
+}) => {
+  await page.setViewportSize(MOBILE);
+  await page.goto("/login");
+
+  await expect(page.locator("html")).not.toHaveClass(/dark/);
+  await expect(page.getByTestId("auth-wordmark")).toBeVisible();
+  await expect(page.getByTestId("auth-wordmark-dark")).toBeHidden();
+});
+
+test("017 #1955: a remembered dark choice swaps in the light-ink wordmark, and only it", async ({
+  page,
+}) => {
+  await page.setViewportSize(MOBILE);
+  await chooseDarkTheme(page);
+  await page.goto("/login");
+
+  // The theme is CLASS-based (the FOUC guard in the root layout applies the
+  // stored choice before first paint), so the swap must key off `.dark` — a
+  // `prefers-color-scheme` swap would ignore this doctor's explicit choice.
+  await expect(page.locator("html")).toHaveClass(/dark/);
+  await expect(page.getByTestId("auth-wordmark-dark")).toBeVisible();
+  await expect(page.getByTestId("auth-wordmark")).toBeHidden();
+
+  // One wordmark per viewport stays true (#237/#275) — the dark asset is a
+  // SWAP, not a second mark added beside the first.
+  await expect(page.locator("[data-testid^='auth-wordmark']")).toHaveCount(2);
+  await expect(
+    page.locator("[data-testid^='auth-wordmark']:visible"),
+  ).toHaveCount(1);
 });

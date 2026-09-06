@@ -16,6 +16,14 @@ import { createServer } from "node:http";
  * `SpecialtyChoiceSchema` — and 404s everything else so the unresolvable-target
  * branch is exercised against a real not-found rather than a connection error.
  *
+ * The session read (`GET /v1/auth/session`, #1955) is here for the third time
+ * for the same reason: `/login` decides whether the visitor already holds a
+ * session on the SERVER, through `lib/shell-auth.ts`, and answers a signed-in
+ * doctor with a redirect instead of the door. The double answers it the way the
+ * api does — the forwarded `__Host-ds_session` cookie names a live session or it
+ * does not — so the tier drives the real server read rather than a switch in
+ * product code.
+ *
  * The specialty read is here because the LD-4 landing is also resolved on the
  * SERVER, from the forwarded `__Host-ds_specialty` cookie, and is therefore
  * just as unreachable from the browser as the event read. The double answers it
@@ -103,6 +111,14 @@ const PARTICIPATION_CTA = {
   presenceCount: null,
 };
 
+/**
+ * The `__Host-ds_session` value this double accepts as a live doctor session
+ * (#1955). Exported through the spec by literal agreement rather than an import:
+ * the spec sets the cookie, this answers it, and the app in between does the
+ * real read.
+ */
+const SESSION_VALUE = "e2e-signed-in-doctor";
+
 const server = createServer((request, response) => {
   const url = new URL(request.url ?? "/", `http://${request.headers.host}`);
 
@@ -121,6 +137,23 @@ const server = createServer((request, response) => {
     );
   }
 
+  if (url.pathname === "/v1/auth/session") {
+    // The one live session this tier knows. Any other cookie value is an
+    // expired or forged session and gets the api's own 401, which
+    // `lib/shell-auth.ts` reads as `guest`.
+    const session = /(?:^|;\s*)__Host-ds_session=([^;]*)/.exec(
+      request.headers.cookie ?? "",
+    );
+    if (session && decodeURIComponent(session[1]) === SESSION_VALUE) {
+      return json(response, 200, {
+        sub: "00000000-0000-4000-8000-0000000000d1",
+        roles: ["doctor_guest"],
+        mfa: false,
+      });
+    }
+    return json(response, 401, { status: 401, message: "unauthorized" });
+  }
+
   // 021 #1945 — the LANDING the tier now follows. After sign-in the doctor is
   // taken to this host's own `/events/<slug>` page (020-design §1), which reads
   // the DOCTOR storefront envelope on the server — so the double has to answer
@@ -128,9 +161,10 @@ const server = createServer((request, response) => {
   // broken redirect green. The page body is the same `EventPageView` the public
   // read serves (`PublicEventPageSchema === EventPageViewSchema`), so the one
   // fixture answers both envelopes rather than drifting into two.
-  const participation = /^\/v1\/storefront\/doctor\/events\/([^/]+)\/participation$/.exec(
-    url.pathname,
-  );
+  const participation =
+    /^\/v1\/storefront\/doctor\/events\/([^/]+)\/participation$/.exec(
+      url.pathname,
+    );
   if (participation) {
     const key = decodeURIComponent(participation[1]);
     if (key !== EVENT.slug && key !== EVENT.id) {
@@ -144,7 +178,8 @@ const server = createServer((request, response) => {
   );
   if (storefront) {
     const key = decodeURIComponent(storefront[1]);
-    if (key === EVENT.slug || key === EVENT.id) return json(response, 200, EVENT);
+    if (key === EVENT.slug || key === EVENT.id)
+      return json(response, 200, EVENT);
     return json(response, 404, { status: 404, message: "event not found" });
   }
 

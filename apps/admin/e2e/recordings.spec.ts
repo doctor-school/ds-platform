@@ -65,24 +65,51 @@ async function attach(
 }
 
 /**
- * Turn the «показать снятые» toggle on. The DS `Switch` is a REAL checkbox that is
- * `sr-only` behind its painted track, so `.check()` on the input is intercepted by
- * the track — exactly as a mouse would be. A user clicks the TRACK, i.e. the
- * wrapping `<label>`, so the spec does the same.
+ * Turn «Показывать отозванные» on in the history list. The DS `Switch` is a REAL
+ * checkbox that is `sr-only` behind its painted track, so `.check()` on the input
+ * is intercepted by the track — exactly as a mouse would be. A user clicks the
+ * TRACK, i.e. the wrapping `<label>`, so the spec does the same. Since 014
+ * EARS-22 the retained rows live in the shared `AdminDataList` history, whose
+ * default read excludes them.
  */
 async function showRetired(page: Page): Promise<void> {
   await page
-    .getByTestId("recordings-show-retired")
+    .getByTestId("recordings-history-include-retired")
     .locator("xpath=ancestor::label[1]")
     .click();
 }
 
+/**
+ * The one control an operator can actually press. The DS `DataTable` renders the
+ * wide table AND the narrow card list at every viewport, hiding one by CSS, so a
+ * row-scoped testid exists twice in the DOM — a bare `getByTestId` is a strict
+ * mode violation on any history-list control.
+ */
+function visibleByTestId(page: Page, testId: string) {
+  return page.locator(`[data-testid="${testId}"]:visible`).first();
+}
+
+/**
+ * The retained row's «Восстановить» button in the history list. Its testid
+ * carries the row id (`recording-row-<uuid>-restore`), which the browser half
+ * never learns, so the spec addresses it by shape and reads the id back.
+ */
+async function retiredRestoreTestId(page: Page): Promise<string> {
+  const button = page
+    .locator(
+      '[data-testid^="recording-row-"][data-testid$="-restore"]:visible',
+    )
+    .first();
+  await expect(button).toBeVisible();
+  return (await button.getAttribute("data-testid"))!;
+}
+
 /** Answer a §3 command's modal confirmation. */
 async function confirmCommand(page: Page, testId: string): Promise<void> {
-  await page.getByTestId(testId).click();
+  await visibleByTestId(page, testId).click();
   const dialog = page.getByRole("alertdialog");
   await expect(dialog).toBeVisible();
-  await page.getByTestId(`${testId}-submit`).click();
+  await visibleByTestId(page, `${testId}-submit`).click();
   await expect(dialog).toBeHidden();
 }
 
@@ -222,9 +249,11 @@ test.describe("014 EARS-1/EARS-2 — retained recordings in the live admin", () 
     await expect(page.getByTestId("recording-empty-edited")).toBeVisible();
 
     await showRetired(page);
-    await expect(page.getByTestId("recording-retired-edited")).toBeVisible();
+    await expect(page.getByTestId("recordings-history-table")).toContainText(
+      "Отозвана",
+    );
 
-    await confirmCommand(page, "recording-retired-edited-restore");
+    await confirmCommand(page, await retiredRestoreTestId(page));
     await expect(page.getByTestId("recording-status-edited")).toContainText(
       "Черновик",
     );
@@ -266,7 +295,7 @@ test.describe("014 EARS-1/EARS-2 — retained recordings in the live admin", () 
     );
 
     await showRetired(page);
-    await confirmCommand(page, "recording-retired-edited-restore");
+    await confirmCommand(page, await retiredRestoreTestId(page));
     await expect(page.getByTestId("recordings-command-error")).toContainText(
       "Слот этого вида уже занят",
     );
@@ -283,7 +312,11 @@ test.describe("014 EARS-1/EARS-2 — retained recordings in the live admin", () 
     // a frozen `{}` there, so a presence check against it reads "loaded" and the
     // panel then trips over `list.eventState` — the white screen of #1428. Only
     // the query's own `data` distinguishes the two states.
-    await page.route("**/v1/admin/events/*/recordings", async (route) => {
+    // A regex, not a glob: since EARS-22 the collection read carries the list
+    // query (`?page=1&pageSize=…`), which a `**/recordings` glob no longer
+    // matches — the whole URL, search string included, has to match.
+    const collectionRead = /\/v1\/admin\/events\/[0-9a-f-]{36}\/recordings(\?|$)/;
+    await page.route(collectionRead, async (route) => {
       if (route.request().method() !== "GET") {
         await route.fallback();
         return;
@@ -303,5 +336,85 @@ test.describe("014 EARS-1/EARS-2 — retained recordings in the live admin", () 
     // than a blank document — an operator can read WHY and retry.
     await expect(page.getByTestId("recordings-panel")).toHaveCount(0);
     await expect(page.getByTestId("tab-recordings")).toBeVisible();
+  });
+
+  test("014 EARS-22: the recording history applies search and facets instantly, and one control undoes them", async ({
+    page,
+  }) => {
+    await signInAsAdmin(page);
+    await createEvent(page, `Запись — список ${Date.now()}`);
+    await openRecordingsTab(page);
+
+    // Two rows the filters can actually tell apart, both created through the
+    // real attach dialog — so this asserts the list against records the API
+    // just produced, not a fixture.
+    await attach(page, "edited", RUTUBE_EDITED);
+    await expect(page.getByTestId("recording-status-edited")).toContainText(
+      "Черновик",
+    );
+    await attach(page, "raw", RUTUBE_RAW);
+    await expect(page.getByTestId("recording-status-raw")).toContainText(
+      "Черновик",
+    );
+
+    const filters = page.getByTestId("recordings-history-filters");
+    const table = page.getByTestId("recordings-history-table");
+    const search = filters.getByRole("searchbox");
+    await expect(filters).toBeVisible();
+    // Retained rows are out of the default read (the 012 default this list
+    // adopts), so the toggle starts off.
+    await expect(
+      page.getByTestId("recordings-history-include-retired"),
+    ).not.toBeChecked();
+    await expect(table).toContainText(RUTUBE_EDITED);
+    await expect(table).toContainText(RUTUBE_RAW);
+
+    // ── EARS-22: typing IS the gesture — no Enter, no «Применить» ──────────
+    await search.fill(RUTUBE_EDITED.slice(0, 12));
+    await expect(
+      page.getByRole("button", { name: "Применить", exact: true }),
+    ).toHaveCount(0);
+    await expect(table).toContainText(RUTUBE_EDITED);
+    await expect(table).not.toContainText(RUTUBE_RAW);
+    await expect(page.getByTestId("recordings-history-total")).toBeVisible();
+    await expect(page.getByText("Выбрано:", { exact: false })).toBeVisible();
+
+    // The two named slots are the server's UNFILTERED projection, so the
+    // operator's primary surface survives a search that matches neither.
+    await search.fill("нет-такой-записи");
+    await expect(page.getByTestId("recording-embed-ref-edited")).toContainText(
+      RUTUBE_EDITED,
+    );
+    await search.fill(RUTUBE_EDITED.slice(0, 12));
+
+    // ── EARS-22: the kind facet applies on change, not on submit ───────────
+    await page.getByTestId("recordings-history-kind").selectOption("raw");
+    await expect(table).not.toContainText(RUTUBE_EDITED);
+
+    // ── EARS-22: ONE control clears the whole applied set ─────────────────
+    const resetAll = filters.getByRole("button", { name: "Сбросить всё" });
+    await expect(resetAll).toHaveCount(1);
+    await resetAll.click();
+    await expect(page.getByText("Выбрано:", { exact: false })).toHaveCount(0);
+    await expect(search).toHaveValue("");
+    await expect(page.getByTestId("recordings-history-kind")).toHaveValue("");
+    await expect(page.getByTestId("recordings-history-status")).toHaveValue("");
+    await expect(table).toContainText(RUTUBE_EDITED);
+    await expect(table).toContainText(RUTUBE_RAW);
+
+    // ── EARS-22: no dead-end pager ────────────────────────────────────────
+    // The DS `Pagination` block omits «Назад» on the first page and the whole
+    // pager on a single page rather than rendering a control that does nothing.
+    await expect(
+      page.getByRole("button", { name: "Назад", exact: true }),
+    ).toHaveCount(0);
+
+    // ── EARS-22: an action that cannot change state is never rendered ─────
+    // Both rows are `draft`, so the server's `validCommands` offers no
+    // «Восстановить» — the row actions come from that list, so there is no
+    // present-but-doomed button here.
+    await expect(
+      page.locator('[data-testid^="recording-row-"][data-testid$="-restore"]'),
+    ).toHaveCount(0);
   });
 });

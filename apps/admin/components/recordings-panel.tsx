@@ -27,7 +27,6 @@ import {
   Input,
   Label,
   NativeSelect,
-  Switch,
 } from "@ds/design-system";
 import type {
   AppliedFilter,

@@ -942,5 +942,104 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       ).toHaveLength(1);
       expect(afterRetire.every((r) => r.subject_id !== null)).toBe(true);
     });
+
+    it("012 EARS-17: when a specialty-link transition quotes an If-Match the row has since outgrown, the system shall answer 412 with zero row and zero audit mutation, and a current validator shall still move it", async () => {
+      const direction = await makeDirection("Ревматология");
+      const created = await linked(direction.id, specialtyA);
+
+      // Real drift, not a fabricated validator: the link is withdrawn and put
+      // back, so the etag the operator is still holding describes the row two
+      // moves ago. Nothing about that request is malformed — it is merely late.
+      const retired = await transitionSpecialty(created.id, "retire", 'W/"1"');
+      expect(retired.statusCode, retired.payload).toBe(200);
+      const restored = await transitionSpecialty(
+        created.id,
+        "restore",
+        'W/"2"',
+      );
+      expect(restored.statusCode, restored.payload).toBe(200);
+
+      const before = await auditEvents(created.id);
+      const stale = await transitionSpecialty(created.id, "retire", 'W/"1"');
+      expect(stale.statusCode).toBe(412);
+      expect((stale.json() as { errorCode?: string }).errorCode).toBe(
+        "PRECONDITION_FAILED",
+      );
+      const unmoved = await app.inject({
+        method: "GET",
+        url: `/v1/admin/direction-specialties/${created.id}`,
+        headers: adminRead(),
+      });
+      expect(unmoved.json()).toMatchObject({ status: "active", version: 3 });
+      expect(await auditEvents(created.id)).toHaveLength(before.length);
+
+      // The refusal is not a dead end: re-read, then the transition lands.
+      const fresh = await transitionSpecialty(created.id, "retire", 'W/"3"');
+      expect(fresh.statusCode, fresh.payload).toBe(200);
+      expect(fresh.json()).toMatchObject({ status: "retired", version: 4 });
+    });
+
+    it("012 EARS-17: when an adjacency retire quotes an If-Match a committed edit has already superseded, the system shall answer 412 with zero row and zero audit mutation", async () => {
+      const a = await makeDirection("Нефрология");
+      const b = await makeDirection("Урология");
+      const created = await edged({
+        directionId: a.id,
+        adjacentDirectionId: b.id,
+        kind: "related",
+        weight: 30,
+      });
+
+      const patched = await app.inject({
+        method: "PATCH",
+        url: `/v1/admin/direction-adjacency/${created.id}`,
+        headers: { ...adminWrite(), "if-match": 'W/"1"' },
+        payload: { weight: 90 },
+      });
+      expect(patched.statusCode, patched.payload).toBe(200);
+
+      const before = await auditEvents(created.id);
+      const stale = await app.inject({
+        method: "POST",
+        url: `/v1/admin/direction-adjacency/${created.id}/retire`,
+        headers: { ...adminWrite(), "if-match": 'W/"1"' },
+        payload: {},
+      });
+      expect(stale.statusCode).toBe(412);
+      expect((stale.json() as { errorCode?: string }).errorCode).toBe(
+        "PRECONDITION_FAILED",
+      );
+      const unmoved = await app.inject({
+        method: "GET",
+        url: `/v1/admin/direction-adjacency/${created.id}`,
+        headers: adminRead(),
+      });
+      expect(unmoved.json()).toMatchObject({
+        status: "active",
+        version: 2,
+        weight: 90,
+      });
+      expect(await auditEvents(created.id)).toHaveLength(before.length);
+
+      const fresh = await app.inject({
+        method: "POST",
+        url: `/v1/admin/direction-adjacency/${created.id}/retire`,
+        headers: { ...adminWrite(), "if-match": 'W/"2"' },
+        payload: {},
+      });
+      expect(fresh.statusCode, fresh.payload).toBe(200);
+    });
+
+    function transitionSpecialty(
+      id: string,
+      transition: "retire" | "restore",
+      ifMatch: string,
+    ): ReturnType<NestFastifyApplication["inject"]> {
+      return app.inject({
+        method: "POST",
+        url: `/v1/admin/direction-specialties/${id}/${transition}`,
+        headers: { ...adminWrite(), "if-match": ifMatch },
+        payload: {},
+      });
+    }
   },
 );

@@ -1072,5 +1072,39 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       ).toHaveLength(2);
       expect(afterRetire.every((r) => r.subject_id !== null)).toBe(true);
     });
+
+    it("012 EARS-17: when a retire quotes an If-Match a committed edit has already superseded, the system shall answer 412 with zero row and zero audit mutation, and a re-read shall still retire it", async () => {
+      const projectId = await insertProject();
+      const partnerId = await insertPartner();
+      const { detail, etag } = await seedRelation(projectId, partnerId, false);
+
+      // Real drift rather than a fabricated validator: the edit lands, so the
+      // etag the second operator is still holding describes the previous row.
+      const promoted = await patchRelation(detail.id, {
+        payload: { isPrimary: true },
+        ifMatch: etag,
+      });
+      expect(promoted.statusCode, promoted.payload).toBe(200);
+
+      const before = await auditTrail(detail.id);
+      const stale = await transitionRelation(detail.id, "retire", {
+        ifMatch: etag,
+      });
+      expect(stale.statusCode).toBe(412);
+      expect(problem(stale).errorCode).toBe("PRECONDITION_FAILED");
+      expect(await relationRow(detail.id)).toMatchObject({
+        status: "active",
+        is_primary: true,
+        version: 2,
+      });
+      expect(await auditTrail(detail.id)).toHaveLength(before.length);
+
+      // The refusal is not a dead end: the current validator still moves it.
+      const fresh = await transitionRelation(detail.id, "retire", {
+        ifMatch: promoted.headers.etag as string,
+      });
+      expect(fresh.statusCode, fresh.payload).toBe(200);
+      expect(body(fresh)).toMatchObject({ status: "retired", version: 3 });
+    });
   },
 );

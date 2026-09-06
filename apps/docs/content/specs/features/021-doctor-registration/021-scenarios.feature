@@ -117,7 +117,7 @@ Feature: A doctor stopped by a gate registers in a short honest form and comes b
     When the doctor enters «not-an-email» in the email field
     Then the email field states what to correct, in Russian, tied to that field
     When the doctor enters a five-character password
-    Then the persistent hint «Не менее 8 символов» stays visible alongside the error
+    Then the error restates «Не менее 8 символов» in that field's single message slot
     When the doctor leaves the medical-worker declaration unticked
     Then the submit control is disabled
     And the reason naming that specific unticked condition is rendered beside it

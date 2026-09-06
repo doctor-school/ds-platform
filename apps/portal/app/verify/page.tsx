@@ -10,12 +10,9 @@ import { VerifyRequestSchema, type LoginRequest } from "@ds/schemas";
 
 import { AuthShell } from "@/components/auth-shell";
 import {
-  BotProtectionField,
-  botProtectionFailureMessage,
-  isBotProtectionRejected,
-  isBotProtectionRequired,
-  useBotProtectedAction,
-} from "@/components/bot-protection";
+  botProtectionMessages,
+  botProtectionSiteKey,
+} from "@/lib/bot-protection";
 import { authClient } from "@/lib/auth-client";
 import { authErrorMessage } from "@/lib/auth-error-message";
 import { refreshHeaderAuth } from "@/lib/header-auth";
@@ -23,13 +20,18 @@ import { takePendingRegistration } from "@/lib/pending-registration";
 import { withReturnTarget } from "@/lib/registration-handoff";
 import { completeReturnTarget } from "@/lib/registration-resume";
 import { useLocalizedResolver } from "@/lib/use-localized-resolver";
-import { useResendCooldown } from "@/lib/use-resend-cooldown";
 
 import {
+  botProtectionFailureMessage,
+  BotProtectionField,
   EmailConfirmCard,
+  isBotProtectionRejected,
+  isBotProtectionRequired,
   maskDestination,
   type EmailConfirmCardCopy,
   type EmailConfirmValues,
+  useBotProtectedAction,
+  useResendCooldown,
 } from "@ds/design-system/blocks";
 
 /*
@@ -131,7 +133,9 @@ function PortalEmailConfirmCard() {
   const captcha = useBotProtectedAction({
     onVerified: () => setCaptchaError(null),
     onChallengeError: (failure) =>
-      setCaptchaError(botProtectionFailureMessage(failure, te)),
+      setCaptchaError(
+        botProtectionFailureMessage(failure, botProtectionMessages(te)),
+      ),
     onActionError: (err) =>
       setResendError(authErrorMessage(err, te, te("verifyResendFailed"))),
   });
@@ -294,7 +298,12 @@ function PortalEmailConfirmCard() {
               error: captchaError ?? resendError,
               pending: captcha.pending,
               notice,
-              captchaSlot: <BotProtectionField {...captcha.fieldProps} />,
+              captchaSlot: (
+                <BotProtectionField
+                  sitekey={botProtectionSiteKey()}
+                  {...captcha.fieldProps}
+                />
+              ),
             }
           : undefined
       }

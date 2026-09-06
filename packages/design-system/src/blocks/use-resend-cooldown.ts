@@ -15,8 +15,11 @@ import { useCallback, useState } from "react";
  *     the now-stale typed code),
  *   - surface a resend failure through the page's existing error channel.
  *
- * This hook factors exactly that orchestration so `/login`, `/verify`, and `/reset`
- * don't each re-implement it. The actual network call is passed in (each surface
+ * This hook factors exactly that orchestration so `/login`, `/verify`, `/reset` and
+ * the doctor storefront's post-registration state don't each re-implement it. It
+ * sits in the design-system beside `useResendCountdown` (021 EARS-19, #1558)
+ * rather than in either app: both storefronts resend a code, and a second copy in
+ * `apps/doctor` would be exactly the cross-front fork AGENTS.md §6 forbids. The actual network call is passed in (each surface
  * resends against a DIFFERENT real endpoint — `requestOtp` / `resendVerification` /
  * `requestPasswordReset`); the hook never knows the transport. The EARS-16 generic
  * outcome is preserved by routing the failure through the caller's `onError`, which

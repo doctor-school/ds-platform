@@ -148,6 +148,32 @@ for (const [state, drive] of [
       }
     },
   ],
+  [
+    // 021 EARS-19 (#1558) — the POST-SUBMIT state the wired command opens. It is
+    // a whole second composition on this route (the canonical
+    // `<EmailConfirmCard>` block: a slotted code field, a live resend countdown,
+    // an alert row and the two co-equal already-registered actions), reachable
+    // only by actually submitting — so without this case the gate would scan the
+    // door and never the screen behind it.
+    "post-submit confirmation",
+    async (page: import("@playwright/test").Page) => {
+      await page.route("**/v1/storefront/doctor/register", (route) =>
+        route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ status: "pending_verification" }),
+        }),
+      );
+      await page.getByTestId("register-email").fill("doctor@clinic.ru");
+      await page.getByTestId("register-password").fill("correct horse battery");
+      for (const id of ["register-medworker", "register-partner-data"]) {
+        await page.getByTestId(id).locator("xpath=ancestor::label[1]").click();
+        await expect(page.getByTestId(id)).toBeChecked();
+      }
+      await page.getByTestId("register-submit").click();
+      await expect(page.getByTestId("verify-submit")).toBeVisible();
+    },
+  ],
 ] as const) {
   test(`021 EARS-1 /register passes WCAG 2 A/AA + one-h1 check (${state})`, async ({
     page,

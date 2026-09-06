@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { createBrowserRoomApi } from "./client/room-api";
 import type { RoomShellProps } from "./types";
 import { PresenceHeartbeat } from "./ui/presence-heartbeat";
@@ -44,6 +44,13 @@ export function RoomShell({
   userCluster,
 }: RoomShellProps) {
   const api = useMemo(() => createBrowserRoomApi({ slug }), [slug]);
+  // 006 EARS-7 — the room's LIFECYCLE phase, lifted here because the close is one
+  // fact three children must agree on (header pill, player region, chat composer).
+  // It flips only on server proof — a gated request refused with the event no
+  // longer `live` — never on a timer, and it is one-way: a room that has been told
+  // the broadcast ended does not re-open itself (a new broadcast is a new grant).
+  const [ended, setEnded] = useState(false);
+  const onRoomClosed = useCallback(() => setEnded(true), []);
 
   return (
     <main className="flex h-dvh flex-col overflow-hidden bg-background text-foreground">
@@ -54,12 +61,20 @@ export function RoomShell({
           copy={copy}
           linkComponent={linkComponent}
           userCluster={userCluster}
+          ended={ended}
         />
         <PresenceHeartbeat
           api={api}
           intervalSeconds={config.heartbeatIntervalSeconds}
+          onRoomClosed={onRoomClosed}
         />
-        <RoomView api={api} config={config} context={context} copy={copy} />
+        <RoomView
+          api={api}
+          config={config}
+          context={context}
+          copy={copy}
+          ended={ended}
+        />
       </RoomPresenceProvider>
     </main>
   );

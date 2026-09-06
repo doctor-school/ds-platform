@@ -219,3 +219,177 @@ export const DoctorRegisterResponseSchema = z.strictObject({
 export type DoctorRegisterResponse = z.infer<
   typeof DoctorRegisterResponseSchema
 >;
+
+/**
+ * `ConfirmEmail` — the 021 confirmation command (021 design §2, EARS-10).
+ *
+ * The second and last box of the 021 seam. It carries the 003 verification
+ * payload unchanged (`email` + `code`, verified by the 003 engine and by
+ * nothing here) plus the ONE thing 021 adds: the return target the doctor
+ * carried in.
+ *
+ * ## Why the target travels in the REQUEST and not in the email
+ *
+ * 003 EARS-29 verification emails are code-only and LINK-FREE by decision
+ * (#910/#1045: zero anchor elements and zero URLs), so there is no confirmation
+ * URL for a return target to ride in. The target is carried IN-APP instead — in
+ * the query of the doctor host's sent-state / code-entry URL, exactly as the
+ * portal already does it (apps/portal/lib/registration-handoff.ts
+ * `withReturnTarget`) — and handed back here, where it is re-validated
+ * server-side by the shipped guard. Moving a link into a 003 email would be a
+ * 003 increment, never a 021 requirement (021-design §2).
+ */
+export const DoctorConfirmRequestSchema = z
+  .object({
+    email: z.email(),
+    /**
+     * The IdP-issued verification code, forwarded verbatim to 003.
+     * Normalization (trim + uppercase, #1109) belongs to the engine, so this
+     * contract states no length, alphabet or case rule of its own — a second
+     * code vocabulary here would be the forked code path LD-1 forbids.
+     */
+    code: z.string(),
+    /**
+     * The carried return target, RAW as the client held it. Deliberately a
+     * plain string rather than the guard-refined form: a hostile or undeclared
+     * value is treated as ABSENT (the doctor lands on the LD-4 default), never
+     * as a 400. A confirmation that succeeds at the IdP must not be turned into
+     * a failure by a query parameter the doctor never typed — and rejecting the
+     * payload would hand an attacker a probe for what the whitelist admits. The
+     * guard runs in the service; its verdict shapes the landing, not the status.
+     */
+    returnTo: z.string().optional(),
+  })
+  .strict();
+export type DoctorConfirmRequest = z.infer<typeof DoctorConfirmRequestSchema>;
+
+/**
+ * LD-8 — why the carried target was NOT the destination. Present only on a
+ * `landing` action, and only when a target was actually carried and found
+ * stale: it is what lets the surface state in plain Russian what happened to
+ * what the doctor came for, rather than performing the silent redirect LD-8
+ * forbids.
+ *
+ * The four values are the four honest answers the public event read can give:
+ *
+ * * `ended` — the эфир is over (`ended`, or an `in_archive` legacy эфир);
+ * * `full` — an offline/hybrid event whose seats ran out (`seatsLeft === 0`;
+ *   `null` seats means unlimited and is NOT this case);
+ * * `unpublished` — the event is `hidden`: it exists, and its direct link
+ *   resolves to a public notice rather than a 404 (004 EARS-5);
+ * * `missing` — the public read has no body at all. A `draft` and a
+ *   non-existent id are ONE answer here on purpose: 004 EARS-6 makes them
+ *   indistinguishable so a public surface cannot become an existence oracle,
+ *   and a fifth value splitting them would build exactly that oracle.
+ */
+export const DOCTOR_CONFIRM_LANDING_REASONS = [
+  "ended",
+  "full",
+  "unpublished",
+  "missing",
+] as const;
+export const DoctorConfirmLandingReasonSchema = z.enum(
+  DOCTOR_CONFIRM_LANDING_REASONS,
+);
+export type DoctorConfirmLandingReason = z.infer<
+  typeof DoctorConfirmLandingReasonSchema
+>;
+
+/**
+ * EARS-10's PRIMARY action — where the doctor goes next, resolved server-side.
+ *
+ * `kind` states which of the two EARS-10 outcomes happened, so the surface can
+ * render the degraded branch without re-deriving it from the href:
+ *
+ * * `return` — the carried point of interest is still live, and `href` IS the
+ *   guard's reconstruction of it. Never carries a `reason`.
+ * * `landing` — the doctor arrived directly (no target carried), or the target
+ *   went stale (LD-8), in which case `reason` says what happened.
+ *
+ * `href` is ALWAYS either the guard's own reconstruction or one of the closed
+ * literals this contract declares — never a string assembled from the raw
+ * client input (021-design §3, property 1).
+ */
+export const DoctorConfirmPrimaryActionSchema = z
+  .object({
+    kind: z.enum(["return", "landing"]),
+    href: z.string(),
+    /**
+     * Absent on `return` and on a direct arrival; present exactly when a target
+     * was carried and could not be honoured. Absent is not "no reason" on a
+     * degraded branch — it is "nothing degraded".
+     */
+    reason: DoctorConfirmLandingReasonSchema.optional(),
+  })
+  .strict();
+export type DoctorConfirmPrimaryAction = z.infer<
+  typeof DoctorConfirmPrimaryActionSchema
+>;
+
+/**
+ * The doctor host's cabinet path — EARS-10's SECONDARY action, and a TRACKED
+ * front door rather than a shipped route: `apps/doctor` has no cabinet yet (it
+ * lands with «Витрина R5 — Кабинет врача и школа», #1842).
+ *
+ * It is declared anyway because EARS-10's requirement is about RANK — «в личный
+ * кабинет» exists as the secondary action and the account page is never the
+ * default outcome — and that rank is a property of the response, not of whether
+ * the destination is built. Omitting the action until #1842 would make release
+ * 1 ship the one shape EARS-10 explicitly forbids: a success state whose only
+ * action is the landing.
+ */
+export const DOCTOR_CABINET_PATH = "/account";
+
+/**
+ * EARS-10's SECONDARY action. A closed one-member `kind` and a closed `href`:
+ * there is exactly one secondary action on this surface and it is never the
+ * default, so neither field is a choice the caller or the client gets to make.
+ */
+export const DoctorConfirmSecondaryActionSchema = z
+  .object({
+    kind: z.literal("cabinet"),
+    href: z.literal(DOCTOR_CABINET_PATH),
+  })
+  .strict();
+export type DoctorConfirmSecondaryAction = z.infer<
+  typeof DoctorConfirmSecondaryActionSchema
+>;
+
+/**
+ * The 021 post-confirmation SUCCESS STATE (EARS-9, EARS-10) — the whole body of
+ * the confirmation response.
+ */
+export const DoctorConfirmResponseSchema = z
+  .object({
+    /** The 003 verify verdict, passed through unchanged (003 EARS-3). */
+    status: z.literal("verified"),
+    /**
+     * EARS-9 / LD-6 — the credited registration amount, as a FACT.
+     *
+     * `null` in release 1, and `null` is the honest answer rather than a
+     * placeholder: an amount may be stated only once feature 025 has asserted it
+     * with `PointsCredited` for this account, 025 has no spec and no Issues, and
+     * the accrual itself is wave 2 (#1545). LD-6 forbids deriving it from
+     * configuration, so there is no number the server could put here today — and
+     * a `0` would be a lie rather than an absent fact. The surface names the
+     * accrual as the pending promise it is.
+     */
+    credited: z.number().int().nonnegative().nullable(),
+    /**
+     * EARS-9 — the plain line naming what completing the profile adds and what
+     * it unlocks, or `null` while there is nothing configured to name.
+     *
+     * `null` in release 1 for the same reason `credited` is: the increment comes
+     * from LD-6's one configuration source, which is wave 2 (#1545). The line is
+     * server-resolved rather than client-composed because its VALUE is
+     * configuration; a client that invented the number would be the
+     * configuration-derived stand-in LD-6 forbids.
+     */
+    profileCompletion: z.string().nullable(),
+    /** EARS-10 — the point of interest, or the LD-4/LD-8 landing. */
+    primaryAction: DoctorConfirmPrimaryActionSchema,
+    /** EARS-10 — «в личный кабинет», secondary and never the default. */
+    secondaryAction: DoctorConfirmSecondaryActionSchema,
+  })
+  .strict();
+export type DoctorConfirmResponse = z.infer<typeof DoctorConfirmResponseSchema>;

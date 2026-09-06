@@ -75,6 +75,41 @@ another visitor.
 One contract serves two compositions (LD-3): the grid beside the feed (#1516)
 and the dedicated calendar page (#1520) read the SAME endpoint.
 
+## 021 EARS-10 — the confirm command and its landing
+
+`POST /v1/storefront/doctor/confirm` (`DoctorRegisterPublicController` →
+`DoctorRegisterService.confirm`) is the doctor storefront's half of email
+confirmation. It does not verify anything itself: the code goes straight to the
+003 engine (`AuthService.verify`, unchanged — 003 EARS-3 forbids a second code
+path). What 021 adds on top is the SUCCESS STATE: where the doctor goes next.
+
+The return target rides the request as an optional `returnTo`, carried in-app in
+the query of the sent-state and code-entry URLs (003 EARS-29 verification emails
+are code-only and link-free, so nothing about the landing travels by letter). It
+is re-validated here, server-side, by the shared guard in `@ds/schemas` —
+`parseDoctorHostReturnTarget`, the composition of the doctor host's two declared
+shapes (`/events/<slug>` and the stateful feed URL). Three consequences worth
+stating:
+
+- **A target the guard rejects is ABSENT, never a 4xx.** A doctor who typed the
+  right code is confirmed; a URL they never typed cannot fail their
+  registration. An academy `/webinars/<slug>` target degrades the same way — it
+  is not a doctor-host route.
+- **Every `href` is the guard's reconstruction or one closed literal.** The
+  landing default is `/events`; the server never builds a path from the raw
+  request, and never guesses the LD-4 home variant, which needs the remembered
+  specialty only the doctor host resolves.
+- **A stale target degrades with a stated `reason`** (LD-8): `ended` / `full`
+  keep the event's own page, `unpublished` / `missing` fall back to the feed. A
+  draft and a non-existent slug collapse into one answer on purpose — 004 EARS-6
+  forbids the existence oracle.
+
+`credited` and `profileCompletion` are `null` in release 1: the points ledger is
+wave 2 (#1545) and LD-6 forbids deriving a credited amount from configuration,
+so the absence is stated rather than filled with a placeholder. The secondary
+action is the cabinet at `/account`, a front door the doctor host does not build
+until #1842 — never the default outcome of registration.
+
 ## Exported symbols
 
 `StorefrontModule` (exports `SpecialtiesService` + `StatisticsService` +

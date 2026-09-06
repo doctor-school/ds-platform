@@ -36,6 +36,9 @@ export default defineConfig({
   // Every `events-*.spec.ts` asserts `[data-events-feed]`, which only exists
   // when something answers `GET /v1/storefront/doctor/events`, so they all
   // belong to `playwright.events.config.ts` and none can be collected here.
+  // The ignore is a GLOB, not a file list: a new `events-*` spec that a list
+  // forgot would be collected here and fail against an upstream that is absent
+  // by contract (#1521), which is exactly the failure this tier must not own.
   // The 006 room tier (#1912) is dev-stand-gated in a stronger sense still: it
   // needs a real api + Postgres + a provisioned doctor session, so it rides
   // `playwright.room.config.ts` and is never collected by a backend-free run.
@@ -43,10 +46,7 @@ export default defineConfig({
     "specialty-consumption.spec.ts",
     "register-return-context.spec.ts",
     "register-direct.spec.ts",
-    "events-feed.spec.ts",
-    "events-url-state.spec.ts",
-    "events-month-beside-feed.spec.ts",
-    "events-guest.spec.ts",
+    "events-*.spec.ts",
     "room.spec.ts",
     "a11y/room-axe.e2e.spec.ts",
   ],

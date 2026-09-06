@@ -5,6 +5,8 @@ import {
   formatMskDateLabel,
   formatMskTime,
   resolveReturnContext,
+  resolveReturnLandingPath,
+  resolveReturnTargetPath,
 } from "@/lib/return-context";
 
 /**
@@ -180,4 +182,54 @@ describe("021 EARS-2: resolveReturnContext", () => {
       "27 августа · чт",
     );
   });
+});
+
+/**
+ * 021 #1945 — the LANDING half. The canonical return target and the path this
+ * host navigates to are two different facts: `/webinars/<slug>` is the academy's
+ * route for the эфир and is not served on `doctor.school` at all, so a doctor
+ * sent there verbatim after signing in met a 404 (020-design §1 route table).
+ * These cases pin the split — same guard, same rejections, doctor-host landing.
+ */
+describe("021 #1945: resolveReturnLandingPath", () => {
+  it("021 #1945: the academy shape lands on the doctor host's own event route", () => {
+    expect(resolveReturnLandingPath("/webinars/prp-pri-gonartroze")).toBe(
+      "/events/prp-pri-gonartroze",
+    );
+    // The canonical target itself is UNCHANGED — it is what rides on into
+    // `/register` and is re-parsed there, so the one vocabulary is intact.
+    expect(resolveReturnTargetPath("/webinars/prp-pri-gonartroze")).toBe(
+      "/webinars/prp-pri-gonartroze",
+    );
+  });
+
+  it("021 #1945: a target this host already serves passes through verbatim", () => {
+    // 020's own event page.
+    expect(resolveReturnLandingPath("/events/prp-pri-gonartroze")).toBe(
+      "/events/prp-pri-gonartroze",
+    );
+    // 019's feed shape — the resumed card, feed query and all.
+    const feed =
+      "/events?day=2026-08-27&tense=upcoming&specialty=mine-and-adjacent" +
+      "&resume=prp-pri-gonartroze";
+    expect(resolveReturnLandingPath(feed)).toBe(feed);
+  });
+
+  it.each([
+    ["absent", undefined],
+    ["a bare slug — the retired second vocabulary", "prp-pri-gonartroze"],
+    ["cross-origin", "https://evil.example/webinars/prp-pri-gonartroze"],
+    ["protocol-relative", "//evil.example/webinars/x"],
+    ["a backslash bypass", String.raw`/webinars/\evil`],
+    ["traversal", "/webinars/../account"],
+    ["a multi-segment slug", "/webinars/a/b"],
+    ["not anchored under a declared shape", "/account"],
+  ])(
+    "021 #1945: %s is no landing at all — the same guard, the same refusal",
+    (_label, value) => {
+      expect(resolveReturnLandingPath(value)).toBeNull();
+      // The two functions refuse in lockstep: one parser, one whitelist.
+      expect(resolveReturnTargetPath(value)).toBeNull();
+    },
+  );
 });

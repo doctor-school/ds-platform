@@ -159,6 +159,44 @@ test.describe("021 EARS-2: the return context on the wide layout", () => {
   });
 });
 
+test.describe("021 #1945: the landing a gate arrival is promised", () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
+
+  test("021 #1945: the published landing is this host's own event route, not the academy's", async ({
+    page,
+  }) => {
+    await page.goto(arrival(KNOWN));
+
+    // The canonical return target stays `/webinars/<slug>` — it is the ONE
+    // vocabulary the guard speaks — but `/webinars/*` is an ACADEMY route and is
+    // not served on doctor.school at all, so the landing this route publishes
+    // (consumed by the EARS-10 confirmation hop) must be the storefront's own
+    // `/events/<slug>` page (020-design §1). Publishing the target verbatim is
+    // what sent a freshly confirmed doctor to a 404.
+    await expect(page.locator("[data-registration-landing]")).toHaveAttribute(
+      "data-registration-landing",
+      `/events/${KNOWN}`,
+    );
+  });
+
+  test("021 #1945: the landing resolves on this app — it is not a dead path", async ({
+    page,
+  }) => {
+    const response = await page.goto(`/events/${KNOWN}`, {
+      waitUntil: "domcontentloaded",
+    });
+    expect(response?.status()).toBe(200);
+    await expect(page.getByTestId("event-page-shell")).toBeVisible();
+
+    // And the path the bug used to hand out is genuinely absent on this host —
+    // the assertion that keeps the fix from being re-argued as cosmetic.
+    const academy = await page.goto(`/webinars/${KNOWN}`, {
+      waitUntil: "domcontentloaded",
+    });
+    expect(academy?.status()).toBe(404);
+  });
+});
+
 test.describe("021 EARS-2: the 390 collapse", () => {
   test.use({ viewport: { width: 390, height: 844 } });
 

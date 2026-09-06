@@ -20,6 +20,7 @@ import { resolveDirectArrivalLanding } from "@/lib/registration-landing";
 import {
   RETURN_CONTEXT_PARAM,
   resolveReturnContext,
+  resolveReturnLandingPath,
   resolveReturnTargetPath,
 } from "@/lib/return-context";
 import { resolveRememberedSpecialty } from "@/lib/specialty-choice";
@@ -163,9 +164,14 @@ export default async function DoctorRegisterPage({
   // it never breaks the door.
   const returnTo = Array.isArray(raw) ? raw[0] : raw;
   // The guard's reconstruction of the arrival's target — the ONE vocabulary,
-  // resolved before the read so the same value serves the context and the
-  // landing, and the raw param serves neither.
+  // resolved before the read so the guard output — never the raw param — is
+  // what both the context read and the landing below are derived from.
   const safeTarget = resolveReturnTargetPath(returnTo);
+  // WHERE this host takes them afterwards. Not the canonical target verbatim:
+  // the academy serves the эфир at `/webinars/<slug>` and this storefront serves
+  // it at `/events/<slug>` (020-design §1), so the landing is the doctor-host
+  // projection of the SAME guard output (#1945).
+  const landingTarget = resolveReturnLandingPath(returnTo);
   const returnEvent = safeTarget
     ? await resolveReturnContext(safeTarget)
     : null;
@@ -175,8 +181,8 @@ export default async function DoctorRegisterPage({
   // remembered specialty says, which is the only per-visitor fact on the route
   // and the only reason it reads `headers()` (see the module header).
   const landing =
-    safeTarget && returnEvent
-      ? safeTarget
+    landingTarget && returnEvent
+      ? landingTarget
       : resolveDirectArrivalLanding(
           await resolveRememberedSpecialty(await headers()),
         );

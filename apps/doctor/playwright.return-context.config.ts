@@ -33,7 +33,10 @@ export default defineConfig({
   // resolved on the server, against this same double, before the first byte of
   // HTML — and a second config would boot a second copy of the same app on a
   // second pair of ports to answer the same upstream.
-  testMatch: "register-{return-context,direct}.spec.ts",
+  // #1945 adds the third half of the same question — the sign-in door's landing
+  // (`login-return-context.spec.ts`), server-resolved against this same double
+  // for exactly the reason the other two are.
+  testMatch: "{register-return-context,register-direct,login-return-context}.spec.ts",
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,

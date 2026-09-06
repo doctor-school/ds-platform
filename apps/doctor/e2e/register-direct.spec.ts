@@ -173,13 +173,19 @@ test.describe("021 EARS-3: LD-4 — where the direct arrival lands", () => {
     page,
   }) => {
     // The canonical arrival URL the gate emits (005 EARS-2), resolved by the
-    // shared guard; the landing is the guard's reconstruction, never the raw
-    // param, and the LD-4 resolver is not consulted at all.
+    // shared guard; the landing is derived from the guard's reconstruction,
+    // never from the raw param, and the LD-4 resolver is not consulted at all.
     await page.goto("/register?returnTo=%2Fwebinars%2Fprp-pri-gonartroze");
 
+    // #1945 corrected WHICH path that derivation yields. One attribute and one
+    // vocabulary still hold — the guard is the only parser on this route — but
+    // the attribute carries the landing on THIS host, and `/webinars/<slug>` is
+    // an academy route that doctor.school does not serve (020-design §1). The
+    // storefront's own page for the same эфир is `/events/<slug>`, so publishing
+    // the canonical target verbatim here landed a confirmed doctor on a 404.
     await expect(page.getByTestId("registration-form")).toHaveAttribute(
       "data-registration-landing",
-      "/webinars/prp-pri-gonartroze",
+      "/events/prp-pri-gonartroze",
     );
     await expect(page.getByTestId("return-context-panel")).toBeVisible();
   });

@@ -185,12 +185,15 @@ test.describe("021 EARS-1: the chromeless registration route", () => {
 
     // EARS-3 honest-empty: these belong to later Issues and nothing supplies
     // them here, so they must not ship as reserved shells.
+    // The two consent tiers left this list when EARS-5 (#1541) built them: they
+    // are supplied now, so their absence would be a regression rather than the
+    // honest-empty rule. What they must NOT be — an empty frame — is asserted
+    // in `register-consent-tiers.spec.ts`, which requires real controls inside
+    // both containers.
     for (const slot of [
       "registration-return-context",
       "registration-attribution",
       "registration-points-promise",
-      "registration-consent-access",
-      "registration-consent-marketing",
     ]) {
       await expect(page.getByTestId(slot), `unfilled slot ${slot}`).toHaveCount(
         0,

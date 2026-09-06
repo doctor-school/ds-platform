@@ -131,6 +131,23 @@ for (const [state, drive] of [
       await expect(page.locator('[aria-invalid="true"]').first()).toBeVisible();
     },
   ],
+  [
+    // 021 EARS-5 (#1541) — the two-tier consent block with both access
+    // conditions granted. The CHECKED state is scanned separately because it is
+    // where the block's own a11y risk lives: the grouped tier-1 frame with its
+    // heading, the composition statement carried as the checkbox's label, and
+    // the reason line the submit still points at once both are ticked.
+    "consents granted",
+    async (page: import("@playwright/test").Page) => {
+      for (const id of ["register-medworker", "register-partner-data"]) {
+        await page
+          .getByTestId(id)
+          .locator("xpath=ancestor::label[1]")
+          .click();
+        await expect(page.getByTestId(id)).toBeChecked();
+      }
+    },
+  ],
 ] as const) {
   test(`021 EARS-1 /register passes WCAG 2 A/AA + one-h1 check (${state})`, async ({
     page,

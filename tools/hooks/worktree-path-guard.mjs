@@ -1,36 +1,10 @@
 #!/usr/bin/env node
-// PreToolUse guard on Edit/Write/MultiEdit. Two independent responsibilities:
-//
-// 1. Escape-BLOCK (exit 2, #359/#486): block a Write/Edit whose ABSOLUTE path
-//    escapes the active git worktree back into the SHARED main tree (AGENTS.md
-//    §6; memory `feedback_worktree_absolute_paths_escape_isolation`).
-//    `EnterWorktree` changes the session cwd but does NOT redirect absolute
-//    paths — an Edit/Write with an absolute main-tree `file_path` (carried over
-//    from pre-worktree Read/Bash calls) silently writes to the main tree while a
-//    parallel session may sweep it into the wrong PR, and any green observed
-//    there is against the wrong checkout. Enforced at the moment the bad path is
-//    issued.
-//    A path inside a DIFFERENT registered worktree is a distinct verdict
-//    (`wrong-worktree`, #1453), NOT a main-tree escape: the session sits in the
-//    wrong checkout (typically a dispatch that inherited the lead's stale cwd),
-//    and the prescribed fix is `EnterWorktree path:<target worktree>` — never
-//    authoring the file elsewhere and copying it in.
-//
-// 2. Write-WARN (exit 0 + systemMessage, #854): the FIRST main-tree WRITE in a
-//    NON-isolated session (cwd not in a worktree) while parallel sessions are
-//    live fires the guard's FULL warning and records `mainTreeWriteSeen` in the
-//    per-session state file. This is the write half of the #823 read-guard's
-//    read-only orchestration carve-out (#854): a read-only lead sees one
-//    softened notice, but the moment it edits main-tree files the full guard
-//    resumes — the write itself warns, and subsequent reads warn at full
-//    strength. WARN-level only — it never blocks (that is habituation, not the
-//    escape hazard #1 guards).
-//
-// Contract: reads the PreToolUse hook JSON on stdin ({session_id, cwd,
-// tool_name, tool_input:{file_path}}). Exit 2 + stderr = BLOCK. Exit 0 (+
-// optional stdout systemMessage) = allow. FAIL-OPEN: any parse/logic error
-// exits 0 — a guard bug must never wedge legitimate edits.
-
+/** PreToolUse mutation isolation. Parse supported file mutation targets and
+ * bounded literal shell writers. Resolve git-registered roots and real filesystem
+ * ancestors (including junctions) before accepting a target. Relevant unparseable
+ * mutations and failed git identity checks exit 2; main-tree writes retain the
+ * existing parallel-session warning. Pure legacy classification seams remain for
+ * callers/tests; runtime enforcement uses registered git identity, not path shape. */
 import { execFileSync } from "node:child_process";
 import { readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
@@ -46,7 +20,13 @@ import {
   targetPath,
   writeState,
 } from "./main-tree-state.mjs";
-import { mutationPaths, projectRoot } from "./hook-compat.mjs";
+import {
+  actorIdentity,
+  canonicalPath,
+  mutationPaths,
+  projectRoot,
+} from "./hook-compat.mjs";
+import { shellMutationPaths } from "./shell-mutations.mjs";
 
 /**
  * Absolute roots of every checkout git knows about (main tree + linked
@@ -196,7 +176,11 @@ export function decideWriteWarn({
   nowMs,
   freshWindowMs = FRESH_WINDOW_MS,
 }) {
-  if (!/^(Edit|Write|MultiEdit|apply_patch)$/.test(toolName || ""))
+  if (
+    !/^(Edit|Write|MultiEdit|apply_patch|Bash|exec_command)$/.test(
+      toolName || "",
+    )
+  )
     return { warn: false };
   if (!cwd || !projectDir) return { warn: false };
   // A worktree-isolated session is exactly the compliant case — never warn.
@@ -210,7 +194,9 @@ export function decideWriteWarn({
   });
   if (live.length === 0) return { warn: false };
 
-  const parsed = mutationPaths(toolName, toolInput, cwd);
+  const parsed = /^(Bash|exec_command)$/.test(toolName)
+    ? shellMutationPaths(toolInput, cwd)
+    : mutationPaths(toolName, toolInput, cwd);
   const targets = parsed.length > 0 ? parsed : [targetPath(toolInput, cwd)];
   const sourceTarget = targets.find(
     (target) =>
@@ -228,43 +214,36 @@ function main() {
     const raw = readFileSync(0, "utf8");
     const payload = JSON.parse(raw);
     const tool = payload.tool_name || "";
-    if (!/^(Edit|Write|MultiEdit|apply_patch)$/.test(tool)) process.exit(0);
-
-    const cwd = payload.cwd || "";
-    const filePaths = mutationPaths(tool, payload.tool_input, cwd);
-
-    // --- (1) Escape-BLOCK: absolute main-tree path issued from inside a worktree.
-    if (cwd && filePaths.length > 0) {
-      const m = cwd.match(/^(.*)[\\/]\.claude[\\/]worktrees[\\/]([^\\/]+)/);
-      if (m) {
-        const mainRoot = m[1];
-        const worktreeRoot = `${m[1]}/.claude/worktrees/${m[2]}`;
-        const roots = gitWorktreeRoots(cwd);
-        for (const p of filePaths) {
-          const { verdict, targetRoot, registered } = classifyWritePath({
-            target: p,
-            mainRoot,
-            worktreeRoot,
-            roots,
-          });
-          if (verdict === "wrong-worktree") {
-            process.stderr.write(
-              wrongWorktreeMessage(p, targetRoot, worktreeRoot, registered),
-            );
-            process.exit(2);
-          }
-          if (verdict === "main-tree-escape") {
-            process.stderr.write(
-              mainTreeEscapeMessage(p, mainRoot, worktreeRoot),
-            );
-            process.exit(2);
-          }
-        }
-        // In a worktree with a compliant path → isolated session, nothing to warn.
-        process.exit(0);
+    if (!/^(Edit|Write|MultiEdit|apply_patch|Bash|exec_command)$/.test(tool))
+      process.exit(0);
+    const cwd = payload.cwd || process.cwd();
+    const shell = /^(Bash|exec_command)$/.test(tool);
+    const executionCwd =
+      payload.tool_input?.workdir || payload.tool_input?.cwd || cwd;
+    const filePaths = shell
+      ? shellMutationPaths(payload.tool_input, executionCwd)
+      : mutationPaths(tool, payload.tool_input, cwd);
+    if (!filePaths.length) process.exit(0);
+    const roots = gitWorktreeRoots(cwd).map(canonicalPath);
+    if (!roots.length)
+      throw new Error(
+        "cannot verify git worktree identity or SHARED main tree isolation",
+      );
+    const worktreeRoot = canonicalPath(projectRoot({ cwd }));
+    const mainRoot = roots[0];
+    for (const target of filePaths) {
+      const p = canonicalPath(target);
+      const owner = owningRoot(p, roots);
+      if (owner && norm(owner) !== norm(worktreeRoot)) {
+        process.stderr.write(
+          norm(owner) === norm(mainRoot)
+            ? mainTreeEscapeMessage(p, mainRoot, worktreeRoot)
+            : wrongWorktreeMessage(p, owner, worktreeRoot),
+        );
+        process.exit(2);
       }
-      // cwd NOT in a worktree → fall through to the write-WARN branch.
     }
+    if (norm(worktreeRoot) !== norm(mainRoot)) process.exit(0);
 
     // --- (2) Write-WARN: first main-tree write in a non-isolated parallel session.
     const projectDir = projectRoot(payload);
@@ -291,7 +270,7 @@ function main() {
       nowMs: Date.now(),
     });
     if (decision.warn) {
-      const statePath = stateFilePath(projectDir, payload.session_id || "");
+      const statePath = stateFilePath(projectDir, actorIdentity(payload));
       const state = readState(statePath);
       // Warn once — on the FIRST main-tree write. `mainTreeWriteSeen` then makes
       // the read guard warn at full strength for the rest of the session.
@@ -311,8 +290,9 @@ function main() {
       }
     }
     process.exit(0);
-  } catch {
-    process.exit(0); // fail-open: never wedge a legitimate edit on a guard bug
+  } catch (error) {
+    process.stderr.write(`BLOCKED (isolation unavailable): ${error.message}\n`);
+    process.exit(2); // Relevant mutation uncertainty must not silently permit an escape
   }
 }
 

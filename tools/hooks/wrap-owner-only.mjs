@@ -1,29 +1,13 @@
 #!/usr/bin/env node
-// PreToolUse guard (#1746): `/wrap` is OWNER-initiated only.
-//
-// Why: the owner found leads starting the end-of-session wrap on their own —
-// at a wave's end, «before a long gap», or in answer to a plain handoff request
-// — and learned of it only later (the owner does not always watch the session).
-// A wrap dispatches a fresh-context retro agent over the whole session log, the
-// single most expensive step a session can take; that decision is the owner's.
-//
-// Contract (Claude Code PreToolUse, matcher `Agent|Task|Read|Skill`): stdin JSON
-// carries {session_id, transcript_path, tool_name, tool_input, agent_id?}.
-// A WRAP-INITIATION step — `Read` of the run-wrap / run-session-retro skill,
-// an Agent/Task dispatch whose brief names the session retro, or `Skill`
-// wrap / run-wrap / wrap-init — is DENIED (permissionDecision "deny") unless
-// the session transcript holds an OWNER user entry carrying `/wrap` (a typed
-// slash command lands as `<command-name>/wrap</command-name>`; plain owner
-// text with the token `/wrap` counts too). Only string content / `text`
-// blocks of `type:"user"` entries are read — `tool_result` blocks are tool
-// output (this guard's own deny reason included), never the owner's words.
-// Every other tool call exits silently before the transcript is touched.
-// Subagents (`agent_id` present) are exempt. FAIL-OPEN: any error exits 0 —
-// a guard bug must never wedge a legitimate tool call.
-
+/** /wrap is owner-initiated. Claude Read/Skill/Agent/Task plus Codex spawn_agent
+ * and recognized shell skill reads are gated. Owner text supports Claude user
+ * entries and Codex user_message events, never tool outputs or assistant text.
+ * Relevant wrap without readable authorization is denied. Legacy Claude child
+ * exemption remains; arbitrary shell/JS semantics are not exhaustively parsed. */
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { shellCommand } from "./hook-compat.mjs";
 
 export const WRAP_SKILL_NAMES = new Set(["wrap", "run-wrap", "wrap-init"]);
 
@@ -54,17 +38,28 @@ export function isWrapInitiation(toolName, toolInput) {
       String(input.file_path || "").replace(/\\/g, "/"),
     );
   }
-  if (toolName === "Agent" || toolName === "Task") {
-    const text = [input.prompt, input.description]
+  if (/^(Agent|Task|spawn_agent)$/.test(toolName)) {
+    const text = [input.prompt, input.description, input.message]
       .filter((v) => typeof v === "string")
       .join("\n");
     return RETRO_DISPATCH_RE.test(text);
+  }
+  if (/^(Bash|exec_command)$/.test(toolName)) {
+    const command = String(shellCommand(input) || "").replace(/\\/g, "/");
+    return /(?:Get-Content|cat|type|readFileSync|readFile)\b[^\n]*skills\/(?:run-wrap|run-session-retro)\/SKILL\.md/i.test(
+      command,
+    );
   }
   return false;
 }
 
 /** Owner-authored text of one transcript entry — `null` for anything else. */
 export function ownerText(entry) {
+  if (entry?.type === "event_msg" && entry?.payload?.type === "user_message") {
+    return typeof entry.payload.message === "string"
+      ? entry.payload.message
+      : null;
+  }
   if (!entry || entry.type !== "user" || !entry.message) return null;
   const content = entry.message.content;
   if (typeof content === "string") return content;
@@ -118,11 +113,17 @@ function main() {
       process.exit(0);
     }
     const transcriptPath = payload.transcript_path;
-    if (typeof transcriptPath !== "string" || !transcriptPath) process.exit(0);
+    let jsonl = "";
+    try {
+      if (typeof transcriptPath === "string")
+        jsonl = readFileSync(transcriptPath, "utf8");
+    } catch {
+      /* Missing evidence cannot authorize wrap. */
+    }
     const decision = decide({
       toolName: payload.tool_name,
       toolInput: payload.tool_input,
-      jsonl: readFileSync(transcriptPath, "utf8"),
+      jsonl,
     });
     if (decision.action !== "deny") process.exit(0);
     const msg = denyMessage(payload.tool_name);

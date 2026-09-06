@@ -135,9 +135,9 @@ describe("lead-context-budget decide()", () => {
   });
 
   it("a non-numeric context reads as 0 (fail-open)", () => {
-    expect(
-      decide({ contextTokens: Number.NaN, override: false }).action,
-    ).toBe("silent");
+    expect(decide({ contextTokens: Number.NaN, override: false }).action).toBe(
+      "silent",
+    );
   });
 });
 
@@ -224,9 +224,7 @@ describe("lead-context-budget end-to-end (real hook process)", () => {
       ),
     );
     expect(json.hookSpecificOutput.permissionDecision).toBe("deny");
-    expect(json.hookSpecificOutput.permissionDecisionReason).toContain(
-      "/wrap",
-    );
+    expect(json.hookSpecificOutput.permissionDecisionReason).toContain("/wrap");
     expect(json.systemMessage).toContain("208K");
   });
 
@@ -261,18 +259,18 @@ describe("lead-context-budget end-to-end (real hook process)", () => {
     ).toBe("");
   });
 
-  it("fail-open: malformed stdin, no transcript path, missing transcript", () => {
+  it("missing telemetry is explicit: malformed stdin, no path, missing transcript", () => {
     const bad = execFileSync(process.execPath, [HOOK], {
       input: "{not json",
       encoding: "utf8",
     });
-    expect(bad.trim()).toBe("");
+    expect(bad.trim()).toContain("unavailable");
     expect(
       runHook(
         { session_id: "sess-1", tool_name: "Agent", tool_input: {} },
         { CLAUDE_PROJECT_DIR: projectDir(false) },
       ),
-    ).toBe("");
+    ).toContain("unavailable");
     expect(
       runHook(
         {
@@ -283,6 +281,6 @@ describe("lead-context-budget end-to-end (real hook process)", () => {
         },
         { CLAUDE_PROJECT_DIR: projectDir(false) },
       ),
-    ).toBe("");
+    ).toContain("unavailable");
   });
 });

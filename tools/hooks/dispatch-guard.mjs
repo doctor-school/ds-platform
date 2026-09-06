@@ -40,7 +40,8 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { projectRoot } from "./hook-compat.mjs";
+import { projectRoot, actorIdentity, canonicalPath } from "./hook-compat.mjs";
+import { gitWorktreeRoots } from "./worktree-path-guard.mjs";
 
 /**
  * Threshold: the streak length at which the guard first WARNs. A single named,
@@ -182,7 +183,7 @@ function main() {
   try {
     const payload = JSON.parse(readFileSync(0, "utf8"));
     const projectDir = projectRoot(payload);
-    const statePath = stateFilePath(projectDir, payload.session_id || "");
+    const statePath = stateFilePath(projectDir, actorIdentity(payload));
     const streak = readStreak(statePath);
     const warned = readWarned(statePath);
     const decision = decideDispatch({
@@ -190,7 +191,15 @@ function main() {
       cwd: payload.cwd || "",
       projectDir,
       streak,
-      carveOut: isCarveOut(process.env),
+      carveOut:
+        isCarveOut(process.env) ||
+        (() => {
+          const roots = gitWorktreeRoots(projectDir);
+          return (
+            roots.length > 0 &&
+            norm(canonicalPath(roots[0])) !== norm(canonicalPath(projectDir))
+          );
+        })(),
       warned,
     });
     if (

@@ -1,77 +1,107 @@
 #!/usr/bin/env node
-/**
- * UserPromptSubmit hook: context-budget OPERATOR ADVISORY (owner decision, 2026-07-16).
- *
- * Supersedes the 2026-07-06 / #862 two-tier directive design. That design
- * injected an `additionalContext` block ordering the model to stop taking new
- * work and propose /wrap — the owner found this makes the agent abandon
- * in-flight slices mid-task. This hook now NEVER talks to the model: it is a
- * VISIBLE OPERATOR ADVISORY ONLY, surfaced via `systemMessage` for the human
- * operator to read. It MUST NEVER emit `hookSpecificOutput` / `additionalContext`
- * — the decision to /wrap stays with the human, not the model.
- *
- * It reads the CURRENT session transcript (path arrives on stdin), takes the
- * last assistant message's usage block, and computes the live context size as
- * input_tokens + cache_read_input_tokens + cache_creation_input_tokens.
- * Thresholds (owner decision 2026-08-31, #1693: 120K / 160K). The advisory
- * speaks in WAVE language — the lead's real decision point is a wave boundary,
- * not a token count — but it now lands at the point where a SECOND wave
- * actually starts: the 2026-08-31 retro found lead sessions opening a fresh
- * dispatch wave at ≈208K, i.e. above the former 200K/250K pair, so those tiers
- * could only ever confirm the overrun after the fact. The same 120K/160K pair
- * is enforced coercively at the dispatch boundary by `lead-context-budget.mjs`
- * (PreToolUse `Agent|Task`, #1693); subagents are governed separately by
- * `subagent-context-budget.mjs` (#1374). Do not change without an explicit
- * owner directive. Below the first tier: silent.
- *
- * Fail-safe: any parse/IO error exits 0 with no output — a broken budget probe
- * must never break prompting.
- */
+/** Operator-only context advisory. Claude retains 120K/160K tiers. Codex
+ * uses current request input / effective model window at 70%/85%, with cache
+ * counted once. Missing/stale telemetry is explicit and never a zero reading.
+ * No additionalContext: the owner decides when to /wrap. */
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { telemetryUnavailable } from "./hook-compat.mjs";
 
 export const WARN_THRESHOLD = 120_000;
 export const WRAP_THRESHOLD = 160_000;
 
-export function contextTokensFromJsonl(jsonl) {
+/** Last request usage, never lifetime totals. Codex cache is included in input. */
+export function contextReadingFromJsonl(jsonl, nowMs = Date.now()) {
   const lines = String(jsonl).split("\n");
   for (let i = lines.length - 1; i >= 0; i--) {
-    const line = lines[i].trim();
-    if (!line) continue;
     let entry;
     try {
-      entry = JSON.parse(line);
+      entry = JSON.parse(lines[i]);
     } catch {
       continue;
     }
+    if (entry?.type === "event_msg" && entry?.payload?.type === "token_count") {
+      const input = entry?.payload?.info?.last_token_usage?.input_tokens;
+      const window = entry?.payload?.info?.model_context_window;
+      const timestamp = Date.parse(entry.timestamp);
+      const fresh =
+        Number.isFinite(timestamp) &&
+        nowMs - timestamp <= 30 * 60 * 1000 &&
+        timestamp <= nowMs + 60_000;
+      return {
+        harness: "codex",
+        tokens: Number.isFinite(input) && input >= 0 ? input : null,
+        window: fresh && Number.isFinite(window) && window > 0 ? window : null,
+      };
+    }
     const usage = entry?.message?.usage;
     if (entry?.type === "assistant" && usage) {
-      return (
-        (usage.input_tokens ?? 0) +
-        (usage.cache_read_input_tokens ?? 0) +
-        (usage.cache_creation_input_tokens ?? 0)
-      );
-    }
-    if (entry?.type === "event_msg" && entry?.payload?.type === "token_count") {
-      // Codex reports cached input as a subset of input_tokens. Using the last
-      // request's input_tokens avoids double-counting the cache component.
-      const input = entry?.payload?.info?.last_token_usage?.input_tokens;
-      if (Number.isFinite(input)) return input;
+      const parts = [
+        usage.input_tokens,
+        usage.cache_read_input_tokens ?? 0,
+        usage.cache_creation_input_tokens ?? 0,
+      ];
+      return {
+        harness: "claude",
+        tokens: parts.every((n) => Number.isFinite(n) && n >= 0)
+          ? parts.reduce((a, b) => a + b, 0)
+          : null,
+        window: null,
+      };
     }
   }
-  return 0;
+  return { harness: "unknown", tokens: null, window: null };
+}
+export function contextTokensFromJsonl(jsonl) {
+  return contextReadingFromJsonl(jsonl).tokens;
+}
+export const CODEX_SOFT_RATIO = 0.7;
+export const CODEX_HARD_RATIO = 0.85;
+export function codexBudgetDecision(reading) {
+  if (reading.tokens === null || !reading.window) return "unavailable";
+  const ratio = reading.tokens / reading.window;
+  return ratio >= CODEX_HARD_RATIO
+    ? "deny"
+    : ratio >= CODEX_SOFT_RATIO
+      ? "soft"
+      : "silent";
+}
+export function codexBudgetMessage(reading, action) {
+  return (
+    `Codex current input ${reading.tokens}/${reading.window} (${Math.round((reading.tokens / reading.window) * 100)}%): ` +
+    (action === "deny"
+      ? "85% cap: no new dispatch; checkpoint and rotate after receiving running agents and completing recovery/PR tails."
+      : "70% warning: finish the current wave and prepare a checkpoint; start no new wave.") +
+    " Headroom is project policy, not a vendor guarantee. /wrap remains owner-only."
+  );
 }
 
 function main() {
   try {
     const stdin = readFileSync(0, "utf8");
     const { transcript_path: transcriptPath } = JSON.parse(stdin);
-    if (!transcriptPath) process.exit(0);
-    const context = contextTokensFromJsonl(
+    if (!transcriptPath) throw new Error("missing transcript");
+    const reading = contextReadingFromJsonl(
       readFileSync(transcriptPath, "utf8"),
     );
+    if (
+      process.env.DS_HOOK_HARNESS === "codex" ||
+      reading.harness === "codex"
+    ) {
+      const action = codexBudgetDecision(reading);
+      if (action === "unavailable") throw new Error("missing telemetry");
+      if (action !== "silent")
+        process.stdout.write(
+          JSON.stringify({
+            systemMessage: codexBudgetMessage(reading, action),
+          }),
+        );
+      process.exit(0);
+    }
+    const context = reading.tokens;
 
+    if (context === null) throw new Error("missing telemetry");
     if (context >= WRAP_THRESHOLD) {
       const k = Math.round(context / 1000);
       process.stdout.write(
@@ -89,6 +119,7 @@ function main() {
     }
     process.exit(0);
   } catch {
+    process.stdout.write(JSON.stringify(telemetryUnavailable("Lead")));
     process.exit(0);
   }
 }

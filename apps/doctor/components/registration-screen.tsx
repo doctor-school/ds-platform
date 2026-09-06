@@ -440,7 +440,7 @@ export function RegistrationScreen({
                 {ACCESS_CONDITIONS_HEADING}
               </p>
               <div className="flex flex-col gap-3.5 px-3.5 py-4">
-            {/*
+                {/*
               EARS-4 — the mandatory declaration, the first access condition,
               standing ABOVE the submit with the rest of tier 1 (EARS-5).
               Built from the design system's checkbox primitive, never a
@@ -451,28 +451,28 @@ export function RegistrationScreen({
               partial variant and no document affordance anywhere around it —
               the declaration is the only thing asked, and it is asked once.
             */}
-            <FormField
-              control={form.control}
-              name="medicalWorkerDeclaration"
-              rules={{ required: MEDICAL_WORKER_DECLARATION_UNMET }}
-              render={({ field }) => (
-                <FormItem data-testid="register-medworker-item">
-                  <FormControl>
-                    <Checkbox
-                      className="items-start"
-                      data-testid="register-medworker"
-                      name={field.name}
-                      ref={field.ref}
-                      checked={field.value}
-                      onBlur={field.onBlur}
-                      onChange={(event) =>
-                        field.onChange(event.target.checked)
-                      }
-                    >
-                      <span className="flex flex-col gap-1">
-                        <span>
-                          {DECLARATION_LABEL_LEAD}
-                          {/*
+                <FormField
+                  control={form.control}
+                  name="medicalWorkerDeclaration"
+                  rules={{ required: MEDICAL_WORKER_DECLARATION_UNMET }}
+                  render={({ field }) => (
+                    <FormItem data-testid="register-medworker-item">
+                      <FormControl>
+                        <Checkbox
+                          className="items-start"
+                          data-testid="register-medworker"
+                          name={field.name}
+                          ref={field.ref}
+                          checked={field.value}
+                          onBlur={field.onBlur}
+                          onChange={(event) =>
+                            field.onChange(event.target.checked)
+                          }
+                        >
+                          <span className="flex flex-col gap-1">
+                            <span>
+                              {DECLARATION_LABEL_LEAD}
+                              {/*
                             The canvas's «обязательно» tag (`reqTagStyle`,
                             `design-source/auth.dc.html`): the requirement is
                             stated on the control itself, not inferred from an
@@ -486,31 +486,31 @@ export function RegistrationScreen({
                             word onto the wrapped line instead of dropping onto a
                             line of its own.
                           */}
-                          <span className="whitespace-nowrap">
-                            {DECLARATION_LABEL_TAIL}
-                            <Badge
-                              variant="label"
-                              className="ml-1.5 align-middle"
-                              data-testid="register-medworker-required-tag"
+                              <span className="whitespace-nowrap">
+                                {DECLARATION_LABEL_TAIL}
+                                <Badge
+                                  variant="label"
+                                  className="ml-1.5 align-middle"
+                                  data-testid="register-medworker-required-tag"
+                                >
+                                  обязательно
+                                </Badge>
+                              </span>
+                            </span>
+                            <span
+                              data-testid="register-medworker-help"
+                              className="text-sm text-muted-foreground"
                             >
-                              обязательно
-                            </Badge>
+                              {MEDICAL_WORKER_DECLARATION_HELP}
+                            </span>
                           </span>
-                        </span>
-                        <span
-                          data-testid="register-medworker-help"
-                          className="text-sm text-muted-foreground"
-                        >
-                          {MEDICAL_WORKER_DECLARATION_HELP}
-                        </span>
-                      </span>
-                    </Checkbox>
-                  </FormControl>
-                  {/* EARS-12 — actionable, in the field where it occurred. */}
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+                        </Checkbox>
+                      </FormControl>
+                      {/* EARS-12 — actionable, in the field where it occurred. */}
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
                 {/*
                   EARS-5 — the partner-data consent, the SECOND access

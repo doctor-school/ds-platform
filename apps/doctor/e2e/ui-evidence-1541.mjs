@@ -64,7 +64,9 @@ async function shoot(browser, { name, viewport, theme, granted }) {
     document.documentElement.classList.contains("dark"),
   );
   if (rendersDark !== (theme === "dark")) {
-    throw new Error(`${name}: expected the ${theme} theme, got ${rendersDark ? "dark" : "light"}`);
+    throw new Error(
+      `${name}: expected the ${theme} theme, got ${rendersDark ? "dark" : "light"}`,
+    );
   }
   if (granted) {
     await tick(page, "register-medworker");
@@ -73,7 +75,9 @@ async function shoot(browser, { name, viewport, theme, granted }) {
   }
   // The block sits below the fields — the evidence is about the BLOCK, so
   // bring the marketing tier (its lower edge) into view before shooting.
-  await page.getByTestId("registration-consent-marketing").scrollIntoViewIfNeeded();
+  await page
+    .getByTestId("registration-consent-marketing")
+    .scrollIntoViewIfNeeded();
   await page.screenshot({ path: `${OUT}/${name}.png`, fullPage: false });
   await ctx.close();
   console.log(`captured ${name}.png`);

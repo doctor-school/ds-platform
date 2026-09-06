@@ -1,3 +1,7 @@
+---
+title: "Canvas source contract"
+---
+
 ## Canvas source → vendor it, build from it (never from prose)
 
 When the design originates in a **Claude Design canvas** (`.dc.html`) — a full re-skin, an auth/webinar screen set, any owner-authored visual language — the canvas is the fidelity SoT, and its **exact values** (px, border widths, colors L+D, states, placeholders) live only in the `.dc.html` inline styles:

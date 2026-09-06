@@ -1,3 +1,7 @@
+---
+title: "Canvas parity evidence contract"
+---
+
 ### Canvas-parity evidence contract (BLOCK)
 
 For every render-capable UI change (authored TSX/JSX/CSS, user-visible message catalogs, design-system `src/**/*.ts` runtime, or design-system primitive/semantic/component tokens), the PR body MUST select exactly one approved-source route. App-owned runtime `.ts` joins this contract through an explicit filename convention: `theme.ts`, `*-theme.ts`, `*-copy.ts`, `*-message.ts`, `*-view-state.ts`, or `*-render-state.ts`; arbitrary server/data `.ts` does not. Canvas-derived work uses `ui-source-kind: canvas`, an existing `ui-source: design-source/<exact-file>.dc.html`, and `ui-source-state: <exact state/mode>`; when the state has `key=value` form the guard proves that pair occurs in the canvas, while other canvas state identifiers remain an explicit Mode (a) comparison because canvas files have no universal state schema. Canvas-derived #1346 cannot use the alternative route.

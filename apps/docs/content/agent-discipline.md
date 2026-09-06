@@ -1,3 +1,7 @@
+---
+title: "Portable agent discipline"
+---
+
 # Portable agent discipline
 
 Read at session entry and after compaction. AGENTS.md is the constitution; this shared startup reference is mandatory for both harnesses and counted in their instruction budgets. CLAUDE.md contains only Claude bindings. Active harness instructions and explicit owner authorization take precedence over project skills.

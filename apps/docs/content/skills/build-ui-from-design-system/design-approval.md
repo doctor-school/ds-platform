@@ -1,3 +1,7 @@
+---
+title: "Design approval gate"
+---
+
 ## Design-approval gate (user-facing surfaces)
 
 The _look_ is a product (taste) decision — the product owner's, not the lead's best-architecture call (AGENTS.md §6). Two non-bypassable check-ins wrap the procedure; for a `user-facing` task they gate implementation (`run-task-lifecycle` step 2 — Stage A precedes UI code; isolation and a discovery claim may happen first). The gate's surface set is **every user-visible render, not just screens**: notification emails and SMS templates (incl. IdP-rendered message texts, e.g. Zitadel's verification email) pass the same Stage-A/Stage-B check-ins — a vendor's bundled default copy shipped on a user-visible channel is a silent Stage-A bypass (#869). Detail + failure lessons: memory `feedback_ui_design_product_approval`.

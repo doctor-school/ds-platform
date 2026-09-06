@@ -1,3 +1,7 @@
+---
+title: "Brainstorming detailed process"
+---
+
 # Brainstorming detailed process
 
 Adapted from obra/superpowers v6.3.0, Jesse Vincent, MIT; see the attribution in SKILL.md. Read for architectural depth or when context/refinement requires it. Project SDD and owner-approval scope in SKILL.md takes precedence over the generic sequence below.

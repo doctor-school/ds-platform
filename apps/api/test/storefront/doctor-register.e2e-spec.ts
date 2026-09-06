@@ -6,7 +6,11 @@ import {
 import { Test, type TestingModule } from "@nestjs/testing";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import type pg from "pg";
-import { DoctorRegisterResponseSchema } from "@ds/schemas";
+import {
+  DoctorRegisterResponseSchema,
+  PARTNER_DATA_SHARING_PURPOSE,
+} from "@ds/schemas";
+import { PARTNER_DATA_SHARING_VERSION } from "../../src/storefront/doctor-register.service.js";
 import { AppModule } from "../../src/app.module.js";
 import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
 import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
@@ -56,6 +60,14 @@ describe.skipIf(!process.env.DATABASE_URL)(
     const runId = Date.now();
     const createdEmails: string[] = [];
     const PASSWORD = "Aa1!ufficiently-long-pw";
+    // EARS-5 (#1541): the second access-condition purpose is required alongside
+    // the declaration; these arrivals grant it so the EARS-3 landing is reached.
+    const PARTNER_CONSENT = [
+      {
+        purpose: PARTNER_DATA_SHARING_PURPOSE,
+        version: PARTNER_DATA_SHARING_VERSION,
+      },
+    ];
     const URL = "/v1/storefront/doctor/register";
 
     function uniqueEmail(tag: string): string {
@@ -100,7 +112,12 @@ describe.skipIf(!process.env.DATABASE_URL)(
         url: URL,
         // The direct arrival, spelled exactly: no `returnTarget`, no
         // `returnTo`, no empty stand-in for one.
-        payload: { email, password: PASSWORD, medicalWorkerDeclaration: true },
+        payload: {
+          email,
+          password: PASSWORD,
+          medicalWorkerDeclaration: true,
+          consent: PARTNER_CONSENT,
+        },
       });
 
       expect(res.statusCode).toBe(200);
@@ -128,7 +145,12 @@ describe.skipIf(!process.env.DATABASE_URL)(
       const res = await app.inject({
         method: "POST",
         url: URL,
-        payload: { email, password: PASSWORD, medicalWorkerDeclaration: true },
+        payload: {
+          email,
+          password: PASSWORD,
+          medicalWorkerDeclaration: true,
+          consent: PARTNER_CONSENT,
+        },
       });
 
       expect(res.statusCode).toBe(200);
@@ -155,6 +177,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
           email,
           password: PASSWORD,
           medicalWorkerDeclaration: true,
+          consent: PARTNER_CONSENT,
           // There is no return-target field in the contract (LD-3: the carried
           // target and its re-validation are #1546). A client that invents one
           // must not be able to make the api store, honour or reflect it.

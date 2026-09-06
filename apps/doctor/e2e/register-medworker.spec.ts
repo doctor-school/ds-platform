@@ -57,11 +57,15 @@ test.describe("021 EARS-4: the mandatory medical-worker declaration", () => {
     // Never pre-ticked: the platform does not declare on the doctor's behalf.
     await expect(declaration).not.toBeChecked();
 
-    // The canvas copy, verbatim — the label, its «обязательно» tag and the
-    // plain-language statement of WHY it is required.
+    // The canvas copy, verbatim — the label and the plain-language statement of
+    // WHY it is required. Вариант Б draws NO requirement tag on either access
+    // condition: the «Условия доступа» frame carries the requirement, so a tag
+    // on this row alone would be an А/В element inside the Б frame.
     const item = page.getByTestId("register-medworker-item");
     await expect(item).toContainText("Я являюсь медицинским работником");
-    await expect(item).toContainText("обязательно");
+    await expect(
+      page.getByTestId("register-medworker-required-tag"),
+    ).toHaveCount(0);
     await expect(page.getByTestId("register-medworker-help")).toHaveText(
       "Требование закона: часть материалов доступна только медицинским работникам.",
     );

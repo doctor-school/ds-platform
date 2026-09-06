@@ -10,6 +10,8 @@ import {
   DoctorRegisterResponseSchema,
   MEDICAL_WORKER_DECLARATION_PURPOSE,
   MEDICAL_WORKER_DECLARATION_REQUIRED_CODE,
+  PARTNER_DATA_SHARING_PURPOSE,
+  PARTNER_DATA_SHARING_REQUIRED_CODE,
 } from "@ds/schemas";
 import { AppModule } from "../../src/app.module.js";
 import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
@@ -23,6 +25,7 @@ import { deleteUserFixture } from "../setup/fixture-cleanup.js";
 import {
   DoctorRegisterService,
   MEDICAL_WORKER_DECLARATION_VERSION,
+  PARTNER_DATA_SHARING_VERSION,
 } from "../../src/storefront/doctor-register.service.js";
 
 /**
@@ -160,7 +163,21 @@ describe.skipIf(!process.env.DATABASE_URL)(
       const res = await app.inject({
         method: "POST",
         url: URL,
-        payload: { email, password: PASSWORD, medicalWorkerDeclaration: true },
+        payload: {
+          email,
+          password: PASSWORD,
+          medicalWorkerDeclaration: true,
+          // EARS-5 (#1541) made the partner-data consent the SECOND access
+          // condition, so an accepted payload now carries both. This clause is
+          // still about the declaration's own row; the partner-data row is
+          // asserted by EARS-5.2 below.
+          consent: [
+            {
+              purpose: PARTNER_DATA_SHARING_PURPOSE,
+              version: PARTNER_DATA_SHARING_VERSION,
+            },
+          ],
+        },
       });
 
       expect(res.statusCode).toBe(200);
@@ -185,14 +202,12 @@ describe.skipIf(!process.env.DATABASE_URL)(
         "SELECT purpose, version, captured_at FROM consent_records cr JOIN users u ON u.id = cr.user_id WHERE u.email = $1",
         [email],
       );
-      expect(consentRows.rows).toHaveLength(1);
-      expect(consentRows.rows[0].purpose).toBe(
-        MEDICAL_WORKER_DECLARATION_PURPOSE,
+      const declaration = consentRows.rows.find(
+        (row) => row.purpose === MEDICAL_WORKER_DECLARATION_PURPOSE,
       );
-      expect(consentRows.rows[0].version).toBe(
-        MEDICAL_WORKER_DECLARATION_VERSION,
-      );
-      expect(consentRows.rows[0].captured_at).toBeTruthy();
+      expect(declaration).toBeDefined();
+      expect(declaration.version).toBe(MEDICAL_WORKER_DECLARATION_VERSION);
+      expect(declaration.captured_at).toBeTruthy();
     });
 
     it("EARS-4.5: the declaration record is written once even if the client also supplies the purpose itself — the ticked box is the row", async () => {
@@ -214,6 +229,10 @@ describe.skipIf(!process.env.DATABASE_URL)(
               purpose: MEDICAL_WORKER_DECLARATION_PURPOSE,
               version: "attacker-chosen",
             },
+            {
+              purpose: PARTNER_DATA_SHARING_PURPOSE,
+              version: PARTNER_DATA_SHARING_VERSION,
+            },
           ],
         },
       });
@@ -224,12 +243,92 @@ describe.skipIf(!process.env.DATABASE_URL)(
         "SELECT purpose, version FROM consent_records cr JOIN users u ON u.id = cr.user_id WHERE u.email = $1",
         [email],
       );
-      expect(consentRows.rows).toEqual([
+      const declarationRows = consentRows.rows.filter(
+        (row) => row.purpose === MEDICAL_WORKER_DECLARATION_PURPOSE,
+      );
+      expect(declarationRows).toEqual([
         {
           purpose: MEDICAL_WORKER_DECLARATION_PURPOSE,
           version: MEDICAL_WORKER_DECLARATION_VERSION,
         },
       ]);
+    });
+
+    /**
+     * 021 EARS-5 (#1541) — the partner-data consent is the SECOND access
+     * condition of the two-tier block, not a preference: withheld, the command
+     * is refused before any IdP call; granted, it produces its own versioned,
+     * dated row beside the declaration's.
+     *
+     * The tier RENDERING (two tiers, the stated composition, neither box
+     * pre-ticked) is a browser fact and lives in
+     * `apps/doctor/e2e/register-consent-tiers.spec.ts`; what a server test can
+     * prove is that the door does not open without it.
+     */
+    it("021 EARS-5.1: a registration without the partner-data consent is refused with its own code, and no account is created", async () => {
+      const email = uniqueEmail("no-partner-data");
+
+      const res = await app.inject({
+        method: "POST",
+        url: URL,
+        payload: { email, password: PASSWORD, medicalWorkerDeclaration: true },
+      });
+
+      expect(res.statusCode).toBe(422);
+      expect(res.json()).toMatchObject({
+        code: PARTNER_DATA_SHARING_REQUIRED_CODE,
+        missingConsentPurposes: [PARTNER_DATA_SHARING_PURPOSE],
+      });
+      // Refused BEFORE the IdP call — the declaration alone opens nothing.
+      expect(await accountExists(email)).toBe(false);
+    });
+
+    it("021 EARS-5.2: with both access conditions the command is accepted and writes two versioned dated rows", async () => {
+      const email = uniqueEmail("both-tier1");
+
+      const res = await app.inject({
+        method: "POST",
+        url: URL,
+        payload: {
+          email,
+          password: PASSWORD,
+          medicalWorkerDeclaration: true,
+          consent: [
+            {
+              purpose: PARTNER_DATA_SHARING_PURPOSE,
+              // A version of the client's choosing: the server stamps the
+              // wording version it actually rendered, so this cannot land.
+              version: "attacker-chosen",
+            },
+          ],
+        },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(await accountExists(email)).toBe(true);
+
+      const consentRows = await pool.query(
+        "SELECT purpose, version, captured_at FROM consent_records cr JOIN users u ON u.id = cr.user_id WHERE u.email = $1 ORDER BY purpose",
+        [email],
+      );
+      expect(
+        consentRows.rows.map((row) => ({
+          purpose: row.purpose,
+          version: row.version,
+        })),
+      ).toEqual([
+        {
+          purpose: MEDICAL_WORKER_DECLARATION_PURPOSE,
+          version: MEDICAL_WORKER_DECLARATION_VERSION,
+        },
+        {
+          purpose: PARTNER_DATA_SHARING_PURPOSE,
+          version: PARTNER_DATA_SHARING_VERSION,
+        },
+      ]);
+      // EARS-7's "each granted consent … with its date", per purpose.
+      for (const row of consentRows.rows)
+        expect(row.captured_at).toBeTruthy();
     });
   },
 );

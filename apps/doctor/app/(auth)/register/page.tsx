@@ -190,7 +190,9 @@ export default async function DoctorRegisterPage({
   return (
     <AuthShell
       returnContext={
-        returnEvent ? <ReturnContextPanel event={returnEvent} /> : undefined
+        returnEvent ? (
+          <ReturnContextPanel event={returnEvent} variant="register" />
+        ) : undefined
       }
     >
       <RegistrationScreen

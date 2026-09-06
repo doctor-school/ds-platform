@@ -46,6 +46,25 @@ import type { ReturnContextEvent } from "@/lib/return-context";
 /** Verbatim from the canvas — the eyebrow above the card in both compositions. */
 const EYEBROW = "Вы вернётесь к этому событию";
 
+/**
+ * Which door the panel is standing beside. The card, the eyebrow and the frame
+ * are identical on both; the ASSURANCE LINE is not, because what happens next
+ * is not the same event. Registration waits on an email confirmation before the
+ * doctor is back; sign-in returns them on the spot. Naming the wrong step there
+ * is not a cosmetic slip — it tells a doctor who already has an account to go
+ * and look for a letter that will never arrive (#1955).
+ *
+ * The prop is REQUIRED and has no default: a new caller must decide which door
+ * it is rather than silently inheriting the registration wording, which is how
+ * the login route came to carry it in the first place.
+ */
+export type ReturnContextVariant = "register" | "login";
+
+const ASSURANCE: Record<ReturnContextVariant, string> = {
+  register: "После подтверждения почты вы вернётесь сюда же — место за вами.",
+  login: "После входа вы вернётесь сюда же — место за вами.",
+};
+
 function ReturnEventCard({ event }: { event: ReturnContextEvent }) {
   return (
     <WebinarCard
@@ -80,7 +99,14 @@ function ReturnEventCard({ event }: { event: ReturnContextEvent }) {
  * the primitive is untouched. Only the CARD is scoped — the eyebrow and the
  * assurance line beside it stay on the panel's white-on-blue pair.
  */
-export function ReturnContextPanel({ event }: { event: ReturnContextEvent }) {
+export function ReturnContextPanel({
+  event,
+  variant,
+}: {
+  event: ReturnContextEvent;
+  /** Which door this panel stands beside — it selects the assurance line. */
+  variant: ReturnContextVariant;
+}) {
   return (
     <div
       data-testid="return-context-panel"
@@ -97,9 +123,10 @@ export function ReturnContextPanel({ event }: { event: ReturnContextEvent }) {
       </div>
       {/* The canvas's assurance line — it states plainly what happens next,
           which is EARS-2's «state plainly what the doctor will return to»
-          without offering a control that acts on it now. */}
+          without offering a control that acts on it now. Which step it names
+          follows the door (#1955). */}
       <p className="max-w-md text-sm leading-relaxed text-primary-surface-muted">
-        После подтверждения почты вы вернётесь сюда же — место за вами.
+        {ASSURANCE[variant]}
       </p>
     </div>
   );

@@ -35,8 +35,12 @@ export default defineConfig({
   // second pair of ports to answer the same upstream.
   // #1945 adds the third half of the same question — the sign-in door's landing
   // (`login-return-context.spec.ts`), server-resolved against this same double
-  // for exactly the reason the other two are.
-  testMatch: "{register-return-context,register-direct,login-return-context}.spec.ts",
+  // for exactly the reason the other two are. `login-arrival.spec.ts` (#1955)
+  // joins them for the same reason again: the sign-in door's return-context
+  // copy AND its signed-in redirect are both server decisions taken against
+  // this same upstream before the first byte of HTML.
+  testMatch:
+    "{register-{return-context,direct},login-{return-context,arrival}}.spec.ts",
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,

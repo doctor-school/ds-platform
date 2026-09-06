@@ -88,6 +88,13 @@ export interface RoomCopyStrings {
   playerSuspectedBody: string;
   playerRestart: string;
   programNow: string;
+  // 006 EARS-7 — the ENDED phase an already-open room degrades into once a gated
+  // request is refused with the event no longer `live`. `endedBadge` is reused by
+  // both the header pill and the mobile slim-bar eyebrow (one wording, one key).
+  endedTitle: string;
+  endedBody: string;
+  endedBadge: string;
+  chatEnded: string;
   // Chat panel (EARS-3).
   moderatorPin: string;
   chatLoading: string;
@@ -151,6 +158,10 @@ export const ROOM_COPY_KEYS = [
   "playerSuspectedBody",
   "playerRestart",
   "programNow",
+  "endedTitle",
+  "endedBody",
+  "endedBadge",
+  "chatEnded",
   "moderatorPin",
   "chatLoading",
   "chatEmpty",

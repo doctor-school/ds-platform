@@ -50,6 +50,12 @@ export interface RoomHeaderBarProps {
   linkComponent?: RoomLinkComponent | undefined;
   /** The one chrome slot: the host's theme toggle + profile chip (D17a). */
   userCluster?: ReactNode | undefined;
+  /**
+   * 006 EARS-7 — the server-proven ended phase, lifted by {@link RoomShell}. The
+   * live pill is the header's whole claim about the broadcast, so it must stop
+   * making it the moment the claim stops being true.
+   */
+  ended?: boolean;
 }
 
 /** The D7 default — a plain anchor, so the package hardcodes no router. */
@@ -65,6 +71,7 @@ export function RoomHeaderBar({
   copy,
   linkComponent,
   userCluster,
+  ended = false,
 }: RoomHeaderBarProps) {
   const LinkImpl = linkComponent ?? PlainAnchor;
   return (
@@ -96,12 +103,23 @@ export function RoomHeaderBar({
             toggle + ✕ physically exceed a 390px viewport (the canvas mock's own
             metrics only fit from ~430px), so the narrow render keeps the truthful
             «В эфире» pill whole rather than clipping the minute tail mid-glyph. */}
-        <Badge variant="live" className="whitespace-nowrap">
-          {copy.liveBadge}
-          <span className="hidden layout:inline">
-            <LiveDuration liveAt={liveAt} format={copy.liveDuration} />
-          </span>
-        </Badge>
+        {/* EARS-7 — once the broadcast is over the pill drops to the NEUTRAL
+            `label` variant («Эфир завершён»): the red pulsing `live` dot is the
+            room's strongest live claim. No minute suffix either — the close
+            instant is server-side, so any client-rendered duration would be a
+            guessed number, and design §6 forbids guessing closure from the clock. */}
+        {ended ? (
+          <Badge variant="label" className="whitespace-nowrap">
+            {copy.endedBadge}
+          </Badge>
+        ) : (
+          <Badge variant="live" className="whitespace-nowrap">
+            {copy.liveBadge}
+            <span className="hidden layout:inline">
+              <LiveDuration liveAt={liveAt} format={copy.liveDuration} />
+            </span>
+          </Badge>
+        )}
       </div>
       <div className="flex flex-none items-center gap-2.5 layout:gap-5">
         {/* The live «N врачей в комнате» presence count (canvas line 21) — desktop

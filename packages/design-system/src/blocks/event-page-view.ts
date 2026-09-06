@@ -5,7 +5,10 @@ import type {
   PublicEventPageSpeaker,
 } from "@ds/schemas";
 
-import type { EventSignupCardProps, EventSignupCondition } from "./event-signup-card";
+import type {
+  EventSignupCardProps,
+  EventSignupCondition,
+} from "./event-signup-card";
 import type { EventFormatBlockProps } from "./event-format-block";
 import type { EventSpeakerCardProps } from "./event-speaker-card";
 
@@ -67,8 +70,22 @@ export interface EventPageCopy {
   conditionFormat: string;
   conditionDuration: string;
   conditionPrice: string;
-  /** The standing participation price on both storefronts today. */
+  /** The zero-cost participation reading — 020 EARS-12, never roubles. */
   priceFree: string;
+  /**
+   * The unit a NON-zero participation cost is counted in — «250 Pul». Pul are
+   * attention points, so the unit is deliberately not a currency symbol: 020
+   * invariants forbid a price and any financing statement on this page.
+   */
+  pulUnit: string;
+  /**
+   * 020 EARS-14 — the НМО condition row's label and value, and the hero chip.
+   * НМО appears ONLY as a badge and as a conditions-line value, never as the
+   * headline; when the event credits nothing, none of the three renders.
+   */
+  conditionNmo: string;
+  nmoCredited: string;
+  nmoChip: string;
   /** Participation-format words, shared by the kicker and the condition row. */
   format: Record<EventParticipationFormat, string>;
   /**
@@ -113,6 +130,10 @@ export const EVENT_PAGE_COPY: EventPageCopy = {
   conditionDuration: "Длительность",
   conditionPrice: "Участие",
   priceFree: "Бесплатно для врача",
+  pulUnit: "Pul",
+  conditionNmo: "НМО",
+  nmoCredited: "Баллы начисляются",
+  nmoChip: "НМО",
   format: {
     online: "Онлайн",
     offline: "Очно",
@@ -232,17 +253,26 @@ export function eventProgrammeContent(
   // honest answer is that it was never published, not a promise about a date
   // that has passed.
   const upcoming = view.state === "published" || view.state === "live";
-  return { statement: upcoming ? copy.programmePending : copy.programmeNeverPublished };
+  return {
+    statement: upcoming ? copy.programmePending : copy.programmeNeverPublished,
+  };
 }
 
 /**
- * The hero chips — the event's target specialties, in projection order. NO НМО
- * chip is synthesised here: `EventPageView` carries no accreditation field yet
- * (that read is EARS-11 / #1774), and inventing one would be the untracked seam
- * F-22 forbids. When the field lands, it joins this one function.
+ * The hero chips — the event's target specialties in projection order, followed
+ * by the НМО badge of canvas:52 when the event credits attention points.
+ *
+ * The badge is the ONLY headline-adjacent place НМО is allowed to appear (020
+ * EARS-14): it is a chip beside the specialties and a conditions-line value,
+ * never the title and never the primary filter. An event that credits nothing
+ * gets NO chip — no «без НМО», no greyed placeholder — because the honest
+ * reading of `nmo: false` is silence (LD-8).
  */
-export function eventPageChips(view: EventPageView): readonly string[] {
-  return view.specialties;
+export function eventPageChips(
+  view: EventPageView,
+  copy: EventPageCopy = EVENT_PAGE_COPY,
+): readonly string[] {
+  return view.nmo ? [...view.specialties, copy.nmoChip] : view.specialties;
 }
 
 /**
@@ -299,7 +329,11 @@ export function eventLifecycleCountdown(
   if (days <= 0) return null;
   const form = RU_PLURAL.select(days);
   const word =
-    form === "one" ? copy.days[0] : form === "few" ? copy.days[1] : copy.days[2];
+    form === "one"
+      ? copy.days[0]
+      : form === "few"
+        ? copy.days[1]
+        : copy.days[2];
   return `${copy.inPrefix} ${days} ${word}`;
 }
 
@@ -312,7 +346,8 @@ const MSK_DAY_KEY = new Intl.DateTimeFormat("en-CA", {
 
 /** Whole Moscow calendar days from `from` to `to` (negative when `to` is past). */
 function mskCalendarDaysBetween(from: Date, to: Date): number {
-  const utcMidnight = (d: Date) => Date.parse(`${MSK_DAY_KEY.format(d)}T00:00:00Z`);
+  const utcMidnight = (d: Date) =>
+    Date.parse(`${MSK_DAY_KEY.format(d)}T00:00:00Z`);
   return Math.round((utcMidnight(to) - utcMidnight(from)) / 86_400_000);
 }
 
@@ -326,19 +361,28 @@ export function eventSignupCardProps(
   copy: EventPageCopy = EVENT_PAGE_COPY,
 ): EventSignupCardProps {
   const { time, date, weekday } = eventPageTimeParts(view);
-  // Canvas:206-228 order — Участие · Формат · Длительность. «Участие» leads:
-  // the price is the fact that decides whether a doctor reads any of the rest,
-  // and the canvas sets it in the success tone for exactly that reason. (The
-  // canvas's fourth row, «НМО 2 балла», needs an accreditation field the public
-  // read does not carry — that is EARS-2 / #1765, and inventing it here would be
-  // the untracked seam F-22 forbids.)
+  // Canvas:181-198 order — Участие · Формат · Длительность · НМО. «Участие»
+  // leads: the cost is the fact that decides whether a doctor reads any of the
+  // rest, and the canvas sets the FREE reading in the success tone for exactly
+  // that reason — a non-zero Pul cost is a neutral fact, not good news, so it
+  // keeps the default tone. The fourth row now comes from the read model
+  // (`view.nmo`, #1766) and is ABSENT when the event credits nothing: «нет» or
+  // a greyed placeholder would be a claim the page has no business making.
   const conditions: EventSignupCondition[] = [
-    { label: copy.conditionPrice, value: copy.priceFree, tone: "success" },
+    view.pulCost === 0
+      ? { label: copy.conditionPrice, value: copy.priceFree, tone: "success" }
+      : {
+          label: copy.conditionPrice,
+          value: `${view.pulCost} ${copy.pulUnit}`,
+        },
     { label: copy.conditionFormat, value: copy.formatDetail[view.format] },
     {
       label: copy.conditionDuration,
       value: `${view.durationMin} ${copy.minutes}`,
     },
+    ...(view.nmo
+      ? [{ label: copy.conditionNmo, value: copy.nmoCredited }]
+      : []),
   ];
   return {
     timeLabel: time,
@@ -373,7 +417,9 @@ export function eventSignupCardProps(
  * card after the first suppresses it with an explicit `null` — `undefined`
  * would RESTORE the card's canvas default.
  */
-export function eventSpeakerCards(view: EventPageView): EventSpeakerCardProps[] {
+export function eventSpeakerCards(
+  view: EventPageView,
+): EventSpeakerCardProps[] {
   const pages = new Map(
     view.links.speakerPages.map((page) => [page.speakerKey, page.href]),
   );

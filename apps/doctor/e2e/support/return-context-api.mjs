@@ -63,6 +63,9 @@ const EVENT = {
   // 020 EARS-2 (#1765): the required AroundEvent object. The doctor host has no
   // expert/school/community route, so every key resolves absent.
   links: { speakerPages: [] },
+  // 020 EARS-4 (#1766): the public page schema is `.strict()` and requires both.
+  nmo: false,
+  pulCost: 0,
   state: "published",
   format: "online",
   seatsLeft: null,

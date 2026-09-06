@@ -1,9 +1,30 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { PresenceHeartbeatAckSchema } from "@ds/schemas";
-import type { BrowserRoomApi } from "../client/room-api";
+import { RoomApiError, type BrowserRoomApi } from "../client/room-api";
 import { usePresenceCountSetter } from "./room-presence";
+
+/**
+ * 006 EARS-7 — does this refused beat PROVE the event left `live`?
+ *
+ * Only a 409 whose body names a lifecycle state other than `live` qualifies: that
+ * is the exact shape the server's close path answers with
+ * (`ConflictException({ message, state })`, pinned by
+ * `apps/api/test/room/room-close.e2e-spec.ts`). Everything else — 401 (unknown
+ * subject), 403 (not registered), 5xx, a network drop, a proxy error page whose
+ * body will not parse — is a diagnostics-only failure. Promoting any of those
+ * would paint «Эфир завершён» over a running broadcast on a transient blip, which
+ * is strictly worse than the stale-live state this feature removes.
+ */
+function provesRoomClosed(error: unknown): boolean {
+  return (
+    error instanceof RoomApiError &&
+    error.status === 409 &&
+    error.state !== undefined &&
+    error.state !== "live"
+  );
+}
 
 /**
  * Leave a diagnostic breadcrumb for a swallowed beat. The loop is best-effort by
@@ -50,22 +71,39 @@ function reportBeatFailure(reason: string, error?: unknown): void {
 export function PresenceHeartbeat({
   api,
   intervalSeconds,
+  onRoomClosed,
 }: {
   /** The room's ONE browser transport — `createBrowserRoomApi({ slug })`. */
   api: BrowserRoomApi;
   intervalSeconds: number;
+  /**
+   * 006 EARS-7 — called AT MOST ONCE, when a beat is refused with proof the event
+   * left `live` ({@link provesRoomClosed}). The loop stops for good at that point:
+   * a closed room has no presence to capture. The shell lifts this into the room's
+   * ended phase; the component itself still renders nothing.
+   */
+  onRoomClosed?: (() => void) | undefined;
 }) {
   const setPresenceCount = usePresenceCountSetter();
+  // Held in a ref so a host passing an inline callback cannot re-run the effect —
+  // a restart would clear the `closed` latch and resume beating a closed room.
+  const onRoomClosedRef = useRef(onRoomClosed);
+  useEffect(() => {
+    onRoomClosedRef.current = onRoomClosed;
+  }, [onRoomClosed]);
   useEffect(() => {
     // A non-positive cadence is inert — never a busy-loop (defence in depth; the
     // schema pins N positive, but the client does not trust that blindly).
     if (!Number.isFinite(intervalSeconds) || intervalSeconds <= 0) return;
 
     let timer: ReturnType<typeof setInterval> | undefined;
+    // EARS-7 — a one-way latch. Once the server has proven the event left `live`,
+    // the loop is done: no grid beat, and no beat on a later visible resume.
+    let closed = false;
 
     const beat = (): void => {
       // Visibility gate: a backgrounded tab emits nothing (EARS-4).
-      if (document.hidden) return;
+      if (closed || document.hidden) return;
       void api
         .sendHeartbeat()
         .then((body) => {
@@ -78,6 +116,18 @@ export function PresenceHeartbeat({
           else reportBeatFailure("ack payload failed the schema contract");
         })
         .catch((error: unknown) => {
+          // EARS-7 — the ONE refusal that is a product event, not a diagnostic:
+          // the room's next gated request was refused because the event is no
+          // longer live, so the room learns the broadcast ended and degrades to
+          // the end card. Latch first, so a beat already in flight cannot report
+          // the close twice.
+          if (provesRoomClosed(error)) {
+            if (closed) return;
+            closed = true;
+            stop();
+            onRoomClosedRef.current?.();
+            return;
+          }
           // Presence capture is best-effort — a failed beat never reaches the
           // doctor, but it does leave a dev-visible breadcrumb (#1122).
           reportBeatFailure("beat request failed (refused/network/transport)", error);
@@ -85,7 +135,7 @@ export function PresenceHeartbeat({
     };
 
     const start = (): void => {
-      if (timer) return;
+      if (timer || closed) return;
       beat(); // capture from minute one / on re-entry, then on the N-second grid.
       timer = setInterval(beat, intervalSeconds * 1000);
     };

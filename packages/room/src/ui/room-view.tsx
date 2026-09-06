@@ -62,6 +62,11 @@ export type RoomViewCopy = Pick<
   | "playerSuspectedBody"
   | "playerRestart"
   | "programNow"
+  // 006 EARS-7 — the ENDED phase: the end card that REPLACES the player region and
+  // the eyebrow/pill wording that replaces «Идёт эфир».
+  | "endedTitle"
+  | "endedBody"
+  | "endedBadge"
 > &
   RoomChatCopy & {
     /** «N новых сообщений» — the collapsed-chat unread tally (EARS-3). */
@@ -83,6 +88,8 @@ type PlayerCopy = Pick<
   | "playerRetrying"
   | "playerSuspectedBody"
   | "playerRestart"
+  | "endedTitle"
+  | "endedBody"
 >;
 
 /** The fixed-white outline restart control — the same «Перезапустить плеер» affordance
@@ -192,7 +199,16 @@ function postYouTubeListening(iframe: HTMLIFrameElement) {
   );
 }
 
-export function PlayerFrame({ config, copy }: { config: RoomConfig; copy: PlayerCopy }) {
+export function PlayerFrame({
+  config,
+  copy,
+  ended = false,
+}: {
+  config: RoomConfig;
+  copy: PlayerCopy;
+  /** 006 EARS-7 — the broadcast is over (server-proven); render the end card. */
+  ended?: boolean;
+}) {
   const embed = resolveEmbed(config.stream);
   // 006 EARS-18 — the runtime player-failure state machine. Hooks run unconditionally
   // (a config-absent `unavailable` embed still calls it with a harmless provider);
@@ -210,6 +226,28 @@ export function PlayerFrame({ config, copy }: { config: RoomConfig; copy: Player
   useEffect(() => {
     setOrigin(window.location.origin);
   }, []);
+
+  if (ended) {
+    // 006 EARS-7 — the end card. It REPLACES the player region rather than
+    // covering it: the iframe is unmounted, so the provider's stream and audio
+    // physically stop and the room can no longer present itself as live (design
+    // §8.3). No live badge, and deliberately NO control — the recording is not
+    // ready at close, so a «Смотреть запись» button here would be a promise the
+    // room cannot keep (the recording pointer is the next increment, #1188).
+    // Same dark-letterbox plate as the EARS-2 unavailable state, per the owner's
+    // «у нас же даже есть плашка поверх плеера — можно её переиспользовать».
+    return (
+      <div
+        data-testid="room-player-ended"
+        className="absolute inset-0 flex flex-col items-center justify-center gap-2.5 px-6 text-center"
+      >
+        <p className="text-lg font-extrabold text-white">{copy.endedTitle}</p>
+        <p className="max-w-sm text-sm leading-relaxed text-white/60">
+          {copy.endedBody}
+        </p>
+      </div>
+    );
+  }
 
   if (embed.kind === "unavailable") {
     // EARS-2 — truthful "stream unavailable" state, canvas-styled (dark region,
@@ -364,12 +402,19 @@ export function RoomView({
   config,
   context,
   copy,
+  ended = false,
 }: {
   /** The room's ONE browser transport — `createBrowserRoomApi({ slug })`. */
   api: BrowserRoomApi;
   config: RoomConfig;
   context: RoomContext;
   copy: RoomViewCopy;
+  /**
+   * 006 EARS-7 — the server-proven ended phase, lifted by {@link RoomShell}. The
+   * view does not derive it; it only projects it onto the player region, the
+   * mobile eyebrow and the chat composer.
+   */
+  ended?: boolean;
 }) {
   const presenceCount = usePresenceCount();
   // Desktop chat collapse + the unread counter (messages missed while folded).
@@ -396,7 +441,7 @@ export function RoomView({
         setCollapsed(next);
         setUnread(0);
       }}
-      player={<PlayerFrame config={config} copy={copy} />}
+      player={<PlayerFrame config={config} copy={copy} ended={ended} />}
       contextStrip={<ContextStrip context={context} />}
       context={<EventContext context={context} copy={copy} />}
       chat={
@@ -407,6 +452,7 @@ export function RoomView({
             copy={copy}
             collapsed={collapsed}
             onIncomingWhileCollapsed={onIncomingWhileCollapsed}
+            ended={ended}
           />
         ) : (
           <ChatUnavailable copy={copy} />
@@ -414,8 +460,11 @@ export function RoomView({
       }
       slimBar={
         <div className="flex items-center gap-2.5 border-b-2 border-border bg-card px-4 py-2.5">
+          {/* EARS-7 — the mobile eyebrow states the phase it is actually in: once
+              the broadcast is over «Идёт эфир» would be the same lie the end card
+              exists to remove. */}
           <span className="text-2xs font-extrabold uppercase tracking-micro text-primary-action whitespace-nowrap">
-            {copy.onAir}
+            {ended ? copy.endedBadge : copy.onAir}
           </span>
           <span className="min-w-0 flex-1 truncate text-sm font-bold text-foreground">
             {context.title}

@@ -67,7 +67,9 @@ describe("<EventPageShell>", () => {
       screen.getByText("28 августа, 19:00 (МСК) · 90 минут"),
     ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "События" })).toBeInTheDocument();
-    expect(screen.getByTestId("event-page-hero-chips").children).toHaveLength(2);
+    expect(screen.getByTestId("event-page-hero-chips").children).toHaveLength(
+      2,
+    );
     expect(screen.getByText("Скоро · через 5 дней")).toBeInTheDocument();
   });
 
@@ -101,5 +103,50 @@ describe("<EventPageShell>", () => {
     expect(screen.queryByTestId("event-page-hero-breadcrumb")).toBeNull();
     expect(screen.queryByTestId("event-page-hero-chips")).toBeNull();
     expect(screen.queryByTestId("event-page-hero-status")).toBeNull();
+  });
+});
+
+/**
+ * 020 EARS-4 (#1766) — the A-variant composition invariant: ONE right column
+ * carrying the sign-up card and nothing else. Everything a doctor reads before
+ * deciding — the speakers included — belongs to the open flow. A second aside,
+ * or a speaker card that drifted into the sticky column, would give the page a
+ * second ask beside its single CTA.
+ */
+describe("<EventPageShell> single right column", () => {
+  it("020 EARS-4.9: the shell shall render exactly one aside holding exactly the node it was given", () => {
+    const { container } = render(
+      <EventPageShell
+        hero={<div data-testid="hero-slot" />}
+        aside={<div data-testid="signup-slot" />}
+      >
+        <div data-testid="event-speaker-card" />
+      </EventPageShell>,
+    );
+
+    expect(container.querySelectorAll("aside")).toHaveLength(1);
+    const aside = screen.getByTestId("event-page-aside");
+    expect(aside.tagName).toBe("ASIDE");
+    expect(aside.children).toHaveLength(1);
+    expect(aside.children[0]).toBe(screen.getByTestId("signup-slot"));
+  });
+
+  it("020 EARS-4.9: a speaker card passed as a child shall land in the open flow, never in the aside", () => {
+    render(
+      <EventPageShell
+        hero={<div data-testid="hero-slot" />}
+        aside={<div data-testid="signup-slot" />}
+      >
+        <div data-testid="event-speaker-card" />
+      </EventPageShell>,
+    );
+
+    const speaker = screen.getByTestId("event-speaker-card");
+    expect(screen.getByTestId("event-page-open-part")).toContainElement(
+      speaker,
+    );
+    expect(screen.getByTestId("event-page-aside")).not.toContainElement(
+      speaker,
+    );
   });
 });

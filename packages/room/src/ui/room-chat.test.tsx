@@ -29,6 +29,7 @@ const copy: RoomChatCopy = {
   chatDisconnected: "chatDisconnected",
   composerPlaceholder: "composerPlaceholder",
   composerSend: "composerSend",
+  chatEnded: "chatEnded",
 };
 
 // The room's ONE browser transport, injected (#1722) — the chat pane no longer
@@ -372,5 +373,57 @@ describe("006 EARS-17 named chat authorship — the poster's real name authors t
     const row = screen.getByTestId("room-chat-message");
     expect(row.textContent).toContain("chatYou");
     expect(row.textContent).not.toContain("Пётр Чатов");
+  });
+});
+
+/**
+ * 006 EARS-7 (#1238) — the chat column after the broadcast ends. Design §8.3: the
+ * chat DEGRADES, it does not vanish. The conversation that just happened stays
+ * readable (doctors scroll back for the links and the speaker's answers); only the
+ * composer goes, replaced by a line that says why — the server refuses a post to a
+ * closed room, so leaving the control armed would offer a send that cannot land.
+ */
+describe("006 EARS-7 the ended room's chat keeps its ledger and drops the composer", () => {
+  function renderEndedChat(
+    msgs: unknown[],
+    props?: Partial<Parameters<typeof RoomChat>[0]>,
+  ): void {
+    let resolveHistory!: (v: { publications: Array<{ data: unknown }> }) => void;
+    sdk.history = () =>
+      new Promise((res) => {
+        resolveHistory = res;
+      });
+    render(<RoomChat api={api} chat={chat} copy={copy} {...props} />);
+    fire("connected", {});
+    fire("subscribed", { channel: chat.channel });
+    act(() => resolveHistory({ publications: msgs.map((m) => ({ data: m })) }));
+  }
+
+  it("EARS-7.8: the composer is replaced by the truthful ended status line", async () => {
+    renderEndedChat([message], { ended: true });
+
+    await waitFor(() => expect(screen.getByTestId("room-chat-ended")).toBeTruthy());
+    const strip = screen.getByTestId("room-chat-ended");
+    expect(strip.getAttribute("role")).toBe("status");
+    expect(strip.textContent).toBe("chatEnded");
+    // No way left to attempt a send the server would refuse.
+    expect(screen.queryByLabelText("composerPlaceholder")).toBeNull();
+    expect(screen.queryByRole("button", { name: "composerSend" })).toBeNull();
+  });
+
+  it("EARS-7.8: the ledger the doctor was reading survives the close", async () => {
+    renderEndedChat([message], { ended: true });
+
+    await waitFor(() => expect(screen.getByText(message.text)).toBeTruthy());
+    expect(screen.getByTestId("room-chat-messages")).toBeInTheDocument();
+    expect(screen.queryByText("chatEmpty")).toBeNull();
+  });
+
+  it("EARS-7.8: a live room keeps its composer — the strip is not the default", async () => {
+    renderEndedChat([message]);
+
+    await waitFor(() => expect(screen.getByText(message.text)).toBeTruthy());
+    expect(screen.queryByTestId("room-chat-ended")).toBeNull();
+    expect(screen.getByLabelText("composerPlaceholder")).toBeInTheDocument();
   });
 });

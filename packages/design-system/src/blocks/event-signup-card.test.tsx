@@ -1,5 +1,6 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
+import { PARTICIPATION_CTA_ACTIONS } from "@ds/schemas";
 import type { ParticipationCta } from "@ds/schemas";
 
 import { EventSignupCard } from "./event-signup-card";
@@ -144,7 +145,9 @@ describe("<EventSignupCard>", () => {
   });
 
   it("020 EARS-1: pinning shall stick the card on the wide canvas only", () => {
-    const { rerender } = render(<EventSignupCard {...base} cta={cta()} pinned />);
+    const { rerender } = render(
+      <EventSignupCard {...base} cta={cta()} pinned />,
+    );
     expect(screen.getByTestId("event-signup-card").className).toContain(
       "layout:sticky",
     );
@@ -285,4 +288,71 @@ describe("<EventSignupCard>", () => {
     render(<EventSignupCard {...base} cta={cta()} />);
     expect(screen.queryByTestId("event-signup-presence")).toBeNull();
   });
+  /**
+   * 020 EARS-4 (#1766) — the ONE-CTA invariant of 020-requirements L122-126,
+   * proven across the WHOLE action vocabulary rather than the two dead-end
+   * states the earlier cases cover. A card that grew a second control (or a
+   * greyed-out one) would put the doctor in front of a choice the server has
+   * already made, which is the defect the single sign-up column exists to
+   * prevent.
+   */
+  it.each(PARTICIPATION_CTA_ACTIONS)(
+    "020 EARS-4.7: %s shall render at most one control and never a disabled one",
+    (action) => {
+      render(
+        <EventSignupCard
+          {...base}
+          conditions={[{ label: "Участие", value: "Бесплатно для врача" }]}
+          cta={cta({
+            action,
+            label: "Действие",
+            // Every action is given a resolvable target, so a missing control
+            // is the card's decision rather than an artefact of the fixture.
+            href: "/target",
+            reason: "Причина.",
+            presenceCount: 3,
+          })}
+          note="Сноска."
+        />,
+      );
+
+      const controls = [
+        ...screen.queryAllByRole("link"),
+        ...screen.queryAllByRole("button"),
+      ];
+      expect(controls.length).toBeLessThanOrEqual(1);
+      for (const control of controls) {
+        expect(control).not.toBeDisabled();
+        expect(control).not.toHaveAttribute("aria-disabled", "true");
+      }
+    },
+  );
+
+  it.each(PARTICIPATION_CTA_ACTIONS)(
+    "020 EARS-4.8: %s shall never speak commerce or a document download",
+    (action) => {
+      render(
+        <EventSignupCard
+          {...base}
+          conditions={[
+            { label: "Участие", value: "250 Pul" },
+            { label: "НМО", value: "Баллы начисляются" },
+          ]}
+          cta={cta({
+            action,
+            label: "Действие",
+            href: "/target",
+            reason: "Причина.",
+            presenceCount: 3,
+          })}
+        />,
+      );
+
+      // 020 invariants: no commerce, no financing statement, no programme
+      // download in the sign-up column — the page has exactly one ask.
+      expect(
+        screen.getByTestId("event-signup-card").textContent ?? "",
+      ).not.toMatch(/купить|оставить заявку|скачать/i);
+    },
+  );
 });

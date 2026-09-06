@@ -4,6 +4,7 @@ import { PlayerFrame } from "./room-view";
 import type { RoomConfig, StreamProvider } from "@ds/schemas";
 import { createBrowserRoomApi } from "../client/room-api";
 import {
+  PLAYER_MAX_AUTO_RETRIES,
   PLAYER_RETRY_DELAY_MS,
   PLAYER_WATCHDOG_MS,
 } from "../model/room-player-state";
@@ -39,6 +40,8 @@ const copy = {
   playerRetrying: "Переподключаемся к трансляции…",
   playerSuspectedBody: "Похоже, трансляция не загружается. Если видео не идёт — перезапустите плеер.",
   playerRestart: "Перезапустить плеер",
+  endedTitle: "Эфир завершён",
+  endedBody: "Запись появится в разделе «Мои события»",
 };
 
 function configFor(provider: StreamProvider, embedRef = "abc123"): RoomConfig {
@@ -266,6 +269,85 @@ describe("006 EARS-18 player-failure two-grade model (component)", () => {
     expect(screen.getByTestId("room-player-unavailable")).toBeInTheDocument();
     expect(screen.queryByTestId("room-player-suspected")).toBeNull();
     expect(screen.queryByTestId("room-player-failure")).toBeNull();
+  });
+});
+
+/**
+ * 006 EARS-7 (#1238) — an already-open room whose event has ENDED. The bug this
+ * closes is a room that keeps presenting a finished broadcast as live: the player
+ * region must stop being a player, and it must stop claiming «В эфире».
+ *
+ * The plate is the EXISTING covering player plate reused (owner 2026-09-05), and
+ * it REPLACES the embed rather than covering it — an iframe left mounted keeps the
+ * provider's stream and audio running behind the card (design §8.3).
+ */
+describe("006 EARS-7 the ended room's end card replaces the player", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it("EARS-7.7: the ended player region states «Эфир завершён» and unmounts the embed", () => {
+    render(<PlayerFrame config={configFor("youtube")} copy={copy} ended />);
+
+    const card = screen.getByTestId("room-player-ended");
+    expect(card).toBeInTheDocument();
+    expect(card.textContent).toContain(copy.endedTitle);
+    expect(card.textContent).toContain(copy.endedBody);
+    // The stream is GONE, not hidden: no iframe survives the transition.
+    expect(document.querySelector("iframe")).toBeNull();
+    expect(screen.queryByTestId("room-player-youtube")).toBeNull();
+  });
+
+  it("EARS-7.7: the ended region carries no live badge and no control", () => {
+    render(<PlayerFrame config={configFor("youtube")} copy={copy} ended />);
+
+    expect(screen.queryByText(copy.liveBadge)).toBeNull();
+    // No restart, no refresh — the recording is not ready at close, so the room
+    // offers nothing it cannot deliver.
+    expect(screen.queryAllByRole("button")).toHaveLength(0);
+    expect(screen.queryByTestId("room-player-restart")).toBeNull();
+  });
+
+  it("EARS-7.7: no player-failure state can surface over the end card", () => {
+    // vk is a parent-observable provider, so an OPEN room would grade a silent
+    // stall here: the watchdog fires SUSPECTED and, past a handshake, the bounded
+    // auto-retry budget re-creates the embed. Draining the whole EARS-18 timer
+    // surface (watchdog + every retry step) proves the end card owns the region —
+    // no timer resurrects the embed or paints a status over the close.
+    render(<PlayerFrame config={configFor("vk")} copy={copy} ended />);
+    advance(
+      PLAYER_WATCHDOG_MS + PLAYER_RETRY_DELAY_MS * (PLAYER_MAX_AUTO_RETRIES + 1),
+    );
+
+    expect(screen.getByTestId("room-player-ended")).toBeInTheDocument();
+    expect(screen.queryByTestId("room-player-failure")).toBeNull();
+    expect(screen.queryByTestId("room-player-suspected")).toBeNull();
+    expect(document.querySelector("iframe")).toBeNull();
+  });
+
+  it("EARS-7.7: an ended room with no stream config shows the end card, not «Трансляция недоступна»", () => {
+    render(
+      <PlayerFrame
+        config={{ stream: null } as unknown as RoomConfig}
+        copy={copy}
+        ended
+      />,
+    );
+
+    expect(screen.getByTestId("room-player-ended")).toBeInTheDocument();
+    expect(screen.queryByTestId("room-player-unavailable")).toBeNull();
+  });
+
+  it("EARS-7.7: a room that has NOT ended is untouched — the embed and the live badge stay", () => {
+    render(<PlayerFrame config={configFor("youtube")} copy={copy} />);
+
+    expect(screen.queryByTestId("room-player-ended")).toBeNull();
+    expect(screen.getByTestId("room-player-youtube")).toBeInTheDocument();
+    expect(screen.getByText(copy.liveBadge)).toBeInTheDocument();
   });
 });
 

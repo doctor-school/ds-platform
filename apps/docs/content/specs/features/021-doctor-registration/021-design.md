@@ -128,7 +128,7 @@ All four use the semantic field primitives tracked in #197 and draw copy from th
 
 1. **The route and the form** (EARS-1, EARS-11) — the split composition, the three inputs and their field contracts. Everything else composes on top. **EARS-19** lands with the first form that submits: no public form ships to a 003 EARS-17-protected endpoint without the challenge wired.
 2. **The consent tiers and the record** (EARS-4, EARS-5, EARS-6, EARS-7) — the command's precondition and the purpose rows; nothing can be submitted meaningfully before this.
-3. **The return target end to end** (EARS-2, EARS-3, EARS-10) — mint, carry, survive the email, resolve, degrade. Agree the token shape with 019 LD-7 before either ships its guest path.
+3. **The return target end to end** (EARS-2, EARS-3, EARS-10) — mint, carry, survive the verification detour, resolve, degrade. Agree the token shape with 019 LD-7 before either ships its guest path.
 4. **Attribution and points** (EARS-8, EARS-9) — both are additive to a working registration and both depend on external consumers (035, 025).
 5. **The honest-state surface** (EARS-12, EARS-13, EARS-14) — errors, the disabled-submit reason, the enumeration-safe already-registered path, the preserved failed submission.
 6. **Cross-cutting** (EARS-15, EARS-16, EARS-17) and the process gate (EARS-18) — one account, mobile/themes/axe, the marketing handoff, and the owner's Stage-B confirmation on the live stand before merge.

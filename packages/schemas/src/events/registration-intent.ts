@@ -30,8 +30,9 @@ import {
  *
  * A safe return target is never "a path that looks harmless" — it is a value of
  * one DECLARED shape, reconstructed from its validated parts (021 LD-3). This
- * prefix anchors the first such shape; the doctor feed's `/events?…&resume=…`
- * is the second, and the list of shapes is {@link RETURN_TARGET_SHAPES}. An
+ * prefix anchors the first such shape; the doctor storefront's event page
+ * `/events/<slug>` is the second and the doctor feed's `/events?…&resume=…`
+ * the third, and the list of shapes is {@link RETURN_TARGET_SHAPES}. An
  * open redirect (`//evil`, `https://evil`, `/\evil`, `../account`) matches no
  * shape and is therefore rejected outright.
  */
@@ -51,8 +52,8 @@ const SLUG_RE = /^[a-z0-9]+(?:[-_][a-z0-9]+)*$/i;
  * The safe registration-intent that rides the 003 round-trip (EARS-2). It carries
  * ONLY the event context — never PII, never a credential; the strict schema below
  * rejects any extra field. `returnTo` is always a CANONICAL same-origin path of
- * one declared shape — 005's `/webinars/<eventSlug>` or 019's
- * `/events?<feed query>&resume=<eventSlug>`.
+ * one declared shape — 005's `/webinars/<eventSlug>`, 020's `/events/<eventSlug>`
+ * or 019's `/events?<feed query>&resume=<eventSlug>`.
  *
  * The interface stays exactly two fields on purpose: a consumer resumes by
  * registering `eventSlug` and navigating to `returnTo`, which is why
@@ -104,7 +105,8 @@ export const RegistrationIntentSchema = z
  * Rejected (→ `null`): a non-string; a cross-origin or protocol-relative target
  * (`https://evil`, `//evil`); a backslash trick (`/\evil`, `/webinars/\..`); a
  * value matching no shape; an empty, multi-segment, or traversal slug
- * (`/webinars/`, `/webinars/a/b`, `/webinars/../account`, `/events?resume=a/b`),
+ * (`/webinars/`, `/webinars/a/b`, `/webinars/../account`, `/events/a/b`,
+ * `/events/../account`, `/events?resume=a/b`),
  * including its percent-encoded forms (`%2f`, `%2e%2e`); and any slug outside
  * {@link SLUG_RE} (query/hash injection, whitespace, dots).
  */
@@ -168,8 +170,64 @@ function parseAcademyEventTarget(returnTo: string): RegistrationIntent | null {
   return { eventSlug: slug, returnTo: `${RETURN_TARGET_PREFIX}${slug}` };
 }
 
-/** The doctor feed's own path — the ONLY path this second shape admits. */
-const DOCTOR_EVENTS_FEED_PATH = "/events";
+/**
+ * The doctor storefront's event-page prefix: the same-origin `/events/<slug>`
+ * page 020 owns (`apps/doctor/app/(storefront)/events/[slug]/page.tsx`).
+ *
+ * Deliberately a SEPARATE constant from the academy prefix rather than a
+ * parameter of one parser: the two hosts serve two different route tables, and a
+ * shared "prefix + slug" helper would make it a one-character edit to admit a
+ * path on a host that does not serve it (the exact failure
+ * {@link parseAcademyEventReturnTarget} exists to prevent).
+ */
+export const DOCTOR_EVENT_RETURN_TARGET_PREFIX = "/events/";
+
+/**
+ * 2. `doctor-event` — `/events/<slug>`, the 020 doctor-storefront event page
+ * (the whitelist increment 021 LD-3 mandates, #1546).
+ *
+ * A doctor who activates «Участвовать» on the storefront event page and is sent
+ * through 021 registration must come back to THAT page. Same construction as the
+ * academy shape and for the same reason: exactly one path segment, decoded once
+ * so an encoded separator or traversal cannot survive as a "slug", `SLUG_RE`
+ * rejecting any query or hash outright, and the accepted value REBUILT from the
+ * validated slug rather than echoed from the input.
+ *
+ * The shape carries NO query. 020's page has a `?tab=…` state, but a tab is a
+ * view preference rather than the point of interest the doctor came for, and
+ * every admitted query key is a key an attacker gets to put in front of the
+ * guard — so the declared shape is the bare page, and a target that carries a
+ * tab is simply not of this shape. Widening it is a declared increment here,
+ * never a call-site relaxation.
+ */
+function parseDoctorEventTarget(returnTo: string): RegistrationIntent | null {
+  if (!returnTo.startsWith(DOCTOR_EVENT_RETURN_TARGET_PREFIX)) return null;
+
+  const rest = returnTo.slice(DOCTOR_EVENT_RETURN_TARGET_PREFIX.length);
+  // Exactly one path segment: no further slash (`/events/a/b`, `/events//x`).
+  if (rest.length === 0 || rest.includes("/")) return null;
+
+  // Decode once to unmask an encoded separator/traversal (`%2f`, `%2e%2e`); a
+  // malformed escape is itself a reject.
+  let slug: string;
+  try {
+    slug = decodeURIComponent(rest);
+  } catch {
+    return null;
+  }
+  if (!SLUG_RE.test(slug)) return null;
+
+  return {
+    eventSlug: slug,
+    returnTo: `${DOCTOR_EVENT_RETURN_TARGET_PREFIX}${slug}`,
+  };
+}/**
+ * The doctor feed's own path — the ONLY path this third shape admits, and the
+ * LD-4 default landing for a doctor who confirms with no target in hand (021
+ * EARS-10). Exported so the confirmation handler names the SAME literal the
+ * guard reconstructs against instead of spelling `"/events"` a second time.
+ */
+export const DOCTOR_EVENTS_FEED_PATH = "/events";
 
 /**
  * The query key that carries the event a guest chose from the feed. It is NOT a
@@ -245,7 +303,7 @@ function parseQueryStringEntries(
 }
 
 /**
- * 2. `doctor-feed` — `/events?<feed query>&resume=<slug>` (019 LD-7 / EARS-12,
+ * 3. `doctor-feed` — `/events?<feed query>&resume=<slug>` (019 LD-7 / EARS-12,
  * the whitelist increment 021 LD-3 mandates).
  *
  * A guest who activates «Участвовать» on a feed card must come back to the
@@ -316,12 +374,15 @@ function buildDoctorEventsFeedReturnTarget(
  * this list is not a safe return target — which is why the list, not a regex,
  * is the guard (021 LD-3).
  *
- * Extending it is one entry: 020's doctor event page (`/events/<slug>?tab=…`)
- * is deliberately NOT here — it lands with #1768 (020 EARS-5) and adds a third
- * parser beside these two, nothing else.
+ * The order is free of meaning: the three shapes are mutually exclusive by
+ * construction (`/webinars/…`, `/events/<slug>` and `/events?…` cannot match one
+ * another), so the first-match loop is a convenience and never a precedence
+ * rule. Extending the list is one entry plus its OWN strict parser — never a
+ * loosened regex inside an existing one.
  */
 const RETURN_TARGET_SHAPES: readonly ReturnTargetShapeParser[] = [
   parseAcademyEventTarget,
+  parseDoctorEventTarget,
   parseDoctorFeedTarget,
 ];
 
@@ -344,6 +405,21 @@ export function parseAcademyEventReturnTarget(
 }
 
 /**
+ * The DOCTOR host's event-page return-target parser: `/events/<slug>` and
+ * nothing else — the 020 storefront page's counterpart of
+ * {@link parseAcademyEventReturnTarget} (021 LD-3, #1546).
+ *
+ * Exported for the same reason the other two are: a host completes only the
+ * intents its OWN surfaces can serve, so a caller that can serve exactly one
+ * shape asks for exactly that shape rather than filtering the union's answer
+ * after the fact. The 021 confirmation handler is NOT such a caller — it serves
+ * every doctor-host shape and therefore uses the union {@link parseReturnTarget}.
+ */
+export function parseDoctorEventReturnTarget(
+  returnTo: unknown,
+): RegistrationIntent | null {
+  return parseShapeStrictly(parseDoctorEventTarget, returnTo);
+}/**
  * The DOCTOR host's feed return-target parser: `/events?<feed query>&resume=<slug>`
  * and nothing else — the counterpart of {@link parseAcademyEventReturnTarget} for
  * the host that owns the feed (019 EARS-12).
@@ -389,4 +465,32 @@ export function mintDoctorEventsFeedReturnTarget(
 /** `true` iff `returnTo` is a safe same-origin event return target (EARS-2). */
 export function isSafeReturnTarget(returnTo: unknown): boolean {
   return parseReturnTarget(returnTo) !== null;
+}
+
+/**
+ * The DOCTOR HOST's return-target parser: the union of the shapes
+ * `doctor.school` actually serves — `/events/<slug>` (020) and
+ * `/events?<feed query>&resume=<slug>` (019).
+ *
+ * This is the parser the 021 confirmation command uses (EARS-10), and it is
+ * NOT a second guard: it composes the two exported per-shape parsers above, so
+ * every rejection rule is the one {@link parseReturnTarget} applies and there is
+ * no place for the two to drift. What it adds is HOST SCOPE, the same law
+ * {@link parseAcademyEventReturnTarget} states from the other side — a host
+ * completes only the intents its own surfaces can serve. The academy's
+ * `/webinars/<slug>` is a path on a DIFFERENT host: landing a doctor on it
+ * after confirmation would produce a 404 on `doctor.school`, so on this host it
+ * is not an intent at all and the doctor lands on the LD-4 default instead.
+ *
+ * It lives here rather than in `apps/api` for the same reason the academy
+ * parser does: the scoping is a fact about the declared shapes, and a host that
+ * hand-assembled it would be the storefront-local copy 021-design §3 forbids.
+ */
+export function parseDoctorHostReturnTarget(
+  returnTo: unknown,
+): RegistrationIntent | null {
+  return (
+    parseDoctorEventReturnTarget(returnTo) ??
+    parseDoctorEventsFeedReturnTarget(returnTo)
+  );
 }

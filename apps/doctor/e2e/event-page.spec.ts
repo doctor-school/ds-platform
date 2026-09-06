@@ -71,6 +71,45 @@ test.describe("020 EARS-1 — the doctor storefront event page", () => {
     await expect(cta).toHaveAttribute("href", /returnTo=/);
   });
 
+  test("020 EARS-4: the right column holds exactly one card, the CTA is the only participation control, and «Ведёт» sits in the open part", async ({
+    page,
+    context,
+  }) => {
+    await context.clearCookies();
+    await page.goto(`${BASE}/events/${SLUG}`, { waitUntil: "domcontentloaded" });
+
+    // One column, one card: the aside carries the sign-up card and nothing
+    // else. EARS-4 adds data to that card's conditions line — never a second
+    // card, never a parallel participation surface.
+    const asideChildren = page.locator('[data-testid="event-page-aside"] > *');
+    await expect(asideChildren).toHaveCount(1);
+    await expect(asideChildren.first()).toHaveAttribute(
+      "data-testid",
+      "event-signup-card",
+    );
+
+    // «Ведёт» belongs to the open part, not the aside: every speaker card on
+    // the page is inside `event-page-open-part`.
+    const speakers = page.getByTestId("event-speaker-card");
+    const speakerCount = await speakers.count();
+    expect(speakerCount).toBeGreaterThanOrEqual(1);
+    await expect(
+      page.locator(
+        '[data-testid="event-page-open-part"] [data-testid="event-speaker-card"]',
+      ),
+    ).toHaveCount(speakerCount);
+
+    // Exactly one participation control page-wide, and no commerce copy that
+    // would imply a second path (buy / request / download).
+    await expect(page.getByRole("link", { name: /Участвовать/ })).toHaveCount(1);
+    await expect(page.getByRole("button", { name: /Участвовать/ })).toHaveCount(
+      0,
+    );
+    await expect(page.locator("body")).not.toContainText(
+      /купить|оставить заявку|скачать/i,
+    );
+  });
+
   test("020 EARS-1: the doctor page is complete HTML from the server (no client gate)", async ({
     request,
   }) => {

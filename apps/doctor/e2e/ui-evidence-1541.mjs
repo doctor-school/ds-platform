@@ -12,6 +12,11 @@
  *   E2E_DOCTOR_URL=http://127.0.0.1:3210 node apps/doctor/e2e/ui-evidence-1541.mjs .github/ui-evidence/1541
  */
 
+// `localStorage` and `document` are declared for ESLint because the
+// `addInitScript` / `page.evaluate` bodies below are serialised and executed in
+// the BROWSER, not in this Node process.
+/* global localStorage, document */
+
 import { chromium } from "@playwright/test";
 import { mkdirSync } from "node:fs";
 

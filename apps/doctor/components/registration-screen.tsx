@@ -167,23 +167,6 @@ const MEDICAL_WORKER_DECLARATION_UNMET =
   "Отметьте, что вы медицинский работник — без этого регистрация невозможна.";
 
 /**
- * The label split at its LAST space, so the closing word and the «обязательно»
- * tag can be tied into one unbreakable inline run. The canvas draws the tag
- * trailing the label's copy (`reqTagStyle`, `display:inline-block`), and at the
- * 390px breakpoint a plain inline tag would be pushed onto a line of its own —
- * a tag floating under the sentence reads as a separate statement rather than a
- * qualifier of it. Derived from the copy constant, never a second hardcoded
- * string: the copy stays stated once.
- */
-const DECLARATION_LABEL_LEAD = MEDICAL_WORKER_DECLARATION_LABEL.slice(
-  0,
-  MEDICAL_WORKER_DECLARATION_LABEL.lastIndexOf(" ") + 1,
-);
-const DECLARATION_LABEL_TAIL = MEDICAL_WORKER_DECLARATION_LABEL.slice(
-  MEDICAL_WORKER_DECLARATION_LABEL.lastIndexOf(" ") + 1,
-);
-
-/**
  * EARS-5 copy, verbatim from `design-source/auth.dc.html` (`#d-register`,
  * «согласия · вариант Б»).
  *
@@ -283,9 +266,13 @@ export function RegistrationScreen({
   // IS on the form.
   const declared = form.watch("medicalWorkerDeclaration");
   const partnerDataGranted = form.watch("partnerDataSharing");
+  // With an empty consent read model the partner-data row is not rendered, but
+  // the server still refuses without that purpose — so the reason names the
+  // unmet access condition rather than a bot-protection step that is not the
+  // first obstacle (EARS-12).
   const submitReason = !declared
     ? MEDICAL_WORKER_DECLARATION_UNMET
-    : partnerDataItem && !partnerDataGranted
+    : !partnerDataItem || !partnerDataGranted
       ? PARTNER_DATA_UNMET
       : BOT_PROTECTION_PENDING;
 
@@ -435,8 +422,13 @@ export function RegistrationScreen({
             <div
               data-testid="registration-consent-access"
               className="border-2 border-border"
+              role="group"
+              aria-labelledby="registration-consent-access-heading"
             >
-              <p className="border-b-2 border-border bg-muted px-3.5 py-2.5 text-xs font-extrabold uppercase tracking-widest">
+              <p
+                id="registration-consent-access-heading"
+                className="border-b-2 border-border bg-muted px-3.5 py-2.5 text-xs font-extrabold uppercase tracking-widest"
+              >
                 {ACCESS_CONDITIONS_HEADING}
               </p>
               <div className="flex flex-col gap-3.5 px-3.5 py-4">
@@ -470,33 +462,19 @@ export function RegistrationScreen({
                           }
                         >
                           <span className="flex flex-col gap-1">
-                            <span>
-                              {DECLARATION_LABEL_LEAD}
-                              {/*
-                            The canvas's «обязательно» tag (`reqTagStyle`,
-                            `design-source/auth.dc.html`): the requirement is
-                            stated on the control itself, not inferred from an
-                            asterisk. It is the design system's `label` badge —
-                            the filled tint plate with tint ink and the micro
-                            uppercase label — never a hand-assembled span.
-
-                            It sits INLINE in the label's own text flow (not as a
-                            flex item), tied to the label's closing word by a
-                            single unbreakable run, so at 390px it trails that
-                            word onto the wrapped line instead of dropping onto a
-                            line of its own.
-                          */}
-                              <span className="whitespace-nowrap">
-                                {DECLARATION_LABEL_TAIL}
-                                <Badge
-                                  variant="label"
-                                  className="ml-1.5 align-middle"
-                                  data-testid="register-medworker-required-tag"
-                                >
-                                  обязательно
-                                </Badge>
-                              </span>
-                            </span>
+                            {/*
+                              Canvas вариант Б draws NO requirement tag on
+                              either access condition (`design-source/auth.dc.html`,
+                              «согласия · вариант Б»): in Б the requirement is
+                              carried by the «Условия доступа» frame itself,
+                              which is the point of the variant. The
+                              `reqTagStyle` tag belongs to вариантs А and В, and
+                              there it sits on BOTH rows — a tag on this row
+                              alone would read as «only the first box is
+                              mandatory». The declaration stays `required` and
+                              its EARS-12 reason unchanged.
+                            */}
+                            <span>{MEDICAL_WORKER_DECLARATION_LABEL}</span>
                             <span
                               data-testid="register-medworker-help"
                               className="text-sm text-muted-foreground"

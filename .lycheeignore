@@ -136,3 +136,11 @@ tools/lint/guard-tests/fixtures/
 # apps/docs/content/design/constitution.md (filter-a-list pattern) stays
 # inline as a historical reference; verified manually, not by CI.
 ^https://design-patterns\.service\.justice\.gov\.uk($|/.*$)
+
+# Yandex Cloud docs (smartcaptcha key format, cited in infra/deploy/README.md):
+# the host answers 403 Forbidden to lychee from GitHub-hosted runners
+# (PR #1913, run 33998232057, 2026-09-05) while the same URL returns 200 from
+# a residential connection with and without a lychee user-agent. The link was
+# in the tree before #1913 and is not part of its diff. Same crawler-hostile
+# false-positive class as the npmjs / GOV.UK entries above; verified manually.
+^https://yandex\.cloud($|/.*$)

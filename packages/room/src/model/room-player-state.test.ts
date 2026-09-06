@@ -3,6 +3,7 @@ import {
   INITIAL_PLAYER_STATE,
   PLAYER_MAX_AUTO_RETRIES,
   PROVIDER_HAS_PARENT_API,
+  initialPlayerState,
   mapYouTubeErrorCode,
   parseProviderSignal,
   playerReducer,
@@ -228,46 +229,58 @@ describe("006 EARS-18 player-failure state machine — pure logic", () => {
     expect(recovered.everReady).toBe(true);
   });
 
-  // EARS-18.3 — the advisory time box: a SUSPECTED failure the room can never prove
-  // must not nag indefinitely over a stream that is most likely playing fine. The
-  // `timebox` action withdraws the banner into the `unverified` state — the grade
-  // stays SUSPECTED, the embed is never re-created (embedKey untouched), and the
-  // only exit is the gesture-gated restart.
-  it("EARS-18.3: the advisory time box moves a suspected failure to unverified without touching the embed", () => {
+  // EARS-18.3 — a provider the room can NEVER observe (cdnvideo) mounts straight
+  // into `unverified`: there is no evidence to grade, so the room states nothing
+  // about the stream and offers only the gesture-gated restart. No failure grade,
+  // nothing observed, the embed untouched.
+  it("EARS-18.3: cdnvideo mounts in unverified with no grade and no failure", () => {
+    const mounted = initialPlayerState("cdnvideo");
+    expect(mounted.status).toBe("unverified");
+    expect(mounted.grade).toBeNull();
+    expect(mounted.failure).toBeNull();
+    expect(mounted.attempt).toBe(0);
+    expect(mounted.embedKey).toBe(0);
+    expect(mounted.everReady).toBe(false);
+  });
+
+  // EARS-18.1 — a parent-observable provider is unaffected: it still mounts in
+  // `loading` and is still graded by the watchdog.
+  it("EARS-18.1: an observable provider still mounts in loading", () => {
+    for (const provider of ["youtube", "rutube", "vk"] as const) {
+      expect(initialPlayerState(provider)).toEqual(INITIAL_PLAYER_STATE);
+    }
+  });
+
+  // EARS-18.1 — the watchdog never grades a structurally silent provider: with no
+  // observability there is no stall to detect, so it can never raise an advisory
+  // ("Похоже, трансляция не загружается" over a probably-healthy stream).
+  it("EARS-18.1: the watchdog is a no-op for a structurally silent provider", () => {
+    const mounted = initialPlayerState("cdnvideo");
+    expect(playerReducer(mounted, { type: "watchdog" })).toBe(mounted);
+    expect(playerReducer(mounted, { type: "watchdog" }).status).toBe("unverified");
+  });
+
+  // EARS-18.3 — the explicit doctor gesture is the only thing that re-creates the
+  // embed for a silent provider, and it lands back in `unverified` (never a banner).
+  it("EARS-18.3: the gesture-gated restart re-creates a cdnvideo embed back into unverified", () => {
+    const mounted = initialPlayerState("cdnvideo");
+    const restarted = playerReducer(mounted, { type: "restart" });
+    expect(restarted.status).toBe("unverified");
+    expect(restarted.grade).toBeNull();
+    expect(restarted.attempt).toBe(0);
+    expect(restarted.embedKey).toBe(mounted.embedKey + 1);
+    // …and the fresh mount is still not graded by the watchdog.
+    expect(playerReducer(restarted, { type: "watchdog" })).toBe(restarted);
+  });
+
+  // EARS-18.3 — an observable provider's restart still returns to `loading` with a
+  // fresh watchdog and a reset auto-retry budget.
+  it("EARS-18.3: the restart returns an observable provider to loading", () => {
     const suspected = playerReducer(INITIAL_PLAYER_STATE, { type: "watchdog" });
-    const boxed = playerReducer(suspected, { type: "timebox" });
-    expect(boxed.status).toBe("unverified");
-    expect(boxed.grade).toBe("suspected");
-    expect(boxed.embedKey).toBe(0); // never re-created on a timer (gesture-gated)
-    expect(boxed.attempt).toBe(0);
-    expect(boxed.everReady).toBe(false); // monotonic — still nothing ever observed
-  });
-
-  // EARS-18.3 — the time box is inert anywhere else: it must never withdraw a
-  // CONFIRMED covering overlay, nor disturb a healthy `loading`/`playing` state.
-  it("EARS-18.3: the time box is a no-op outside a suspected failure", () => {
-    const loading = playerReducer(INITIAL_PLAYER_STATE, { type: "timebox" });
-    expect(loading).toBe(INITIAL_PLAYER_STATE);
-    const readied = playerReducer(INITIAL_PLAYER_STATE, { type: "handshake" });
-    const confirmed = playerReducer(
-      { ...readied, attempt: PLAYER_MAX_AUTO_RETRIES },
-      { type: "watchdog" },
-    );
-    expect(confirmed.status).toBe("failed");
-    expect(confirmed.grade).toBe("confirmed");
-    expect(playerReducer(confirmed, { type: "timebox" })).toBe(confirmed);
-  });
-
-  // EARS-18.3 — from `unverified` the ONLY exit is the explicit doctor gesture, which
-  // re-creates the embed with a fresh watchdog (never a timer, never on mount).
-  it("EARS-18.3: the gesture-gated restart re-creates the embed from unverified", () => {
-    const boxed = playerReducer(
-      playerReducer(INITIAL_PLAYER_STATE, { type: "watchdog" }),
-      { type: "timebox" },
-    );
-    const restarted = playerReducer(boxed, { type: "restart" });
+    expect(suspected.grade).toBe("suspected");
+    const restarted = playerReducer(suspected, { type: "restart" });
     expect(restarted.status).toBe("loading");
     expect(restarted.grade).toBeNull();
-    expect(restarted.embedKey).toBe(boxed.embedKey + 1);
+    expect(restarted.embedKey).toBe(suspected.embedKey + 1);
   });
 });

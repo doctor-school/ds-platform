@@ -4,7 +4,6 @@ import { PlayerFrame } from "./room-view";
 import type { RoomConfig, StreamProvider } from "@ds/schemas";
 import { createBrowserRoomApi } from "../client/room-api";
 import {
-  PLAYER_ADVISORY_TIMEBOX_MS,
   PLAYER_RETRY_DELAY_MS,
   PLAYER_WATCHDOG_MS,
 } from "../model/room-player-state";
@@ -20,7 +19,8 @@ import { RoomPresenceProvider } from "./room-presence";
  *    (SUSPECTED) over a still-visible embed, and NEVER auto-retries / re-creates it;
  *  - 18.2 an observed YouTube error is CONFIRMED (covering overlay, distinct copy),
  *    a no-handshake stall is SUSPECTED, a post-handshake stall is CONFIRMED,
- *    vk/cdnvideo are watchdog-only (SUSPECTED);
+ *    a failed handshake on an observable provider is SUSPECTED, while the
+ *    structurally silent cdnvideo is never graded at all (`unverified` from mount);
  *  - 18.3 a CONFIRMED failure auto-retries then offers the manual «Перезапустить
  *    плеер» — NO off-platform link, NO page reload;
  *  - 18.4 a playing signal clears the overlay/banner;
@@ -73,12 +73,12 @@ describe("006 EARS-18 player-failure two-grade model (component)", () => {
     vi.unstubAllGlobals();
   });
 
-  // EARS-18.1 — a watchdog stall with NO observable signal (cdnvideo, the structurally
-  // silent provider) is SUSPECTED: a NON-COVERING advisory banner beside a
-  // still-visible embed, never a covering "confirmed failure" overlay over
-  // possibly-healthy video.
-  it("EARS-18.1: a watchdog stall on a watchdog-only provider raises a non-covering advisory banner", () => {
-    renderPlayer("cdnvideo");
+  // EARS-18.1 — a watchdog stall with NO handshake ever observed on an OBSERVABLE
+  // provider (a rutube embed whose `player:ready` never arrived) is SUSPECTED: a
+  // NON-COVERING advisory banner beside a still-visible embed, never a covering
+  // "confirmed failure" overlay over possibly-healthy video.
+  it("EARS-18.1: a watchdog stall with no handshake raises a non-covering advisory banner", () => {
+    renderPlayer("rutube");
     expect(screen.queryByTestId("room-player-suspected")).toBeNull();
     advance(PLAYER_WATCHDOG_MS);
     const banner = screen.getByTestId("room-player-suspected");
@@ -88,7 +88,7 @@ describe("006 EARS-18 player-failure two-grade model (component)", () => {
     expect(banner.className).toContain("pointer-events-none");
     // it is NOT the covering confirmed overlay, and the embed stays visible.
     expect(screen.queryByTestId("room-player-failure")).toBeNull();
-    expect(screen.getByTestId("room-player-cdnvideo")).toBeInTheDocument();
+    expect(screen.getByTestId("room-player-rutube")).toBeInTheDocument();
   });
 
   // EARS-18.1 — a SUSPECTED stall NEVER auto-retries: no covering overlay ever
@@ -140,16 +140,19 @@ describe("006 EARS-18 player-failure two-grade model (component)", () => {
     expect(screen.queryByTestId("room-player-suspected")).toBeNull();
   });
 
-  // EARS-18.2 — cdnvideo is watchdog-only: a provider-shaped message never counts as
-  // a signal, and the stall raises the SUSPECTED advisory banner.
-  it("EARS-18.2: cdnvideo is watchdog-only — a provider message is ignored, stall is suspected", () => {
+  // EARS-18.2 — cdnvideo exposes no parent API: a provider-shaped message from its
+  // origin never counts as a signal, and the room states nothing either way — it
+  // stays `unverified`, with no advisory banner and no covering overlay.
+  it("EARS-18.2: a cdnvideo provider-shaped message is ignored and raises no failure state", () => {
     renderPlayer("cdnvideo");
     fireProviderMessage("https://playercdn.cdnvideo.ru", {
       type: "player:changeState",
       data: { state: "playing" },
     });
-    advance(PLAYER_WATCHDOG_MS);
-    expect(screen.getByTestId("room-player-suspected")).toBeInTheDocument();
+    advance(PLAYER_WATCHDOG_MS * 3);
+    expect(screen.queryByTestId("room-player-suspected")).toBeNull();
+    expect(screen.queryByTestId("room-player-failure")).toBeNull();
+    expect(screen.getByTestId("room-player-unverified-restart")).toBeInTheDocument();
   });
 
   // EARS-18.4 — a playing signal observed after a CONFIRMED failure clears the overlay
@@ -216,52 +219,52 @@ describe("006 EARS-18 player-failure two-grade model (component)", () => {
     expect(screen.getByTestId("room-player-vk")).toBeInTheDocument();
   });
 
-  // EARS-18.3 — the cdnvideo advisory is TIME-BOXED: it auto-dismisses after
-  // PLAYER_ADVISORY_TIMEBOX_MS so a healthy-but-silent stream is not nagged
-  // indefinitely, leaving only a persistent, gesture-gated «Перезапустить плеер»
-  // that re-creates the embed on a click — never on a timer.
-  it("EARS-18.3: the cdnvideo advisory times out, leaving only a gesture-gated restart", () => {
+  // EARS-18.3 — cdnvideo mounts in `unverified`: the room can never observe it, so
+  // it never claims «Похоже, трансляция не загружается» — from the first second the
+  // embed is visible and uncovered with only the persistent, LOW-EMPHASIS
+  // «Перезапустить плеер» in the corner, which re-creates the embed on a click and
+  // never on a timer.
+  it("EARS-18.3: cdnvideo mounts unverified — no advisory ever, only a gesture-gated restart", () => {
     renderPlayer("cdnvideo");
-    advance(PLAYER_WATCHDOG_MS);
-    expect(screen.getByTestId("room-player-suspected")).toBeInTheDocument();
-
-    advance(PLAYER_ADVISORY_TIMEBOX_MS);
-    // The banner is withdrawn; the embed stays visible and uncovered.
-    expect(screen.queryByTestId("room-player-suspected")).toBeNull();
-    expect(screen.queryByTestId("room-player-failure")).toBeNull();
     const embed = screen.getByTestId("room-player-cdnvideo");
-    expect(embed).toBeInTheDocument();
-
-    // The gesture-gated control persists and re-creates the embed only on the click.
     const restart = screen.getByTestId("room-player-unverified-restart");
     expect(restart).toHaveTextContent("Перезапустить плеер");
-    advance(PLAYER_ADVISORY_TIMEBOX_MS * 2); // no timer ever re-creates the embed
+    expect(screen.queryByTestId("room-player-suspected")).toBeNull();
+    expect(screen.queryByTestId("room-player-failure")).toBeNull();
+
+    // No wall-clock passage may raise an advisory or re-create the embed.
+    advance(PLAYER_WATCHDOG_MS * 5);
+    expect(screen.queryByTestId("room-player-suspected")).toBeNull();
+    expect(screen.queryByTestId("room-player-failure")).toBeNull();
     expect(screen.getByTestId("room-player-cdnvideo")).toBe(embed);
 
     act(() => {
       fireEvent.click(restart);
     });
-    expect(screen.queryByTestId("room-player-unverified-restart")).toBeNull();
+    // The gesture re-creates the embed and the control stays (still unverified).
     expect(screen.getByTestId("room-player-cdnvideo")).not.toBe(embed);
+    expect(screen.getByTestId("room-player-unverified-restart")).toBeInTheDocument();
+    expect(screen.queryByTestId("room-player-suspected")).toBeNull();
   });
 
-  // EARS-18.3 — the time box is cdnvideo-only: a failed youtube handshake keeps its
-  // advisory banner (a real, observable failure must not self-hide).
-  it("EARS-18.3: a youtube suspected advisory is not time-boxed", () => {
+  // EARS-18.1 — an OBSERVABLE provider is untouched: a failed youtube handshake keeps
+  // its advisory banner (a real, observable failure must not self-hide) and never
+  // shows the `unverified` corner control.
+  it("EARS-18.1: a youtube suspected advisory persists", () => {
     renderPlayer("youtube");
     advance(PLAYER_WATCHDOG_MS);
     expect(screen.getByTestId("room-player-suspected")).toBeInTheDocument();
-    advance(PLAYER_ADVISORY_TIMEBOX_MS * 2);
+    advance(PLAYER_WATCHDOG_MS * 5);
     expect(screen.getByTestId("room-player-suspected")).toBeInTheDocument();
     expect(screen.queryByTestId("room-player-unverified-restart")).toBeNull();
   });
 
-  // EARS-2 × EARS-18.3 — the config-absent "stream unavailable" branch must never
-  // arm the cdnvideo time box: it returns before any player-failure UI, so no
-  // advisory, no unverified restart and no covering overlay can appear there.
+  // EARS-2 × EARS-18.3 — the config-absent "stream unavailable" branch returns before
+  // any player-failure UI, so no advisory, no unverified restart and no covering
+  // overlay can appear there whatever the state machine holds.
   it("EARS-18.3: the EARS-2 unavailable branch never shows a player-failure state", () => {
     render(<PlayerFrame config={{ stream: null } as unknown as RoomConfig} copy={copy} />);
-    advance(PLAYER_WATCHDOG_MS + PLAYER_ADVISORY_TIMEBOX_MS);
+    advance(PLAYER_WATCHDOG_MS * 3);
     expect(screen.getByTestId("room-player-unavailable")).toBeInTheDocument();
     expect(screen.queryByTestId("room-player-suspected")).toBeNull();
     expect(screen.queryByTestId("room-player-failure")).toBeNull();

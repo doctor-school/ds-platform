@@ -20,6 +20,7 @@ import {
   doctorEventsFeedHorizonWidth,
   formatDoctorEventsFeedDayLabel,
 } from "@ds/schemas";
+import { eventEconomyFacts } from "../events/event-economy-facts.js";
 import {
   type DoctorFeedRow,
   DoctorEventsRepository,
@@ -55,8 +56,10 @@ import { TargetingService } from "./targeting.service.js";
  * them under managed directions, and has no НМО, Pul-cost, city or seat column
  * at all. So the mapping states the truth of the current authoring model rather
  * than inventing values — `format: "webinar"`, `kind` = the event's managed
- * direction, `nmo: false`, `pulCost: 0` («бесплатно для врача»), and no
- * `city`/`seatsLeft` key. Widening 007's authoring to the remaining four
+ * direction, and no `city`/`seatsLeft` key. НМО and the Pul cost are NOT read
+ * here: they come from `eventEconomyFacts` (`../events/event-economy-facts.ts`),
+ * the one module the 020 event page reads them from too (#1766), so a card and
+ * the page it opens can never disagree. Widening 007's authoring to the remaining four
  * formats and the НМО/Pul/offline fields is tracked as decision-debt in
  * `DEBT.md`; the contract already carries them, so that widening is a mapper
  * change and not a reshape.
@@ -162,8 +165,7 @@ export class DoctorEventsService {
       horizon.to,
       doctorEventsFeedDayOf(firstStart),
     );
-    const steps =
-      Math.floor(gap / DOCTOR_EVENTS_FEED_HORIZON_STEP_DAYS) + 1;
+    const steps = Math.floor(gap / DOCTOR_EVENTS_FEED_HORIZON_STEP_DAYS) + 1;
     return addDoctorEventsFeedDays(
       horizon.from,
       Math.min(
@@ -397,8 +399,7 @@ export class DoctorEventsService {
       title: row.title,
       speaker: speakers.get(row.id) ?? "",
       source: row.school,
-      nmo: false,
-      pulCost: 0,
+      ...eventEconomyFacts(),
       signUpCount: signUps.get(row.id) ?? 0,
       // 014 EARS-26 (#1741): `in_archive` is the legacy machine's «this эфир
       // happened and its recording is published» — the same fact `ended` carries

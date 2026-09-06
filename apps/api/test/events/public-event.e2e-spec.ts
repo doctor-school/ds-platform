@@ -321,7 +321,15 @@ describe.skipIf(!process.env.DATABASE_URL)(
           // never an operator field — so it is publish-safe and leaves the
           // guest/principal byte-identity below intact.
           "links",
+          // 020 EARS-4 (#1766): whether the event credits НМО and what it costs
+          // in Pul attention points. Both are publish-safe facts ABOUT the
+          // event — the sign-up card's conditions line is public copy — and
+          // neither varies by viewer, so the guest/principal byte-identity
+          // below is untouched. Never a rouble price: 020's invariants forbid
+          // commerce and any financing statement on this page.
+          "nmo",
           "partners",
+          "pulCost",
           "programPdfUrl",
           // 014 EARS-4 (#1341): the source-free recording projection. It joins
           // the allow-list rather than a sibling endpoint because the post-live

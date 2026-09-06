@@ -212,8 +212,54 @@ describe.skipIf(!process.env.DATABASE_URL)(
       }
     });
 
+    it("020 EARS-4.2: the public read carries nmo and the Pul cost on both hosts, identical to the 019 feed card", async () => {
+      // 020 EARS-4 puts НМО and the cost in Pul on the sign-up card's
+      // conditions line. A doctor meets the same event twice — as a 019 feed
+      // card and as this page one click later — so the two facts come from the
+      // ONE `eventEconomyFacts` helper. This test is what makes that structural
+      // rather than a convention: the page and the card are read in the same
+      // breath and compared. The value today is the honest reading of feature
+      // 007's model, which authors neither column (`DEBT.md`, 2026-09-02).
+      const { slug } = await seedEvent({
+        state: "published",
+        format: "online",
+      });
+
+      const pages = await Promise.all(
+        [
+          `/v1/public/events/${slug}`,
+          `/v1/storefront/doctor/events/${slug}`,
+        ].map(async (url) => (await app.inject({ method: "GET", url })).json()),
+      );
+
+      const feed = await app.inject({
+        method: "GET",
+        url: "/v1/storefront/doctor/events?from=2026-07-18&to=2026-07-19",
+      });
+      expect(feed.statusCode).toBe(200);
+      const cards = (
+        feed.json() as {
+          days: { items: { slug: string; nmo: boolean; pulCost: number }[] }[];
+        }
+      ).days.flatMap((day) => day.items);
+      const card = cards.find((item) => item.slug === slug);
+      expect(card).toBeDefined();
+
+      for (const body of pages as { nmo: boolean; pulCost: number }[]) {
+        expect(body.nmo).toBe(false);
+        expect(body.pulCost).toBe(0);
+        expect({ nmo: body.nmo, pulCost: body.pulCost }).toEqual({
+          nmo: card?.nmo,
+          pulCost: card?.pulCost,
+        });
+      }
+    });
+
     it("020 EARS-1: an event with no seat limit reports seatsLeft null — «unlimited» is not «zero»", async () => {
-      const { slug } = await seedEvent({ state: "published", format: "online" });
+      const { slug } = await seedEvent({
+        state: "published",
+        format: "online",
+      });
 
       const body = (
         await app.inject({ method: "GET", url: `/v1/public/events/${slug}` })

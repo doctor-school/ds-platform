@@ -1998,10 +1998,12 @@ export interface components {
                     speakerKey: string;
                 }[];
             };
+            nmo: boolean;
             partners: {
                 label: string;
             }[];
             programPdfUrl?: string;
+            pulCost: number;
             recording: {
                 expectedBy: string | null;
                 posterUrl: string | null;

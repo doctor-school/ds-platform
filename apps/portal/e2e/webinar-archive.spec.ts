@@ -34,6 +34,12 @@ import { test, expect } from "@playwright/test";
  * last two are the same rule seen from both sides, which is why neither is left
  * to a unit test.
  *
+ * 014 EARS-21 (#1608) added one test to the first describe: the archived page's
+ * speaker block is the canonical `event_experts` projection RENDERED — same
+ * items, same relation order — and never a legacy name list. The api half lives
+ * in `apps/api/test/taxonomy/archived-speakers.e2e-spec.ts`; this half proves the
+ * browser shows what that projection returned, which no payload assertion can.
+ *
  * Live-stand-gated tier, mirroring `event-page-registered.spec.ts`: it needs a
  * running portal whose `/v1/*` rewrite reaches a running api + Postgres seeded
  * with an `ended` event carrying a PUBLISHED recording. It `test.skip`s unless
@@ -247,6 +253,43 @@ test.describe("014 EARS-4 public post-live event page (e2e)", () => {
         res?.status(),
         `${mirror} must not exist — /webinars/:slug is the single route`,
       ).toBe(404);
+    }
+  });
+
+  test("014 EARS-21: the post-live page renders the speaker cards from the canonical projection, in relation order", async ({
+    page,
+    context,
+  }) => {
+    await context.clearCookies();
+
+    // The canonical answer, taken from the SAME stand through the portal's own
+    // `/v1/*` rewrite: `GET :key/speakers` is the standalone rendering of the
+    // one 012 EARS-8 resolver (`position ASC`, then link id ASC) that
+    // `PublicEventPage.speakers` also serves. Reading it here rather than
+    // hard-coding names is the point of the test — the browser assertion is
+    // «the page shows exactly this list, in exactly this order», so a page that
+    // re-sorted, deduped or inferred a name fails even after the seed changes.
+    const res = await page.request.get(
+      `${BASE}/v1/public/events/${ENDED_SLUG}/speakers`,
+    );
+    expect(res.status()).toBe(200);
+    const projected = (await res.json()) as { name: string }[];
+    expect(
+      projected.length,
+      "the seeded ended event must carry at least one eligible event_experts link",
+    ).toBeGreaterThan(0);
+
+    await page.goto(`${BASE}/webinars/${ENDED_SLUG}`, {
+      waitUntil: "domcontentloaded",
+    });
+
+    const cards = page.getByTestId("event-speaker-card");
+    await expect(cards).toHaveCount(projected.length);
+    for (const [index, speaker] of projected.entries()) {
+      await expect(
+        cards.nth(index),
+        `speaker card ${index} must be «${speaker.name}» — the projection's own order`,
+      ).toContainText(speaker.name);
     }
   });
 });

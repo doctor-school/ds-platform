@@ -73,20 +73,13 @@ Feature: Webinar room — a registered doctor watches live, chats in real time, 
       | 100     | the video is unavailable                     |
 
   @EARS-18 @edge
-  Scenario: A structurally silent cdnvideo stream is never graded and shows no advisory
+  Scenario: A structurally silent cdnvideo stream is never graded and the room shows nothing of its own
     Given a gated doctor in a live room on a "cdnvideo" stream that emits no parent-observable signal
     When the watchdog threshold elapses with no playing signal
     Then the player region shows no advisory banner and no covering status overlay
+    And the player region shows no room-owned control over the embed
     And the embed stays visible and uncovered
     And the room does not auto-retry or re-create the embed
-
-  @EARS-18 @edge
-  Scenario: The cdnvideo restart is gesture-gated from the first second of the room
-    Given a gated doctor in a live room on a "cdnvideo" stream
-    When the room renders the player
-    Then a «Перезапустить плеер» control is available in the corner of the player region
-    And the embed is re-created only when the doctor activates that control
-    And the player region still shows no advisory banner after the re-create
 
   @EARS-18 @happy
   Scenario: A vk embed is parent-observable through its js_api handshake

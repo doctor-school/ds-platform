@@ -59,7 +59,7 @@ Run dependent commands sequentially, check every exit. PowerShell native exit is
 
 TDD: meaningful RED before production/guard logic, then GREEN. Run required focused tests, full lint and applicable static guards; after PR create run `pnpm pr:preflight <N>`. Cite precise baseline failures, never bypass them. Independent review + fresh CI + applicable owner evidence precede canonical landing. No `ci:wait` substitute after rebase.
 
-Hooks have separate configured/trusted/observed states. `tools/hooks/README.md` owns diagnostics: `pnpm agent:doctor`, `pnpm agent:smoke --prepare`, then `--run <fixture>` in a fresh CLI. Runtime `/hooks` trust is an owner action; never bypass trust or expand the sandbox. A missing hook means manual discipline, never a claim that enforcement ran. Observations cannot prove persisted trust.
+Hooks have separate configured/trusted/observed states. `tools/hooks/README.md` owns diagnostics: `pnpm agent:doctor`; after landing, restart Codex in the target project, obtain owner review/trust of that project and its exact `/hooks` definitions, then run `pnpm agent:smoke --project`. Fixtures are developer checks, not project activation proof or an extra owner trust ceremony. Never bypass trust or expand the sandbox. Synthetic logs cannot prove live execution or persisted trust; unobserved tool paths and missing/stale telemetry remain unavailable, requiring manual discipline.
 
 ## Memory and wrap
 

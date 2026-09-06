@@ -1196,7 +1196,18 @@ jobs:
       - uses: actions/setup-node@v7
         with: { node-version-file: .nvmrc, cache: pnpm }
       - run: pnpm install --frozen-lockfile
+      # `API_PROXY_TARGET` is BUILD-time here for the same reason as the admin
+      # build below (#1647): `rewrites()` is evaluated when the routes manifest
+      # is emitted, so `/v1/:path*` is frozen into `.next/routes-manifest.json`
+      # and a value supplied only to `next start` is ignored. The events tier
+      # (019 EARS-6) polls `GET /v1/storefront/doctor/events/live` from the
+      # BROWSER, so that rewrite must reach the tier's upstream stand-in —
+      # `DOCTOR_EVENTS_FAKE_API_PORT`, default 3214. The other doctor tiers make
+      # no client-side `/v1` call; their server-side reads resolve the target at
+      # runtime and are unaffected by which port is baked.
       - run: pnpm exec turbo run build --filter=@ds/doctor
+        env:
+          API_PROXY_TARGET: http://127.0.0.1:3214
       - run: pnpm --filter @ds/doctor exec playwright install --with-deps chromium
       - run: pnpm --filter @ds/doctor test:e2e:ci
 

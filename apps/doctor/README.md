@@ -71,8 +71,8 @@ lives here rather than being imported from the portal.
 pnpm install
 pnpm --filter @ds/doctor dev          # http://localhost:3004
 pnpm --filter @ds/doctor test         # vitest units
-pnpm --filter @ds/doctor build
-pnpm --filter @ds/doctor test:e2e:ci  # backend-free Playwright (needs the build)
+API_PROXY_TARGET=http://127.0.0.1:3214 pnpm --filter @ds/doctor build
+pnpm --filter @ds/doctor test:e2e:ci  # all four Playwright tiers (need the build)
 pnpm ci:standalone-boot doctor        # boots the artifact the image runs
 ```
 
@@ -82,4 +82,6 @@ Parallel sessions must probe ports with `pnpm dev:ports` (prints an
 
 `API_PROXY_TARGET` (default `http://localhost:3000`) points the `/v1/*` rewrite at
 the api. It is frozen into the build, so it must be present at **build** time, not
-only at runtime.
+only at runtime — including before the Playwright tiers, whose 019 events tier
+polls `/v1/storefront/doctor/events/live` from the browser and therefore needs the
+baked destination to be that tier's stand-in (`DOCTOR_EVENTS_FAKE_API_PORT`, 3214).

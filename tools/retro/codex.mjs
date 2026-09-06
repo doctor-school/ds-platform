@@ -161,7 +161,7 @@ export function codexRolloutToPortable(jsonl, sourcePath = null) {
               ? item.message.trim()
               : textBlocks(
                   item.content,
-                  new Set(["input_text", "output_text", "text"]),
+                  new Set(["input_text", "output_text", "text", "Text"]),
                 );
         const key = `${role}:${text}`;
         if (messageCounts.get(key)) {

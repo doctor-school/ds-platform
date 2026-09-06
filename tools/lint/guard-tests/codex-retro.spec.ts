@@ -300,6 +300,67 @@ describe("Codex retro portable adapter", () => {
     };
     expect(validatePortableSession(value).schema).toBe("ds-platform-retro/v1");
   });
+  it.each(["event-only", "mirror-before", "mirror-after"])(
+    "EARS-14: retains capitalized completed Text blocks and one self-catch for %s",
+    (mode) => {
+      const text = "Я ошибся и пропустил проверку.\nПовторю проверку.";
+      const completed = {
+        type: "event_msg",
+        payload: {
+          type: "item_completed",
+          item: {
+            type: "AgentMessage",
+            content: [
+              { type: "Text", text: "Я ошибся и пропустил проверку." },
+              { type: "Text", text: "Повторю проверку." },
+            ],
+          },
+        },
+      };
+      const mirror = {
+        type: "response_item",
+        payload: {
+          type: "message",
+          role: "assistant",
+          content: [{ type: "output_text", text }],
+        },
+      };
+      const rows = fixture()
+        .trim()
+        .split("\n")
+        .map((line) => JSON.parse(line))
+        .filter((row) => row.payload?.role !== "assistant");
+      rows.push(
+        ...(mode === "event-only"
+          ? [completed]
+          : mode === "mirror-before"
+            ? [mirror, completed]
+            : [completed, mirror]),
+      );
+      const portable = codexRolloutToPortable(
+        rows.map((row) => JSON.stringify(row)).join("\n"),
+      );
+      const assistants = portable.events.filter(
+        (event) => event.role === "assistant",
+      );
+      expect(assistants).toHaveLength(1);
+      expect(assistants[0].text).toBe(text);
+      if (mode === "event-only") {
+        expect(assistants[0].evidence).toBe("item_completed");
+      }
+      const out = mkdtempSync(join(tmpdir(), "codex-completed-text-"));
+      dirs.push(out);
+      writeCodexCorpus(portable, out);
+      const transcript = readFileSync(
+        join(out, "transcripts/codex-session-1243.md"),
+        "utf8",
+      );
+      expect(transcript.split(`[A] ${text}`)).toHaveLength(2);
+      expect(
+        JSON.parse(readFileSync(join(out, "self-catches.json"), "utf8")),
+      ).toEqual([expect.objectContaining({ text })]);
+    },
+  );
   it("EARS-13: requires explicit submission for async replies associated with receipt request IDs", () => {
     // Compatibility fixture for a supported explicit response envelope, not a
     // claim that every host emits this event shape.

@@ -6,6 +6,11 @@
  */
 export { AuthLayout } from "./auth-layout";
 export { AuthCard } from "./auth-card";
+// #1666 slice C — the ONE canonical auth FRAME (canvas brand panel over
+// `AuthLayout`) both storefronts project; brand assets, localized copy and app
+// policy (the portal #675 guard, the EARS-17 captcha disclosure) stay app glue.
+export { AuthShell } from "./auth-shell";
+export type { AuthShellProps, AuthShellCopy } from "./auth-shell";
 export { OtpFocusScreen } from "./otp-focus-screen";
 export { useResendCountdown } from "./use-resend-countdown";
 export { maskDestination } from "./mask-destination";

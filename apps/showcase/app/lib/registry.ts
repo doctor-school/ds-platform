@@ -109,6 +109,7 @@ export const SHOWCASE_REGISTRY: ShowcaseEntry[] = [
   // ── Blocks (spec §3.3) — `./blocks` components.
   { id: "AuthCard", section: "blocks" },
   { id: "AuthLayout", section: "blocks" },
+  { id: "AuthShell", section: "blocks" },
   { id: "LoginCard", section: "blocks" },
   { id: "PasswordRecoveryCard", section: "blocks" },
   { id: "EmailConfirmCard", section: "blocks" },

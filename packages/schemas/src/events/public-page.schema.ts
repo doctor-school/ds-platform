@@ -86,6 +86,28 @@ export const EventPageViewBaseSchema = z.object({
   school: z.string(),
   startsAt: z.iso.datetime({ offset: true }),
   durationMin: z.number().int(),
+  /**
+   * 020 EARS-4 / EARS-14 (#1766) — whether the event credits НМО attention
+   * points. НМО is a hero BADGE and a conditions-line value only, never the
+   * headline (020-requirements §EARS-14, 020-design §НМО). `false` renders
+   * NOTHING — no «нет», no placeholder — so the page states only facts it has.
+   *
+   * The same reading the 019 doctor feed card carries
+   * (`DoctorEventCardSchema.nmo`), produced by the ONE helper
+   * `eventEconomyFacts` in the API, so the card and the page cannot disagree.
+   */
+  nmo: z.boolean(),
+  /**
+   * 020 EARS-4 / EARS-12 (#1766) — cost in Pul attention points; `0` is the
+   * free-for-the-doctor reading, rendered as «Бесплатно для врача». NEVER
+   * roubles: the page carries no financing statement and no commerce
+   * (020-requirements §invariants), and Pul is an attention unit, not a price.
+   *
+   * Required rather than optional: #1780 records the cost as the per-event
+   * parameter it is, and an absent field would leave a consumer unable to tell
+   * «free» from «this read does not know».
+   */
+  pulCost: z.number().int().nonnegative(),
   description: z.string(),
   // 012 EARS-8: the merged legacy+expert union, produced by the ONE canonical
   // resolver that also feeds `/events/:key/speakers` and the upcoming card.

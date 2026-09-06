@@ -678,6 +678,9 @@
             "required": ["speakerPages"],
             "type": "object"
           },
+          "nmo": {
+            "type": "boolean"
+          },
           "partners": {
             "items": {
               "properties": {
@@ -692,6 +695,11 @@
           },
           "programPdfUrl": {
             "type": "string"
+          },
+          "pulCost": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
           },
           "recording": {
             "properties": {
@@ -850,6 +858,8 @@
           "school",
           "startsAt",
           "durationMin",
+          "nmo",
+          "pulCost",
           "description",
           "speakers",
           "specialties",

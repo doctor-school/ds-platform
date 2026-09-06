@@ -30,6 +30,9 @@ const VIEW: EventPageView = {
   // 2026-08-28T16:00:00Z = 19:00 МСК, пятница.
   startsAt: "2026-08-28T16:00:00.000Z",
   durationMin: 90,
+  // The standing reading of feature 007's model today: no НМО, no Pul cost.
+  nmo: false,
+  pulCost: 0,
   description: "Разбор клинического случая.",
   speakers: [
     {
@@ -92,10 +95,28 @@ describe("020 EARS-1 — shared event-page view projection", () => {
     ]);
   });
 
-  it("020 EARS-1: the hero chips never synthesise an НМО badge the read model has no field for", () => {
-    // EARS-11 (#1774) owns accreditation; inventing a chip here would be the
-    // untracked seam F-22 forbids.
-    expect(eventPageChips(VIEW).some((chip) => chip.includes("НМО"))).toBe(false);
+  it("020 EARS-4.3: an event that credits nothing gets NO НМО chip and no substitute row", () => {
+    // `nmo: false` reads as silence (LD-8): no «без НМО», no greyed placeholder.
+    expect(eventPageChips(VIEW).some((chip) => chip.includes("НМО"))).toBe(
+      false,
+    );
+    const rows = eventSignupCardProps(VIEW, REGISTER_CTA).conditions ?? [];
+    expect(rows.some((row) => row.label === "НМО")).toBe(false);
+    expect(rows[0]).toEqual({
+      label: "Участие",
+      value: "Бесплатно для врача",
+      tone: "success",
+    });
+  });
+
+  it("020 EARS-4.5: an accredited event carries the НМО chip LAST, after the specialties", () => {
+    // Canvas:52 — the badge is the only headline-adjacent place НМО may appear
+    // (EARS-14); it never becomes the title and never leads the chip row.
+    expect(eventPageChips({ ...VIEW, nmo: true })).toEqual([
+      "Травматология и ортопедия",
+      "Ортобиология",
+      "НМО",
+    ]);
   });
 
   it("020 EARS-1: the sign-up card renders the server CTA verbatim and never re-resolves it", () => {
@@ -181,6 +202,48 @@ describe("020 EARS-1 — shared event-page view projection", () => {
       { label: "Участие", value: "Бесплатно для врача", tone: "success" },
       { label: "Формат", value: "Онлайн · комната эфира" },
       { label: "Длительность", value: "90 минут" },
+    ]);
+  });
+
+  it("020 EARS-4.4: a non-zero cost reads as Pul attention points, in the default tone", () => {
+    // Pul are attention points, never roubles, and a cost is a neutral fact
+    // rather than good news — only the FREE reading earns the success accent.
+    const rows =
+      eventSignupCardProps({ ...VIEW, pulCost: 250 }, REGISTER_CTA)
+        .conditions ?? [];
+    expect(rows[0]).toEqual({ label: "Участие", value: "250 Pul" });
+    expect(rows.filter((row) => row.tone === "success")).toHaveLength(0);
+    expect(
+      rows.some(
+        (row) => typeof row.value === "string" && /₽|руб/i.test(row.value),
+      ),
+    ).toBe(false);
+  });
+
+  it("020 EARS-4.5: the НМО row is the FOURTH condition, right after Длительность", () => {
+    expect(
+      eventSignupCardProps({ ...VIEW, nmo: true }, REGISTER_CTA).conditions,
+    ).toEqual([
+      { label: "Участие", value: "Бесплатно для врача", tone: "success" },
+      { label: "Формат", value: "Онлайн · комната эфира" },
+      { label: "Длительность", value: "90 минут" },
+      { label: "НМО", value: "Баллы начисляются" },
+    ]);
+  });
+
+  it("020 EARS-4.6: the conditions are the canvas rows and never a fifth kind of row", () => {
+    // Canvas:181-198 is the closed set. A row the canvas does not carry would
+    // be a new product statement made in a mapper.
+    const labels = (view: EventPageView) =>
+      (eventSignupCardProps(view, REGISTER_CTA).conditions ?? []).map(
+        (row) => row.label,
+      );
+    expect(labels(VIEW)).toEqual(["Участие", "Формат", "Длительность"]);
+    expect(labels({ ...VIEW, nmo: true, pulCost: 250 })).toEqual([
+      "Участие",
+      "Формат",
+      "Длительность",
+      "НМО",
     ]);
   });
 
@@ -332,11 +395,13 @@ describe("020 EARS-2 — the registration-free decision set", () => {
   it("020 EARS-2.4: an entry for an unknown speaker key links nobody", () => {
     const stale: EventPageView = {
       ...VIEW,
-      links: { speakerPages: [{ speakerKey: "someone-else", href: "/experts/x" }] },
+      links: {
+        speakerPages: [{ speakerKey: "someone-else", href: "/experts/x" }],
+      },
     };
-    expect(eventSpeakerCards(stale).every((card) => card.href === undefined)).toBe(
-      true,
-    );
+    expect(
+      eventSpeakerCards(stale).every((card) => card.href === undefined),
+    ).toBe(true);
   });
 
   it("020 EARS-2.5: the programme content is the download with a PDF and the lifecycle sentence without one", () => {

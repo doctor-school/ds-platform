@@ -38,6 +38,7 @@ import {
   EventsRepository,
   type Tx,
 } from "./events.repository.js";
+import { eventEconomyFacts } from "./event-economy-facts.js";
 import { EVENT_CURSOR_SHAPE } from "../taxonomy/public-event-cursor.js";
 
 /**
@@ -509,20 +510,18 @@ export class EventsService {
 
     const programPdfRef = pdf ? await this.storeProgramPdf(slug, pdf) : null;
 
-    const aggregate = await this.repo.insert(
-      {
-        slug,
-        title: input.title,
-        school: input.school,
-        startsAt: mskLocalToInstant(input.startsAtMsk),
-        durationMin: input.durationMin,
-        description: input.description,
-        specialties: input.specialties,
-        partnerRef: input.partnerRef ?? null,
-        programPdfRef,
-        state: "draft",
-      },
-    );
+    const aggregate = await this.repo.insert({
+      slug,
+      title: input.title,
+      school: input.school,
+      startsAt: mskLocalToInstant(input.startsAtMsk),
+      durationMin: input.durationMin,
+      description: input.description,
+      specialties: input.specialties,
+      partnerRef: input.partnerRef ?? null,
+      programPdfRef,
+      state: "draft",
+    });
 
     return this.toDetail(aggregate);
   }
@@ -1320,6 +1319,10 @@ export class EventsService {
       school: e.school,
       startsAt: e.startsAt.toISOString(),
       durationMin: e.durationMin,
+      // 020 EARS-4 (#1766): НМО and the Pul cost come from the ONE helper the
+      // 019 doctor feed card reads too, so the card and the page a doctor opens
+      // from it can never disagree about what an event credits or costs.
+      ...eventEconomyFacts(),
       description: e.description,
       // 012 EARS-8: the merged legacy+expert union from the ONE canonical
       // resolver — byte-identical to `GET /v1/public/events/:key/speakers`.

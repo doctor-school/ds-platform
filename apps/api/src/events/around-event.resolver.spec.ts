@@ -32,6 +32,9 @@ const VIEW: HostFreeEventPageView = {
   school: "Школа кардиологии",
   startsAt: "2026-09-28T16:00:00.000Z",
   durationMin: 90,
+  // The standing reading of feature 007's model today (#1766).
+  nmo: false,
+  pulCost: 0,
   description: "Разбор трёх случаев.",
   speakers: [
     {
@@ -96,6 +99,8 @@ describe("resolveAroundEvent", () => {
 
   it("020 EARS-2.2: an event with no speakers yields an empty page list, never a null entry", () => {
     const noSpeakers: HostFreeEventPageView = { ...VIEW, speakers: [] };
-    expect(resolveAroundEvent(noSpeakers, FULL_ROUTES).speakerPages).toEqual([]);
+    expect(resolveAroundEvent(noSpeakers, FULL_ROUTES).speakerPages).toEqual(
+      [],
+    );
   });
 });

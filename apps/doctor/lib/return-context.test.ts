@@ -43,6 +43,9 @@ const EVENT = {
   // The doctor host publishes no expert/school/community page yet, so every
   // key resolves absent — but the object itself is always on the body.
   links: { speakerPages: [] },
+  // 020 EARS-4 (#1766): the public page read is `.strict()` and requires both.
+  nmo: false,
+  pulCost: 0,
   state: "published",
   format: "online",
   seatsLeft: null,

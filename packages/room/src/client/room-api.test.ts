@@ -123,4 +123,37 @@ describe("006 createBrowserRoomApi — the room's browser transport", () => {
       status: 400,
     });
   });
+
+  // 006 EARS-7 (#1238) — the room learns the event ended from the refusal BODY,
+  // never from the clock (design §6). `POST /v1/events/:slug/heartbeat` answers
+  // 409 `{ message, state }` once the event leaves `live`, so the transport must
+  // carry that `state` onto the typed error; a status alone cannot distinguish an
+  // ended room from any other conflict.
+  it("006 EARS-7: a 409 refusal carries the lifecycle state onto RoomApiError", async () => {
+    const fetchImpl = fetchDouble(409, { message: "event is not live", state: "ended" });
+    await expect(api(fetchImpl).sendHeartbeat()).rejects.toMatchObject({
+      status: 409,
+      state: "ended",
+    });
+  });
+
+  it("006 EARS-7: a refusal with no readable state leaves it undefined, never guessed", async () => {
+    await expect(api(fetchDouble(409, {})).sendHeartbeat()).rejects.toMatchObject({
+      status: 409,
+      state: undefined,
+    });
+    await expect(api(fetchDouble(403, null)).sendHeartbeat()).rejects.toMatchObject({
+      status: 403,
+      state: undefined,
+    });
+    const unparsable = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 409,
+      json: () => Promise.reject(new SyntaxError("not json")),
+    });
+    await expect(api(unparsable).sendHeartbeat()).rejects.toMatchObject({
+      status: 409,
+      state: undefined,
+    });
+  });
 });

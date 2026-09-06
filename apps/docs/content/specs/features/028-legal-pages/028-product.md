@@ -1,6 +1,6 @@
 ---
 title: "Feature 028 — Legal documents & contacts (PRD)"
-description: "Product requirements for the legally public surface of both storefronts: a documents section and a contacts page on doctor.school and on the Academy, serving one shared body of content from one legal entity. Thin slice A (R1) publishes the personal-data policy, the exact consent texts feature 021 links from its checkboxes, contacts with the operator's requisites, and the educational-licence block; contracts, the constitution and the teal-model documents follow in slice 2 (R3) with feature 037. Source of the 028 EARS triplet (ADR-0014)."
+description: "Product requirements for the legally public surface of both storefronts: a documents section and a contacts page on doctor.school and on the Academy, serving one shared body of content from one legal entity. Thin slice 1 (R1) publishes the personal-data policy, the exact consent texts feature 021 links from its checkboxes, contacts with the operator's requisites, and the educational-licence block; contracts, the constitution and the teal-model documents follow in slice 2 (R3) with feature 037. Source of the 028 EARS triplet (ADR-0014)."
 slug: two-site-ia-028-legal-pages-product
 epic: ../../product/two-site-ia/brief.md
 status: Draft
@@ -10,19 +10,19 @@ lang: en
 
 > **EN (this)** · **RU:** [`028-product-ru.md`](./028-product-ru.md)
 
-> Epic: [Two-site IA — product brief](../../product/two-site-ia/brief.md) · **Wave 3** (028 + 037 + 038 — «the platform is legally public»). 028 is delivered in **two slices**: **slice A (R1)** — personal-data policy, the 021 consent texts, contacts and requisites, the licence block — carries **no `blocked_by`**; **slice 2 (R3)** — contracts, the constitution, the teal-model documents (REQ-74) and payment/refund terms — stays `blocked_by` **037**, because the composition and retention wording of those documents is derived from the accepted personal-data lifecycle. It reuses the **008** portal shell and the **017** doctor-storefront shell rather than introducing a surface of its own; the verification strategy is ADR-0016 §7.
+> Epic: [Two-site IA — product brief](../../product/two-site-ia/brief.md) · **Wave 3** (028 + 037 + 038 — «the platform is legally public»). 028 is delivered in **two slices**: **slice 1 (R1)** — personal-data policy, the 021 consent texts, contacts and requisites, the licence block — carries **no `blocked_by`**; **slice 2 (R3)** — contracts, the constitution, the teal-model documents (REQ-74) and payment/refund terms — stays `blocked_by` **037**, because the composition and retention wording of those documents is derived from the accepted personal-data lifecycle. It reuses the **008** portal shell and the **017** doctor-storefront shell rather than introducing a surface of its own; the verification strategy is ADR-0016 §7.
 
 ## Feature summary
 
 The platform asks a doctor to tick a consent checkbox before it will let them register (feature 021), and asks an Academy visitor to tick one before it will accept a partnership lead. Both checkboxes point at a document. Today that document does not exist on the platform: the only link in the codebase points at `doctor.school/index/privacy-pay` on the **legacy site** — a route that renders an empty shell. Feature 028 is what those checkboxes will link to.
 
-The owner's framing (2026-09-06) is that this is **not a legal-documents project** but the minimum that makes the platform legally public. Hence a deliberately thin **slice A** for R1: the **personal-data policy**, the **exact texts of the 021 consents**, **contacts with requisites**, and a **licence block**. Contracts, the constitution and the «teal» documents REQ-74 asks for are real obligations, but they are not what blocks registration — they move to **slice 2 in R3**, alongside 037, whose accepted personal-data lifecycle their wording depends on.
+The owner's framing (2026-09-06) is that this is **not a legal-documents project** but the minimum that makes the platform legally public. Hence a deliberately thin **slice 1** for R1: the **personal-data policy**, the **exact texts of the 021 consents**, **contacts with requisites**, and a **licence block**. Contracts, the constitution and the «teal» documents REQ-74 asks for are real obligations, but they are not what blocks registration — they move to **slice 2 in R3**, alongside 037, whose accepted personal-data lifecycle their wording depends on.
 
 Three product decisions shape the surface.
 
 **One feature, both storefronts, shared content** (owner, 2026-08-22, F-5). `doctor.school` and the Academy each get their own documents section and their own contacts page (`#d-docs` / `#a-docs`, REQ-136), but the document bodies are authored once and served identically on both hosts. A doctor and a regulator read the same policy; there is no per-host legal fork.
 
-**One legal entity on the documents: ООО «Ивекскон»** (owner, 2026-09-06). The legacy site shows two entities — ООО «Ивекскон» as the personal-data operator, with full requisites, and АНО ДПО «Академия Доктор Скул (Школа)» as the licence holder, with every requisite field left blank. Slice A publishes «Ивекскон» as the operator behind the platform's requisites. Which entity is named as the **licensee** — and therefore whose licence number appears in the licence block — is a live owner-and-lawyer question (Q-31, tied to the НМО provider question), and the licence block's content is an **owner-input dependency**, not a technical one.
+**One legal entity on the documents: ООО «Ивекскон»** (owner, 2026-09-06). The legacy site shows two entities — ООО «Ивекскон» as the personal-data operator, with full requisites, and АНО ДПО «Академия Доктор Скул (Школа)» as the licence holder, with every requisite field left blank. Slice 1 publishes «Ивекскон» as the operator behind the platform's requisites. Which entity is named as the **licensee** — and therefore whose licence number appears in the licence block — is a live owner-and-lawyer question (Q-31, tied to the НМО provider question), and the licence block's content is an **owner-input dependency**, not a technical one.
 
 **No link back to the legacy site** (owner, verbatim: «мы не ведём на старый сайт»). The legacy texts are the **source copy** — the personal-data policy body, the consent wordings and the contacts copy are lifted from there and re-published here — but no surface of the new platform links to `doctor.school/index/*`. The `ACADEMY_PRIVACY_POLICY_URL` constant that today points at the legacy route is repointed at the platform's own policy document.
 
@@ -88,16 +88,16 @@ What is being replaced is not a working surface. The legacy site's legal routes 
 
 ## Product acceptance criteria
 
-### Slice A (R1) — what this feature ships now
+### Slice 1 (R1) — what this feature ships now
 
-- Each storefront — `doctor.school` (`apps/doctor`) and the Academy (`apps/portal`) — has **its own documents section and its own contacts page**, rendered in that host's existing shell (017 / 008), while the **document bodies are one shared set of content** rather than two per-host copies.
-- Every document is reachable at a **stable per-document URL** that does not change when its text is corrected. Consent checkboxes and the Academy lead form link a **specific document**, never the index.
+- Each storefront — `doctor.school` (`apps/doctor`) and the Academy (`apps/portal`) — has **its own documents section** (owner-settled, F-5 / REQ-136) and **its own contacts page** (**agent-proposed — unconfirmed**), rendered in that host's existing shell (017 / 008), while the **document bodies are one shared set of content** rather than two per-host copies.
+- Every document is reachable at a **stable per-document URL** that does not change when its text is corrected; consent checkboxes and the Academy lead form link a **specific document**, never the index (**agent-proposed — unconfirmed**; the index + per-document-URL IA is settled at Stage A).
 - The **personal-data policy** is published, sourced from the legacy text (152-ФЗ policy) and naming **ООО «Ивекскон»** as the operator.
 - The **exact texts of the 021 consents** are published as documents — the medical-worker declaration, the partner-data-sharing consent and the marketing-communications consent — and the wording a doctor sees at registration matches the published document word for word.
 - The **photo/video distribution consent** text (present in the legacy material) is published as a document on this surface. Whether any R1 surface links it is an open question; publication does not itself create a link.
 - **Contacts and requisites** are published on both storefronts: the operating entity, ИНН, ОГРН, legal address, support email and phone, and what each channel is for.
 - A **licence block** presents the educational licence — number, issuing authority, a way to verify it in the official registry, and the scan — as one identifiable element of the surface. Its content is an **owner/lawyer input** (Q-31); until it is supplied the block is absent, never a placeholder.
-- Every document page states its **title, effective date and version**; nothing is published undated.
+- Every document page states its **title and effective date**; nothing is published undated. Whether a **version marker** is shown to the reader at all, and in what form, is **agent-proposed — unconfirmed**.
 - **No surface of the platform links to the legacy site.** The `ACADEMY_PRIVACY_POLICY_URL` used by the Academy partnership lead form points at the platform's own policy document, and no document, footer or consent line references `doctor.school/index/*`.
 - Documents are **readable at 390 and 1440**, in light and dark, using design-system primitives and typography — a legal text is a reading surface, not a bespoke layout.
 - Document pages meet the platform's accessibility bar for a public page (the `playwright-axe` gate): real heading structure, meaningful document order, links that name their destination.
@@ -109,7 +109,7 @@ What is being replaced is not a working surface. The legacy site's legal routes 
 - **Contracts and public documents**, the **constitution** and the **teal-model documents** REQ-74 names are published in the same section, with the same versioning and the same two-host projection.
 - **Payment and refund terms** are published once paid flows exist; the legacy `pay-info` text is a source, but its 2023 price table is stale data and is not carried over.
 - Document composition and retention wording follow the **accepted personal-data lifecycle** delivered by **037** — which is why slice 2, and only slice 2, is `blocked_by` 037.
-- Adding these documents requires **no second legal surface**: they are entries in the section slice A already built.
+- Adding these documents requires **no second legal surface**: they are entries in the section slice 1 already built.
 
 ## Approved-mockup reference
 
@@ -121,7 +121,7 @@ What is being replaced is not a working surface. The legacy site's legal routes 
 - **Consent recording mechanics.** Which consents are asked, how they are presented at registration and how each record is written is feature **021**; the record store, retention and withdrawal handling is **037**. 028 owns only the published document those records refer to.
 - **Document verification** — the doctor's diplomas, certificates and their verification queue are **037**.
 - **NMO records and codes** — feature **038**.
-- **Payment flows.** No paid flow exists in R1, so payment and refund terms are not part of slice A.
+- **Payment flows.** No paid flow exists in R1, so payment and refund terms are not part of slice 1.
 - **A self-service consent-withdrawal toggle** — 021 fixes withdrawal as a manager-handled request; this surface publishes the text, it does not operate the lifecycle.
 - **An admin authoring UI for documents.** How the platform team edits document text (repo-managed content vs CMS) is a design-level mechanism question, not a product decision of this PRD.
 - **Legal drafting itself.** The platform publishes what the owner and the lawyer approve; 028 does not author legal language.
@@ -131,13 +131,13 @@ What is being replaced is not a working surface. The legacy site's legal routes 
 
 Items marked **agent-proposed** are this PRD's own proposals and are **unconfirmed by the owner**; they are UX mechanics offered by best practice, not owner forks, and Stage A is where they are settled.
 
-- **Q-31 (owner + lawyer, open): who is the licensee / НМО provider.** Two entities exist in the legacy material — ООО «Ивекскон» (personal-data operator, full requisites) and АНО ДПО «Академия Доктор Скул (Школа)» (licence entity, requisites blank). The operating entity on the documents is decided (Ивекскон); **whose educational licence the licence block shows is not**. This is an **owner-input dependency** of slice A, deliberately not modelled as a `blocked_by` edge.
+- **Q-31 (owner + lawyer, open): who is the licensee / НМО provider.** Two entities exist in the legacy material — ООО «Ивекскон» (personal-data operator, full requisites) and АНО ДПО «Академия Доктор Скул (Школа)» (licence entity, requisites blank). The operating entity on the documents is decided (Ивекскон); **which entity is named as licensee on the published block is not**. Accepted **ADR-0016 §7** already records the partial answer — Doctor.School holds the educational licence and is the issuer of record — so the open part is narrower: the entity naming. This is an **owner-input dependency** of slice 1, deliberately not modelled as a `blocked_by` edge.
 - **Agent-proposed — the IA.** An index page «Документы» on each storefront listing every document, plus one stable URL per document, with consent checkboxes and the lead form linking a specific document and never the index; a «Контакты» page carrying requisites on each storefront. Unconfirmed.
-- **Agent-proposed — per-document title, effective date and version on the page.** The 021 consent records are versioned; nothing on the legacy site is (its policy is explicitly evergreen, «действует бессрочно до замены новой версией»). Whether the reader is shown a version marker at all, and in what form, is unconfirmed.
+- **Agent-proposed — per-document title, effective date and version on the page.** The 021 consent records are versioned; nothing on the legacy site is (its policy is explicitly evergreen, «действует бессрочно до замены новой версией»). Whether the reader is shown a version marker at all, and in what form, is unconfirmed. **US-4** and **US-17** rest on this proposal: if Stage A drops the visible version marker, both ids are retired, never reused.
 - **Agent-proposed — entry points.** A footer link in both shells, alongside the consent-checkbox links. **The footer as an element is itself agent-proposed** — whether either shell gets one, and what else it holds, is an owner/Stage-A call.
 - **Agent-proposed — one authoring, two hosts.** Content authored once and served on both storefronts. The **mechanism** (repo-managed text vs CMS-managed content) is a design-level open question, not a product decision.
 - **Agent-proposed — the photo/video consent's placement.** The text is hosted by 028 as a document; whether any R1 surface links it is open.
-- **Agent-proposed — payment/refund terms excluded from slice A** on the grounds that R1 has no paid flows. Unconfirmed as a scope call.
+- **Agent-proposed — payment/refund terms excluded from slice 1** on the grounds that R1 has no paid flows. Unconfirmed as a scope call.
 - **The versioning mechanism.** «Version and effective date» is a product outcome; whether superseded versions stay publicly readable, and where the historical text a doctor consented to lives (here, or in 037's consent record), is unresolved.
 - **Whether the licence scan is a file, an image or a registry deep link**, and whether a scan is published at all before the licensee question is settled.
 - **Whether the contacts page carries a form** or only channels. The legacy contacts copy describes a «Служба технической поддержки портала»; whether the new surface reproduces a support form or lists channels is open.

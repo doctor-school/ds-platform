@@ -7,7 +7,11 @@ import {
 import { Test, type TestingModule } from "@nestjs/testing";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import type pg from "pg";
-import { DoctorConfirmResponseSchema } from "@ds/schemas";
+import {
+  DoctorConfirmResponseSchema,
+  PARTNER_DATA_SHARING_PURPOSE,
+} from "@ds/schemas";
+import { PARTNER_DATA_SHARING_VERSION } from "../../src/storefront/doctor-register.service.js";
 import { AppModule } from "../../src/app.module.js";
 import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
 import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
@@ -81,7 +85,20 @@ describe.skipIf(!process.env.DATABASE_URL)(
       const res = await app.inject({
         method: "POST",
         url: REGISTER_URL,
-        payload: { email, password: PASSWORD, medicalWorkerDeclaration: true },
+        payload: {
+          email,
+          password: PASSWORD,
+          medicalWorkerDeclaration: true,
+          // 021 EARS-5 (#1541, merged after this branch opened): the second
+          // access-condition purpose is required alongside the declaration, so
+          // the arrival that reaches confirmation grants it.
+          consent: [
+            {
+              purpose: PARTNER_DATA_SHARING_PURPOSE,
+              version: PARTNER_DATA_SHARING_VERSION,
+            },
+          ],
+        },
       });
       expect(res.statusCode).toBe(200);
       return email;
@@ -131,7 +148,9 @@ describe.skipIf(!process.env.DATABASE_URL)(
     afterAll(async () => {
       const ids = createdEventIds.splice(0);
       if (ids.length > 0 && pool)
-        await pool.query("DELETE FROM events WHERE id = ANY($1::uuid[])", [ids]);
+        await pool.query("DELETE FROM events WHERE id = ANY($1::uuid[])", [
+          ids,
+        ]);
       await app?.close();
     });
 
@@ -150,7 +169,10 @@ describe.skipIf(!process.env.DATABASE_URL)(
         href: `/events/${slug}`,
       });
       // «в личный кабинет» is present and SECONDARY — never the default outcome.
-      expect(body.secondaryAction).toEqual({ kind: "cabinet", href: "/account" });
+      expect(body.secondaryAction).toEqual({
+        kind: "cabinet",
+        href: "/account",
+      });
       // Release 1 credits no points (#1545): the absence is stated, not faked.
       expect(body.credited).toBeNull();
     });
@@ -227,7 +249,10 @@ describe.skipIf(!process.env.DATABASE_URL)(
         expect(body.status).toBe("verified");
         // Absent, so LD-4's default — and NO `reason`: nothing degraded, there
         // was never a target to degrade from.
-        expect(body.primaryAction).toEqual({ kind: "landing", href: "/events" });
+        expect(body.primaryAction).toEqual({
+          kind: "landing",
+          href: "/events",
+        });
         await deleteUserFixture(pool, "email", email);
         createdEmails.splice(createdEmails.indexOf(email), 1);
       }
@@ -241,7 +266,10 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(res.statusCode).toBe(200);
       const body = DoctorConfirmResponseSchema.parse(res.json());
       expect(body.primaryAction).toEqual({ kind: "landing", href: "/events" });
-      expect(body.secondaryAction).toEqual({ kind: "cabinet", href: "/account" });
+      expect(body.secondaryAction).toEqual({
+        kind: "cabinet",
+        href: "/account",
+      });
     });
 
     it("021 EARS-10.7: a wrong code fails generically and leaks no landing at all", async () => {

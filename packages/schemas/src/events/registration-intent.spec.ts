@@ -163,7 +163,10 @@ describe("019 EARS-12 — the doctor-feed registration return target", () => {
       "/events?resume=a/b",
       "/events?resume=abc%2Froom",
     ]) {
-      expect(parseReturnTarget(smuggled), `must reject: ${smuggled}`).toBeNull();
+      expect(
+        parseReturnTarget(smuggled),
+        `must reject: ${smuggled}`,
+      ).toBeNull();
       expect(parseDoctorEventsFeedReturnTarget(smuggled)).toBeNull();
       expect(parseAcademyEventReturnTarget(smuggled)).toBeNull();
     }
@@ -309,5 +312,13 @@ describe("021 EARS-10 — the doctor-storefront event-page return target", () =>
         returnTo: "/events/abc?tab=program",
       }).success,
     ).toBe(false);
+  });
+
+  it("021 EARS-10.9: an over-long value is rejected by every entry point, so no unbounded string is ever parsed or echoed back", () => {
+    const longSlug = "a".repeat(600);
+
+    expect(parseReturnTarget(`/events/${longSlug}`)).toBeNull();
+    expect(parseDoctorEventReturnTarget(`/events/${longSlug}`)).toBeNull();
+    expect(parseAcademyEventReturnTarget(`/webinars/${longSlug}`)).toBeNull();
   });
 });

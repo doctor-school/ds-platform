@@ -110,8 +110,13 @@ export const RegistrationIntentSchema = z
  * including its percent-encoded forms (`%2f`, `%2e%2e`); and any slug outside
  * {@link SLUG_RE} (query/hash injection, whitespace, dots).
  */
-export function parseReturnTarget(returnTo: unknown): RegistrationIntent | null {
+export function parseReturnTarget(
+  returnTo: unknown,
+): RegistrationIntent | null {
   if (typeof returnTo !== "string") return null;
+  // Length first, for the same reason the per-shape entry point applies it:
+  // no parser ever walks an unbounded string.
+  if (returnTo.length > MAX_RETURN_TARGET_LENGTH) return null;
   // A backslash never belongs in a same-origin path and is a classic redirect
   // bypass (browsers may treat `/\evil` as `//evil`); reject the whole value
   // before any shape sees it.
@@ -142,6 +147,9 @@ function parseShapeStrictly(
   returnTo: unknown,
 ): RegistrationIntent | null {
   if (typeof returnTo !== "string") return null;
+  // Length first, so no shape parser ever walks an unbounded string and no
+  // reconstruction of one is ever echoed back to a caller.
+  if (returnTo.length > MAX_RETURN_TARGET_LENGTH) return null;
   if (returnTo.includes("\\")) return null;
   return parseShape(returnTo);
 }
@@ -221,7 +229,9 @@ function parseDoctorEventTarget(returnTo: string): RegistrationIntent | null {
     eventSlug: slug,
     returnTo: `${DOCTOR_EVENT_RETURN_TARGET_PREFIX}${slug}`,
   };
-}/**
+}
+
+/**
  * The doctor feed's own path — the ONLY path this third shape admits, and the
  * LD-4 default landing for a doctor who confirms with no target in hand (021
  * EARS-10). Exported so the confirmation handler names the SAME literal the
@@ -394,9 +404,9 @@ const RETURN_TARGET_SHAPES: readonly ReturnTargetShapeParser[] = [
  * `/events?…&resume=<slug>` is a path on a DIFFERENT host, so on the academy
  * host it is not an intent at all — it must parse to `null` rather than send the
  * visitor to a same-path-different-host URL (and fire `RegisterForEvent` on the
- * way). 021's post-confirmation return on the doctor host is #1546; the union
- * {@link parseReturnTarget} stays the guard for the doctor host and for
- * {@link RegistrationIntentSchema}.
+ * way). 021 post-confirmation return on the doctor host (#1546) is served by the
+ * host-scoped {@link parseDoctorHostReturnTarget}; the union
+ * {@link parseReturnTarget} stays the guard for {@link RegistrationIntentSchema}.
  */
 export function parseAcademyEventReturnTarget(
   returnTo: unknown,
@@ -412,14 +422,17 @@ export function parseAcademyEventReturnTarget(
  * Exported for the same reason the other two are: a host completes only the
  * intents its OWN surfaces can serve, so a caller that can serve exactly one
  * shape asks for exactly that shape rather than filtering the union's answer
- * after the fact. The 021 confirmation handler is NOT such a caller — it serves
- * every doctor-host shape and therefore uses the union {@link parseReturnTarget}.
+ * after the fact. The 021 confirmation handler serves every doctor-host shape, so
+ * it composes this parser with the feed one through
+ * {@link parseDoctorHostReturnTarget} rather than widening to the union.
  */
 export function parseDoctorEventReturnTarget(
   returnTo: unknown,
 ): RegistrationIntent | null {
   return parseShapeStrictly(parseDoctorEventTarget, returnTo);
-}/**
+}
+
+/**
  * The DOCTOR host's feed return-target parser: `/events?<feed query>&resume=<slug>`
  * and nothing else — the counterpart of {@link parseAcademyEventReturnTarget} for
  * the host that owns the feed (019 EARS-12).

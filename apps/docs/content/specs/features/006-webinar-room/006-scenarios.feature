@@ -73,20 +73,20 @@ Feature: Webinar room — a registered doctor watches live, chats in real time, 
       | 100     | the video is unavailable                     |
 
   @EARS-18 @edge
-  Scenario: An unobservable cdnvideo stall shows a non-covering advisory banner, not a covering wall
-    Given a gated doctor in a live room on a "cdnvideo" stream that never emits a playing signal
-    When no playing signal is observed within the watchdog threshold
-    Then the player region shows a NON-covering advisory banner beside the still-visible embed
+  Scenario: A structurally silent cdnvideo stream is never graded and shows no advisory
+    Given a gated doctor in a live room on a "cdnvideo" stream that emits no parent-observable signal
+    When the watchdog threshold elapses with no playing signal
+    Then the player region shows no advisory banner and no covering status overlay
+    And the embed stays visible and uncovered
     And the room does not auto-retry or re-create the embed
-    And the room offers a manual «Перезапустить плеер» affordance
 
   @EARS-18 @edge
-  Scenario: The cdnvideo advisory is time-boxed and its restart is gesture-gated
-    Given a gated doctor in a live room on a "cdnvideo" stream showing the advisory banner
-    When the advisory time box elapses with no playing signal
-    Then the advisory banner is withdrawn and the embed stays visible
-    And a «Перезапустить плеер» control remains available
+  Scenario: The cdnvideo restart is gesture-gated from the first second of the room
+    Given a gated doctor in a live room on a "cdnvideo" stream
+    When the room renders the player
+    Then a «Перезапустить плеер» control is available in the corner of the player region
     And the embed is re-created only when the doctor activates that control
+    And the player region still shows no advisory banner after the re-create
 
   @EARS-18 @happy
   Scenario: A vk embed is parent-observable through its js_api handshake

@@ -59,7 +59,7 @@ The canvas **state** props are not forks — they are content-driven obligations
 ## Outcomes
 
 - `doctor.school` has one shell — header, navigation, footer — defined once and consumed unchanged by every doctor-facing screen of features 018–021.
-- The header states the visitor's sign-in status unambiguously: exactly one of «Войти / Регистрация» or «Личный кабинет» plus the points plate, never both and never an in-between.
+- The header states the visitor's sign-in status unambiguously: exactly one of «Войти / Регистрация» or «Личный кабинет» plus the points plate, never both and never an in-between. In release 1 «Личный кабинет» opens `/account` on the storefront — the 003 «Account profile v1» surface projected through the shared account-profile block, not a doctor-specific cabinet; the full cabinet arrives with feature 022 ([#1791](https://github.com/doctor-school/ds-platform/issues/1791), R5).
 - A doctor's first action is choosing a specialty, and the whole Минздрав list is reachable both by typing a name and by browsing what exists — never as a bare full-length scroll.
 - The choice is remembered — on the profile for a signed-in doctor, in the anonymous session for a guest — so the second visit opens the targeted view with the catalog collapsed to a changeable row.
 - Targeting follows the managed adjacency reference table, so an operator changes what a specialty sees by editing a reference book rather than a page.

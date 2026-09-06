@@ -240,6 +240,30 @@ describe("<RegisterCard>", () => {
     ).toHaveTextContent("You may withdraw a consent at any time");
   });
 
+  it("003 EARS-20: the below-fields slot renders between the credentials and the consent/submit groups, only when supplied", () => {
+    renderCard();
+    expect(screen.queryByTestId("below-fields")).toBeNull();
+
+    cleanup();
+    renderCard({
+      belowFieldsSlot: <p data-testid="below-fields">Consent statement</p>,
+    });
+    const slot = screen.getByTestId("below-fields");
+    const password = screen.getByTestId("register-password");
+    const accessGroup = screen.getByTestId("registration-consent-access");
+    // `compareDocumentPosition` reads the RENDERED order, which is the whole
+    // contract: the Academy statement has shipped under the credentials and above
+    // the challenge, and that position may not drift with a refactor.
+    expect(
+      password.compareDocumentPosition(slot) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      slot.compareDocumentPosition(accessGroup) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
   it("021 EARS-5: no consent is ever pre-ticked, and the granted state reaches onSubmit", async () => {
     const user = userEvent.setup();
     const { onSubmit } = renderCard({ consentItems: [ACCESS_ITEM, MARKETING_ITEM] });

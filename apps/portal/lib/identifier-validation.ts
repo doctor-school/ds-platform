@@ -12,6 +12,7 @@ import {
   type RegisterRequest,
 } from "@ds/schemas";
 
+import type { RegisterCardValues } from "@ds/design-system/blocks";
 import {
   IdentifierFieldSchema,
   NewPasswordFieldSchema,
@@ -122,6 +123,28 @@ export function registerFormSchema(): z.ZodType<
     consent: z.array(ConsentAcceptanceSchema),
     captchaToken: z.string().optional(),
   }) as unknown as z.ZodType<RegisterRequest, RegisterRequest>;
+}
+
+/**
+ * The same registration rules, shaped for the shared `<RegisterCard>` form model
+ * (#1934). The block owns the form state, so its value shape — not the wire
+ * `RegisterRequest` — is what the resolver must validate: `consent` is supplied by
+ * this host on submit from the canonical `REQUIRED_CONSENT` pair and is not a form
+ * field, so validating it here would set an error on a field that does not exist
+ * and silently refuse every submit. `promoCode` / `consents` are the block's own
+ * always-present keys (unused on this surface) and are carried through untouched.
+ * The credential rules themselves are byte-identical to {@link registerFormSchema}.
+ */
+export function registerCardFormSchema(): z.ZodType<
+  RegisterCardValues,
+  RegisterCardValues
+> {
+  return z.object({
+    email: EmailIdentifierSchema,
+    password: NewPasswordFieldSchema,
+    promoCode: z.string().optional(),
+    consents: z.record(z.string(), z.boolean()).optional(),
+  }) as unknown as z.ZodType<RegisterCardValues, RegisterCardValues>;
 }
 
 /**

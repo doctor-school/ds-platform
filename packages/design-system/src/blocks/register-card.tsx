@@ -167,6 +167,13 @@ export interface RegisterCardProps {
   attributionSlot?: React.ReactNode;
   /** 021 EARS-9 — the points promise, inside the form, above the submit group. */
   aboveSubmitSlot?: React.ReactNode;
+  /**
+   * A host statement that belongs immediately UNDER the credential fields and
+   * ABOVE the consent/submit groups — the Academy `/register` consent sentence
+   * (003 EARS-20), which is a single read-only line rather than a tier-1 item and
+   * has stood in that position since it shipped. Absent → nothing renders.
+   */
+  belowFieldsSlot?: React.ReactNode;
   /** The host bot-protection element (003 EARS-17), rendered inside the submit group. */
   captchaSlot?: React.ReactNode;
   /**
@@ -274,6 +281,7 @@ export function RegisterCard({
   returnContextSlot,
   attributionSlot,
   aboveSubmitSlot,
+  belowFieldsSlot,
   captchaSlot,
   confirmation,
   consentItems,
@@ -488,6 +496,13 @@ export function RegisterCard({
                 )}
               />
             ) : null}
+
+            {/*
+              A host line that reads with the fields it follows, not with the
+              submit group (the Academy consent sentence). Rendered bare — the
+              host owns its element, so no wrapper alters the form own rhythm.
+            */}
+            {belowFieldsSlot}
 
             {/*
               021 EARS-5 — TIER 1, the access conditions, framed TOGETHER above

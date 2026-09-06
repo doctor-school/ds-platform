@@ -3,18 +3,14 @@
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { useForm } from "react-hook-form";
 import { useTranslations } from "next-intl";
 import { UserPlus } from "lucide-react";
-
-import { type RegisterRequest } from "@ds/schemas";
 
 import { AuthShell } from "@/components/auth-shell";
 import {
   botProtectionMessages,
   botProtectionSiteKey,
 } from "@/lib/bot-protection";
-import { EmailField, PasswordField } from "@ds/design-system/fields";
 import { authClient } from "@/lib/auth-client";
 import { authErrorMessage } from "@/lib/auth-error-message";
 import { REQUIRED_CONSENT } from "@/lib/consent";
@@ -23,20 +19,19 @@ import {
   setPendingRegistration,
 } from "@/lib/pending-registration";
 import { withReturnTarget } from "@/lib/registration-handoff";
-import { registerFormSchema } from "@/lib/identifier-validation";
+import { registerCardFormSchema } from "@/lib/identifier-validation";
 import { useLocalizedResolver } from "@/lib/use-localized-resolver";
 
-import { Button } from "@ds/design-system/button";
 import { Link as DsLink } from "@ds/design-system/link";
 import {
-  AuthCard,
   botProtectionFailureMessage,
   BotProtectionField,
   isBotProtectionRejected,
   isBotProtectionRequired,
+  RegisterCard,
+  type RegisterCardValues,
   useBotProtectedAction,
 } from "@ds/design-system/blocks";
-import { Form, FormField, FormError } from "@ds/design-system/form";
 
 /*
  * Registration surface (#131, EARS-1). Email-primary (#202): registration is
@@ -44,11 +39,29 @@ import { Form, FormField, FormError } from "@ds/design-system/form";
  * email, so the dual-identifier email/phone toggle was removed (phone is a future
  * post-registration secondary identifier; it stays on /login, OTP-login, /reset).
  *
+ * #1934: the form itself is no longer assembled here. Both registration doors —
+ * this one and the doctor storefront `/register` — are thin projections of the ONE
+ * canonical `<RegisterCard>` block in `@ds/design-system/blocks` (AGENTS.md §6
+ * cross-front capability reuse; registry row in
+ * `specs/product/two-site-ia/capability-ownership.md`). What stays here is exactly
+ * what is host-owned: the RU copy (#235 — the package carries no strings), the
+ * localized resolver, the bot-protection element, the transport, and the outcome
+ * mapping. The rendered result is unchanged — the consent line still reads between
+ * the password and the challenge (`belowFieldsSlot`), the submit group still reads
+ * challenge → statement → button (`submitBlock="error-first"`) in the `sm` rhythm.
+ *
  * Validates with a portal resolver built from the field primitives (#200, see
- * `registerFormSchema`), submits same-origin to `/v1/auth/register`, and on the
+ * `registerCardFormSchema`), submits same-origin to `/v1/auth/register`, and on the
  * `pending_verification` ack routes to `/verify?email=…` carrying the email so the
  * registrant can submit the code Zitadel mailed. Consent is captured here
- * (EARS-20) — the BFF refuses an empty array — using the canonical ToS pair.
+ * (EARS-20) — the BFF refuses an empty array — using the canonical ToS pair, as a
+ * single read-only statement rather than a tier-1 checkbox group (that is the
+ * doctor door's 021 EARS-5 shape, not this one's).
+ *
+ * 003 EARS-16: no discriminated outcome branch — the BFF answers a brand-new and an
+ * already-registered address identically, so this host maps every ack to the same
+ * `/verify` hop. 003 EARS-24: the Academy navigates rather than swapping the card in
+ * place, so the block's `confirmation` slot stays unused here.
  *
  * 005 EARS-2: a guest entering from an event's «Участвовать» CTA arrives with
  * `?returnTo=/webinars/:slug` (004 EARS-3 handoff). The event context is carried
@@ -63,13 +76,13 @@ export default function RegisterPage() {
   return (
     <AuthShell>
       <Suspense fallback={null}>
-        <RegisterCard />
+        <RegisterProjection />
       </Suspense>
     </AuthShell>
   );
 }
 
-function RegisterCard() {
+function RegisterProjection() {
   const router = useRouter();
   const t = useTranslations("register");
   const tc = useTranslations("common");
@@ -106,19 +119,11 @@ function RegisterCard() {
   // outrank the error map in zod v4). The submitted body still goes through
   // `authClient.register(...)` and the API still enforces the full
   // `RegisterRequestSchema` (email required + consent).
-  const form = useForm<RegisterRequest>({
-    // `onTouched` (#200 defect 2): validate on blur and re-validate on change, so a
-    // malformed email/password is surfaced before the user clicks submit.
-    mode: "onTouched",
-    resolver: useLocalizedResolver(registerFormSchema()),
-    defaultValues: {
-      email: "",
-      password: "",
-      consent: REQUIRED_CONSENT.slice(),
-    },
-  });
+  const resolver = useLocalizedResolver<RegisterCardValues, RegisterCardValues>(
+    registerCardFormSchema(),
+  );
 
-  function onSubmit(values: RegisterRequest) {
+  function onSubmit(values: RegisterCardValues) {
     setError(null);
     // Drop any password held from a prior (e.g. failed-then-retried) registration
     // before we re-stash, so the single in-memory slot never carries a stale
@@ -130,7 +135,7 @@ function RegisterCard() {
         password: values.password,
         consent: REQUIRED_CONSENT.slice(),
         ...(captchaToken ? { captchaToken } : {}),
-      } as RegisterRequest);
+      });
       // Hand the entered credential to the verify step IN MEMORY ONLY (#175):
       // module-scoped state survives this SPA `router.push` so `/verify` can
       // replay the EARS-5 password login on success and land the user signed-in
@@ -154,13 +159,17 @@ function RegisterCard() {
   }
 
   return (
-    <AuthCard
+    <RegisterCard
+      copy={{
+        title: t("title"),
+        description: t("description"),
+        emailLabel: tc("email"),
+        emailPlaceholder: tc("emailPlaceholder"),
+        passwordLabel: tc("password"),
+        passwordPolicyHint: tc("passwordPolicy"),
+        submit: t("submit"),
+      }}
       icon={<UserPlus className="text-primary" aria-hidden />}
-      // #1033: the page title is the document's single h1 (a11y landmark).
-      // Bare h1 — Tailwind preflight makes it inherit the CardTitle styling,
-      // so the render is pixel-identical.
-      title={<h1>{t("title")}</h1>}
-      description={t("description")}
       footer={
         <DsLink asChild>
           {/* 005 EARS-2: the already-registered guest's path — the event
@@ -170,62 +179,29 @@ function RegisterCard() {
           </Link>
         </DsLink>
       }
-    >
-      <Form {...form}>
-        <form
-          onSubmit={form.handleSubmit(onSubmit)}
-          className="space-y-4"
-          noValidate
-        >
-          <FormField
-            control={form.control}
-            name="email"
-            render={({ field }) => (
-              <EmailField
-                field={field}
-                label={tc("email")}
-                placeholder={tc("emailPlaceholder")}
-              />
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="password"
-            render={({ field }) => (
-              <PasswordField
-                field={field}
-                purpose="new"
-                label={tc("password")}
-                policyHint={tc("passwordPolicy")}
-                testId="register-password"
-                revealLabels={{
-                  show: tc("passwordShow"),
-                  hide: tc("passwordHide"),
-                  showAria: tc("passwordShowAria"),
-                  hideAria: tc("passwordHideAria"),
-                }}
-              />
-            )}
-          />
-
-          <p className="text-xs text-muted-foreground">{t("consent")}</p>
-
-          <BotProtectionField
-            sitekey={botProtectionSiteKey()}
-            {...captcha.fieldProps}
-          />
-          <FormError>{captchaError ?? error}</FormError>
-          <Button
-            type="submit"
-            className="w-full"
-            loading={form.formState.isSubmitting || captcha.pending}
-            data-testid="register-submit"
-          >
-            {t("submit")}
-          </Button>
-        </form>
-      </Form>
-    </AuthCard>
+      // EARS-20 on this door: one read-only statement, in the position it has
+      // shipped in — under the credentials, above the challenge.
+      belowFieldsSlot={
+        <p className="text-xs text-muted-foreground">{t("consent")}</p>
+      }
+      captchaSlot={
+        <BotProtectionField
+          sitekey={botProtectionSiteKey()}
+          {...captcha.fieldProps}
+        />
+      }
+      resolver={resolver}
+      onSubmit={onSubmit}
+      // The shipped single statement slot: a challenge failure outranks a command
+      // failure, exactly as the one `<FormError>{captchaError ?? error}` did.
+      errors={{
+        challenge: captchaError,
+        command: captchaError ? null : error,
+      }}
+      pending={captcha.pending}
+      submitBlock="error-first"
+      spacing="sm"
+      testIds={{ submit: "register-submit" }}
+    />
   );
 }

@@ -153,7 +153,7 @@ function PasswordControl<T extends FieldValues>({
             : null;
           setRevealed((prev) => !prev);
         }}
-        className="absolute inset-y-0 right-0 flex w-12 items-center justify-center bg-transparent text-xs font-extrabold text-primary-action focus-visible:shadow-focus focus-visible:outline-none"
+        className="absolute inset-y-0 right-0 flex w-12 items-center justify-center bg-transparent text-xs font-extrabold text-primary-action hover:underline focus-visible:shadow-focus focus-visible:outline-none"
       >
         {text}
       </button>

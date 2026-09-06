@@ -71,6 +71,30 @@ describe("<EventPageShell>", () => {
     expect(screen.getByText("Скоро · через 5 дней")).toBeInTheDocument();
   });
 
+  it("004 EARS-4: the hero title column shall break long words so a phone-width measure never scrolls the page sideways", () => {
+    render(
+      <EventPageHero
+        kicker="Школа эндокринологии · Онлайн"
+        title="Архивный эфир: инсулинотерапия"
+        dateLine="28 августа, 19:00 (МСК)"
+        statusPlate={<span>Запись доступна</span>}
+      />,
+    );
+
+    // #1810: `min-w-0` is what lets the plate wrap BELOW the title on a phone
+    // instead of being pushed off the right edge — so the column can end up
+    // narrower than a single long Russian word. Without an explicit break the
+    // word overflows the hero and the whole document gains a horizontal
+    // scroll at 320–360 px (measured: `in_archive` @360 → 5 px, @320 → 45 px).
+    const column = screen.getByRole("heading", { level: 1 }).parentElement;
+    expect(column?.className).toContain("min-w-0");
+    expect(column?.className).toContain("break-words");
+    // The plate keeps the canvas geometry — no per-label branch, no shrink.
+    const plate = screen.getByTestId("event-page-hero-status");
+    expect(plate.className).toContain("flex-none");
+    expect(plate.className).toContain("rotate-3");
+  });
+
   it("020 EARS-1: the hero shall omit the breadcrumb, chip row and status plate a host does not supply", () => {
     render(<EventPageHero kicker="k" title="t" dateLine="d" />);
 

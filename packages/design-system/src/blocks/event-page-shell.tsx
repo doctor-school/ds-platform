@@ -61,7 +61,16 @@ export function EventPageHero({
           </nav>
         ) : null}
         <div className="flex flex-wrap items-start justify-between gap-8">
-          <div className="min-w-0 max-w-3xl">
+          {/* `min-w-0` lets the title column shrink so the status plate can wrap
+              below it on a phone instead of being pushed off the right edge
+              (#1810); the flip side is that the column may then be narrower
+              than a long unbroken Russian word («коморбидность»,
+              «инсулинотерапия»), whose overflow spills past the hero and gives
+              the whole page a horizontal scroll at 320–360 px. `break-words`
+              (inherited by the kicker, the h1 and the date line) lets the word
+              break at the measure instead — the plate keeps the canvas
+              geometry, the title keeps the viewport. */}
+          <div className="min-w-0 max-w-3xl break-words">
             <div className="text-eyebrow font-extrabold uppercase tracking-micro text-hero-muted">
               {kicker}
             </div>

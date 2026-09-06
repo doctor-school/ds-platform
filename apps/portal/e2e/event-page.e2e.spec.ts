@@ -24,6 +24,9 @@ const SLUG_LIVE = process.env.E2E_WEBINAR_SLUG_LIVE;
 const SLUG_ENDED = process.env.E2E_WEBINAR_SLUG_ENDED;
 // EARS-5 — the hidden direct-link notice needs its own seeded `hidden` event.
 const SLUG_HIDDEN = process.env.E2E_WEBINAR_SLUG_HIDDEN;
+// `in_archive` is the fourth PUBLIC lifecycle render (a legacy эфир whose only
+// signal is its recording, 014-design §3.1) — its own seed.
+const SLUG_ARCHIVE = process.env.E2E_WEBINAR_SLUG_ARCHIVE;
 
 test.skip(
   !process.env.E2E_PORTAL_URL || !SLUG,
@@ -236,4 +239,69 @@ test.describe("004 EARS-5 hidden direct-link notice (e2e)", () => {
       page.getByRole("link", { name: "Смотреть эфир", exact: true }),
     ).toHaveCount(0);
   });
+});
+
+/**
+ * 004 EARS-4 (mobile geometry regression, #1810) — the hero lifecycle plate is a
+ * STATUS SIGNAL: a chip whose label is half off-screen («СК» of «СКРЫТО») tells a
+ * phone visitor nothing. The plate sits in the hero's `statusPlate` slot next to
+ * the title column, so its geometry is owned by `EventPageHero`
+ * (`@ds/design-system`) — this pin measures the rendered chip, per public
+ * lifecycle state, at the three narrow widths the audience actually carries
+ * (390 = iPhone 14/15, 360 = the common Android floor, 320 = the smallest
+ * phone viewport still in use, where the overflow measured worst). `live` is excluded: it is
+ * a different plate (single `variant="live"` badge, EARS-4 swap).
+ *
+ * The assertion is a bounding box, not a class: `boundingBox()` resolves the real
+ * post-transform rect, so the plate's `rotate-3` overflow counts as overflow.
+ */
+test.describe("004 EARS-4 hero status plate — mobile viewport containment (e2e)", () => {
+  const NARROW_WIDTHS = [390, 360, 320] as const;
+
+  for (const [state, slugEnv] of [
+    ["published", () => SLUG],
+    ["ended", () => SLUG_ENDED],
+    ["hidden", () => SLUG_HIDDEN],
+    ["in_archive", () => SLUG_ARCHIVE],
+  ] as const) {
+    for (const width of NARROW_WIDTHS) {
+      test(`004 EARS-4: hero status chip bounding box lies inside a ${width}px viewport for the ${state} lifecycle state`, async ({
+        page,
+        context,
+      }) => {
+        const slug = slugEnv();
+        test.skip(!slug, `requires a seeded ${state} event slug`);
+
+        await context.clearCookies();
+        await page.setViewportSize({ width, height: 900 });
+        await page.goto(`${BASE}/webinars/${slug}`, {
+          waitUntil: "domcontentloaded",
+        });
+
+        const plate = page.getByTestId("event-page-hero-status");
+        await expect(plate).toBeVisible();
+
+        const box = await plate.boundingBox();
+        expect(box, "the hero status plate must have a layout box").not.toBeNull();
+        // Left edge inside the viewport…
+        expect(
+          Math.round(box!.x),
+          `plate left edge (${state} @ ${width}px)`,
+        ).toBeGreaterThanOrEqual(0);
+        // …and the whole chip, rotation included, inside the right edge.
+        expect(
+          Math.round(box!.x + box!.width),
+          `plate right edge (${state} @ ${width}px)`,
+        ).toBeLessThanOrEqual(width);
+
+        // The page itself must not gain a horizontal scroll because of it.
+        const overflow = await page.evaluate(
+          () =>
+            document.documentElement.scrollWidth -
+            document.documentElement.clientWidth,
+        );
+        expect(overflow, `document horizontal overflow @ ${width}px`).toBeLessThanOrEqual(0);
+      });
+    }
+  }
 });

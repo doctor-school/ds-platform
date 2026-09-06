@@ -96,6 +96,15 @@ describe("EARS-1920: discipline gate regressions", () => {
       ).ok,
     ).toBe(false);
   });
+  it("keeps Nest e2e-spec tests within the test-only exemption", () => {
+    expect(
+      classifyModeAExemption(
+        [{ filename: "apps/api/test/auth.e2e-spec.ts" }],
+        "",
+        "a".repeat(40),
+      ).ok,
+    ).toBe(true);
+  });
   it("CI actually runs tool and guard suites for instruction-only diffs", () => {
     const ci = readFileSync(
       new URL("../../../.github/workflows/ci.yml", import.meta.url),

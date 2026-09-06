@@ -513,7 +513,9 @@ export function classifyModeAExemption(files, body, headSha) {
         };
       continue;
     }
-    if (/\.(?:test|spec)\.[cm]?[jt]sx?$|(?:^|\/)__tests__\//.test(path))
+    if (
+      /\.(?:test|spec|e2e-spec)\.[cm]?[jt]sx?$|(?:^|\/)__tests__\//.test(path)
+    )
       continue;
     if (/\.mdx?$/.test(path)) continue;
     if (

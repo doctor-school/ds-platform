@@ -23,7 +23,7 @@ This is a startup precondition, not a guarantee against a later service crash.
 The provisioner's independent origin/identity validation remains in place;
 provisioning writes and product requests are not retried here. Issue #1887 still
 requires **five consecutive PR CI runs** without provisioning or admin-session
-readiness failures. The separate provisioning-convergence scope remains #1910.
+readiness failures. Related readiness task #1910 remains tracked separately.
 
 Fixture coverage runs in `pnpm test:tools` or, focused:
 `node --test tools/scripts/idp-readiness.test.mjs`. No live stand is needed.

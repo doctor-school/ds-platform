@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
+import { redirect } from "next/navigation";
 
 import { AuthShell } from "@/components/auth-shell";
 import { LoginScreen } from "@/components/login-screen";
@@ -14,6 +15,7 @@ import {
   resolveReturnLandingPath,
   resolveReturnTargetPath,
 } from "@/lib/return-context";
+import { resolveShellAuth } from "@/lib/shell-auth";
 import { resolveRememberedSpecialty } from "@/lib/specialty-choice";
 
 /**
@@ -56,11 +58,28 @@ import { resolveRememberedSpecialty } from "@/lib/specialty-choice";
  * `/register` uses for `data-registration-landing` — one vocabulary, decided
  * once, on the server.
  *
- * ONE `headers()` READ, AND ONLY ON A DIRECT ARRIVAL, exactly as `/register`
- * does it: the rendered screen is not per-visitor, but the LD-4 landing IS, so
- * the request headers are read on the branch that needs them and forwarded
- * through the one shared resolver (`lib/specialty-choice.ts`) rather than
- * inspected here.
+ * A DOCTOR WHO IS ALREADY SIGNED IN NEVER SEES THIS DOOR (#1955). The route is
+ * reachable from anywhere — a bookmark, a shared link, the 017 guest cluster
+ * still painted in a stale tab — and rendering a password box to a visitor who
+ * already holds a session invites them to re-authenticate for nothing, on a
+ * CHROMELESS screen with no way back onto the storefront. So the session is
+ * resolved before the render and a signed-in doctor is sent straight to the
+ * landing this route had already computed: the эфир they came from on a gate
+ * arrival, the LD-4 destination otherwise. The redirect target is the SAME
+ * value the screen would have published — one landing vocabulary, decided once
+ * — so the door and the guard can never disagree about where sign-in leads.
+ *
+ * The status comes from `lib/shell-auth.ts`, the app's ONE server-side session
+ * read (ADR-0015 §4): no second auth path, and its fail-safe answer is `guest`,
+ * so a flaky api shows the sign-in form rather than bouncing a doctor off it.
+ * `/register` deliberately keeps no such guard — the Issue names `/login`, and
+ * a sign-up door answers a different question for someone with an account.
+ *
+ * ONE `headers()` READ FOR THE WHOLE RENDER, exactly as `/register` does it:
+ * the rendered screen is not per-visitor, but the LD-4 landing and the session
+ * status BOTH are, so the request headers are read once and forwarded through
+ * the shared resolvers (`lib/specialty-choice.ts`, `lib/shell-auth.ts`) rather
+ * than inspected here or read twice.
  *
  * The route is registered `deferred` in `tools/lint/prod-surface-manifest.yaml`
  * alongside `/register`: the sign-in journey is real and wired, but the doctor
@@ -92,6 +111,24 @@ export default async function DoctorLoginPage({
   // it at `/events/<slug>` (020-design §1), so the landing is the doctor-host
   // projection of the SAME guard output (#1945).
   const landingTarget = resolveReturnLandingPath(returnTo);
+  // ONE read of the request headers, serving both per-visitor facts below.
+  const requestHeaders = await headers();
+
+  // Already signed in ⇒ the door is not for this visitor: send them to the same
+  // place a successful sign-in would have. Before the render, so no form is ever
+  // painted for a doctor who does not need it (#1955) — and before the upstream
+  // event read, because a direct arrival's landing is decided by the remembered
+  // specialty alone, so that round-trip would answer a question nobody asks. A
+  // gate arrival genuinely needs both facts and pays for both.
+  const auth = await resolveShellAuth(requestHeaders);
+  if (auth.status === "doctor" && !landingTarget) {
+    redirect(
+      resolveDirectArrivalLanding(
+        await resolveRememberedSpecialty(requestHeaders),
+      ),
+    );
+  }
+
   const returnEvent = safeTarget
     ? await resolveReturnContext(safeTarget)
     : null;
@@ -100,8 +137,10 @@ export default async function DoctorLoginPage({
     landingTarget && returnEvent
       ? landingTarget
       : resolveDirectArrivalLanding(
-          await resolveRememberedSpecialty(await headers()),
+          await resolveRememberedSpecialty(requestHeaders),
         );
+
+  if (auth.status === "doctor") redirect(landing);
 
   // Sign-up is a co-equal auth path, so the arrival context survives the hop
   // into it — built from the GUARD output, so a hostile param can never be
@@ -113,7 +152,9 @@ export default async function DoctorLoginPage({
   return (
     <AuthShell
       returnContext={
-        returnEvent ? <ReturnContextPanel event={returnEvent} /> : undefined
+        returnEvent ? (
+          <ReturnContextPanel event={returnEvent} variant="login" />
+        ) : undefined
       }
     >
       <LoginScreen

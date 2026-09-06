@@ -45,6 +45,9 @@ export default defineConfig({
     "register-return-context.spec.ts",
     "register-direct.spec.ts",
     "login-return-context.spec.ts",
+    // #1955: the signed-in redirect and the login return-context copy are both
+    // server reads against an api — they ride the return-context tier.
+    "login-arrival.spec.ts",
     "events-feed.spec.ts",
     "events-url-state.spec.ts",
     "events-month-beside-feed.spec.ts",

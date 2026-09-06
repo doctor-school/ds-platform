@@ -14,3 +14,15 @@
  * not `@source` a package downstream of itself.
  */
 @source "../../../packages/room/src";
+
+/*
+ * The storefront theme is a CLASS on <html> — `lib/theme.ts` toggles `.dark`,
+ * the design-system tokens key off it, and the root layout's FOUC guard applies
+ * the remembered choice before first paint. Tailwind v4's stock `dark:` variant
+ * is `prefers-color-scheme` instead, which would ignore that explicit choice
+ * exactly when it matters (a doctor on a light OS who chose dark). Re-pointing
+ * the variant at the class makes `dark:` mean what the app means by dark, so a
+ * theme-dependent asset swap can be expressed in tokens-only utilities rather
+ * than in bespoke CSS (#1955).
+ */
+@custom-variant dark (&:where(.dark, .dark *));

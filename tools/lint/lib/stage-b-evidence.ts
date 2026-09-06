@@ -4,20 +4,44 @@ export interface StageBRecord {
   createdAt?: string;
   updatedAt?: string;
   url?: string;
+  /** Native scope assigned by the loader; never parsed from owner-controlled text. */
+  batchContext?: { gate: number; child: StageBRecord };
 }
-type Verdict = { ok: boolean; reason: string };
-const marker = /^\s*Stage-?B:\s*(.*?)\s*$/gim; // no-hardcoded-path-ok: approval marker regex, not a filesystem path
+type StageBDecision = ReturnType<typeof stageBDecisions>[number];
+type Verdict =
+  | { ok: true; reason: string; decision: StageBDecision }
+  | { ok: false; reason: string };
+const marker = /^[ \t]*Stage-?B:[ \t]*(.*?)[ \t]*$/gim; // no-hardcoded-path-ok: approval marker regex, not a filesystem path
 const meaningful = (value: string) =>
   value.length > 0 && !/^(?:n\/a|none|tbd|pending|todo|<.*>)$/i.test(value);
 const utc = (value: string) =>
   /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{3})?Z$/.test(value) && // no-hardcoded-path-ok: ISO UTC timestamp regex, not a filesystem path
   Number.isFinite(Date.parse(value));
 export const stageBField = (body: string, name: string) =>
-  body.match(new RegExp(`^Stage-B-${name}:\\s*(.+)$`, "mi"))?.[1]?.trim() ?? "";
+  body
+    .match(new RegExp(`^Stage-B-${name}:[ \\t]*([^\\r\\n]*)$`, "mi"))?.[1]
+    ?.trim() ?? "";
 const sourceOk = (value: string) =>
   /^https:\/\/github\.com\/[^/]+\/[^/]+\/(?:issues|pull)\/\d+#(?:issuecomment-|discussion_r|pullrequestreview-)\d+$/.test(
     value,
   ) || /^owner-relay:[\w.-]+#[\w.-]+$/.test(value);
+
+function decisionTime(record: StageBRecord, value: string): number {
+  const recorded = Date.parse(stageBField(record.body, "recorded-at"));
+  const native = [record.updatedAt, record.createdAt]
+    .map((date) => Date.parse(date ?? ""))
+    .filter(Number.isFinite);
+  const affirmative =
+    /^(?:GO(?:\s*[-\u2013\u2014]|$)|batched at #\d+\s*$|N\/A \(no visual surface\).*lead-certified)/i.test(
+      value,
+    ) &&
+    !/\b(?:pending|hold|no|revoked|tbd|not)\b/i.test(
+      value.replace(/no visual surface/i, ""),
+    );
+  if (affirmative) return recorded;
+  const timestamps = [recorded, ...native].filter(Number.isFinite);
+  return timestamps.length ? Math.max(...timestamps) : NaN;
+}
 
 export function stageBDecisions(records: StageBRecord[]) {
   return records
@@ -27,12 +51,9 @@ export function stageBDecisions(records: StageBRecord[]) {
         value: match[1],
         order,
         index,
-        time: Date.parse(
-          stageBField(record.body, "recorded-at") ||
-            record.updatedAt ||
-            record.createdAt ||
-            "",
-        ),
+        // Approval age never refreshes merely because a body was edited. A
+        // refusal/pending marker must honor its later native creation/edit time.
+        time: decisionTime(record, match[1]),
       })),
     )
     .sort((a, b) => a.time - b.time || a.order - b.order || a.index - b.index);
@@ -113,12 +134,17 @@ export function validateStageB(
           "Lead certification requires owner autonomous-merge authorization, no visual change, live harness/run UTC/report, complete stdout and tested head SHA",
       };
   }
-  if (batch) {
-    const gate = gates[Number(batch[1])] ?? "";
+  const batchId =
+    latest.batchContext?.gate ?? (batch ? Number(batch[1]) : null);
+  if (batchId !== null) {
+    const gate = gates[batchId] ?? "";
     const covered = stageBField(gate, "surfaces")
       .split(",")
       .map((s) => s.trim());
-    const declared = field("surfaces")
+    const declared = stageBField(
+      latest.batchContext?.child.body ?? latest.body,
+      "surfaces",
+    )
       .split(",")
       .map((s) => s.trim());
     if (
@@ -134,5 +160,9 @@ export function validateStageB(
           "Batched Stage-B needs the approved decomposition, bounded surface list and no new section at the gate Issue",
       };
   }
-  return { ok: true, reason: `Current Stage-B record: ${latest.value}` };
+  return {
+    ok: true,
+    reason: `Current Stage-B record: ${latest.value}`,
+    decision: latest,
+  };
 }

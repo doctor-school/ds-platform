@@ -162,14 +162,14 @@ describe("stage-b-lint", () => {
     expect(stderr).toContain("Stage-B");
   });
 
-  it("skip (frontmatter heuristic): design-system-only under a backend-only spec → exit 0", () => {
-    const { code, stdout } = runGuard(
+  it("red: design-system render cannot be waived by a backend-only feature label", () => {
+    const { code, stderr } = runGuard(
       GUARD,
       caseDir("stage-b", "skip-ds-nonuserfacing-spec"),
       { env: prEnv("210", "skip-ds-nonuserfacing-spec") },
     );
-    expect(code).toBe(0);
-    expect(stdout).toContain("rule does not apply");
+    expect(code).toBe(1);
+    expect(stderr).toContain("Stage-B");
   });
 
   it("skip: not a pull_request event → exit 0", () => {

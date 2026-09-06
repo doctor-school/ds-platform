@@ -63,6 +63,11 @@
  * Canon: AGENTS.md §4, skill `merge-when-green` Step 1, memory
  * `feedback_phase0_merge_gate_manual`. Issue #836.
  */
+import { normalizeReviewBody } from "./review-body.mjs";
+import {
+  classifyReleaseFiles,
+  isVersionPackagesPr,
+} from "./release-review-exemption.mjs";
 import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 
@@ -340,7 +345,7 @@ const MODE_A_VERDICT_RE = /^VERDICT:\s*(APPROVE|REQUEST_CHANGES)\b/m;
  */
 export function classifyModeAVerdict(reviews, headSha) {
   const modeA = (Array.isArray(reviews) ? reviews : []).flatMap((r) => {
-    const body = typeof r?.body === "string" ? r.body : "";
+    const body = normalizeReviewBody(r?.body);
     if (!MODE_A_HEADER_RE.test(body)) return [];
     const m = MODE_A_VERDICT_RE.exec(body);
     if (!m) return [];
@@ -469,9 +474,10 @@ export function flattenApiPages(pages, field) {
 }
 
 /** Scope is determined by changed paths, never by the exemption reason. */
-export function classifyModeAExemption(files, body, headSha) {
+export function classifyModeAExemption(files, body, headSha, metadata = {}) {
   if (!Array.isArray(files) || !files.length)
     return { ok: false, reason: "No complete changed-file set" };
+  if (isVersionPackagesPr(metadata)) return classifyReleaseFiles(files);
   for (const file of files.flatMap((file) =>
     file.previous_filename
       ? [file, { filename: file.previous_filename }]
@@ -538,6 +544,62 @@ export function classifyModeAExemption(files, body, headSha) {
     ok: true,
     reason: "Changed files qualify under the documented exemption scope",
   };
+}
+
+export function verifyModeAExemption(files, metadata, headSha, runGit = git) {
+  const hydrated = files.map((file) => ({ ...file }));
+  if (isVersionPackagesPr(metadata))
+    hydrateReleaseFiles(hydrated, headSha, metadata.baseRefOid, runGit);
+  return classifyModeAExemption(
+    hydrated,
+    metadata.body ?? "",
+    headSha,
+    metadata,
+  );
+}
+
+/** Read the exact PR comparison blobs; filename-only bot claims are insufficient. */
+function hydrateReleaseFiles(files, headSha, baseSha, runGit) {
+  const failRelease = (reason) => {
+    throw new Error(reason);
+  };
+  if (![headSha, baseSha].every((sha) => /^[a-f0-9]{40}$/.test(sha ?? "")))
+    failRelease("Invalid release comparison SHA");
+  const fetched = runGit(["fetch", "--no-tags", "origin", headSha, baseSha]);
+  if (fetched.status !== 0)
+    failRelease("Cannot fetch release comparison commits");
+  const base = runGit(["merge-base", baseSha, headSha]);
+  if (base.status !== 0) failRelease("Cannot resolve release comparison base");
+  const mergeBase = base.stdout.trim();
+  const diff = runGit([
+    "diff",
+    "--name-only",
+    "-z",
+    `${mergeBase}..${headSha}`,
+  ]);
+  const localPaths = diff.stdout?.split("\0").filter(Boolean).sort();
+  if (
+    diff.status !== 0 ||
+    JSON.stringify(localPaths) !==
+      JSON.stringify(files.map((file) => file.filename).sort())
+  )
+    failRelease(
+      "GitHub release file list differs from the complete git comparison",
+    );
+  for (const file of files) {
+    if (
+      !/^(?:(?:apps|packages)\/[^/]+\/package\.json|pnpm-lock\.yaml)$/.test(
+        file.filename,
+      )
+    )
+      continue;
+    const before = runGit(["show", `${mergeBase}:${file.filename}`]);
+    const after = runGit(["show", `${headSha}:${file.filename}`]);
+    if (before.status !== 0 || after.status !== 0)
+      failRelease(`Cannot read complete release blobs: ${file.filename}`);
+    file.baseContent = before.stdout;
+    file.headContent = after.stdout;
+  }
 }
 
 function die(msg, code = 3) {
@@ -787,7 +849,7 @@ async function main() {
         "view",
         String(prNumber),
         "--json",
-        "body,changedFiles",
+        "body,changedFiles,headRefName,baseRefOid,author",
       ]);
       if (filesRes.status !== 0 || bodyRes.status !== 0)
         die("Cannot validate Mode-a exemption scope", 1);
@@ -798,7 +860,7 @@ async function main() {
           "Incomplete changed-file set; Mode-a exemption cannot be proven",
           1,
         );
-      const scope = classifyModeAExemption(files, metadata.body ?? "", sha);
+      const scope = verifyModeAExemption(files, metadata, sha);
       if (!scope.ok) die(`MODE-A EXEMPT refused: ${scope.reason}`, 1);
       process.stdout.write(
         `${TAG} MODE-A EXEMPT — verdict gate SKIPPED for PR #${prNumber}: ${modeAExempt.reason} ` +

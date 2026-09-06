@@ -8,8 +8,35 @@ import {
 import { isUiSourcePath } from "../lib/ui-surface";
 import { classifyDisciplineChanges } from "../../ci/discipline-changes.mjs";
 import { readFileSync } from "node:fs";
+import { latestModeAReview } from "../ui-parity-lint";
 
 describe("EARS-1920: discipline gate regressions", () => {
+  it("accepts UTF-8 BOM review files and never hides a later BOM refusal", () => {
+    const approval = {
+      body: "\uFEFF## Mode (a) Review\nVERDICT: APPROVE",
+      commit_id: "abc",
+      submitted_at: "2026-09-06T00:00:00Z",
+      state: "COMMENTED",
+    };
+    expect(classifyModeAVerdict([approval], "abc").state).toBe("fresh-approve");
+    const refusal = {
+      ...approval,
+      body: "\uFEFF## Mode (a) Review\nVERDICT: REQUEST_CHANGES",
+      submitted_at: "2026-09-06T01:00:00Z",
+    };
+    expect(
+      classifyModeAVerdict(
+        [{ ...approval, body: approval.body.slice(1) }, refusal],
+        "abc",
+      ).state,
+    ).toBe("request-changes");
+    expect(
+      latestModeAReview([
+        { body: approval.body.slice(1), submittedAt: approval.submitted_at },
+        { body: refusal.body, submittedAt: refusal.submitted_at },
+      ])?.body,
+    ).toContain("REQUEST_CHANGES");
+  });
   it("preserves WARN findings locally while blocking BLOCK and execution errors", () => {
     expect(
       summarize([

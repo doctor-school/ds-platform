@@ -341,9 +341,12 @@ function enterConfirmedFailure(
  * burst cannot exhaust the budget in one tick. `retry` re-creates the embed (bumps
  * `embedKey`); `restart` resets the budget + re-creates the embed (keeping the
  * monotonic `everReady`); `playing` clears everything (EARS-18.4). A NON-observable
- * state (cdnvideo) is never graded and never leaves `unverified`: the watchdog is
- * ignored there and no `retry`/`restart` is reachable, because the room renders no
- * control of its own over a stream it cannot see.
+ * state (cdnvideo) is never graded: the watchdog is ignored there and neither
+ * `retry` nor `restart` is reachable, because the room renders no control of its
+ * own over a stream it cannot see; `playing`/`error` are never dispatched for it
+ * either, since the hook subscribes to no provider channel. It therefore stays
+ * `unverified` for want of any reachable transition, not by a guard on every
+ * action.
  */
 export function playerReducer(state: PlayerState, action: PlayerAction): PlayerState {
   switch (action.type) {

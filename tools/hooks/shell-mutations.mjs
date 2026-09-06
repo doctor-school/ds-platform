@@ -26,9 +26,11 @@ export function shellMutationPaths(input, cwd) {
   const writer =
     /\b(?:Set-Content|Add-Content|Out-File|Remove-Item|Move-Item|Copy-Item|New-Item|Clear-Content|tee|touch|mkdir|rmdir|rm|mv|cp)\b|(?:^|\s)sed\s+-i\b|writeFile(?:Sync)?\s*\(|\.write_text\s*\(|\.write_bytes\s*\(|open\s*\([^\n]*,[\s]*['"](?:w|a)|(?:^|[^>])>{1,2}(?!&)/i;
   if (!writer.test(command)) return [];
-  if (/[;&|`$\r\n(){}]/.test(command))
+  // Reject redirection and PowerShell array syntax before accepting a literal
+  // writer; otherwise additional destinations escape the single-target check.
+  if (/[;&|`$\r\n(){},<>]/.test(command))
     throw new Error(
-      "dynamic/chained shell mutation cannot be isolated; use apply_patch or a literal file writer",
+      "dynamic/chained shell mutation, redirection or array cannot be isolated; use apply_patch or one literal file writer",
     );
   const tokens = command.match(/"[^"\r\n]*"|'[^'\r\n]*'|[^\s]+/g) || [];
   const unquote = (s) => s.replace(/^(['"])(.*)\1$/, "$2");

@@ -140,7 +140,7 @@ if (args[0] === "--prepare") {
     ownerAction: diagnosis.ownerAction,
   };
   writeFileSync(
-    resolve(fixture, "runtime-report.json"),
+    resolve(evidenceDir, "runtime-report.json"),
     JSON.stringify(report, null, 2) + "\n",
   );
   process.stdout.write(JSON.stringify(report, null, 2) + "\n");

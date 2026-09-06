@@ -198,6 +198,13 @@ function RegisterCard() {
                 purpose="new"
                 label={tc("password")}
                 policyHint={tc("passwordPolicy")}
+                testId="register-password"
+                revealLabels={{
+                  show: tc("passwordShow"),
+                  hide: tc("passwordHide"),
+                  showAria: tc("passwordShowAria"),
+                  hideAria: tc("passwordHideAria"),
+                }}
               />
             )}
           />

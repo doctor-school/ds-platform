@@ -43,6 +43,12 @@ const copy: PasswordRecoveryCardCopy = {
     codeLabel: "copy.complete.codeLabel",
     newPasswordLabel: "copy.complete.newPasswordLabel",
     passwordPolicyHint: "copy.complete.passwordPolicyHint",
+    passwordReveal: {
+      show: "copy.complete.revealShow",
+      hide: "copy.complete.revealHide",
+      showAria: "copy.complete.revealShowAria",
+      hideAria: "copy.complete.revealHideAria",
+    },
     submit: "copy.complete.submit",
     startOver: "copy.complete.startOver",
     resend: "copy.complete.resend",

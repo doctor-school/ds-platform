@@ -1,6 +1,6 @@
 import * as React from "react";
 import { useForm, type ControllerRenderProps } from "react-hook-form";
-import { render, screen, cleanup } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { Form, FormField } from "../form";
@@ -113,5 +113,115 @@ describe("PasswordField composition (inline message)", () => {
     const errored = paras[0]!;
     expect(errored).toHaveTextContent("Не менее 8 символов.");
     expect(errored).toHaveAttribute("role", "alert");
+  });
+});
+
+/**
+ * 003 EARS-38 harness: a bare creation field with a stable test id per instance,
+ * so a second instance can be mounted alongside the first and proven independent.
+ */
+function RevealHarness({
+  testId = "pw",
+  placeholder,
+}: {
+  testId?: string;
+  placeholder?: string;
+}) {
+  const form = useForm<{ password: string }>({
+    defaultValues: { password: "" },
+  });
+  return (
+    <Form {...form}>
+      <FormField
+        control={form.control}
+        name="password"
+        render={({ field }) => (
+          <PasswordField
+            field={field as ControllerRenderProps<{ password: string }>}
+            purpose="new"
+            label="Пароль"
+            testId={testId}
+            {...(placeholder !== undefined ? { placeholder } : {})}
+          />
+        )}
+      />
+    </Form>
+  );
+}
+
+describe("PasswordField reveal toggle (003 EARS-38)", () => {
+  it("003 EARS-38.1: masked by default — type=password, toggle present, aria-pressed=false, «Показать»", () => {
+    render(<RevealHarness />);
+    const input = screen.getByTestId("pw");
+    expect(input).toHaveAttribute("type", "password");
+    const toggle = screen.getByTestId("pw-reveal");
+    expect(toggle).toHaveAttribute("type", "button");
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
+    expect(toggle).toHaveTextContent("Показать");
+    expect(toggle).toHaveAttribute("aria-label", "Показать пароль");
+    // The control the toggle governs is the password input itself.
+    expect(toggle.getAttribute("aria-controls")).toBe(input.getAttribute("id"));
+  });
+
+  it("003 EARS-38.2: toggling reveals — type=text, aria-pressed=true, «Скрыть», and back to masked", () => {
+    render(<RevealHarness />);
+    const input = screen.getByTestId("pw");
+    const toggle = screen.getByTestId("pw-reveal");
+
+    fireEvent.click(toggle);
+    expect(input).toHaveAttribute("type", "text");
+    expect(toggle).toHaveAttribute("aria-pressed", "true");
+    expect(toggle).toHaveTextContent("Скрыть");
+    expect(toggle).toHaveAttribute("aria-label", "Скрыть пароль");
+
+    fireEvent.click(toggle);
+    expect(input).toHaveAttribute("type", "password");
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
+    expect(toggle).toHaveTextContent("Показать");
+  });
+
+  it("003 EARS-38.3: the entered value and the caret survive a toggle, focus stays on the field", async () => {
+    render(<RevealHarness />);
+    const input = screen.getByTestId("pw") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "secret1234" } });
+    await waitFor(() => expect(input).toHaveValue("secret1234"));
+    input.focus();
+    input.setSelectionRange(4, 4);
+
+    fireEvent.click(screen.getByTestId("pw-reveal"));
+
+    expect(input).toHaveValue("secret1234");
+    expect(input).toHaveAttribute("type", "text");
+    expect(input.selectionStart).toBe(4);
+    expect(input.selectionEnd).toBe(4);
+    expect(document.activeElement).toBe(input);
+
+    // Flush the select events jsdom queues on `focus` / `setSelectionRange` so no
+    // timer outlives the test (#441 orphan-timer guard).
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+
+  it("003 EARS-38.4: revealing one field does not reveal another instance", () => {
+    render(
+      <>
+        <RevealHarness testId="pw-a" />
+        <RevealHarness testId="pw-b" />
+      </>,
+    );
+    fireEvent.click(screen.getByTestId("pw-a-reveal"));
+    expect(screen.getByTestId("pw-a")).toHaveAttribute("type", "text");
+    expect(screen.getByTestId("pw-b")).toHaveAttribute("type", "password");
+    expect(screen.getByTestId("pw-b-reveal")).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+  });
+
+  it("003 EARS-38.5: the optional placeholder reaches the input", () => {
+    render(<RevealHarness placeholder="••••••••" />);
+    expect(screen.getByTestId("pw")).toHaveAttribute(
+      "placeholder",
+      "••••••••",
+    );
   });
 });

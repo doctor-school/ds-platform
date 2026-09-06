@@ -15,6 +15,7 @@ import { ApiOkResponse, ApiQuery } from "@nestjs/swagger";
 import type { FastifyRequest } from "fastify";
 import {
   type DoctorEventsFeed,
+  type DoctorEventsLiveRead,
   type DoctorEventsMonthGrid,
   type EventPageView,
   type ParticipationCta,
@@ -31,6 +32,7 @@ import type { ParticipationRoutes } from "../events/participation-cta.resolver.j
 import { ParticipationService } from "../events/participation.service.js";
 import {
   DoctorEventsFeedDto,
+  DoctorEventsLiveDto,
   DoctorEventsMonthGridDto,
 } from "./doctor-events.dto.js";
 import { DoctorEventsService } from "./doctor-events.service.js";
@@ -213,6 +215,50 @@ export class DoctorEventsPublicController {
     return this.feed.month({
       query: parsed.data,
       specialtyReference: readSpecialtyChoiceCookie(cookie),
+    });
+  }
+
+  /**
+   * 019 EARS-6 (#1521) — `GET /v1/storefront/doctor/events/live`, the
+   * «Идёт сейчас» strip that stands above the feed.
+   *
+   * Declared BEFORE `@Get(":idOrSlug")` so the literal segment keeps winning
+   * over the parameter — the same ordering rule `@Get("month")` follows.
+   *
+   * ## Why it is a route of its own and not a field of the feed
+   *
+   * Two reasons, both structural. The feed body is targeted but NOT per-viewer,
+   * and the strip is per-viewer (its `href` depends on whether this reader holds
+   * a registration) — folding it in would poison the feed's `private, max-age=30`
+   * cache with one doctor's room link. And the strip is a LIVE fact the host
+   * re-reads on its own bounded cadence (`DOCTOR_EVENTS_LIVE_REFRESH_SECONDS`);
+   * re-reading the whole day-grouped feed every 30 s to refresh one badge would
+   * be the cost this split exists to avoid.
+   *
+   * `@Public()` with an OPTIONAL principal, exactly like the participation
+   * sibling: a guest gets a strip pointing at the event page, never a 401 and
+   * never a gated payload delivered to be hidden client-side. `no-store`,
+   * because the answer varies per viewer AND changes the moment a room closes.
+   */
+  @Get("live")
+  @ApiOkResponse({ type: DoctorEventsLiveDto })
+  @Public()
+  @Header("Cache-Control", "private, no-store")
+  @Authz({
+    access: "public",
+    check: "none",
+    audit: "none",
+    tests: ["EARS-6"],
+  })
+  live(
+    @Req() req: FastifyRequest,
+    @Headers("cookie") cookie?: string,
+  ): Promise<DoctorEventsLiveRead> {
+    const sub = (req as { user?: { sub?: string } }).user?.sub;
+    return this.feed.live({
+      specialtyReference: readSpecialtyChoiceCookie(cookie),
+      routes: DOCTOR_ROUTES,
+      sub,
     });
   }
 

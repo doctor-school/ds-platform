@@ -75,6 +75,37 @@ another visitor.
 One contract serves two compositions (LD-3): the grid beside the feed (#1516)
 and the dedicated calendar page (#1520) read the SAME endpoint.
 
+## 019 «Идёт сейчас» — the live strip
+
+`GET /v1/storefront/doctor/events/live` (EARS-6, #1521) returns `LiveStrip | null`
+— the ONE targeted эфир that is running right now, or `null`. `access: public`
+with an OPTIONAL principal and `private, no-store`: the body varies per viewer
+and changes the moment a room closes.
+
+- **It exists because the feed cannot carry it.** An эфир that started before the
+  rendered horizon is excluded by the feed's lower bound, so a doctor arriving
+  mid-эфир would see only what is still to come. `findLiveRows` applies the
+  feed's OWN targeting subquery with the horizon dropped and the lifecycle
+  narrowed to `state = 'live'` — a projection of the same selection, never a
+  second one, and never `startsAt + durationMin` compared to the clock.
+- **The entry policy is 020's, not a second room rule.** The strip asks
+  `ParticipationService.cta()` under `DOCTOR_ROUTES`: `enter-room` means the
+  viewer holds a registration and its `href` is the room; every other answer —
+  guest and signed-in-unregistered alike — resolves to the event page, where 020
+  already renders the honest next step.
+- **One presence aggregate, two callers.** A registered viewer's `presenceCount`
+  arrives with the CTA and excludes themself («коллеги» = other people, 020
+  EARS-7); everyone else is not in the room, so the same
+  `PresenceRepository.countLivePresence` is read over the same `2 × N` window
+  with no exclusion.
+- **The contract carries no `startsAt`.** `endsAt` is present only as the «до
+  HH:MM МСК» line and nothing branches on it, so no host can derive liveness
+  from its own clock (019-design §4). `DOCTOR_EVENTS_LIVE_REFRESH_SECONDS = 30`
+  is the bounded re-read cadence (LD-6) — a socket for one badge is not built.
+- **Several concurrent эфиры → the earliest `startsAt`.** A deterministic
+  tie-break over rows targeting already chose, not a ranking; the strip is
+  `.strict()` and has no field a score could be written into.
+
 ## Exported symbols
 
 `StorefrontModule` (exports `SpecialtiesService` + `StatisticsService` +

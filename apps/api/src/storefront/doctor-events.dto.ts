@@ -1,6 +1,7 @@
 import { createZodDto } from "nestjs-zod";
 import {
   DoctorEventsFeedSchema,
+  DoctorEventsLiveStripSchema,
   DoctorEventsMonthGridSchema,
 } from "@ds/schemas";
 
@@ -22,4 +23,17 @@ export class DoctorEventsFeedDto extends createZodDto(DoctorEventsFeedSchema) {}
  */
 export class DoctorEventsMonthGridDto extends createZodDto(
   DoctorEventsMonthGridSchema,
+) {}
+
+/**
+ * 019 EARS-6 — the «Идёт сейчас» response of
+ * `GET /v1/storefront/doctor/events/live`. Same rule as its two siblings: the
+ * Zod schema is the SSOT, and this class exists only so the OpenAPI document —
+ * and the `@ds/api-client` the doctor host's live block reads — carries the
+ * real strip envelope. `LiveStrip | null` is expressed as a NULLABLE response
+ * rather than a 204, so «nothing live» is a value the client parses with the
+ * same schema as a strip and never an empty body it has to special-case.
+ */
+export class DoctorEventsLiveDto extends createZodDto(
+  DoctorEventsLiveStripSchema,
 ) {}

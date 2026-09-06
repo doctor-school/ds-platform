@@ -9,6 +9,7 @@ import {
   type DoctorEventsFeed,
   type DoctorEventsFeedQuery,
   type DoctorEventsFeedTargeting,
+  type DoctorEventsLiveRead,
   type DoctorEventsMonthGrid,
   type DoctorEventsMonthQuery,
   doctorEventsFeedDayOf,
@@ -20,6 +21,13 @@ import {
   doctorEventsFeedHorizonWidth,
   formatDoctorEventsFeedDayLabel,
 } from "@ds/schemas";
+import type { ParticipationRoutes } from "../events/participation-cta.resolver.js";
+import { ParticipationService } from "../events/participation.service.js";
+import { PresenceRepository } from "../room/presence.repository.js";
+import {
+  ROOM_HEARTBEAT_INTERVAL_SECONDS,
+  presenceWindowSeconds,
+} from "../room/room.tokens.js";
 import {
   type DoctorFeedRow,
   DoctorEventsRepository,
@@ -68,6 +76,16 @@ export class DoctorEventsService {
     private readonly repository: DoctorEventsRepository,
     @Inject(TargetingService)
     private readonly targeting: TargetingService,
+    // 019 EARS-6 (#1521): the live strip reuses 020's ONE participation policy
+    // for the entry decision and 006's ONE presence aggregate for the count.
+    // Neither is re-implemented here — a second room-eligibility rule is
+    // exactly the drift 019-design §4 forbids.
+    @Inject(ParticipationService)
+    private readonly participation: ParticipationService,
+    @Inject(PresenceRepository)
+    private readonly presence: PresenceRepository,
+    @Inject(ROOM_HEARTBEAT_INTERVAL_SECONDS)
+    private readonly heartbeatIntervalSeconds: number,
   ) {}
 
   async feed(input: {
@@ -266,6 +284,93 @@ export class DoctorEventsService {
         hasLive: counts.get(date)?.hasLive ?? false,
       })),
       targeting,
+    };
+  }
+
+  /**
+   * 019 EARS-6 (#1521) — «Идёт сейчас»: the ONE targeted эфир that is running
+   * right now, or `null` (019-design §3 «model: `LiveStrip | null`», §4).
+   *
+   * ## Why this read exists at all
+   *
+   * Because the feed cannot carry it. An эфир that started before the rendered
+   * horizon is excluded from `findFeedRows` by the horizon's lower bound (stand
+   * finding 2026-09-02), so a doctor arriving mid-эфир would otherwise see the
+   * feed of what is still to come and no way into what is happening. The live
+   * block is that way in — a projection of the SAME targeted selection, with
+   * the horizon dropped and the lifecycle narrowed to `live`.
+   *
+   * ## Nothing is derived here that 006 or 020 already decide
+   *
+   * Liveness is 006's `state` (never `startsAt + durationMin` against a clock,
+   * here or on any client). The ENTRY POLICY is 020's
+   * {@link ParticipationService}: the strip asks for the participation CTA of
+   * the resolved event under THIS host's routes and reads the answer —
+   * `enter-room` means «registered, the room is open», and its `href` is the
+   * room. Anything else, guest and signed-in-unregistered alike, is sent to the
+   * event page, where 020 already renders the honest next step. So there is no
+   * second room-eligibility rule to drift out of step with the event page.
+   *
+   * ## Two counts, one aggregate
+   *
+   * A registered viewer's count arrives with the CTA and excludes themself —
+   * «коллеги» means other people (020 EARS-7). Everyone else is not in the room
+   * and therefore excludes nobody, so the count is read from the SAME
+   * {@link PresenceRepository} aggregate over the SAME `2 × N` window with no
+   * exclusion. Two callers, one query, one definition of «в комнате».
+   *
+   * ## Several эфиры at once
+   *
+   * The earliest `startsAt` wins — the эфир that has been running longest, and
+   * so the one nearest its end. It is a deterministic tie-break over rows the
+   * targeting already chose, not a ranking: the strip has no score field and
+   * this method computes none.
+   */
+  async live(input: {
+    /** The remembered specialty of the 017 anonymous session; `null` degrades to the untargeted read. */
+    specialtyReference: string | null;
+    /** The calling host's route table — the only host-specific thing in this read. */
+    routes: ParticipationRoutes;
+    /** The authenticated subject, absent for a guest. */
+    sub?: string | undefined;
+  }): Promise<DoctorEventsLiveRead> {
+    const targeting = await this.resolveTargeting(
+      { specialty: "mine-and-adjacent" },
+      input.specialtyReference,
+    );
+    const rows = await this.repository.findLiveRows(
+      targeting.mode === "all"
+        ? null
+        : [...targeting.directionIds, ...targeting.adjacentDirectionIds],
+    );
+
+    const row = rows[0];
+    if (row === undefined) return null;
+
+    const cta = await this.participation.cta(row.slug, input.routes, input.sub);
+    const viewerIsRegistered = cta?.action === "enter-room";
+    const href =
+      viewerIsRegistered && cta.href !== null
+        ? cta.href
+        : input.routes.eventPath(row.slug);
+
+    return {
+      eventId: row.id,
+      slug: row.slug,
+      title: row.title,
+      school: row.school,
+      href,
+      // Rendered as «до HH:MM МСК» and nothing else — no host branches on it.
+      endsAt: new Date(
+        row.startsAt.getTime() + row.durationMin * 60_000,
+      ).toISOString(),
+      presenceCount: viewerIsRegistered
+        ? (cta.presenceCount ?? 0)
+        : await this.presence.countLivePresence(
+            row.id,
+            presenceWindowSeconds(this.heartbeatIntervalSeconds),
+          ),
+      viewerIsRegistered,
     };
   }
 

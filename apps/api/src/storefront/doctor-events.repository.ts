@@ -147,6 +147,54 @@ export class DoctorEventsRepository {
   }
 
   /**
+   * 019 EARS-6 (#1521) — the targeted эфиры that are RUNNING right now.
+   *
+   * The selection is the feed's own targeting predicate — the same
+   * {@link activeDirectionsOf} subquery over the managed `event_directions`
+   * rows — with two differences and no others: the lifecycle filter is the
+   * single `live` state instead of the whole publish window, and there is NO
+   * horizon. The horizon is deliberately dropped rather than widened: an эфир
+   * that started before the rendered window is EXCLUDED from the feed (stand
+   * finding 2026-09-02), and the live block is precisely the surface where a
+   * running эфир must still be reachable.
+   *
+   * What this method must never become is a second selection path: liveness is
+   * 006's `state` column, never `startsAt + durationMin` compared to `now()`
+   * here or on any client (019-design §4). Ordered by `startsAt` so a viewer
+   * targeted at several concurrent эфиры sees the one that has been running
+   * longest — a deterministic tie-break, not a ranking.
+   */
+  async findLiveRows(directionIds: string[] | null): Promise<DoctorFeedRow[]> {
+    // A targeted read that reaches no direction has nothing live, full stop —
+    // the same short-circuit `findFeedRows` applies, for the same reason.
+    if (directionIds !== null && directionIds.length === 0) return [];
+
+    const where = [
+      eq(events.recordStatus, "active"),
+      eq(events.state, "live"),
+    ];
+    if (directionIds !== null) {
+      where.push(inArray(events.id, this.activeDirectionsOf(directionIds)));
+    }
+
+    const rows = await this.db
+      .select({
+        id: events.id,
+        slug: events.slug,
+        title: events.title,
+        school: events.school,
+        startsAt: events.startsAt,
+        durationMin: events.durationMin,
+        state: events.state,
+      })
+      .from(events)
+      .where(and(...where))
+      .orderBy(asc(events.startsAt), asc(events.id));
+
+    return rows as DoctorFeedRow[];
+  }
+
+  /**
    * The earliest start of a feed-eligible event inside `[fromInstant,
    * toInstant)` under the SAME predicate {@link findFeedRows} applies — the
    * question «is there anything at all past the rendered horizon?» (019 LD-2,

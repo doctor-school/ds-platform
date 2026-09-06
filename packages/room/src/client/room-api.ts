@@ -27,9 +27,34 @@ export class RoomApiError extends Error {
   constructor(
     readonly status: number,
     endpoint: string,
+    /**
+     * 006 EARS-7 — the event lifecycle state the SERVER named in its refusal body
+     * (`ConflictException({ message, state })`), when it named one. The room may
+     * only learn that the broadcast ended from this value: a status alone cannot
+     * tell an ended room from any other conflict, and the clock must never be the
+     * source (design §6). `undefined` whenever the body is absent, not JSON, or
+     * carries no string `state` — never guessed.
+     */
+    readonly state?: string,
   ) {
     super(`room api ${endpoint} failed (${status})`);
     this.name = "RoomApiError";
+  }
+}
+
+/**
+ * Best-effort read of the refusal body's `state`. A refusal is already the
+ * unhappy path — an unreadable or unexpected body must degrade to `undefined`,
+ * never to a throw that would replace the typed {@link RoomApiError} with a
+ * parse error.
+ */
+async function readRefusalState(res: Response): Promise<string | undefined> {
+  try {
+    const body: unknown = await res.json();
+    const state = (body as { state?: unknown } | null | undefined)?.state;
+    return typeof state === "string" ? state : undefined;
+  } catch {
+    return undefined;
   }
 }
 
@@ -64,7 +89,7 @@ export function createBrowserRoomApi({
         headers: { "content-type": "application/json", accept: "application/json" },
         body: JSON.stringify({ text }),
       });
-      if (!res.ok) throw new RoomApiError(res.status, "chat");
+      if (!res.ok) throw new RoomApiError(res.status, "chat", await readRefusalState(res));
     },
 
     async sendHeartbeat(): Promise<unknown> {
@@ -75,7 +100,9 @@ export function createBrowserRoomApi({
         // A beat is a fire-and-forget signal; keep it alive across an unload.
         keepalive: true,
       });
-      if (!res.ok) throw new RoomApiError(res.status, "heartbeat");
+      if (!res.ok) {
+        throw new RoomApiError(res.status, "heartbeat", await readRefusalState(res));
+      }
       return (await res.json()) as unknown;
     },
 

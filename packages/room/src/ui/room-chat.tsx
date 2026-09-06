@@ -61,6 +61,8 @@ export type RoomChatCopy = Pick<
   | "chatDisconnected"
   | "composerPlaceholder"
   | "composerSend"
+  // 006 EARS-7 — the line that replaces the composer once the broadcast is over.
+  | "chatEnded"
 >;
 export function RoomChat({
   api,
@@ -68,6 +70,7 @@ export function RoomChat({
   copy,
   collapsed = false,
   onIncomingWhileCollapsed,
+  ended = false,
 }: {
   /** The room's ONE browser transport — `createBrowserRoomApi({ slug })`. */
   api: BrowserRoomApi;
@@ -78,6 +81,13 @@ export function RoomChat({
   collapsed?: boolean;
   /** Reports how many messages arrived while the chat was collapsed. */
   onIncomingWhileCollapsed?: (delta: number) => void;
+  /**
+   * 006 EARS-7 — the broadcast is over (server-proven). The pane DEGRADES, it does
+   * not vanish (design §8.3): the ledger stays readable and the live connection is
+   * left alone, only the composer is replaced by a truthful status line. Sending
+   * would be refused by the server anyway, so offering the control would be a lie.
+   */
+  ended?: boolean;
 }) {
   // EARS-5: the live presence count rides this SAME channel/connection; the chat
   // panel owns the room's only Centrifugo connection (it stays mounted even when
@@ -383,6 +393,18 @@ export function RoomChat({
           {copy.chatSendError}
         </div>
       ) : null}
+      {ended ? (
+        // EARS-7 — the composer's slot, stating why it is gone. Same strip look as
+        // the connection banners above (`role="status"`), flipped to a top border
+        // because it sits where the composer sat.
+        <div
+          role="status"
+          data-testid="room-chat-ended"
+          className="border-t-2 border-border bg-tint px-4 py-2 text-caption text-tint-foreground"
+        >
+          {copy.chatEnded}
+        </div>
+      ) : (
       <form onSubmit={submit} className="flex gap-3 border-t-2 border-border p-4">
         {/* primitives-first-ok: canvas-pinned webinar-room composer field (room
             canvas) — border-2 hairline box, no DS Input chrome; pre-#828 surface,
@@ -404,6 +426,7 @@ export function RoomChat({
           {copy.composerSend}
         </Button>
       </form>
+      )}
     </div>
   );
 }

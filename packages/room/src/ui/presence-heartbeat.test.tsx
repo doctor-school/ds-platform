@@ -37,11 +37,20 @@ function ack(presenceCount: number): Response {
 }
 
 /** A refused beat (server-side gate / closed room) — `sendHeartbeat` rejects. */
-function nonOk(status: number): Response {
+function nonOk(status: number, body: unknown = {}): Response {
   return {
     ok: false,
     status,
-    json: () => Promise.resolve({}),
+    json: () => Promise.resolve(body),
+  } as unknown as Response;
+}
+
+/** A refusal whose body is not JSON at all (proxy/HTML error page). */
+function nonOkUnparsable(status: number): Response {
+  return {
+    ok: false,
+    status,
+    json: () => Promise.reject(new SyntaxError("Unexpected token < in JSON")),
   } as unknown as Response;
 }
 
@@ -53,16 +62,26 @@ function badShape(): Response {
   } as unknown as Response;
 }
 
-function renderRoom(intervalSeconds = 60): void {
+function renderRoom(intervalSeconds = 60, onRoomClosed?: () => void): void {
   render(
     <RoomPresenceProvider initialCount={1}>
       <PresenceCount format={presenceLabel} />
       <PresenceHeartbeat
         api={createBrowserRoomApi({ slug })}
         intervalSeconds={intervalSeconds}
+        onRoomClosed={onRoomClosed}
       />
     </RoomPresenceProvider>,
   );
+}
+
+/** Flip `document.hidden` and fire the event the loop listens on. */
+function setHidden(hidden: boolean): void {
+  Object.defineProperty(document, "hidden", {
+    configurable: true,
+    get: () => hidden,
+  });
+  document.dispatchEvent(new Event("visibilitychange"));
 }
 
 /** Drain the beat's microtask chain (fetch → await json → setState) under fake timers. */
@@ -225,5 +244,120 @@ describe("006 EARS-5 heartbeat-ack fallback for the live presence count (#1122/#
     await flushBeat();
     expect(count()).toBe("presenceCount:4");
     expect(debug).toHaveBeenCalledTimes(3);
+  });
+});
+
+/**
+ * 006 EARS-7 (#1238) — an ALREADY-OPEN room learns the event ended only when its
+ * next gated request is refused (design §6: never guess closure from the clock).
+ * The heartbeat is that gated request: once the event leaves `live` the server
+ * answers 409 `{ message, state }`. Only such a refusal promotes the room to the
+ * ended phase; every other failure (401 / 403 / network / an unparsable 409 body)
+ * stays a diagnostics-only breadcrumb, because a transient or an auth blip must
+ * never fabricate «Эфир завершён» over a running broadcast.
+ */
+describe("006 EARS-7 the heartbeat 409 ended refusal closes an open room", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    Object.defineProperty(document, "hidden", {
+      configurable: true,
+      get: () => false,
+    });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it("EARS-7.5: a 409 {state:'ended'} beat reports the close exactly once and stops the loop", async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(nonOk(409, { message: "event is not live", state: "ended" }));
+    vi.stubGlobal("fetch", fetchMock);
+    const onRoomClosed = vi.fn();
+
+    renderRoom(60, onRoomClosed);
+    await flushBeat();
+
+    expect(onRoomClosed).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    // No further beat on the N-second grid — the room is closed, not degraded.
+    await act(async () => {
+      vi.advanceTimersByTime(180_000);
+    });
+    await flushBeat();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(onRoomClosed).toHaveBeenCalledTimes(1);
+  });
+
+  it("EARS-7.5: a closed room emits no beat when the tab is backgrounded and returns", async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(nonOk(409, { message: "event is not live", state: "ended" }));
+    vi.stubGlobal("fetch", fetchMock);
+    const onRoomClosed = vi.fn();
+
+    renderRoom(60, onRoomClosed);
+    await flushBeat();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      setHidden(true);
+    });
+    await act(async () => {
+      setHidden(false);
+    });
+    await flushBeat();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(onRoomClosed).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ["401 unknown subject", () => nonOk(401, { message: "unauthorized" })],
+    ["403 not registered", () => nonOk(403, { message: "forbidden" })],
+    ["409 with an unparsable body", () => nonOkUnparsable(409)],
+    [
+      "409 whose state is still live",
+      () => nonOk(409, { message: "conflict", state: "live" }),
+    ],
+  ])(
+    "EARS-7.6: %s never closes the room and the loop keeps beating",
+    async (_label, make) => {
+      const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(make());
+      vi.stubGlobal("fetch", fetchMock);
+      const onRoomClosed = vi.fn();
+
+      renderRoom(60, onRoomClosed);
+      await flushBeat();
+
+      await act(async () => {
+        vi.advanceTimersByTime(60_000);
+      });
+      await flushBeat();
+
+      expect(onRoomClosed).not.toHaveBeenCalled();
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  it("EARS-7.6: a network rejection never closes the room", async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockRejectedValue(new TypeError("Failed to fetch"));
+    vi.stubGlobal("fetch", fetchMock);
+    const onRoomClosed = vi.fn();
+
+    renderRoom(60, onRoomClosed);
+    await flushBeat();
+
+    await act(async () => {
+      vi.advanceTimersByTime(60_000);
+    });
+    await flushBeat();
+
+    expect(onRoomClosed).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });

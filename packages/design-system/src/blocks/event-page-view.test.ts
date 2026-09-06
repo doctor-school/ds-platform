@@ -213,7 +213,11 @@ describe("020 EARS-1 — shared event-page view projection", () => {
         .conditions ?? [];
     expect(rows[0]).toEqual({ label: "Участие", value: "250 Pul" });
     expect(rows.filter((row) => row.tone === "success")).toHaveLength(0);
-    expect(rows.some((row) => /₽|руб/i.test(row.value))).toBe(false);
+    expect(
+      rows.some(
+        (row) => typeof row.value === "string" && /₽|руб/i.test(row.value),
+      ),
+    ).toBe(false);
   });
 
   it("020 EARS-4.5: the НМО row is the FOURTH condition, right after Длительность", () => {

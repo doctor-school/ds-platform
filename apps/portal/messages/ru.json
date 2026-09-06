@@ -1,6 +1,10 @@
 {
   "common": {
     "email": "Электронная почта",
+    "passwordShow": "Показать",
+    "passwordHide": "Скрыть",
+    "passwordShowAria": "Показать пароль",
+    "passwordHideAria": "Скрыть пароль",
     "phone": "Телефон",
     "password": "Пароль",
     "emailOrPhone": "Электронная почта или телефон",

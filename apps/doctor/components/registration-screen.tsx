@@ -97,10 +97,11 @@ import {
  *   «Минимум 8 символов, буквы и цифры.» would be exactly that second policy,
  *   so the hint states the length baseline only. Deliberate canvas deviation.
  *
- * • **No show-password toggle** (canvas + 003 EARS-38). `<PasswordField>`
- *   exposes no reveal affordance and no app ships one, so building it here
- *   would be a screen-local copy of a shared primitive's job — the adopt-first
- *   gate's failure mode. Surfaced as decision-debt for `@ds/design-system`.
+ * • **The show-password toggle is the primitive's** (canvas + 003 EARS-38,
+ *   #1663). `<PasswordField>` ships the reveal affordance itself — the canvas
+ *   «Показать» / «Скрыть» control, its RU labels and its masked default — so
+ *   this screen renders none of it and inherits the behaviour by adopting the
+ *   shared field, which is what the adopt-first gate asks for.
  *
  * Tokens only, from `@ds/design-system`; the split's `layout:` breakpoint
  * (901px) — the canvas's 900px collapse — is the frame's business, not this

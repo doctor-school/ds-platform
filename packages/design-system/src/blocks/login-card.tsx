@@ -17,6 +17,7 @@ import {
   IdentifierField,
   PasswordField,
   PhoneField,
+  type PasswordRevealLabels,
 } from "../primitives/fields";
 import { AuthCard } from "./auth-card";
 import { OtpFocusScreen } from "./otp-focus-screen";
@@ -105,6 +106,9 @@ export interface LoginCardCopy {
     identifierLabel: string;
     identifierPlaceholder: string;
     passwordLabel: string;
+    /** Localized show/hide copy for the password reveal toggle (003 EARS-38);
+     * omitted leaves the design-system RU default. */
+    reveal?: PasswordRevealLabels;
     submit: React.ReactNode;
   };
   otp: {
@@ -347,6 +351,7 @@ function PasswordLogin({
               field={field}
               purpose="current"
               label={copy.passwordLabel}
+              {...(copy.reveal ? { revealLabels: copy.reveal } : {})}
             />
           )}
         />

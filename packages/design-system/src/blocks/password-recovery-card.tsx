@@ -6,7 +6,12 @@ import { useForm, type Resolver } from "react-hook-form";
 import { Button } from "../primitives/button";
 import { Link as DsLink } from "../primitives/link";
 import { Form, FormField, FormError } from "../primitives/form";
-import { IdentifierField, OtpField, PasswordField } from "../primitives/fields";
+import {
+  IdentifierField,
+  OtpField,
+  PasswordField,
+  type PasswordRevealLabels,
+} from "../primitives/fields";
 import { AuthCard } from "./auth-card";
 import { maskDestination } from "./mask-destination";
 import { useResendCountdown } from "./use-resend-countdown";
@@ -94,6 +99,9 @@ export interface PasswordRecoveryCardCopy {
     codeLabel: string;
     newPasswordLabel: string;
     passwordPolicyHint: string;
+    /** Localized show/hide copy for the password reveal toggle (003 EARS-38);
+     * omitted leaves the design-system RU default. */
+    passwordReveal?: PasswordRevealLabels;
     submit: React.ReactNode;
     startOver: React.ReactNode;
     resend: React.ReactNode;
@@ -384,6 +392,9 @@ function RecoveryCompleteForm({
               purpose="new"
               label={copy.newPasswordLabel}
               policyHint={copy.passwordPolicyHint}
+              {...(copy.passwordReveal
+                ? { revealLabels: copy.passwordReveal }
+                : {})}
             />
           )}
         />

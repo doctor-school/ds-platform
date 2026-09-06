@@ -10,6 +10,7 @@ export { EmailField } from "./email-field";
 export { PhoneField } from "./phone-field";
 export { OtpField } from "./otp-field";
 export { PasswordField } from "./password-field";
+export type { PasswordRevealLabels } from "./password-field";
 export { IdentifierField } from "./identifier-field";
 
 export {

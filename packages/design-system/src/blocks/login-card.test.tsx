@@ -40,6 +40,12 @@ const copy: LoginCardCopy = {
     identifierLabel: "copy.password.identifierLabel",
     identifierPlaceholder: "copy.password.identifierPlaceholder",
     passwordLabel: "copy.password.passwordLabel",
+    reveal: {
+      show: "copy.password.revealShow",
+      hide: "copy.password.revealHide",
+      showAria: "copy.password.revealShowAria",
+      hideAria: "copy.password.revealHideAria",
+    },
     submit: "copy.password.submit",
   },
   otp: {

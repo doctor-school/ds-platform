@@ -215,6 +215,13 @@ export default function ResetPage() {
       codeLabel: t("codeLabel"),
       newPasswordLabel: t("newPasswordLabel"),
       passwordPolicyHint: tc("passwordPolicy"),
+      // 003 EARS-38: reveal toggle copy from the catalog (EARS-21).
+      passwordReveal: {
+        show: tc("passwordShow"),
+        hide: tc("passwordHide"),
+        showAria: tc("passwordShowAria"),
+        hideAria: tc("passwordHideAria"),
+      },
       submit: t("setNewPassword"),
       startOver: t("startOver"),
       resend: t("resend"),

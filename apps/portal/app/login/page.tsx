@@ -286,6 +286,14 @@ function PortalLoginCard() {
       identifierLabel: tc("emailOrPhone"),
       identifierPlaceholder: tc("identifierPlaceholder"),
       passwordLabel: tc("password"),
+      // 003 EARS-38: the reveal toggle copy rides the catalog (EARS-21), not the
+      // design-system RU default.
+      reveal: {
+        show: tc("passwordShow"),
+        hide: tc("passwordHide"),
+        showAria: tc("passwordShowAria"),
+        hideAria: tc("passwordHideAria"),
+      },
       submit: t("submit"),
     },
     otp: {

@@ -7,6 +7,8 @@ mode: inline
 
 # verify-base-ci-green
 
+**Execution contract:** Read [portable agent discipline](../../agent-discipline.md) before first use; map tools/models to the active harness and preserve its authorization, context and memory rules.
+
 **Kind:** procedural · **Mode:** inline.
 
 ## Input
@@ -18,10 +20,10 @@ mode: inline
 1. Run:
 
    ```bash
-   gh run list --branch main --limit 1 --json conclusion,headSha,name -q '.[0]'
+   gh run list --branch main --workflow ci.yml --limit 1 --json databaseId,status,conclusion,headSha,name -q '.[0]'
    ```
 
-2. Read `.conclusion`. Possible values: `success`, `failure`, `cancelled`, `null` (still in progress).
+2. Confirm the run matches the current base SHA and read `.status` + `.conclusion`; no registered/current run is unknown, never green. Possible values: `success`, `failure`, `cancelled`, `null` (still in progress).
 3. If `failure`, identify which jobs failed (`gh run view <run-id>` or the workflow logs) and record the baseline-red state.
 
 ## Output

@@ -7,6 +7,8 @@ mode: inline
 
 # do-product-discovery
 
+**Execution contract:** Read [portable agent discipline](../../agent-discipline.md) before first use; map tools/models to the active harness and preserve its authorization, context and memory rules.
+
 **Kind:** orchestration · **Mode:** inline (the lead agent runs this procedure itself; it invokes `brainstorming`, dispatches `author-product-spec`, and runs `author-design-mockup`).
 
 This is the **discovery-track** orchestrator for the task kind `product-discovery` (ADR-0014). It produces the product layer — a thin epic `brief.md` + a per-feature `NNN-product.md` PRD — plus an owner-approved design mockup, and hands the result to `spec-authoring` (`author-ears-spec`). It is the upstream complement of `do-feature-iteration` (delivery track). It does **not** re-own Issue creation / branch / review / merge — those belong to `run-task-lifecycle`, into whose **step 2** this skill slots exactly as `do-feature-iteration` does.

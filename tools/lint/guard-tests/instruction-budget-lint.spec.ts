@@ -132,6 +132,26 @@ const BASE_LINES = AGENTS_FIXTURE_LINES + CLAUDE_FIXTURE_LINES;
 const PATHS_FRONTMATTER = '---\npaths:\n  - "infra/**"\n---\n\n';
 
 describe("instruction-budget-lint", () => {
+  it("#1918: a referenced mandatory startup file cannot disappear from the budget", () => {
+    const root = totalCase(1024, 1024);
+    writeFileSync(join(root, "AGENTS.md"), "Read apps/docs/content/agent-discipline.md at startup.\n");
+    const result = runGuard(GUARD, root, { extraArgs: ["--harness", "codex"] });
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("MISSING required file:");
+    expect(result.stderr).toContain("agent-discipline.md");
+  });
+
+  it("#1918: mandatory shared startup reference counts in both effective windows", () => {
+    const root = totalCase(20 * 1024, 1024);
+    mkdirSync(join(root, "apps/docs/content"), { recursive: true });
+    writeFileSync(join(root, "apps/docs/content/agent-discipline.md"), sizedMd(11 * 1024));
+    for (const harness of ["codex", "claude"]) {
+      const result = runGuard(GUARD, root, { extraArgs: ["--harness", harness] });
+      expect(result.code, harness).toBe(1);
+      expect(result.stdout).toContain("OVER BUDGET");
+    }
+  });
+
   it("#1918: Codex counts AGENTS without requiring or loading the Claude overlay", () => {
     const root = totalCase(20 * 1024, 11 * 1024);
     const result = runGuard(GUARD, root, { extraArgs: ["--harness", "codex"] });

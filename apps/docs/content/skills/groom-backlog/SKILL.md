@@ -7,6 +7,8 @@ mode: inline
 
 # groom-backlog
 
+**Execution contract:** Read [portable agent discipline](../../agent-discipline.md) before first use; map tools/models to the active harness and preserve its authorization, context and memory rules.
+
 **Kind:** grooming · **Mode:** inline (the lead agent runs this procedure itself; it dispatches subagents only at the steps marked **dispatch**).
 
 The split is deliberate: `pnpm backlog:triage` (`tools/backlog-triage.ts`) owns the **deterministic** checks — what is takeable, what is waiting on a block being built in the other track, what is orphaned, stalled, likely already done, and how the release milestones are rotating. This skill owns the **judgment and the owner dialogue** on top of that output. Never hand the owner raw script output as a groom; never re-derive by hand what the script already computes.
@@ -37,7 +39,7 @@ These are candidate lists, not verdicts. Each row needs a human-level decision, 
 
 - **`## Orphans`** (`no-blocker` / `no-parent` / `off-head (<milestone>)`) — attach to its epic as a native sub-issue, wire a `blocked_by` edge **with a written rationale**, or ask the owner. `blocked_by` means a **technical** dependency only — never «this matters less», which is milestone/order, not a blocker edge.
 - **`## Likely done`** — an open Issue a merged PR claims to have **delivered**: it closes it (`Closes/Fixes/Resolves #N`) or carries it as the Conventional-Commit scope of its title (`type(N):`). A bare `#N` mention is not delivery evidence and never appears here. Verify against the merged PR's diff (not its title) that the acceptance criteria are met, then close with `state_reason`; otherwise leave it open and say what is missing. Never auto-close from this section. The section prints its horizon (the last N merged PRs) — an Issue closed by an older PR is outside what was looked at.
-- **Duplicates** — **dispatch** `ds-explorer` (Sonnet, read-only) over open Issue titles + their spec paths to return candidate duplicate pairs. The lead judges the pairs; the explorer never closes anything.
+- **Duplicates** — **dispatch** `ds-explorer` (read-only) over open Issue titles + their spec paths to return candidate duplicate pairs. The lead judges the pairs; the explorer never closes anything.
 - **`## Wait for reuse`** — Issue A waits on a block being built by Issue B in the other track. Open the matched `Canonical location` path the script printed and confirm it is genuinely the **same** capability (`apps/docs/content/specs/product/two-site-ia/capability-ownership.md` is the registry). If it is: A waits and gets a `blocked_by` edge on B with the rationale, and A stays out of the wave. A block being built in one track is **never** started in parallel in the other — wait and reuse (AGENTS.md §6 cross-front reuse).
 
 ## Step 4 — Release rotation, with the owner, interactively
@@ -55,7 +57,7 @@ Grooming is a **conversation**, not a delivered document. Rules, all binding:
 
 ## Step 5 — Propose the parallel wave
 
-**Dispatch** `ds-explorer` (Sonnet, read-only) to map the nearest-release candidates to their probable touch sets — the `feature:NNN` spec directory, the named surfaces in the acceptance criteria, and the `Reuse:` paths. Then propose a wave of **≤4–5 Issues with non-overlapping touch sets**, each at or behind its track's queue head, plus an explicit list of which candidates **wait** and why (overlap, wait-for-reuse, unanswered owner fork). Overlapping touch sets are serialised, not parallelised.
+**Dispatch** `ds-explorer` (read-only) to map the nearest-release candidates to their probable touch sets — the `feature:NNN` spec directory, the named surfaces in the acceptance criteria, and the `Reuse:` paths. Then propose a wave of **≤4–5 Issues with non-overlapping touch sets**, each at or behind its track's queue head, plus an explicit list of which candidates **wait** and why (overlap, wait-for-reuse, unanswered owner fork). Overlapping touch sets are serialised, not parallelised.
 
 ## Step 6 — Recommendation
 

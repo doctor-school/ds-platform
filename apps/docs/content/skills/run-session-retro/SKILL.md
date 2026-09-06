@@ -7,6 +7,8 @@ mode: dispatch
 
 # run-session-retro
 
+**Execution contract:** Read [portable agent discipline](../../agent-discipline.md) before first use; map tools/models to the active harness and preserve its authorization, context and memory rules.
+
 **Kind:** procedural · **Mode:** dispatch (an _independent_ agent — never the
 session's own author — reads the log via the `tools/retro` extractor and returns
 findings in the schema below; the caller cannot self-review).
@@ -65,7 +67,7 @@ payloads dropped), `self-catches.json` (assistant self-corrections). Codex also
 writes `portable/<id>.json` with schema `ds-platform-retro/v1`; never feed a
 Codex rollout into the Claude parser or describe it as a Claude transcript.
 
-Also run the **token ledger** — `pnpm retro:tokens <session-id>` (`--since YYYY-MM-DD` for a batch run) — and read its per-agent peak-context rows as a first-class corpus input. **Finding rule (no correction quote needed):** any subagent peak >200K or lead peak >300K is a deviation finding on its own — `theme: context-budget`, `root_cause: context-bloat`, `evidence_agent` = the ledger row (agent, peak, turns), `violated_rule: AGENTS.md §6 — Subagent context budget`. These never surface from `corrections.json`, so a run that skips the ledger under-reports them to zero.
+Also run the active harness **token ledger** documented in `tools/retro/README.md`. Apply portable agent discipline's observed effective input/window policy, not lifetime cumulative usage or Claude constants to Codex. A context finding cites the actual ledger row and active adapter threshold. Missing/stale telemetry or an unavailable window is an evidence gap, never a zero usage or zero-deviation claim.
 
 ### 2. Isolation + exclusion rules (already enforced by the extractor — verify, don't re-derive)
 
@@ -105,9 +107,7 @@ genuine deviation before emitting a finding.
 - **A handed-in `--session <id>` may be the wrong log.** An SDK-launched
   review/security subagent writes its own `*.jsonl` (`promptSource: sdk`); it is
   **not** the interactive work session. If the id resolves to an `sdk`/near-empty
-  log, find the real session (newest large interactive `*.jsonl`, e.g. the one
-  whose branch matches the work) and analyze that instead — note it in the
-  corpus header.
+  log, stop corpus analysis and resolve the actual session by the task marker/branch and verified session identity, never newest mtime. Record the correction in the corpus header; do not substitute an unrelated log.
 
 ### 4. Read each candidate in context, emit findings
 
@@ -129,7 +129,7 @@ deterministic `remedy_kind` (`skill` / `command` / `hook` / `lint-gate`) over
 A big historical corpus exceeds one context window (the audit: ~2.8 MB / 65
 transcripts). Fan out: split the time-sorted transcript list into N batches
 **balanced by byte size** (not count — some sessions are 10–20× larger),
-dispatch one Opus subagent per batch with this SKILL.md + its manifest, then
+dispatch one reviewer-grade subagent per batch with this SKILL.md + its manifest, then
 **consolidate** (de-duplicate theme recurrences, keep the strongest quote).
 Single-session mode never needs fan-out.
 

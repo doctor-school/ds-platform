@@ -7,9 +7,11 @@ mode: dispatch
 
 # run-iteration-end-checklist
 
+**Execution contract:** Read [portable agent discipline](../../agent-discipline.md) before first use; map tools/models to the active harness and preserve its authorization, context and memory rules.
+
 **Kind:** procedural · **Mode:** dispatch (the lead agent passes this SKILL.md content to a subagent; the subagent returns a verdict the lead cannot bypass).
 
-The body below is the **subagent prompt**. The lead agent dispatches a fresh-context subagent with this file's content as the system prompt plus a task-specific user message identifying the branch, changed files, and feature-spec.
+The body below is the **subagent prompt**. The lead agent dispatches a fresh-context subagent with this file's path and an instruction to read it as the task contract plus a task-specific user message identifying the branch, changed files, and feature-spec.
 
 ---
 
@@ -28,7 +30,7 @@ You are a verification subagent. Your sole job is to verify the 15-item iteratio
 For each of the 15 items below, return one of: **PASS** / **FAIL** (with one-line reason) / **N/A** (with one-line reason).
 
 1. `pnpm test` — green (unit + e2e where applicable).
-2. `pnpm generate:all && git diff --exit-code` — no drift in generated artifacts.
+2. `pnpm generate:all`, verify exit 0, then `git diff --exit-code` — no drift in generated artifacts.
 3. `pnpm typecheck` — green.
 4. `pnpm lint` — green.
 5. Module README updated if exports changed.
@@ -46,13 +48,7 @@ For each of the 15 items below, return one of: **PASS** / **FAIL** (with one-lin
 
 ### Canvas-parity evidence contract (BLOCK)
 
-For every render-capable UI change (authored TSX/JSX/CSS, user-visible message catalogs, design-system `src/**/*.ts` runtime, or design-system primitive/semantic/component tokens), the PR body MUST select exactly one approved-source route. App-owned runtime `.ts` joins this contract through an explicit filename convention: `theme.ts`, `*-theme.ts`, `*-copy.ts`, `*-message.ts`, `*-view-state.ts`, or `*-render-state.ts`; arbitrary server/data `.ts` does not. Canvas-derived work uses `ui-source-kind: canvas`, an existing `ui-source: design-source/<exact-file>.dc.html`, and `ui-source-state: <exact state/mode>`; when the state has `key=value` form the guard proves that pair occurs in the canvas, while other canvas state identifiers remain an explicit Mode (a) comparison because canvas files have no universal state schema. Canvas-derived #1346 cannot use the alternative route.
-
-A surface with no owning canvas uses `ui-source-kind: approved-non-canvas`, `ui-source: <stable id from tools/lint/ui-approved-sources.json>`, and an exact declared `ui-source-state:`. The guard reads that manifest from the base branch, rejects a source added by the implementation PR itself, and verifies every touched render-capable path and state plus exact equality with the entry's `evidenceProfiles` set. Approval provenance must be an exact owner-decision `issues/<N>#issuecomment-<ID>` URL. The seeded `admin-refine-compositions-v1` grants only the dedicated `recordings-panel.tsx` owner and its `recordings-tab` composition approved in the owner comment on #1337; it does not grant the multipurpose event page, lifecycle actions, message catalog, mark-ended modal, or loading/empty/error states. A future slice must first extract a dedicated owner or land a separately approved base-manifest entry. Never invent a fake canvas or self-authorize a manifest entry.
-
-Both routes declare `ui-evidence-profile:`. `responsive-web` requires distinct `ui-render-desktop-light:`, `ui-render-desktop-dark:`, `ui-render-mobile-light:`, and `ui-render-mobile-dark:` links. `native-mobile` requires distinct `ui-render-phone-light:`, `ui-render-phone-dark:`, `ui-render-tablet-light:`, and `ui-render-tablet-dark:` links. A PR touching both declares both comma-separated and supplies both sets. Every profile also requires `ui-interactions:` with driven interaction-state evidence, or reasoned `N/A — no interactive elements or states <reason>`.
-
-The latest structured Mode (a) review MUST repeat `ui-source-kind:`, `ui-source:`, `ui-source-state:`, and `ui-evidence-profile:`; record `ui-source-applicability:` confirming purpose fit for the touched surface; list the profile-specific renders plus interactions in `ui-artifacts-compared:`; and record an element-level `ui-comparison-result:`. At merge time this binding is re-read only after the head-pinned CI poll is green, closing PR-body edit races. “Inspected”, token/a11y/test results, or a stale review are not evidence. This automates evidence completeness only and never replaces the product owner’s independent `Stage-B: GO`.
+For item 15 read [the full shared parity evidence contract](../build-ui-from-design-system/parity-evidence.md). Verify every required source/profile/render/interaction field and reviewer binding; no render delta uses only its reviewer-certified N/A route.
 
 ### Output (mandatory format)
 

@@ -7,6 +7,8 @@ mode: inline
 
 # handoff-prompt
 
+**Execution contract:** Read [portable agent discipline](../../agent-discipline.md) before first use; map tools/models to the active harness and preserve its authorization, context and memory rules.
+
 Produce one copy-pasteable handoff for a fresh DS Platform agent. Do not ask clarifying questions. Inspect the session and live tracker state yourself.
 
 **Scope: this skill alone (#1746).** A handoff request never implies `/wrap` — no retro dispatch, no instruction/memory edits, no DEBT lines; emit the prompt and stop. `/wrap` is typed by the owner only.
@@ -27,6 +29,6 @@ Emit exactly one fenced block, ≤300 tokens, with no trailing text. The first l
 
 `FIRST ACTION: pipe this verbatim block through \`pnpm handoff:verify\` before any tracker/git action.`
 
-Then use these sections, omitting only empty optional ones: `## Current task`, `## Progress so far`, `## Where we stopped`, `## Next steps`, optional `## Key decisions & gotchas`, `## Context references`, and `## Open questions`. Current task, Where we stopped, and Next steps are never omitted. Write instructions to a fresh agent; use terse bullets and absolute paths for `AGENTS.md`, `CLAUDE.md`, and the active spec/plan.
+Then use these sections, omitting only empty optional ones: `## Current task`, `## Progress so far`, `## Where we stopped`, `## Next steps`, optional `## Key decisions & gotchas`, `## Context references`, and `## Open questions`. Current task, Where we stopped, and Next steps are never omitted. Write instructions to a fresh agent; use terse bullets and absolute paths for `AGENTS.md`, `apps/docs/content/agent-discipline.md`, and the active spec/plan (`CLAUDE.md` only for a Claude-specific resume).
 
 Before emitting, write the draft to a gitignored temp file and run `pnpm handoff:verify <file>`. Any STALE row blocks output until corrected.

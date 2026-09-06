@@ -7,6 +7,8 @@ mode: inline
 
 # author-feature-spec
 
+**Execution contract:** Read [portable agent discipline](../../agent-discipline.md) before first use; map tools/models to the active harness and preserve its authorization, context and memory rules.
+
 **Kind:** orchestration · **Mode:** inline (the lead agent runs this procedure itself; it invokes `brainstorming` as the step-2 vehicle in Claude Code, and dispatches `author-ears-spec` at step 3).
 
 This is the **spec-authoring** orchestrator for the task kind `spec-authoring` (AGENTS.md §3.1). It exists so the stage is dispatched **by catalog path**, not by a bare `brainstorming` mapping — vendor-agnosticism (AGENTS.md §3.3, "the path is the contract") and the CURRENT-system review that must precede any replacement design were previously codified nowhere. It is connective: it names the canonical sequence and invokes the existing catalog skills at each gate rather than restating them. It slots into `run-task-lifecycle` step 2 exactly as `do-feature-iteration` / `do-product-discovery` do.

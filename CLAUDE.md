@@ -1,70 +1,21 @@
 @AGENTS.md
 
-# CLAUDE.md — Claude Code overlay for DS Platform
+# CLAUDE.md — Claude Code bindings
 
-All conventions in [`AGENTS.md`](./AGENTS.md) apply (imported above); this file adds only Claude-Code-specific tooling. Detail lives in `.claude/rules/*.md` (per the AGENTS.md §0 index) and the skill catalog. Anti-bloat budget (`pnpm lint:instruction-budget`): ≤200 lines / ≤25 KB per always-on file AND ≤30 KB across the always-on set; net-negative — new always-on rule text is offset by removing at least as many bytes.
+Read [portable agent discipline](apps/docs/content/agent-discipline.md) at entry/after compaction. All shared rules live there and in AGENTS.md; Codex does not import this overlay.
 
----
+## Runtime and context
 
-## SessionStart hook
+`.claude/settings.json` supplies `pnpm bootstrap` via SessionStart `additionalContext`; it is a derived snapshot, not board ground truth. Hook diagnostics live in `tools/hooks/README.md`.
 
-`.claude/settings.json` runs `pnpm bootstrap` on SessionStart — git/Issue/PR/spec state lands in `additionalContext`; no manual `git log` / `gh issue list` at start. (`pnpm bootstrap` = `tsx tools/agent-bootstrap.ts`, avoids `tsx` PATH issues.)
+`/wrap` is owner-entered only. Claude `context-budget` advisory and `lead-context-budget` dispatch tiers are 120K/160K. The owner-only `.claude/lead-budget-override` is removed by wrap. Child hooks request ROTATE at 150K and deny non-git tools at 200K; rotate before rework when the actual lagging notification usage reaches 120K. These constants are Claude-specific; Codex uses observed effective input/window bands in portable discipline.
 
-## Wrap cadence
+## Dispatch
 
-`/wrap` is OWNER-typed only — never agent-started, not for a «handoff» ask (= skill `handoff-prompt` alone, no retro); guard `wrap-owner-only` denies it (#1746). `context-budget` hook (120K/160K) = operator advisory only. The same tiers bind at the DISPATCH boundary (`lead-context-budget`, PreToolUse `Agent|Task`, #1693): ≥120K — finish the wave, start no new one; ≥160K — a new dispatch is denied (accept running agents, finish PR tails by hand, handoff). Owner-only hatch: `.claude/lead-budget-override`, removed by `/wrap`.
+Claude judgment/implementation: `ds-implementer` / `ds-reviewer` with Opus; scout/closeout: `ds-explorer` / `ds-lander` with Sonnet. A general-purpose fallback receives the same contract and supported model. Review requires shell/gh access; never assume `feature-dev:code-reviewer` has it.
 
-## Auto-memory (load-on-demand by design)
+`Workflow` fan-out is owner-opt-in after a bounded shape/cost proposal. Reconcile synthesis against every seed; use ordinary orchestration when adaptive work or lifecycle gates require it. Vendor packs remain disabled.
 
-`~/.claude/projects/<project>/memory/`: only the first 200 lines / 25 KB of `MEMORY.md` load at start; topic files load on demand. `MEMORY.md` is an index, not a store — one bullet per topic. A memory that becomes a hard convention is promoted into `AGENTS.md` / a skill / a rules file, leaving the bullet as a pointer (never duplicate full text). Memory prose (topic files + index) is ENGLISH; RU only where the Russian string is itself the artifact (verbatim owner quotes, UI copy).
+## Auto-memory
 
-## Tool priority
-
-1. `gh` CLI — primary for GitHub Issues, PRs, releases (`--json`).
-2. GitHub MCP (`mcp__plugin_github_github__*`) — only for read-tasks `gh` doesn't cover (rare).
-3. `plane-pp-cli` — Plane work-items only, full CRUD under `projects issues` (`list-work-items` / `create-work-item` / `update-work-item` / `create-work-item-comment`); the top-level `work-items` tag is get+search only (looks read-only — isn't). Plane MCP is optional, not required for writes. Not for code-level Issues. (Binary is `plane-pp-cli`, not `pp-plane`; PowerShell PATH only.)
-
-## Skill priorities
-
-Vendor skill packs are disabled for this project (AGENTS.md §3.4) — dispatch project work per §3 via the catalog. Orchestration is the default execution mode (AGENTS.md §6); an «оркеструй» directive only escalates to the `orchestrating-coding-agents` skill / confirms scope.
-
-## Propose Workflow (multi-agent) when the shape is known
-
-`Workflow` (deterministic scripted fan-out, ≤16 concurrent agents) is user-opt-in: never auto-run — propose with a rough scale/token estimate and await go. Triggers, all shape-knowable upfront: same-shape batch audit/sweep; an impl/review wave of ≈4+ independent, non-overlapping-touch-set Issues/PRs (named script `impl-wave`, `.claude/workflows/`); a find→verify pipeline; an N-approach bake-off with a judge panel. The lead CLOSES a run by diffing the synthesis rows against the seed ledgers — nothing checks completeness. Stay on plain orchestration when a step depends on judging the prior return, or the discipline contour (worktree/Mode-a/merge/board) must run inline — Workflow subagents don't carry it.
-
-## Session plan (первый ответ сессии — canon AGENTS.md §3.2)
-
-The first user-facing reply OPENS with the «План сессии» block (RU, ≤6 lines, plain language, no jargon from prior sessions the owner didn't see):
-
-> **План сессии**
-> **Тип:** продуктовая | техническая | процессная
-> **Трек:** академия | витрина | платформа — из `track:*` активного Issue
-> **Что делаем:** 1–3 нумерованных пункта — деливераблы сессии, не механика
-> **Зачем:** одна строка — что это даёт / разблокирует
-
-Then the §3.2 entry point (kind / artifact / skill). A handoff-resumed session states verified reality (after `pnpm handoff:verify`), never the handoff's claims. Restate once if the owner re-directs or scope changes materially — so the owner catches course drift before work starts.
-
-## Blocked-on-owner handback
-
-Работа заблокирована ТОЛЬКО действием владельца → последняя видимая строка хода: `⏸ ЖДУ ВАС: <одно действие>; после него продолжу автономно`; поллер/wakeup — после неё, не вместо. Развилки — ИНТЕРАКТИВНО (owner 2026-08-24): ОДНА на сообщение (сущность простым RU · почему · 2–3 варианта + рекомендация), дословный ответ → в артефакт, затем следующая; список ≥2 или счётчик «осталось N» — нарушение.
-
-## PR-review subagent (Mode a)
-
-`feature-dev:code-reviewer` has no Bash/`gh` — dispatch `ds-reviewer` (Opus, read-only + `gh`, diffs a branch not in the tree); fallback `general-purpose` `model: opus` when project agents are unavailable.
-
-## Subagent context economy
-
-A subagent's final message lands in the lead's context and is re-read until session end — that, not dispatch count, burns the limit.
-
-1. Return contract in every brief: final message = verdict / diff summary / artifact paths, ≤30 lines, heavy content → file or PR comment. Scaffold IMPL briefs with `pnpm dispatch:brief <issue-N>`.
-2. Model routing: mechanical fan-out → `ds-explorer` (Sonnet, read-only); judgment (review, architecture, implementation, spec work) → Opus (`ds-implementer` / `ds-reviewer` / `general-purpose` with EXPLICIT `model: opus` on every dispatch) — inheriting the session model is forbidden, and Fable is never a subagent model.
-3. Browser payloads are dispatched — interactive Playwright runs inside a subagent, not the lead (`.claude/rules/dev-stand.md`).
-4. Lead-only tools are never delegated: a tool absent from the subagent environment (DesignSync, …) the lead runs itself BEFORE dispatch, handing the subagent only the mechanical follow-on — dead-ending there is a guaranteed block.
-5. Briefs in English; RU only where the RU string is itself the artifact. User-facing replies stay RU.
-6. Background dispatches are checkpointed and probed with `pnpm dispatch:probe <N>` (STILL-CLEAN ≈10 min in ⇒ kill + re-dispatch on a tighter brief), never by "waiting for the notification"; owner-facing status names observed artifacts only (commit / PR # / verdict), downstream steps are phrased as plan, and every impl brief carries the dispatch-brief checklist heading (memory `feedback_orchestration_brief_full_lint_before_pr`). Any wait on CI or a workflow run follows the shared-token poller rules in skill `merge-when-green` Step 1.
-7. Impl dispatches go to `ds-implementer` (Opus); PR tails → `ds-lander` (Sonnet). 150K/200K ROTATE: AGENTS.md §6.
-8. `<subagent_tokens>` = the child's reading in the task-notification `<usage>`, taken BEFORE the round (it ignores that round's own ≈20K+ cost). SendMessage rework/re-review only while it is < 120K — impl and reviewer alike; at or above, as on a `ROTATE:` return, dispatch a FRESH agent with PR + review URL + checkpoint. Wave landed → handoff.
-
-## On-demand pointers
-
-`.claude/rules/*.md` do NOT auto-load — `Read` the file the AGENTS.md §0 index names before the gated action. Pull on demand: UI construction — AGENTS.md §6 + skill `build-ui-from-design-system` + ADR-0013; engineering-readiness defaults (Coolify, Caddy, GlitchTip, Loki/Prometheus/Tempo, Vault, Unleash, Beget DNS) — [engineering-readiness spec](./apps/docs/content/specs/tech/2026-05-12-engineering-readiness-design-en.md).
+Claude uses `~/.claude/projects/<project>/memory/`: MEMORY.md is an English index (first 200 lines /25 KB loaded), topics on demand; RU only for verbatim artifacts. Promote hard rules to the repo. Apply active memory permissions and the approved wrap subset; never route Codex memory here.

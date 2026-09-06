@@ -7,9 +7,11 @@ mode: dispatch
 
 # author-ears-spec
 
+**Execution contract:** Read [portable agent discipline](../../agent-discipline.md) before first use; map tools/models to the active harness and preserve its authorization, context and memory rules.
+
 **Kind:** procedural · **Mode:** dispatch (the lead agent passes this SKILL.md content to a subagent and consumes the verdict; it does not author the spec inline).
 
-The body below is the **subagent prompt**. The lead agent dispatches a subagent (`Task` tool in Claude Code; equivalent in Codex / Cursor) with this file's content as the system prompt plus a task-specific user message identifying the initiative.
+The body below is the **subagent prompt**. The lead agent dispatches a subagent (using the active harness dispatch capability) with this file's path and an instruction to read it as the task contract plus a task-specific user message identifying the initiative.
 
 ---
 

@@ -93,12 +93,10 @@ function RestartButton({
   label,
   onRestart,
   className = "",
-  testId = "room-player-restart",
 }: {
   label: string;
   onRestart: () => void;
   className?: string;
-  testId?: string;
 }) {
   return (
     // primitives-first-ok: fixed-white outline control on the PERMANENTLY-dark player
@@ -106,7 +104,7 @@ function RestartButton({
     // on the always-dark region (matches the EARS-2 refresh button).
     <button
       type="button"
-      data-testid={testId}
+      data-testid="room-player-restart"
       onClick={onRestart}
       className={`border-2 border-white/50 font-extrabold text-white cursor-pointer hover:border-white focus-visible:outline-none focus-visible:shadow-focus ${className}`}
     >
@@ -159,8 +157,9 @@ function PlayerFailureOverlay({
 
 /**
  * 006 EARS-18 SUSPECTED grade — the NON-COVERING advisory banner for an UNPROVABLE
- * failure: the watchdog elapsed with no positive signal ever observed (vk + cdnvideo
- * always — no parent API; youtube/rutube when no handshake arrived). The room can NOT
+ * failure: the watchdog elapsed with no positive signal ever observed — a
+ * youtube/rutube/vk embed whose handshake never arrived. (A structurally silent
+ * provider never reaches this component: it rests in `unverified`.) The room can NOT
  * prove the stream failed — a healthy video may simply be unobservable — so the embed
  * stays FULLY VISIBLE and interactive (the banner container is `pointer-events-none`;
  * only the restart button captures clicks) and there is NO auto-retry (an auto
@@ -183,34 +182,6 @@ function PlayerSuspectedBanner({ copy, onRestart }: { copy: PlayerCopy; onRestar
   );
 }
 
-/**
- * 006 EARS-18.3 `unverified` — the post-time-box SUSPECTED state for the permanently
- * unobservable cdnvideo. The advisory banner has withdrawn itself (a stream the room
- * can never observe is most likely playing fine, and an indefinite «не загружается»
- * over it would be untruthful nagging), so NOTHING covers or annotates the embed —
- * only a persistent, LOW-EMPHASIS «Перезапустить плеер» in the corner that re-creates
- * the embed on an explicit doctor gesture, never on a timer and never on mount. The
- * container is `pointer-events-none` so the provider's own controls stay reachable.
- */
-function PlayerUnverifiedRestart({
-  copy,
-  onRestart,
-}: {
-  copy: PlayerCopy;
-  onRestart: () => void;
-}) {
-  return (
-    <div className="pointer-events-none absolute inset-0 z-20 flex items-end justify-end p-4">
-      <RestartButton
-        testId="room-player-unverified-restart"
-        label={copy.playerRestart}
-        onRestart={onRestart}
-        className="pointer-events-auto bg-black/50 px-4 py-2 text-2xs uppercase tracking-micro opacity-70 hover:opacity-100"
-      />
-    </div>
-  );
-}
-
 /** Post the YouTube IFrame Player API `listening` handshake so the embed streams
  *  its state/error events to the parent (EARS-18.2). Best-effort — a script-less,
  *  RU-safe path; failure degrades to the watchdog floor, never breaks the room. */
@@ -226,10 +197,10 @@ export function PlayerFrame({ config, copy }: { config: RoomConfig; copy: Player
   // 006 EARS-18 — the runtime player-failure state machine. Hooks run unconditionally
   // (a config-absent `unavailable` embed still calls it with a harmless provider);
   // it only drives the iframe branch below. The `unavailable` branch RETURNS before
-  // any player-failure UI is reachable, so neither the watchdog nor the cdnvideo
-  // advisory time box can surface a banner or a restart control there — an invariant
-  // locked by a test in room-view.test.tsx ("the EARS-2 unavailable branch never
-  // shows a player-failure state").
+  // any player-failure UI is reachable, so no state the machine holds can surface a
+  // banner or a restart control there — an invariant locked by a test in
+  // room-view.test.tsx ("the EARS-2 unavailable branch never shows a player-failure
+  // state").
   const provider = embed.kind === "unavailable" ? "cdnvideo" : embed.kind;
   const { status, grade, failure, embedKey, restart } = usePlayerFailureState(provider);
   // The `origin` param YouTube's IFrame API wants is resolved AFTER mount so the
@@ -316,11 +287,11 @@ export function PlayerFrame({ config, copy }: { config: RoomConfig; copy: Player
       {status === "failed" && grade === "suspected" && (
         <PlayerSuspectedBanner copy={copy} onRestart={restart} />
       )}
-      {/* SUSPECTED, time box elapsed (cdnvideo) — banner withdrawn, gesture-gated
-          restart only; the embed is never re-created on a timer (EARS-18.3). */}
-      {status === "unverified" && (
-        <PlayerUnverifiedRestart copy={copy} onRestart={restart} />
-      )}
+      {/* UNVERIFIED (cdnvideo, from mount) renders NOTHING of its own: the room has
+          no evidence channel for a structurally silent provider, so it neither
+          claims anything about the stream nor hangs a permanent control over the
+          embed — the provider's own in-iframe controls are the only affordance
+          (owner decision 2026-09-06). */}
     </>
   );
 }

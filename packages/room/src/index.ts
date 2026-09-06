@@ -15,6 +15,7 @@ export {
   PLAYER_RETRY_DELAY_MS,
   PLAYER_WATCHDOG_MS,
   PROVIDER_HAS_PARENT_API,
+  initialPlayerState,
   mapYouTubeErrorCode,
   parseProviderSignal,
   playerReducer,

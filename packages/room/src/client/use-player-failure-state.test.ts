@@ -2,10 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook } from "@testing-library/react";
 
 import { usePlayerFailureState } from "./use-player-failure-state";
-import {
-  PLAYER_ADVISORY_TIMEBOX_MS,
-  PLAYER_WATCHDOG_MS,
-} from "../model/room-player-state";
+import { PLAYER_WATCHDOG_MS } from "../model/room-player-state";
 
 /**
  * 006 EARS-18 — the hook half of the player-failure machine. The reducer itself is
@@ -73,7 +70,8 @@ describe("006 EARS-18 usePlayerFailureState — watchdog, grades and restart", (
     // A vk embed whose `inited` handshake never arrives is a FAILED handshake — the
     // room cannot prove the stream died, so it must grade SUSPECTED (advisory banner
     // beside a still-interactive embed, no auto-retry: re-creating it would interrupt
-    // a possibly-healthy stream). It is NOT time-boxed — that is cdnvideo-only.
+    // a possibly-healthy stream). vk is observable, so the advisory is truthful and
+    // persists — unlike cdnvideo, which is never graded at all.
     const vk = renderHook(() => usePlayerFailureState("vk"));
     act(() => {
       vi.advanceTimersByTime(PLAYER_WATCHDOG_MS);
@@ -125,35 +123,28 @@ describe("006 EARS-18 usePlayerFailureState — watchdog, grades and restart", (
     expect(result.current.embedKey).toBe(0);
   });
 
-  // EARS-18.3 — the cdnvideo advisory time box. cdnvideo is permanently silent, so an
-  // indefinitely-shown advisory would nag over a stream that is most likely fine:
-  // after PLAYER_ADVISORY_TIMEBOX_MS the banner is withdrawn (`unverified`), the
-  // grade stays SUSPECTED and the embed is NEVER re-created on the timer.
-  it("EARS-18.3: a cdnvideo suspected advisory times out to unverified without re-creating the embed", () => {
+  // EARS-18.3 — cdnvideo is structurally silent, so the room has NO evidence to
+  // grade and never claims the stream failed: the hook mounts straight into
+  // `unverified`, arms no watchdog at all, and no amount of wall-clock can produce a
+  // `failed`/`suspected` advisory or re-create the embed behind the doctor. The room
+  // renders no control of its own there, so nothing can move it out of that state.
+  it("EARS-18.3: cdnvideo mounts unverified and no timer ever raises an advisory", () => {
     const { result } = renderHook(() => usePlayerFailureState("cdnvideo"));
-    act(() => {
-      vi.advanceTimersByTime(PLAYER_WATCHDOG_MS);
-    });
-    expect(result.current.status).toBe("failed");
-    expect(result.current.grade).toBe("suspected");
+    expect(result.current.status).toBe("unverified");
+    expect(result.current.grade).toBeNull();
 
     act(() => {
-      vi.advanceTimersByTime(PLAYER_ADVISORY_TIMEBOX_MS);
+      vi.advanceTimersByTime(PLAYER_WATCHDOG_MS * 10);
     });
     expect(result.current.status).toBe("unverified");
-    expect(result.current.grade).toBe("suspected");
-    expect(result.current.embedKey).toBe(0); // gesture-gated: never a timer re-create
-
-    // The persistent restart control is the only exit, and it re-creates the embed.
-    act(() => result.current.restart());
-    expect(result.current.status).toBe("loading");
-    expect(result.current.embedKey).toBe(1);
+    expect(result.current.grade).toBeNull();
+    expect(result.current.embedKey).toBe(0); // never a timer re-create
   });
 
-  // EARS-18.3 — the time box is cdnvideo-ONLY: for a provider that genuinely can
-  // still emit a signal (a failed youtube handshake) a self-withdrawing banner would
-  // hide a real, observable failure, so the advisory persists.
-  it("EARS-18.3: a youtube failed handshake advisory is NOT time-boxed", () => {
+  // EARS-18.1 — an OBSERVABLE provider is untouched: a youtube failed handshake is
+  // still graded SUSPECTED by the watchdog and its advisory still persists, because
+  // for it a real signal could still have arrived.
+  it("EARS-18.1: a youtube failed handshake still raises a persistent suspected advisory", () => {
     const { result } = renderHook(() => usePlayerFailureState("youtube"));
     act(() => {
       vi.advanceTimersByTime(PLAYER_WATCHDOG_MS);
@@ -161,7 +152,7 @@ describe("006 EARS-18 usePlayerFailureState — watchdog, grades and restart", (
     expect(result.current.status).toBe("failed");
     expect(result.current.grade).toBe("suspected");
     act(() => {
-      vi.advanceTimersByTime(PLAYER_ADVISORY_TIMEBOX_MS * 2);
+      vi.advanceTimersByTime(PLAYER_WATCHDOG_MS * 5);
     });
     expect(result.current.status).toBe("failed");
     expect(result.current.grade).toBe("suspected");

@@ -73,13 +73,14 @@ process.env.ACADEMY_SUBMISSIONS_DIR = ACADEMY_SUBMISSIONS_DIR;
 
 export default defineConfig({
   testDir: "./e2e",
-  // Only the backend-free axe and Academy specs run in CI; live-Zitadel journeys
+  // Only the backend-free axe, Academy and password-reveal specs run in CI; live-Zitadel journeys
   // and the dev-stand-gated `e2e/a11y/` suite (`test:axe`) stay out. Anchored regex,
   // not a bare-basename glob: `e2e/a11y/a11y-axe.e2e.spec.ts` (the dev-stand
   // tier) shares the basename and a glob would drag its env-skipped tests in.
   testMatch: [
     /[\\/]e2e[\\/]a11y-axe\.e2e\.spec\.ts$/,
     /[\\/]e2e[\\/]academy-home\.e2e\.spec\.ts$/,
+    /[\\/]e2e[\\/]password-reveal\.e2e\.spec\.ts$/,
   ],
   globalTeardown: "./e2e/support/academy-submissions-global-teardown.ts",
   fullyParallel: true,

@@ -48,6 +48,7 @@
         "apps/admin/app/projects/page.tsx",
         "apps/admin/components/admin-data-list.tsx",
         "apps/admin/components/admin-list-shell.tsx",
+        "apps/admin/components/recordings-panel.tsx",
         "apps/admin/components/event-experts-panel.tsx",
         "apps/admin/components/event-projects-panel.tsx",
         "apps/admin/components/event-directions-panel.tsx",

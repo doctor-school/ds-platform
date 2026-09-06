@@ -990,5 +990,79 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         );
       }
     });
+
+    // ── 012 EARS-17: key reuse and the feature-010 trail ───────────────────
+    //
+    // 012-design §6 binds EVERY mutating admin route to the same safeguards,
+    // and line 343 calls the coordination joins "audited as the ordinary
+    // taxonomy mutations they are". So the proof belongs ON this join table,
+    // not inferred from the shared service the handler happens to call.
+
+    /** The 010 ledger rows of one retained row, addressed by `metadata->'pk'`. */
+    async function auditTrail(
+      id: string,
+    ): Promise<{ event_type: string; subject_id: string | null }[]> {
+      const { rows } = await pool.query<{
+        event_type: string;
+        subject_id: string | null;
+      }>(
+        `SELECT event_type, subject_id FROM audit_ledger
+          WHERE metadata -> 'pk' ->> 'id' = $1`,
+        [id],
+      );
+      return rows;
+    }
+
+    it("012 EARS-17: when the same Idempotency-Key carries a different relationship payload, the system shall refuse with IDEMPOTENCY_KEY_REUSED before any domain or audit write", async () => {
+      const event = await makeEvent(false);
+      const first = await makeProject(false);
+      const second = await makeProject(false);
+      const k = key();
+
+      const created = await relate(event.id, first.id, { idempotencyKey: k });
+      expect(created.statusCode, created.payload).toBe(201);
+      createdRelationIds.push((created.json() as RelationBody).id);
+
+      const reused = await relate(event.id, second.id, { idempotencyKey: k });
+      expect(reused.statusCode).toBe(409);
+      expect((reused.json() as { errorCode?: string }).errorCode).toBe(
+        "IDEMPOTENCY_KEY_REUSED",
+      );
+
+      // The refusal lands BEFORE the write: the relationship the second call
+      // described exists in neither the domain table nor the 010 trail.
+      const { rows } = await pool.query<{ count: string }>(
+        "SELECT count(*)::text AS count FROM event_projects WHERE event_id = $1 AND project_id = $2",
+        [event.id, second.id],
+      );
+      expect(rows[0]!.count).toBe("0");
+    });
+
+    it("012 EARS-17: when a relationship is created and retired, feature 010 shall hold exactly one attributed audit row per change", async () => {
+      const event = await makeEvent(false);
+      const project = await makeProject(false);
+      const rel = await relation(event.id, project.id);
+
+      const afterCreate = await auditTrail(rel.id);
+      expect(afterCreate.map((r) => r.event_type)).toEqual([
+        "data.event_projects.insert",
+      ]);
+      // Attribution is the point of the trail: an unattributed row is a change
+      // nobody can be asked about.
+      expect(afterCreate[0]!.subject_id).not.toBeNull();
+
+      const retire = await move(rel.id, "retire");
+      expect(retire.statusCode, retire.payload).toBe(200);
+
+      const afterRetire = await auditTrail(rel.id);
+      // One update per committed change — the retirement, neither collapsed
+      // into the insert row nor duplicated.
+      expect(
+        afterRetire.filter(
+          (r) => r.event_type === "data.event_projects.update",
+        ),
+      ).toHaveLength(1);
+      expect(afterRetire.every((r) => r.subject_id !== null)).toBe(true);
+    });
   },
 );

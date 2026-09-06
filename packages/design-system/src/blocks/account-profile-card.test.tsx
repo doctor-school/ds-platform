@@ -17,8 +17,9 @@ import {
  * failure, sign-out, and the honest-empty «Мои события» row.
  *
  * The host-side behaviour (the EARS-9 silent refresh, the EARS-10 redirect
- * target, the transports) is covered by each host's own page test — the block
- * owns none of it.
+ * target, the route table, the transports) is NOT the block, and is asserted
+ * per host: apps/portal/app/account/page.test.tsx for the Academy and
+ * apps/doctor/components/account-screen.test.tsx for the doctor storefront.
  */
 
 const copy: AccountProfileCardCopy = {

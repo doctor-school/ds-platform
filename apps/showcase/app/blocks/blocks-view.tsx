@@ -3572,7 +3572,12 @@ function EventPageSection() {
 /* AccountProfileCard (003 EARS-27/28, #1958)                          */
 /* ------------------------------------------------------------------ */
 
-/** Neutral RU copy — the Academy `messages/ru.json` `account` block, verbatim. */
+/**
+ * Neutral RU catalogue copy. NOT either host copy verbatim: the Academy strings
+ * live in its `messages/ru.json` and the doctor host carries its own RU literals,
+ * and this section exists to demonstrate the composition, not to become a third
+ * source of product wording.
+ */
 const ACCOUNT_PROFILE_COPY: AccountProfileCardCopy = {
   title: "Личный кабинет",
   subtitle: "Ваши данные и настройки входа",
@@ -3655,10 +3660,10 @@ const ACCOUNT_PROFILE_PROPS: PropRow[] = [
   },
   {
     name: "renderLink",
-    type: "(props: { href, className, children }) => ReactNode",
+    type: "(props: { href, children }) => ReactNode",
     required: false,
     description:
-      "Host router seam — the Academy and the doctor storefront both pass their framework Link; the default renders a plain anchor.",
+      "Host router seam — the Academy and the doctor storefront both pass their framework Link; the default renders a plain anchor. The row classes arrive on the returned element through the DsLink asChild Slot clone, so the host renderer takes no className.",
   },
   {
     name: "onSaveDisplayName",

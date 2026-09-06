@@ -150,6 +150,11 @@ export function AccountScreen() {
   async function onSignOut() {
     try {
       await logoutStorefront();
+    } catch {
+      // A refused or unreachable revoke is swallowed HERE rather than escaping as
+      // an unhandled rejection: the block fires this handler as `void onSignOut()`,
+      // so a rejecting host promise would surface only in the console while the
+      // `finally` below already does the one thing that matters to the doctor.
     } finally {
       // Whether or not the revoke round-trip succeeded, the doctor intends to
       // leave. `refresh()` re-runs the SERVER render, which is where the 017

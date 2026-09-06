@@ -9,8 +9,10 @@ import react from "@vitejs/plugin-react";
  * `lib/shell-auth.ts`), which touch `Headers`/`fetch` and no DOM, plus the 017
  * shell components rendered to STATIC SERVER MARKUP (`react-dom/server`) — the
  * level EARS-1 actually constrains (what reaches the HTML), which needs no DOM
- * either. A jsdom project lands here when the app gains its first test of
- * client-side BEHAVIOUR — see
+ * either. The DEFAULT stays node for that reason; the app gained its first test
+ * of client-side BEHAVIOUR with #1958 (`components/account-screen.test.tsx`),
+ * and that file opts itself into jsdom with a `@vitest-environment jsdom`
+ * docblock rather than flipping the whole app onto a DOM it does not need — see
  * apps/docs/content/architecture/component-testing.md for that tier.
  *
  * `@vitejs/plugin-react` supplies the JSX transform (the same plugin the portal's

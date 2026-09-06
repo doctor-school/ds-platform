@@ -17,7 +17,8 @@ README covers only how to run the tools.
 | ------------------------ | ------------------------------------------------------------------------------------------------------------- |
 | `extract.mjs`            | `sessions/<id>.json`, `index.json`, `summary.json`, `corrections.json`                                        |
 | `transcripts.mjs`        | `transcripts/<id>.md`, `self-catches.json`                                                                    |
-| `codex.mjs`              | All single-session corpus files above + `portable/<id>.json` (`ds-platform-retro/v1`)                         |
+| `codex.mjs`              | All single-session corpus files above + `portable/<id>.json` (`ds-platform-retro/v2`; accepts v1 inputs)      |
+| `codex-rollout.mjs`      | Shared read-only Codex metadata and token telemetry boundary (imported by adapter and ledger)                 |
 | `orchestration-mine.mjs` | `orchestration-metrics.json`, `orchestration-episodes.json`, `orchestration-summary.json`                     |
 | `token-ledger.mjs`       | stdout ledger: lead + per-subagent peak ctx / turns / cache-read / est \$ + `FLAG` rows (`pnpm retro:tokens`) |
 
@@ -65,6 +66,9 @@ node tools/retro/transcripts.mjs --session <session-id>
 # Token ledger — where a session's tokens/dollars went (lead vs subagents):
 pnpm retro:tokens <session-id>
 pnpm retro:tokens --since 2026-08-10
+pnpm retro:tokens --harness codex <session-id>
+pnpm retro:tokens --harness codex --since 2026-09-06
+pnpm retro:tokens --rollout <rollout.jsonl> --log-dir <sessions-root>
 
 # Codex single-session mode (raw rollout is normalized, never treated as Claude):
 node tools/retro/codex.mjs --session <session-id>
@@ -93,10 +97,11 @@ node tools/retro/extract.mjs --help
 
 ### Codex adapter options
 
-- `--session <id>` — recursively resolve the rollout under `~/.codex/sessions`.
+- `--session <id>` — recursively resolve the rollout under
+  `$CODEX_HOME/sessions`, falling back to `~/.codex/sessions`.
 - `--rollout <file>` — use an explicitly selected raw Codex rollout.
 - `--portable-input <file>` — use a pre-normalized
-  `ds-platform-retro/v1` record with `harness: codex`.
+  `ds-platform-retro/v1` or `ds-platform-retro/v2` record with `harness: codex`.
 - `--out-dir <dir>` / `--help` — same output/help conventions as above.
 
 The Codex transcript format is not used as a stable downstream interface:
@@ -105,7 +110,81 @@ Subagent rollouts are labelled `sdk` even when their forked history contains a
 copied user turn, so the independent retro agent cannot mistake itself for the
 interactive owner session.
 
+### Portable schema evolution
+
+New raw-rollout conversions emit **`ds-platform-retro/v2`**. Existing v1
+portable inputs remain accepted and retain their version; missing v2 evidence
+is never synthesized. Both versions retain the session metadata and ordered
+`events` array. v2 adds parent thread/history metadata, tool `namespace`,
+`callId`, `status`, `evidence`, `exitCode`, collaboration recipients/states and
+`role: subagent` activity records. Downstream readers must tolerate added fields
+and roles; v1-only consumers must explicitly upgrade before consuming v2.
+
+`response_item` function/custom calls have `evidence: call` and initially
+`status: requested`. A `functions.exec` program remains one tool request:
+JavaScript mentioning inner tools does **not** prove they executed.
+`event_msg.item_completed.item` records with `type: CommandExecution`,
+`SubAgentActivity` and `CollabAgentToolCall` supply actual execution/activity
+evidence. A matching call ID enriches the original call instead of counting it
+twice. Command summaries preserve command, cwd, status and exit code; bulky
+stdout/stderr remain in the original rollout. Mirrored UserMessage/AgentMessage
+records are paired one-for-one with response-item messages so repeated owner
+turns are retained without double-counting the two channels.
+
+Owner answers from **matched** `request_user_input` tool outputs become user
+events with `source: request_user_input`, `callId` and
+`evidence: submitted_answers`. The supported shape is an `answers` object whose
+values contain string `answers` arrays. Question text, suggested options,
+unmatched outputs and pending/default receipts never become owner evidence.
+Async answers additionally require `submitted: true` or an explicit
+`submitted`/`answered` status. A returned `request_id` can correlate a later
+explicit `request_user_input_response` envelope. That envelope is a tested
+compatibility input, **not an observed universal host format**; unsupported
+host answer envelopes must remain unknown or be supplied through an explicitly
+provenanced portable user event. Ordinary user messages continue to work.
+
+### Token ledger accounting
+
+The existing positional command defaults to Claude; choose `--harness codex`
+for a Codex session ID or `--rollout <file>` for a single explicit Codex file.
+`--log-dir` overrides the session search root for either harness.
+`CODEX_HOME` applies to both the ledger and the Codex corpus adapter.
+Codex `--since` selects root logs by modification date and reports each tree;
+it does not produce cross-session orchestration aggregates.
+
+- **Claude:** streamed repeats of the same message ID retain the last usage.
+  Context is input + cache creation + cache read. The historical #1374 family
+  price constants are preserved as estimates, not current prices or billing.
+  Unknown model families have no price. Missing counters propagate as `null`
+  in analysis and `UNKNOWN` in the ledger instead of becoming zero.
+- **Codex:** `event_msg.token_count.info.total_token_usage` is cumulative.
+  Repeated snapshots are not summed; the final snapshot supplies session usage.
+  Input already includes cached input; reasoning is a subset of output. Peak
+  observed context is `last_token_usage.input_tokens`, without adding cache.
+  The model context window is reported separately. `turns` counts observed
+  distinct cumulative snapshots, not guaranteed complete user or model turns.
+  A counter reset makes the usage total unknown. Codex cost is always unknown
+  because this tool has no verified Codex price table.
+- **Children:** discover recursively via
+  `session_meta.source.subagent.thread_spawn.parent_thread_id`, including each
+  child's usage and context. Discovery reads bounded metadata prefixes (64 KiB)
+  and only loads full transcripts for the selected tree. Duplicate logs are
+  deduplicated by thread ID. Records older than the child's session timestamp
+  are excluded; where an inherited cumulative baseline exists, report its
+  delta. Without a reliable baseline/boundary, flag the attribution ambiguity
+  explicitly. Missing/archived/unavailable logs cannot be counted; the report
+  names its discovery root and does not claim corpus completeness.
+
+These are observational reports, not budget enforcement or proof of billing.
+The existing 200K child / 300K lead peak flags remain advisory. Synthetic,
+privacy-safe regressions cover both harnesses in
+`tools/lint/guard-tests/retro-token-ledger.spec.ts` and `codex-retro.spec.ts`.
+
 ## Orchestration mining
+
+The full-corpus miner remains **Claude-only**. A Codex single-session corpus or
+token ledger is not a supported input for cross-session orchestration metrics;
+do not present a partial tree as a complete multi-session measurement.
 
 `orchestration-mine.mjs` (#916) widens the #700 first-pass orchestration retro
 (which sampled only 50 of ~361 sessions, hand-recovered 3 inline episodes, and

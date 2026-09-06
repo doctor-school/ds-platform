@@ -28,9 +28,19 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { slugifyRepoRoot } from "./extract.mjs";
+import {
+  analyzeCodexJsonl,
+  codexSessionsRoot,
+  parentThread,
+  readRecords,
+  rolloutMeta,
+  walkJsonl,
+  number,
+} from "./codex-rollout.mjs";
 
 /** Approximate USD per Mtok: [input, cache_write, cache_read, output].
- * Estimate only; opus-tier prices are used for fable/opus, then sonnet, haiku. */
+ * Historical #1374 estimates, retained for Claude compatibility; not current
+ * billing rates. Unrecognized model families have no price. */
 export const PRICE = {
   opus: [15, 18.75, 1.5, 75],
   fable: [15, 18.75, 1.5, 75],
@@ -45,11 +55,13 @@ export const LEAD_PEAK_FLAG = 300_000;
 export function priceFor(model) {
   const m = String(model || "").toLowerCase();
   for (const key of Object.keys(PRICE)) if (m.includes(key)) return PRICE[key];
-  return PRICE.opus;
+  return null;
 }
 
 /** Analyze one `*.jsonl` transcript (lead session or subagent). */
-export function analyzeJsonl(jsonl) {
+export function analyzeJsonl(jsonl, { harness = "claude" } = {}) {
+  if (harness === "codex") return analyzeCodexJsonl(jsonl);
+  if (harness !== "claude") throw new Error(`Unknown harness: ${harness}`);
   const usageById = new Map();
   const order = [];
   let firstTs = null;
@@ -85,7 +97,7 @@ export function analyzeJsonl(jsonl) {
     const usage = message.usage;
     if (!usage) continue;
     // Dedupe streamed repeats: one row per message id, LAST usage wins.
-    const id = message.id || entry.uuid;
+    const id = message.id || entry.uuid || Symbol();
     if (!usageById.has(id)) order.push(id);
     usageById.set(id, { usage, model: message.model, ts });
   }
@@ -97,21 +109,35 @@ export function analyzeJsonl(jsonl) {
   let cost = 0;
   for (const id of order) {
     const { usage, model } = usageById.get(id);
-    const input = usage.input_tokens ?? 0;
-    const cacheWrite = usage.cache_creation_input_tokens ?? 0;
-    const cacheRead = usage.cache_read_input_tokens ?? 0;
-    const output = usage.output_tokens ?? 0;
-    total.input += input;
-    total.cacheWrite += cacheWrite;
-    total.cacheRead += cacheRead;
-    total.output += output;
-    const ctx = input + cacheWrite + cacheRead;
-    if (ctx > peak) {
+    const input = number(usage.input_tokens);
+    const cacheWrite = number(usage.cache_creation_input_tokens);
+    const cacheRead = number(usage.cache_read_input_tokens);
+    const output = number(usage.output_tokens);
+    for (const [key, value] of Object.entries({
+      input,
+      cacheWrite,
+      cacheRead,
+      output,
+    })) {
+      total[key] =
+        value === null || total[key] === null ? null : total[key] + value;
+    }
+    const ctx = [input, cacheWrite, cacheRead].includes(null)
+      ? null
+      : input + cacheWrite + cacheRead;
+    if (ctx === null) peak = null;
+    else if (peak !== null && ctx > peak) {
       peak = ctx;
       peakTs = usageById.get(id).ts;
     }
-    const [pi, pw, pr, po] = priceFor(model);
-    cost += (input * pi + cacheWrite * pw + cacheRead * pr + output * po) / 1e6;
+    const price = priceFor(model);
+    if (!price || [input, cacheWrite, cacheRead, output].includes(null))
+      cost = null;
+    else if (cost !== null) {
+      const [pi, pw, pr, po] = price;
+      cost +=
+        (input * pi + cacheWrite * pw + cacheRead * pr + output * po) / 1e6;
+    }
     models.set(model, (models.get(model) || 0) + 1);
   }
 
@@ -120,6 +146,11 @@ export function analyzeJsonl(jsonl) {
     const a = Date.parse(firstTs);
     const b = Date.parse(lastTs);
     if (Number.isFinite(a) && Number.isFinite(b)) durationH = (b - a) / 3.6e6;
+  }
+  if (!order.length) {
+    for (const key of Object.keys(total)) total[key] = null;
+    peak = null;
+    cost = null;
   }
   return {
     turns: order.length,
@@ -136,8 +167,9 @@ export function analyzeJsonl(jsonl) {
   };
 }
 
-export const fmtK = (n) => `${Math.round(n / 1000)}K`;
-const fmt$ = (n) => `$${n.toFixed(n < 10 ? 1 : 0)}`;
+export const fmtK = (n) =>
+  n === null ? "UNKNOWN" : `${Math.round(n / 1000)}K`;
+const fmt$ = (n) => (n === null ? "UNKNOWN" : `$${n.toFixed(n < 10 ? 1 : 0)}`);
 const pad = (s, n) => String(s).padStart(n);
 
 /** Default log dir: ~/.claude/projects/<repo-slug>/ (same convention as
@@ -154,17 +186,47 @@ export function defaultLogDir(repoRoot = process.cwd(), env = process.env) {
 }
 
 export function parseArgs(argv) {
-  const out = { sessions: [], since: null, logDir: null, help: false };
+  const out = {
+    sessions: [],
+    since: null,
+    logDir: null,
+    help: false,
+    harness: null,
+    rollout: null,
+  };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--help" || a === "-h") out.help = true;
-    else if (a === "--since") out.since = argv[++i];
-    else if (a.startsWith("--since=")) out.since = a.slice("--since=".length);
-    else if (a === "--log-dir") out.logDir = argv[++i];
+    else if (["--harness", "--rollout", "--since", "--log-dir"].includes(a)) {
+      const value = argv[++i];
+      if (!value || value.startsWith("--"))
+        throw new Error(`Missing value for ${a}`);
+      out[
+        {
+          "--harness": "harness",
+          "--rollout": "rollout",
+          "--since": "since",
+          "--log-dir": "logDir",
+        }[a]
+      ] = value;
+    } else if (a.startsWith("--since=")) out.since = a.slice("--since=".length);
     else if (a.startsWith("--log-dir="))
       out.logDir = a.slice("--log-dir=".length);
+    else if (a.startsWith("--harness=")) out.harness = a.slice(10);
+    else if (a.startsWith("--rollout=")) out.rollout = a.slice(10);
+    else if (a.startsWith("-")) throw new Error(`Unknown option: ${a}`);
     else out.sessions.push(a);
   }
+  if (out.harness && !["claude", "codex"].includes(out.harness))
+    throw new Error("--harness must be claude or codex");
+  if (
+    out.rollout &&
+    (out.harness === "claude" || out.sessions.length || out.since)
+  )
+    throw new Error(
+      "--rollout selects one Codex file; do not combine with Claude, sessions or --since",
+    );
+  out.harness ??= out.rollout ? "codex" : "claude";
   return out;
 }
 
@@ -177,6 +239,8 @@ const USAGE = `tools/retro/token-ledger.mjs — per-session token/cost ledger (#
   --since <date>   every session log modified on/after that date
   --log-dir <dir>  session-log dir (default: ~/.claude/projects/<repo-slug>/)
   --help, -h       this text
+  --harness codex  Codex sessions (CODEX_HOME/sessions or ~/.codex/sessions)
+  --rollout <file> explicit Codex rollout; --log-dir sets descendant search root
 `;
 
 function sessionsSince(logDir, since) {
@@ -241,7 +305,10 @@ function reportSession(logDir, sessionId, out = process.stdout) {
     rows.push({ a: analyzeJsonl(fs.readFileSync(p, "utf8")), meta, name });
   }
   rows.sort((x, y) => y.a.cost - x.a.cost);
-  const sum = (f) => rows.reduce((n, r) => n + f(r.a), 0);
+  const sum = (f) =>
+    rows.some((r) => f(r.a) === null)
+      ? null
+      : rows.reduce((n, r) => n + f(r.a), 0);
   out.write(
     `  SUBAGENTS: n=${rows.length} est=${fmt$(sum((a) => a.cost))}` +
       ` out=${fmtK(sum((a) => a.total.output))}` +
@@ -269,9 +336,13 @@ function reportSession(logDir, sessionId, out = process.stdout) {
 
 function main(argv = process.argv.slice(2)) {
   const args = parseArgs(argv);
-  if (args.help || (!args.sessions.length && !args.since)) {
+  if (args.help || (!args.sessions.length && !args.since && !args.rollout)) {
     process.stdout.write(USAGE);
     process.exit(args.help ? 0 : 1);
+  }
+  if (args.harness === "codex") {
+    reportCodex(args);
+    return;
   }
   const logDir = args.logDir || defaultLogDir();
   if (!logDir || !fs.existsSync(logDir)) {
@@ -290,5 +361,87 @@ function main(argv = process.argv.slice(2)) {
 
 const invoked = process.argv[1] ? path.resolve(process.argv[1]) : "";
 if (invoked && invoked === path.resolve(fileURLToPath(import.meta.url))) {
-  main();
+  try {
+    main();
+  } catch (error) {
+    process.stderr.write(`[retro:tokens] ${error.message}\n`);
+    process.exitCode = 1;
+  }
+}
+
+function reportCodex(args, out = process.stdout) {
+  const root = args.logDir || codexSessionsRoot();
+  const files = walkJsonl(root);
+  if (args.rollout && !files.includes(path.resolve(args.rollout)))
+    files.push(path.resolve(args.rollout));
+  // Discovery reads only the metadata prefix, not every private transcript.
+  const entries = files.map((file) => {
+    const handle = fs.openSync(file, "r");
+    try {
+      const buffer = Buffer.alloc(65536);
+      const bytes = fs.readSync(handle, buffer, 0, buffer.length, 0);
+      return {
+        file,
+        meta: rolloutMeta(
+          readRecords(buffer.subarray(0, bytes).toString("utf8")),
+        ),
+      };
+    } finally {
+      fs.closeSync(handle);
+    }
+  });
+  // Duplicate log copies are one thread, choosing the most recently written log.
+  entries.sort(
+    (a, b) => fs.statSync(b.file).mtimeMs - fs.statSync(a.file).mtimeMs,
+  );
+  const byId = new Map();
+  for (const entry of entries) {
+    const id = entry.meta.id ?? entry.meta.session_id;
+    if (id && !byId.has(id)) byId.set(id, entry);
+  }
+  let selected;
+  if (args.rollout)
+    selected = [
+      entries.find(
+        (row) => path.resolve(row.file) === path.resolve(args.rollout),
+      ),
+    ];
+  else if (args.sessions.length)
+    selected = args.sessions.map((id) => byId.get(id));
+  else {
+    const cut = Date.parse(`${args.since}T00:00:00Z`);
+    if (!Number.isFinite(cut)) throw new Error("Invalid --since date");
+    selected = [...byId.values()].filter(
+      (row) => !parentThread(row.meta) && fs.statSync(row.file).mtimeMs >= cut,
+    );
+  }
+  if (!selected.length || selected.some((row) => !row))
+    throw new Error("Codex session log not found; use --rollout or --log-dir");
+  for (const lead of selected) {
+    const id = lead.meta.id ?? lead.meta.session_id;
+    out.write(`\n=== CODEX SESSION ${id ?? "UNKNOWN"}\n`);
+    const seen = new Set();
+    const print = (entry, role) => {
+      const thread = entry.meta.id ?? entry.meta.session_id;
+      if (seen.has(thread)) return;
+      seen.add(thread);
+      const a = analyzeCodexJsonl(fs.readFileSync(entry.file, "utf8"));
+      out.write(
+        `  ${role} ${thread}: turns=${a.turns ?? "UNKNOWN"} peak_ctx=${fmtK(a.peak)} window=${fmtK(a.contextWindow)} input=${fmtK(a.total.input)} cache_read=${fmtK(a.total.cacheRead)} out=${fmtK(a.total.output)} reasoning=${fmtK(a.total.reasoningOutput)} est=${fmt$(a.cost)}\n`,
+      );
+      for (const warning of a.warnings) out.write(`    ${warning}\n`);
+      const threshold = role === "lead" ? LEAD_PEAK_FLAG : SUBAGENT_PEAK_FLAG;
+      if (a.peak !== null && a.peak > threshold)
+        out.write(
+          `    FLAG (#1374 budget): peak ${fmtK(a.peak)} > ${fmtK(threshold)}\n`,
+        );
+      for (const child of byId.values())
+        if (thread && parentThread(child.meta) === thread)
+          print(child, "subagent");
+    };
+    print(lead, "lead");
+    out.write(
+      `  SUBAGENTS: n=${seen.size - 1}; discovery scope=${root ?? "UNKNOWN"} (only available logs)\n`,
+    );
+  }
 }

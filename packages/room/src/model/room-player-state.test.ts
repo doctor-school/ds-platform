@@ -232,8 +232,8 @@ describe("006 EARS-18 player-failure state machine — pure logic", () => {
 
   // EARS-18.3 — a provider the room can NEVER observe (cdnvideo) mounts straight
   // into `unverified`: there is no evidence to grade, so the room states nothing
-  // about the stream and offers only the gesture-gated restart. No failure grade,
-  // nothing observed, the embed untouched.
+  // about the stream and renders nothing of its own over the embed. No failure
+  // grade, nothing observed, the embed untouched.
   it("EARS-18.3: cdnvideo mounts in unverified with no grade and no failure", () => {
     const mounted = initialPlayerState("cdnvideo");
     expect(mounted.status).toBe("unverified");
@@ -261,17 +261,16 @@ describe("006 EARS-18 player-failure state machine — pure logic", () => {
     expect(playerReducer(mounted, { type: "watchdog" }).status).toBe("unverified");
   });
 
-  // EARS-18.3 — the explicit doctor gesture is the only thing that re-creates the
-  // embed for a silent provider, and it lands back in `unverified` (never a banner).
-  it("EARS-18.3: the gesture-gated restart re-creates a cdnvideo embed back into unverified", () => {
+  // EARS-18.3 — the room renders no control of its own over a silent provider, so
+  // nothing dispatches `restart` there; the reducer holds that invariant too — a
+  // cdnvideo state can never be pulled out of `unverified` into a watched `loading`
+  // (which would arm the watchdog and raise the advisory the owner rejected).
+  it("EARS-18.3: a restart cannot pull cdnvideo out of unverified", () => {
     const mounted = initialPlayerState("cdnvideo");
     const restarted = playerReducer(mounted, { type: "restart" });
+    expect(restarted).toBe(mounted);
     expect(restarted.status).toBe("unverified");
-    expect(restarted.grade).toBeNull();
-    expect(restarted.attempt).toBe(0);
-    expect(restarted.embedKey).toBe(mounted.embedKey + 1);
-    // …and the fresh mount is still not graded by the watchdog.
-    expect(playerReducer(restarted, { type: "watchdog" })).toBe(restarted);
+    expect(restarted.embedKey).toBe(mounted.embedKey);
   });
 
   // EARS-18.3 — an observable provider's restart still returns to `loading` with a

@@ -93,12 +93,10 @@ function RestartButton({
   label,
   onRestart,
   className = "",
-  testId = "room-player-restart",
 }: {
   label: string;
   onRestart: () => void;
   className?: string;
-  testId?: string;
 }) {
   return (
     // primitives-first-ok: fixed-white outline control on the PERMANENTLY-dark player
@@ -106,7 +104,7 @@ function RestartButton({
     // on the always-dark region (matches the EARS-2 refresh button).
     <button
       type="button"
-      data-testid={testId}
+      data-testid="room-player-restart"
       onClick={onRestart}
       className={`border-2 border-white/50 font-extrabold text-white cursor-pointer hover:border-white focus-visible:outline-none focus-visible:shadow-focus ${className}`}
     >
@@ -179,34 +177,6 @@ function PlayerSuspectedBanner({ copy, onRestart }: { copy: PlayerCopy; onRestar
         label={copy.playerRestart}
         onRestart={onRestart}
         className="pointer-events-auto px-4 py-2 text-2xs uppercase tracking-micro"
-      />
-    </div>
-  );
-}
-
-/**
- * 006 EARS-18.3 `unverified` — the resting state of the permanently unobservable
- * cdnvideo, held from the first second of the эфир. The room has no evidence channel
- * for that provider, so it claims NOTHING about the stream: no banner, no overlay,
- * nothing covering or annotating the embed — only a persistent, LOW-EMPHASIS
- * «Перезапустить плеер» in the corner that re-creates the embed on an explicit doctor
- * gesture, never on a timer. The container is `pointer-events-none` so the provider's
- * own controls stay reachable.
- */
-function PlayerUnverifiedRestart({
-  copy,
-  onRestart,
-}: {
-  copy: PlayerCopy;
-  onRestart: () => void;
-}) {
-  return (
-    <div className="pointer-events-none absolute inset-0 z-20 flex items-end justify-end p-4">
-      <RestartButton
-        testId="room-player-unverified-restart"
-        label={copy.playerRestart}
-        onRestart={onRestart}
-        className="pointer-events-auto bg-black/50 px-4 py-2 text-2xs uppercase tracking-micro opacity-70 hover:opacity-100"
       />
     </div>
   );
@@ -317,11 +287,11 @@ export function PlayerFrame({ config, copy }: { config: RoomConfig; copy: Player
       {status === "failed" && grade === "suspected" && (
         <PlayerSuspectedBanner copy={copy} onRestart={restart} />
       )}
-      {/* UNVERIFIED (cdnvideo, from mount) — nothing is claimed about the stream:
-          no banner, gesture-gated restart only, never re-created on a timer. */}
-      {status === "unverified" && (
-        <PlayerUnverifiedRestart copy={copy} onRestart={restart} />
-      )}
+      {/* UNVERIFIED (cdnvideo, from mount) renders NOTHING of its own: the room has
+          no evidence channel for a structurally silent provider, so it neither
+          claims anything about the stream nor hangs a permanent control over the
+          embed — the provider's own in-iframe controls are the only affordance
+          (owner decision 2026-09-06). */}
     </>
   );
 }

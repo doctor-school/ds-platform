@@ -43,8 +43,8 @@ export interface PlayerFailureState {
  *   re-creates the embed; the budget is bounded in the reducer.
  * - **Structurally silent providers (EARS-18.3).** cdnvideo exposes no parent API,
  *   so the hook mounts it in `unverified` and arms NO watchdog: the room states
- *   nothing about a stream it cannot observe and shows no advisory — only the
- *   gesture-gated restart, which re-creates the embed back into `unverified`.
+ *   nothing about a stream it cannot observe and renders nothing of its own over
+ *   the embed — no advisory, no overlay, no room-owned control.
  * - **Recovery (EARS-18.4).** A `playing` signal at any point clears the overlay.
  */
 export function usePlayerFailureState(provider: StreamProvider): PlayerFailureState {

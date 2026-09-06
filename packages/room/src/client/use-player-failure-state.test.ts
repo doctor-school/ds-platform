@@ -126,8 +126,8 @@ describe("006 EARS-18 usePlayerFailureState — watchdog, grades and restart", (
   // EARS-18.3 — cdnvideo is structurally silent, so the room has NO evidence to
   // grade and never claims the stream failed: the hook mounts straight into
   // `unverified`, arms no watchdog at all, and no amount of wall-clock can produce a
-  // `failed`/`suspected` advisory. Only the doctor's own gesture re-creates the
-  // embed — and it lands back in `unverified`, never in a banner.
+  // `failed`/`suspected` advisory or re-create the embed behind the doctor. The room
+  // renders no control of its own there, so nothing can move it out of that state.
   it("EARS-18.3: cdnvideo mounts unverified and no timer ever raises an advisory", () => {
     const { result } = renderHook(() => usePlayerFailureState("cdnvideo"));
     expect(result.current.status).toBe("unverified");
@@ -138,17 +138,7 @@ describe("006 EARS-18 usePlayerFailureState — watchdog, grades and restart", (
     });
     expect(result.current.status).toBe("unverified");
     expect(result.current.grade).toBeNull();
-    expect(result.current.embedKey).toBe(0); // gesture-gated: never a timer re-create
-
-    // The persistent restart control re-creates the embed, and only on the gesture.
-    act(() => result.current.restart());
-    expect(result.current.status).toBe("unverified");
-    expect(result.current.embedKey).toBe(1);
-    act(() => {
-      vi.advanceTimersByTime(PLAYER_WATCHDOG_MS * 10);
-    });
-    expect(result.current.status).toBe("unverified");
-    expect(result.current.embedKey).toBe(1);
+    expect(result.current.embedKey).toBe(0); // never a timer re-create
   });
 
   // EARS-18.1 — an OBSERVABLE provider is untouched: a youtube failed handshake is

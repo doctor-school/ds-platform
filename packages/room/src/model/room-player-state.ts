@@ -26,8 +26,8 @@ import type { StreamProvider } from "@ds/schemas";
  * parent API at all, so a watchdog stall on it is evidence of nothing and an advisory
  * would be a guess shown over a stream that is most likely playing fine. It mounts
  * straight into `unverified` ({@link initialPlayerState}) — nothing covers or
- * annotates the embed, the watchdog never runs, and the only affordance is the
- * gesture-gated «Перезапустить плеер» (EARS-18.3).
+ * annotates the embed, the watchdog never runs, and the room offers no remedy of
+ * its own: the provider's in-iframe controls are the only affordance (EARS-18.3).
  */
 
 /**
@@ -54,9 +54,8 @@ export const PLAYER_RETRY_DELAY_MS = 4_000;
  * window before the first playing signal (the provider renders its own spinner);
  * `retrying`/`failed` carry a {@link PlayerGrade} that decides covering-overlay
  * (confirmed) vs non-covering-banner (suspected); `unverified` is the state of a
- * structurally silent provider — nothing is known and nothing is claimed, the embed
- * is untouched and only the gesture-gated restart is offered; `playing` clears
- * everything.
+ * structurally silent provider — nothing is known, nothing is claimed and nothing
+ * is rendered over the embed; `playing` clears everything.
  */
 export type PlayerStatus =
   | "loading"
@@ -284,10 +283,11 @@ export const INITIAL_PLAYER_STATE: PlayerState = {
  * EARS-18.3 — the mount state for `provider`. An observable provider mounts in
  * `loading` and is graded by the watchdog ({@link INITIAL_PLAYER_STATE}). The
  * structurally silent cdnvideo mounts in `unverified`: the room cannot observe it, so
- * it states nothing about the stream — no banner, no overlay, no watchdog — and
- * offers only the gesture-gated «Перезапустить плеер» from the first second. An
- * advisory that would appear on EVERY cdnvideo эфир regardless of the stream's health
- * is a guess, not a status (owner decision 2026-09-06).
+ * it states nothing about the stream and renders nothing of its own — no banner, no
+ * overlay, no watchdog, no room-owned control. An advisory that would appear on
+ * EVERY cdnvideo эфир regardless of the stream's health is a guess, not a status,
+ * and a permanently visible restart button is the same intrusion in another shape
+ * (owner decision 2026-09-06).
  */
 export function initialPlayerState(provider: StreamProvider): PlayerState {
   const observable = PROVIDER_HAS_PARENT_API[provider];
@@ -303,7 +303,9 @@ export function initialPlayerState(provider: StreamProvider): PlayerState {
  * - `watchdog` — the watchdog elapsed with no playing signal (EARS-18.1).
  * - `error` — an observed provider error → always CONFIRMED (EARS-18.2).
  * - `retry` — the bounded auto-retry timer fired (EARS-18.3): re-create the embed.
- * - `restart` — the manual «Перезапустить плеер» affordance (EARS-18.3).
+ * - `restart` — the manual «Перезапустить плеер» affordance of a GRADED failure
+ *   state (EARS-18.3); an unverified cdnvideo has no such control, so nothing
+ *   dispatches it there.
  */
 export type PlayerAction =
   | { type: "playing" }
@@ -338,9 +340,10 @@ function enterConfirmedFailure(
  * duplicate `watchdog`/`error` while already `failed`/`retrying` is ignored so a
  * burst cannot exhaust the budget in one tick. `retry` re-creates the embed (bumps
  * `embedKey`); `restart` resets the budget + re-creates the embed (keeping the
- * monotonic `everReady`); `playing` clears everything (EARS-18.4). On a
- * NON-observable state (cdnvideo) the watchdog never grades and every (re)mount
- * rests in `unverified` — the room never guesses about a stream it cannot see.
+ * monotonic `everReady`); `playing` clears everything (EARS-18.4). A NON-observable
+ * state (cdnvideo) is never graded and never leaves `unverified`: the watchdog is
+ * ignored there and no `retry`/`restart` is reachable, because the room renders no
+ * control of its own over a stream it cannot see.
  */
 export function playerReducer(state: PlayerState, action: PlayerAction): PlayerState {
   switch (action.type) {
@@ -367,9 +370,11 @@ export function playerReducer(state: PlayerState, action: PlayerAction): PlayerS
       if (state.status !== "retrying") return state;
       return { ...state, status: "loading", embedKey: state.embedKey + 1 };
     case "restart":
+      // Reachable only from a graded (observable) failure state — the `unverified`
+      // resting state of a silent provider offers no room-owned restart at all.
+      if (!state.observable) return state;
       return {
-        // A silent provider's fresh embed is just as unobservable as the last one.
-        status: state.observable ? "loading" : "unverified",
+        status: "loading",
         grade: null,
         failure: null,
         attempt: 0,

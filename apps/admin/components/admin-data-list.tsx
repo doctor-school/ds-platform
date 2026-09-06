@@ -35,8 +35,10 @@ import {
  *   • filters apply INSTANTLY — the text field debounces inside `FilterBar`
  *     (≈400ms) and every facet fires on change; there is no submit control;
  *   • the applied set renders as removable chips with «Сбросить всё»;
- *   • the whole ROW opens the record, so a single-action list gets no «Действия»
- *     column — the callers here all have exactly one action;
+ *   • the whole ROW opens the record where the caller passes `rowHref`, so such a
+ *     list needs no «Действия» column; a caller with a per-row COMMAND SET and no
+ *     record route (the 014 recordings history) renders that set as a column
+ *     instead — both shapes are supported, the row link is not a requirement;
  *   • below `md` the rows become record cards, so a phone never scrolls sideways.
  */
 
@@ -59,6 +61,7 @@ export const ADMIN_DATA_LIST_INITIAL_QUERY: AdminDataListQueryState<never> = {
 
 export function AdminDataList<Row, Status extends string = TaxonomyStatus>({
   title,
+  headingLevel = 1,
   description,
   notice,
   createHref,
@@ -71,6 +74,7 @@ export function AdminDataList<Row, Status extends string = TaxonomyStatus>({
   filterable = true,
   extraFilters,
   extraApplied = [],
+  includeRetiredLabel,
   caption,
   record,
   columns,
@@ -87,6 +91,14 @@ export function AdminDataList<Row, Status extends string = TaxonomyStatus>({
   testId,
 }: {
   title: string;
+  /**
+   * The heading rank the list's own title takes. A LIST ROUTE owns its page and
+   * keeps the default `1`; a list mounted inside a surface that already has an
+   * `<h1>` — the recordings history in the «Записи» tab of the event detail —
+   * passes `2`, so the document keeps one top-level heading and the outline does
+   * not skip a rank. It is a rank, not a size: the visual scale is the same.
+   */
+  headingLevel?: 1 | 2;
   description: string;
   /** A standing fact about the surface (e.g. «справочник только для чтения»). */
   notice?: ReactNode;
@@ -109,6 +121,14 @@ export function AdminDataList<Row, Status extends string = TaxonomyStatus>({
   extraFilters?: ReactNode;
   /** Chips for the resource-specific facets — the bar cannot know their labels. */
   extraApplied?: AppliedFilter[];
+  /**
+   * The retained-rows toggle in the RESOURCE's own words. Defaults to the
+   * taxonomy wording («снятые с публикации»); a recording is «отозвана», and a
+   * toggle that named the wrong act would read as the unpublish command sitting
+   * a few pixels away. Same reason `statusLabels` exists: the control is shared,
+   * the vocabulary is the resource's.
+   */
+  includeRetiredLabel?: string;
   caption: string;
   record: DataTableRecordColumn<Row>;
   columns: DataTableColumn<Row>[];
@@ -155,7 +175,7 @@ export function AdminDataList<Row, Status extends string = TaxonomyStatus>({
       ? [
           {
             id: "includeRetired",
-            label: t("common.list.includeRetired"),
+            label: includeRetiredLabel ?? t("common.list.includeRetired"),
             onRemove: () =>
               onQueryChange({ ...query, includeRetired: false, page: 1 }),
           },
@@ -179,7 +199,7 @@ export function AdminDataList<Row, Status extends string = TaxonomyStatus>({
     <div>
       <div className="mb-6 flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-xl font-extrabold text-foreground">{title}</h1>
+          <Heading level={headingLevel}>{title}</Heading>
           <p className="text-sm text-muted-foreground">{description}</p>
         </div>
         {createHref && createLabel ? (
@@ -278,7 +298,7 @@ export function AdminDataList<Row, Status extends string = TaxonomyStatus>({
                     })
                   }
                 >
-                  {t("common.list.includeRetired")}
+                  {includeRetiredLabel ?? t("common.list.includeRetired")}
                 </Switch>
               </div>
             </>
@@ -347,5 +367,21 @@ export function AdminDataList<Row, Status extends string = TaxonomyStatus>({
         />
       </div>
     </div>
+  );
+}
+
+/** The list title at the rank its host surface leaves free (see `headingLevel`). */
+function Heading({
+  level,
+  children,
+}: {
+  level: 1 | 2;
+  children: ReactNode;
+}) {
+  const className = "text-xl font-extrabold text-foreground";
+  return level === 1 ? (
+    <h1 className={className}>{children}</h1>
+  ) : (
+    <h2 className={className}>{children}</h2>
   );
 }

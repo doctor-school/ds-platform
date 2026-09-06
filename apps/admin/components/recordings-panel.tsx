@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { useCustom, useCustomMutation, useUpdate } from "@refinedev/core";
+import { keepPreviousData } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import type { z } from "zod";
 import {
@@ -25,8 +26,13 @@ import {
   DialogTitle,
   DialogTrigger,
   Input,
-  Switch,
+  Label,
+  NativeSelect,
 } from "@ds/design-system";
+import type {
+  AppliedFilter,
+  DataTableColumn,
+} from "@ds/design-system/blocks";
 import {
   Form,
   FormControl,
@@ -38,13 +44,20 @@ import {
 import {
   type AttachRecordingRequest,
   RECORDING_KINDS,
+  RECORDING_STATUSES,
   type RecordingAdminDetail,
   type RecordingAdminList,
   type RecordingCommand,
   type RecordingKind,
+  type RecordingStatus,
   STREAM_PROVIDERS,
   type UpdateRecordingRequest,
 } from "@ds/schemas";
+import {
+  ADMIN_DATA_LIST_INITIAL_QUERY,
+  AdminDataList,
+  type AdminDataListQueryState,
+} from "@/components/admin-data-list";
 import { RecordingSourceFieldSet } from "@/components/recording-source-fields";
 import {
   type RecordingExpectedByFields,
@@ -87,11 +100,39 @@ export function RecordingsPanel({
   onEventChanged: () => void;
 }) {
   const t = useTranslations();
+  /**
+   * The 014 EARS-22 list query. `kind` rides beside the shared state rather than
+   * inside it because it is 014's own facet — the shared state carries what
+   * every admin list has (`q` / `status` / `includeRetired` / the page), and a
+   * resource facet reaches the composition as `extraFilters` plus a chip.
+   */
+  const [listQuery, setListQuery] =
+    useState<AdminDataListQueryState<RecordingStatus>>(
+      ADMIN_DATA_LIST_INITIAL_QUERY,
+    );
+  const [kind, setKind] = useState<RecordingKind | "">("");
+  // Server-backed, never a client-side filter over a full roster: the URL IS the
+  // query, so what the operator sees is what the database matched and `total` is
+  // the size of the filtered set rather than of the page.
   const { query } = useCustom<RecordingAdminList>({
-    url: recordingsUrl.collection(eventId),
+    url: recordingsUrl.collection(eventId, {
+      page: listQuery.page,
+      pageSize: listQuery.pageSize,
+      q: listQuery.q,
+      status: listQuery.status,
+      kind,
+      includeRetired: listQuery.includeRetired,
+    }),
     method: "get",
+    /**
+     * Every keystroke of the instant search is a NEW query key, and a pending
+     * key would blank `query.data`. `keepPreviousData` keeps the previous page
+     * on screen while the next one loads, so the panel — the two unfiltered
+     * slot cards and the FilterBar with its draft text and keyboard focus —
+     * never unmounts between debounce commits (014 EARS-22).
+     */
+    queryOptions: { placeholderData: keepPreviousData },
   });
-  const [showRetired, setShowRetired] = useState(false);
   const [errorKey, setErrorKey] = useState<string | null>(null);
   const [noticeKey, setNoticeKey] = useState<string | null>(null);
 
@@ -115,18 +156,16 @@ export function RecordingsPanel({
     setErrorKey(taxonomyErrorKey(error, fallbackKey));
   }
 
-  if (query.isLoading) {
-    return (
-      <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
-    );
-  }
-
   // The QUERY is the source of presence, not `result`: Refine's `result.data`
   // substitutes a frozen `{}` when the query has no answer, so a check against it
   // reads "loaded" for a failed read and then trips over `list.eventState` /
   // `list.data`.
   const list = query.data?.data;
-  if (!list) {
+  // A hard read failure is the ONE case that replaces the panel: there is no
+  // event state, no slots and no history to show. The very first load renders
+  // the panel shell with an in-region loading line instead — never an early
+  // return, or the FilterBar would remount under the operator's cursor.
+  if (!list && !query.isLoading) {
     return (
       <Alert variant="danger" data-testid="recordings-error">
         {t("recordings.errors.loadFailed")}
@@ -134,8 +173,118 @@ export function RecordingsPanel({
     );
   }
 
-  const ended = list.eventState === "ended";
-  const retired = list.data.filter((row) => row.status === "retired");
+  const ended = list?.eventState === "ended";
+
+  const statusLabels: Record<RecordingStatus, string> = {
+    draft: t("recordings.statuses.draft"),
+    published: t("recordings.statuses.published"),
+    retired: t("recordings.statuses.retired"),
+  };
+
+  /** The one resource facet 014 has, rendered inside the shared bar. */
+  const kindFilter = (
+    <div className="flex flex-col gap-1.5 sm:w-56">
+      <Label htmlFor="recordings-history-kind">
+        {t("recordings.history.kind")}
+      </Label>
+      <NativeSelect
+        id="recordings-history-kind"
+        value={kind}
+        data-testid="recordings-history-kind"
+        onChange={(event) => {
+          setKind(event.target.value as RecordingKind | "");
+          setListQuery({ ...listQuery, page: 1 });
+        }}
+      >
+        <option value="">{t("recordings.history.kindAny")}</option>
+        {RECORDING_KINDS.map((option) => (
+          <option key={option} value={option}>
+            {t(`recordings.kinds.${option}`)}
+          </option>
+        ))}
+      </NativeSelect>
+    </div>
+  );
+
+  const kindApplied: AppliedFilter[] = kind
+    ? [
+        {
+          id: "kind",
+          label: t(`recordings.kinds.${kind}`),
+          onRemove: () => {
+            setKind("");
+            setListQuery({ ...listQuery, page: 1 });
+          },
+        },
+      ]
+    : [];
+
+  const historyColumns: DataTableColumn<RecordingAdminDetail>[] = [
+    {
+      key: "status",
+      header: t("recordings.history.columns.status"),
+      width: "16%",
+      overflow: "wrap",
+      fullValue: (row) => statusLabels[row.status],
+      render: (row) => (
+        <Badge variant="label" data-testid={`recording-row-status-${row.id}`}>
+          {statusLabels[row.status]}
+        </Badge>
+      ),
+    },
+    {
+      key: "source",
+      header: t("recordings.history.columns.source"),
+      width: "26%",
+      fullValue: (row) => `${row.provider} · ${row.embedRef}`,
+      render: (row) => (
+        <span className="text-muted-foreground">
+          {row.provider} · {row.embedRef}
+        </span>
+      ),
+    },
+    {
+      key: "updatedAt",
+      header: t("recordings.history.columns.updated"),
+      width: "18%",
+      fullValue: (row) => formatMskDateTime(row.updatedAt),
+      render: (row) => (
+        <span className="text-muted-foreground">
+          {formatMskDateTime(row.updatedAt)}
+        </span>
+      ),
+    },
+    {
+      key: "actions",
+      header: t("recordings.history.columns.actions"),
+      width: "22%",
+      overflow: "wrap",
+      // `validCommands` is the SERVER's answer for this row in this event state,
+      // so a command that cannot change anything is never rendered — there is no
+      // present-but-doomed button here that would 409 if it were pressed
+      // (014-design §7; EARS-22 «hide or disable every action that cannot change
+      // state»). The row's own version rides each button as `If-Match`.
+      fullValue: (row) =>
+        row.validCommands
+          .map((command) => t(`recordings.action.${command}`))
+          .join(", "),
+      render: (row) => (
+        <div className="flex flex-wrap gap-2">
+          {row.validCommands.map((command) => (
+            <CommandButton
+              key={command}
+              eventId={eventId}
+              row={row}
+              command={command}
+              testId={`recording-row-${row.id}-${command}`}
+              onDone={announce}
+              onError={fail}
+            />
+          ))}
+        </div>
+      ),
+    },
+  ];
 
   return (
     <div className="flex flex-col gap-6" data-testid="recordings-panel">
@@ -143,16 +292,20 @@ export function RecordingsPanel({
         {t("recordings.description")}
       </p>
 
-      <Alert
-        variant={ended ? "success" : "info"}
-        data-testid="recordings-event-state"
-      >
-        {ended
-          ? t("recordings.eventStateReady")
-          : t("recordings.eventStateNotice", {
-              state: t(`events.state.${list.eventState}`),
-            })}
-      </Alert>
+      {list ? (
+        <Alert
+          variant={ended ? "success" : "info"}
+          data-testid="recordings-event-state"
+        >
+          {ended
+            ? t("recordings.eventStateReady")
+            : t("recordings.eventStateNotice", {
+                state: t(`events.state.${list.eventState}`),
+              })}
+        </Alert>
+      ) : (
+        <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
+      )}
 
       {errorKey ? (
         <Alert variant="danger" data-testid="recordings-command-error">
@@ -164,59 +317,77 @@ export function RecordingsPanel({
         </Alert>
       ) : null}
 
-      <ExpectedByForm
-        eventId={eventId}
-        value={list.recordingExpectedBy}
-        onSaved={() => announce("recordings.toast.expectedBySaved")}
-        onError={(error) => fail(error, "recordings.errors.expectedByFailed")}
-      />
+      {list ? (
+        <>
+          <ExpectedByForm
+            eventId={eventId}
+            value={list.recordingExpectedBy}
+            onSaved={() => announce("recordings.toast.expectedBySaved")}
+            onError={(error) =>
+              fail(error, "recordings.errors.expectedByFailed")
+            }
+          />
 
-      {RECORDING_KINDS.map((kind) => (
-        <KindSlot
-          key={kind}
-          eventId={eventId}
-          kind={kind}
-          row={
-            list.data.find(
-              (candidate) =>
-                candidate.kind === kind && candidate.status !== "retired",
-            ) ?? null
-          }
-          onDone={announce}
-          onError={fail}
+          {/* The two named slots come from `slots` — the server's UNFILTERED
+              projection of the current row per kind. Deriving them from `data`
+              would let a search box or a facet empty the operator's PRIMARY
+              surface, which is a different thing from filtering the history. */}
+          {RECORDING_KINDS.map((slotKind) => (
+            <KindSlot
+              key={slotKind}
+              eventId={eventId}
+              kind={slotKind}
+              row={
+                list.slots.find((candidate) => candidate.kind === slotKind) ??
+                null
+              }
+              onDone={announce}
+              onError={fail}
+            />
+          ))}
+        </>
+      ) : null}
+
+      {/* 014 EARS-22 — the full history through the ONE admin list composition
+          every other list mounts: instant search and facets, removable chips,
+          one «Сбросить всё», a server-backed pager. `headingLevel={2}` because
+          the event detail already owns the page's <h1>. */}
+      <div className="border-t-2 border-border pt-6">
+        <AdminDataList<RecordingAdminDetail, RecordingStatus>
+          headingLevel={2}
+          title={t("recordings.history.title")}
+          description={t("recordings.history.description")}
+          statuses={RECORDING_STATUSES}
+          statusLabels={statusLabels}
+          includeRetiredLabel={t("recordings.history.includeRetired")}
+          searchLabel={t("recordings.history.searchLabel")}
+          searchPlaceholder={t("recordings.history.searchPlaceholder")}
+          extraFilters={kindFilter}
+          extraApplied={kindApplied}
+          caption={t("recordings.history.caption")}
+          record={{
+            header: t("recordings.history.columns.kind"),
+            width: "18%",
+            title: (row) => (
+              <span data-testid={`recording-row-${row.id}`}>
+                {t(`recordings.kinds.${row.kind}`)}
+              </span>
+            ),
+            context: (row) => statusLabels[row.status],
+            label: (row) => t(`recordings.kinds.${row.kind}`),
+          }}
+          columns={historyColumns}
+          rows={list?.data ?? []}
+          getRowKey={(row) => row.id}
+          total={list?.total ?? 0}
+          isLoading={query.isFetching}
+          error={query.isError ? t("recordings.errors.loadFailed") : null}
+          query={listQuery}
+          onQueryChange={setListQuery}
+          emptyTitle={t("recordings.history.empty")}
+          emptyDescription={t("recordings.history.emptyDescription")}
+          testId="recordings-history"
         />
-      ))}
-
-      <div className="flex flex-col gap-3 border-t-2 border-border pt-6">
-        {/* The DS Switch wraps its own <label>, so the visible text is its
-            child — a sibling <label htmlFor> would name the control twice. */}
-        <Switch
-          id="show-retired"
-          data-testid="recordings-show-retired"
-          checked={showRetired}
-          onChange={(event) => setShowRetired(event.target.checked)}
-        >
-          {t("recordings.showRetired")}
-        </Switch>
-        {showRetired ? (
-          <div className="flex flex-col gap-3" data-testid="recordings-retired">
-            {retired.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                {t("recordings.retiredEmpty")}
-              </p>
-            ) : (
-              retired.map((row) => (
-                <RetiredRow
-                  key={row.id}
-                  eventId={eventId}
-                  row={row}
-                  onDone={announce}
-                  onError={fail}
-                />
-              ))
-            )}
-          </div>
-        ) : null}
       </div>
 
       <p className="text-sm text-muted-foreground">
@@ -355,43 +526,6 @@ function KindSlot({
   );
 }
 
-/** A retired row — addressable, listed, and restorable. Never deletable. */
-function RetiredRow({
-  eventId,
-  row,
-  onDone,
-  onError,
-}: {
-  eventId: string;
-  row: RecordingAdminDetail;
-  onDone: DoneHandler;
-  onError: ErrorHandler;
-}) {
-  const t = useTranslations();
-  return (
-    <div
-      className="flex flex-wrap items-center gap-3 border-2 border-border p-3"
-      data-testid={`recording-retired-${row.kind}`}
-    >
-      <span className="text-sm font-bold text-foreground">
-        {t(`recordings.kinds.${row.kind}`)}
-      </span>
-      <Badge variant="label">{t(`recordings.statuses.${row.status}`)}</Badge>
-      <span className="text-sm text-muted-foreground">{row.embedRef}</span>
-      {row.validCommands.map((command) => (
-        <CommandButton
-          key={command}
-          eventId={eventId}
-          row={row}
-          command={command}
-          testId={`recording-retired-${row.kind}-${command}`}
-          onDone={onDone}
-          onError={onError}
-        />
-      ))}
-    </div>
-  );
-}
 
 function Fact({
   label,

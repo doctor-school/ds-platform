@@ -7,6 +7,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   Req,
   Res,
   UseFilters,
@@ -19,6 +20,7 @@ import {
   IF_MATCH_HEADER,
   parseIfMatchVersion,
   type RecordingAdminList,
+  RecordingAdminListQuerySchema,
   type RecordingCommand,
   UpdateRecordingRequestSchema,
 } from "@ds/schemas";
@@ -67,17 +69,38 @@ export class RecordingsAdminController {
     private readonly idempotency: IdempotencyService,
   ) {}
 
-  /** EARS-1 — every retained row of the event, retired ones included. */
+  /**
+   * EARS-1 / EARS-22 — one filtered, paginated page of the event's retained
+   * rows plus the unfiltered kind slots. The query is the SHARED admin list
+   * query of 012-design §5.1 (`page`/`pageSize`/`q`/`status`/`includeRetired`)
+   * with the recording lifecycle as its `status` vocabulary and 014's one facet
+   * (`kind`); a malformed query is `VALIDATION_FAILED` as RFC 7807 before the
+   * handler runs, exactly as on the taxonomy lists.
+   */
   @Get()
   @Authz({
     access: "authenticated",
     roles: ["platform_admin"],
     check: "fast-path",
     audit: "none",
-    tests: ["EARS-1", "EARS-17"],
+    tests: ["EARS-1", "EARS-17", "EARS-22"],
   })
-  list(@Param("eventId") eventId: string): Promise<RecordingAdminList> {
-    return this.recordings.list(requireUuid(eventId));
+  list(
+    @Param("eventId") eventId: string,
+    @Query() rawQuery: Record<string, string>,
+  ): Promise<RecordingAdminList> {
+    const parsed = RecordingAdminListQuerySchema.safeParse(rawQuery);
+    if (!parsed.success) {
+      throw new TaxonomyError(
+        "VALIDATION_FAILED",
+        "invalid list query",
+        parsed.error.issues.map((i) => ({
+          path: i.path.join("."),
+          message: i.message,
+        })),
+      );
+    }
+    return this.recordings.list(requireUuid(eventId), parsed.data);
   }
 
   /**

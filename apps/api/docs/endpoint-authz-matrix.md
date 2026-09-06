@@ -20,7 +20,7 @@
 | GET /v1/admin/event-projects/:id                                | authenticated | platform_admin               | fast-path  | —            | false   | none       | none        | EARS-6, EARS-16                    |
 | GET /v1/admin/event-projects/:id/lifecycle-impact               | authenticated | platform_admin               | fast-path  | —            | false   | none       | none        | EARS-6, EARS-16                    |
 | GET /v1/admin/events                                            | authenticated | platform_admin               | fast-path  | —            | false   | none       | none        | EARS-8                             |
-| GET /v1/admin/events/:eventId/recordings                        | authenticated | platform_admin               | fast-path  | —            | false   | none       | none        | EARS-1, EARS-17                    |
+| GET /v1/admin/events/:eventId/recordings                        | authenticated | platform_admin               | fast-path  | —            | false   | none       | none        | EARS-1, EARS-17, EARS-22           |
 | GET /v1/admin/events/:id                                        | authenticated | platform_admin               | fast-path  | —            | false   | none       | none        | EARS-8                             |
 | GET /v1/admin/experts                                           | authenticated | platform_admin               | fast-path  | —            | false   | none       | none        | EARS-2, EARS-15, EARS-16           |
 | GET /v1/admin/experts/:id                                       | authenticated | platform_admin               | fast-path  | —            | false   | none       | none        | EARS-2, EARS-16                    |

@@ -198,6 +198,7 @@ describe("006 EARS-18 player-failure state machine — pure logic", () => {
       attempt: 2,
       embedKey: 5,
       everReady: true,
+      observable: true,
     } as PlayerState;
     const restarted = playerReducer(failed, { type: "restart" });
     expect(restarted.status).toBe("loading");

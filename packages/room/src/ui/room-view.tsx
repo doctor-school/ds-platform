@@ -184,13 +184,13 @@ function PlayerSuspectedBanner({ copy, onRestart }: { copy: PlayerCopy; onRestar
 }
 
 /**
- * 006 EARS-18.3 `unverified` — the post-time-box SUSPECTED state for the permanently
- * unobservable cdnvideo. The advisory banner has withdrawn itself (a stream the room
- * can never observe is most likely playing fine, and an indefinite «не загружается»
- * over it would be untruthful nagging), so NOTHING covers or annotates the embed —
- * only a persistent, LOW-EMPHASIS «Перезапустить плеер» in the corner that re-creates
- * the embed on an explicit doctor gesture, never on a timer and never on mount. The
- * container is `pointer-events-none` so the provider's own controls stay reachable.
+ * 006 EARS-18.3 `unverified` — the resting state of the permanently unobservable
+ * cdnvideo, held from the first second of the эфир. The room has no evidence channel
+ * for that provider, so it claims NOTHING about the stream: no banner, no overlay,
+ * nothing covering or annotating the embed — only a persistent, LOW-EMPHASIS
+ * «Перезапустить плеер» in the corner that re-creates the embed on an explicit doctor
+ * gesture, never on a timer. The container is `pointer-events-none` so the provider's
+ * own controls stay reachable.
  */
 function PlayerUnverifiedRestart({
   copy,
@@ -226,10 +226,10 @@ export function PlayerFrame({ config, copy }: { config: RoomConfig; copy: Player
   // 006 EARS-18 — the runtime player-failure state machine. Hooks run unconditionally
   // (a config-absent `unavailable` embed still calls it with a harmless provider);
   // it only drives the iframe branch below. The `unavailable` branch RETURNS before
-  // any player-failure UI is reachable, so neither the watchdog nor the cdnvideo
-  // advisory time box can surface a banner or a restart control there — an invariant
-  // locked by a test in room-view.test.tsx ("the EARS-2 unavailable branch never
-  // shows a player-failure state").
+  // any player-failure UI is reachable, so no state the machine holds can surface a
+  // banner or a restart control there — an invariant locked by a test in
+  // room-view.test.tsx ("the EARS-2 unavailable branch never shows a player-failure
+  // state").
   const provider = embed.kind === "unavailable" ? "cdnvideo" : embed.kind;
   const { status, grade, failure, embedKey, restart } = usePlayerFailureState(provider);
   // The `origin` param YouTube's IFrame API wants is resolved AFTER mount so the
@@ -316,8 +316,8 @@ export function PlayerFrame({ config, copy }: { config: RoomConfig; copy: Player
       {status === "failed" && grade === "suspected" && (
         <PlayerSuspectedBanner copy={copy} onRestart={restart} />
       )}
-      {/* SUSPECTED, time box elapsed (cdnvideo) — banner withdrawn, gesture-gated
-          restart only; the embed is never re-created on a timer (EARS-18.3). */}
+      {/* UNVERIFIED (cdnvideo, from mount) — nothing is claimed about the stream:
+          no banner, gesture-gated restart only, never re-created on a timer. */}
       {status === "unverified" && (
         <PlayerUnverifiedRestart copy={copy} onRestart={restart} />
       )}

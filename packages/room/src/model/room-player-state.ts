@@ -15,15 +15,19 @@ import type { StreamProvider } from "@ds/schemas";
  *   `player:error`), OR a watchdog stall AFTER a handshake was established (a real
  *   signal loss). The room covers the embed with a specific truthful status,
  *   auto-retries a bounded number of times, then offers the manual restart.
- * - **SUSPECTED** — a watchdog stall with NO positive signal ever observed (cdnvideo
- *   always, since it is structurally silent; youtube/rutube/vk when no handshake ever
+ * - **SUSPECTED** — a watchdog stall with NO positive signal ever observed on a
+ *   provider that COULD have spoken (youtube/rutube/vk when no handshake ever
  *   arrived). The room can NOT prove the stream failed — a healthy video may simply be
  *   unobservable — so it renders a NON-COVERING advisory banner beside the
  *   still-visible, still-interactive embed and does NOT auto-retry (an auto re-create
- *   would interrupt a possibly-healthy stream). Restart is manual only. For the
- *   permanently-unobservable cdnvideo the advisory is additionally TIME-BOXED
- *   ({@link PLAYER_ADVISORY_TIMEBOX_MS}) into the `unverified` state, so a
- *   healthy-but-silent stream is not nagged indefinitely (EARS-18.3).
+ *   would interrupt a possibly-healthy stream). Restart is manual only.
+ *
+ * A STRUCTURALLY SILENT provider (cdnvideo) is graded by neither: it exposes no
+ * parent API at all, so a watchdog stall on it is evidence of nothing and an advisory
+ * would be a guess shown over a stream that is most likely playing fine. It mounts
+ * straight into `unverified` ({@link initialPlayerState}) — nothing covers or
+ * annotates the embed, the watchdog never runs, and the only affordance is the
+ * gesture-gated «Перезапустить плеер» (EARS-18.3).
  */
 
 /**
@@ -46,25 +50,13 @@ export const PLAYER_MAX_AUTO_RETRIES = 2;
 export const PLAYER_RETRY_DELAY_MS = 4_000;
 
 /**
- * Advisory time box (EARS-18.3) — how long a SUSPECTED advisory banner may stand for
- * a PERMANENTLY-unobservable provider (cdnvideo) before it withdraws itself into the
- * `unverified` state, leaving only the gesture-gated «Перезапустить плеер». A silent
- * provider means an indefinitely-shown advisory would sit over a stream that is most
- * likely playing fine. Named design constant (design §3.1, default ~60 s — a
- * lead-chosen starting default, tunable after the first live cdnvideo эфир). The time
- * box is cdnvideo-ONLY: every other SUSPECTED case (a failed youtube/rutube/vk
- * handshake) keeps its banner, because for those a real signal can still arrive and a
- * self-withdrawing banner would hide an observable failure.
- */
-export const PLAYER_ADVISORY_TIMEBOX_MS = 60_000;
-
-/**
  * The runtime player state (design §3.1 state machine). `loading` covers the mount
  * window before the first playing signal (the provider renders its own spinner);
  * `retrying`/`failed` carry a {@link PlayerGrade} that decides covering-overlay
- * (confirmed) vs non-covering-banner (suspected); `unverified` is the post-time-box
- * SUSPECTED state (banner withdrawn, embed untouched, gesture-gated restart only);
- * `playing` clears everything.
+ * (confirmed) vs non-covering-banner (suspected); `unverified` is the state of a
+ * structurally silent provider — nothing is known and nothing is claimed, the embed
+ * is untouched and only the gesture-gated restart is offered; `playing` clears
+ * everything.
  */
 export type PlayerStatus =
   | "loading"
@@ -99,8 +91,10 @@ export type PlayerFailureKind = "embedding-disabled" | "unavailable" | "generic"
  * (#1314; a live probe 2026-08-20 recorded `inited` ~t+4.5 s, `started` on play and a
  * recurring `timeupdate`). `cdnvideo` does NOT and never will: its served bundles emit
  * NO parent-directed message of any kind and render errors inside the iframe only — a
- * structural capability constraint verified by probe, so cdnvideo is watchdog-only and
- * can therefore only ever reach the SUSPECTED grade.
+ * structural capability constraint verified by probe. This flag therefore also decides
+ * the MOUNT state ({@link initialPlayerState}): an observable provider starts in
+ * `loading` under the watchdog, the silent one starts in `unverified` and is never
+ * graded at all.
  */
 export const PROVIDER_HAS_PARENT_API: Record<StreamProvider, boolean> = {
   youtube: true,
@@ -264,8 +258,16 @@ export interface PlayerState {
    * SUSPECTED if never (vk/cdnvideo always; a youtube/rutube failed handshake).
    */
   readonly everReady: boolean;
+  /**
+   * Whether the mounted provider exposes a parent-observable API at all
+   * ({@link PROVIDER_HAS_PARENT_API}). Constant for the life of the embed. `false`
+   * (cdnvideo) means the room has NO evidence channel: the watchdog is meaningless
+   * there, so it never grades, and every (re)mount rests in `unverified`.
+   */
+  readonly observable: boolean;
 }
 
+/** The mount state of an OBSERVABLE provider — `loading`, under the watchdog. */
 export const INITIAL_PLAYER_STATE: PlayerState = {
   status: "loading",
   grade: null,
@@ -273,7 +275,24 @@ export const INITIAL_PLAYER_STATE: PlayerState = {
   attempt: 0,
   embedKey: 0,
   everReady: false,
+  observable: true,
 };
+
+/**
+ * EARS-18.3 — the mount state for `provider`. An observable provider mounts in
+ * `loading` and is graded by the watchdog ({@link INITIAL_PLAYER_STATE}). The
+ * structurally silent cdnvideo mounts in `unverified`: the room cannot observe it, so
+ * it states nothing about the stream — no banner, no overlay, no watchdog — and
+ * offers only the gesture-gated «Перезапустить плеер» from the first second. An
+ * advisory that would appear on EVERY cdnvideo эфир regardless of the stream's health
+ * is a guess, not a status (owner decision 2026-09-06).
+ */
+export function initialPlayerState(provider: StreamProvider): PlayerState {
+  const observable = PROVIDER_HAS_PARENT_API[provider];
+  return observable
+    ? INITIAL_PLAYER_STATE
+    : { ...INITIAL_PLAYER_STATE, status: "unverified", observable: false };
+}
 
 /**
  * The player-failure state-machine actions:
@@ -282,8 +301,6 @@ export const INITIAL_PLAYER_STATE: PlayerState = {
  * - `watchdog` — the watchdog elapsed with no playing signal (EARS-18.1).
  * - `error` — an observed provider error → always CONFIRMED (EARS-18.2).
  * - `retry` — the bounded auto-retry timer fired (EARS-18.3): re-create the embed.
- * - `timebox` — the advisory time box elapsed (EARS-18.3, cdnvideo only): withdraw
- *   the SUSPECTED banner into `unverified`, leaving the gesture-gated restart.
  * - `restart` — the manual «Перезапустить плеер» affordance (EARS-18.3).
  */
 export type PlayerAction =
@@ -292,7 +309,6 @@ export type PlayerAction =
   | { type: "watchdog" }
   | { type: "error"; failure: PlayerFailureKind }
   | { type: "retry" }
-  | { type: "timebox" }
   | { type: "restart" };
 
 /** Enter a CONFIRMED failure: auto-retry while the bounded budget remains, else the
@@ -319,9 +335,10 @@ function enterConfirmedFailure(
  * stall — covering overlay + bounded auto-retry). An `error` is always CONFIRMED. A
  * duplicate `watchdog`/`error` while already `failed`/`retrying` is ignored so a
  * burst cannot exhaust the budget in one tick. `retry` re-creates the embed (bumps
- * `embedKey`); `timebox` withdraws a standing SUSPECTED advisory into `unverified`
- * without touching the embed (EARS-18.3); `restart` resets the budget + re-creates the
- * embed (keeping the monotonic `everReady`); `playing` clears everything (EARS-18.4).
+ * `embedKey`); `restart` resets the budget + re-creates the embed (keeping the
+ * monotonic `everReady`); `playing` clears everything (EARS-18.4). On a
+ * NON-observable state (cdnvideo) the watchdog never grades and every (re)mount
+ * rests in `unverified` — the room never guesses about a stream it cannot see.
  */
 export function playerReducer(state: PlayerState, action: PlayerAction): PlayerState {
   switch (action.type) {
@@ -330,6 +347,9 @@ export function playerReducer(state: PlayerState, action: PlayerAction): PlayerS
     case "handshake":
       return state.everReady ? state : { ...state, everReady: true };
     case "watchdog": {
+      // A structurally silent provider is never graded: a stall it cannot report is
+      // evidence of nothing, and an advisory over it would be a guess (EARS-18.3).
+      if (!state.observable) return state;
       if (state.status !== "loading") return state;
       if (!state.everReady) {
         // SUSPECTED — unprovable failure: advisory only, never cover the embed,
@@ -344,21 +364,16 @@ export function playerReducer(state: PlayerState, action: PlayerAction): PlayerS
     case "retry":
       if (state.status !== "retrying") return state;
       return { ...state, status: "loading", embedKey: state.embedKey + 1 };
-    case "timebox":
-      // EARS-18.3 — only a standing SUSPECTED advisory is time-boxed; a CONFIRMED
-      // overlay and every healthy status are untouched. The embed is NOT re-created
-      // (that needs an explicit doctor gesture) and the grade stays `suspected`, so
-      // the room never claims to have learned something it did not observe.
-      if (state.status !== "failed" || state.grade !== "suspected") return state;
-      return { ...state, status: "unverified" };
     case "restart":
       return {
-        status: "loading",
+        // A silent provider's fresh embed is just as unobservable as the last one.
+        status: state.observable ? "loading" : "unverified",
         grade: null,
         failure: null,
         attempt: 0,
         embedKey: state.embedKey + 1,
         everReady: state.everReady,
+        observable: state.observable,
       };
     default:
       return state;

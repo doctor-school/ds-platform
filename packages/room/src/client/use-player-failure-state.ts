@@ -3,11 +3,10 @@
 import { useCallback, useEffect, useReducer } from "react";
 import type { StreamProvider } from "@ds/schemas";
 import {
-  INITIAL_PLAYER_STATE,
-  PLAYER_ADVISORY_TIMEBOX_MS,
   PLAYER_RETRY_DELAY_MS,
   PLAYER_WATCHDOG_MS,
   PROVIDER_HAS_PARENT_API,
+  initialPlayerState,
   parseProviderSignal,
   playerReducer,
   type PlayerFailureKind,
@@ -39,22 +38,22 @@ export interface PlayerFailureState {
  *   carries `js_api=1`, #1314), a window `message` listener parses the provider's own
  *   signals ({@link parseProviderSignal}, origin-guarded) to clear the watchdog on
  *   `playing` and surface provider errors; cdnvideo registers no listener — it is
- *   structurally silent and therefore watchdog-only.
+ *   structurally silent, so there is nothing to listen to.
  * - **Bounded retry (EARS-18.3).** On `retrying`, a `PLAYER_RETRY_DELAY_MS` timer
  *   re-creates the embed; the budget is bounded in the reducer.
- * - **Advisory time box (EARS-18.3).** For cdnvideo ONLY — the permanently
- *   unobservable provider — a standing SUSPECTED advisory withdraws itself after
- *   `PLAYER_ADVISORY_TIMEBOX_MS` into `unverified` (banner gone, embed untouched,
- *   gesture-gated restart only). Every other SUSPECTED case keeps its banner, because
- *   a real signal can still arrive for it.
+ * - **Structurally silent providers (EARS-18.3).** cdnvideo exposes no parent API,
+ *   so the hook mounts it in `unverified` and arms NO watchdog: the room states
+ *   nothing about a stream it cannot observe and shows no advisory — only the
+ *   gesture-gated restart, which re-creates the embed back into `unverified`.
  * - **Recovery (EARS-18.4).** A `playing` signal at any point clears the overlay.
  */
 export function usePlayerFailureState(provider: StreamProvider): PlayerFailureState {
-  const [state, dispatch] = useReducer(playerReducer, INITIAL_PLAYER_STATE);
+  const [state, dispatch] = useReducer(playerReducer, provider, initialPlayerState);
   const { status, grade, failure, embedKey, attempt } = state;
 
   // Watchdog — re-armed on every fresh load (a new embedKey or a return to loading).
   // The reducer grades the stall (SUSPECTED without a handshake, CONFIRMED with one).
+  // A silent provider never reaches `loading`, so no watchdog is ever armed for it.
   useEffect(() => {
     if (status !== "loading") return;
     const timer = setTimeout(() => dispatch({ type: "watchdog" }), PLAYER_WATCHDOG_MS);
@@ -67,16 +66,6 @@ export function usePlayerFailureState(provider: StreamProvider): PlayerFailureSt
     const timer = setTimeout(() => dispatch({ type: "retry" }), PLAYER_RETRY_DELAY_MS);
     return () => clearTimeout(timer);
   }, [status, attempt]);
-
-  // Advisory time box (EARS-18.3) — cdnvideo ONLY: a SUSPECTED advisory the room can
-  // never resolve withdraws itself rather than nagging over a probably-healthy stream.
-  // Cleared on any status change (orphan-timer safe); it never touches the embed.
-  useEffect(() => {
-    if (provider !== "cdnvideo") return;
-    if (status !== "failed" || grade !== "suspected") return;
-    const timer = setTimeout(() => dispatch({ type: "timebox" }), PLAYER_ADVISORY_TIMEBOX_MS);
-    return () => clearTimeout(timer);
-  }, [provider, status, grade]);
 
   // Provider-event layering — only where the provider exposes a parent-observable API.
   useEffect(() => {

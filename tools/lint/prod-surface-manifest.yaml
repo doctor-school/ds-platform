@@ -143,6 +143,12 @@ routes:
     status: deferred
     issue: "#1430"
 
+  - app: doctor
+    route: /login
+    file: apps/doctor/app/(auth)/login/page.tsx
+    status: deferred
+    issue: "#1430"
+
   # apps/admin — 007 admin console (login + events CRUD/lifecycle), all real
   # Refine surfaces; root is a pure redirect to /events.
   - app: admin

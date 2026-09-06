@@ -15,7 +15,10 @@
  * chat + heartbeat room), and (b) adds the EARS-2 provider-variant live events:
  * `seed-006-room-youtube` (youtube), `seed-006-room-rutube` (rutube), and
  * `seed-006-room-unavailable` (live but deliberately NO stream config → the
- * truthful "stream unavailable" state). The roster the room gate requires is NOT
+ * truthful "stream unavailable" state), and (c) the 006 EARS-18 pair (#1932)
+ * `seed-006-room-vk` (vk — parent-observable via `js_api=1`) +
+ * `seed-006-room-cdnvideo` (cdnvideo — structurally silent), which
+ * `apps/portal/e2e/room-player-false-positive.spec.ts` drives. The roster the room gate requires is NOT
  * seeded — a `registrations` row needs a real `users.id` (003 mirror) that only
  * exists after a real Zitadel signup, so the room E2E self-provisions its doctor
  * via the real 003 signup + 005 registration flow and enters the room (the
@@ -51,12 +54,7 @@
  * Exits non-zero on failure.
  */
 import { pathToFileURL } from "node:url";
-import {
-  createDrizzle,
-  eventRecordings,
-  events,
-  streamConfig,
-} from "@ds/db";
+import { createDrizzle, eventRecordings, events, streamConfig } from "@ds/db";
 import { and, eq, isNull } from "drizzle-orm";
 
 const MINUTE = 60_000;
@@ -109,7 +107,7 @@ interface SeedSpec {
    * — the portal builds the embed URL from the provider enum).
    */
   readonly stream?: {
-    readonly provider: "rutube" | "youtube";
+    readonly provider: "rutube" | "youtube" | "vk" | "cdnvideo";
     readonly embedRef: string;
   };
   /**
@@ -241,6 +239,52 @@ function specs(now: number): SeedSpec[] {
       stream: {
         provider: "rutube",
         embedRef: "b9e7d1a4c2f5e8039a6b1c4d7e0f3a25",
+      },
+    },
+    // 006 EARS-18 (#1932): the two provider-observability classes the
+    // player-failure state machine treats differently — `vk` is parent-observable
+    // (its embed carries `js_api=1`, so real playback produces a real `playing`
+    // signal and the watchdog never fires), `cdnvideo` is structurally silent (no
+    // provider channel at all, so the room renders NOTHING of its own over the
+    // embed). `apps/portal/e2e/room-player-false-positive.spec.ts` drives both.
+    {
+      slug: "seed-006-room-vk",
+      state: "live",
+      title: "Прямой эфир: неврология (VK)",
+      school: "Школа неврологии",
+      startsAt: new Date(now - 10 * MINUTE),
+      durationMin: 120,
+      description:
+        "Живой разбор клинических случаев. Тестовая комната с VK-плеером для интеграционной проверки.",
+      specialties: ["Неврология"],
+      partnerRef: "Партнёр Фарма",
+      stream: {
+        // A PUBLIC, embeddable VK video: the fixture must actually play on a
+        // stand, or the EARS-18.2 live drive would be pinning a dead embed
+        // instead of the false-positive path. This is the same video whose raw
+        // `js_api=1` traffic was captured in the #1904 live drive; the schema
+        // fixture `-9944999_456239622_…` is no longer resolvable (VK answers
+        // «video not found», probed 2026-09-06), so it stays a SCHEMA fixture
+        // only. No `_hash` — the hash is optional for a public video (#1134).
+        provider: "vk",
+        embedRef: "-22822305_456241864",
+      },
+    },
+    {
+      slug: "seed-006-room-cdnvideo",
+      state: "live",
+      title: "Прямой эфир: эндокринология (CDNvideo)",
+      school: "Школа эндокринологии",
+      startsAt: new Date(now - 10 * MINUTE),
+      durationMin: 120,
+      description:
+        "Живой разбор клинических случаев. Тестовая комната с CDNvideo-плеером для интеграционной проверки.",
+      specialties: ["Эндокринология"],
+      partnerRef: "Партнёр Фарма",
+      stream: {
+        provider: "cdnvideo",
+        embedRef:
+          "https://playercdn.cdnvideo.ru/aloha/players/auto_player1.html?clid=kcta544ubo&plid=c263cdf6-253e-400b-a008-d1775d3ee190",
       },
     },
     {
@@ -516,6 +560,9 @@ export async function seedEvents(): Promise<void> {
       E2E_ROOM_SLUG_YOUTUBE: "seed-006-room-youtube",
       E2E_ROOM_SLUG_RUTUBE: "seed-006-room-rutube",
       E2E_ROOM_SLUG_UNAVAILABLE: "seed-006-room-unavailable",
+      // 006 EARS-18 (#1932): the two provider-observability classes.
+      E2E_ROOM_SLUG_VK: "seed-006-room-vk",
+      E2E_ROOM_SLUG_CDNVIDEO: "seed-006-room-cdnvideo",
       // The happy-path live room for the EARS-3 chat + EARS-4 heartbeat E2E.
       E2E_ROOM_SLUG_LIVE: "seed-005-live",
     },

@@ -187,20 +187,20 @@ describe("006 EARS-12/EARS-15 the host-injected room header bar", () => {
  * number (design §6 forbids deriving closure from the clock in either direction).
  */
 describe("006 EARS-7 the ended room's header pill", () => {
-  it("EARS-7.5: the pill reads «Эфир завершён» and drops the live wording", () => {
+  it("EARS-7.9: the pill reads «Эфир завершён» and drops the live wording", () => {
     renderBar({ ended: true, liveAt: new Date(Date.now() - 24 * 60_000).toISOString() });
 
     expect(screen.getByText(copy.endedBadge)).toBeInTheDocument();
     expect(screen.queryByText(copy.liveBadge)).toBeNull();
   });
 
-  it("EARS-7.5: the ended pill shows NO duration suffix", () => {
+  it("EARS-7.9: the ended pill shows NO duration suffix", () => {
     renderBar({ ended: true, liveAt: new Date(Date.now() - 24 * 60_000).toISOString() });
 
     expect(screen.queryByTestId("room-live-duration")).toBeNull();
   });
 
-  it("EARS-7.5: the rest of the header survives the close", () => {
+  it("EARS-7.9: the rest of the header survives the close", () => {
     renderBar({
       ended: true,
       userCluster: <span data-testid="room-avatar">ИИ</span>,
@@ -211,7 +211,7 @@ describe("006 EARS-7 the ended room's header pill", () => {
     expect(screen.getByLabelText(copy.brandHome)).toBeInTheDocument();
   });
 
-  it("EARS-7.5: a live room still shows the live pill with its duration", () => {
+  it("EARS-7.9: a live room still shows the live pill with its duration", () => {
     renderBar({ liveAt: new Date(Date.now() - 24 * 60_000).toISOString() });
 
     expect(screen.getByText(copy.liveBadge)).toBeInTheDocument();

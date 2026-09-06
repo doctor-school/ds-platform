@@ -269,7 +269,7 @@ describe("006 EARS-7 the heartbeat 409 ended refusal closes an open room", () =>
     vi.restoreAllMocks();
   });
 
-  it("EARS-7.1: a 409 {state:'ended'} beat reports the close exactly once and stops the loop", async () => {
+  it("EARS-7.5: a 409 {state:'ended'} beat reports the close exactly once and stops the loop", async () => {
     const fetchMock = vi
       .fn<typeof fetch>()
       .mockResolvedValue(nonOk(409, { message: "event is not live", state: "ended" }));
@@ -291,7 +291,7 @@ describe("006 EARS-7 the heartbeat 409 ended refusal closes an open room", () =>
     expect(onRoomClosed).toHaveBeenCalledTimes(1);
   });
 
-  it("EARS-7.1: a closed room emits no beat when the tab is backgrounded and returns", async () => {
+  it("EARS-7.5: a closed room emits no beat when the tab is backgrounded and returns", async () => {
     const fetchMock = vi
       .fn<typeof fetch>()
       .mockResolvedValue(nonOk(409, { message: "event is not live", state: "ended" }));
@@ -323,7 +323,7 @@ describe("006 EARS-7 the heartbeat 409 ended refusal closes an open room", () =>
       () => nonOk(409, { message: "conflict", state: "live" }),
     ],
   ])(
-    "EARS-7.2: %s never closes the room and the loop keeps beating",
+    "EARS-7.6: %s never closes the room and the loop keeps beating",
     async (_label, make) => {
       const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(make());
       vi.stubGlobal("fetch", fetchMock);
@@ -342,7 +342,7 @@ describe("006 EARS-7 the heartbeat 409 ended refusal closes an open room", () =>
     },
   );
 
-  it("EARS-7.2: a network rejection never closes the room", async () => {
+  it("EARS-7.6: a network rejection never closes the room", async () => {
     const fetchMock = vi
       .fn<typeof fetch>()
       .mockRejectedValue(new TypeError("Failed to fetch"));

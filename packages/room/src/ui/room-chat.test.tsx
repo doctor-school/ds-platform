@@ -399,7 +399,7 @@ describe("006 EARS-7 the ended room's chat keeps its ledger and drops the compos
     act(() => resolveHistory({ publications: msgs.map((m) => ({ data: m })) }));
   }
 
-  it("EARS-7.4: the composer is replaced by the truthful ended status line", async () => {
+  it("EARS-7.8: the composer is replaced by the truthful ended status line", async () => {
     renderEndedChat([message], { ended: true });
 
     await waitFor(() => expect(screen.getByTestId("room-chat-ended")).toBeTruthy());
@@ -411,7 +411,7 @@ describe("006 EARS-7 the ended room's chat keeps its ledger and drops the compos
     expect(screen.queryByRole("button", { name: "composerSend" })).toBeNull();
   });
 
-  it("EARS-7.4: the ledger the doctor was reading survives the close", async () => {
+  it("EARS-7.8: the ledger the doctor was reading survives the close", async () => {
     renderEndedChat([message], { ended: true });
 
     await waitFor(() => expect(screen.getByText(message.text)).toBeTruthy());
@@ -419,7 +419,7 @@ describe("006 EARS-7 the ended room's chat keeps its ledger and drops the compos
     expect(screen.queryByText("chatEmpty")).toBeNull();
   });
 
-  it("EARS-7.4: a live room keeps its composer — the strip is not the default", async () => {
+  it("EARS-7.8: a live room keeps its composer — the strip is not the default", async () => {
     renderEndedChat([message]);
 
     await waitFor(() => expect(screen.getByText(message.text)).toBeTruthy());

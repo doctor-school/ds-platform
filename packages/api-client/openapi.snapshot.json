@@ -134,6 +134,24 @@
         "required": ["familyName", "givenName"],
         "type": "object"
       },
+      "DoctorConfirmRequestDto": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "email": {
+            "format": "email",
+            "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$",
+            "type": "string"
+          },
+          "returnTo": {
+            "type": "string"
+          }
+        },
+        "required": ["email", "code"],
+        "type": "object"
+      },
       "DoctorEventsFeedDto": {
         "additionalProperties": false,
         "properties": {
@@ -4524,6 +4542,28 @@
           }
         },
         "tags": ["Readiness"]
+      }
+    },
+    "/v1/storefront/doctor/confirm": {
+      "post": {
+        "operationId": "DoctorRegisterPublicController_confirm",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DoctorConfirmRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["DoctorRegisterPublic"]
       }
     },
     "/v1/storefront/doctor/events": {

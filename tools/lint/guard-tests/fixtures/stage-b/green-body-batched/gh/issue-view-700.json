@@ -1,0 +1,5 @@
+{
+  "number": 700,
+  "body": "\nStage-B-head: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nStage-B-recorded-at: 2026-09-06T00:00:00Z\nStage-B-owner-quote: Approved the scoped live result\nStage-B-source: owner-relay:session-123#message-4\nStage-B-live-url: http://localhost:3000/room\n\nStage-B-batch-approved: yes\nStage-B-new-section: no\nStage-B-surfaces: apps/admin/src/app/events/row.tsx\nStage-B-deferred-prs: #201",
+  "comments": []
+}

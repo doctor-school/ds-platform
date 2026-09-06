@@ -1,8 +1,15 @@
 {
   "number": 208,
-  "body": "## Summary\nRestyle the WebinarCard primitive.\n\nStage-B: GO — owner live-approved 2026-07-09.\n",
-  "labels": [{ "name": "feature:006-webinar-room" }],
+  "body": "## Summary\nRestyle the WebinarCard primitive.\n\nStage-B: GO — owner live-approved 2026-07-09.\n\nStage-B-head: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nStage-B-recorded-at: 2026-09-06T00:00:00Z\nStage-B-owner-quote: Approved the scoped live result\nStage-B-source: owner-relay:session-123#message-4\nStage-B-live-url: http://localhost:3000/room\n",
+  "labels": [
+    {
+      "name": "feature:006-webinar-room"
+    }
+  ],
   "files": [
-    { "path": "packages/design-system/src/components/webinar-card.tsx" }
-  ]
+    {
+      "path": "packages/design-system/src/components/webinar-card.tsx"
+    }
+  ],
+  "headRefOid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 }

@@ -1,6 +1,11 @@
 {
   "number": 211,
-  "body": "## Summary\nRedirect an unauthenticated /room visit to /login (behavioral-only; no new/changed visual surface).\n\nStage-B: N/A (no visual surface) — lead-certified.\n",
+  "body": "## Summary\nRedirect an unauthenticated /room visit to /login (behavioral-only; no new/changed visual surface).\n\nStage-B: N/A (no visual surface) — lead-certified; harness: pnpm loadtest:room:verify; run UTC: 2026-09-06T00:00:00Z; report: https://github.com/acme/repo/issues/1#issuecomment-2\n\nStage-B-head: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nStage-B-recorded-at: 2026-09-06T00:00:00Z\nStage-B-owner-quote: Approved the scoped live result\nStage-B-source: owner-relay:session-123#message-4\nStage-B-live-url: http://localhost:3000/room\n\nStage-B-authorization: autonomous-merge\nStage-B-visual-change: none\nStage-B-live-verified: yes\nStage-B-report-sha: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nStage-B-report-stdout: PASS room roundtrip complete, reject/accept verified\n",
   "labels": [],
-  "files": [{ "path": "apps/portal/src/app/room/page.tsx" }]
+  "files": [
+    {
+      "path": "apps/portal/src/app/room/page.tsx"
+    }
+  ],
+  "headRefOid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 }

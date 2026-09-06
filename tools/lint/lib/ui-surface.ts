@@ -22,6 +22,7 @@ export type UiEvidenceProfile = "native-mobile" | "responsive-web";
 
 export function isUiSourcePath(path: string): boolean {
   if (NON_RENDER_SOURCE_RE.test(path)) return false;
+  if (/^packages\/room\/.*\.(?:[jt]sx?|css)$/.test(path)) return true;
   if (DS_TOKEN_SOURCE_RE.test(path)) return true;
   if (USER_MESSAGE_RE.test(path)) return true;
   if (DS_RENDER_SOURCE_RE.test(path)) return true;

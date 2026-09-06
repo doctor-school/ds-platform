@@ -1,10 +1,22 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { and, asc, count, eq, gt, inArray, isNull, ne, or, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  eq,
+  gt,
+  inArray,
+  isNull,
+  ne,
+  or,
+  sql,
+} from "drizzle-orm";
 import type { DrizzleHandle, Partner, Project, ProjectPartner } from "@ds/db";
 import { partners, projectPartners, projects } from "@ds/db";
 import type { ProjectPartnerAdminListQuery } from "@ds/schemas";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
 import { withRequestAuditContext } from "../audit/audit-context.tx.js";
+import { withRelationConflictMapping } from "./taxonomy.errors.js";
 
 // 012 EARS-10 (#1292) — Drizzle data access for the `project_partners` join.
 //
@@ -112,10 +124,7 @@ export class ProjectPartnersRepository {
    * locking it would widen the lock set for nothing. It is read only to refuse
    * linking a soft-deleted row.
    */
-  async partnerLifecycle(
-    tx: Tx,
-    id: string,
-  ): Promise<PartnerLifecycle | null> {
+  async partnerLifecycle(tx: Tx, id: string): Promise<PartnerLifecycle | null> {
     const [row] = await tx
       .select({
         id: partners.id,
@@ -131,9 +140,11 @@ export class ProjectPartnersRepository {
     tx: Tx,
     values: { projectId: string; partnerId: string; isPrimary: boolean },
   ): Promise<ProjectPartner> {
-    const [row] = await tx.insert(projectPartners).values(values).returning();
-    if (!row) throw new Error("project_partner insert returned no row");
-    return row;
+    return withRelationConflictMapping(async () => {
+      const [row] = await tx.insert(projectPartners).values(values).returning();
+      if (!row) throw new Error("project_partner insert returned no row");
+      return row;
+    });
   }
 
   async findById(id: string): Promise<ProjectPartner | null> {
@@ -178,21 +189,26 @@ export class ProjectPartnersRepository {
     expectedVersion: number,
     patch: ProjectPartnerPatch,
   ): Promise<ProjectPartner | null> {
-    const [row] = await tx
-      .update(projectPartners)
-      .set({
-        ...patch,
-        version: sql`${projectPartners.version} + 1`,
-        updatedAt: new Date(),
-      })
-      .where(
-        and(
-          eq(projectPartners.id, id),
-          eq(projectPartners.version, expectedVersion),
-        ),
-      )
-      .returning();
-    return row ?? null;
+    // Wrapped for the same §6 reason as `insert`: a patch that raises
+    // `isPrimary` races the project's partial primary-slot index, and the
+    // pre-check cannot serialize two callers claiming the slot at once.
+    return withRelationConflictMapping(async () => {
+      const [row] = await tx
+        .update(projectPartners)
+        .set({
+          ...patch,
+          version: sql`${projectPartners.version} + 1`,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(projectPartners.id, id),
+            eq(projectPartners.version, expectedVersion),
+          ),
+        )
+        .returning();
+      return row ?? null;
+    });
   }
 
   /** Hydrate one relation with both endpoints' display forms (admin detail). */

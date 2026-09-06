@@ -151,11 +151,12 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     async function link(
       directionId: string,
       specialtyMinzdravId: string,
+      idempotencyKey?: string,
     ): Promise<ReturnType<NestFastifyApplication["inject"]>> {
       return app.inject({
         method: "POST",
         url: "/v1/admin/direction-specialties",
-        headers: adminWrite(),
+        headers: adminWrite(idempotencyKey),
         payload: { directionId, specialtyMinzdravId },
       });
     }
@@ -171,11 +172,14 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       return body;
     }
 
-    async function edge(payload: Record<string, unknown>) {
+    async function edge(
+      payload: Record<string, unknown>,
+      idempotencyKey?: string,
+    ) {
       return app.inject({
         method: "POST",
         url: "/v1/admin/direction-adjacency",
-        headers: adminWrite(),
+        headers: adminWrite(idempotencyKey),
         payload,
       });
     }
@@ -740,5 +744,383 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         far.title,
       ]);
     });
+
+    // ── 012 EARS-17: replay, key reuse and the feature-010 trail ───────────
+    //
+    // 012-design §6 binds EVERY mutating admin route to the same three
+    // safeguards, and §6 line 343 says the coordination joins are "audited as
+    // the ordinary taxonomy mutations they are". The two reference relations
+    // are ordinary retained rows, so this section proves the safeguards ON the
+    // join tables rather than inferring them from the shared service.
+
+    /** The 010 ledger rows of one retained row, addressed by `metadata->'pk'`. */
+    async function auditEvents(
+      id: string,
+    ): Promise<{ event_type: string; subject_id: string | null }[]> {
+      const { rows } = await pool.query<{
+        event_type: string;
+        subject_id: string | null;
+      }>(
+        `SELECT event_type, subject_id FROM audit_ledger
+          WHERE metadata -> 'pk' ->> 'id' = $1`,
+        [id],
+      );
+      return rows;
+    }
+
+    it("012 EARS-17: when an adjacency create is retried under the same Idempotency-Key with identical input, the system shall replay the stored outcome instead of authoring a second edge", async () => {
+      const a = await makeDirection("Кардиология");
+      const b = await makeDirection("Терапия");
+      const k = key();
+      const payload = {
+        directionId: a.id,
+        adjacentDirectionId: b.id,
+        kind: "related",
+        weight: 40,
+      };
+
+      const first = await edge(payload, k);
+      expect(first.statusCode, first.payload).toBe(201);
+      createdEdgeIds.push((first.json() as { id: string }).id);
+
+      const replay = await edge(payload, k);
+      expect(replay.statusCode).toBe(201);
+      // The stored response is replayed WHOLE — body, validator and Location —
+      // so a retrying client cannot tell the two calls apart.
+      expect(replay.json()).toEqual(first.json());
+      expect(replay.headers.etag).toBe(first.headers.etag);
+      expect(replay.headers.location).toBe(first.headers.location);
+
+      const { rows } = await pool.query<{ count: string }>(
+        "SELECT count(*)::text AS count FROM direction_adjacency WHERE direction_id = $1",
+        [a.id],
+      );
+      expect(rows[0]!.count).toBe("1");
+    });
+
+    it("012 EARS-17: when the same Idempotency-Key carries a different adjacency payload, the system shall refuse with IDEMPOTENCY_KEY_REUSED before any domain or audit write", async () => {
+      const a = await makeDirection("Ревматология");
+      const b = await makeDirection("Ортопедия");
+      const c = await makeDirection("Травматология");
+      const k = key();
+
+      const first = await edge(
+        { directionId: a.id, adjacentDirectionId: b.id, kind: "related" },
+        k,
+      );
+      expect(first.statusCode, first.payload).toBe(201);
+      createdEdgeIds.push((first.json() as { id: string }).id);
+
+      const reused = await edge(
+        { directionId: a.id, adjacentDirectionId: c.id, kind: "related" },
+        k,
+      );
+      expect(reused.statusCode).toBe(409);
+      expect((reused.json() as { errorCode?: string }).errorCode).toBe(
+        "IDEMPOTENCY_KEY_REUSED",
+      );
+
+      // The refusal lands BEFORE the write: the edge the second call described
+      // exists in neither the domain table nor the 010 trail.
+      const { rows } = await pool.query<{ count: string }>(
+        "SELECT count(*)::text AS count FROM direction_adjacency WHERE direction_id = $1 AND adjacent_direction_id = $2",
+        [a.id, c.id],
+      );
+      expect(rows[0]!.count).toBe("0");
+    });
+
+    it("012 EARS-17: when a specialty link create is retried under the same Idempotency-Key with identical input, the system shall replay the stored outcome instead of linking twice", async () => {
+      const direction = await makeDirection("Гастроэнтерология");
+      const k = key();
+
+      const first = await link(direction.id, specialtyA, k);
+      expect(first.statusCode, first.payload).toBe(201);
+      createdLinkIds.push((first.json() as { id: string }).id);
+
+      const replay = await link(direction.id, specialtyA, k);
+      expect(replay.statusCode).toBe(201);
+      expect(replay.json()).toEqual(first.json());
+      expect(replay.headers.etag).toBe(first.headers.etag);
+      expect(replay.headers.location).toBe(first.headers.location);
+
+      const { rows } = await pool.query<{ count: string }>(
+        "SELECT count(*)::text AS count FROM direction_specialties WHERE direction_id = $1",
+        [direction.id],
+      );
+      expect(rows[0]!.count).toBe("1");
+    });
+
+    it("012 EARS-17: when the same Idempotency-Key carries a different specialty link payload, the system shall refuse with IDEMPOTENCY_KEY_REUSED before any domain or audit write", async () => {
+      const direction = await makeDirection("Гепатология");
+      const k = key();
+
+      const first = await link(direction.id, specialtyA, k);
+      expect(first.statusCode, first.payload).toBe(201);
+      createdLinkIds.push((first.json() as { id: string }).id);
+
+      const reused = await link(direction.id, specialtyB, k);
+      expect(reused.statusCode).toBe(409);
+      expect((reused.json() as { errorCode?: string }).errorCode).toBe(
+        "IDEMPOTENCY_KEY_REUSED",
+      );
+
+      const { rows } = await pool.query<{ count: string }>(
+        "SELECT count(*)::text AS count FROM direction_specialties WHERE direction_id = $1 AND specialty_minzdrav_id = $2",
+        [direction.id, specialtyB],
+      );
+      expect(rows[0]!.count).toBe("0");
+    });
+
+    it("012 EARS-17: when an adjacency edge is created, edited and retired, feature 010 shall hold exactly one attributed audit row per change", async () => {
+      const a = await makeDirection("Пульмонология");
+      const b = await makeDirection("Аллергология");
+      const created = await edged({
+        directionId: a.id,
+        adjacentDirectionId: b.id,
+        kind: "related",
+        weight: 30,
+      });
+
+      const afterCreate = await auditEvents(created.id);
+      expect(afterCreate.map((r) => r.event_type)).toEqual([
+        "data.direction_adjacency.insert",
+      ]);
+      // Attribution is the point of the trail: an unattributed row is a change
+      // nobody can be asked about.
+      expect(afterCreate[0]!.subject_id).not.toBeNull();
+
+      const patched = await app.inject({
+        method: "PATCH",
+        url: `/v1/admin/direction-adjacency/${created.id}`,
+        headers: { ...adminWrite(), "if-match": 'W/"1"' },
+        payload: { weight: 90 },
+      });
+      expect(patched.statusCode, patched.payload).toBe(200);
+
+      const retire = await app.inject({
+        method: "POST",
+        url: `/v1/admin/direction-adjacency/${created.id}/retire`,
+        headers: { ...adminWrite(), "if-match": 'W/"2"' },
+        payload: {},
+      });
+      expect(retire.statusCode, retire.payload).toBe(200);
+
+      const afterRetire = await auditEvents(created.id);
+      // One update per committed change — the edit and the retirement, neither
+      // collapsed into one row nor duplicated.
+      expect(
+        afterRetire.filter(
+          (r) => r.event_type === "data.direction_adjacency.update",
+        ),
+      ).toHaveLength(2);
+      expect(afterRetire.every((r) => r.subject_id !== null)).toBe(true);
+    });
+
+    it("012 EARS-17: when a specialty link is created and retired, feature 010 shall hold exactly one attributed audit row per change", async () => {
+      const direction = await makeDirection("Эндокринология");
+      const created = await linked(direction.id, specialtyA);
+
+      const afterCreate = await auditEvents(created.id);
+      expect(afterCreate.map((r) => r.event_type)).toEqual([
+        "data.direction_specialties.insert",
+      ]);
+      expect(afterCreate[0]!.subject_id).not.toBeNull();
+
+      const retire = await app.inject({
+        method: "POST",
+        url: `/v1/admin/direction-specialties/${created.id}/retire`,
+        headers: { ...adminWrite(), "if-match": 'W/"1"' },
+        payload: {},
+      });
+      expect(retire.statusCode, retire.payload).toBe(200);
+
+      const afterRetire = await auditEvents(created.id);
+      expect(
+        afterRetire.filter(
+          (r) => r.event_type === "data.direction_specialties.update",
+        ),
+      ).toHaveLength(1);
+      expect(afterRetire.every((r) => r.subject_id !== null)).toBe(true);
+    });
+
+    it("012 EARS-17: when a specialty-link transition quotes an If-Match the row has since outgrown, the system shall answer 412 with zero row and zero audit mutation, and a current validator shall still move it", async () => {
+      const direction = await makeDirection("Ревматология");
+      const created = await linked(direction.id, specialtyA);
+
+      // Real drift, not a fabricated validator: the link is withdrawn and put
+      // back, so the etag the operator is still holding describes the row two
+      // moves ago. Nothing about that request is malformed — it is merely late.
+      const retired = await transitionSpecialty(created.id, "retire", 'W/"1"');
+      expect(retired.statusCode, retired.payload).toBe(200);
+      const restored = await transitionSpecialty(
+        created.id,
+        "restore",
+        'W/"2"',
+      );
+      expect(restored.statusCode, restored.payload).toBe(200);
+
+      const before = await auditEvents(created.id);
+      const stale = await transitionSpecialty(created.id, "retire", 'W/"1"');
+      expect(stale.statusCode).toBe(412);
+      expect((stale.json() as { errorCode?: string }).errorCode).toBe(
+        "PRECONDITION_FAILED",
+      );
+      const unmoved = await app.inject({
+        method: "GET",
+        url: `/v1/admin/direction-specialties/${created.id}`,
+        headers: adminRead(),
+      });
+      expect(unmoved.json()).toMatchObject({ status: "active", version: 3 });
+      expect(await auditEvents(created.id)).toHaveLength(before.length);
+
+      // The refusal is not a dead end: re-read, then the transition lands.
+      const fresh = await transitionSpecialty(created.id, "retire", 'W/"3"');
+      expect(fresh.statusCode, fresh.payload).toBe(200);
+      expect(fresh.json()).toMatchObject({ status: "retired", version: 4 });
+    });
+
+    it("012 EARS-17: when an adjacency retire quotes an If-Match a committed edit has already superseded, the system shall answer 412 with zero row and zero audit mutation", async () => {
+      const a = await makeDirection("Нефрология");
+      const b = await makeDirection("Урология");
+      const created = await edged({
+        directionId: a.id,
+        adjacentDirectionId: b.id,
+        kind: "related",
+        weight: 30,
+      });
+
+      const patched = await app.inject({
+        method: "PATCH",
+        url: `/v1/admin/direction-adjacency/${created.id}`,
+        headers: { ...adminWrite(), "if-match": 'W/"1"' },
+        payload: { weight: 90 },
+      });
+      expect(patched.statusCode, patched.payload).toBe(200);
+
+      const before = await auditEvents(created.id);
+      const stale = await app.inject({
+        method: "POST",
+        url: `/v1/admin/direction-adjacency/${created.id}/retire`,
+        headers: { ...adminWrite(), "if-match": 'W/"1"' },
+        payload: {},
+      });
+      expect(stale.statusCode).toBe(412);
+      expect((stale.json() as { errorCode?: string }).errorCode).toBe(
+        "PRECONDITION_FAILED",
+      );
+      const unmoved = await app.inject({
+        method: "GET",
+        url: `/v1/admin/direction-adjacency/${created.id}`,
+        headers: adminRead(),
+      });
+      expect(unmoved.json()).toMatchObject({
+        status: "active",
+        version: 2,
+        weight: 90,
+      });
+      expect(await auditEvents(created.id)).toHaveLength(before.length);
+
+      const fresh = await app.inject({
+        method: "POST",
+        url: `/v1/admin/direction-adjacency/${created.id}/retire`,
+        headers: { ...adminWrite(), "if-match": 'W/"2"' },
+        payload: {},
+      });
+      expect(fresh.statusCode, fresh.payload).toBe(200);
+    });
+
+    it("012 EARS-17: when the same adjacency pair is authored concurrently under distinct keys, exactly one call shall win and the losers shall get 409, never an opaque 500", async () => {
+      const a = await makeDirection("Гематология");
+      const b = await makeDirection("Онкология");
+      const payload = {
+        directionId: a.id,
+        adjacentDirectionId: b.id,
+        kind: "related",
+        weight: 55,
+      };
+
+      // DISTINCT Idempotency-Keys on purpose: the record layer cannot collapse
+      // these into a replay, so all three reach the domain transaction and §6's
+      // "unique constraints remain the final race guard" is what has to hold.
+      const raceKeys = [randomUUID(), randomUUID(), randomUUID()];
+      const responses = await Promise.all(
+        raceKeys.map((key) => edge(payload, key)),
+      );
+      expect(
+        responses.map((r) => r.statusCode).sort(),
+        responses.map((r) => r.payload).join("\n"),
+      ).toEqual([201, 409, 409]);
+
+      const winner = responses.find((r) => r.statusCode === 201)!;
+      const winnerId = (winner.json() as { id: string }).id;
+      createdEdgeIds.push(winnerId);
+      for (const loser of responses.filter((r) => r.statusCode === 409)) {
+        expect((loser.json() as { errorCode?: string }).errorCode).toBe(
+          "RELATIONSHIP_CONFLICT",
+        );
+      }
+
+      const { rows } = await pool.query<{ count: string }>(
+        "SELECT count(*)::text AS count FROM direction_adjacency WHERE direction_id = $1 AND adjacent_direction_id = $2",
+        [a.id, b.id],
+      );
+      expect(rows[0]!.count).toBe("1");
+      // §6: "invariant failures and serialization aborts write no domain audit
+      // row" — the winner leaves exactly one, the losers leave none.
+      expect(await auditEvents(winnerId)).toHaveLength(1);
+
+      // The race 409 is raised AFTER a failed statement aborted the Postgres
+      // transaction — a different path from the pre-check 409 the replay tests
+      // above cover. §6 fences it as a deterministic terminal outcome, so a
+      // loser's key must replay the stored 409, not IDEMPOTENCY_REQUEST_IN_PROGRESS.
+      const loserKey = raceKeys[responses.findIndex((r) => r.statusCode === 409)]!;
+      const replayed = await edge(payload, loserKey);
+      expect(replayed.statusCode, replayed.payload).toBe(409);
+      expect((replayed.json() as { errorCode?: string }).errorCode).toBe(
+        "RELATIONSHIP_CONFLICT",
+      );
+    });
+
+    it("012 EARS-17: when the same specialty link is authored concurrently under distinct keys, exactly one call shall win and the losers shall get 409, never an opaque 500", async () => {
+      const direction = await makeDirection("Пульмонология");
+      const responses = await Promise.all([
+        link(direction.id, specialtyA),
+        link(direction.id, specialtyA),
+        link(direction.id, specialtyA),
+      ]);
+      expect(
+        responses.map((r) => r.statusCode).sort(),
+        responses.map((r) => r.payload).join("\n"),
+      ).toEqual([201, 409, 409]);
+
+      const winner = responses.find((r) => r.statusCode === 201)!;
+      const winnerId = (winner.json() as { id: string }).id;
+      createdLinkIds.push(winnerId);
+      for (const loser of responses.filter((r) => r.statusCode === 409)) {
+        expect((loser.json() as { errorCode?: string }).errorCode).toBe(
+          "RELATIONSHIP_CONFLICT",
+        );
+      }
+
+      const { rows } = await pool.query<{ count: string }>(
+        "SELECT count(*)::text AS count FROM direction_specialties WHERE direction_id = $1 AND specialty_minzdrav_id = $2",
+        [direction.id, specialtyA],
+      );
+      expect(rows[0]!.count).toBe("1");
+      expect(await auditEvents(winnerId)).toHaveLength(1);
+    });
+
+    function transitionSpecialty(
+      id: string,
+      transition: "retire" | "restore",
+      ifMatch: string,
+    ): ReturnType<NestFastifyApplication["inject"]> {
+      return app.inject({
+        method: "POST",
+        url: `/v1/admin/direction-specialties/${id}/${transition}`,
+        headers: { ...adminWrite(), "if-match": ifMatch },
+        payload: {},
+      });
+    }
   },
 );

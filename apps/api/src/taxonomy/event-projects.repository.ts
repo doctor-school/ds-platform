@@ -5,6 +5,7 @@ import { eventProjects, events, projects } from "@ds/db";
 import type { EventProjectAdminListQuery } from "@ds/schemas";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
 import { withRequestAuditContext } from "../audit/audit-context.tx.js";
+import { withRelationConflictMapping } from "./taxonomy.errors.js";
 import {
   afterEventCursor,
   eventCursorInstant,
@@ -76,9 +77,11 @@ export class EventProjectsRepository {
     tx: Tx,
     values: { eventId: string; projectId: string },
   ): Promise<EventProject> {
-    const [row] = await tx.insert(eventProjects).values(values).returning();
-    if (!row) throw new Error("event_projects insert returned no row");
-    return row;
+    return withRelationConflictMapping(async () => {
+      const [row] = await tx.insert(eventProjects).values(values).returning();
+      if (!row) throw new Error("event_projects insert returned no row");
+      return row;
+    });
   }
 
   async findById(id: string): Promise<EventProject | null> {
@@ -223,7 +226,10 @@ export class EventProjectsRepository {
         updatedAt: new Date(),
       })
       .where(
-        and(eq(eventProjects.id, id), eq(eventProjects.version, expectedVersion)),
+        and(
+          eq(eventProjects.id, id),
+          eq(eventProjects.version, expectedVersion),
+        ),
       )
       .returning();
     return row ?? null;

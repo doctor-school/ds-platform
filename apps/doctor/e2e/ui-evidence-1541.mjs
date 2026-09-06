@@ -28,14 +28,44 @@ async function tick(page, testId) {
   await page.getByTestId(testId).locator("xpath=ancestor::label[1]").click();
 }
 
+/**
+ * The storefront theme is CLASS-based: `<html class="dark">` is the source of
+ * truth (`apps/doctor/lib/theme.ts`), applied before first paint by the root
+ * layout's FOUC guard from `localStorage["ds-theme"]`. The OS-level
+ * `colorScheme` context option therefore does NOT switch this app's theme --
+ * seeding the persisted choice through an init script (Playwright runs those
+ * ahead of the page's own inline scripts) is what makes the guard add the class.
+ */
+const THEME_STORAGE_KEY = "ds-theme";
+
 async function shoot(browser, { name, viewport, theme, granted }) {
   const ctx = await browser.newContext({
     viewport: VIEWPORTS[viewport],
     colorScheme: theme,
   });
+  await ctx.addInitScript(
+    ([key, value]) => {
+      try {
+        localStorage.setItem(key, value);
+      } catch {
+        // Storage unavailable in this context -- the guard then falls back to
+        // the light default and the capture below would be wrong, so fail loud.
+        throw new Error("ui-evidence: cannot seed the persisted theme choice");
+      }
+    },
+    [THEME_STORAGE_KEY, theme],
+  );
   const page = await ctx.newPage();
   await page.goto(`${BASE}/register`, { waitUntil: "networkidle" });
   await page.getByTestId("registration-consent-access").waitFor();
+  // The evidence is only honest if the theme actually took -- assert the class
+  // the DS tokens key off rather than trusting the seeding to have worked.
+  const rendersDark = await page.evaluate(() =>
+    document.documentElement.classList.contains("dark"),
+  );
+  if (rendersDark !== (theme === "dark")) {
+    throw new Error(`${name}: expected the ${theme} theme, got ${rendersDark ? "dark" : "light"}`);
+  }
   if (granted) {
     await tick(page, "register-medworker");
     await tick(page, "register-partner-data");

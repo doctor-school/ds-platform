@@ -29,16 +29,16 @@ describe("006 EARS-18 player-failure state machine — pure logic", () => {
   });
 
   // EARS-18.2 — cdnvideo is the ONLY structurally silent provider (its bundles emit
-  // no parent-directed message at all — probe, design §3.1), so it is watchdog-only
-  // and can only ever reach the SUSPECTED grade. vk IS parent-observable once the
+  // no parent-directed message at all — probe, design §3.1), so no provider signal is
+  // ever parsed for it and it is never graded. vk IS parent-observable once the
   // embed src carries `js_api=1` (#1314): its `inited` / `started` / `timeupdate`
   // traffic arrives from https://vk.com.
-  it("EARS-18.2: cdnvideo is watchdog-only; vk is parent-observable (js_api=1)", () => {
+  it("EARS-18.2: cdnvideo exposes no parent API; vk is parent-observable (js_api=1)", () => {
     expect(PROVIDER_HAS_PARENT_API.youtube).toBe(true);
     expect(PROVIDER_HAS_PARENT_API.rutube).toBe(true);
     expect(PROVIDER_HAS_PARENT_API.vk).toBe(true);
     expect(PROVIDER_HAS_PARENT_API.cdnvideo).toBe(false);
-    // No provider-event path is even parsed for the watchdog-only provider.
+    // No provider-event path is even parsed for the structurally silent provider.
     expect(
       parseProviderSignal("cdnvideo", { origin: "https://playercdn.cdnvideo.ru", data: {} }),
     ).toBeNull();

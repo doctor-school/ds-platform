@@ -15,9 +15,7 @@ event, so none is ever synthesized — a vk stall is still graded by the
 watchdog alone.
 
 CDNvideo stays permanently unobservable (its bundles emit no parent message at
-all), so its suspected-grade advisory is now time-boxed: after
-`PLAYER_ADVISORY_TIMEBOX_MS` (~60 s) the banner withdraws itself into the new
-`unverified` state, leaving only a low-emphasis «Перезапустить плеер» that
-re-creates the embed on an explicit doctor gesture — never on a timer. The
-time box is cdnvideo-only: a failed youtube/rutube/vk handshake keeps its
+all), so the room adds an `unverified` player state for it: a low-emphasis
+«Перезапустить плеер» that re-creates the embed on an explicit doctor gesture —
+never on a timer. A failed youtube/rutube/vk handshake keeps its advisory
 banner, because for those a real signal can still arrive.

@@ -159,8 +159,9 @@ function PlayerFailureOverlay({
 
 /**
  * 006 EARS-18 SUSPECTED grade — the NON-COVERING advisory banner for an UNPROVABLE
- * failure: the watchdog elapsed with no positive signal ever observed (vk + cdnvideo
- * always — no parent API; youtube/rutube when no handshake arrived). The room can NOT
+ * failure: the watchdog elapsed with no positive signal ever observed — a
+ * youtube/rutube/vk embed whose handshake never arrived. (A structurally silent
+ * provider never reaches this component: it rests in `unverified`.) The room can NOT
  * prove the stream failed — a healthy video may simply be unobservable — so the embed
  * stays FULLY VISIBLE and interactive (the banner container is `pointer-events-none`;
  * only the restart button captures clicks) and there is NO auto-retry (an auto

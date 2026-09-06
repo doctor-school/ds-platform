@@ -167,7 +167,8 @@ function asRecord(data: unknown): Record<string, unknown> | null {
  *   (handshake only, not playing). VK exposes NO error event — a stall shows as an
  *   absent/non-advancing `timeupdate` and is graded by the watchdog — so this branch
  *   never synthesizes one.
- * - **cdnvideo** — no parent-observable API → always `null` (watchdog-only).
+ * - **cdnvideo** — no parent-observable API → always `null`. It runs no watchdog
+ *   either: it mounts in `unverified` and is never graded (design §3.1).
  */
 export function parseProviderSignal(
   provider: StreamProvider,
@@ -255,7 +256,8 @@ export interface PlayerState {
    * Whether a positive provider signal (playing / ready / buffering) has EVER been
    * observed for this stream. Monotonic (a real stream never becomes unobservable);
    * decides the grade of a watchdog stall — CONFIRMED if a handshake was seen,
-   * SUSPECTED if never (vk/cdnvideo always; a youtube/rutube failed handshake).
+   * SUSPECTED if never (a failed youtube/rutube/vk handshake). Only a
+   * parent-observable provider ever reaches a grade at all.
    */
   readonly everReady: boolean;
   /**

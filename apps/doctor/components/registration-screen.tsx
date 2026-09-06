@@ -337,13 +337,11 @@ export function RegistrationScreen({
   // EARS-12 — the reason beside the disabled submit names the SPECIFIC unmet
   // condition. While the declaration is unticked that is the declaration, in the
   // canvas's own words; once it is ticked the next real obstacle is stated
-  // instead — first the partner-data consent (EARS-5), then, with both access
-  // conditions granted, the bot-protection challenge the door still has to run
-  // (003 EARS-17 / 021 EARS-19, #1558). The submit stays disabled through all
-  // three because the command remains unreachable until that last one lands,
-  // and wiring the button past it would ship the untracked seam design §2 names
-  // by name. The reason line never says «следующим шагом» about a consent that
-  // IS on the form.
+  // instead — the partner-data consent (EARS-5). Those two access conditions are
+  // the whole list: 021 EARS-19 (#1558) wired the command, so the bot-protection
+  // challenge is no longer a stated obstacle (it is invisible and runs inside the
+  // submit, 003 EARS-17). The reason line never says «следующим шагом» about a
+  // consent that IS on the form.
   const declared = form.watch("medicalWorkerDeclaration");
   const partnerDataGranted = form.watch("partnerDataSharing");
   // With an empty consent read model the partner-data row is not rendered, but

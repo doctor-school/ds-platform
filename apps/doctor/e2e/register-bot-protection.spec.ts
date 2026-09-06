@@ -141,10 +141,10 @@ test.describe("021 EARS-19: bot protection on the registration and resend forms"
   for (const [label, code, statement] of [
     [
       "rejected",
-      "bot_protection_rejected",
+      "BOT_PROTECTION_REJECTED",
       "Проверка истекла или не пройдена. Подтвердите ещё раз.",
     ],
-    ["required", "bot_protection_required", "Подтвердите, что вы не робот."],
+    ["required", "BOT_PROTECTION_REQUIRED", "Подтвердите, что вы не робот."],
   ] as const) {
     test(`021 EARS-19.4: a ${label} challenge is stated at FORM level, never as a field error`, async ({
       page,
@@ -178,6 +178,11 @@ test.describe("021 EARS-19: bot protection on the registration and resend forms"
   test("021 EARS-19.5: a successful submit opens the confirmation state, whose resend is protected by the same challenge", async ({
     page,
   }) => {
+    // The 003 resend control opens INSIDE its cooldown — a code has just been
+    // sent, so the countdown is already running when the state mounts. Waiting
+    // it out is the honest assertion (the alternative is asserting a shortened
+    // fake), and it costs more than the default per-test budget.
+    test.setTimeout(90_000);
     await acceptRegistration(page);
     await page.route(RESEND_ROUTE, (route) =>
       route.fulfill({
@@ -198,9 +203,13 @@ test.describe("021 EARS-19: bot protection on the registration and resend forms"
 
     // EARS-19 «every verification-code resend»: a real round trip through the
     // @BotProtected resend route, not a re-render.
+    const resend = page.getByTestId("verify-resend");
+    await expect(resend, "the cooldown that opened with the state runs out").toBeEnabled(
+      { timeout: 45_000 },
+    );
     const [request] = await Promise.all([
       page.waitForRequest(RESEND_ROUTE),
-      page.getByTestId("verify-resend").click(),
+      resend.click(),
     ]);
     expect(body(request).identifier).toBe(EMAIL);
     // The acknowledgement is conditionally phrased — identical for a

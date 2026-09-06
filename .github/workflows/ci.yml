@@ -451,6 +451,10 @@ jobs:
             echo "waiting for the bootstrap PAT ($i/30)..."; sleep 2
           done
           echo "the bootstrap PAT never appeared"; docker logs ds-idp; exit 1
+      # Discovery can serve before the authenticated management API is usable
+      # (#1887). Require stable instance identity before any provisioning write.
+      - name: Wait for authenticated IdP management readiness
+        run: node infra/dev-stand/idp/wait-ready.mjs
       # STDOUT to the file only — this repo is public and the provisioner prints
       # the OIDC client secret; the secret is masked before it enters $GITHUB_ENV.
       - name: Provision the IdP project, client and roles
@@ -1327,6 +1331,10 @@ jobs:
             echo "waiting for the bootstrap PAT ($i/30)..."; sleep 2
           done
           echo "the bootstrap PAT never appeared"; docker logs ds-idp; exit 1
+      # /debug/ready can pass before the management API's internal gRPC listener
+      # is usable (#1887). Share the authenticated wait with api-e2e.
+      - name: Wait for authenticated IdP management readiness
+        run: node infra/dev-stand/idp/wait-ready.mjs
       # The dev stand's own provisioner, unmodified — it is idempotent, needs
       # only curl + jq (both on ubuntu-latest), seeds the
       # `doctor_guest,platform_admin` roles the flows tier grants, and prints

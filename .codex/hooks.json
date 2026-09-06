@@ -72,7 +72,7 @@
         ]
       },
       {
-        "matcher": "^(spawn_agent|Agent|Task|Read|Skill|Bash|exec_command)$",
+        "matcher": "^(spawn_agent|followup_task|Agent|Task|Read|Skill|Bash|exec_command)$",
         "hooks": [
           {
             "type": "command",

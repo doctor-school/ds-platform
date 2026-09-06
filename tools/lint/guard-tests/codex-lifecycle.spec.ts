@@ -127,6 +127,16 @@ describe("Codex hook regression #1919", () => {
       ),
     ).toBe(false);
   });
+  it("gates wrap on followup_task while ordinary child completion remains allowed", () => {
+    expect(
+      isWrapInitiation("followup_task", { message: "Run run-session-retro" }),
+    ).toBe(true);
+    expect(
+      isWrapInitiation("followup_task", {
+        message: "Finish the existing PR review",
+      }),
+    ).toBe(false);
+  });
   it("denies relevant wrap if the transcript is missing or unreadable", () => {
     for (const transcript_path of [undefined, join(dir, "missing.jsonl")]) {
       const result = run("wrap-owner-only", {

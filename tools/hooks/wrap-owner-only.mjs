@@ -38,7 +38,7 @@ export function isWrapInitiation(toolName, toolInput) {
       String(input.file_path || "").replace(/\\/g, "/"),
     );
   }
-  if (/^(Agent|Task|spawn_agent)$/.test(toolName)) {
+  if (/^(Agent|Task|spawn_agent|followup_task)$/.test(toolName)) {
     const text = [input.prompt, input.description, input.message]
       .filter((v) => typeof v === "string")
       .join("\n");

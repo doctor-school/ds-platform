@@ -37,6 +37,13 @@ describe("017 #1933: the doctor sign-in screen", () => {
     expect(html).toContain("Создать аккаунт");
   });
 
+  it("017 #1933.14: password recovery points at the live academy /reset, not a doctor-host 404", () => {
+    const html = render();
+
+    expect(html).toContain('href="https://academy.doctor.school/reset"');
+    expect(html).not.toContain('href="/reset"');
+  });
+
   it("017 #1933.11: the create-account link carries the validated arrival context onward", () => {
     const html = render({ registerHref: "/register?returnTo=%2Fwebinars%2Fabc" });
 

@@ -19,6 +19,7 @@ import {
   type LoginCardPasswordValues,
 } from "@ds/design-system/blocks";
 
+import { academyHref } from "@/lib/academy";
 import { authClient } from "@/lib/auth-client";
 import {
   AUTH_GENERIC_MESSAGES,
@@ -237,6 +238,8 @@ export function LoginScreen({
 
   async function sendOtp(values: LoginCardOtpRequestValues, resend: boolean) {
     setOtpRequestError(null);
+    // A fresh code is in flight: the previous code verify error is stale.
+    setOtpVerifyError(null);
     setOtpPending(true);
     try {
       await authClient.requestOtp({
@@ -322,12 +325,12 @@ export function LoginScreen({
           // Sign-up is a co-equal path and the arrival context rides onward.
           register: registerHref,
           // Password recovery has no doctor-host projection yet (out of #1933
-          // scope): the target is the RELATIVE `/reset`, pointing at this host
-          // own future route rather than cross-origin to the academy — a
-          // cross-host jump mid-sign-in would drop the `__Host-` origin the
-          // doctor is signing in on, and there is no academy-origin helper in
-          // `apps/doctor/lib` to point at one anyway.
-          reset: "/reset",
+          // scope), and a doctor-relative `/reset` would 404 on this host. #1933
+          // records the interim: point at the academy `/reset`, which is the one
+          // live recovery surface, until the doctor-host projection lands. The
+          // crossing is the sanctioned LD-4 one and it does not touch the
+          // in-flight sign-in — recovery restarts the flow by construction.
+          reset: academyHref("/reset"),
         }}
         // Next.js `<Link>` keeps the footer links on client-side navigation.
         renderLink={({ href, children }) => <Link href={href}>{children}</Link>}

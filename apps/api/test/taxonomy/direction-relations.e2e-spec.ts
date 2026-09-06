@@ -1029,6 +1029,77 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(fresh.statusCode, fresh.payload).toBe(200);
     });
 
+    it("012 EARS-17: when the same adjacency pair is authored concurrently under distinct keys, exactly one call shall win and the losers shall get 409, never an opaque 500", async () => {
+      const a = await makeDirection("Гематология");
+      const b = await makeDirection("Онкология");
+      const payload = {
+        directionId: a.id,
+        adjacentDirectionId: b.id,
+        kind: "related",
+        weight: 55,
+      };
+
+      // DISTINCT Idempotency-Keys on purpose: the record layer cannot collapse
+      // these into a replay, so all three reach the domain transaction and §6's
+      // "unique constraints remain the final race guard" is what has to hold.
+      const responses = await Promise.all([
+        edge(payload),
+        edge(payload),
+        edge(payload),
+      ]);
+      expect(
+        responses.map((r) => r.statusCode).sort(),
+        responses.map((r) => r.payload).join("\n"),
+      ).toEqual([201, 409, 409]);
+
+      const winner = responses.find((r) => r.statusCode === 201)!;
+      const winnerId = (winner.json() as { id: string }).id;
+      createdEdgeIds.push(winnerId);
+      for (const loser of responses.filter((r) => r.statusCode === 409)) {
+        expect((loser.json() as { errorCode?: string }).errorCode).toBe(
+          "RELATIONSHIP_CONFLICT",
+        );
+      }
+
+      const { rows } = await pool.query<{ count: string }>(
+        "SELECT count(*)::text AS count FROM direction_adjacency WHERE direction_id = $1 AND adjacent_direction_id = $2",
+        [a.id, b.id],
+      );
+      expect(rows[0]!.count).toBe("1");
+      // §6: "invariant failures and serialization aborts write no domain audit
+      // row" — the winner leaves exactly one, the losers leave none.
+      expect(await auditEvents(winnerId)).toHaveLength(1);
+    });
+
+    it("012 EARS-17: when the same specialty link is authored concurrently under distinct keys, exactly one call shall win and the losers shall get 409, never an opaque 500", async () => {
+      const direction = await makeDirection("Пульмонология");
+      const responses = await Promise.all([
+        link(direction.id, specialtyA),
+        link(direction.id, specialtyA),
+        link(direction.id, specialtyA),
+      ]);
+      expect(
+        responses.map((r) => r.statusCode).sort(),
+        responses.map((r) => r.payload).join("\n"),
+      ).toEqual([201, 409, 409]);
+
+      const winner = responses.find((r) => r.statusCode === 201)!;
+      const winnerId = (winner.json() as { id: string }).id;
+      createdLinkIds.push(winnerId);
+      for (const loser of responses.filter((r) => r.statusCode === 409)) {
+        expect((loser.json() as { errorCode?: string }).errorCode).toBe(
+          "RELATIONSHIP_CONFLICT",
+        );
+      }
+
+      const { rows } = await pool.query<{ count: string }>(
+        "SELECT count(*)::text AS count FROM direction_specialties WHERE direction_id = $1 AND specialty_minzdrav_id = $2",
+        [direction.id, specialtyA],
+      );
+      expect(rows[0]!.count).toBe("1");
+      expect(await auditEvents(winnerId)).toHaveLength(1);
+    });
+
     function transitionSpecialty(
       id: string,
       transition: "retire" | "restore",

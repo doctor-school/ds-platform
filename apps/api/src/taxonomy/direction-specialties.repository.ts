@@ -10,6 +10,7 @@ import { directions, directionSpecialties, specialtiesMinzdrav } from "@ds/db";
 import type { DirectionSpecialtyAdminListQuery } from "@ds/schemas";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
 import { withRequestAuditContext } from "../audit/audit-context.tx.js";
+import { withRelationConflictMapping } from "./taxonomy.errors.js";
 
 // #1483 (ADR-0016 §2.8, 017-design §5) — Drizzle data access for the
 // `direction_specialties` link. Posture copied from `event-projects.repository.ts`
@@ -53,12 +54,14 @@ export class DirectionSpecialtiesRepository {
     tx: Tx,
     values: { directionId: string; specialtyMinzdravId: string },
   ): Promise<DirectionSpecialty> {
-    const [row] = await tx
-      .insert(directionSpecialties)
-      .values(values)
-      .returning();
-    if (!row) throw new Error("direction_specialties insert returned no row");
-    return row;
+    return withRelationConflictMapping(async () => {
+      const [row] = await tx
+        .insert(directionSpecialties)
+        .values(values)
+        .returning();
+      if (!row) throw new Error("direction_specialties insert returned no row");
+      return row;
+    });
   }
 
   async findById(id: string): Promise<DirectionSpecialty | null> {
@@ -234,10 +237,7 @@ export class DirectionSpecialtiesRepository {
     }
     if (query.specialtyMinzdravId) {
       filters.push(
-        eq(
-          directionSpecialties.specialtyMinzdravId,
-          query.specialtyMinzdravId,
-        ),
+        eq(directionSpecialties.specialtyMinzdravId, query.specialtyMinzdravId),
       );
     }
     if (query.status) {
@@ -259,7 +259,10 @@ export class DirectionSpecialtiesRepository {
         specialtyName: specialtiesMinzdrav.name,
       })
       .from(directionSpecialties)
-      .innerJoin(directions, eq(directions.id, directionSpecialties.directionId))
+      .innerJoin(
+        directions,
+        eq(directions.id, directionSpecialties.directionId),
+      )
       .innerJoin(
         specialtiesMinzdrav,
         eq(specialtiesMinzdrav.id, directionSpecialties.specialtyMinzdravId),

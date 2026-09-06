@@ -4,16 +4,12 @@ import { and, asc, count, eq, gt, inArray, isNull, or, sql } from "drizzle-orm";
 // completed the rename through this vertical, so the join, its column and its
 // public route all speak `direction` and no bridge alias survives at the
 // import.
-import type {
-  Direction,
-  DrizzleHandle,
-  Event,
-  EventDirection,
-} from "@ds/db";
+import type { Direction, DrizzleHandle, Event, EventDirection } from "@ds/db";
 import { directions, eventDirections, events } from "@ds/db";
 import type { EventDirectionAdminListQuery } from "@ds/schemas";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
 import { withRequestAuditContext } from "../audit/audit-context.tx.js";
+import { withRelationConflictMapping } from "./taxonomy.errors.js";
 import {
   afterEventCursor,
   eventCursorInstant,
@@ -75,9 +71,11 @@ export class EventDirectionsRepository {
     tx: Tx,
     values: { eventId: string; directionId: string },
   ): Promise<EventDirection> {
-    const [row] = await tx.insert(eventDirections).values(values).returning();
-    if (!row) throw new Error("event_directions insert returned no row");
-    return row;
+    return withRelationConflictMapping(async () => {
+      const [row] = await tx.insert(eventDirections).values(values).returning();
+      if (!row) throw new Error("event_directions insert returned no row");
+      return row;
+    });
   }
 
   async findById(id: string): Promise<EventDirection | null> {
@@ -95,7 +93,10 @@ export class EventDirectionsRepository {
    * command that locked its own row first and then reached for an endpoint
    * would invert the order an entity command uses and deadlock against it.
    */
-  async lockForTransition(tx: Tx, id: string): Promise<EventDirectionRow | null> {
+  async lockForTransition(
+    tx: Tx,
+    id: string,
+  ): Promise<EventDirectionRow | null> {
     const [existing] = await tx
       .select()
       .from(eventDirections)
@@ -123,7 +124,10 @@ export class EventDirectionsRepository {
   }
 
   /** Join one relation row to both endpoints' display forms. */
-  async hydrate(tx: Tx | Db, relation: EventDirection): Promise<EventDirectionRow> {
+  async hydrate(
+    tx: Tx | Db,
+    relation: EventDirection,
+  ): Promise<EventDirectionRow> {
     const [row] = await tx
       .select({
         eventId: events.id,
@@ -183,7 +187,10 @@ export class EventDirectionsRepository {
       .select()
       .from(eventDirections)
       .where(
-        and(eq(eventDirections.eventId, eventId), eq(eventDirections.directionId, directionId)),
+        and(
+          eq(eventDirections.eventId, eventId),
+          eq(eventDirections.directionId, directionId),
+        ),
       );
     return row ?? null;
   }
@@ -194,7 +201,10 @@ export class EventDirectionsRepository {
   }
 
   async findDirection(tx: Tx | Db, id: string): Promise<Direction | null> {
-    const [row] = await tx.select().from(directions).where(eq(directions.id, id));
+    const [row] = await tx
+      .select()
+      .from(directions)
+      .where(eq(directions.id, id));
     return row ?? null;
   }
 
@@ -219,7 +229,10 @@ export class EventDirectionsRepository {
         updatedAt: new Date(),
       })
       .where(
-        and(eq(eventDirections.id, id), eq(eventDirections.version, expectedVersion)),
+        and(
+          eq(eventDirections.id, id),
+          eq(eventDirections.version, expectedVersion),
+        ),
       )
       .returning();
     return row ?? null;
@@ -263,7 +276,10 @@ export class EventDirectionsRepository {
       .innerJoin(events, eq(events.id, eventDirections.eventId))
       .innerJoin(directions, eq(directions.id, eventDirections.directionId))
       .where(
-        or(eq(eventDirections.eventId, eventId), eq(eventDirections.directionId, directionId)),
+        or(
+          eq(eventDirections.eventId, eventId),
+          eq(eventDirections.directionId, directionId),
+        ),
       )
       .orderBy(asc(eventDirections.id));
 
@@ -291,7 +307,8 @@ export class EventDirectionsRepository {
   ): Promise<{ rows: EventDirectionRow[]; total: number }> {
     const filters = [];
     if (query.eventId) filters.push(eq(eventDirections.eventId, query.eventId));
-    if (query.directionId) filters.push(eq(eventDirections.directionId, query.directionId));
+    if (query.directionId)
+      filters.push(eq(eventDirections.directionId, query.directionId));
     if (query.status) {
       filters.push(eq(eventDirections.status, query.status));
     } else if (!query.includeRetired) {
@@ -318,7 +335,11 @@ export class EventDirectionsRepository {
       .where(where)
       // Stable total order ending in the relation id — two rows created in the
       // same millisecond must not swap places between pages.
-      .orderBy(asc(events.title), asc(directions.title), asc(eventDirections.id))
+      .orderBy(
+        asc(events.title),
+        asc(directions.title),
+        asc(eventDirections.id),
+      )
       .limit(query.pageSize)
       .offset((query.page - 1) * query.pageSize);
 
@@ -363,7 +384,9 @@ export class EventDirectionsRepository {
     id?: string;
     slug?: string;
   }): Promise<Direction | null> {
-    const where = key.id ? eq(directions.id, key.id) : eq(directions.slug, key.slug!);
+    const where = key.id
+      ? eq(directions.id, key.id)
+      : eq(directions.slug, key.slug!);
     const [row] = await this.db.select().from(directions).where(where);
     return row ?? null;
   }

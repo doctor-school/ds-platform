@@ -1106,5 +1106,76 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(fresh.statusCode, fresh.payload).toBe(200);
       expect(body(fresh)).toMatchObject({ status: "retired", version: 3 });
     });
+
+    it("012 EARS-17: when the same project↔partner pair is created concurrently under distinct keys, exactly one call shall win and the losers shall get 409, never an opaque 500", async () => {
+      const projectId = await insertProject();
+      const partnerId = await insertPartner();
+
+      // DISTINCT Idempotency-Keys on purpose: the record layer cannot collapse
+      // these into a replay, so all three reach the domain transaction and
+      // §6's "unique constraints remain the final race guard" is what has to
+      // hold — `pairTaken` passes in all three before any of them has inserted.
+      const responses = await Promise.all([
+        createRelation({ payload: { projectId, partnerId } }),
+        createRelation({ payload: { projectId, partnerId } }),
+        createRelation({ payload: { projectId, partnerId } }),
+      ]);
+      expect(
+        responses.map((r) => r.statusCode).sort(),
+        responses.map((r) => r.payload).join("\n"),
+      ).toEqual([201, 409, 409]);
+
+      const winner = responses.find((r) => r.statusCode === 201)!;
+      for (const loser of responses.filter((r) => r.statusCode === 409)) {
+        expect(problem(loser).errorCode).toBe("RELATIONSHIP_CONFLICT");
+      }
+
+      const { rows } = await pool.query(
+        "SELECT id FROM project_partners WHERE project_id = $1 AND partner_id = $2",
+        [projectId, partnerId],
+      );
+      expect(rows).toHaveLength(1);
+      // §6: "invariant failures and serialization aborts write no domain audit
+      // row" — the winner leaves exactly one insert row, the losers none.
+      expect(await auditRows(body(winner).id)).toBe(1);
+    });
+
+    it("012 EARS-17: when two partners claim the primary slot on one project concurrently, exactly one shall take it and the loser shall get 409, never an opaque 500", async () => {
+      // The EARS-10 refusal above is sequential — the incumbent is already
+      // committed when the challenger arrives, so only the pre-check is
+      // exercised. Here neither claim is committed when the other reads, which
+      // is the interleaving the partial `…_project_primary_active_uniq` index
+      // exists to settle.
+      const projectId = await insertProject();
+      const first = await insertPartner();
+      const second = await insertPartner();
+
+      const responses = await Promise.all([
+        createRelation({
+          payload: { projectId, partnerId: first, isPrimary: true },
+        }),
+        createRelation({
+          payload: { projectId, partnerId: second, isPrimary: true },
+        }),
+      ]);
+      expect(
+        responses.map((r) => r.statusCode).sort(),
+        responses.map((r) => r.payload).join("\n"),
+      ).toEqual([201, 409]);
+
+      const winner = responses.find((r) => r.statusCode === 201)!;
+      const loser = responses.find((r) => r.statusCode === 409)!;
+      expect(problem(loser).errorCode).toBe("RELATIONSHIP_CONFLICT");
+
+      // Exactly one active primary, and the loser left no row at all — the slot
+      // is decided, never shared and never silently demoted.
+      const { rows } = await pool.query<{ id: string; is_primary: boolean }>(
+        "SELECT id, is_primary FROM project_partners WHERE project_id = $1 AND status = 'active' AND is_primary = true",
+        [projectId],
+      );
+      expect(rows).toHaveLength(1);
+      expect(rows[0]!.id).toBe(body(winner).id);
+      expect(await auditRows(body(winner).id)).toBe(1);
+    });
   },
 );

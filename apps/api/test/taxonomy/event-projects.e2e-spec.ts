@@ -1064,5 +1064,43 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       ).toHaveLength(1);
       expect(afterRetire.every((r) => r.subject_id !== null)).toBe(true);
     });
+
+    it("012 EARS-17: when the same event↔project pair is related concurrently under distinct keys, exactly one call shall win and the losers shall get 409, never an opaque 500", async () => {
+      const event = await makeEvent(false);
+      const project = await makeProject(false);
+
+      // DISTINCT Idempotency-Keys on purpose: the record layer cannot collapse
+      // these into a replay, so all three reach the domain transaction and
+      // §6's "unique constraints remain the final race guard" is what has to
+      // hold — the in-transaction pair pre-check passes in all three before any
+      // of them has inserted.
+      const responses = await Promise.all([
+        relate(event.id, project.id),
+        relate(event.id, project.id),
+        relate(event.id, project.id),
+      ]);
+      expect(
+        responses.map((r) => r.statusCode).sort(),
+        responses.map((r) => r.payload).join("\n"),
+      ).toEqual([201, 409, 409]);
+
+      const winner = responses.find((r) => r.statusCode === 201)!;
+      const winnerId = (winner.json() as RelationBody).id;
+      createdRelationIds.push(winnerId);
+      for (const loser of responses.filter((r) => r.statusCode === 409)) {
+        expect((loser.json() as { errorCode?: string }).errorCode).toBe(
+          "RELATIONSHIP_CONFLICT",
+        );
+      }
+
+      const { rows } = await pool.query<{ count: string }>(
+        "SELECT count(*)::text AS count FROM event_projects WHERE event_id = $1 AND project_id = $2",
+        [event.id, project.id],
+      );
+      expect(rows[0]!.count).toBe("1");
+      // §6: "invariant failures and serialization aborts write no domain audit
+      // row" — the winner leaves exactly one insert row, the losers none.
+      expect(await auditCount(winnerId)).toBe(1);
+    });
   },
 );

@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import pg from "pg";
 
-import { AUDIT_PD_COLUMNS } from "@ds/db";
+import { AUDIT_CAPTURE_ALLOWLIST, AUDIT_PD_COLUMNS } from "@ds/db";
 import { deleteEventFixture } from "../setup/fixture-cleanup.js";
 
 // 010 — Universal edit audit (spec `specs/features/010-universal-edit-audit/`,
@@ -436,6 +436,91 @@ describe.skipIf(!process.env.DATABASE_URL)(
         `SELECT audit_pd_columns('events') AS cols`,
       );
       expect(rows[0]!.cols).toEqual([]);
+    });
+
+    // ── 012 §6 — the exact two-table technical allowlist ───────────────────
+
+    it("012 EARS-17: the SQL trigger install list and the packages/db registry agree that EXACTLY idempotency_keys and media_cleanup_jobs are the taxonomy technical exclusions, and a raw write to each leaves no trail", async () => {
+      // 012-design §6: "Record cleanup remains distinct from §5.1
+      // `media_cleanup_jobs`; §6's exact two-table technical allowlist covers
+      // both with explicit parity tests." Two lists have to agree — what the
+      // database actually installed, and what `packages/db` says it installed —
+      // and the count is EXACT in both directions: a third un-audited taxonomy
+      // table is a silent audit hole, and auditing either of these two would
+      // duplicate a technical stream the domain mutation already records.
+      const { rows: attached } = await pool.query<{ table_name: string }>(
+        `SELECT c.relname AS table_name
+         FROM pg_trigger t
+         JOIN pg_class c ON c.oid = t.tgrelid
+         JOIN pg_proc p ON p.oid = t.tgfoid
+         WHERE NOT t.tgisinternal AND p.proname = 'audit_row_change'`,
+      );
+      const attachedSet = new Set(attached.map((r) => r.table_name));
+
+      // Every table the 012 surface owns: four entities, five joins, and the
+      // two technical tables §6 names. Adding a taxonomy table without deciding
+      // its audit status fails this test rather than passing silently.
+      const TAXONOMY_TABLES = [
+        "projects",
+        "experts",
+        "directions",
+        "partners",
+        "event_experts",
+        "event_projects",
+        "event_directions",
+        "project_experts",
+        "project_partners",
+        "direction_specialties",
+        "direction_adjacency",
+        "idempotency_keys",
+        "media_cleanup_jobs",
+      ] as const;
+      const TECHNICAL_EXCLUSIONS = ["idempotency_keys", "media_cleanup_jobs"];
+
+      // Direction 1 — what the DB installed.
+      expect(
+        TAXONOMY_TABLES.filter((table) => !attachedSet.has(table)).sort(),
+      ).toEqual([...TECHNICAL_EXCLUSIONS].sort());
+
+      // Direction 2 — what packages/db declares. Same two, no more.
+      expect(
+        AUDIT_CAPTURE_ALLOWLIST.map((entry) => entry.table)
+          .filter((table) =>
+            (TAXONOMY_TABLES as readonly string[]).includes(table),
+          )
+          .sort(),
+      ).toEqual([...TECHNICAL_EXCLUSIONS].sort());
+
+      // Direction 3 — behaviour, not just registries: a raw write to each of
+      // the two produces no ledger row at all.
+      const key = randomUUID();
+      await pool.query(
+        `INSERT INTO idempotency_keys
+           (key, scope, actor_id, method, route, request_fingerprint, expires_at)
+         VALUES ($1, 'audit-e2e', 'audit-e2e-actor', 'POST', '/v1/audit-e2e', $2, now() + interval '1 day')`,
+        [key, randomUUID().replace(/-/g, "")],
+      );
+      const { rows: jobRows } = await pool.query<{ id: string }>(
+        `INSERT INTO media_cleanup_jobs
+           (cleanup_kind, entity_kind, entity_id, slot, object_key)
+         VALUES ('clear', 'project', $1, 'cover', $2)
+         RETURNING id`,
+        [randomUUID(), `audit-e2e/${randomUUID()}`],
+      );
+
+      try {
+        const { rows: ledger } = await pool.query<{ n: string }>(
+          `SELECT count(*)::text AS n FROM audit_ledger
+            WHERE event_type LIKE 'data.idempotency_keys.%'
+               OR event_type LIKE 'data.media_cleanup_jobs.%'`,
+        );
+        expect(ledger[0]!.n).toBe("0");
+      } finally {
+        await pool.query(`DELETE FROM idempotency_keys WHERE key = $1`, [key]);
+        await pool.query(`DELETE FROM media_cleanup_jobs WHERE id = $1`, [
+          jobRows[0]!.id,
+        ]);
+      }
     });
   },
 );

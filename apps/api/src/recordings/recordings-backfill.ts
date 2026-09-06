@@ -4,6 +4,7 @@ import { z } from "zod";
 import {
   AttachRecordingRequestSchema,
   type AttachRecordingRequest,
+  RecordingAdminListQuerySchema,
   type RecordingKind,
 } from "@ds/schemas";
 import { auditContextStore } from "../audit/audit-context.js";
@@ -259,10 +260,17 @@ async function runTarget(
     // 3. What the kind slot already holds, read through the ordinary list
     //    command — the LD-1 partial unique index is the guard, this read is what
     //    turns the guard into a per-row verdict.
-    const listed = await deps.recordings.list(event.id);
-    const held = listed.data.find(
-      (row) => row.kind === target.kind && row.status !== "retired",
+    //
+    //    `slots` and not `data`: since EARS-22 (#1612) `data` is the operator's
+    //    FILTERED page, while `slots` is exactly this question — the current
+    //    non-retired row of each kind — projected unfiltered by the server. The
+    //    backfill asks the server the question rather than re-deriving it from a
+    //    page whose contents depend on a query it has no reason to care about.
+    const listed = await deps.recordings.list(
+      event.id,
+      RecordingAdminListQuerySchema.parse({}),
     );
+    const held = listed.slots.find((row) => row.kind === target.kind);
 
     if (held?.status === "published") {
       return {

@@ -134,8 +134,8 @@ Feature: A doctor stopped by a gate registers in a short honest form and comes b
 
   @EARS-10 @failure
   Scenario: A stale return target degrades honestly instead of dead-ending
-    Given a doctor registered from an эфир and confirms the letter after the эфир was unpublished
-    When the confirmation link is opened
+    Given a doctor registered from an эфир and confirms their email after the эфир was unpublished
+    When the code from the letter is entered on the code-entry screen that carries the return target
     Then the doctor lands on the nearest honest destination
     And a plain Russian line states what happened to the content they came for
     And no dead link and no silent redirect occurs

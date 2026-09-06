@@ -1,9 +1,10 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { and, asc, eq, inArray, isNull, or, sql } from "drizzle-orm";
+import { and, asc, count, eq, ilike, inArray, isNull, or, sql } from "drizzle-orm";
 import type { DrizzleHandle, Event, EventRecording } from "@ds/db";
 import { eventRecordings, events } from "@ds/db";
 import {
   CANONICAL_UUID_REGEX,
+  type RecordingAdminListQuery,
   type RecordingKind,
   type RecordingStatus,
   type StreamProvider,
@@ -285,19 +286,76 @@ export class RecordingsRepository {
   }
 
   /**
-   * Every retained row of one event, RETIRED ONES INCLUDED (§3: a retired row
-   * stays addressable). Ordered by kind then creation so the panel's two rows
-   * keep a stable place and a superseded retired row lists under its successor.
+   * 014 EARS-22 (#1612) — one filtered, paginated page of the event's retained
+   * rows, RETIRED ONES INCLUDED when asked for (§3: a retired row stays
+   * addressable). Ordered by kind then creation so the rows keep a stable place
+   * and a superseded retired row lists under its successor; the id breaks the
+   * tie so two rows created in the same millisecond cannot swap pages.
+   *
+   * The predicate is SQL — filtering a full roster in application code would
+   * make `total` a lie the moment the event outgrows one page (012-design §5.1,
+   * the same rule the taxonomy lists are held to).
    */
-  listByEvent(eventId: string): Promise<EventRecording[]> {
-    return this.db
+  async listByEvent(
+    eventId: string,
+    query: RecordingAdminListQuery,
+  ): Promise<{ rows: EventRecording[]; total: number }> {
+    const filters = [eq(eventRecordings.eventId, eventId)];
+    if (query.status) {
+      filters.push(eq(eventRecordings.status, query.status));
+    } else if (!query.includeRetired) {
+      filters.push(isNull(eventRecordings.deletedAt));
+    }
+    if (query.kind) {
+      filters.push(eq(eventRecordings.kind, query.kind));
+    }
+    if (query.q) {
+      // NFKC first, exactly as the taxonomy search does: two visually identical
+      // inputs must behave the same against an NFKC-normalized column.
+      const pattern = `%${escapeLike(query.q.normalize("NFKC"))}%`;
+      filters.push(ilike(eventRecordings.embedRef, pattern));
+    }
+    const where = and(...filters);
+
+    const rows = await this.db
       .select()
       .from(eventRecordings)
-      .where(eq(eventRecordings.eventId, eventId))
+      .where(where)
       .orderBy(
         asc(eventRecordings.kind),
         asc(eventRecordings.createdAt),
         asc(eventRecordings.id),
-      );
+      )
+      .limit(query.pageSize)
+      .offset((query.page - 1) * query.pageSize);
+
+    const [totals] = await this.db
+      .select({ value: count() })
+      .from(eventRecordings)
+      .where(where);
+    return { rows, total: Number(totals?.value ?? 0) };
   }
+
+  /**
+   * The current non-retired row of each kind, UNFILTERED by the list query
+   * (§7 slots). The `(event_id, kind)` partial unique index makes this at most
+   * one row per kind, so no ordering is needed to pick a winner.
+   */
+  listSlots(eventId: string): Promise<EventRecording[]> {
+    return this.db
+      .select()
+      .from(eventRecordings)
+      .where(
+        and(
+          eq(eventRecordings.eventId, eventId),
+          isNull(eventRecordings.deletedAt),
+        ),
+      )
+      .orderBy(asc(eventRecordings.kind));
+  }
+}
+
+/** Escape the LIKE wildcards so a search for `100%` is a literal search. */
+function escapeLike(value: string): string {
+  return value.replace(/[\\%_]/g, (ch) => `\\${ch}`);
 }

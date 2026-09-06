@@ -5,6 +5,7 @@ import {
   type AttachRecordingRequest,
   type RecordingAdminDetail,
   type RecordingAdminList,
+  type RecordingAdminListQuery,
   type RecordingCommand,
   type RecordingStatus,
   RECORDING_TRANSITIONS,
@@ -77,14 +78,29 @@ export class RecordingsService {
     private readonly idempotency: IdempotencyService,
   ) {}
 
-  /** `GET /v1/admin/events/:id/recordings` — every retained row of the event. */
-  async list(eventId: string): Promise<RecordingAdminList> {
+  /**
+   * `GET /v1/admin/events/:id/recordings` — 014 EARS-22 (#1612): one filtered,
+   * paginated page of the event's retained rows, plus the two kind slots
+   * projected UNFILTERED so the panel renders its primary surface and its
+   * history from a single response (see `RecordingAdminListSchema`).
+   */
+  async list(
+    eventId: string,
+    query: RecordingAdminListQuery,
+  ): Promise<RecordingAdminList> {
     const event = await this.repo.findEvent(eventId);
     if (!event) throw new TaxonomyError("RESOURCE_NOT_FOUND");
-    const rows = await this.repo.listByEvent(eventId);
+    const publishable = recordingPublishable(event);
+    const [{ rows, total }, slots] = await Promise.all([
+      this.repo.listByEvent(eventId, query),
+      this.repo.listSlots(eventId),
+    ]);
     return {
-      data: rows.map((row) => toDetail(row, recordingPublishable(event))),
-      total: rows.length,
+      data: rows.map((row) => toDetail(row, publishable)),
+      total,
+      page: query.page,
+      pageSize: query.pageSize,
+      slots: slots.map((row) => toDetail(row, publishable)),
       eventState: event.state,
       recordingExpectedBy: event.recordingExpectedBy,
     };

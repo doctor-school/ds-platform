@@ -5,6 +5,7 @@ import {
   RECORDING_COMMANDS,
   RECORDING_ERROR_CODES,
   RECORDING_TRANSITIONS,
+  RecordingAdminListQuerySchema,
   UpdateRecordingRequestSchema,
   validRecordingCommands,
 } from "./index.js";
@@ -189,5 +190,51 @@ describe("014 event recordings — admin contract (SSOT)", () => {
       expect(RECORDING_ERROR_CODES).toContain(code);
     }
     expect(RECORDING_ERROR_CODES).not.toContain("INTERNAL_ERROR");
+  });
+  // ── EARS-22 — the shared list query ───────────────────────────────────────
+  //
+  // The point of these assertions is that 014 did NOT author a second list
+  // protocol: the parameter names, their defaults and their strictness are the
+  // 012 shared ones, and only the two vocabularies (`status`, `kind`) are the
+  // recording's own. A drift here is a fork of the shared control, which is
+  // exactly what EARS-22 forbids.
+
+  it("014 EARS-22: the recording list query shall default to page 1 of the operator working set, excluding retired rows until asked", () => {
+    const parsed = RecordingAdminListQuerySchema.parse({});
+    expect(parsed).toEqual({ page: 1, pageSize: 20, includeRetired: false });
+  });
+
+  it("014 EARS-22: the list query shall coerce the wire strings a query string carries and accept the recording vocabularies", () => {
+    const parsed = RecordingAdminListQuerySchema.parse({
+      page: "3",
+      pageSize: "50",
+      q: "  abc  ",
+      status: "retired",
+      kind: "raw",
+      includeRetired: "true",
+    });
+    expect(parsed).toEqual({
+      page: 3,
+      pageSize: 50,
+      q: "abc",
+      status: "retired",
+      kind: "raw",
+      includeRetired: true,
+    });
+  });
+
+  it("014 EARS-22: the list query shall refuse a foreign vocabulary, an out-of-range page and an unknown parameter", () => {
+    for (const bad of [
+      // `published` is a recording status; `archived` is not one of the three.
+      { status: "archived" },
+      // `montage` is a public PROJECTION state, never a stored kind.
+      { kind: "montage" },
+      { page: "0" },
+      { pageSize: "101" },
+      // Strict: an unknown parameter is a client bug, not something to ignore.
+      { sortBy: "title" },
+    ]) {
+      expect(RecordingAdminListQuerySchema.safeParse(bad).success).toBe(false);
+    }
   });
 });

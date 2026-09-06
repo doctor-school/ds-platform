@@ -612,7 +612,30 @@ export const dataProvider: DataProvider = {
  * never hand-concatenates a path (and never reaches a DELETE — none exists).
  */
 export const recordingsUrl = {
-  collection: (eventId: string) => `${ADMIN_BASE}/events/${eventId}/recordings`,
+  /**
+   * The list route, with the 014 EARS-22 admin list query serialized here rather
+   * than by the caller. The `custom` transport above is a plain `fetch` — it has
+   * no filter/pagination translation of its own — so the query string is part of
+   * the URL, and building it in the one place that owns these paths keeps the
+   * panel from hand-concatenating a route.
+   *
+   * An empty or absent value is OMITTED, never sent as `""`: the list query is
+   * `.strict()` on a closed vocabulary, and `status=` would be a 400 rather than
+   * «no status filter».
+   */
+  collection: (
+    eventId: string,
+    query?: Partial<Record<string, string | number | boolean>>,
+  ) => {
+    const base = `${ADMIN_BASE}/events/${eventId}/recordings`;
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(query ?? {})) {
+      if (value === undefined || value === null || value === "") continue;
+      params.set(key, String(value));
+    }
+    const qs = params.toString();
+    return qs ? `${base}?${qs}` : base;
+  },
   row: (eventId: string, recordingId: string) =>
     `${ADMIN_BASE}/events/${eventId}/recordings/${recordingId}`,
   command: (eventId: string, recordingId: string, command: RecordingCommand) =>

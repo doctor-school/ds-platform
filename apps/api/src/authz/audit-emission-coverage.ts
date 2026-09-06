@@ -88,6 +88,15 @@ export const HIGH_STAKES_AUDIT_COVERAGE: Record<string, AuditEmissionCoverage> =
       coveredBy:
         "audit-ledger.e2e: EARS-18 register appends one auth.register row (emitted by the delegated 003 command site)",
     },
+    "POST /v1/storefront/doctor/confirm": {
+      // 021 EARS-10 (#1546): the doctor-host confirm command delegates the
+      // verification itself to the 003 `AuthService.verify` command site
+      // unchanged, so the terminal auth.account.verified / verify_failed rows are
+      // the ones that site already emits; this route only resolves the landing.
+      emits: ["IdentifierVerified", "VerifyFailed"],
+      coveredBy:
+        "audit-ledger.e2e: EARS-18 email verification appends one auth.account.verified row (emitted by the delegated 003 command site); doctor-register-return.e2e EARS-10 drives the route end to end",
+    },
     "POST /v1/auth/login": {
       // Success and both failure branches (wrong_password / lock) emit here; the
       // tripping transition also emits AccountLocked (EARS-15).

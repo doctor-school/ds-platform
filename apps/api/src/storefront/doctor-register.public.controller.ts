@@ -1,11 +1,17 @@
 import { Body, Controller, HttpCode, Inject, Post } from "@nestjs/common";
-import type { DoctorRegisterResponse } from "@ds/schemas";
+import type {
+  DoctorConfirmResponse,
+  DoctorRegisterResponse,
+} from "@ds/schemas";
 
 import { Authz, Public } from "../authz/index.js";
 import { BotProtected } from "../bot-protection/index.js";
 import { RateLimited } from "../auth/rate-limit/index.js";
 import { TimingEqualized } from "../auth/timing/index.js";
-import { DoctorRegisterRequestDto } from "./doctor-register.dto.js";
+import {
+  DoctorConfirmRequestDto,
+  DoctorRegisterRequestDto,
+} from "./doctor-register.dto.js";
 import { DoctorRegisterService } from "./doctor-register.service.js";
 
 /**
@@ -61,5 +67,42 @@ export class DoctorRegisterPublicController {
     @Body() dto: DoctorRegisterRequestDto,
   ): Promise<DoctorRegisterResponse> {
     return this.doctorRegister.register(dto);
+  }
+
+  /**
+   * `POST /v1/storefront/doctor/confirm` — the 021 `ConfirmEmail` command
+   * (EARS-10, #1546).
+   *
+   * The decorators MIRROR the 003 `/v1/auth/verify` handler this delegates to,
+   * deliberately and exactly: `@Public()` (the doctor has no session yet — the
+   * code IS the credential), `@RateLimited()` (a code-gated route is
+   * brute-forceable and the 003 route is limited for that reason), `@HttpCode(200)`.
+   *
+   * There is NO `@TimingEqualized()` here, and that is a match rather than an
+   * omission: `/verify` is deliberately outside the EARS-16 ≤50 ms floor
+   * (003-requirements-en.md does not list it), because it is gated on a secret
+   * the caller either holds or does not — it discloses nothing about account
+   * existence that timing could widen. Adding the interceptor on this twin
+   * while the 003 original runs without it would make the two surfaces
+   * observably different, which is the divergence 021 LD-1 forbids.
+   *
+   * `@BotProtected` is likewise absent by symmetry with `/verify`: 003 EARS-17
+   * protects registration and code RESENDS, not the verification submit itself.
+   *
+   * A wrong code raises the 003 generic 400 (RFC 7807, ADR-0002) from inside
+   * the service, so no landing is resolved and none is leaked.
+   */
+  @Post("confirm")
+  @Public()
+  @RateLimited()
+  @HttpCode(200)
+  @Authz({
+    access: "public",
+    check: "none",
+    audit: "high-stakes",
+    tests: ["EARS-10"],
+  })
+  confirm(@Body() dto: DoctorConfirmRequestDto): Promise<DoctorConfirmResponse> {
+    return this.doctorRegister.confirm(dto);
   }
 }

@@ -1748,6 +1748,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/storefront/doctor/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["DoctorRegisterPublicController_confirm"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/storefront/doctor/events": {
         parameters: {
             query?: never;
@@ -1873,6 +1889,12 @@ export interface components {
             professionalRole?: string | null;
             /** Format: uuid */
             userId?: string;
+        };
+        DoctorConfirmRequestDto: {
+            code: string;
+            /** Format: email */
+            email: string;
+            returnTo?: string;
         };
         DoctorEventsFeedDto: {
             days: {
@@ -4811,6 +4833,27 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    DoctorRegisterPublicController_confirm: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DoctorConfirmRequestDto"];
+            };
+        };
         responses: {
             200: {
                 headers: {

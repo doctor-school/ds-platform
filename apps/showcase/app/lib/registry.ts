@@ -196,4 +196,12 @@ export const NON_CATALOGUED_EXPORTS: string[] = [
   "TableHead",
   "TableCell",
   "TableCaption",
+  // `./blocks` bot-protection client half (021 EARS-19, #1558) — the SmartCaptcha
+  // adapter and the field that mounts it render NOTHING of their own: the provider
+  // challenge is invisible, and without a site key the field is an empty element
+  // that resumes the pending action. There is no state matrix to show and no
+  // look to keep parity with, and mounting a live third-party challenge inside
+  // the showcase would call the provider on every page view.
+  "SmartCaptcha",
+  "BotProtectionField",
 ];

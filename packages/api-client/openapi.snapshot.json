@@ -4819,7 +4819,14 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DoctorEventsLiveDto"
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/DoctorEventsLiveDto"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 }
               }
             },

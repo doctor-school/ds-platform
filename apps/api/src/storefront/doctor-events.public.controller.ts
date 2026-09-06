@@ -11,7 +11,12 @@ import {
   Req,
   UseFilters,
 } from "@nestjs/common";
-import { ApiOkResponse, ApiQuery } from "@nestjs/swagger";
+import {
+  ApiExtraModels,
+  ApiOkResponse,
+  ApiQuery,
+  getSchemaPath,
+} from "@nestjs/swagger";
 import type { FastifyRequest } from "fastify";
 import {
   type DoctorEventsFeed,
@@ -241,7 +246,16 @@ export class DoctorEventsPublicController {
    * because the answer varies per viewer AND changes the moment a room closes.
    */
   @Get("live")
-  @ApiOkResponse({ type: DoctorEventsLiveDto })
+  @ApiExtraModels(DoctorEventsLiveDto)
+  @ApiOkResponse({
+    // `LiveStrip | null` (`DoctorEventsLiveReadSchema`), not a bare strip: the
+    // most common answer on this route is «nothing is live», and a published
+    // contract that types the 200 body as an always-present object would make
+    // every SDK consumer wrong about its own happy path.
+    schema: {
+      oneOf: [{ $ref: getSchemaPath(DoctorEventsLiveDto) }, { type: "null" }],
+    },
+  })
   @Public()
   @Header("Cache-Control", "private, no-store")
   @Authz({

@@ -91,6 +91,17 @@ async function shootPortalLoginRevealed(browser) {
     viewport: "desktop",
     theme: "light",
   });
+  // The portal auth pages mount inside `useRedirectIfAuthenticated`, whose
+  // `authClient.session()` probe never resolves with no BFF behind the rewrite,
+  // leaving `<AuthShell>` empty (#1034). Fulfil it with the 401 a cookie-less
+  // visitor really gets, exactly as `apps/portal/e2e/*.e2e.spec.ts` do.
+  await page.route("**/v1/auth/session", (route) =>
+    route.fulfill({
+      status: 401,
+      contentType: "application/json",
+      body: JSON.stringify({ message: "unauthorized" }),
+    }),
+  );
   await page.goto(`${PORTAL}/login`, { waitUntil: "networkidle" });
   const input = page.locator("input[name='password']");
   await input.waitFor();

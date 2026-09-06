@@ -113,10 +113,14 @@ function PasswordControl<T extends FieldValues>({
           {...(placeholder !== undefined ? { placeholder } : {})}
           {...field}
           value={field.value ?? ""}
-          // `pr-14` (56px) reserves the canvas right gutter for the 48px (`w-12`)
-          // toggle so the typed value never runs under the control. Token-only —
-          // arbitrary Tailwind values are lint-blocked (ADR-0013).
-          className="pr-14"
+          // `pr-24` (96px) reserves the right gutter for the 80px (`w-20`)
+          // toggle so the typed value never runs under the control. The canvas
+          // gutter (52px) / box (48px) is narrower than the RU label needs:
+          // «Показать» at `text-xs`/`font-extrabold` measures wider than 48px and
+          // overran the field border, so the box grows to the next token step
+          // that keeps the label inside in both themes. Token-only — arbitrary
+          // Tailwind values are lint-blocked (ADR-0013).
+          className="pr-24"
           ref={(node: HTMLInputElement | null) => {
             inputRef.current = node;
             const rhfRef: unknown = field.ref;
@@ -153,7 +157,7 @@ function PasswordControl<T extends FieldValues>({
             : null;
           setRevealed((prev) => !prev);
         }}
-        className="absolute inset-y-0 right-0 flex w-12 items-center justify-center bg-transparent text-xs font-extrabold text-primary-action hover:underline focus-visible:shadow-focus focus-visible:outline-none"
+        className="absolute inset-y-0 right-0 flex w-20 items-center justify-end pr-3 bg-transparent text-xs font-extrabold text-primary-action hover:underline focus-visible:shadow-focus focus-visible:outline-none"
       >
         {text}
       </button>

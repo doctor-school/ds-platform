@@ -1,7 +1,7 @@
 import * as React from "react";
 import { useForm, type ControllerRenderProps } from "react-hook-form";
 import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { Form, FormField } from "../form";
 
@@ -149,6 +149,50 @@ function RevealHarness({
   );
 }
 
+/**
+ * Reveal harness wired to spies: the field's `onChange` (what RHF would use to
+ * write the value) and the form's submit handler. EARS-38's "no value is
+ * copied, logged, submitted, or stored as a side effect" clause is only implied
+ * by the state assertions above — this pins it directly.
+ */
+function SpyHarness({
+  onChange,
+  onSubmit,
+}: {
+  onChange: (...args: unknown[]) => void;
+  onSubmit: (...args: unknown[]) => void;
+}) {
+  const form = useForm<{ password: string }>({
+    defaultValues: { password: "" },
+  });
+  return (
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(() => onSubmit())}>
+        <FormField
+          control={form.control}
+          name="password"
+          render={({ field }) => (
+            <PasswordField
+              field={
+                {
+                  ...field,
+                  onChange: (...args: unknown[]) => {
+                    onChange(...args);
+                    (field.onChange as (...a: unknown[]) => void)(...args);
+                  },
+                } as unknown as ControllerRenderProps<{ password: string }>
+              }
+              purpose="new"
+              label="Пароль"
+              testId="pw"
+            />
+          )}
+        />
+      </form>
+    </Form>
+  );
+}
+
 describe("PasswordField reveal toggle (003 EARS-38)", () => {
   it("003 EARS-38.1: masked by default — type=password, toggle present, aria-pressed=false, «Показать»", () => {
     render(<RevealHarness />);
@@ -223,5 +267,27 @@ describe("PasswordField reveal toggle (003 EARS-38)", () => {
       "placeholder",
       "••••••••",
     );
+  });
+
+  it("003 EARS-38.6: toggling fires no onChange / no value side effect", () => {
+    const onChange = vi.fn();
+    const onSubmit = vi.fn();
+    render(<SpyHarness onChange={onChange} onSubmit={onSubmit} />);
+    const input = screen.getByTestId("pw") as HTMLInputElement;
+
+    fireEvent.change(input, { target: { value: "secret1234" } });
+    expect(onChange).toHaveBeenCalledTimes(1);
+    onChange.mockClear();
+
+    const toggle = screen.getByTestId("pw-reveal");
+    fireEvent.click(toggle);
+    fireEvent.click(toggle);
+
+    // The toggle mutates presentation only: no write back through the field's
+    // change channel, no submit, and the value itself is untouched.
+    expect(onChange).not.toHaveBeenCalled();
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(input).toHaveValue("secret1234");
+    expect(input).toHaveAttribute("type", "password");
   });
 });

@@ -79,15 +79,15 @@ lang: en
 
 28 provisional features across seven build waves. Row detail — screens, REQ coverage, `blocked_by` rationale and engine reuse — lives in [`functional-map-ru.md`](./functional-map-ru.md) §B–§C; this table is the epic-level view only.
 
-| Wave  | Features                | Surfaces                 | What becomes demonstrable                                                                                                                        |
-| ----- | ----------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **1** | 017, 018, 019, 020, 021 | doctor (+ event on both) | The whole doctor funnel: entry → specialty → feed → event → «Участвовать» → registration → return to the point of interest; `apps/promo` retired |
-| **2** | 022, 023, 024, 025, 044 | doctor · backend         | The doctor learns and accrues attention points, sees them in the account, reaches a school as a product; congress-2026 sign-ups land in our DB   |
-| **3** | 028, 037, 038           | both · backend           | The doctor passes verification, receives a document and an NMO code; the platform is legally public                                              |
-| **4** | 029, 030, 031, 033      | academy                  | The whole expert funnel: heard of it → read the backstage → «Это я» / application                                                                |
-| **5** | 032, 034, 035, 036      | academy · backend        | The whole investor funnel: understood the model → checked the leaderboard → cabinet with the accrual report                                      |
-| **6** | 039, 040, 042, 043      | admin · backend          | The team runs people, content and mailings in the system; the existing audience has migrated                                                     |
-| **7** | 026, 027, 041           | doctor · admin           | The congress lives on the platform; communities work                                                                                             |
+| Wave  | Features                | Surfaces                 | What becomes demonstrable                                                                                                                                                                     |
+| ----- | ----------------------- | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **1** | 017, 018, 019, 020, 021 | doctor (+ event on both) | The whole doctor funnel: entry → specialty → feed → event → «Участвовать» → registration → return to the point of interest; `apps/promo` retired                                              |
+| **2** | 022, 023, 024, 025, 044 | doctor · backend         | The doctor learns and accrues attention points, sees them in the account, reaches a school as a product; congress-2026 sign-ups land in our DB                                                |
+| **3** | 028, 037, 038           | both · backend           | The doctor passes verification, receives a document and an NMO code; the platform is legally public (028 ships in two slices — its thin slice A lands in R1 without 037, the rest stays here) |
+| **4** | 029, 030, 031, 033      | academy                  | The whole expert funnel: heard of it → read the backstage → «Это я» / application                                                                                                             |
+| **5** | 032, 034, 035, 036      | academy · backend        | The whole investor funnel: understood the model → checked the leaderboard → cabinet with the accrual report                                                                                   |
+| **6** | 039, 040, 042, 043      | admin · backend          | The team runs people, content and mailings in the system; the existing audience has migrated                                                                                                  |
+| **7** | 026, 027, 041           | doctor · admin           | The congress lives on the platform; communities work                                                                                                                                          |
 
 **Wave 1 also carries one engineering deliverable, not a pipeline feature:** retiring `apps/promo` once its marketing routes are served from `apps/doctor`. It has no PRD; its acceptance is «the routes answer from `doctor.school`, the old app is undeployed and removed from the repository».
 

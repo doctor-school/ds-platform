@@ -416,11 +416,11 @@ Relaxing (or later tightening) the policy is therefore a **three-place, one-deci
 
 Length-only means a long but weak or breached passphrase (`password123456`) passes. The control that would catch it — a **HIBP k-anonymity compromised-password check** — is deferred (ADR-0001 deferred-gaps table, DSO-26) and named as out of scope rather than silently implied. Meanwhile the risk is carried by controls that are already shipped: EARS-13 rate limits (per-user / per-IP / per-ASN), EARS-15 native Zitadel lockout with our notification email, and EARS-16 enumeration-resistant, timing-equalized responses. Those bound online guessing; they do not bound offline cracking of a stolen hash, which is why the HIBP gap stays on the deferred list with an owner rather than being closed by assertion.
 
-### 15.4 Presentation — hint slot vs error slot (EARS-37)
+### 15.4 Presentation — one message slot, hint or error (EARS-37)
 
-The current `password-field.tsx` renders the requirement hint and the validation error through **one** shared `FormMessage` slot, so the moment validation fails the rule the user needs is replaced by the complaint that the rule was not met. That is the defect EARS-37 fixes: the field renders **two distinct slots** — a persistent requirement line, present from first render, and an error line beneath it — so the rule and the error are visible **simultaneously**.
+`PasswordField` renders the requirement hint and the validation error through **one** shared `FormMessage` slot (ADR-0013 §7): the hint stands from first render, and on a validation error the error takes its place until the field is valid again — hint or error, never both. That single slot is the contract, in the design system and in the canvas alike (`design-source/auth.dc.html`, `#d-register`, where the hint node is hidden in the error state). The swap is lossless: with a length-only policy the hint and the error carry the **same single rule**, so the message that replaces the rule restates it.
 
-Because the policy is length-only there is exactly **one** rule to show: «Не менее 8 символов». No checklist of requirements, no strength meter, no second requirement revealed after the first is satisfied — those UI patterns exist to serve composition rules that no longer exist here. The hint and the error copy name the same single rule and both resolve from the RU message catalog (EARS-21, §8.1); neither is a hardcoded string.
+Because the policy is length-only there is exactly **one** rule to show: «Не менее 8 символов». No checklist of requirements, no strength meter, no second requirement revealed after the first is satisfied — those UI patterns exist to serve composition rules that no longer exist here. The hint and the error copy name the same single rule and both resolve from the RU message catalog (EARS-21, §8.1); neither is a hardcoded string — which is what keeps one slot sufficient.
 
 ### 15.5 Reveal toggle (EARS-38)
 

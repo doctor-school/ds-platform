@@ -426,11 +426,11 @@ Feature: Net-new web authentication producing a doctor_guest identity
     And no requirement checklist, strength meter, or second requirement is shown
 
   @EARS-37 @failure
-  Scenario: The password rule stays visible while the validation error is shown
+  Scenario: The validation error replaces the hint in the one message slot
     Given a visitor on the registration form
     When the visitor submits a password that is too short
-    Then the validation error is shown in its own slot
-    And the single rule remains visible at the same time
+    Then the validation error is shown in the field's single message slot
+    And the hint is no longer rendered in that slot
     And the error names the same single rule as the hint
 
   @EARS-38 @happy

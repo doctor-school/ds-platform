@@ -115,12 +115,12 @@ The advance mechanics — the per-event configurable flag the owner fixed — li
 
 ## 7. Field contracts (EARS-11, LD-9)
 
-| Field             | Client rule                               | Mask   | Notes                                                                                        |
-| ----------------- | ----------------------------------------- | ------ | -------------------------------------------------------------------------------------------- |
-| email             | address shape                             | `none` | A mask would reject legitimate address forms.                                                |
-| password          | length ≥ 8 (003 EARS-36), persistent hint | `none` | Hint and error occupy distinct slots (003 EARS-37); show-password toggle (003 EARS-38).      |
-| promo code        | trim + length bound, otherwise opaque     | `none` | The code vocabulary belongs to a campaign, not to the form.                                  |
-| verification code | fixed length, alphanumeric                | `none` | `inputMode` admits letters; **no** CSS uppercase transform — verification is case-sensitive. |
+| Field             | Client rule                                  | Mask   | Notes                                                                                                   |
+| ----------------- | -------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------- |
+| email             | address shape                                | `none` | A mask would reject legitimate address forms.                                                           |
+| password          | length ≥ 8 (003 EARS-36), hint before submit | `none` | The error restates the rule in the same message slot (003 EARS-37); show-password toggle (003 EARS-38). |
+| promo code        | trim + length bound, otherwise opaque        | `none` | The code vocabulary belongs to a campaign, not to the form.                                             |
+| verification code | fixed length, alphanumeric                   | `none` | `inputMode` admits letters; **no** CSS uppercase transform — verification is case-sensitive.            |
 
 All four use the semantic field primitives tracked in #197 and draw copy from the message catalog (003 EARS-21). Client validation is a UX affordance only; the BFF and the IdP stay the authority.
 

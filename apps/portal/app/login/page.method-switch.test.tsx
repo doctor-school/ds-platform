@@ -46,10 +46,10 @@ type CaptchaProps = {
  * whole point is a challenge left IN FLIGHT across the switch.
  */
 let captchaProps: CaptchaProps | undefined;
-vi.mock("@/components/bot-protection", async () => {
+vi.mock("@ds/design-system/blocks", async () => {
   const actual = await vi.importActual<
-    typeof import("@/components/bot-protection")
-  >("@/components/bot-protection");
+    typeof import("@ds/design-system/blocks")
+  >("@ds/design-system/blocks");
   return {
     ...actual,
     BotProtectionField: (props: CaptchaProps) => {

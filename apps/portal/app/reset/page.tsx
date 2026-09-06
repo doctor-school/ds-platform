@@ -8,12 +8,9 @@ import { KeyRound } from "lucide-react";
 
 import { AuthShell } from "@/components/auth-shell";
 import {
-  BotProtectionField,
-  botProtectionFailureMessage,
-  isBotProtectionRejected,
-  isBotProtectionRequired,
-  useBotProtectedAction,
-} from "@/components/bot-protection";
+  botProtectionMessages,
+  botProtectionSiteKey,
+} from "@/lib/bot-protection";
 import { authClient } from "@/lib/auth-client";
 import { authErrorMessage } from "@/lib/auth-error-message";
 import { refreshHeaderAuth } from "@/lib/header-auth";
@@ -25,11 +22,16 @@ import { useLocalizedResolver } from "@/lib/use-localized-resolver";
 import { useResendCooldown } from "@/lib/use-resend-cooldown";
 
 import {
+  botProtectionFailureMessage,
+  BotProtectionField,
+  isBotProtectionRejected,
+  isBotProtectionRequired,
   maskDestination,
   PasswordRecoveryCard,
   type PasswordRecoveryCardCopy,
   type PasswordRecoveryCompleteValues,
   type PasswordRecoveryRequestValues,
+  useBotProtectedAction,
 } from "@ds/design-system/blocks";
 
 /*
@@ -65,7 +67,9 @@ export default function ResetPage() {
   const captcha = useBotProtectedAction({
     onVerified: () => setCaptchaError(null),
     onChallengeError: (failure) =>
-      setCaptchaError(botProtectionFailureMessage(failure, te)),
+      setCaptchaError(
+        botProtectionFailureMessage(failure, botProtectionMessages(te)),
+      ),
     onActionError: (err) => {
       if (isBotProtectionRejected(err)) {
         setCaptchaError(te("captchaRejected"));
@@ -95,7 +99,9 @@ export default function ResetPage() {
   const resendCaptcha = useBotProtectedAction({
     onVerified: () => setResendCaptchaError(null),
     onChallengeError: (failure) =>
-      setResendCaptchaError(botProtectionFailureMessage(failure, te)),
+      setResendCaptchaError(
+        botProtectionFailureMessage(failure, botProtectionMessages(te)),
+      ),
     onActionError: (err) =>
       setResendError(authErrorMessage(err, te, te("resetResendFailed"))),
   });
@@ -235,7 +241,12 @@ export default function ResetPage() {
           onSubmit: onRequest,
           error: captchaError ?? error,
           pending: captcha.pending,
-          captchaSlot: <BotProtectionField {...captcha.fieldProps} />,
+          captchaSlot: (
+            <BotProtectionField
+              sitekey={botProtectionSiteKey()}
+              {...captcha.fieldProps}
+            />
+          ),
         }}
         complete={{
           resolver: completeResolver,
@@ -247,7 +258,12 @@ export default function ResetPage() {
           onResend: () => resendCaptcha.request(onResend),
           onRestart,
           notice,
-          captchaSlot: <BotProtectionField {...resendCaptcha.fieldProps} />,
+          captchaSlot: (
+            <BotProtectionField
+              sitekey={botProtectionSiteKey()}
+              {...resendCaptcha.fieldProps}
+            />
+          ),
         }}
       />
     </AuthShell>

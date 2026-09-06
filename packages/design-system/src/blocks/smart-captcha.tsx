@@ -13,7 +13,7 @@ import {
 
 export type BotProtectionFailure = "expired" | "unavailable" | "incomplete";
 
-type PortalTheme = "light" | "dark";
+type SurfaceTheme = "light" | "dark";
 
 function subscribeToTheme(onChange: () => void): () => void {
   const observer = new MutationObserver(onChange);
@@ -24,11 +24,11 @@ function subscribeToTheme(onChange: () => void): () => void {
   return () => observer.disconnect();
 }
 
-function readTheme(): PortalTheme {
+function readTheme(): SurfaceTheme {
   return document.documentElement.classList.contains("dark") ? "dark" : "light";
 }
 
-function serverTheme(): PortalTheme {
+function serverTheme(): SurfaceTheme {
   return "light";
 }
 
@@ -40,7 +40,7 @@ export interface SmartCaptchaProps {
   onToken: (token?: string) => void;
   /** Provider/script lifecycle failure; callers map it to localized action copy. */
   onError: (failure: BotProtectionFailure) => void;
-  /** Widget UI language; defaults to Russian (the portal default locale). */
+  /** Widget UI language; defaults to Russian (the storefront default locale). */
   hl?: InvisibleSmartCaptchaProps["language"];
 }
 
@@ -100,7 +100,7 @@ function ThemeBoundInvisibleSmartCaptcha({
  * Thin EARS-17 adapter over Yandex's official MIT React package.
  *
  * `InvisibleSmartCaptcha` owns script loading, provider challenge UI and the
- * imperative execute lifecycle. The portal supplies only policy: when to run,
+ * imperative execute lifecycle. The host supplies only policy: when to run,
  * its resolved `.dark`/light theme, and truthful error routing. No custom
  * challenge UI is implemented here.
  */

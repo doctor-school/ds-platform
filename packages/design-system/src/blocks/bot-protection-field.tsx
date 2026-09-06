@@ -1,9 +1,22 @@
 "use client";
 
 import { useEffect } from "react";
+
 import { SmartCaptcha, type BotProtectionFailure } from "./smart-captcha";
 
 export interface BotProtectionFieldProps {
+  /**
+   * The provider site key, resolved by the HOST (021 EARS-19, #1558).
+   *
+   * The portal-local original read `process.env.NEXT_PUBLIC_SMARTCAPTCHA_SITE_KEY`
+   * itself. A design-system block must not: the package ships no build-time env
+   * of its own and is mounted by two Next apps that inline their own, so the key
+   * arrives as a prop and each host names the variable it actually builds with.
+   * Absent or empty — the dev-stand default, and the state a storefront built
+   * without a key runs in — the pending action RESUMES TOKENLESS, exactly
+   * matching the backend guard's no-op when the provider is disabled.
+   */
+  sitekey?: string | undefined;
   /** Monotonic key for one pending protected action; `null` is idle. */
   requestKey: number | null;
   /** Emits one fresh token; `undefined` means protection is disabled locally. */
@@ -19,12 +32,11 @@ export interface BotProtectionFieldProps {
  * without a token, matching the disabled backend provider.
  */
 export function BotProtectionField({
+  sitekey,
   requestKey,
   onToken,
   onError,
 }: BotProtectionFieldProps) {
-  const sitekey = process.env.NEXT_PUBLIC_SMARTCAPTCHA_SITE_KEY;
-
   useEffect(() => {
     if (!sitekey && requestKey !== null) onToken(undefined);
   }, [onToken, requestKey, sitekey]);

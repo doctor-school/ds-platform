@@ -14,12 +14,9 @@ import {
 
 import { AuthShell } from "@/components/auth-shell";
 import {
-  BotProtectionField,
-  botProtectionFailureMessage,
-  isBotProtectionRejected,
-  isBotProtectionRequired,
-  useBotProtectedAction,
-} from "@/components/bot-protection";
+  botProtectionMessages,
+  botProtectionSiteKey,
+} from "@/lib/bot-protection";
 import { authClient } from "@/lib/auth-client";
 import { authErrorMessage } from "@/lib/auth-error-message";
 import { refreshHeaderAuth } from "@/lib/header-auth";
@@ -32,11 +29,16 @@ import { completeReturnTarget } from "@/lib/registration-resume";
 import { useLocalizedResolver } from "@/lib/use-localized-resolver";
 
 import {
+  botProtectionFailureMessage,
+  BotProtectionField,
+  isBotProtectionRejected,
+  isBotProtectionRequired,
   LoginCard,
   type LoginCardCopy,
   type LoginCardOtpRequestValues,
   type LoginCardOtpVerifyValues,
   type LoginCardPasswordValues,
+  useBotProtectedAction,
 } from "@ds/design-system/blocks";
 
 /*
@@ -97,7 +99,9 @@ function PortalLoginCard() {
   const passwordCaptcha = useBotProtectedAction({
     onVerified: () => setPasswordCaptchaError(null),
     onChallengeError: (failure) =>
-      setPasswordCaptchaError(botProtectionFailureMessage(failure, te)),
+      setPasswordCaptchaError(
+        botProtectionFailureMessage(failure, botProtectionMessages(te)),
+      ),
     onActionError: (err) => {
       if (isBotProtectionRejected(err)) {
         setPasswordCaptchaError(te("captchaRejected"));
@@ -164,7 +168,9 @@ function PortalLoginCard() {
   const otpCaptcha = useBotProtectedAction({
     onVerified: () => setOtpCaptchaError(null),
     onChallengeError: (failure) =>
-      setOtpCaptchaError(botProtectionFailureMessage(failure, te)),
+      setOtpCaptchaError(
+        botProtectionFailureMessage(failure, botProtectionMessages(te)),
+      ),
     onActionError: (err) => {
       if (isBotProtectionRejected(err)) {
         setOtpCaptchaError(te("captchaRejected"));
@@ -257,7 +263,10 @@ function PortalLoginCard() {
   }
 
   // ---- resolvers (app-owned: localized messages + the portal identifier guards) --
-  const emailRequestSchema = useMemo(() => otpIdentifierFormSchema("email"), []);
+  const emailRequestSchema = useMemo(
+    () => otpIdentifierFormSchema("email"),
+    [],
+  );
   const smsRequestSchema = useMemo(() => otpIdentifierFormSchema("sms"), []);
   const passwordResolver = useLocalizedResolver(LoginIdentifierFormSchema);
   const emailRequestResolver = useLocalizedResolver(emailRequestSchema);
@@ -307,7 +316,10 @@ function PortalLoginCard() {
       copy={copy}
       // 005 EARS-2: signup is a co-equal auth path — the event context rides
       // onward into /register so it survives this hop too.
-      links={{ register: withReturnTarget("/register", returnTo), reset: "/reset" }}
+      links={{
+        register: withReturnTarget("/register", returnTo),
+        reset: "/reset",
+      }}
       // Next.js `<Link>` keeps the footer links on client-side navigation.
       renderLink={({ href, children }) => <Link href={href}>{children}</Link>}
       onMethodChange={onMethodChange}
@@ -316,7 +328,12 @@ function PortalLoginCard() {
         onSubmit: onPasswordSubmit,
         error: passwordCaptchaError ?? passwordError,
         pending: passwordCaptcha.pending,
-        captchaSlot: <BotProtectionField {...passwordCaptcha.fieldProps} />,
+        captchaSlot: (
+          <BotProtectionField
+            sitekey={botProtectionSiteKey()}
+            {...passwordCaptcha.fieldProps}
+          />
+        ),
       }}
       otp={{
         requestResolvers: {
@@ -329,7 +346,12 @@ function PortalLoginCard() {
         error: otpCaptchaError ?? otpRequestError,
         screenError: otpCaptchaError ?? otpRequestError ?? otpVerifyError,
         pending: otpCaptcha.pending,
-        captchaSlot: <BotProtectionField {...otpCaptcha.fieldProps} />,
+        captchaSlot: (
+          <BotProtectionField
+            sitekey={botProtectionSiteKey()}
+            {...otpCaptcha.fieldProps}
+          />
+        ),
         onRequest: onOtpRequest,
         onResend: onOtpResend,
         onVerify: onOtpVerify,

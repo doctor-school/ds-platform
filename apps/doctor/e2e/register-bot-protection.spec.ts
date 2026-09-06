@@ -161,7 +161,13 @@ test.describe("021 EARS-19: bot protection on the registration and resend forms"
       await page.getByTestId("register-submit").click();
 
       // The 003 catalog statement, verbatim — 021 invents no captcha copy.
-      await expect(page.getByTestId("register-captcha-error")).toHaveText(
+      // `toContainText`, not `toHaveText`: since #1934 the statement renders in
+      // the canonical `<FormError>`, which leads every form-level error with the
+      // decorative `aria-hidden` `⚠` glyph of the visual language (#512). The
+      // Academy asserts its own form messages the same way
+      // (`apps/portal/e2e/auth-journeys.e2e.spec.ts`). The copy assertion is
+      // unchanged — the statement is still the catalog one, verbatim.
+      await expect(page.getByTestId("register-captcha-error")).toContainText(
         statement,
       );
       // Not a field error: nothing the doctor typed is wrong, so no control

@@ -31,7 +31,7 @@ After landing, restart Codex in the **project checkout**, trust the project laye
 
 `pnpm agent:smoke --prepare` and `--run <fixture>` also support development fixtures. They copy the unchanged PreToolUse/prompt guards into a new temp git repo and omit bootstrap (which needs monorepo dependencies). They **do not prove project hook activation** and should not require an extra owner trust ceremony. Prefer the project smoke for final verification. No smoke uses a hook-trust bypass.
 
-Observed on 2026-09-06, `codex-cli 0.153.4`: a genuine fresh fixture session `01a074c1-6bf0-7b42-b8a0-409f5573097f` completed the one read-only command, exit 0, but produced **no hook execution observations**. Activation is unverified; no missing-hook reason was emitted. Project trust review and the same-project smoke remain the exact final owner action. Synthetic regression tests are separate evidence and are never reported as real activation.
+Observed on 2026-09-06, `codex-cli 0.153.4`: a fresh **same-project** session `01a074e9-8b0a-7a80-9797-61c09e4ad322` against main `b5257af9` completed exactly one read-only `git status --short`, exit 0. The smoke recorded **SessionStart/bootstrap only**: no PreToolUse/tool observations or denials; stderr was empty. Project and exact-definition trust remain unknown, and mutation/dispatch guard activation is not established. The owner still needs to review/trust the updated project definitions in `/hooks`; the agent then repeats the same-project smoke in a fresh session and reports the observed coverage. A prior fresh fixture session `01a074c1-6bf0-7b42-b8a0-409f5573097f` completed its command with no hook observations. Neither fixture results nor synthetic regression tests prove project activation.
 
 ## Verification
 

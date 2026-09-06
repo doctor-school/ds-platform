@@ -453,7 +453,10 @@ describe.skipIf(!process.env.DATABASE_URL)(
          FROM pg_trigger t
          JOIN pg_class c ON c.oid = t.tgrelid
          JOIN pg_proc p ON p.oid = t.tgfoid
-         WHERE NOT t.tgisinternal AND p.proname = 'audit_row_change'`,
+         JOIN pg_namespace n ON n.oid = c.relnamespace
+         WHERE NOT t.tgisinternal
+           AND p.proname = 'audit_row_change'
+           AND n.nspname = 'public'`,
       );
       const attachedSet = new Set(attached.map((r) => r.table_name));
 
@@ -483,6 +486,9 @@ describe.skipIf(!process.env.DATABASE_URL)(
       ).toEqual([...TECHNICAL_EXCLUSIONS].sort());
 
       // Direction 2 — what packages/db declares. Same two, no more.
+      // `AUDIT_CAPTURE_ALLOWLIST` (packages/db/src/audit.ts:28) is the
+      // EXCLUSION registry despite its name: a table listed there is allowed to
+      // carry NO capture trigger, not allowed to be audited.
       expect(
         AUDIT_CAPTURE_ALLOWLIST.map((entry) => entry.table)
           .filter((table) =>

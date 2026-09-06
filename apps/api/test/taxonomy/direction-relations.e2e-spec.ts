@@ -1042,11 +1042,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       // DISTINCT Idempotency-Keys on purpose: the record layer cannot collapse
       // these into a replay, so all three reach the domain transaction and §6's
       // "unique constraints remain the final race guard" is what has to hold.
-      const responses = await Promise.all([
-        edge(payload),
-        edge(payload),
-        edge(payload),
-      ]);
+      const raceKeys = [randomUUID(), randomUUID(), randomUUID()];
+      const responses = await Promise.all(
+        raceKeys.map((key) => edge(payload, key)),
+      );
       expect(
         responses.map((r) => r.statusCode).sort(),
         responses.map((r) => r.payload).join("\n"),
@@ -1069,6 +1068,17 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       // §6: "invariant failures and serialization aborts write no domain audit
       // row" — the winner leaves exactly one, the losers leave none.
       expect(await auditEvents(winnerId)).toHaveLength(1);
+
+      // The race 409 is raised AFTER a failed statement aborted the Postgres
+      // transaction — a different path from the pre-check 409 the replay tests
+      // above cover. §6 fences it as a deterministic terminal outcome, so a
+      // loser's key must replay the stored 409, not IDEMPOTENCY_REQUEST_IN_PROGRESS.
+      const loserKey = raceKeys[responses.findIndex((r) => r.statusCode === 409)]!;
+      const replayed = await edge(payload, loserKey);
+      expect(replayed.statusCode, replayed.payload).toBe(409);
+      expect((replayed.json() as { errorCode?: string }).errorCode).toBe(
+        "RELATIONSHIP_CONFLICT",
+      );
     });
 
     it("012 EARS-17: when the same specialty link is authored concurrently under distinct keys, exactly one call shall win and the losers shall get 409, never an opaque 500", async () => {

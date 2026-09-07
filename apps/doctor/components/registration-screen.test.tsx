@@ -8,7 +8,11 @@ import {
   MARKETING_COMMUNICATIONS_PURPOSE,
   PARTNER_DATA_SHARING_PURPOSE,
 } from "@ds/schemas";
-import { clearPendingRegistration } from "@ds/design-system/blocks";
+import {
+  clearPendingRegistration,
+  setPendingRegistration,
+  takePendingRegistration,
+} from "@ds/design-system/blocks";
 
 /**
  * 021 EARS-15 / 003 EARS-39 (#1996) — the doctor storefront is SIGNED IN after
@@ -176,6 +180,9 @@ describe("021 EARS-15 (#1996): the doctor is signed in after email confirmation"
     await waitFor(() =>
       expect(screen.queryByLabelText(/Код из письма/)).toBeNull(),
     );
+    // The take is single-shot: the credential is gone the moment it is
+    // replayed, so nothing survives the journey to be replayed a second time.
+    expect(takePendingRegistration(EMAIL)).toBeNull();
   });
 
   it("021 EARS-15.2: with no held password the confirm still succeeds and NO login is replayed", async () => {
@@ -212,6 +219,9 @@ describe("021 EARS-15 (#1996): the doctor is signed in after email confirmation"
       expect(screen.queryByLabelText(/Код из письма/)).toBeNull(),
     );
     expect(screen.queryByText("Код не подошёл. Попробуйте ещё раз.")).toBeNull();
+    // The other half of the clause: the slot is wiped whether the replay
+    // succeeded or threw — the take consumes, it does not roll back on error.
+    expect(takePendingRegistration(EMAIL)).toBeNull();
   });
 
   it("021 EARS-15.4: the password is held only AFTER registerDoctor succeeded", async () => {
@@ -225,9 +235,24 @@ describe("021 EARS-15 (#1996): the doctor is signed in after email confirmation"
     await waitFor(() => expect(h.registerDoctor).toHaveBeenCalledTimes(1));
     // A rejected command leaves NO credential behind for a later confirm to
     // replay: the slot is still empty after the failed submit.
-    const { takePendingRegistration } = await import(
-      "@ds/design-system/blocks"
-    );
+    expect(takePendingRegistration(EMAIL)).toBeNull();
+  });
+
+  it("021 EARS-15.4.1: a stale hold from an earlier attempt is dropped at the top of the submit, so a rejected command leaves nothing behind", async () => {
+    // A prior attempt in this same tab already parked a credential in the
+    // single shared slot (TTL 5 min), exactly as a completed register submit
+    // does before the doctor backs out and starts over.
+    setPendingRegistration({ identifier: EMAIL, password: "St4le!Pass" });
+    h.registerDoctor.mockRejectedValue(new Error("rejected"));
+    const user = userEvent.setup();
+    renderScreen();
+
+    await fillRegisterForm(user);
+    await user.click(screen.getByTestId("register-submit"));
+
+    await waitFor(() => expect(h.registerDoctor).toHaveBeenCalledTimes(1));
+    // The clear runs BEFORE the command, so the failure cannot preserve the
+    // stale password — the same top-of-submit invariant the Academy runs.
     expect(takePendingRegistration(EMAIL)).toBeNull();
   });
 });

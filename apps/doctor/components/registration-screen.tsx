@@ -12,6 +12,7 @@ import {
 import {
   BotProtectionField,
   botProtectionFailureMessage,
+  clearPendingRegistration,
   EmailConfirmCard,
   isBotProtectionRejected,
   isBotProtectionRequired,
@@ -390,6 +391,12 @@ export function RegistrationScreen({
       setCaptchaError(null);
       setCommandError(null);
       const email = values.email.trim();
+      // 003 EARS-39 / 021 EARS-15 (#1996) — drop any credential held by an
+      // earlier attempt in this tab BEFORE the command runs, so a rejected
+      // submit cannot leave a stale password sitting in the single shared slot
+      // for the rest of its TTL. Same top-of-submit clear the Academy
+      // `/register` runs; the slot invariant is one host-independent contract.
+      clearPendingRegistration();
       captcha.request(async (captchaToken) => {
         // EARS-7 — an ungranted optional purpose is ABSENT from the array;
         // there is no `granted: false` shape. The declaration is not listed

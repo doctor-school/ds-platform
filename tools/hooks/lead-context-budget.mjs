@@ -12,7 +12,11 @@ import {
   codexBudgetDecision,
   codexBudgetMessage,
 } from "./context-budget.mjs";
-import { projectRoot, telemetryUnavailable } from "./hook-compat.mjs";
+import {
+  projectRoot,
+  telemetryUnavailable,
+  isNewDispatchTool,
+} from "./hook-compat.mjs";
 import { readTail } from "./subagent-context-budget.mjs";
 
 /** Soft cap: the wave in flight may finish; no NEW wave may start.
@@ -90,6 +94,7 @@ export function decide({ contextTokens, override }) {
 function main() {
   try {
     const payload = JSON.parse(readFileSync(0, "utf8"));
+    if (!isNewDispatchTool(payload.tool_name)) process.exit(0);
     // A subagent's dispatch is not ours: `subagent-context-budget.mjs` owns it.
     if (payload.agent_id) process.exit(0);
     const transcriptPath = payload.transcript_path;

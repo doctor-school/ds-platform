@@ -7,7 +7,11 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { shellCommand } from "./hook-compat.mjs";
+import {
+  shellCommand,
+  normalizeToolName,
+  isNewDispatchTool,
+} from "./hook-compat.mjs";
 
 export const WRAP_SKILL_NAMES = new Set(["wrap", "run-wrap", "wrap-init"]);
 
@@ -38,7 +42,10 @@ export function isWrapInitiation(toolName, toolInput) {
       String(input.file_path || "").replace(/\\/g, "/"),
     );
   }
-  if (/^(Agent|Task|spawn_agent|followup_task)$/.test(toolName)) {
+  if (
+    isNewDispatchTool(toolName) ||
+    normalizeToolName(toolName) === "followup_task"
+  ) {
     const text = [input.prompt, input.description, input.message]
       .filter((v) => typeof v === "string")
       .join("\n");

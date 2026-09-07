@@ -28,7 +28,7 @@
         ]
       },
       {
-        "matcher": "spawn_agent|Agent|Task|apply_patch|Edit|Write|MultiEdit",
+        "matcher": "^((collaboration\\.?)?spawn_agent|Agent|Task|apply_patch|Edit|Write|MultiEdit)$",
         "hooks": [
           {
             "type": "command",
@@ -50,7 +50,7 @@
         ]
       },
       {
-        "matcher": "^(spawn_agent|Agent|Task)$",
+        "matcher": "^((collaboration\\.?)?spawn_agent|Agent|Task)$",
         "hooks": [
           {
             "type": "command",
@@ -72,7 +72,7 @@
         ]
       },
       {
-        "matcher": "^(spawn_agent|followup_task|Agent|Task|Read|Skill|Bash|exec_command)$",
+        "matcher": "^((collaboration\\.?)?(spawn_agent|followup_task)|Agent|Task|Read|Skill|Bash|exec_command)$",
         "hooks": [
           {
             "type": "command",

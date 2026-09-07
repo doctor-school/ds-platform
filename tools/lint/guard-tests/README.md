@@ -3,7 +3,16 @@
 Each spec spawns the **real** `tools/lint/*.ts` guard as a subprocess (via
 `pnpm exec tsx`) and asserts its exit code (`0` pass / `1` fail) plus a stable
 substring of the message. No mock of the guard — the production code path runs.
-Runs in CI inside the `unit` job (`turbo run test`); no dedicated CI job.
+Runs in CI inside the `core` job (`turbo run test`). Instruction-only edits also
+select this suite and `pnpm test:tools` through `tools/ci/discipline-changes.mjs`,
+without selecting product builds or browser jobs. Ordinary prose stays cheap.
+
+Guard rollout severity is shared by local preflight and both CI workflows in
+`tools/lint/guard-policy.mjs`: finding exit 1 is WARN for the recorded WARN set;
+other guards and execution errors fail. Parity tests reject a divergent CI roster.
+Stage-B fixture `artifact-<comment-or-review-id>.json` supplies exact URL-backed
+owner quote/report bodies. The live merge path rereads Stage-B after CI finishes;
+relay provenance identifies a session/message and does not authenticate identity.
 
 Harness entry points live in [`run-guard.ts`](./run-guard.ts): `runGuard`,
 `caseDir`, `ghDir`.

@@ -2,5 +2,10 @@
   "number": 205,
   "body": "## Summary\nHeartbeat endpoint.\n",
   "labels": [],
-  "files": [{ "path": "apps/api/src/webinar/heartbeat.controller.ts" }]
+  "files": [
+    {
+      "path": "apps/api/src/webinar/heartbeat.controller.ts"
+    }
+  ],
+  "headRefOid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 }

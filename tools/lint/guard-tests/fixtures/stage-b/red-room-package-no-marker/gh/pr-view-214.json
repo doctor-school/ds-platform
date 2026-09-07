@@ -6,5 +6,6 @@
     {
       "path": "packages/room/src/ui/room-header-bar.tsx"
     }
-  ]
+  ],
+  "headRefOid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 }

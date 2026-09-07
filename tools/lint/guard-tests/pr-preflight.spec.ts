@@ -95,6 +95,7 @@ describe("pr-preflight MERGE_GUARDS roster (#692)", () => {
     expect(PRE_CI_MERGE_GUARDS.map((g) => g.name)).toEqual(["stage-b"]);
     expect(MERGE_GATE.name).toBe("merge-gate");
     expect(POST_CI_MERGE_GUARDS.map((g) => g.name)).toEqual([
+      "stage-b",
       "ui-parity-review",
     ]);
 
@@ -291,7 +292,7 @@ describe("pr-preflight summarize()", () => {
     ).toBe(true);
     expect(
       summarize([
-        { name: "registry-research", status: 1 },
+        { name: "spec-link", status: 1 },
         { name: "spec-link", status: 0 },
       ]).ok,
     ).toBe(false);

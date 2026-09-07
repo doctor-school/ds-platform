@@ -1,5 +1,6 @@
 #!/usr/bin/env tsx
 /** BLOCK guard for approved-source UI parity evidence (Issue #1627). */
+import { normalizeReviewBody } from "../gh/review-body.mjs";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -238,6 +239,7 @@ export function latestModeAReview(
 ): GhReview | null {
   return (
     (reviews ?? [])
+      .map((review) => ({ ...review, body: normalizeReviewBody(review.body) }))
       .filter(
         (review) =>
           MODE_A_HEADER_RE.test(review.body ?? "") &&

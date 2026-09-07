@@ -3,6 +3,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
+import { caseDir, ghDir, runGuard } from "./run-guard";
 
 const repoRoot = resolve(
   dirname(fileURLToPath(import.meta.url)),
@@ -74,6 +75,22 @@ describe("#1302 Academy demo permanent CI and guard routing", () => {
   it.each(["registry-research-lint.ts", "stage-b-lint.ts"])(
     "treats Academy render changes as user-facing in %s",
     (guard) => {
+      if (guard === "stage-b-lint.ts") {
+        const result = runGuard(
+          guard,
+          caseDir("stage-b", "red-academy-no-marker"),
+          {
+            env: {
+              GITHUB_EVENT_NAME: "pull_request",
+              PR_NUMBER: "215",
+              LINT_GH_FIXTURE_DIR: ghDir("stage-b", "red-academy-no-marker"),
+            },
+          },
+        );
+        expect(result.code).toBe(1);
+        expect(result.stderr).toContain("No Stage-B record");
+        return;
+      }
       expect(readRepo(`tools/lint/${guard}`)).toContain("academy-demo");
     },
   );

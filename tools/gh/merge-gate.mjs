@@ -26,6 +26,8 @@
  *      from substring-matching check NAMES.
  *   4. Head pinning — after a green board the head SHA is re-resolved; a head
  *      that moved mid-poll (force-push, new commit) is RED, not green.
+ *      After polling, the current live main must also be an ancestor of that
+ *      head. Another session landing while CI runs requires rebase/recheck.
  *   5. Mode-a verdict gate (#992) — requires a head-SHA-pinned Mode (a)
  *      APPROVE: the latest PR review whose body opens `## Mode (a) Review` and
  *      carries a `VERDICT:` line must be APPROVE, and its native `commit_id`
@@ -63,6 +65,11 @@
  * Canon: AGENTS.md §4, skill `merge-when-green` Step 1, memory
  * `feedback_phase0_merge_gate_manual`. Issue #836.
  */
+import { normalizeReviewBody } from "./review-body.mjs";
+import {
+  classifyReleaseFiles,
+  isVersionPackagesPr,
+} from "./release-review-exemption.mjs";
 import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 
@@ -340,13 +347,19 @@ const MODE_A_VERDICT_RE = /^VERDICT:\s*(APPROVE|REQUEST_CHANGES)\b/m;
  */
 export function classifyModeAVerdict(reviews, headSha) {
   const modeA = (Array.isArray(reviews) ? reviews : []).flatMap((r) => {
-    const body = typeof r?.body === "string" ? r.body : "";
+    const body = normalizeReviewBody(r?.body);
     if (!MODE_A_HEADER_RE.test(body)) return [];
     const m = MODE_A_VERDICT_RE.exec(body);
     if (!m) return [];
     return [
       {
-        verdict: m[1],
+        verdict:
+          r?.state === "DISMISSED" ||
+          r?.state === "PENDING" ||
+          r?.state === "CHANGES_REQUESTED" ||
+          /^VERDICT:\s*REQUEST_CHANGES/m.test(body)
+            ? "REQUEST_CHANGES"
+            : m[1],
         commitId: r?.commit_id ?? null,
         submittedAt: r?.submitted_at ?? null,
       },
@@ -451,6 +464,145 @@ export function parseModeAExempt(args) {
 }
 
 // ── impure CLI (skipped on import) ──────────────────────────────────────────
+
+/** Fail closed on malformed/truncated pagination payloads. */
+export function flattenApiPages(pages, field) {
+  if (!Array.isArray(pages)) throw new Error("Expected paginated GitHub array");
+  return pages.flatMap((page) => {
+    const items = field ? page?.[field] : page;
+    if (!Array.isArray(items)) throw new Error("Malformed GitHub page");
+    return items;
+  });
+}
+
+/** Scope is determined by changed paths, never by the exemption reason. */
+export function classifyModeAExemption(files, body, headSha, metadata = {}) {
+  if (!Array.isArray(files) || !files.length)
+    return { ok: false, reason: "No complete changed-file set" };
+  if (isVersionPackagesPr(metadata)) return classifyReleaseFiles(files);
+  for (const file of files.flatMap((file) =>
+    file.previous_filename
+      ? [file, { filename: file.previous_filename }]
+      : [file],
+  )) {
+    const path = file.filename;
+    if (typeof path !== "string")
+      return { ok: false, reason: "Missing changed filename" };
+    if (
+      /^(?:infra|tools\/deploy)\/|^apps\/docs\/content\/(?:specs|adr)\//.test(
+        path,
+      )
+    )
+      return {
+        ok: false,
+        reason: `Spec/security artifact requires review: ${path}`,
+      };
+    if (
+      /(?:^|\/)(?:AGENTS|CLAUDE)\.md$|^(?:\.claude|\.codex|\.github|tools)\/.*\.md$|^apps\/docs\/content\/skills\//.test(
+        path,
+      )
+    ) {
+      const pin = body.match(
+        /^mode-a-exempt-head:\s*([a-f0-9]{40})\s*$/im,
+      )?.[1];
+      const proof = body.match(
+        /^mode-a-exempt-live-verification:\s*(https:\/\/\S+)\s*$/im,
+      )?.[1];
+      const command = body.match(/^mode-a-exempt-command:\s*(.+)$/im)?.[1];
+      if (
+        pin !== headSha ||
+        !proof ||
+        !command ||
+        /^(?:n\/a|none|tbd|pending)$/i.test(command.trim())
+      )
+        return {
+          ok: false,
+          reason: `Procedure requires head-pinned live command + verification URL: ${path}`,
+        };
+      continue;
+    }
+    if (
+      /\.(?:test|spec|e2e-spec)\.[cm]?[jt]sx?$|(?:^|\/)__tests__\//.test(path)
+    )
+      continue;
+    if (/\.mdx?$/.test(path)) continue;
+    if (
+      /^packages\/api-client\/(?:src\/types\.generated\.ts|openapi\.snapshot\.json)$|^packages\/glossary\/src\/ids\.ts$/.test(
+        path,
+      )
+    )
+      continue;
+    if (
+      /^tools\//.test(path) &&
+      !/^tools\/(?:lint|gh|ci|hooks|deploy)\//.test(path)
+    )
+      continue;
+    return {
+      ok: false,
+      reason: `Runtime/CI gate or unproven regeneration requires review: ${path}`,
+    };
+  }
+  return {
+    ok: true,
+    reason: "Changed files qualify under the documented exemption scope",
+  };
+}
+
+export function verifyModeAExemption(files, metadata, headSha, runGit = git) {
+  const hydrated = files.map((file) => ({ ...file }));
+  if (isVersionPackagesPr(metadata))
+    hydrateReleaseFiles(hydrated, headSha, metadata.baseRefOid, runGit);
+  return classifyModeAExemption(
+    hydrated,
+    metadata.body ?? "",
+    headSha,
+    metadata,
+  );
+}
+
+/** Read the exact PR comparison blobs; filename-only bot claims are insufficient. */
+function hydrateReleaseFiles(files, headSha, baseSha, runGit) {
+  const failRelease = (reason) => {
+    throw new Error(reason);
+  };
+  if (![headSha, baseSha].every((sha) => /^[a-f0-9]{40}$/.test(sha ?? "")))
+    failRelease("Invalid release comparison SHA");
+  const fetched = runGit(["fetch", "--no-tags", "origin", headSha, baseSha]);
+  if (fetched.status !== 0)
+    failRelease("Cannot fetch release comparison commits");
+  const base = runGit(["merge-base", baseSha, headSha]);
+  if (base.status !== 0) failRelease("Cannot resolve release comparison base");
+  const mergeBase = base.stdout.trim();
+  const diff = runGit([
+    "diff",
+    "--name-only",
+    "-z",
+    `${mergeBase}..${headSha}`,
+  ]);
+  const localPaths = diff.stdout?.split("\0").filter(Boolean).sort();
+  if (
+    diff.status !== 0 ||
+    JSON.stringify(localPaths) !==
+      JSON.stringify(files.map((file) => file.filename).sort())
+  )
+    failRelease(
+      "GitHub release file list differs from the complete git comparison",
+    );
+  for (const file of files) {
+    if (
+      !/^(?:(?:apps|packages)\/[^/]+\/package\.json|pnpm-lock\.yaml)$/.test(
+        file.filename,
+      )
+    )
+      continue;
+    const before = runGit(["show", `${mergeBase}:${file.filename}`]);
+    const after = runGit(["show", `${headSha}:${file.filename}`]);
+    if (before.status !== 0 || after.status !== 0)
+      failRelease(`Cannot read complete release blobs: ${file.filename}`);
+    file.baseContent = before.stdout;
+    file.headContent = after.stdout;
+  }
+}
 
 function die(msg, code = 3) {
   process.stderr.write(`${TAG} ${msg}\n`);
@@ -604,12 +756,14 @@ function fetchCheckRuns(sha) {
   const res = gh([
     "api",
     `repos/{owner}/{repo}/commits/${sha}/check-runs?per_page=100`,
+    "--paginate",
+    "--slurp",
   ]);
   if (res.status !== 0)
     die(`gh api check-runs for ${sha} failed: ${(res.stderr ?? "").trim()}`);
   try {
     const parsed = JSON.parse(res.stdout);
-    return Array.isArray(parsed.check_runs) ? parsed.check_runs : [];
+    return flattenApiPages(parsed, "check_runs");
   } catch {
     die(`could not parse gh api check-runs JSON for ${sha}`);
   }
@@ -623,6 +777,8 @@ function fetchReviews(prNumber) {
   const res = gh([
     "api",
     `repos/{owner}/{repo}/pulls/${prNumber}/reviews?per_page=100`,
+    "--paginate",
+    "--slurp",
   ]);
   if (res.status !== 0)
     die(
@@ -630,10 +786,60 @@ function fetchReviews(prNumber) {
     );
   try {
     const parsed = JSON.parse(res.stdout);
-    return Array.isArray(parsed) ? parsed : [];
+    return flattenApiPages(parsed);
   } catch {
     die(`could not parse gh api reviews JSON for PR #${prNumber}`);
   }
+}
+
+/** Final live-base check. Fetch objects only: never move main or local refs. */
+function assertCurrentMainAncestry(headSha) {
+  const refuse = (reason) =>
+    die(
+      `RED — cannot prove current main is included in head ${headSha.slice(0, 12)}: ${reason}. Fetch/rebase the PR onto current main, push and recheck CI/review, then re-run the gate. Do NOT merge.`,
+      1,
+    );
+  const response = gh(["api", "repos/{owner}/{repo}/git/ref/heads/main"]);
+  if (response.status !== 0)
+    refuse(`live main lookup failed: ${(response.stderr ?? "").trim()}`);
+  let mainSha;
+  try {
+    mainSha = JSON.parse(response.stdout)?.object?.sha;
+  } catch {
+    refuse("live main lookup returned invalid JSON");
+  }
+  if (!/^[a-f0-9]{40}$/i.test(mainSha ?? ""))
+    refuse("live main lookup returned no valid commit SHA");
+  for (const sha of [mainSha, headSha]) {
+    // Pin the native API result, not a possibly stale origin/main or FETCH_HEAD.
+    // Fetch head too if a different session pushed it and this clone lacks it.
+    let present = git(["cat-file", "-e", `${sha}^{commit}`]);
+    if (sha === mainSha || present.error || present.status !== 0) {
+      const fetched = git([
+        "fetch",
+        "--quiet",
+        "--no-tags",
+        "--no-write-fetch-head",
+        "origin",
+        sha,
+      ]);
+      if (fetched.error || fetched.status !== 0)
+        refuse(`fetch of ${sha.slice(0, 12)} failed`);
+      present = git(["cat-file", "-e", `${sha}^{commit}`]);
+    }
+    if (present.error || present.status !== 0)
+      refuse(`commit ${sha.slice(0, 12)} is unavailable after fetch`);
+  }
+  const ancestry = git(["merge-base", "--is-ancestor", mainSha, headSha]);
+  if (ancestry.error || ancestry.status !== 0)
+    refuse(
+      ancestry.status === 1 && !ancestry.error
+        ? `main advanced to ${mainSha.slice(0, 12)} outside the PR ancestry`
+        : `git ancestry check failed for main ${mainSha.slice(0, 12)}`,
+    );
+  process.stdout.write(
+    `${TAG} Current main ${mainSha.slice(0, 12)} is included in the checked head.\n`,
+  );
 }
 
 async function main() {
@@ -681,53 +887,80 @@ async function main() {
   // needs a Mode-a APPROVE pinned (via the review's native commit_id) to THIS
   // head SHA. If the head moves mid-poll, step 4's head pin goes RED anyway,
   // so a verdict fresh here stays fresh for any green this run can emit.
-  const redispatch = `Dispatch (or re-dispatch) request-mode-a-review against the CURRENT head, or — ONLY for a sanctioned no-Mode-a class (AGENTS.md §3.8: pure docs / test-only / generated-regen; the Version Packages bot PR) — re-run with --mode-a-exempt "<reason>". Do NOT merge.`;
-  if (modeAExempt.exempt) {
-    process.stdout.write(
-      `${TAG} MODE-A EXEMPT — verdict gate SKIPPED for PR #${prNumber}: ${modeAExempt.reason} ` +
-        `(sanctioned classes only — AGENTS.md §3.8; this line is the audit record).\n`,
-    );
-  } else {
-    const verdict = classifyModeAVerdict(fetchReviews(prNumber), sha);
-    if (verdict.state === "no-verdict") {
-      die(
-        `RED — PR #${prNumber} head ${sha.slice(0, 12)}: no Mode (a) review verdict found ` +
-          `(no PR review opens '## Mode (a) Review' with a VERDICT: line). Common pitfall: a verdict posted via ` +
-          `'gh pr comment' is an ISSUE comment, invisible to the reviews API — the reviewer must post via ` +
-          `'gh pr review ${prNumber} --comment --body-file <file>'. ${redispatch}`,
-        1,
-      );
-    }
-    if (verdict.state === "request-changes") {
-      die(
-        `RED — PR #${prNumber} head ${sha.slice(0, 12)}: latest Mode (a) verdict is REQUEST_CHANGES ` +
-          `(submitted ${verdict.submittedAt ?? "<unknown>"}). Address the findings, then re-dispatch. Do NOT merge.`,
-        1,
-      );
-    }
-    if (verdict.state === "stale-approve") {
-      // #1865: a pure rebase moves the head without changing a single patch —
-      // accept the pinned APPROVE when `git range-diff` proves that.
-      const equiv = checkRebaseEquivalence(verdict.commitId ?? "", sha);
-      if (equiv.accepted) {
-        process.stdout.write(
-          `${TAG} APPROVE at ${(verdict.commitId ?? "").slice(0, 12)} accepted for ${sha.slice(0, 12)}: ` +
-            `pure rebase, ${equiv.equal}/${equiv.total} commits = (git range-diff origin/main; #1865).\n`,
-        );
-      } else {
+  function assertCurrentReview() {
+    const redispatch = `Dispatch (or re-dispatch) request-mode-a-review against the CURRENT head, or — ONLY for a sanctioned no-Mode-a class (AGENTS.md §3.8: pure docs / test-only / generated-regen; the Version Packages bot PR) — re-run with --mode-a-exempt "<reason>". Do NOT merge.`;
+    if (modeAExempt.exempt) {
+      const filesRes = gh([
+        "api",
+        `repos/{owner}/{repo}/pulls/${prNumber}/files?per_page=100`,
+        "--paginate",
+        "--slurp",
+      ]);
+      const bodyRes = gh([
+        "pr",
+        "view",
+        String(prNumber),
+        "--json",
+        "body,changedFiles,headRefName,baseRefOid,author",
+      ]);
+      if (filesRes.status !== 0 || bodyRes.status !== 0)
+        die("Cannot validate Mode-a exemption scope", 1);
+      const files = flattenApiPages(JSON.parse(filesRes.stdout));
+      const metadata = JSON.parse(bodyRes.stdout);
+      if (files.length !== metadata.changedFiles)
         die(
-          `RED — PR #${prNumber} head ${sha.slice(0, 12)}: latest Mode (a) APPROVE is STALE — reviewed at ` +
-            `${(verdict.commitId ?? "<unknown>").slice(0, 12)}, but the head has since moved (a rework invalidates the verdict). ` +
-            `Rebase-equivalence (#1865) did not apply: ${equiv.reason}. ${redispatch}`,
+          "Incomplete changed-file set; Mode-a exemption cannot be proven",
+          1,
+        );
+      const scope = verifyModeAExemption(files, metadata, sha);
+      if (!scope.ok) die(`MODE-A EXEMPT refused: ${scope.reason}`, 1);
+      process.stdout.write(
+        `${TAG} MODE-A EXEMPT — verdict gate SKIPPED for PR #${prNumber}: ${modeAExempt.reason} ` +
+          `(sanctioned classes only — AGENTS.md §3.8; this line is the audit record).\n`,
+      );
+    } else {
+      const verdict = classifyModeAVerdict(fetchReviews(prNumber), sha);
+      if (verdict.state === "no-verdict") {
+        die(
+          `RED — PR #${prNumber} head ${sha.slice(0, 12)}: no Mode (a) review verdict found ` +
+            `(no PR review opens '## Mode (a) Review' with a VERDICT: line). Common pitfall: a verdict posted via ` +
+            `'gh pr comment' is an ISSUE comment, invisible to the reviews API — the reviewer must post via ` +
+            `'gh pr review ${prNumber} --comment --body-file <file>'. ${redispatch}`,
           1,
         );
       }
+      if (verdict.state === "request-changes") {
+        die(
+          `RED — PR #${prNumber} head ${sha.slice(0, 12)}: latest Mode (a) verdict is REQUEST_CHANGES ` +
+            `(submitted ${verdict.submittedAt ?? "<unknown>"}). Address the findings, then re-dispatch. Do NOT merge.`,
+          1,
+        );
+      }
+      if (verdict.state === "stale-approve") {
+        // #1865: a pure rebase moves the head without changing a single patch —
+        // accept the pinned APPROVE when `git range-diff` proves that.
+        const equiv = checkRebaseEquivalence(verdict.commitId ?? "", sha);
+        if (equiv.accepted) {
+          process.stdout.write(
+            `${TAG} APPROVE at ${(verdict.commitId ?? "").slice(0, 12)} accepted for ${sha.slice(0, 12)}: ` +
+              `pure rebase, ${equiv.equal}/${equiv.total} commits = (git range-diff origin/main; #1865).\n`,
+          );
+        } else {
+          die(
+            `RED — PR #${prNumber} head ${sha.slice(0, 12)}: latest Mode (a) APPROVE is STALE — reviewed at ` +
+              `${(verdict.commitId ?? "<unknown>").slice(0, 12)}, but the head has since moved (a rework invalidates the verdict). ` +
+              `Rebase-equivalence (#1865) did not apply: ${equiv.reason}. ${redispatch}`,
+            1,
+          );
+        }
+      }
+      if (verdict.state === "fresh-approve")
+        process.stdout.write(
+          `${TAG} Mode-a verdict OK — PR #${prNumber}: APPROVE pinned at head ${sha.slice(0, 12)} (submitted ${verdict.submittedAt ?? "<unknown>"}).\n`,
+        );
     }
-    if (verdict.state === "fresh-approve")
-      process.stdout.write(
-        `${TAG} Mode-a verdict OK — PR #${prNumber}: APPROVE pinned at head ${sha.slice(0, 12)} (submitted ${verdict.submittedAt ?? "<unknown>"}).\n`,
-      );
   }
+  assertCurrentReview();
 
   // 3. Bounded foreground poll against the pinned SHA.
   const start = Date.now();
@@ -749,6 +982,10 @@ async function main() {
           1,
         );
       }
+      // A review can be dismissed or revoked while CI runs without moving the head.
+      assertCurrentReview();
+      // Main can advance while CI runs even when head/review are unchanged.
+      assertCurrentMainAncestry(sha);
       process.stdout.write(
         `${TAG} GREEN — PR #${prNumber} head ${sha.slice(0, 12)}: ${runs.length} check-run(s) registered, all non-skipped terminal-successful (${attempt} poll(s)). OK to merge.\n`,
       );

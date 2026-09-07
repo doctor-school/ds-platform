@@ -84,9 +84,13 @@ describe("stage-b-lint", () => {
   });
 
   it("red (#1722): doctor-storefront render + no Stage-B marker → exit 1", () => {
-    const { code } = runGuard(GUARD, caseDir("stage-b", "red-doctor-no-marker"), {
-      env: prEnv("213", "red-doctor-no-marker"),
-    });
+    const { code } = runGuard(
+      GUARD,
+      caseDir("stage-b", "red-doctor-no-marker"),
+      {
+        env: prEnv("213", "red-doctor-no-marker"),
+      },
+    );
     expect(code).toBe(1);
   });
 
@@ -106,7 +110,7 @@ describe("stage-b-lint", () => {
       { env: prEnv("204", "red-empty-marker") },
     );
     expect(code).toBe(1);
-    expect(stderr).toContain("not a Stage-B");
+    expect(stderr).toContain("Stage-B decision");
   });
 
   it("skip: backend-only PR (apps/api) → exit 0", () => {
@@ -158,23 +162,27 @@ describe("stage-b-lint", () => {
     expect(stderr).toContain("Stage-B");
   });
 
-  it("skip (frontmatter heuristic): design-system-only under a backend-only spec → exit 0", () => {
-    const { code, stdout } = runGuard(
+  it("red: design-system render cannot be waived by a backend-only feature label", () => {
+    const { code, stderr } = runGuard(
       GUARD,
       caseDir("stage-b", "skip-ds-nonuserfacing-spec"),
       { env: prEnv("210", "skip-ds-nonuserfacing-spec") },
     );
-    expect(code).toBe(0);
-    expect(stdout).toContain("rule does not apply");
+    expect(code).toBe(1);
+    expect(stderr).toContain("Stage-B");
   });
 
   it("skip: not a pull_request event → exit 0", () => {
-    const { code, stdout } = runGuard(GUARD, caseDir("stage-b", "green-body-go"), {
-      env: {
-        GITHUB_EVENT_NAME: "push",
-        LINT_GH_FIXTURE_DIR: ghDir("stage-b", "green-body-go"),
+    const { code, stdout } = runGuard(
+      GUARD,
+      caseDir("stage-b", "green-body-go"),
+      {
+        env: {
+          GITHUB_EVENT_NAME: "push",
+          LINT_GH_FIXTURE_DIR: ghDir("stage-b", "green-body-go"),
+        },
       },
-    });
+    );
     expect(code).toBe(0);
     expect(stdout).toContain("skipping");
   });

@@ -28,9 +28,7 @@ import { execa } from "execa";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-export type GhResult<T> =
-  | { ok: true; data: T }
-  | { ok: false; error: string };
+export type GhResult<T> = { ok: true; data: T } | { ok: false; error: string };
 
 /**
  * CI SEAM `PR_BODY` (Issue #651): when the workflow passes the event payload's
@@ -80,6 +78,7 @@ export async function ghViewJson<T>(
   number: string | number,
   fields: string,
   cwd?: string,
+  liveBody = false,
 ): Promise<GhResult<T>> {
   const fixtureDir = process.env.LINT_GH_FIXTURE_DIR;
   if (fixtureDir) {
@@ -87,12 +86,14 @@ export async function ghViewJson<T>(
     try {
       return {
         ok: true,
-        data: withEventBody(
-          kind,
-          number,
-          fields,
-          JSON.parse(readFileSync(file, "utf8")) as T,
-        ),
+        data: liveBody
+          ? (JSON.parse(readFileSync(file, "utf8")) as T)
+          : withEventBody(
+              kind,
+              number,
+              fields,
+              JSON.parse(readFileSync(file, "utf8")) as T,
+            ),
       };
     } catch (e) {
       return {
@@ -109,7 +110,9 @@ export async function ghViewJson<T>(
     );
     return {
       ok: true,
-      data: withEventBody(kind, number, fields, JSON.parse(stdout) as T),
+      data: liveBody
+        ? (JSON.parse(stdout) as T)
+        : withEventBody(kind, number, fields, JSON.parse(stdout) as T),
     };
   } catch (e) {
     return { ok: false, error: (e as Error).message.split("\n")[0] };

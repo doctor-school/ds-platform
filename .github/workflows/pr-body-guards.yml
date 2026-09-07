@@ -75,6 +75,9 @@ jobs:
       - uses: actions/setup-node@v7
         with: { node-version-file: .nvmrc, cache: pnpm }
       - run: pnpm install --frozen-lockfile
+      - name: Load guard severity policy
+        id: guard_policy
+        run: node tools/lint/guard-policy.mjs >> "$GITHUB_OUTPUT"
 
       # registry-research: a PR touching a user-facing UI surface must carry the
       # `build-ui-from-design-system` adoption artifact in its body (ADR-0013 /
@@ -82,7 +85,7 @@ jobs:
       # BLOCK once stable.
       - name: WARN · registry-research
         id: warn_registry_research
-        continue-on-error: true
+        continue-on-error: ${{ steps.guard_policy.outputs.registry-research == 'WARN' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -98,7 +101,7 @@ jobs:
       # §2.6 new-guard posture — promote to BLOCK once stable.
       - name: WARN · cross-front-reuse
         id: warn_cross_front_reuse
-        continue-on-error: true
+        continue-on-error: ${{ steps.guard_policy.outputs.cross-front-reuse == 'WARN' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -114,7 +117,7 @@ jobs:
       # `continue-on-error` here.
       - name: WARN · spec-status-fresh
         id: warn_spec_status_fresh
-        continue-on-error: true
+        continue-on-error: ${{ steps.guard_policy.outputs.spec-status-fresh == 'WARN' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -129,7 +132,7 @@ jobs:
       # sweep flips it.
       - name: WARN · prior-decisions
         id: warn_prior_decisions
-        continue-on-error: true
+        continue-on-error: ${{ steps.guard_policy.outputs.prior-decisions == 'WARN' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -148,7 +151,7 @@ jobs:
       # WARN-report step.
       - name: WARN · spec-deletion
         id: warn_spec_deletion
-        continue-on-error: true
+        continue-on-error: ${{ steps.guard_policy.outputs.spec-deletion == 'WARN' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -169,7 +172,7 @@ jobs:
       # `continue-on-error` line below AND its row from the WARN-report step.
       - name: WARN · catalog-deletion
         id: warn_catalog_deletion
-        continue-on-error: true
+        continue-on-error: ${{ steps.guard_policy.outputs.catalog-deletion == 'WARN' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -188,7 +191,7 @@ jobs:
       # the job above).
       - name: WARN · epic-autoclose
         id: warn_epic_autoclose
-        continue-on-error: true
+        continue-on-error: ${{ steps.guard_policy.outputs.epic-autoclose == 'WARN' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}

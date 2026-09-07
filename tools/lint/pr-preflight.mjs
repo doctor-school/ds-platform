@@ -43,6 +43,8 @@ import { spawnSync } from "node:child_process";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { guardVerdict } from "./guard-policy.mjs";
+
 import { parseModeAExempt } from "../gh/merge-gate.mjs";
 
 // ── pure seams (unit-tested in guard-tests) ─────────────────────────────────
@@ -76,11 +78,7 @@ export const GUARDS = [
  * block (fumadocs compile), so this guard is the LOCAL pre-push mirror of that
  * existing gate — its `name` labels the local run, not a CI job.
  *
- * A WARN-posture guard (ADR-0007 §2.6) carries its own severity in its EXIT CODE
- * — it prints findings and exits 0 while in WARN, exiting non-zero only for its
- * BLOCK class (e.g. `primitives-first`, #1108 rework). So this harness needs no
- * WARN tier: exit 0 → PASS, exit non-zero → FAIL, uniformly. A guard that must
- * hard-block wires that into its own exit code, never into `continue-on-error`.
+ * WARN rollout severity is shared with CI in guard-policy.mjs.
  */
 /**
  * The PRE-MERGE gate family — guards whose evidence exists only at MERGE time,
@@ -99,9 +97,10 @@ export const PRE_CI_MERGE_GUARDS = [
   { name: "stage-b", file: "stage-b-lint.ts" },
 ];
 export const POST_CI_MERGE_GUARDS = [
+  { name: "stage-b", file: "stage-b-lint.ts" },
   { name: "ui-parity-review", file: "ui-parity-review-lint.ts" },
 ];
-export const MERGE_GUARDS = [...PRE_CI_MERGE_GUARDS, ...POST_CI_MERGE_GUARDS];
+export const MERGE_GUARDS = POST_CI_MERGE_GUARDS;
 
 /**
  * The deterministic CI merge gate (#836) — `tools/gh/merge-gate.mjs`, run after
@@ -261,18 +260,15 @@ export function mergeGateForwardArgs(argv, runMergeGate) {
 
 /**
  * Fold per-guard results into an overall verdict + printable report lines.
- * A guard carries WARN posture in its OWN exit code (prints findings, exits 0
- * while in WARN — ADR-0007 §2.6), so the harness is a uniform PASS/FAIL fold:
- * exit 0 → PASS, non-zero → FAIL. No WARN tier here — that would mask a guard's
- * BLOCK exit (the #1108 rework moved severity into the tool exit code).
+ * CI and local use the same policy: finding exit 1 is WARN or FAIL; execution errors fail.
  * @param {{name: string, status: number}[]} results
  * @returns {{ok: boolean, lines: string[]}} `ok` iff every guard exited 0.
  */
 export function summarize(results) {
   const lines = results.map(
-    (r) => `  ${r.status === 0 ? "PASS" : "FAIL"}  ${r.name}`,
+    (r) => `  ${guardVerdict(r.name, r.status)}  ${r.name}`,
   );
-  const ok = results.every((r) => r.status === 0);
+  const ok = results.every((r) => guardVerdict(r.name, r.status) !== "FAIL");
   return { ok, lines };
 }
 

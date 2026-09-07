@@ -3,6 +3,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
+import { WARN_GUARDS, guardSeverity } from "../guard-policy.mjs";
 
 /**
  * WARN posture lives in the WORKFLOW, not in the merge gate (#1253).
@@ -38,6 +39,29 @@ const workflowsDir =
 
 const read = (file: string) =>
   readFileSync(resolve(workflowsDir, file), "utf8");
+
+describe("EARS-1920: local/CI severity parity", () => {
+  it("every CI WARN step consumes the shared policy for its exact guard", () => {
+    const names = new Set<string>();
+    for (const file of ["ci.yml", "pr-body-guards.yml"]) {
+      const src = read(file);
+      expect(src).toContain(
+        'run: node tools/lint/guard-policy.mjs >> "$GITHUB_OUTPUT"',
+      );
+      for (const match of src.matchAll(
+        /- name: WARN · ([\w-]+)\n([\s\S]*?)(?=\n {6}- |$)/g,
+      )) {
+        const name = match[1];
+        names.add(name);
+        expect(guardSeverity(name)).toBe("WARN");
+        expect(match[2]).toContain(
+          `continue-on-error: \u0024{{ steps.guard_policy.outputs.${name} == 'WARN' }}`,
+        );
+      }
+    }
+    expect([...names].sort()).toEqual([...WARN_GUARDS].sort());
+  });
+});
 
 /** Extract one job's block: from `  <job>:` to the next 2-space-indented key. */
 function jobBlock(src: string, job: string): string {
@@ -99,7 +123,12 @@ describe("ci.yml `guards-warn` — a WARN-findings run must conclude SUCCESS (#1
     const all = warnSteps(block);
     expect(all.length).toBeGreaterThan(20); // the 23 light-profile WARN guards
     const missing = all
-      .filter((s) => !/\n\s+continue-on-error: true\b/.test(s))
+      .filter(
+        (s) =>
+          !/\n\s+continue-on-error: \$\{\{ steps\.guard_policy\.outputs\.[\w-]+ == 'WARN' \}\}/.test(
+            s,
+          ),
+      )
       .map((s) => /- name: (.*)/.exec(s)?.[1]);
     expect(missing).toEqual([]);
   });
@@ -134,7 +163,12 @@ describe("pr-body-guards.yml — same posture, mixed batch (#1253)", () => {
     const all = warnSteps(block);
     expect(all.length).toBe(7); // registry-research, spec-status-fresh, prior-decisions, spec-deletion, catalog-deletion, epic-autoclose, cross-front-reuse
     const missing = all
-      .filter((s) => !/\n\s+continue-on-error: true\b/.test(s))
+      .filter(
+        (s) =>
+          !/\n\s+continue-on-error: \$\{\{ steps\.guard_policy\.outputs\.[\w-]+ == 'WARN' \}\}/.test(
+            s,
+          ),
+      )
       .map((s) => /- name: (.*)/.exec(s)?.[1]);
     expect(missing).toEqual([]);
   });

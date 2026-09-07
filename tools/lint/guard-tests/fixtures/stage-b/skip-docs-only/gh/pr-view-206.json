@@ -3,7 +3,12 @@
   "body": "## Summary\nDocs.\n",
   "labels": [],
   "files": [
-    { "path": "apps/docs/content/adr/0013-x.md" },
-    { "path": "README.md" }
-  ]
+    {
+      "path": "apps/docs/content/adr/0013-x.md"
+    },
+    {
+      "path": "README.md"
+    }
+  ],
+  "headRefOid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 }

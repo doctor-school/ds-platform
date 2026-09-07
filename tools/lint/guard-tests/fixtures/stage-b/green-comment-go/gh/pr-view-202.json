@@ -2,5 +2,10 @@
   "number": 202,
   "body": "## Summary\nRoom CTA.\n\nCloses #300\n",
   "labels": [],
-  "files": [{ "path": "apps/portal/src/components/webinar-card.tsx" }]
+  "files": [
+    {
+      "path": "apps/portal/src/components/webinar-card.tsx"
+    }
+  ],
+  "headRefOid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 }

@@ -119,12 +119,20 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       code: ${{ steps.classify.outputs.code }}
+      discipline: ${{ steps.discipline.outputs.discipline }}
     steps:
       # Full history: the classifier diffs the PR head against the PR base sha,
       # and both parents of the merge ref must be present.
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+      - name: Select discipline tests
+        id: discipline
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: node tools/ci/discipline-changes.mjs
       - name: Classify the changed-file set
         id: classify
         env:
@@ -229,8 +237,11 @@ jobs:
       - name: unit
         if: needs.changes.outputs.code == 'true'
         run: pnpm exec turbo run test --filter='!@ds/api'
+      - name: discipline guards (instruction-only changes)
+        if: needs.changes.outputs.code != 'true' && needs.changes.outputs.discipline == 'true'
+        run: pnpm --filter @ds/lint-guard-tests test
       - name: unit (tools)
-        if: needs.changes.outputs.code == 'true'
+        if: needs.changes.outputs.code == 'true' || needs.changes.outputs.discipline == 'true'
         run: pnpm test:tools
 
       # api-build-smoke — apps/api build smoke (#158). A single COLD `pnpm build`
@@ -671,6 +682,9 @@ jobs:
       - uses: actions/setup-node@v7
         with: { node-version-file: .nvmrc, cache: pnpm }
       - run: pnpm install --frozen-lockfile
+      - name: Load guard severity policy
+        id: guard_policy
+        run: node tools/lint/guard-policy.mjs >> "$GITHUB_OUTPUT"
 
       # module-readme: every top-level NestJS module dir under apps/*/src (a dir with a
       # *.module.ts) carries a README (ADR-0006 §7). Was an exit-0 stub; implemented as
@@ -680,7 +694,7 @@ jobs:
       # flips it; do not remove the `continue-on-error` here.
       - name: WARN · module-readme
         id: warn_module_readme
-        continue-on-error: true
+        continue-on-error: ${{ steps.guard_policy.outputs.module-readme == 'WARN' }}
         run: pnpm exec tsx tools/lint/module-readme-lint.ts
 
       # route-targets: every internal navigation target in apps/portal + apps/admin
@@ -691,7 +705,7 @@ jobs:
       # stable), and NOT in the `ci` needs-list.
       - name: WARN · route-targets
         id: warn_route_targets
-        continue-on-error: true
+        continue-on-error: ${{ steps.guard_policy.outputs.route-targets == 'WARN' }}
         run: pnpm exec tsx tools/lint/route-target-lint.ts
 
       # axe-exclude: every `AxeBuilder.exclude(...)` in an e2e a11y spec
@@ -702,7 +716,7 @@ jobs:
       # WARN v1 (ADR-0007 §2.6), and NOT in the `ci` needs-list.
       - name: WARN · axe-exclude
         id: warn_axe_exclude
-        continue-on-error: true
+        continue-on-error: ${{ steps.guard_policy.outputs.axe-exclude == 'WARN' }}
         run: pnpm exec tsx tools/lint/axe-exclude-lint.ts
 
       # glossary-mdx — ADR-0006 §6.4 MDX glossary-lint (a `[[term-id]]` directive in
@@ -724,7 +738,7 @@ jobs:
       # ADR-0006 §7.0.
       - name: WARN · glossary-mdx
         id: warn_glossary_mdx
-        continue-on-error: true
+        continue-on-error: ${{ steps.guard_policy.outputs.glossary-mdx == 'WARN' }}
         run: pnpm exec tsx tools/lint/glossary-mdx-lint.ts
 
       # glossary-ids — ADR-0006 §6.3 glossary canonical-id SSOT enforcement. The
@@ -749,7 +763,7 @@ jobs:
       # the step into `guards-block`, no rule change.
       - name: WARN · glossary-ids
         id: warn_glossary_ids
-        continue-on-error: true
+        continue-on-error: ${{ steps.guard_policy.outputs.glossary-ids == 'WARN' }}
         run: pnpm lint:glossary-ids
 
       # no-stub: user-facing source must not ship a "set this env var" dev
@@ -757,7 +771,7 @@ jobs:
       # ADR-0007 §2.6 new-guard posture — promote to BLOCK once stable.
       - name: WARN · no-stub
         id: warn_no_stub
-        continue-on-error: true
+        continue-on-error: ${{ steps.guard_policy.outputs.no-stub == 'WARN' }}
         run: pnpm lint:no-stub
 
       # no-hardcoded-path: committed tooling (`tools/**/*.{mjs,ts}`) must not bake a
@@ -769,7 +783,7 @@ jobs:
       # §2.6 new-guard posture — promote to BLOCK once stable.
       - name: WARN · no-hardcoded-path
         id: warn_no_hardcoded_path
-        continue-on-error: true
+        continue-on-error: ${{ steps.guard_policy.outputs.no-hardcoded-path == 'WARN' }}
         run: pnpm lint:no-hardcoded-path
 
       # external-anchor: external-document anchors on user-facing surfaces
@@ -781,7 +795,7 @@ jobs:
       # BLOCK once stable.
       - name: WARN · external-anchor
         id: warn_external_anchor
-        continue-on-error: true
+        continue-on-error: ${{ steps.guard_policy.outputs.external-anchor == 'WARN' }}
         run: pnpm lint:external-anchor
 
       # migration-index: Drizzle migration-index collision guard (#799). Parallel
@@ -794,7 +808,7 @@ jobs:
       # red). WARN v1 — promote to BLOCK per ADR-0007 §2.6.
       - name: WARN · migration-index
         id: warn_migration_index
-        continue-on-error: true
+        continue-on-error: ${{ steps.guard_policy.outputs.migration-index == 'WARN' }}
         run: pnpm lint:migration-index
 
       # tsc-version: one-compiler guard (#1258). `apps/api` builds with `nest build`,
@@ -810,7 +824,7 @@ jobs:
       # SKIP, never a false red. WARN v1 — promote to BLOCK per ADR-0007 §2.6.
       - name: WARN · tsc-version
         id: warn_tsc_version
-        continue-on-error: true
+        continue-on-error: ${{ steps.guard_policy.outputs.tsc-version == 'WARN' }}
         run: pnpm lint:tsc-version
 
       # audit-coverage: universal edit-audit coverage guard (010 EARS-8, #1089).
@@ -824,7 +838,7 @@ jobs:
       # WARN v1 — promote to BLOCK per ADR-0007 §2.6.
       - name: WARN · audit-coverage
         id: warn_audit_coverage
-        continue-on-error: true
+        continue-on-error: ${{ steps.guard_policy.outputs.audit-coverage == 'WARN' }}
         run: pnpm lint:audit-coverage
 
       # showcase-coverage: the design-system living showcase (apps/showcase) is the
@@ -835,7 +849,7 @@ jobs:
       # #350). Static source scan — no PR/gh context needed. WARN per ADR-0007 §2.6.
       - name: WARN · showcase-coverage
         id: warn_showcase_coverage
-        continue-on-error: true
+        continue-on-error: ${{ steps.guard_policy.outputs.showcase-coverage == 'WARN' }}
         run: pnpm lint:showcase-coverage
 
       # showcase-snippet: the showcase (apps/showcase) is the rendered VIEWER of
@@ -847,7 +861,7 @@ jobs:
       # PR/gh context needed. WARN per ADR-0007 §2.6.
       - name: WARN · showcase-snippet
         id: warn_showcase_snippet
-        continue-on-error: true
+        continue-on-error: ${{ steps.guard_policy.outputs.showcase-snippet == 'WARN' }}
         run: pnpm lint:showcase-snippet
 
       # asset-format: product assets are vector-first (ADR-0013 §8, #275) — logos /
@@ -856,7 +870,7 @@ jobs:
       # file scan — no PR/gh context needed. WARN per ADR-0007 §2.6.
       - name: WARN · asset-format
         id: warn_asset_format
-        continue-on-error: true
+        continue-on-error: ${{ steps.guard_policy.outputs.asset-format == 'WARN' }}
         run: pnpm lint:asset-format
 
       # interaction-states: a @ds/design-system clickable primitive must carry its
@@ -866,7 +880,7 @@ jobs:
       # (Its RUNTIME twin, `playwright-axe`, is BLOCK.)
       - name: WARN · interaction-states
         id: warn_interaction_states
-        continue-on-error: true
+        continue-on-error: ${{ steps.guard_policy.outputs.interaction-states == 'WARN' }}
         run: pnpm lint:interaction-states
 
       # aa-contrast: the cheap STATIC pre-filter for the AA-contrast usage rule (ADR-0013
@@ -878,7 +892,7 @@ jobs:
       # context needed. WARN per ADR-0007 §2.6.
       - name: WARN · aa-contrast
         id: warn_aa_contrast
-        continue-on-error: true
+        continue-on-error: ${{ steps.guard_policy.outputs.aa-contrast == 'WARN' }}
         run: pnpm lint:aa-contrast
 
       # form-error: a form-level error/message in app UI source must route through the
@@ -889,7 +903,7 @@ jobs:
       # no PR/gh context needed. WARN per ADR-0007 §2.6.
       - name: WARN · form-error
         id: warn_form_error
-        continue-on-error: true
+        continue-on-error: ${{ steps.guard_policy.outputs.form-error == 'WARN' }}
         run: pnpm lint:form-error
 
       # form-rhythm: the settled form vertical-rhythm + error-state contract (ADR-0013
@@ -902,7 +916,7 @@ jobs:
       # PR/gh context. WARN per ADR-0007 §2.6.
       - name: WARN · form-rhythm
         id: warn_form_rhythm
-        continue-on-error: true
+        continue-on-error: ${{ steps.guard_policy.outputs.form-rhythm == 'WARN' }}
         run: pnpm lint:form-rhythm
 
       # submit-pending: the async-submit pending standard (ADR-0013 §7 layer 2, #337).
@@ -915,7 +929,7 @@ jobs:
       # surfaces — no PR/gh context. WARN per ADR-0007 §2.6.
       - name: WARN · submit-pending
         id: warn_submit_pending
-        continue-on-error: true
+        continue-on-error: ${{ steps.guard_policy.outputs.submit-pending == 'WARN' }}
         run: pnpm lint:submit-pending
 
       # ears-tests: the COVERAGE + ORPHAN direction of the EARS↔test contract (#316,
@@ -928,7 +942,7 @@ jobs:
       # remove the `continue-on-error` here — promotion is a later sweep decision.
       - name: WARN · ears-tests
         id: warn_ears_tests
-        continue-on-error: true
+        continue-on-error: ${{ steps.guard_policy.outputs.ears-tests == 'WARN' }}
         run: pnpm exec tsx tools/lint/ears-test-lint.ts
 
       # ears-naming: the FORMAT-hygiene direction of the EARS↔test contract (#316,
@@ -939,7 +953,7 @@ jobs:
       # alone. Static title scan. WARN per ADR-0007 §2.6.
       - name: WARN · ears-naming
         id: warn_ears_naming
-        continue-on-error: true
+        continue-on-error: ${{ steps.guard_policy.outputs.ears-naming == 'WARN' }}
         run: pnpm lint:ears-naming
 
       # tdd-signal: a PR that changes production source under apps/*/src with no test
@@ -956,7 +970,7 @@ jobs:
       # batch job's `permissions` block carries the grant; the step carries the token.
       - name: WARN · tdd-signal
         id: warn_tdd_signal
-        continue-on-error: true
+        continue-on-error: ${{ steps.guard_policy.outputs.tdd-signal == 'WARN' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -974,7 +988,7 @@ jobs:
       # carries `GH_TOKEN`/`PR_NUMBER` (enforced by the workflow-auth guard below).
       - name: WARN · product-note
         id: warn_product_note
-        continue-on-error: true
+        continue-on-error: ${{ steps.guard_policy.outputs.product-note == 'WARN' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -993,7 +1007,7 @@ jobs:
       # starts at merge 2026-07-02.
       - name: WARN · workflow-auth
         id: warn_workflow_auth
-        continue-on-error: true
+        continue-on-error: ${{ steps.guard_policy.outputs.workflow-auth == 'WARN' }}
         run: pnpm exec tsx tools/lint/workflow-auth-lint.ts
 
       # retained-data: retained-row lifecycle regression guard (#1404, slice C of
@@ -1014,7 +1028,7 @@ jobs:
       # PR/gh context. WARN v1 — promote to BLOCK per ADR-0007 §2.6.
       - name: WARN · retained-data
         id: warn_retained_data
-        continue-on-error: true
+        continue-on-error: ${{ steps.guard_policy.outputs.retained-data == 'WARN' }}
         run: pnpm lint:retained-data
 
       # WARN report — the second half of the WARN encoding, and the batch's

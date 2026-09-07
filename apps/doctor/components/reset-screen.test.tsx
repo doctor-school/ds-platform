@@ -126,7 +126,7 @@ describe("003 EARS-11/12 #1989: the doctor /reset projection", () => {
         screen.getByRole("heading", { level: 1 }).textContent,
       ).toContain("Новый пароль"),
     );
-    expect(screen.getByLabelText("Код из письма")).toBeTruthy();
+    expect(screen.getByLabelText("Код из сообщения")).toBeTruthy();
     expect(screen.queryByTestId("reset-request-submit")).toBeNull();
   });
 
@@ -134,10 +134,10 @@ describe("003 EARS-11/12 #1989: the doctor /reset projection", () => {
     render(<ResetScreen />);
     const user = await requestCode("doctor@clinic.ru");
     await waitFor(() =>
-      expect(screen.getByLabelText("Код из письма")).toBeTruthy(),
+      expect(screen.getByLabelText("Код из сообщения")).toBeTruthy(),
     );
 
-    await user.type(screen.getByLabelText("Код из письма"), CODE);
+    await user.type(screen.getByLabelText("Код из сообщения"), CODE);
     await user.type(screen.getByLabelText("Новый пароль"), NEW_PASSWORD);
     await user.click(screen.getByRole("button", { name: "Сменить пароль" }));
 
@@ -162,10 +162,10 @@ describe("003 EARS-11/12 #1989: the doctor /reset projection", () => {
     render(<ResetScreen />);
     const user = await requestCode();
     await waitFor(() =>
-      expect(screen.getByLabelText("Код из письма")).toBeTruthy(),
+      expect(screen.getByLabelText("Код из сообщения")).toBeTruthy(),
     );
 
-    await user.type(screen.getByLabelText("Код из письма"), CODE);
+    await user.type(screen.getByLabelText("Код из сообщения"), CODE);
     await user.type(screen.getByLabelText("Новый пароль"), NEW_PASSWORD);
     await user.click(screen.getByRole("button", { name: "Сменить пароль" }));
 

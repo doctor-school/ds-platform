@@ -86,7 +86,7 @@ import { makeResolver } from "@/lib/make-resolver";
 const IDENTIFIER_REQUIRED = "Введите почту или телефон.";
 const IDENTIFIER_MALFORMED =
   "Проверьте: почта вида doctor@clinic.ru или телефон в формате +79991234567.";
-const CODE_REQUIRED = "Введите код из письма.";
+const CODE_REQUIRED = "Введите код из сообщения.";
 const PASSWORD_TOO_SHORT = "Пароль должен быть не короче 8 символов.";
 
 /** The neutral EARS-16 outcome copy, one per recovery command. */
@@ -143,7 +143,7 @@ const COPY: PasswordRecoveryCardCopy = {
     submit: "Прислать код",
   },
   complete: {
-    codeLabel: "Код из письма",
+    codeLabel: "Код из сообщения",
     newPasswordLabel: "Новый пароль",
     passwordPolicyHint: "Не короче 8 символов.",
     submit: "Сменить пароль",

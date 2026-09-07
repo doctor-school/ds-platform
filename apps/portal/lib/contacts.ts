@@ -24,13 +24,21 @@ export interface AcademyContactChannel {
 /** The Academy's support mailbox (canvas `academy-docs.dc.html` L165). */
 export const ACADEMY_CONTACT_EMAIL = "academy@doctor.school";
 
+/**
+ * The caption under the mailbox, drawn inside the «Команда Академии» card
+ * (canvas `academy-docs.dc.html` L166).
+ */
+export const ACADEMY_MAILBOX_CAPTION =
+  "Вопросы по проектам, документам и партнёрству.";
+
 export const ACADEMY_CONTACT_CHANNELS: readonly AcademyContactChannel[] = [
   { id: "telegram", label: "Telegram", href: "https://t.me/doctorschool" },
 ];
 
 /**
- * The ONE caption drawn under the chip row (canvas L175). Per-channel captions
- * are deliberately absent — the canvas carries a single line for the whole row.
+ * The caption under the chip row, inside the «Сообщества и соцсети» card (canvas
+ * L175). Per-channel captions are deliberately absent — the canvas carries a
+ * single line for the whole row.
  */
 export const ACADEMY_CONTACT_CAPTION =
   "Эфиры, фрагменты подкастов, новости проектов.";

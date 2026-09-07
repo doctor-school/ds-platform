@@ -25,6 +25,13 @@ describe("028 Academy documents index", () => {
     expect(heading).toHaveTextContent("Документы и контакты");
     // The three blocks of EARS-2, each addressable by its own anchor.
     expect(screen.getByTestId("documents-list")).toBeInTheDocument();
+    // Both section titles are the canvas h2 unit (title + rule), not the
+    // uppercase micro-label: they name their section for a screen reader.
+    for (const title of ["Документы", "Контакты"]) {
+      expect(
+        screen.getByRole("heading", { level: 2, name: title }),
+      ).toBeInTheDocument();
+    }
     expect(document.getElementById("contacts")).not.toBeNull();
     expect(document.getElementById("requisites")).not.toBeNull();
   });
@@ -51,25 +58,33 @@ describe("028 Academy documents index", () => {
     expect(screen.queryByText("обновлено")).toBeNull();
   });
 
-  it("028 EARS-4: renders the support mailbox, the channel chips and the single chip-row caption", async () => {
+  it("028 EARS-4: draws both canvas contact cards — mailbox and channels, each with its eyebrow and its caption", async () => {
     render(await DocumentsPage());
 
     const contacts = screen.getByTestId("documents-contacts");
-    expect(
-      within(contacts).getByRole("link", { name: "academy@doctor.school" }),
-    ).toHaveAttribute("href", "mailto:academy@doctor.school");
 
-    const telegram = within(contacts).getByRole("link", { name: "Telegram" });
+    // Card 1 — «Команда Академии»: eyebrow, mailbox, caption (canvas L163-166).
+    const team = within(contacts).getByTestId("documents-contacts-team");
+    expect(team).toHaveTextContent("Команда Академии");
+    expect(
+      within(team).getByRole("link", { name: "academy@doctor.school" }),
+    ).toHaveAttribute("href", "mailto:academy@doctor.school");
+    expect(team).toHaveTextContent(
+      "Вопросы по проектам, документам и партнёрству.",
+    );
+
+    // Card 2 — «Сообщества и соцсети»: eyebrow, chip row, caption (L168-176).
+    const channels = within(contacts).getByTestId(
+      "documents-contacts-channels",
+    );
+    expect(channels).toHaveTextContent("Сообщества и соцсети");
+    const telegram = within(channels).getByRole("link", { name: "Telegram" });
     expect(telegram).toHaveAttribute("href", "https://t.me/doctorschool");
     expect(telegram).toHaveAttribute("target", "_blank");
     expect(telegram).toHaveAttribute("rel", "noopener noreferrer");
-
-    // One caption under the chip row — never a per-channel caption.
-    expect(
-      within(contacts).getByText(
-        "Эфиры, фрагменты подкастов, новости проектов.",
-      ),
-    ).toBeInTheDocument();
+    expect(channels).toHaveTextContent(
+      "Эфиры, фрагменты подкастов, новости проектов.",
+    );
 
     // Hide-until-content: a channel without a recorded URL is not drawn at all.
     // A `#` destination is a banned stub, so no anchor on the page may carry one.

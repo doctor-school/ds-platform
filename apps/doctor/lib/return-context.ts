@@ -137,6 +137,28 @@ export function resolveReturnTargetPath(
 }
 
 /**
+ * 021 EARS-15 / 003 EARS-39 (#1996) — carry the return context ONWARD across an
+ * intermediate auth hop on THIS host, the doctor projection of the Academy's
+ * `withReturnTarget` (`apps/portal/lib/registration-handoff.ts`).
+ *
+ * The invariant is the one that lives in the Academy helper rather than at its
+ * call sites: the value re-appended is never the raw input, it is what
+ * `parseReturnTarget` reconstructed from the parts it accepted, so a
+ * cross-origin, traversal or otherwise hostile target can never be propagated
+ * across the hop, and an absent or rejected one is simply dropped — the doctor
+ * still reaches the door, just without a context to come back to.
+ */
+export function withReturnContext(
+  path: string,
+  returnTo: string | undefined,
+): string {
+  const safe = resolveReturnTargetPath(returnTo);
+  if (!safe) return path;
+  const sep = path.includes("?") ? "&" : "?";
+  return `${path}${sep}${RETURN_CONTEXT_PARAM}=${encodeURIComponent(safe)}`;
+}
+
+/**
  * Resolve the raw `returnTo` value to a card projection, or `null` when there is
  * nothing honest to show. `fetchImpl` is injected for tests, exactly as
  * `fetchScaleStatistics` / `fetchSessionClaims` do it.

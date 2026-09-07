@@ -14,10 +14,6 @@ import {
 import { authClient } from "@/lib/auth-client";
 import { authErrorMessage } from "@/lib/auth-error-message";
 import { REQUIRED_CONSENT } from "@/lib/consent";
-import {
-  clearPendingRegistration,
-  setPendingRegistration,
-} from "@/lib/pending-registration";
 import { withReturnTarget } from "@/lib/registration-handoff";
 import { registerCardFormSchema } from "@/lib/identifier-validation";
 import { useLocalizedResolver } from "@/lib/use-localized-resolver";
@@ -26,9 +22,11 @@ import { Link as DsLink } from "@ds/design-system/link";
 import {
   botProtectionFailureMessage,
   BotProtectionField,
+  clearPendingRegistration,
   isBotProtectionRejected,
   isBotProtectionRequired,
   RegisterCard,
+  setPendingRegistration,
   type RegisterCardValues,
   useBotProtectedAction,
 } from "@ds/design-system/blocks";

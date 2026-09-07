@@ -85,6 +85,21 @@ export {
 } from "./bot-protection-error";
 export type { BotProtectionMessages } from "./bot-protection-error";
 
+// 003 EARS-39 / 021 EARS-15 (#1996) — the ONE canonical post-confirmation
+// sign-in mechanism both storefronts run: the in-flight registration password
+// held in a single module-scoped slot and replayed through the real 003 EARS-5
+// login once the email is confirmed. Lifted out of `apps/portal/lib/` (the 021
+// boundary table calls the doctor post-registration screen «a second rendition
+// of the same contract, not a fork»). App glue stays with the host — its
+// transport, its confirm command and where it lands the signed-in user.
+export {
+  setPendingRegistration,
+  takePendingRegistration,
+  clearPendingRegistration,
+  PENDING_TTL_MS,
+} from "./pending-registration";
+export type { PendingRegistration } from "./pending-registration";
+
 // 004 EARS-19 — month-calendar presentation blocks (webinars-month.dc.html).
 export { MonthCalendarGrid } from "./month-calendar-grid";
 export type {

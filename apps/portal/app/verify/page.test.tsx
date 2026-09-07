@@ -47,6 +47,9 @@ type CaptchaProps = {
   onToken: (token?: string) => void;
   onError: (reason: "expired" | "unavailable" | "incomplete") => void;
 };
+// No held password by default (deep-link path → route to /login after verify);
+// the 005 EARS-2 tests below set a held credential to drive the auto-login replay.
+let heldRegistration: { identifier: string; password: string } | null = null;
 let captchaMode: "bypass" | "manual" = "bypass";
 let captchaProps: CaptchaProps | undefined;
 vi.mock("@ds/design-system/blocks", async () => {
@@ -65,6 +68,9 @@ vi.mock("@ds/design-system/blocks", async () => {
       }, [props.onToken, props.requestKey]);
       return <div data-testid="bot-protection-field" />;
     },
+    // #1996 — the held-password slot moved into this package with the replay it
+    // feeds; the seam these tests drive is the same one, at its new home.
+    takePendingRegistration: () => heldRegistration,
   };
 });
 
@@ -85,13 +91,6 @@ vi.mock("@/lib/auth-client", () => ({
     session: () => session(),
   },
   AuthError: class extends Error {},
-}));
-
-// No held password by default (deep-link path → route to /login after verify);
-// the 005 EARS-2 tests below set a held credential to drive the auto-login replay.
-let heldRegistration: { identifier: string; password: string } | null = null;
-vi.mock("@/lib/pending-registration", () => ({
-  takePendingRegistration: () => heldRegistration,
 }));
 
 // 005 EARS-2: the post-auth registration resume fires the real EARS-1 command

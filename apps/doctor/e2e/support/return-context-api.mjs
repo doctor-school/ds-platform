@@ -24,6 +24,14 @@ import { createServer } from "node:http";
  * does not — so the tier drives the real server read rather than a switch in
  * product code.
  *
+ * `POST /v1/auth/login` (021 EARS-15, #1996) is here because the confirmed
+ * doctor is SIGNED IN by replaying the real 003 EARS-5 login: the confirm route
+ * mints no session, the client replays the login through this same proxy, and
+ * the api answers by setting `__Host-ds_session`. The double answers it the same
+ * way — the one live session value below — so the header of the page the doctor
+ * lands on is decided by the real server read of a real cookie, not by a switch
+ * in the tier.
+ *
  * The specialty read is here because the LD-4 landing is also resolved on the
  * SERVER, from the forwarded `__Host-ds_specialty` cookie, and is therefore
  * just as unreachable from the browser as the event read. The double answers it
@@ -103,6 +111,14 @@ const SPECIALTY = {
  * serves the SERVER-RESOLVED object the page renders; it never lets the host
  * branch on lifecycle or registration, which is the whole point of the contract.
  */
+/**
+ * The one password this double REFUSES at `POST /v1/auth/login` (021 EARS-15).
+ * Kept in step by name with the same constant in `e2e/register-return.spec.ts`,
+ * which is the only caller that sends it — a spec importing from this module
+ * would pull the whole server into the Playwright type graph.
+ */
+const REFUSED_PASSWORD = "the second password the idp never took";
+
 const PARTICIPATION_CTA = {
   action: "register",
   label: "Участвовать",
@@ -175,7 +191,13 @@ function confirmAnswer(returnTo) {
 const server = createServer((request, response) => {
   const url = new URL(request.url ?? "/", `http://${request.headers.host}`);
 
-  if (url.pathname === "/health") return json(response, 200, { ok: true });
+  // The `double` marker is a CONTRACT, not decoration (#1996 review): the
+  // one-off evidence driver drives a real registration, so it refuses to start
+  // until it has read this marker off its upstream. The owner's real api on
+  // :3000 answers `/health` without it, which is exactly the mistake that has
+  // to be impossible rather than merely documented.
+  if (url.pathname === "/health")
+    return json(response, 200, { ok: true, double: "return-context-api" });
 
   // The three write commands the registration journey makes (021 EARS-10,
   // #1546). The register and resend answers are the enumeration-safe constants
@@ -189,6 +211,35 @@ const server = createServer((request, response) => {
     if (url.pathname === "/v1/auth/verify/resend") {
       return readJson(request, () =>
         json(response, 200, { status: "resend_requested" }),
+      );
+    }
+    // 003 EARS-5 / 021 EARS-15 (#1996) — the replayed sign-in. The double owns
+    // exactly ONE credential verdict, and it is the one the journey turns on:
+    // `REFUSED_PASSWORD` gets the generic 401 the 003 engine answers when the
+    // held credential is not the one the IdP holds (the doctor re-registered
+    // with a second password — 003 EARS-16 answers a repeat registration
+    // identically, so the client cannot know). Every other password is accepted,
+    // because this tier asserts the session that follows a successful sign-in,
+    // not the engine's verdict. The success answer is the api's own — a
+    // token-free body plus the `__Host-ds_session` cookie the BFF sets, which
+    // `/v1/auth/session` above then recognises as this tier's live doctor.
+    if (url.pathname === "/v1/auth/login") {
+      return readJson(request, (body) =>
+        body?.password === REFUSED_PASSWORD
+          ? // 003 EARS-16 — one generic answer, no enumeration oracle.
+            json(response, 401, {
+              statusCode: 401,
+              error: "Unauthorized",
+              message: "invalid_credentials",
+            })
+          : json(
+              response,
+              200,
+              { status: "authenticated" },
+              {
+                "set-cookie": `__Host-ds_session=${SESSION_VALUE}; Path=/; HttpOnly; Secure; SameSite=Lax`,
+              },
+            ),
       );
     }
     if (url.pathname === "/v1/storefront/doctor/confirm") {
@@ -284,7 +335,7 @@ function readJson(request, done) {
   });
 }
 
-function json(response, status, body) {
-  response.writeHead(status, { "content-type": "application/json" });
+function json(response, status, body, headers) {
+  response.writeHead(status, { "content-type": "application/json", ...headers });
   response.end(JSON.stringify(body));
 }

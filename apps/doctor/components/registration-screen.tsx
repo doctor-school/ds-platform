@@ -1,9 +1,15 @@
 "use client";
 
 import { useCallback, useState, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import { type Resolver, type ResolverResult } from "react-hook-form";
 
-import type { ConsentAcceptance, ConsentItem, ConsentTier } from "@ds/schemas";
+import type {
+  ConsentAcceptance,
+  ConsentItem,
+  ConsentTier,
+  DoctorConfirmResponse,
+} from "@ds/schemas";
 import {
   MARKETING_COMMUNICATIONS_PURPOSE,
   PARTNER_DATA_SHARING_PURPOSE,
@@ -12,12 +18,15 @@ import {
 import {
   BotProtectionField,
   botProtectionFailureMessage,
+  clearPendingRegistration,
   EmailConfirmCard,
   isBotProtectionRejected,
   isBotProtectionRequired,
   maskDestination,
   RegisterCard,
   RegistrationSuccessCard,
+  setPendingRegistration,
+  takePendingRegistration,
   useBotProtectedAction,
   useResendCooldown,
   type EmailConfirmCardCopy,
@@ -26,6 +35,8 @@ import {
   type RegisterCardValues,
 } from "@ds/design-system/blocks";
 
+import { login } from "@/lib/auth-client";
+import { withReturnContext } from "@/lib/return-context";
 import {
   BOT_PROTECTION_MESSAGES,
   botProtectionSiteKey,
@@ -281,10 +292,13 @@ function findConsentItem(
  * confirms an email with these words, and 021 invents none of its own.
  *
  * ONE line is deliberately NOT the portal's: the portal's «Код принят —
- * входим…» promises the auto-login replay it performs with a held password.
- * The doctor storefront holds no password and replays no login (#1546 owns
- * where a confirmed doctor lands), so promising a sign-in here would be copy
- * asserting a mechanism this surface does not have.
+ * входим…» narrates the replay while the registrant waits on the `/verify`
+ * route. This host runs the SAME replay (021 EARS-15, #1996 — the shared
+ * `takePendingRegistration` slot), but its confirmation card is REPLACED by the
+ * success card in the same tick, so a «входим…» line would be copy for a state
+ * nobody sees. «Код принят — почта подтверждена.» states the fact the doctor
+ * can act on; the sign-in shows up where it is observable — the header of the
+ * page the success card sends them to reads «Личный кабинет».
  */
 const CONFIRM_COPY: EmailConfirmCardCopy = {
   title: "Проверьте почту",
@@ -384,6 +398,12 @@ export function RegistrationScreen({
       setCaptchaError(null);
       setCommandError(null);
       const email = values.email.trim();
+      // 003 EARS-39 / 021 EARS-15 (#1996) — drop any credential held by an
+      // earlier attempt in this tab BEFORE the command runs, so a rejected
+      // submit cannot leave a stale password sitting in the single shared slot
+      // for the rest of its TTL. Same top-of-submit clear the Academy
+      // `/register` runs; the slot invariant is one host-independent contract.
+      clearPendingRegistration();
       captcha.request(async (captchaToken) => {
         // EARS-7 — an ungranted optional purpose is ABSENT from the array;
         // there is no `granted: false` shape. The declaration is not listed
@@ -414,6 +434,12 @@ export function RegistrationScreen({
           },
           captchaToken,
         );
+        // 003 EARS-39 / 021 EARS-15 (#1996) — hold the just-entered password
+        // for the post-confirmation replay, and only now: a failed register
+        // command leaves no credential behind. The slot is the SHARED one the
+        // Academy uses (volatile module memory, single-shot take, TTL-bounded);
+        // this host merely spans a state change instead of a route change.
+        setPendingRegistration({ identifier: email, password: values.password });
         // 003 EARS-16 / 021 EARS-13 — the response is IDENTICAL for a new and
         // an already-registered address, so there is exactly one next state and
         // no branch to make on it.
@@ -625,6 +651,7 @@ function RegistrationConfirmation({
   landing: string;
   returnTarget?: string;
 }) {
+  const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<RegistrationSuccessView | null>(null);
   const [captchaError, setCaptchaError] = useState<string | null>(null);
@@ -668,22 +695,59 @@ function RegistrationConfirmation({
 
   async function onSubmit(values: EmailConfirmValues) {
     setError(null);
+    let confirmed: DoctorConfirmResponse;
     try {
       // Mapped field by field rather than cast: a future field on the confirm
       // contract must fail typecheck here instead of shipping a silent omission.
       // `returnTo` rides the SAME command as the code, so the server decides the
       // destination with the verification it just performed — there is no second
       // hop in which the target could go stale unobserved.
-      const confirmed = await confirmDoctorEmail({
+      confirmed = await confirmDoctorEmail({
         email: values.email,
         code: values.code,
         ...(returnTarget ? { returnTo: returnTarget } : {}),
       });
-      setSuccess(resolveRegistrationSuccess(confirmed, landing));
     } catch {
+      // Only the CODE failing keeps the doctor on this screen: it is the one
+      // failure they can act on from here, by typing the code again. Everything
+      // below has already accepted the code, so it can no longer produce this
+      // state (003 EARS-16 — the message stays generic either way).
       setSuccess(null);
       setError(CONFIRM_FAILED);
+      return;
     }
+
+    // 021 EARS-15 / 003 EARS-39 (#1996) — the confirm route verifies the email
+    // and mints NO session (by contract, same as 003 EARS-3), so a doctor sent
+    // onward from here would land on the эфир as a guest and be asked to
+    // register again. The rule is the Academy's, copied whole rather than
+    // re-invented (`apps/portal/app/verify/page.tsx`, 003 EARS-39): replay the
+    // REAL 003 EARS-5 password login with the held credential — the session
+    // still comes from the login route, never from confirm — and let the
+    // SUCCESS STATE EXIST ONLY FOR A DOCTOR WHO IS SIGNED IN.
+    //
+    // No held credential (a reload, a restored tab, an expired hold) or a replay
+    // the login refuses (the classic case: the doctor re-registered the same
+    // email with a SECOND password, so the slot holds a credential the IdP never
+    // took — 003 EARS-16 answers a repeat registration identically) both mean the
+    // same thing: the email is verified and there is no session. That doctor goes
+    // to the sign-in door carrying their return context, NOT to a success card
+    // that would walk them onto the эфир as a guest and back through the
+    // registration loop this Issue exists to close. The slot is wiped by the take
+    // whether the replay then succeeds or throws.
+    const held = takePendingRegistration(email);
+    if (held) {
+      try {
+        await login({ identifier: held.identifier, password: held.password });
+        setSuccess(resolveRegistrationSuccess(confirmed, landing));
+        return;
+      } catch {
+        // Fall through to the sign-in door below — the same exit as no hold at
+        // all, because the doctor is in the same position: verified, not signed
+        // in, and holding a password only they can now supply.
+      }
+    }
+    router.push(withReturnContext("/login", returnTarget));
   }
 
   // EARS-10 — the success state REPLACES the code screen rather than annotating

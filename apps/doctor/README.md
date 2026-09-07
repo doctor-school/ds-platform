@@ -74,6 +74,14 @@ The RU copy map and the pure landing composition live in
 `lib/registration-success.ts`; every href reaching a navigation comes from the
 server response or that `landing` prop — never assembled on the client.
 
+The doctor is also SIGNED IN by then (021 EARS-15, #1996): the confirm route
+mints no session, so the screen holds the just-entered password in the shared
+`pending-registration` slot (`@ds/design-system/blocks` — the same one the
+Academy `/register → /verify` pair uses) and replays the real 003 EARS-5
+`POST /v1/auth/login` once the confirm succeeds, which is what sets
+`__Host-ds_session`. A replay that fails does not fail the confirmation — the
+email is verified either way and the success card still renders.
+
 ## Sessions on two hosts (ADR-0015 §4)
 
 One Zitadel identity, but the BFF session cookie is `__Host-ds_session` — the

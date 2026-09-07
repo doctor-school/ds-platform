@@ -27,6 +27,8 @@ import { test, expect, type Page, type Request } from "@playwright/test";
 const REGISTER_ROUTE = "**/v1/storefront/doctor/register";
 const RESEND_ROUTE = "**/v1/auth/verify/resend";
 const CONFIRM_ROUTE = "**/v1/storefront/doctor/confirm";
+// 021 EARS-15 (#1996) — the sign-in the confirmation replays.
+const LOGIN_ROUTE = "**/v1/auth/login";
 
 const EMAIL = "doctor@clinic.ru";
 const PASSWORD = "correct horse battery";
@@ -244,6 +246,19 @@ test.describe("021 EARS-19: bot protection on the registration and resend forms"
           primaryAction: { kind: "landing", href: "/events" },
           secondaryAction: { kind: "cabinet", href: "/account" },
         }),
+      }),
+    );
+    // 021 EARS-15 (#1996) — the success state exists ONLY for a doctor who is
+    // signed in: the screen replays the real 003 EARS-5 login with the password
+    // it held, and a replay that fails routes to `/login?returnTo=…` instead of
+    // rendering the card. This tier is backend-free, so the replay is fulfilled
+    // at the same network boundary as the commands above rather than left to a
+    // refused connection.
+    await page.route(LOGIN_ROUTE, (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ status: "authenticated" }),
       }),
     );
     await page.goto("/register");

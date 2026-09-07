@@ -143,12 +143,15 @@ test.describe("005 EARS-1/3/4 (#2005): one-tap registration on the doctor эфи
     await expect(page.getByTestId("event-register-one-tap")).toHaveCount(0);
     const door = page.getByRole("link", { name: /Участвовать/ });
     await expect(door).toBeVisible();
-    // The canonical hand-off the api emits (participation-cta.resolver.ts):
-    // this host /register carrying the ACADEMY-shaped returnTo, which the door
-    // then projects back to /events/<slug> on the way out (#1945).
+    // The hand-off this host renders: the api resolves the guest CTA
+    // (participation-cta.resolver.ts) and the page substitutes THIS host's own
+    // event path as the returnTo, because `/webinars/*` is not routed here at all
+    // (`app/(storefront)/events/[slug]/page.tsx`, pinned in its unit tier). The
+    // academy-shaped `/webinars/<slug>` is what the AUTH doors accept on the way
+    // IN (`lib/return-context.ts`), not what the storefront door emits.
     await expect(door).toHaveAttribute(
       "href",
-      "/register?returnTo=" + encodeURIComponent("/webinars/" + ONE_TAP_SLUG),
+      "/register?returnTo=" + encodeURIComponent("/events/" + ONE_TAP_SLUG),
     );
   });
 });
@@ -163,10 +166,15 @@ test.describe("005 EARS-2 (#2005): the эфир intent is completed on the way b
         encodeURIComponent("/webinars/" + RETURN_SLUG),
     );
 
+    // `exact` matters: the field shares its accessible-name prefix with the
+    // «Показать пароль» reveal toggle, so a loose label match is a strict-mode
+    // violation (the repo-wide shape — see `login.spec.ts`).
     await page
-      .getByLabel("Почта или телефон")
+      .getByLabel("Почта или телефон", { exact: true })
       .fill(process.env.E2E_DOCTOR_EMAIL ?? "");
-    await page.getByLabel("Пароль").fill(process.env.E2E_DOCTOR_PASSWORD ?? "");
+    await page
+      .getByLabel("Пароль", { exact: true })
+      .fill(process.env.E2E_DOCTOR_PASSWORD ?? "");
     await page.getByRole("button", { name: "Войти" }).click();
 
     // Landed on THIS host эфир page, never the academy /webinars/<slug>.

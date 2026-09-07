@@ -11,7 +11,7 @@ lang: en
 
 **New package `packages/legal-content/`.** `ls packages/` at authoring time shows no existing content/i18n package (`glossary` is a term-id registry, not prose content) — 028 is the first surface with document-shaped content, so it graduates a new package rather than forcing the shape into `glossary` or `db`.
 
-- Documents are Markdown files, one file per document, frontmatter: `slug` (matches the route segment), `title`, `edition` (ISO date, the «редакция от» value), `kind: policy | consent`.
+- Documents are Markdown files, one file per document, frontmatter: `slug` (matches the route segment), `title`, `edition` (a quoted ISO date `"YYYY-MM-DD"`, the «редакция от» value — quoted because YAML coerces a bare date scalar to a timestamp and silently rolls an impossible one over, e.g. `2026-02-30` → 2 March), `kind: policy | consent`.
 - No CMS, no database table, no admin authoring UI. A document is a reviewed file: publishing a correction is a PR against this package, same review bar as code (Mode (a) + green CI). This is a deliberate scope cut for slice 1 — document volume is small (one policy + four consent texts in R1), change frequency is low, and an admin UI/CMS is a second surface to build and secure for a workload a PR already covers. R3 (slice 2) may revisit this once document count and edit frequency from non-engineering owners justify it — not decided here.
 - The package exports a loader: `slug → { frontmatter, body }` and a `list(kind?)` enumerator. Both hosts and the shared component consume only this loader — no host reads the Markdown files directly.
 

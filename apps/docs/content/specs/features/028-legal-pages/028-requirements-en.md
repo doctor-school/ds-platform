@@ -2,7 +2,7 @@
 title: "028 — Legal pages (documents and contacts)"
 description: "Requirements for the «Документы и контакты» page on both storefronts: a shared legal-content set (personal-data policy, 021 consent texts, photo/video consent), contacts and requisites blocks, and the per-document reading page — slice 1 only, licence and R3 documents deferred."
 slug: 028-legal-pages
-status: Draft
+status: In dev
 issues: [1965, 1966, 1967, 1968, 1969, 1970]
 surface: user-facing
 tracker: https://github.com/doctor-school/ds-platform/milestone/17

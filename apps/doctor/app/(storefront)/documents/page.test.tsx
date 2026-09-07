@@ -56,8 +56,7 @@ describe("028 #1967: the doctor documents index", () => {
       expect(heading?.[1]).toContain("layout:text-4xl");
       expect(heading?.[1]).toContain("font-extrabold");
     }
-    const rules =
-      html.match(/border-t-2 border-foreground/g) ?? [];
+    const rules = html.match(/border-t-2 border-foreground/g) ?? [];
     expect(rules, "section rule lines").toHaveLength(2);
   });
 
@@ -81,16 +80,20 @@ describe("028 #1967: the doctor documents index", () => {
     }
   });
 
-  it("028 EARS-4: the contacts block carries the support mailbox, its caption and only channels with a real URL", () => {
+  it("028 EARS-4: the contacts block carries the support mailbox, its caption and the Telegram, ВКонтакте and RuTube chips", () => {
     const html = renderToStaticMarkup(<DoctorDocumentsPage />);
 
     expect(html).toContain('href="mailto:support@doctor.school"');
     expect(html).toContain("Мы отвечаем в рабочие дни.");
-    expect(html).toContain('href="https://t.me/doctorschool"');
-    // A `#` chip is a dead affordance: ВКонтакте and YouTube appear the day
-    // their real URLs are recorded, never before (owner «hide until content»).
+    expect(html).toContain('href="https://t.me/DoctorSchool"');
+    expect(html).toContain('href="https://vk.ru/doctor.school"');
+    expect(html).toContain('href="https://rutube.ru/channel/33533508/"');
+    // Canvas row order: Telegram → ВКонтакте → RuTube.
+    expect(html.indexOf("Telegram")).toBeLessThan(html.indexOf("ВКонтакте"));
+    expect(html.indexOf("ВКонтакте")).toBeLessThan(html.indexOf("RuTube"));
+    // Every chip carries a real destination — a `#` chip is a dead affordance —
+    // and the operator has no YouTube channel, so that label never renders.
     expect(html).not.toMatch(/href="#"/);
-    expect(html).not.toContain("ВКонтакте");
     expect(html).not.toContain("YouTube");
   });
 

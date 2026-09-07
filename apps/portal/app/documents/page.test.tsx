@@ -44,7 +44,9 @@ describe("028 Academy documents index", () => {
     );
     expect(rows).toHaveLength(1);
     expect(rows[0]).toHaveAttribute("href", "/documents/privacy-policy");
-    expect(rows[0]).toHaveTextContent("Политика персональных данных и согласия");
+    expect(rows[0]).toHaveTextContent(
+      "Политика персональных данных и согласия",
+    );
     // Slice 1 draws none of the other canvas rows.
     for (const absent of [
       "Лицензия",
@@ -78,16 +80,30 @@ describe("028 Academy documents index", () => {
       "documents-contacts-channels",
     );
     expect(channels).toHaveTextContent("Сообщества и соцсети");
-    const telegram = within(channels).getByRole("link", { name: "Telegram" });
-    expect(telegram).toHaveAttribute("href", "https://t.me/doctorschool");
-    expect(telegram).toHaveAttribute("target", "_blank");
-    expect(telegram).toHaveAttribute("rel", "noopener noreferrer");
+    const channelLinks = within(channels).getAllByRole("link");
+    expect(channelLinks.map((link) => link.textContent?.trim())).toEqual([
+      "Telegram",
+      "ВКонтакте",
+      "RuTube",
+    ]);
+    const hrefs: readonly (readonly [string, string])[] = [
+      ["Telegram", "https://t.me/DoctorSchool"],
+      ["ВКонтакте", "https://vk.ru/doctor.school"],
+      ["RuTube", "https://rutube.ru/channel/33533508/"],
+    ];
+    for (const [name, href] of hrefs) {
+      const chip = within(channels).getByRole("link", { name });
+      expect(chip).toHaveAttribute("href", href);
+      expect(chip).toHaveAttribute("target", "_blank");
+      expect(chip).toHaveAttribute("rel", "noopener noreferrer");
+    }
     expect(channels).toHaveTextContent(
       "Эфиры, фрагменты подкастов, новости проектов.",
     );
 
-    // Hide-until-content: a channel without a recorded URL is not drawn at all.
-    // A `#` destination is a banned stub, so no anchor on the page may carry one.
+    // The roster names RuTube, never YouTube — the operator has no YouTube
+    // channel. A `#` destination is a banned stub, so no anchor may carry one.
+    expect(document.body.textContent).not.toContain("YouTube");
     for (const link of Array.from(
       document.querySelectorAll<HTMLAnchorElement>("a[href]"),
     )) {
@@ -106,7 +122,9 @@ describe("028 Academy documents index", () => {
     // EARS-6 is the doctor host's counterpart caption only — the Academy list
     // carries none, so nothing here links out to the doctor storefront.
     const outbound = Array.from(
-      document.querySelectorAll<HTMLAnchorElement>('a[href^="https://doctor.school"]'),
+      document.querySelectorAll<HTMLAnchorElement>(
+        'a[href^="https://doctor.school"]',
+      ),
     );
     expect(outbound).toHaveLength(0);
   });

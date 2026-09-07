@@ -31,7 +31,7 @@ lang: en
 
 - The «Документы и контакты» page on `apps/doctor` and on `apps/portal`, each in its host's existing shell.
 - The document reading page (one shared component, host-projected), the R1 documents list (one row: Политика персональных данных и согласия), the per-021-consent document pages, the photo/video consent document page.
-- The contacts block (mailto + Telegram/ВКонтакте/YouTube chips) and the requisites line (юрлицо · ИНН · ОГРН · адрес — no licence).
+- The contacts block (mailto + Telegram/ВКонтакте/RuTube chips) and the requisites line (юрлицо · ИНН · ОГРН · адрес — no licence).
 - No caption or link to the Academy on the doctor documents list and no counterpart on the Academy list: the storefront footer link stays the single Academy crossing (REQ-24, EARS-6).
 - Removing every legacy-site link, including repointing `ACADEMY_PRIVACY_POLICY_URL`.
 
@@ -68,7 +68,7 @@ Documents are Markdown files in the new shared package `packages/legal-content/`
 - **EARS-1** (`realizes: US-3, US-6`) — WHEN a visitor requests the doctor storefront's «Документы и контакты» page, THE SYSTEM SHALL render it in the 017 shell with the documents list, the contacts block and the requisites line.
 - **EARS-2** (`realizes: US-3, US-6`) — WHEN a visitor requests the Academy's «Документы и контакты» page, THE SYSTEM SHALL render it in the 008 shell with the same three blocks, sourced from the same shared document set.
 - **EARS-3** (`realizes: US-2`) — WHERE slice 1 is in force, THE SYSTEM SHALL list exactly one entry on both hosts' documents list — «Политика персональных данных и согласия» — and SHALL NOT list the licence, «Пользовательское соглашение» or «Правила начисления очков» rows drawn on the canvases.
-- **EARS-4** (`realizes: US-12`) — THE SYSTEM SHALL render the contacts block with `support@doctor.school` (doctor) or `academy@doctor.school` (Academy) as a `mailto:` link plus Telegram/ВКонтакте/YouTube chips, each caption exactly as drawn on that host's canvas.
+- **EARS-4** (`realizes: US-12`) — THE SYSTEM SHALL render the contacts block with `support@doctor.school` (doctor) or `academy@doctor.school` (Academy) as a `mailto:` link plus Telegram/ВКонтакте/RuTube chips, each caption exactly as drawn on that host's canvas.
 - **EARS-5** (`realizes: US-9, US-10`) — THE SYSTEM SHALL render one requisites line on both hosts reading «ООО «Ивекскон» · ИНН <…> · ОГРН <…> · <юридический адрес>», with no licence number in R1.
 - **EARS-6** (`realizes: US-3`) — THE SYSTEM SHALL NOT place any caption or link to the Academy on the doctor documents list: the storefront's single Academy crossing is the footer link (REQ-24), and a second exit from this page would contradict it. The Academy list SHALL likewise carry no counterpart caption to the doctor storefront.
 - **EARS-7** (`realizes: US-4, US-13, US-14`) — WHEN a visitor opens a document's own URL, THE SYSTEM SHALL render its title, «редакция от <дата>», a table of contents (sticky left column at ≥1440px, collapsed above the body at ≤390px — `tocVariant: А`), the body, a back link to the documents list, and a «Другие документы» list of the remaining published documents.

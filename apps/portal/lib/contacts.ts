@@ -6,13 +6,11 @@
  * canvas draws the roster in a single row, so it lives here as one list rather
  * than as anchors sprinkled through the page.
  *
- * Hide-until-content: a channel is listed ONLY once its real destination is
- * recorded. The canvas draws Telegram / ВКонтакте / YouTube, but only the
- * Telegram URL exists anywhere in the repo (`app/academy-home-view.tsx`); the VK
- * and YouTube destinations have never been recorded, and the canvas carries
- * `href="#"` for all three. A `#` chip is a stub that looks like a live channel,
- * so the two unrecorded channels are simply absent until their URLs arrive —
- * adding them is one line here, no layout change.
+ * The roster is Telegram → ВКонтакте → RuTube, in the canvas row order (the
+ * canvas fixes the SHAPE of the row, not the destinations, and carries
+ * `href="#"` placeholders). Every entry here carries the operator's real
+ * channel URL: a `#` chip is a stub that looks like a live channel and is
+ * banned in this array.
  */
 export interface AcademyContactChannel {
   /** Stable id — the React key; never shown. */
@@ -32,7 +30,13 @@ export const ACADEMY_MAILBOX_CAPTION =
   "Вопросы по проектам, документам и партнёрству.";
 
 export const ACADEMY_CONTACT_CHANNELS: readonly AcademyContactChannel[] = [
-  { id: "telegram", label: "Telegram", href: "https://t.me/doctorschool" },
+  { id: "telegram", label: "Telegram", href: "https://t.me/DoctorSchool" },
+  { id: "vk", label: "ВКонтакте", href: "https://vk.ru/doctor.school" },
+  {
+    id: "rutube",
+    label: "RuTube",
+    href: "https://rutube.ru/channel/33533508/",
+  },
 ];
 
 /**

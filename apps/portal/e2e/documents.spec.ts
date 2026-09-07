@@ -41,7 +41,14 @@ test.describe("028 Academy documents surface (V-4)", () => {
     ).toHaveAttribute("href", "mailto:academy@doctor.school");
     await expect(
       contacts.getByRole("link", { name: "Telegram" }),
-    ).toHaveAttribute("href", "https://t.me/doctorschool");
+    ).toHaveAttribute("href", "https://t.me/DoctorSchool");
+    await expect(
+      contacts.getByRole("link", { name: "ВКонтакте" }),
+    ).toHaveAttribute("href", "https://vk.ru/doctor.school");
+    await expect(
+      contacts.getByRole("link", { name: "RuTube" }),
+    ).toHaveAttribute("href", "https://rutube.ru/channel/33533508/");
+    await expect(page.getByText("YouTube")).toHaveCount(0);
     await expect(
       contacts.getByText("Эфиры, фрагменты подкастов, новости проектов."),
     ).toBeVisible();

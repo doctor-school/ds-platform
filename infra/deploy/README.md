@@ -366,6 +366,22 @@ http://api:3000`. A portal image built before this fix must be REBUILT.
      # then: docker compose up -d api   (restart to pick up the OIDC creds)
      ```
 
+   - **Re-run this provision step after every release whose range touches
+     `infra/dev-stand/idp/provision.sh`.** The converge steps in that script are the
+     managed owner of the prod IdP configuration too (login / notification /
+     password-complexity policies, active providers, message texts), and
+     `pnpm deploy:prod` never runs it: the deploy ships images, the IdP keeps whatever
+     the LAST provisioning run left. `git diff --name-only <deployedSha>..<target> --
+infra/dev-stand/idp/provision.sh` non-empty ⇒ the release tail is this block
+     (idempotent — read the stderr converge log: exactly the drifted steps print
+     «converged», everything else «already» / «ensured») plus a read-back of the
+     touched policy (`GET /admin/v1/policies/…` with the bootstrap PAT). Precedent
+     #1994 (2026-09-07): #1396 relaxed `@ds/schemas` and the portal hint to
+     length-only (003 EARS-36) and added § 8.sexies; the code reached prod (a3ba0c4a)
+     while the instance policy stayed the provider default (upper + lower + digit +
+     symbol), so every registration with a plain password answered 422 behind
+     «Проверьте введённые данные» until this step was re-run.
+
 10. **Verify (definition of done, spec §10).** Drive the auth vertical in the live
     UI (`https://academy.doctor.school`, Playwright): register → **real** verification
     email (mail.ru); email-OTP login; **one supervised paid** SMS-OTP login

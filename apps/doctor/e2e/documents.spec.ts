@@ -35,19 +35,19 @@ test.describe("028 V-3: documents index and document page", () => {
     );
   });
 
-  test("028 EARS-6: the index closes with the Academy documents caption", async ({
+  test("028 EARS-6: the index carries no Academy caption and no Academy link", async ({
     page,
   }) => {
     await page.goto("/documents");
 
-    const caption = page.getByTestId("documents-academy-caption");
-    await expect(caption).toHaveText(
-      "Полный набор документов платформы — на странице документов Академии.",
-    );
-    await expect(caption).toHaveAttribute(
-      "href",
-      "https://academy.doctor.school/documents",
-    );
+    await expect(page.getByTestId("documents-academy-caption")).toHaveCount(0);
+    // The shell footer link is the ONE Academy crossing REQ-24 allows, so the
+    // scope is the page body: `main` must contribute no second exit.
+    await expect(page.locator('main a[href*="academy.doctor.school"]')).toHaveCount(0);
+    await expect(page.locator('footer a[href*="academy.doctor.school"]')).toHaveCount(1);
+    // The «Про согласия» explainer went with it (owner Stage-B, 2026-09-07):
+    // nothing on this surface describes or offers to withdraw a consent.
+    await expect(page.getByTestId("documents-consents-note")).toHaveCount(0);
   });
 
   test("028 EARS-7: opening the policy from the index shows it and both back links return to the list", async ({

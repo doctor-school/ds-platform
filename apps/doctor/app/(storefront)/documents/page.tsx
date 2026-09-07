@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import NextLink from "next/link";
 
 import { listDocuments } from "@ds/legal-content";
 import {
@@ -12,7 +11,6 @@ import { LegalDocumentList } from "@ds/design-system/legal-document";
 import { ContactChip } from "@ds/design-system/contact-chip";
 
 import { SectionHeading } from "@/components/section-heading";
-import { academyHref } from "@/lib/academy";
 import {
   CONTACT_CHANNELS,
   REQUISITES_LINE,
@@ -40,16 +38,12 @@ export const metadata: Metadata = {
 };
 
 /**
- * EARS-6, verbatim from the canvas (L139). It is the THIRD and last placement
- * REQ-24 allows for an Academy crossing on this storefront (the footer link,
- * «Стать экспертом», this caption) — which is also why the canvas third contacts
- * card «Клиникам и организациям», a fourth Academy link, is not rendered below.
- * The destination is the Academy documents list shipping in #1968, this wave.
+ * EARS-6 — this list carries NO caption and NO link to the Academy documents
+ * page. The owner's Stage-B verdict (2026-09-07) is that the storefront keeps
+ * exactly ONE Academy crossing, the footer link (REQ-24): a second exit from
+ * this page contradicts it, so the caption the canvas drew at L139 is
+ * superseded by that live decision and is not rendered.
  */
-const ACADEMY_CAPTION =
-  "Полный набор документов платформы — на странице документов Академии.";
-
-const ACADEMY_DOCUMENTS_HREF = academyHref("/documents");
 
 interface PolicyRows {
   readonly rows: LegalDocumentNeighbour[];
@@ -134,45 +128,6 @@ export default function DoctorDocumentsPage() {
           ) : (
             <LegalDocumentList items={rows} data-testid="documents-list" />
           )}
-
-          <p className="mt-4 text-sm font-semibold text-faint">
-            <a
-              data-testid="documents-academy-caption"
-              href={ACADEMY_DOCUMENTS_HREF}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline underline-offset-4 hover:text-primary-action focus-visible:text-primary-action"
-            >
-              {ACADEMY_CAPTION}
-            </a>
-          </p>
-
-          {/* «Про согласия» — an explanation, not a control (canvas
-              `d-docs · согласия`): this surface never toggles a consent. */}
-          <div
-            data-testid="documents-consents-note"
-            className="mt-6 bg-section p-5"
-          >
-            {/* `text-muted-foreground`, not the canvas `inkFaint`: on the grey
-                plate that faint tone fails WCAG AA contrast (axe
-                `color-contrast`), and the fix belongs to the surface, not to
-                the scan (EARS-15). */}
-            <p className="mb-2.5 text-2xs font-extrabold tracking-micro text-muted-foreground uppercase">
-              Про согласия
-            </p>
-            <p className="max-w-prose text-sm leading-relaxed font-semibold text-muted-foreground">
-              Согласия отдельные по целям: передача данных партнёрам, публичное
-              отображение, рассылка. Какие согласия вы дали и когда — видно в{" "}
-              <NextLink
-                href="/account"
-                className="font-bold text-primary-action underline underline-offset-4"
-              >
-                личном кабинете
-              </NextLink>
-              . Чтобы отозвать согласие, напишите в поддержку — мы обработаем
-              обращение вручную.
-            </p>
-          </div>
         </section>
 
         <section id="contacts" aria-labelledby="contacts-heading">

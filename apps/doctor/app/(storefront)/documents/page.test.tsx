@@ -103,20 +103,29 @@ describe("028 #1967: the doctor documents index", () => {
     expect(html).not.toMatch(/Лицензи/i);
   });
 
-  it("028 EARS-6: the list closes with the Academy documents caption, linking to the Academy page", () => {
+  it("028 EARS-6: the list carries no caption and no link to the Academy documents page", () => {
     const html = renderToStaticMarkup(<DoctorDocumentsPage />);
 
-    expect(html).toContain(
+    expect(html).not.toContain(
       "Полный набор документов платформы — на странице документов Академии.",
     );
-    expect(html).toContain('href="https://academy.doctor.school/documents"');
-    // REQ-24 allows three Academy placements on this storefront and the footer
-    // owns one of them; this page contributes exactly ONE, not the canvas
-    // «Клиникам и организациям» card as well.
-    const crossings = html.match(/academy\.doctor\.school/g) ?? [];
-    expect(crossings, "Academy crossings contributed by the page").toHaveLength(
-      1,
-    );
+    expect(html).not.toContain('data-testid="documents-academy-caption"');
+    // REQ-24 keeps exactly ONE Academy crossing on this storefront and the
+    // footer owns it (owner Stage-B verdict, 2026-09-07): this page contributes
+    // none — neither the caption nor the canvas «Клиникам и организациям» card.
+    expect(html).not.toContain("academy.doctor.school");
+  });
+
+  it("028 #1967: the index carries no «Про согласия» explainer", () => {
+    const html = renderToStaticMarkup(<DoctorDocumentsPage />);
+
+    // The canvas `d-docs · согласия` block claimed consents are visible in the
+    // cabinet and invited a withdrawal by support ticket. Neither is true of
+    // this release, so the owner's Stage-B verdict (2026-09-07) drops the block
+    // rather than softening its copy.
+    expect(html).not.toContain('data-testid="documents-consents-note"');
+    expect(html).not.toContain("Про согласия");
+    expect(html).not.toContain('href="/account"');
   });
 
   it("028 EARS-12: an empty document set renders no rows and no placeholder", () => {

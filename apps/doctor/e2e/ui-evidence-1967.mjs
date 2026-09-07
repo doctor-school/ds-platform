@@ -172,7 +172,6 @@ await shoot(browser, {
   // element CLASS (not per node, and not as a screenshot).
   for (const [label, selector] of [
     ["documents row link", 'a[href="/documents/privacy-policy"]'],
-    ["academy caption link", '[data-testid="documents-academy-caption"]'],
     ["support mailto chip", '[data-testid="documents-support"] a'],
     ["community chip", '[data-testid="documents-channels"] a'],
     ["footer entry link", 'footer a[href="/documents"]'],
@@ -223,7 +222,6 @@ await shoot(browser, {
   const copy = await page.evaluate(() => ({
     h1: document.querySelector("h1")?.textContent?.trim(),
     row: document.querySelector('a[href="/documents/privacy-policy"]')?.textContent?.trim(),
-    caption: document.querySelector('[data-testid="documents-academy-caption"]')?.textContent?.trim(),
     mail: document.querySelector('[data-testid="documents-support"] a')?.getAttribute("href"),
     mailCaption: document
       .querySelector('[data-testid="documents-support"] p:last-of-type')
@@ -237,7 +235,6 @@ await shoot(browser, {
   const EXPECTED = {
     h1: "Документы и контакты",
     row: "Политика персональных данных и согласия",
-    caption: "Полный набор документов платформы — на странице документов Академии.",
     mail: "mailto:support@doctor.school",
     mailCaption: "Мы отвечаем в рабочие дни.",
     channels: ["Telegram=https://t.me/doctorschool"],
@@ -256,7 +253,7 @@ await shoot(browser, {
   verdict(
     mismatches.length === 0,
     mismatches.length === 0
-      ? "copy self-consistency: all 7 rendered strings match apps/doctor/lib/contacts.ts + the page constants"
+      ? "copy self-consistency: all 6 rendered strings match apps/doctor/lib/contacts.ts + the page constants"
       : "copy self-consistency: " + mismatches.join(" ;; "),
   );
 

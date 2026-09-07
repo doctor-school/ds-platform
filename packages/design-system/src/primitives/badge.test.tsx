@@ -51,3 +51,31 @@ describe("Badge — label / speaker variant (#513)", () => {
     expect(clsB).toContain("bg-tint");
   });
 });
+
+/**
+ * 028 EARS-11 (#1966) — the «обновлено» chip on a documents-list row. A FLAG,
+ * never a version: the variant carries the pale tint plate and nothing else, so
+ * the surface cannot grow a numeric version through it.
+ */
+describe("Badge — updated variant (028 EARS-11)", () => {
+  it("028 EARS-11: renders the «обновлено» flag on the pale tint plate", () => {
+    render(<Badge variant="updated">обновлено</Badge>);
+    const badge = screen.getByText("обновлено");
+
+    expect(badge).toHaveClass(
+      "bg-tint",
+      "text-tint-foreground",
+      "text-2xs",
+      "uppercase",
+    );
+    // Inert label, not a status: no live region announcement for a flag.
+    expect(badge).not.toHaveAttribute("role");
+  });
+
+  it("028 EARS-11: carries no dot and no numeric version of its own", () => {
+    const { container } = render(<Badge variant="updated">обновлено</Badge>);
+
+    expect(container.querySelector(".rounded-full")).toBeNull();
+    expect(container.textContent ?? "").not.toMatch(/\d/);
+  });
+});

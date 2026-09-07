@@ -174,6 +174,14 @@ at the network boundary.
 pnpm --filter @ds/doctor exec playwright test --config=playwright.ci.config.ts e2e/mobile.spec.ts
 ```
 
+The backend-free tier assumes NOTHING answers on the server-side `API_PROXY_TARGET`
+(default `http://localhost:3000`, read at runtime by `lib/session.ts`): the
+server resolve then fails, the client re-issues the read and the spec's
+`page.route` mock answers it. A live local api on `:3000` (a dev stand, a
+Stage-B stand) breaks that chain — the server resolves «nothing chosen» for
+real and `specialty-memory.spec.ts` fails on the read-back. Run the tier as CI
+does, against an empty port: `API_PROXY_TARGET=http://127.0.0.1:3214`.
+
 The nearest-events block with the compact calendar (#1485), «Что исследовать»
 (#1486), the leaderboard (#1487) and the marketing routes (#1488) are outside
 this sweep and carry their own mobile/axe obligation when they land.

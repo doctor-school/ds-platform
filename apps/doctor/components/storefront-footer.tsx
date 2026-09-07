@@ -20,16 +20,20 @@ import styles from "./storefront-footer.module.css";
  * sponsor, partner or funding wording belongs in this footer.
  *
  * The «Документы и контакты» links target the storefront legal surface
- * (`#d-docs` in the two-site IA), a separate tracked deliverable; they are
- * forward references to a real planned route rather than `#` placeholders, and
- * `apps/doctor` is not publicly routed yet (no compose service, no Caddy vhost —
- * prod-surface manifest), so no visitor can reach them ahead of that page.
+ * (`#d-docs` in the two-site IA): `/documents` is a real route as of 028 EARS-1
+ * (#1967), so these are destinations, not forward references. «Контакты» is the
+ * anchor of that page contacts block rather than a second page.
+ *
+ * There is deliberately NO «Пользовательское соглашение» link. That document has
+ * no owner-approved text, EARS-12 gives it no row and no page, and a footer link
+ * into nothing is exactly the placeholder that rule forbids — it returns here the
+ * day the document is published.
  */
 const DOCUMENT_LINKS = [
-  { href: "/documents#user-agreement", label: "Пользовательское соглашение" },
+  { href: "/documents", label: "Документы и контакты" },
   {
-    href: "/documents#personal-data",
-    label: "Политика обработки персональных данных",
+    href: "/documents/privacy-policy",
+    label: "Политика персональных данных и согласия",
   },
   { href: "/documents#contacts", label: "Контакты" },
 ] as const;

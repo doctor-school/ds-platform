@@ -1,7 +1,11 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { LegalDocument, formatEditionLine } from "./legal-document";
+import {
+  LegalDocument,
+  LegalDocumentList,
+  formatEditionLine,
+} from "./legal-document";
 
 afterEach(cleanup);
 
@@ -302,5 +306,64 @@ describe("<LegalDocument> — responsive hero (028 EARS-14)", () => {
     expect(screen.getByRole("heading", { level: 1 })).toHaveClass(
       ...RESPONSIVE_HEADING_CLASSES,
     );
+  });
+});
+
+/**
+ * 028 EARS-3 / EARS-11 (#1967) — the row unit on its own.
+ *
+ * A host documents INDEX composes this exported list rather than hand-assembling
+ * rows: `doctor-docs.dc.html` annotates the row as «юнит „строка-ссылка
+ * документа"» taken as-is by the other lists, and the assertion that matters is
+ * that the SAME anatomy renders whether it is reached through `<LegalDocument>`
+ * or directly.
+ */
+describe("LegalDocumentList", () => {
+  const ROWS = [
+    {
+      slug: "privacy-policy",
+      title: "Политика персональных данных и согласия",
+      href: "/documents/privacy-policy",
+      editionLabel: "редакция от 7 сентября 2026",
+      updated: false,
+    },
+    {
+      slug: "consent-photo-video",
+      title: "Согласие на фото и видео",
+      href: "/documents/consent-photo-video",
+      updated: true,
+    },
+  ];
+
+  it("028 EARS-3: every row links to its own document URL under a host-chosen testid prefix", () => {
+    render(<LegalDocumentList items={ROWS} testIdPrefix="documents-row" />);
+
+    expect(screen.getByTestId("documents-row-privacy-policy")).toHaveAttribute(
+      "href",
+      "/documents/privacy-policy",
+    );
+    expect(
+      screen.getByTestId("documents-row-consent-photo-video"),
+    ).toHaveAttribute("href", "/documents/consent-photo-video");
+    expect(screen.getAllByRole("link")).toHaveLength(2);
+  });
+
+  it("028 EARS-11: the «обновлено» chip follows the host-fed boolean and no version number is rendered", () => {
+    render(<LegalDocumentList items={ROWS} testIdPrefix="documents-row" />);
+
+    expect(screen.getAllByText("обновлено")).toHaveLength(1);
+    expect(
+      screen.getByTestId("documents-row-consent-photo-video"),
+    ).toHaveTextContent("обновлено");
+    expect(
+      screen.getByTestId("documents-row-privacy-policy"),
+    ).not.toHaveTextContent("обновлено");
+    expect(document.body.textContent).not.toMatch(/v\d|версия/i);
+  });
+
+  it("028 EARS-12: an empty list renders no rows at all", () => {
+    render(<LegalDocumentList items={[]} />);
+
+    expect(screen.queryAllByRole("link")).toHaveLength(0);
   });
 });

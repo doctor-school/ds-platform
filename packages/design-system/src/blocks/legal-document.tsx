@@ -202,6 +202,78 @@ function TocList({
   );
 }
 
+export interface LegalDocumentListProps {
+  /** The rows, host-ordered. */
+  items: LegalDocumentNeighbour[];
+  /** EARS-11 chip copy; defaults to the RU «обновлено». */
+  updatedChip?: string;
+  /**
+   * `data-testid` prefix for the rows. The «Другие документы» section under a
+   * document keeps `legal-document-other`; a host documents INDEX passes its own
+   * so the two lists stay distinguishable in a page-level test.
+   */
+  testIdPrefix?: string;
+  className?: string;
+}
+
+/**
+ * `LegalDocumentList` — the row unit of a documents list, exported on its own.
+ *
+ * The «Другие документы» section below a document and a host's `/documents`
+ * INDEX are the same anatomy on the canvases (`document.dc.html` «другие
+ * документы» / `doctor-docs.dc.html` «юнит „строка-ссылка документа"», which the
+ * canvas itself annotates as taken as-is by the Academy and community lists).
+ * Exporting it is what keeps that true in code: a host index composes THIS,
+ * instead of hand-assembling a second set of rows that drifts from the first
+ * (AGENTS.md §6 cross-front reuse, 028-design.md → «Shared component, thin host
+ * projection»).
+ *
+ * Presentation only, like the block around it: which documents appear, in what
+ * order, and whether a row is `updated` are host decisions (EARS-3, EARS-11).
+ */
+function LegalDocumentList({
+  items,
+  updatedChip = LEGAL_DOCUMENT_COPY.updatedChip,
+  testIdPrefix = "legal-document-other",
+  className,
+}: LegalDocumentListProps) {
+  return (
+    <div className={cn("flex flex-col gap-3", className)}>
+      {items.map((item) => (
+        <a
+          key={item.slug}
+          href={item.href}
+          data-testid={`${testIdPrefix}-${item.slug}`}
+          className="grid items-center gap-1.5 border-2 border-border bg-card p-5 shadow-md hover:shadow-sm focus-visible:shadow-sm sm:flex sm:items-center sm:justify-between sm:gap-5"
+        >
+          <span className="min-w-0">
+            <span className="flex flex-wrap items-center gap-2.5">
+              <span className="text-base leading-snug font-extrabold tracking-tight text-card-foreground">
+                {item.title}
+              </span>
+              {item.updated ? (
+                <Badge variant="updated" className="flex-none">
+                  {updatedChip}
+                </Badge>
+              ) : null}
+            </span>
+            {item.note ? (
+              <span className="mt-1.5 block text-sm leading-snug font-semibold text-muted-foreground">
+                {item.note}
+              </span>
+            ) : null}
+          </span>
+          {item.editionLabel ? (
+            <span className="text-xs font-bold whitespace-nowrap text-faint">
+              {item.editionLabel}
+            </span>
+          ) : null}
+        </a>
+      ))}
+    </div>
+  );
+}
+
 function OtherDocuments({
   items,
   title,
@@ -223,39 +295,7 @@ function OtherDocuments({
       >
         {title}
       </p>
-      <div className="flex flex-col gap-3">
-        {items.map((item) => (
-          <a
-            key={item.slug}
-            href={item.href}
-            data-testid={`legal-document-other-${item.slug}`}
-            className="grid items-center gap-1.5 border-2 border-border bg-card p-5 shadow-md hover:shadow-sm focus-visible:shadow-sm sm:flex sm:items-center sm:justify-between sm:gap-5"
-          >
-            <span className="min-w-0">
-              <span className="flex flex-wrap items-center gap-2.5">
-                <span className="text-base leading-snug font-extrabold tracking-tight text-card-foreground">
-                  {item.title}
-                </span>
-                {item.updated ? (
-                  <Badge variant="updated" className="flex-none">
-                    {updatedChip}
-                  </Badge>
-                ) : null}
-              </span>
-              {item.note ? (
-                <span className="mt-1.5 block text-sm leading-snug font-semibold text-muted-foreground">
-                  {item.note}
-                </span>
-              ) : null}
-            </span>
-            {item.editionLabel ? (
-              <span className="text-xs font-bold whitespace-nowrap text-faint">
-                {item.editionLabel}
-              </span>
-            ) : null}
-          </a>
-        ))}
-      </div>
+      <LegalDocumentList items={items} updatedChip={updatedChip} />
     </section>
   );
 }
@@ -411,4 +451,4 @@ const LegalDocument = React.forwardRef<HTMLElement, LegalDocumentProps>(
 );
 LegalDocument.displayName = "LegalDocument";
 
-export { LegalDocument };
+export { LegalDocument, LegalDocumentList };

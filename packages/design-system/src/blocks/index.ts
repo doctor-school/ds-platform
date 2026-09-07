@@ -267,13 +267,19 @@ export type {
 // 028 EARS-7/11/14 (#1966) — the ONE legal-document reading surface both
 // storefronts mount (canvas `design-source/document.dc.html`, tocVariant А).
 // The hosts add a route and the neighbour list; neither owns a copy of it.
-export { LegalDocument, LEGAL_DOCUMENT_COPY, formatEditionLine } from "./legal-document";
+export {
+  LegalDocument,
+  LegalDocumentList,
+  LEGAL_DOCUMENT_COPY,
+  formatEditionLine,
+} from "./legal-document";
 export type {
   LegalDocumentProps,
   LegalDocumentState,
   LegalDocumentContent,
   LegalDocumentCopy,
   LegalDocumentNeighbour,
+  LegalDocumentListProps,
 } from "./legal-document";
 
 // 021 EARS-9 + EARS-10 (#1546) — the ONE canonical post-confirmation success

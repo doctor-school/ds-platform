@@ -187,6 +187,13 @@ export default async function DoctorRegisterPage({
           await resolveRememberedSpecialty(await headers()),
         );
 
+  // 021 EARS-10 (#1546) — the target CARRIED THROUGH the confirmation, in the
+  // doctor-host vocabulary the confirm command's guard accepts. Present only
+  // when the эфир actually resolved: an unresolvable target is the same as no
+  // target, and sending it anyway would ask the server to name a degradation
+  // reason for a page this route already knows nothing answers.
+  const returnTarget = landingTarget && returnEvent ? landingTarget : undefined;
+
   return (
     <AuthShell
       returnContext={
@@ -197,6 +204,7 @@ export default async function DoctorRegisterPage({
     >
       <RegistrationScreen
         landing={landing}
+        {...(returnTarget ? { returnTarget } : {})}
         consentTiers={CONSENT_TIERS}
         returnContext={
           returnEvent ? <ReturnContextPlate event={returnEvent} /> : undefined

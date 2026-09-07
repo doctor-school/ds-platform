@@ -55,6 +55,25 @@ apps/doctor/
   playwright.ci.config.ts  # backend-free tier, DOCTOR_CI_PORT (default 3211)
 ```
 
+## Registration success state (021 EARS-10)
+
+After the doctor submits the emailed code, `components/registration-screen.tsx`
+calls the single storefront command `POST /v1/storefront/doctor/confirm` (it
+verifies the code and decides the landing in one round trip) and replaces the
+confirm card with the shared `RegistrationSuccessCard`
+(`@ds/design-system` — see the capability registry). The card's PRIMARY action is
+the landing: the server's `primaryAction.href` when the carried return target is
+still live, or when the server degraded it to the nearest honest destination
+(`reason: ended | full | unpublished | missing`, stated in RU above the actions);
+with nothing carried it is the `landing` prop the register page computed from the
+specialty read (LD-4 — `/events`, else `/`). The personal cabinet (`/account`) is
+always the SECONDARY action, never the default destination. Points are shown as a
+pending promise, not an accrued fact, while the API returns `credited: null`, and
+the profile-motivation line is absent until `profileCompletion` carries a string.
+The RU copy map and the pure landing composition live in
+`lib/registration-success.ts`; every href reaching a navigation comes from the
+server response or that `landing` prop — never assembled on the client.
+
 ## Sessions on two hosts (ADR-0015 §4)
 
 One Zitadel identity, but the BFF session cookie is `__Host-ds_session` — the

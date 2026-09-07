@@ -38,6 +38,7 @@ import {
   OtpFocusScreen,
   Pagination,
   PasswordRecoveryCard,
+  RegistrationSuccessCard,
   maskDestination,
   type AccountProfileCardCopy,
   type ComboboxOption,
@@ -1751,6 +1752,160 @@ function EmailConfirmCardSection() {
           >
             <Canvas>
               <NeutralEmailConfirmCard withResend={false} />
+            </Canvas>
+          </StateCase>
+        </div>
+      </SubRow>
+    </BlockSection>
+  );
+}
+
+
+/* ------------------------------------------------------------------ */
+/* RegistrationSuccessCard                                             */
+/* ------------------------------------------------------------------ */
+
+const REGISTRATION_SUCCESS_PROPS: PropRow[] = [
+  {
+    name: "title",
+    type: "ReactNode",
+    required: true,
+    description: "The success heading — host-supplied and localized.",
+  },
+  {
+    name: "description",
+    type: "ReactNode",
+    required: false,
+    description: "Optional sub-copy under the heading.",
+  },
+  {
+    name: "icon",
+    type: "ReactNode",
+    required: false,
+    description: "Optional leading glyph, promoted into the AuthCard badge tile.",
+  },
+  {
+    name: "accrual",
+    type: "ReactNode",
+    required: true,
+    description:
+      "The registration accrual as the host resolved it from the response — the pending promise while credited is null, the stated fact once a number arrives. Never an amount the block invents.",
+  },
+  {
+    name: "profileCompletion",
+    type: "ReactNode",
+    required: false,
+    description:
+      "The profile-completion motivation line, verbatim from the server. Omitted ⇒ the row is absent from the tree, never an empty frame.",
+  },
+  {
+    name: "reason",
+    type: "ReactNode",
+    required: false,
+    description:
+      "What happened to a carried target that could not be honoured — rendered above the actions in a role=status alert.",
+  },
+  {
+    name: "primary",
+    type: "RegistrationSuccessAction",
+    required: true,
+    description:
+      "The landing: a resolved href plus its label. Always ranked first, and never the account page.",
+  },
+  {
+    name: "secondary",
+    type: "RegistrationSuccessAction",
+    required: true,
+    description:
+      "The personal cabinet: a resolved href plus its label. Always ranked second — the block does not let a call site swap the pair.",
+  },
+];
+
+/** A live `RegistrationSuccessCard` at a given state, with inert host wiring. */
+function NeutralRegistrationSuccessCard({
+  profileCompletion,
+  reason,
+  accrual = "Starting points for registering will be credited to your account.",
+  primaryLabel = "Back to the broadcast →",
+}: {
+  profileCompletion?: string;
+  reason?: string;
+  accrual?: string;
+  primaryLabel?: string;
+}) {
+  return (
+    <RegistrationSuccessCard
+      title="Email confirmed"
+      accrual={accrual}
+      profileCompletion={profileCompletion}
+      reason={reason}
+      primary={{ href: "#", label: primaryLabel }}
+      secondary={{ href: "#", label: "To the personal cabinet" }}
+    />
+  );
+}
+
+function RegistrationSuccessCardSection() {
+  return (
+    <BlockSection
+      title="RegistrationSuccessCard"
+      exportsLine="RegistrationSuccessCard — props: title · description? · icon? · accrual · profileCompletion? · reason? · primary · secondary"
+    >
+      <p className="text-sm text-muted-foreground">
+        The post-confirmation success state of a registration door, as one
+        reusable unit: the <code className="font-mono text-xs">AuthCard</code>{" "}
+        frame, the accrual line, the optional profile-completion line, the
+        optional statement of what happened to a carried destination, and the
+        ranked action pair. It is data-in / presentation-out — it composes no
+        href, invents no amount, and never re-ranks the two actions, so the
+        landing is always primary and the cabinet always secondary.
+      </p>
+
+      <SubRow label="Preview">
+        <Canvas>
+          <NeutralRegistrationSuccessCard />
+        </Canvas>
+      </SubRow>
+
+      <SubRow label="Slots / props">
+        <PropsTable rows={REGISTRATION_SUCCESS_PROPS} />
+      </SubRow>
+
+      <SubRow label="State matrix — what the server had to say">
+        <div className="grid grid-cols-1 gap-x-10 gap-y-6 lg:grid-cols-2">
+          <StateCase
+            label="carried target still live"
+            note="the resting state — the accrual as a pending promise, no motivation line, the landing primary"
+          >
+            <Canvas>
+              <NeutralRegistrationSuccessCard />
+            </Canvas>
+          </StateCase>
+          <StateCase
+            label="points credited"
+            note="the server returned a number — the host states the fact instead of the promise"
+          >
+            <Canvas>
+              <NeutralRegistrationSuccessCard accrual="20 points have been credited — your starting points for registering." />
+            </Canvas>
+          </StateCase>
+          <StateCase
+            label="profile motivation configured"
+            note="the server supplied the line — rendered verbatim; absent above because it had nothing to name"
+          >
+            <Canvas>
+              <NeutralRegistrationSuccessCard profileCompletion="Complete your profile for 30 more points and access to certificates." />
+            </Canvas>
+          </StateCase>
+          <StateCase
+            label="degraded landing"
+            note="the carried target could not be honoured — the reason is stated above the actions, which point at the nearest honest destination"
+          >
+            <Canvas>
+              <NeutralRegistrationSuccessCard
+                reason="The broadcast you signed up for has already ended — here is its page."
+                primaryLabel="Open the broadcast page →"
+              />
             </Canvas>
           </StateCase>
         </div>
@@ -4124,6 +4279,7 @@ export function BlocksView({ legalDocument, legalOthers }: BlocksViewProps) {
       <RegisterCardSection />
       <PasswordRecoveryCardSection />
       <EmailConfirmCardSection />
+      <RegistrationSuccessCardSection />
       <OtpFocusScreenSection />
       <MonthCalendarGridSection />
       <MonthDotGridSection />

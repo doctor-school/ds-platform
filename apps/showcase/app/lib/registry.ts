@@ -123,6 +123,9 @@ export const SHOWCASE_REGISTRY: ShowcaseEntry[] = [
   { id: "RegisterCard", section: "blocks" },
   { id: "PasswordRecoveryCard", section: "blocks" },
   { id: "EmailConfirmCard", section: "blocks" },
+  // 021 EARS-9/EARS-10 (#1546) — the post-confirmation success state both
+  // registration doors project.
+  { id: "RegistrationSuccessCard", section: "blocks" },
   { id: "OtpFocusScreen", section: "blocks" },
 
   // ── Month-calendar blocks (004 EARS-19, #1050) — the webinars-month.dc.html

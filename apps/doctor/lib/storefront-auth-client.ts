@@ -1,6 +1,8 @@
 "use client";
 
 import type {
+  DoctorConfirmRequest,
+  DoctorConfirmResponse,
   DoctorRegisterRequest,
   DoctorRegisterResponse,
   MyDisplayName,
@@ -14,7 +16,7 @@ import type {
 
 /**
  * 021 EARS-19 (#1558) — the doctor storefront's client transport for the
- * registration command and the two 003 verification calls it hands off to.
+ * registration and confirmation commands and the 003 code-resend call beside them.
  *
  * Same shape and same rules as `lib/auth-client.ts`'s session probe: a RELATIVE
  * `/v1/...` path with `credentials: "include"`, so the request rides THIS origin
@@ -22,11 +24,14 @@ import type {
  * same-origin proxy — the `__Host-ds_session` cookie is locked to this host, and
  * the access/refresh tokens never reach this client.
  *
- * 021 defines NO second credential path and NO second code path: the register
- * command is the storefront's own (`POST /v1/storefront/doctor/register`), and
- * confirming the emailed code and re-issuing it are the SHIPPED 003 routes the
- * Academy already calls (`/v1/auth/verify`, `/v1/auth/verify/resend`). Reused,
- * not re-implemented.
+ * 021 defines NO second credential path and NO second code ENGINE. The register
+ * and confirm commands are the storefront's own
+ * (`POST /v1/storefront/doctor/register`, `POST /v1/storefront/doctor/confirm`),
+ * and the confirm command exists for the ANSWER rather than the check: it
+ * delegates the code to the shipped 003 engine unchanged and adds the 021
+ * success state on top (021 EARS-10, #1546). Re-issuing a code stays the 003
+ * route the Academy already calls (`/v1/auth/verify/resend`). Reused, not
+ * re-implemented.
  */
 const BASE = "/v1";
 
@@ -194,4 +199,30 @@ export function logoutStorefront(): Promise<unknown> {
  */
 export function refreshStorefrontSession(): Promise<unknown> {
   return post<Record<string, never>, unknown>("auth/refresh", {});
+}
+
+/**
+ * 021 EARS-10 (#1546) — confirm the emailed code AND learn where to land, in ONE
+ * round trip.
+ *
+ * `POST /v1/storefront/doctor/confirm` is not a second code path beside 003's
+ * `/v1/auth/verify`: the storefront command DELEGATES to the same shipped 003
+ * engine and then answers with the 021 success state (`credited`,
+ * `profileCompletion`, the primary/secondary actions). So this surface calls it
+ * INSTEAD of `verifyEmail`, never both — a client that called the 003 route and
+ * then asked for a landing would verify the code twice.
+ *
+ * `returnTo` carries the DOCTOR-HOST projection of the arrival target
+ * (`/events/<slug>`), which is the shape the server-side guard
+ * `parseDoctorHostReturnTarget` accepts. It is re-validated there against the
+ * live эфир, so nothing about this client's value is trusted: a stale, hostile
+ * or absent target all resolve to a landing the server chose.
+ */
+export function confirmDoctorEmail(
+  body: DoctorConfirmRequest,
+): Promise<DoctorConfirmResponse> {
+  return post<DoctorConfirmRequest, DoctorConfirmResponse>(
+    "storefront/doctor/confirm",
+    body,
+  );
 }

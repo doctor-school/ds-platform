@@ -17,6 +17,7 @@ import {
   isBotProtectionRequired,
   maskDestination,
   RegisterCard,
+  RegistrationSuccessCard,
   useBotProtectedAction,
   useResendCooldown,
   type EmailConfirmCardCopy,
@@ -36,10 +37,14 @@ import {
   resolveVerificationCode,
 } from "@/lib/register-fields";
 import {
+  confirmDoctorEmail,
   registerDoctor,
   resendVerification,
-  verifyEmail,
 } from "@/lib/storefront-auth-client";
+import {
+  resolveRegistrationSuccess,
+  type RegistrationSuccessView,
+} from "@/lib/registration-success";
 
 /**
  * 021 EARS-1 — the doctor registration screen (`design-source/auth.dc.html`,
@@ -101,13 +106,30 @@ export type RegistrationScreenProps = {
    * reconstruction — one vocabulary, LD-3), a direct arrival carries the LD-4
    * decision (`lib/registration-landing.ts`).
    *
-   * REQUIRED, and a CONSUMED SEAM rather than decoration: the post-confirmation
-   * success state of EARS-10 (#1546) reads this value for
-   * `SuccessState.primaryAction` instead of recomputing the decision on the far
-   * side of the confirmation hop. It is not optional precisely so that no
+   * REQUIRED, and CONSUMED: the post-confirmation success state of EARS-10
+   * (#1546) renders this value as its primary action whenever the confirmation
+   * response carries no honoured target of its own, instead of recomputing the
+   * decision on the far side of the hop — so the landing the doctor is promised
+   * on the door is the landing they get. It is not optional precisely so that no
    * future caller can render the door without having decided.
    */
   landing: string;
+  /**
+   * 021 EARS-10 (#1546) — the arrival target to CARRY THROUGH the confirmation,
+   * in the doctor host's own vocabulary (`/events/<slug>`).
+   *
+   * Not the raw `returnTo` param and not {@link landing}: the confirm command's
+   * server-side guard (`parseDoctorHostReturnTarget`) speaks the doctor-host
+   * shapes and rejects the canonical academy `/webinars/<slug>` the gate emits,
+   * so the route hands over the projection it already resolved (#1945). Absent
+   * on a direct arrival and on an arrival whose target did not resolve — the
+   * server then answers with a landing rather than a return.
+   *
+   * It is re-validated server-side against the live эфир (EARS-10), so nothing
+   * about this value is trusted across the hop; carrying it is what lets the
+   * server tell «still live» from «went stale» and name WHICH.
+   */
+  returnTarget?: string;
   /** The resolved representative/organisation line (EARS-8, #1544). */
   attribution?: ReactNode;
   /** The pre-submission points promise read from configuration (EARS-9, #1545). */
@@ -298,6 +320,7 @@ const CONFIRM_RESEND_ACKNOWLEDGED = (destination: string) =>
 export function RegistrationScreen({
   returnContext,
   landing,
+  returnTarget,
   attribution,
   pointsPromise,
   consentTiers,
@@ -503,7 +526,13 @@ export function RegistrationScreen({
       // line and the points promise are pre-submission framing of a decision the
       // doctor has now made.
       confirmation={
-        pendingEmail ? <RegistrationConfirmation email={pendingEmail} /> : null
+        pendingEmail ? (
+          <RegistrationConfirmation
+            email={pendingEmail}
+            landing={landing}
+            returnTarget={returnTarget}
+          />
+        ) : null
       }
       testIds={{
         root: "registration-screen",
@@ -559,10 +588,11 @@ const confirmResolver: Resolver<EmailConfirmValues> = (values) => {
  * The composition is not written here: `<EmailConfirmCard>` is the ONE canonical
  * email-confirmation block both storefronts mount (#1902, AGENTS.md §6
  * cross-front reuse), so this is a host projection of it — RU copy, the resolver
- * above, and the transport. The engine is 003's shipped one, unchanged: the code
- * goes to `/v1/auth/verify` and a resend to `@BotProtected("verify-resend")`
- * `/v1/auth/verify/resend`, which is why every resend mints its own token
- * through the same challenge the registration submit ran.
+ * above, and the transport. The code ENGINE is 003's shipped one, unchanged: the
+ * storefront confirm command delegates to it and a resend goes straight to
+ * `@BotProtected("verify-resend")` `/v1/auth/verify/resend`, which is why every
+ * resend mints its own token through the same challenge the registration submit
+ * ran.
  *
  * Its own `useBotProtectedAction`, separate from the registration form's: the
  * form is gone by the time this renders, and a resend is a different protected
@@ -573,11 +603,30 @@ const confirmResolver: Resolver<EmailConfirmValues> = (values) => {
  * own `/login` and `/reset` — same-site relative, never a hand-off to the
  * Academy origin, which is a separate site. Whether those two routes exist yet,
  * and the enumeration-safe parity assertions around them, belong to #1549.
- * #1546 (EARS-10) owns where a confirmed doctor lands after «Код принят».
+ *
+ * WHERE A CONFIRMED DOCTOR LANDS (#1546, EARS-10) is decided here, which is why
+ * the code goes to the STOREFRONT confirm command rather than 003's
+ * `/v1/auth/verify`: that command runs the same 003 engine and answers with the
+ * 021 success state, so ONE round trip both accepts the code and names the
+ * destination — a client that called both routes would verify the code twice.
+ *
+ * On success this surface is REPLACED by `<RegistrationSuccessCard>` rather than
+ * annotated: the canvas «Успех» artboard is its own screen, so the confirmation
+ * card and the success state never stand on the page together. A rejected code
+ * stays on the EARS-16 generic failure — the confirm command is no more of an
+ * oracle than the 003 route it delegates to.
  */
-function RegistrationConfirmation({ email }: { email: string }) {
+function RegistrationConfirmation({
+  email,
+  landing,
+  returnTarget,
+}: {
+  email: string;
+  landing: string;
+  returnTarget?: string;
+}) {
   const [error, setError] = useState<string | null>(null);
-  const [succeeded, setSucceeded] = useState(false);
+  const [success, setSuccess] = useState<RegistrationSuccessView | null>(null);
   const [captchaError, setCaptchaError] = useState<string | null>(null);
   const [resendError, setResendError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -620,14 +669,41 @@ function RegistrationConfirmation({ email }: { email: string }) {
   async function onSubmit(values: EmailConfirmValues) {
     setError(null);
     try {
-      // Mapped field by field rather than cast: a future field on the 003
+      // Mapped field by field rather than cast: a future field on the confirm
       // contract must fail typecheck here instead of shipping a silent omission.
-      await verifyEmail({ email: values.email, code: values.code });
-      setSucceeded(true);
+      // `returnTo` rides the SAME command as the code, so the server decides the
+      // destination with the verification it just performed — there is no second
+      // hop in which the target could go stale unobserved.
+      const confirmed = await confirmDoctorEmail({
+        email: values.email,
+        code: values.code,
+        ...(returnTarget ? { returnTo: returnTarget } : {}),
+      });
+      setSuccess(resolveRegistrationSuccess(confirmed, landing));
     } catch {
-      setSucceeded(false);
+      setSuccess(null);
       setError(CONFIRM_FAILED);
     }
+  }
+
+  // EARS-10 — the success state REPLACES the code screen rather than annotating
+  // it: the code has been accepted, so the surface the doctor is looking at is
+  // no longer «введите код», and leaving the code form behind the outcome would
+  // offer an action that can only fail from here.
+  if (success) {
+    return (
+      <RegistrationSuccessCard
+        icon={<SuccessGlyph />}
+        title={success.title}
+        accrual={success.accrual}
+        {...(success.profileCompletion
+          ? { profileCompletion: success.profileCompletion }
+          : {})}
+        {...(success.reason ? { reason: success.reason } : {})}
+        primary={success.primary}
+        secondary={success.secondary}
+      />
+    );
   }
 
   return (
@@ -640,7 +716,6 @@ function RegistrationConfirmation({ email }: { email: string }) {
       onSubmit={onSubmit}
       onInvalid={() => setError(CONFIRM_CODE_INVALID)}
       error={error}
-      succeeded={succeeded}
       // Same-site, relative: the doctor storefront is its own site and hands a
       // visitor off to no other one.
       links={{ login: "/login", reset: "/reset" }}
@@ -680,6 +755,26 @@ function ConfirmationGlyph() {
         strokeWidth="2"
         strokeLinecap="square"
       />
+    </svg>
+  );
+}
+
+/**
+ * The success state's glyph — a check mark, drawn inline for the same reason the
+ * envelope above is. Decorative only: «Почта подтверждена» carries the meaning,
+ * and the outcome is also announced by the card's own copy rather than by a
+ * mark a screen reader never sees.
+ */
+function SuccessGlyph() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      aria-hidden
+      focusable="false"
+    >
+      <path d="M4 12l6 6L20 6" strokeWidth="2" strokeLinecap="square" />
     </svg>
   );
 }

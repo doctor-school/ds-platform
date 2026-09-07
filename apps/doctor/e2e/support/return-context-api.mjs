@@ -119,10 +119,84 @@ const PARTICIPATION_CTA = {
  */
 const SESSION_VALUE = "e2e-signed-in-doctor";
 
+/**
+ * The эфир that ALREADY ENDED (021 EARS-10 / LD-8, #1546). Carried through the
+ * confirmation, it is the degraded branch: the page still exists and is still
+ * readable, so the honest landing is that page — with the success state saying
+ * WHY it is no longer a return. Same shape as the live fixture; only the
+ * lifecycle state, the slug and the instant differ.
+ */
+const ENDED_EVENT = {
+  ...EVENT,
+  id: "00000000-0000-4000-8000-0000000005f8",
+  slug: "ended-vedenie-hronicheskoy-boli",
+  title: "Ведение хронической боли: разбор клинических случаев",
+  startsAt: "2026-05-14T16:00:00.000Z",
+  state: "ended",
+};
+
+/** Every эфир this double answers for, by slug and by id. */
+const EVENTS = [EVENT, ENDED_EVENT];
+
+function findEvent(key) {
+  return EVENTS.find((event) => event.slug === key || event.id === key) ?? null;
+}
+
+/**
+ * 021 EARS-10 (#1546) — the layer-1 landing table, answered by the target the
+ * client carried.
+ *
+ * The double reproduces the SERVER's decision, never the client's: the browser
+ * tier has to see a `return`, a degraded `landing` with a reason and a bare
+ * `landing` come back from the wire, because the whole point of the clause is
+ * that the client re-derives none of them.
+ */
+function confirmAnswer(returnTo) {
+  const base = {
+    status: "verified",
+    credited: null,
+    profileCompletion: null,
+    secondaryAction: { kind: "cabinet", href: "/account" },
+  };
+  if (returnTo === `/events/${EVENT.slug}`) {
+    return { ...base, primaryAction: { kind: "return", href: returnTo } };
+  }
+  if (returnTo === `/events/${ENDED_EVENT.slug}`) {
+    return {
+      ...base,
+      primaryAction: { kind: "landing", href: returnTo, reason: "ended" },
+    };
+  }
+  // Absent, unparseable or hostile — one answer, exactly as the guard treats
+  // them: nothing was carried, so the landing is the api's own default.
+  return { ...base, primaryAction: { kind: "landing", href: "/events" } };
+}
+
 const server = createServer((request, response) => {
   const url = new URL(request.url ?? "/", `http://${request.headers.host}`);
 
   if (url.pathname === "/health") return json(response, 200, { ok: true });
+
+  // The three write commands the registration journey makes (021 EARS-10,
+  // #1546). The register and resend answers are the enumeration-safe constants
+  // the contract declares; the confirm answer is the landing table above.
+  if (request.method === "POST") {
+    if (url.pathname === "/v1/storefront/doctor/register") {
+      return readJson(request, () =>
+        json(response, 200, { status: "pending_verification" }),
+      );
+    }
+    if (url.pathname === "/v1/auth/verify/resend") {
+      return readJson(request, () =>
+        json(response, 200, { status: "resend_requested" }),
+      );
+    }
+    if (url.pathname === "/v1/storefront/doctor/confirm") {
+      return readJson(request, (body) =>
+        json(response, 200, confirmAnswer(body.returnTo)),
+      );
+    }
+  }
 
   if (url.pathname === "/v1/public/specialty-choice") {
     const remembered = /(?:^|;\s*)__Host-ds_specialty=([^;]*)/.exec(
@@ -166,8 +240,8 @@ const server = createServer((request, response) => {
       url.pathname,
     );
   if (participation) {
-    const key = decodeURIComponent(participation[1]);
-    if (key !== EVENT.slug && key !== EVENT.id) {
+    const found = findEvent(decodeURIComponent(participation[1]));
+    if (!found) {
       return json(response, 404, { status: 404, message: "event not found" });
     }
     return json(response, 200, PARTICIPATION_CTA);
@@ -177,18 +251,15 @@ const server = createServer((request, response) => {
     url.pathname,
   );
   if (storefront) {
-    const key = decodeURIComponent(storefront[1]);
-    if (key === EVENT.slug || key === EVENT.id)
-      return json(response, 200, EVENT);
+    const found = findEvent(decodeURIComponent(storefront[1]));
+    if (found) return json(response, 200, found);
     return json(response, 404, { status: 404, message: "event not found" });
   }
 
   const match = /^\/v1\/public\/events\/([^/]+)$/.exec(url.pathname);
   if (match) {
-    const key = decodeURIComponent(match[1]);
-    if (key === EVENT.slug || key === EVENT.id) {
-      return json(response, 200, EVENT);
-    }
+    const found = findEvent(decodeURIComponent(match[1]));
+    if (found) return json(response, 200, found);
     return json(response, 404, { status: 404, message: "event not found" });
   }
 
@@ -198,6 +269,19 @@ const server = createServer((request, response) => {
 server.listen(port, "127.0.0.1");
 for (const signal of ["SIGINT", "SIGTERM"]) {
   process.on(signal, () => server.close(() => process.exit(0)));
+}
+
+/** Collect a JSON request body, then answer. `{}` for anything unparseable. */
+function readJson(request, done) {
+  const chunks = [];
+  request.on("data", (chunk) => chunks.push(chunk));
+  request.on("end", () => {
+    try {
+      done(JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}"));
+    } catch {
+      done({});
+    }
+  });
 }
 
 function json(response, status, body) {

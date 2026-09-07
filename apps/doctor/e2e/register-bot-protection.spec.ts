@@ -26,7 +26,7 @@ import { test, expect, type Page, type Request } from "@playwright/test";
  */
 const REGISTER_ROUTE = "**/v1/storefront/doctor/register";
 const RESEND_ROUTE = "**/v1/auth/verify/resend";
-const VERIFY_ROUTE = "**/v1/auth/verify";
+const CONFIRM_ROUTE = "**/v1/storefront/doctor/confirm";
 
 const EMAIL = "doctor@clinic.ru";
 const PASSWORD = "correct horse battery";
@@ -225,15 +225,25 @@ test.describe("021 EARS-19: bot protection on the registration and resend forms"
     );
   });
 
-  test("021 EARS-19.5: the confirmation state confirms the code through the shipped 003 route", async ({
+  // #1546 moved this hop from 003's `/v1/auth/verify` to the STOREFRONT confirm
+  // command: it runs the same 003 engine and answers with the 021 success state,
+  // so the code is still checked exactly once and the browser still makes exactly
+  // one round trip — what changed is the answer, not the engine.
+  test("021 EARS-19.5: the confirmation state confirms the code through the storefront confirm command", async ({
     page,
   }) => {
     await acceptRegistration(page);
-    await page.route(VERIFY_ROUTE, (route) =>
+    await page.route(CONFIRM_ROUTE, (route) =>
       route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify({ status: "verified" }),
+        body: JSON.stringify({
+          status: "verified",
+          credited: null,
+          profileCompletion: null,
+          primaryAction: { kind: "landing", href: "/events" },
+          secondaryAction: { kind: "cabinet", href: "/account" },
+        }),
       }),
     );
     await page.goto("/register");
@@ -242,13 +252,13 @@ test.describe("021 EARS-19: bot protection on the registration and resend forms"
     await expect(page.getByTestId("verify-submit")).toBeVisible();
 
     const [request] = await Promise.all([
-      page.waitForRequest(VERIFY_ROUTE),
+      page.waitForRequest(CONFIRM_ROUTE),
       // The slotted OTP field auto-submits on completion (#175), so filling
       // it IS the submit — the same way the portal drives its code fields.
       page.locator('input[autocomplete="one-time-code"]').fill("ABC123"),
     ]);
     expect(body(request)).toEqual({ email: EMAIL, code: "ABC123" });
 
-    await expect(page.getByTestId("verify-succeeded")).toBeVisible();
+    await expect(page.getByTestId("registration-success")).toBeVisible();
   });
 });

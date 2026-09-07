@@ -68,6 +68,7 @@ Deviations: <ADR/spec clause — #N or DEBT.md#anchor | N/A — reason>
 
 ## Checklist
 
+- [ ] No production-side effect of this diff is deferred to a manual step (else: linked `release-blocker` Issue #N)
 - [ ] Tests green (unit + e2e where applicable)
 - [ ] `pnpm generate:all` artifacts up-to-date
 - [ ] Linked spec status updated if applicable

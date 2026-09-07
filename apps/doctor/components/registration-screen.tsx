@@ -35,8 +35,11 @@ import {
   type RegisterCardValues,
 } from "@ds/design-system/blocks";
 
+import { completeReturnTarget } from "@ds/events-storefront";
+
 import { login } from "@/lib/auth-client";
 import { withReturnContext } from "@/lib/return-context";
+import { doctorReturnHost } from "@/lib/return-completion";
 import {
   BOT_PROTECTION_MESSAGES,
   botProtectionSiteKey,
@@ -741,6 +744,22 @@ function RegistrationConfirmation({
     if (held) {
       try {
         await login({ identifier: held.identifier, password: held.password });
+        // 005 EARS-2 (#2005) — the session exists now, so the эфир the doctor
+        // came from is COMPLETED before the outcome is painted: they pressed
+        // «Участвовать» on a gated эфир and were sent here to make an account,
+        // and an account without the registration is not what they asked for.
+        // The decision is the ONE shared rule (`@ds/events-storefront`
+        // `completeReturnTarget`, the Academy's rule verbatim) under this host's
+        // projection of it (`lib/return-completion.ts`); the landing it returns
+        // is DISCARDED here, because this door does not navigate — the EARS-10
+        // success card owns where the doctor goes next, and it already holds the
+        // server's own honoured target. Best-effort by that rule's contract: a
+        // refusal still shows the success state, and the эфир page's per-viewer
+        // participation read (005 EARS-4) tells the truth there.
+        await completeReturnTarget(
+          returnTarget ?? null,
+          doctorReturnHost(landing),
+        );
         setSuccess(resolveRegistrationSuccess(confirmed, landing));
         return;
       } catch {

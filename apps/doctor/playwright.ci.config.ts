@@ -63,6 +63,11 @@ export default defineConfig({
     "login-arrival.spec.ts",
     "room.spec.ts",
     "a11y/room-axe.e2e.spec.ts",
+    // 005 EARS-1/2/3/4 (#2005): one-tap registration drives the REAL
+    // `POST /v1/events/:slug/registration` against a provisioned doctor account,
+    // so it is dev-stand-gated in the same strong sense as the room tier and
+    // rides `playwright.event-register.config.ts`.
+    "event-register-one-tap.spec.ts",
   ],
   fullyParallel: true,
   forbidOnly: !!process.env.CI,

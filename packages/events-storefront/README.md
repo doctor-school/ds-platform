@@ -61,6 +61,45 @@ it projects rather than the whole unit.
 Both hosts list the package in `transpilePackages` (`next.config.ts`) and depend
 on it as `workspace:*`.
 
+### Wiring the completion-on-return rule
+
+A host declares its `ReturnHost` once and hands `completeReturnTarget` the target
+it has ALREADY resolved and consumed — the parking store is per-host (014 EARS-6),
+so the package never reads a cookie or a URL of its own. The doctor storefront
+(`apps/doctor/lib/return-completion.ts`):
+
+```ts
+import { parseDoctorEventReturnTarget } from "@ds/schemas";
+import type { ReturnHost } from "@ds/events-storefront";
+
+export function doctorReturnHost(defaultLanding: string): ReturnHost {
+  return {
+    // This host mounts a room but routes every EARS-6 refusal to its own event
+    // page rather than through auth, so no room url ever rides a `returnTo` here.
+    parseRoomReturn: () => null,
+    parseIntent: parseDoctorEventReturnTarget,
+    defaultLanding,
+  };
+}
+```
+
+and its sign-in door awaits the answer before navigating
+(`apps/doctor/components/login-screen.tsx`):
+
+```ts
+const target = await completeReturnTarget(
+  returnTarget ?? null,
+  doctorReturnHost(landing),
+);
+router.push(target);
+router.refresh();
+```
+
+A door that does not navigate — the post-confirmation success card in
+`apps/doctor/components/registration-screen.tsx` — awaits the same call and
+DISCARDS the landing: what it needs is the command the rule fires, and the card
+owns where the doctor goes next.
+
 ## Tests
 
 `pnpm --filter @ds/events-storefront test` — vitest, jsdom, co-located

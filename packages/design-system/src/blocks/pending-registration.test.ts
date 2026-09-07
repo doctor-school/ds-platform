@@ -21,8 +21,8 @@ afterEach(() => {
   clearPendingRegistration();
 });
 
-describe("003 EARS-39 / 021 EARS-15: the held-password slot", () => {
-  it("003 EARS-39: a held credential is returned once and only once for its identifier", () => {
+describe("021 EARS-15: the held-password slot (003 EARS-39 security envelope)", () => {
+  it("021 EARS-15.5: a held credential is returned once and only once for its identifier", () => {
     setPendingRegistration({ identifier: "doc@example.com", password: "s3cret" });
 
     expect(takePendingRegistration("doc@example.com")).toEqual({
@@ -34,7 +34,7 @@ describe("003 EARS-39 / 021 EARS-15: the held-password slot", () => {
     expect(takePendingRegistration("doc@example.com")).toBeNull();
   });
 
-  it("003 EARS-39: a mismatched identifier yields nothing AND still wipes the slot", () => {
+  it("021 EARS-15.6: a mismatched identifier yields nothing AND still wipes the slot", () => {
     setPendingRegistration({ identifier: "doc@example.com", password: "s3cret" });
 
     expect(takePendingRegistration("someone-else@example.com")).toBeNull();
@@ -42,7 +42,7 @@ describe("003 EARS-39 / 021 EARS-15: the held-password slot", () => {
     expect(takePendingRegistration("doc@example.com")).toBeNull();
   });
 
-  it("003 EARS-39: a record older than the TTL is treated as no-hold", () => {
+  it("021 EARS-15.7: a record older than the TTL is treated as no-hold", () => {
     vi.useFakeTimers();
     setPendingRegistration({ identifier: "doc@example.com", password: "s3cret" });
 
@@ -56,7 +56,7 @@ describe("003 EARS-39 / 021 EARS-15: the held-password slot", () => {
     expect(takePendingRegistration("doc@example.com")).toBeNull();
   });
 
-  it("003 EARS-39: the slot is single-valued — a fresh register submit replaces the prior hold", () => {
+  it("021 EARS-15.8: the slot is single-valued — a fresh register submit replaces the prior hold", () => {
     setPendingRegistration({ identifier: "first@example.com", password: "one" });
     setPendingRegistration({ identifier: "second@example.com", password: "two" });
 
@@ -68,14 +68,14 @@ describe("003 EARS-39 / 021 EARS-15: the held-password slot", () => {
     });
   });
 
-  it("003 EARS-39: clearing drops the credential without handing it back", () => {
+  it("021 EARS-15.9: clearing drops the credential without handing it back", () => {
     setPendingRegistration({ identifier: "doc@example.com", password: "s3cret" });
     clearPendingRegistration();
 
     expect(takePendingRegistration("doc@example.com")).toBeNull();
   });
 
-  it("021 EARS-15: a fresh module (hard reload) holds nothing — the caller sees the no-hold path", () => {
+  it("021 EARS-15.10: a fresh module (hard reload) holds nothing — the caller sees the no-hold path", () => {
     // No `setPendingRegistration` ran in this module lifetime: the reload case
     // both hosts must survive without a dead end (the doctor host re-registers,
     // the Academy falls back to `/login`).

@@ -138,6 +138,11 @@ const BUILTIN_DEFERRALS: Record<string, Deferral> = {
     reason:
       'spec authored ahead of code (password-friction increment); EARS-37 tests land with the requirement-presentation slice of #1331',
   },
+  '003:EARS-39': {
+    issue: 1394,
+    reason:
+      'the security-envelope half ships with the shared held-password slot (#1996); the no-dead-end shall-clause is still unbuilt — /verify with no hold still does router.push(withReturnTarget("/login", returnTo)) instead of keeping the registrant on the verification step and routing to sign-in with explicit localized copy — tracked by #1394',
+  },
 };
 
 function loadDeferrals(): Record<string, Deferral> {

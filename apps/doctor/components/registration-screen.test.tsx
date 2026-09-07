@@ -49,6 +49,8 @@ const h = vi.hoisted(() => ({
   confirmDoctorEmail: vi.fn(),
   resendVerification: vi.fn(),
   login: vi.fn(),
+  push: vi.fn(),
+  replace: vi.fn(),
   calls: [] as string[],
 }));
 
@@ -71,11 +73,25 @@ vi.mock("@/lib/auth-client", () => ({
   },
 }));
 
+// The sign-in door the Academy rule routes to is a REAL route on this host
+// (#1939), so what is stubbed here is the navigator, not the destination: the
+// assertion is «which path was pushed», which is the whole of the no-dead-end
+// clause that is observable in jsdom.
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: h.push, replace: h.replace }),
+}));
+
 import { RegistrationScreen } from "@/components/registration-screen";
 
 const EMAIL = "doc@example.com";
 const PASSWORD = "Sup3rSecret!";
 const CODE = "PVDC3R";
+/**
+ * The doctor-host projection of the arrival's return target (`/events/<slug>`,
+ * 021 #1945) — the value the register page hands the screen, and the one the
+ * sign-in hop has to carry onward for the round-trip to close.
+ */
+const RETURN_TARGET = "/events/kardio";
 
 const CONSENT_TIERS: readonly ConsentTier[] = [
   {
@@ -115,6 +131,8 @@ beforeEach(() => {
     secondaryAction: { href: "/account" },
   });
   h.login.mockReset().mockResolvedValue({});
+  h.push.mockReset();
+  h.replace.mockReset();
   clearPendingRegistration();
 });
 
@@ -123,9 +141,30 @@ afterEach(() => {
   clearPendingRegistration();
 });
 
+/**
+ * `delay: null` is not a speed tweak, it is what makes this tier deterministic.
+ * The default `userEvent.setup()` awaits a real `setTimeout` BETWEEN EVERY
+ * KEYSTROKE, and one journey here types an email, a password and a six-digit
+ * code through the real form — dozens of timer round-trips, each also flushing a
+ * React `act()` cycle. On the worktree that fits inside the 5 s default; on the
+ * shared CI runner it did not, and `021 EARS-15` timed out at
+ * `registration-screen.test.tsx:157` in `core / unit` while asserting nothing
+ * about time. With `delay: null` the keystrokes are dispatched synchronously, so
+ * the test measures the wiring it is about and not the runner it happens to be
+ * on. Raising `testTimeout` would have hidden the same unbounded wait behind a
+ * bigger number.
+ */
+function setupUser() {
+  return userEvent.setup({ delay: null });
+}
+
 function renderScreen() {
   return render(
-    <RegistrationScreen landing="/events" consentTiers={CONSENT_TIERS} />,
+    <RegistrationScreen
+      landing="/events"
+      returnTarget={RETURN_TARGET}
+      consentTiers={CONSENT_TIERS}
+    />,
   );
 }
 
@@ -159,7 +198,7 @@ async function submitCode(user: ReturnType<typeof userEvent.setup>) {
 
 describe("021 EARS-15 (#1996): the doctor is signed in after email confirmation", () => {
   it("021 EARS-15: when the confirm succeeds and a password is held, system shall replay the login before the success state", async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     renderScreen();
 
     await submitRegistration(user);
@@ -185,48 +224,61 @@ describe("021 EARS-15 (#1996): the doctor is signed in after email confirmation"
     expect(takePendingRegistration(EMAIL)).toBeNull();
   });
 
-  it("021 EARS-15.2: with no held password the confirm still succeeds and NO login is replayed", async () => {
-    const user = userEvent.setup();
+  it("021 EARS-15.2: with no held password, system shall route to the sign-in door with the return context instead of a success card", async () => {
+    const user = setupUser();
     renderScreen();
 
     await submitRegistration(user);
-    // The reload case (003 EARS-39 no-dead-end) reproduced at the seam that
-    // actually loses the credential: the module slot is emptied between the
-    // register submit and the code. The doctor host renders both steps in ONE
-    // component with no route change, so a real reload lands on the empty
-    // register form and the doctor re-registers (003 EARS-16 answers
-    // identically) — either way the confirmation itself is never blocked.
+    // The credential-loss case (003 EARS-39) reproduced at the seam that
+    // actually loses it: the module slot is emptied between the register submit
+    // and the code — a reload, a restored tab, or a hold past its TTL.
     clearPendingRegistration();
     await submitCode(user);
 
     await waitFor(() => expect(h.confirmDoctorEmail).toHaveBeenCalledTimes(1));
+    // The Academy rule, whole: no held credential means no session, and a
+    // doctor with no session is sent to sign in CARRYING the return context —
+    // never handed a success card that would walk them onto the эфир as a guest.
+    await waitFor(() =>
+      expect(h.push).toHaveBeenCalledWith(
+        `/login?returnTo=${encodeURIComponent(RETURN_TARGET)}`,
+      ),
+    );
     expect(h.login).not.toHaveBeenCalled();
     expect(h.calls).toEqual(["register", "confirm"]);
+    // The success state exists ONLY for a doctor who is signed in.
+    expect(screen.queryByTestId("registration-success-primary")).toBeNull();
   });
 
-  it("021 EARS-15.3: a replay that throws is not a failed confirmation — the success state still renders", async () => {
-    h.login.mockRejectedValue(new Error("login unavailable"));
-    const user = userEvent.setup();
+  it("021 EARS-15.3: a replay the login refuses routes to the same sign-in door, with the slot wiped and no success card", async () => {
+    // The concrete journey: the doctor re-registered the same email with a
+    // SECOND password, 003 EARS-16 answered identically, and the IdP still holds
+    // the first one — so the replay is refused with the generic 401 and there is
+    // no session, exactly as if nothing had been held.
+    h.login.mockRejectedValue(new Error("invalid credentials"));
+    const user = setupUser();
     renderScreen();
 
     await submitRegistration(user);
     await submitCode(user);
 
     await waitFor(() => expect(h.login).toHaveBeenCalledTimes(1));
-    // The email IS verified, so the screen states that fact; the doctor is a
-    // verified guest who signs in from the header, which is the honest outcome.
     await waitFor(() =>
-      expect(screen.queryByLabelText(/Код из письма/)).toBeNull(),
+      expect(h.push).toHaveBeenCalledWith(
+        `/login?returnTo=${encodeURIComponent(RETURN_TARGET)}`,
+      ),
     );
+    // Not a failed CONFIRMATION — the code was accepted, so the doctor is never
+    // told to type it again.
     expect(screen.queryByText("Код не подошёл. Попробуйте ещё раз.")).toBeNull();
-    // The other half of the clause: the slot is wiped whether the replay
-    // succeeded or threw — the take consumes, it does not roll back on error.
+    expect(screen.queryByTestId("registration-success-primary")).toBeNull();
+    // The take consumes; it does not roll back on error.
     expect(takePendingRegistration(EMAIL)).toBeNull();
   });
 
   it("021 EARS-15.4: the password is held only AFTER registerDoctor succeeded", async () => {
     h.registerDoctor.mockRejectedValue(new Error("rejected"));
-    const user = userEvent.setup();
+    const user = setupUser();
     renderScreen();
 
     await fillRegisterForm(user);
@@ -244,7 +296,7 @@ describe("021 EARS-15 (#1996): the doctor is signed in after email confirmation"
     // does before the doctor backs out and starts over.
     setPendingRegistration({ identifier: EMAIL, password: "St4le!Pass" });
     h.registerDoctor.mockRejectedValue(new Error("rejected"));
-    const user = userEvent.setup();
+    const user = setupUser();
     renderScreen();
 
     await fillRegisterForm(user);

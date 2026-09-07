@@ -35,6 +35,14 @@ const ENDED = "ended-vedenie-hronicheskoy-boli";
 
 const EMAIL = "doctor@clinic.ru";
 const PASSWORD = "correct horse battery";
+/**
+ * The credential `e2e/support/return-context-api.mjs` answers with the generic
+ * 401 — the journey of a doctor who re-registered the same email with a SECOND
+ * password while the IdP kept the first (003 EARS-16 answers a repeat
+ * registration identically, so nothing on the way tells them). Byte-identical to
+ * `REFUSED_PASSWORD` in that module; it is sent from here and only from here.
+ */
+const REFUSED_PASSWORD = "the second password the idp never took";
 
 /**
  * The canonical gate hand-off URL, built the way the producer builds it
@@ -54,10 +62,14 @@ async function tick(page: Page, testId: string) {
 }
 
 /** Walk the whole journey: fill the door, submit, type the code, confirm. */
-async function registerAndConfirm(page: Page, url: string) {
+async function registerAndConfirm(
+  page: Page,
+  url: string,
+  password: string = PASSWORD,
+) {
   await page.goto(url);
   await page.getByTestId("register-email").fill(EMAIL);
-  await page.getByTestId("register-password").fill(PASSWORD);
+  await page.getByTestId("register-password").fill(password);
   await tick(page, "register-medworker");
   await tick(page, "register-partner-data");
   await page.getByTestId("register-submit").click();
@@ -67,6 +79,11 @@ async function registerAndConfirm(page: Page, url: string) {
   // the submit. The code itself is never checked here — the double delegates
   // that to the 003 engine exactly as the real command does.
   await page.locator("input[autocomplete=\"one-time-code\"]").fill("ABC123");
+}
+
+/** The journey above, through to the success state a signed-in doctor gets. */
+async function registerAndConfirmSucceeding(page: Page, url: string) {
+  await registerAndConfirm(page, url);
   await expect(page.getByTestId("registration-success")).toBeVisible();
 }
 
@@ -76,7 +93,7 @@ test.describe("021 EARS-10: the post-confirmation landing", () => {
   test("021 EARS-10.1: a live carried target is the primary action, and pressing it lands on the эфир", async ({
     page,
   }) => {
-    await registerAndConfirm(page, arrival(LIVE));
+    await registerAndConfirmSucceeding(page, arrival(LIVE));
 
     const primary = page.getByTestId("registration-success-primary");
     await expect(primary).toHaveAttribute("href", `/events/${LIVE}`);
@@ -91,7 +108,7 @@ test.describe("021 EARS-10: the post-confirmation landing", () => {
   test("021 EARS-10.2: the cabinet is the secondary action and never the default", async ({
     page,
   }) => {
-    await registerAndConfirm(page, arrival(LIVE));
+    await registerAndConfirmSucceeding(page, arrival(LIVE));
 
     const primary = page.getByTestId("registration-success-primary");
     const secondary = page.getByTestId("registration-success-secondary");
@@ -112,7 +129,7 @@ test.describe("021 EARS-10: the post-confirmation landing", () => {
   test("021 EARS-10.3: a target that already ended says so, and lands on the эфир page anyway", async ({
     page,
   }) => {
-    await registerAndConfirm(page, arrival(ENDED));
+    await registerAndConfirmSucceeding(page, arrival(ENDED));
 
     const reason = page.getByTestId("registration-success-reason");
     // Contains, not equals: the Alert primitive prefixes an aria-hidden
@@ -138,7 +155,7 @@ test.describe("021 EARS-10: the post-confirmation landing", () => {
     // No `returnTo` and no remembered specialty: the LD-4 storefront home. The
     // confirm API answers `/events` because it cannot read the 017 cookie —
     // the answer of the door is the one that reaches the doctor.
-    await registerAndConfirm(page, "/register");
+    await registerAndConfirmSucceeding(page, "/register");
 
     const primary = page.getByTestId("registration-success-primary");
     await expect(primary).toHaveAttribute("href", "/");
@@ -163,7 +180,7 @@ test.describe("021 EARS-10: the post-confirmation landing", () => {
     // through the real 003 EARS-5 login — and the ONLY place it is observable
     // is here: the session is a cookie set by the upstream, read on the SERVER
     // by `lib/shell-auth.ts` when the landing page renders.
-    await registerAndConfirm(page, arrival(LIVE));
+    await registerAndConfirmSucceeding(page, arrival(LIVE));
 
     await page.getByTestId("registration-success-primary").click();
     await expect(page).toHaveURL(new RegExp(`/events/${LIVE}$`));
@@ -178,7 +195,7 @@ test.describe("021 EARS-10: the post-confirmation landing", () => {
   test("021 EARS-9: the accrual is named as a pending promise, with no amount and no ledger link", async ({
     page,
   }) => {
-    await registerAndConfirm(page, arrival(LIVE));
+    await registerAndConfirmSucceeding(page, arrival(LIVE));
 
     const accrual = page.getByTestId("registration-success-accrual");
     await expect(accrual).toHaveText(
@@ -191,5 +208,23 @@ test.describe("021 EARS-10: the post-confirmation landing", () => {
     await expect(
       page.getByTestId("registration-success-profile"),
     ).toHaveCount(0);
+  });
+  test("021 EARS-15.5: a replay the login refuses lands on the sign-in door with the return context, never on a success card", async ({
+    page,
+  }) => {
+    // The whole point of the Academy rule (003 EARS-39), driven end to end: the
+    // credential in the slot is not the one the IdP holds, so the replay is
+    // refused. The email IS verified — but there is no session, and a success
+    // card here would walk the doctor onto the эфир as a guest and «Участвовать»
+    // would send them back through the door: the #1996 loop, one attempt later.
+    await registerAndConfirm(page, arrival(LIVE), REFUSED_PASSWORD);
+
+    await expect(page).toHaveURL(
+      `/login?returnTo=${encodeURIComponent(`/events/${LIVE}`)}`,
+    );
+    // Not a dead end: the door they land on still shows them what they are
+    // coming back to (#1939's return-context card).
+    await expect(page.getByTestId("return-context-panel")).toBeVisible();
+    await expect(page.getByTestId("registration-success")).toHaveCount(0);
   });
 });

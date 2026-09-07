@@ -31,11 +31,15 @@ import type {
  * project.
  *
  * The surface is deliberately narrow: the session probe plus the three sign-in
- * calls `/login` needs (#1933). Registration, verification and password recovery
- * are NOT here — the doctor host owns no such command yet (its `/register`
- * submit is inert pending #1558's bot-protection client half), and adding
- * transport ahead of the screen that calls it would be exactly the untracked
- * seam AGENTS.md §6 forbids.
+ * calls `/login` needs (#1933). Since 021 EARS-15 (#1996) `login` has a SECOND
+ * caller — the registration screen replays it with the held credential once the
+ * email is confirmed, because the confirm route mints no session — and that is
+ * the same 003 EARS-5 command through the same origin proxy, not a registration
+ * transport. Registration, verification and password recovery themselves stay
+ * OUT of this module: they are the STOREFRONT commands
+ * (`lib/storefront-auth-client.ts`, `/v1/storefront/doctor/*`), a different
+ * contract with a different owner, and merging the two surfaces here would blur
+ * which route mints a session.
  */
 
 const BASE = "/v1/auth";

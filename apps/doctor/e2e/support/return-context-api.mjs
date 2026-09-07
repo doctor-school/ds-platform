@@ -111,6 +111,14 @@ const SPECIALTY = {
  * serves the SERVER-RESOLVED object the page renders; it never lets the host
  * branch on lifecycle or registration, which is the whole point of the contract.
  */
+/**
+ * The one password this double REFUSES at `POST /v1/auth/login` (021 EARS-15).
+ * Kept in step by name with the same constant in `e2e/register-return.spec.ts`,
+ * which is the only caller that sends it — a spec importing from this module
+ * would pull the whole server into the Playwright type graph.
+ */
+const REFUSED_PASSWORD = "the second password the idp never took";
+
 const PARTICIPATION_CTA = {
   action: "register",
   label: "Участвовать",
@@ -205,21 +213,33 @@ const server = createServer((request, response) => {
         json(response, 200, { status: "resend_requested" }),
       );
     }
-    // 003 EARS-5 / 021 EARS-15 (#1996) — the replayed sign-in. Credentials are
-    // NOT checked: the 003 engine owns that verdict and this tier asserts the
-    // session that follows a successful one. The answer is the api's own —
-    // a token-free body plus the `__Host-ds_session` cookie the BFF sets, which
+    // 003 EARS-5 / 021 EARS-15 (#1996) — the replayed sign-in. The double owns
+    // exactly ONE credential verdict, and it is the one the journey turns on:
+    // `REFUSED_PASSWORD` gets the generic 401 the 003 engine answers when the
+    // held credential is not the one the IdP holds (the doctor re-registered
+    // with a second password — 003 EARS-16 answers a repeat registration
+    // identically, so the client cannot know). Every other password is accepted,
+    // because this tier asserts the session that follows a successful sign-in,
+    // not the engine's verdict. The success answer is the api's own — a
+    // token-free body plus the `__Host-ds_session` cookie the BFF sets, which
     // `/v1/auth/session` above then recognises as this tier's live doctor.
     if (url.pathname === "/v1/auth/login") {
-      return readJson(request, () =>
-        json(
-          response,
-          200,
-          { status: "authenticated" },
-          {
-            "set-cookie": `__Host-ds_session=${SESSION_VALUE}; Path=/; HttpOnly; Secure; SameSite=Lax`,
-          },
-        ),
+      return readJson(request, (body) =>
+        body?.password === REFUSED_PASSWORD
+          ? // 003 EARS-16 — one generic answer, no enumeration oracle.
+            json(response, 401, {
+              statusCode: 401,
+              error: "Unauthorized",
+              message: "invalid_credentials",
+            })
+          : json(
+              response,
+              200,
+              { status: "authenticated" },
+              {
+                "set-cookie": `__Host-ds_session=${SESSION_VALUE}; Path=/; HttpOnly; Secure; SameSite=Lax`,
+              },
+            ),
       );
     }
     if (url.pathname === "/v1/storefront/doctor/confirm") {

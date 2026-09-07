@@ -78,6 +78,10 @@ export const SHOWCASE_REGISTRY: ShowcaseEntry[] = [
   { id: "switch", section: "primitives" },
   { id: "alert", section: "primitives" },
   { id: "skeleton", section: "primitives" },
+
+  // ── 028 EARS-14 (#1966) — one contact channel as a chip; the `https:` vs
+  //    `mailto:`/`tel:` opener decision is the only thing it owns.
+  { id: "contact-chip", section: "primitives" },
   { id: "day-band", section: "primitives" },
 
   // ── Listing unit (004 EARS-8, #557) — the webinar-card.dc.html §09 unit.
@@ -136,6 +140,10 @@ export const SHOWCASE_REGISTRY: ShowcaseEntry[] = [
   { id: "DataTable", section: "blocks" },
   { id: "Pagination", section: "blocks" },
   { id: "EmptyState", section: "blocks" },
+  // 028 EARS-7/11 (#1966) — the shared legal-document reading surface
+  //    (document.dc.html): ToC aside, «обновлено» chip, loading/error/not-found.
+  { id: "legal-document", section: "blocks" },
+  { id: "LegalDocument", section: "blocks" },
   // 014 EARS-10/11 — the controlled cross-front event feed.
   { id: "EventList", section: "blocks" },
   // 020 EARS-1 — event-page composition (webinar-page-variant-a.dc.html), #1764

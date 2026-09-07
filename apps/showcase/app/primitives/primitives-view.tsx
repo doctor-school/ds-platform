@@ -58,6 +58,7 @@ import { Radio } from "@ds/design-system/radio";
 import { Switch } from "@ds/design-system/switch";
 import { Alert } from "@ds/design-system/alert";
 import { Skeleton } from "@ds/design-system/skeleton";
+import { ContactChip } from "@ds/design-system/contact-chip";
 import { DayBand } from "@ds/design-system/day-band";
 import { WebinarCard } from "@ds/design-system/webinar-card";
 import { WebinarPageContent } from "@ds/design-system/webinar-page-content";
@@ -1677,6 +1678,53 @@ function SkeletonSection() {
   );
 }
 
+function ContactChipSection() {
+  return (
+    <PrimitiveSection
+      title="Contact-chip"
+      exportsLine="ContactChip — one contact channel as a chip (028 EARS-14)"
+    >
+      <SubRow label="Channels — the host supplies the label, the mark and the order">
+        <ThemePair
+          render={() => (
+            <div className="flex flex-wrap items-center gap-3">
+              <ContactChip
+                href="mailto:support@doctor.school"
+                label="support@doctor.school"
+                icon={<span className="font-mono text-xs">@</span>}
+              />
+              <ContactChip href="tel:+78001234567" label="8 800 123-45-67" />
+              <ContactChip
+                href="https://t.me/doctorschool"
+                label="Telegram"
+                icon={<span className="font-mono text-xs">TG</span>}
+              />
+            </div>
+          )}
+        />
+      </SubRow>
+
+      <SubRow label="Destination decides the opener — the one thing the chip owns">
+        <p className="max-w-2xl text-sm text-muted-foreground">
+          An <code className="font-mono text-xs">https:</code> destination is
+          off-platform, so the chip opens it in a new tab with the opener severed
+          (<code className="font-mono text-xs">
+            rel=&quot;noopener noreferrer&quot;
+          </code>
+          ). A <code className="font-mono text-xs">mailto:</code> or{" "}
+          <code className="font-mono text-xs">tel:</code> hands off to the
+          operating system and stays in place — a{" "}
+          <code className="font-mono text-xs">target=&quot;_blank&quot;</code>{" "}
+          there would leave the reader on a blank tab. The channel mark is
+          decorative (
+          <code className="font-mono text-xs">aria-hidden</code>): the label
+          already names the channel.
+        </p>
+      </SubRow>
+    </PrimitiveSection>
+  );
+}
+
 function DayBandSection() {
   return (
     <PrimitiveSection
@@ -2579,6 +2627,7 @@ export function PrimitivesView() {
       <SwitchSection />
       <AlertSection />
       <SkeletonSection />
+      <ContactChipSection />
       <DayBandSection />
       <EventsFilterSection />
       <WebinarCardSection />

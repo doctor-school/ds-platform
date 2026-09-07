@@ -37,7 +37,7 @@ mode: inline
 
 - `canon: packages/<x>` — the feature package already owns the behaviour; the host adds a route file plus host-config fields and nothing else.
 - `extract-from: apps/portal/<file> (#<wave-issue>)` — the other host runs it today and the named extraction-wave Issue moves it into the package; the child Issue is `blocked_by` that wave Issue.
-- `host-only: <allowlist reason>` — genuinely host-specific. **Requires a row in the registry section «Host-file allowlist» added in the SAME PR**; without that row the value is invalid and the run stops.
+- `new: host-only — <allowlist reason>` — genuinely host-specific (the `new:` form `pnpm issue:create` already accepts; `host-only` is its reason prefix, not a fourth form). **Requires a row in the registry section «Host-file allowlist» added in the SAME PR**; without that row the value is invalid and the run stops.
 - `new: <reason>` — neither host ships it and no package owns it yet.
 
 **An EARS Issue whose behaviour the other host already ships is not opened for implementation.** It is closed as a duplicate of the extraction-wave Issue (`blocked_by` that Issue, `Reuse: extract-from …`) — re-implementing it on the second host is the fork this step exists to prevent (021 → #1996). Only the host-config diff (copy, route, brand, authz envelope) stays as its own child Issue. `pnpm issue:create` fails closed on a storefront-track Issue without that line, so an unanswered capability stops the run rather than producing an Issue that describes existing Academy behaviour as new Doctor work.

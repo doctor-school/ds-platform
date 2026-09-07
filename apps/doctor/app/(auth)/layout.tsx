@@ -22,8 +22,9 @@ import type { ReactNode } from "react";
  * `<html>`/`<body>` and the pre-paint theme guard, and the frame is the page's
  * to compose, so a wrapper here would be a third nesting level that paints
  * nothing. It exists to make the chromeless contract explicit at the group
- * boundary and to be the anchor for the auth routes that follow (login, verify,
- * reset), which must not drift back under the shell.
+ * boundary and to be the anchor for the auth routes that live here — `/register`,
+ * `/login` and, since #1989, `/reset` — plus the verification surface still to
+ * come, none of which may drift back under the shell.
  *
  * No `headers()` read HERE, unlike the shell layout: the group adds no
  * per-visitor element of its own, so it imposes no dynamic rendering on the

@@ -3,8 +3,6 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import type { Resolver } from "react-hook-form";
-
 import { EmailIdentifierSchema, PhoneIdentifierSchema } from "@ds/schemas";
 import {
   IdentifierFieldSchema,
@@ -19,12 +17,12 @@ import {
   type LoginCardPasswordValues,
 } from "@ds/design-system/blocks";
 
-import { academyHref } from "@/lib/academy";
 import { authClient } from "@/lib/auth-client";
 import {
   AUTH_GENERIC_MESSAGES,
   authErrorMessage,
 } from "@/lib/auth-error-message";
+import { makeResolver } from "@/lib/make-resolver";
 
 /**
  * #1933 — the doctor storefront sign-in screen (`doctor.school/login`).
@@ -51,7 +49,8 @@ import {
  * root layout ships no provider, so the copy is literal here as it is in
  * `registration-screen.tsx` — and the resolvers below are hand-written for the
  * same reason: the portal `useLocalizedResolver` exists to translate zod issue
- * codes into a catalogue this app does not have. The GUARDS themselves are NOT
+ * codes into a catalogue this app does not have (the shaping helper itself is
+ * `lib/make-resolver.ts`, shared with `/reset` since #1989). The GUARDS themselves are NOT
  * re-invented: `IdentifierFieldSchema` (the email-or-E.164 union the login box
  * takes), the per-channel `EmailIdentifierSchema` / `PhoneIdentifierSchema` and
  * `OtpCodeFieldSchema` are the shared shapes the portal validates with; only the
@@ -85,32 +84,6 @@ export type LoginScreenProps = {
   /** The gate context the doctor arrived from — the mobile plate (021 EARS-2). */
   returnContext?: ReactNode;
 };
-
-/**
- * Build a react-hook-form resolver from per-field validators.
- *
- * `<LoginCard>` takes `Resolver`s because the guard is the host business (the
- * portal passes zod-backed localized ones). Three tiny field checks do not
- * justify pulling the zod resolver adapter into an app that has neither — so the
- * shared schemas below do the DECIDING and this closure only shapes the result
- * into what RHF expects. The cast is the one every resolver factory needs: the
- * RHF `Resolver` is generic over its internal field-path machinery, which a
- * plain record cannot express.
- */
-function makeResolver<T extends object>(rules: {
-  [K in keyof T]?: (value: T[K], values: T) => string | null;
-}): Resolver<T> {
-  return ((values: T) => {
-    const errors: Record<string, { type: string; message: string }> = {};
-    for (const key of Object.keys(rules) as (keyof T)[]) {
-      const message = rules[key]?.(values[key], values) ?? null;
-      if (message) errors[key as string] = { type: "validate", message };
-    }
-    return Object.keys(errors).length > 0
-      ? { values: {}, errors }
-      : { values, errors: {} };
-  }) as unknown as Resolver<T>;
-}
 
 const IDENTIFIER_REQUIRED = "Введите почту или телефон.";
 const IDENTIFIER_MALFORMED =
@@ -324,13 +297,13 @@ export function LoginScreen({
         links={{
           // Sign-up is a co-equal path and the arrival context rides onward.
           register: registerHref,
-          // Password recovery has no doctor-host projection yet (out of #1933
-          // scope), and a doctor-relative `/reset` would 404 on this host. #1933
-          // records the interim: point at the academy `/reset`, which is the one
-          // live recovery surface, until the doctor-host projection lands. The
-          // crossing is the sanctioned LD-4 one and it does not touch the
-          // in-flight sign-in — recovery restarts the flow by construction.
-          reset: academyHref("/reset"),
+          // Password recovery is THIS host's own surface since #1989
+          // (`app/(auth)/reset/page.tsx`, the shared `<PasswordRecoveryCard>`),
+          // so the link is host-relative: a doctor who forgot a password stays
+          // on the storefront and comes back signed in here, on the origin the
+          // `__Host-` session belongs to. The #1933 interim that pointed at the
+          // Academy `/reset` is gone with the route that made it necessary.
+          reset: "/reset",
         }}
         // Next.js `<Link>` keeps the footer links on client-side navigation.
         renderLink={({ href, children }) => <Link href={href}>{children}</Link>}

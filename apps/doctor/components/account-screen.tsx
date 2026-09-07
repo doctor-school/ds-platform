@@ -7,7 +7,6 @@ import { useRouter } from "next/navigation";
 import type { MyProfile } from "@ds/schemas";
 import { initialsFromDisplayName } from "@ds/room/display-name";
 
-import { academyHref } from "@/lib/academy";
 
 import { Container } from "@ds/design-system/container";
 import { AccountProfileCard } from "@ds/design-system/account-profile-card";
@@ -46,9 +45,9 @@ import {
  * `/account/events` route, so the row would link into a 404. The block hides a
  * row whose href is `null` (017 EARS-3 honest-empty), and that route is the
  * tracked follow-on slice of #1958 — not a stub standing in for it here.
- * «Сменить пароль» keeps the #1933 interim instead: the Academy `/reset`, the
- * one live recovery surface, through the sanctioned LD-4 crossing — the same
- * decision the `/login` card on this host already carries.
+ * «Сменить пароль», by contrast, is NOT absent and no longer crosses hosts: since
+ * #1989 this storefront serves password recovery itself at `/reset`, so the row
+ * links host-relative — the same decision the `/login` card on this host carries.
  */
 
 const COPY = {
@@ -200,12 +199,12 @@ export function AccountScreen() {
           ? initialsFromDisplayName(profile.displayName)
           : null
       }
-      // Password recovery still has no doctor-host projection (#1933 interim,
-      // unchanged here): a doctor-relative `/reset` would 404 on this host, so
-      // the row points at the one LIVE recovery surface through the sanctioned
-      // LD-4 crossing — the same href the `/login` card already carries, from
-      // the same `lib/academy.ts` constant, never a second hardcoded URL.
-      passwordHref={academyHref("/reset")}
+      // Password recovery lives on THIS host since #1989 — the `(auth)/reset`
+      // route projecting the shared `<PasswordRecoveryCard>` — so the row stays
+      // on the storefront: a signed-in doctor changes a password and lands back
+      // here, on the origin their session belongs to, instead of crossing to the
+      // Academy and returning signed in somewhere else.
+      passwordHref="/reset"
       eventsHref={null}
       renderLink={({ href, children }) => (
         <NextLink href={href}>{children}</NextLink>

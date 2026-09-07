@@ -6,6 +6,10 @@ import type {
   OtpRequest,
   OtpRequestResponse,
   OtpVerify,
+  PasswordResetCompleteRequest,
+  PasswordResetCompleteResponse,
+  PasswordResetRequest,
+  PasswordResetResponse,
   SessionClaims,
 } from "@ds/schemas";
 
@@ -30,13 +34,15 @@ import type {
  * `@ds/design-system/blocks` `<LoginCard>` (#1666), which both storefronts
  * project.
  *
- * The surface is deliberately narrow: the session probe plus the three sign-in
- * calls `/login` needs (#1933). Since 021 EARS-15 (#1996) `login` has a SECOND
- * caller — the registration screen replays it with the held credential once the
- * email is confirmed, because the confirm route mints no session — and that is
- * the same 003 EARS-5 command through the same origin proxy, not a registration
- * transport. Registration, verification and password recovery themselves stay
- * OUT of this module: they are the STOREFRONT commands
+ * The surface is the session probe, the three sign-in calls `/login` needs
+ * (#1933) and the two password-recovery calls `/reset` needs (#1989). Each pair
+ * arrived WITH the screen that calls it: transport ahead of its surface would be
+ * exactly the untracked seam AGENTS.md §6 forbids. Since 021 EARS-15 (#1996)
+ * `login` has a SECOND caller — the registration screen replays it with the held
+ * credential once the email is confirmed, because the confirm route mints no
+ * session — and that is the same 003 EARS-5 command through the same origin
+ * proxy, not a registration transport. Registration and email verification
+ * themselves stay OUT of this module: they are the STOREFRONT commands
  * (`lib/storefront-auth-client.ts`, `/v1/storefront/doctor/*`), a different
  * contract with a different owner, and merging the two surfaces here would blur
  * which route mints a session.
@@ -142,7 +148,49 @@ export function loginWithOtp(body: OtpVerify): Promise<LoginResponse> {
 }
 
 /**
+ * 003 EARS-11 — initiate password recovery for an identifier (email or phone).
+ *
+ * The BFF answer is enumeration-resistant (EARS-16): the SAME body comes back
+ * whether or not an account exists, so a caller may never read existence out of
+ * it and the screen always advances to the code step. `POST /v1/auth/password/reset`
+ * is `@BotProtected("password-reset")`, so the optional `captchaToken` the shared
+ * bot-protection action mints rides in the body when a site key is configured.
+ */
+export function requestPasswordReset(
+  body: PasswordResetRequest,
+): Promise<PasswordResetResponse> {
+  return post<PasswordResetRequest, PasswordResetResponse>(
+    "password/reset",
+    body,
+  );
+}
+
+/**
+ * 003 EARS-12 — complete the recovery with the emailed code and a new password.
+ *
+ * On success the BFF revokes every PRIOR session for the subject AND mints a
+ * fresh one on THIS origin (auto-login, #221): the response sets the
+ * `__Host-ds_session` cookie here, so the caller routes straight into the
+ * authenticated area instead of back to the sign-in door.
+ */
+export function completePasswordReset(
+  body: PasswordResetCompleteRequest,
+): Promise<PasswordResetCompleteResponse> {
+  return post<PasswordResetCompleteRequest, PasswordResetCompleteResponse>(
+    "password/reset/complete",
+    body,
+  );
+}
+
+/**
  * Grouped surface, so a screen wires ONE object and a test swaps ONE seam.
  * `readSession` keeps its named export — the 017 call sites import it directly.
  */
-export const authClient = { readSession, login, requestOtp, loginWithOtp };
+export const authClient = {
+  readSession,
+  login,
+  requestOtp,
+  loginWithOtp,
+  requestPasswordReset,
+  completePasswordReset,
+};

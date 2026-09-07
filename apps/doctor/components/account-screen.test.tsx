@@ -14,8 +14,8 @@ import type { MyProfile } from "@ds/schemas";
  * This is the app's first jsdom test, the tier `vitest.config.ts` reserved for
  * "client-side BEHAVIOUR" (component-testing.md); the node tier next door still
  * covers what merely reaches the HTML. What is asserted here is the HOST
- * contract — the Academy crossing of the recovery row (a doctor-relative
- * `/reset` 404s on this host, the defect class #1958 exists to close), the
+ * contract — the host-relative recovery row (`/reset` is this storefront's own
+ * surface since #1989, so the row no longer crosses to the Academy), the
  * honest-empty events row, the EARS-9 silent-refresh-then-retry with its
  * `/login?returnTo=%2Faccount` fallback, the EARS-10 landing on the storefront
  * home plus the server re-render, and the #175 save-error mapping. The
@@ -112,14 +112,14 @@ describe("017 EARS-1 / 003 EARS-9/10 #1958: the doctor /account projection", () 
     expect(html).not.toContain('data-testid="profile-email"');
   });
 
-  it("017 EARS-1.1: password recovery crosses to the live Academy /reset, never a doctor-relative 404", async () => {
+  it("017 EARS-1.1 (#1989): password recovery stays on THIS host — «Сменить пароль» links to the storefront /reset", async () => {
     await renderReady();
 
     const link = screen.getByText("Сменить пароль").closest("a");
     expect(link).not.toBeNull();
-    expect(link?.getAttribute("href")).toBe(
-      "https://academy.doctor.school/reset",
-    );
+    // Host-relative since the doctor storefront serves recovery itself; the
+    // Academy crossing was the #1933/#1958 interim and is gone.
+    expect(link?.getAttribute("href")).toBe("/reset");
   });
 
   it("017 EARS-1.2: «Мои события» is ABSENT on this host — the row is hidden, not linked at a 404", async () => {

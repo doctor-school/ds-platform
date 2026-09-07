@@ -92,3 +92,59 @@ describe("017 #1933: the doctor sign-in transport", () => {
     expect((error as AuthError).code).toBeUndefined();
   });
 });
+
+/**
+ * 003 EARS-11/12 (#1989) — the password-recovery half of the same transport.
+ *
+ * The origin contract is the point again, and it is sharper here than for login:
+ * completion AUTO-LOGS-IN (#221), so the `__Host-ds_session` cookie the response
+ * sets must land on THIS origin. An absolute URL would mint the session on the
+ * Academy's — the exact defect the doctor-host projection exists to end.
+ */
+describe("017 #1989: the doctor password-recovery transport", () => {
+  it("003 EARS-11: the initiate call POSTs the relative reset path with the cookie attached", async () => {
+    const spy = stubFetch(json({ ok: true }));
+
+    await authClient.requestPasswordReset({ identifier: "doctor@clinic.ru" });
+
+    const [url, init] = spy.mock.calls[0] as unknown as FetchCall;
+    expect(url).toBe("/v1/auth/password/reset");
+    expect(init.method).toBe("POST");
+    expect(init.credentials).toBe("include");
+    expect(JSON.parse(init.body as string)).toEqual({
+      identifier: "doctor@clinic.ru",
+    });
+  });
+
+  it("003 EARS-12: the completion call POSTs code + new password to the relative complete path", async () => {
+    const spy = stubFetch(json({ ok: true }));
+
+    await authClient.completePasswordReset({
+      identifier: "doctor@clinic.ru",
+      code: "PVDC3R",
+      newPassword: "Sup3r$ecretPw!9",
+    });
+
+    const [url, init] = spy.mock.calls[0] as unknown as FetchCall;
+    expect(url).toBe("/v1/auth/password/reset/complete");
+    expect(init.credentials).toBe("include");
+    expect(JSON.parse(init.body as string)).toEqual({
+      identifier: "doctor@clinic.ru",
+      code: "PVDC3R",
+      newPassword: "Sup3r$ecretPw!9",
+    });
+  });
+
+  it("003 EARS-17: a guard refusal comes back as an AuthError carrying the bot-protection code", async () => {
+    stubFetch(
+      json({ message: "captcha", code: "BOT_PROTECTION_REQUIRED" }, 403),
+    );
+
+    const error = await authClient
+      .requestPasswordReset({ identifier: "doctor@clinic.ru" })
+      .catch((err: unknown) => err);
+
+    expect(error).toBeInstanceOf(AuthError);
+    expect((error as AuthError).code).toBe("BOT_PROTECTION_REQUIRED");
+  });
+});

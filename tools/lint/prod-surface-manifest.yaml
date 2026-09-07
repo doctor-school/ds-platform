@@ -157,6 +157,17 @@ routes:
     status: deferred
     issue: "#1430"
 
+  # 003 EARS-11/12 (#1989) — password recovery on THIS host: the shared
+  # `<PasswordRecoveryCard>` projected by `components/reset-screen.tsx`, ending
+  # the #1933/#1958 interim that sent «Забыли пароль» and «Сменить пароль»
+  # across to the Academy. Same cut-over as the doors beside it — the storefront
+  # opens with #1430.
+  - app: doctor
+    route: /reset
+    file: apps/doctor/app/(auth)/reset/page.tsx
+    status: deferred
+    issue: "#1430"
+
   # 003 EARS-27/28 (#1958) — the 017 signed-in cluster «Личный кабинет» target:
   # the Academy account-profile surface projected onto this host through the
   # shared block, until feature 022 (#1791) replaces it with the doctor cabinet.

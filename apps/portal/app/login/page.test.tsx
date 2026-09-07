@@ -101,7 +101,8 @@ vi.mock("@/lib/auth-client", () => ({
 // through this client — mocked here so the page tests assert the resume wiring
 // (the command's server semantics are EARS-1/EARS-3).
 const registerForEvent = vi.fn().mockResolvedValue({ registered: true });
-vi.mock("@/lib/registration-client", () => ({
+vi.mock("@ds/events-storefront/client", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@ds/events-storefront/client")>()),
   registerForEvent: (slug: string) => registerForEvent(slug),
 }));
 

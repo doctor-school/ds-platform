@@ -1,0 +1,41 @@
+{
+  "name": "@ds/events-storefront",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "DS Platform shared event-storefront unit — the one-tap event registration command, its progressive-enhancement control, the per-user registration read and the completion-on-return rule, hosted by both storefronts (ADR-0013 A1, feature 005 / 020).",
+  "exports": {
+    ".": "./src/index.ts",
+    "./client": "./src/client/registration-client.ts",
+    "./ui": "./src/ui/index.ts",
+    "./server": "./src/server/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@ds/design-system": "workspace:*",
+    "@ds/schemas": "workspace:*"
+  },
+  "peerDependencies": {
+    "next": "^16.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.0",
+    "@types/node": "^26.2.0",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "@vitejs/plugin-react": "^6.1.0",
+    "jsdom": "^30.0.1",
+    "next": "16.3.2",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.11"
+  }
+}

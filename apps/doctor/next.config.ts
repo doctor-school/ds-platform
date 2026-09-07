@@ -57,7 +57,7 @@ const config: NextConfig = {
   // room unit this app mounts at /events/:slug/room; it ships TypeScript sources
   // with "use client" boundaries, so it must be transpiled here exactly as the
   // design system is.
-  transpilePackages: ["@ds/design-system", "@ds/room"],
+  transpilePackages: ["@ds/design-system", "@ds/events-storefront", "@ds/room"],
   // Storefront → api proxy. Client-IP note (#1655): this rewrite forwards the
   // incoming request headers VERBATIM to the api, `x-forwarded-for` included, but
   // it does NOT append its own hop — Next's rewrite proxy (httpxy) enriches the

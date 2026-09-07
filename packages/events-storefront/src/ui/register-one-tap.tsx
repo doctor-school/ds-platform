@@ -6,17 +6,17 @@ import { useRouter } from "next/navigation";
 import { Button } from "@ds/design-system/button";
 import { FormError } from "@ds/design-system/form";
 
-import { registerForEvent } from "@/lib/registration-client";
+import { registerForEvent } from "../client/registration-client";
 
-import { registerForEventAction } from "./register-action";
+import { registerForEventAction } from "../server/register-action";
 
 /**
  * 005 EARS-1 — the logged-in one-tap register affordance on the event page,
- * PROGRESSIVELY ENHANCED (#1111).
+ * PROGRESSIVELY ENHANCED (#1111), shared by both storefronts (020 EARS-1).
  *
  * For a doctor who already has a 003 session but is NOT yet registered, the
  * «Участвовать» CTA is a ONE-ACTION command, not a trip through the auth flow
- * (that guest path is the plain `/register` link the server `ParticipationCta` emits).
+ * (that guest path is the plain register link the server `ParticipationCta` emits).
  *
  * The CTA is a REAL `<form>` whose action is a server action
  * (`registerForEventAction`), so it registers with ZERO client JS: on a weak
@@ -24,24 +24,31 @@ import { registerForEventAction } from "./register-action";
  * fires the command server-side and lands the doctor back on the event page —
  * never a dead button (the #1111 defect). Once hydrated, the SAME control keeps
  * today's one-tap path: `onSubmit` intercepts the submit, POSTs the real
- * `RegisterForEvent` client-side (`lib/registration-client`, same-origin
- * `credentials: "include"`), and calls `router.refresh()` so the server component
- * re-reads the per-user `EventRegistrationState` (EARS-4) and swaps to the
- * registered confirmation IN PLACE — no navigation, no confirmation round-trip
- * (design §3.1). Either arm is a server-side idempotent no-op on a repeat (EARS-3).
+ * `RegisterForEvent` client-side (same-origin `credentials: "include"`), and calls
+ * `router.refresh()` so the server component re-reads the per-user
+ * `EventRegistrationState` (EARS-4) and swaps to the registered confirmation IN
+ * PLACE — no navigation, no confirmation round-trip (design §3.1). Either arm is a
+ * server-side idempotent no-op on a repeat (EARS-3).
  *
- * The guest path never reaches this component: the event page renders the
- * `/register` handoff link when no session rode the request (registration state
- * `null`); this control appears only for an authenticated, unregistered caller.
- * All copy resolves through the message catalog (EARS-12) — passed in as props so
- * the server component owns the `next-intl` lookup.
+ * `returnTo` is the HOST's own event path (`/webinars/<slug>` on the academy,
+ * `/events/<slug>` on the doctor storefront). It rides the form as a second hidden
+ * field so the no-JS arm lands on the page the doctor actually submitted from —
+ * the only host-shaped fact this control needs, and it arrives as a prop rather
+ * than as a rule baked into the shared unit.
+ *
+ * The guest path never reaches this component: the event page renders the register
+ * handoff link when no session rode the request (registration state `null`); this
+ * control appears only for an authenticated, unregistered caller. All copy is
+ * passed in as props so the host owns its own catalogue lookup (EARS-12).
  */
 export function RegisterOneTap({
   slug,
+  returnTo,
   label,
   errorLabel,
 }: {
   readonly slug: string;
+  readonly returnTo: string;
   readonly label: string;
   readonly errorLabel: string;
 }) {
@@ -79,6 +86,8 @@ export function RegisterOneTap({
     >
       {/* No-JS payload: the server action reads the slug from the submitted form. */}
       <input type="hidden" name="slug" value={slug} />
+      {/* …and the host event path it must land back on. */}
+      <input type="hidden" name="returnTo" value={returnTo} />
       <Button
         type="submit"
         size="lg"

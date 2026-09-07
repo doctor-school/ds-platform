@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@ds/design-system": "workspace:*",
+    "@ds/events-storefront": "workspace:*",
     "@ds/legal-content": "workspace:*",
     "@ds/room": "workspace:*",
     "@ds/schemas": "workspace:*",

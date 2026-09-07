@@ -24,6 +24,7 @@ import {
   eventSignupCardProps,
   eventSpeakerCards,
 } from "@ds/design-system/blocks";
+import { RegisterOneTap } from "@ds/events-storefront/ui";
 import { fetchPublicEventPage } from "../../../lib/public-events";
 import { fetchParticipationCta } from "../../../lib/participation-cta";
 import { toCanvasStatus } from "../../../lib/event-lifecycle";
@@ -34,7 +35,6 @@ import {
 import { fetchEventPlayback } from "../../../lib/event-playback";
 import { withReturnTarget } from "../../../lib/registration-handoff";
 import { fetchEventRegistrationState } from "../../../lib/registration-state";
-import { RegisterOneTap } from "./register-one-tap";
 import { RecordingGate } from "./recording-gate";
 import { RecordingPlayer } from "./recording-player";
 
@@ -157,6 +157,7 @@ export default async function WebinarEventPage({
     cta?.action === "register" && isAuthenticated ? (
       <RegisterOneTap
         slug={event.slug}
+        returnTo={gateReturnTo}
         label={cta.label}
         errorLabel={t("cta.registerError")}
       />

@@ -3,12 +3,17 @@
 import type { EventRegistrationState } from "@ds/schemas";
 
 /**
- * 005 — same-origin portal client for the `RegisterForEvent` command (EARS-1,
- * fired on the guest's post-auth return for EARS-2). Like {@link authClient}, it
- * POSTs to a RELATIVE `/v1/…` path with `credentials: "include"`, so the request
- * rides the portal origin and carries the `__Host-ds_session` cookie the BFF set
- * during the 003 round-trip (Next `rewrites()` proxies `/v1/*` to the api — see
- * `next.config.ts`). No token ever touches this client.
+ * 005 — same-origin browser client for the `RegisterForEvent` command (EARS-1,
+ * fired on the guest's post-auth return for EARS-2). It POSTs to a RELATIVE
+ * `/v1/…` path with `credentials: "include"`, so the request rides the CALLING
+ * storefront's own origin and carries the `__Host-ds_session` cookie that origin's
+ * BFF set during the 003 round-trip (each Next host `rewrites()` `/v1/*` to the
+ * api — see the host's `next.config.ts`). No token ever touches this client.
+ *
+ * Being origin-relative is exactly why one implementation serves BOTH storefronts
+ * (ADR-0015 §4): `academy.doctor.school` and `doctor.school` hold SEPARATE
+ * `__Host-` cookies under the same name, and a relative POST always addresses the
+ * one the current document owns.
  *
  * The response is the registered `EventRegistrationState` (`{ registered: true,
  * registeredAt }`) so the caller can land the doctor on the event page already in

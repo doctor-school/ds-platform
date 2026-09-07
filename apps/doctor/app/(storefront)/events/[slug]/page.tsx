@@ -21,10 +21,13 @@ import {
   eventSignupCardProps,
   eventSpeakerCards,
 } from "@ds/design-system/blocks";
+import { RegisterOneTap } from "@ds/events-storefront/ui";
+import { fetchEventRegistrationState } from "@ds/events-storefront/server";
 import {
   fetchDoctorEventPage,
   fetchDoctorParticipationCta,
 } from "@/lib/event-page";
+import { forwardedSessionFrom } from "@/lib/session";
 
 /**
  * 020 EARS-1 / EARS-18 (#1764, slice 3) — `doctor.school/events/:slug`, the
@@ -70,6 +73,10 @@ const COPY = {
   programme: "Программа",
   programmeDownload: "Скачать программу (PDF)",
   partnersEyebrow: "При поддержке",
+  /* 005 EARS-1 — what the one-tap says when the command fails. The label on the
+     control itself is the server's (`cta.label`); only the failure sentence is
+     this host's copy, because the api answers a policy, not an error string. */
+  registerError: "Не удалось записаться. Попробуйте ещё раз.",
   /* The lifecycle words. WHICH plate renders is the mapper's decision
      (`eventLifecyclePlate`); only the word is host copy. */
   state: {
@@ -90,13 +97,37 @@ export default async function DoctorEventPage({
 
   // The two reads are independent and issued in parallel: the page body is the
   // same for everyone, the participation answer is this viewer's.
-  const [event, cta] = await Promise.all([
+  // A signed-in viewer's per-user registration read rides along; a guest has no
+  // session to read on behalf of, so the third read is simply not issued.
+  const session = forwardedSessionFrom(h);
+  const [event, cta, registrationState] = await Promise.all([
     fetchDoctorEventPage(slug, h),
     fetchDoctorParticipationCta(slug, h),
+    session ? fetchEventRegistrationState(slug, session) : Promise.resolve(null),
   ]);
   // Draft / unknown → 404. A `hidden` event stays a reachable 200 whose CTA is
   // `unavailable` with the reason in plain words (004 EARS-5 parity).
   if (!event) notFound();
+
+  /* 005 EARS-1 — the ONE one-tap control, hosted from `@ds/events-storefront`
+     rather than re-invented here: the api resolves `register` for a guest and for
+     a signed-in-unregistered doctor alike (one policy, LD-2), and WHO gets the
+     in-place command instead of the `/register` hand-off is the only thing the
+     host decides — exactly as the academy decides it on `/webinars/:slug`. The
+     session read answering at all is the authentication signal; `null` means no
+     session (401/404 upstream, or no cookie to forward), so the card keeps the
+     server-resolved guest link. `returnTo` is THIS host's event path, so the
+     no-JS form arm lands back here rather than on the academy (020 EARS-1). */
+  const isAuthenticated = registrationState !== null;
+  const control =
+    cta?.action === "register" && isAuthenticated ? (
+      <RegisterOneTap
+        slug={event.slug}
+        returnTo={`/events/${encodeURIComponent(event.slug)}`}
+        label={cta.label}
+        errorLabel={COPY.registerError}
+      />
+    ) : undefined;
 
   const formatBlock = eventFormatBlockProps(event);
   const lifecyclePlate = eventLifecyclePlate(event);
@@ -139,7 +170,11 @@ export default async function DoctorEventPage({
       }
       aside={
         cta ? (
-          <EventSignupCard {...eventSignupCardProps(event, cta)} pinned />
+          <EventSignupCard
+            {...eventSignupCardProps(event, cta)}
+            control={control}
+            pinned
+          />
         ) : null
       }
     >

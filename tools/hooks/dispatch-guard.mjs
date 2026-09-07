@@ -40,7 +40,12 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { projectRoot, actorIdentity, canonicalPath } from "./hook-compat.mjs";
+import {
+  projectRoot,
+  actorIdentity,
+  canonicalPath,
+  isNewDispatchTool,
+} from "./hook-compat.mjs";
 import { gitWorktreeRoots } from "./worktree-path-guard.mjs";
 
 /**
@@ -56,7 +61,7 @@ export const MUTATION_TOOL_RE = /^(Edit|Write|MultiEdit|apply_patch)$/;
 
 /** Dispatch tools that RESET the streak. `Agent` is this harness's subagent-
  * spawn tool (per #913); `Task` is accepted as its cross-harness alias. */
-export const DISPATCH_TOOL_RE = /^(Agent|Task|spawn_agent)$/;
+export { DISPATCH_TOOL_RE } from "./hook-compat.mjs";
 
 /** Env var a sanctioned-inline session exports to opt out (provisional #914). */
 export const CARVE_OUT_ENV = "DS_DISPATCH_GUARD_DISABLE";
@@ -166,7 +171,7 @@ export function decideDispatch({
   carveOut = false,
   warned = false,
 }) {
-  if (DISPATCH_TOOL_RE.test(toolName || "")) {
+  if (isNewDispatchTool(toolName)) {
     return { action: "reset", streak: 0 };
   }
   if (!MUTATION_TOOL_RE.test(toolName || "")) return { action: "silent" };

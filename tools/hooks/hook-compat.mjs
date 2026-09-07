@@ -3,6 +3,20 @@ import { createHash } from "node:crypto";
 import { existsSync, realpathSync } from "node:fs";
 import { dirname, join, resolve, win32, posix } from "node:path";
 
+/** Only supported collaboration aliases: dotted tool API names and compact
+ * names observed in host hook payloads. Unknown namespaces stay unchanged. */
+export function normalizeToolName(value) {
+  const name = String(value || "");
+  return name.replace(
+    /^collaboration\.?((?:spawn_agent|followup_task))$/,
+    "$1",
+  );
+}
+export const DISPATCH_TOOL_RE = /^(Agent|Task|spawn_agent)$/;
+export function isNewDispatchTool(value) {
+  return DISPATCH_TOOL_RE.test(normalizeToolName(value));
+}
+
 export function isPortableAbsolute(value) {
   const p = String(value || "");
   return /^[a-zA-Z]:[\\/]/.test(p) || /^\\\\/.test(p) || p.startsWith("/");

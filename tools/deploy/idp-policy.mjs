@@ -28,7 +28,8 @@ export class IdpPolicyError extends Error {
 
 /**
  * The character-class flags the length-only policy (003 EARS-36) requires to be
- * `false`. Order is the order Zitadel returns them and the order we report in.
+ * `false`. Order is the order we report in; Zitadel omits them from the response
+ * entirely when they hold their proto3 default `false` (see below).
  */
 export const PASSWORD_COMPLEXITY_FLAGS = [
   "hasUppercase",
@@ -85,9 +86,22 @@ export function parsePasswordMinLength(sourceText) {
  *
  * Zitadel returns `minLength` as a JSON STRING (`"8"`), so the comparison is
  * numeric on purpose; a number is accepted too, in case the API ever changes.
- * A missing flag is NOT read as `false`: an absent field means the response
- * shape is not the one we verified against, and a deploy must never certify a
- * policy it could not actually read.
+ *
+ * A MISSING class flag reads as `false`, because that is what the wire actually
+ * means here. Zitadel's REST surface is grpc-gateway + protojson configured with
+ * a single `runtime.JSONPb` and NO `EmitUnpopulated`
+ * (`internal/api/grpc/server/gateway.go`), so proto3 default values are dropped
+ * from the response body — and `false` is the proto3 default for exactly the
+ * four `hasUppercase/hasLowercase/hasNumber/hasSymbol` fields that DEFINE the
+ * converged length-only policy (003 EARS-36). `minLength` survives only because
+ * `"8"` is non-default. Treating an absent flag as a hard failure would red
+ * every deploy on the CORRECT policy, after `migrate` + `up -d`.
+ * This repo's live-proven precedent reads the very same endpoint the same way:
+ * `infra/dev-stand/idp/provision.sh:853-857` uses `(.hasUppercase // false)` and
+ * `(.minLength // "0")`. We mirror it exactly, including the `"0"` default for a
+ * missing `minLength` — which then mismatches `expectedMin` and fails closed.
+ * A flag that IS present but is not a boolean (e.g. the string `"false"`) is
+ * still an error: that is an unexpected shape, not a proto3 default.
  *
  * @param {unknown} policyJson the parsed response body, or its `.policy` object
  * @param {number} expectedMin from {@link parsePasswordMinLength}
@@ -114,12 +128,14 @@ export function assertPasswordPolicyConverged(policyJson, expectedMin) {
       ? policyJson.policy
       : policyJson;
 
-  const rawMin = policy.minLength;
-  if (rawMin === undefined || rawMin === null || rawMin === "") {
-    throw new IdpPolicyError(
-      "IdP password-complexity read-back has no `minLength` — refusing to certify an unread policy",
-    );
-  }
+  // provision.sh:854 `(.minLength // "0")` — an absent length defaults to 0 and
+  // therefore mismatches any positive `expectedMin` below (fail-closed).
+  const rawMin =
+    policy.minLength === undefined ||
+    policy.minLength === null ||
+    policy.minLength === ""
+      ? "0"
+      : policy.minLength;
   const minLength = Number(rawMin);
   if (!Number.isFinite(minLength)) {
     throw new IdpPolicyError(
@@ -135,9 +151,13 @@ export function assertPasswordPolicyConverged(policyJson, expectedMin) {
   }
   const flags = {};
   for (const flag of PASSWORD_COMPLEXITY_FLAGS) {
-    const value = policy[flag];
+    const raw = policy[flag];
+    // provision.sh:855-858 `(.hasUppercase // false)` — absent == proto3 `false`.
+    const value = raw === undefined || raw === null ? false : raw;
     if (typeof value !== "boolean") {
-      problems.push(`${flag} is missing or not a boolean in the read-back`);
+      problems.push(
+        `${flag} is present but not a boolean in the read-back: ${JSON.stringify(raw)}`,
+      );
       continue;
     }
     flags[flag] = value;

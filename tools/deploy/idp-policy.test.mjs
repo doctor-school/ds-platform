@@ -103,22 +103,52 @@ test("#1997: a minLength that disagrees with @ds/schemas is REJECTED", () => {
   );
 });
 
-test("#1997: a missing flag is NOT read as false — an unread policy is never certified", () => {
+test("#1997: Zitadel omits proto3 `false` — a body with NO class flags is CONVERGED", () => {
+  // grpc-gateway/protojson without EmitUnpopulated drops every default value,
+  // so the correct length-only policy arrives as `{ minLength: "8" }` alone.
+  // provision.sh:853-857 reads the same endpoint with `// false` defaulting.
+  const verdict = assertPasswordPolicyConverged({ minLength: "8" }, 8);
+  assert.equal(verdict.minLength, 8);
+  assert.deepEqual(verdict.flags, {
+    hasUppercase: false,
+    hasLowercase: false,
+    hasNumber: false,
+    hasSymbol: false,
+  });
+});
+
+test("#1997: a single omitted flag reads as false alongside explicit ones", () => {
   const { hasSymbol, ...withoutSymbol } = converged;
   void hasSymbol;
+  assert.equal(
+    assertPasswordPolicyConverged(withoutSymbol, 8).flags.hasSymbol,
+    false,
+  );
+});
+
+test("#1997: a flag PRESENT but not a boolean (string \"false\") is REJECTED", () => {
   assert.throws(
-    () => assertPasswordPolicyConverged(withoutSymbol, 8),
+    () => assertPasswordPolicyConverged({ ...converged, hasNumber: "false" }, 8),
     (e) =>
-      e instanceof IdpPolicyError && /hasSymbol is missing/.test(e.message),
+      e instanceof IdpPolicyError &&
+      /hasNumber is present but not a boolean/.test(e.message),
   );
 });
 
 test("#1997: a missing or non-numeric minLength is REJECTED", () => {
+  // provision.sh:854 `(.minLength // "0")` — absent defaults to 0, which can
+  // never equal a positive PASSWORD_MIN_LENGTH, so the deploy still fails closed.
   const { minLength, ...withoutMin } = converged;
   void minLength;
   assert.throws(
     () => assertPasswordPolicyConverged(withoutMin, 8),
-    (e) => e instanceof IdpPolicyError && /no `minLength`/.test(e.message),
+    (e) =>
+      e instanceof IdpPolicyError && /minLength=0, expected 8/.test(e.message),
+  );
+  assert.throws(
+    () => assertPasswordPolicyConverged({}, 8),
+    (e) =>
+      e instanceof IdpPolicyError && /minLength=0, expected 8/.test(e.message),
   );
   assert.throws(
     () =>

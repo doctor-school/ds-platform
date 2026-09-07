@@ -82,7 +82,9 @@ Pipeline, fail-closed, stops at the first red step and prints a rollback pointer
    leaves the box — and asserts `minLength` equals `@ds/schemas`
    `PASSWORD_MIN_LENGTH` **at the deployed SHA** (read via
    `git show <sha>:packages/schemas/src/auth/auth.schema.ts`, never a literal) with
-   every character-class flag `false`. A failed converge, an unreadable read-back or
+   every character-class flag `false` — and because Zitadel's grpc-gateway/protojson
+   surface omits proto3 defaults, an ABSENT flag reads as `false`, the same
+   defaulting `provision.sh` step 8.sexies uses. A failed converge, an unreadable read-back or
    a mismatch FAILS the deploy with the containers already swapped (the rollback
    pointer says so). Closes the #1994 class: a converge step that lands in code and
    never reaches the instance (18 days of 422 registrations). The pure decision

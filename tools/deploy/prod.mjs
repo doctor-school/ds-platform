@@ -775,7 +775,7 @@ sudo bash -c 'set -a; . /etc/ds-platform/api.env; set +a; IDP_BASE_URL=${IDP_BAS
   try {
     const verdict = assertPasswordPolicyConverged(JSON.parse(raw), expectedMin);
     console.log(
-      `  ℹ prod IdP password policy: ${formatPasswordPolicy(verdict)}`,
+      `  ℹ prod IdP password policy @ ${IDP_BASE_URL}: ${formatPasswordPolicy(verdict)}`,
     );
   } catch (e) {
     die(

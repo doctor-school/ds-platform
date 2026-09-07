@@ -11,7 +11,7 @@ mode: dispatch
 
 **Kind:** procedural · **Mode:** dispatch (the lead agent passes this SKILL.md content to a subagent; the subagent returns a verdict the lead cannot bypass).
 
-The body below is the **subagent prompt**. The lead agent dispatches a fresh-context subagent with this file's path and an instruction to read it as the task contract plus a task-specific user message identifying the branch, changed files, and feature-spec.
+The body below is the **subagent prompt**. Dispatch an independent fresh-context general agent with this skill path, branch, changed files and feature-spec. Check the loaded role contract before dispatch: Codex's `ds-reviewer` profile is reserved for Mode (a) PR review and is not the checklist role. The checklist agent reads this skill as its task contract and returns its own report without fixing, pushing or merging.
 
 ---
 

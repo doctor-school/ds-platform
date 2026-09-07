@@ -308,7 +308,12 @@ describe("008 EARS-1…13 — persistent app-shell header", () => {
     expect(
       await screen.findByTestId("shell-nav-broadcasts"),
     ).toHaveTextContent("ЭФИРЫ_ИЗ_КАТАЛОГА");
-    expect(screen.getByTestId("shell-login")).toHaveTextContent(
+    // «Войти» is behind the async `useHeaderAuth` read: the nav renders on the
+    // first paint, the account affordance only once the profile promise settles
+    // (until then the slot is the `loading` spacer). A synchronous query here
+    // raced that resolution and went red under CI load (run 34102123811); the
+    // catalog assertion needs the RESOLVED guest branch, so it awaits it.
+    expect(await screen.findByTestId("shell-login")).toHaveTextContent(
       "ВОЙТИ_ИЗ_КАТАЛОГА",
     );
   });

@@ -37,7 +37,21 @@ const WCAG_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"];
 /** The `useRedirectIfAuthenticated` session probe (`authClient.session()`). */
 const SESSION_PROBE = "**/v1/auth/session";
 
-async function scan(page: Page, path: string): Promise<void> {
+/**
+ * 028: the documents surfaces are backend-free AND form-free, so the auth-page
+ * readiness contract (mock the session probe, wait for a `form`) does not apply
+ * to them — `ready` names what must have rendered before axe reads the DOM instead.
+ * The anonymous session probe stays mocked for EVERY route: the 008 shell header
+ * these pages mount reads it too, and an unmocked probe would leave the header in
+ * its pending state, scanning less of the composed page than ships. The
+ * empty-shell sentinel stays the exactly-one-non-empty-h1 assertion below, which
+ * every route in this tier still runs.
+ */
+async function scan(
+  page: Page,
+  path: string,
+  options: { ready?: string } = {},
+): Promise<void> {
   // Deterministic anonymous principal: fulfill the session probe with the 401
   // the real BFF returns for a cookie-less visitor, so the auth shell renders
   // without any backend (`authClient.session()` maps 401 → null → "anonymous").
@@ -52,7 +66,7 @@ async function scan(page: Page, path: string): Promise<void> {
   // Wait for the page's real form so the surface has rendered before the scan
   // (axe reads the live DOM; the pending-guard empty shell has no form at all,
   // and a half-rendered page would under-report).
-  await page.locator("form").first().waitFor({ state: "visible" });
+  await page.locator(options.ready ?? "form").first().waitFor({ state: "visible" });
 
   // Composed-page shell check: exactly one NON-EMPTY h1 per route (axe's
   // `page-has-heading-one` only guarantees ≥1, and is a best-practice-tagged
@@ -92,5 +106,24 @@ test.describe("#400 page-level axe a11y scan (backend-free)", () => {
     page,
   }) => {
     await scan(page, "/reset");
+  });
+
+  // 028 EARS-2/3/4/5 — the Academy documents surfaces. Both are composed
+  // long-form reading pages (heading hierarchy, link contrast, landmark
+  // structure), which is precisely what a primitive-level scan cannot cover.
+  test("028: the documents index passes WCAG 2 A/AA + one-h1 shell check", async ({
+    page,
+  }) => {
+    await scan(page, "/documents", {
+      ready: '[data-testid="documents-list"]',
+    });
+  });
+
+  test("028: the policy document page passes WCAG 2 A/AA + one-h1 shell check", async ({
+    page,
+  }) => {
+    await scan(page, "/documents/privacy-policy", {
+      ready: '[data-testid="legal-document-body"]',
+    });
   });
 });

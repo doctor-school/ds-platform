@@ -531,6 +531,9 @@ importers:
       '@ds/design-system':
         specifier: workspace:*
         version: link:../../packages/design-system
+      '@ds/legal-content':
+        specifier: workspace:*
+        version: link:../../packages/legal-content
       '@ds/schemas':
         specifier: workspace:*
         version: link:../../packages/schemas

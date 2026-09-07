@@ -44,8 +44,14 @@ export default defineConfig({
   // follows is projected on the SERVER at the door and re-validated on the
   // SERVER by the confirm command; a browser-intercepted tier could only assert
   // its own fixture of both decisions.
+  // #1768 adds the fifth half of the same question — the 020 hand-off
+  // (`register-return-handoff.spec.ts`). It belongs here because the CTA the
+  // guest presses is resolved by the upstream, the target it carries is
+  // projected on the SERVER at the door, and the landing is re-validated on the
+  // SERVER by the confirm command: the whole journey is decided upstream of the
+  // browser, against this same double.
   testMatch:
-    "{register-{return-context,direct,return},login-{return-context,arrival}}.spec.ts",
+    "{register-{return-context,direct,return,return-handoff},login-{return-context,arrival}}.spec.ts",
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,

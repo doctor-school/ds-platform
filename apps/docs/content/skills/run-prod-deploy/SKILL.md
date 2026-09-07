@@ -25,6 +25,20 @@ The D-decision gate, over the **whole deploy range** (`deployedSha..origin/main`
 2. **All Stage-B GO** — every `user-facing` PR in the range records `Stage-B: GO` / `Stage-B: batched at #<gate>` / `Stage-B: N/A (no visual surface) — lead-certified` (`gh pr view <N> --json body,comments`). A missing verdict = **stop** (forces escalate/hold).
 3. **CI green at the deploy SHA** — `gh api repos/{owner}/{repo}/commits/$(git rev-parse origin/main)/check-runs` all green (the deploy pre-flight re-asserts this; the checklist confirms it before the D-decision).
 4. **Migrations expand/contract** — `git diff --name-only <deployedSha>..origin/main -- apps/api/drizzle` ; inspect every listed `.sql`: expand-only (new nullable column / table / index) keeps an app rollback DB-safe; any contracting/destructive/backfill migration flips the class to **escalate** (spec §10.3).
+
+   **Contract-migration gate.** A migration dropping a column/constraint, or guarding itself with a `RAISE EXCEPTION` on non-empty data, runs INSIDE `pnpm deploy:prod` (step 5) — a violated precondition aborts the **deploy**. Always **escalate**. All of the following hold, or the deploy **HOLDS**:
+
+   - **(a) Precondition re-verified on prod immediately before `pnpm deploy:prod`** — not earlier; the number moves under you. Read-only, from the deploy environment:
+     ```bash
+     ssh ds-data-prod "sudo docker exec ds-data-prod-postgres-1 psql -U ds -d ds_prod -Atc 'select count(*) from experts'"
+     ```
+   - **(b) Authoring freeze for the deploy window** — announce to the admin operators that the affected entity is not created or edited from the count until the health verify (§3) passes, then **re-run the count after that announcement**: the second read gates the ship.
+   - **(c) Pre-migrate restore point recorded** — the pipeline takes a pgbackrest pre-migrate `incr` backup (`infra/deploy/README.md` → step 4, DSO-129); confirm it in the transcript, record its label/timestamp in the deploy record comment. (Dev-stand counterpart: `.claude/rules/dev-stand.md` → «Snapshot before migrate»; never `dev:snapshot` on prod.)
+
+   Unmet ⇒ hold the range; never weaken the migration, never delete prod rows to satisfy it — open the spec-mandated data path as its own Issue, then ship. Named instances (add a line, not a section):
+
+   - **0028 — `experts` structured-name contract (#1642).** `apps/api/drizzle/0028_cultured_princess_powerful.sql` drops three `experts_*` constraints and `experts.name` irreversibly, raising `EARS-20: … explicit reviewed per-id mapping` on ANY `experts` row. Gate = (a); `count > 0` ⇒ hold + open the per-id mapping (012-requirements EARS-20).
+
 5. **Rollback ready** — the app-only `--rollback <sha>` path is available (target images retained — last 3 per repo) and the DB is untouched by an app rollback (guaranteed by item 4).
 6. **Clean deploy environment** — clean working tree + `git pull --ff-only origin main` (the pre-flight enforces this; verify it _before_ deciding to ship).
 7. **No live broadcast (эфир gate)** — `pnpm deploy:check-live`: `CLEAR` (exit 0) proceeds; `LIVE:` or `UNKNOWN` (exit 1, fail-closed) **holds regardless of change-class** — wait for the эфир to end or bind to the maintenance window (02:00–06:00 MSK). The deploy pre-flight runs the same probe as a hard gate; an urgent mid-broadcast ship is by definition **escalate**: owner's explicit go + `--allow-live-broadcast`.

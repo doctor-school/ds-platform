@@ -33,7 +33,9 @@ The D-decision gate, over the **whole deploy range** (`deployedSha..origin/main`
 
 9. **Session-invalidating changes announced** — a change in the range that re-derives the session fingerprint forces every signed-in user and operator to sign in again on deploy; ship it in a quiet window with the owner ack recorded on the PR. Standing entry: **deploy #1736 invalidates all sessions once — quiet window, owner ack 2026-09-02** (https://github.com/doctor-school/ds-platform/pull/1736#issuecomment-5505979858).
 
-**Standing-auth** class + 1–9 green → ship autonomously. **Escalate** class — or any эфир hold — → the one-line **"ready to ship X — go?"** first, then proceed on the owner's go.
+10. **IdP provisioning drift** — `git diff --name-only <deployedSha>..origin/main -- infra/dev-stand/idp/provision.sh`; non-empty ⇒ the post-deploy tail includes the README step 9 provision re-run on api-prod plus a policy read-back (`infra/deploy/README.md` → step 9 → «Re-run this provision step…»). The deploy script ships images only; an IdP converge that lands in code without its prod run is an outage class, not a docs nit (precedent #1994: the 003 EARS-36 length-only policy shipped in code, the prod instance kept the provider default, registration 422'd until the re-run on 2026-09-07).
+
+**Standing-auth** class + 1–10 green → ship autonomously. **Escalate** class — or any эфир hold — → the one-line **"ready to ship X — go?"** first, then proceed on the owner's go.
 
 ## `main` stays deployable — revert by default (spec §10.10)
 

@@ -1,6 +1,8 @@
 import { Button, FilterChip, Input, Skeleton } from "@ds/design-system";
 import type { SpecialtyRef } from "@ds/schemas";
 
+import { SectionHeading } from "@/components/section-heading";
+
 /**
  * 017 EARS-4 / EARS-5 — the home-page specialty catalog in Stage-A variant Б
  * (`design-source/doctor-home.dc.html` L118-132), PRESENTATIONAL and total over
@@ -142,16 +144,9 @@ const INNER = "mx-auto w-full max-w-container-content";
 const CHIP_ROW = "flex flex-wrap justify-center gap-2";
 
 function Heading() {
-  // The canvas's title + rule line (L77-80): the rule is decorative, so it is a
-  // presentational span, not an <hr> a screen reader would announce.
-  return (
-    <div className="mb-5 flex items-baseline gap-4 layout:mb-6">
-      <h2 className="whitespace-nowrap text-2xl font-extrabold leading-none tracking-tight text-foreground layout:text-4xl">
-        {HEADING}
-      </h2>
-      <span aria-hidden="true" className="-translate-y-1.5 flex-1 border-t-2 border-foreground" />
-    </div>
-  );
+  // The canvas's title + rule line (L77-80), shared with the other storefront
+  // sections that draw the same anatomy.
+  return <SectionHeading>{HEADING}</SectionHeading>;
 }
 
 export function SpecialtyCatalogView({

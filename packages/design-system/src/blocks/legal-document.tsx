@@ -202,48 +202,43 @@ function TocList({
   );
 }
 
-export interface LegalDocumentListProps {
-  /** The rows, host-ordered. */
+export interface LegalDocumentListProps
+  extends Omit<React.HTMLAttributes<HTMLDivElement>, "children"> {
+  /** The rows to draw, host-ordered. An empty list renders an empty container. */
   items: LegalDocumentNeighbour[];
-  /** EARS-11 chip copy; defaults to the RU «обновлено». */
+  /** EARS-11 chip copy; defaults to the shared RU wording. */
   updatedChip?: string;
-  /**
-   * `data-testid` prefix for the rows. The «Другие документы» section under a
-   * document keeps `legal-document-other`; a host documents INDEX passes its own
-   * so the two lists stay distinguishable in a page-level test.
-   */
-  testIdPrefix?: string;
-  className?: string;
 }
 
 /**
- * `LegalDocumentList` — the row unit of a documents list, exported on its own.
+ * The «строка-ссылка документа» unit — the ONE row rendering both a documents
+ * index and the «Другие документы» block beneath a document (the canvases draw
+ * the same unit in both places, `academy-docs.dc.html` «документы» reuses
+ * `#d-docs` "как есть"). It lives beside the reading component rather than in
+ * either host: two storefronts list the same shared document set, and a copy per
+ * host is exactly the fork ADR-0013 §A1 forbids.
  *
- * The «Другие документы» section below a document and a host's `/documents`
- * INDEX are the same anatomy on the canvases (`document.dc.html` «другие
- * документы» / `doctor-docs.dc.html` «юнит „строка-ссылка документа"», which the
- * canvas itself annotates as taken as-is by the Academy and community lists).
- * Exporting it is what keeps that true in code: a host index composes THIS,
- * instead of hand-assembling a second set of rows that drifts from the first
- * (AGENTS.md §6 cross-front reuse, 028-design.md → «Shared component, thin host
- * projection»).
- *
- * Presentation only, like the block around it: which documents appear, in what
- * order, and whether a row is `updated` are host decisions (EARS-3, EARS-11).
+ * The row owns no data decisions — which slugs appear, their order, their notes
+ * and their `updated` flag are all host-fed (028-design «Shared component, thin
+ * host projection»).
  */
 function LegalDocumentList({
   items,
   updatedChip = LEGAL_DOCUMENT_COPY.updatedChip,
-  testIdPrefix = "legal-document-other",
   className,
+  ...rest
 }: LegalDocumentListProps) {
   return (
-    <div className={cn("flex flex-col gap-3", className)}>
+    <div
+      data-testid="legal-document-list"
+      className={cn("flex flex-col gap-3", className)}
+      {...rest}
+    >
       {items.map((item) => (
         <a
           key={item.slug}
           href={item.href}
-          data-testid={`${testIdPrefix}-${item.slug}`}
+          data-testid={`legal-document-row-${item.slug}`}
           className="grid items-center gap-1.5 border-2 border-border bg-card p-5 shadow-md hover:shadow-sm focus-visible:shadow-sm sm:flex sm:items-center sm:justify-between sm:gap-5"
         >
           <span className="min-w-0">

@@ -36,16 +36,36 @@ describe("028 #1967: the doctor documents index", () => {
     const html = renderToStaticMarkup(<DoctorDocumentsPage />);
 
     expect(html).toContain("Документы и контакты");
-    expect(html).toContain('data-testid="documents-row-privacy-policy"');
+    expect(html).toContain('data-testid="legal-document-row-privacy-policy"');
     expect(html).toContain('id="contacts"');
     expect(html).toContain('data-testid="documents-requisites"');
+  });
+
+  it("028 EARS-1: both section headings carry the canvas heading anatomy — the rule line beside the title", () => {
+    const html = renderToStaticMarkup(<DoctorDocumentsPage />);
+
+    // `doctor-docs.dc.html` L64-67 / L155-158: the h2 sits in a baseline flex
+    // row at clamp(24px,3.6vw,36px)/800 with a full-width 2px rule nudged onto
+    // the baseline — the same unit the storefront catalogue already draws.
+    for (const id of ["documents-heading", "contacts-heading"]) {
+      const heading = html.match(
+        new RegExp(`<h2 id="${id}"[^>]*class="([^"]*)"`),
+      );
+      expect(heading, `${id} heading`).not.toBeNull();
+      expect(heading?.[1]).toContain("text-2xl");
+      expect(heading?.[1]).toContain("layout:text-4xl");
+      expect(heading?.[1]).toContain("font-extrabold");
+    }
+    const rules =
+      html.match(/border-t-2 border-foreground/g) ?? [];
+    expect(rules, "section rule lines").toHaveLength(2);
   });
 
   it("028 EARS-3: exactly one row is listed, scoped to policy documents, and none of the canvas placeholder rows ship", () => {
     const html = renderToStaticMarkup(<DoctorDocumentsPage />);
 
     expect(listDocuments).toHaveBeenCalledWith("policy");
-    const rows = html.match(/data-testid="documents-row-/g) ?? [];
+    const rows = html.match(/data-testid="legal-document-row-/g) ?? [];
     expect(rows, "documents rows").toHaveLength(1);
     expect(html).toContain("Политика персональных данных и согласия");
     for (const absent of [
@@ -104,7 +124,7 @@ describe("028 #1967: the doctor documents index", () => {
 
     const html = renderToStaticMarkup(<DoctorDocumentsPage />);
 
-    expect(html).not.toContain('data-testid="documents-row-');
+    expect(html).not.toContain('data-testid="legal-document-row-');
     expect(html).not.toContain("готовится");
     // The rest of the page still stands — contacts and requisites are not
     // conditional on a document existing.

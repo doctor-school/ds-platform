@@ -22,10 +22,10 @@ test.describe("028 V-3: documents index and document page", () => {
     await expect(page.getByTestId("storefront-shell")).toBeVisible();
     await expect(page.locator("h1")).toHaveText("Документы и контакты");
     await expect(
-      page.locator('[data-testid^="documents-row-"]'),
+      page.getByTestId("documents-list").locator('[data-testid^="legal-document-row-"]'),
       "documents rows",
     ).toHaveCount(1);
-    await expect(page.getByTestId("documents-row-privacy-policy")).toBeVisible();
+    await expect(page.getByTestId("legal-document-row-privacy-policy")).toBeVisible();
     await expect(page.getByTestId("documents-support-mail")).toHaveAttribute(
       "href",
       "mailto:support@doctor.school",
@@ -54,7 +54,7 @@ test.describe("028 V-3: documents index and document page", () => {
     page,
   }) => {
     await page.goto("/documents");
-    await page.getByTestId("documents-row-privacy-policy").click();
+    await page.getByTestId("legal-document-row-privacy-policy").click();
 
     await expect(page).toHaveURL(/\/documents\/privacy-policy$/);
     await expect(page.getByTestId("legal-document")).toHaveAttribute(
@@ -70,7 +70,7 @@ test.describe("028 V-3: documents index and document page", () => {
 
     await page.getByTestId("legal-document-back-bottom").click();
     await expect(page).toHaveURL(/\/documents$/);
-    await expect(page.getByTestId("documents-row-privacy-policy")).toBeVisible();
+    await expect(page.getByTestId("legal-document-row-privacy-policy")).toBeVisible();
   });
 
   test("028 EARS-7: a «Другие документы» link resolves to that document's own page", async ({

@@ -63,10 +63,10 @@ describe("028 #1967: the doctor document route", () => {
     );
 
     expect(html).toContain(
-      'data-testid="legal-document-other-consent-photo-video"',
+      'data-testid="legal-document-row-consent-photo-video"',
     );
     expect(html).not.toContain(
-      'data-testid="legal-document-other-privacy-policy"',
+      'data-testid="legal-document-row-privacy-policy"',
     );
     expect(html).toContain('href="/documents/consent-photo-video"');
   });

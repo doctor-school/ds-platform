@@ -6,11 +6,12 @@ import {
   EmptyState,
   formatEditionLine,
   LEGAL_DOCUMENT_COPY,
-  LegalDocumentList,
   type LegalDocumentNeighbour,
 } from "@ds/design-system/blocks";
+import { LegalDocumentList } from "@ds/design-system/legal-document";
 import { ContactChip } from "@ds/design-system/contact-chip";
 
+import { SectionHeading } from "@/components/section-heading";
 import { academyHref } from "@/lib/academy";
 import {
   CONTACT_CHANNELS,
@@ -123,12 +124,7 @@ export default function DoctorDocumentsPage() {
 
       <div className="mx-auto my-10 flex w-full max-w-content flex-col gap-12 px-4 sm:px-8 lg:px-12">
         <section aria-labelledby="documents-heading">
-          <h2
-            id="documents-heading"
-            className="mb-4.5 text-xl leading-tight font-extrabold tracking-tight text-foreground sm:text-2xl"
-          >
-            Документы
-          </h2>
+          <SectionHeading id="documents-heading">Документы</SectionHeading>
 
           {failed ? (
             <EmptyState
@@ -136,7 +132,7 @@ export default function DoctorDocumentsPage() {
               title="Не удалось загрузить список документов."
             />
           ) : (
-            <LegalDocumentList items={rows} testIdPrefix="documents-row" />
+            <LegalDocumentList items={rows} data-testid="documents-list" />
           )}
 
           <p className="mt-4 text-sm font-semibold text-faint">
@@ -180,12 +176,7 @@ export default function DoctorDocumentsPage() {
         </section>
 
         <section id="contacts" aria-labelledby="contacts-heading">
-          <h2
-            id="contacts-heading"
-            className="mb-4.5 text-xl leading-tight font-extrabold tracking-tight text-foreground sm:text-2xl"
-          >
-            Контакты
-          </h2>
+          <SectionHeading id="contacts-heading">Контакты</SectionHeading>
 
           <div className="grid gap-3 sm:grid-cols-2">
             <div

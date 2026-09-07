@@ -40,6 +40,20 @@ const config: NextConfig = {
   // DSO-100). Without this Next may warn about an inferred workspace root and, on a
   // machine with a stray lockfile, root the trace elsewhere and break the COPY.
   outputFileTracingRoot: path.join(configDir, "../../"),
+  // The published legal texts of `@ds/legal-content` are READ AT RUNTIME with
+  // `fs` (028 EARS-12: a document exists because its file exists), so Next's
+  // module tracer — which follows imports, never a `join()` computed at runtime —
+  // leaves them out of the standalone output. `apps/portal/Dockerfile` ships ONLY
+  // that output, so without this include the production image has an empty
+  // /documents list and every /documents/:slug answers 404, while every local
+  // `next dev` and every jsdom test passes. Turbopack rewrites the loader's
+  // `import.meta.url` to its source path under the tracing root, which is why the
+  // files must land at `<standalone>/packages/legal-content/documents/`; the glob
+  // below is what puts them there.
+  outputFileTracingIncludes: {
+    "/documents": ["../../packages/legal-content/documents/**"],
+    "/documents/[slug]": ["../../packages/legal-content/documents/**"],
+  },
   // Consume @ds/design-system as source (.tsx) — owned-code shadcn model,
   // no separate build step for the internal package (ADR-0004 §6).
   transpilePackages: ["@ds/design-system", "@ds/room"],

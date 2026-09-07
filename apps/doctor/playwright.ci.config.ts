@@ -49,6 +49,9 @@ export default defineConfig({
     // 021 EARS-10 (#1546): the post-confirmation landing is a decision of the
     // upstream, so this spec rides the return-context tier beside its double.
     "register-return.spec.ts",
+    // 020 EARS-5 (#1768): the event page the hand-off starts on is read from
+    // the upstream on the SERVER, so this spec rides the return-context tier.
+    "register-return-handoff.spec.ts",
     "register-direct.spec.ts",
     "login-return-context.spec.ts",
     "events-*.spec.ts",

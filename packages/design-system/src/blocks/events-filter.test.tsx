@@ -4,6 +4,10 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { EventsFilter, type AppliedFacets } from "./events-filter";
+// The whole blocks barrel, loaded at collection time: EARS-7.5 asserts export
+// IDENTITY, not import speed — a cold barrel import inside the 5 s per-test
+// budget timed out on CI once the barrel grew (#1981).
+import * as blocksBarrel from "./index";
 
 afterEach(() => {
   cleanup();
@@ -460,8 +464,8 @@ describe("EventsFilter — the three D-1 fill states (EARS-7)", () => {
     expect(screen.getByLabelText(LABELS.query)).toBeInTheDocument();
   });
 
-  it("EARS-7.5: the blocks barrel exposes exactly ONE panel implementation — a consumer cannot reach a fork", async () => {
-    const barrel = await import("./index");
+  it("EARS-7.5: the blocks barrel exposes exactly ONE panel implementation — a consumer cannot reach a fork", () => {
+    const barrel = blocksBarrel;
     // Identity, not shape: a second, forked panel exported under the same name
     // (or the barrel re-pointing at a screen-local copy) fails here, which is
     // what «019 shall create no private copy of the panel» means for a

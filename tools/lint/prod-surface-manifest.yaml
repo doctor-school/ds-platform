@@ -149,6 +149,16 @@ routes:
     status: deferred
     issue: "#1430"
 
+  # 003 EARS-27/28 (#1958) — the 017 signed-in cluster «Личный кабинет» target:
+  # the Academy account-profile surface projected onto this host through the
+  # shared block, until feature 022 (#1791) replaces it with the doctor cabinet.
+  # Same cut-over as the two doors above — the storefront opens with #1430.
+  - app: doctor
+    route: /account
+    file: apps/doctor/app/(storefront)/account/page.tsx
+    status: deferred
+    issue: "#1430"
+
   # apps/admin — 007 admin console (login + events CRUD/lifecycle), all real
   # Refine surfaces; root is a pure redirect to /events.
   - app: admin

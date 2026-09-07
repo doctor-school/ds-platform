@@ -41,6 +41,7 @@
     "./fields": "./src/primitives/fields/index.ts",
     "./events-filter": "./src/blocks/events-filter.tsx",
     "./recording-spoiler": "./src/blocks/recording-spoiler.tsx",
+    "./account-profile-card": "./src/blocks/account-profile-card.tsx",
     "./blocks": "./src/blocks/index.ts"
   },
   "scripts": {

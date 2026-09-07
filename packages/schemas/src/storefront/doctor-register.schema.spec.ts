@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import {
   ConsentTierSchema,
+  DOCTOR_REGISTER_CONSENT_PURPOSES,
   DOCTOR_REGISTER_CONSENT_REFUSAL_CODES,
+  DoctorRegisterConsentAcceptanceSchema,
+  DoctorRegisterRequestSchema,
   MARKETING_COMMUNICATIONS_PURPOSE,
   MEDICAL_WORKER_DECLARATION_PURPOSE,
   MEDICAL_WORKER_DECLARATION_REQUIRED_CODE,
@@ -105,5 +108,102 @@ describe("021 EARS-5: the two-tier consent contract", () => {
     expect(
       ConsentTierSchema.safeParse({ tier: "marketing", items: [] }).success,
     ).toBe(false);
+  });
+});
+
+/**
+ * 021 EARS-7 (#1543) — the contract half of "one versioned record per granted
+ * purpose".
+ *
+ * The row-level half (one row each, server-stamped version, `captured_at` at
+ * write time) is proven against real Postgres in
+ * `apps/api/test/storefront/doctor-register-consents.e2e-spec.ts`. What belongs
+ * HERE is the boundary rule that makes those rows meaningful: the command
+ * records only purposes this surface actually renders.
+ */
+describe("021 EARS-7: the closed consent-purpose list", () => {
+  it("021 EARS-7.1: the declared purposes are exactly the three 021 renders", () => {
+    expect(DOCTOR_REGISTER_CONSENT_PURPOSES).toEqual([
+      MEDICAL_WORKER_DECLARATION_PURPOSE,
+      PARTNER_DATA_SHARING_PURPOSE,
+      MARKETING_COMMUNICATIONS_PURPOSE,
+    ]);
+  });
+
+  it("021 EARS-7.2: each declared purpose parses as a command consent item", () => {
+    for (const purpose of DOCTOR_REGISTER_CONSENT_PURPOSES) {
+      expect(
+        DoctorRegisterConsentAcceptanceSchema.safeParse({
+          purpose,
+          version: "2026-09",
+        }).success,
+      ).toBe(true);
+    }
+  });
+
+  it("021 EARS-7.3: an undeclared purpose is refused at the I/O boundary", () => {
+    // 003's engine schema takes any non-empty string — it serves every surface.
+    // 021 renders three purposes, so a fourth one reaching `consent_records`
+    // would be a consent record of wording no doctor ever saw.
+    expect(
+      DoctorRegisterConsentAcceptanceSchema.safeParse({
+        purpose: "analytics-profiling",
+        version: "2026-09",
+      }).success,
+    ).toBe(false);
+    expect(
+      DoctorRegisterRequestSchema.safeParse({
+        email: "doctor@example.test",
+        password: "Str0ng-passw0rd!",
+        medicalWorkerDeclaration: true,
+        consent: [
+          { purpose: PARTNER_DATA_SHARING_PURPOSE, version: "2026-09" },
+          { purpose: "analytics-profiling", version: "2026-09" },
+        ],
+      }).success,
+    ).toBe(false);
+  });
+
+  it("021 EARS-7.4: a version is still mandatory on every declared purpose", () => {
+    // ADR-0009: a bare boolean is not a consent record. Narrowing the purpose
+    // must not have loosened the versioning rule inherited from 003.
+    expect(
+      DoctorRegisterConsentAcceptanceSchema.safeParse({
+        purpose: MARKETING_COMMUNICATIONS_PURPOSE,
+        version: "",
+      }).success,
+    ).toBe(false);
+    expect(
+      DoctorRegisterConsentAcceptanceSchema.safeParse({
+        purpose: MARKETING_COMMUNICATIONS_PURPOSE,
+      }).success,
+    ).toBe(false);
+  });
+
+  it("021 EARS-6: the marketing opt-in is expressible and omissible alike", () => {
+    const base = {
+      email: "doctor@example.test",
+      password: "Str0ng-passw0rd!",
+      medicalWorkerDeclaration: true,
+    };
+    // Withheld: simply absent. There is no `granted: false` shape to store, so
+    // "no row at all when withheld" holds at the contract layer already.
+    const withheld = DoctorRegisterRequestSchema.safeParse({
+      ...base,
+      consent: [{ purpose: PARTNER_DATA_SHARING_PURPOSE, version: "2026-09" }],
+    });
+    expect(withheld.success).toBe(true);
+    expect(withheld.success && withheld.data.consent).toEqual([
+      { purpose: PARTNER_DATA_SHARING_PURPOSE, version: "2026-09" },
+    ]);
+
+    const granted = DoctorRegisterRequestSchema.safeParse({
+      ...base,
+      consent: [
+        { purpose: PARTNER_DATA_SHARING_PURPOSE, version: "2026-09" },
+        { purpose: MARKETING_COMMUNICATIONS_PURPOSE, version: "2026-09" },
+      ],
+    });
+    expect(granted.success).toBe(true);
   });
 });

@@ -104,3 +104,48 @@ the api. It is frozen into the build, so it must be present at **build** time, n
 only at runtime — including before the Playwright tiers, whose 019 events tier
 polls `/v1/storefront/doctor/events/live` from the browser and therefore needs the
 baked destination to be that tier's stand-in (`DOCTOR_EVENTS_FAKE_API_PORT`, 3214).
+
+## Events mobile and accessibility matrix (019 EARS-13)
+
+`e2e/events-mobile.spec.ts` always checks 390/1440 × light/dark, loaded/empty
+feeds, live presence/absence, labelled card links, horizontal overflow, keyboard
+focus and horizon navigation, and desktop month day/month navigation. Full-page
+axe includes contrast with no exclusions. Screenshot attachments accompany each
+presentation. The events CI tier runs serially because its upstream live scenario
+is mutable and shared between files.
+
+```bash
+# After the matching build above; ports must be free.
+pnpm --filter @ds/doctor exec playwright test --config=playwright.events.config.ts
+```
+
+This is coverage of the existing R1 feed and desktop month pane. Filter mounting
+and final route composition (#1516), the calendar page (#1520), past (#1525) and
+mine (#1526) remain R1.1 deliverables with their own mobile/axe obligations.
+
+For real API/DB verification, build and start doctor with the same real
+`API_PROXY_TARGET`, seed an isolated branch DB with `pnpm --filter @ds/api
+seed:events`, and supply the complete ENV SET documented in the spec:
+
+```bash
+export E2E_DOCTOR_URL=<running-doctor-origin>
+export E2E_EVENTS_LOADED_PATH='/events?specialty=all'
+export E2E_EVENTS_EMPTY_PATH='/events?specialty=all&q=1528-no-matching-event'
+export E2E_EVENTS_EXPECT_LIVE=present
+pnpm --filter @ds/doctor exec playwright test --config=playwright.events-live.config.ts
+# DATABASE_URL must already name YOUR isolated ds_dev_<issue> database.
+node apps/doctor/e2e/support/events-live-phase.mjs <issue>
+export E2E_EVENTS_EXPECT_LIVE=absent
+pnpm --filter @ds/doctor exec playwright test --config=playwright.events-live.config.ts
+pnpm --filter @ds/api seed:events # restore the present phase for owner review
+```
+
+The live config fails on missing/partial environment instead of skipping or
+falling back to the upstream double. Each phase executes the same substantive
+assertions; the real live read is independent of feed query facets, so an empty
+feed can legitimately still have a live strip. The loaded fixture must contain
+both current-horizon cards and a further event reached by «Показать ещё».
+The lifecycle helper ends only six exact `seed:events` live fixtures, checks the
+branch database name before connecting and again inside the transaction, and
+never deletes data. Its refusal checks run with
+`node --test apps/doctor/e2e/support/events-live-phase.test.mjs`.

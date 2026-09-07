@@ -123,4 +123,12 @@ describe("@ds/legal-content loader", () => {
       "privacy-policy",
     ]);
   });
+
+  it("028 EARS-9: the real documents directory publishes privacy-policy and consent-photo-video", () => {
+    expect(listDocuments().map((entry) => entry.slug)).toEqual([
+      "consent-photo-video",
+      "privacy-policy",
+    ]);
+    expect(loadDocument("privacy-policy")?.body).toContain("Ивекскон");
+  });
 });

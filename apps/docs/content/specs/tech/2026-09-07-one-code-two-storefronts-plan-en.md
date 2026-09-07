@@ -64,8 +64,8 @@ The repo already contains the correct shape twice: `@ds/room` (`packages/room`; 
 - [ ] ADR-0013 §A1 rewrite (rule 1).
 - [ ] Registry: column + allowlist + wording removal (rule 2).
 - [ ] #2002 re-scoped to the allowlist guard (rule 3); #1874, #1907 linked.
-- [ ] `author-ears-spec`, `open-ears-issues` 2b, orchestration brief template, `request-mode-a-review` (rules 4–5).
-- [ ] `request-mode-a-review`: the stage-0 orphan-marker check — a `// mirror-of:` block whose Academy anchor does not exist or whose branches differ is a `[BLOCKER]`.
+- [x] `author-ears-spec`, `open-ears-issues` 2b, orchestration brief template, `request-mode-a-review` (rules 4–5).
+- [x] `request-mode-a-review`: the stage-0 orphan-marker check — a `// mirror-of:` block whose Academy anchor does not exist or whose branches differ is a `[BLOCKER]`.
 - [ ] `design-source/README.md` canvas canon (rule 6).
 - [ ] Milestone «Платформа — один код на два фронта» (track:platform), blocking Витрина R4 (018) and the R1.1 Issues listed in section 7.
 

@@ -265,6 +265,13 @@ ${bulletsOrPlaceholder(scopeSource, "the files/surfaces this slice touches — e
 - <fill: the concrete deliverable — what to build/change, and its acceptance.>
 - ≤2 layers per dispatch (db+api+e2e · UI+Playwright · live-verify+PR-polish); a wider brief is split by the lead before dispatch.
 
+## Extraction contract (only for an \`extract-from\` / \`mirror-of\` brief — delete this block otherwise)
+- **Both halves, with \`file:line\`.** <fill: the storage/helper half (where the value is written/read) AND every call-site decision rule (the branch that decides what happens next). A brief that names only the storage half reproduces the slot and re-invents the routing — #1996 copied the held-password slot and lost the post-confirm sign-in.>
+- **Every behaviour branch the package must reproduce:** missing / success / failure — <fill: what the Academy unit does in each, cited by \`file:line\`>. A branch not listed here is a branch that will be dropped.
+- **No host-local substitute.** If the Academy rule does not fit this host, **STOP and return the question** — never invent a host-local variant, a "simplified" branch, or a comment saying this host does not do X. That comment is a Mode (a) \`[BLOCKER]\` (see \`request-mode-a-review\` Pass 2 «Deferred Academy behaviour»).
+- **Host divergence is host-config only:** <fill: the config fields — copy, route, brand, authz envelope — that legitimately differ>. Anything else identical.
+- **Return line (mandatory):** \`package mounted by: <host route file>; host-config fields: …\`.
+
 ## Gates (all GREEN before push, from the worktree)
 - \`pnpm pr:preflight --static\` GREEN before push (runs the STATIC_GUARDS tree-scan family: \`ears-naming\`, \`no-stub\`, …).
 - Any red guard touching your NEW files is yours to root-cause — "pre-existing" requires proving it reproduces on \`origin/main\` untouched.

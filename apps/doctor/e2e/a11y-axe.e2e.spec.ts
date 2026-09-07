@@ -207,6 +207,18 @@ for (const [state, drive] of [
           }),
         }),
       );
+      // 021 EARS-15 (#1996) — the success state exists ONLY for a doctor who
+      // is signed in: the screen replays the real 003 EARS-5 login with the
+      // password it held, and a replay that fails routes to `/login?returnTo=…`
+      // instead of rendering the card. This tier is backend-free, so the replay
+      // is fulfilled at the same network boundary as the two commands above.
+      await page.route("**/v1/auth/login", (route) =>
+        route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ status: "authenticated" }),
+        }),
+      );
       await page.getByTestId("register-email").fill("doctor@clinic.ru");
       await page.getByTestId("register-password").fill("correct horse battery");
       for (const id of ["register-medworker", "register-partner-data"]) {

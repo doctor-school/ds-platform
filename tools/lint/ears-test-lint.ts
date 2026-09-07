@@ -138,11 +138,6 @@ const BUILTIN_DEFERRALS: Record<string, Deferral> = {
     reason:
       'spec authored ahead of code (password-friction increment); EARS-37 tests land with the requirement-presentation slice of #1331',
   },
-  '003:EARS-39': {
-    issue: 1331,
-    reason:
-      'spec authored ahead of code (password-friction increment); EARS-39 tests land with the no-dead-end-verify slice of #1331',
-  },
 };
 
 function loadDeferrals(): Record<string, Deferral> {

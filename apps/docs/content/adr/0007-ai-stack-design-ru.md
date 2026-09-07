@@ -20,22 +20,22 @@ lang: ru
 
 ## 1. Сводка решений (cross-ref ADR-0007)
 
-| Решение                          | Выбор                                                                                                                                                                         | ADR-0007 §        |
-| -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
-| Scope ADR-0007                   | Phase 0 = AI-loop methodology (dev-time); runtime AI infra — deferred с triggers                                                                                              | §1                |
-| Coding agent harnesses Pre-pilot | Claude Code (primary, sync) + Codex (opt-in async). Cursor deferred.                                                                                                          | §2                |
-| Agent loop discipline            | SDD + TDD как hard rules; iteration-end checklist machine-checkable                                                                                                           | §3                |
-| Task tracking source             | GitHub Issues (per ADR-0006 §9), сгруппированы под релизными milestone'ами трека                                                                                              | inherits ADR-0006 |
-| Session bootstrap                | `tools/agent-bootstrap.ts` — детерминистический скрипт, output = live state snapshot                                                                                          | §4                |
-| Drift guards AI-specific         | Дополнительные CI checks поверх ADR-0006 §7 (spec-link, TDD signal, EARS↔test linkage, и др.)                                                                                 | §5                |
-| LLM-assisted PR review           | Только интерактивный (три режима — subagent `/review`, параллельный Codex CLI, чистый human). Никакого автоматического reviewer-bot'а, никаких LLM API-ключей в repo secrets. | §6, AGENTS.md §4  |
-| Prompt-caching                   | `cache_control: ephemeral` на AGENTS.md+CLAUDE.md+active spec+ADRs; стабильный prefix order для OpenAI prefix-cache                                                           | §7                |
-| Cost observability               | Вручную через консоли vendor'ов (Anthropic Console, OpenAI Platform) в Phase 0; никакого автоматического cost-ledger CSV в репо.                                              | §7                |
-| Autonomy Phase                   | Phase 2 (chores + supervised PRs); явные trigger'ы на Phase 3                                                                                                                 | §8                |
-| Runtime LLM gateway              | LiteLLM Proxy self-hosted в Zone AI (Hetzner EU) — **deferred**, trigger: first runtime AI feature deploy                                                                     | §9                |
-| PII-filter / egress proxy        | Same trigger — deferred                                                                                                                                                       | §9                |
-| OTel GenAI semconv collector     | Same trigger — в Phase 0 minimal token-count logging без semconv                                                                                                              | §9                |
-| Vector DB                        | pgvector в Postgres17 (наследуется из ADR-0003), trigger на Qdrant — отдельный ADR                                                                                            | inherits ADR-0003 |
+| Решение                          | Выбор                                                                                                                                                                                       | ADR-0007 §          |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- |
+| Scope ADR-0007                   | Phase 0 = AI-loop methodology (dev-time); runtime AI infra — deferred с triggers                                                                                                            | §2.1                |
+| Coding agent harnesses Pre-pilot | Claude Code + локальный Codex (поддерживаются); Codex cloud async необязателен. Cursor deferred.                                                                                            | §2.2                |
+| Agent loop discipline            | SDD + TDD как hard rules; iteration-end checklist machine-checkable                                                                                                                         | §2.3–2.4            |
+| Task tracking source             | GitHub Issues (per ADR-0006 §9), сгруппированы под релизными milestone'ами трека                                                                                                            | inherits ADR-0006   |
+| Session bootstrap                | `tools/agent-bootstrap.ts` — детерминистический скрипт, output = live state snapshot                                                                                                        | §2.5                |
+| Drift guards AI-specific         | Дополнительные CI checks поверх ADR-0006 §7 (spec-link, TDD signal, EARS↔test linkage, и др.)                                                                                               | §2.6                |
+| LLM-assisted PR review           | Только интерактивный (три режима — subagent `request-mode-a-review`, параллельный Codex CLI, чистый human). Никакого автоматического reviewer-bot'а, никаких LLM API-ключей в repo secrets. | §2.10, AGENTS.md §4 |
+| Prompt-caching                   | `cache_control: ephemeral` на shared instructions + applicable harness overlay + active spec + ADRs; стабильный prefix order для OpenAI prefix-cache                                        | §2.8                |
+| Cost observability               | Вручную через консоли vendor'ов (Anthropic Console, OpenAI Platform) в Phase 0; никакого автоматического cost-ledger CSV в репо.                                                            | §2.9                |
+| Autonomy Phase                   | Phase 2 (chores + supervised PRs); явные trigger'ы на Phase 3                                                                                                                               | §2.10               |
+| Runtime LLM gateway              | LiteLLM Proxy self-hosted в Zone AI (Hetzner EU) — **deferred**, trigger: first runtime AI feature deploy                                                                                   | §2.11               |
+| PII-filter / egress proxy        | Same trigger — deferred                                                                                                                                                                     | §2.11               |
+| OTel GenAI semconv collector     | Same trigger — в Phase 0 minimal token-count logging без semconv                                                                                                                            | §2.11               |
+| Vector DB                        | pgvector в Postgres17 (наследуется из ADR-0003), trigger на Qdrant — отдельный ADR                                                                                                          | inherits ADR-0003   |
 
 ---
 
@@ -54,7 +54,7 @@ orchestrated iteration cycle (`do-feature-iteration` оркеструет эти
 ```
 1. READ
    - Run agent-bootstrap (§4) — получает live state
-   - Load AGENTS.md + CLAUDE.md (per-harness overlay)
+   - Load AGENTS.md + apps/docs/content/agent-discipline.md; CLAUDE.md only for Claude Code
    - Load active spec (req + design + scenarios)
    - Load ADRs из spec's "Prior decisions"
    - Glance at glossary terms in scope
@@ -62,7 +62,7 @@ orchestrated iteration cycle (`do-feature-iteration` оркеструет эти
 
 2. PLAN
    - Если parent Issue для spec'а ещё нет → создать +
-     sub-issues per EARS-handler через `gh issue create`
+     sub-issues per EARS-handler через `pnpm issue:create`
        --milestone "<Трек> R<n> — <результат>" --label "feature:NNN-<slug>"
    - Если parent есть → выбрать open sub-issue или открыть новый
 
@@ -94,7 +94,7 @@ orchestrated iteration cycle (`do-feature-iteration` оркеструет эти
    - CI runs ADR-0006 §7 + AI-specific guards (§5.2)
 
 8. REVIEW + MERGE
-   - Mode (a) subagent `/review` skill, Mode (b) параллельный Codex CLI,
+   - Mode (a) subagent `request-mode-a-review` skill, Mode (b) параллельный Codex CLI,
      или Mode (c) human review (AGENTS.md §4).
    - Положительный verdict → `pnpm pr:land <N>` (`merge:gate` — опрос check-runs по head SHA → `gh pr merge <N> --squash --delete-branch`)
      (skill: merge-when-green).
@@ -102,12 +102,15 @@ orchestrated iteration cycle (`do-feature-iteration` оркеструет эти
 
 ### 2.3 Какие harness'ы проходят этот цикл
 
-| Harness                      | Sync/Async    | Phase 0 status                                                         | Notes                                                                                                                                                          |
-| ---------------------------- | ------------- | ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Claude Code (terminal в VSC) | sync          | **Primary**                                                            | Текущий рабочий режим Tech Lead. SessionStart hook запускает bootstrap.                                                                                        |
-| Codex (cloud)                | async         | **Opt-in self-serve**                                                  | Tech Lead вешает label `codex-go` на `agent-ready` Issue → Codex bot подхватывает. AGENTS.md «Before any task» инструктирует выполнить bootstrap первым шагом. |
-| Cursor                       | sync (inline) | **Deferred**                                                           | Trigger: наём второго инженера с inline-AI предпочтением.                                                                                                      |
-| Любой другой агент           | —             | Может подключиться к тому же loop'у; bootstrap скрипт vendor-agnostic. |
+| Harness      | Режим             | Статус                    | Контракт                                                                                               |
+| ------------ | ----------------- | ------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Claude Code  | local interactive | **Поддерживается**        | Общая дисциплина + CLAUDE.md bindings; SessionStart bootstrap при observed запуске.                    |
+| Codex        | local interactive | **Поддерживается**        | Общая дисциплина + роли `.codex/agents/`; наследуемые поддерживаемые модели, явный bootstrap fallback. |
+| Codex cloud  | async             | **Необязателен**          | Проверить integration и доступ при подключении (§9.7); bot/label-trigger не предполагается.            |
+| Cursor       | inline            | **Deferred**              | Trigger: второй инженер с inline-AI preference.                                                        |
+| Другой агент | по capabilities   | Тот же loop при поддержке | Проверять обязательные tools и evidence до dispatch.                                                   |
+
+Оба локальных harness читают [portable agent discipline](../agent-discipline.md) при входе и после compaction. Там определены tool/model mappings, сохранение авторизации, context tiers и memory policy. Codex не импортирует CLAUDE.md или Claude rules неявно. Файл профиля не доказывает, что роль загружена; при допустимости использовать доступного capability-equivalent агента с точным role brief. Отсутствующий dispatch не допускает self-review автора; unavailable telemetry не означает нулевой usage или выполненный enforcement.
 
 ---
 
@@ -118,7 +121,7 @@ orchestrated iteration cycle (`do-feature-iteration` оркеструет эти
 Hard rule, enforce'ится через AGENTS.md + spec-link CI guard (§5.2):
 
 - **Никакого production-кода без feature-spec'а** в `apps/docs/content/specs/features/NNN-<slug>/`.
-- Если фича не имеет spec'а — агент сначала пишет spec через superpowers:brainstorming, потом код. В рамках одной сессии это нормально: brainstorm → spec → ADR (если архитектурно) → план → код.
+- Если у фичи нет spec, использовать проектный `author-feature-spec`; user-facing фича без PRD начинается с `do-product-discovery` (ADR-0014). Spec должен попасть в main до реализации.
 - Изменения существующих фич обновляют existing spec (status: Draft → In dev → Shipped), а не пишут новый.
 - ADR требуется если решение затрагивает несколько модулей или вводит новую технологию.
 
@@ -130,7 +133,7 @@ Hard rule, enforce'ится через AGENTS.md + TDD-signal CI guard (§5.2 WA
 - One Vitest test per EARS requirement; naming: `it('EARS-N: ...', ...)`.
 - Playwright tests генерируются из `NNN-scenarios.feature` через playwright-bdd (test code != production code).
 - Property-based tests для invariants — opt-in от первой фичи с инвариантами (ledger reconciliation, например).
-- superpowers:test-driven-development skill — обязательный invocation для любого implementation task.
+- Проектный `do-feature-iteration` владеет RED/GREEN/REFACTOR; bug fixes проходят `do-hotfix-pr`. Внешние vendor skill packs отключены.
 
 ### 3.3 Когда SDD/TDD justifiably skipped
 
@@ -171,7 +174,7 @@ Hard rule, enforce'ится через AGENTS.md + TDD-signal CI guard (§5.2 WA
    - Извлекает glossary terms из spec body через [[g:term-id]] directives
 
 4. Context files to load (paths only)
-   - AGENTS.md, CLAUDE.md (root)
+   - AGENTS.md + apps/docs/content/agent-discipline.md; CLAUDE.md only for Claude Code
    - active spec files (3)
    - ADRs из Prior decisions
    - module README of модулей, упомянутых в Issue body (heuristic)
@@ -289,7 +292,7 @@ function recommend(
       .slice(0, 3)
       .map((i) => `#${i.number}`)
       .join(", ")}.`;
-  return `Clean slate. Open a new feature-spec via superpowers:brainstorming.`;
+  return `No queue candidate in this snapshot. Reconcile the live board before choosing project discovery/spec authoring.`;
 }
 
 async function main() {
@@ -377,7 +380,9 @@ async function main() {
   console.log();
 
   console.log(`## Context files to load`);
-  console.log(`- @AGENTS.md  @CLAUDE.md`);
+  console.log(
+    `- AGENTS.md + apps/docs/content/agent-discipline.md; CLAUDE.md only for Claude Code`,
+  );
   activeSpecs.filter(Boolean).forEach(({ spec }) => {
     if (!spec) return;
     console.log(
@@ -397,12 +402,12 @@ main().catch((e) => {
 
 ### 4.5 Per-harness integration
 
-| Harness                   | Mechanism                                                                                                                                                                                                                                                            |
-| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Claude Code**           | `.claude/settings.json` SessionStart hook: `{"command": "pnpm bootstrap"}` (использует `pnpm` alias, не прямой `tsx`, чтобы избежать PATH-resolution issues). Output идёт в `additionalContext` как system-reminder. Прозрачно для пользователя. Timeout — см. §4.6. |
-| **Codex (cloud)**         | AGENTS.md «Before any task» — первым шагом: `Run \`pnpm bootstrap\` and use its output to orient yourself.` Codex выполняет в initial setup phase.                                                                                                                   |
-| **Cursor (deferred)**     | `.cursor/rules/00-bootstrap.md` указывает то же.                                                                                                                                                                                                                     |
-| **Manual / другой агент** | `pnpm bootstrap` (alias в root package.json: `"bootstrap": "tsx tools/agent-bootstrap.ts"`).                                                                                                                                                                         |
+| Harness                                                         | Mechanism                                                                                                                                                                                                                                                            |
+| --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Claude Code**                                                 | `.claude/settings.json` SessionStart hook: `{"command": "pnpm bootstrap"}` (использует `pnpm` alias, не прямой `tsx`, чтобы избежать PATH-resolution issues). Output идёт в `additionalContext` как system-reminder. Прозрачно для пользователя. Timeout — см. §4.6. |
+| **Codex (локальный; optional cloud следует тому же контракту)** | AGENTS.md §3.5 + portable agent discipline: выполнить `pnpm bootstrap`, если harness не предоставил snapshot, и прочитать вывод. Claude hook injection не предполагается.                                                                                            |
+| **Cursor (deferred)**                                           | `.cursor/rules/00-bootstrap.md` указывает то же.                                                                                                                                                                                                                     |
+| **Manual / другой агент**                                       | `pnpm bootstrap` (alias в root package.json: `"bootstrap": "pnpm agent:setup && tsx tools/agent-bootstrap.ts"`).                                                                                                                                                     |
 
 ### 4.6 Edge cases
 
@@ -601,33 +606,33 @@ main().catch((e) => {
 
 ## 6. Reviewer roles — см. §2.2 и AGENTS.md §4
 
-Cross-vendor LLM-assisted review в Phase 0 — только интерактивный (три режима: (a) main-session subagent `/review` skill, (b) параллельный Codex CLI, (c) чистый human review). §2.2 cycle Step 8 и AGENTS.md §4 несут полный контракт. Никакого автоматического headless reviewer-bot'а, никакого `tools/reviewer-agent/`, никакого `.github/workflows/agent-review.yml`, никаких LLM API-ключей в repo secrets.
+Cross-vendor LLM-assisted review в Phase 0 — только интерактивный (три режима: (a) main-session subagent `request-mode-a-review` skill, (b) параллельный Codex CLI, (c) чистый human review). §2.2 cycle Step 8 и AGENTS.md §4 несут полный контракт. Никакого автоматического headless reviewer-bot'а, никакого `tools/reviewer-agent/`, никакого `.github/workflows/agent-review.yml`, никаких LLM API-ключей в repo secrets.
 
 ---
 
 ## 7. Prompt-caching policy
 
-Prompt-caching policy действует для любого LLM-клиента — интерактивного subagent'а `/review` сегодня, runtime AI features после §9 trigger'а. Cost tracking в Phase 0 происходит через консоли vendor'ов (Anthropic Console, OpenAI Platform); никакого автоматического cost-ledger CSV в репо нет.
+Это design policy для проектных LLM clients. Интерактивные Claude/Codex clients сами управляют payload и кешированием; dispatched reviewer не может заявлять вызов helper без evidence. Cost tracking в Phase 0 использует vendor consoles; внедрение runtime AI привязано к §9.
 
 ### 7.1 Caching policy
 
-Hard rule в AGENTS.md, обязателен для всех LLM-вызовов (интерактивный subagent `/review` сегодня, future Content Pipeline и т.д.):
+Проектные clients применяют поддерживаемое провайдером кеширование к применимому набору инструкций:
 
-| Что                                    | Cache policy                                                                       |
-| -------------------------------------- | ---------------------------------------------------------------------------------- |
-| `AGENTS.md`, `CLAUDE.md`               | `cache_control: ephemeral` (Anthropic); первым в payload (для OpenAI prefix-cache) |
-| Active spec files (3)                  | `cache_control: ephemeral` пока сессия про этот spec                               |
-| ADRs из Prior decisions (только cited) | `cache_control: ephemeral`                                                         |
-| Glossary entries                       | НЕ кешировать (избирательно, малый ROI)                                            |
-| User turn-by-turn dialogue             | НЕ кешировать                                                                      |
+| Что                                                          | Cache policy                                                                       |
+| ------------------------------------------------------------ | ---------------------------------------------------------------------------------- |
+| AGENTS.md + portable discipline + applicable harness overlay | `cache_control: ephemeral` (Anthropic); первым в payload (для OpenAI prefix-cache) |
+| Active spec files (3)                                        | `cache_control: ephemeral` пока сессия про этот spec                               |
+| ADRs из Prior decisions (только cited)                       | `cache_control: ephemeral`                                                         |
+| Glossary entries                                             | НЕ кешировать (избирательно, малый ROI)                                            |
+| User turn-by-turn dialogue                                   | НЕ кешировать                                                                      |
 
 **Стабильный prefix order** в каждом запросе:
 
 ```
-[system] AGENTS.md → CLAUDE.md → active spec (req → design → scenarios) → ADRs (sorted by ADR number) → glossary terms (только in-scope) → [user turn]
+[system] AGENTS.md → portable discipline → applicable harness overlay → active spec (req → design → scenarios) → ADRs (sorted by ADR number) → glossary terms (только in-scope) → [user turn]
 ```
 
-Anthropic — explicit `cache_control: {type: 'ephemeral'}`, 5-min TTL. OpenAI GPT-5+ — automatic prefix cache, требует чтобы префикс был byte-identical. Все LLM clients строят payload через общую helper-функцию `packages/llm-utils/buildContext.ts` для гарантии стабильности.
+Anthropic — explicit `cache_control: {type: 'ephemeral'}`, 5-min TTL. OpenAI GPT-5+ — automatic prefix cache, требует чтобы префикс был byte-identical. Проектные LLM clients, принимающие этот design, строят payload через общую helper-функцию `packages/llm-utils/buildContext.ts` для гарантии стабильности.
 
 ### 7.2 Sketch buildContext
 
@@ -644,6 +649,7 @@ import { glob } from "fast-glob";
 const REPO_ROOT = process.env.REPO_ROOT ?? process.cwd();
 
 export interface ContextInput {
+  harness?: "claude" | "codex"; // absent = shared context only
   specPath?: string; // e.g., apps/docs/content/specs/features/001-doctor-onboarding
   adrs?: string[]; // e.g., ['ADR-0001', 'ADR-0002']
   glossaryTerms?: string[]; // canonical IDs
@@ -668,7 +674,7 @@ export async function buildSystemBlocks(
 ): Promise<CachedBlock[]> {
   const blocks: CachedBlock[] = [];
 
-  // ---- Tier 1: constitution (AGENTS.md обязательный, CLAUDE.md optional, concat) ----
+  // ---- Tier 1: shared constitution + mandatory discipline; Claude overlay only for Claude ----
   const agentsPath = resolve(REPO_ROOT, "AGENTS.md");
   if (!existsSync(agentsPath)) {
     throw new Error(
@@ -676,11 +682,18 @@ export async function buildSystemBlocks(
     );
   }
   const agentsMd = await readFile(agentsPath, "utf-8");
-  const claudeMd = await readOptional(resolve(REPO_ROOT, "CLAUDE.md"));
+  const disciplineMd = await readFile(
+    resolve(REPO_ROOT, "apps/docs/content/agent-discipline.md"),
+    "utf-8",
+  );
+  const claudeMd =
+    input.harness === "claude"
+      ? await readFile(resolve(REPO_ROOT, "CLAUDE.md"), "utf-8")
+      : null;
   blocks.push({
     type: "text",
     text:
-      `# AGENTS.md\n\n${agentsMd}` +
+      `# AGENTS.md\n\n${agentsMd}\n\n# Portable agent discipline\n\n${disciplineMd}` +
       (claudeMd ? `\n\n---\n\n# CLAUDE.md\n\n${claudeMd}` : ""),
     cache_control: { type: "ephemeral" }, // breakpoint 1/4
   });
@@ -754,13 +767,13 @@ export async function buildSystemBlocks(
 }
 ```
 
-Используется интерактивным subagent'ом `/review` и любыми другими LLM-клиентами.
+Проектный client может принять этот sketch; интерактивные harness он не настраивает.
 
 **Cache invariants:**
 
-- AGENTS.md / CLAUDE.md изменяются редко → tier 1 cache hit ~всегда после первого call.
+- Общие инструкции и применимый overlay изменяются нечасто → tier 1 cache hit ~всегда после первого call.
 - Spec изменяется per feature → tier 2 cache hit пока сессия в рамках одной фичи.
-- ADRs immutable после Accepted → tier 3 cache hit ~всегда (новый ADR в "Prior decisions" инвалидирует — это приемлемо, редкое событие).
+- Accepted ADRs изменяются через парную revision procedure → кеш переиспользуется только пока байты cited ADR не изменены; правки инвалидируют соответствующий prefix.
 - Glossary terms — последние, чтобы изменения per-spec scope не ломали prefix выше.
 
 ---
@@ -775,7 +788,7 @@ export async function buildSystemBlocks(
 - Human-merge gate или положительный verdict интерактивного LLM-review (Mode (a) / Mode (b) по AGENTS.md §4) **обязателен** перед merge
 - Write-доступ в prod-DB запрещён (только через миграции в PR)
 - Direct push в `main` запрещён
-- Прямая запись в `docs/adr/*.md` после `status: Accepted` запрещена (создание superseding ADR разрешено)
+- Правки Accepted ADR проходят `do-adr-revision`: парная EN/RU inline revision; amendment только при изменении работающего в production решения.
 
 **Auto-chores разрешены** через bot-PR с label `chore:auto`:
 
@@ -924,162 +937,25 @@ Output-direction PII filter — **v3 concern**. До v3 — operational mitigati
 
 ### 9.7 Codex cloud async activation
 
-**Trigger:** Tech Lead решает запустить первую async-задачу. Не требует ADR.
+**Trigger:** Tech Lead явно выбирает cloud async-задачу. Новый ADR не нужен; локальная разработка/ревью Codex уже поддерживаются (§2.3).
 
-**Setup на момент trigger:**
-
-1. `.codex/AGENTS.md` link на root AGENTS.md (если Codex requires its own location)
-2. GitHub App для Codex с правами write-PR в репо
-3. Label `codex-go` — bot trigger
-4. Bootstrap скрипт уже работает универсально
+При подключении проверить доступную integration, доступ к репо, setup environment, поддерживаемый trigger и permissions по фактическому сервису. Настроить только необходимый доступ и подтвердить, что задача читает root AGENTS.md и portable agent discipline, выполняет bootstrap и возвращает reviewable artifacts через те же gates. GitHub App, label `codex-go` или redirect `.codex/AGENTS.md` не считаются существующими и не требуются локальным контрактом. Отсутствующий cloud access означает недоступность cloud-задачи, не отключая локальный Codex.
 
 ---
 
-## 10. AGENTS.md / CLAUDE.md — sketches для DS Platform
+## 10. Общие инструкции и harness bindings
 
-Эти скетчи показывают AI-loop-specific overlay'и, добавленные поверх baseline'а ADR-0006 §9. Секции, не относящиеся к review/cost (orchestrated iteration cycle wording, SDD/TDD discipline, prompt-caching, SessionStart hook, skill priorities), — это authoritative-часть скетчей. Review-related строки описывают интерактивный three-mode review по AGENTS.md §4 — никакого автоматического reviewer-bot'а, никакого headless LLM CI workflow.
+Исполняемый контракт инструкций живёт в root AGENTS.md, [portable agent discipline](../agent-discipline.md), связанных repository/dev-stand rules и проектном skill-каталоге (§2.2). Эта секция описывает их ответственность, не дублируя второй исполняемый checklist.
 
 ### 10.1 AGENTS.md (root)
 
-ADR-0006 §9.1 уже зафиксировал основную структуру. DSO-30 добавляет AI-loop секцию:
+AGENTS.md задаёт универсальную конституцию и read-before-action index. Portable agent discipline — обязательный startup context обоих harness: session plan, bootstrap fallback, реальные capabilities, наследуемые поддерживаемые модели Codex, dispatch/checkpoints, shell evidence, сохранение owner authorization и memory policy. Общие инструкции сохраняют SDD/TDD, независимое review, Stage A до UI-кода, Stage B до merge, destructive-infra и release gates. `pnpm issue:create` владеет созданием tracker artifacts; `pnpm pr:land <N>` — каноническим closeout из main-tree после всех применимых gates.
 
-```markdown
-# Agent Instructions — DS Platform
+Effective root startup sets включают этот обязательный reference. `pnpm lint:instruction-budget` проверяет каждый harness отдельно; scoped rules и role profiles загружаются по необходимости. Context telemetry специфична для harness: Codex использует observed current input/window bands, Claude — пороги overlay; отсутствующие или stale значения считаются unavailable. Hook configuration, runtime trust и observed enforcement — разные состояния. Диагностика: `tools/hooks/README.md`; session/ledger adapters: `tools/retro/README.md`.
 
-[... stack list, doc structure из ADR-0006 ...]
+### 10.2 CLAUDE.md (Claude-only overlay)
 
-## AI-loop discipline (ADR-0007)
-
-Every implementation iteration follows the orchestrated iteration cycle:
-
-### Step 1 — READ (always first)
-
-Run `pnpm bootstrap` (alias for `tsx tools/agent-bootstrap.ts`). Read its output. Then load:
-
-- AGENTS.md (this file) — already in your context
-- CLAUDE.md if you are Claude Code
-- Active spec at `apps/docs/content/specs/features/NNN-<slug>/`:
-  - `NNN-requirements.md`
-  - `NNN-design.md`
-  - `NNN-scenarios.feature`
-- ADRs from spec's "Prior decisions" section
-- `gh issue view <N>` for current Issue context and history
-
-### Step 2 — PLAN
-
-Per ADR-0006 §9 conventions (title format `[NNN] EARS-N: ...`, label `kind:ears-handler` / `kind:policy` / `kind:saga-step` / `kind:bug` / `kind:refactor`).
-
-- If no parent Issue exists for the spec: create one with `--body-file` (a `--body` flag must be provided in non-interactive contexts; `gh issue create` without it opens an editor and hangs in CI/Codex):
-  gh issue create --title "Feature NNN: <name>" \
-  --milestone "<Трек> R<n> — <результат>" --label "feature:NNN-<slug>" \
-  --body-file .github/issue_templates/feature.md
-  Then for each EARS-handler from `NNN-requirements.md`:
-  gh issue create --title "[NNN] EARS-N: <description>" \
-  --milestone "<Трек> R<n> — <результат>" --label "feature:NNN-<slug>,kind:ears-handler,agent-ready" \
-  --body "Spec: apps/docs/content/specs/features/NNN-<slug>/. Parent: #<parent-issue>."
-- Use superpowers:writing-plans skill only if the task is multi-step within a single Issue.
-
-### Step 3 — RED (TDD: failing tests first)
-
-Per superpowers:test-driven-development. One Vitest test per EARS:
-it('EARS-3.1: when <trigger>, system shall <behavior>', () => { ... })
-
-### Step 4 — GREEN (minimum code to pass)
-
-### Step 5 — REFACTOR
-
-### Step 6 — ITERATION-END CHECKLIST (hard rules)
-
-Before `git push`, verify all 9 items pass:
-
-1. pnpm test:unit && pnpm test:e2e — green
-2. pnpm generate:all && git diff --exit-code — no drift
-3. pnpm typecheck — green
-4. pnpm lint — green
-5. pnpm lint:module-readme — green (or n/a)
-6. Spec status frontmatter updated (Draft → In dev → Shipped)
-7. pnpm lint:glossary-mdx — green
-8. ADR created if architectural decision was made
-9. `gh issue comment <N>` with summary: file paths, decisions, what's left
-
-If any check fails — fix it, don't push.
-
-### Step 7 — PR OPEN
-
-Title: `<type>(<module>): <description> [#N]`
-Body must contain `Closes #N` linking to the Issue. CI gates (ADR-0006 §7 +
-ADR-0007 §5.2) will block merge if violated.
-
-### Step 8 — REVIEW + MERGE
-
-Запусти интерактивный review через Mode (a) subagent `/review` skill, Mode (b) параллельный
-Codex CLI, или Mode (c) pure human (AGENTS.md §4). Обработай findings, затем merge через
-`pnpm pr:land <N>` после положительного verdict'а — команда прогоняет `merge:gate` (опрос
-check-runs, привязанный к head SHA, плюс head-pinned Mode (a) APPROVE), затем
-`gh pr merge <N> --squash --delete-branch`, затем board Status = Done и teardown ветки. `--auto`
-не используется: ruleset `main` требует ровно один check (`ci`), поэтому auto-merge влил бы PR по
-одному контексту `ci` — без привязки к head SHA и без Mode (a) verdict'а, которые ruleset выразить
-не может (skill `merge-when-green`, ADR-0008 §2.6). CI гейтится
-in-band через `merge:gate`, а не очередью auto-merge от GitHub.
-
-## SDD — hard rule
-
-No production code without a feature spec at apps/docs/content/specs/features/NNN-<slug>/.
-If the feature has no spec, invoke superpowers:brainstorming first.
-
-## TDD — hard rule
-
-No production code without a failing test that motivates it.
-Naming convention: `it('EARS-N: ...', ...)`.
-
-## Prompt-caching
-
-For any LLM call you make (e.g., the interactive `/review` skill subagent), use
-packages/llm-utils/buildContext.ts to construct the system message. This
-ensures cache_control: ephemeral on AGENTS.md / CLAUDE.md / active spec /
-ADRs in a stable prefix order. Cache hit rate target: ≥60% on second+ calls.
-
-## Cost discipline
-
-Cost is tracked manually via the vendor consoles (Anthropic Console, OpenAI Platform)
-in Phase 0. If your work generates expensive calls (e.g., large diff reviews, bulk
-doc generation), flag it in PR description.
-
-## Kill switch
-
-.github/agents-config.json controls global agent activity. If
-`agents_enabled: false` — do not push automated PRs, escalate to human.
-```
-
-### 10.2 CLAUDE.md (Claude-Code overlay) — additive blocks vs ADR-0006 §9.2
-
-ADR-0006 §9.2 уже зафиксировал baseline CLAUDE.md (MCP servers, tool preferences, skill priority, slash commands, notes). DSO-31 implementer **добавляет** к этому baseline следующие блоки. Tool preferences и skill priority блоки из ADR-0006 §9.2 **переиспользуются как есть, не дублируются**:
-
-```markdown
-[... ADR-0006 §9.2 baseline CLAUDE.md content (MCP, tool prefs, skill priority, slash commands, notes) ...]
-
-## SessionStart hook (ADR-0007 §2.5) — NEW
-
-.claude/settings.json contains:
-{
-"hooks": {
-"SessionStart": [{ "type": "command", "command": "pnpm bootstrap" }]
-}
-}
-The `pnpm bootstrap` alias (defined in root package.json as `tsx tools/agent-bootstrap.ts`)
-is used to avoid PATH-resolution issues with the `tsx` binary in different shell contexts.
-The hook runs at session start (timeout ~10s, see §4.5); output is injected into the
-session's additionalContext as a system reminder.
-
-## AI-loop skills priority (additive to §9.2 baseline) — NEW
-
-For DS Platform feature work, invoke skills in this order:
-
-- superpowers:brainstorming — before any new feature spec
-- superpowers:writing-plans — only for multi-step tasks within a single Issue (most Issues are single-task)
-- superpowers:test-driven-development — mandatory before any production code (§3 of ADR-0007 spec)
-- superpowers:verification-before-completion — before pushing
-```
+CLAUDE.md владеет Claude SessionStart injection, Claude model routing/context thresholds и Claude auto-memory bindings. Он ссылается на общую дисциплину вместо её дублирования. Codex его не импортирует; `.codex/agents/` задаёт роли Codex с наследуемыми поддерживаемыми настройками. Указанные в skills tools и модели — запросы capabilities, а не доказательство их наличия. Permissions активного harness и явная авторизация владельца приоритетнее проектной процедуры. Только прямой запрос владельца разрешает обновление памяти Codex; wrap сам по себе разрешает предложения, не запись.
 
 ---
 
@@ -1101,7 +977,7 @@ Phase 0 (Tech Lead + AI, sequential — после того как DSO-31 соз
 | 11 | Обновить `AGENTS.md` (root) с секцией AI-loop discipline | агенты следуют orchestrated iteration cycle | DSO-31 baseline AGENTS.md |
 | 12 | Обновить `CLAUDE.md` (root) с SessionStart hook reference + skill priorities | Claude Code aligned | step 11 |
 | 13 | **[`gh api` — payload `branch-protection.json`]** Применить repository ruleset `main protection`: PR обязателен, required-контекст `ci` (non-strict), linear history, без force-push, без удаления ветки, **ноль** required approvals, admin bypass только в scope `pull_request` (форточка для ветки `changeset-release/main` без check-run'ов). Обоснование: ADR-0008 §2.6. | merge gated server-side | step 9 |
-| 14 | Smoke test: first feature spec через цикл (superpowers:brainstorming → spec → Issues → PR → review → merge) | proof of concept | steps 1-13 |
+| 14 | Smoke test: first feature spec через цикл (project discovery/spec authoring → spec → Issues → PR → review → merge) | proof of concept | steps 1-13 |
 
 Нумерация шагов сохраняет исходную последовательность; отменённые шаги (5, 6, 10) намеренно пропущены.
 
@@ -1121,7 +997,7 @@ Phase 2+ (runtime AI features):
 - **ADR-0001** — Zitadel IdP: future runtime LLM gateway (§9.1) admin защищён тем же OIDC tenant.
 - **ADR-0002 §6 BullMQ** — async queue для Content Pipeline AI jobs (§9.1).
 - **ADR-0003 §7 pgvector** — vector DB default; trigger на Qdrant (§9.4).
-- **ADR-0004 §13 ESLint `no-vercel-only-api`** — интерактивный subagent `/review` применяет это правило в SDD-compliance prompt.
+- **ADR-0004 §13 ESLint `no-vercel-only-api`** — интерактивный subagent `request-mode-a-review` применяет это правило в SDD-compliance prompt.
 - **ADR-0005** — mobile clients для AI-рекомендаций (v3) будут вызывать backend, backend → LiteLLM (§9.1).
 - **ADR-0006 §7 drift detection** — DSO-30 расширяет AI-specific guards (§5.2).
 - **ADR-0006 §4 SDD format** — DSO-30 наследует 3-file feature-spec.
@@ -1133,7 +1009,7 @@ Phase 2+ (runtime AI features):
 ## 13. Open follow-ups (DSO-31+ и beyond)
 
 1. **TDD signal heuristic false-positive rate** — после первых 10 PR в Phase 1 переоценить, переключать ли на BLOCK.
-2. **Codex cloud activation playbook** — конкретный setup в момент когда Tech Lead захочет первую async-задачу (label conventions, GitHub App config).
+2. **Codex cloud activation playbook** — конкретный setup в момент когда Tech Lead захочет первую async-задачу (проверить фактические integration, permissions и trigger; независимо от локального Codex).
 3. **Phase 3 low-risk criteria** — формальный список classes изменений (test-only, doc-only, devDep bumps) для auto-merge активации.
 4. **PR template** — `.github/pull_request_template.md` с обязательными секциями (Closes #N, spec link, checklist).
 5. **Bootstrap caching** — для частых вызовов (если будут такие сценарии) — кешировать gh API calls на ≤60s; в Phase 0 не нужно (один вызов на сессию).

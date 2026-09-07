@@ -1,13 +1,15 @@
 ---
 title: "research-ui-element"
-description: "Procedural skill (dispatch): before building any element class not yet in the design constitution, an Opus subagent runs the whitelist + web-first best-practice research and returns a ready-to-append constitution section (findings + 2-3 rendered options + token mapping) for the owner's Stage-A pick."
+description: "Procedural skill (dispatch): before building any element class not yet in the design constitution, a reviewer-grade subagent runs the whitelist + web-first best-practice research and returns a ready-to-append constitution section (findings + 2-3 rendered options + token mapping) for the owner's Stage-A pick."
 name: research-ui-element
 mode: dispatch
 ---
 
 # research-ui-element
 
-**Kind:** procedural · **Mode:** dispatch (the lead agent dispatches a fresh-context Opus subagent to research an element class it is about to build).
+**Execution contract:** Read [portable agent discipline](../../agent-discipline.md) before first use; map tools/models to the active harness and preserve its authorization, context and memory rules.
+
+**Kind:** procedural · **Mode:** dispatch (the lead agent dispatches a fresh-context reviewer-grade subagent to research an element class it is about to build).
 
 This skill makes design research **durable and real** instead of ephemeral and "performed-not-real" (epic #340 cause #1). Its output is **one section of the [design constitution](../../design/constitution.md)** — written once, reused forever. A covered element class is **never re-researched**; this skill runs only for a class that has **no section yet** (status `on-demand` in the constitution taxonomy).
 
@@ -19,7 +21,7 @@ Decide by the element class the task will build, not by feel:
 - **Do NOT dispatch** — the class already has a `researched` section (button, field, error-validation, tabs, link, async-submit motion). **Reuse it.** Re-running research on a covered class is the waste this store exists to prevent.
 - **Revision, not research** — if a covered standard genuinely needs to change, that is an inline constitution edit (with the driver recorded in the PR), not a fresh research dispatch.
 
-The lead passes this file's body as the subagent's system prompt plus a user message naming the element class, the target app/surface, and the brand source-of-truth paths.
+The lead gives the subagent this file path as the task contract plus the element class, target app/surface and brand source paths.
 
 ---
 

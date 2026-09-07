@@ -2,12 +2,12 @@
 /**
  * tools/agent-bootstrap.ts — deterministic session bootstrap.
  *
- * Spec: docs/superpowers/specs/2026-05-15-ds-platform-ai-stack-design-en.md §4
- * ADR:  docs/adr/0007-ai-stack-en.md §2.5
+ * Spec: apps/docs/content/adr/0007-ai-stack-design-en.md §4
+ * ADR:  apps/docs/content/adr/0007-ai-stack-en.md §2.5
  *
  * Prints a ≤ 2 KB markdown snapshot of git + GitHub state + active spec metadata.
- * Used by Claude Code SessionStart hook (pnpm bootstrap), Codex AGENTS.md
- * "Before any task" first step, or manual invocation.
+ * Used by the SessionStart hook (pnpm bootstrap), or the manual fallback
+ * required by AGENTS.md §3.5 and portable agent discipline at session entry.
  *
  * FACTS ONLY (#1700). The former `## Recommendation` rollup is gone: it was a
  * derived re-ranking of the same buckets printed just above it, and AGENTS.md

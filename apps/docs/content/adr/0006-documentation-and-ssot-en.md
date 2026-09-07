@@ -64,7 +64,7 @@ Principle 7 of the reference doc applied literally: each type of truth has exact
 | Module README                                | `apps/*/src/<module>/README.md` (module dir = direct child of `apps/<app>/src/` holding a `*.module.ts`) | Rendered Fumadocs + lint checks README presence (exports ↔ README in v2)                                  |
 | Prose narrative (Vision, OKRs, PRD)          | `apps/docs/content/product/*.md`                                                                         | Markdown in Git (IDE / PR) + Fumadocs render                                                              |
 | Operations (runbooks, monitoring)            | `apps/docs/content/operations/`                                                                          | Fumadocs render                                                                                           |
-| AI constitution                              | `AGENTS.md` (root) + `CLAUDE.md` (Claude-Code overrides)                                                 | Read by AI first at session start                                                                         |
+| AI constitution                              | `AGENTS.md` + [portable agent discipline](../agent-discipline.md); `CLAUDE.md` (Claude only)             | Read by AI first at session start                                                                         |
 
 "Copying a value between Masters is forbidden" — this is the best indicator of potential drift. If a value appears in two places, the second must be an auto-generated artifact, not a manual copy.
 
@@ -148,11 +148,11 @@ Outputs of Spec-Driven Development:
 
 ### 5. AI Constitution: AGENTS.md + CLAUDE.md split
 
-`AGENTS.md` at the root of the DS-Platform repo — **universal constitution** for all AI agents (Claude/Cursor/Cody/GPT-Codex). Contains: stack list, repo doc structure, mandatory "Before any task" / "During implementation" / "After implementation" checklists, PR requirements, forbidden actions (silent arch changes, hardcoded glossary IDs, etc.). Immutable in substance — updated only when a new architecture layer is added. Structure follows reference doc §4.1.
+[`AGENTS.md`](../../../../AGENTS.md) is the universal constitution for every agent working in the repository, including Claude Code and Codex. It owns the read-before-action index, task-kind routing, hard gates and canonical artifact locations. Its mandatory shared startup reference, [portable agent discipline](../agent-discipline.md), owns the session plan, capability mappings, dispatch/context policy, authorization and memory rules. Task procedures live only in the [project skill catalog](../skills/); read the selected skill directly by path.
 
-`CLAUDE.md` — Claude-Code-specific overlay. Contains: a link to AGENTS.md as baseline, MCP server config, Claude-Code skill preferences (pp-plane CLI first), tool-allowlist, hook patterns, slash-command shortcuts. May change frequently.
+[`CLAUDE.md`](../../../../CLAUDE.md) is a thin Claude Code overlay for runtime/context, model routing and auto-memory bindings. Codex reads the shared contract and its own configured roles; it does not implicitly import this overlay or Claude rules. Configuration files and observed tool availability determine actual capabilities; prose never proves a hook is active.
 
-`.cursor/rules/` — added when/if Cursor joins the team.
+These instructions evolve through reviewed PRs as the working discipline changes. Preserve one canonical home per rule, EN/RU parity in paired ADRs, and the effective startup budgets checked by `pnpm lint:instruction-budget`. The amendment-versus-inline decision follows AGENTS.md §6 and `do-adr-revision`; accepted status alone does not make a paper decision immutable. Design spec §9 links to the actual instruction files instead of maintaining a second executable template. Add an overlay for another harness only when it is used and its capability mapping is verified.
 
 ### 6. Glossary Mechanism: file-per-term glossary + 3-layer validation + roundtrip check
 
@@ -209,7 +209,7 @@ To avoid false-SSOT in Git (`tasks.md`), task execution state lives in task trac
 
 | What we track                                                                          | Where                                             | Why                                                                                                                                                         |
 | -------------------------------------------------------------------------------------- | ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Stack ADRs, infra milestones, product/PM decisions, hiring, fundraising                | Plane workspace `doctor-school` (DSP/DSC/DSM/DSO) | Strategic level, cross-team, Product Lead works in Plane natively, CLAUDE.md pp-plane-first rule                                                            |
+| Stack ADRs, infra milestones, product/PM decisions, hiring, fundraising                | Plane workspace `doctor-school` (DSP/DSC/DSM/DSO) | Strategic level, cross-team, Product Lead works in Plane natively, AGENTS.md §3.7                                                                           |
 | Implementation tasks for DS Platform code (EARS handlers, bugs, refactors, deps, perf) | **GitHub Issues** in DS Platform repo             | PR-native (auto-close, mention, sub-issues, GitHub Projects v2), AI works with `gh` CLI in the repo, `feature:NNN-<slug>` labels bind Issues to their specs |
 | Cross-cutting initiatives (release planning, infrastructure milestone)                 | Plane parent + GitHub Milestone children          | Strategic owner = Plane, implementation details = GitHub                                                                                                    |
 
@@ -231,7 +231,7 @@ To avoid false-SSOT in Git (`tasks.md`), task execution state lives in task trac
 - Start of session in DS Platform repo: `gh issue view N` → read linked feature spec → implement → PR auto-close on merge.
 - AI agent does NOT open Plane for code-level work — that would create friction. Plane is opened only for strategic context (e.g., reading a DSO-ADR when referenced).
 
-**Plane CLI rule:** `AGENTS.md` / `CLAUDE.md` fix the rule: "`gh` CLI first for code-level Issues; pp-plane — for cross-tracker references only (Plane DSO-XXX from an ADR/spec)."
+**Plane CLI rule:** AGENTS.md §3.7 owns the shared Plane entry and CLI discipline. Code-level work stays in GitHub; strategic/cross-team work uses Plane. Read [repository conventions](../../../../.claude/rules/repo-conventions.md) before Issue actions; `pnpm issue:create` is the only creation path for GitHub Issues. Claude-specific bindings do not redefine this tracker split.
 
 ### 10. Repository Topology in the Monorepo
 

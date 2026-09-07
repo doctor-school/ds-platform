@@ -1,60 +1,15 @@
 #!/usr/bin/env tsx
 /**
- * tools/lint/instruction-budget-lint.ts — anti-bloat budget for the always-on
- * agent context (epic #247, child #250).
- *
- * Why: the always-on context (AGENTS.md + CLAUDE.md + every path-less
- * .claude/rules/*.md, loaded in full every session; MEMORY.md, of which only
- * the first 200 lines / 25 KB load) suffers "context rot" as it grows — the model's recall of any single rule degrades as
- * total tokens rise (Anthropic, "Effective context engineering for AI agents").
- * Anthropic's CLAUDE.md guidance is "target under 200 lines"; auto-memory loads
- * only the first 200 lines OR 25 KB of MEMORY.md, whichever comes first. We
- * adopt that as a hard ceiling for every always-on file and let `/wrap` (and,
- * optionally, CI) enforce it so the file cannot silently grow back.
- *
- * Sources:
- *   https://code.claude.com/docs/en/memory  (size + 200-line/25 KB load rule)
- *   https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents
- *
- * Budgets (per file):
- *   - lines:  <= 200   (Anthropic CLAUDE.md target + MEMORY.md load cutoff)
- *   - bytes:  <= 25 KB  (MEMORY.md load cutoff; applied to all three for headroom)
- *
- * Budget (always-on TOTAL, #1678): <= 30 KB across the repo-tracked files that
- * load at session start (AGENTS.md + CLAUDE.md + path-less .claude/rules/*.md).
- * MEMORY.md is deliberately OFF the total: it is machine-local (auto-memory dir,
- * outside git), invisible in CI, and already bounded by its own 200-line / 25 KB
- * load cutoff — counting it would make the total verdict differ between a
- * developer's box and CI, i.e. non-deterministic. It keeps its per-file budget.
- * Per-file caps alone cannot bound the window: three files
- * each comfortably inside 25 KB still open a 75 KB session, and context rot is a
- * function of the TOTAL, not of any single file. The cap is a hard FAIL (BLOCK,
- * exit 1) in the same style as a per-file overrun — the remedy is identical:
- * relocate detail into a `paths:`-scoped rules file or a read-on-demand skill,
- * both of which are off the total by construction.
- *   CLAUDE.md additionally carries a softer high-signal WARN target of 120 lines.
- *   An always-on file within budget but with < 256 B of byte-headroom left WARNs
- *   (#1042) — the next edit would force ad-hoc squeezing; compact proactively.
- *
- * A `.claude/rules/*.md` file carrying `paths:` frontmatter is file-glob-
- * triggered, not loaded at session start (and not re-injected after /compact),
- * so it keeps its per-file budget but is OFF the always-on total (#1370) —
- * exactly like a read-on-demand skill.
- *
- * Skills (`apps/docs/content/skills/<name>/SKILL.md`, #416) are read-on-demand, not
- * always-on — they never enter the session-start window, so the concern is
- * per-file scannability, not context rot. We reuse the SAME 200-line / 25 KB
- * ceiling (no new magic number; every skill already fits with headroom — the
- * largest is ~13 KB) but at WARN level in Phase 0: an over-budget skill prints a
- * warning and is listed, without failing the run. Skills do NOT contribute to
- * the always-on total.
- *
- * Run: `pnpm lint:instruction-budget` (also the `/wrap` budget step).
- * Failures: stderr + exit 1. Success: stdout summary + exit 0.
- *
- * Note: MEMORY.md lives OUTSIDE git (auto-memory dir). It is checked only when
- * present and resolvable locally; in CI (no auto-memory dir) it is skipped with
- * a note, so the always-on repo files (AGENTS.md, CLAUDE.md) are the CI gate.
+ * Effective root startup budgets for Claude Code and Codex (#250, #1918).
+ * Each file <=200 lines /25 KB; each harness total <=30 KB.
+ * Claude: AGENTS + CLAUDE + path-less rules. Codex: root AGENTS.override
+ * when present, otherwise AGENTS. Both include the mandatory shared startup
+ * reference: a manual mandatory read consumes the same context as an import.
+ * Scoped rules and role definitions keep per-file caps; catalog skills and
+ * their reference docs are on-demand WARN-only. Local Claude MEMORY keeps its
+ * per-file cap, excluded from deterministic repo totals. Global/ancestor files,
+ * nested cwd chains and actual model usage are outside this root-only report.
+ * Optional --harness all|claude|codex; default all. Unknown options fail closed.
  */
 import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { resolve, dirname } from "node:path";
@@ -67,6 +22,15 @@ const REPO_ROOT = process.env.LINT_FIXTURE_ROOT
   ? resolve(process.env.LINT_FIXTURE_ROOT)
   : resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const TAG = "[instruction-budget]";
+const args = process.argv.slice(2);
+const harness = args.length === 0 ? "all" : args.length === 2 && args[0] === "--harness" ? args[1] : "invalid";
+if (!["all", "claude", "codex"].includes(harness)) {
+  process.stderr.write(`${TAG} Usage: pnpm lint:instruction-budget [--harness all|claude|codex]\n`);
+  process.exit(2);
+}
+const checkClaude = harness !== "codex";
+const checkCodex = harness !== "claude";
+const codexRootFile = existsSync(resolve(REPO_ROOT, "AGENTS.override.md")) ? "AGENTS.override.md" : "AGENTS.md";
 
 const MAX_LINES = 200;
 const MAX_BYTES = 25 * 1024; // 25 KB, matching the MEMORY.md auto-load cutoff
@@ -82,6 +46,7 @@ interface Target {
   warnOnly?: boolean; // over-budget WARNs instead of failing (Phase-0 skills, #416)
   offTotal?: boolean; // not part of the always-on total (read-on-demand skills, `paths:`-scoped rules, MEMORY.md)
   sessionStart?: boolean; // loads in full at session start → eligible for the byte-headroom WARN (#1042)
+  codexTotal?: boolean; // part of Codex's root instruction chain, not the Claude import set
 }
 
 // MEMORY.md path: derive from this repo's auto-memory dir convention
@@ -104,11 +69,18 @@ function memoryPath(): string | null {
   return existsSync(candidate) ? candidate : null;
 }
 
-const memPath = memoryPath();
+const memPath = checkClaude ? memoryPath() : null;
 
 const targets: Target[] = [
-  { label: "AGENTS.md", path: resolve(REPO_ROOT, "AGENTS.md"), optional: false, sessionStart: true },
-  { label: "CLAUDE.md", path: resolve(REPO_ROOT, "CLAUDE.md"), optional: false, softLines: CLAUDE_SOFT_LINES, sessionStart: true },
+  ...(checkClaude || (checkCodex && codexRootFile === "AGENTS.md")
+    ? [{ label: "AGENTS.md", path: resolve(REPO_ROOT, "AGENTS.md"), optional: false, sessionStart: true, offTotal: !checkClaude, codexTotal: checkCodex && codexRootFile === "AGENTS.md" }]
+    : []),
+  ...(checkClaude
+    ? [{ label: "CLAUDE.md", path: resolve(REPO_ROOT, "CLAUDE.md"), optional: false, softLines: CLAUDE_SOFT_LINES, sessionStart: true }]
+    : []),
+  ...(checkCodex && codexRootFile === "AGENTS.override.md"
+    ? [{ label: codexRootFile, path: resolve(REPO_ROOT, codexRootFile), optional: false, sessionStart: true, offTotal: true, codexTotal: true }]
+    : []),
   // MEMORY.md keeps its per-file budget and its headroom WARN, but is OFF the
   // always-on total (#1680): it lives outside git, so counting it would make the
   // total verdict machine-dependent — green in CI, red on one developer's box —
@@ -150,7 +122,7 @@ function hasPathsFrontmatter(raw: string): boolean {
 // the per-file budget applies and a new always-on rule can't silently grow the
 // window unnoticed.
 const rulesDir = resolve(REPO_ROOT, ".claude", "rules");
-if (existsSync(rulesDir)) {
+if (checkClaude && existsSync(rulesDir)) {
   for (const f of readdirSync(rulesDir).filter((n) => n.endsWith(".md")).sort()) {
     const p = resolve(rulesDir, f);
     const lazy = hasPathsFrontmatter(readFileSync(p, "utf8"));
@@ -167,6 +139,22 @@ if (existsSync(rulesDir)) {
   }
 }
 
+// Mandatory manual startup reads consume context just like automatic imports.
+// Role definitions remain dispatch-specific, outside the root startup total.
+const portableReference = resolve(REPO_ROOT, "apps/docs/content/agent-discipline.md");
+const requiresPortableReference = targets.some((target) =>
+  target.sessionStart && existsSync(target.path) && readFileSync(target.path, "utf8").includes("apps/docs/content/agent-discipline.md"),
+);
+if (requiresPortableReference || existsSync(portableReference)) {
+  targets.push({ label: "agent-discipline.md (mandatory startup read)", path: portableReference, optional: false, offTotal: !checkClaude, codexTotal: checkCodex, sessionStart: true });
+}
+const codexAgentsDir = resolve(REPO_ROOT, ".codex/agents");
+if (checkCodex && existsSync(codexAgentsDir)) {
+  for (const name of readdirSync(codexAgentsDir).filter((n) => n.endsWith(".toml")).sort()) {
+    targets.push({ label: `Codex role: ${name} (on-demand)`, path: resolve(codexAgentsDir, name), optional: false, offTotal: true });
+  }
+}
+
 // Skills (apps/docs/content/skills/*/SKILL.md, #416) are read-on-demand — cap
 // them so a skill can't silently re-bloat, but at WARN level in Phase 0 and OFF
 // the always-on total (they never load at session start). Same 200 L / 25 KB
@@ -180,6 +168,9 @@ if (existsSync(skillsDir)) {
     const p = resolve(skillsDir, d, "SKILL.md");
     if (existsSync(p)) {
       targets.push({ label: `skill: ${d} (on-demand)`, path: p, optional: false, warnOnly: true, offTotal: true });
+      for (const name of readdirSync(resolve(skillsDir, d)).filter((n) => n.endsWith(".md") && n !== "SKILL.md").sort()) {
+        targets.push({ label: `skill reference: ${d}/${name} (on-demand)`, path: resolve(skillsDir, d, name), optional: false, warnOnly: true, offTotal: true });
+      }
     }
   }
 }
@@ -187,6 +178,8 @@ if (existsSync(skillsDir)) {
 let failed = false;
 let totalLines = 0;
 let totalBytes = 0;
+let codexLines = 0;
+let codexBytes = 0;
 const lines: string[] = [];
 
 for (const t of targets) {
@@ -205,6 +198,10 @@ for (const t of targets) {
   if (!t.offTotal) {
     totalLines += lineCount;
     totalBytes += bytes;
+  }
+  if (t.codexTotal) {
+    codexLines += lineCount;
+    codexBytes += bytes;
   }
 
   const overLines = lineCount > MAX_LINES;
@@ -244,12 +241,14 @@ for (const t of targets) {
   }
 }
 
-const overTotal = totalBytes > MAX_TOTAL_BYTES;
+const overTotal = checkClaude && totalBytes > MAX_TOTAL_BYTES;
+if (checkClaude) {
 lines.push(
   `${TAG} ${(overTotal ? "OVER BUDGET" : "ok").padEnd(11)} always-on total: ${totalLines} lines / ${(totalBytes / 1024).toFixed(1)} KB ` +
     `(limit ${(MAX_TOTAL_BYTES / 1024).toFixed(0)} KB) ` +
-    `(AGENTS.md + CLAUDE.md + path-less .claude/rules/*.md; MEMORY.md excluded — machine-local)`,
+    `(Claude always-on total: AGENTS.md + CLAUDE.md + mandatory shared startup reference + path-less .claude/rules/*.md; MEMORY.md excluded — machine-local)`,
 );
+}
 if (overTotal) {
   process.stderr.write(
     `${TAG} always-on total: ${(totalBytes / 1024).toFixed(1)} KB > ${(MAX_TOTAL_BYTES / 1024).toFixed(0)} KB. ` +
@@ -257,6 +256,14 @@ if (overTotal) {
       `Relocate detail to a \`paths:\`-scoped .claude/rules/*.md file or a read-on-demand skill (both off the total).\n`,
   );
   failed = true;
+}
+if (checkCodex) {
+  const overCodexTotal = codexBytes > MAX_TOTAL_BYTES;
+  lines.push(`${TAG} ${(overCodexTotal ? "OVER BUDGET" : "ok").padEnd(11)} Codex always-on total: ${codexLines} lines / ${(codexBytes / 1024).toFixed(1)} KB (limit 30 KB) (${codexRootFile} + mandatory shared startup reference; root cwd, global instructions/memory and on-demand files excluded)`);
+  if (overCodexTotal) {
+    process.stderr.write(`${TAG} Codex always-on total: ${(codexBytes / 1024).toFixed(1)} KB > 30 KB. Compact the root instruction chain.\n`);
+    failed = true;
+  }
 }
 
 process.stdout.write(lines.join("\n") + "\n");

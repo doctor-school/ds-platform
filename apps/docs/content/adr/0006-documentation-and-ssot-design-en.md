@@ -96,7 +96,7 @@ This document is the implementation detail for ADR-0006. The ADR records "what a
 | Module README           | `apps/*/src/<module>/README.md` (module dir = direct child of `apps/<app>/src/` holding a `*.module.ts`)                                                                                      | Rendered Fumadocs                                                                                       | (none)                                                                                               | `module-readme-lint.ts`                       |
 | Prose narrative         | `apps/docs/content/product/{vision,prd/*,business-rules,user-journeys}.md`                                                                                                                    | Rendered Fumadocs                                                                                       | (none)                                                                                               | Markdown link check; glossary-mdx-lint        |
 | Operations              | `apps/docs/content/operations/*.md`, `runbooks/*.md`                                                                                                                                          | Rendered Fumadocs                                                                                       | (none)                                                                                               | Markdown link check                           |
-| AI constitution         | `AGENTS.md` (root), `CLAUDE.md` (root)                                                                                                                                                        | (none — read directly by AI)                                                                            | (none)                                                                                               | Manual review                                 |
+| AI constitution         | `AGENTS.md` + [portable agent discipline](../agent-discipline.md); `CLAUDE.md` (Claude only)                                                                                                  | (none — read directly by AI)                                                                            | (none)                                                                                               | Manual review                                 |
 
 **No other "source of truth."** If a value appears in two places outside this table, it is a false-SSOT.
 
@@ -956,20 +956,7 @@ Decomposition of the spec into atomic tasks happens in GitHub Issues (one EARS-h
    Академия R1 — Архив записей — the next Academy release; holds 1–4 feature-level Issues, this feature among them.
    ```
 
-2. **Create Issues** — one per EARS-handler + cross-cutting tasks (DB migration, OpenAPI snapshot update, Playwright tests, Module README, glossary updates if new terms). The `feature:NNN-<slug>` label binds the Issue to its spec; the Milestone groups execution under the release:
-
-   ```bash
-   gh issue create \
-     --milestone "Академия R1 — Архив записей" \
-     --title "[001] EARS-3: When OIDC callback received, the system shall ..." \
-     --label "feature:001-doctor-onboarding,kind:ears-handler" \
-     --body "Spec: apps/docs/content/specs/features/001-doctor-onboarding/001-requirements.md#ears-3
-
-   ## Implementation
-   - Handler: `apps/api/src/auth/oidc-callback.handler.ts`
-   - Test: `oidc-callback.handler.test.ts` (must reference EARS-3 in describe)
-   "
-   ```
+2. **Create Issues** through [`open-ears-issues`](../skills/open-ears-issues/SKILL.md), using only `pnpm issue:create`. The skill owns parent/child creation, inherited release milestones, required kind/source/track labels, native technical dependency links and user-facing integration deliverables. Its current command forms and field contract are authoritative; do not duplicate a creation recipe here.
 
 3. **Update `NNN-requirements.md` frontmatter** `tracker:` field → URL of the release Milestone the feature ships in.
 
@@ -998,130 +985,20 @@ Decomposition of the spec into atomic tasks happens in GitHub Issues (one EARS-h
 
 ### 9.1 AGENTS.md (root)
 
-```markdown
-# Agent Instructions — DS Platform
+The instruction structure is defined by the committed files, with one canonical home per rule:
 
-## Stack
+- [`AGENTS.md`](../../../../AGENTS.md) — universal constitution, read-before-action index, task routing and hard gates.
+- [Portable agent discipline](../agent-discipline.md) — mandatory shared startup reference for the session plan, tool/model mappings, context, authorization, evidence and memory policy; counted in both harness budgets.
+- [Repository conventions](../../../../.claude/rules/repo-conventions.md) and [dev-stand rules](../../../../.claude/rules/dev-stand.md) — on-demand references read before the actions indexed by AGENTS.md §0. Their directory name does not restrict the shared rules to Claude Code; Codex reads them explicitly.
+- [Project skill catalog](../skills/) — the sole procedure source, selected by AGENTS.md §3 and read directly by path. The SDD triplet is the implementation plan; vendor skill packs are disabled. `brainstorming` is the vendored scoped step of the project orchestrators.
 
-- Runtime: Node.js 22 LTS
-- Framework: NestJS 11 (backend, ADR-0002), Next.js 15 App Router (frontend, ADR-0004)
-- Mobile: React Native 0.78 + Expo SDK 53 (ADR-0005)
-- DB: PostgreSQL 17 + Drizzle ORM (ADR-0003)
-- Schema/Validation: Zod (single SSOT — ADR-0002 §3)
-- Auth/RBAC: Zitadel OIDC (closed per ADR-0001 §8, DSP-209) + Cerbos RBAC (ADR-0003 §5)
-- Realtime: Centrifugo (ADR-0002 §7)
-- CMS: Payload v3 content-only (ADR-0004 §7)
-- Test: Vitest + Playwright + Maestro (mobile)
-- Observability: GlitchTip (Sentry-API-compat) + PostHog
-
-## Documentation structure
-
-- /AGENTS.md, /CLAUDE.md — AI constitution (this file + Claude-specific)
-- /docs/adr/ — accepted architectural decisions (immutable)
-- /apps/docs/content/specs/tech/ — architectural specs (brainstorm-style)
-- /apps/docs/content/specs/features/NNN/ — feature specs (SDD: req+design+scenarios; tasks live in GitHub Issues)
-- /apps/docs/content/product/glossary/ — domain terms (canonical)
-- /apps/docs/content/architecture/ — overview + C4
-- /apps/docs/content/operations/ — runbooks
-- /apps/*/src/<module>/README.md — module README per ADR-0006
-- /packages/schemas/ — Zod schemas (API SSOT)
-- /packages/db/schema/ — Drizzle schemas (DB SSOT)
-- /packages/glossary/src/ids.ts — GENERATED, never edit
-
-## Before any task
-
-1. `gh issue view <N>` — read the Issue (it links to feature spec + EARS-ID).
-2. Read the feature spec at `apps/docs/content/specs/features/<NNN>/<NNN>-requirements.md` — full EARS context.
-3. Read related ADRs listed in spec's "Prior decisions" section.
-4. Check `packages/schemas/<module>/*.ts` for current Zod contract.
-5. Check `packages/db/schema/<module>.ts` for current DB schema.
-6. Check `apps/<app>/src/<name>/README.md`.
-
-## During implementation
-
-1. Respect existing architecture (see ADRs).
-2. Do not change public API without updating `packages/schemas/<module>` in same PR (OpenAPI auto-regenerates).
-3. Do not change DB schema without `pnpm db:generate` migration in same PR.
-4. Do not hardcode glossary IDs as strings — `import { GLOSSARY_IDS } from '@ds/glossary/ids'`.
-5. Do not emit undocumented `@OutboxEmit('...')` events — add to spec's events.md first.
-6. Keep changes scoped to the assigned GitHub Issue (one EARS-handler per Issue per PR).
-
-## After implementation
-
-- Update `NNN-requirements.md` if behaviour diverged from spec
-- Run `pnpm generate:all` and commit generated artifacts
-- Update module README if module boundaries changed
-- Update glossary if new domain terms appeared
-- Add ADR if non-trivial architectural decision was made
-
-## PR requirements
-
-Every PR must include:
-
-- code + unit tests
-- docs updates OR explicit "no docs needed" note in PR description
-- migration (if DB changed)
-- updated OpenAPI snapshot (auto via `pnpm generate:openapi`)
-- ADR (if architectural)
-
-## Forbidden
-
-- Silent architecture changes (must add ADR)
-- Hardcoded glossary canonical IDs (use `@ds/glossary/ids`)
-- Undocumented domain events (must appear in spec events.md)
-- Editing accepted ADRs after status: Accepted (create superseding ADR)
-- Editing generated files (look for `// AUTO-GENERATED` header)
-- Editing past migrations in `apps/api/drizzle/` (append-only; per ADR-0008 §2.3)
-- Bypassing module boundaries
-- Skipping CI hooks (--no-verify)
-- Vercel-only API usage (ESLint rule `no-vercel-only-api` blocks this)
-- class-validator decorators (ESLint rule `no-class-validator` per ADR-0002)
-
-## References
-
-- /docs/adr/0001..NNNN.md — accepted decisions
-- /docs/superpowers/specs/ — design specs
-- /apps/docs/content/specs/features/ — feature specs
-- /apps/docs/content/product/glossary/ — domain terms
-```
+Instruction changes use a reviewed PR and `pnpm lint:instruction-budget`. The actual constitution and skill contracts govern spec-first work, TDD, independent review, owner approvals, decision-debt and canonical landing. This section is a map to those contracts, not another copy of their checklists. ADR revision uses [`do-adr-revision`](../skills/do-adr-revision/SKILL.md), including paired EN/RU changes and both-direction cross-reference checks.
 
 ### 9.2 CLAUDE.md (Claude-Code overlay)
 
-```markdown
-# Claude Code instructions — DS Platform
+[`CLAUDE.md`](../../../../CLAUDE.md) imports the shared constitution and adds only Claude runtime/context, model routing and auto-memory bindings. The active configuration under `.claude/` determines configured hooks and roles. Codex uses `.codex/` configuration and the shared capability mappings without implicitly reading the Claude overlay. Verify available tools and configured/trusted/observed hook state; never treat a sample MCP name, role profile or slash command as proof of a live capability. Hook diagnostics and activation procedure live in [`tools/hooks/README.md`](../../../../tools/hooks/README.md).
 
-Inherit from `/AGENTS.md` (universal AI constitution). This file adds Claude-Code-specific behaviour.
-
-## MCP servers configured
-
-- plane-pp-mcp — DS Platform Plane workspace `doctor-school`
-- payload — Payload v3 admin (apps/cms) for AI content reads (read-only by default)
-
-## Tool preferences
-
-- **For code-level task tracking** (current sprint, EARS-handler Issues, bugs, refactors): `gh` CLI first — `gh issue view`, `gh issue list --milestone`, `gh pr create`. Issues live in DS Platform repo.
-- **For strategic / cross-tracker references** (Plane DSO-XXX из ADR/spec): `plane-pp-cli`.
-- For DB inspection: `drizzle-kit introspect:pg` over raw `psql`
-- For schema changes: edit `packages/db/schema/<module>.ts`, then `pnpm db:generate` — never hand-write migrations
-
-## Skill priority
-
-- Before any creative work: invoke superpowers:brainstorming
-- Before implementation: invoke superpowers:writing-plans
-- Before claiming work complete: invoke superpowers:verification-before-completion
-- For Fumadocs MDX issues: TBD skill (DSO-31 may author)
-
-## Slash commands
-
-- `/spec NNN` — open feature spec NNN in editor
-- `/adr` — open most recent ADR
-
-## Notes for Claude
-
-- Skill output language: Russian (per project convention)
-- Doc-as-SSOT — STRICT rule. Read docs first, code second (per [[feedback_docs_as_ssot]])
-- No bias arguments — see [[feedback_tech_stack_criteria_no_team_skill]]
-```
+Shared procedures never route through a vendor skill pack. Runtime bindings and permission policies belong to the active harness; explicit owner authorization and the shared discipline retain their scope across turns.
 
 ---
 
@@ -1145,7 +1022,7 @@ Phase 0.5 (after Phase 0 is ready):
 
 - Product Lead pilot-edits Vision through a PR (authoring smoke test).
 - Tech Lead writes the first feature spec in SDD format (`docs/content/specs/features/001-doctor-onboarding/` — 3 files, no tasks.md).
-- **Create (or reuse) the release GitHub Milestone** (e.g. `«Академия R1 — Архив записей»`) + Issues per EARS-handler via `gh issue create`, each carrying the `feature:001-doctor-onboarding` label. Fill in the `tracker:` URL frontmatter in `NNN-requirements.md`.
+- **Create (or reuse) the release GitHub Milestone** (e.g. `«Академия R1 — Архив записей»`) + Issues per EARS-handler via `pnpm issue:create` and `open-ears-issues`, each carrying the `feature:001-doctor-onboarding` label. Fill in the `tracker:` URL frontmatter in `NNN-requirements.md`.
 - **Setup GitHub Project v2 "DS Platform Implementation"** with swimlanes by feature label.
 - Drift detection in CI begins blocking merge.
 

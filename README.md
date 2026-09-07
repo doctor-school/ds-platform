@@ -13,7 +13,7 @@ Phase 0 (greenfield, brainstorm complete). Pre-pilot target: 2026 Q3 (TBD).
 - **Frontend:** Next.js 16 + Refine; 5 apps — `apps/doctor/` (`doctor.school` storefront), `apps/portal/` (`academy.doctor.school`), `apps/promo/`, `apps/admin/`, `apps/cms/` (Payload v3 content-only) (ADR-0004, two-storefront topology ADR-0015)
 - **Mobile:** React Native + Expo + WatermelonDB (ADR-0005); `apps/mobile/`
 - **Docs:** Fumadocs (`apps/docs/`) + glossary in `apps/docs/content/product/glossary/` (ADR-0006)
-- **AI dev loop:** Claude Code + Codex async + reviewer-bot (ADR-0007)
+- **AI dev loop:** Claude Code and local Codex with shared disciplines and independent interactive review (ADR-0007); no automated reviewer-bot
 - **Repo:** pnpm workspaces + Turborepo + changesets + GitHub Actions CI on GitHub-hosted runners (ADR-0008 §2.8)
 - **Identity:** Zitadel (ADR-0001 §8, closed per DSP-209) + Cerbos RBAC (ADR-0003 §5)
 
@@ -39,7 +39,7 @@ pnpm --filter @ds/api dev   # single app
 
 ## Contribute
 
-See AGENTS.md (universal constitution) and CLAUDE.md (Claude Code overlay).
+Read [AGENTS.md](AGENTS.md) and [portable agent discipline](apps/docs/content/agent-discipline.md) for both harnesses. [CLAUDE.md](CLAUDE.md) adds only Claude Code bindings; Codex loads roles from `.codex/agents/` and project skills through the `.agents/skills` bridge materialized by `pnpm install`. Hooks are capabilities to verify, not implied guarantees: see [adapter diagnostics](tools/hooks/README.md). Instruction budgets: `pnpm lint:instruction-budget` checks both root sets; `--harness codex` / `--harness claude` inspects one.
 
 ## Owners
 

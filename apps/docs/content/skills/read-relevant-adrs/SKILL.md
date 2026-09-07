@@ -7,6 +7,8 @@ mode: inline
 
 # read-relevant-adrs
 
+**Execution contract:** Read [portable agent discipline](../../agent-discipline.md) before first use; map tools/models to the active harness and preserve its authorization, context and memory rules.
+
 **Kind:** procedural · **Mode:** inline (the lead agent executes this procedure itself).
 
 ## Input

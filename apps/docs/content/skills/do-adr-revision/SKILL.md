@@ -7,6 +7,8 @@ mode: inline
 
 # do-adr-revision
 
+**Execution contract:** Read [portable agent discipline](../../agent-discipline.md) before first use; map tools/models to the active harness and preserve its authorization, context and memory rules.
+
 **Kind:** orchestration · **Mode:** inline.
 
 > **Cannot proceed without** — EN+RU parity for every edited section, **and** parallel edits to the paired design-spec (`-design-en.md` / `-design-ru.md`) if one exists. A PR that lands the EN edit without the RU mirror fails review on principle. The reviewer is instructed to REQUEST_CHANGES on language drift regardless of other findings.

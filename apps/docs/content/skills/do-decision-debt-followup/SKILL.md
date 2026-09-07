@@ -7,6 +7,8 @@ mode: inline
 
 # do-decision-debt-followup
 
+**Execution contract:** Read [portable agent discipline](../../agent-discipline.md) before first use; map tools/models to the active harness and preserve its authorization, context and memory rules.
+
 **Kind:** orchestration · **Mode:** inline.
 
 > **Cannot proceed without** — a closing artifact linked from the debt item. "Drop with no rationale" is not a valid resolution. If the debt is genuinely no-longer-relevant, close with a comment explaining why (the closing comment is itself the closing artifact).

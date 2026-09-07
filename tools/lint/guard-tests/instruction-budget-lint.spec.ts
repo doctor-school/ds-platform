@@ -132,6 +132,66 @@ const BASE_LINES = AGENTS_FIXTURE_LINES + CLAUDE_FIXTURE_LINES;
 const PATHS_FRONTMATTER = '---\npaths:\n  - "infra/**"\n---\n\n';
 
 describe("instruction-budget-lint", () => {
+  it("#1918: a referenced mandatory startup file cannot disappear from the budget", () => {
+    const root = totalCase(1024, 1024);
+    writeFileSync(join(root, "AGENTS.md"), "Read apps/docs/content/agent-discipline.md at startup.\n");
+    const result = runGuard(GUARD, root, { extraArgs: ["--harness", "codex"] });
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("MISSING required file:");
+    expect(result.stderr).toContain("agent-discipline.md");
+  });
+
+  it("#1918: mandatory shared startup reference counts in both effective windows", () => {
+    const root = totalCase(20 * 1024, 1024);
+    mkdirSync(join(root, "apps/docs/content"), { recursive: true });
+    writeFileSync(join(root, "apps/docs/content/agent-discipline.md"), sizedMd(11 * 1024));
+    for (const harness of ["codex", "claude"]) {
+      const result = runGuard(GUARD, root, { extraArgs: ["--harness", harness] });
+      expect(result.code, harness).toBe(1);
+      expect(result.stdout).toContain("OVER BUDGET");
+    }
+  });
+
+  it("#1918: Codex counts AGENTS without requiring or loading the Claude overlay", () => {
+    const root = totalCase(20 * 1024, 11 * 1024);
+    const result = runGuard(GUARD, root, { extraArgs: ["--harness", "codex"] });
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain("Codex always-on total:");
+    expect(result.stdout).toContain("20.0 KB");
+    expect(result.stdout).not.toContain("CLAUDE.md:");
+    rmSync(join(root, "CLAUDE.md"));
+    expect(runGuard(GUARD, root, { extraArgs: ["--harness", "codex"] }).code).toBe(0);
+  });
+
+  it("#1918: default checks both harness totals and retains the Claude total failure", () => {
+    const result = runGuard(GUARD, totalCase(20 * 1024, 11 * 1024));
+    expect(result.code).toBe(1);
+    expect(result.stdout).toContain("Codex always-on total:");
+    expect(result.stdout).toContain("Claude always-on total:");
+  });
+
+  it("#1918: Codex root override replaces AGENTS in its loaded set", () => {
+    const root = totalCase(20 * 1024, 1 * 1024);
+    writeFileSync(join(root, "AGENTS.override.md"), sizedMd(2 * 1024));
+    const result = runGuard(GUARD, root, { extraArgs: ["--harness", "codex"] });
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain("AGENTS.override.md:");
+    expect(result.stdout).not.toContain("AGENTS.md:");
+    expect(totalLine(result.stdout)).toContain("2.0 KB");
+  });
+
+  it("#1918: path-less Claude rules do not enter the Codex window", () => {
+    const root = rulesCase("plain.md", "filler\n".repeat(210));
+    expect(runGuard(GUARD, root, { extraArgs: ["--harness", "codex"] }).code).toBe(0);
+    expect(runGuard(GUARD, root, { extraArgs: ["--harness", "claude"] }).code).toBe(1);
+  });
+
+  it("#1918: unknown harness fails closed instead of silently checking a different window", () => {
+    const result = runGuard(GUARD, totalCase(1024, 1024), { extraArgs: ["--harness", "other"] });
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain("--harness");
+  });
+
   it("green: all always-on files + memory within budget → exit 0", () => {
     const { code, stdout } = runGuard(
       GUARD,

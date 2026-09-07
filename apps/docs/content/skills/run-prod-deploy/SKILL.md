@@ -7,6 +7,8 @@ mode: inline
 
 # run-prod-deploy
 
+**Execution contract:** Read [portable agent discipline](../../agent-discipline.md) before first use; map tools/models to the active harness and preserve its authorization, context and memory rules.
+
 **Kind:** procedural · **Mode:** inline.
 
 Production deploy is an **agent-run, off-CI command** — there is no CI deploy (ADR-0012: SSH deploy from the agent's deploy environment, not GitHub Actions). One command reproducibly rolls `origin/main` onto prod (api-prod public + data-prod private). This skill is the runbook; the executable form is `tools/deploy/prod.mjs`, and the operational SSOT for first-time provisioning stays [`infra/deploy/README.md`](../../../../../infra/deploy/README.md) §5–§10.

@@ -7,15 +7,17 @@ mode: dispatch
 
 # author-product-spec
 
+**Execution contract:** Read [portable agent discipline](../../agent-discipline.md) before first use; map tools/models to the active harness and preserve its authorization, context and memory rules.
+
 **Kind:** procedural · **Mode:** dispatch (the lead passes this SKILL.md content to a subagent and consumes the verdict; it does not author the PRD inline).
 
-The body below is the **subagent prompt**. The lead dispatches a subagent with this file's content as the system prompt plus a task-specific message identifying the epic/feature and the mined prior-art. Format canon: ADR-0014 §1–2.
+The body below is the **subagent prompt**. The lead dispatches a subagent with this file's path and an instruction to read it as the task contract plus a task-specific message identifying the epic/feature and the mined prior-art. Format canon: ADR-0014 §1–2.
 
 ---
 
 ## Subagent prompt
 
-You are authoring the product layer for a DS Platform product epic/feature. This layer sits ABOVE the EARS triplet and is its **source, never its duplicate** (ADR-0014 §2): you write *what the user needs and why* (outcome language); `author-ears-spec` later restates it as *what the system shall do* (testable shall-clauses).
+You are authoring the product layer for a DS Platform product epic/feature. This layer sits ABOVE the EARS triplet and is its **source, never its duplicate** (ADR-0014 §2): you write _what the user needs and why_ (outcome language); `author-ears-spec` later restates it as _what the system shall do_ (testable shall-clauses).
 
 ### Input
 
@@ -28,14 +30,14 @@ You are authoring the product layer for a DS Platform product epic/feature. This
 
 1. **Write the epic `brief.md`** (`apps/docs/content/specs/product/<epic>/brief.md`) — **deliberately thin** (bullets, not all stories):
    - Frontmatter: `milestone:` (the epic's Milestone URL/placeholder), `status: Draft`, `features:` (the decomposition list).
-   - Sections: Problem / Jobs-to-be-done / Cross-cutting information architecture (how the epic's surfaces compose into one LK) / Feature decomposition / Success metrics / **Prior art — source system** (the mined Bubble domain model + workflows; *reference, not a template*).
+   - Sections: Problem / Jobs-to-be-done / Cross-cutting information architecture (how the epic's surfaces compose into one LK) / Feature decomposition / Success metrics / **Prior art — source system** (the mined Bubble domain model + workflows; _reference, not a template_).
    - One brief per epic. It is **revisable throughout discovery** (ADR-0014 §3) — a changed decomposition re-flows into the feature PRDs.
 2. **Write each feature `NNN-product.md`** (co-located in `specs/features/NNN-<slug>/`):
    - Frontmatter: `epic:` (back-link to the brief), `status: Draft`, **`surface:` (`backend-only` | `user-facing`)** — the same F-22 classification the EARS spec will carry.
    - Sections: Feature summary / **User stories** (each with a stable `US-N` id) / Flows (happy + key branches) / **Product acceptance criteria** (outcome language — the draft the EARS clauses will formalize) / Out of scope / Open questions.
    - For a `user-facing` feature: an **approved-mockup reference** slot (filled by `author-design-mockup` at Stage A).
 3. **`US-N` id space (the traceability anchor).** Ids are minted here, **per feature**, and are stable for the life of the PRD — `NNN-product.md` is the id registry. When a story is split, the original id is **retired and new ids added** (never silently renumbered), so a downstream `realizes: US-N` never dangles.
-4. **RU mirror.** The product-owner-facing artifacts carry an RU mirror — `brief.md` → `brief-ru.md`, `NNN-product.md` → `NNN-product-ru.md` — consistent with the *product-facing-only* principle (memory `feedback_product_feature_spec_bilingual`: mirror product-facing artifacts, keep technical ones EN). The downstream EARS triplet's technical files stay EN.
+4. **RU mirror.** The product-owner-facing artifacts carry an RU mirror — `brief.md` → `brief-ru.md`, `NNN-product.md` → `NNN-product-ru.md` — consistent with the _product-facing-only_ principle (memory `feedback_product_feature_spec_bilingual`: mirror product-facing artifacts, keep technical ones EN). The downstream EARS triplet's technical files stay EN.
 5. **Do NOT write EARS.** The PRD stops at product acceptance criteria (outcome language). Translating them into testable `EARS-N` shall-clauses is `author-ears-spec`'s job, downstream; each EARS clause will carry `realizes: US-N` back to your stories.
 6. **Commit** the product layer on the discovery branch.
 

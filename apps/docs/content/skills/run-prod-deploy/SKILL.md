@@ -25,6 +25,23 @@ The D-decision gate, over the **whole deploy range** (`deployedSha..origin/main`
 2. **All Stage-B GO** — every `user-facing` PR in the range records `Stage-B: GO` / `Stage-B: batched at #<gate>` / `Stage-B: N/A (no visual surface) — lead-certified` (`gh pr view <N> --json body,comments`). A missing verdict = **stop** (forces escalate/hold).
 3. **CI green at the deploy SHA** — `gh api repos/{owner}/{repo}/commits/$(git rev-parse origin/main)/check-runs` all green (the deploy pre-flight re-asserts this; the checklist confirms it before the D-decision).
 4. **Migrations expand/contract** — `git diff --name-only <deployedSha>..origin/main -- apps/api/drizzle` ; inspect every listed `.sql`: expand-only (new nullable column / table / index) keeps an app rollback DB-safe; any contracting/destructive/backfill migration flips the class to **escalate** (spec §10.3).
+
+   **Contract-migration gate.** A migration that drops a column/constraint, or that guards itself with a `RAISE EXCEPTION` on non-empty data, is not shippable on the checklist alone: the migration runs inside `pnpm deploy:prod` (pipeline step 5), so a violated precondition aborts the DEPLOY, not just the migration. Before shipping any range containing one, ALL of the following hold — a failing item **HOLDS the deploy**:
+
+   - **(a) Precondition re-verified on prod, immediately before `pnpm deploy:prod`** (not earlier in the session — the number can change under you). Read-only, from the deploy environment:
+     ```bash
+     ssh ds-data-prod "sudo docker exec ds-data-prod-postgres-1 psql -U ds -d ds_prod -Atc 'select count(*) from experts'"
+     ```
+     (SSH alias `ds-data-prod` and the `ds` / `ds_prod` credentials are the deploy config in `tools/deploy/prod.mjs` + `infra/deploy/compose/data-prod`; container name = compose project `ds-data-prod` + service + `-1`.)
+   - **(b) Authoring freeze for the deploy window.** Announce to the admin operators that the affected entity is neither created nor edited from the moment of the count until the health verify (§3) passes, then **re-run the count after the announcement** — the second read is the one that gates the ship. A row created between the two reads is exactly the case the migration aborts on.
+   - **(c) Pre-migrate restore point confirmed and recorded.** The pipeline takes a pgbackrest **pre-migrate `incr` backup** before any migration (`infra/deploy/README.md` → step 4, DSO-129); confirm that step succeeded in the transcript and record its label/timestamp in the deploy record comment alongside the deployed SHA. (The dev-stand counterpart of this rule is `.claude/rules/dev-stand.md` → «Snapshot before migrate»; on prod the pgbackrest checkpoint is its form — never `pnpm dev:snapshot`.)
+
+   **Failure branch:** the precondition unmet (count > 0) ⇒ the deploy **HOLDS** and the range is not shippable as-is. Never edit or weaken the migration, and never delete prod rows to satisfy it — route to the reviewed data path the spec mandates as its own Issue, then ship. This is always an **escalate** class: the owner's explicit go, never a standing-auth ship.
+
+   Named instances (add a line per irreversible migration, not a new section):
+
+   - **0028 — `experts` structured-name contract (#1642).** `apps/api/drizzle/0028_cultured_princess_powerful.sql` drops three `experts_*` constraints and the `experts.name` column irreversibly, and opens with a DO-block that raises `EARS-20: experts structured-name migration requires an explicit reviewed per-id mapping` when `experts` holds ANY row. Gate command = the (a) snippet above. `count > 0` ⇒ hold, and open the explicit reviewed per-id mapping (012-requirements EARS-20) as its own Issue.
+
 5. **Rollback ready** — the app-only `--rollback <sha>` path is available (target images retained — last 3 per repo) and the DB is untouched by an app rollback (guaranteed by item 4).
 6. **Clean deploy environment** — clean working tree + `git pull --ff-only origin main` (the pre-flight enforces this; verify it _before_ deciding to ship).
 7. **No live broadcast (эфир gate)** — `pnpm deploy:check-live`: `CLEAR` (exit 0) proceeds; `LIVE:` or `UNKNOWN` (exit 1, fail-closed) **holds regardless of change-class** — wait for the эфир to end or bind to the maintenance window (02:00–06:00 MSK). The deploy pre-flight runs the same probe as a hard gate; an urgent mid-broadcast ship is by definition **escalate**: owner's explicit go + `--allow-live-broadcast`.

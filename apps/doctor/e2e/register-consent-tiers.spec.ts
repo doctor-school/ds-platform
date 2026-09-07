@@ -18,8 +18,9 @@ import { test, expect } from "@playwright/test";
  * versioned dated row written when it has it) is proven in
  * `apps/api/test/storefront/doctor-register-consents.e2e-spec.ts`.
  *
- * EARS-6's optionality guarantees are #1542's and are deliberately NOT asserted
- * here beyond «never pre-ticked», which EARS-5 needs for its own tier-2 render.
+ * EARS-6's optionality guarantees live in `register-consent-optional.spec.ts`
+ * (#1542); this file asserts only «never pre-ticked», which EARS-5 needs for its
+ * own tier-2 render.
  */
 
 /** The composition the statement must name, from the 021 read model. */

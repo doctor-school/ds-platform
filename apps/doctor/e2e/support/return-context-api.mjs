@@ -183,7 +183,13 @@ function confirmAnswer(returnTo) {
 const server = createServer((request, response) => {
   const url = new URL(request.url ?? "/", `http://${request.headers.host}`);
 
-  if (url.pathname === "/health") return json(response, 200, { ok: true });
+  // The `double` marker is a CONTRACT, not decoration (#1996 review): the
+  // one-off evidence driver drives a real registration, so it refuses to start
+  // until it has read this marker off its upstream. The owner's real api on
+  // :3000 answers `/health` without it, which is exactly the mistake that has
+  // to be impossible rather than merely documented.
+  if (url.pathname === "/health")
+    return json(response, 200, { ok: true, double: "return-context-api" });
 
   // The three write commands the registration journey makes (021 EARS-10,
   // #1546). The register and resend answers are the enumeration-safe constants

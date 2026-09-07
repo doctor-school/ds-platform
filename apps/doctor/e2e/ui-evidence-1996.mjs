@@ -20,7 +20,7 @@
  *   DOCTOR_FAKE_API_PORT=3311 node apps/doctor/e2e/support/return-context-api.mjs &
  *   API_PROXY_TARGET=http://127.0.0.1:3311 \
  *     pnpm --filter @ds/doctor exec next start -p 3310
- *   E2E_DOCTOR_URL=http://localhost:3310 \
+ *   E2E_DOCTOR_URL=http://localhost:3310 E2E_DOCTOR_API_URL=http://127.0.0.1:3311 \
  *     node apps/doctor/e2e/ui-evidence-1996.mjs .github/ui-evidence/1996
  */
 
@@ -30,8 +30,46 @@ import { chromium, devices } from "@playwright/test";
 import { mkdirSync } from "node:fs";
 
 const DOCTOR = process.env.E2E_DOCTOR_URL ?? "http://localhost:3310";
+const API = process.env.E2E_DOCTOR_API_URL ?? "http://127.0.0.1:3311";
 const OUT = process.argv[2];
 mkdirSync(OUT, { recursive: true });
+
+/**
+ * Fail-fast before the first `goto` (#1996 review). This driver REGISTERS a
+ * doctor for real, so the one thing it must never do is reach a live api: an
+ * earlier run of it reached the owner's stand on :3000 and left a pending
+ * registration behind. Two independent conditions have to hold — the reserved
+ * agent port band (≥ 3300, the owner's stands live below it) and the double's
+ * own `/health` marker, which no real api answers.
+ */
+async function assertUpstreamIsTheDouble() {
+  for (const [name, value] of Object.entries({ DOCTOR, API })) {
+    const port = Number(new URL(value).port);
+    if (!(port >= 3300)) {
+      throw new Error(
+        `ui-evidence: ${name}=${value} is outside the agent port band (>= 3300). ` +
+          "Ports 3000-3299 are the owner's live stands and this driver registers a real doctor.",
+      );
+    }
+  }
+  let body;
+  try {
+    body = await (await fetch(`${API}/health`)).json();
+  } catch (cause) {
+    throw new Error(
+      `ui-evidence: no upstream answering ${API}/health — boot e2e/support/return-context-api.mjs first`,
+      { cause },
+    );
+  }
+  if (body?.double !== "return-context-api") {
+    throw new Error(
+      `ui-evidence: ${API} is not the return-context double (no \`double\` marker on /health). ` +
+        "Refusing to drive a registration against an unknown upstream.",
+    );
+  }
+}
+
+await assertUpstreamIsTheDouble();
 
 const VIEWPORTS = {
   desktop: { width: 1440, height: 1100 },

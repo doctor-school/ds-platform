@@ -250,3 +250,16 @@ export type {
   AccountProfileCardProps,
   AccountProfileCardCopy,
 } from "./account-profile-card";
+// #1934 — the ONE canonical registration composition both storefronts mount
+// (Academy `/register` and the doctor storefront door). Copy, transport and the
+// consent read model stay host-side; the block owns the structure the two
+// surfaces must not drift apart on (021 EARS-5/12, 003 EARS-16/17).
+export { RegisterCard } from "./register-card";
+export type {
+  RegisterCardProps,
+  RegisterCardCopy,
+  RegisterCardValues,
+  RegisterCardConsentItem,
+  RegisterCardPromoProps,
+  RegisterCardTestIds,
+} from "./register-card";

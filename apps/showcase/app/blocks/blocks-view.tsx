@@ -30,6 +30,7 @@ import {
   FormSection,
   FormSeparator,
   LoginCard,
+  RegisterCard,
   MonthCalendarGrid,
   MonthDotGrid,
   MonthPicker,
@@ -46,6 +47,9 @@ import {
   type EmailConfirmValues,
   type EventSignupCardProps,
   type LoginCardCopy,
+  type RegisterCardConsentItem,
+  type RegisterCardCopy,
+  type RegisterCardProps,
   type LoginCardMethod,
   type LoginCardOtpRequestValues,
   type LoginCardOtpVerifyValues,
@@ -1131,6 +1135,204 @@ function LoginCardSection() {
             </Canvas>
           </StateCase>
         </div>
+      </SubRow>
+    </BlockSection>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* RegisterCard                                                         */
+/* ------------------------------------------------------------------ */
+
+const REGISTER_CARD_PROPS: PropRow[] = [
+  {
+    name: "copy",
+    type: "RegisterCardCopy",
+    required: true,
+    description:
+      "Every visible string — title, description, field labels, the length-baseline password hint, the submit, the access-group heading.",
+  },
+  {
+    name: "consentItems",
+    type: "RegisterCardConsentItem[]",
+    required: false,
+    description:
+      "The consent read model, as DATA. An access item renders inside the bordered group above the submit and gates it; a marketing item renders below it, outside that frame, in the quieter tone.",
+  },
+  {
+    name: "consentNote",
+    type: "ReactNode",
+    required: false,
+    description:
+      "The withdrawal statement below the form. No control beside it — the block promises no self-service mechanism.",
+  },
+  {
+    name: "promo",
+    type: "RegisterCardPromoProps",
+    required: false,
+    description:
+      "Optional promo-code field (label, placeholder, length bound). Absent means the field is not rendered at all.",
+  },
+  {
+    name: "resolver / fieldRules",
+    type: "Resolver<…> | { email?, password? }",
+    required: false,
+    description:
+      "Host-owned validation: a full resolver, or per-field react-hook-form rules. Messages are the host's — the package ships no copy.",
+  },
+  {
+    name: "onSubmit",
+    type: "(values: RegisterCardValues) => Promise<void> | void",
+    required: true,
+    description:
+      "Awaited by react-hook-form, so it drives the pending state. Transport and outcome mapping stay host-side — the block makes no outcome branch of its own.",
+  },
+  {
+    name: "errors",
+    type: "{ challenge?: ReactNode; command?: ReactNode }",
+    required: false,
+    description:
+      "Two already-localized FORM-level statements, held apart so a fresh challenge clears one without erasing the other. Neither belongs on a field.",
+  },
+  {
+    name: "unmetPrecondition",
+    type: "string | null",
+    required: false,
+    description:
+      "A precondition no rendered item covers. Stated beside the disabled submit once every rendered item is granted; null is the enabled state.",
+  },
+  {
+    name: "confirmation",
+    type: "ReactNode",
+    required: false,
+    description:
+      "The post-submit state. Non-null replaces the WHOLE form — a slot rather than an owned stage, because one host swaps the card in place and the other navigates to its own route.",
+  },
+  {
+    name: "submitBlock",
+    type: '"error-first" | "submit-first"',
+    required: false,
+    description:
+      "The submit-group order — the one structural fork between the two shipped hosts. An explicit prop rather than a silent pick, because neither order changes without a design re-confirmation.",
+  },
+  {
+    name: "spacing",
+    type: '"sm" | "md"',
+    required: false,
+    description:
+      "Vertical rhythm between form rows, for the same reason.",
+  },
+  {
+    name: "pending / pendingAffordance",
+    type: 'boolean / "spinner" | "inert"',
+    required: false,
+    description:
+      "Host-side busy signal, and how it reads on the submit: the loading affordance, or plainly disabled where the button is already the disabled control.",
+  },
+  {
+    name: "returnContextSlot / attributionSlot / aboveSubmitSlot / captchaSlot",
+    type: "ReactNode",
+    required: false,
+    description:
+      "Host framing around and inside the form. An unsupplied slot renders NOTHING — no wrapper, no reserved frame.",
+  },
+  {
+    name: "formDataAttributes",
+    type: "Record<string, string>",
+    required: false,
+    description:
+      "Extra data-* attributes published on the form element — host facts resolved on the server, carried rather than recomputed.",
+  },
+  {
+    name: "testIds",
+    type: "RegisterCardTestIds",
+    required: false,
+    description:
+      "Per-part data-testids the hosts' shipped e2e query. Every one optional — omitted means no attribute.",
+  },
+];
+
+
+/** Neutral-realistic copy — catalogue strings only, never product copy. */
+const REGISTER_CARD_COPY: RegisterCardCopy = {
+  title: "Create an account",
+  description: "An email and a password are all it takes.",
+  emailLabel: "Work email",
+  emailPlaceholder: "you@example.com",
+  passwordLabel: "Password",
+  passwordPolicyHint: "At least 8 characters.",
+  submit: "Create account",
+  accessGroupHeading: "Access conditions",
+};
+
+const REGISTER_CARD_CONSENTS: RegisterCardConsentItem[] = [
+  {
+    id: "professionalDeclaration",
+    tier: "access",
+    label: "I confirm I belong to the audience this catalogue serves",
+    help: "A statement, not a document request — nothing is uploaded here.",
+    unmetMessage: "Confirm the declaration — it is required to continue.",
+  },
+  {
+    id: "partnerDataSharing",
+    tier: "access",
+    label: "I agree that my name and contact reach the programme partner",
+    help: "The second access condition, framed together with the first.",
+    unmetMessage: "Agree to the transfer — it is required to continue.",
+  },
+  {
+    id: "newsletter",
+    tier: "marketing",
+    label: "Send me occasional programme news",
+    optionalTag: "optional",
+    help: "Outside the group the submit depends on, in the quieter tone.",
+  },
+];
+
+/** A live `RegisterCard` with inert host wiring. */
+function NeutralRegisterCard(props: Partial<RegisterCardProps> = {}) {
+  return (
+    <div className="w-full max-w-md">
+      <RegisterCard
+        copy={REGISTER_CARD_COPY}
+        consentItems={REGISTER_CARD_CONSENTS}
+        consentNote="Consents are recorded separately, each with its date."
+        promo={{
+          label: "Promo code — if you have one",
+          placeholder: "CODE-2026",
+        }}
+        onSubmit={() => {}}
+        {...props}
+      />
+    </div>
+  );
+}
+
+function RegisterCardSection() {
+  return (
+    <BlockSection
+      title="RegisterCard"
+      exportsLine="RegisterCard — props: copy · consentItems? · consentNote? · promo? · resolver?/fieldRules? · onSubmit · errors? · unmetPrecondition? · confirmation? · submitBlock? · spacing? · pending?/pendingAffordance? · slots · formDataAttributes? · testIds?"
+    >
+      <p className="text-sm text-muted-foreground">
+        The whole registration composition as one reusable unit: the{" "}
+        <code className="font-mono text-xs">AuthCard</code> frame, the email /
+        password / promo fields, and the two consent tiers told apart by their
+        RENDERING — access conditions inside a bordered group above the submit,
+        the optional opt-in outside it below. The block owns that structure and
+        the disabled-submit reason; copy, the consent read model, validation,
+        transport and bot protection are host-supplied, so both storefronts
+        project the same registration form.
+      </p>
+
+      <SubRow label="Preview">
+        <Canvas>
+          <NeutralRegisterCard />
+        </Canvas>
+      </SubRow>
+
+      <SubRow label="Slots / props">
+        <PropsTable rows={REGISTER_CARD_PROPS} />
       </SubRow>
     </BlockSection>
   );
@@ -3772,6 +3974,7 @@ export function BlocksView() {
       <AuthLayoutSection />
       <AuthShellSection />
       <LoginCardSection />
+      <RegisterCardSection />
       <PasswordRecoveryCardSection />
       <EmailConfirmCardSection />
       <OtpFocusScreenSection />

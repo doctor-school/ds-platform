@@ -9,15 +9,16 @@ ADR-0012), driven by the D+B trigger policy (release-cycle spec §10);
 **first-time provisioning** (Terraform, DNS, secrets, Zitadel first-boot
 bootstrap) is a one-time human setup, out of the steady-state loop.
 
-| File                       | `pnpm` alias           | Role                                                                                                                                                               |
-| -------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `prod.mjs`                 | `deploy:prod`          | Full deploy pipeline + `--rollback <sha>` (app-only revert).                                                                                                       |
-| `smoke-prod.mjs`           | `deploy:smoke`         | Live prod HTTP + TLS smoke; also called by `prod.mjs` post-`up -d`.                                                                                                |
-| `release-notes.mjs`        | `deploy:release-notes` | Aggregated PROD release note to Mattermost (#868); render+POST seam fired from CI on `deployment_status: success` (`release-digest.yml`, #968).                    |
-| `live-broadcast-check.mjs` | `deploy:check-live`    | Read-only live-эфир probe (`GET /v1/public/events`, spec §10.4 item 7): `CLEAR` exit 0 / `LIVE`+`UNKNOWN` exit 1 (fail-closed); also a `prod.mjs` pre-flight hold. |
-| `deploy-probe.mjs`         | `deploy:probe`         | One-line box-reality probe (#905): health SHA + running api/portal/admin images/status over ssh; the STALLED watchdog message routes here.                         |
-| `rollback-floor.mjs`       | —                      | Rollback compatibility-floor guard (012 EARS-24, #1607): refuses a `--rollback` target that predates migration 0036 once prod has applied it (see below).          |
-| `release-gate.mjs`         | —                      | Release-blocker + open-batched-Stage-B pre-flight hold (#1662): probe + pure verdict consumed by `prod.mjs` (see below).                                           |
+| File                       | `pnpm` alias           | Role                                                                                                                                                                                                     |
+| -------------------------- | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `prod.mjs`                 | `deploy:prod`          | Full deploy pipeline + `--rollback <sha>` (app-only revert).                                                                                                                                             |
+| `smoke-prod.mjs`           | `deploy:smoke`         | Live prod HTTP + TLS smoke; also called by `prod.mjs` post-`up -d`.                                                                                                                                      |
+| `release-notes.mjs`        | `deploy:release-notes` | Aggregated PROD release note to Mattermost (#868); render+POST seam fired from CI on `deployment_status: success` (`release-digest.yml`, #968).                                                          |
+| `live-broadcast-check.mjs` | `deploy:check-live`    | Read-only live-эфир probe (`GET /v1/public/events`, spec §10.4 item 7): `CLEAR` exit 0 / `LIVE`+`UNKNOWN` exit 1 (fail-closed); also a `prod.mjs` pre-flight hold.                                       |
+| `deploy-probe.mjs`         | `deploy:probe`         | One-line box-reality probe (#905): health SHA + running api/portal/admin images/status over ssh; the STALLED watchdog message routes here.                                                               |
+| `rollback-floor.mjs`       | —                      | Rollback compatibility-floor guard (012 EARS-24, #1607): refuses a `--rollback` target that predates migration 0036 once prod has applied it (see below).                                                |
+| `idp-policy.mjs`           | —                      | Pure seams for the pipeline-owned IdP provision converge (#1997): the password-complexity read-back verdict and the `@ds/schemas` `PASSWORD_MIN_LENGTH` extraction consumed by `prod.mjs` (see step 5b). |
+| `release-gate.mjs`         | —                      | Release-blocker + open-batched-Stage-B pre-flight hold (#1662): probe + pure verdict consumed by `prod.mjs` (see below).                                                                                 |
 
 ## `pnpm deploy:prod`
 
@@ -71,6 +72,22 @@ Pipeline, fail-closed, stops at the first red step and prints a rollback pointer
    step 6. CI's static twin is the `standalone-boot` job
    (`tools/ci/standalone-boot-check.mjs`), which boots the same standalone entry
    on every PR.
+   5b. **IdP provision converge + policy read-back (#1997)** — after the config
+   apply and before the truthful-success verify, the pipeline runs
+   `infra/dev-stand/idp/provision.sh` on api-prod with the `infra/deploy/README.md`
+   step 9 environment (`api.env` sourced as root inside `sudo bash -c`; the script
+   is idempotent read-before-write, so an unchanged script is a no-op that prints
+   `already` / `no changes` per step). It then READS THE POLICY BACK on-box —
+   `GET /admin/v1/policies/password/complexity` with the bootstrap PAT, which never
+   leaves the box — and asserts `minLength` equals `@ds/schemas`
+   `PASSWORD_MIN_LENGTH` **at the deployed SHA** (read via
+   `git show <sha>:packages/schemas/src/auth/auth.schema.ts`, never a literal) with
+   every character-class flag `false`. A failed converge, an unreadable read-back or
+   a mismatch FAILS the deploy with the containers already swapped (the rollback
+   pointer says so). Closes the #1994 class: a converge step that lands in code and
+   never reaches the instance (18 days of 422 registrations). The pure decision
+   table lives in `idp-policy.mjs`; `--rollback` re-runs NO provisioning — converge
+   steps are forward-only.
 6. **Truthful-success verify** — the script polls `docker inspect` on-box until
    the RUNNING api + portal + admin + doctor containers carry exactly
    `ds-*:<sha>` **and** report

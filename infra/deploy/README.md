@@ -366,21 +366,29 @@ http://api:3000`. A portal image built before this fix must be REBUILT.
      # then: docker compose up -d api   (restart to pick up the OIDC creds)
      ```
 
-   - **Re-run this provision step after every release whose range touches
-     `infra/dev-stand/idp/provision.sh`.** The converge steps in that script are the
-     managed owner of the prod IdP configuration too (login / notification /
-     password-complexity policies, active providers, message texts), and
-     `pnpm deploy:prod` never runs it: the deploy ships images, the IdP keeps whatever
-     the LAST provisioning run left. `git diff --name-only <deployedSha>..<target> --
-infra/dev-stand/idp/provision.sh` non-empty ⇒ the release tail is this block
-     (idempotent — read the stderr converge log: exactly the drifted steps print
-     «converged», everything else «already» / «ensured») plus a read-back of the
-     touched policy (`GET /admin/v1/policies/…` with the bootstrap PAT). Precedent
-     #1994 (2026-09-07): #1396 relaxed `@ds/schemas` and the portal hint to
-     length-only (003 EARS-36) and added § 8.sexies; the code reached prod (a3ba0c4a)
-     while the instance policy stayed the provider default (upper + lower + digit +
-     symbol), so every registration with a plain password answered 422 behind
-     «Проверьте введённые данные» until this step was re-run.
+   - **`pnpm deploy:prod` runs this provision step for you (#1997).** The converge
+     steps in that script are the managed owner of the prod IdP configuration too
+     (login / notification / password-complexity policies, active providers, message
+     texts), so the deploy pipeline owns the run: after `up -d` and before the
+     truthful-success verify it executes exactly the command above on api-prod and
+     then READS THE POLICY BACK from the instance (`GET
+/admin/v1/policies/password/complexity` with the bootstrap PAT, on the box —
+     the PAT never leaves it), comparing `minLength` against the `@ds/schemas`
+     `PASSWORD_MIN_LENGTH` at the deployed SHA and requiring every character-class
+     flag to be `false`. A failed converge or a rejected read-back FAILS the deploy.
+     The script is idempotent read-before-write, so with **no `provision.sh` change
+     since the last deploy the run is a no-op** — read the stderr converge log:
+     exactly the drifted steps print «converged», everything else «already» /
+     «ensured». Provisioning is **not** rolled back (`--rollback` re-tags and
+     restarts only; converge steps are forward-only).
+   - **The manual command above stays the recovery path** — for first-time
+     provisioning, for an instance rebuild, and for repairing an IdP whose converge
+     failed mid-deploy. Precedent #1994 (2026-09-07), the incident that moved the run
+     into the pipeline: #1396 relaxed `@ds/schemas` and the portal hint to length-only
+     (003 EARS-36) and added § 8.sexies; the code reached prod (a3ba0c4a) while the
+     instance policy stayed the provider default (upper + lower + digit + symbol), so
+     every registration with a plain password answered 422 behind «Проверьте
+     введённые данные» for 18 days, until this step was re-run by hand.
 
 10. **Verify (definition of done, spec §10).** Drive the auth vertical in the live
     UI (`https://academy.doctor.school`, Playwright): register → **real** verification

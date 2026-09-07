@@ -84,7 +84,9 @@ export function RegistrationSuccessCard({
   return (
     <AuthCard
       data-testid="registration-success"
-      title={title}
+      // #1035: the card title is the document's single h1 landmark — the
+      // success state REPLACES the confirm card, so the h1 travels with it.
+      title={<h1>{title}</h1>}
       description={description}
       icon={icon}
     >

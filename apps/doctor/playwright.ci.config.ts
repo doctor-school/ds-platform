@@ -46,6 +46,9 @@ export default defineConfig({
   testIgnore: [
     "specialty-consumption.spec.ts",
     "register-return-context.spec.ts",
+    // 021 EARS-10 (#1546): the post-confirmation landing is a decision of the
+    // upstream, so this spec rides the return-context tier beside its double.
+    "register-return.spec.ts",
     "register-direct.spec.ts",
     "login-return-context.spec.ts",
     "events-*.spec.ts",

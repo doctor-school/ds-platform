@@ -158,10 +158,10 @@ function confirmAnswer(returnTo) {
     profileCompletion: null,
     secondaryAction: { kind: "cabinet", href: "/account" },
   };
-  if (returnTo === `/events/`) {
+  if (returnTo === `/events/${EVENT.slug}`) {
     return { ...base, primaryAction: { kind: "return", href: returnTo } };
   }
-  if (returnTo === `/events/`) {
+  if (returnTo === `/events/${ENDED_EVENT.slug}`) {
     return {
       ...base,
       primaryAction: { kind: "landing", href: returnTo, reason: "ended" },

@@ -115,7 +115,9 @@ test.describe("021 EARS-10: the post-confirmation landing", () => {
     await registerAndConfirm(page, arrival(ENDED));
 
     const reason = page.getByTestId("registration-success-reason");
-    await expect(reason).toHaveText(
+    // Contains, not equals: the Alert primitive prefixes an aria-hidden
+    // glyph, which no assistive technology reads out.
+    await expect(reason).toContainText(
       "Эфир, на который вы записывались, уже завершился — вот его страница.",
     );
     await expect(reason).toHaveAttribute("role", "status");

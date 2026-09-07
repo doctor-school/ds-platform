@@ -81,6 +81,9 @@ export default defineConfig({
     /[\\/]e2e[\\/]a11y-axe\.e2e\.spec\.ts$/,
     /[\\/]e2e[\\/]academy-home\.e2e\.spec\.ts$/,
     /[\\/]e2e[\\/]password-reveal\.e2e\.spec\.ts$/,
+    // 028 V-4: the documents surface reads a workspace package from disk and
+    // issues no api call, so it is hermetic in exactly this tier.
+    /[\\/]e2e[\\/]documents\.spec\.ts$/,
   ],
   globalTeardown: "./e2e/support/academy-submissions-global-teardown.ts",
   fullyParallel: true,

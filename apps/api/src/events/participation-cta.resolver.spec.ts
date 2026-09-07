@@ -1,4 +1,7 @@
-import { ParticipationCtaSchema } from "@ds/schemas";
+import {
+  ParticipationCtaSchema,
+  parseDoctorEventReturnTarget,
+} from "@ds/schemas";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -20,6 +23,18 @@ const ACADEMY: ParticipationRoutes = {
   eventPath: (slug) => `/webinars/${slug}`,
   registrationEntry: "/register",
   roomPath: (slug) => `/webinars/${slug}/room`,
+};
+
+/**
+ * The DOCTOR host's routes — the shape `doctor-events.public.controller.ts`
+ * passes (`DOCTOR_ROUTES`). The same policy, a different route table: that is
+ * the whole of the two-storefront claim, so the fixture mirrors the controller
+ * rather than paraphrasing it.
+ */
+const DOCTOR: ParticipationRoutes = {
+  eventPath: (slug) => `/events/${encodeURIComponent(slug)}`,
+  registrationEntry: "/register",
+  roomPath: (slug) => `/events/${encodeURIComponent(slug)}/room`,
 };
 
 /** A host that has not mounted a room route yet (the doctor storefront today). */
@@ -171,5 +186,38 @@ describe("resolveParticipationCta (020 EARS-1)", () => {
       "sold-out",
       "unavailable",
     ]);
+  });
+
+  it("020 EARS-5: a guest on the doctor host is routed into 021 on the doctor host carrying this page as returnTo", () => {
+    // The clause is about WHICH door and WHICH target. The door is this host's
+    // own `/register` — never the academy's — and the target is this host's own
+    // event path, percent-escaped, so the doctor comes back to exactly the page
+    // they pressed the button on.
+    const cta = resolveParticipationCta(facts(), DOCTOR);
+
+    expect(cta.action).toBe("register");
+    expect(cta.label).toBe("Участвовать");
+    expect(cta.href).toBe("/register?returnTo=%2Fevents%2Fkardio-2026");
+    expect(cta.reason).toBeNull();
+    // The identity row: the same guest, the same policy, a different host — the
+    // ACTION is a fact of the event, only the carried target differs.
+    expect(resolveParticipationCta(facts(), ACADEMY).action).toBe(cta.action);
+  });
+
+  it("020 EARS-5.2: the carried target round-trips through the shared return-target parser, so 021 reads the event back out of it", () => {
+    const cta = resolveParticipationCta(facts(), DOCTOR);
+    const returnTo = new URL(
+      cta.href ?? "",
+      "https://doctor.school",
+    ).searchParams.get("returnTo");
+
+    // The contract between 020 and 021 is the VALUE, never a host string: what
+    // the resolver writes is exactly what `@ds/schemas` parses back, so the
+    // door can name the event it is returning the doctor to.
+    expect(returnTo).toBe("/events/kardio-2026");
+    expect(parseDoctorEventReturnTarget(returnTo ?? "")).toEqual({
+      eventSlug: "kardio-2026",
+      returnTo: "/events/kardio-2026",
+    });
   });
 });

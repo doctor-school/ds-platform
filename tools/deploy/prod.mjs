@@ -66,6 +66,11 @@ import {
   parseRefFlag,
 } from "./hotfix-ref.mjs";
 import {
+  assertPasswordPolicyConverged,
+  formatPasswordPolicy,
+  parsePasswordMinLength,
+} from "./idp-policy.mjs";
+import {
   RELEASE_GATE_EXEMPT_FLAG,
   evaluateReleaseGate,
   formatReleaseGateClear,
@@ -365,7 +370,9 @@ function resolveHotfixTarget(ref) {
         ` deploy ships pushed, reviewable commits only. Push the hotfix branch first.`,
     );
   }
-  ok(`hotfix target ${sha.slice(0, 12)} on origin (${contains.split(/\r?\n/).length} branch(es))`);
+  ok(
+    `hotfix target ${sha.slice(0, 12)} on origin (${contains.split(/\r?\n/).length} branch(es))`,
+  );
   return sha;
 }
 
@@ -393,11 +400,9 @@ async function assertHotfixInvariants(target) {
 
   // `git cherry <upstream> <head> <limit>`: `-` = an equivalent commit exists on
   // origin/main (a cherry-pick of merged work), `+` = it does not.
-  const cherry = spawnSync(
-    "git",
-    ["cherry", "origin/main", target, deployed],
-    { encoding: "utf8" },
-  );
+  const cherry = spawnSync("git", ["cherry", "origin/main", target, deployed], {
+    encoding: "utf8",
+  });
   if (cherry.status !== 0) {
     die(
       `${REF_FLAG}: \`git cherry origin/main ${target.slice(0, 12)} ${deployed.slice(0, 12)}\`` +
@@ -673,6 +678,115 @@ function sshCapture(host, script) {
 // ds-api-prod` in the api-prod compose file): `<project>-<service>-1`.
 const CONTAINER_PREFIX = "ds-api-prod-";
 
+// --- #1997: pipeline-owned IdP provisioning converge ----------------------
+//
+// `infra/dev-stand/idp/provision.sh` is the managed owner of the prod Zitadel
+// instance configuration (login / notification / password-complexity policies,
+// active providers, message texts). Before #1997 the deploy shipped IMAGES ONLY
+// and the instance kept whatever the last MANUAL provisioning run had left, so a
+// converge step could land in code and never reach prod — exactly the #1994
+// incident (003 EARS-36 length-only password policy merged 2026-08-20, prod kept
+// the provider default, registration 422'd for 18 days until the hand re-run on
+// 2026-09-07). A checklist item (#1995) is a memory-based control; this step
+// makes the PIPELINE the thing that runs it, on every deploy.
+//
+// The command is the `infra/deploy/README.md` step 9 command verbatim, env
+// included: `api.env` is root:root 0600, so it is sourced AS ROOT inside
+// `sudo bash -c` (a non-root `.` yields an EMPTY env and provision.sh then
+// refuses `real` delivery mode fail-closed — #902). The script is idempotent
+// read-before-write on every step, so with no `provision.sh` change since the
+// last deploy the run is a no-op that prints `already` / `no changes` lines.
+//
+// Then the policy is READ BACK from the instance and compared against the
+// mirrored `@ds/schemas` constant. The read-back runs ON THE BOX: the bootstrap
+// PAT lives only in `/etc/ds-platform/idp-bootstrap-pat.txt` (0600 root:root) and
+// is never copied to a workstation. A converge that "succeeded" but left the
+// policy off-target fails the deploy — a green provision exit code alone is not
+// evidence that the instance is where the code says it should be.
+const IDP_BASE_URL = process.env.DS_IDP_BASE_URL || "https://id.doctor.school";
+const IDP_PROVISION_DIR = `${REMOTE_TREE}/infra/dev-stand/idp`;
+const IDP_BOOTSTRAP_PAT_FILE = "/etc/ds-platform/idp-bootstrap-pat.txt";
+const IDP_REDIRECT_URIS = "https://api.doctor.school/auth/callback";
+const IDP_POST_LOGOUT_URIS =
+  "https://academy.doctor.school,https://new.doctor.school";
+// The mirrored SSOT constant, read at the DEPLOYED SHA (never a literal `8`):
+// the deploy must verify the instance against the number the shipped code
+// enforces, which on a `--ref` hotfix is not necessarily the local checkout's.
+const SCHEMAS_AUTH_SCHEMA_PATH = "packages/schemas/src/auth/auth.schema.ts";
+
+// The step's rollback pointer: this runs AFTER `up -d`, so the containers are
+// already swapped when it can fail.
+const IDP_ROLLBACK_HINT =
+  "the new containers are ALREADY serving (this step runs after `up -d`)";
+
+async function provisionIdp(sha, label = sha.slice(0, 12)) {
+  let expectedMin;
+  try {
+    expectedMin = parsePasswordMinLength(
+      localCap("git", ["show", `${sha}:${SCHEMAS_AUTH_SCHEMA_PATH}`]),
+    );
+  } catch (e) {
+    die(
+      `cannot resolve PASSWORD_MIN_LENGTH from ${SCHEMAS_AUTH_SCHEMA_PATH} at ${label}` +
+        ` — ${IDP_ROLLBACK_HINT}:\n  ${e.message}`,
+      { rollbackHint: true },
+    );
+  }
+  console.log(
+    `  ℹ @ds/schemas PASSWORD_MIN_LENGTH at ${label}: ${expectedMin}` +
+      ` (read from ${SCHEMAS_AUTH_SCHEMA_PATH}, not hardcoded)`,
+  );
+
+  // provision.sh streams one `converged` / `already` / `no changes` line per
+  // step to stderr; sshScript forwards every remote byte verbatim, so those
+  // lines land in the deploy transcript as-is.
+  try {
+    await sshScript(
+      API_PROD,
+      `cd ${IDP_PROVISION_DIR}
+sudo bash -c 'set -a; . /etc/ds-platform/api.env; set +a; IDP_BASE_URL=${IDP_BASE_URL} IDP_REDIRECT_URIS=${IDP_REDIRECT_URIS} IDP_POST_LOGOUT_URIS=${IDP_POST_LOGOUT_URIS} EMAIL_DELIVERY_MODE=real SMS_DELIVERY_MODE=real ./provision.sh --pat-file ${IDP_BOOTSTRAP_PAT_FILE}'
+`,
+      { label: "idp provision", stallBudgetMs: STALL_BUDGET_BUILD_MS },
+    );
+  } catch (e) {
+    die(
+      `IdP provision converge FAILED on api-prod — ${IDP_ROLLBACK_HINT}, and the` +
+        ` instance configuration is in an UNKNOWN state (provision.sh is idempotent,` +
+        ` so a re-run is safe once the cause is fixed):\n  ${e.message}\n` +
+        `  Manual recovery path: infra/deploy/README.md → step 9.`,
+      { rollbackHint: true },
+    );
+  }
+
+  let raw;
+  try {
+    raw = await sshCapture(
+      API_PROD,
+      `sudo bash -c 'curl -fsS --max-time 30 -H "Authorization: Bearer $(cat ${IDP_BOOTSTRAP_PAT_FILE})" ${IDP_BASE_URL}/admin/v1/policies/password/complexity'`,
+    );
+  } catch (e) {
+    die(
+      `cannot READ BACK the prod IdP password-complexity policy — ${IDP_ROLLBACK_HINT}.` +
+        ` An unreadable policy is a failed deploy, never an assumed-good one:\n  ${e.message}`,
+      { rollbackHint: true },
+    );
+  }
+
+  try {
+    const verdict = assertPasswordPolicyConverged(JSON.parse(raw), expectedMin);
+    console.log(
+      `  ℹ prod IdP password policy @ ${IDP_BASE_URL}: ${formatPasswordPolicy(verdict)}`,
+    );
+  } catch (e) {
+    die(
+      `prod IdP policy read-back REJECTED — ${IDP_ROLLBACK_HINT}:\n  ${e.message}\n` +
+        `  Re-run the converge by hand (infra/deploy/README.md → step 9) and inspect` +
+        ` the instance before serving registrations (#1994).`,
+      { rollbackHint: true },
+    );
+  }
+}
+
 // #1896: the per-service verify set of a deploy is READ from the TARGET tree's
 // compose file, not from the local checkout. `--ref <sha>` ships that commit's
 // tree, so its compose is what the on-box `docker compose build` consumes and
@@ -722,7 +836,10 @@ async function verifyRunningSha(sha, services) {
     )
     .join("\n");
   const state = services
-    .map((s) => `${s.name}=$${shellVarName(s.name)}_img($${shellVarName(s.name)}_h)`)
+    .map(
+      (s) =>
+        `${s.name}=$${shellVarName(s.name)}_img($${shellVarName(s.name)}_h)`,
+    )
     .join(" ");
   const condition = services
     .map(
@@ -1081,6 +1198,13 @@ sudo docker compose up -d
   await applyRuntimeConfigs();
   ok("Caddy + Centrifugo run with the shipped configs", t);
 
+  step(
+    "#1997: IdP provision converge (provision.sh, idempotent) + policy read-back",
+  );
+  t = Date.now();
+  await provisionIdp(sha);
+  ok("prod IdP converged and read back", t);
+
   step("Verify the RUNNING containers carry the deployed SHA");
   await verifyRunningSha(sha, services);
 
@@ -1377,7 +1501,9 @@ async function rollback(shaArg) {
   //    `event_speakers`; the target's tree must carry the migration that dropped
   //    it). Fail-closed rules and the one recorded allow (a production DB that
   //    has not applied 0036) live in tools/deploy/rollback-floor.mjs.
-  step("EARS-24: rollback compatibility floor (speaker cutover, migration 0036)");
+  step(
+    "EARS-24: rollback compatibility floor (speaker cutover, migration 0036)",
+  );
   try {
     const verdict = await assertRollbackAllowed({
       sha,
@@ -1416,6 +1542,19 @@ done`,
     );
   }
   ok("target images present on api-prod");
+
+  // #1997: a rollback ships NO tree and re-runs NO provisioning. The
+  // `provision.sh` converge steps are FORWARD-ONLY — read-before-write toward a
+  // target state, with no record of the prior state to restore — so the IdP
+  // instance keeps the configuration the LAST forward deploy converged it to.
+  // Implication: an app image is put back, its identity-provider contract is
+  // not. If the rollback target genuinely needs the older IdP configuration,
+  // revert the `provision.sh` change on `main` and deploy FORWARD; hand-running
+  // the older script (README step 9) is the emergency-only alternative.
+  console.log(
+    "  ℹ IdP provisioning is NOT rolled back (converge steps are forward-only) —" +
+      "\n    the instance keeps what the last forward deploy converged it to.",
+  );
 
   step("api-prod: up -d previous tag (NO rebuild, NO migrate — app tier only)");
   await sshScript(

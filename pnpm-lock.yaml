@@ -531,6 +531,9 @@ importers:
       '@ds/design-system':
         specifier: workspace:*
         version: link:../../packages/design-system
+      '@ds/legal-content':
+        specifier: workspace:*
+        version: link:../../packages/legal-content
       '@ds/schemas':
         specifier: workspace:*
         version: link:../../packages/schemas
@@ -644,12 +647,24 @@ importers:
       cmdk:
         specifier: ^1.1.1
         version: 1.1.1(@types/react-dom@19.2.4(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      github-slugger:
+        specifier: ^2.0.0
+        version: 2.0.0
       input-otp:
         specifier: ^1.5.0
         version: 1.5.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      remark-gfm:
+        specifier: ^4.0.1
+        version: 4.0.1
+      remark-parse:
+        specifier: ^11.0.0
+        version: 11.0.0
       tailwind-merge:
         specifier: ^3.3.1
         version: 3.6.0
+      unified:
+        specifier: ^11.0.5
+        version: 11.0.5
       zod:
         specifier: ^4.4.3
         version: 4.4.3

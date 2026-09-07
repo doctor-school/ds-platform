@@ -1,5 +1,5 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import matter from "gray-matter";
@@ -30,9 +30,16 @@ const DOCUMENT_EXTENSION = ".md";
  * Default documents directory. `../documents` resolves identically from
  * `src/loader.ts` and the emitted `dist/loader.js` — both sit one level below
  * the package root.
+ *
+ * The path is assembled with `join(dirname(...))` rather than
+ * `new URL("../documents/", import.meta.url)` on purpose: bundlers (Turbopack in
+ * the Next.js consumers) treat a literal `new URL(..., import.meta.url)` as a
+ * static asset reference and fail the build with "Module not found:
+ * '../documents/'" — a directory is not a module. `join` is opaque to that
+ * analysis and resolves at runtime, which is where the documents live.
  */
 const defaultDocumentsDir = (): string =>
-  fileURLToPath(new URL("../documents/", import.meta.url));
+  join(dirname(fileURLToPath(import.meta.url)), "..", "documents");
 
 const resolveDir = (options?: LoaderOptions): string =>
   options?.documentsDir ?? defaultDocumentsDir();

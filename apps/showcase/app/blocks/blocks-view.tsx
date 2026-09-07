@@ -29,6 +29,7 @@ import {
   FormFieldGroup,
   FormSection,
   FormSeparator,
+  LegalDocument,
   LoginCard,
   RegisterCard,
   MonthCalendarGrid,
@@ -46,6 +47,9 @@ import {
   type EmailConfirmCardCopy,
   type EmailConfirmValues,
   type EventSignupCardProps,
+  type LegalDocumentContent,
+  type LegalDocumentNeighbour,
+  type LegalDocumentState,
   type LoginCardCopy,
   type RegisterCardConsentItem,
   type RegisterCardCopy,
@@ -3966,9 +3970,152 @@ function AccountProfileCardSection() {
   );
 }
 
-export function BlocksView() {
+export interface BlocksViewProps {
+  /**
+   * The REAL published legal document and its neighbours, loaded server-side in
+   * `page.tsx` through `@ds/legal-content` (the loader is Node-only). The
+   * showcase renders the block against actual content — a lorem body would hide
+   * exactly the defects this section exists to surface: heading depth, a wide
+   * table, a nine-entry table of contents.
+   */
+  legalDocument: LegalDocumentContent;
+  legalOthers: LegalDocumentNeighbour[];
+}
+
+const LEGAL_DOCUMENT_PROPS: PropRow[] = [
+  {
+    name: "document",
+    type: "{ title; edition; body }",
+    required: false,
+    description:
+      "The document itself — title, ISO edition, Markdown body. Absent in every state but normal.",
+  },
+  {
+    name: "state",
+    type: '"normal" | "loading" | "error" | "not-found"',
+    required: false,
+    description:
+      "Host-resolved data state. All four render inside the same shell — never a bare host 404/500.",
+  },
+  {
+    name: "backHref",
+    type: "string",
+    required: true,
+    description: "The documents list — the way back from every state.",
+  },
+  {
+    name: "others",
+    type: "LegalDocumentNeighbour[]",
+    required: false,
+    description:
+      "«Другие документы» rows; each carries its own updated flag. Empty → no section.",
+  },
+  {
+    name: "updated",
+    type: "boolean",
+    required: false,
+    description:
+      "EARS-11 flag for this document's own header chip. Host-fed — the block does no date arithmetic.",
+  },
+  {
+    name: "onRetry",
+    type: "() => void",
+    required: false,
+    description: "error state only. Omitted → the alert renders without a retry.",
+  },
+];
+
+const LEGAL_DOCUMENT_STATES: { value: LegalDocumentState; label: string }[] = [
+  { value: "normal", label: "обычно" },
+  { value: "loading", label: "загрузка" },
+  { value: "error", label: "ошибка" },
+  { value: "not-found", label: "не найден" },
+];
+
+function LegalDocumentSection({
+  legalDocument,
+  legalOthers,
+}: BlocksViewProps) {
+  const [state, setState] = useState<LegalDocumentState>("normal");
+
+  return (
+    <BlockSection
+      title="Документ"
+      exportsLine="LegalDocument — props: document · state (обычно | загрузка | ошибка | не найден) · backHref · others · updated · onRetry"
+    >
+      <p className="text-sm text-muted-foreground">
+        The ONE legal-document reading surface both storefronts mount (028
+        EARS-7). Rendered here against the REAL published «Политика персональных
+        данных и согласия» from <code>@ds/legal-content</code>, not a fixture.
+        Все четыре состояния живут внутри одной оболочки: заголовок, шапка и путь
+        назад переживают и загрузку, и ошибку, и отсутствующий документ — читатель
+        никогда не попадает на голую 404 хоста.
+      </p>
+      <SubRow label="Состояние">
+        <div className="flex flex-wrap gap-2">
+          {LEGAL_DOCUMENT_STATES.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              aria-pressed={state === option.value}
+              onClick={() => setState(option.value)}
+              className={
+                state === option.value
+                  ? "border border-border bg-foreground px-4 py-2 text-sm font-bold text-background"
+                  : "border border-border bg-card px-4 py-2 text-sm font-bold text-card-foreground"
+              }
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      </SubRow>
+      <SubRow label="Live render">
+        <WideCanvas>
+          <LegalDocument
+            document={legalDocument}
+            state={state}
+            backHref="/documents"
+            others={legalOthers}
+            updated
+            onRetry={() => setState("normal")}
+          />
+        </WideCanvas>
+      </SubRow>
+      <SubRow label="State matrix">
+        <div className="grid gap-6">
+          {LEGAL_DOCUMENT_STATES.map((option) => (
+            <StateCase
+              key={option.value}
+              label={`state="${option.value}"`}
+              note={`канва document.dc.html — «${option.label}»`}
+            >
+              <WideCanvas>
+                <LegalDocument
+                  document={legalDocument}
+                  state={option.value}
+                  backHref="/documents"
+                  others={legalOthers}
+                />
+              </WideCanvas>
+            </StateCase>
+          ))}
+        </div>
+      </SubRow>
+      <SubRow label="Slots / props">
+        <PropsTable rows={LEGAL_DOCUMENT_PROPS} />
+      </SubRow>
+    </BlockSection>
+  );
+}
+
+export function BlocksView({ legalDocument, legalOthers }: BlocksViewProps) {
   return (
     <div className="flex flex-col gap-2">
+      <LegalDocumentSection
+        legalDocument={legalDocument}
+        legalOthers={legalOthers}
+      />
       <AccountProfileCardSection />
       <AuthCardSection />
       <AuthLayoutSection />

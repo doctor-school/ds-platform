@@ -83,6 +83,7 @@ export {
   type FilterChipProps,
 } from "./primitives/filter-chip";
 export { Badge, badgeVariants, type BadgeProps } from "./primitives/badge";
+export { ContactChip, type ContactChipProps } from "./primitives/contact-chip";
 export { Avatar, avatarVariants, type AvatarProps } from "./primitives/avatar";
 export {
   HEADER_CHIP_SURFACE,
@@ -148,3 +149,21 @@ export {
   OtpFocusScreen,
   maskDestination,
 } from "./blocks";
+
+// 028 EARS-7 (#1966) — the legal-document reading surface and the Markdown→ToC
+// helper it renders through.
+export {
+  LegalDocument,
+  LEGAL_DOCUMENT_COPY,
+  formatEditionLine,
+  type LegalDocumentProps,
+  type LegalDocumentState,
+  type LegalDocumentContent,
+  type LegalDocumentCopy,
+  type LegalDocumentNeighbour,
+} from "./blocks/legal-document";
+export {
+  parseLegalDocument,
+  type LegalDocumentTocEntry,
+  type ParsedLegalDocument,
+} from "./lib/markdown-document";

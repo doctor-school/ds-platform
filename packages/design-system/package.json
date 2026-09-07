@@ -25,6 +25,7 @@
     "./media-dropzone": "./src/primitives/media-dropzone.tsx",
     "./filter-chip": "./src/primitives/filter-chip.tsx",
     "./badge": "./src/primitives/badge.tsx",
+    "./contact-chip": "./src/primitives/contact-chip.tsx",
     "./avatar": "./src/primitives/avatar.tsx",
     "./checkbox": "./src/primitives/checkbox.tsx",
     "./radio": "./src/primitives/radio.tsx",
@@ -42,6 +43,7 @@
     "./events-filter": "./src/blocks/events-filter.tsx",
     "./recording-spoiler": "./src/blocks/recording-spoiler.tsx",
     "./account-profile-card": "./src/blocks/account-profile-card.tsx",
+    "./legal-document": "./src/blocks/legal-document.tsx",
     "./blocks": "./src/blocks/index.ts"
   },
   "scripts": {
@@ -62,8 +64,12 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
+    "github-slugger": "^2.0.0",
     "input-otp": "^1.5.0",
+    "remark-gfm": "^4.0.1",
+    "remark-parse": "^11.0.0",
     "tailwind-merge": "^3.3.1",
+    "unified": "^11.0.5",
     "zod": "^4.4.3"
   },
   "peerDependencies": {

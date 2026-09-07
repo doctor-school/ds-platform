@@ -16,6 +16,8 @@ import { cn } from "../lib/utils";
  *                       (`webinar-archive` canvas). Same geometry as `label`,
  *                       green ink so a positive outcome reads apart from a
  *                       neutral meta tag at a glance.
+ *   • `updated`         the pale `tint` «обновлено» flag on a documents-list row
+ *                       (028 EARS-11) — a boolean marker, never a version number.
  *   • `label`/`speaker` the pale `tint` tag with `tint-foreground` copy (a meta
  *                       tag / speaker chip); identical visual, two names for intent.
  *
@@ -39,6 +41,17 @@ const badgeVariants = cva(
         // as the pale-green plate with the darker green ink the token docs
         // designate for exactly this (light 4.96:1, dark 8.81:1).
         success: "bg-success-tint px-3 py-1.5 text-success-text",
+        // 028 EARS-11 (#1966, canvas `design-source/document.dc.html` L245-247):
+        // the «обновлено» chip on a documents-list row. Same pale `tint` plate as
+        // `label` on a tighter inset, because it rides INSIDE a row title line
+        // next to the document name rather than standing alone as a meta tag.
+        //
+        // It is a FLAG, never a version: the block that renders it takes a
+        // host-fed boolean and this variant carries no date and no number — EARS-11
+        // forbids a numeric version anywhere on the surface, and how long the chip
+        // stays visible after a re-publication is an open product decision
+        // (DEBT.md, PR #1971), so no window is baked in here.
+        updated: "bg-tint px-2 py-1 text-tint-foreground",
         label: "bg-tint px-2.5 py-1.5 text-tint-foreground",
         speaker: "bg-tint px-2.5 py-1.5 text-tint-foreground",
       },

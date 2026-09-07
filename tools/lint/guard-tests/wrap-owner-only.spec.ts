@@ -41,6 +41,14 @@ const assistantWrap = line({
     content: [{ type: "text", text: "запускаю /wrap" }],
   },
 });
+const codexOwnerWrap = line({
+  type: "response_item",
+  payload: {
+    type: "message",
+    role: "user",
+    content: [{ type: "input_text", text: "Проведи /wrap для этой сессии." }],
+  },
+});
 
 describe("wrap-owner-only isWrapInitiation()", () => {
   it("flags Skill wrap / run-wrap / wrap-init", () => {
@@ -89,6 +97,72 @@ describe("wrap-owner-only isWrapInitiation()", () => {
 });
 
 describe("wrap-owner-only ownerRequestedWrap()", () => {
+  it("accepts Codex response_item owner input and retains event_msg support", () => {
+    expect(ownerRequestedWrap(codexOwnerWrap)).toBe(true);
+    expect(
+      ownerRequestedWrap(
+        line({
+          type: "event_msg",
+          payload: {
+            type: "user_message",
+            message: "Проведи /wrap для этой сессии.",
+          },
+        }),
+      ),
+    ).toBe(true);
+  });
+
+  it.each(["assistant", "tool", "system", "developer"])(
+    "rejects Codex response_item role %s even with input_text",
+    (role) => {
+      expect(
+        ownerRequestedWrap(
+          line({
+            type: "response_item",
+            payload: { role, content: [{ type: "input_text", text: "/wrap" }] },
+          }),
+        ),
+      ).toBe(false);
+    },
+  );
+
+  it("rejects Codex tool outputs, quoted output blocks and malformed content", () => {
+    for (const content of [
+      [{ type: "output_text", text: "/wrap" }],
+      [{ type: "tool_result", content: "/wrap" }],
+      [{ type: "input_text", text: 123 }],
+      "/wrap",
+      null,
+    ]) {
+      expect(
+        ownerRequestedWrap(
+          line({ type: "response_item", payload: { role: "user", content } }),
+        ),
+      ).toBe(false);
+    }
+    expect(
+      ownerRequestedWrap(
+        line({
+          type: "response_item",
+          payload: { type: "function_call_output", output: "/wrap" },
+        }),
+      ),
+    ).toBe(false);
+    expect(
+      ownerRequestedWrap(
+        line({
+          type: "response_item",
+          payload: {
+            role: "user",
+            content: [
+              { type: "input_text", text: "дай handoff" },
+              { type: "output_text", text: "/wrap" },
+            ],
+          },
+        }),
+      ),
+    ).toBe(false);
+  });
   it("true on the owner's typed slash command", () => {
     expect(ownerRequestedWrap(userText("hi") + ownerSlash)).toBe(true);
   });
@@ -170,6 +244,24 @@ describe("wrap-owner-only hook (spawned end-to-end)", () => {
     const r = run(ownerSlash);
     expect(r.status).toBe(0);
     expect(r.stdout).toBe("");
+  });
+
+  it("allows the actual Codex owner message shape through the CLI", () => {
+    const r = run(codexOwnerWrap);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toBe("");
+  });
+
+  it("denies missing evidence and gives a normal-text Codex invocation", () => {
+    for (const transcript_path of [undefined, join(DIR, "missing.jsonl")]) {
+      const r = run(codexOwnerWrap, { transcript_path });
+      expect(r.status).toBe(0);
+      const out = JSON.parse(r.stdout).hookSpecificOutput;
+      expect(out.permissionDecision).toBe("deny");
+      expect(out.permissionDecisionReason).toContain(
+        "Проведи /wrap для этой сессии.",
+      );
+    }
   });
 
   it("silent for a subagent and for a non-wrap tool", () => {

@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /** /wrap is owner-initiated. Claude Read/Skill/Agent/Task plus Codex spawn_agent
  * and recognized shell skill reads are gated. Owner text supports Claude user
- * entries and Codex user_message events, never tool outputs or assistant text.
+ * entries and Codex user_message events / response_item user input_text,
+ * never tool outputs or assistant text.
  * Relevant wrap without readable authorization is denied. Legacy Claude child
  * exemption remains; arbitrary shell/JS semantics are not exhaustively parsed. */
 import { readFileSync } from "node:fs";
@@ -67,6 +68,17 @@ export function ownerText(entry) {
       ? entry.payload.message
       : null;
   }
+  if (entry?.type === "response_item" && entry?.payload?.role === "user") {
+    const content = entry.payload.content;
+    if (!Array.isArray(content)) return null;
+    const parts = content
+      .filter(
+        (block) =>
+          block?.type === "input_text" && typeof block.text === "string",
+      )
+      .map((block) => block.text);
+    return parts.length ? parts.join("\n") : null;
+  }
   if (!entry || entry.type !== "user" || !entry.message) return null;
   const content = entry.message.content;
   if (typeof content === "string") return content;
@@ -108,7 +120,8 @@ export function denyMessage(toolName) {
     `этой сессии его команды /wrap нет — шаг «${toolName}» открывает wrap/ретро ` +
     `и заблокирован. Просьба о handoff = skill handoff-prompt: только промпт, ` +
     `без ретро и без правок инструкций. Для wrap ничего не делай; если владелец ` +
-    `хочет ретро, он введёт /wrap сам.`
+    `хочет ретро, он может написать обычное сообщение: «Проведи /wrap для этой сессии.». ` +
+    `Отдельная slash-команда /wrap в Codex может быть не зарегистрирована.`
   );
 }
 

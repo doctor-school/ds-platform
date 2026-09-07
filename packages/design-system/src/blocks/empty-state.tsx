@@ -47,8 +47,14 @@ export interface EmptyStateProps
   extends Omit<React.HTMLAttributes<HTMLDivElement>, "title"> {
   /** WHICH empty situation this is — the two are never one string. */
   variant: EmptyStateVariant;
-  /** Heading, app-supplied and localized («Направлений пока нет»). */
-  title: React.ReactNode;
+  /**
+   * Heading, app-supplied and localized («Направлений пока нет»). Omit it ONLY
+   * on `not-found`, and only when an ancestor surface already prints this
+   * state's headline (the `legal-document` poster hero renders it as the page
+   * `h1`): printing it again would draw the same sentence twice on screen AND
+   * announce the state's heading twice to assistive tech.
+   */
+  title?: React.ReactNode;
   /** One explanatory line; for `no-results`, name what was applied. */
   description?: React.ReactNode;
   /**
@@ -94,7 +100,7 @@ export function EmptyState({
             key={width + String(index)}
             aria-hidden="true"
             className={cn(
-              "block h-3.5 animate-live-pulse bg-muted",
+              "block h-3.5 animate-live-pulse bg-hairline",
               index === 0 ? "h-5" : undefined,
               width,
             )}
@@ -140,9 +146,16 @@ export function EmptyState({
         className={cn("max-w-prose", className)}
         {...rest}
       >
-        <p className="text-base font-bold text-foreground">{title}</p>
+        {title ? (
+          <p className="text-base font-bold text-foreground">{title}</p>
+        ) : null}
         {description ? (
-          <p className="mt-3 text-base leading-relaxed font-semibold text-muted-foreground">
+          <p
+            className={cn(
+              "text-base leading-relaxed font-semibold text-muted-foreground",
+              title ? "mt-3" : undefined,
+            )}
+          >
             {description}
           </p>
         ) : null}

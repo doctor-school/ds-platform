@@ -233,6 +233,8 @@ describe("<LegalDocument> — data states (028 EARS-7, 028-design dataState)", (
     expect(
       screen.getByRole("heading", { level: 1, name: "Такого документа нет." }),
     ).toBeInTheDocument();
+    // Canvas L107-108 / L139-142: the headline is printed ONCE, in the hero.
+    expect(screen.getAllByText("Такого документа нет.")).toHaveLength(1);
     expect(
       screen.getByRole("link", { name: "Все документы платформы →" }),
     ).toHaveAttribute("href", "/documents");
@@ -264,5 +266,41 @@ describe("formatEditionLine (028 EARS-11)", () => {
 
   it("028 EARS-11: passes a non-ISO value through rather than printing «Invalid Date»", () => {
     expect(formatEditionLine("скоро", "редакция от")).toBe("скоро");
+  });
+});
+
+describe("<LegalDocument> — responsive hero (028 EARS-14)", () => {
+  /**
+   * At 390px the hero H1 must stay INSIDE the poster plate. The first build
+   * shipped `text-3xl leading-none` with no wrap affordance, so a long Russian
+   * word («персональных») overran the blue band and rendered white on the page
+   * surface. The canvas H1 is `clamp(28px,4.2vw,46px)` + `text-wrap:balance`:
+   * it steps DOWN on narrow viewports and balances instead of overflowing.
+   */
+  const RESPONSIVE_HEADING_CLASSES = [
+    "text-2xl", // mobile step-down — the canvas clamp floor, not the 1440px size
+    "sm:text-4xl", // the wide-viewport size is unchanged
+    "text-balance",
+    "break-words", // a single long word breaks rather than leaving the plate
+    "hyphens-auto",
+    "leading-tight", // `leading-none` clips descenders once the H1 wraps
+  ];
+
+  it("028 EARS-14: the document hero H1 steps down and wraps inside the plate on a narrow viewport", () => {
+    render(
+      <LegalDocument state="normal" document={DOCUMENT} backHref="/documents" />,
+    );
+
+    expect(screen.getByRole("heading", { level: 1 })).toHaveClass(
+      ...RESPONSIVE_HEADING_CLASSES,
+    );
+  });
+
+  it("028 EARS-14: the not-found hero H1 carries the same responsive treatment", () => {
+    render(<LegalDocument state="not-found" backHref="/documents" />);
+
+    expect(screen.getByRole("heading", { level: 1 })).toHaveClass(
+      ...RESPONSIVE_HEADING_CLASSES,
+    );
   });
 });

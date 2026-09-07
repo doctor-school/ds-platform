@@ -75,6 +75,21 @@ describe("<EmptyState> — 028 document states", () => {
     expect(screen.getByText("Документ загружается")).toHaveClass("sr-only");
   });
 
+  it("028 EARS-7: the loading skeleton bars are painted on the hairline tier, so the wait is VISIBLE and not a blank page", () => {
+    const { container } = render(
+      <EmptyState variant="loading" title="Документ загружается" />,
+    );
+
+    const bars = container.querySelectorAll('span[aria-hidden="true"]');
+    expect(bars.length).toBeGreaterThan(0);
+    for (const bar of bars) {
+      // `bg-muted` is ~1.00 contrast against `bg-section`/`bg-background`; the
+      // canvas paints these bars one tier darker (`hairline`).
+      expect(bar).toHaveClass("bg-hairline");
+      expect(bar).not.toHaveClass("bg-muted");
+    }
+  });
+
   it("028 EARS-7: the error variant is an alert with a retry, not an emptiness", () => {
     render(
       <EmptyState
@@ -106,6 +121,19 @@ describe("<EmptyState> — 028 document states", () => {
       screen.getByRole("link", { name: "Все документы платформы →" }),
     ).toHaveAttribute("href", "/documents");
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("028 EARS-7: the not-found variant omits its own headline when the host surface already prints it", () => {
+    render(
+      <EmptyState
+        variant="not-found"
+        description="Возможно, ссылка устарела."
+        action={<a href="/documents">Все документы платформы →</a>}
+      />,
+    );
+
+    expect(screen.getByText("Возможно, ссылка устарела.")).toBeInTheDocument();
+    expect(screen.queryByText("Такого документа нет.")).toBeNull();
   });
 
   it("028 EARS-7: the two original empty variants are untouched by the extension", () => {

@@ -303,7 +303,7 @@ const LegalDocument = React.forwardRef<HTMLElement, LegalDocumentProps>(
             </a>
             {isContent ? (
               <>
-                <h1 className="text-3xl leading-none font-extrabold tracking-tight text-hero-foreground sm:text-4xl">
+                <h1 className="text-2xl leading-tight font-extrabold tracking-tight text-balance break-words hyphens-auto text-hero-foreground sm:text-4xl sm:leading-none">
                   {document.title}
                 </h1>
                 <div className="mt-4 flex flex-wrap items-center gap-3">
@@ -328,7 +328,7 @@ const LegalDocument = React.forwardRef<HTMLElement, LegalDocumentProps>(
               </div>
             ) : null}
             {state === "not-found" ? (
-              <h1 className="text-3xl leading-none font-extrabold tracking-tight text-hero-foreground sm:text-4xl">
+              <h1 className="text-2xl leading-tight font-extrabold tracking-tight text-balance break-words hyphens-auto text-hero-foreground sm:text-4xl sm:leading-none">
                 {t.notFoundTitle}
               </h1>
             ) : null}
@@ -355,7 +355,9 @@ const LegalDocument = React.forwardRef<HTMLElement, LegalDocumentProps>(
           {state === "not-found" ? (
             <EmptyState
               variant="not-found"
-              title={t.notFoundTitle}
+              /* No title here: the poster hero above already carries
+                 «Такого документа нет.» as the page h1 (canvas L107-108,
+                 L139-142). The body holds only the explanation and the CTA. */
               description={t.notFoundDescription}
               action={
                 <Button asChild>

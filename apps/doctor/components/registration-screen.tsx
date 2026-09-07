@@ -18,6 +18,8 @@ import {
   maskDestination,
   RegisterCard,
   RegistrationSuccessCard,
+  setPendingRegistration,
+  takePendingRegistration,
   useBotProtectedAction,
   useResendCooldown,
   type EmailConfirmCardCopy,
@@ -26,6 +28,7 @@ import {
   type RegisterCardValues,
 } from "@ds/design-system/blocks";
 
+import { login } from "@/lib/auth-client";
 import {
   BOT_PROTECTION_MESSAGES,
   botProtectionSiteKey,
@@ -281,10 +284,13 @@ function findConsentItem(
  * confirms an email with these words, and 021 invents none of its own.
  *
  * ONE line is deliberately NOT the portal's: the portal's «Код принят —
- * входим…» promises the auto-login replay it performs with a held password.
- * The doctor storefront holds no password and replays no login (#1546 owns
- * where a confirmed doctor lands), so promising a sign-in here would be copy
- * asserting a mechanism this surface does not have.
+ * входим…» narrates the replay while the registrant waits on the `/verify`
+ * route. This host runs the SAME replay (021 EARS-15, #1996 — the shared
+ * `takePendingRegistration` slot), but its confirmation card is REPLACED by the
+ * success card in the same tick, so a «входим…» line would be copy for a state
+ * nobody sees. «Код принят — почта подтверждена.» states the fact the doctor
+ * can act on; the sign-in shows up where it is observable — the header of the
+ * page the success card sends them to reads «Личный кабинет».
  */
 const CONFIRM_COPY: EmailConfirmCardCopy = {
   title: "Проверьте почту",
@@ -414,6 +420,12 @@ export function RegistrationScreen({
           },
           captchaToken,
         );
+        // 003 EARS-39 / 021 EARS-15 (#1996) — hold the just-entered password
+        // for the post-confirmation replay, and only now: a failed register
+        // command leaves no credential behind. The slot is the SHARED one the
+        // Academy uses (volatile module memory, single-shot take, TTL-bounded);
+        // this host merely spans a state change instead of a route change.
+        setPendingRegistration({ identifier: email, password: values.password });
         // 003 EARS-16 / 021 EARS-13 — the response is IDENTICAL for a new and
         // an already-registered address, so there is exactly one next state and
         // no branch to make on it.
@@ -679,6 +691,23 @@ function RegistrationConfirmation({
         code: values.code,
         ...(returnTarget ? { returnTo: returnTarget } : {}),
       });
+      // 021 EARS-15 / 003 EARS-39 (#1996) — the confirm route verifies the
+      // email and mints NO session (by contract, same as 003 EARS-3), so the
+      // doctor would land on the event page as a guest and be asked to register
+      // again. Replay the REAL 003 EARS-5 password login with the held
+      // credential: the session still comes from the login route, not from
+      // confirm. A failed replay is NOT a failed confirmation — the email is
+      // verified either way, so the success card still renders and the honest
+      // outcome is a verified doctor who signs in from the header. The slot is
+      // wiped by the take whether the replay then succeeds or throws.
+      const held = takePendingRegistration(email);
+      if (held) {
+        try {
+          await login({ identifier: held.identifier, password: held.password });
+        } catch {
+          // Intentionally swallowed — see above.
+        }
+      }
       setSuccess(resolveRegistrationSuccess(confirmed, landing));
     } catch {
       setSuccess(null);

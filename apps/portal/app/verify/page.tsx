@@ -16,7 +16,6 @@ import {
 import { authClient } from "@/lib/auth-client";
 import { authErrorMessage } from "@/lib/auth-error-message";
 import { refreshHeaderAuth } from "@/lib/header-auth";
-import { takePendingRegistration } from "@/lib/pending-registration";
 import { withReturnTarget } from "@/lib/registration-handoff";
 import { completeReturnTarget } from "@/lib/registration-resume";
 import { useLocalizedResolver } from "@/lib/use-localized-resolver";
@@ -28,6 +27,7 @@ import {
   isBotProtectionRejected,
   isBotProtectionRequired,
   maskDestination,
+  takePendingRegistration,
   type EmailConfirmCardCopy,
   type EmailConfirmValues,
   useBotProtectedAction,
@@ -63,7 +63,8 @@ import {
  * but mints NO session. To carry the freshly-registered user straight in without
  * re-typing credentials, `/register` stashed the entered password in a volatile
  * in-memory store (never the URL / any persisted store — see
- * `lib/pending-registration.ts`). On a successful verify we read it back and
+ * `@ds/design-system/blocks` → `pending-registration.ts`, the ONE slot the
+ * doctor storefront replays through too, #1996). On a successful verify we read it back and
  * replay the REAL EARS-5 password login (`POST /v1/auth/login` → EARS-8 cookie),
  * then land on `/account`. The session therefore still comes from the password
  * login, NOT from `/auth/verify` — the API contract is unchanged. If no held

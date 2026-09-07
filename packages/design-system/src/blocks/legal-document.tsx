@@ -178,7 +178,7 @@ function TocList({
         data-testid="legal-document-toc-aside"
         className="hidden xl:sticky xl:top-6 xl:col-span-1 xl:block xl:self-start xl:border-2 xl:border-border xl:bg-card xl:p-5 xl:shadow-lg"
       >
-        <p className="mb-3.5 text-2xs font-extrabold tracking-micro text-faint uppercase">
+        <p className="mb-3.5 text-2xs font-extrabold tracking-micro text-muted-foreground uppercase">
           {title}
         </p>
         <ol className="flex list-none flex-col gap-0.5">{items}</ol>
@@ -219,7 +219,7 @@ function OtherDocuments({
     >
       <p
         id="legal-document-others"
-        className="mb-3.5 text-2xs font-extrabold tracking-micro text-faint uppercase"
+        className="mb-3.5 text-2xs font-extrabold tracking-micro text-muted-foreground uppercase"
       >
         {title}
       </p>

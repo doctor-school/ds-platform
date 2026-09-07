@@ -34,8 +34,16 @@ export function StorefrontHero() {
         {/*
           The page's single non-empty `h1` (the shell layout owns none — it wraps
           many routes and must not carry their heading).
+
+          Size tiers (#2031): the canvas draws the headline at
+          `clamp(34px, 5.6vw, 60px)`, i.e. 34px on a phone and 60px on the
+          desktop composition. «Doctor.School» has no break opportunity inside
+          it, so below the `layout` breakpoint the heading must FIT its content
+          box by size — `text-3xl` (2.5rem) is the token nearest the canvas's
+          mobile tier that does; `text-4xl` (3.5rem) pushed the brand token
+          19px past the 358px box at 390px and scrolled the whole page sideways.
         */}
-        <h1 className="text-4xl font-extrabold leading-tight tracking-tight text-balance layout:text-6xl">
+        <h1 className="text-3xl font-extrabold leading-tight tracking-tight text-balance layout:text-6xl">
           Doctor.School — бесплатное образование для врачей
         </h1>
 

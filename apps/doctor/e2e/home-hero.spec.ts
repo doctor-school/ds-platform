@@ -235,3 +235,68 @@ test.describe("017 EARS-2: home hero and the four scale counters", () => {
     ).toHaveCount(0);
   });
 });
+
+/**
+ * 017 EARS-14.1 (#2031) — the hero heading at the mobile breakpoint.
+ *
+ * At 390px the content box is 358px wide and the heading's brand token
+ * «Doctor.School» has no break opportunity inside it, so the heading must fit
+ * the box by its SIZE, not by breaking a word: an unbreakable run that
+ * overruns the box propagates up to `html` and the whole storefront home
+ * scrolls sideways on a phone — the defect #2031 fixes. Both themes, because
+ * the theme swap re-renders the band. The full mobile sweep is #1489
+ * (`mobile.spec.ts`); this is the hero's own regression pin.
+ */
+const MOBILE = { width: 390, height: 844 };
+
+test.describe("017 EARS-14.1: the hero heading wraps inside the mobile viewport (#2031)", () => {
+  test.use({ viewport: MOBILE });
+
+  for (const theme of ["light", "dark"] as const) {
+    test(`017 EARS-14.1: at 390px in the ${theme} theme the heading fits its content box and / does not scroll horizontally`, async ({
+      page,
+    }) => {
+      await serveStatistics(page, {
+        doctors: 12400,
+        specialties: 118,
+        lessons: 340,
+        eventsPerYear: 86,
+        computedAt: COMPUTED_AT,
+      });
+      await page.goto("/");
+
+      const toggle = page.getByTestId("theme-toggle");
+      await expect(toggle).toBeVisible();
+      if ((await toggle.getAttribute("aria-pressed")) !== String(theme === "dark"))
+        await toggle.click();
+      await expect(toggle).toHaveAttribute("aria-pressed", String(theme === "dark"));
+      // Measure the RESOLVED page, never whatever was on screen first.
+      await expect(page.getByTestId("hero-counters")).toHaveAttribute(
+        "data-state",
+        "ready",
+      );
+
+      const heading = page.getByRole("heading", {
+        level: 1,
+        name: "Doctor.School — бесплатное образование для врачей",
+      });
+      await expect(heading).toBeVisible();
+      expect(
+        await heading.evaluate((el) => el.scrollWidth - el.clientWidth),
+        "heading must wrap inside its content box",
+      ).toBeLessThanOrEqual(0);
+      expect(
+        await page.evaluate(() => document.documentElement.clientWidth),
+        "document must fill the viewport width",
+      ).toBe(MOBILE.width);
+      expect(
+        await page.evaluate(
+          () =>
+            document.documentElement.scrollWidth -
+            document.documentElement.clientWidth,
+        ),
+        "page must not overflow horizontally",
+      ).toBeLessThanOrEqual(1);
+    });
+  }
+});

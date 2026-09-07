@@ -38,6 +38,20 @@ const config: NextConfig = {
   // DETERMINISTIC — the server entry lands at apps/doctor/server.js, exactly the
   // path apps/doctor/Dockerfile COPYs and `pnpm ci:standalone-boot doctor` boots.
   outputFileTracingRoot: path.join(configDir, "../../"),
+  // The published legal texts of `@ds/legal-content` are READ AT RUNTIME with
+  // `fs` (028 EARS-12: a document exists because its file exists), so Next's
+  // module tracer — which follows imports, never a `join()` computed at runtime —
+  // leaves them out of the standalone output. `apps/doctor/Dockerfile` ships ONLY
+  // that output, so without this include the production image has an empty
+  // /documents list and every /documents/:slug answers 404, while every local
+  // `next dev` and every jsdom test passes. Turbopack rewrites the loader's
+  // `import.meta.url` to its source path under the tracing root, which is why the
+  // files must land at `<standalone>/packages/legal-content/documents/`; the glob
+  // below is what puts them there.
+  outputFileTracingIncludes: {
+    "/documents": ["../../packages/legal-content/documents/**"],
+    "/documents/[slug]": ["../../packages/legal-content/documents/**"],
+  },
   // Consume the internal packages as source (.tsx) — owned-code shadcn model
   // (ADR-0004 §6), no separate build step. `@ds/room` (#1722) is the shared live
   // room unit this app mounts at /events/:slug/room; it ships TypeScript sources

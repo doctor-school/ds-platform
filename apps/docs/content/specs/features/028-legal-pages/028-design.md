@@ -20,7 +20,7 @@ lang: en
 One reading component lives in `packages/design-system` and renders any document: title, «редакция от <дата>», ToC (sticky left at ≥1440px / collapsed above the body at ≤390px per `tocVariant: А`), body, back link, «Другие документы».
 
 - `apps/doctor` and `apps/portal` each add only:
-  - a documents-list route rendering their own projection (which `slug`s appear, in what order, with which captions/exits — EARS-3, EARS-6),
+  - a documents-list route rendering their own projection (which `slug`s appear and in what order — EARS-3; neither host's list carries a caption or exit to the other — EARS-6),
   - a `[slug]` document route that calls the shared component,
   - the contacts + requisites blocks, which are host-specific copy (support email, canvas captions) but the same layout primitive.
 - No app-to-app imports. Neither host imports from the other; both import from `packages/legal-content` and `packages/design-system` only.

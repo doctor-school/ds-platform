@@ -32,7 +32,7 @@ lang: en
 - The «Документы и контакты» page on `apps/doctor` and on `apps/portal`, each in its host's existing shell.
 - The document reading page (one shared component, host-projected), the R1 documents list (one row: Политика персональных данных и согласия), the per-021-consent document pages, the photo/video consent document page.
 - The contacts block (mailto + Telegram/ВКонтакте/YouTube chips) and the requisites line (юрлицо · ИНН · ОГРН · адрес — no licence).
-- The doctor-list caption exit naming the Academy documents page (REQ-24, third placement).
+- No caption or link to the Academy on the doctor documents list and no counterpart on the Academy list: the storefront footer link stays the single Academy crossing (REQ-24, EARS-6).
 - Removing every legacy-site link, including repointing `ACADEMY_PRIVACY_POLICY_URL`.
 
 ### Out of scope
@@ -57,7 +57,7 @@ lang: en
 - Canvas fork 1 (`docsVariant: Б`) — each host lists its own projection of one shared legal set; canonical logic and content live once, per-host route projection only (AGENTS.md §6 cross-front reuse).
 - Canvas fork, prompt 21 (`tocVariant: А`) — sticky left ToC at 1440, collapsed list above the text at 390.
 - Canvas fork 2, prompt 21 (`doc: короткий`) — every 021 consent and the photo/video consent is its own short-variant document page, never an extra index row.
-- REQ-24 amended (same PR as this spec's PRD commit) to name the doctor→Academy documents-list caption as its third allowed placement, alongside the footer link and «Стать экспертом».
+- REQ-24 keeps its two placements (footer link and «Стать экспертом»); the 028 documents list adds none — owner Stage-B decision 2026-09-07, EARS-6.
 
 ## Content model (design-level; detail in `028-design.md`)
 
@@ -70,7 +70,7 @@ Documents are Markdown files in the new shared package `packages/legal-content/`
 - **EARS-3** (`realizes: US-2`) — WHERE slice 1 is in force, THE SYSTEM SHALL list exactly one entry on both hosts' documents list — «Политика персональных данных и согласия» — and SHALL NOT list the licence, «Пользовательское соглашение» or «Правила начисления очков» rows drawn on the canvases.
 - **EARS-4** (`realizes: US-12`) — THE SYSTEM SHALL render the contacts block with `support@doctor.school` (doctor) or `academy@doctor.school` (Academy) as a `mailto:` link plus Telegram/ВКонтакте/YouTube chips, each caption exactly as drawn on that host's canvas.
 - **EARS-5** (`realizes: US-9, US-10`) — THE SYSTEM SHALL render one requisites line on both hosts reading «ООО «Ивекскон» · ИНН <…> · ОГРН <…> · <юридический адрес>», with no licence number in R1.
-- **EARS-6** (`realizes: US-3`) — THE SYSTEM SHALL close the doctor documents list with the caption «Полный набор документов платформы — на странице документов Академии.», linking to the Academy documents page (REQ-24, third placement); the Academy list SHALL carry no counterpart caption.
+- **EARS-6** (`realizes: US-3`) — THE SYSTEM SHALL NOT place any caption or link to the Academy on the doctor documents list: the storefront's single Academy crossing is the footer link (REQ-24), and a second exit from this page would contradict it. The Academy list SHALL likewise carry no counterpart caption to the doctor storefront.
 - **EARS-7** (`realizes: US-4, US-13, US-14`) — WHEN a visitor opens a document's own URL, THE SYSTEM SHALL render its title, «редакция от <дата>», a table of contents (sticky left column at ≥1440px, collapsed above the body at ≤390px — `tocVariant: А`), the body, a back link to the documents list, and a «Другие документы» list of the remaining published documents.
 - **EARS-8** (`realizes: US-1, US-2, US-7`) — WHEN a doctor opens a consent link next to a 021 registration checkbox, THE SYSTEM SHALL open that specific consent's document page (short `doc` variant) in the same host, word for word the checkbox's text, without discarding the doctor's in-progress registration form.
 - **EARS-9** (`realizes: US-2`) — THE SYSTEM SHALL publish each of the three 021 consent texts (medical-worker declaration, partner-data-sharing consent, marketing consent) and the photo/video distribution consent as its own document page, never as an index row.

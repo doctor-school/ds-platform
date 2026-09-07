@@ -109,9 +109,14 @@ describe("017 EARS-12: the single Academy crossing lives in the footer", () => {
     const html = renderToStaticMarkup(<StorefrontFooter />);
 
     expect(html).toContain("Документы и контакты");
-    expect(html).toContain("Пользовательское соглашение");
-    expect(html).toContain("Политика обработки персональных данных");
+    expect(html).toContain("Политика персональных данных и согласия");
     expect(html).toContain("Контакты");
+    expect(html).toContain('href="/documents"');
+    expect(html).toContain('href="/documents/privacy-policy"');
+    expect(html).toContain('href="/documents#contacts"');
+    // 028 EARS-12 (#1967): «Пользовательское соглашение» has no approved text,
+    // so it has no page — and therefore no footer link into nothing.
+    expect(html).not.toContain("Пользовательское соглашение");
     // No dead `#` affordance anywhere in the shell footer.
     expect(html).not.toMatch(/href="#"/);
   });

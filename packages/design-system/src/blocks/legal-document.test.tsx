@@ -83,10 +83,10 @@ describe("<LegalDocument> — normal state (028 EARS-7)", () => {
 
     expect(screen.getByTestId("legal-document-others")).toBeInTheDocument();
     expect(
-      screen.getByTestId("legal-document-other-consent-photo-video"),
+      screen.getByTestId("legal-document-row-consent-photo-video"),
     ).toHaveAttribute("href", "/documents/consent-photo-video");
     expect(
-      screen.getByTestId("legal-document-other-user-agreement"),
+      screen.getByTestId("legal-document-row-user-agreement"),
     ).toHaveAttribute("href", "/documents/user-agreement");
   });
 
@@ -159,9 +159,9 @@ describe("<LegalDocument> — «обновлено» chip (028 EARS-11)", () => 
     renderNormal();
 
     const flagged = screen.getByTestId(
-      "legal-document-other-consent-photo-video",
+      "legal-document-row-consent-photo-video",
     );
-    const plain = screen.getByTestId("legal-document-other-user-agreement");
+    const plain = screen.getByTestId("legal-document-row-user-agreement");
 
     expect(flagged).toHaveTextContent("обновлено");
     expect(plain).not.toHaveTextContent("обновлено");

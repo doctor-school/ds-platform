@@ -159,6 +159,22 @@ routes:
     status: deferred
     issue: "#1430"
 
+  # 028 EARS-1/3/4/5/6 (#1967) — the storefront legal surface: the «Документы и
+  # контакты» index and the per-document route the footer and the 021 consent
+  # links point at. Filesystem content only, no api read. Same cut-over as the
+  # routes above — the doctor storefront front door opens with #1430.
+  - app: doctor
+    route: /documents
+    file: apps/doctor/app/(storefront)/documents/page.tsx
+    status: deferred
+    issue: "#1430"
+
+  - app: doctor
+    route: /documents/[slug]
+    file: apps/doctor/app/(storefront)/documents/[slug]/page.tsx
+    status: deferred
+    issue: "#1430"
+
   # apps/admin — 007 admin console (login + events CRUD/lifecycle), all real
   # Refine surfaces; root is a pure redirect to /events.
   - app: admin

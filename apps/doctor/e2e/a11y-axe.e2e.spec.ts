@@ -294,3 +294,39 @@ for (const [state, drive] of [
     expect(summary, `axe violations on /login (${state})`).toEqual([]);
   });
 }
+
+/**
+ * 028 EARS-15 (#1967) — the legal surface joins the gate the day it ships.
+ *
+ * A CONTENT surface fails differently from a form: the risks here are heading
+ * structure (a document body is authored Markdown promoted to real `h2`/`h3`,
+ * plus the page's own hero `h1`), link text that names its destination, and the
+ * contrast of the faint requisites and edition lines. Both routes are scanned —
+ * the index composes the row unit and the contact chips, the document composes
+ * the ToC and the body — and neither takes an api read, so no route mock is
+ * needed on this backend-free tier.
+ */
+for (const [label, path] of [
+  ["/documents", "/documents"],
+  ["/documents/privacy-policy", "/documents/privacy-policy"],
+] as const) {
+  test(`028 EARS-15 ${label} passes WCAG 2 A/AA + one-h1 check`, async ({
+    page,
+  }) => {
+    await page.goto(path);
+
+    const h1 = page.locator("h1");
+    await expect(h1, `h1 count on ${label}`).toHaveCount(1);
+    await expect(h1, `h1 text on ${label}`).not.toHaveText(/^\s*$/);
+
+    const results = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze();
+
+    const summary = results.violations.map((v) => ({
+      id: v.id,
+      impact: v.impact,
+      help: v.help,
+      nodes: v.nodes.map((n) => n.target).flat(),
+    }));
+    expect(summary, `axe violations on ${label}`).toEqual([]);
+  });
+}

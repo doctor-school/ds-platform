@@ -45,11 +45,11 @@ Feature: 028 — Legal pages (documents and contacts)
     And no document, footer or consent line on either host references "doctor.school/index/*"
 
   @EARS-6
-  Scenario: Doctor documents list exits to the Academy documents page
+  Scenario: Doctor documents list carries no Academy exit
     Given a visitor is on the doctor storefront's documents list
-    When they reach the caption at the end of the list
-    Then it reads "Полный набор документов платформы — на странице документов Академии."
-    And it links to the Academy's documents page
+    When they reach the end of the list
+    Then no caption or link to the Academy is shown on the page
+    And the only Academy crossing on the storefront stays the footer link
 
   @EARS-11
   Scenario: A republished document shows the "обновлено" chip, never a version number

@@ -24,6 +24,14 @@ import { createServer } from "node:http";
  * does not — so the tier drives the real server read rather than a switch in
  * product code.
  *
+ * `POST /v1/auth/login` (021 EARS-15, #1996) is here because the confirmed
+ * doctor is SIGNED IN by replaying the real 003 EARS-5 login: the confirm route
+ * mints no session, the client replays the login through this same proxy, and
+ * the api answers by setting `__Host-ds_session`. The double answers it the same
+ * way — the one live session value below — so the header of the page the doctor
+ * lands on is decided by the real server read of a real cookie, not by a switch
+ * in the tier.
+ *
  * The specialty read is here because the LD-4 landing is also resolved on the
  * SERVER, from the forwarded `__Host-ds_specialty` cookie, and is therefore
  * just as unreachable from the browser as the event read. The double answers it
@@ -191,6 +199,23 @@ const server = createServer((request, response) => {
         json(response, 200, { status: "resend_requested" }),
       );
     }
+    // 003 EARS-5 / 021 EARS-15 (#1996) — the replayed sign-in. Credentials are
+    // NOT checked: the 003 engine owns that verdict and this tier asserts the
+    // session that follows a successful one. The answer is the api's own —
+    // a token-free body plus the `__Host-ds_session` cookie the BFF sets, which
+    // `/v1/auth/session` above then recognises as this tier's live doctor.
+    if (url.pathname === "/v1/auth/login") {
+      return readJson(request, () =>
+        json(
+          response,
+          200,
+          { status: "authenticated" },
+          {
+            "set-cookie": `__Host-ds_session=${SESSION_VALUE}; Path=/; HttpOnly; Secure; SameSite=Lax`,
+          },
+        ),
+      );
+    }
     if (url.pathname === "/v1/storefront/doctor/confirm") {
       return readJson(request, (body) =>
         json(response, 200, confirmAnswer(body.returnTo)),
@@ -284,7 +309,7 @@ function readJson(request, done) {
   });
 }
 
-function json(response, status, body) {
-  response.writeHead(status, { "content-type": "application/json" });
+function json(response, status, body, headers) {
+  response.writeHead(status, { "content-type": "application/json", ...headers });
   response.end(JSON.stringify(body));
 }

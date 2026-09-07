@@ -152,6 +152,29 @@ test.describe("021 EARS-10: the post-confirmation landing", () => {
     await expect(page).toHaveURL(/\/$/);
   });
 
+  test("021 EARS-15: the confirmed doctor lands on the эфир SIGNED IN, and is never asked to register again", async ({
+    page,
+  }) => {
+    // The defect this test exists to catch (#1996, owner Stage-B withdrawal):
+    // `/v1/storefront/doctor/confirm` verifies the email and mints NO session,
+    // so a doctor who typed the code still arrived on the эфир as a guest and
+    // «Участвовать» sent them back to the door they had just walked through.
+    // The fix is the Academy's own mechanism — the held password replayed
+    // through the real 003 EARS-5 login — and the ONLY place it is observable
+    // is here: the session is a cookie set by the upstream, read on the SERVER
+    // by `lib/shell-auth.ts` when the landing page renders.
+    await registerAndConfirm(page, arrival(LIVE));
+
+    await page.getByTestId("registration-success-primary").click();
+    await expect(page).toHaveURL(new RegExp(`/events/${LIVE}$`));
+
+    // The header of the landed page is the observable outcome: the signed-in
+    // cluster, not «Войти».
+    const header = page.getByTestId("storefront-header");
+    await expect(header.getByRole("link", { name: "Личный кабинет" })).toBeVisible();
+    await expect(header.getByRole("link", { name: "Войти" })).toHaveCount(0);
+  });
+
   test("021 EARS-9: the accrual is named as a pending promise, with no amount and no ledger link", async ({
     page,
   }) => {

@@ -32,7 +32,7 @@ lang: en
 - The «Документы и контакты» page on `apps/doctor` and on `apps/portal`, each in its host's existing shell.
 - The document reading page (one shared component, host-projected), the R1 documents list (one row: Политика персональных данных и согласия), the per-021-consent document pages, the photo/video consent document page.
 - The contacts block (mailto + Telegram/ВКонтакте/YouTube chips) and the requisites line (юрлицо · ИНН · ОГРН · адрес — no licence).
-- The doctor-list caption exit naming the Academy documents page (REQ-24, third placement).
+- No caption or link to the Academy on the doctor documents list and no counterpart on the Academy list: the storefront footer link stays the single Academy crossing (REQ-24, EARS-6).
 - Removing every legacy-site link, including repointing `ACADEMY_PRIVACY_POLICY_URL`.
 
 ### Out of scope
@@ -57,7 +57,7 @@ lang: en
 - Canvas fork 1 (`docsVariant: Б`) — each host lists its own projection of one shared legal set; canonical logic and content live once, per-host route projection only (AGENTS.md §6 cross-front reuse).
 - Canvas fork, prompt 21 (`tocVariant: А`) — sticky left ToC at 1440, collapsed list above the text at 390.
 - Canvas fork 2, prompt 21 (`doc: короткий`) — every 021 consent and the photo/video consent is its own short-variant document page, never an extra index row.
-- REQ-24 amended (same PR as this spec's PRD commit) to name the doctor→Academy documents-list caption as its third allowed placement, alongside the footer link and «Стать экспертом».
+- REQ-24 keeps its two placements (footer link and «Стать экспертом»); the 028 documents list adds none — owner Stage-B decision 2026-09-07, EARS-6.
 
 ## Content model (design-level; detail in `028-design.md`)
 

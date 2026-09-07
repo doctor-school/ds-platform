@@ -18,7 +18,9 @@ import { test, expect, devices, type Page, type Request } from "@playwright/test
  * assertable — the code that leaves the browser, not the glyphs on screen.
  */
 const REGISTER_ROUTE = "**/v1/storefront/doctor/register";
-const VERIFY_ROUTE = "**/v1/auth/verify";
+// #1546 — the code now rides the STOREFRONT confirm command (same 003 engine,
+// plus the 021 success state), so this is the request the browser makes.
+const CONFIRM_ROUTE = "**/v1/storefront/doctor/confirm";
 
 const EMAIL = "doctor@clinic.ru";
 const PASSWORD = "correct horse battery";
@@ -165,11 +167,17 @@ test.describe("021 EARS-11: the confirmation code on a phone", () => {
         body: JSON.stringify({ status: "pending_verification" }),
       }),
     );
-    await page.route(VERIFY_ROUTE, (route) =>
+    await page.route(CONFIRM_ROUTE, (route) =>
       route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify({ status: "verified" }),
+        body: JSON.stringify({
+          status: "verified",
+          credited: null,
+          profileCompletion: null,
+          primaryAction: { kind: "landing", href: "/events" },
+          secondaryAction: { kind: "cabinet", href: "/account" },
+        }),
       }),
     );
 
@@ -200,11 +208,11 @@ test.describe("021 EARS-11: the confirmation code on a phone", () => {
     // The proof the field is typed for the REAL code: a lowercase code passes
     // the client guard and leaves the browser in the case the engine expects.
     const [request] = await Promise.all([
-      page.waitForRequest(VERIFY_ROUTE),
+      page.waitForRequest(CONFIRM_ROUTE),
       code.fill("abc123"),
     ]);
     expect(body(request)).toEqual({ email: EMAIL, code: "ABC123" });
 
-    await expect(page.getByTestId("verify-succeeded")).toBeVisible();
+    await expect(page.getByTestId("registration-success")).toBeVisible();
   });
 });

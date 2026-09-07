@@ -275,3 +275,13 @@ export type {
   LegalDocumentCopy,
   LegalDocumentNeighbour,
 } from "./legal-document";
+
+// 021 EARS-9 + EARS-10 (#1546) — the ONE canonical post-confirmation success
+// state of a registration door. Data-in, presentation-out: the accrual sentence,
+// the profile-completion line and BOTH hrefs are resolved by the host from the
+// confirmation response; the block owns only the composition and the RANK.
+export { RegistrationSuccessCard } from "./registration-success-card";
+export type {
+  RegistrationSuccessAction,
+  RegistrationSuccessCardProps,
+} from "./registration-success-card";

@@ -4,6 +4,7 @@ import type { DoctorRegisterRequest } from "@ds/schemas";
 
 import {
   StorefrontAuthError,
+  confirmDoctorEmail,
   registerDoctor,
   resendVerification,
   verifyEmail,
@@ -126,6 +127,56 @@ describe("021 EARS-19: the bot-protection token on the storefront commands", () 
     const [url, init] = callArgs();
     expect(url, "003's engine, not a second code path").toBe("/v1/auth/verify");
     expect(JSON.parse(String(init.body))).toEqual({
+      email: "doctor@clinic.ru",
+      code: "ABC123",
+    });
+  });
+
+  it("021 EARS-10: the confirm command carries the code AND the doctor-host return target in one request", async () => {
+    fetchMock.mockResolvedValue(
+      ok({
+        status: "verified",
+        credited: null,
+        profileCompletion: null,
+        primaryAction: { kind: "return", href: "/events/prp-pri-gonartroze" },
+        secondaryAction: { kind: "cabinet", href: "/account" },
+      }),
+    );
+
+    await confirmDoctorEmail({
+      email: "doctor@clinic.ru",
+      code: "ABC123",
+      returnTo: "/events/prp-pri-gonartroze",
+    });
+
+    const [url, init] = callArgs();
+    expect(url, "one command, not a verify hop plus a landing hop").toBe(
+      "/v1/storefront/doctor/confirm",
+    );
+    expect(JSON.parse(String(init.body))).toEqual({
+      email: "doctor@clinic.ru",
+      code: "ABC123",
+      // The DOCTOR-HOST projection, which is the only shape the server guard
+      // accepts — never the canonical academy `/webinars/<slug>` the gate emits.
+      returnTo: "/events/prp-pri-gonartroze",
+    });
+    expect(init.credentials).toBe("include");
+  });
+
+  it("021 EARS-10: a direct arrival sends no target at all rather than an empty one", async () => {
+    fetchMock.mockResolvedValue(
+      ok({
+        status: "verified",
+        credited: null,
+        profileCompletion: null,
+        primaryAction: { kind: "landing", href: "/events" },
+        secondaryAction: { kind: "cabinet", href: "/account" },
+      }),
+    );
+
+    await confirmDoctorEmail({ email: "doctor@clinic.ru", code: "ABC123" });
+
+    expect(JSON.parse(String(callArgs()[1].body))).toEqual({
       email: "doctor@clinic.ru",
       code: "ABC123",
     });

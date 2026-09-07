@@ -176,6 +176,12 @@ export default async function DoctorRegisterPage({
     ? await resolveReturnContext(safeTarget)
     : null;
 
+  // 021 EARS-10 (#1546) — the target CARRIED THROUGH the confirmation, in the
+  // doctor-host vocabulary the confirm command's guard accepts. Present only
+  // when the эфир actually resolved: an unresolvable target is the same as no
+  // target, and sending it anyway would ask the server to name a degradation
+  // reason for a page this route already knows nothing answers.
+  //
   // EARS-3 / LD-4 — where this arrival lands after confirmation. A gate arrival
   // lands back on the эфир it came from; a direct arrival lands where 017's
   // remembered specialty says, which is the only per-visitor fact on the route
@@ -197,6 +203,7 @@ export default async function DoctorRegisterPage({
     >
       <RegistrationScreen
         landing={landing}
+        {...(landingTarget && returnEvent ? { returnTarget: landingTarget } : {})}
         consentTiers={CONSENT_TIERS}
         returnContext={
           returnEvent ? <ReturnContextPlate event={returnEvent} /> : undefined

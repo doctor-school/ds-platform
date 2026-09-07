@@ -39,8 +39,13 @@ export default defineConfig({
   // joins them for the same reason again: the sign-in door's return-context
   // copy AND its signed-in redirect are both server decisions taken against
   // this same upstream before the first byte of HTML.
+  // #1546 adds the fourth half of the same question — the post-confirmation
+  // landing (`register-return.spec.ts`). It belongs here because the target it
+  // follows is projected on the SERVER at the door and re-validated on the
+  // SERVER by the confirm command; a browser-intercepted tier could only assert
+  // its own fixture of both decisions.
   testMatch:
-    "{register-{return-context,direct},login-{return-context,arrival}}.spec.ts",
+    "{register-{return-context,direct,return},login-{return-context,arrival}}.spec.ts",
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,

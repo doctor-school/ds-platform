@@ -11,7 +11,6 @@ import type { ConsentAcceptance, ConsentItem, ConsentTier } from "@ds/schemas";
 import {
   MARKETING_COMMUNICATIONS_PURPOSE,
   PARTNER_DATA_SHARING_PURPOSE,
-  VerifyRequestSchema,
 } from "@ds/schemas";
 
 import {
@@ -45,6 +44,12 @@ import {
   BOT_PROTECTION_MESSAGES,
   botProtectionSiteKey,
 } from "@/lib/bot-protection";
+import {
+  REGISTER_FIELD_MESSAGES,
+  registerFieldHint,
+  registerFieldRules,
+  resolveVerificationCode,
+} from "@/lib/register-fields";
 import {
   registerDoctor,
   resendVerification,
@@ -280,7 +285,11 @@ const CONFIRM_COPY: EmailConfirmCardCopy = {
   goToReset: "Сбросить пароль",
 };
 
-const CONFIRM_CODE_INVALID = "Введите код из письма.";
+/**
+ * 021 EARS-11 — the code field's message, taken from the FieldSpec projection
+ * so the rule that rejects and the copy that explains cannot drift apart.
+ */
+const CONFIRM_CODE_INVALID = REGISTER_FIELD_MESSAGES.code.invalid;
 const CONFIRM_FAILED = "Код не подошёл. Попробуйте ещё раз.";
 const CONFIRM_RESEND_FAILED =
   "Не удалось отправить код повторно. Попробуйте ещё раз.";
@@ -510,16 +519,10 @@ export function RegistrationScreen({
             <FormField
               control={form.control}
               name="email"
-              rules={{
-                required:
-                  "Введите рабочую почту — на неё придёт код подтверждения.",
-                pattern: {
-                  // UX affordance only: shape, not deliverability.
-                  value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
-                  message:
-                    "Проверьте адрес: он должен быть вида doctor@clinic.ru.",
-                },
-              }}
+              // EARS-11 — rule, mask and copy all come from the FieldSpec
+              // SSOT (`DOCTOR_REGISTER_FIELD_SPECS`); the shape check is a UX
+              // affordance only, never deliverability.
+              rules={registerFieldRules("email")}
               render={({ field }) => (
                 <EmailField
                   field={field}
@@ -533,21 +536,19 @@ export function RegistrationScreen({
             <FormField
               control={form.control}
               name="password"
-              rules={{
-                required: "Придумайте пароль не короче 8 символов.",
-                minLength: {
-                  // 003 EARS-36 — the length-only baseline, 021 declares none.
-                  value: 8,
-                  message:
-                    "Пароль слишком короткий — нужно не менее 8 символов.",
-                },
-              }}
+              // EARS-11 — the length-only baseline (003 EARS-36) lives in the
+              // FieldSpec SSOT, bound to the `@ds/schemas` policy constants;
+              // no length literal survives on this screen.
+              rules={registerFieldRules("password")}
               render={({ field }) => (
                 <PasswordField
                   field={field}
                   purpose="new"
                   label="Пароль"
-                  policyHint="Не менее 8 символов."
+                  // The PRE-SUBMIT half of the one-slot hint-OR-error contract
+                  // (003 EARS-37, decision Б): the shared message slot shows
+                  // this hint until an error replaces it.
+                  policyHint={registerFieldHint("password") ?? undefined}
                   testId="register-password"
                 />
               )}
@@ -556,13 +557,9 @@ export function RegistrationScreen({
             <FormField
               control={form.control}
               name="promoCode"
-              rules={{
-                maxLength: {
-                  value: 64,
-                  message:
-                    "Промокод длиннее 64 символов — проверьте, что скопировали только код.",
-                },
-              }}
+              // EARS-11 — trim + the length bound, both from the FieldSpec
+              // SSOT (`PROMO_CODE_MAX_LENGTH`), never a literal here.
+              rules={registerFieldRules("promoCode")}
               render={({ field }) => (
                 // No semantic primitive exists for a promo code, and one
                 // would be wrong: the code vocabulary belongs to a campaign,
@@ -900,24 +897,29 @@ export function RegistrationScreen({
 }
 
 /**
- * The RHF resolver for the confirmation code, hand-rolled over the 003
- * `VerifyRequestSchema` SSOT.
+ * 021 EARS-11 — the RHF resolver for the confirmation code, hand-rolled over
+ * the `code` FieldSpec.
  *
  * Hand-rolled and not `@hookform/resolvers/zod`: the doctor storefront does not
  * carry that dependency, and adding a package to translate three lines of issue
- * mapping would be the heavier change. It stays a projection of the SCHEMA all
- * the same — the shape is never re-declared here, only its issues are given the
+ * mapping would be the heavier change. It stays a projection of the SSOT all
+ * the same — the shape is never re-declared here, only its failure is given the
  * screen's Russian wording, which is exactly the split the block's `resolver`
  * prop exists for (copy is the host's, the contract is `@ds/schemas`').
+ *
+ * The guard is deliberately CASE-INSENSITIVE (LD-9): the emitted code is
+ * alphanumeric, the widget normalises the value to upper case and the 003
+ * engine normalises again server-side, so a lowercase-typed code is a valid
+ * code. The REQUEST contract stays loose (`DoctorConfirmRequestSchema.code` is
+ * `z.string()`, LD-1) — this length/charset vocabulary is the client guard
+ * only.
  */
 const confirmResolver: Resolver<EmailConfirmValues> = (values) => {
-  const parsed = VerifyRequestSchema.safeParse(values);
-  const result: ResolverResult<EmailConfirmValues> = parsed.success
-    ? { values: parsed.data, errors: {} }
-    : {
-        values: {},
-        errors: { code: { type: "validate", message: CONFIRM_CODE_INVALID } },
-      };
+  const message = resolveVerificationCode(values.code);
+  const result: ResolverResult<EmailConfirmValues> =
+    message === null
+      ? { values, errors: {} }
+      : { values: {}, errors: { code: { type: "validate", message } } };
   return result;
 };
 

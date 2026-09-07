@@ -58,8 +58,13 @@ const InputOTPSlot = React.forwardRef<
         // Neo-brutalist OTP slot: a 40px square cell (`w-10`, the approved #512
         // deviation from the canvas 42×52 wrapped inputs — auth.dc.html renders
         // 42×52px slots with a 7px gap + flex-wrap; #512 shipped a contiguous
-        // shared-border 40px row instead) with a hard 2px border, tabular uppercase
-        // digits. `aspect-square min-w-0` (#544) lets the cell SHRINK below its
+        // shared-border 40px row instead) with a hard 2px border and tabular
+        // figures. NO `uppercase` text-transform (021 LD-9, #1547): the slot
+        // renders the value it is given and never restyles it. An alphanumeric
+        // code is normalised to upper case in the VALUE by `<OtpField>` (#1109)
+        // and again by the server, so a CSS transform would add nothing while
+        // showing the doctor glyphs that differ from what they typed — the exact
+        // thing LD-9 forbids. `aspect-square min-w-0` (#544) lets the cell SHRINK below its
         // preferred 40px — staying square — only when the row would otherwise
         // overflow a narrow card (login = 8 slots at 390px); on wide layouts every
         // slot keeps its 40px preferred width, so 6-slot verify/reset rows and
@@ -68,7 +73,7 @@ const InputOTPSlot = React.forwardRef<
         // `hairline`; FILLED switches to the ink `border` (source "filled ⇒ border
         // ink"); the ACTIVE slot takes the brand `ring` border + the flush 3px
         // `shadow-focus`. Token-only → light + `.dark`.
-        "relative flex aspect-square w-10 min-w-0 items-center justify-center border-y-2 border-r-2 first:border-l-2 text-sm font-bold uppercase tabular-nums text-foreground transition-all",
+        "relative flex aspect-square w-10 min-w-0 items-center justify-center border-y-2 border-r-2 first:border-l-2 text-sm font-bold tabular-nums text-foreground transition-all",
         char ? "border-border" : "border-hairline",
         isActive && "z-10 border-ring shadow-focus",
         className,

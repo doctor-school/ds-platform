@@ -151,6 +151,24 @@ describe("OtpField variant=slotted", () => {
     expect(input).toHaveAttribute("autocapitalize", "characters");
   });
 
+  it("applies NO uppercase text-transform to a slot — the value is normalised, never the glyphs (021 LD-9, #1547)", () => {
+    // The alphanumeric code is uppercased in the VALUE (#1109) and again by the
+    // server, so a CSS `text-transform` on the slot buys nothing and breaks the
+    // rule that what the doctor sees is what they typed. A class assertion, not
+    // a computed-style one: jsdom does not apply Tailwind, so the class IS the
+    // observable. The rendered counterpart runs under mobile emulation in
+    // `apps/doctor/e2e/register-validation.spec.ts`.
+    const { container } = render(
+      <SlottedHarness length={6} charset="alphanumeric" />,
+    );
+
+    const slots = container.querySelectorAll("div.aspect-square");
+    expect(slots).toHaveLength(6);
+    for (const slot of slots) {
+      expect(slot.className).not.toMatch(/\buppercase\b/);
+    }
+  });
+
   it("keeps a NUMERIC keyboard for the digit login OTP (charset=numeric, #1110)", () => {
     // The login OTP is digits-only — charset=\"numeric\" must pin the numeric keypad
     // explicitly (never a text keyboard) and never force autoCapitalize.

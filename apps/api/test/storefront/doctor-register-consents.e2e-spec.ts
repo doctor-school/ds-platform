@@ -540,5 +540,39 @@ describe.skipIf(!process.env.DATABASE_URL)(
         },
       ]);
     });
+
+    it("021 EARS-7.3: a purpose named twice still leaves exactly one row", async () => {
+      const email = uniqueEmail("duplicate-purpose");
+
+      const res = await app.inject({
+        method: "POST",
+        url: URL,
+        payload: {
+          email,
+          password: PASSWORD,
+          medicalWorkerDeclaration: true,
+          consent: [
+            { purpose: PARTNER_DATA_SHARING_PURPOSE, version: "2026-09" },
+            { purpose: MARKETING_COMMUNICATIONS_PURPOSE, version: "2026-09" },
+            { purpose: MARKETING_COMMUNICATIONS_PURPOSE, version: "2026-08" },
+            // The declaration is derived from the flag, never from the array —
+            // listing it here must not add a second declaration row either.
+            {
+              purpose: MEDICAL_WORKER_DECLARATION_PURPOSE,
+              version: "2026-09",
+            },
+          ],
+        },
+      });
+      expect(res.statusCode).toBe(200);
+
+      // The table is append-only: a duplicate row is permanent, and it would
+      // make "the granted version" ambiguous for the manager view of 037.
+      expect((await consentRowsFor(email)).map((row) => row.purpose)).toEqual([
+        MARKETING_COMMUNICATIONS_PURPOSE,
+        MEDICAL_WORKER_DECLARATION_PURPOSE,
+        PARTNER_DATA_SHARING_PURPOSE,
+      ]);
+    });
   },
 );

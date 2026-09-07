@@ -298,6 +298,9 @@ export class DoctorRegisterService {
    *    purpose guard above is stated twice — so an undeclared purpose can never
    *    reach `consent_records` through a caller that bypasses the DTO pipe.
    *
+   * 3. **One row per purpose.** A payload naming the same purpose twice would
+   *    otherwise leave two permanent rows.
+   *
    * `consent_records` is append-only and has no status column, so a row written
    * here is permanent: withdrawal is a manager-side operation of feature 037
    * (021 design §4), not a second row and not a flag flip.
@@ -305,7 +308,7 @@ export class DoctorRegisterService {
   private accessConditionConsents(
     req: DoctorRegisterRequest,
   ): ConsentAcceptance[] {
-    const supplied = req.consent.flatMap((entry) => {
+    const granted = req.consent.flatMap((entry) => {
       // The declaration is derived from the flag above, never from the array.
       if (entry.purpose === MEDICAL_WORKER_DECLARATION_PURPOSE) return [];
       // Rule 2, the domain half: an undeclared purpose reaches no record.
@@ -318,6 +321,14 @@ export class DoctorRegisterService {
         },
       ];
     });
+    // Rule 3: ONE row per purpose. `consent_records` is append-only, so a
+    // payload that names the same purpose twice would leave two permanent rows
+    // and make "the granted version" ambiguous for the manager view that reads
+    // them. Every declared purpose now carries the same server-stamped version
+    // anyway, so the duplicates are indistinguishable and the first wins.
+    const supplied = [
+      ...new Map(granted.map((entry) => [entry.purpose, entry])).values(),
+    ];
     return req.medicalWorkerDeclaration
       ? [
           {

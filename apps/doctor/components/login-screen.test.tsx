@@ -37,11 +37,12 @@ describe("017 #1933: the doctor sign-in screen", () => {
     expect(html).toContain("Создать аккаунт");
   });
 
-  it("017 #1933.14: password recovery points at the live academy /reset, not a doctor-host 404", () => {
+  it("017 #1989.14: password recovery stays on THIS host — «Забыли пароль» links to the storefront /reset", () => {
     const html = render();
 
-    expect(html).toContain('href="https://academy.doctor.school/reset"');
-    expect(html).not.toContain('href="/reset"');
+    expect(html).toContain('href="/reset"');
+    // The #1933 interim crossing is gone with the route that made it necessary.
+    expect(html).not.toContain("academy.doctor.school");
   });
 
   it("017 #1933.11: the create-account link carries the validated arrival context onward", () => {

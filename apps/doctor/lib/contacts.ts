@@ -7,13 +7,11 @@
  * support entry point, an email footer) must read them from here instead of
  * re-typing an address that then drifts.
  *
- * WHY THE CHANNEL LIST IS SHORT. The canvas (`design-source/doctor-docs.dc.html`
- * L167-169) draws Telegram / ВКонтакте / YouTube chips, but it draws all three
- * with `href="#"` — the canvas fixes the SHAPE, not the destinations, and the VK
- * and YouTube URLs are not recorded anywhere in this repo. A `#` chip is a dead
- * affordance, and the owner's rule for this exact case is «hide until content»:
- * a channel appears here the moment its real URL exists, and adding one is this
- * one array literal.
+ * THE CHANNEL ROSTER. The canvas (`design-source/doctor-docs.dc.html` L167-169)
+ * draws three chips with `href="#"`: it fixes the SHAPE of the row, not the
+ * destinations. The destinations are the operator's own channels — Telegram,
+ * ВКонтакте, RuTube — and each entry below carries a real URL, because a `#`
+ * chip is a dead affordance that looks like a live channel.
  */
 export interface ContactChannel {
   /** Stable key — the React key and the row's `data-testid` suffix. */
@@ -30,12 +28,18 @@ export const SUPPORT_EMAIL = "support@doctor.school";
 export const SUPPORT_CAPTION = "Мы отвечаем в рабочие дни.";
 
 /**
- * Community channels, in canvas order. Telegram's URL is the one already in
- * production on the Academy home view (`apps/portal/app/academy-home-view.tsx`);
- * ВКонтакте and YouTube join this array when their URLs are recorded.
+ * Community channels, in canvas order: Telegram, ВКонтакте, RuTube. The Academy
+ * storefront publishes the same roster from its own host copy
+ * (`apps/portal/lib/contacts.ts`) — the list is host copy, not a shared unit.
  */
 export const CONTACT_CHANNELS: readonly ContactChannel[] = [
-  { key: "telegram", label: "Telegram", href: "https://t.me/doctorschool" },
+  { key: "telegram", label: "Telegram", href: "https://t.me/DoctorSchool" },
+  { key: "vk", label: "ВКонтакте", href: "https://vk.ru/doctor.school" },
+  {
+    key: "rutube",
+    label: "RuTube",
+    href: "https://rutube.ru/channel/33533508/",
+  },
 ];
 
 /**

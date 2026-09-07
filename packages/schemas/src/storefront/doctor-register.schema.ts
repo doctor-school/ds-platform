@@ -35,10 +35,86 @@ export const PARTNER_DATA_SHARING_PURPOSE = "partner-data-sharing";
  *
  * Named here so the storefront's tier-2 control and the future record write
  * agree on one purpose string, and deliberately ABSENT from the required list
- * below: its record semantics (a row only when granted, no row at all when
- * withheld) are #1542's to land.
+ * below: withholding it refuses nothing. Its record semantics are EARS-6's — a
+ * row only when granted, no row at all when withheld — and hold by
+ * construction, because an ungranted purpose is simply absent from the
+ * command's `consent` array and there is no `granted: false` shape to store.
  */
 export const MARKETING_COMMUNICATIONS_PURPOSE = "marketing-communications";
+
+/**
+ * 021 EARS-7 (#1543) — every purpose the registration command is willing to
+ * record, as a CLOSED list.
+ *
+ * The 003 `ConsentAcceptanceSchema` deliberately takes any non-empty purpose
+ * string: 003 is the engine and does not know which purposes a given surface
+ * renders. 021 does — it renders exactly three — so the storefront command
+ * closes the list at its own I/O boundary. Without it a caller could name a
+ * purpose no surface ever displayed and still get an append-only
+ * `consent_records` row for it, which is a consent record of nothing; EARS-7
+ * requires one versioned record per purpose the doctor actually granted on
+ * THIS surface.
+ *
+ * Adding a purpose here is therefore a surface decision (new rendered wording
+ * plus its server-stamped version constant), never a contract convenience.
+ */
+export const DOCTOR_REGISTER_CONSENT_PURPOSES = [
+  MEDICAL_WORKER_DECLARATION_PURPOSE,
+  PARTNER_DATA_SHARING_PURPOSE,
+  MARKETING_COMMUNICATIONS_PURPOSE,
+] as const;
+export type DoctorRegisterConsentPurpose =
+  (typeof DOCTOR_REGISTER_CONSENT_PURPOSES)[number];
+
+/**
+ * Is this purpose one the 021 registration surface actually renders?
+ *
+ * Exported as a guard rather than kept private, because the same closed list is
+ * restated in the service as a DOMAIN rule (a caller reaching the service
+ * without the DTO pipe must meet it too) and the two must not drift.
+ */
+export function isDoctorRegisterConsentPurpose(
+  purpose: string,
+): purpose is DoctorRegisterConsentPurpose {
+  return (DOCTOR_REGISTER_CONSENT_PURPOSES as readonly string[]).includes(
+    purpose,
+  );
+}
+
+/**
+ * One granted consent inside a 021 registration command: the 003 acceptance
+ * shape whose purpose must be one this surface renders.
+ *
+ * Derived from `ConsentAcceptanceSchema` rather than restated, so the two never
+ * drift on the `version` rule; 003's own schema stays untouched for every other
+ * caller of the engine.
+ *
+ * The check is a refinement over `string` rather than a `z.enum` literal union
+ * on purpose. Both refuse an undeclared purpose identically at run time; the
+ * enum would additionally narrow the INFERRED request type, and the doctor
+ * storefront that builds this array is frozen for the wave-1 extraction into
+ * `packages/auth-flow` (#2027 / epic #2020), which forbids touching it. The
+ * narrowing is worth having and is recorded as debt for that extraction — it is
+ * a type-level improvement, not the rule itself, which lives here and in the
+ * service.
+ */
+export const DoctorRegisterConsentAcceptanceSchema =
+  ConsentAcceptanceSchema.extend({
+    purpose: z
+      .string()
+      .min(1)
+      // The callback is annotated `: boolean` deliberately: passing the type
+      // guard directly would make zod narrow the INFERRED purpose to the
+      // literal union, and the frozen storefront (#2027) still declares its
+      // array as the wide 003 `ConsentAcceptance`. The refusal is identical
+      // either way — this is about the inferred type, not the rule.
+      .refine((purpose): boolean => isDoctorRegisterConsentPurpose(purpose), {
+        message: `purpose must be one of: ${DOCTOR_REGISTER_CONSENT_PURPOSES.join(", ")}`,
+      }),
+  });
+export type DoctorRegisterConsentAcceptance = z.infer<
+  typeof DoctorRegisterConsentAcceptanceSchema
+>;
 
 /**
  * Purposes the 021 registration command refuses to proceed without (021 design
@@ -196,7 +272,7 @@ export const DoctorRegisterRequestSchema = z.object({
    * this array; there is no `granted: false` shape, because EARS-7 requires an
    * ungranted purpose to produce no record at all.
    */
-  consent: z.array(ConsentAcceptanceSchema).default([]),
+  consent: z.array(DoctorRegisterConsentAcceptanceSchema).default([]),
   /**
    * 003 EARS-17 bot-protection widget token (021 EARS-19, #1558). Optional at
    * the contract layer exactly as the 003 register payload has it — the guard

@@ -15,7 +15,10 @@ import type {
 import {
   DOCTOR_CABINET_PATH,
   DOCTOR_EVENTS_FEED_PATH,
+  DOCTOR_REGISTER_CONSENT_PURPOSES,
   DOCTOR_REGISTER_CONSENT_REFUSAL_CODES,
+  isDoctorRegisterConsentPurpose,
+  MARKETING_COMMUNICATIONS_PURPOSE,
   MEDICAL_WORKER_DECLARATION_PURPOSE,
   MEDICAL_WORKER_DECLARATION_REQUIRED_CODE,
   parseDoctorHostReturnTarget,
@@ -45,6 +48,36 @@ export const MEDICAL_WORKER_DECLARATION_VERSION = "2026-09";
  * version would let the recorded row claim a wording the surface never rendered.
  */
 export const PARTNER_DATA_SHARING_VERSION = "2026-09";
+
+/**
+ * The version stamped on the marketing opt-in (021 EARS-6). Same server-stamp
+ * rule as the two access conditions: presence of the purpose in the command is
+ * the GRANT, the version is ours — it names the marketing wording the doctor
+ * actually read on the storefront, so it changes when that copy changes and
+ * never because a caller claimed a different one.
+ *
+ * It is a separate constant rather than a shared one because the three wordings
+ * version independently: re-wording the marketing opt-in must not silently
+ * restamp the access conditions the doctor accepted under the old text.
+ */
+export const MARKETING_COMMUNICATIONS_VERSION = "2026-09";
+
+/**
+ * The wording version this server stamps on each declared purpose (021 EARS-7).
+ *
+ * Typed against the contract's closed purpose list, so adding a purpose to
+ * `DOCTOR_REGISTER_CONSENT_PURPOSES` without deciding which wording version its
+ * rows carry is a compile error rather than a row that quietly inherits a
+ * caller's claim.
+ */
+const SERVER_STAMPED_CONSENT_VERSIONS: Record<
+  (typeof DOCTOR_REGISTER_CONSENT_PURPOSES)[number],
+  string
+> = {
+  [MEDICAL_WORKER_DECLARATION_PURPOSE]: MEDICAL_WORKER_DECLARATION_VERSION,
+  [PARTNER_DATA_SHARING_PURPOSE]: PARTNER_DATA_SHARING_VERSION,
+  [MARKETING_COMMUNICATIONS_PURPOSE]: MARKETING_COMMUNICATIONS_VERSION,
+};
 
 /**
  * 021 `RegisterDoctor` — the doctor-storefront registration command (021 design
@@ -242,28 +275,49 @@ export class DoctorRegisterService {
 
   /**
    * The purposes that go to the engine: the declaration derived from the
-   * command's own flag, plus whatever else the caller granted.
+   * command's own flag, plus every OTHER purpose this surface declares and the
+   * caller granted — each stamped with the server's wording version.
    *
    * Deriving the declaration row from `medicalWorkerDeclaration` rather than
    * trusting the array is what keeps the flag and the record from ever
    * disagreeing — the checkbox the doctor ticked IS the row that is written.
-   * EARS-7's "an ungranted optional purpose produces no record at all" holds by
+   * EARS-6's "an ungranted optional purpose produces no record at all" holds by
    * construction: an ungranted purpose is simply absent from the array; there is
-   * no `granted: false` shape to store.
+   * no `granted: false` shape to store, and nothing here invents one.
+   *
+   * Two rules make the resulting rows trustworthy (021 EARS-7, ADR-0009 §2.1):
+   *
+   * 1. **The version is always ours.** Every declared purpose is re-stamped from
+   *    its own constant, so a row can only ever claim wording this surface
+   *    actually rendered. A client-supplied version would let the record assert
+   *    a text the doctor never saw.
+   * 2. **The purpose list is closed.** `DOCTOR_REGISTER_CONSENT_PURPOSES` is the
+   *    contract's closed list and `DoctorRegisterConsentAcceptanceSchema`
+   *    already refuses anything else at the I/O boundary; the guard here is the
+   *    DOMAIN statement of the same rule — for exactly the reason the required-
+   *    purpose guard above is stated twice — so an undeclared purpose can never
+   *    reach `consent_records` through a caller that bypasses the DTO pipe.
+   *
+   * `consent_records` is append-only and has no status column, so a row written
+   * here is permanent: withdrawal is a manager-side operation of feature 037
+   * (021 design §4), not a second row and not a flag flip.
    */
   private accessConditionConsents(
     req: DoctorRegisterRequest,
   ): ConsentAcceptance[] {
-    const supplied = req.consent
-      .filter((entry) => entry.purpose !== MEDICAL_WORKER_DECLARATION_PURPOSE)
-      // 021 EARS-5 — the partner-data row carries the SERVER's wording version,
-      // never the caller's claim about which wording was on screen. Presence in
-      // the array is the grant; the version is ours to stamp.
-      .map((entry) =>
-        entry.purpose === PARTNER_DATA_SHARING_PURPOSE
-          ? { ...entry, version: PARTNER_DATA_SHARING_VERSION }
-          : entry,
-      );
+    const supplied = req.consent.flatMap((entry) => {
+      // The declaration is derived from the flag above, never from the array.
+      if (entry.purpose === MEDICAL_WORKER_DECLARATION_PURPOSE) return [];
+      // Rule 2, the domain half: an undeclared purpose reaches no record.
+      if (!isDoctorRegisterConsentPurpose(entry.purpose)) return [];
+      // Rule 1: presence is the grant, the version is ours to stamp.
+      return [
+        {
+          purpose: entry.purpose,
+          version: SERVER_STAMPED_CONSENT_VERSIONS[entry.purpose],
+        },
+      ];
+    });
     return req.medicalWorkerDeclaration
       ? [
           {

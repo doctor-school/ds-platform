@@ -216,9 +216,11 @@ const CONSENT_MANAGER_NOTE =
  * `MEDICAL_WORKER_DECLARATION_VERSION` / `PARTNER_DATA_SHARING_VERSION`
  * (`doctor-register.service.ts`), because a client-supplied version would let a
  * record claim a wording the surface never rendered — presence in the array is
- * the grant, the version is the server's to stamp. The optional marketing
- * purpose has no server-side stamp yet (its record semantics are #1542's), so
- * for that row this IS the recorded version until #1542 moves the stamp across.
+ * the grant, the version is the server's to stamp. Since #1542 the marketing
+ * purpose is stamped the same way (`MARKETING_COMMUNICATIONS_VERSION`), so this
+ * constant is now what the screen RENDERS, never what any row records — the
+ * command sends it, the service overwrites it, and the two drifting apart is a
+ * copy bug on this screen rather than a false consent record.
  */
 const CONSENT_WORDING_VERSION = "2026-09";
 

@@ -15,6 +15,8 @@ The [official Codex hooks contract](https://learn.chatgpt.com/docs/hooks) was ch
 
 Codex ratios reserve 30%/15% headroom by project policy, not an OpenAI guarantee. Cached input is already included in Codex input tokens. Lifetime cumulative totals are never used. Codex ratio enforcement requires a positive effective window and a token event timestamp no older than 30 minutes; stale or absent values remain unavailable. Current Claude usage accounting is unchanged. Hooks cannot verify undocumented host identity/telemetry fields; the operator follows shared wave/rotation rules when readings are absent.
 
+Owner wrap authorization accepts Claude owner text, Codex `event_msg` / `user_message`, and Codex `response_item` with `payload.role: user` and `input_text` blocks. Assistant/tool records and other content block types do not authorize it. In Codex, send ordinary text such as **«Проведи /wrap для этой сессии.»**; a standalone `/wrap` slash command may be unregistered. Missing or unreadable transcript evidence still denies a recognized wrap step.
+
 ## Configuration, trust, and observed execution
 
 Run `pnpm agent:doctor` from the checkout. It reads configuration and privacy-minimized local observations, without changing trust or settings:

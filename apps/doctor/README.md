@@ -157,3 +157,31 @@ The lifecycle helper ends only six exact `seed:events` live fixtures, checks the
 branch database name before connecting and again inside the transaction, and
 never deletes data. Its refusal checks run with
 `node --test apps/doctor/e2e/support/events-live-phase.test.mjs`.
+
+## Storefront mobile and accessibility matrix (017 EARS-14)
+
+`e2e/mobile.spec.ts` sweeps the release-1 017 surfaces on `/` — the shell header
+with its action cluster, the specialty catalog with its search field and expand
+control, the collapsed chosen row with «сменить», and the hero counters band. It
+checks 390/1280 × light/dark: mobile composition and operability, horizontal
+overflow, full-page axe (WCAG 2 A/AA + 2.1 A/AA, no exclusions) in both the open
+catalog and the collapsed-row render, labelled controls and keyboard reach with a
+visible focus ring. It rides the backend-free tier and mocks the storefront reads
+at the network boundary.
+
+```bash
+# After the matching build above.
+pnpm --filter @ds/doctor exec playwright test --config=playwright.ci.config.ts e2e/mobile.spec.ts
+```
+
+The backend-free tier assumes NOTHING answers on the server-side `API_PROXY_TARGET`
+(default `http://localhost:3000`, read at runtime by `lib/session.ts`): the
+server resolve then fails, the client re-issues the read and the spec's
+`page.route` mock answers it. A live local api on `:3000` (a dev stand, a
+Stage-B stand) breaks that chain — the server resolves «nothing chosen» for
+real and `specialty-memory.spec.ts` fails on the read-back. Run the tier as CI
+does, against an empty port: `API_PROXY_TARGET=http://127.0.0.1:3214`.
+
+The nearest-events block with the compact calendar (#1485), «Что исследовать»
+(#1486), the leaderboard (#1487) and the marketing routes (#1488) are outside
+this sweep and carry their own mobile/axe obligation when they land.

@@ -182,7 +182,8 @@ async function main(): Promise<void> {
   const author = result.data.author?.login ?? "";
   const automated =
     (author === "app/github-actions" && branch === "changeset-release/main") ||
-    (author === "app/dependabot" && /^dependabot\/.+/.test(branch));
+    (author === "app/dependabot" && /^dependabot\/.+/.test(branch)) ||
+    (author === "app/doctor-school-renovate" && /^renovate\/.+/.test(branch));
   if (automated) {
     info(
       `PR #${result.data.number} is an automated PR (${branch}); evidence contract exempt.`,

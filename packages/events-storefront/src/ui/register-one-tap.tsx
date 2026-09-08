@@ -82,7 +82,7 @@ export function RegisterOneTap({
     <form
       action={registerForEventAction}
       onSubmit={onSubmit}
-      className="flex flex-col items-start gap-2"
+      className="mt-3.5 flex w-full flex-col gap-2"
     >
       {/* No-JS payload: the server action reads the slug from the submitted form. */}
       <input type="hidden" name="slug" value={slug} />
@@ -91,6 +91,7 @@ export function RegisterOneTap({
       <Button
         type="submit"
         size="lg"
+        className="w-full"
         loading={busy || isRefreshing}
         data-testid="event-register-one-tap"
       >

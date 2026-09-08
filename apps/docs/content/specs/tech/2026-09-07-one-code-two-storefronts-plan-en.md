@@ -66,7 +66,7 @@ Forbidden in a host config: lifecycle callbacks (`onSuccess`, `onError`, `before
 
 ## 4. Execution plan
 
-### Stage 0 — freeze during Витрина R1 (now → R1 release)
+### Stage 0 — freeze during Витрина R1 (closed: Витрина R1 shipped in release-2026.09.08-1)
 
 - No new host-local logic on either storefront. An R1 Issue that already carries `extract-from:` (#1996, #2005) extracts into the package — those are wave-1 bricks landing early.
 - An R1 Issue where extraction is too risky at 90 % readiness (#1989 `/reset`, #1768, #1769) copies the Academy rule **branch by branch** with a `// mirror-of: apps/portal/<file>#L<a>-L<b>@<sha7> until:wave-<N>` marker on every copied unit and one DEBT.md line naming the Issue. The `@<sha7>` pins the Academy version whose behaviour was copied (line numbers alone drift with the next Academy commit); `until:wave-<N>` names the wave that deletes the copy. The token is exactly `// mirror-of: ` (lower-case, this spelling only); `grep -rn 'mirror-of: ' apps/doctor` (case-sensitive) is the wave input, so a paraphrased marker cannot slip past the wave; a `mirror-of` block without a matching Academy unit at the pinned SHA is a review BLOCKER.
@@ -83,7 +83,7 @@ Forbidden in a host config: lifecycle callbacks (`onSuccess`, `onError`, `before
 - [x] `design-source/README.md` canvas canon (rule 6).
 - [x] Milestone «Платформа — один код на два фронта» (track:platform), blocking Витрина R4 (018) and the R1.1 Issues listed in section 7.
 
-### Stage 2 — extraction waves (after the R1 release)
+### Stage 2 — extraction waves (open: the R1 release gate is satisfied by release-2026.09.08-1)
 
 **Wave-entry gate (before the first PR of a wave).** The wave Issue carries a **behaviour matrix** — one row per scenario: `scenario → Academy behaviour (file:line) → doctor behaviour (file:line) → shared contract → allowed difference (config field | ADR product reason | convergence approved by the owner) → test id`. A row without a test id or with an unexplained difference blocks the wave; Stage-B on both hosts later confirms rendering, it does not replace this matrix. The matrix is built from **both** implementations' tests: the Academy's move into the package; the doctor's either become package tests (the behaviour is shared) or stay on the host as mount tests of its config branch. Alongside the matrix: the EARS disposition table of §3 rule 4 for every absorbed Issue, and the PR sequence of that wave (below) with the allowed intermediate state after each PR.
 

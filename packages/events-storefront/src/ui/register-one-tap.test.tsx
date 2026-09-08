@@ -14,18 +14,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  * button). Once hydrated, the SAME control keeps today's one-tap path: intercept
  * the submit, POST `RegisterForEvent` client-side, and re-read the per-user state
  * in place (`router.refresh()`) with NO navigation. Repeats are server-side
- * idempotent (EARS-3); copy stays catalog-sourced via props (EARS-12).
+ * idempotent (EARS-3); copy stays host-sourced via props (EARS-12), and the host
+ * event path rides the form so the no-JS arm lands on the right storefront.
  *
  * jsdom always has JS on, so these tests cover the hydrated path + the structural
- * no-JS contract (real form, submit button, slug payload carrier). The actual
- * no-JS server-action execution is verified live (Playwright / lead live-verify).
+ * no-JS contract (real form, submit button, slug and returnTo payload carriers).
+ * The actual no-JS server-action execution is verified live (Playwright).
  */
 
 const refresh = vi.fn();
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }));
 
 const { registerForEvent } = vi.hoisted(() => ({ registerForEvent: vi.fn() }));
-vi.mock("@/lib/registration-client", () => ({
+vi.mock("../client/registration-client", () => ({
   registerForEvent: (slug: string) => registerForEvent(slug),
 }));
 
@@ -35,7 +36,7 @@ vi.mock("@/lib/registration-client", () => ({
 const { registerForEventAction } = vi.hoisted(() => ({
   registerForEventAction: vi.fn(),
 }));
-vi.mock("./register-action", () => ({
+vi.mock("../server/register-action", () => ({
   registerForEventAction: (formData: FormData) =>
     registerForEventAction(formData),
 }));
@@ -43,6 +44,8 @@ vi.mock("./register-action", () => ({
 import { RegisterOneTap } from "./register-one-tap";
 
 const SLUG = "ahilles-042";
+const ACADEMY_RETURN = "/webinars/ahilles-042";
+const DOCTOR_RETURN = "/events/ahilles-042";
 
 beforeEach(() => {
   refresh.mockClear();
@@ -51,10 +54,15 @@ beforeEach(() => {
 });
 afterEach(() => cleanup());
 
-describe("#1111 RegisterOneTap progressive enhancement (005 EARS-1)", () => {
-  it("EARS-1: renders a REAL form with a submit button and the slug payload — works before hydration", () => {
+describe("005 EARS-1 RegisterOneTap progressive enhancement (#1111)", () => {
+  it("005 EARS-1: renders a REAL form with a submit button and the slug payload — works before hydration", () => {
     const { container } = render(
-      <RegisterOneTap slug={SLUG} label="Участвовать" errorLabel="err" />,
+      <RegisterOneTap
+        slug={SLUG}
+        returnTo={ACADEMY_RETURN}
+        label="Участвовать"
+        errorLabel="err"
+      />,
     );
     const form = container.querySelector("form");
     expect(form).not.toBeNull();
@@ -68,10 +76,42 @@ describe("#1111 RegisterOneTap progressive enhancement (005 EARS-1)", () => {
     expect(slugInput).toHaveValue(SLUG);
   });
 
-  it("EARS-1: when hydrated, submitting fires the client one-tap POST + in-place refresh, with NO navigation", async () => {
+  it("020 EARS-1: the host event path rides the form, so the no-JS arm lands back on the SUBMITTING storefront", () => {
+    const { container, unmount } = render(
+      <RegisterOneTap
+        slug={SLUG}
+        returnTo={DOCTOR_RETURN}
+        label="Участвовать"
+        errorLabel="err"
+      />,
+    );
+    expect(container.querySelector('input[name="returnTo"]')).toHaveValue(
+      DOCTOR_RETURN,
+    );
+    unmount();
+
+    const academy = render(
+      <RegisterOneTap
+        slug={SLUG}
+        returnTo={ACADEMY_RETURN}
+        label="Участвовать"
+        errorLabel="err"
+      />,
+    );
+    expect(
+      academy.container.querySelector('input[name="returnTo"]'),
+    ).toHaveValue(ACADEMY_RETURN);
+  });
+
+  it("005 EARS-1: when hydrated, submitting fires the client one-tap POST + in-place refresh, with NO navigation", async () => {
     registerForEvent.mockResolvedValue({ registered: true });
     const { container } = render(
-      <RegisterOneTap slug={SLUG} label="Участвовать" errorLabel="Ошибка" />,
+      <RegisterOneTap
+        slug={SLUG}
+        returnTo={ACADEMY_RETURN}
+        label="Участвовать"
+        errorLabel="Ошибка"
+      />,
     );
 
     fireEvent.submit(container.querySelector("form")!);
@@ -84,11 +124,12 @@ describe("#1111 RegisterOneTap progressive enhancement (005 EARS-1)", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
-  it("EARS-3: a registration failure (401/409/transient) surfaces the retryable FormError, no refresh", async () => {
+  it("005 EARS-3: a registration failure (401/409/transient) surfaces the retryable FormError, no refresh", async () => {
     registerForEvent.mockRejectedValue(new Error("registration failed (401)"));
     const { container } = render(
       <RegisterOneTap
         slug={SLUG}
+        returnTo={ACADEMY_RETURN}
         label="Участвовать"
         errorLabel="Не удалось записать — попробуйте ещё раз"
       />,

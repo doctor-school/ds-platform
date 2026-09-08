@@ -49,6 +49,7 @@ const h = vi.hoisted(() => ({
   confirmDoctorEmail: vi.fn(),
   resendVerification: vi.fn(),
   login: vi.fn(),
+  registerForEvent: vi.fn(),
   push: vi.fn(),
   replace: vi.fn(),
   calls: [] as string[],
@@ -79,6 +80,21 @@ vi.mock("@/lib/auth-client", () => ({
 // clause that is observable in jsdom.
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: h.push, replace: h.replace }),
+}));
+
+/**
+ * 005 EARS-2 (#2005) — the `RegisterForEvent` command the completion-on-return
+ * rule fires. The mocked seam is the package's `./client` transport ENTRY, not
+ * the barrel: `completeReturnTarget` imports `registerForEvent` from that entry
+ * inside the package, so mocking the barrel leaves that import untouched and the
+ * command unobserved. The RULE above the mock is the real shared one.
+ */
+vi.mock("@ds/events-storefront/client", () => ({
+  registerForEvent: (...args: unknown[]) => {
+    h.calls.push("register-for-event");
+    return h.registerForEvent(...args);
+  },
+  RegistrationError: class extends Error {},
 }));
 
 import { RegistrationScreen } from "@/components/registration-screen";
@@ -131,6 +147,7 @@ beforeEach(() => {
     secondaryAction: { href: "/account" },
   });
   h.login.mockReset().mockResolvedValue({});
+  h.registerForEvent.mockReset().mockResolvedValue(undefined);
   h.push.mockReset();
   h.replace.mockReset();
   clearPendingRegistration();
@@ -196,6 +213,65 @@ async function submitCode(user: ReturnType<typeof userEvent.setup>) {
   await user.type(screen.getByLabelText(/Код из письма/), CODE);
 }
 
+describe("005 EARS-2 (#2005): the confirmed doctor is registered to the эфир they came from", () => {
+  it("005 EARS-2: after the held-password replay, system shall fire RegisterForEvent for the carried эфир before the success state", async () => {
+    const user = setupUser();
+    renderScreen();
+
+    await submitRegistration(user);
+    await submitCode(user);
+
+    await waitFor(() =>
+      expect(h.registerForEvent).toHaveBeenCalledWith("kardio"),
+    );
+    // Order is the contract, and it is the SAME order the Academy ships: the
+    // session must exist before the command (the api answers a guest with a
+    // 401), and the success card must not paint before the doctor is actually
+    // on the roster — its «вернуться к эфиру» action would otherwise land them
+    // on a card still asking them to register.
+    expect(h.calls).toEqual([
+      "register",
+      "confirm",
+      "login",
+      "register-for-event",
+    ]);
+    await waitFor(() =>
+      expect(screen.getByTestId("registration-success-primary")).toBeTruthy(),
+    );
+  });
+
+  it("005 EARS-2: a direct arrival carries no эфир — the success state stands and NO registration fires", async () => {
+    const user = setupUser();
+    render(
+      <RegistrationScreen landing="/events" consentTiers={CONSENT_TIERS} />,
+    );
+
+    await submitRegistration(user);
+    await submitCode(user);
+
+    await waitFor(() => expect(h.login).toHaveBeenCalledTimes(1));
+    expect(h.registerForEvent).not.toHaveBeenCalled();
+    expect(h.calls).toEqual(["register", "confirm", "login"]);
+  });
+
+  it("005 EARS-2: a refused registration never strands the doctor — the success state still stands", async () => {
+    // Best-effort by the shared rule's contract: a transient failure or a gating
+    // refusal is not a reason to withhold the outcome of the confirmation the
+    // doctor DID complete. The truth about the roster is re-read per viewer on
+    // the эфир page itself (005 EARS-4).
+    h.registerForEvent.mockRejectedValue(new Error("upstream down"));
+    const user = setupUser();
+    renderScreen();
+
+    await submitRegistration(user);
+    await submitCode(user);
+
+    await waitFor(() =>
+      expect(screen.getByTestId("registration-success-primary")).toBeTruthy(),
+    );
+  });
+});
+
 describe("021 EARS-15 (#1996): the doctor is signed in after email confirmation", () => {
   it("021 EARS-15: when the confirm succeeds and a password is held, system shall replay the login before the success state", async () => {
     const user = setupUser();
@@ -213,8 +289,16 @@ describe("021 EARS-15 (#1996): the doctor is signed in after email confirmation"
     });
     // Order is the contract: confirm first (the code is the thing being
     // proven), login second, and only then the success state — a success card
-    // rendered before the replay would send a guest to the event page.
-    expect(h.calls).toEqual(["register", "confirm", "login"]);
+    // rendered before the replay would send a guest to the event page. The
+    // carried эфир is completed on the far side of the replay (005 EARS-2,
+    // #2005); it is asserted in its own describe below, and named here so this
+    // sequence stays the whole sequence.
+    expect(h.calls).toEqual([
+      "register",
+      "confirm",
+      "login",
+      "register-for-event",
+    ]);
     // EARS-10 — the success state REPLACES the code screen.
     await waitFor(() =>
       expect(screen.queryByLabelText(/Код из письма/)).toBeNull(),

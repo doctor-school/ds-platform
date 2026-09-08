@@ -195,11 +195,13 @@ export default [
     //   • local/no-token-redefinition — forbids forking a generated token value
     //     via inline style / setProperty in app code (token values change only
     //     in the @ds/design-system source).
-    // #1722 D11 — `packages/room/src` carries the room composition that used to
-    // live under `apps/portal/app`; the tokens-only contract follows the code, so
-    // the shared unit is scoped here alongside the apps that mount it.
+    // #1722 D11 / #2005 — `packages/room/src` and `packages/events-storefront/src`
+    // carry UI that used to live under `apps/portal/app`; the tokens-only
+    // contract follows the code, so the shared units are scoped here alongside
+    // the apps that mount them.
     files: [
       "apps/**/*.{ts,tsx,js,jsx,mjs,cjs}",
+      "packages/events-storefront/src/**/*.{ts,tsx}",
       "packages/room/src/**/*.{ts,tsx}",
     ],
     languageOptions: {

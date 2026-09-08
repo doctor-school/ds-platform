@@ -160,6 +160,12 @@ export default async function DoctorLoginPage({
       <LoginScreen
         registerHref={registerHref}
         landing={landing}
+        // 005 EARS-2 — the эфир intent to COMPLETE after sign-in, in this host's
+        // vocabulary. Supplied only when the target actually resolved to a live
+        // эфир: an unknown or draft slug is not something to register anyone for,
+        // and `landing` has already fallen back to the LD-4 destination for it,
+        // so the two facts never disagree about where sign-in leads.
+        {...(landingTarget && returnEvent ? { returnTarget: landingTarget } : {})}
         returnContext={
           returnEvent ? <ReturnContextPlate event={returnEvent} /> : undefined
         }

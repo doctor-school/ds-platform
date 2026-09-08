@@ -86,7 +86,8 @@ vi.mock("@/lib/auth-client", () => ({
   AuthError: MockAuthError,
 }));
 
-vi.mock("@/lib/registration-client", () => ({
+vi.mock("@ds/events-storefront/client", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@ds/events-storefront/client")>()),
   registerForEvent: vi.fn().mockResolvedValue({ registered: true }),
 }));
 

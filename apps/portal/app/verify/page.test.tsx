@@ -96,7 +96,8 @@ vi.mock("@/lib/auth-client", () => ({
 // 005 EARS-2: the post-auth registration resume fires the real EARS-1 command
 // through this client — mocked so these tests assert the resume wiring only.
 const registerForEvent = vi.fn().mockResolvedValue({ registered: true });
-vi.mock("@/lib/registration-client", () => ({
+vi.mock("@ds/events-storefront/client", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@ds/events-storefront/client")>()),
   registerForEvent: (slug: string) => registerForEvent(slug),
 }));
 

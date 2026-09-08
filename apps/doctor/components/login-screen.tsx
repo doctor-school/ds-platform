@@ -17,12 +17,15 @@ import {
   type LoginCardPasswordValues,
 } from "@ds/design-system/blocks";
 
+import { completeReturnTarget } from "@ds/events-storefront";
+
 import { authClient } from "@/lib/auth-client";
 import {
   AUTH_GENERIC_MESSAGES,
   authErrorMessage,
 } from "@/lib/auth-error-message";
 import { makeResolver } from "@/lib/make-resolver";
+import { doctorReturnHost } from "@/lib/return-completion";
 
 /**
  * #1933 — the doctor storefront sign-in screen (`doctor.school/login`).
@@ -81,6 +84,20 @@ export type LoginScreenProps = {
    * recomputes it, and the raw `returnTo` is never navigated to.
    */
   landing: string;
+  /**
+   * 005 EARS-2 — the arrival target to COMPLETE once the session exists, in the
+   * doctor host own vocabulary (`/events/<slug>`).
+   *
+   * Not the raw `returnTo` param and not {@link landing}: the route hands over
+   * the projection its own guard already reconstructed
+   * (`lib/return-context.ts` `resolveReturnLandingPath`, #1945), so the raw param
+   * never reaches the client and the academy `/webinars/<slug>` the gate emits is
+   * already this host's `/events/<slug>` by the time the rule sees it. The SAME
+   * prop and the same value `registration-screen.tsx` carries through the confirm
+   * hop — one vocabulary across both doors. Absent on a direct arrival and on an
+   * arrival whose target did not resolve, and then the landing simply stands.
+   */
+  returnTarget?: string;
   /** The gate context the doctor arrived from — the mobile plate (021 EARS-2). */
   returnContext?: ReactNode;
 };
@@ -170,6 +187,7 @@ const COPY: LoginCardCopy = {
 export function LoginScreen({
   registerHref,
   landing,
+  returnTarget,
   returnContext,
 }: LoginScreenProps) {
   const router = useRouter();
@@ -188,11 +206,24 @@ export function LoginScreen({
   /**
    * The session now exists on this origin. The 017 shell reads it SERVER-side
    * (`lib/shell-auth.ts`), so `refresh()` — not a client header-refresh helper —
-   * is what makes the signed-in cluster appear; `push` then takes the doctor to
-   * the landing the server already decided.
+   * is what makes the signed-in cluster appear; `push` then takes the doctor
+   * where the completed return decides.
+   *
+   * 005 EARS-2 — and the doctor who arrived from a gated эфир is REGISTERED to it
+   * here, not merely returned to it. The decision is the ONE shared rule
+   * (`@ds/events-storefront` `completeReturnTarget`, the Academy's rule verbatim);
+   * this host contributes only its own projection of it
+   * (`lib/return-completion.ts` — which shapes are ours, where nothing lands).
+   * The registration is best-effort by that rule's contract: a refusal still
+   * lands the doctor on the эфир, where the per-viewer participation read (005
+   * EARS-4) tells them the truth, rather than stranding them on a listing.
    */
-  function finishLogin() {
-    router.push(landing);
+  async function finishLogin() {
+    const target = await completeReturnTarget(
+      returnTarget ?? null,
+      doctorReturnHost(landing),
+    );
+    router.push(target);
     router.refresh();
   }
 
@@ -203,7 +234,7 @@ export function LoginScreen({
         identifier: values.identifier.trim(),
         password: values.password,
       });
-      finishLogin();
+      await finishLogin();
     } catch (err) {
       setPasswordError(authErrorMessage(err, AUTH_GENERIC_MESSAGES.login));
     }
@@ -245,7 +276,7 @@ export function LoginScreen({
         code: values.code,
         channel: values.channel,
       });
-      finishLogin();
+      await finishLogin();
     } catch (err) {
       setOtpVerifyError(authErrorMessage(err, AUTH_GENERIC_MESSAGES.otpVerify));
     }

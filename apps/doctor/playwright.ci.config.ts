@@ -55,6 +55,10 @@ export default defineConfig({
     // 021 EARS-16 (#1552): the parity matrix drives the gate arrival and the
     // upstream's register/confirm answers, so it rides the return-context tier.
     "register-mobile.spec.ts",
+    // 020 EARS-20 (#1777): the parity matrix drives the upstream's lifecycle,
+    // participation and registration answers, so it rides the return-context
+    // tier and must never be collected by a backend-free run (#1521).
+    "event-page-parity.spec.ts",
     "register-direct.spec.ts",
     "login-return-context.spec.ts",
     "events-*.spec.ts",

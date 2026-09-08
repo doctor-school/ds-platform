@@ -24,7 +24,7 @@ import { DOCTOR_ROOM_ROUTES } from "./room-routes";
  * login (D10 / ADR-0015 §4 REQ-24).
  *
  * D16a — a request carrying no session cookie is redirected BEFORE any upstream
- * read: `forwardedSessionFrom` returns `null` for an anonymous visitor, and
+ * read: an anonymous visitor's forwarded surface carries an empty cookie, and
  * issuing a guaranteed-401 read on their behalf would only add a round trip.
  *
  * Only SERIALIZABLE props cross into the client (D14): the grant, the event
@@ -46,9 +46,10 @@ export default async function DoctorRoomPage({
   const routes = DOCTOR_ROOM_ROUTES(slug);
 
   // The session is fingerprint-bound (ADR-0001 §6) — the forwarded surface is
-  // the cookie plus the two headers the browser bound at login.
+  // the cookie plus the user-agent, accept-language and client address the
+  // browser bound at login (#2054).
   const session = forwardedSessionFrom(await headers());
-  if (session === null) redirect(routes.entry.auth);
+  if (!session.cookie) redirect(routes.entry.auth);
 
   const entry = resolveRoomEntry(
     await fetchDoctorRoomConfig(slug, session),

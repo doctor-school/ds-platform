@@ -4,7 +4,7 @@ import {
   parseDoctorEventsMonthQuery,
   type RawQueryValue,
 } from "@ds/schemas";
-import { API_BASE } from "@/lib/session";
+import { API_BASE, forwardedHeaders, forwardedSessionFrom } from "@/lib/session";
 import { SPECIALTY_CHOICE_COOKIE_NAME } from "@/lib/specialty-choice";
 
 /**
@@ -93,12 +93,13 @@ export async function fetchDoctorEventsMonthGrid(
 
   try {
     const res = await fetchImpl(url, {
-      headers: {
-        accept: "application/json",
+      // Public read: only the specialty cookie is relayed (never the session),
+      // but the client chain still rides along — `request.ip` keys the api's
+      // rate-limit windows, and the container address pools every visitor (#2054).
+      headers: forwardedHeaders({
+        ...forwardedSessionFrom(headers),
         cookie: specialtyCookieOnly(headers.get("cookie")),
-        "user-agent": headers.get("user-agent") ?? "",
-        "accept-language": headers.get("accept-language") ?? "",
-      },
+      }),
       cache: "no-store",
     });
     if (!res.ok) return { ok: false, reason: "unavailable" };

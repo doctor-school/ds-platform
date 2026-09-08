@@ -6,6 +6,7 @@ import type { PastBroadcastCard } from "@ds/schemas";
 import { Link as DsLink } from "@ds/design-system/link";
 import { fetchEventListingWithCursorFallback } from "@/lib/public-events";
 import { fetchMyEvents } from "@/lib/my-events";
+import { forwardedSessionFrom } from "@/lib/registration-state";
 import {
   formatMskDayLabel,
   formatMskMonth,
@@ -23,11 +24,7 @@ import { ViewSwitcher } from "./view-switcher";
 async function fetchRegisteredSlugs(): Promise<ReadonlySet<string>> {
   const h = await headers();
   try {
-    const result = await fetchMyEvents({
-      cookie: h.get("cookie") ?? "",
-      userAgent: h.get("user-agent") ?? "",
-      acceptLanguage: h.get("accept-language") ?? "",
-    });
+    const result = await fetchMyEvents(forwardedSessionFrom(h));
     // `MyEvents` is an envelope per tab (014 EARS-9); the public listing's
     // «вы записаны» marker is about the caller's UPCOMING registrations, which
     // is the read's default tab — the rows live under `.data`.

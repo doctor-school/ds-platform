@@ -37,7 +37,8 @@ export async function resolveShellAuth(
   fetchImpl: typeof fetch = fetch,
 ): Promise<ShellAuth> {
   const session = forwardedSessionFrom(headers);
-  if (!session) return { status: "guest" };
+  // No session cookie rode the request → a guest; never issue the upstream read.
+  if (!session.cookie) return { status: "guest" };
 
   try {
     const claims = await fetchSessionClaims(session, fetchImpl);

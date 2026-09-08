@@ -1,5 +1,9 @@
 import { SpecialtyChoiceSchema, type SpecialtyChoice } from "@ds/schemas";
-import { API_BASE, forwardedSessionFrom } from "@/lib/session";
+import {
+  API_BASE,
+  forwardedHeaders,
+  forwardedSessionFrom,
+} from "@/lib/session";
 
 /**
  * 017 EARS-6 / EARS-7 (#1482) — the storefront half of the choose/change
@@ -165,21 +169,21 @@ export async function resolveRememberedSpecialty(
   fetchImpl: typeof fetch = fetch,
 ): Promise<RememberedSpecialty> {
   const session = forwardedSessionFrom(headers);
-  const cookie = headers.get("cookie") ?? "";
   const consumptionDeferred =
     headers.get(SPECIALTY_CONSUMPTION_DEFERRED_HEADER) === "1";
-  const upstream = {
-    accept: "application/json",
-    cookie,
-    "user-agent": headers.get("user-agent") ?? "",
-    "accept-language": headers.get("accept-language") ?? "",
-  };
+  // The RAW cookie header rides both reads: the guest store lives in the
+  // specialty cookie, which `forwardedSessionFrom` deliberately does not treat as
+  // a session. The client chain rides along either way (#2054).
+  const upstream = forwardedHeaders({
+    ...session,
+    cookie: headers.get("cookie") ?? "",
+  });
 
   const read = async (path: string) =>
     fetchImpl(`${API_BASE}${path}`, { headers: upstream, cache: "no-store" });
 
   try {
-    if (session) {
+    if (session.cookie) {
       const res = await read(SPECIALTY_CHOICE_ME_PATH);
       if (res.ok) {
         return { actor: "doctor", choice: parseChoice(await res.json()) };
@@ -193,8 +197,8 @@ export async function resolveRememberedSpecialty(
     return { actor: "guest", choice: parseChoice(await res.json()) };
   } catch {
     return {
-      actor: session ? "doctor" : "guest",
-      choice: session && consumptionDeferred ? NO_SPECIALTY_CHOICE : null,
+      actor: session.cookie ? "doctor" : "guest",
+      choice: session.cookie && consumptionDeferred ? NO_SPECIALTY_CHOICE : null,
     };
   }
 }

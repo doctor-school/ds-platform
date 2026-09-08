@@ -1,5 +1,5 @@
 import type { EventPageView, ParticipationCta } from "@ds/schemas";
-import { API_BASE } from "@/lib/session";
+import { API_BASE, forwardedHeaders, forwardedSessionFrom } from "@/lib/session";
 import { SPECIALTY_CHOICE_COOKIE_NAME } from "@/lib/specialty-choice";
 
 /**
@@ -75,20 +75,13 @@ export async function fetchDoctorParticipationCta(
   headers: Headers,
   fetchImpl: typeof fetch = fetch,
 ): Promise<ParticipationCta | null> {
-  const cookie = headers.get("cookie");
   const res = await fetchImpl(
     `${API_BASE}${DOCTOR_EVENT_PAGE_PATH}/${encodeURIComponent(idOrSlug)}/participation`,
     {
-      headers: {
-        accept: "application/json",
-        ...(cookie
-          ? {
-              cookie,
-              "user-agent": headers.get("user-agent") ?? "",
-              "accept-language": headers.get("accept-language") ?? "",
-            }
-          : {}),
-      },
+      // The whole forwarded surface (ADR-0001 §6 + the client chain, #2054):
+      // since #1655 the api reads `request.ip` from `x-forwarded-for`, so an SSR
+      // hop that drops it presents the container address.
+      headers: forwardedHeaders(forwardedSessionFrom(headers)),
       cache: "no-store",
     },
   );

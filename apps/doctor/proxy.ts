@@ -1,5 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { API_BASE, SESSION_COOKIE_NAME } from "@/lib/session";
+import {
+  API_BASE,
+  SESSION_COOKIE_NAME,
+  forwardedHeaders,
+  forwardedSessionFrom,
+} from "@/lib/session";
 import {
   SPECIALTY_CHOICE_COOKIE_NAME,
   SPECIALTY_CHOICE_ME_PATH,
@@ -26,12 +31,10 @@ export async function consumeGuestSpecialtyBeforeRender(
 
   try {
     const upstream = await fetchImpl(`${API_BASE}${SPECIALTY_CHOICE_ME_PATH}`, {
-      headers: {
-        accept: "application/json",
-        cookie,
-        "user-agent": request.headers.get("user-agent") ?? "",
-        "accept-language": request.headers.get("accept-language") ?? "",
-      },
+      // The adoption read runs on the doctor's own session, so it carries the
+      // full fingerprint surface — client chain included, or the api re-derives a
+      // different fingerprint and 401s a valid session (#2054).
+      headers: forwardedHeaders(forwardedSessionFrom(request.headers)),
       cache: "no-store",
     });
     if (!upstream.ok) return deferredResponse(request);

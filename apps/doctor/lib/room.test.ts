@@ -20,6 +20,7 @@ const session: ForwardedSession = {
   cookie: "__Host-ds_session=abc",
   userAgent: "Mozilla/5.0 (doctor)",
   acceptLanguage: "ru-RU,ru;q=0.9",
+  forwardedFor: "203.0.113.7, 172.18.0.4",
 };
 
 const jsonResponse = (body: unknown, status = 200) =>

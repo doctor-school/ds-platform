@@ -34,7 +34,10 @@ import {
 } from "../../../lib/recording-signal";
 import { fetchEventPlayback } from "../../../lib/event-playback";
 import { withReturnTarget } from "../../../lib/registration-handoff";
-import { fetchEventRegistrationState } from "../../../lib/registration-state";
+import {
+  fetchEventRegistrationState,
+  forwardedSessionFrom,
+} from "../../../lib/registration-state";
 import { RecordingGate } from "./recording-gate";
 import { RecordingPlayer } from "./recording-player";
 
@@ -109,13 +112,10 @@ export default async function WebinarEventPage({
   const fromRoom = (await searchParams).from === "room";
 
   const h = await headers();
-  const session = {
-    cookie: h.get("cookie") ?? "",
-    // The session is fingerprint-bound — forward the same surface the browser
-    // bound at login so an authed read is not 401'd.
-    userAgent: h.get("user-agent") ?? "",
-    acceptLanguage: h.get("accept-language") ?? "",
-  };
+  // The session is fingerprint-bound (ADR-0001 §6) — the shared builder carries
+  // the same surface the browser bound at login, forwarded client address
+  // included, so an authed read is not 401'd (#2054).
+  const session = forwardedSessionFrom(h);
 
   // The ONE participation decision, resolved server-side for this
   // viewer on this event. A `null` here would mean the event vanished between

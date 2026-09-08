@@ -103,7 +103,9 @@ export default async function DoctorEventPage({
   const [event, cta, registrationState] = await Promise.all([
     fetchDoctorEventPage(slug, h),
     fetchDoctorParticipationCta(slug, h),
-    session ? fetchEventRegistrationState(slug, session) : Promise.resolve(null),
+    session.cookie
+      ? fetchEventRegistrationState(slug, session)
+      : Promise.resolve(null),
   ]);
   // Draft / unknown → 404. A `hidden` event stays a reachable 200 whose CTA is
   // `unavailable` with the reason in plain words (004 EARS-5 parity).

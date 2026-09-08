@@ -48,12 +48,15 @@ describe("#1440 doctor storefront session helpers", () => {
       cookie: `${SESSION_COOKIE_NAME}=abc`,
       userAgent: "Mozilla/5.0 (probe)",
       acceptLanguage: "ru-RU,ru;q=0.9",
+      forwardedFor: "",
     });
   });
 
-  it("1440.4: returns null with no session cookie — no upstream read is issued", () => {
-    expect(forwardedSessionFrom(new Headers({ cookie: "other=1" }))).toBeNull();
-    expect(forwardedSessionFrom(new Headers())).toBeNull();
+  it("1440.4: yields an EMPTY cookie with no session cookie — no upstream authed read is issued", () => {
+    expect(forwardedSessionFrom(new Headers({ cookie: "other=1" })).cookie).toBe(
+      "",
+    );
+    expect(forwardedSessionFrom(new Headers()).cookie).toBe("");
   });
 
   it("1440.5: the BFF read replays cookie + fingerprint headers", async () => {
@@ -71,6 +74,7 @@ describe("#1440 doctor storefront session helpers", () => {
         cookie: `${SESSION_COOKIE_NAME}=abc`,
         userAgent: "Mozilla/5.0 (probe)",
         acceptLanguage: "ru-RU",
+        forwardedFor: "",
       },
       fetchImpl,
     );
@@ -91,6 +95,7 @@ describe("#1440 doctor storefront session helpers", () => {
       cookie: `${SESSION_COOKIE_NAME}=abc`,
       userAgent: "ua",
       acceptLanguage: "ru",
+      forwardedFor: "",
     };
     const unauthorized = (async () =>
       new Response("", { status: 401 })) as unknown as typeof fetch;
@@ -101,5 +106,37 @@ describe("#1440 doctor storefront session helpers", () => {
     await expect(fetchSessionClaims(session, broken)).rejects.toThrow(
       /session fetch failed \(503\)/,
     );
+  });
+});
+
+/**
+ * #2054 — the doctor host runs the same SSR hop as the Academy: since #1655 the
+ * api resolves `request.ip` from `x-forwarded-for` when the peer is trusted, so
+ * the session fingerprint is bound to the BROWSER's `/24`. Dropping the chain on
+ * the container→api hop 401s a valid session and bounces the doctor to login.
+ */
+describe("#2054 the doctor BFF read forwards the client chain", () => {
+  it("2054.6: forwardedSessionFrom carries x-forwarded-for and the session read replays it", async () => {
+    const headers = new Headers({
+      cookie: `${SESSION_COOKIE_NAME}=abc`,
+      "user-agent": "Mozilla/5.0 (probe)",
+      "accept-language": "ru-RU",
+      "x-forwarded-for": "203.0.113.7, 172.18.0.4",
+    });
+    const session = forwardedSessionFrom(headers);
+    expect(session.forwardedFor).toBe("203.0.113.7, 172.18.0.4");
+
+    const calls: RequestInit[] = [];
+    const fetchImpl = (async (_url: RequestInfo | URL, init?: RequestInit) => {
+      calls.push(init ?? {});
+      return new Response(
+        JSON.stringify({ sub: "u-1", roles: ["doctor"], mfa: false }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    }) as unknown as typeof fetch;
+
+    await fetchSessionClaims(session, fetchImpl);
+    const sent = calls[0]!.headers as Record<string, string>;
+    expect(sent["x-forwarded-for"]).toBe("203.0.113.7, 172.18.0.4");
   });
 });

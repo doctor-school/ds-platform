@@ -9,7 +9,11 @@ import {
   mskDayKey,
   mskMonthKey,
 } from "./msk";
-import { resolveRoomEntryHref, type ForwardedSession } from "./registration-state";
+import {
+  forwardedHeaders,
+  resolveRoomEntryHref,
+  type ForwardedSession,
+} from "./registration-state";
 import { toCanvasStatus } from "./event-lifecycle";
 import { isRecordingPlayable } from "./recording-cta";
 
@@ -21,8 +25,9 @@ import { isRecordingPlayable } from "./recording-cta";
  * (EARS-10): the surface is server-rendered, so this runs on the server and
  * forwards the incoming request's session cookie AND its fingerprint headers (the
  * BFF session is fingerprint-bound, ADR-0001 §6 — a server-to-server read must
- * present the same `user-agent` + `accept-language` the browser bound at login, or
- * the api 401s a valid session). The upstream is the same env-driven
+ * present the same `user-agent`, `accept-language` AND client address the browser
+ * bound at login, or the api 401s a valid session — #2054, the bounce this page
+ * showed to signed-in doctors in production). The upstream is the same env-driven
  * `API_PROXY_TARGET` the rest of the portal's server reads use — never a
  * hardcoded host.
  */
@@ -61,14 +66,10 @@ export async function fetchMyEvents(
   if (!session.cookie) return { authenticated: false };
 
   const res = await fetch(`${API_BASE}/v1/me/events?tab=${tab}`, {
-    headers: {
-      accept: "application/json",
-      cookie: session.cookie,
-      // Forward the fingerprint surface (ADR-0001 §6) — without it the api
-      // re-derives a different fingerprint and 401s a valid session.
-      "user-agent": session.userAgent,
-      "accept-language": session.acceptLanguage,
-    },
+    // The whole fingerprint surface (ADR-0001 §6), forwarded client address
+    // included — without it the api re-derives a different fingerprint and 401s
+    // a valid session (#2054).
+    headers: forwardedHeaders(session),
     // Per-user, authenticated — MUST NOT be shared-cached (design §5).
     cache: "no-store",
   });

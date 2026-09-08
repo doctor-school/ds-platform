@@ -1,6 +1,6 @@
 import type { ParticipationCta } from "@ds/schemas";
 
-import type { ForwardedSession } from "./registration-state";
+import { forwardedHeaders, type ForwardedSession } from "./registration-state";
 
 /**
  * 020 EARS-1 / LD-2 (#1764, slice 3) — the academy host's read of the ONE
@@ -38,16 +38,9 @@ export async function fetchParticipationCta(
   const res = await fetch(
     `${API_BASE}/v1/public/events/${encodeURIComponent(idOrSlug)}/participation`,
     {
-      headers: {
-        accept: "application/json",
-        ...(session.cookie
-          ? {
-              cookie: session.cookie,
-              "user-agent": session.userAgent,
-              "accept-language": session.acceptLanguage,
-            }
-          : {}),
-      },
+      // A guest simply carries no session surface: the helper emits `accept`
+      // alone when no session cookie rode the request.
+      headers: forwardedHeaders(session),
       cache: "no-store",
     },
   );

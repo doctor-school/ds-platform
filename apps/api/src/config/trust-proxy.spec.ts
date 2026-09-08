@@ -136,6 +136,20 @@ describe("Fastify client-IP resolution (#1655 AC 1 + AC 2)", () => {
     expect(ip).toBe("203.0.113.7");
   });
 
+  it("EARS-13 (#2054): the Next container's SSR hop keeps the client ip only when it forwards x-forwarded-for", async () => {
+    const call = ipEcho({});
+    // The SSR reader builds its OWN request to the api, so nothing is inherited:
+    // with no forwarded chain `request.ip` is the storefront container itself,
+    // and the session fingerprint (bound to the browser's /24 at login) misses.
+    const { ip: withoutChain } = await call("172.18.0.8");
+    expect(withoutChain).toBe("172.18.0.8");
+    // Forwarding the chain the storefront received from Caddy restores the real
+    // client — the container peer is inside the default trusted set, so the api
+    // honours the header it relays.
+    const { ip: withChain } = await call("172.18.0.8", "203.0.113.7");
+    expect(withChain).toBe("203.0.113.7");
+  });
+
   it("EARS-13 (#1655): with no forwarded header request.ip is the socket peer", async () => {
     const call = ipEcho({});
     const { ip } = await call("172.18.0.4");

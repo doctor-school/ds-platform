@@ -157,3 +157,83 @@ Rules (land in `design-source/README.md`, stage 1):
 ## 9. Session protocol for this epic
 
 A session on #2020 reads this file, picks the next unchecked item of the earliest open stage, and updates the checklist in the same PR. Progress lives here and in the epic's sub-issues; no handoff replaces the checklist.
+
+## 10. Reviewer comments for specification revision — 2026-09-08
+
+**Status: pending disposition.** Recorded at the owner's request in [#2044](https://github.com/doctor-school/ds-platform/issues/2044). These are recommendations for the next specification author, not approved architecture, a decision amendment, or a formal Mode (a) verdict. Stage 1 remains completed; the owner decisions in §8 and their tracking in #2027 / #2028 remain in force. The review used the plan, repository code and GitHub records; it did not run live user journeys.
+
+**Overall assessment.** The task is worthwhile and feature packages are the right direction. It is a medium-to-large architectural refactor with high auth-regression risk. Without tighter boundaries, duplication can migrate into config, adapters and exceptions. Auth followed by events is a reasonable priority. Before broad extraction, the reviewer recommends a both-host behaviour matrix, typed package/config contracts, a dependency graph and explicit verification/release criteria for each wave.
+
+**Handoff.** Address each REV ID with `accepted/resolved` and a link to the revised clause/evidence, or `rejected` and a rationale; an accepted but unfinished item remains pending with its tracking Issue. Apply accepted changes by rewriting the affected plan clauses inline, preserving requirement traceability and recorded owner forks. Reconcile dependent ADR/spec/registry wording where needed. Do not treat this review as authorization for a new product decision or reopen a closed owner fork without a concrete unresolved conflict.
+
+### REV-01 — High: the allowlist does not enforce the full sharing boundary
+
+**Affected:** §3 rule 3; §5. **Evidence / risk:** the proposed check covers only `apps/{portal,doctor}/{lib,components}` and file membership. Logic added to `app/**/page.tsx`, another directory such as `hooks/`, an already allowlisted file, or a host-config callback can pass. §1 itself identifies page-level compositions as a source of duplication. The allowlist is useful, but its stated structural guarantee is broader than its coverage.
+
+**Requested specification change:** retain the allowlist and define complementary import/boundary checks: shared routes mount their registered package; packages never import apps; host config does not implement the shared scenario. State which guarantees are automated and which still require review.
+
+- [ ] Specify coverage and negative cases for route-local logic, alternate directories, allowed-file growth, package-to-app imports and behavioural config callbacks.
+- [ ] Define enforceable acceptance tests and any remaining review obligations, including their relation to the WARN-to-BLOCK transition.
+
+### REV-02 — High: preserve both storefronts' behaviour and tests
+
+**Affected:** §2 package contract; §4 Stage 2 common steps. **Evidence / risk:** moving Academy code and tests alone does not establish parity. Doctor-side flows already include specialty-based landing, stale-`returnTo` explanations, confirmation/consent states and a recorded divergence on automatic sign-in failure after email confirmation. Some differences are intended product behaviour; others require disposition. Stage B on both hosts is already required, but cannot replace regression coverage.
+
+**Requested specification change:** prepare a matrix per wave: scenario → Academy behaviour → doctor behaviour → shared contract → permitted host difference → test. Inventory both hosts' tests before moving code; retain shared behaviour tests and host-mount/integration coverage for each host.
+
+- [ ] Cover missing/success/failure branches, return-context recovery and the doctor-specific cases above; link each intended difference to its decision.
+- [ ] State how both existing test sets map to package tests and per-host tests, without silently dropping doctor behaviour or relaxing Stage B.
+
+### REV-03 — High: temporary-copy expiry conflicts with extraction timing
+
+**Affected:** §2 bounded copy exception; §4 Stages 0 and 2. **Evidence / risk:** §2 forbids mirrors past R1, while Stage 2 starts the waves that remove them after R1. Both deadlines cannot hold for the same mirror. Stage 0 anchors source line ranges without pinning the source version.
+
+**Requested specification change:** choose a consistent release sequence: either the relevant extraction blocks R1, or the exception expires at a named later wave/release with a checkable deletion condition. Record this disposition against the affected Issues. Pin every source anchor to a commit SHA as well as its path/range.
+
+- [ ] Reconcile all mirror deadlines and name the extraction owner/Issue and deletion check for each allowed mirror.
+- [ ] Specify immutable source provenance and the check for source changes between copying and extraction.
+
+### REV-04 — Medium: define config, adapter and server/client boundaries
+
+**Affected:** §2 route/config contract; §4 wave 1 inventory. **Evidence / risk:** arbitrary callbacks such as `onSuccess()` or `resolveLanding()` can conceal independent flow implementations. Next.js also needs middleware, metadata and server integration beyond a page mount. For example, `apps/portal/middleware.ts` parks `returnTo`, but the wave-1 inventory does not name it.
+
+**Requested specification change:** provide typed package entry points and host-config/adapter contracts, with permitted adapter operations and shared ownership of decisions. Assign middleware, metadata, server actions, session forwarding and caching explicitly; separate server-only and client entry points and define thin framework mounts where necessary.
+
+- [ ] Include allowed/disallowed config examples and distinguish transport adaptation from routing, authorization and state-machine decisions.
+- [ ] Inventory framework entry points, including `apps/portal/middleware.ts`, and specify their package dependencies and server/client boundaries.
+
+### REV-05 — Medium: sequence dependencies and independently verifiable steps
+
+**Affected:** §4 Stage 2 wave table. **Evidence / risk:** wave-1 `registration-handoff` depends on `room-return`, listed in wave 4. `packages/events-storefront` already exists following #2005, and `registration-resume` already consumes its completion-on-return behaviour. The work is not four independent package moves; an incomplete move could recreate copies or require a package-to-app dependency.
+
+**Requested specification change:** draw the actual dependency graph from current shared owners and split each large wave into small, complete PR steps. Define the valid intermediate state after every step, especially for login, registration, confirmation, recovery, session and theme in wave 1.
+
+- [ ] Resolve the `registration-handoff` / `room-return` ordering and account for the existing `events-storefront` completion-on-return owner.
+- [ ] Name each step's prerequisites, consumer migration and acceptance evidence; prohibit temporary package-to-app imports and duplicated rules used to bypass ordering.
+
+### REV-06 — Medium: verify packaged runtime and define release/rollback criteria
+
+**Affected:** §2 deployment rationale; §4 per-wave acceptance. **Evidence / risk:** package moves affect existing `transpilePackages`, CSS `@source`, standalone output and runtime-file inclusion. Type checks or source tests alone can miss missing styles/files in the built apps. Separate containers permit separate deployment, but do not by themselves prove release independence: the current deployment uses a shared SHA and service set.
+
+**Requested specification change:** add both-app build/start and runtime smoke criteria to every affected wave, alongside existing behavioural and owner gates. Clarify actual deployment coupling, rollout unit, compatibility assumptions and rollback through the canonical deployment process.
+
+- [ ] Require both standalone apps to build and start with required package files/styles, and verify affected routes plus same-origin auth/session behaviour.
+- [ ] Define deployment order/unit, release evidence and rollback criteria; avoid promising independent releases without specifying how the current deploy supports them.
+
+### REV-07 — Medium: retain every absorbed requirement's traceability
+
+**Affected:** §3 rule 4; §4 Stage 3 docs cleanup; §7 duplicate/absorption actions. **Evidence / risk:** a projection line can replace duplicate prose only when the shared contract actually covers it. #2027 already records the requirement to always explain a disabled submit reason as lacking an Academy counterpart. Closing a duplicate Issue does not itself prove that all its clauses are preserved.
+
+**Requested specification change:** map every absorbed EARS clause to its canonical requirement and shared test, retained host difference, or explicit owner-approved removal. Preserve the closed-Issue history and the §8 decision; trace unique clauses into the receiving wave instead of losing them during cleanup.
+
+- [ ] Audit all absorbed Issues clause by clause, including #1548–#1550 and the disabled-submit requirement recorded in #2027.
+- [ ] Keep stable source requirement IDs and links to receiving requirements/tests or the owner's removal decision; a projection line links to that mapping.
+
+### REV-08 — Optional: separate canvas consolidation from behavioural extraction
+
+**Affected:** §6 and §4 cleanup sequencing. **Evidence / risk:** sharing runtime behaviour does not technically require one physical canvas file. Combining canvases can introduce an unintended redesign or delay extraction while already approved variants exist.
+
+**Requested specification change:** consider a separate canvas-consolidation workstream with explicit dependencies only where genuinely required. Preserve one component owner, approved host variants, design provenance and both-host parity. This suggestion does not waive the existing design canon, Stage A or Stage B; any change to that canon needs explicit disposition in the relevant documents.
+
+- [ ] Record acceptance or rejection of decoupling and identify the actual design dependencies of each extraction wave.
+- [ ] Ensure consolidation preserves approved variants and that any changed look/behaviour follows the existing owner gates.

@@ -1,5 +1,12 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -215,10 +222,32 @@ async function submitCode(user: ReturnType<typeof userEvent.setup>) {
 
 describe("005 EARS-2 (#2005): the confirmed doctor is registered to the эфир they came from", () => {
   it("005 EARS-2: after the held-password replay, system shall fire RegisterForEvent for the carried эфир before the success state", async () => {
+    let completeRegistration!: () => void;
+    h.registerForEvent.mockReturnValue(
+      new Promise<void>((resolve) => {
+        completeRegistration = resolve;
+      }),
+    );
     const user = setupUser();
     renderScreen();
 
-    await submitRegistration(user);
+    // Credentials are setup for this command-order test: one real change per
+    // field still runs RHF validation, without rendering every partial email
+    // and password. Keep consent/submit clicks and OTP typing as interactions;
+    // the latter exercises the real last-character auto-submit boundary.
+    fireEvent.change(screen.getByTestId("register-email"), {
+      target: { value: EMAIL },
+    });
+    fireEvent.change(screen.getByTestId("register-password"), {
+      target: { value: PASSWORD },
+    });
+    for (const box of screen
+      .getByTestId("registration-form")
+      .querySelectorAll<HTMLInputElement>('input[type="checkbox"]')) {
+      if (!box.checked) await user.click(box);
+    }
+    await user.click(screen.getByTestId("register-submit"));
+    await screen.findByLabelText(/Код из письма/);
     await submitCode(user);
 
     await waitFor(() =>
@@ -235,6 +264,8 @@ describe("005 EARS-2 (#2005): the confirmed doctor is registered to the эфир
       "login",
       "register-for-event",
     ]);
+    expect(screen.queryByTestId("registration-success-primary")).toBeNull();
+    await act(async () => completeRegistration());
     await waitFor(() =>
       expect(screen.getByTestId("registration-success-primary")).toBeTruthy(),
     );
@@ -354,7 +385,9 @@ describe("021 EARS-15 (#1996): the doctor is signed in after email confirmation"
     );
     // Not a failed CONFIRMATION — the code was accepted, so the doctor is never
     // told to type it again.
-    expect(screen.queryByText("Код не подошёл. Попробуйте ещё раз.")).toBeNull();
+    expect(
+      screen.queryByText("Код не подошёл. Попробуйте ещё раз."),
+    ).toBeNull();
     expect(screen.queryByTestId("registration-success-primary")).toBeNull();
     // The take consumes; it does not roll back on error.
     expect(takePendingRegistration(EMAIL)).toBeNull();

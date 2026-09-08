@@ -52,6 +52,9 @@ export default defineConfig({
     // 020 EARS-5 (#1768): the event page the hand-off starts on is read from
     // the upstream on the SERVER, so this spec rides the return-context tier.
     "register-return-handoff.spec.ts",
+    // 021 EARS-16 (#1552): the parity matrix drives the gate arrival and the
+    // upstream's register/confirm answers, so it rides the return-context tier.
+    "register-mobile.spec.ts",
     "register-direct.spec.ts",
     "login-return-context.spec.ts",
     "events-*.spec.ts",

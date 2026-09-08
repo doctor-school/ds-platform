@@ -50,8 +50,13 @@ export default defineConfig({
   // projected on the SERVER at the door, and the landing is re-validated on the
   // SERVER by the confirm command: the whole journey is decided upstream of the
   // browser, against this same double.
+  // 021 EARS-16 (#1552) adds the sixth half of the same question — the
+  // mobile-breakpoint parity matrix (`register-mobile.spec.ts`). Half of every
+  // row in it is the with-return-context arm, resolved on the SERVER against
+  // this same double, and its letter-sent and confirmed states are the
+  // upstream's own answers to the register and confirm commands.
   testMatch:
-    "{register-{return-context,direct,return,return-handoff},login-{return-context,arrival}}.spec.ts",
+    "{register-{return-context,direct,return,return-handoff,mobile},login-{return-context,arrival}}.spec.ts",
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,

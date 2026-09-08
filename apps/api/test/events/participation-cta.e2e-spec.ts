@@ -193,6 +193,25 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(answer.href).toBeNull();
     });
 
+    it("020 EARS-6: a registered doctor on an upcoming event gets the statement-only registered action on the DOCTOR host, identical to the Academy host", async () => {
+      const { slug } = await seedEvent({ state: "published" });
+      const cookie = await doctorSession();
+      await register(slug, cookie);
+
+      const doctor = await cta(DOCTOR(slug), cookie);
+      const academy = await cta(ACADEMY(slug), cookie);
+
+      // Release 3 ships the registered card at Academy parity: a bare
+      // «Вы записаны» statement. A null href is what makes the card render a
+      // statement instead of a control, so cancel, add-to-calendar, the
+      // pre-start reminder and the «Мои события» link have nothing to hang on
+      // — they are wave 2 (#2040).
+      expect(doctor.action).toBe("registered");
+      expect(doctor.href).toBeNull();
+      expect(doctor.presenceCount).toBeNull();
+      expect(doctor).toEqual(academy);
+    });
+
     it("020 EARS-1: a signed-in doctor WITHOUT a registration is offered registration like a guest", async () => {
       const { slug } = await seedEvent({ state: "published" });
       const cookie = await doctorSession();

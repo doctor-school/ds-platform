@@ -144,6 +144,25 @@ describe("<EventSignupCard>", () => {
     expect(screen.queryByTestId("event-signup-cta")).toBeNull();
   });
 
+  it("020 EARS-6: the registered card shall state «Вы записаны» and offer no other control — no cancel, calendar, reminder or «Мои события» link", () => {
+    render(
+      <EventSignupCard
+        {...base}
+        cta={cta({ action: "registered", label: "Вы записаны", href: null })}
+      />,
+    );
+
+    expect(screen.getByTestId("event-signup-statement")).toHaveTextContent(
+      "Вы записаны",
+    );
+    expect(screen.queryByTestId("event-signup-cta")).toBeNull();
+    expect(screen.queryByRole("button")).toBeNull();
+    expect(screen.queryByRole("link")).toBeNull();
+    expect(
+      screen.queryByText(/календар|отмен|напомин|Мои события/i),
+    ).toBeNull();
+  });
+
   it("020 EARS-1: pinning shall stick the card on the wide canvas only", () => {
     const { rerender } = render(
       <EventSignupCard {...base} cta={cta()} pinned />,

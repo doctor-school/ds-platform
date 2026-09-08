@@ -36,7 +36,7 @@ Feature: One event page serves the doctor storefront and the Academy, and a doct
     And the registration carries the event and the return URL "/events/vedenie-osteoartrit?mode=online"
     When the guest completes feature 021's registration
     Then the doctor lands back on "/events/vedenie-osteoartrit?mode=online" with the participation intent resumed
-    And the sticky card reads «Вы записаны» with an add-to-calendar affordance, a cancel-sign-up affordance and a link into «Мои события»
+    And the sticky card reads «Вы записаны» and offers no other control
     And no «Участвовать» CTA is rendered anywhere on the page
     When feature 006 opens the room for the event
     Then the sticky card offers room entry with the presence count of colleagues already there
@@ -270,11 +270,15 @@ Feature: One event page serves the doctor storefront and the Academy, and a doct
     And the free-text partner reference is not rendered anywhere
 
   @EARS-6 @deferred @failure
-  Scenario: No pre-start reminder is promised in release 3
+  Scenario: The registered card promises no cancel, calendar, reminder or «Мои события» link in release 3
     Given a signed-in doctor holds a registration on an upcoming event
     When the doctor opens the event page
-    Then the sticky card offers the calendar add, the cancel affordance and the «Мои события» link
+    Then the sticky card reads «Вы записаны» and offers no other control
+    And no cancel-sign-up affordance is rendered
+    And no add-to-calendar affordance is rendered
     And no reminder promise, reminder setting or reminder placeholder is rendered
+    And no «Мои события» link is rendered on the card
+    And no «Участвовать» CTA is rendered anywhere on the page
 
   # --- Process gate ---
 

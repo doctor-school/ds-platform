@@ -1,3 +1,11 @@
+---
+title: Ревью плана «Один код на две витрины» — 2026-09-08
+status: Review record — recommendations folded into the plan on 2026-09-08 (PR #2048); not a decision record
+date: 2026-09-08
+kind: independent review (static)
+issue: 2020
+---
+
 # Ревью плана «Один код на две витрины» — 2026-09-08
 
 Исходный документ: [2026-09-07-one-code-two-storefronts-plan-en.md](2026-09-07-one-code-two-storefronts-plan-en.md).

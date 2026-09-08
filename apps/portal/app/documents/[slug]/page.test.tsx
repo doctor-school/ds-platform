@@ -105,4 +105,17 @@ describe("028 Academy document route", () => {
     expect(within(main).getByTestId("legal-document")).toBeInTheDocument();
     expect(screen.getAllByRole("main")).toHaveLength(1);
   });
+
+  it("028 EARS-15: the not-found shell exposes exactly one main landmark", () => {
+    render(<DocumentNotFound />);
+
+    // The unresolved-slug shell is a served page of this segment, so it owns its
+    // landmark on the same terms as the document page itself.
+    const main = screen.getByRole("main");
+    expect(within(main).getByTestId("legal-document")).toHaveAttribute(
+      "data-state",
+      "not-found",
+    );
+    expect(screen.getAllByRole("main")).toHaveLength(1);
+  });
 });

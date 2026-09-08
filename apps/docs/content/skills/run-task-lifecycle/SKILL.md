@@ -15,13 +15,19 @@ This is the **connective** lifecycle skill. It does not re-implement any step �
 
 > **Cannot proceed without** — the verdict artifacts of `request-mode-a-review` (APPROVE) and the per-kind orchestration gates. The lead does not advance past a gate without its artifact in hand (ADR-0007 §2.4).
 
+## Scope gate — before tracker or dispatch
+
+Classify the requested deliverable before entering this lifecycle. Saving or copying already-written chat text into a separate local file, without revising a maintained source, is an artifact export. The lead writes that file, verifies its content and destination, and returns its link; do not create an Issue, branch or PR, dispatch agents, or run repository-wide checks for the export. Use the requested destination; absent one, choose a user-accessible location outside the repository. Do not overwrite a tracked canonical document under this route. One artifact write fits the existing small-inline-mutation carve-out; an explicit user-specified destination governs the export location.
+
+Changing a maintained spec, ADR, instruction or runtime source, or explicitly requesting repository integration/publication, enters the normal lifecycle below. A request to save text does not by itself request such a change. Preserve the text's language and distinguish review recommendations from accepted decisions.
+
 ## Autonomous vs human-gated (read first)
 
 Per AGENTS.md §4 + §6, the agent is **autonomous through merge**: it dispatches the review, confirms CI green by hand, merges, closes, sets the board, and grooms — **without waiting for the human**. A positive **Mode (a)** (subagent) or **Mode (b)** (Codex) verdict + green CI is sufficient to merge; human-merge is **not** required. **Mode (c)** review is human-gated. Independently, Stage A before UI implementation, Stage B before merge, and explicit destructive-infra/release escalation gates remain owner decisions. Do not stop at an intermediate step "waiting for confirmation"; the repeated correction in the audit was precisely that stop.
 
 ## Input
 
-- A task: an existing Issue `#N`, or a need that has no Issue yet (create one first — step 1).
+- A repository-changing task that passed the Scope gate: an existing Issue `#N`, or a need that has no Issue yet (create one first — step 1).
 
 ## Procedure
 

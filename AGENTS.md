@@ -60,7 +60,7 @@ Every session, any vendor: **identify task kind → open with the session plan �
 - product-discovery — new product epic / user-facing feature, no PRD yet → `do-product-discovery`
 - spec-authoring — new feature-spec / ADR / design-spec → `author-feature-spec`
 
-Not in the list? Dependency bump → `engineering-task` + the two checks in `repo-conventions.md` → Dependency bumps. Opening Issues from a merged spec → skill `open-ears-issues`. User-facing epic/feature with no PRD → `product-discovery` → `spec-authoring` → `feature-iteration` (ADR-0014). Still unmapped → `engineering-task` (§3.8), state the assumption, proceed; ask Tech Lead only if that genuinely doesn't fit.
+Existing-text export → inline, `run-task-lifecycle` Scope gate; no repository change implied. Dependency bump → `engineering-task` + repo-conventions checks. Merged-spec Issues → `open-ears-issues`. New user-facing scope → discovery → spec → implementation (ADR-0014). Otherwise → `engineering-task` (§3.8); state the assumption, ask only if it genuinely does not fit.
 
 ### 3.2 Open with the session plan
 

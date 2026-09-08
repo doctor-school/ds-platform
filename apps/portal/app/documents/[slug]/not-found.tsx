@@ -8,5 +8,13 @@ import { LegalDocument } from "@ds/design-system/legal-document";
  * renders for the `notFound()` the route throws.
  */
 export default function DocumentNotFound() {
-  return <LegalDocument state="not-found" backHref="/documents" />;
+  // EARS-15: this segment's pages own their content landmark — the Academy root
+  // layout renders `{children}` straight into `<body>` and the shared block owns
+  // only its own container, so the served 404 shell would otherwise expose no
+  // `main` at all.
+  return (
+    <main>
+      <LegalDocument state="not-found" backHref="/documents" />
+    </main>
+  );
 }

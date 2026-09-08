@@ -27,7 +27,9 @@ afterEach(cleanup);
 describe("028 Academy document route", () => {
   it("028 EARS-2: renders the published policy body through the shared reading component", async () => {
     render(
-      await DocumentPage({ params: Promise.resolve({ slug: "privacy-policy" }) }),
+      await DocumentPage({
+        params: Promise.resolve({ slug: "privacy-policy" }),
+      }),
     );
 
     const block = screen.getByTestId("legal-document");
@@ -40,9 +42,9 @@ describe("028 Academy document route", () => {
       /редакция от/,
     );
     // A non-empty rendered body — the block parses the Markdown itself.
-    expect(screen.getByTestId("legal-document-body").textContent ?? "").not.toBe(
-      "",
-    );
+    expect(
+      screen.getByTestId("legal-document-body").textContent ?? "",
+    ).not.toBe("");
     // Back to the Academy's own list, never the doctor host's.
     expect(screen.getByTestId("legal-document-back-top")).toHaveAttribute(
       "href",
@@ -56,7 +58,9 @@ describe("028 Academy document route", () => {
 
   it("028 EARS-2: offers every OTHER published document as a neighbour, never itself", async () => {
     render(
-      await DocumentPage({ params: Promise.resolve({ slug: "privacy-policy" }) }),
+      await DocumentPage({
+        params: Promise.resolve({ slug: "privacy-policy" }),
+      }),
     );
 
     const others = screen.getByTestId("legal-document-others");
@@ -83,5 +87,35 @@ describe("028 Academy document route", () => {
     expect(
       screen.getByRole("link", { name: /Все документы платформы/ }),
     ).toHaveAttribute("href", "/documents");
+  });
+
+  it("028 EARS-15: the document page exposes exactly one main landmark wrapping the document", async () => {
+    render(
+      await DocumentPage({
+        params: Promise.resolve({ slug: "privacy-policy" }),
+      }),
+    );
+
+    // The root layout renders `{children}` straight into `<body>` and the shared
+    // block owns only its own container, so without a page-owned landmark the
+    // served document page exposes banner, navigation and the ToC navigation and
+    // nothing a screen reader can jump into. Academy convention: the PAGE opens
+    // `<main>` (`app/account/page.tsx`, `academy-home-view.tsx`).
+    const main = screen.getByRole("main");
+    expect(within(main).getByTestId("legal-document")).toBeInTheDocument();
+    expect(screen.getAllByRole("main")).toHaveLength(1);
+  });
+
+  it("028 EARS-15: the not-found shell exposes exactly one main landmark", () => {
+    render(<DocumentNotFound />);
+
+    // The unresolved-slug shell is a served page of this segment, so it owns its
+    // landmark on the same terms as the document page itself.
+    const main = screen.getByRole("main");
+    expect(within(main).getByTestId("legal-document")).toHaveAttribute(
+      "data-state",
+      "not-found",
+    );
+    expect(screen.getAllByRole("main")).toHaveLength(1);
   });
 });

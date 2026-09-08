@@ -55,8 +55,14 @@ export default defineConfig({
   // row in it is the with-return-context arm, resolved on the SERVER against
   // this same double, and its letter-sent and confirmed states are the
   // upstream's own answers to the register and confirm commands.
+  // 020 EARS-20 (#1777) adds the seventh half of the same question — the
+  // event-page parity matrix (`event-page-parity.spec.ts`). It belongs here
+  // because the lifecycle phase, the participation policy AND the caller's
+  // registration are all resolved on the SERVER against this same double before
+  // the first byte of HTML; a browser-intercepted tier could only ever assert
+  // its own fixture of all three.
   testMatch:
-    "{register-{return-context,direct,return,return-handoff,mobile},login-{return-context,arrival}}.spec.ts",
+    "{register-{return-context,direct,return,return-handoff,mobile},login-{return-context,arrival},event-page-parity}.spec.ts",
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,

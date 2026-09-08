@@ -119,13 +119,26 @@ const SPECIALTY = {
  */
 const REFUSED_PASSWORD = "the second password the idp never took";
 
-const PARTICIPATION_CTA = {
-  action: "register",
-  label: "Участвовать",
-  href: `/register?returnTo=${encodeURIComponent(`/events/${EVENT.slug}`)}`,
-  reason: null,
-  presenceCount: null,
-};
+/**
+ * The register policy the api's `participation-cta.resolver` builds for a
+ * publicly reachable, REGISTRABLE event (`published`/`live`, 005 design §5): the
+ * hand-off to `/register` carrying THIS host's event path as the return target.
+ * Identical for a guest and for a signed-in-but-unregistered doctor — one policy
+ * (020 LD-2); who gets the in-place one-tap instead of the hand-off is the
+ * host's decision, taken from the registration read below.
+ */
+function registerCta(slug) {
+  return {
+    action: "register",
+    label: "Участвовать",
+    href: `/register?returnTo=${encodeURIComponent(`/events/${slug}`)}`,
+    reason: null,
+    presenceCount: null,
+  };
+}
+
+/** The fixture event's guest policy, kept as a name the older specs read by. */
+const PARTICIPATION_CTA = registerCta(EVENT.slug);
 
 /**
  * The `__Host-ds_session` value this double accepts as a live doctor session
@@ -151,8 +164,92 @@ const ENDED_EVENT = {
   state: "ended",
 };
 
+/**
+ * 020 EARS-20 (#1777) — the эфир that is ON AIR right now. The parity sweep has
+ * to drive the LIVE phase on both hosts, and «live» is a SERVER fact
+ * (`PublicEventStateSchema`, `state: "live"`) that no browser-side switch can
+ * fabricate: the hero status plate and the room-entry policy are both resolved
+ * from it upstream of the first byte of HTML. `startsAt` sits in the past by a
+ * margin larger than `durationMin`, so the countdown mapper has nothing to
+ * count and the plate falls to the bare «В эфире» word.
+ */
+const LIVE_EVENT = {
+  ...EVENT,
+  id: "00000000-0000-4000-8000-0000000005f9",
+  slug: "live-nevrologiya-praktikum",
+  title: "Неврология в практике терапевта: разбор случаев",
+  startsAt: "2026-05-20T09:00:00.000Z",
+  state: "live",
+};
+
+/**
+ * 020 EARS-20 (#1777) — the upcoming эфир this tier's ONE doctor is ALREADY
+ * registered for. It is a separate fixture rather than a flag on {@link EVENT}
+ * because the registered arm and the not-yet-registered arm of the matrix must
+ * both be drivable in the same run, and the upstream keys registration by event,
+ * not by a request parameter.
+ */
+const REGISTERED_EVENT = {
+  ...EVENT,
+  id: "00000000-0000-4000-8000-0000000005fa",
+  slug: "registered-revmatologiya-obzor",
+  title: "Ревматология: обзор новых клинических рекомендаций",
+  startsAt: "2026-09-24T16:00:00.000Z",
+  state: "published",
+};
+
 /** Every эфир this double answers for, by slug and by id. */
-const EVENTS = [EVENT, ENDED_EVENT];
+const EVENTS = [EVENT, ENDED_EVENT, LIVE_EVENT, REGISTERED_EVENT];
+
+/**
+ * The slugs this tier's ONE live doctor holds a registration for (005 EARS-4).
+ * A read for any other event answers `{ registered: false }` — the honest
+ * «this doctor is signed in and is not registered» fact, which is what makes the
+ * host render the one-tap command instead of the `/register` hand-off.
+ */
+const REGISTERED_SLUGS = new Set([REGISTERED_EVENT.slug, LIVE_EVENT.slug]);
+
+/**
+ * The participation policy, resolved the way the api resolves it (020 LD-2):
+ * from the event's lifecycle state and the CALLER's registration, never from
+ * anything the host could compute. The four answers this tier needs:
+ *
+ *   • registrable × not registered → `register` (guest and signed-in alike);
+ *   • `published` × registered   → `registered`, no target — the card states
+ *     «Вы записаны» in words and carries no control (020 EARS-6);
+ *   • `live` × registered        → `enter-room` with THIS host's room route
+ *     (#1722) — the «Войти в эфир» control (020 EARS-7);
+ *   • not registrable (`ended`) → `unavailable`, no target, the reason in plain
+ *     words — zero participation controls (020 EARS-4).
+ */
+function participationFor(event, registered) {
+  if (event.state === "ended") {
+    return {
+      action: "unavailable",
+      label: "Регистрация закрыта",
+      href: null,
+      reason: "Эфир завершён — регистрация больше не открыта.",
+      presenceCount: null,
+    };
+  }
+  if (!registered) return registerCta(event.slug);
+  if (event.state === "live") {
+    return {
+      action: "enter-room",
+      label: "Войти в эфир",
+      href: `/events/${event.slug}/room`,
+      reason: null,
+      presenceCount: null,
+    };
+  }
+  return {
+    action: "registered",
+    label: "Вы записаны",
+    href: null,
+    reason: null,
+    presenceCount: null,
+  };
+}
 
 function findEvent(key) {
   return EVENTS.find((event) => event.slug === key || event.id === key) ?? null;
@@ -262,6 +359,30 @@ const server = createServer((request, response) => {
     );
   }
 
+  // 005 EARS-4 (#1777) — the per-caller registration read the shared unit makes
+  // SERVER-side (`packages/events-storefront/src/server/registration-state.ts`),
+  // forwarding the session cookie. It is authenticated: no live session → the
+  // api's own 401, which the unit collapses to `null` and the page renders as a
+  // guest. That collapse is exactly what tells the host whether to mount the
+  // one-tap command or keep the server-resolved `/register` hand-off, so the
+  // double has to answer it rather than let a browser switch decide.
+  const registration = /^\/v1\/events\/([^/]+)\/registration$/.exec(url.pathname);
+  if (registration && request.method === "GET") {
+    if (!isLiveSession(request)) {
+      return json(response, 401, { status: 401, message: "unauthorized" });
+    }
+    const found = findEvent(decodeURIComponent(registration[1]));
+    if (!found) {
+      return json(response, 404, { status: 404, message: "event not found" });
+    }
+    return REGISTERED_SLUGS.has(found.slug)
+      ? json(response, 200, {
+          registered: true,
+          registeredAt: "2026-09-01T10:00:00.000Z",
+        })
+      : json(response, 200, { registered: false });
+  }
+
   if (url.pathname === "/v1/auth/session") {
     // The one live session this tier knows. Any other cookie value is an
     // expired or forged session and gets the api's own 401, which
@@ -295,7 +416,14 @@ const server = createServer((request, response) => {
     if (!found) {
       return json(response, 404, { status: 404, message: "event not found" });
     }
-    return json(response, 200, PARTICIPATION_CTA);
+    return json(
+      response,
+      200,
+      participationFor(
+        found,
+        isLiveSession(request) && REGISTERED_SLUGS.has(found.slug),
+      ),
+    );
   }
 
   const storefront = /^\/v1\/storefront\/doctor\/events\/([^/]+)$/.exec(
@@ -320,6 +448,18 @@ const server = createServer((request, response) => {
 server.listen(port, "127.0.0.1");
 for (const signal of ["SIGINT", "SIGTERM"]) {
   process.on(signal, () => server.close(() => process.exit(0)));
+}
+
+/**
+ * Does this request carry the ONE live doctor session this tier knows? The same
+ * cookie read `/v1/auth/session` does, shared so the participation and
+ * registration answers cannot drift from the session answer.
+ */
+function isLiveSession(request) {
+  const session = /(?:^|;\s*)__Host-ds_session=([^;]*)/.exec(
+    request.headers.cookie ?? "",
+  );
+  return !!session && decodeURIComponent(session[1]) === SESSION_VALUE;
 }
 
 /** Collect a JSON request body, then answer. `{}` for anything unparseable. */

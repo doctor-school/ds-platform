@@ -28,7 +28,7 @@ graph TD
   Sticky --> CTA021["cta.action = register → feature 021 registration on the SAME host"]
   CTA021 --> Back["return to this exact URL incl. mode tab, intent resumed (LD-9)"]
   Sticky --> Room["cta.action = enter-room → /events/[slug]/room — thin apps/doctor route over packages/room (#1722)"]
-  Sticky --> Mine["registered state → «Мои события» — #d-lk, feature 022"]
+  Sticky --> Mine["registered state → «Вы записаны» statement only; cancel / calendar / reminder / «Мои события» link deferred to wave 2 (#2040)"]
   Fmt --> Online["kind = online: room block + when the room opens"]
   Fmt --> Offline["kind = offline: address, map, «как добраться», seats"]
   Fmt --> Hybrid["kind = hybrid: two tabs «очно / онлайн», mode=... in the URL (F-020-2 Б)"]
@@ -80,7 +80,7 @@ sequenceDiagram
   R->>API: re-read with the session
   API->>P: resolve(lifecycle, registration=held, format, seatsLeft)
   P-->>API: cta { action: 'registered' }
-  R-->>G: «Вы записаны» + calendar add + cancel + «Мои события» (EARS-6)
+  R-->>G: «Вы записаны» statement only — no other control; cancel / calendar / «Мои события» wave 2, #2040 (EARS-6)
 
   Note over R006: эфир starts — RoomOpened
   R->>API: re-read
@@ -118,7 +118,7 @@ stateDiagram-v2
     Register --> Registered: registration held (005 / 021)
     Register --> SwitchToOnline: hybrid, offline seats exhausted (F-020-3 Б)
     Register --> SoldOut: pure offline, seats exhausted — no CTA at all
-    Registered --> Register: registration cancelled (005)
+    Registered --> Register: registration cancelled — wave 2 (005 cancellation, #2040)
   }
   state Live {
     [*] --> EnterRoom: registration held → doctor-host room route /events/[slug]/room
@@ -214,15 +214,16 @@ This branch is recorded as a **decision pending owner confirmation (Stage-B of [
 
 ## 7. What release 3 deliberately does not draw (LD-8)
 
-Six product surfaces are postponed, and each renders **nothing at all** — no disabled control, no empty labelled box, no «скоро» marker. Their release-3 proof is an absence assertion in `020-scenarios.feature`, and each carries its own tracked Issue on the 020 parent.
+Seven product surfaces are postponed, and each renders **nothing at all** — no disabled control, no empty labelled box, no «скоро» marker. Their release-3 proof is an absence assertion in `020-scenarios.feature`, and each carries its own tracked Issue on the 020 parent.
 
-| Deferred                                                  | Clause  | Waits on                                | Release-3 render                                              |
-| --------------------------------------------------------- | ------- | --------------------------------------- | ------------------------------------------------------------- |
-| Points balance, shortfall paths, silent advance, accrual  | EARS-12 | feature 025 (no spec, no Issues yet)    | the Pul cost parameter only; zero reads «бесплатно для врача» |
-| Live-эфир interaction — questions, polls, vote, reminders | EARS-13 | feature 006 channel + 040 / 024 marking | nothing in any live render                                    |
-| НМО check-in surface and outcome statement                | EARS-14 | feature 038                             | НМО as a badge and a conditions-line value only               |
-| Ticket and its QR                                         | EARS-15 | features 022 and 038                    | address, map, «как добраться», seats — nothing else           |
-| Post-event rating, review and F-020-4 А mini-survey       | EARS-16 | wave 2 in the decided F-020-4 А shape   | the 014 recording and materials only                          |
-| Event-level partner link                                  | EARS-17 | feature 030 + 021's attribution clause  | no attribution element, no marking field                      |
+| Deferred                                                                           | Clause  | Waits on                                                                                 | Release-3 render                                              |
+| ---------------------------------------------------------------------------------- | ------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| Points balance, shortfall paths, silent advance, accrual                           | EARS-12 | feature 025 (no spec, no Issues yet)                                                     | the Pul cost parameter only; zero reads «бесплатно для врача» |
+| Live-эфир interaction — questions, polls, vote, reminders                          | EARS-13 | feature 006 channel + 040 / 024 marking                                                  | nothing in any live render                                    |
+| НМО check-in surface and outcome statement                                         | EARS-14 | feature 038                                                                              | НМО as a badge and a conditions-line value only               |
+| Ticket and its QR                                                                  | EARS-15 | features 022 and 038                                                                     | address, map, «как добраться», seats — nothing else           |
+| Post-event rating, review and F-020-4 А mini-survey                                | EARS-16 | wave 2 in the decided F-020-4 А shape                                                    | the 014 recording and materials only                          |
+| Event-level partner link                                                           | EARS-17 | feature 030 + 021's attribution clause                                                   | no attribution element, no marking field                      |
+| Registered-card cancel, add-to-calendar, pre-start reminder and «Мои события» link | EARS-6  | feature 005's wave-2 cancellation and its notifications, a calendar Stage A, feature 022 | the «Вы записаны» statement only — no other control           |
 
-The pre-start reminder of EARS-6 is the seventh absence: no scheduling capability exists in the platform, so release 3 promises none rather than rendering an unbacked promise.
+The EARS-6 row is the deepest cut of the seven: release 3 ships the registered card at parity with what the Academy renders today (D-4) — the «Вы записаны» statement and nothing else. Cancellation waits on feature 005's wave-2 cancellation vertical and its notifications, the calendar affordance owes its own Stage A, no scheduling capability exists in the platform to back a reminder, and «Мои события» waits on feature 022; all four are tracked under [#2040](https://github.com/doctor-school/ds-platform/issues/2040) and promised nowhere on the page.

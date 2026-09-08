@@ -1,6 +1,6 @@
 {
   "name": "@ds/events-storefront",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "description": "DS Platform shared event-storefront unit — the one-tap event registration command, its progressive-enhancement control, the per-user registration read and the completion-on-return rule, hosted by both storefronts (ADR-0013 A1, feature 005 / 020).",

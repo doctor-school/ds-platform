@@ -102,6 +102,12 @@ export function forwardedSessionFrom(headers: Headers): ForwardedSession {
  * the socket peer, which IS the same loopback address the browser's login rode
  * through — synthesising a value there would break the very fingerprint this
  * function exists to preserve.
+ *
+ * `session.cookie` is caller-overridable ON PURPOSE: a session-free public read
+ * (the doctor event page / live strip) spreads `forwardedSessionFrom(headers)`
+ * and then replaces `cookie` with a narrower or empty value. This function only
+ * tests the cookie for presence and never re-validates its name — tightening
+ * that would silently drop those reads' cookies.
  */
 export function forwardedHeaders(
   session: ForwardedSession,

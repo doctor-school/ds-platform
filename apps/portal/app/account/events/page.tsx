@@ -4,6 +4,7 @@ import { getTranslations } from "next-intl/server";
 import type { MyEventsTab } from "@ds/schemas";
 import { Container } from "@ds/design-system/container";
 import { buildMyEventListItems, fetchMyEvents } from "../../../lib/my-events";
+import { forwardedSessionFrom } from "../../../lib/registration-state";
 import { EventListRouter } from "../../../components/event-list-router";
 
 /**
@@ -70,16 +71,10 @@ export default async function MyEventsPage({
   const tWebinar = await getTranslations("webinar");
   const tab = resolveTab((await searchParams).tab);
   const h = await headers();
-  const result = await fetchMyEvents(
-    {
-      cookie: h.get("cookie") ?? "",
-      // The session is fingerprint-bound (ADR-0001 §6) — forward the same surface
-      // the browser bound at login so the authed read is not 401'd (see the lib).
-      userAgent: h.get("user-agent") ?? "",
-      acceptLanguage: h.get("accept-language") ?? "",
-    },
-    tab,
-  );
+  // The session is fingerprint-bound (ADR-0001 §6) — the shared builder carries
+  // the same surface the browser bound at login, forwarded client address
+  // included, so the authed read is not 401'd (#2054).
+  const result = await fetchMyEvents(forwardedSessionFrom(h), tab);
   // Authenticated surface: a guest / expired session goes to login (never a blank
   // or public render, unlike the 004 public pages).
   if (!result.authenticated) redirect("/login");

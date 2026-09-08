@@ -1,4 +1,8 @@
 import type { SessionClaims } from "@ds/schemas";
+import {
+  forwardedHeaders,
+  type ForwardedSession,
+} from "@ds/events-storefront/server";
 
 /**
  * Server-side session read for the doctor storefront (`doctor.school`).
@@ -14,22 +18,25 @@ import type { SessionClaims } from "@ds/schemas";
  *
  * The read forwards BOTH the session cookie AND the fingerprint headers
  * (ADR-0001 §6): the BFF session is fingerprint-bound, so a server-to-server read
- * on the doctor's behalf must present the same `user-agent` + `accept-language`
- * the browser bound at login, or the api re-derives a different fingerprint and
- * 401s an otherwise valid session. Per-caller ⇒ `cache: "no-store"`, never shared.
+ * on the doctor's behalf must present the same `user-agent`, `accept-language`
+ * AND client address the browser bound at login, or the api re-derives a
+ * different fingerprint and 401s an otherwise valid session. Per-caller ⇒
+ * `cache: "no-store"`, never shared.
+ *
+ * The surface itself and its builder are NOT declared here: both storefronts run
+ * the identical hop, so a second copy is a second place for a fingerprint input
+ * to be forgotten — which is exactly how #2054 reached production. The canon is
+ * `@ds/events-storefront/server`; this module re-exports it so this host's
+ * readers keep addressing it by one local name.
  */
 
-/** The BFF session cookie name. `__Host-` = origin-locked, no `Domain`. */
-export const SESSION_COOKIE_NAME = "__Host-ds_session";
-
-/** The request-scoped surface a server-side BFF read must present. */
-export interface ForwardedSession {
-  /** Raw `Cookie` header value to replay upstream. */
-  cookie: string;
-  /** Fingerprint surface, ADR-0001 §6 — must match what was bound at login. */
-  userAgent: string;
-  acceptLanguage: string;
-}
+export {
+  SESSION_COOKIE_NAME,
+  forwardedHeaders,
+  forwardedSessionFrom,
+  hasSessionCookie,
+  type ForwardedSession,
+} from "@ds/events-storefront/server";
 
 /**
  * Same-origin BFF upstream (Next rewrites `/v1/*` here — see next.config.ts).
@@ -44,38 +51,6 @@ export const API_BASE = (
 ).replace(/\/$/, "");
 
 /**
- * True when the raw `Cookie` header actually carries the session cookie.
- *
- * Name-boundary aware on purpose: a bare `includes()` would match a DIFFERENT
- * cookie whose name merely ends with ours (`x__Host-ds_session`) or whose VALUE
- * happens to contain the string, and would then hand a cookie-less request to
- * the BFF as if it were authenticated.
- */
-export function hasSessionCookie(cookieHeader: string | null): boolean {
-  if (!cookieHeader) return false;
-  return cookieHeader
-    .split(";")
-    .some((part) => part.trim().startsWith(`${SESSION_COOKIE_NAME}=`));
-}
-
-/**
- * Build the forwarded surface from an incoming request's headers, or `null` when
- * there is no session cookie to forward (an anonymous visitor — the caller
- * renders the guest branch and never issues the upstream read).
- */
-export function forwardedSessionFrom(
-  headers: Headers,
-): ForwardedSession | null {
-  const cookie = headers.get("cookie");
-  if (!hasSessionCookie(cookie)) return null;
-  return {
-    cookie: cookie as string,
-    userAgent: headers.get("user-agent") ?? "",
-    acceptLanguage: headers.get("accept-language") ?? "",
-  };
-}
-
-/**
  * Read the authenticated principal (`sub, roles[], mfa`) server-side.
  *
  * `null` on 401 (no/expired session) rather than a throw, so a caller can branch
@@ -87,14 +62,9 @@ export async function fetchSessionClaims(
   fetchImpl: typeof fetch = fetch,
 ): Promise<SessionClaims | null> {
   const res = await fetchImpl(`${API_BASE}/v1/auth/session`, {
-    headers: {
-      accept: "application/json",
-      cookie: session.cookie,
-      // Forward the fingerprint surface (ADR-0001 §6) — without it the api
-      // re-derives a different fingerprint and 401s a valid session.
-      "user-agent": session.userAgent,
-      "accept-language": session.acceptLanguage,
-    },
+    // The whole fingerprint surface (ADR-0001 §6), forwarded client address
+    // included — without it the api 401s a valid session (#2054).
+    headers: forwardedHeaders(session),
     cache: "no-store",
   });
 

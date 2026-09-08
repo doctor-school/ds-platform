@@ -1,6 +1,6 @@
 import type { RoomConfig } from "@ds/schemas";
 
-import type { RoomSession } from "./session";
+import { roomForwardedHeaders, type RoomSession } from "./session";
 
 /**
  * 006 EARS-1 (consumed) / EARS-2 — the authenticated server-side read of the
@@ -11,8 +11,9 @@ import type { RoomSession } from "./session";
  * server-side, forwarding the incoming request's session cookie AND its
  * fingerprint headers (ADR-0001 §6) exactly as the 005 registration-state read
  * does — the BFF session is fingerprint-bound, so a server-to-server read on the
- * doctor's behalf must present the same `user-agent` + `accept-language` the
- * browser bound at login, or the api re-derives a different fingerprint and 401s.
+ * doctor's behalf must present the same `user-agent`, `accept-language` AND
+ * client address the browser bound at login (`roomForwardedHeaders`), or the api
+ * re-derives a different fingerprint and 401s (#2054).
  *
  * The gate's three refusals map to the EARS-6 access branches (owned by the
  * denied-access-routing handler; #578 consumes the grant and surfaces the branch
@@ -62,14 +63,7 @@ export async function fetchRoomConfig(
   const res = await doFetch(
     `${normalizeApiBase(apiBase)}/v1/events/${encodeURIComponent(idOrSlug)}/room`,
     {
-      headers: {
-        accept: "application/json",
-        cookie: session.cookie,
-        // Forward the fingerprint surface (ADR-0001 §6) — without it the api
-        // re-derives a different fingerprint and 401s a valid session.
-        "user-agent": session.userAgent,
-        "accept-language": session.acceptLanguage,
-      },
+      headers: roomForwardedHeaders(session),
       cache: "no-store",
     },
   );

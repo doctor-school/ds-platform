@@ -12,6 +12,7 @@ const session: RoomSession = {
   cookie: "__Host-ds_session=abc",
   userAgent: "Mozilla/5.0 (probe)",
   acceptLanguage: "ru-RU",
+  forwardedFor: "203.0.113.7, 172.18.0.4",
 };
 
 describe("006 EARS-14: the self display-name read", () => {

@@ -4,6 +4,8 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { parseReturnTarget } from "@ds/schemas";
 
+import { forwardedHeaders, forwardedSessionFrom } from "./registration-state";
+
 /**
  * #1111 (005 EARS-1) — the SERVER-side arm of the logged-in one-tap register CTA,
  * the progressive-enhancement fallback the `<form>` posts to when JavaScript has
@@ -53,15 +55,11 @@ export async function registerForEventAction(
   const h = await headers();
   await fetch(`${API_BASE}/v1/events/${encodeURIComponent(slug)}/registration`, {
     method: "POST",
-    headers: {
-      accept: "application/json",
-      // The session cookie must ride the server-to-server hop…
-      cookie: h.get("cookie") ?? "",
-      // …alongside the fingerprint surface, or the api re-derives a different
-      // fingerprint and 401s a valid session (ADR-0001 §6 / 003 design §3).
-      "user-agent": h.get("user-agent") ?? "",
-      "accept-language": h.get("accept-language") ?? "",
-    },
+    // The session cookie must ride the server-to-server hop alongside the whole
+    // fingerprint surface — user-agent, accept-language AND the forwarded client
+    // address — or the api re-derives a different fingerprint and 401s a valid
+    // session (ADR-0001 §6 / 003 design §3, #2054).
+    headers: forwardedHeaders(forwardedSessionFrom(h)),
     // Per-user, authenticated — never shared-cached.
     cache: "no-store",
   });

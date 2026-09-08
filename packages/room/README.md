@@ -40,12 +40,12 @@ exempt from that gate.
 
 ## Exports
 
-| Subpath          | Contract                                                                                                                                                            |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `.`              | client barrel — the room parts, hooks and types                                                                                                                     |
-| `./server`       | JSX-free server reads and entry resolution                                                                                                                          |
-| `./embed`        | the pure `resolveEmbed` provider→embed-URL resolver (also feeds the 014 recording player)                                                                           |
-| `./display-name` | `setDisplayName`, `DisplayNameError`, `initialsFromDisplayName` — no room UI, so a non-room route importing it never pulls the chat transport into its module graph |
+| Subpath          | Contract                                                                                                                                                                                                                                    |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `.`              | client barrel — the room parts, hooks and types                                                                                                                                                                                             |
+| `./server`       | JSX-free server reads and entry resolution; `RoomSession` + `roomForwardedHeaders` — the structural mirror of `@ds/events-storefront/server`'s hop builder (session surface + `x-forwarded-for` relay, #2054; one mirror by DEBT.md record) |
+| `./embed`        | the pure `resolveEmbed` provider→embed-URL resolver (also feeds the 014 recording player)                                                                                                                                                   |
+| `./display-name` | `setDisplayName`, `DisplayNameError`, `initialsFromDisplayName` — no room UI, so a non-room route importing it never pulls the chat transport into its module graph                                                                         |
 
 ## Tests
 

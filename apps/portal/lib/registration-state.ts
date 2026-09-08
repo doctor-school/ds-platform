@@ -20,6 +20,8 @@ import { buildRoomReturnHref } from "./room-return";
 export {
   type ForwardedSession,
   fetchEventRegistrationState,
+  forwardedHeaders,
+  forwardedSessionFrom,
 } from "@ds/events-storefront/server";
 
 /**

@@ -7,6 +7,7 @@ import {
   resolveRoomEntry,
 } from "@ds/room/server";
 import { fetchPublicEventPage } from "../../../../lib/public-events";
+import { forwardedSessionFrom } from "../../../../lib/registration-state";
 import { buildRoomCopyStrings } from "./copy";
 import { RoomClient } from "./room-client";
 import { PORTAL_ROOM_ROUTES } from "./room-routes";
@@ -47,13 +48,10 @@ export default async function RoomPage({
   const { slug } = await params;
 
   const h = await headers();
-  // The session is fingerprint-bound (ADR-0001 §6) — forward the same surface the
-  // browser bound at login so every authed server read is not 401'd.
-  const session = {
-    cookie: h.get("cookie") ?? "",
-    userAgent: h.get("user-agent") ?? "",
-    acceptLanguage: h.get("accept-language") ?? "",
-  };
+  // The session is fingerprint-bound (ADR-0001 §6) — the shared builder carries
+  // the same surface the browser bound at login, forwarded client address
+  // included, so every authed server read is not 401'd (#2054).
+  const session = forwardedSessionFrom(h);
 
   const routes = PORTAL_ROOM_ROUTES(slug);
   const access = await fetchRoomConfig(slug, session, { apiBase: API_BASE });

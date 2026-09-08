@@ -18,6 +18,7 @@ const session: RoomSession = {
   cookie: "__Host-ds_session=abc",
   userAgent: "Mozilla/5.0 (probe)",
   acceptLanguage: "ru-RU,ru;q=0.9",
+  forwardedFor: "203.0.113.7, 172.18.0.4",
 };
 
 function fetchReturning(status: number, body?: unknown): typeof fetch {
@@ -89,5 +90,29 @@ describe("006 EARS-1: the room grant read", () => {
     await expect(
       fetchRoomConfig("s", session, { apiBase: "http://api", fetchImpl: fetchReturning(500) }),
     ).rejects.toThrow(/500/);
+  });
+});
+
+/**
+ * #2054 — the room reads run the same SSR hop as the event page: the api derives
+ * `request.ip` from `x-forwarded-for` (since #1655), so a room read that hides
+ * the client behind the storefront container's address is 401'd into the login
+ * redirect for a doctor whose grant is valid.
+ */
+describe("#2054 the room read forwards the client chain", () => {
+  it("2054.7: the gate read replays the incoming x-forwarded-for", async () => {
+    const calls: RequestInit[] = [];
+    const fetchImpl = (async (_url: RequestInfo | URL, init?: RequestInit) => {
+      calls.push(init ?? {});
+      return new Response(null, { status: 401 });
+    }) as unknown as typeof fetch;
+
+    await fetchRoomConfig("ahilles-042", session, {
+      apiBase: "http://api.test",
+      fetchImpl,
+    });
+
+    const sent = calls[0]!.headers as Record<string, string>;
+    expect(sent["x-forwarded-for"]).toBe("203.0.113.7, 172.18.0.4");
   });
 });

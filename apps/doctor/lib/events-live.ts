@@ -2,7 +2,7 @@ import {
   type DoctorEventsLiveRead,
   DoctorEventsLiveReadSchema,
 } from "@ds/schemas";
-import { API_BASE } from "@/lib/session";
+import { API_BASE, forwardedHeaders, forwardedSessionFrom } from "@/lib/session";
 
 /**
  * 019 EARS-6 (#1521) — the doctor storefront's half of the «Идёт сейчас» read.
@@ -36,19 +36,16 @@ export async function fetchDoctorEventsLive(
   headers: Headers,
   fetchImpl: typeof fetch = fetch,
 ): Promise<DoctorEventsLiveRead> {
-  const cookie = headers.get("cookie");
   try {
     const res = await fetchImpl(`${API_BASE}${DOCTOR_EVENTS_LIVE_PATH}`, {
-      headers: {
-        accept: "application/json",
-        ...(cookie
-          ? {
-              cookie,
-              "user-agent": headers.get("user-agent") ?? "",
-              "accept-language": headers.get("accept-language") ?? "",
-            }
-          : {}),
-      },
+      // The WHOLE cookie header rides on (the documented contract above), plus
+      // the client chain: since #1655 the api reads `request.ip` from
+      // `x-forwarded-for`, so an SSR hop that drops it presents the container
+      // address and the fingerprint misses (#2054).
+      headers: forwardedHeaders({
+        ...forwardedSessionFrom(headers),
+        cookie: headers.get("cookie") ?? "",
+      }),
       cache: "no-store",
     });
     if (!res.ok) return null;

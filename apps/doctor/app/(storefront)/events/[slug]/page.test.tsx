@@ -22,7 +22,13 @@ vi.mock("@/lib/event-page", () => ({
   fetchDoctorEventPage,
   fetchDoctorParticipationCta,
 }));
-vi.mock("@ds/events-storefront/server", () => ({ fetchEventRegistrationState }));
+// Only the READ is stubbed: `forwardedSessionFrom` is the real shared builder the
+// route (via `@/lib/session`) derives the forwarded surface with, so a mock that
+// replaced the whole module would hide a broken build of that surface (#2054).
+vi.mock("@ds/events-storefront/server", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@ds/events-storefront/server")>()),
+  fetchEventRegistrationState,
+}));
 vi.mock("next/headers", () => ({ headers }));
 vi.mock("next/navigation", () => ({
   notFound,

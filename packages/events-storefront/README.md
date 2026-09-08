@@ -44,12 +44,12 @@ the target, then hands `completeReturnTarget` the already-resolved value.
 One entry per layer, so a host — and a host's test — addresses exactly the layer
 it projects rather than the whole unit.
 
-| Subpath    | Contract                                                                        |
-| ---------- | ------------------------------------------------------------------------------- |
-| `.`        | `completeReturnTarget`, `currentReturnTarget`, `ReturnHost` — the decision rule |
-| `./client` | `registerForEvent`, `RegistrationError` — the browser transport of the command  |
-| `./ui`     | `RegisterOneTap` — the progressive-enhancement one-tap control                  |
-| `./server` | `ForwardedSession`, `fetchEventRegistrationState`, `registerForEventAction`     |
+| Subpath    | Contract                                                                                                                                                                                                                                                         |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `.`        | `completeReturnTarget`, `currentReturnTarget`, `ReturnHost` — the decision rule                                                                                                                                                                                  |
+| `./client` | `registerForEvent`, `RegistrationError` — the browser transport of the command                                                                                                                                                                                   |
+| `./ui`     | `RegisterOneTap` — the progressive-enhancement one-tap control                                                                                                                                                                                                   |
+| `./server` | `ForwardedSession`, `forwardedSessionFrom`, `forwardedHeaders`, `hasSessionCookie`, `SESSION_COOKIE_NAME`, `fetchEventRegistrationState`, `registerForEventAction` — the canonical BFF hop (session + `x-forwarded-for` relay, #2054) and the registration reads |
 
 ## Hosts
 

@@ -3,7 +3,7 @@
  * upstream reads and the pure entry resolution a host's server component drives.
  * Nothing here may import React or a host framework (see `../purity.test.ts`).
  */
-export type { RoomSession } from "./session";
+export { roomForwardedHeaders, type RoomSession } from "./session";
 export {
   fetchRoomConfig,
   normalizeApiBase,

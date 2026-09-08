@@ -1,6 +1,6 @@
 import type { EventPlayback } from "@ds/schemas";
 
-import type { ForwardedSession } from "./registration-state";
+import { forwardedHeaders, type ForwardedSession } from "./registration-state";
 
 /**
  * 014 EARS-5 — the AUTHENTICATED source read behind the recording player.
@@ -14,8 +14,10 @@ import type { ForwardedSession } from "./registration-state";
  * Session forwarding is the 005 `registration-state` mechanism unchanged (its
  * {@link ForwardedSession} is reused rather than re-declared): the BFF session is
  * fingerprint-bound (ADR-0001 §6), so a server-side read on the doctor's behalf
- * must present the browser's `user-agent` + `accept-language` alongside the
- * cookie or the api re-derives a different fingerprint and 401s a valid session.
+ * must present the browser's `user-agent`, `accept-language` AND client address
+ * alongside the cookie or the api re-derives a different fingerprint and 401s a
+ * valid session — which is why the header set is built by the shared
+ * `forwardedHeaders` and never by hand (#2054).
  *
  * The upstream is the same env-driven `API_PROXY_TARGET` every other portal read
  * uses — never a hardcoded host, so dev and prod differ by config only.
@@ -52,14 +54,9 @@ export async function fetchEventPlayback(
   const res = await fetch(
     `${API_BASE}/v1/events/${encodeURIComponent(idOrSlug)}/recordings`,
     {
-      headers: {
-        accept: "application/json",
-        cookie: session.cookie,
-        // Forward the fingerprint surface (ADR-0001 §6) — without it the api
-        // re-derives a different fingerprint and 401s a valid session.
-        "user-agent": session.userAgent,
-        "accept-language": session.acceptLanguage,
-      },
+      // The whole fingerprint surface (ADR-0001 §6), forwarded client address
+      // included — without it the api 401s a valid session (#2054).
+      headers: forwardedHeaders(session),
       cache: "no-store",
     },
   );

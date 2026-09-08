@@ -487,33 +487,32 @@ image build.
 
 3. **SmartCaptcha production invariant (#186).** Use the dedicated Yandex Cloud
    resource `ds-platform-prod`; never reuse the localhost-only dev keypair.
-   Keep domain validation **ON**. The allowed-domains list is
-   `academy.doctor.school` + `new.doctor.school` — the portal auth surface and the
-   doctor storefront (#1723), the two hosts that serve it; the `new.` entry is an
-   owner-gated console step of the doctor roll-out (its step 2 below) and stays
-   pending until the lead runs it. The legacy `app.doctor.school` entry is removed
-   from the resource as an owner-gated console step of the #1173 retirement
-   (cutover step 2 below), which is likewise pending until the lead runs it. Creating or replacing the provider resource is
-   **[OWNER-GATED]**;
+   Keep domain validation **ON**. The allowed-domains list on the keypair is
+   `academy.doctor.school` alone — a second allowed domain needs a paid Yandex
+   tariff, so `new.doctor.school` (the doctor storefront, #1723) is NOT on it.
+   **Risk, unverified:** a real doctor-host registration served from
+   `new.doctor.school` may be rejected by the widget on domain validation; that
+   flow has not been driven on prod. Adding the `new.` entry is an owner-gated
+   console step of the doctor roll-out (its step 2 below) and stays pending until
+   the lead runs it. The legacy `app.doctor.school` entry is removed from the
+   resource as an owner-gated console step of the #1173 retirement (cutover
+   step 2 below), which is likewise pending until the lead runs it. Creating or
+   replacing the provider resource is **[OWNER-GATED]**;
    capture its **site key** (public, build-time) and **server key** (secret), but
    never print or copy the server key into a repo file, command transcript, or
    issue/PR.
 
-   **Current prod state: bot protection is OFF on both storefronts since
-   2026-09-06 (#1959)** — SmartCaptcha needs a paid tariff for a second allowed
-   domain, and one compose var (`SMARTCAPTCHA_SITE_KEY`) feeds both the portal
-   and the doctor image builds, so it is all-or-nothing across
-   `academy.doctor.school` and `new.doctor.school`. On box: `api.env` has
-   `BOT_PROTECTION_ENABLED=false` and the compose `.env` has an empty
-   `SMARTCAPTCHA_SITE_KEY=`; the api guard stays wired and no-ops and the
-   clients submit tokenless (003 design §10.1 fallback). Rate limits are
-   unaffected and stay on.
+   **Current prod state: bot protection is ON.** On box: `api.env` has
+   `BOT_PROTECTION_ENABLED=true` with the `ysc2_` server key, and the compose
+   `.env` beside `compose/api-prod/compose.yml` carries the matching `ysc1_`
+   site key. One compose var (`SMARTCAPTCHA_SITE_KEY`) feeds both the portal and
+   the doctor image builds, so the state is all-or-nothing across
+   `academy.doctor.school` and `new.doctor.school` — it cannot be ON for the
+   portal alone. Rate limits are independent of the flag and stay on either way.
 
-   The checks below are therefore the **re-enable** procedure, not a check of
-   today's state. Before an image build that activates or revalidates bot
-   protection — and after restoring `SMARTCAPTCHA_SITE_KEY` in the compose
-   `.env`, which the storefront images bake at build time — confirm the on-box
-   state without printing either value:
+   Before an image build that activates or revalidates bot protection — the
+   storefront images bake `SMARTCAPTCHA_SITE_KEY` at build time — confirm the
+   on-box state without printing either value:
 
    ```bash
    test "$(sudo grep -c '^BOT_PROTECTION_ENABLED=true$' /etc/ds-platform/api.env)" -eq 1
@@ -547,19 +546,29 @@ image build.
      byte-equal to their twins; the centrifugo container reads the same file);
    - the S3 six-key set from step 1 (**mandatory** — with `S3_ENDPOINT` unset
      the api silently fail-opens to in-memory `FakeObjectStorage`, spec §5.4);
-   - `BOT_PROTECTION_ENABLED=false` — bot protection is OFF since 2026-09-06
-     (#1959, step 3); set it to `true` and add `SMARTCAPTCHA_SERVER_KEY` from
-     step 3 only when re-enabling.
+   - `BOT_PROTECTION_ENABLED=true` + `SMARTCAPTCHA_SERVER_KEY` from step 3.
 
    And in the **non-secret** `.env` beside `compose/api-prod/compose.yml` (the
    `DEPLOY_SHA` interpolation file), ensure there is exactly one build-time site
-   key entry, preserving every other line — empty while bot protection is OFF:
+   key entry, preserving every other line:
 
    ```dotenv
-   SMARTCAPTCHA_SITE_KEY=
+   SMARTCAPTCHA_SITE_KEY=<site-key-from-step-3>
    ```
 
-   When re-enabling, this becomes `SMARTCAPTCHA_SITE_KEY=<site-key-from-step-3>`.
+   **Flipping the toggle (either direction).** Back up both files on the box
+   first, naming the state the flip moves TO —
+   `sudo cp /etc/ds-platform/api.env /etc/ds-platform/api.env.bak-captcha-<on|off>-<ts>`
+   and the same pattern for the compose `.env`. Then, in order:
+
+   - **OFF** — `BOT_PROTECTION_ENABLED=false` and comment out
+     `SMARTCAPTCHA_SERVER_KEY` in `api.env`; empty `SMARTCAPTCHA_SITE_KEY=` in
+     the compose `.env`; `pnpm deploy:prod`. The storefront images MUST rebuild;
+     the clients then submit tokenless and the api guard stays wired and no-ops
+     (003 design §10.1 fallback).
+   - **ON** — restore `BOT_PROTECTION_ENABLED=true` plus the `ysc2_` server half
+     in `api.env` and `SMARTCAPTCHA_SITE_KEY=ysc1_…` in the compose `.env`, run
+     the keypair-identifier checks in step 3, then `pnpm deploy:prod`.
 
 5. **Ship source + build images.** Ship the merged `origin/main` tree to the
    boxes (Apply order step 5 / `pnpm deploy:prod` does this), then on api-prod:
@@ -567,8 +576,7 @@ image build.
    ```bash
    cd ~/ds-platform/infra/deploy/compose/api-prod
    sudo BUILDX_NO_DEFAULT_ATTESTATIONS=1 docker compose build admin portal api
-   # admin is NEW; portal MUST rebuild (bakes the captcha site key — empty while
-   # bot protection is OFF, #1959); api rebuilds
+   # admin is NEW; portal MUST rebuild (bakes the captcha site key); api rebuilds
    # to the wave-1 code. centrifugo is pulled (centrifugo/centrifugo:v6).
    ```
 

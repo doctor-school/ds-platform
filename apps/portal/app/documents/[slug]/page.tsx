@@ -43,7 +43,8 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { slug } = await params;
   const document = loadDocument(slug);
-  if (!document) return { title: "Документ не найден — Академия Doctor.School" };
+  if (!document)
+    return { title: "Документ не найден — Академия Doctor.School" };
   return {
     title: `${document.frontmatter.title} — Академия Doctor.School`,
     description: formatEditionLine(
@@ -79,17 +80,22 @@ export default async function DocumentPage({
       updated: false,
     }));
 
+  // EARS-15: the root layout renders `{children}` straight into `<body>` and the
+  // shared block owns only its own container, so the content landmark is
+  // page-owned on the Academy host (`app/account/page.tsx`, `academy-home-view`).
   return (
-    <LegalDocument
-      document={{
-        title: document.frontmatter.title,
-        edition: document.frontmatter.edition,
-        body: document.body,
-      }}
-      backHref="/documents"
-      others={others}
-      // EARS-11: nothing has been re-published in slice 1.
-      updated={false}
-    />
+    <main>
+      <LegalDocument
+        document={{
+          title: document.frontmatter.title,
+          edition: document.frontmatter.edition,
+          body: document.body,
+        }}
+        backHref="/documents"
+        others={others}
+        // EARS-11: nothing has been re-published in slice 1.
+        updated={false}
+      />
+    </main>
   );
 }

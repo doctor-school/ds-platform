@@ -139,7 +139,7 @@ What stays local and unchanged: Vitest unit and component tests; `api-e2e` / `ad
 
 ## 8. Execution plan
 
-Order is dependency order. Each line becomes one engineering-task Issue (`track:platform`, milestone «Platform ops & hardening») opened **after** this spec lands, as sub-issues of #2056; sizes are the lead's estimate for one Opus implementer session each.
+Order is dependency order. Each line becomes one engineering-task Issue (`track:platform`, milestone «Platform ops & hardening») opened **after** this spec lands, as sub-issues of the STAGE-stand epic #2070 (this spec’s own Issue #2056 is a closed child of that epic); sizes are the lead's estimate for one Opus implementer session each. Issues #2061–#2069 map to steps 1–9 in order.
 
 1. **C1 box + `stg-infra`** — Terraform `stage-1.tf` (owner runs `apply`; provider write actions are owner-gated per the AGENTS.md §6 live-infra rule), box bootstrap from the existing `infra/deploy/cloud-init`, `stg-infra` compose (the `data-prod` + dev-sink services), Zitadel provisioned by `provision.sh`, the self-hosted runner registered (owner-gated token), Redis `databases` raised, `twc_vpc.stage` with no route to `twc_vpc.ds` verified. Acceptance: `docker compose -p stg-infra ps` all healthy; a connection from the box to the production Postgres private address is unroutable (no route, not a timeout on an open path).
 2. **C2 edge** — wildcard record (owner, DNS provider), Caddy on-demand TLS with the `ask` endpoint stub, basic auth, `noindex`. Acceptance: `https://academy-main.stage.doctor.school` answers 401 without credentials and presents a valid certificate.

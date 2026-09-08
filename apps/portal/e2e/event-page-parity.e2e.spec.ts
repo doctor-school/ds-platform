@@ -161,7 +161,9 @@ async function tabTo(page: Page, target: Locator, label: string) {
 
 async function expectOperable(page: Page, control: Locator, label: string) {
   await expect(control, `${label} is visible`).toBeVisible();
-  const name = (await control.innerText())
+  // The DOM text, not the CSS-transformed glyphs: the accessible name a
+  // screen reader announces comes from `textContent`.
+  const name = ((await control.textContent()) ?? "")
     .replace(/\s+/g, " ")
     .replace(/↗/g, "")
     .trim();
@@ -374,7 +376,10 @@ for (const viewport of VIEWPORTS) {
           const status = page.getByTestId("event-page-hero-status");
           await expect(status, "the hero carries a status plate").toBeVisible();
           expect(
-            (await status.innerText()).replace(/\s+/g, " ").trim(),
+            // `textContent`, not `innerText`: the plate is rendered through the
+            // DS `uppercase` utility and `innerText` returns the transformed
+            // glyphs («СКОРО»); a screen reader announces the DOM text.
+            ((await status.textContent()) ?? "").replace(/\s+/g, " ").trim(),
             `the status plate states "${spec.statusWord}" in words`,
           ).toContain(spec.statusWord);
 
@@ -393,7 +398,7 @@ for (const viewport of VIEWPORTS) {
             await expect(statement, "the card states the fact").toBeVisible();
             if (spec.statement) {
               expect(
-                (await statement.innerText()).replace(/\s+/g, " ").trim(),
+                ((await statement.textContent()) ?? "").replace(/\s+/g, " ").trim(),
                 "the statement carries the server's own copy",
               ).toContain(spec.statement);
             }

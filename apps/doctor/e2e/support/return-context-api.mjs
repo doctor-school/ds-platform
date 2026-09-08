@@ -137,9 +137,6 @@ function registerCta(slug) {
   };
 }
 
-/** The fixture event's guest policy, kept as a name the older specs read by. */
-const PARTICIPATION_CTA = registerCta(EVENT.slug);
-
 /**
  * The `__Host-ds_session` value this double accepts as a live doctor session
  * (#1955). Exported through the spec by literal agreement rather than an import:

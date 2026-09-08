@@ -172,7 +172,9 @@ async function tabTo(page: Page, target: Locator, label: string) {
  */
 async function expectOperable(page: Page, control: Locator, label: string) {
   await expect(control, `${label} is visible`).toBeVisible();
-  const name = (await control.innerText()).replace(/\s+/g, " ").trim();
+  // The DOM text, not the CSS-transformed glyphs: the accessible name a
+  // screen reader announces comes from `textContent`.
+  const name = ((await control.textContent()) ?? "").replace(/\s+/g, " ").trim();
   expect(name, `${label} has a non-empty accessible name`).not.toBe("");
   await tabTo(page, control, label);
   const ring = await control.evaluate((node) => {
@@ -376,8 +378,12 @@ for (const viewport of VIEWPORTS) {
           // alone — the load-bearing case being «В эфире».
           const status = page.getByTestId("event-page-hero-status");
           await expect(status, "the hero carries a status plate").toBeVisible();
+          // `textContent`, not `innerText`: the plate is rendered through the DS
+          // `uppercase` utility, and `innerText` returns the CSS-TRANSFORMED
+          // glyphs («СКОРО»). A screen reader announces the DOM text, so the
+          // accessibility-tree assertion has to read the DOM text too.
           expect(
-            (await status.innerText()).replace(/\s+/g, " ").trim(),
+            ((await status.textContent()) ?? "").replace(/\s+/g, " ").trim(),
             `the status plate states "${spec.statusWord}" in words`,
           ).toContain(spec.statusWord);
 
@@ -393,7 +399,7 @@ for (const viewport of VIEWPORTS) {
             await expect(oneTap, "no one-tap command").toHaveCount(0);
             await expect(statement, "the card states the fact").toBeVisible();
             expect(
-              (await statement.innerText()).replace(/\s+/g, " ").trim(),
+              ((await statement.textContent()) ?? "").replace(/\s+/g, " ").trim(),
               "the statement carries the server's own copy",
             ).toContain(spec.statement!);
           } else {
@@ -409,7 +415,7 @@ for (const viewport of VIEWPORTS) {
               "and no second control of the other kind",
             ).toHaveCount(0);
             expect(
-              (await control.innerText())
+              ((await control.textContent()) ?? "")
                 .replace(/\s+/g, " ")
                 .replace(/↗/g, "")
                 .trim(),

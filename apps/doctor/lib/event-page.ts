@@ -78,10 +78,14 @@ export async function fetchDoctorParticipationCta(
   const res = await fetchImpl(
     `${API_BASE}${DOCTOR_EVENT_PAGE_PATH}/${encodeURIComponent(idOrSlug)}/participation`,
     {
-      // The whole forwarded surface (ADR-0001 §6 + the client chain, #2054):
-      // since #1655 the api reads `request.ip` from `x-forwarded-for`, so an SSR
-      // hop that drops it presents the container address.
-      headers: forwardedHeaders(forwardedSessionFrom(headers)),
+      // The WHOLE cookie header rides on, exactly as before, plus
+      // the client chain: since #1655 the api reads `request.ip` from
+      // `x-forwarded-for`, so an SSR hop that drops it presents the container
+      // address and the fingerprint misses (#2054).
+      headers: forwardedHeaders({
+        ...forwardedSessionFrom(headers),
+        cookie: headers.get("cookie") ?? "",
+      }),
       cache: "no-store",
     },
   );

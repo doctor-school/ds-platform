@@ -80,7 +80,7 @@ sequenceDiagram
   R->>API: re-read with the session
   API->>P: resolve(lifecycle, registration=held, format, seatsLeft)
   P-->>API: cta { action: 'registered' }
-  R-->>G: «Вы записаны» + calendar add + cancel + «Мои события» (EARS-6)
+  R-->>G: «Вы записаны» statement only — no other control; cancel / calendar / «Мои события» wave 2, #2040 (EARS-6)
 
   Note over R006: эфир starts — RoomOpened
   R->>API: re-read

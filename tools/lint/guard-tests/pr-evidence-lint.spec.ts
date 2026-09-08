@@ -214,6 +214,7 @@ describe("pr-evidence-lint (#1637)", () => {
   it.each([
     ["16377", "green-changeset-release-bot", "changeset-release/main"],
     ["16378", "green-dependabot", "dependabot/npm_and_yarn/tooling"],
+    ["16384", "green-renovate", "renovate/npm-fastify-vulnerability"],
   ])("exempts automated PR %s on %s", (pr, fixture, branch) => {
     const { code, stdout } = runGuard(GUARD, ".", {
       env: prEnv(pr, fixture),
@@ -226,6 +227,7 @@ describe("pr-evidence-lint (#1637)", () => {
   it.each([
     ["16381", "red-human-changeset-branch", "changeset-release/main"],
     ["16382", "red-human-dependabot-branch", "dependabot/npm_and_yarn/tooling"],
+    ["16385", "red-human-renovate-branch", "renovate/npm-fastify-vulnerability"],
   ])("does not exempt human PR %s on bot-shaped branch %s", (pr, fixture) => {
     const { code, stderr } = runGuard(GUARD, ".", {
       env: prEnv(pr, fixture),

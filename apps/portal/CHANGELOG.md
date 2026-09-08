@@ -1,5 +1,221 @@
 # @ds/portal
 
+## 1.0.0
+
+### Major Changes
+
+- [#1760](https://github.com/doctor-school/ds-platform/pull/1760) [`04fa58f`](https://github.com/doctor-school/ds-platform/commit/04fa58f9dcbbc0131e30bdb3cd0bb52413c05d9d) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 007 EARS-28 / [#1748](https://github.com/doctor-school/ds-platform/issues/1748) — the hidden broadcast state is renamed `archived` → `hidden`
+  («Скрыто»), and its command `ArchiveEvent` → `HideEvent` («Скрыть»).
+
+  Breaking on the wire and in the SDK. The `event_lifecycle_state` enum's terminal
+  value is `hidden` (`@ds/db` migration 0033 relabels the Postgres enum in place,
+  so every existing row follows and nothing is rewritten); `EventLifecycleState`
+  and every schema deriving from it (`@ds/schemas`) speak `hidden`; the admin
+  transition route moves from `POST /v1/admin/events/:id/archive` to
+  `…/:id/hide` and the audit type from `event.archived` to `event.hidden`
+  (`@ds/api`), with `@ds/api-client` regenerated against it. `@ds/admin` shows the
+  status «Скрыто» and the action «Скрыть»; `@ds/portal` renders the hidden event's
+  notice as «Мероприятие скрыто». No dual-read shim and no compatibility alias —
+  the old value is gone.
+
+  The word «Архив» now denotes only the SHOWN recordings archive (014): the public
+  archive listing, its badge, «Мои события» and the `/webinars` past tab are
+  untouched.
+
+- [#1815](https://github.com/doctor-school/ds-platform/pull/1815) [`d565d04`](https://github.com/doctor-school/ds-platform/commit/d565d049c4597b7ab2e30d34ec673f110abcfaf7) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 014 EARS-23…27 / [#1741](https://github.com/doctor-school/ds-platform/issues/1741) (slice 1 of 3) — an эфир held BEFORE the platform existed
+  gets its own lifecycle, and the `MarkEventEnded` fork leaves feature 007's machine.
+
+  Breaking on the wire, in the SDK and in the database. `events.origin`
+  (`platform | legacy`, `@ds/db` migration 0035, NOT NULL, default `platform`) is a
+  server-assigned discriminator that picks the state machine and is rejected by
+  every update path; `event_lifecycle_state` gains `in_archive`, reachable only on
+  the legacy machine (`hidden ↔ in_archive`). Feature 007's machine loses its
+  `published → ended` edge and the `POST /v1/admin/events/:id/mark-ended` route
+  with it; `validTransitions(state)` / `canTransition(from, to)` become
+  origin-aware (`validTransitions(state, origin)`), so every caller passes the
+  machine explicitly. Three routes are added: `POST /v1/admin/legacy-broadcasts`
+  (create, born `hidden`, carrying its recording), `POST …/:id/archive-legacy`
+  («Архивировать», requires a published non-retired recording — 409
+  `EVENT_NOT_FINISHED` otherwise) and `POST …/:id/hide-legacy` («Скрыть»). Every
+  broadcast command on a `legacy` event and every legacy command on a `platform`
+  event is refused 409 `INVALID_TRANSITION` with no mutation. Recording
+  publication is now gated per machine: `ended` on the platform machine as before,
+  either legacy state on the legacy one — an эфир that never passed through the
+  platform room can never be `ended`, and without this its recording could never be
+  published at all.
+
+  The archive projection is unchanged for readers: an `in_archive` legacy эфир is
+  the same `recorded` card a platform `ended` broadcast with a published recording
+  already was. `@ds/admin` loses the «Отметить завершённым» action, `@ds/portal`
+  renders `in_archive` exactly as `ended`; the full admin lifecycle bar and the
+  «Архивный эфир» creation form land in slices 2 and 3.
+
+### Minor Changes
+
+- [#2008](https://github.com/doctor-school/ds-platform/pull/2008) [`06209df`](https://github.com/doctor-school/ds-platform/commit/06209df8a40e21749ebfac76cc118e65934e2c84) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 028 EARS-2,3,4,5 — the Academy host gains «Документы и контакты» (`/documents`) and the document route `/documents/[slug]`, both thin projections of the shared legal-document blocks: one policy row, the support mailbox with its channel chips and caption, and the operator requisites line. The design system gains the standalone `LegalDocumentList` export the index composes, alongside the `LegalDocument` block that already used it internally.
+
+- [#1707](https://github.com/doctor-school/ds-platform/pull/1707) [`d32a070`](https://github.com/doctor-school/ds-platform/commit/d32a07089ea8b9c36f8cb085cc610d238042a70e) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 014 EARS-5: login-gated playback — the webinar archive page serves a source-free
+  public read plus a guest gate («просмотр бесплатен, нужен аккаунт») whose sign-in
+  action carries the EARS-6 return target, and mounts the recording player for an
+  authenticated doctor.
+
+  Bump letter — `minor` (additive, no break, per repo-conventions → Bump letter):
+  `@ds/schemas` and the regenerated `@ds/api-client` gain the new playback contract
+  without changing any existing export or field shape; `@ds/api` adds a new
+  authenticated endpoint `GET /v1/events/:idOrSlug/recordings` and leaves every
+  existing route's response untouched (the public read stays source-free); `@ds/portal`
+  adds a new user-visible capability to an existing page with no removed behaviour.
+  No migration in this slice.
+
+- [#1832](https://github.com/doctor-school/ds-platform/pull/1832) [`439e749`](https://github.com/doctor-school/ds-platform/commit/439e74902873f9c3bb0900e73ad393f7c192be1e) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 020 EARS-1: one shared event page on both storefronts (doctor `/events/[slug]`, academy `/webinars/[slug]`)
+
+### Patch Changes
+
+- [#2010](https://github.com/doctor-school/ds-platform/pull/2010) [`4e48d2a`](https://github.com/doctor-school/ds-platform/commit/4e48d2a98cb2c288db9c589bc6fc96da43f00401) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 021 EARS-15 — the doctor storefront signs the doctor in after email confirmation.
+
+  The in-flight held-password slot moves out of `apps/portal/lib/` into
+  `@ds/design-system/blocks` (`pending-registration.ts`), so both storefronts run
+  ONE post-confirmation sign-in mechanism (003 EARS-39). The doctor host holds the
+  password after `registerDoctor` succeeds and replays the real 003 EARS-5 login
+  after `confirmDoctorEmail` succeeds. The Academy's rule is copied whole, not
+  half: the success state exists ONLY for a doctor who is signed in, and a
+  confirmation with no held credential or a replay the login refuses routes to
+  `/login?returnTo=…` carrying the return context instead. The Academy behaviour
+  is unchanged and only its import path moved.
+
+- [#2034](https://github.com/doctor-school/ds-platform/pull/2034) [`09bd1d8`](https://github.com/doctor-school/ds-platform/commit/09bd1d88842c7faf45db3fc5aae189fd05144c2c) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 005 EARS-1/2/3/4 on doctor.school — one-tap эфир registration, as ONE shared
+  control on both storefronts.
+
+  The Academy one-tap registration and its completion-on-return rule move out of
+  `apps/portal/{app/webinars/[slug],lib}` into the new `@ds/events-storefront`
+  package (tech spec `2026-09-07-one-code-two-storefronts-plan-en.md` §4 Stage 0):
+  the `RegisterOneTap` control (`./ui`), the browser transport (`./client`), the
+  session-bound registration read and the server action (`./server`), and the
+  `completeReturnTarget` decision rule (`.`). Each host supplies only its own
+  projection — which return shapes are its own, where nothing lands, its own copy
+  and its own event path.
+
+  The doctor storefront now reads the per-viewer registration state on
+  `/events/<slug>` and renders that control for a signed-in doctor who is not yet
+  registered, so the card flips to «Вы записаны» in place. Both of its auth doors
+  complete a carried эфир intent once the session exists: `/login` after sign-in,
+  and `/register` after the held-password replay that follows email confirmation
+  (003 EARS-39). A guest still goes through `/register?returnTo=…` and arrives
+  registered. Academy behaviour is unchanged — only the code moved.
+
+- [#2039](https://github.com/doctor-school/ds-platform/pull/2039) [`da36c9d`](https://github.com/doctor-school/ds-platform/commit/da36c9d42859c3f6baaddca43df55c5746101a39) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 028 EARS-15 — the Academy's `/documents`, `/documents/[slug]` and the segment's
+  not-found shell each render a single `main` landmark. The root layout renders
+  `{children}` straight into `<body>` and the shared `LegalDocument` block owns
+  only its own container, so the content landmark is page-owned on this host; these
+  three routes were the only Academy pages missing it. Semantic wrapper only — no
+  class, copy, order or layout change.
+
+- [#1914](https://github.com/doctor-school/ds-platform/pull/1914) [`7aba7ae`](https://github.com/doctor-school/ds-platform/commit/7aba7aef5843d34245b07b7fd52b021ff297eaa8) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Shared `AuthShell` block: the canvas auth frame (brand panel over `AuthLayout`) is one canonical implementation both storefronts project
+
+  `apps/portal` and `apps/doctor` each carried their own copy of the same three-zone brand panel, and the two had drifted apart on headline scale and on the panel mark's alignment. The frame now lives once in `@ds/design-system/blocks` as `<AuthShell>`, built from the canvas (`design-source/auth.dc.html`): the mark pinned top-left, the value prop centred in the remaining space, the panel's footer line, and the 021 return-context swap that also widens the split. Both apps keep a thin projection holding only what the package refuses to hold — brand assets, localized copy, and app policy (the portal's authenticated-redirect guard and its SmartCaptcha disclosure). Academy's auth panel converges onto the canvas typography and mark alignment; behaviour is unchanged on both sides.
+
+- [#1946](https://github.com/doctor-school/ds-platform/pull/1946) [`68f69b3`](https://github.com/doctor-school/ds-platform/commit/68f69b3bae1407c506891d046919583becc0ac63) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Bot protection is one implementation for both storefronts (021 EARS-19). The
+  SmartCaptcha adapter, the resume-one-action orchestration and the error
+  predicates move out of `apps/portal/components/bot-protection/` into
+  `@ds/design-system/blocks`, app-agnostic: the site key is a prop, the failure
+  copy is the host's, and the predicates read the stable `@ds/schemas` code off
+  any error shape instead of a portal-local class. The Academy pages become thin
+  projections with no behaviour change.
+
+  The doctor registration door is wired: the submit runs the invisible challenge
+  and sends the real `RegisterDoctor` command with the minted token on the
+  `x-smartcaptcha-token` header, so the «Защита от ботов подключается» reason is
+  gone and the button is live once both access conditions are granted. A
+  challenge failure is stated at form level, never on a field. A successful
+  submission opens the shared `EmailConfirmCard` confirmation state, whose code
+  confirm and captcha-protected resend run against the shipped 003 routes.
+
+- [#1964](https://github.com/doctor-school/ds-platform/pull/1964) [`c120660`](https://github.com/doctor-school/ds-platform/commit/c1206608e95b365e77ff47563926452287243f32) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Doctor storefront `/account`: the shell's signed-in «Личный кабинет» action now
+  resolves to a real route instead of a 404. The account-profile composition (003
+  EARS-27/28) is lifted out of the Academy page into the shared
+  `@ds/design-system/blocks` `<AccountProfileCard>`, and both storefronts mount that
+  one block — the Academy keeps its `next-intl` copy and routes, the doctor host
+  passes RU literals, its own `/v1` transport and a storefront landing on sign-out.
+  A `null` href hides its row, so no host renders a link it cannot serve. The
+  showcase catalogues the new block; the Academy surface itself is unchanged.
+
+- [#1957](https://github.com/doctor-school/ds-platform/pull/1957) [`bf0c6d8`](https://github.com/doctor-school/ds-platform/commit/bf0c6d8b2afebfe00ebe879da0aada0a1c631c3f) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 003 EARS-38 — the login, registration and reset-complete password fields render the show-password toggle, with its copy supplied from the RU message catalog.
+
+- [#1870](https://github.com/doctor-school/ds-platform/pull/1870) [`f3ad99f`](https://github.com/doctor-school/ds-platform/commit/f3ad99fdf399cf7cfec87292ca2d0ed22fb34cfc) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Room composition moved into `@ds/room/ui`: the six room components, the presence channel and the two server reads now live in the shared package, parameterised on a host-injection contract (copy, room API, link component + routes, user-cluster slot). The academy route at `/webinars/[slug]/room` is re-seated as a thin server host projection over `RoomShell` with no render delta.
+
+- [#1878](https://github.com/doctor-school/ds-platform/pull/1878) [`38d7952`](https://github.com/doctor-school/ds-platform/commit/38d79529862e9ef5bf47fbf628500b0042d6dfd7) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Interim Academy home mounts the standard app-shell header on / ([#1877](https://github.com/doctor-school/ds-platform/issues/1877)). The
+  `@chrome` root slot returned `null`, so `/` was the one portal route without
+  the 008 `AppShellHeader`; the interim landing stub carried a bespoke header of
+  its own whose «Войти» and `≡` controls were permanently `disabled`. The slot
+  now mounts `AppShellHeader` unchanged — logo → `/webinars`, «Эфиры», «Мои
+  события», the theme toggle and the real «Войти» → `/login` (avatar → `/account`
+  for a signed-in doctor), plus the mobile `≡` dropdown — and the stub's bespoke
+  header and its local theme toggle are deleted. This moves the interim page onto
+  the canonical 013 design §7 / EARS-16 behaviour; no navigation entry is added
+  for a route that does not exist yet (LD-10).
+
+- [#1940](https://github.com/doctor-school/ds-platform/pull/1940) [`e6f4eba`](https://github.com/doctor-school/ds-platform/commit/e6f4eba29b04faac067a62ad4ce9b7fcdb09cb32) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 020 EARS-4 — карточка записи на событие читает НМО и стоимость в Pul из модели
+  события, а не из зашитой копии. Публичное чтение события (`EventPageView`)
+  получило обязательные поля `nmo` и `pulCost`; оба приходят из одного помощника
+  `eventEconomyFacts` в API, который уже питает карточку ленты врача (019), — так
+  карточка и страница, которую врач открывает из неё, не могут разойтись. Строка
+  условий теперь идёт в порядке канваса: Участие · Формат · Длительность · НМО.
+  При нулевой стоимости участие по-прежнему читается как «Бесплатно для врача» с
+  акцентом успеха; ненулевая — как «250 Pul», нейтрально и никогда в рублях.
+  Строка НМО и чип «НМО» в шапке появляются, только если событие начисляет баллы:
+  `nmo: false` не рисует ни «нет», ни заглушку.
+
+- [#2026](https://github.com/doctor-school/ds-platform/pull/2026) [`5282b16`](https://github.com/doctor-school/ds-platform/commit/5282b16d8862d60945f995f1dc6ea5779c66b7d5) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - documents contacts: ВКонтакте and RuTube channel chips on both hosts
+
+- [#1902](https://github.com/doctor-school/ds-platform/pull/1902) [`29aca1e`](https://github.com/doctor-school/ds-platform/commit/29aca1efe2e468cd5ab02ea87176e5e64ea2c3c6) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - [#1666](https://github.com/doctor-school/ds-platform/issues/1666) slice B — `PasswordRecoveryCard` and `EmailConfirmCard` join the blocks
+  tier, so password recovery and post-registration email confirmation each have
+  ONE canonical implementation both storefronts project (AGENTS.md §6 cross-front
+  capability reuse, ADR-0013 A1). Both compositions were lifted verbatim out of the
+  portal `/reset` and `/verify` pages — same elements, order, classes, test ids,
+  aria and state presentation — with the app glue replaced by props: copy, the
+  validation resolvers, BFF transport, the enumeration-safe outcome mapping, the
+  bot-protection element and routing all stay host-supplied. The portal pages are
+  now thin host projections; no rendered output changes.
+
+- [#1983](https://github.com/doctor-school/ds-platform/pull/1983) [`6ac683b`](https://github.com/doctor-school/ds-platform/commit/6ac683b8bf94663a55cb6dbab542aa851220bba5) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - `<RegisterCard>` — the ONE canonical registration composition both storefronts mount (021 EARS-5/12, 003 EARS-16/17). The block owns the structure the Academy `/register` and the doctor storefront door must not drift apart on: the two consent tiers told apart by their rendering (F-021-1 «вариант Б» — access conditions framed above the submit, the optional marketing opt-in outside that frame below it), the stated reason beside a disabled submit, and the challenge and command statements held apart at form level. Copy, the consent read model, validation messages and transport stay host-side.
+
+  Both registration screens are now thin projections over that block instead of screen-local compositions. The Academy `/register` render is unchanged — its consent statement keeps its shipped position under the credentials (`belowFieldsSlot`), its submit group keeps the challenge → statement → button order (`submitBlock="error-first"`) and its row rhythm (`spacing="sm"`). One deliberate render delta on the doctor side: the two form-level statements move from screen-local styling to the canonical `<FormError>` (`role="alert"` and both testids kept).
+
+  The block also carries the 003 EARS-38 show-password labels down to `<PasswordField>` (`copy.passwordRevealLabels`), so the reveal control [#1663](https://github.com/doctor-school/ds-platform/issues/1663) shipped reaches both doors through the shared field rather than a per-host copy.
+
+- [#1938](https://github.com/doctor-school/ds-platform/pull/1938) [`21eaccf`](https://github.com/doctor-school/ds-platform/commit/21eaccf91069eb31d1c5904dda3b76441d3408d9) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 006 EARS-7 — an already-open room degrades to an ended state instead of keeping
+  a dead live stream on screen. `RoomApiError` now carries the lifecycle `state`
+  parsed from a refusal body; the presence heartbeat promotes a `409` refusal
+  whose state is present and not `live` to a one-way `onRoomClosed` latch and
+  stops beating. The room shell lifts that phase, so the player slot is replaced
+  by the «Эфир завершён» end card (no iframe, no live badge, no restart button),
+  the header pill goes neutral without a duration, and the chat composer is
+  replaced by a truthful status strip while the message ledger stays readable.
+  Both hosts map the four new RU copy keys.
+
+- [#1868](https://github.com/doctor-school/ds-platform/pull/1868) [`f9d3e5b`](https://github.com/doctor-school/ds-platform/commit/f9d3e5b6eec35814298f2a843b209b60f4fb4177) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Extract the webinar room's pure model and browser transport into the shared `@ds/room` package. The portal keeps its room components and re-export shims, so there is no behaviour or render change; only import paths move.
+
+- [#1850](https://github.com/doctor-school/ds-platform/pull/1850) [`dad13c3`](https://github.com/doctor-school/ds-platform/commit/dad13c3628625ef2ac5b67bcb4cc144b299ebb71) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 020 EARS-2 slice 1 — the registration-free decision set. The public event read
+  now carries `links: AroundEvent` (school / speaker pages / community), resolved
+  per host by one shared resolver from a route table each storefront owns; a
+  destination that does not exist has no key at all, so the page renders plain
+  text rather than a dead link. The «Программа» section now always renders — the
+  PDF download when one is attached, and otherwise an honest lifecycle-specific
+  statement instead of an omitted block. «О чём событие», «Программа» and the hero
+  kicker move out of the two host routes into shared `@ds/design-system` blocks.
+
+- [#1889](https://github.com/doctor-school/ds-platform/pull/1889) [`dfe3a50`](https://github.com/doctor-school/ds-platform/commit/dfe3a5098073a4d57d4656d21dd8e5b801748970) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Add the `LoginCard` block to `@ds/design-system/blocks` — the whole sign-in
+  composition (AuthCard frame, password / one-time-code tabs, both forms, and the
+  code-entry stage on `OtpFocusScreen`) as one canonical unit both storefronts
+  project. The portal `/login` page becomes a thin projection that supplies copy,
+  resolvers, transport and routing; no visible change.
+- Updated dependencies [[`4e48d2a`](https://github.com/doctor-school/ds-platform/commit/4e48d2a98cb2c288db9c589bc6fc96da43f00401), [`09bd1d8`](https://github.com/doctor-school/ds-platform/commit/09bd1d88842c7faf45db3fc5aae189fd05144c2c), [`bd198c3`](https://github.com/doctor-school/ds-platform/commit/bd198c33d326750623b73ecea4e9cd6239abab32), [`7aba7ae`](https://github.com/doctor-school/ds-platform/commit/7aba7aef5843d34245b07b7fd52b021ff297eaa8), [`68f69b3`](https://github.com/doctor-school/ds-platform/commit/68f69b3bae1407c506891d046919583becc0ac63), [`034671c`](https://github.com/doctor-school/ds-platform/commit/034671c37e60bfd8193e9b8fb1288ed2b7afdf2d), [`98d9509`](https://github.com/doctor-school/ds-platform/commit/98d9509a65216edfd8d6c99a9074b82d011e4cd9), [`5688b56`](https://github.com/doctor-school/ds-platform/commit/5688b564e2b4850a8a0fd81813dde210e99fd827), [`5688b56`](https://github.com/doctor-school/ds-platform/commit/5688b564e2b4850a8a0fd81813dde210e99fd827), [`c120660`](https://github.com/doctor-school/ds-platform/commit/c1206608e95b365e77ff47563926452287243f32), [`f93d81c`](https://github.com/doctor-school/ds-platform/commit/f93d81c444ebf021f0562c18e8b76b3dc4354bd2), [`e926d75`](https://github.com/doctor-school/ds-platform/commit/e926d75c9c71037687fc25de37e41539a3ba3d6d), [`06209df`](https://github.com/doctor-school/ds-platform/commit/06209df8a40e21749ebfac76cc118e65934e2c84), [`6484a11`](https://github.com/doctor-school/ds-platform/commit/6484a11ff00db3e4ced30227c64ed5b251bf5c4d), [`654f3ba`](https://github.com/doctor-school/ds-platform/commit/654f3baaf2dd8772de1820e2199baa982d539102), [`a846acd`](https://github.com/doctor-school/ds-platform/commit/a846acd36863bcd6b6ad0c6aad5ba477e6f6c839), [`8c54c06`](https://github.com/doctor-school/ds-platform/commit/8c54c06f7f4ce452eb2665d4680d1ce80fe87ad1), [`f3ad99f`](https://github.com/doctor-school/ds-platform/commit/f3ad99fdf399cf7cfec87292ca2d0ed22fb34cfc), [`ec001b1`](https://github.com/doctor-school/ds-platform/commit/ec001b1c6cce81169ef056c3c09dffec5df3460b), [`04fa58f`](https://github.com/doctor-school/ds-platform/commit/04fa58f9dcbbc0131e30bdb3cd0bb52413c05d9d), [`d565d04`](https://github.com/doctor-school/ds-platform/commit/d565d049c4597b7ab2e30d34ec673f110abcfaf7), [`a846acd`](https://github.com/doctor-school/ds-platform/commit/a846acd36863bcd6b6ad0c6aad5ba477e6f6c839), [`bc18826`](https://github.com/doctor-school/ds-platform/commit/bc188260cc26a6781c4fe1ff9f3bb4f7ae73a727), [`d32a070`](https://github.com/doctor-school/ds-platform/commit/d32a07089ea8b9c36f8cb085cc610d238042a70e), [`e6f4eba`](https://github.com/doctor-school/ds-platform/commit/e6f4eba29b04faac067a62ad4ce9b7fcdb09cb32), [`9ea994f`](https://github.com/doctor-school/ds-platform/commit/9ea994fb52a731be7a183181f8753367386de3bf), [`57ef112`](https://github.com/doctor-school/ds-platform/commit/57ef11212e6cab3c3dde3029775688ff9cc74ed4), [`d04e10a`](https://github.com/doctor-school/ds-platform/commit/d04e10a0c24dce99c573cc33862e8ef8bc64e823), [`0e0f1cf`](https://github.com/doctor-school/ds-platform/commit/0e0f1cf895748b9185ab44e5055044ba36a37a57), [`bf0c6d8`](https://github.com/doctor-school/ds-platform/commit/bf0c6d8b2afebfe00ebe879da0aada0a1c631c3f), [`8f5ea39`](https://github.com/doctor-school/ds-platform/commit/8f5ea39ead9446fef812425d5f4e3ae9bd723495), [`71f382c`](https://github.com/doctor-school/ds-platform/commit/71f382ce9b17e97ad947da94773143c378f9179e), [`29aca1e`](https://github.com/doctor-school/ds-platform/commit/29aca1efe2e468cd5ab02ea87176e5e64ea2c3c6), [`6ac683b`](https://github.com/doctor-school/ds-platform/commit/6ac683b8bf94663a55cb6dbab542aa851220bba5), [`0e0f1cf`](https://github.com/doctor-school/ds-platform/commit/0e0f1cf895748b9185ab44e5055044ba36a37a57), [`b6f0fcd`](https://github.com/doctor-school/ds-platform/commit/b6f0fcde0872ac1c9517498cfb101cac3c42fd09), [`21eaccf`](https://github.com/doctor-school/ds-platform/commit/21eaccf91069eb31d1c5904dda3b76441d3408d9), [`f9d3e5b`](https://github.com/doctor-school/ds-platform/commit/f9d3e5b6eec35814298f2a843b209b60f4fb4177), [`5688b56`](https://github.com/doctor-school/ds-platform/commit/5688b564e2b4850a8a0fd81813dde210e99fd827), [`439e749`](https://github.com/doctor-school/ds-platform/commit/439e74902873f9c3bb0900e73ad393f7c192be1e), [`5a8e03f`](https://github.com/doctor-school/ds-platform/commit/5a8e03f0746ffcc3b8fb7260d906785f4b7b9a0e), [`cdd7b52`](https://github.com/doctor-school/ds-platform/commit/cdd7b52c9c64d27c976c08f4060b64f0c54830bd), [`dad13c3`](https://github.com/doctor-school/ds-platform/commit/dad13c3628625ef2ac5b67bcb4cc144b299ebb71), [`dfe3a50`](https://github.com/doctor-school/ds-platform/commit/dfe3a5098073a4d57d4656d21dd8e5b801748970), [`836cad8`](https://github.com/doctor-school/ds-platform/commit/836cad87fd5691ddfbcea3614cf1c3df4ca6b321), [`df90729`](https://github.com/doctor-school/ds-platform/commit/df9072929a7084b3b259d727f7081e45c68cdb30), [`c734f7b`](https://github.com/doctor-school/ds-platform/commit/c734f7b8df04c6514550da38894ffd681f702f86), [`222667b`](https://github.com/doctor-school/ds-platform/commit/222667baccba9cfcf0b7671a582f68127db4c99c), [`68ba282`](https://github.com/doctor-school/ds-platform/commit/68ba2821bfede1afd2d10cef8e62974450e2c889)]:
+  - @ds/design-system@5.4.0
+  - @ds/events-storefront@0.1.0
+  - @ds/room@0.1.0
+  - @ds/schemas@6.0.0
+  - @ds/legal-content@0.1.0
+
 ## 0.20.0
 
 ### Minor Changes

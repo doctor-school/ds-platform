@@ -1,6 +1,6 @@
 {
   "name": "@ds/room",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "description": "DS Platform shared webinar-room unit — the room's pure model, browser transport, server reads and composition, hosted by both storefronts (ADR-0013 A1, feature 006 / 020).",

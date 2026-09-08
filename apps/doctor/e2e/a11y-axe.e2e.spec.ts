@@ -1,5 +1,5 @@
 import AxeBuilder from "@axe-core/playwright";
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 
 /**
  * Page-level axe-core a11y scan of the doctor storefront (#1440), the sibling of
@@ -140,10 +140,7 @@ for (const [state, drive] of [
     "consents granted",
     async (page: import("@playwright/test").Page) => {
       for (const id of ["register-medworker", "register-partner-data"]) {
-        await page
-          .getByTestId(id)
-          .locator("xpath=ancestor::label[1]")
-          .click();
+        await page.getByTestId(id).locator("xpath=ancestor::label[1]").click();
         await expect(page.getByTestId(id)).toBeChecked();
       }
     },
@@ -227,7 +224,7 @@ for (const [state, drive] of [
       }
       await page.getByTestId("register-submit").click();
       await expect(page.getByTestId("verify-submit")).toBeVisible();
-      await page.locator("input[autocomplete=\"one-time-code\"]").fill("ABC123");
+      await page.locator('input[autocomplete="one-time-code"]').fill("ABC123");
       await expect(page.getByTestId("registration-success")).toBeVisible();
     },
   ],
@@ -242,7 +239,9 @@ for (const [state, drive] of [
     await expect(h1, "h1 count on /register").toHaveCount(1);
     await expect(h1, "h1 text on /register").not.toHaveText(/^\s*$/);
 
-    const results = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze();
+    const results = await new AxeBuilder({ page })
+      .withTags(WCAG_TAGS)
+      .analyze();
 
     const summary = results.violations.map((v) => ({
       id: v.id,
@@ -279,7 +278,9 @@ for (const [state, drive] of [
       );
       const form = page.getByTestId("password-login-form");
       await form.getByLabel("Почта или телефон").fill("doctor@clinic.ru");
-      await form.getByLabel("Пароль", { exact: true }).fill("wrong-password-123");
+      await form
+        .getByLabel("Пароль", { exact: true })
+        .fill("wrong-password-123");
       await page.getByTestId("password-login-submit").click();
       await expect(form.getByRole("alert")).toBeVisible();
     },
@@ -295,7 +296,9 @@ for (const [state, drive] of [
     await expect(h1, "h1 count on /login").toHaveCount(1);
     await expect(h1, "h1 text on /login").not.toHaveText(/^\s*$/);
 
-    const results = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze();
+    const results = await new AxeBuilder({ page })
+      .withTags(WCAG_TAGS)
+      .analyze();
 
     const summary = results.violations.map((v) => ({
       id: v.id,
@@ -308,7 +311,9 @@ for (const [state, drive] of [
 }
 
 /**
- * 028 EARS-15 (#1967) — the legal surface joins the gate the day it ships.
+ * 028 EARS-15 (#1967, #1970) — the legal surface joins the gate the day it
+ * ships, and the gate asserts what EARS-15 literally names: "real heading
+ * structure and links that name their destination".
  *
  * A CONTENT surface fails differently from a form: the risks here are heading
  * structure (a document body is authored Markdown promoted to real `h2`/`h3`,
@@ -317,12 +322,102 @@ for (const [state, drive] of [
  * the index composes the row unit and the contact chips, the document composes
  * the ToC and the body — and neither takes an api read, so no route mock is
  * needed on this backend-free tier.
+ *
+ * Why the WCAG tag set alone is not the gate: axe files `heading-order` under
+ * `best-practice`, so a body that jumped h1 → h3 would scan clean on the tags
+ * above, and `link-name` only rejects an EMPTY name — «здесь» passes it. The
+ * structural assertions below close both holes deterministically from the DOM,
+ * and the scan additionally enables `heading-order` and proves it was evaluated.
  */
+
+/** Link text that names nothing — the anti-pattern EARS-15 forbids. */
+const GENERIC_LINK_TEXT =
+  /^(здесь|тут|сюда|подробнее|далее|ссылка|читать|перейти|click here|here|link|more|read more)\.?$/i;
+
+/** Rule ids axe evaluated in this run, whatever their outcome. */
+function evaluatedRuleIds(results: {
+  passes: { id: string }[];
+  violations: { id: string }[];
+  incomplete: { id: string }[];
+  inapplicable: { id: string }[];
+}): string[] {
+  return [
+    ...results.passes,
+    ...results.violations,
+    ...results.incomplete,
+    ...results.inapplicable,
+  ].map((r) => r.id);
+}
+
+/**
+ * EARS-15 structure: headings inside `main` never skip a level going down; the
+ * document body contributes real `h2` sections; every ToC entry resolves to an
+ * element on the same page; every link in `main` has a name that is neither
+ * empty nor generic, and no link is a `#` stub.
+ */
+async function assertLegalStructure(page: Page, label: string): Promise<void> {
+  const structure = await page.locator("main").evaluate((main) => {
+    const levels = Array.from(
+      main.querySelectorAll("h1, h2, h3, h4, h5, h6"),
+    ).map((h) => Number(h.tagName.slice(1)));
+    const bodyH2 = main.querySelectorAll(
+      '[data-testid="legal-document-body"] h2',
+    ).length;
+    const tocHrefs = Array.from(
+      main.querySelectorAll('nav[aria-label="Содержание"] a[href^="#"]'),
+    ).map((a) => a.getAttribute("href") ?? "");
+    const unresolvedToc = tocHrefs.filter(
+      (href) => !main.querySelector(`[id="${CSS.escape(href.slice(1))}"]`),
+    );
+    const links = Array.from(main.querySelectorAll("a")).map((a) => ({
+      href: a.getAttribute("href") ?? "",
+      name: (a.getAttribute("aria-label") ?? a.textContent ?? "")
+        .replace(/\s+/g, " ")
+        .trim(),
+    }));
+    return { levels, bodyH2, tocHrefs, unresolvedToc, links };
+  });
+
+  const skips = structure.levels.filter(
+    (level, i) => i > 0 && level > structure.levels[i - 1] + 1,
+  );
+  expect(structure.levels[0], `first heading on ${label} is the h1`).toBe(1);
+  expect(
+    skips,
+    `heading levels skipped on ${label}: ${structure.levels}`,
+  ).toEqual([]);
+
+  if (label !== "/documents") {
+    expect(
+      structure.bodyH2,
+      `Markdown h2 sections in the body on ${label}`,
+    ).toBeGreaterThan(0);
+    expect(
+      structure.tocHrefs.length,
+      `ToC entries on ${label}`,
+    ).toBeGreaterThan(0);
+    expect(
+      structure.unresolvedToc,
+      `ToC anchors without a target on ${label}`,
+    ).toEqual([]);
+  }
+
+  const nameless = structure.links.filter(
+    (l) => l.name === "" || GENERIC_LINK_TEXT.test(l.name),
+  );
+  expect(
+    nameless,
+    `links that do not name their destination on ${label}`,
+  ).toEqual([]);
+  const stubs = structure.links.filter((l) => l.href === "#" || l.href === "");
+  expect(stubs, `stub links on ${label}`).toEqual([]);
+}
+
 for (const [label, path] of [
   ["/documents", "/documents"],
   ["/documents/privacy-policy", "/documents/privacy-policy"],
 ] as const) {
-  test(`028 EARS-15 ${label} passes WCAG 2 A/AA + one-h1 check`, async ({
+  test(`028 EARS-15 ${label} passes WCAG 2 A/AA + heading-order, one-h1 and named-links checks`, async ({
     page,
   }) => {
     await page.goto(path);
@@ -331,7 +426,20 @@ for (const [label, path] of [
     await expect(h1, `h1 count on ${label}`).toHaveCount(1);
     await expect(h1, `h1 text on ${label}`).not.toHaveText(/^\s*$/);
 
-    const results = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze();
+    await assertLegalStructure(page, label);
+
+    // `options` first, `withTags` second: the builder's tag call writes
+    // `runOnly` onto the options object, and an explicit `rules[id].enabled`
+    // wins over the tag filter inside axe, so `heading-order` runs beside the
+    // WCAG set instead of replacing it.
+    const results = await new AxeBuilder({ page })
+      .options({ rules: { "heading-order": { enabled: true } } })
+      .withTags(WCAG_TAGS)
+      .analyze();
+    expect(
+      evaluatedRuleIds(results),
+      `heading-order evaluated on ${label}`,
+    ).toContain("heading-order");
 
     const summary = results.violations.map((v) => ({
       id: v.id,

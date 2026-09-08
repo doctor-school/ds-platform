@@ -16,9 +16,10 @@ import { SPECIALTY_CHOICE_COOKIE_NAME } from "@/lib/specialty-choice";
  * EARS-18 and it is asserted end-to-end in the Playwright suite.
  *
  * The page is readable with NO account (EARS-1). Only 017's remembered-specialty
- * cookie travels with the page read, exactly as 019's feed read does; the
- * participation read additionally forwards the session, because WHO is asking
- * changes the answer (registered → «Вы записаны» / «Войти в эфир»).
+ * cookie travels with the page read, exactly as 019's feed read does (plus the
+ * client chain every hop relays, #2054); the participation read additionally
+ * forwards the session, because WHO is asking changes the answer
+ * (registered → «Вы записаны» / «Войти в эфир»).
  */
 
 export const DOCTOR_EVENT_PAGE_PATH = "/v1/storefront/doctor/events";
@@ -50,7 +51,11 @@ export async function fetchDoctorEventPage(
     `${API_BASE}${DOCTOR_EVENT_PAGE_PATH}/${encodeURIComponent(idOrSlug)}`,
     {
       headers: {
-        accept: "application/json",
+        // The canonical hop builder with the session surface stripped: the page
+        // read is session-free (only the specialty cookie travels, below), but
+        // the client chain rides every hop (#2054 — `request.ip` keys the api's
+        // rate-limit windows, #1655 EARS-13) and is omitted when absent.
+        ...forwardedHeaders({ ...forwardedSessionFrom(headers), cookie: "" }),
         cookie: specialtyCookieOnly(headers.get("cookie")),
       },
       cache: "no-store",

@@ -66,7 +66,7 @@ async function main(): Promise<void> {
     // base path at `cwd` (the repo root, or a fixture root under test) while the
     // rules and scopes stay the single SSOT in eslint.import-boundary.config.mjs.
     overrideConfigFile: true,
-    overrideConfig: boundaryConfig as ESLint.Options["overrideConfig"],
+    overrideConfig: boundaryConfig,
     errorOnUnmatchedPattern: false,
   });
 

@@ -17,7 +17,12 @@
 timezone: Europe/Moscow
 
 package_update: true
-package_upgrade: true
+# Deliberately false: `package_upgrade` runs inside cloud-init's per-instance path,
+# takes minutes on a fresh Ubuntu image and does not resume after a reboot — the exact
+# shape of #2121. The upgrade is step 1 of stage-bootstrap.sh instead, where a marker
+# makes it resumable. `packages` below stays minimal: only what the bootstrap script
+# itself needs before it can run (curl, jq) plus the cheap base set.
+package_upgrade: false
 packages:
   - ufw
   - fail2ban
@@ -124,59 +129,150 @@ write_files:
       [Install]
       WantedBy=multi-user.target
 
-  # Everything in first-boot provisioning that is slow, network-bound and therefore
-  # likely to be interrupted. It lives here rather than in runcmd because `runcmd` is
-  # per-instance: cloud-init records the instance as done and NEVER resumes an
-  # interrupted runcmd after a reboot (observed 2026-09-09, #2121 — the hypervisor
-  # hard-reset stage-1 about two minutes into first boot, right after Terraform
-  # attached the floating IP and the firewall, and cloud-init then reported
-  # `status: done, errors: []` with the runner never downloaded).
+  # ALL of first-boot provisioning that is slow or network-bound lives here, not in
+  # `runcmd`: `runcmd` is per-instance, so cloud-init records the instance as done and
+  # NEVER resumes an interrupted runcmd after a reboot (observed 2026-09-09, #2121 —
+  # the hypervisor hard-reset stage-1 about two minutes into first boot, right after
+  # Terraform attached the floating IP and the firewall, and cloud-init then reported
+  # `status: done, errors: []` with the runner never downloaded). `package_upgrade` has
+  # the same property, which is why it is false above and an apt upgrade is step 1 here.
   #
-  # Every step below is idempotent and re-runnable, so a second (or fifth) boot
-  # simply finishes what the previous one did not.
+  # Each step carries its OWN marker under /var/lib/ds-platform and the marker is
+  # written only after the step returns 0, so a reboot in the middle of any step
+  # repeats exactly that step on the next boot and skips nothing after it. The
+  # aggregate marker stage-bootstrap.done — the one ds-actions-runner and the runbook
+  # read — is written last of all, after every step has succeeded.
   - path: /opt/ds-platform/stage-bootstrap.sh
     permissions: "0755"
     content: |
       #!/usr/bin/env bash
       set -euo pipefail
 
+      # A systemd service inherits none of the environment cloud-init exports, and on
+      # Ubuntu 24.04 debconf and needrestart will otherwise try to prompt inside a
+      # unit and hang the apt runs below.
+      export DEBIAN_FRONTEND=noninteractive
+      export NEEDRESTART_MODE=a
+
+      MARKERS=/var/lib/ds-platform
+      install -d -m 0755 -o root -g root "$MARKERS"
+
+      # step <marker> <function> — run the step only when its marker is absent, and
+      # write the marker only once the step has returned 0.
+      step() {
+        local name="$1"
+        shift
+        if [ -f "$MARKERS/$name" ]; then
+          echo "[stage-bootstrap] $name: already done"
+          return 0
+        fi
+        echo "[stage-bootstrap] $name: running"
+        "$@"
+        touch "$MARKERS/$name"
+      }
+
+      sys_upgrade() {
+        apt-get update
+        apt-get -y \
+          -o Dpkg::Options::=--force-confold \
+          -o Dpkg::Options::=--force-confdef \
+          upgrade
+      }
+
+      # Docker CE + compose plugin (official convenience script), same as api-prod.
+      docker_install() {
+        curl -fsSL https://get.docker.com | sh
+        # #1419 parity: prove the daemon.json written above parses on THIS docker
+        # version. Non-blocking on purpose — halting here would leave a half-built box.
+        dockerd --validate --config-file /etc/docker/daemon.json \
+          || echo "WARNING (#1419) /etc/docker/daemon.json failed dockerd --validate — build-cache GC policy is NOT in effect; fix the file and restart docker"
+      }
+
+      # Host firewall (defence-in-depth alongside twc_firewall.stage_1): SSH + web only.
+      # No port is opened for CI: the runner registers OUTBOUND (it long-polls GitHub),
+      # which is exactly why this box needs no deploy key and no CI-facing 22.
+      host_firewall() {
+        ufw default deny incoming
+        ufw default allow outgoing
+        ufw allow 22/tcp
+        ufw allow 80/tcp
+        ufw allow 443/tcp
+        ufw --force enable
+        systemctl enable --now fail2ban
+      }
+
+      # Node 22 + corepack/pnpm — the slot script (tools/staging/slot.mjs, step 4) and
+      # the Playwright suite run on the host, not in a container.
+      node_toolchain() {
+        curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+        apt-get install -y nodejs
+        corepack enable
+      }
+
       # Playwright host libraries for the regression suite (spec step 7). Installed at
       # bootstrap so a suite run never pays for apt on the critical path; browsers
       # themselves are installed per checkout by `pnpm exec playwright install`.
-      npx --yes playwright@latest install-deps chromium firefox webkit
+      playwright_deps() {
+        npx --yes playwright@latest install-deps chromium firefox webkit
+      }
 
       # GitHub Actions runner package. The tarball is fetched at the CURRENT release —
       # the runner self-updates after registration anyway, so pinning a tag here would
       # only guarantee a first-run update; what matters is that the download is a
-      # release artifact of actions/runner and nothing else.
-      if [ ! -f /opt/actions-runner/run.sh ]; then
+      # release artifact of actions/runner and nothing else. Unpacked through a temp
+      # directory so run.sh never appears on a partially extracted tree.
+      runner_unpack() {
+        local tag tmp
+        tag=$(curl -fsSL https://api.github.com/repos/actions/runner/releases/latest | jq -r .tag_name)
+        tmp=$(mktemp -d)
+        curl -fsSL -o "$tmp/actions-runner.tar.gz" \
+          "https://github.com/actions/runner/releases/download/$tag/actions-runner-linux-x64-$${tag#v}.tar.gz"
+        tar xzf "$tmp/actions-runner.tar.gz" -C "$tmp"
+        rm -f "$tmp/actions-runner.tar.gz"
         install -d -m 0755 -o deploy -g deploy /opt/actions-runner
-        RUNNER_TAG=$(curl -fsSL https://api.github.com/repos/actions/runner/releases/latest | jq -r .tag_name)
-        curl -fsSL -o /tmp/actions-runner.tar.gz \
-          "https://github.com/actions/runner/releases/download/$RUNNER_TAG/actions-runner-linux-x64-$${RUNNER_TAG#v}.tar.gz"
-        tar xzf /tmp/actions-runner.tar.gz -C /opt/actions-runner
-        rm -f /tmp/actions-runner.tar.gz
-        /opt/actions-runner/bin/installdependencies.sh
-      fi
+        cp -a "$tmp/." /opt/actions-runner/
+        rm -rf "$tmp"
+      }
 
+      # Its own step, and its own marker: this is an apt run over libicu/libkrb5/…,
+      # slow and interruptible, and run.sh already exists by the time it starts.
+      runner_deps() {
+        /opt/actions-runner/bin/installdependencies.sh
+      }
+
+      install -d -m 0700 -o root -g root /etc/ds-platform
+
+      step apt-upgrade "sys_upgrade"
+      step docker "docker_install"
+      step firewall "host_firewall"
+      step node "node_toolchain"
+      step playwright-deps "playwright_deps"
+      step runner-unpacked "runner_unpack"
+      step runner-deps "runner_deps"
+
+      # Cheap and unconditional — the unit runs as root, ds-actions-runner as deploy.
       install -d -m 0755 -o deploy -g deploy /opt/actions-runner/_work
       chown -R deploy:deploy /opt/actions-runner
 
-      # LAST: the marker both ds-actions-runner and the README preflight read.
-      install -d -m 0755 -o root -g root /var/lib/ds-platform
-      touch /var/lib/ds-platform/stage-bootstrap.done
+      # LAST: the aggregate marker ds-actions-runner and the runbook read.
+      touch "$MARKERS/stage-bootstrap.done"
 
   # The resilience primitive. `runcmd` runs once per instance and does not resume
   # after a reboot; a oneshot unit gated on the absence of its own marker retries on
   # every boot until it succeeds. A provider-side reboot during the first minutes is
   # NORMAL on Timeweb (the IP and firewall attach after the server is already
   # booting, observed 2026-09-09, #2121) — this unit is what makes that survivable.
+  # It is armed twice over: from `runcmd` on first boot and from `bootcmd` on every
+  # boot thereafter (see the comments on both keys below), so the arming itself never
+  # depends on the per-instance primitive this unit exists to replace. `After=` names
+  # only network-online.target: docker is installed BY this unit, so it cannot be
+  # ordered after docker.service.
   - path: /etc/systemd/system/ds-stage-bootstrap.service
     permissions: "0644"
     content: |
       [Unit]
-      Description=ds-platform stage-1 first-boot bootstrap (runner + Playwright deps)
-      After=network-online.target docker.service
+      Description=ds-platform stage-1 first-boot bootstrap (apt, docker, node, runner)
+      After=network-online.target
       Wants=network-online.target
       ConditionPathExists=!/var/lib/ds-platform/stage-bootstrap.done
 
@@ -184,38 +280,34 @@ write_files:
       Type=oneshot
       ExecStart=/opt/ds-platform/stage-bootstrap.sh
       RemainAfterExit=no
+      # The script installs docker and a Node toolchain and runs three apt passes: on
+      # a cold box it takes several minutes, far past the 90 s DefaultTimeoutStartSec.
+      TimeoutStartSec=0
+      # Reboots are covered by the markers; this covers the no-reboot failure path
+      # (transient DNS/network), so a blip does not park the box until someone looks.
+      Restart=on-failure
+      RestartSec=30
 
       [Install]
       WantedBy=multi-user.target
 
+# Arming path 2 of 2 — EVERY boot. bootcmd is per-boot where runcmd is per-instance,
+# so if a provider reboot cuts the first boot short of runcmd, the unit file is on
+# disk unenabled and this line enables it on the next boot. On the very first boot
+# this is a no-op (bootcmd runs before write_files, so the unit does not exist yet)
+# and the failure is swallowed — first boot is runcmd's job. Between the two, the
+# bootstrap unit is armed no matter where a reboot lands (#2121).
+bootcmd:
+  - systemctl enable ds-stage-bootstrap.service 2>/dev/null || true
+
+# Arming path 1 of 2 — first boot. runcmd holds nothing slow any more: everything
+# that can be interrupted moved into stage-bootstrap.sh, so cloud-init reaches these
+# two lines within seconds of boot instead of after a docker + node + apt marathon.
+#
+# ds-actions-runner deliberately stays NOT enabled here: it starts only after the
+# owner writes /etc/ds-platform/runner.env (0600 root:root) with RUNNER_URL +
+# RUNNER_TOKEN and runs `systemctl enable --now ds-actions-runner`
+# (README → Runner registration).
 runcmd:
-  # Docker CE + compose plugin (official convenience script), same as api-prod.
-  - curl -fsSL https://get.docker.com | sh
-  # #1419 parity: prove the daemon.json written above parses on THIS docker version.
-  # Non-blocking on purpose — halting cloud-init would leave a half-provisioned box.
-  - dockerd --validate --config-file /etc/docker/daemon.json || echo "WARNING (#1419) /etc/docker/daemon.json failed dockerd --validate — build-cache GC policy is NOT in effect; fix the file and restart docker"
-  # Host firewall (defence-in-depth alongside twc_firewall.stage_1): SSH + web only.
-  # No port is opened for CI: the runner registers OUTBOUND (it long-polls GitHub),
-  # which is exactly why this box needs no deploy key and no CI-facing 22.
-  - ufw default deny incoming
-  - ufw default allow outgoing
-  - ufw allow 22/tcp
-  - ufw allow 80/tcp
-  - ufw allow 443/tcp
-  - ufw --force enable
-  - systemctl enable --now fail2ban
-  - install -d -m 0700 -o root -g root /etc/ds-platform
-  # Node 22 + corepack/pnpm — the slot script (tools/staging/slot.mjs, step 4) and
-  # the Playwright suite run on the host, not in a container.
-  - curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
-  - apt-get install -y nodejs
-  - corepack enable
-  # Everything slow and network-bound (Playwright host libs, the runner tarball) is
-  # in /opt/ds-platform/stage-bootstrap.sh, driven by the oneshot unit below, so a
-  # reboot mid-provisioning resumes instead of leaving the box half-built (#2121).
-  #
-  # ds-actions-runner itself stays NOT enabled: it starts only after the owner writes
-  # /etc/ds-platform/runner.env (0600 root:root) with RUNNER_URL + RUNNER_TOKEN and
-  # runs `systemctl enable --now ds-actions-runner` (README → Runner registration).
   - systemctl daemon-reload
-  - systemctl enable --now ds-stage-bootstrap
+  - systemctl enable --now ds-stage-bootstrap.service

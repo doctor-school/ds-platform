@@ -216,9 +216,14 @@ missing PGDATA, changed volume, replacement cluster or inconsistent sidecar
 refuses deployment. The check runs again before each guarded step. No environment
 override authorizes a major migration; that procedure remains #2101.
 
-Unchanged data source and currently running images need no certificate. A first
-successful guard records their source hash and system identifier in
+Unchanged data inputs and currently running images need no certificate. A first
+successful guard adopts the exact inspected running immutable image IDs and
+records the accepted input snapshot hash and system identifier in
 `~/ds-platform-postgres-state.json`, outside the archive replacement boundary.
+This bootstrap is not evidence that the remote Dockerfile built legacy images:
+those images carry no historical build-source label. Their actual runtime and
+pending configuration paths must pass the guard, and activation reuses their
+exact IDs without building or pulling. Any later input change needs certification.
 The record advances only after the target images start and pass read-back. An
 interrupted tree shipment therefore cannot be mistaken for a completed image
 update on re-entry. An interrupted/stopped or drifted cluster fails closed;

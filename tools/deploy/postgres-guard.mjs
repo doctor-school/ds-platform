@@ -34,6 +34,16 @@ export function postgresContract(files) {
   );
   const server = c.services.postgres;
   const backup = c.services.pgbackrest;
+  requireFact(
+    typeof files["postgres/postgresql.conf"] === "string",
+    "missing server configuration",
+  );
+  requireFact(
+    !/^\s*(?:config_file|include|include_if_exists|include_dir)\s*(?:=|\s)/im.test(
+      files["postgres/postgresql.conf"],
+    ),
+    "server path/include override requires a separately reviewed configuration contract",
+  );
   const declaredMajor = (text) => {
     const lines = String(text)
       .split(/\r?\n/)
@@ -57,6 +67,23 @@ export function postgresContract(files) {
   ];
   requireFact(paths.length === 1, "unknown backup data path");
   const pgdata = server.environment?.PGDATA || paths[0][1];
+  const expectedPaths = {
+    data_directory: pgdata,
+    hba_file: `${pgdata}/pg_hba.conf`,
+    ident_file: `${pgdata}/pg_ident.conf`,
+    unix_socket_directories: "/var/run/postgresql",
+  };
+  for (const [key, value] of Object.entries(expectedPaths)) {
+    const lines = files["postgres/postgresql.conf"]
+      .split(/\r?\n/)
+      .filter((line) => new RegExp(`^\\s*${key}\\s*(?:=|\\s)`, "i").test(line));
+    requireFact(
+      (key === "data_directory" && lines.length === 0) ||
+        (lines.length === 1 &&
+          lines[0].match(/^[^=]+=\s*'([^']*)'\s*(?:#.*)?$/)?.[1] === value),
+      `unknown effective ${key}`,
+    );
+  }
   requireFact(
     String(files["pgbackrest/pgbackrest.conf"])
       .match(/^\[(?!global(?:[:\]])).*\]$/gm)

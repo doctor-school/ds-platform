@@ -146,16 +146,16 @@ async function main() {
     )[0];
     const prefix = `sudo docker run --rm --network none --read-only --label org.doctor-school.task=2141`;
     const versionOutput = remote(
-      `${prefix} --entrypoint postgres ${plan.tag} --version`,
+      `${prefix} --entrypoint postgres ${inspected.Id} --version`,
     );
     const uidOutput = remote(
-      `${prefix} --entrypoint id ${plan.tag} -u postgres`,
+      `${prefix} --entrypoint id ${inspected.Id} -u postgres`,
     );
     const gidOutput = remote(
-      `${prefix} --entrypoint id ${plan.tag} -g postgres`,
+      `${prefix} --entrypoint id ${inspected.Id} -g postgres`,
     );
     const pgbackrestVersionOutput = remote(
-      `${prefix} --entrypoint pgbackrest ${plan.tag} version`,
+      `${prefix} --entrypoint pgbackrest ${inspected.Id} version`,
     );
     certificate.images[plan.role] = certifyImage({
       inspected,
@@ -170,9 +170,14 @@ async function main() {
   assertArtifactPair(certificate.images);
   const output = openSync(option("--export"), "wx");
   try {
-    remote(`sudo docker image save ${plans.map((p) => p.tag).join(" ")}`, {
-      binaryOutput: output,
-    });
+    remote(
+      `sudo docker image save ${Object.values(certificate.images)
+        .map((image) => image.id)
+        .join(" ")}`,
+      {
+        binaryOutput: output,
+      },
+    );
   } finally {
     closeSync(output);
   }

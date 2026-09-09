@@ -61,6 +61,20 @@ try:
     version_num, data_directory, system_id = row.split("|")
     if int(version_num) // 10000 != source["major"] or data_directory != source["pgdata"] or system_id != source["systemId"]:
         raise RuntimeError("running SQL server differs from mounted data")
+    expected_settings = {"data_directory": source["pgdata"], "hba_file": source["pgdata"] + "/pg_hba.conf",
+                         "ident_file": source["pgdata"] + "/pg_ident.conf", "unix_socket_directories": "/var/run/postgresql",
+                         "config_file": "/etc/postgresql/postgresql.conf"}
+    names = ",".join("'" + name + "'" for name in expected_settings)
+    settings = run("sudo", "docker", "exec", server_name, "psql", "-XAt", "-U", "ds", "-d", "postgres", "-c",
+                   "SELECT name,setting FROM pg_settings WHERE name IN (" + names + ")")
+    if dict(line.split("|", 1) for line in settings.splitlines()) != expected_settings:
+        raise RuntimeError("live effective configuration paths mismatch")
+    pending = run("sudo", "docker", "exec", server_name, "psql", "-XAt", "-U", "ds", "-d", "postgres", "-c",
+                  "SELECT name,setting,coalesce(error,'') FROM pg_file_settings WHERE name IN (" + names + ") OR error IS NOT NULL")
+    for line in pending.splitlines():
+        name, value, error = line.split("|", 2)
+        if error or expected_settings.get(name) != value:
+            raise RuntimeError("pending PostgreSQL configuration is unsafe or unknown")
     configs = [run("sudo", "docker", "exec", n, "cat", "/etc/pgbackrest/pgbackrest.conf") for n in [server_name, backup_name]]
     paths = [re.findall(r"^pg1-path\s*=\s*(\S+)\s*$", config, re.M) for config in configs]
     if paths[0] != paths[1] or len(paths[0]) != 1:

@@ -19,6 +19,7 @@ const files = Object.fromEntries(
   [
     "compose.yml",
     "postgres/Dockerfile",
+    "postgres/postgresql.conf",
     "pgbackrest/Dockerfile",
     "pgbackrest/pgbackrest.conf",
   ].map((p) => [p, readFileSync(new URL(p, root), "utf8")]),
@@ -86,6 +87,25 @@ test("EARS-9: target backup socket and stanza cannot silently diverge", () => {
       ),
     }),
   );
+});
+
+test("EARS-10: effective server path cannot be redirected by target config", () => {
+  for (const directive of [
+    "data_directory = '/empty/alternate-cluster'",
+    "include = 'other.conf'",
+    "include_if_exists 'other.conf'",
+    "include_dir = 'conf.d'",
+    "hba_file = '/other/hba.conf'",
+    "ident_file = '/other/ident.conf'",
+  ]) {
+    assert.throws(() =>
+      postgresContract({
+        ...files,
+        "postgres/postgresql.conf":
+          files["postgres/postgresql.conf"] + "\n" + directive,
+      }),
+    );
+  }
 });
 
 test("EARS-6: canonical deployment seam rechecks before executing a mutation", async () => {

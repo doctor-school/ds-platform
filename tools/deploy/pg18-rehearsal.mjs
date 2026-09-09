@@ -580,7 +580,7 @@ async function main() {
           await client([
             "bash",
             "-ceu",
-            `pg_restore --list /scratch/${db.archive} > /scratch/toc
+            `pg_restore --create --list /scratch/${db.archive} > /scratch/toc
 test "$(grep -Ec '^[0-9]+; [0-9]+ [0-9]+ DATABASE - postgres ' /scratch/toc)" -eq 1
 sed '/^[0-9][0-9]*; [0-9][0-9]* [0-9][0-9]* DATABASE - postgres /d' /scratch/toc > /scratch/restore-toc`,
           ]);

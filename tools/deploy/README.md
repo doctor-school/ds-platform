@@ -45,7 +45,9 @@ Pipeline, fail-closed, stops at the first red step and prints a rollback pointer
    `origin/main`'s SHA — or, under `--ref <sha>`, to that commit (below).
 2. **Ship** — `git archive <sha>` streamed over SSH to both boxes (no registry,
    no deploy key). Streams are piped in-process → Windows-safe.
-3. **data-prod** — `docker compose up -d --build` (idempotent).
+3. **data-prod** — PostgreSQL guard before shipping and before persistence-plane
+   mutations, then immutable inspected server/sidecar images with
+   `up -d --no-build --pull never --wait`. Redis retains its normal `up` path.
 4. **Checkpoint (DSO-129)** — pgbackrest **pre-migrate `incr` backup** (the same
    `backup.sh` cron runs) **before** `migrate`, so a restore anchor exists at the
    pre-migrate state. Pairs with the **expand/contract** prod migration rule
@@ -203,6 +205,60 @@ shrinking service set means the service was deliberately deleted — its contain
 then survives as a compose orphan while the shipped older Caddyfile stops routing
 it, and the derived smoke no longer probes it. The deploy goes green with a public
 vhost dark. Ship a service removal on `origin/main`, never as a hotfix.
+
+## PostgreSQL deployment guard (#2141)
+
+Ordinary releases retain the initialized same-major cluster. Before the first
+remote write, `prod.mjs` verifies the committed target contract against read-only
+SQL, Docker image/mount inspection, both `PG_VERSION`/control files and the active
+pgBackRest stanza identity. Unknown or stopped evidence, a different major,
+missing PGDATA, changed volume, replacement cluster or inconsistent sidecar
+refuses deployment. The check runs again before each guarded step. No environment
+override authorizes a major migration; that procedure remains #2101.
+
+Unchanged data source and currently running images need no certificate. A first
+successful guard records their source hash and system identifier in
+`~/ds-platform-postgres-state.json`, outside the archive replacement boundary.
+The record advances only after the target images start and pass read-back. An
+interrupted tree shipment therefore cannot be mistaken for a completed image
+update on re-entry. An interrupted/stopped or drifted cluster fails closed;
+diagnose it through read-only evidence and resume the reviewed operation. Do not
+delete or hand-edit the record to clear a refusal.
+
+Changed data build/configuration requires a generated same-major artifact
+certificate. The source hash covers the committed data compose and all files in
+its postgres/pgbackrest build contexts. Preparation sends only those infra
+contexts to an explicitly selected Docker host, labels the resulting images,
+executes their real PostgreSQL version and UID commands without a cluster,
+checks image PGDATA and matching UIDs, and exports the exact built images:
+
+```bash
+node tools/deploy/postgres-artifact-prepare.mjs --host <approved-build-host> --ref <commit> --output <certificate.json> --export <images.tar> --audit-log <commands.jsonl>
+```
+
+This is a separate, audited build operation, not permission to mutate production.
+The exported images must already be available on the deployment host through the
+authorized artifact delivery operation; a missing image is a refusal, never an
+implicit pull or rebuild. Preserve the certificate with the exported image
+archive. Image IDs, source labels, declared major, measured version and PGDATA
+must all match. The preparation images use the `org.doctor-school.task=2141`
+label and remain available for export; remove only those owned image IDs when
+their retention is no longer needed. Probe containers use `--rm`, no network,
+read-only roots and no live mounts.
+
+```bash
+node tools/deploy/postgres-artifact-check.mjs --ref <commit> --certificate <certificate.json> --audit-log <commands.jsonl>
+pnpm deploy:prod --postgres-artifacts <certificate.json>
+```
+
+Omit `--certificate` for read-only validation of the unchanged deployment. The
+check command uses the normal `DS_DATA_PROD_SSH`/SSH alias and never calls deploy,
+build, init, stanza-create or SQL writes. The deploy writes an image-ID-only
+compose overlay after the guard, disabling PostgreSQL build/pull at activation;
+this prevents an uninspected on-box rebuild from replacing a verified artifact.
+Certificates are evidence generated from approved code/build access, not a
+signature or a replacement for release authorization. Arbitrary alternate
+entrypoints, external data volumes and unknown build contracts fail closed.
 
 ## The app-only rollback boundary (`--rollback`, #1896)
 

@@ -19,6 +19,7 @@ export const WARN_GUARDS = new Set([
   "form-rhythm",
   "glossary-ids",
   "glossary-mdx",
+  "host-allowlist",
   "interaction-states",
   "migration-index",
   "module-readme",

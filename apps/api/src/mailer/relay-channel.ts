@@ -19,24 +19,19 @@ export interface OutboundEmail {
 export interface RelayChannel {
   /**
    * Stable provider label for observability (design §14.3 dashboards):
-   * `mail.ru` (the real SMTP primary), `resend` (failover), `mailpit`
+   * `postbox` / deliberate `mail.ru` (SMTP primary), `resend` (failover), `mailpit`
    * (the #209 intercept).
    */
   readonly provider: string;
   send(message: OutboundEmail): Promise<void>;
 }
 
-/**
- * A non-2xx provider outcome. `code` is the provider response code (SMTP
- * `451`, HTTP `429`, or an errno string like `ECONNREFUSED` for a connection
- * failure) — bounded values, safe as a metric label. `message` is the RAW
- * provider detail and MAY echo the outbound message (and thus a transiting
- * one-time code): it never leaves `SmtpMailer.dispatch` un-redacted (EARS-30).
- */
+/** Bounded provider code and explicit acceptance certainty; details stay internal. */
 export class ChannelRejection extends Error {
   constructor(
     readonly code: string,
     detail: string,
+    readonly outcome: "rejected" | "uncertain" = "rejected",
   ) {
     super(detail);
     this.name = "ChannelRejection";

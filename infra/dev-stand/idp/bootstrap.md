@@ -222,8 +222,9 @@ to the **real** route, and you should prefer the first:
    the matching provider on a flag change — **no `.env.local` edit, no
    `provision.sh` re-run, no restart**. Toggle the flag in the admin UI
    (`http://<HOST>:4242`) and the next Zitadel-sent OTP goes real vs intercepted.
-   (Real SMTP must have its `IDP_SMTP_REAL_*` creds set at provision time, else
-   that provider is skipped and the reconcile leaves email on Mailpit with a note.)
+   Real mode requires the same explicit provider and complete `IDP_SMTP_REAL_*`
+   configuration in both provisioning and the BFF environment. Missing or drifted
+   real identity is an error; a flag cannot silently promote Mailpit to real delivery.
 
 2. **Boot-time, via env (the original #176 mechanism).** `EMAIL_DELIVERY_MODE` /
    `SMS_DELIVERY_MODE` now select which of the two pre-configured providers
@@ -271,12 +272,28 @@ ssh truenas 'cd ~/ds-platform-dev-stand/idp && \
 # runtime, prefer toggling the Unleash flags (option 1 above) instead of re-running.
 ```
 
-If `EMAIL_DELIVERY_MODE=real` but the real SMTP provider was **skipped** (its
-`IDP_SMTP_REAL_*` creds were absent at provision time), `provision.sh` activates
-Mailpit instead with a loud WARN — you cannot test real email without creds, and
-it never silently leaves email unconfigured. Set `IDP_SMTP_REAL_*` to provision and
-activate the real sender. (The SMS providers need no creds in Zitadel — the
-`sms-aero-adapter` holds the SMS-Aero keys and does the egress.)
+`EMAIL_DELIVERY_MODE=real` requires `IDP_SMTP_REAL_PROVIDER=postbox|mail.ru`,
+matching host, port 465, nonblank username/password and a valid sender address.
+Postbox uses `postbox.cloud.yandex.net:465` and API key ID/secret for SMTP auth;
+deliberate compatibility uses `smtp.mail.ru:465`. Host may include `:465` or use
+`IDP_SMTP_REAL_PORT=465`; contradictory ports abort. TLS certificate validation
+remains enabled. Invalid real configuration aborts before any provisioning write.
+In intercept mode, no explicit provider leaves real credentials inert; a complete
+explicit provider can be provisioned in advance while Mailpit remains the boot choice.
+
+The stable `real transactional sender` identity is updated in place. Runtime
+reconcile verifies host/sender/username/TLS before activation and rejects drift,
+even for an already-active identity. Real-email startup failures abort API boot;
+later flag failures log loudly. The BFF cannot suppress independently queued IdP
+emails: the previous active provider may still send until configuration is repaired.
+Verified-account login OTP remains Zitadel-generated/rendered/sent. BFF verify/reset
+uses `returnCode` and MailerModule. `RESEND_ENABLED=false` is the default; enabling
+Resend affects BFF sends only, as do BFF per-send deadlines.
+
+Production selection/secret injection, readback, rollback and received-message proof
+are release-blocker [#2116](https://github.com/doctor-school/ds-platform/issues/2116).
+Use the [activation runbook](../../deploy/smtp-activation.md); ordinary test runs keep
+intercept defaults and never toggle the shared stand's global provider.
 
 > **DoD note (operator-verified live).** The two live checks — a real verification
 > email actually arriving, and one supervised paid SMS arriving on a real handset —

@@ -324,7 +324,19 @@ only if it does), and **complete** returns one generic 400 for a bad/expired
 code. Cross-path _timing_ equalization (EARS-16's ≤50 ms budget) is enforced by
 the `@TimingEqualized` `TimingEqualizationInterceptor` (`timing/`), which floors
 register/login/otp/reset to a fixed minimum on success **and** failure so the
-existing/unknown delta collapses to jitter (F6 #90).
+existing/unknown delta collapses to jitter (F6 #90). The floor cannot hide a
+stalled mail transport: registration verification, resend and reset delivery
+run in observed async tails outside the HTTP response path. Resend's `OtpSent`
+audit stays in its delivery tail and is written only after the adapter reports
+success; unknown/verified identifiers and failed sends still write no row.
+Registration and reset-request audit retain their existing synchronous meaning.
+Native lookup/code requests in those tails share a 5-second abort budget,
+including response bodies; SMTP and optional fallback retain their respective
+15-second and 10-second owned cancellation deadlines. No queue or retry retains
+codes. Recovery remains the user's resend/re-request action, including after a
+process exits mid-send. `test/auth/email-timing.e2e-spec.ts` exercises the real
+controller/service/adapter/mailer chain with stalled local SMTP, delayed fallback
+and invalid configuration; only Zitadel's native API responses are simulated.
 
 ## Cross-cutting security (F6 #90)
 

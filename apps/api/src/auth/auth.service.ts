@@ -327,7 +327,9 @@ export class AuthService {
   async requestPasswordReset(
     identifier: string,
   ): Promise<PasswordResetResponse> {
-    await this.idp.requestPasswordReset(identifier);
+    this.dispatchEmail("password-reset", () =>
+      this.idp.requestPasswordReset(identifier),
+    );
     // EARS-18: `auth.password.reset_requested` (identifier masked; no subject —
     // resolving one would itself be an existence oracle, EARS-16).
     await this.audit.record({ type: "PasswordResetRequested", identifier });
@@ -545,10 +547,12 @@ export class AuthService {
       // follow-up `/email/resend` — a single verification code, never invalidated
       // by a second generation before the registrant reads it. When the create
       // response carried no code the adapter falls back to the resend hop.
-      await this.idp.requestEmailVerification(
-        created.sub,
-        req.email,
-        created.verificationCode,
+      this.dispatchEmail("registration", () =>
+        this.idp.requestEmailVerification(
+          created.sub,
+          req.email,
+          created.verificationCode,
+        ),
       );
 
       // EARS-18: one terminal `auth.register` row for the created account. The
@@ -603,6 +607,24 @@ export class AuthService {
         }`,
       );
     }
+  }
+
+  /**
+   * EARS-16/31: run one delivery off the HTTP response path. The adapter owns
+   * native-request cancellation and the mailer owns bounded SMTP/fallback work.
+   * No retry or queued code: the existing resend action is the recovery path.
+   * Observe synchronous throws and rejected tails without exposing their data.
+   */
+  private dispatchEmail(context: string, operation: () => Promise<void>): void {
+    void (async () => {
+      try {
+        await operation();
+      } catch {
+        // Mailer diagnostics already carry sanitized provider outcomes. This
+        // catches native-hop/audit faults too, never raw error/recipient/code.
+        this.logger.warn(`auth email dispatch failed: ${context}`);
+      }
+    })();
   }
 
   /**
@@ -695,17 +717,18 @@ export class AuthService {
   async resendEmailVerification(
     identifier: string,
   ): Promise<VerifyResendResponse> {
-    const issued = await this.idp.resendEmailVerification(identifier);
-    // EARS-18: `auth.otp.sent` (identifier masked, channel email) — written ONLY
-    // when a real code was re-issued. An unknown / already-verified identifier
-    // issued nothing, so no row exists for it: the ledger discloses no existence.
-    if (issued) {
-      await this.audit.record({
-        type: "OtpSent",
-        identifier,
-        channel: "email",
-      });
-    }
+    this.dispatchEmail("verification-resend", async () => {
+      const issued = await this.idp.resendEmailVerification(identifier);
+      // Keep the acceptance-dependent ledger write in the same observed tail:
+      // failures and unknown/already-verified identifiers still write no row.
+      if (issued) {
+        await this.audit.record({
+          type: "OtpSent",
+          identifier,
+          channel: "email",
+        });
+      }
+    });
     return { status: "resend_requested" };
   }
 

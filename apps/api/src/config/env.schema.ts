@@ -174,14 +174,7 @@ export const ApiEnvSchema = z.looseObject({
   // and survives the looseObject passthrough.
   TRUSTED_PROXIES: z.string().optional(),
 
-  // BFF transactional-email channel (003 EARS-23, design §4) — the account-exists
-  // notice on duplicate registration, DISTINCT from Zitadel's identity-credential
-  // emails (verification / OTP / reset codes). Config-gated: with no
-  // MAILER_SMTP_HOST the SmtpMailer degrades to a logged no-op (infra-gated, like
-  // the IdP / Redis fakes), so the dev-stand / CI boot without an SMTP host. On
-  // the dev-stand these point at Mailpit (`truenas.local:1025`, no auth); in prod
-  // at a real SMTP relay (the same creds class as IDP_SMTP_REAL_*). The notice
-  // carries no secret, so this is a separate config block from the IdP's SMTP.
+  // Explicit Mailpit intercept for BFF email; an absent selected host fails closed.
   MAILER_SMTP_HOST: z.string().optional(),
   MAILER_SMTP_PORT: z.coerce.number().int().positive().optional(),
   MAILER_SMTP_USER: z.string().optional(),
@@ -191,28 +184,21 @@ export const ApiEnvSchema = z.looseObject({
   // `/reset`). Optional — defaults to the local portal in the adapter.
   MAILER_PORTAL_BASE_URL: z.url().optional(),
 
-  // Real SMTP relay creds for the BFF notice's REAL transport (#209) — REUSED
-  // from the IdP's real-SMTP class (provision.sh consumes the same vars for
-  // Zitadel's real provider). The MailerModule selects this transport per send
-  // when `email-delivery-real` is ON (else the MAILER_SMTP_* intercept / Mailpit),
-  // so ONE flag flip moves both Zitadel's channel and the BFF notice Mailpit ↔
-  // real. Optional (provision.sh-only today): unset ⇒ the real transport is absent
-  // and a flag-ON send fails SOFT to the intercept + warns (never throws). HOST
-  // carries `host:port`; if it has no port, IDP_SMTP_REAL_PORT is the fallback
-  // (mirrors provision.sh). `secure` is derived from port 465 in the adapter.
+  // Shared BFF/native SMTP configuration. Validated by real-smtp.ts on selection:
+  // explicit postbox or mail.ru, matching canonical host:465, complete credentials.
+  // Strings remain optional at boot so explicit intercept can operate without real secrets.
+  IDP_SMTP_REAL_PROVIDER: z.string().optional(),
   IDP_SMTP_REAL_HOST: z.string().optional(),
   IDP_SMTP_REAL_PORT: z.coerce.number().int().positive().optional(),
   IDP_SMTP_REAL_USER: z.string().optional(),
   IDP_SMTP_REAL_PASSWORD: z.string().optional(),
   IDP_SMTP_REAL_SENDER_ADDRESS: z.string().optional(),
 
-  // Resend failover channel of the BFF mailer transport chain (003 design
-  // §14.3, EARS-31, #1046): mail.ru primary → Resend failover, one switch per
-  // send. Optional: unset ⇒ no failover channel (the chain is mail.ru only).
-  // Failover-only by recorded 152-ФЗ decision (§14.6) — these mails carry only
-  // the recipient address + a short-lived one-time code. The From address
-  // reuses IDP_SMTP_REAL_SENDER_ADDRESS (resend._domainkey DKIM is live in the
-  // doctor.school zone).
+  // Dormant BFF-only fallback; true without a key is a send-time config error.
+  // No provider selection or promotion based on secret presence.
+  RESEND_ENABLED: z
+    .stringbool({ truthy: ["true", "1"], falsy: ["false", "0", ""] })
+    .default(false),
   RESEND_API_KEY: z.string().optional(),
 
   // Error monitoring (self-hosted GlitchTip — DSO-125). Sentry SaaS is rejected

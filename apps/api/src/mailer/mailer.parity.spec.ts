@@ -18,7 +18,10 @@ function buildSmtp(): SmtpMailer {
   // No host on either transport ⇒ the adapter is a logged no-op; the parity guard
   // (assertSendableEmail) runs FIRST, before any transport decision (#209).
   return new SmtpMailer({
-    intercept: {},
+    intercept: { host: "mailpit.test", port: 1025 },
+    transportFactory: () => ({
+      sendMail: async () => ({ response: "250 accepted" }),
+    }),
     real: undefined,
     isEnabled: () => false,
     portalBaseUrl: "http://localhost:3001",
@@ -47,7 +50,7 @@ describe("EARS-23: FakeMailer ↔ SmtpMailer contract parity", () => {
     await expect(
       fake.sendAccountExistsNotice(VALID_EMAIL),
     ).resolves.toBeUndefined();
-    // Unconfigured SmtpMailer resolves (logged no-op) for a valid address.
+    // Configured SmtpMailer resolves on scripted acceptance for a valid address.
     await expect(
       smtp.sendAccountExistsNotice(VALID_EMAIL),
     ).resolves.toBeUndefined();
@@ -111,7 +114,7 @@ describe("003 EARS-29: code-email FakeMailer ↔ SmtpMailer contract parity", ()
     await expect(
       fake.sendPasswordResetCodeEmail(VALID_EMAIL, CODE),
     ).resolves.toBeUndefined();
-    // Unconfigured SmtpMailer resolves (logged no-op) for valid input.
+    // Configured SmtpMailer resolves on scripted acceptance for valid input.
     await expect(
       smtp.sendVerificationCodeEmail(VALID_EMAIL, CODE),
     ).resolves.toBeUndefined();

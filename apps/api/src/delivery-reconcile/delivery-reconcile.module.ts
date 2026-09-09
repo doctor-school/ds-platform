@@ -43,6 +43,7 @@ export const DELIVERY_RECONCILE = Symbol("DELIVERY_RECONCILE");
         return new DeliveryReconcileService(flags, admin, {
           emailReal: env.EMAIL_DELIVERY_MODE === "real",
           smsReal: env.SMS_DELIVERY_MODE === "real",
+          realSmtp: env,
         });
       },
     },
@@ -57,18 +58,8 @@ export class DeliveryReconcileModule
   ) {}
 
   async onApplicationBootstrap(): Promise<void> {
-    // `start()` subscribes to flag signals FIRST and runs a resilient, never-throw
-    // initial reconcile (#214), so a transient boot failure no longer leaves the
-    // process deaf to flag changes. The defensive catch stays as belt-and-braces:
-    // a failure here must never abort boot (the env mode is the safe fallback).
     if (!this.reconcile) return;
-    await this.reconcile.start().catch((err: unknown) => {
-      console.warn(
-        `[delivery-reconcile] start failed: ${
-          err instanceof Error ? err.message : "unknown"
-        }`,
-      );
-    });
+    await this.reconcile.start();
   }
 
   onModuleDestroy(): void {

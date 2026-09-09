@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import type { FeatureFlags, FlagName } from "../feature-flags/feature-flags.types.js";
+import type {
+  FeatureFlags,
+  FlagName,
+} from "../feature-flags/feature-flags.types.js";
 import { DeliveryReconcileService } from "./delivery-reconcile.service.js";
 import {
   SMS_DESCRIPTION_INTERCEPT,
@@ -101,14 +104,29 @@ function fakeAdmin(
 
 const smtpPair = (): ZitadelProvider[] => [
   { id: "smtp-mailpit", description: SMTP_DESCRIPTION_INTERCEPT, active: true },
-  { id: "smtp-real", description: SMTP_DESCRIPTION_REAL, active: false },
+  {
+    id: "smtp-real",
+    description: SMTP_DESCRIPTION_REAL,
+    active: false,
+    host: "postbox.cloud.yandex.net:465",
+    user: "fixture-key",
+    senderAddress: "noreply@example.test",
+    tls: true,
+  },
 ];
 const smsPair = (): ZitadelProvider[] => [
   { id: "sms-sink", description: SMS_DESCRIPTION_INTERCEPT, active: true },
   { id: "sms-aero", description: SMS_DESCRIPTION_REAL, active: false },
 ];
 
-const envDefaults = { emailReal: false, smsReal: false };
+const realSmtp = {
+  IDP_SMTP_REAL_PROVIDER: "postbox",
+  IDP_SMTP_REAL_HOST: "postbox.cloud.yandex.net:465",
+  IDP_SMTP_REAL_USER: "fixture-key",
+  IDP_SMTP_REAL_PASSWORD: "fixture-secret",
+  IDP_SMTP_REAL_SENDER_ADDRESS: "noreply@example.test",
+};
+const envDefaults = { emailReal: false, smsReal: false, realSmtp };
 
 describe("DeliveryReconcileService (#185 flag → Zitadel _activate)", () => {
   it("activates the REAL SMTP provider (matched by description) when email-delivery-real is on", async () => {
@@ -171,26 +189,30 @@ describe("DeliveryReconcileService (#185 flag → Zitadel _activate)", () => {
     const svc = new DeliveryReconcileService(flags, admin, {
       emailReal: true,
       smsReal: false,
+      realSmtp,
     });
     await svc.reconcile();
     expect(smtpActivations).toEqual(["smtp-real"]);
     expect(smsActivations).toEqual([]);
   });
 
-  it("skips a channel with a clear warning when the desired provider is not provisioned (no wrong activation)", async () => {
+  it("EARS-31: rejects missing real SMTP provider without wrong activation", async () => {
     // email-delivery-real on, but the REAL SMTP provider was never configured
     // (no real-SMTP creds → provision.sh skipped it). The reconcile must NOT
     // activate the intercept provider as a fallback — it leaves the channel as-is.
     const { flags } = fakeFlags({ "email-delivery-real": true });
     const smtpOnlyIntercept: ZitadelProvider[] = [
-      { id: "smtp-mailpit", description: SMTP_DESCRIPTION_INTERCEPT, active: true },
+      {
+        id: "smtp-mailpit",
+        description: SMTP_DESCRIPTION_INTERCEPT,
+        active: true,
+      },
     ];
     const { admin, smtpActivations } = fakeAdmin(smtpOnlyIntercept, smsPair());
     const svc = new DeliveryReconcileService(flags, admin, envDefaults);
     const warn = vi.fn();
-    await svc.reconcile(warn);
+    await expect(svc.reconcile(warn)).rejects.toThrow("Native SMTP");
     expect(smtpActivations).toEqual([]);
-    expect(warn).toHaveBeenCalled();
   });
 
   it("reconciles on a flag-change event after start() subscribes", async () => {
@@ -277,7 +299,7 @@ describe("DeliveryReconcileService (#185 flag → Zitadel _activate)", () => {
     const svc = new DeliveryReconcileService(
       flags,
       admin,
-      { emailReal: true, smsReal: false }, // env default email=real
+      { emailReal: true, smsReal: false, realSmtp }, // env default email=real
       {
         attempts: 3,
         baseDelayMs: 10,
@@ -322,5 +344,51 @@ describe("DeliveryReconcileService (#185 flag → Zitadel _activate)", () => {
     fire();
     await new Promise((r) => setImmediate(r));
     expect(smsActivations).toEqual([]);
+  });
+});
+
+describe("native explicit provider contract", () => {
+  it.each([{}, { ...realSmtp, IDP_SMTP_REAL_PROVIDER: "mail.ru" }])(
+    "EARS-31: rejects invalid selected real configuration",
+    async (realSmtp) => {
+      const { flags } = fakeFlags({ "email-delivery-real": true });
+      const { admin, smtpActivations } = fakeAdmin(smtpPair(), smsPair());
+      const svc = new DeliveryReconcileService(flags, admin, {
+        ...envDefaults,
+        realSmtp,
+      });
+      await expect(svc.reconcile()).rejects.toThrow(
+        "Invalid real SMTP configuration",
+      );
+      expect(smtpActivations).toEqual([]);
+    },
+  );
+  it.each([
+    { host: "smtp.mail.ru:465" },
+    { tls: false },
+    { user: "stale" },
+    { senderAddress: "stale@example.test" },
+  ])(
+    "EARS-31: rejects drift even when stable real identity is active",
+    async (drift) => {
+      const { flags } = fakeFlags({ "email-delivery-real": true });
+      const providers = smtpPair();
+      Object.assign(providers[1]!, drift, { active: true });
+      const { admin, smtpActivations } = fakeAdmin(providers, smsPair());
+      await expect(
+        new DeliveryReconcileService(flags, admin, envDefaults).reconcile(),
+      ).rejects.toThrow("Native SMTP");
+      expect(smtpActivations).toEqual([]);
+    },
+  );
+  it("EARS-31: aborts startup when real SMTP cannot be reconciled", async () => {
+    const { flags } = fakeFlags({ "email-delivery-real": true });
+    const { admin } = fakeAdmin([], smsPair());
+    const svc = new DeliveryReconcileService(flags, admin, envDefaults, {
+      attempts: 1,
+      baseDelayMs: 0,
+      sleep: async () => {},
+    });
+    await expect(svc.start(vi.fn())).rejects.toThrow("Native SMTP");
   });
 });

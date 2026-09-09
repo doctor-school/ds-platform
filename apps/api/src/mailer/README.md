@@ -21,23 +21,39 @@ The module shares the `email-delivery-real` Unleash flag with the
 moves both this channel and Zitadel's between Mailpit-intercept and the
 real relay with no restart.
 
-## Failover chain (003 EARS-31/32, design §14.3, #1046)
+## Explicit transport chain (003 EARS-31/32, design ?14.3, #2118)
 
-On the real path the send rides a **mail.ru primary → Resend failover** chain:
-a rate-limit/availability rejection on the active channel (mail.ru `451`,
-Resend `429`, any 4xx/5xx/connection failure, or a resolved non-2xx SMTP
-acceptance) triggers ONE switch to the other channel within the same send —
-never a same-channel retry — and a send counts as delivered **only on a
-provider 2xx**. Both channels failing = fail-closed: the send throws a
-sanitized error (provider=code pairs only), and the enumeration-safe API
-surface above stays unchanged (EARS-16 — callers swallow/log, never 500).
-The Mailpit intercept path (flag OFF, #209) never fails over to a real
-provider. Every failover and relay failure emits the EARS-32 triple —
-structured log + `bff_mailer_relay_events_total{event,provider,code}`
-Prometheus counter + GlitchTip event (`relay-observability.ts`) — so degraded
-channel state is visible, never silent. Resend is failover-only by recorded
-152-ФЗ decision (design §14.6); creds: `RESEND_API_KEY`
-(`infra/deploy/api.env.example`).
+Real mode requires `IDP_SMTP_REAL_PROVIDER=postbox` and the matching
+`postbox.cloud.yandex.net:465` endpoint, or deliberate `mail.ru` with
+`smtp.mail.ru:465`. Both use verified implicit TLS and the shared
+`IDP_SMTP_REAL_USER`, `IDP_SMTP_REAL_PASSWORD`, and sender address.
+Missing or mismatched real configuration fails internally on every send,
+including after a flag flip; it never selects Mailpit or promotes a fallback.
+Explicit intercept mode requires `MAILER_SMTP_HOST`; an absent host is an error.
+
+`RESEND_ENABLED=false` is the default. Only `true` plus `RESEND_API_KEY`
+enables the optional BFF fallback; enabling without a key is a configuration
+error. A definite SMTP rejection can switch once. Timeout/connection loss
+with uncertain acceptance never triggers an automatic duplicate. No retries.
+Resend does not cover native Zitadel login OTP; its relay is reconciled separately.
+
+SMTP limits are 5 seconds for connection/TLS, 5 seconds greeting, 10 seconds
+socket inactivity, and 15 seconds absolute. Each send owns its socket through
+Nodemailer's public `getSocket`; timeout destroys it, rejects late handoff,
+and clears timers. HTTP uses an AbortController and a 10-second deadline,
+including error-body consumption. Total transport execution is at most
+25 seconds; enumeration-sensitive orchestration remains out of band.
+
+Final SMTP/HTTP 2xx means **provider accepted**, not delivered or Inbox.
+Structured logs and `bff_mailer_relay_events_total{event,provider,code}` distinguish
+`primary_accepted`, `fallback_accepted`, `intercept_accepted`, `failover`,
+`uncertain`, `configuration`, and `relay_failure`. Failures retain GlitchTip
+reporting. Provider response text is discarded rather than partially redacted:
+no address, subject, body, OTP or credential reaches these diagnostics.
+
+Production activation, native OTP readback, rollback, quotas and controlled
+received-artifact checks remain release-blocker #2116. Microsoft sender-auth
+and Inbox evidence remain #1120; successful SMTP acceptance does not close it.
 
 ## Delivery-mode env defaults — and where SMS lives (not here)
 
@@ -105,10 +121,9 @@ Detail: `infra/dev-stand/README.md` → delivery flags.
   **`WarnFn`** (`smtp-mailer.ts`) — the production adapter over `nodemailer`. It
   carries **both** an intercept transport (`MAILER_SMTP_*`, Mailpit) and a real
   transport (`IDP_SMTP_REAL_*`) and selects per send from the live flag read.
-  Fail-soft: flag OFF (or Unleash-unreachable) ⇒ intercept; flag ON but the real
-  relay unconfigured ⇒ warn + intercept (never throw, never silently drop); the
-  selected transport's host unset ⇒ a logged no-op (infra-gated, so the dev-stand /
-  CI still boots and the EARS-23 path stays exercised).
+  Invalid selected transport configuration fails closed, preserving the
+  enumeration-safe caller response. `smtp-transport.ts` owns wire deadlines;
+  `config/real-smtp.ts` is the shared BFF/native provider-validation contract.
 - **`FakeMailer`** (`mailer.fake.ts`) — the in-memory unit-test double; records
   every accepted send (`accountExistsNotices`, `verificationCodeEmails`,
   `passwordResetCodeEmails`; `failNextCodeSends(err)` models a transport

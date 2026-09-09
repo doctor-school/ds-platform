@@ -7,7 +7,10 @@ import {
 /** A fetch double recording calls and returning scripted JSON per URL substring. */
 function fakeFetch(
   routes: Array<{ match: string; status: number; body: unknown }>,
-): { fetchImpl: AdminFetchLike; calls: Array<{ url: string; method: string }> } {
+): {
+  fetchImpl: AdminFetchLike;
+  calls: Array<{ url: string; method: string }>;
+} {
   const calls: Array<{ url: string; method: string }> = [];
   return {
     calls,
@@ -35,8 +38,16 @@ describe("ZitadelDeliveryAdmin (#185 admin _search + _activate)", () => {
         status: 200,
         body: {
           result: [
-            { id: "a", description: "dev-stand mailpit", state: "SMTP_CONFIG_ACTIVE" },
-            { id: "b", description: "real transactional sender", state: "SMTP_CONFIG_INACTIVE" },
+            {
+              id: "a",
+              description: "dev-stand mailpit",
+              state: "SMTP_CONFIG_ACTIVE",
+            },
+            {
+              id: "b",
+              description: "real transactional sender",
+              state: "SMTP_CONFIG_INACTIVE",
+            },
           ],
         },
       },
@@ -57,7 +68,11 @@ describe("ZitadelDeliveryAdmin (#185 admin _search + _activate)", () => {
         body: {
           result: [
             { id: "s1", description: "dev-stand sms-sink", state: "ACTIVE" },
-            { id: "s2", http: { description: "real sms-aero-adapter" }, state: "INACTIVE" },
+            {
+              id: "s2",
+              http: { description: "real sms-aero-adapter" },
+              state: "INACTIVE",
+            },
           ],
         },
       },
@@ -100,5 +115,63 @@ describe("ZitadelDeliveryAdmin (#185 admin _search + _activate)", () => {
     ]);
     const admin = new ZitadelDeliveryAdmin({ ...cfg, fetchImpl });
     await expect(admin.activateSmtp("z")).rejects.toThrow();
+  });
+});
+
+describe("native SMTP metadata and diagnostics", () => {
+  it("EARS-31: preserves actual Admin SMTP metadata without returning a password", async () => {
+    const { fetchImpl } = fakeFetch([
+      {
+        match: "/smtp/_search",
+        status: 200,
+        body: {
+          result: [
+            {
+              id: "stable",
+              description: "real transactional sender",
+              state: "SMTP_CONFIG_ACTIVE",
+              host: "postbox.cloud.yandex.net:465",
+              tls: true,
+              user: "key-id",
+              senderAddress: "noreply@example.test",
+            },
+          ],
+        },
+      },
+    ]);
+    const [provider] = await new ZitadelDeliveryAdmin({
+      ...cfg,
+      fetchImpl,
+    }).listSmtpProviders();
+    expect(provider).toEqual({
+      id: "stable",
+      description: "real transactional sender",
+      active: true,
+      host: "postbox.cloud.yandex.net:465",
+      tls: true,
+      user: "key-id",
+      senderAddress: "noreply@example.test",
+    });
+    expect(provider).not.toHaveProperty("password");
+  });
+  it("EARS-32: does not expose provider rejection bodies", async () => {
+    const { fetchImpl } = fakeFetch([
+      {
+        match: "/_activate",
+        status: 500,
+        body: { message: "fixture-secret recipient@example.test 123456" },
+      },
+    ]);
+    await expect(
+      new ZitadelDeliveryAdmin({ ...cfg, fetchImpl }).activateSmtp("stable"),
+    ).rejects.toThrow("zitadel provider activation failed: HTTP 500");
+  });
+  it("EARS-32: does not expose transport exception details", async () => {
+    const fetchImpl = async () => {
+      throw new Error("fixture-secret");
+    };
+    await expect(
+      new ZitadelDeliveryAdmin({ ...cfg, fetchImpl }).listSmtpProviders(),
+    ).rejects.toThrow("Zitadel delivery admin request failed");
   });
 });

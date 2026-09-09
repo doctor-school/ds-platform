@@ -100,25 +100,28 @@ case "$SMS_DELIVERY_MODE" in
   sink|real) ;;
   *) echo "ERROR: SMS_DELIVERY_MODE='${SMS_DELIVERY_MODE}' is not one of: sink | real" >&2; exit 4 ;;
 esac
-if [[ "$EMAIL_DELIVERY_MODE" == "real" ]]; then
-  _missing=()
-  [[ -z "${IDP_SMTP_REAL_HOST:-}" ]] && _missing+=(IDP_SMTP_REAL_HOST)
-  [[ -z "${IDP_SMTP_REAL_USER:-}" ]] && _missing+=(IDP_SMTP_REAL_USER)
-  [[ -z "${IDP_SMTP_REAL_PASSWORD:-}" ]] && _missing+=(IDP_SMTP_REAL_PASSWORD)
-  [[ -z "${IDP_SMTP_REAL_SENDER_ADDRESS:-}" ]] && _missing+=(IDP_SMTP_REAL_SENDER_ADDRESS)
-  if (( ${#_missing[@]} > 0 )); then
-    echo "ERROR: EMAIL_DELIVERY_MODE=real but real SMTP creds are absent: ${_missing[*]}" >&2
-    echo "  Refusing to provision (fail-closed, #902): activating a fallback provider here" >&2
-    echo "  silently breaks real email delivery (2026-07-14 prod incident). Likely cause on" >&2
-    echo "  prod: api.env sourced without root — /etc/ds-platform/api.env is root:root 0600," >&2
-    echo "  so a non-root source fails (Permission denied) and yields a silently EMPTY env." >&2
-    echo "  Source it as root:" >&2
-    echo "    sudo bash -c 'set -a; . /etc/ds-platform/api.env; set +a; ./provision.sh'" >&2
-    if [[ -e /etc/ds-platform/api.env && ! -r /etc/ds-platform/api.env ]]; then
-      echo "  (detected: /etc/ds-platform/api.env exists but is NOT readable by this user)" >&2
-    fi
-    exit 4
+# Shared provider contract (003 EARS-31): credentials never select a provider.
+# In intercept mode, an absent selector keeps real credentials inert.
+SMTP_REAL_HOST_PORT=""
+if [[ "$EMAIL_DELIVERY_MODE" == "real" || -n "${IDP_SMTP_REAL_PROVIDER:-}" ]]; then
+  _smtp_invalid() { echo "ERROR: Invalid real SMTP configuration; refusing to provision" >&2; exit 4; }
+  case "${IDP_SMTP_REAL_PROVIDER:-}" in
+    postbox) _smtp_expected_host="postbox.cloud.yandex.net" ;;
+    mail.ru) _smtp_expected_host="smtp.mail.ru" ;;
+    *) _smtp_invalid ;;
+  esac
+  _smtp_host="${IDP_SMTP_REAL_HOST:-}"
+  _smtp_port="${IDP_SMTP_REAL_PORT:-}"
+  if [[ "$_smtp_host" == *:* ]]; then
+    _smtp_embedded_port="${_smtp_host#*:}"
+    [[ -z "$_smtp_port" || "$_smtp_port" == "$_smtp_embedded_port" ]] || _smtp_invalid
+    _smtp_port="$_smtp_embedded_port"
+    _smtp_host="${_smtp_host%%:*}"
   fi
+  [[ "$_smtp_host" == "$_smtp_expected_host" && "$_smtp_port" == "465" ]] || _smtp_invalid
+  [[ "${IDP_SMTP_REAL_USER:-}" =~ [^[:space:]] && "${IDP_SMTP_REAL_PASSWORD:-}" =~ [^[:space:]] ]] || _smtp_invalid
+  [[ "${IDP_SMTP_REAL_SENDER_ADDRESS:-}" =~ ^[^[:space:]@\<\>]+@[^[:space:]@\<\>]+\.[^[:space:]@\<\>]+$ ]] || _smtp_invalid
+  SMTP_REAL_HOST_PORT="${_smtp_host}:${_smtp_port}"
 fi
 # SMS carries no creds env here (the sms-aero-adapter holds the SMS-Aero creds
 # and does the egress), so the SMS_DELIVERY_MODE=real fail-closed gate lives at
@@ -365,28 +368,14 @@ else
 fi
 
 # ── 6. ensure BOTH SMTP providers → Mailpit (intercept) + real sender ────────
-# Email verification (EARS-3) and password-reset codes are delivered by Zitadel's
-# SMTP notifier. Zitadel ships with NO SMTP provider, so `email/resend` accepts
-# (200) yet nothing is delivered until one is configured + activated (the live
-# email-verify round-trip #148 depends on it).
-#
-# #185 (runtime delivery toggle): instead of converging to ONE provider, this step
-# ensures BOTH the Mailpit (intercept) AND the real-sender provider EXIST, each
-# stamped with a STABLE recognizable `description` the api matches on:
-#   "dev-stand mailpit"          → host `mailpit:1025` (in-network service name,
-#                                  NOT the host port), TLS off, no auth — the
-#                                  plaintext dev catch-all.
-#   "real transactional sender"  → the real sender from env (TLS on, SMTP AUTH),
-#                                  configured ONLY when its creds (IDP_SMTP_REAL_*)
-#                                  are present (else SKIPPED with a clear note —
-#                                  you cannot test real email without creds anyway;
-#                                  no real cred is ever committed).
-# Activation is left to runtime: the api's delivery reconcile reads the Unleash
-# `email-delivery-real` flag and `_activate`s the matching provider by description
-# (no .env edit + restart). At boot we activate the one selected by EMAIL_DELIVERY_MODE
-# so a stand without the api still has a working active provider (the bootstrap
-# default). ensure_smtp_provider creates-or-updates by description; activation uses
-# api_activate (tolerates the already-active precondition on a same-mode re-run).
+# Verified-account login OTP remains generated/rendered/sent by Zitadel; BFF
+# verify/reset uses returnCode + MailerModule. The providers retain their stable
+# descriptions across Postbox activation and deliberate mail.ru rollback.
+# Only validated explicit real configuration provisions the real identity.
+# TLS=true on port 465 preserves implicit TLS with certificate verification;
+# no insecure TLS option is introduced. BFF deadlines/Resend do not cover native sends.
+# Runtime reconcile validates public SMTP metadata before selecting this identity.
+# Provisioning converges the selected boot provider even without a running BFF.
 #
 # ensure_smtp_provider <description> <host:port> <senderAddr> <senderName> <user> <pw> <tls-bool>
 #   echoes the provider id on stdout.
@@ -395,9 +384,15 @@ ensure_smtp_provider() {
   payload="$(jq -nc --arg d "$desc" --arg h "$host" --arg a "$addr" \
     --arg n "$name" --arg u "$user" --arg p "$pw" --argjson tls "$tls" \
     '{description:$d, senderAddress:$a, senderName:$n, tls:$tls, host:$h, user:$u, password:$p}')"
-  # Match an existing provider by its stable description (the #185 contract).
-  id="$(api POST /admin/v1/smtp/_search '{}' \
-    | jq -r --arg d "$desc" '.result[]? | select(.description==$d) | .id' | head -n1 || true)"
+  # Search must succeed and the stable identity must be unique before any write.
+  local matches
+  matches="$(api POST /admin/v1/smtp/_search '{}' \
+    | jq -c --arg d "$desc" '[.result[]? | select(.description==$d)]')" || return 1
+  if [[ "$(jq 'length' <<< "$matches")" -gt 1 ]]; then
+    echo "ERROR: Duplicate SMTP provider identity; refusing to provision" >&2
+    return 1
+  fi
+  id="$(jq -r '.[0].id // empty' <<< "$matches")"
   if [[ -n "$id" && "$id" != "null" ]]; then
     api_idempotent PUT "/admin/v1/smtp/${id}" "$payload" >/dev/null
     echo "ensured SMTP provider ${id} (${desc})" >&2
@@ -416,17 +411,9 @@ SMTP_MAILPIT_ID="$(ensure_smtp_provider \
   "${IDP_SMTP_SENDER_NAME:-DS Platform Dev}" \
   "" "" false)"
 
-# Real transactional sender — ensured ONLY when its creds are present. Missing
-# creds is NOT fatal here (unlike the old converge-to-real path): the intercept
-# provider stands, the real one is simply absent, and the api reconcile will skip
-# `email-delivery-real` with a clear note (you cannot test real email without creds).
+# Only a validated explicit selection provisions the stable real identity.
 SMTP_REAL_ID=""
-SMTP_REAL_HOST_PORT="${IDP_SMTP_REAL_HOST:-}"
-if [[ -n "$SMTP_REAL_HOST_PORT" && "$SMTP_REAL_HOST_PORT" != *:* && -n "${IDP_SMTP_REAL_PORT:-}" ]]; then
-  SMTP_REAL_HOST_PORT="${SMTP_REAL_HOST_PORT}:${IDP_SMTP_REAL_PORT}"
-fi
-if [[ -n "$SMTP_REAL_HOST_PORT" && -n "${IDP_SMTP_REAL_USER:-}" \
-   && -n "${IDP_SMTP_REAL_PASSWORD:-}" && -n "${IDP_SMTP_REAL_SENDER_ADDRESS:-}" ]]; then
+if [[ -n "$SMTP_REAL_HOST_PORT" ]]; then
   SMTP_REAL_ID="$(ensure_smtp_provider \
     "real transactional sender" \
     "$SMTP_REAL_HOST_PORT" \
@@ -436,9 +423,7 @@ if [[ -n "$SMTP_REAL_HOST_PORT" && -n "${IDP_SMTP_REAL_USER:-}" \
     "${IDP_SMTP_REAL_PASSWORD}" \
     true)"
 else
-  echo "real SMTP creds (IDP_SMTP_REAL_*) absent — skipping the real SMTP provider." >&2
-  echo "  'email-delivery-real' will have no provider to activate; the api reconcile" >&2
-  echo "  leaves email on Mailpit and warns. Set IDP_SMTP_REAL_* to enable real email." >&2
+  echo "No explicit real SMTP provider selected; intercept only. A runtime real selection will fail." >&2
 fi
 
 # Activate the boot-time default (EMAIL_DELIVERY_MODE) so a stand has a working

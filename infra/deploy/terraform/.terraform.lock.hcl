@@ -3,7 +3,7 @@
 
 provider "registry.terraform.io/timeweb-cloud/timeweb-cloud" {
   version     = "1.8.2"
-  constraints = "~> 1.0"
+  constraints = ">= 1.8.2, < 2.0.0"
   hashes = [
     "h1:8Ygtv2PKYJxQN+rKjBkhSb6rCezhwsisKm3vbOLT4Ng=",
     "h1:Q2I7YvwG949s/pfCskPrRqDRQ+xkXHr40y1gM03eWP8=",

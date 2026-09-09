@@ -136,18 +136,24 @@ leaves `ds_golden` serving the previous generation untouched.
 ## Drift rule (§9)
 
 Two consecutive template builds must produce an empty
-`pg_dump --data-only` diff modulo `GOLDEN_NOW`:
+`pg_dump --data-only` diff modulo `GOLDEN_NOW`, over every table except the two
+bookkeeping tables named below:
 
 ```sh
+EXCL='--exclude-table=__drizzle_migrations --exclude-table=audit_ledger'
 pnpm staging:golden-db
-pg_dump --data-only --no-owner "$DATABASE_URL_GOLDEN" > /tmp/golden-1.sql
+pg_dump --data-only --no-owner $EXCL "$DATABASE_URL_GOLDEN" > /tmp/golden-1.sql
 pnpm staging:golden-db
-pg_dump --data-only --no-owner "$DATABASE_URL_GOLDEN" > /tmp/golden-2.sql
+pg_dump --data-only --no-owner $EXCL "$DATABASE_URL_GOLDEN" > /tmp/golden-2.sql
 diff /tmp/golden-1.sql /tmp/golden-2.sql   # must be empty
 ```
 
-A non-empty diff means something in the dataset read a clock, generated an id, or
-relied on a column default — fix the dataset, never the diff.
+The comparison excludes exactly two tables — `__drizzle_migrations` and
+`audit_ledger` — and no others. Neither holds dataset content: each records the
+fact and the moment of a write, so its rows carry per-build ids and timestamps by
+design. Every one of the 22 dataset tables is compared in full, column for
+column. A non-empty diff means something in the dataset read a clock, generated
+an id, or relied on a column default — fix the dataset, never the diff.
 
 ### Why the rule holds on the specialty book too
 
@@ -190,7 +196,13 @@ happened_, and pinning that would falsify the record.
 So a raw two-build diff is empty on all 22 dataset tables and non-empty on
 `audit_ledger` alone, in those four columns. `audit_ledger` sits in the same
 class as `__drizzle_migrations`: bookkeeping about the build rather than fixture
-content. Whether the golden build should therefore leave the ledger empty, or
-whether the drift comparison should skip it the way it already skips the
-migrations table, is an **open decision** — recorded rather than silently
-resolved, because it decides what a cloned preview slot inherits.
+content.
+
+**The rule.** The drift comparison skips `audit_ledger`, exactly as it already
+skips `__drizzle_migrations` — those two tables and no others. The golden build
+does **not** truncate the ledger and does **not** disable the trigger: the ledger
+stays a faithful record of the template build, and a cloned preview slot inherits
+the seed's own audit rows. Those rows are expected, not drift. Excluding the
+table from the diff is what keeps the rule honest — the alternative, pinning
+`id` / `event_id` / `created_at` / `metadata.txid`, would falsify a record whose
+only job is to say when a write really happened.

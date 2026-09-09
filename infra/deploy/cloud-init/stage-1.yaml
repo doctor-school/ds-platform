@@ -68,7 +68,12 @@ write_files:
   # create. Until the owner writes it and enables the unit, nothing runs and nothing
   # crash-loops (the unit is installed disabled). Manual step, documented in
   # infra/deploy/compose/stg-infra/README.md → «Runner registration».
+  # `defer: true` is required by the `owner:` below, not decoration: plain write_files
+  # runs BEFORE the users-groups module, so `deploy` does not exist yet and the chown
+  # would fail the module. Deferred entries are written after users-groups instead.
   - path: /opt/actions-runner/ensure-configured.sh
+    owner: deploy:deploy
+    defer: true
     permissions: "0700"
     content: |
       #!/usr/bin/env bash
@@ -92,8 +97,14 @@ write_files:
     content: |
       [Unit]
       Description=GitHub Actions self-hosted runner (ds-platform staging)
-      After=network-online.target docker.service
+      After=network-online.target docker.service ds-stage-bootstrap.service
       Wants=network-online.target
+      Requires=ds-stage-bootstrap.service
+      # The runner binaries are laid down by ds-stage-bootstrap, not by cloud-init
+      # (#2121). Without this condition the owner's `enable --now` would fail as
+      # 203/EXEC on a missing run.sh; with it, systemd says the condition failed and
+      # `test -f /var/lib/ds-platform/stage-bootstrap.done` names the actual cause.
+      ConditionPathExists=/var/lib/ds-platform/stage-bootstrap.done
 
       [Service]
       Type=simple
@@ -109,6 +120,70 @@ write_files:
       KillMode=process
       KillSignal=SIGTERM
       TimeoutStopSec=5min
+
+      [Install]
+      WantedBy=multi-user.target
+
+  # Everything in first-boot provisioning that is slow, network-bound and therefore
+  # likely to be interrupted. It lives here rather than in runcmd because `runcmd` is
+  # per-instance: cloud-init records the instance as done and NEVER resumes an
+  # interrupted runcmd after a reboot (observed 2026-09-09, #2121 — the hypervisor
+  # hard-reset stage-1 about two minutes into first boot, right after Terraform
+  # attached the floating IP and the firewall, and cloud-init then reported
+  # `status: done, errors: []` with the runner never downloaded).
+  #
+  # Every step below is idempotent and re-runnable, so a second (or fifth) boot
+  # simply finishes what the previous one did not.
+  - path: /opt/ds-platform/stage-bootstrap.sh
+    permissions: "0755"
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+
+      # Playwright host libraries for the regression suite (spec step 7). Installed at
+      # bootstrap so a suite run never pays for apt on the critical path; browsers
+      # themselves are installed per checkout by `pnpm exec playwright install`.
+      npx --yes playwright@latest install-deps chromium firefox webkit
+
+      # GitHub Actions runner package. The tarball is fetched at the CURRENT release —
+      # the runner self-updates after registration anyway, so pinning a tag here would
+      # only guarantee a first-run update; what matters is that the download is a
+      # release artifact of actions/runner and nothing else.
+      if [ ! -f /opt/actions-runner/run.sh ]; then
+        install -d -m 0755 -o deploy -g deploy /opt/actions-runner
+        RUNNER_TAG=$(curl -fsSL https://api.github.com/repos/actions/runner/releases/latest | jq -r .tag_name)
+        curl -fsSL -o /tmp/actions-runner.tar.gz \
+          "https://github.com/actions/runner/releases/download/$RUNNER_TAG/actions-runner-linux-x64-$${RUNNER_TAG#v}.tar.gz"
+        tar xzf /tmp/actions-runner.tar.gz -C /opt/actions-runner
+        rm -f /tmp/actions-runner.tar.gz
+        /opt/actions-runner/bin/installdependencies.sh
+      fi
+
+      install -d -m 0755 -o deploy -g deploy /opt/actions-runner/_work
+      chown -R deploy:deploy /opt/actions-runner
+
+      # LAST: the marker both ds-actions-runner and the README preflight read.
+      install -d -m 0755 -o root -g root /var/lib/ds-platform
+      touch /var/lib/ds-platform/stage-bootstrap.done
+
+  # The resilience primitive. `runcmd` runs once per instance and does not resume
+  # after a reboot; a oneshot unit gated on the absence of its own marker retries on
+  # every boot until it succeeds. A provider-side reboot during the first minutes is
+  # NORMAL on Timeweb (the IP and firewall attach after the server is already
+  # booting, observed 2026-09-09, #2121) — this unit is what makes that survivable.
+  - path: /etc/systemd/system/ds-stage-bootstrap.service
+    permissions: "0644"
+    content: |
+      [Unit]
+      Description=ds-platform stage-1 first-boot bootstrap (runner + Playwright deps)
+      After=network-online.target docker.service
+      Wants=network-online.target
+      ConditionPathExists=!/var/lib/ds-platform/stage-bootstrap.done
+
+      [Service]
+      Type=oneshot
+      ExecStart=/opt/ds-platform/stage-bootstrap.sh
+      RemainAfterExit=no
 
       [Install]
       WantedBy=multi-user.target
@@ -135,25 +210,12 @@ runcmd:
   - curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
   - apt-get install -y nodejs
   - corepack enable
-  # Playwright host libraries for the regression suite (step 7). Installed at
-  # bootstrap so a suite run never pays for apt on the critical path; browsers
-  # themselves are installed per checkout by `pnpm exec playwright install`.
-  - npx --yes playwright@latest install-deps chromium firefox webkit
-  # GitHub Actions runner package. The tarball is fetched at the CURRENT release —
-  # the runner self-updates after registration anyway, so pinning a tag here would
-  # only guarantee a first-run update; what matters is that the download is a
-  # release artifact of actions/runner and nothing else.
-  - install -d -m 0755 -o deploy -g deploy /opt/actions-runner/_work
-  - chown -R deploy:deploy /opt/actions-runner
-  - >-
-    RUNNER_TAG=$(curl -fsSL https://api.github.com/repos/actions/runner/releases/latest | jq -r .tag_name)
-    && curl -fsSL -o /tmp/actions-runner.tar.gz
-    "https://github.com/actions/runner/releases/download/$RUNNER_TAG/actions-runner-linux-x64-$${RUNNER_TAG#v}.tar.gz"
-    && tar xzf /tmp/actions-runner.tar.gz -C /opt/actions-runner
-    && rm -f /tmp/actions-runner.tar.gz
-    && chown -R deploy:deploy /opt/actions-runner
-    && /opt/actions-runner/bin/installdependencies.sh
-  # Unit installed but NOT enabled: it starts only after the owner writes
+  # Everything slow and network-bound (Playwright host libs, the runner tarball) is
+  # in /opt/ds-platform/stage-bootstrap.sh, driven by the oneshot unit below, so a
+  # reboot mid-provisioning resumes instead of leaving the box half-built (#2121).
+  #
+  # ds-actions-runner itself stays NOT enabled: it starts only after the owner writes
   # /etc/ds-platform/runner.env (0600 root:root) with RUNNER_URL + RUNNER_TOKEN and
   # runs `systemctl enable --now ds-actions-runner` (README → Runner registration).
   - systemctl daemon-reload
+  - systemctl enable --now ds-stage-bootstrap

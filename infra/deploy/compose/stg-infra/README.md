@@ -26,7 +26,14 @@ Everything here is Phase B: nothing in this file runs on a developer machine.
 1. `terraform apply` in `infra/deploy/terraform/` creates `stage-1` (own VPC, no
    route to `twc_vpc.ds`). Provider write actions are owner-gated — AGENTS.md §6.
 2. `ssh deploy@$(terraform output -raw stage_1_public_ip)` works; cloud-init has
-   finished (`cloud-init status --wait`).
+   finished (`cloud-init status --wait`) **and** the first-boot bootstrap unit has
+   completed: `systemctl is-active ds-stage-bootstrap` prints `inactive` and
+   `test -f /var/lib/ds-platform/stage-bootstrap.done` succeeds. `activating` means it
+   is still downloading; `failed` ⇒ read `journalctl -u ds-stage-bootstrap`. At least
+   one provider-side reboot in the first minutes is expected on Timeweb (the floating
+   IP and firewall attach while the box is still booting) — `cloud-init` does not
+   resume its `runcmd` after that reboot, which is precisely why the slow steps live
+   in this unit: it re-runs on every boot until the marker exists (#2121).
 3. The repo is checked out on the box at `/srv/ds-platform` (the `main` tree the
    slot script clones from).
 4. `/etc/ds-platform/stage.env` written from `infra/deploy/stage.env.example`, mode
@@ -121,12 +128,15 @@ Two standing rules come with the shared instance (spec §3 «Identity»):
 
 ## Runner registration — the one manual, owner-gated step
 
-`cloud-init` installs the GitHub Actions runner package and a systemd unit
-(`ds-actions-runner.service`) but leaves it **disabled**, because a registration
-token is a live credential and cloud-init cannot hold one. The unit reads
-`/etc/ds-platform/runner.env`, a root-only file cloud-init deliberately does not
-create, and `ExecStartPre=/opt/actions-runner/ensure-configured.sh` registers on
-first start and is a no-op afterwards.
+`cloud-init` installs the GitHub Actions runner package (via the
+`ds-stage-bootstrap` unit) and a systemd unit (`ds-actions-runner.service`) but
+leaves the latter **disabled**, because a registration token is a live credential and
+cloud-init cannot hold one. The unit reads `/etc/ds-platform/runner.env`, a root-only
+file cloud-init deliberately does not create, and
+`ExecStartPre=/opt/actions-runner/ensure-configured.sh` registers on first start and
+is a no-op afterwards. `ds-actions-runner` also refuses to start until
+`/var/lib/ds-platform/stage-bootstrap.done` exists, so run the step-2 bootstrap check
+above first — otherwise `enable --now` reports a failed start condition.
 
 ```bash
 # Owner, on the box. The token is short-lived (~1 h): GitHub → repo Settings →

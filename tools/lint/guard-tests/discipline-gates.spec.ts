@@ -160,13 +160,28 @@ describe("EARS-1920: discipline gate regressions", () => {
   it("includes shared room UI and previously skipped rendered surfaces", () => {
     for (const path of [
       "packages/room/src/header.tsx",
-      "packages/room/src/use-room.ts",
+      // #1907 — a shared package declares its render-capable surface under
+      // `src/ui/`; a hook that lives there is UI evidence like any other file
+      // in it.
+      "packages/room/src/ui/use-room.ts",
       "apps/portal/app/global.css",
       "apps/showcase/app/page.tsx",
       "apps/mobile/app/home.tsx",
       "apps/admin/messages/ru.json",
     ])
       expect(isUiSourcePath(path)).toBe(true);
+  });
+  it("excludes shared-package non-UI source (#1907 convention, not a name match)", () => {
+    // Pre-#1907 the rule was a `packages/room/` NAME match, so `use-room.ts`
+    // — plain TypeScript outside the package's declared UI directory — demanded
+    // canvas-parity evidence on a pure logic PR. The convention replaces the
+    // name; authored JSX/CSS anywhere under `src/` still counts on its own.
+    for (const path of [
+      "packages/room/src/use-room.ts",
+      "packages/room/src/model/display-name.ts",
+      "packages/room/src/server/room-entry.ts",
+    ])
+      expect(isUiSourcePath(path)).toBe(false);
   });
   it("instruction-only diffs select guard tests and ordinary documentation stays cheap", () => {
     for (const path of [

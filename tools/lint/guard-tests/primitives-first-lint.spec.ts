@@ -115,3 +115,20 @@ describe("primitives-first-lint", () => {
     expect(code).toBe(0);
   });
 });
+
+/**
+ * #1874 — the doctor storefront (`apps/doctor`) is a full product front (four
+ * routes + the shared live room since #1722 slice 3), so hand-assembled
+ * interaction states are a finding there exactly as on the academy. Pre-fix
+ * `APP_GLOBS` named no `apps/doctor` root, leaving the whole host unscanned
+ * (DEBT 2026-09-05, #1722 slice 3).
+ */
+describe("primitives-first: apps/doctor is in scope (#1874)", () => {
+  it("primitives-first: apps/doctor app/components/lib hand-assembled states are findings", () => {
+    const { code, stderr } = runGuard(GUARD, dir("red-doctor-scope"));
+    expect(code).toBe(1);
+    expect(stderr).toContain("apps/doctor/app/page.tsx");
+    expect(stderr).toContain("apps/doctor/components/join-button.tsx");
+    expect(stderr).toContain("apps/doctor/lib/render-cta.tsx");
+  });
+});

@@ -7,11 +7,13 @@
  * matching `app/webinars/[slug]/room/page.tsx` route existed — a dead link that
  * typecheck/lint could not see (an href string is just a string). This guard
  * makes that class of defect fire at CI time: every internal nav target in
- * `apps/portal`, `apps/admin`, and the dev-only `apps/academy-demo` must resolve
+ * `apps/portal`, `apps/admin`, `apps/doctor`, and the dev-only `apps/academy-demo`
+ * must resolve
  * to a real app-router route.
  *
  * ── What it scans ─────────────────────────────────────────────────────────────
- * For each app (`apps/portal`, `apps/admin`, `apps/academy-demo`) it collects internal navigation
+ * For each app (`apps/portal`, `apps/admin`, `apps/academy-demo`, `apps/doctor`) it
+ * collects internal navigation
  * targets from `*.ts`/`*.tsx` source (tests/stories excluded):
  *   - `<Link href="…">` / `href={"…"}` / `href={`…`}` (string OR template literal)
  *   - `router.push("…")` / `router.replace("…")`
@@ -63,8 +65,19 @@ const REPO_ROOT = process.env.LINT_FIXTURE_ROOT
   : resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const TAG = "[route-target]";
 
-/** Apps whose internal nav targets are checked. */
-const APPS = ["apps/portal", "apps/admin", "apps/academy-demo"];
+/**
+ * Apps whose internal nav targets are checked. `apps/doctor` joined in #1874:
+ * the doctor storefront is a full product front (four routes plus the shared
+ * live room since #1722 slice 3), so a dead nav target there is the #673
+ * defect class exactly as on the academy — it was simply unscanned
+ * (DEBT 2026-09-05).
+ */
+const APPS = [
+  "apps/portal",
+  "apps/admin",
+  "apps/academy-demo",
+  "apps/doctor",
+];
 
 /** Source globs (relative to an app dir) scanned for nav targets. */
 const SRC_GLOBS = ["**/*.{ts,tsx}"];

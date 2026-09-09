@@ -7,6 +7,23 @@ const USER_MESSAGE_RE =
 const DS_RENDER_SOURCE_RE =
   /^packages\/design-system\/src\/.*\.(?:[jt]sx?|css)$/;
 /**
+ * Shared-package UI is declared by CONVENTION, not by package name (#1907).
+ * A package publishes its render-capable surface under `src/ui/` — everything
+ * there participates in canvas parity, including the `index.ts` barrel that
+ * shapes what hosts can mount. The pre-#1907 rule was a `packages/room/` NAME
+ * match, so it both missed every other shared-UI package and pulled that one
+ * package's model/server/transport modules into UI evidence.
+ */
+const PACKAGE_UI_DIR_RE = /^packages\/[^/]+\/src\/ui\/.*\.(?:[jt]sx?|css)$/;
+/**
+ * Authored JSX / CSS anywhere under a package's `src/` is render-capable on its
+ * own merits — a component file is UI wherever it sits (`packages/room/src/
+ * room-shell.tsx`, the composed room screen, #1722 D11). Plain `.ts`/`.js` is
+ * deliberately excluded here: that is the model/server half the convention
+ * above exists to keep out.
+ */
+const PACKAGE_RENDER_SOURCE_RE = /^packages\/[^/]+\/src\/.*\.(?:[jt]sx|css)$/;
+/**
  * App-owned runtime TypeScript participates when its filename explicitly owns
  * visual theme, copy/message, or render/view-state semantics. This naming
  * contract stays extensible without treating arbitrary server/data modules as UI.
@@ -22,7 +39,8 @@ export type UiEvidenceProfile = "native-mobile" | "responsive-web";
 
 export function isUiSourcePath(path: string): boolean {
   if (NON_RENDER_SOURCE_RE.test(path)) return false;
-  if (/^packages\/room\/.*\.(?:[jt]sx?|css)$/.test(path)) return true;
+  if (PACKAGE_UI_DIR_RE.test(path)) return true;
+  if (PACKAGE_RENDER_SOURCE_RE.test(path)) return true;
   if (DS_TOKEN_SOURCE_RE.test(path)) return true;
   if (USER_MESSAGE_RE.test(path)) return true;
   if (DS_RENDER_SOURCE_RE.test(path)) return true;

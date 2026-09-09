@@ -88,3 +88,46 @@ describe("rendered UI source classification", () => {
     ).toEqual(["native-mobile", "responsive-web"]);
   });
 });
+
+/**
+ * #1907 — shared-package UI is classified by the `src/ui/**` CONVENTION, not by
+ * a hardcoded `packages/room/` name match. A package declares its render-capable
+ * surface by putting it under `src/ui/`; everything else in the package (model,
+ * server, client, transport, schemas) is not UI evidence just because it lives
+ * in a package that happens to own a screen. The pre-#1907 name match made every
+ * file in `packages/room/**` — `src/model/display-name.ts`, `src/server/*` —
+ * render-capable, so a pure server-logic PR demanded canvas-parity evidence.
+ */
+describe("ui-surface: shared-package UI is the `src/ui/**` convention (#1907)", () => {
+  it.each([
+    "packages/room/src/ui/room-view.tsx",
+    "packages/room/src/ui/room-header-bar.tsx",
+    "packages/room/src/ui/index.ts",
+    "packages/events-storefront/src/ui/event-card.tsx",
+  ])("green: %s is render-capable package UI", (path) => {
+    expect(isUiSourcePath(path)).toBe(true);
+  });
+
+  it.each([
+    "packages/room/src/index.ts",
+    "packages/room/src/model/display-name.ts",
+    "packages/room/src/server/room-entry.ts",
+    "packages/schemas/src/x.ts",
+    "packages/events-storefront/src/server/registration-state.ts",
+  ])("red: %s is package non-UI source", (path) => {
+    expect(isUiSourcePath(path)).toBe(false);
+  });
+
+  it.each([
+    "packages/room/src/ui/room-chat.test.tsx",
+    "packages/room/src/ui/__tests__/room-chat.tsx",
+  ])("red: %s is test code, not UI evidence", (path) => {
+    expect(isUiSourcePath(path)).toBe(false);
+  });
+
+  it("green: authored .tsx outside src/ui still renders (no #1722 D11 regression)", () => {
+    // `packages/room/src/room-shell.tsx` is the composed room screen itself; the
+    // convention must not silently drop it when the name match goes away.
+    expect(isUiSourcePath("packages/room/src/room-shell.tsx")).toBe(true);
+  });
+});

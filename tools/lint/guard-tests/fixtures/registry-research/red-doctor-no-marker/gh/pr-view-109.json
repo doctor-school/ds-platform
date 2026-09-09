@@ -1,0 +1,5 @@
+{
+  "number": 109,
+  "body": "## Summary\n\nReworked the doctor.school specialty catalog screen. No registry-research artifact in the body.\n",
+  "files": [{ "path": "apps/doctor/app/(storefront)/specialties/page.tsx" }]
+}

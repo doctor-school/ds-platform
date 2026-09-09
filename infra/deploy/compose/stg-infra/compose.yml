@@ -1,0 +1,414 @@
+# stg-infra — the SHARED service set of the STAGE stand, started once on `stage-1`
+# and kept up (tech spec 2026-09-08-staging-previews-and-regression-contour-en.md
+# §3 «Shared infrastructure project», §8 step 1; Issue #2061).
+#
+# It is the dev-stand core (infra/dev-stand/compose.core.yml) moved from a personal
+# TrueNAS box to a project box, minus what belongs to a slot and minus what belongs
+# to production:
+#   - Centrifugo is NOT here — it is part of the api-prod service set and runs
+#     inside every slot (spec §3 «Shared infrastructure project»).
+#   - pgbackrest is NOT here — the box carries no unique state; `terraform apply`
+#     recreates it and stg-infra + ds_golden rebuild from the repo (spec §9 «Box
+#     down»). Nothing on this box is worth a backup repository.
+#   - Unleash is NOT here — the staging plane reads flags from env like production
+#     does today; adding a second stateful admin service is a §2 non-goal
+#     («минимальный набор, чтобы не плодить точки отказа»).
+#
+# NETWORK. The project default network is NAMED `stg-infra` so slot projects can
+# join it as an external network: `slot up` attaches only a slot's `api` container
+# here (Postgres, Redis, Zitadel, Cerbos, MinIO, the sinks), never its frontends or
+# its Centrifugo — that per-slot isolation is what makes two slots that both name a
+# service `api` impossible to confuse (spec §3 «Slots»).
+#
+# PORTS. Nothing here publishes a host port except Caddy (80/443). Every consumer is
+# either on this network (slot `api`) or on the host through Caddy (step 2, #2062).
+# The one deliberate exception is documented at each service below.
+#
+# SECRETS. `/etc/ds-platform/stage.env`, 0600, provisioned by the owner from
+# infra/deploy/stage.env.example (prod precedent: infra/deploy/{api,data}.env).
+# It carries SINK and TEST values only — the box holds no production credential of
+# any kind, and the C1 acceptance greps this file against the production secret
+# NAMES (spec §3 «Secrets and side effects»; README → Phase B acceptance).
+#
+# Bring-up order, the `provision.sh` converge and the runner registration: README.md
+# beside this file.
+
+name: stg-infra
+
+services:
+  # --- Postgres 17 + pgvector + pg_partman — the stand's ONLY database server ---
+  # Same image source as the dev stand (infra/dev-stand/postgres/Dockerfile:
+  # pgvector/pgvector:pg17 + postgresql-17-partman), NOT the data-prod build — that
+  # one adds pgbackrest for archive_command, which this box deliberately has no use
+  # for. Built on-box, no registry (the whole stand builds on the box).
+  #
+  # It holds: `zitadel` (the shared IdP's own database), `ds_golden` (the template
+  # built by `pnpm seed:golden`, step 3 / #2063) and one database per live slot,
+  # cloned from `ds_golden` by `slot up` (step 4). Sized for that in
+  # postgres/postgresql.conf.
+  postgres:
+    build:
+      context: ../../../dev-stand/postgres
+      dockerfile: Dockerfile
+    image: ds-platform/postgres:pg17-partman
+    restart: unless-stopped
+    # `env_file:` populates the CONTAINER only. The `${...}` values below are compose
+    # INTERPOLATION, resolved from the invoking shell — so every compose command on
+    # this box runs as `sudo bash -c 'set -a; . /etc/ds-platform/stage.env; set +a;
+    # docker compose ...'` (README → «Bring-up order»), as production does.
+    env_file: [/etc/ds-platform/stage.env] # POSTGRES_PASSWORD
+    environment:
+      POSTGRES_USER: ds
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in /etc/ds-platform/stage.env}
+      # The bootstrap database. Slot databases and `ds_golden` are created later by
+      # `pnpm seed:golden` / `slot up`, never by the entrypoint.
+      POSTGRES_DB: ds_stage
+    command: ["postgres", "-c", "config_file=/etc/postgresql/postgresql.conf"]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # vector + partman on a FRESH cluster (dev-stand parity). Zitadel creates its
+      # own `zitadel` database on first boot with the admin credentials below.
+      - ../../../dev-stand/postgres/init.sql:/docker-entrypoint-initdb.d/10-init.sql:ro
+      - ./postgres/postgresql.conf:/etc/postgresql/postgresql.conf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ds -d ds_stage"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # --- Redis 7 — cache, sessions, BullMQ broker, per-slot logical databases ---
+  # `--databases 64` is the ONE staging-specific setting (spec §3 «Slots», «the
+  # Redis `databases` setting on the box is raised to cover the slot budget»):
+  # every slot's api gets its own logical database (`redis://redis:6379/<db>`,
+  # `main` = 0) so OTP challenges, session revocation by subject and rate-limit keys
+  # of one slot never touch another. 64 is well above the preview cap of 3 (§10) and
+  # costs nothing — Redis allocates a database lazily.
+  #
+  # AOF is on for dev-stand/data-prod parity, not for durability: losing this
+  # dataset costs a re-login, and `slot reset` flushes a slot's database anyway.
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--databases", "64"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # --- MinIO — S3-compatible object storage for every slot ---
+  # Staging never touches the production Timeweb S3 bucket. That bucket is a PUBLIC
+  # endpoint the box can always resolve, so the control is authorization, not the
+  # network: no production S3 key exists in stage.env, and every slot's api is
+  # configured with S3_ENDPOINT pointing here (spec §3 «Secrets and side effects»).
+  # Bucket creation per slot is the slot script's job (step 4).
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    env_file: [/etc/ds-platform/stage.env]
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in /etc/ds-platform/stage.env}
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  # --- Cerbos — policy decision point (PDP), shared by every slot ---
+  # Policies are mounted READ-ONLY from the checked-out repo at the box's `main`
+  # tree. A slot whose PR changes a policy therefore does NOT get its own PDP; that
+  # is the same shared-resource caveat as the IdP (spec §3 «Identity») and the same
+  # remedy — such a PR is serialized and its preview converges the shared instance
+  # (the slot script re-points this mount at the slot tree; step 4 owns it).
+  cerbos:
+    image: ghcr.io/cerbos/cerbos:latest
+    restart: unless-stopped
+    command: ["server", "--config=/config/config.yaml"]
+    volumes:
+      - ../../../dev-stand/cerbos/config.yaml:/config/config.yaml:ro
+      - ../../../dev-stand/cerbos/policies:/policies:ro
+    healthcheck:
+      test: ["CMD", "/cerbos", "healthcheck", "--config=/config/config.yaml"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # --- Mailpit — the stand's SMTP catch-all, ONE instance for every slot ---
+  # Per-slot partitioning is by RECIPIENT/SENDER NAMESPACE, not by instance (the
+  # decision recorded in spec §3 «Secrets and side effects»): a slot's api sends
+  # with a slot-tagged sender local part, so the suite selects its own mail with a
+  # Mailpit search query and the sinks stay single containers. Mail that the SHARED
+  # Zitadel originates (OTP, verification) cannot carry a slot tag — one instance,
+  # one template set — which is why suite runs are serialized repo-wide (§3
+  # «Identity»); that serialization is the control there, and the suite reads the
+  # newest message for the recipient.
+  #
+  # The UI is not published: it is reachable through the shared Caddy in step 2
+  # (mailpit.stage.doctor.school, basic-auth like every staging host). Slots reach
+  # SMTP in-network as `mailpit:1025`.
+  mailpit:
+    image: axllent/mailpit:latest
+    restart: unless-stopped
+    volumes:
+      - mailpitdata:/data
+    environment:
+      # Persist across restarts so a suite failure can still be inspected after a
+      # `compose restart` — the dev stand keeps mail in memory, the stand box is
+      # where evidence gets read hours later.
+      MP_DATABASE: /data/mailpit.db
+      MP_MAX_MESSAGES: "5000"
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # --- sms-sink — the stand's SMS catch-all (the SMS analogue of Mailpit) ---
+  # Zitadel's generic HTTP SMS provider POSTs every outbound SMS here instead of a
+  # real gateway (idp/provision.sh, SMS_DELIVERY_MODE=sink). The suite reads the
+  # delivered code back by recipient phone over its small REST API — the same seam
+  # the live SMS-OTP e2e uses on the dev stand. Dependency-free: the stock node
+  # image runs the bind-mounted script, no bespoke image to build.
+  sms-sink:
+    image: node:22-alpine
+    restart: unless-stopped
+    command: ["node", "/srv/server.mjs"]
+    environment:
+      SMS_SINK_PORT: "8090"
+    volumes:
+      - ../../../dev-stand/sms-sink/server.mjs:/srv/server.mjs:ro
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://localhost:8090/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # --- sms-aero-adapter — present, but pointed AT THE SINK on this box ---
+  # On the dev stand this is the opt-in REAL outbound route (SMS-Aero, costs money).
+  # Here it exists only so the staging service list matches production's shape and a
+  # PR touching the adapter is exercised; it is NEVER selected — `provision.sh` runs
+  # with SMS_DELIVERY_MODE=sink and stage.env carries no SMSAERO_API_KEY. Sending a
+  # real SMS from the staging box would be spending money from a stand that runs
+  # arbitrary PR code, which is exactly what the empty credential prevents.
+  sms-aero-adapter:
+    image: node:22-alpine
+    restart: unless-stopped
+    command: ["node", "/srv/server.mjs"]
+    environment:
+      SMS_AERO_ADAPTER_PORT: "8091"
+      # Deliberately empty on this box — see above. Not `:?`: the adapter must be
+      # able to start unconfigured, because nothing ever calls it here.
+      SMSAERO_EMAIL: ""
+      SMSAERO_API_KEY: ""
+      SMSAERO_SIGN: "SMS Aero"
+    volumes:
+      - ../../../dev-stand/sms-aero-adapter/server.mjs:/srv/server.mjs:ro
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://localhost:8091/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # --- Zitadel — the ONE identity provider for every slot (spec §3 «Identity») ---
+  # DB-backed, no named volume: config, users, orgs, signing keys and assets all
+  # live in the shared Postgres, so `compose down` + `up` is not a data event.
+  # Provisioned by the existing idempotent converge (infra/dev-stand/idp/provision.sh
+  # + idp-policy.mjs, #1997) — README → «Zitadel converge».
+  #
+  # ExternalDomain/Secure MUST match the origin browsers actually reach or OIDC
+  # discovery advertises a wrong issuer. On this box that origin is the staging
+  # Caddy vhost (step 2, #2062) over TLS; both come from stage.env so step 2 changes
+  # values, not this file.
+  idp:
+    image: ghcr.io/zitadel/zitadel:latest
+    restart: unless-stopped
+    command:
+      - start-from-init
+      - --masterkeyFromEnv
+    env_file: [/etc/ds-platform/stage.env]
+    environment:
+      ZITADEL_MASTERKEY: ${IDP_SECRET_KEY:?set IDP_SECRET_KEY (exactly 32 chars) in /etc/ds-platform/stage.env}
+      ZITADEL_EXTERNALSECURE: ${IDP_EXTERNAL_SECURE:-true}
+      # TLS terminates at Caddy; core speaks cleartext h2c behind it (dev-stand
+      # precedent — the env form, not the start-only --tlsMode flag, so every
+      # subcommand including the distroless healthcheck shares it).
+      ZITADEL_TLS_ENABLED: "false"
+      ZITADEL_EXTERNALDOMAIN: ${IDP_EXTERNAL_DOMAIN:-id.stage.doctor.school}
+      ZITADEL_EXTERNALPORT: ${IDP_EXTERNAL_PORT:-443}
+      # Login V2 — REQUIRED for the headless BFF session→token exchange the api uses
+      # (Variant-B). With it off, the authorize hop files a v1 auth request the v2
+      # link API cannot see and the link 404s (proven live, #146). Never disable.
+      ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_REQUIRED: "true"
+      # SSRF guard relaxed for this compose network only — Zitadel's default deny
+      # list refuses every private CIDR AFTER DNS resolution, which would block the
+      # HTTP SMS providers `sms-sink` / `sms-aero-adapter` (#1595). The entries that
+      # still carry weight are kept: cloud metadata, IPv6 link-local, IPv6 ULA.
+      ZITADEL_HTTPCLIENT_DENYLIST: "169.254.0.0/16,fe80::/10,fc00::/7"
+      ZITADEL_DATABASE_POSTGRES_HOST: postgres
+      ZITADEL_DATABASE_POSTGRES_PORT: 5432
+      ZITADEL_DATABASE_POSTGRES_DATABASE: zitadel
+      ZITADEL_DATABASE_POSTGRES_USER_USERNAME: ds
+      ZITADEL_DATABASE_POSTGRES_USER_PASSWORD: ${POSTGRES_PASSWORD}
+      ZITADEL_DATABASE_POSTGRES_USER_SSL_MODE: disable
+      ZITADEL_DATABASE_POSTGRES_ADMIN_USERNAME: ds
+      ZITADEL_DATABASE_POSTGRES_ADMIN_PASSWORD: ${POSTGRES_PASSWORD}
+      ZITADEL_DATABASE_POSTGRES_ADMIN_SSL_MODE: disable
+      # First-instance bootstrap, read ONLY on a fresh init: creates the
+      # `ds-bootstrap` IAM-owner machine user whose PAT provision.sh authenticates
+      # with, plus the console admin. Set IDP_BOOTSTRAP=1 in stage.env for the very
+      # first bring-up and unset it afterwards (README → Zitadel converge).
+      ZITADEL_FIRSTINSTANCE_PATPATH: ${IDP_BOOTSTRAP:+/pat/pat.txt}
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_USERNAME: ${IDP_BOOTSTRAP:+ds-bootstrap}
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_NAME: ${IDP_BOOTSTRAP:+ds-bootstrap}
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_PAT_EXPIRATIONDATE: ${IDP_BOOTSTRAP:+2099-12-31T23:59:59Z}
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_USERNAME: ${IDP_BOOTSTRAP:+zitadel-admin}
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORD: ${IDP_BOOTSTRAP:+${IDP_BOOTSTRAP_ADMIN_PASSWORD:-}}
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORDCHANGEREQUIRED: ${IDP_BOOTSTRAP:+false}
+    # Writable tmpfs owned by the image's non-root uid so the init step can write the
+    # PAT file (the distroless image has no writable /tmp). Inert unless
+    # IDP_BOOTSTRAP is set.
+    tmpfs:
+      - /pat:uid=1000,gid=1000,mode=0700
+    expose:
+      - "8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "/app/zitadel", "ready"]
+      interval: 10s
+      timeout: 30s
+      retries: 12
+      # start-from-init runs the DB migrations inline on a fresh database.
+      start_period: 60s
+
+  # --- idp-login — Zitadel Login V2 UI (Next.js) ---
+  # The core binary renders no login screen since v4; without this container the
+  # interactive login of the admin Console 404s. The api BFF stays HEADLESS (no
+  # baseUri wired into its auth path) — this serves the operator and the suite's
+  # browser login. Tag PINNED to the running core version so UI and core never skew.
+  idp-login:
+    image: ${IDP_LOGIN_IMAGE:-ghcr.io/zitadel/zitadel-login:v4.15.0}
+    restart: unless-stopped
+    environment:
+      ZITADEL_API_URL: http://idp:8080
+      NEXT_PUBLIC_BASE_PATH: /ui/v2/login
+      ZITADEL_SERVICE_USER_TOKEN_FILE: /pat/login-client.pat
+      CUSTOM_REQUEST_HEADERS: Host:${IDP_EXTERNAL_DOMAIN:-id.stage.doctor.school}
+    expose:
+      - "3000"
+    volumes:
+      # Root-provisioned path OUTSIDE the repo checkout, so a `git clean` or a slot
+      # sync never wipes it. Placed once by the owner at Phase B (README → bring-up
+      # step 2) as `install -m 400 -o 1001` — this container runs as uid 1001
+      # (`nextjs`), and a root:root 0600 file mounts fine but is UNREADABLE inside
+      # (#866). Absent or unreadable ⇒ the healthcheck below fails closed rather
+      # than serving a broken login.
+      - ${IDP_LOGIN_PAT_FILE:-/etc/ds-platform/idp-login-client.pat}:/pat/login-client.pat:ro
+    depends_on:
+      idp:
+        condition: service_healthy
+    healthcheck:
+      # accessSync(R_OK) runs as the container user (uid 1001) — an unreadable or
+      # absent PAT flips the service unhealthy at once instead of silently serving
+      # cold-login 500s behind a green /healthy endpoint (#866). Without this probe
+      # the volume comment above would not be true.
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "const fs=require('node:fs');fs.accessSync('/pat/login-client.pat',fs.constants.R_OK);fetch('http://localhost:3000/ui/v2/login/healthy').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # --- caddy — the box's single ingress ---
+  # STEP 1 SCOPE ONLY: this service exists so the container that step 2 (#2062)
+  # configures is already here, owned by this project, holding the 80/443 the
+  # firewall opens, and already on the `stg-infra` network that `slot up` attaches
+  # it to per slot. Its config today is a health responder and NOTHING else — no
+  # placeholder vhost, no commented-out slot block, no on-demand TLS. The wildcard
+  # DNS record, on-demand issuing with the `ask` endpoint, basic auth, the
+  # `X-Robots-Tag: noindex` header and the per-slot vhosts are step 2's deliverable
+  # and land in Caddyfile as a whole.
+  #
+  # Volumes: the certificate/ACME state must survive a container replacement or
+  # step 2 re-issues on every `up` and burns Let's Encrypt rate limit.
+  caddy:
+    image: caddy:2.8-alpine
+    restart: unless-stopped
+    command:
+      [
+        "caddy",
+        "run",
+        "--config",
+        "/etc/caddy/Caddyfile",
+        "--adapter",
+        "caddyfile",
+      ]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddydata:/data
+      - caddyconfig:/config
+      # Read-only docker socket is NOT mounted: `slot up` attaches this container to
+      # a slot network from the host (`docker network connect`), so Caddy itself
+      # needs no docker access.
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp" # HTTP/3
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "-qO-",
+          "http://localhost:2019/config/",
+          "-O",
+          "/dev/null",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  pgdata:
+  redisdata:
+  miniodata:
+  mailpitdata:
+  caddydata:
+  caddyconfig:
+
+# The project default network is named `stg-infra` (not `stg-infra_default`) so a
+# slot project can join it verbatim:
+#     networks: { stg-infra: { external: true } }
+# `slot up` attaches ONLY the slot's `api` here; the slot's frontends and Centrifugo
+# stay on the slot's own default network (spec §3 «Slots»).
+networks:
+  default:
+    name: stg-infra

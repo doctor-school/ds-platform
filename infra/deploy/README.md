@@ -52,7 +52,30 @@ infra/deploy/
     data-prod/        compose: postgres + redis + pgbackrest, plus
                       postgres/  (Dockerfile pgvector+partman+pgbackrest, postgresql.conf, init.sql)
                       pgbackrest/(Dockerfile, pgbackrest.conf, crontab, entrypoint.sh, backup.sh)
+    stg-infra/        STAGE stand shared services — see «Staging box» below
+  stage.env.example   /etc/ds-platform/stage.env template (STAGE box; sinks and
+                      vendor test keys only, never a production credential)
 ```
+
+## Staging box (`stage-1`)
+
+A **third** VPS, separate from this production plane and not part of any deploy path
+described below. It runs the STAGE stand: one shared service project plus a live
+preview slot per pull request. Nothing here deploys to it and `pnpm deploy:prod`
+never touches it.
+
+- Terraform: `terraform/stage-1.tf` — its **own** VPC (`twc_vpc.stage`), no peering
+  and no route to `twc_vpc.ds`. That absent route, not a firewall rule, is what keeps
+  a box running arbitrary PR code away from production Postgres and Redis (the
+  Timeweb rule model is allow-only; see the header of `terraform/network.tf`).
+- Bootstrap: `cloud-init/stage-1.yaml` (the `api-prod` hardening set plus a Node
+  toolchain, the Playwright host libraries and the GitHub Actions runner unit).
+- Services, bring-up order, the Zitadel converge, the runner-registration manual step
+  and the acceptance commands: **`compose/stg-infra/README.md`**.
+- Env: `stage.env.example`. The box holds no production credential of any kind; that
+  is an acceptance criterion, not an intention.
+- Plan of record:
+  `apps/docs/content/specs/tech/2026-09-08-staging-previews-and-regression-contour-en.md`.
 
 ## Runtime contract (discovered from the built 003 code)
 

@@ -1,0 +1,34 @@
+# stg-infra Caddy — STEP 1 CONFIG: health only (Issue #2061).
+#
+# The edge is step 2's deliverable (#2062): the `*.stage.doctor.school` wildcard
+# record, on-demand TLS with the `ask` endpoint that answers 200 only for hosts of
+# currently registered slots, basic auth on every staging host, the
+# `X-Robots-Tag: noindex` header, and the per-slot vhosts (portal / doctor / api /
+# admin plus the two Centrifugo path families). None of it is stubbed here: this
+# file gains those blocks as a whole when step 2 lands, and until then it says
+# exactly what it does.
+#
+# What step 1 needs from Caddy is only that the container exists in this project,
+# holds the 80/443 the firewall opens, and is on the `stg-infra` network that
+# `slot up` attaches per slot (compose.yml → caddy).
+
+{
+	# The admin API on the loopback is what the compose healthcheck probes, and what
+	# `slot up` would use for a config reload. Bound to localhost inside the
+	# container; never published.
+	admin localhost:2019
+}
+
+# Port 80 only. No TLS is configured in step 1: automatic HTTPS needs a hostname,
+# and the wildcard record does not exist yet — asking Caddy to issue for a name that
+# does not resolve would fail an ACME challenge on every boot.
+:80 {
+	# The box liveness probe. Answers regardless of Host, so it works by IP before
+	# any DNS exists.
+	respond /healthz "ok" 200
+
+	# Anything else is not served yet. A blunt 404 with a pointer beats a default
+	# Caddy page that looks like a misconfigured production host to whoever finds
+	# this IP.
+	respond "stage-1 edge not configured yet (staging contour step 2, Issue #2062)" 404
+}

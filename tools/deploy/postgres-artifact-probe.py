@@ -10,8 +10,8 @@ import sys
 request = json.loads(base64.b64decode(sys.argv[1]))
 
 
-def run(*args):
-    result = subprocess.run(args, text=True, capture_output=True, timeout=45)
+def run(*args, stdin=None):
+    result = subprocess.run(args, input=stdin, text=True, capture_output=True, timeout=45)
     if result.returncode:
         raise RuntimeError("PostgreSQL evidence command failed: " + args[0])
     return result.stdout.strip()
@@ -87,8 +87,21 @@ try:
         record["recordedSystemId"] = state["systemId"]
         if request.get("preferRecordedImages") and source_hash == request.get("sourceHash"):
             requested_images = state["images"]
+    # Let Compose parse its own env-file syntax. This config-only request never
+    # starts/pulls scratch; secret values remain inside this process on the host.
+    env_config = json.dumps({"services": {"guard": {"image": "scratch", "env_file": ["/etc/ds-platform/data.env"]}}})
+    env_values = json.loads(run("sudo", "docker", "compose", "-f", "-", "config", "--format", "json", stdin=env_config))["services"]["guard"].get("environment", {})
+    activation = {}
+    for role, ref in requested_images.items():
+        merged = {**environment(inspect("image", ref)), **env_values, **target["environment"][role]}
+        if merged.get("PGBACKREST_PG1_PATH", paths[0][0]) != paths[0][0]:
+            raise RuntimeError("pending backup env-file path override")
+        activation[role] = (merged["PGDATA"], int(merged["PG_MAJOR"]))
+    if activation["postgres"] != activation["pgbackrest"]:
+        raise RuntimeError("pending sidecar data environment mismatch")
     print(json.dumps({"source": source, "sidecar": sidecar, "backupSystemId": str(db["system-id"]),
                       "backupPath": paths[0][0], "sourceHash": source_hash, **record,
+                      "activationPgdata": activation["postgres"][0], "activationMajor": activation["postgres"][1],
                       "images": {"postgres": image_evidence(server["Image"]), "pgbackrest": image_evidence(backup["Image"])},
                       "targetImages": {role: image_evidence(ref) for role, ref in requested_images.items()}}))
 except Exception as error:

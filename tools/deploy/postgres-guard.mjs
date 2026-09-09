@@ -58,6 +58,24 @@ export function postgresContract(files) {
   requireFact(paths.length === 1, "unknown backup data path");
   const pgdata = server.environment?.PGDATA || paths[0][1];
   requireFact(
+    String(files["pgbackrest/pgbackrest.conf"])
+      .match(/^\[(?!global(?:[:\]])).*\]$/gm)
+      ?.join() === "[ds]",
+    "unknown backup stanza contract",
+  );
+  const socketFor = (service) =>
+    (service.volumes || []).filter(
+      (v) => typeof v === "string" && v.split(":")[1] === "/var/run/postgresql",
+    );
+  const serverSockets = socketFor(server);
+  const backupSockets = socketFor(backup);
+  requireFact(
+    serverSockets.length === 1 &&
+      backupSockets.length === 1 &&
+      serverSockets[0] === backupSockets[0],
+    "server/sidecar socket mount mismatch",
+  );
+  requireFact(
     pgdata === paths[0][1] && /^\/[\w/.-]+$/.test(pgdata),
     "PGDATA/backup path mismatch",
   );
@@ -97,6 +115,11 @@ export function postgresContract(files) {
     ["pgbackrest", backup],
   ]) {
     requireFact(
+      JSON.stringify(service.env_file) ===
+        JSON.stringify(["/etc/ds-platform/data.env"]),
+      "unknown PostgreSQL env-file contract",
+    );
+    requireFact(
       service.build?.context === `./${name}` &&
         (service.build.dockerfile || "Dockerfile") === "Dockerfile" &&
         Object.keys(service.build).every((k) =>
@@ -129,6 +152,10 @@ export function postgresContract(files) {
     mount,
     sidecarMount,
     images: { postgres: server.image, pgbackrest: backup.image },
+    environment: {
+      postgres: server.environment || {},
+      pgbackrest: backup.environment || {},
+    },
   };
 }
 
@@ -190,6 +217,10 @@ export function assertPostgresEvidence({
   requireFact(
     s.pgdata === target.pgdata && s.pgVersion === String(s.major),
     "missing/wrong PGDATA or uninitialized data directory",
+  );
+  requireFact(
+    live.activationPgdata === s.pgdata && live.activationMajor === s.major,
+    "pending env-file overrides PostgreSQL major or data path",
   );
   for (const [actual, wanted] of [
     [s.mount, target.mount],

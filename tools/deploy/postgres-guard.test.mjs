@@ -47,6 +47,8 @@ function fixture() {
       },
       backupSystemId: source.systemId,
       backupPath: source.pgdata,
+      activationPgdata: source.pgdata,
+      activationMajor: source.major,
       images: { postgres: image, pgbackrest: { ...image } },
       sourceHash: "b".repeat(64),
       targetImages: { postgres: image, pgbackrest: { ...image } },
@@ -62,6 +64,27 @@ test("EARS-1: accepts the actual same-major production contract", () => {
 
 test("EARS-8: artifact source is pinned to an immutable commit before building", () => {
   assert.match(readPostgresTarget("HEAD").sha, /^[a-f0-9]{40}$/);
+});
+
+test("EARS-9: target backup socket and stanza cannot silently diverge", () => {
+  assert.throws(() =>
+    postgresContract({
+      ...files,
+      "compose.yml": files["compose.yml"].replace(
+        "pgsocket:/var/run/postgresql # shared",
+        "redisdata:/var/run/postgresql # shared",
+      ),
+    }),
+  );
+  assert.throws(() =>
+    postgresContract({
+      ...files,
+      "pgbackrest/pgbackrest.conf": files["pgbackrest/pgbackrest.conf"].replace(
+        "[ds]",
+        "[other]",
+      ),
+    }),
+  );
 });
 
 test("EARS-6: canonical deployment seam rechecks before executing a mutation", async () => {
@@ -174,6 +197,12 @@ for (const [name, change] of [
     "persisted identity changed",
     (f) => {
       f.live.recordedSystemId = "7544271560000000009";
+    },
+  ],
+  [
+    "pending env-file PGDATA replacement",
+    (f) => {
+      f.live.activationPgdata = "/empty";
     },
   ],
 ]) {

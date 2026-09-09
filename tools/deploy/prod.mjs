@@ -58,6 +58,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { envFooter } from "../ci/post-product-note.mjs";
 import { cutDeployRelease } from "../release/cut-release.mjs";
+import { classifyDeployCheckRuns } from "./ci-gate.mjs";
 import { createDeploymentRecord } from "./deployment-record.mjs";
 import {
   REF_FLAG,
@@ -467,9 +468,22 @@ function assertNoLiveBroadcast() {
   ok(`no live broadcast — ${line}`);
 }
 
-// The most reliable green-CI signal for a merged main SHA is its check-runs:
-// group by check name, take the LATEST run per name (so a passing re-run wins
-// over an older failure), and require every latest run completed successfully.
+// The most reliable green-CI signal for a merged main SHA is its check-runs —
+// but ONLY the ones produced by repo-owned workflows. GitHub also injects its
+// own dynamic workflows on the default branch ("Dependabot Updates", code
+// scanning); their check-runs sit on the same commit board, cannot be re-run,
+// and a `failure` there says nothing about our code. On main a0ddf421 a single
+// such row held a fully green deploy hostage (#2077).
+//
+// So: fetch the commit's check-runs AND the SHA's workflow runs, drop the
+// suites whose workflow `path` is positively NOT under `.github/workflows/`
+// (structural provenance — never a name allow-list, per the merge-gate TOTAL
+// rule #1253), then group by check name, take the LATEST run per name and
+// require every latest run completed successfully. Fail-closed throughout:
+// unknown provenance still blocks, and an API failure dies rather than falling
+// back to the unfiltered board. `tools/gh/merge-gate.mjs` is deliberately NOT
+// changed — dynamic workflows only fire on the default branch, so this gate
+// judges the same board the merge gate saw, minus those dynamic suites.
 function assertGreenCi(sha) {
   const repo = localCap("gh", [
     "repo",
@@ -479,46 +493,56 @@ function assertGreenCi(sha) {
     "-q",
     ".nameWithOwner",
   ]);
-  let raw;
+  let checkRuns;
   try {
-    raw = localCap("gh", [
+    const raw = localCap("gh", [
       "api",
       "--paginate",
       `repos/${repo}/commits/${sha}/check-runs`,
       "-q",
-      ".check_runs[] | {name,status,conclusion,started_at,completed_at}",
+      ".check_runs[] | {name,status,conclusion,started_at,completed_at,check_suite_id:.check_suite.id}",
     ]);
+    checkRuns = raw
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .map((l) => JSON.parse(l));
   } catch (e) {
     die(`could not query CI check-runs via gh: ${e.message}`);
   }
-  const runs = raw
-    .split(/\r?\n/)
-    .filter(Boolean)
-    .map((l) => JSON.parse(l));
-  if (runs.length === 0) {
-    die(
-      `no CI check-runs reported for ${sha.slice(0, 12)} yet — wait for CI to run.`,
+  let workflowRuns;
+  try {
+    const raw = localCap("gh", [
+      "api",
+      "--paginate",
+      `repos/${repo}/actions/runs?head_sha=${sha}&per_page=100`,
+      "-q",
+      ".workflow_runs[] | {name,path,check_suite_id}",
+    ]);
+    workflowRuns = raw
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .map((l) => JSON.parse(l));
+  } catch (e) {
+    // Fail-closed: without provenance we cannot tell repo CI from an injected
+    // workflow, and judging the unfiltered board would re-introduce #2077.
+    die(`could not query workflow runs via gh (provenance unknown): ${e.message}`);
+  }
+
+  const verdict = classifyDeployCheckRuns(checkRuns, workflowRuns);
+  if (verdict.dropped.length)
+    ok(
+      `ignored ${verdict.dropped.length} non-repo workflow check(s): ` +
+        verdict.dropped.join(", "),
     );
-  }
-  // latest run per check name
-  const latest = new Map();
-  for (const r of runs) {
-    const key = r.name;
-    const ts = Date.parse(r.completed_at || r.started_at || 0) || 0;
-    const prev = latest.get(key);
-    if (!prev || ts >= prev._ts) latest.set(key, { ...r, _ts: ts });
-  }
-  const good = new Set(["success", "neutral", "skipped"]);
-  const bad = [];
-  const pending = [];
-  for (const r of latest.values()) {
-    if (r.status !== "completed") pending.push(r.name);
-    else if (!good.has(r.conclusion)) bad.push(`${r.name}=${r.conclusion}`);
-  }
-  if (pending.length)
-    die(`CI still running for ${sha.slice(0, 12)}: ${pending.join(", ")}`);
-  if (bad.length) die(`CI is RED for ${sha.slice(0, 12)}: ${bad.join(", ")}`);
-  ok(`CI green — ${latest.size} check(s) passed for ${sha.slice(0, 12)}`);
+  if (verdict.state === "empty")
+    die(
+      `no repo-owned CI check-runs reported for ${sha.slice(0, 12)} yet — wait for CI to run.`,
+    );
+  if (verdict.state === "pending")
+    die(`CI still running for ${sha.slice(0, 12)}: ${verdict.pending.join(", ")}`);
+  if (verdict.state === "red")
+    die(`CI is RED for ${sha.slice(0, 12)}: ${verdict.red.join(", ")}`);
+  ok(`CI green — ${verdict.count} check(s) passed for ${sha.slice(0, 12)}`);
 }
 
 // --- ssh helpers ----------------------------------------------------------

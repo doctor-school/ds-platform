@@ -64,6 +64,11 @@ test-results/
 # Local privacy-minimized hook invocation evidence (#1919).
 .claude/hook-observations/
 
+# Session scratch written by agent sessions (briefs, PR bodies, capture output)
+# — never repo content. An untracked dir here dirties the working tree and
+# `deploy:prod` refuses to run on it (#2077).
+.claude/scratchpad/
+
 # Owner-only escape hatch for the lead context budget (#1693): its presence lifts
 # the 120K/160K dispatch tiers for the CURRENT session — live marker, never a
 # committed setting (created on an explicit owner instruction, removed by /wrap)

@@ -1,0 +1,765 @@
+{
+  "scope": "synthetic SQL cluster only",
+  "identityNote": "pgBackRest numeric system-id fields omitted: native JSON parsing loses integer precision. Use the exact SQL-text recovered.systemId strings as authoritative cluster identities.",
+  "commit": "76ad7fd223e15adab295943e2fdafc2937fbf369",
+  "prefix": "ds-pg18-2135-r09",
+  "pending": [
+    "real application migrations and flows",
+    "Zitadel login/token",
+    "GlitchTip ingest/read",
+    "representative RF restore",
+    "production deployment guard",
+    "production cutover proposal"
+  ],
+  "stages": [
+    {
+      "name": "absence-and-capacity",
+      "seconds": 1.112,
+      "result": {
+        "docker": "27.1.1",
+        "disk": "Filesystem               1024-blocks     Used Available Capacity Mounted on\nDaily SSD/ix-apps/docker   591041536 65964416 525077120      12% /mnt/.ix-apps/docker\n"
+      }
+    },
+    {
+      "name": "candidate-images",
+      "seconds": 7.769,
+      "result": "Exact local image IDs retained; promotion requires exporting/publishing these same artifacts."
+    },
+    {
+      "name": "synthetic-fixture",
+      "seconds": 17.15,
+      "result": {
+        "databases": ["ds_prod", "glitchtip", "postgres", "zitadel"],
+        "integrity": {
+          "ds_prod": "e43b986c02ca285e79a4ab5b13395a4fa10bdc0d5d11fa2b4409bac30618017f",
+          "glitchtip": "4ce6fb34da9455f8627f07217af42612a9b89ab5aec97071939c60b7ebfdc05f",
+          "postgres": "ed0fd17e3afd06d07da0bba3e4e52aec846fd0a26f9dc3e4d548078795a8fcf5",
+          "zitadel": "d3f881c58fd52efac43bd9a78fc00a769080e5f24a26f97ad83015348bb30edf",
+          "roles": "fe4f5f859399b8d5cd52c91c6ff876bc632376f0614f51d367b0aa9a8b166bba",
+          "memberships": "bdf030fd9dcb19fcb37904c1b175f7af0a9e5345fff83382662e6bead8ef4987",
+          "databases": "eb77f7ca9dc656612edc05ec10243a464dfff0939f6b764f7e0e79b86f82a9df",
+          "databaseSettings": "4efb1dcff9d47d9d4eb0a28b2c825234748d418b781101262f743e335a112b40"
+        }
+      }
+    },
+    {
+      "name": "pg17-full-incremental-wal-pitr",
+      "seconds": 44.94,
+      "result": {
+        "lsn": "0/8044EE0",
+        "restorePoint": "drill_17",
+        "integrity": {
+          "ds_prod": "62fbb67579a10934a1b8f42cd29cd0f25cae161a570f9751d7387fc02cfdeaf6",
+          "glitchtip": "4bbf4d55f403911bebc5429c49e1a54537239f6c1a6d9f369a6b77488d926b77",
+          "postgres": "07a9c6430784ce7234faa316450c3149213ac0956ea9e50e7df750c15d1bb61b",
+          "zitadel": "013d007b603bbeff5338174f451434a2e7778ac0056a42a3473b8ef04fb7ef85",
+          "roles": "fe4f5f859399b8d5cd52c91c6ff876bc632376f0614f51d367b0aa9a8b166bba",
+          "memberships": "bdf030fd9dcb19fcb37904c1b175f7af0a9e5345fff83382662e6bead8ef4987",
+          "databases": "eb77f7ca9dc656612edc05ec10243a464dfff0939f6b764f7e0e79b86f82a9df",
+          "databaseSettings": "4efb1dcff9d47d9d4eb0a28b2c825234748d418b781101262f743e335a112b40"
+        },
+        "backups": [
+          {
+            "archive": [
+              {
+                "database": {
+                  "id": 1,
+                  "repo-key": 1
+                },
+                "id": "17-1",
+                "max": "000000010000000000000009",
+                "min": "000000010000000000000001"
+              }
+            ],
+            "backup": [
+              {
+                "archive": {
+                  "start": "000000010000000000000004",
+                  "stop": "000000010000000000000005"
+                },
+                "backrest": {
+                  "format": 5,
+                  "version": "2.59.1"
+                },
+                "database": {
+                  "id": 1,
+                  "repo-key": 1
+                },
+                "error": false,
+                "info": {
+                  "delta": 49760835,
+                  "repository": {
+                    "delta": 6632124,
+                    "size": 6632124
+                  },
+                  "size": 49760835
+                },
+                "label": "20260909-110227F",
+                "lsn": {
+                  "start": "0/4000028",
+                  "stop": "0/5000088"
+                },
+                "prior": null,
+                "reference": null,
+                "timestamp": {
+                  "start": 1788951747,
+                  "stop": 1788951760
+                },
+                "type": "full"
+              },
+              {
+                "archive": {
+                  "start": "000000010000000000000006",
+                  "stop": "000000010000000000000007"
+                },
+                "backrest": {
+                  "format": 5,
+                  "version": "2.59.1"
+                },
+                "database": {
+                  "id": 1,
+                  "repo-key": 1
+                },
+                "error": false,
+                "info": {
+                  "delta": 8449,
+                  "repository": {
+                    "delta": 401,
+                    "size": 6632120
+                  },
+                  "size": 49760834
+                },
+                "label": "20260909-110227F_20260909-110241I",
+                "lsn": {
+                  "start": "0/6000028",
+                  "stop": "0/7000050"
+                },
+                "prior": "20260909-110227F",
+                "reference": ["20260909-110227F"],
+                "timestamp": {
+                  "start": 1788951761,
+                  "stop": 1788951763
+                },
+                "type": "incr"
+              }
+            ],
+            "cipher": "none",
+            "db": [
+              {
+                "id": 1,
+                "repo-key": 1,
+                "version": "17"
+              }
+            ],
+            "name": "drill",
+            "repo": [
+              {
+                "cipher": "none",
+                "key": 1,
+                "status": {
+                  "code": 0,
+                  "message": "ok"
+                }
+              }
+            ],
+            "status": {
+              "code": 0,
+              "lock": {
+                "backup": {
+                  "held": false
+                },
+                "restore": {
+                  "held": false
+                }
+              },
+              "message": "ok"
+            }
+          }
+        ],
+        "recovered": {
+          "systemId": "7683489162326102057",
+          "timeline": 2
+        }
+      }
+    },
+    {
+      "name": "logical-17-to-18",
+      "seconds": 32.545,
+      "result": {
+        "integrity": {
+          "ds_prod": "62fbb67579a10934a1b8f42cd29cd0f25cae161a570f9751d7387fc02cfdeaf6",
+          "glitchtip": "4bbf4d55f403911bebc5429c49e1a54537239f6c1a6d9f369a6b77488d926b77",
+          "postgres": "07a9c6430784ce7234faa316450c3149213ac0956ea9e50e7df750c15d1bb61b",
+          "zitadel": "013d007b603bbeff5338174f451434a2e7778ac0056a42a3473b8ef04fb7ef85",
+          "roles": "fe4f5f859399b8d5cd52c91c6ff876bc632376f0614f51d367b0aa9a8b166bba",
+          "memberships": "bdf030fd9dcb19fcb37904c1b175f7af0a9e5345fff83382662e6bead8ef4987",
+          "databases": "eb77f7ca9dc656612edc05ec10243a464dfff0939f6b764f7e0e79b86f82a9df",
+          "databaseSettings": "4efb1dcff9d47d9d4eb0a28b2c825234748d418b781101262f743e335a112b40"
+        },
+        "phaseA": "retained PG17 restored source unchanged",
+        "checksums": "on"
+      }
+    },
+    {
+      "name": "pg18-full-incremental-wal-pitr",
+      "seconds": 45.051,
+      "result": {
+        "lsn": "0/805A9B8",
+        "restorePoint": "drill_18",
+        "integrity": {
+          "ds_prod": "654bf1f6813ba66edf72ea291b6661722424a2721100cea16692e917e41916aa",
+          "glitchtip": "22551852897389e9206c82b49d777025759d258e2060e4a62245a20f6de692e1",
+          "postgres": "f660083134b887b18f53183283ddeee95eed1dfbd2980da022a175b33af9e655",
+          "zitadel": "d366ecc0318b91146d1c5c71c3cc12cbf8b8323d843dd5dce6cf981e0eab268e",
+          "roles": "fe4f5f859399b8d5cd52c91c6ff876bc632376f0614f51d367b0aa9a8b166bba",
+          "memberships": "bdf030fd9dcb19fcb37904c1b175f7af0a9e5345fff83382662e6bead8ef4987",
+          "databases": "eb77f7ca9dc656612edc05ec10243a464dfff0939f6b764f7e0e79b86f82a9df",
+          "databaseSettings": "4efb1dcff9d47d9d4eb0a28b2c825234748d418b781101262f743e335a112b40"
+        },
+        "backups": [
+          {
+            "archive": [
+              {
+                "database": {
+                  "id": 1,
+                  "repo-key": 1
+                },
+                "id": "18-1",
+                "max": "000000010000000000000009",
+                "min": "000000010000000000000001"
+              }
+            ],
+            "backup": [
+              {
+                "archive": {
+                  "start": "000000010000000000000005",
+                  "stop": "000000010000000000000005"
+                },
+                "backrest": {
+                  "format": 5,
+                  "version": "2.59.1"
+                },
+                "database": {
+                  "id": 1,
+                  "repo-key": 1
+                },
+                "error": false,
+                "info": {
+                  "delta": 51425454,
+                  "repository": {
+                    "delta": 6880171,
+                    "size": 6880171
+                  },
+                  "size": 51425454
+                },
+                "label": "20260909-110346F",
+                "lsn": {
+                  "start": "0/5000028",
+                  "stop": "0/504F9C8"
+                },
+                "prior": null,
+                "reference": null,
+                "timestamp": {
+                  "start": 1788951826,
+                  "stop": 1788951837
+                },
+                "type": "full"
+              },
+              {
+                "archive": {
+                  "start": "000000010000000000000007",
+                  "stop": "000000010000000000000007"
+                },
+                "backrest": {
+                  "format": 5,
+                  "version": "2.59.1"
+                },
+                "database": {
+                  "id": 1,
+                  "repo-key": 1
+                },
+                "error": false,
+                "info": {
+                  "delta": 884994,
+                  "repository": {
+                    "delta": 194059,
+                    "size": 6896936
+                  },
+                  "size": 51490990
+                },
+                "label": "20260909-110346F_20260909-110357I",
+                "lsn": {
+                  "start": "0/7000028",
+                  "stop": "0/7000120"
+                },
+                "prior": "20260909-110346F",
+                "reference": ["20260909-110346F"],
+                "timestamp": {
+                  "start": 1788951837,
+                  "stop": 1788951839
+                },
+                "type": "incr"
+              }
+            ],
+            "cipher": "none",
+            "db": [
+              {
+                "id": 1,
+                "repo-key": 1,
+                "version": "18"
+              }
+            ],
+            "name": "drill",
+            "repo": [
+              {
+                "cipher": "none",
+                "key": 1,
+                "status": {
+                  "code": 0,
+                  "message": "ok"
+                }
+              }
+            ],
+            "status": {
+              "code": 0,
+              "lock": {
+                "backup": {
+                  "held": false
+                },
+                "restore": {
+                  "held": false
+                }
+              },
+              "message": "ok"
+            }
+          }
+        ],
+        "recovered": {
+          "systemId": "7683489443632197678",
+          "timeline": 2
+        }
+      }
+    },
+    {
+      "name": "phase-b-pg18-forward-recovery",
+      "seconds": 25.584,
+      "result": {
+        "integrity": {
+          "ds_prod": "4dab8a858486736ab8a1bb81696995f73e0416479399aa84c0dd936df58ccc46",
+          "glitchtip": "c97e63c2a9db50a1967d1fd62df6450f7748104cec0800e19dab910910c79d83",
+          "postgres": "bceba6739e329b81d7132ccc960463ed06be06e2d314e731231f8eccaa435ed7",
+          "zitadel": "064be4421ec2e8084d0e4f2e3171ec492fd9ce4750296ad3a0e4fe8e214ea330",
+          "roles": "fe4f5f859399b8d5cd52c91c6ff876bc632376f0614f51d367b0aa9a8b166bba",
+          "memberships": "bdf030fd9dcb19fcb37904c1b175f7af0a9e5345fff83382662e6bead8ef4987",
+          "databases": "eb77f7ca9dc656612edc05ec10243a464dfff0939f6b764f7e0e79b86f82a9df",
+          "databaseSettings": "4efb1dcff9d47d9d4eb0a28b2c825234748d418b781101262f743e335a112b40"
+        },
+        "recovery": "fresh PG18 forward restore includes every acknowledged synthetic marker",
+        "downgrade17": "not exercised; unavailable"
+      }
+    },
+    {
+      "name": "retained-pg17",
+      "seconds": 3.727,
+      "result": {
+        "integrity": {
+          "ds_prod": "227a5a82810382f5c14090065945b757e05bc23a23d22cd88306bad39937a93c",
+          "glitchtip": "e5ac048d001246ecbc4b2152920897a549af4f5ceeab757d4332d660e19a50a9",
+          "postgres": "27774c032294bf5bc2c8f0ef982b57d49a6a1dca80c25e0d8d7074a6d235ee7b",
+          "zitadel": "8efc384f21cc2aa4cdd1f7c8dde70ff030e1560ef7c2b37e0e5818832a800e38",
+          "roles": "fe4f5f859399b8d5cd52c91c6ff876bc632376f0614f51d367b0aa9a8b166bba",
+          "memberships": "bdf030fd9dcb19fcb37904c1b175f7af0a9e5345fff83382662e6bead8ef4987",
+          "databases": "eb77f7ca9dc656612edc05ec10243a464dfff0939f6b764f7e0e79b86f82a9df",
+          "databaseSettings": "4efb1dcff9d47d9d4eb0a28b2c825234748d418b781101262f743e335a112b40"
+        },
+        "backups": [
+          {
+            "archive": [
+              {
+                "database": {
+                  "id": 1,
+                  "repo-key": 1
+                },
+                "id": "17-1",
+                "max": "000000010000000000000009",
+                "min": "000000010000000000000001"
+              }
+            ],
+            "backup": [
+              {
+                "archive": {
+                  "start": "000000010000000000000004",
+                  "stop": "000000010000000000000005"
+                },
+                "backrest": {
+                  "format": 5,
+                  "version": "2.59.1"
+                },
+                "database": {
+                  "id": 1,
+                  "repo-key": 1
+                },
+                "error": false,
+                "info": {
+                  "delta": 49760835,
+                  "repository": {
+                    "delta": 6632124,
+                    "size": 6632124
+                  },
+                  "size": 49760835
+                },
+                "label": "20260909-110227F",
+                "lsn": {
+                  "start": "0/4000028",
+                  "stop": "0/5000088"
+                },
+                "prior": null,
+                "reference": null,
+                "timestamp": {
+                  "start": 1788951747,
+                  "stop": 1788951760
+                },
+                "type": "full"
+              },
+              {
+                "archive": {
+                  "start": "000000010000000000000006",
+                  "stop": "000000010000000000000007"
+                },
+                "backrest": {
+                  "format": 5,
+                  "version": "2.59.1"
+                },
+                "database": {
+                  "id": 1,
+                  "repo-key": 1
+                },
+                "error": false,
+                "info": {
+                  "delta": 8449,
+                  "repository": {
+                    "delta": 401,
+                    "size": 6632120
+                  },
+                  "size": 49760834
+                },
+                "label": "20260909-110227F_20260909-110241I",
+                "lsn": {
+                  "start": "0/6000028",
+                  "stop": "0/7000050"
+                },
+                "prior": "20260909-110227F",
+                "reference": ["20260909-110227F"],
+                "timestamp": {
+                  "start": 1788951761,
+                  "stop": 1788951763
+                },
+                "type": "incr"
+              }
+            ],
+            "cipher": "none",
+            "db": [
+              {
+                "id": 1,
+                "repo-key": 1,
+                "version": "17"
+              }
+            ],
+            "name": "drill",
+            "repo": [
+              {
+                "cipher": "none",
+                "key": 1,
+                "status": {
+                  "code": 0,
+                  "message": "ok"
+                }
+              }
+            ],
+            "status": {
+              "code": 0,
+              "lock": {
+                "backup": {
+                  "held": false
+                },
+                "restore": {
+                  "held": false
+                }
+              },
+              "message": "ok"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "phase-a-old-cluster-restart",
+      "seconds": 8.06,
+      "result": {
+        "integrity": {
+          "ds_prod": "62fbb67579a10934a1b8f42cd29cd0f25cae161a570f9751d7387fc02cfdeaf6",
+          "glitchtip": "4bbf4d55f403911bebc5429c49e1a54537239f6c1a6d9f369a6b77488d926b77",
+          "postgres": "07a9c6430784ce7234faa316450c3149213ac0956ea9e50e7df750c15d1bb61b",
+          "zitadel": "013d007b603bbeff5338174f451434a2e7778ac0056a42a3473b8ef04fb7ef85",
+          "roles": "fe4f5f859399b8d5cd52c91c6ff876bc632376f0614f51d367b0aa9a8b166bba",
+          "memberships": "bdf030fd9dcb19fcb37904c1b175f7af0a9e5345fff83382662e6bead8ef4987",
+          "databases": "eb77f7ca9dc656612edc05ec10243a464dfff0939f6b764f7e0e79b86f82a9df",
+          "databaseSettings": "4efb1dcff9d47d9d4eb0a28b2c825234748d418b781101262f743e335a112b40"
+        },
+        "boundary": "database-only old endpoint restart; no application cutover"
+      }
+    },
+    {
+      "name": "task-storage",
+      "seconds": 2.326,
+      "result": {
+        "source17": "15385\t/var/lib/postgresql/data",
+        "repo17": "17480\t/pgbackrest",
+        "restored17": "15621\t/var/lib/postgresql/data",
+        "candidate18": "15695\t/var/lib/postgresql/18/docker",
+        "repo18": "20151\t/pgbackrest",
+        "restored18": "15924\t/var/lib/postgresql/18/docker",
+        "forward18": "15635\t/var/lib/postgresql/18/docker"
+      }
+    }
+  ],
+  "images": {
+    "17": {
+      "base": "pgvector/pgvector@sha256:cf134a767f474095eeba57e0117be8e568e011a63f33fbf252f14c9b760f8e6f",
+      "id": "sha256:76cf3e4fa1fb6f1cdf9cd3802adbcc475fb50ef74a328b3d9f4683d7e3b930eb",
+      "architecture": "amd64",
+      "packages": "pgbackrest\t2.59.1-1.pgdg12+1\npostgresql-17\t17.11-1.pgdg12+2\npostgresql-17-jit-llvm\t\npostgresql-17-partman\t5.5.0-1.pgdg12+1\npostgresql-9.1\t\npostgresql-client\t\npostgresql-client-17\t17.11-1.pgdg12+2\npostgresql-client-common\t293.pgdg12+1\npostgresql-common\t293.pgdg12+1\npostgresql-contrib-17\t\npostgresql-doc-17\t\npostgresql-pgmp\t\n",
+      "declaredVolumes": {
+        "/var/lib/postgresql/data": {}
+      },
+      "environment": [
+        "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/lib/postgresql/17/bin",
+        "GOSU_VERSION=1.19",
+        "LANG=en_US.utf8",
+        "PG_MAJOR=17",
+        "PG_VERSION=17.11-1.pgdg12+2",
+        "PGDATA=/var/lib/postgresql/data"
+      ]
+    },
+    "18": {
+      "base": "pgvector/pgvector@sha256:2ba9ca5f2e7daa0f0e7723cba1ee9167bab54efd3640516a44ac1a928dd67e7a",
+      "id": "sha256:29b909b32492c52146f414ad71ec010d58962ae3826760d93775d1541a2ab67e",
+      "architecture": "amd64",
+      "packages": "pgbackrest\t2.59.1-1.pgdg12+1\npostgresql-18\t18.6-1.pgdg12+2\npostgresql-18-jit\t18.6-1.pgdg12+2\npostgresql-18-jit-llvm\t\npostgresql-18-partman\t5.5.0-1.pgdg12+1\npostgresql-9.1\t\npostgresql-client\t\npostgresql-client-18\t18.6-1.pgdg12+2\npostgresql-client-common\t293.pgdg12+1\npostgresql-common\t293.pgdg12+1\npostgresql-contrib-18\t\npostgresql-doc-18\t\npostgresql-pgmp\t\n",
+      "declaredVolumes": {
+        "/var/lib/postgresql": {}
+      },
+      "environment": [
+        "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/lib/postgresql/18/bin",
+        "GOSU_VERSION=1.19",
+        "LANG=en_US.utf8",
+        "PG_MAJOR=18",
+        "PG_VERSION=18.6-1.pgdg12+2",
+        "PGDATA=/var/lib/postgresql/18/docker"
+      ]
+    }
+  },
+  "extensions": {
+    "source17/ds_prod": {
+      "versions": {
+        "plpgsql": "1.0",
+        "vector": "0.8.6",
+        "citext": "1.6",
+        "pg_trgm": "1.6",
+        "pg_partman": "5.5.0"
+      },
+      "citextUpdatePath": null
+    },
+    "source17/glitchtip": {
+      "versions": {
+        "plpgsql": "1.0",
+        "vector": "0.8.6",
+        "citext": "1.6",
+        "pg_trgm": "1.6",
+        "pg_partman": "5.5.0"
+      },
+      "citextUpdatePath": null
+    },
+    "source17/postgres": {
+      "versions": {
+        "plpgsql": "1.0",
+        "vector": "0.8.6",
+        "citext": "1.6",
+        "pg_trgm": "1.6",
+        "pg_partman": "5.5.0"
+      },
+      "citextUpdatePath": null
+    },
+    "source17/zitadel": {
+      "versions": {
+        "plpgsql": "1.0",
+        "vector": "0.8.6",
+        "citext": "1.6",
+        "pg_trgm": "1.6",
+        "pg_partman": "5.5.0"
+      },
+      "citextUpdatePath": null
+    },
+    "restored17/ds_prod": {
+      "versions": {
+        "plpgsql": "1.0",
+        "vector": "0.8.6",
+        "citext": "1.6",
+        "pg_trgm": "1.6",
+        "pg_partman": "5.5.0"
+      },
+      "citextUpdatePath": null
+    },
+    "restored17/glitchtip": {
+      "versions": {
+        "plpgsql": "1.0",
+        "vector": "0.8.6",
+        "citext": "1.6",
+        "pg_trgm": "1.6",
+        "pg_partman": "5.5.0"
+      },
+      "citextUpdatePath": null
+    },
+    "restored17/postgres": {
+      "versions": {
+        "plpgsql": "1.0",
+        "vector": "0.8.6",
+        "citext": "1.6",
+        "pg_trgm": "1.6",
+        "pg_partman": "5.5.0"
+      },
+      "citextUpdatePath": null
+    },
+    "restored17/zitadel": {
+      "versions": {
+        "plpgsql": "1.0",
+        "vector": "0.8.6",
+        "citext": "1.6",
+        "pg_trgm": "1.6",
+        "pg_partman": "5.5.0"
+      },
+      "citextUpdatePath": null
+    },
+    "candidate18/ds_prod": {
+      "versions": {
+        "plpgsql": "1.0",
+        "citext": "1.8",
+        "pg_partman": "5.5.0",
+        "pg_trgm": "1.6",
+        "vector": "0.8.6"
+      },
+      "citextUpdatePath": "1.6--1.7--1.8"
+    },
+    "candidate18/glitchtip": {
+      "versions": {
+        "plpgsql": "1.0",
+        "citext": "1.8",
+        "pg_partman": "5.5.0",
+        "pg_trgm": "1.6",
+        "vector": "0.8.6"
+      },
+      "citextUpdatePath": "1.6--1.7--1.8"
+    },
+    "candidate18/postgres": {
+      "versions": {
+        "plpgsql": "1.0",
+        "citext": "1.8",
+        "pg_partman": "5.5.0",
+        "pg_trgm": "1.6",
+        "vector": "0.8.6"
+      },
+      "citextUpdatePath": "1.6--1.7--1.8"
+    },
+    "candidate18/zitadel": {
+      "versions": {
+        "plpgsql": "1.0",
+        "citext": "1.8",
+        "pg_partman": "5.5.0",
+        "pg_trgm": "1.6",
+        "vector": "0.8.6"
+      },
+      "citextUpdatePath": "1.6--1.7--1.8"
+    },
+    "restored18/ds_prod": {
+      "versions": {
+        "plpgsql": "1.0",
+        "citext": "1.8",
+        "pg_partman": "5.5.0",
+        "pg_trgm": "1.6",
+        "vector": "0.8.6"
+      },
+      "citextUpdatePath": "1.6--1.7--1.8"
+    },
+    "restored18/glitchtip": {
+      "versions": {
+        "plpgsql": "1.0",
+        "citext": "1.8",
+        "pg_partman": "5.5.0",
+        "pg_trgm": "1.6",
+        "vector": "0.8.6"
+      },
+      "citextUpdatePath": "1.6--1.7--1.8"
+    },
+    "restored18/postgres": {
+      "versions": {
+        "plpgsql": "1.0",
+        "citext": "1.8",
+        "pg_partman": "5.5.0",
+        "pg_trgm": "1.6",
+        "vector": "0.8.6"
+      },
+      "citextUpdatePath": "1.6--1.7--1.8"
+    },
+    "restored18/zitadel": {
+      "versions": {
+        "plpgsql": "1.0",
+        "citext": "1.8",
+        "pg_partman": "5.5.0",
+        "pg_trgm": "1.6",
+        "vector": "0.8.6"
+      },
+      "citextUpdatePath": "1.6--1.7--1.8"
+    },
+    "forward18/ds_prod": {
+      "versions": {
+        "plpgsql": "1.0",
+        "citext": "1.8",
+        "pg_partman": "5.5.0",
+        "pg_trgm": "1.6",
+        "vector": "0.8.6"
+      },
+      "citextUpdatePath": "1.6--1.7--1.8"
+    },
+    "forward18/glitchtip": {
+      "versions": {
+        "plpgsql": "1.0",
+        "citext": "1.8",
+        "pg_partman": "5.5.0",
+        "pg_trgm": "1.6",
+        "vector": "0.8.6"
+      },
+      "citextUpdatePath": "1.6--1.7--1.8"
+    },
+    "forward18/postgres": {
+      "versions": {
+        "plpgsql": "1.0",
+        "citext": "1.8",
+        "pg_partman": "5.5.0",
+        "pg_trgm": "1.6",
+        "vector": "0.8.6"
+      },
+      "citextUpdatePath": "1.6--1.7--1.8"
+    },
+    "forward18/zitadel": {
+      "versions": {
+        "plpgsql": "1.0",
+        "citext": "1.8",
+        "pg_partman": "5.5.0",
+        "pg_trgm": "1.6",
+        "vector": "0.8.6"
+      },
+      "citextUpdatePath": "1.6--1.7--1.8"
+    }
+  },
+  "status": "passed-core-only"
+}

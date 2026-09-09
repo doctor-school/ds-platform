@@ -30,6 +30,7 @@ export const WARN_GUARDS = new Set([
   "product-note",
   "registry-research",
   "retained-data",
+  "route-mount",
   "route-targets",
   "showcase-coverage",
   "showcase-snippet",

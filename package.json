@@ -59,6 +59,7 @@
     "lint:registry-research": "tsx tools/lint/registry-research-lint.ts",
     "lint:cross-front-reuse": "tsx tools/lint/cross-front-reuse-lint.ts",
     "lint:host-allowlist": "tsx tools/lint/host-allowlist-lint.ts",
+    "lint:route-mount": "tsx tools/lint/route-mount-lint.ts",
     "lint:import-boundary": "tsx tools/lint/import-boundary-lint.ts",
     "lint:ui-parity": "tsx tools/lint/ui-parity-lint.ts",
     "lint:retained-data": "tsx tools/lint/retained-data-lint.ts",

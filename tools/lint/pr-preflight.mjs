@@ -147,6 +147,7 @@ export const STATIC_GUARDS = [
   { name: "workflow-auth", file: "workflow-auth-lint.ts" },
   { name: "retained-data", file: "retained-data-lint.ts" },
   { name: "host-allowlist", file: "host-allowlist-lint.ts" },
+  { name: "route-mount", file: "route-mount-lint.ts" },
 ];
 
 /**

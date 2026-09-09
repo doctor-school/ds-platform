@@ -49,15 +49,27 @@
  * Outside a `pull_request` event class 3 is skipped with an info line; classes
  * 1 and 2 always run (that is what `pnpm pr:preflight --static` executes).
  *
+ * The row grammar — the row regex, the glob rule, the wave rule and the
+ * section-span scan — lives in the shared parser `./lib/registry-rows.ts` and
+ * is used unchanged by `route-mount-lint.ts` (#2002 slice D), so both tree
+ * checks read the one answer key with the one row shape.
+ *
  * Run: `pnpm lint:host-allowlist`. Findings: stderr, exit 1. Clean: stdout
  * summary, exit 0.
  */
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import fg from "fast-glob";
 
 import { ghViewJson } from "./lib/gh";
+import {
+  GLOB_CHARS_RE,
+  REGISTRY_REL,
+  type Row,
+  WAVE_RE,
+  parseRegistryRows,
+} from "./lib/registry-rows";
 
 // TEST SEAM: `LINT_FIXTURE_ROOT` lets the guard-tests harness point the scan at
 // a fixture tree (tools/lint/guard-tests). Inert in production — when unset the
@@ -67,9 +79,7 @@ const REPO_ROOT = process.env.LINT_FIXTURE_ROOT
   : resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const TAG = "[host-allowlist]";
 
-/** The checked-in answer key, and the heading that opens its allowlist section. */
-const REGISTRY_REL =
-  "apps/docs/content/specs/product/two-site-ia/capability-ownership.md";
+/** The heading that opens the allowlist section of the shared answer key. */
 const SECTION_HEADING = "## Host-file allowlist";
 
 /** The two storefront hosts the plan converges; other apps are out of scope. */
@@ -90,18 +100,6 @@ const SCAN_IGNORE = [
 ];
 const ROUTE_BASENAME_RE =
   /^(page|layout|loading|error|not-found|template|default|route|middleware|proxy)\.tsx?$/;
-/** Only true glob metacharacters: route groups and dynamic segments are real path text. */
-const GLOB_CHARS_RE = /[*?{}]/;
-/** A row is `| <backtick path> | reason | until |`; header and separator rows carry no backticks. */
-const ROW_RE = /^\|\s*`([^`]+)`\s*\|\s*(.*?)\s*\|\s*(.*?)\s*\|\s*$/;
-const WAVE_RE = /\bwave\s*\d+/i;
-
-interface Row {
-  path: string;
-  reason: string;
-  until: string;
-}
-
 interface GhPR {
   number: number;
   files?: { path: string }[];
@@ -117,27 +115,18 @@ function info(msg: string): void {
 }
 
 /**
- * Parse the allowlist rows out of the registry. Only the span between
- * `## Host-file allowlist` and the next `## ` heading is read: the `## Registry`
- * table above it uses brace globs in a different column shape and is NOT an
- * allowlist row.
+ * Parse the allowlist rows out of the shared answer key. Only the span between
+ * `## Host-file allowlist` and the next `## ` heading is read (see
+ * ./lib/registry-rows.ts): the `## Registry` table above it uses brace globs in
+ * a different column shape, and the route-file registry below it is a separate
+ * answer key with its own guard.
  */
 function parseAllowlist(): Row[] {
-  const file = resolve(REPO_ROOT, REGISTRY_REL);
-  if (!existsSync(file)) fail(`answer key not found at ${REGISTRY_REL}`);
-  const lines = readFileSync(file, "utf8").split(/\r?\n/);
-  const start = lines.findIndex((l) => l.trim() === SECTION_HEADING);
-  if (start === -1) {
-    fail(`«${SECTION_HEADING}» section missing in ${REGISTRY_REL}`);
+  try {
+    return parseRegistryRows(SECTION_HEADING);
+  } catch (e) {
+    fail((e as Error).message);
   }
-  const rows: Row[] = [];
-  for (let i = start + 1; i < lines.length; i += 1) {
-    const line = lines[i];
-    if (line.startsWith("## ")) break;
-    const m = ROW_RE.exec(line.trim());
-    if (m) rows.push({ path: m[1].trim(), reason: m[2], until: m[3] });
-  }
-  return rows;
 }
 
 /** Repo-relative posix paths of every host file that must carry a row. */
@@ -184,7 +173,9 @@ async function honestLimit(rows: Row[]): Promise<string[]> {
   }
   const res = await ghViewJson<GhPR>("pr", prNumber, "number,files");
   if (!res.ok) {
-    process.stderr.write(`${TAG} gh pr view ${prNumber} failed: ${res.error}\n`);
+    process.stderr.write(
+      `${TAG} gh pr view ${prNumber} failed: ${res.error}\n`,
+    );
     return [];
   }
   const touched = new Set((res.data.files ?? []).map((f) => f.path));

@@ -13,4 +13,7 @@ export {
   specialtyCodeFromName,
   specialtyIdentityName,
 } from "./specialty-code.js";
-export * from "./golden/index.js";
+// The golden dataset is deliberately NOT re-exported here. This barrel is
+// reachable from `@ds/db`, which the api imports for the specialty book seed —
+// re-exporting it would pull a staging fixture (accounts, events, consents) into
+// the production module graph. Consumers import `@ds/db/seed/golden`.

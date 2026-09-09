@@ -12,6 +12,10 @@
     "./schema": {
       "types": "./dist/schema/index.d.ts",
       "default": "./dist/schema/index.js"
+    },
+    "./seed/golden": {
+      "types": "./dist/seed/golden/index.d.ts",
+      "default": "./dist/seed/golden/index.js"
     }
   },
   "main": "./dist/index.js",

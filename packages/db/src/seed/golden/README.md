@@ -70,6 +70,11 @@ signing in, not by reading `users`.
 Addressed through the exported `golden` object (`packages/db/src/seed/golden/ids.ts`);
 step 7's `route-params.ts` imports it. These names are a published contract.
 
+Import it from the dedicated subpath, `import { golden } from "@ds/db/seed/golden"`.
+It is deliberately absent from the `@ds/db` root barrel: the api imports that
+barrel for the specialty book seed, and a staging fixture — accounts, events,
+consent records — has no business in the production module graph.
+
 | Path                                         | Row                                                                       |
 | -------------------------------------------- | ------------------------------------------------------------------------- |
 | `golden.doctors.unverified`                  | signed up, address unconfirmed                                            |

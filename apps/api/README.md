@@ -78,6 +78,16 @@ database/config values, so it neither connects to Postgres nor starts lifecycle
 hooks. Both the committed OpenAPI snapshot and `@ds/api-client` are compared in
 memory by the blocking `generated-artifacts` CI job.
 
+On an email-OTP integration failure, the assertion includes test-only HTTP
+status/route categories and mailbox freshness, subject-match and code-extraction
+counts. It never includes recipient addresses, subjects, codes or tokens. The
+failed `api-e2e` job also uploads `api-e2e-diagnostics` for seven days: fixed
+category counters from bounded Zitadel/Mailpit logs, produced by
+`tools/scripts/api-e2e-diagnostics.mjs`. Raw provider logs are not uploaded.
+These diagnostics preserve the adapter's enumeration-safe acknowledgement and
+the existing delivery deadline; a green run alone does not explain an earlier
+missing message.
+
 Running the e2e suites locally against the dev stand needs two env facts beyond
 the endpoints in `~/.ds-platform/.env.local`:
 

@@ -1,6 +1,10 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { ZitadelIdpClient } from "../../src/auth/idp/zitadel.idp.js";
 import { NOTIFICATION_SUBJECTS } from "../support/notification-subjects.js";
+import {
+  diagnosticFetch,
+  mailboxSnapshot,
+} from "../support/otp-diagnostics.js";
 
 /**
  * EARS-6/7 real-adapter integration spec (design §3, §6, §11 — passwordless
@@ -170,12 +174,15 @@ async function fetchOtpCode(
   email: string,
   afterIso: string,
   subject?: string,
+  diagnostics: unknown[] = [],
 ): Promise<string | null> {
   const after = Date.parse(afterIso);
   for (let attempt = 0; attempt < 30; attempt++) {
     const res = await fetch(
       `${MAILPIT_BASE}/api/v1/search?query=${encodeURIComponent(`to:${email}`)}`,
     );
+    const record: Record<string, unknown> = { status: res.status };
+    diagnostics.push(record);
     if (res.ok) {
       const data = (await res.json()) as {
         messages?: Array<{ ID?: string; Created?: string; Subject?: string }>;
@@ -189,8 +196,13 @@ async function fetchOtpCode(
           // (`NOTIFICATION_SUBJECTS`) and we match it anywhere in the subject.
           (!subject || (m.Subject ?? "").includes(subject)),
       );
+      Object.assign(
+        record,
+        mailboxSnapshot(data.messages ?? [], after, subject),
+      );
       if (hit?.ID) {
         const msgRes = await fetch(`${MAILPIT_BASE}/api/v1/message/${hit.ID}`);
+        record.messageStatus = msgRes.status;
         if (msgRes.ok) {
           const code = extractCode(
             (await msgRes.json()) as {
@@ -199,6 +211,7 @@ async function fetchOtpCode(
               HTML?: string;
             },
           );
+          record.codeExtracted = !!code;
           if (code) return code;
         }
       }
@@ -275,6 +288,7 @@ async function fetchSmsCode(
 
 describe.skipIf(!LIVE_OIDC)("Zitadel OTP login (integration)", () => {
   let client: ZitadelIdpClient;
+  const providerDiagnostics: unknown[] = [];
   const createdEmails: string[] = [];
 
   const newEmail = (): string => {
@@ -287,6 +301,7 @@ describe.skipIf(!LIVE_OIDC)("Zitadel OTP login (integration)", () => {
 
   beforeAll(() => {
     client = new ZitadelIdpClient({
+      fetchImpl: diagnosticFetch(globalThis.fetch, providerDiagnostics),
       baseUrl: process.env.IDP_ISSUER!,
       serviceToken: process.env.IDP_SERVICE_TOKEN!,
       clientId: process.env.IDP_CLIENT_ID!,
@@ -380,6 +395,8 @@ describe.skipIf(!LIVE_OIDC)("Zitadel OTP login (integration)", () => {
       ReturnType<typeof client.exchangeSessionForTokens>
     > | null = null;
     for (let attempt = 0; attempt < 3 && !tokens; attempt++) {
+      providerDiagnostics.length = 0;
+      const mailboxDiagnostics: unknown[] = [];
       const sentAt = new Date().toISOString();
       await expect(client.requestEmailOtp(email)).resolves.toBeUndefined();
 
@@ -387,10 +404,15 @@ describe.skipIf(!LIVE_OIDC)("Zitadel OTP login (integration)", () => {
         email,
         sentAt,
         NOTIFICATION_SUBJECTS.verifyEmailOtp,
+        mailboxDiagnostics,
       );
       expect(
         code,
-        "login OTP code should be delivered to Mailpit",
+        "login OTP code should be delivered to Mailpit; safe diagnostics: " +
+          JSON.stringify({
+            provider: providerDiagnostics,
+            mailbox: mailboxDiagnostics,
+          }),
       ).toBeTruthy();
 
       // EARS-6 step 2: verify the code → checked session.

@@ -1,0 +1,5 @@
+{
+  "number": 300,
+  "body": "## Summary\n\nGrow the doomed helper.\n",
+  "files": [{ "path": "apps/doctor/lib/a.ts" }]
+}

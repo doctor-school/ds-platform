@@ -28,6 +28,10 @@ interface RawProvider {
   id?: string;
   description?: string;
   state?: string;
+  host?: string;
+  tls?: boolean;
+  user?: string;
+  senderAddress?: string;
   /** SMS HTTP providers nest their description under `http`. */
   http?: { description?: string };
 }
@@ -51,7 +55,14 @@ export class ZitadelDeliveryAdmin implements DeliveryAdmin {
   private readonly fetchImpl: AdminFetchLike;
 
   constructor(private readonly config: ZitadelDeliveryAdminConfig) {
-    this.fetchImpl = config.fetchImpl ?? (globalThis.fetch as AdminFetchLike);
+    const fetchImpl = config.fetchImpl ?? (globalThis.fetch as AdminFetchLike);
+    this.fetchImpl = async (...args) => {
+      try {
+        return await fetchImpl(...args);
+      } catch {
+        throw new Error("Zitadel delivery admin request failed");
+      }
+    };
   }
 
   private headers(): Record<string, string> {
@@ -74,13 +85,23 @@ export class ZitadelDeliveryAdmin implements DeliveryAdmin {
     if (!res.ok) {
       throw new Error(`zitadel ${path} failed: HTTP ${res.status}`);
     }
-    const data = (await res.json()) as { result?: RawProvider[] };
+    const data = (await res.json().catch(() => {
+      throw new Error("Invalid Zitadel delivery admin response");
+    })) as { result?: RawProvider[] };
     return (data.result ?? []).map((p) => ({
       id: p.id ?? "",
       // SMTP carries `description` at the top level; the SMS HTTP provider nests
       // it under `http`. Read both so one adapter serves both channels.
       description: p.description ?? p.http?.description ?? "",
       active: isActiveState(p.state),
+      ...(path === "/admin/v1/smtp/_search"
+        ? {
+            host: p.host,
+            tls: p.tls,
+            user: p.user,
+            senderAddress: p.senderAddress,
+          }
+        : {}),
     }));
   }
 
@@ -104,7 +125,7 @@ export class ZitadelDeliveryAdmin implements DeliveryAdmin {
     // anything else is a real failure and throws.
     const body = await res.text().catch(() => "");
     if (/already active|already|no changes/i.test(body)) return;
-    throw new Error(`zitadel ${path} failed: HTTP ${res.status}: ${body}`);
+    throw new Error(`zitadel provider activation failed: HTTP ${res.status}`);
   }
 
   activateSmtp(id: string): Promise<void> {

@@ -368,7 +368,10 @@ http://api:3000`. A portal image built before this fix must be REBUILT.
 
    - **Provision the OIDC app + activate the real providers** (idempotent; SMTP creds
      come from `api.env`, so source it). This grants `IAM_LOGIN_CLIENT`, registers the
-     prod redirect URI, and activates mail.ru + SMS-Aero as the boot providers:
+     prod redirect URI, and activates the explicitly selected SMTP relay + SMS-Aero
+     as the boot providers. Before deploying the SMTP configuration revision, follow
+     [Transactional SMTP configuration and controlled activation](./smtp-activation.md)
+     for the required provider selection, native readback and rollback (#2116).
 
      ```bash
      # api.env is root:root 0600 — source it AS ROOT (sudo bash -c): a non-root `.`

@@ -27,6 +27,7 @@ export type FetchLike = (
     method: string;
     headers: Record<string, string>;
     body?: string;
+    signal?: AbortSignal;
     /**
      * The OIDC authorize hop must read the `Location` redirect rather than
      * follow it — `manual` keeps the 302 visible. Optional so the User/Session
@@ -528,13 +529,17 @@ export class ZitadelIdpClient implements IdpClient {
    * on a non-2xx or a code-less 2xx (a silent success would leave the registrant
    * code-less forever). The returned code is never logged (EARS-30).
    */
-  private async resendEmailCode(sub: string): Promise<string> {
+  private async resendEmailCode(
+    sub: string,
+    signal: AbortSignal,
+  ): Promise<string> {
     const res = await this.fetchImpl(
       this.url(`/v2/users/${sub}/email/resend`),
       {
         method: "POST",
         headers: this.headers(),
         body: JSON.stringify({ returnCode: {} }),
+        signal,
       },
     );
     // Surface a failed send instead of silently looking like success
@@ -556,16 +561,44 @@ export class ZitadelIdpClient implements IdpClient {
     email?: string,
     code?: string,
   ): Promise<void> {
+    return this.withEmailRequestDeadline((signal) =>
+      this.deliverEmailVerification(sub, email, code, signal),
+    );
+  }
+
+  /** Five seconds for native lookup/code issuance, including response bodies.
+   * SMTP/fallback then use their own existing 15s/10s resource-owned deadlines.
+   * Abort cancels native I/O; no Promise.race leaves an orphan request running.
+   */
+  private async withEmailRequestDeadline<T>(
+    operation: (signal: AbortSignal) => Promise<T>,
+  ): Promise<T> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 5_000);
+    try {
+      return await operation(controller.signal);
+    } finally {
+      clearTimeout(timer);
+      controller.abort();
+    }
+  }
+
+  private async deliverEmailVerification(
+    sub: string,
+    email: string | undefined,
+    code: string | undefined,
+    signal: AbortSignal,
+  ): Promise<void> {
     // #1128 single-code registration: the create-time code echoed by CreateUser
     // is delivered DIRECTLY — no `/email/resend`, which would generate a SECOND
     // code and invalidate the create-time one before the registrant reads it.
     // A code-less create response (the implicit retry seam) FALLS BACK to the
     // resend hop, which regenerates and returns a fresh code. Either way the
     // code lives only in this local for the in-flight send (EARS-30).
-    const codeToSend = code ?? (await this.resendEmailCode(sub));
+    const codeToSend = code ?? (await this.resendEmailCode(sub, signal));
     // The EARS-1/3 cascade always passes the registrant's email; a legacy
     // caller without one falls back to the IdP's stored address for the sub.
-    const to = email ?? (await this.getUser(sub))?.email;
+    const to = email ?? (await this.getUser(sub, signal))?.email;
     if (!to) {
       throw new Error(
         "zitadel email send_code: no destination email for sub — cannot deliver the verification code",
@@ -1027,7 +1060,10 @@ export class ZitadelIdpClient implements IdpClient {
    * Fails closed — any non-2xx or empty result is `null` — so the callers stay
    * enumeration-safe (an unknown identifier looks like a hiccup).
    */
-  private async resolveUserVerification(identifier: string): Promise<{
+  private async resolveUserVerification(
+    identifier: string,
+    signal?: AbortSignal,
+  ): Promise<{
     userId: string;
     emailVerified: boolean;
     email: string | undefined;
@@ -1039,6 +1075,7 @@ export class ZitadelIdpClient implements IdpClient {
       method: "POST",
       headers: this.headers(),
       body: JSON.stringify({ queries: [query] }),
+      ...(signal ? { signal } : {}),
     });
     if (!res.ok) return null;
     const data = (await res.json()) as {
@@ -1057,6 +1094,15 @@ export class ZitadelIdpClient implements IdpClient {
   }
 
   async resendEmailVerification(identifier: string): Promise<boolean> {
+    return this.withEmailRequestDeadline((signal) =>
+      this.deliverResentEmailVerification(identifier, signal),
+    );
+  }
+
+  private async deliverResentEmailVerification(
+    identifier: string,
+    signal: AbortSignal,
+  ): Promise<boolean> {
     // EARS-25: re-issue the registration email code, enumeration-safely. Mirror
     // `requestPasswordReset`'s discipline — resolve the identifier internally and
     // NEVER throw or branch on existence so the caller's ack/timing is not an
@@ -1065,7 +1111,7 @@ export class ZitadelIdpClient implements IdpClient {
     // hiccup is a silent no-op. The boolean is a server-side ledger decision
     // (whether an `otp.sent` row is owed), never reflected into the response.
     try {
-      const user = await this.resolveUserVerification(identifier);
+      const user = await this.resolveUserVerification(identifier, signal);
       // Unknown identifier, or already verified → no send, no ledger row. An
       // already-verified registrant has no pending verification to re-issue, and
       // re-sending would be an existence/state oracle, so it is a no-op.
@@ -1082,6 +1128,7 @@ export class ZitadelIdpClient implements IdpClient {
           method: "POST",
           headers: this.headers(),
           body: JSON.stringify({ returnCode: {} }),
+          signal,
         },
       );
       if (!res.ok) return false;
@@ -1101,6 +1148,15 @@ export class ZitadelIdpClient implements IdpClient {
   }
 
   async requestPasswordReset(identifier: string): Promise<void> {
+    return this.withEmailRequestDeadline((signal) =>
+      this.deliverPasswordReset(identifier, signal),
+    );
+  }
+
+  private async deliverPasswordReset(
+    identifier: string,
+    signal: AbortSignal,
+  ): Promise<void> {
     // Zitadel User v2: POST /v2/users/{userId}/password_reset with the
     // `PasswordResetRequest` oneof `returnCode` (#910, EARS-11/29): Zitadel
     // generates/stores/expires/verifies the reset code but SENDS NOTHING — the
@@ -1113,7 +1169,7 @@ export class ZitadelIdpClient implements IdpClient {
     // BFF response is not an existence oracle (EARS-11/16) — and the swallow
     // guarantees the transiting code cannot leak via a thrown error (EARS-30).
     try {
-      const user = await this.resolveUserVerification(identifier);
+      const user = await this.resolveUserVerification(identifier, signal);
       if (!user) return;
       const res = await this.fetchImpl(
         this.url(`/v2/users/${user.userId}/password_reset`),
@@ -1121,6 +1177,7 @@ export class ZitadelIdpClient implements IdpClient {
           method: "POST",
           headers: this.headers(),
           body: JSON.stringify({ returnCode: {} }),
+          signal,
         },
       );
       if (!res.ok) return;
@@ -2228,7 +2285,7 @@ export class ZitadelIdpClient implements IdpClient {
     return out;
   }
 
-  async getUser(sub: string): Promise<IdpUser | null> {
+  async getUser(sub: string, signal?: AbortSignal): Promise<IdpUser | null> {
     // EARS-26 (#709): targeted per-sub read for the read-path mirror self-heal.
     // Same User v2 search surface `listUsers` parses, narrowed to one sub via
     // `inUserIdsQuery` so the heal never enumerates the directory. Fails soft —
@@ -2241,6 +2298,7 @@ export class ZitadelIdpClient implements IdpClient {
         body: JSON.stringify({
           queries: [{ inUserIdsQuery: { userIds: [sub] } }],
         }),
+        ...(signal ? { signal } : {}),
       });
       if (!res.ok) return null;
       const data = (await res.json()) as {

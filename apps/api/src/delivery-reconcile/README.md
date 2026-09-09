@@ -1,63 +1,42 @@
-# `delivery-reconcile` — flag → Zitadel active-provider reconcile
+# Native delivery reconciliation
 
-Reconciles the live `email-delivery-real` / `sms-delivery-real` Unleash flags
-onto Zitadel's **active** notification provider (#185, [003 design][design] §3).
-The api sends no OTP email/SMS itself — **Zitadel** does, using whichever provider
-is currently active — so a delivery-mode flag cannot branch in our code; it must
-repoint Zitadel via the admin API. This module reads each flag, finds the
-pre-configured provider whose stable `description` matches the desired mode, and
-`_activate`s it. It holds **no** SMTP/SMS secrets (those live in Zitadel's
-provider config, set by `provision.sh`) — it only flips which provider is active.
+`DeliveryReconcileModule` reconciles the `email-delivery-real` and
+`sms-delivery-real` flags onto Zitadel notification providers. Verified-account
+login email OTP remains generated, rendered and sent by Zitadel. BFF verify/reset
+and account-exists emails use `MailerModule` and its separate send chain.
 
-## What's here
+`DeliveryReconcileService` subscribes to flag changes and initial SDK synchronization
+before the bounded startup reconcile. It uses env defaults until flags synchronize.
+Intercept defaults remain Mailpit/sms-sink. The optional module is absent when no
+live IdP issuer/service token is configured.
 
-| Concern                                      | File                            |
-| -------------------------------------------- | ------------------------------- |
-| Module wiring + lifecycle hooks              | `delivery-reconcile.module.ts`  |
-| Reconcile orchestration (flags → activate)   | `delivery-reconcile.service.ts` |
-| Port + provider contracts + description SSOT | `delivery-reconcile.types.ts`   |
-| Real Zitadel admin-API adapter               | `zitadel-delivery-admin.ts`     |
+For real SMTP, the shared `config/real-smtp.ts` validator requires explicit
+`IDP_SMTP_REAL_PROVIDER=postbox|mail.ru`, matching host, port 465 and complete shared
+credentials/sender. The stable `real transactional sender` description is preserved.
+Before activation, including an already-active provider, reconcile requires exactly
+one matching identity and checks its host, sender, username and TLS metadata against
+the configured selection. It never reads or compares the stored SMTP password:
+Zitadel does not return it. Provisioning owns credential convergence.
 
-## Exported symbols
+Missing, duplicate or mismatched real SMTP configuration rejects reconciliation.
+Startup exhausts its bounded retries and fails when real email is selected. A later
+flag failure logs a sanitized error and retries on the next signal; it never
+activates a fallback. **This cannot stop independently scheduled Zitadel sends or
+retract already queued mail**: the previous active provider can still send until
+operations correct the configuration. Native failures must be monitored in Zitadel.
+BFF Resend fallback, per-send deadlines and acceptance metrics do not cover native
+sends. SMTP acceptance is not mailbox delivery evidence.
 
-- **`DeliveryReconcileModule`** (`delivery-reconcile.module.ts`) — wires the
-  reconcile. It is bound to a live service **only when** a real Zitadel admin
-  client is configured (`IDP_ISSUER` + `IDP_SERVICE_TOKEN` — the same env
-  `IdpModule` uses to pick the real adapter); otherwise the token resolves to
-  `null` and no reconcile runs (no live Zitadel to repoint, so the boot-time env
-  mode stands). `onApplicationBootstrap` runs the initial reconcile and subscribes
-  to flag signals; `onModuleDestroy` unsubscribes. A boot failure is caught and
-  logged — it must never abort boot.
-- **`DELIVERY_RECONCILE`** (`delivery-reconcile.module.ts`) — the `Symbol` DI
-  token for the optional service (absent without a live Zitadel admin).
-- **`DeliveryReconcileService`** (`delivery-reconcile.service.ts`) — the reconcile
-  itself. `start(warn?)` subscribes to `onChange` (operator UI toggle) and
-  `onSynchronized` (the SDK's first poll — converges a steady-ON flag, #214)
-  **first and unconditionally**, then runs a resilient initial reconcile with
-  bounded linear backoff; it never throws. `reconcile(warn?)` reads both flags
-  (env default as fallback) and, per channel, selects the provider matching the
-  desired description and `_activate`s it unless already active. It is
-  **idempotent** (skips an already-active provider), **safe** (a missing match is
-  a no-op + warn — it never activates the wrong provider), and **reactive**.
-  `stop()` unsubscribes.
-- **`DeliveryEnvDefaults`** / **`ReconcileRetryConfig`** / **`WarnFn`**
-  (`delivery-reconcile.service.ts`) — the boot/Unleash-unreachable delivery
-  defaults, the injectable retry knobs (attempts, backoff, sleep — overridable in
-  tests), and the diagnostic sink type.
-- **`DeliveryAdmin`** + **`ZitadelProvider`** (`delivery-reconcile.types.ts`) —
-  the minimal Zitadel admin port (list SMTP/SMS providers, activate one by id) and
-  the normalised provider shape (`id`, `description`, `active`).
-- **`SMTP_DESCRIPTION_INTERCEPT` / `SMTP_DESCRIPTION_REAL` /
-  `SMS_DESCRIPTION_INTERCEPT` / `SMS_DESCRIPTION_REAL`**
-  (`delivery-reconcile.types.ts`) — the stable `description` strings that are the
-  contract between `provision.sh` and the reconcile: changing one side without the
-  other breaks the match (the reconcile then warns rather than activating the
-  wrong provider).
-- **`ZitadelDeliveryAdmin`** + **`ZitadelDeliveryAdminConfig`** / **`AdminFetchLike`**
-  (`zitadel-delivery-admin.ts`) — the real `DeliveryAdmin` adapter over the
-  Zitadel admin API (`/admin/v1/smtp/_search`, `/admin/v1/sms/_search`,
-  `…/{id}/_activate`), reusing the `baseUrl` + `serviceToken` + injectable
-  `fetchImpl` pattern. `_activate` on an already-active provider is tolerated as a
-  no-op (mirroring `provision.sh`); any other non-2xx throws.
+`ZitadelDeliveryAdmin` reads the Admin SMTP/SMS search endpoints and activates by ID.
+Its SMTP metadata shape follows [ListSMTPConfigs](https://zitadel.com/docs/reference/api/admin/zitadel.admin.v1.AdminService.ListSMTPConfigs).
+Provider response bodies and SMTP credentials are never included in its errors.
+`stop()` removes both signal subscriptions. SMS/intercept retains its existing
+missing-provider warning and transient startup recovery behavior.
 
-[design]: ../../../docs/content/specs/features/003-user-authentication/003-design.md
+Tests: from the repo root, `node apps/api/node_modules/vitest/vitest.mjs run apps/api/src/delivery-reconcile`.
+Provisioning fixtures execute isolated shell sections with a fake API and synthetic
+credentials; they need Bash and jq, never a running stand or provider connection.
+
+Controlled activation, readback, rollback and received-artifact proof are tracked in
+[#2116](https://github.com/doctor-school/ds-platform/issues/2116), using the
+[SMTP activation runbook](../../../../infra/deploy/smtp-activation.md).

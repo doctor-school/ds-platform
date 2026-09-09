@@ -23,7 +23,7 @@ function recordingFactory(): {
   const factory: TransportFactory = () => ({
     sendMail: (msg: { to?: unknown }) => {
       sends.push({ to: String(msg.to) });
-      return Promise.resolve();
+      return Promise.resolve({ response: "250 accepted" });
     },
   });
   return { factory, sends };
@@ -35,9 +35,10 @@ const interceptCfg = {
   from: "noreply@doctor.school",
 };
 
-function buildMailer(
-  synthetic: SyntheticSuppression,
-): { mailer: SmtpMailer; sends: Array<{ to: string }> } {
+function buildMailer(synthetic: SyntheticSuppression): {
+  mailer: SmtpMailer;
+  sends: Array<{ to: string }>;
+} {
   const rec = recordingFactory();
   const mailer = new SmtpMailer({
     intercept: interceptCfg,

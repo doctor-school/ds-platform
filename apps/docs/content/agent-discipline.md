@@ -57,13 +57,13 @@ Interactive browser payloads go to a verifier subagent; committed compact Playwr
 
 ## Shell, verification and evidence
 
-Use the worktree for all deliverable reads/writes/tests, including docs. Run `pnpm install` there before its first commit; no borrowed dependencies or docs-only hook skip. Stage explicit paths and inspect status/diff; never alter others' files/listeners.
+Use the worktree for all deliverable reads/writes/tests, including docs. Run `pnpm install` there before its first commit; no borrowed dependencies or docs-only hook skip. Stage explicit paths and inspect status/diff; never alter others' files/listeners. The lead never `cd`s into a worktree; canon: repo-conventions → Closeout.
 
 Run dependent commands sequentially, check every exit. PowerShell native exit is `$LASTEXITCODE`, captured immediately; `$?` is Boolean. Git ancestry is 0=fresh, 1=stale, other=error; verify fetch and both SHA resolutions first. Never turn all errors into “stale” with an echo chain. Multiline GitHub text uses literal UTF-8 `--body-file`.
 
 TDD: meaningful RED before production/guard logic, then GREEN. Run required focused tests, full lint and applicable static guards; after PR create run `pnpm pr:preflight <N>`. Cite precise baseline failures, never bypass them. Independent review + fresh CI + applicable owner evidence precede canonical landing. No `ci:wait` substitute after rebase.
 
-Hooks have separate configured/trusted/observed states. `tools/hooks/README.md` owns diagnostics: `pnpm agent:doctor`; after landing, restart Codex in the target project, obtain owner review/trust of that project and its exact `/hooks` definitions, then run `pnpm agent:smoke --project`. Fixtures are developer checks, not project activation proof or an extra owner trust ceremony. Never bypass trust or expand the sandbox. Synthetic logs cannot prove live execution or persisted trust; unobserved tool paths and missing/stale telemetry remain unavailable, requiring manual discipline.
+Hooks have separate configured/trusted/observed states; `tools/hooks/README.md` owns diagnostics (`pnpm agent:doctor`): after landing, restart Codex in the target project, obtain owner review/trust of it and its exact `/hooks` definitions, then run `pnpm agent:smoke --project`. Fixtures are developer checks, not activation proof or an owner trust ceremony. Never bypass trust or expand the sandbox. Synthetic logs cannot prove live execution or persisted trust; unobserved tool paths and missing/stale telemetry remain unavailable, so discipline is manual.
 
 ## Memory and wrap
 

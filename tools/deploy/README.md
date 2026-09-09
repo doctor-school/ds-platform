@@ -35,7 +35,10 @@ Pipeline, fail-closed, stops at the first red step and prints a rollback pointer
 
 1. **Pre-flight (DSO-126)** — clean working tree · `HEAD == origin/main` · **green
    CI** for that SHA (latest check-run per name via
-   `gh api …/commits/<sha>/check-runs`) · **no live broadcast**
+   `gh api …/commits/<sha>/check-runs`, restricted to suites of repo-owned
+   `.github/workflows/*` runs — GitHub-injected `dynamic/*` workflows such as
+   Dependabot Updates are dropped by workflow `path`, never by name; unknown
+   provenance still blocks — see `ci-gate.mjs`, #2077) · **no live broadcast**
    (`live-broadcast-check.mjs`, fail-closed — #1000, spec §10.4 item 7; the
    `--rollback` path skips this hold) · **release gate** (`release-gate.mjs`,
    #1662 — below). Refuses otherwise. Fixes the deployed commit to

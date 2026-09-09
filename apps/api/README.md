@@ -88,6 +88,26 @@ These diagnostics preserve the adapter's enumeration-safe acknowledgement and
 the existing delivery deadline; a green run alone does not explain an earlier
 missing message.
 
+For #2085 recurrence evidence, after the diagnostic workflow change is on main,
+run `gh workflow run CI --ref main -f otp_diagnostic=true`. This opt-in adds
+20 sequential fresh-account executions of the real EARS-6 email test to the
+provisioned API job, stopping on the first failing case or incomplete cleanup.
+Each case retains its original 15-second mailbox poll and 45-second test limit;
+the existing token-exchange convergence loop is unchanged. It deletes the
+created identity after each case, including failures. Ordinary CI has no extra
+cases. The runner refuses execution outside the provisioned GitHub Actions job.
+
+The seven-day `otp-delivery-diagnostic` artifact retains allowlisted provider
+status/lookup counts and mailbox counters for successes and the first failure.
+An empty user search points to lookup/readiness; a rejected factor or session
+points to challenge setup; an accepted challenge with zero messages points to
+notifier/delivery; subject matches with no fresh mail point to the timestamp
+boundary; eligible mail without an extracted code points to the parser/template.
+Setup failures and incomplete cleanup also fail closed. No raw test output,
+provider logs, addresses, subjects, codes or tokens are uploaded. Twenty green
+cases narrow recurrence evidence; they do not establish a root-cause fix or
+close the release blocker #2085.
+
 Running the e2e suites locally against the dev stand needs two env facts beyond
 the endpoints in `~/.ds-platform/.env.local`:
 

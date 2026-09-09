@@ -221,6 +221,8 @@ async function main() {
       "-e",
       `POSTGRES_USER=${user}`,
       "-e",
+      "POSTGRES_DB=postgres",
+      "-e",
       "POSTGRES_HOST_AUTH_METHOD=trust",
       "-e",
       `POSTGRES_INITDB_ARGS=--encoding=UTF8 --locale=en_US.utf8 ${major === 18 ? "--data-checksums" : ""}`,
@@ -300,7 +302,7 @@ async function main() {
       await sql(
         name,
         "postgres",
-        "SELECT roleid::regrole,member::regrole,grantor::regrole,admin_option,inherit_option,set_option FROM pg_auth_members ORDER BY 1::text,2::text",
+        "SELECT roleid::regrole,member::regrole,grantor::regrole,admin_option,inherit_option,set_option FROM pg_auth_members ORDER BY roleid::regrole::text,member::regrole::text",
       ),
     );
     return result;
@@ -566,6 +568,49 @@ async function main() {
     await stage("pg18-full-incremental-wal-pitr", () =>
       pitr("candidate18", 18, "restored18", "repo18"),
     );
+    await stage("phase-b-pg18-forward-recovery", async () => {
+      // The candidate contains BOTH acknowledged markers; the historical PITR
+      // target intentionally predates the second. Recover its latest backup
+      // into another PG18 volume, never reconnect the stale PG17 volume.
+      const acknowledged = await summary("candidate18");
+      await backup("candidate18", "--type=incr", "backup");
+      await createVolume("forward18");
+      await docker(
+        "run",
+        "--rm",
+        ...label,
+        ...limited,
+        "--network",
+        "none",
+        ...mounts("forward18", 18, "repo18"),
+        ...env(18),
+        "--entrypoint",
+        "bash",
+        image(18),
+        "-ceu",
+        `mkdir -p ${dataPath(18)}; chown postgres:postgres ${dataPath(18)}; exec gosu postgres pgbackrest --stanza=drill --type=immediate --target-action=promote restore`,
+      );
+      await start("forward18", 18, "repo18", { restore: true });
+      checkEqual(acknowledged, await summary("forward18"));
+      for (const db of await databases("forward18")) {
+        if (
+          (
+            await sql(
+              "forward18",
+              db.name,
+              "SELECT count(*) FROM drill.markers WHERE marker IN ('before','after')",
+            )
+          ).trim() !== "2"
+        )
+          throw new Error("acknowledged write lost");
+      }
+      return {
+        integrity: acknowledged,
+        recovery:
+          "fresh PG18 forward restore includes every acknowledged synthetic marker",
+        downgrade17: "not exercised; unavailable",
+      };
+    });
     await stage("retained-pg17", async () => ({
       integrity: await summary("source17"),
       backups: JSON.parse(await backup("source17", "--output=json", "info")),
@@ -580,6 +625,24 @@ async function main() {
         integrity: before,
         boundary: "database-only old endpoint restart; no application cutover",
       };
+    });
+    await stage("task-storage", async () => {
+      const sizes = {};
+      for (const [name, major, repo] of [
+        ["source17", 17, "repo17"],
+        ["restored17", 17, "repo17"],
+        ["candidate18", 18, "repo18"],
+        ["restored18", 18, "repo18"],
+        ["forward18", 18, "repo18"],
+      ]) {
+        sizes[name] = (
+          await docker("exec", container(name), "du", "-sk", dataPath(major))
+        ).trim();
+        sizes[repo] = (
+          await docker("exec", container(name), "du", "-sk", "/pgbackrest")
+        ).trim();
+      }
+      return sizes;
     });
     evidence.status = "passed-core-only";
   } catch (error) {

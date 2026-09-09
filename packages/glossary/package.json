@@ -32,7 +32,7 @@
   "devDependencies": {
     "fast-glob": "^3.3.3",
     "gray-matter": "^4.0.3",
-    "tsx": "^4.23.12",
+    "tsx": "^4.23.13",
     "typescript": "^6.0.3"
   }
 }

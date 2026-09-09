@@ -45,9 +45,13 @@ resource "twc_router" "ds" {
   preset_id  = var.router_preset_id
   project_id = var.project_id
 
-  # The VPC this router manages (the private data plane).
+  # Preserve the existing DHCP-disabled network and floating-IP SNAT explicitly.
+  # Provider 1.8.2 models networks as a set with its own nat_ip; leaving these
+  # implicit introduces a router update on refresh (#2110 / #2111).
   networks {
-    id = twc_vpc.ds.id
+    id              = twc_vpc.ds.id
+    is_dhcp_enabled = false
+    nat_ip          = twc_floating_ip.data_egress.ip
   }
 
   # Floating IP used as the NAT source, bound to the managed VPC. This is the

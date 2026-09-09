@@ -172,7 +172,25 @@ pre-clear skips rows that already hold the rank they are about to be given, and
 the conflict branch moves `updated_at` only when `name`, `is_other` or
 `frequent_rank` really differs from the stored row.
 
-The diff comparison excludes **no** column. Scenarios must still address
-specialties by code or name rather than by a hard-coded id: the id belongs to the
-book seed, and a scenario that pins one would break on any database whose book
-predates the derivation.
+No column of any dataset table is excluded from the comparison. Scenarios must
+still address specialties by code or name rather than by a hard-coded id: the id
+belongs to the book seed, and a scenario that pins one would break on any
+database whose book predates the derivation.
+
+### `audit_ledger` — build bookkeeping, not dataset content
+
+The dataset is written with `source: db-direct`, and the audit trigger records
+each of those 42 inserts. Those ledger rows are _derived_: their whole payload
+(`metadata.diff`, `metadata.pk`, `event_type`, `table`) is a function of the
+golden rows and is byte-identical between builds. What is not identical is the
+ledger's own write-provenance — `id`, `event_id`, `created_at` and
+`metadata.txid` — because an audit row truthfully records _when a write actually
+happened_, and pinning that would falsify the record.
+
+So a raw two-build diff is empty on all 22 dataset tables and non-empty on
+`audit_ledger` alone, in those four columns. `audit_ledger` sits in the same
+class as `__drizzle_migrations`: bookkeeping about the build rather than fixture
+content. Whether the golden build should therefore leave the ledger empty, or
+whether the drift comparison should skip it the way it already skips the
+migrations table, is an **open decision** — recorded rather than silently
+resolved, because it decides what a cloned preview slot inherits.

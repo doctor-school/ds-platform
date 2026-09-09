@@ -404,7 +404,7 @@ Without these items **we do not onboard the first real doctor to prod**:
 2. **ИСПДн classification per ФСТЭК-21** — formal act with УЗ-3 (DSO-X2). 187-FZ N/A (not CII).
 3. **Privacy policy + public offer agreement + per-purpose consent** published; capture via `/me/consent/accept` per-version (ADR-0009 §2.1).
 4. **152-FZ data subject rights endpoints**: data export, data deletion — operational (ADR-0009 §2.2 — Pre-pilot mandatory).
-5. **Retention matrix** published in `packages/db/schema/pd/retention.ts` + CI-validated (ADR-0009 §2.6).
+5. **Retention matrix** published in `packages/db/src/schema/pd/retention.ts` + CI-validated (ADR-0009 §2.6).
 6. **Cookie consent UI** on all public pages.
 7. **Edge & comms providers — all required categories** (DNS, CAPTCHA, CDN, WAF, SMS primary, Email primary) — provider selected + DPA signed (see §5.bis).
 

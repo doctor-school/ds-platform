@@ -87,7 +87,7 @@ Retention duration **не зафиксирован в этом ADR** — это 
 
 - TS schema как single source of truth, doc-as-SSOT принцип.
 - pgvector first-class (`vector(...)` type из коробки).
-- Schema-файлы по доменам в `packages/db/schema/` — общая SSOT для всей платформы (ADR-0006 §1 SSOT-table + ADR-0008 §2.3), так read-only потребители (`apps/admin`, `apps/cms`, mobile sync) импортируют типы без cross-app boundary violation. Все PD-bearing таблицы (`consent_*`, `data_export_requests`, `erasure_requests`, `idempotency_keys`, `job_outbox`, `subject_keys`, `audit_retention_keys` по ADR-0009 §5) живут здесь. drizzle-kit конфиг в `packages/db/drizzle.config.ts` указывает `out: '../../apps/api/drizzle'` — миграционная директория остаётся `apps/api/drizzle/`.
+- Schema-файлы по доменам в `packages/db/src/schema/` — общая SSOT для всей платформы (ADR-0006 §1 SSOT-table + ADR-0008 §2.3), так read-only потребители (`apps/admin`, `apps/cms`, mobile sync) импортируют типы без cross-app boundary violation. Все PD-bearing таблицы (`consent_*`, `data_export_requests`, `erasure_requests`, `idempotency_keys`, `job_outbox`, `subject_keys`, `audit_retention_keys` по ADR-0009 §5) живут здесь. drizzle-kit конфиг в `packages/db/drizzle.config.ts` указывает `out: '../../apps/api/drizzle'` — миграционная директория остаётся `apps/api/drizzle/`.
 - drizzle-kit generate → SQL-diff-файлы в `apps/api/drizzle/`, human-editable для сложных миграций (concurrent index, partition manipulation, RLS).
 - В CI — migration dry-run против staging БД перед merge.
 
@@ -168,7 +168,7 @@ Retention duration **не зафиксирован в этом ADR** — это 
 
 **Schema impact:**
 
-- Таблица `idempotency_keys (key text PRIMARY KEY, scope text, created_at timestamptz, expires_at timestamptz, status text, deleted_at timestamptz)` в `packages/db/schema/` — истечение через retained-row lifecycle-cron.
+- Таблица `idempotency_keys (key text PRIMARY KEY, scope text, created_at timestamptz, expires_at timestamptz, status text, deleted_at timestamptz)` в `packages/db/src/schema/` — истечение через retained-row lifecycle-cron.
 - Таблица `job_outbox (id uuid PK, kind text, payload jsonb, status text, created_at, claimed_at, completed_at, attempt int)` для critical jobs.
 - BullMQ драйнер читает `job_outbox` для critical job kinds; non-critical jobs шлются напрямую в BullMQ.
 - Queue contract, имена очередей, idempotency-key policy, classification critical vs non-critical — см. `2026-05-18-ds-platform-bullmq-queue-contract-design`.

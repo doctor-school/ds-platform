@@ -121,7 +121,7 @@ ds-platform/
         └── generated-artifacts-check.ts  # ADR-0006 §7
 ```
 
-**The authoritative source for the layout is ADR-0006 §10.** ADR-0008 does not rename anything; it only adds root-level manifest files and the `.github/` skeleton. The canonical Drizzle-schema master is `packages/db/schema/` (per ADR-0006 §1 SSOT-row); `packages/db/` enables read-only consumers (`apps/admin`, `apps/cms`) to reference ImageRecord schema without cross-app imports. `apps/api/drizzle/` (migrations) remains unchanged.
+**The authoritative source for the layout is ADR-0006 §10.** ADR-0008 does not rename anything; it only adds root-level manifest files and the `.github/` skeleton. The canonical Drizzle-schema master is `packages/db/src/schema/` (per ADR-0006 §1 SSOT-row); `packages/db/` enables read-only consumers (`apps/admin`, `apps/cms`) to reference ImageRecord schema without cross-app imports. `apps/api/drizzle/` (migrations) remains unchanged.
 
 **No top-level `docs/`** — all documentation is rendered by Fumadocs from `apps/docs/content/`. This preserves a single SSOT for rendering and aligns with the ADR-0006 §1, §10 topology.
 
@@ -346,7 +346,7 @@ Step 21 — admin-only. Step 22 — joint Tech Lead+AI.
 | OQ-R9  | GitHub Team plan upgrade trigger thresholds (exact min/month)                                                                                                                                                            | After 2 months of Phase 0 telemetry                                                                                                                                                        |
 | OQ-R10 | Mirror on Gitea/Forgejo failover plan                                                                                                                                                                                    | Trigger: GitHub.com sustained downtime > 24h from RF                                                                                                                                       |
 | OQ-R12 | Self-hosted GHA runner — concrete setup                                                                                                                                                                                  | **CLOSED** — none. The shared BBM ephemeral pool was trialled (#1224) and reverted (#1249); CI runs GitHub-hosted per §2.8, with no dedicated runner VPS and no runner ADR here            |
-| OQ-R13 | `packages/db/` vs `apps/api/src/db/schema/` — formal resolution of ADR-0003 §4 ↔ ADR-0006 §1 conflict                                                                                                                    | **CLOSED** — ADR-0003 §4 now reads `packages/db/schema/` as the canonical master in line with ADR-0006 §1                                                                                  |
+| OQ-R13 | `packages/db/` vs `apps/api/src/db/schema/` — formal resolution of ADR-0003 §4 ↔ ADR-0006 §1 conflict                                                                                                                    | **CLOSED** — ADR-0003 §4 now reads `packages/db/src/schema/` as the canonical master in line with ADR-0006 §1                                                                              |
 | OQ-R14 | Reactivation discipline owner — the §2.6 trigger has fired (the repo is public); who is responsible for applying the branch-protection contract?                                                                         | Owner: Tech Lead. Closed by GitHub Issue #1403: a repository ruleset on `main` is live, with the admin bypass scoped to `pull_request` so the Version-Packages bot branch stays mergeable. |
 | OQ-R15 | Periodic process-level audit of merge-gate intent compliance — whether a recurring (monthly?) self-audit confirming that Tech Lead merges actually satisfied the §2.6 intent (CI green, diff read) is worth the overhead | Deferred — adds overhead without obvious value in single-developer Phase 0; revisit when a second engineer joins (OQ-R6 trigger)                                                           |
 
@@ -359,7 +359,7 @@ Step 21 — admin-only. Step 22 — joint Tech Lead+AI.
 - ADR-0001 — Zitadel: SSO for GitHub.com is not needed in Phase 0 (Enterprise plan only); decision to revisit when the team grows.
 - ADR-0002 §6 — BullMQ async queue: lives as part of `apps/api/`.
 - ADR-0002 §3-5 — Zod schemas + openapi-typescript: `packages/schemas/` + `packages/api-client/` (the latter — generated artifact).
-- ADR-0003 §4 (Drizzle ORM + drizzle-kit migrations) + §7 (pgvector): Drizzle schemas in `packages/db/schema/`; migrations in `apps/api/drizzle/`.
+- ADR-0003 §4 (Drizzle ORM + drizzle-kit migrations) + §7 (pgvector): Drizzle schemas in `packages/db/src/schema/`; migrations in `apps/api/drizzle/`.
 - ADR-0004 §2 — 4 frontend apps: doctor, portal, admin, cms (Payload v3). All in `apps/`.
 - ADR-0004 §7 — Payload v3 content-only: `apps/cms/`, marketing-content in `cms.*` schema namespace shared Postgres.
 - ADR-0004 §13 — ESLint `no-vercel-only-api` rule: exported from `packages/eslint-config/`.

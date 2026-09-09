@@ -94,9 +94,9 @@ packages/db/
   src/
     index.ts                   # re-exports createDrizzle + schema
     client.ts                  # createDrizzle(connectionString) → { pool, db }
-  schema/
-    idempotency-keys.ts        # per ADR-0003 §5
-    index.ts
+    schema/
+      idempotency-keys.ts      # per ADR-0003 §5
+      index.ts
 
 packages/schemas/
   src/
@@ -134,7 +134,7 @@ export type ReadinessResponse = z.infer<typeof ReadinessResponseSchema>;
 
 `CheckStatusSchema` is exported as a building block — when Redis / MinIO / Centrifugo probes land, they reuse this enum and extend the `checks` shape inside their own spec.
 
-### 4.2 `packages/db/schema/idempotency-keys.ts`
+### 4.2 `packages/db/src/schema/idempotency-keys.ts`
 
 ```ts
 import { pgTable, text, timestamp } from "drizzle-orm/pg-core";

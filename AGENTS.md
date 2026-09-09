@@ -154,7 +154,7 @@ In Phase 0, Tech Lead is the single CODEOWNERS owner (ADR-0008 §2.7) and the si
 - Tech specs (brainstorm): `apps/docs/content/specs/tech/<topic>.md`
 - Project skill catalog: `apps/docs/content/skills/<name>/SKILL.md`
 - Glossary: `apps/docs/content/product/glossary/` (file-per-term)
-- API contract SSOT / DB schema SSOT: `packages/schemas/` (Zod) / `packages/db/schema/` (Drizzle)
+- API contract SSOT / DB schema SSOT: `packages/schemas/` (Zod) / `packages/db/src/schema/` (Drizzle)
 - Generated — never edit by hand: `packages/api-client/`, `packages/glossary/src/ids.ts`
 - Lint tools / bootstrap: `tools/lint/*.ts` / `tools/agent-bootstrap.ts` (`pnpm bootstrap`)
 - Strategic / cross-team work-items: Plane `doctor-school` (DSP, DSC, DSM, DSO)

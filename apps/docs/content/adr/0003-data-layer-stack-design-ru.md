@@ -186,7 +186,7 @@ lang: ru
 
 **Retention — закрыто 2026-05-18 (DSO-63 #6): см. ADR-0009 §2.6 + PD-lifecycle design spec §3.**
 
-Retention matrix per table — в `packages/db/schema/pd/retention.ts` (TS-объект, CI-validated). Каждая таблица с PD имеет: legal basis, retention period, erasure mechanism, audit exception, owner. Retention — это lifecycle/value-erasure решение, а не физическое удаление строк: data-bearing `DROP PARTITION` запрещён для каждого application-owned stream (§3.6).
+Retention matrix per table — в `packages/db/src/schema/pd/retention.ts` (TS-объект, CI-validated). Каждая таблица с PD имеет: legal basis, retention period, erasure mechanism, audit exception, owner. Retention — это lifecycle/value-erasure решение, а не физическое удаление строк: data-bearing `DROP PARTITION` запрещён для каждого application-owned stream (§3.6).
 
 - `audit_log` retention — читаемые encrypted PD в течение **5y** (152-ФЗ + НК РФ + medical compliance), затем crypto-shred PD с сохранением неперсональной hash-chain строки (ADR-0009 §2.4). Follow-up #383 отвечает за term crypto-shred и regression guard, сохраняющий `partman.part_config.retention` незаданным для `audit_ledger`; его партиции удалять нельзя.
 - `events_log`, `notifications`, `ai_pipeline_jobs` retention — определяется в retention matrix.
@@ -248,9 +248,9 @@ Retention matrix per table — в `packages/db/schema/pd/retention.ts` (TS-об�
 
 ### 3.3. Schema organization
 
-- `packages/db/schema/` — TS-файлы по доменам (`users.ts`, `courses.ts`, `ledger.ts`, ...). Master location per ADR-0003 §4.
+- `packages/db/src/schema/` — TS-файлы по доменам (`users.ts`, `courses.ts`, `ledger.ts`, ...). Master location per ADR-0003 §4.
 - Каждый файл экспортирует `pgTable` definitions, indexes, foreign keys.
-- Один `packages/db/schema/index.ts` re-export'ит всё.
+- Один `packages/db/src/schema/index.ts` re-export'ит всё.
 - Drizzle infer type'ы: `type User = typeof users.$inferSelect`, `type NewUser = typeof users.$inferInsert`.
 - Zod-схемы для request/response (из ADR-0002) — отдельно, не дублируют Drizzle-схемы, но генерируются через `drizzle-zod` где возможно.
 
@@ -438,7 +438,7 @@ Redis несёт только cache + Centrifugo presence + BullMQ best-effort j
 
 ### 7.4. Postgres-side schemas
 
-Новые таблицы в `packages/db/schema/`:
+Новые таблицы в `packages/db/src/schema/`:
 
 ```ts
 export const idempotencyKeys = pgTable(

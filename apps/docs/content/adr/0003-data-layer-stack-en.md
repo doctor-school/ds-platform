@@ -87,7 +87,7 @@ Retention duration **is not fixed in this ADR** — it is a knob, not an archite
 
 - TS schema as single source of truth, doc-as-SSOT principle.
 - pgvector first-class (`vector(...)` type out of the box).
-- Schema files per domain in `packages/db/schema/` — shared SSOT for the whole platform (ADR-0006 §1 SSOT-table + ADR-0008 §2.3), so read-only consumers (`apps/admin`, `apps/cms`, mobile sync) import types without cross-app boundary violations. All PD-bearing tables (`consent_*`, `data_export_requests`, `erasure_requests`, `idempotency_keys`, `job_outbox`, `subject_keys`, `audit_retention_keys` per ADR-0009 §5) live here. drizzle-kit config in `packages/db/drizzle.config.ts` keeps `out: '../../apps/api/drizzle'` so the migration directory remains `apps/api/drizzle/`.
+- Schema files per domain in `packages/db/src/schema/` — shared SSOT for the whole platform (ADR-0006 §1 SSOT-table + ADR-0008 §2.3), so read-only consumers (`apps/admin`, `apps/cms`, mobile sync) import types without cross-app boundary violations. All PD-bearing tables (`consent_*`, `data_export_requests`, `erasure_requests`, `idempotency_keys`, `job_outbox`, `subject_keys`, `audit_retention_keys` per ADR-0009 §5) live here. drizzle-kit config in `packages/db/drizzle.config.ts` keeps `out: '../../apps/api/drizzle'` so the migration directory remains `apps/api/drizzle/`.
 - drizzle-kit generate → SQL diff files in `apps/api/drizzle/`, human-editable for complex migrations (concurrent index, partition manipulation, RLS).
 - In CI — migration dry-run against the staging DB before merge.
 
@@ -168,7 +168,7 @@ A single Redis serving cache + sessions + idempotency + rate-limit + queues at o
 
 **Schema impact:**
 
-- Table `idempotency_keys (key text PRIMARY KEY, scope text, created_at timestamptz, expires_at timestamptz, status text, deleted_at timestamptz)` in `packages/db/schema/` — expiry via a retained-row lifecycle cron.
+- Table `idempotency_keys (key text PRIMARY KEY, scope text, created_at timestamptz, expires_at timestamptz, status text, deleted_at timestamptz)` in `packages/db/src/schema/` — expiry via a retained-row lifecycle cron.
 - Table `job_outbox (id uuid PK, kind text, payload jsonb, status text, created_at, claimed_at, completed_at, attempt int)` for critical jobs.
 - A BullMQ drainer reads `job_outbox` for critical job kinds; non-critical jobs go directly into BullMQ.
 - Queue contract, queue names, idempotency-key policy, critical vs non-critical classification — see `2026-05-18-ds-platform-bullmq-queue-contract-design`.

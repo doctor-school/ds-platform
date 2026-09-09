@@ -404,7 +404,7 @@ Reg list внешних processor'ов с DPA-status, fallback chain, и кат�
 2. **Классификация ИСПДн по ФСТЭК-21** — формальный акт с УЗ-3 (DSO-X2). 187-ФЗ N/A (не КИИ).
 3. **Privacy policy + договор-оферта + per-purpose consent** опубликованы; capture через `/me/consent/accept` per-version (ADR-0009 §2.1).
 4. **152-ФЗ data subject rights endpoints**: data export, data deletion — рабочие (ADR-0009 §2.2 — Pre-pilot mandatory).
-5. **Retention matrix** opublished в `packages/db/schema/pd/retention.ts` + CI-validated (ADR-0009 §2.6).
+5. **Retention matrix** opublished в `packages/db/src/schema/pd/retention.ts` + CI-validated (ADR-0009 §2.6).
 6. **Cookie consent UI** на всех публичных страницах.
 7. **Edge & comms providers — все required категории** (DNS, CAPTCHA, CDN, WAF, SMS primary, Email primary) — provider выбран + DPA подписан (см. §5.bis).
 

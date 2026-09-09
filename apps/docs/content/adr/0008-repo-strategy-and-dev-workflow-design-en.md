@@ -32,7 +32,7 @@ This document is the implementation detail for ADR-0008. The ADR fixes "what and
 | ADR location           | `apps/docs/content/adr/NNNN-<slug>.md` + companion `NNNN-<slug>-design.md`                                                                               | §2.3                        |
 | Feature spec location  | `apps/docs/content/specs/features/NNN-<slug>/{NNN-requirements.md, NNN-design.md, NNN-scenarios.feature}`                                                | §2.3 (inherits ADR-0006)    |
 | Tech spec location     | `apps/docs/content/specs/tech/<topic>.md`                                                                                                                | §2.3 (inherits ADR-0006 §4) |
-| Drizzle schema master  | `packages/db/schema/` per ADR-0006 §1 (supersedes ADR-0003 §4 location); migrations in `apps/api/drizzle/`                                               | §2.3                        |
+| Drizzle schema master  | `packages/db/src/schema/` per ADR-0006 §1 (supersedes ADR-0003 §4 location); migrations in `apps/api/drizzle/`                                           | §2.3                        |
 | Release tooling        | changesets + `changesets/action` GitHub workflow                                                                                                         | §2.4                        |
 | Commit convention      | conventional-commits (light, no enforce)                                                                                                                 | §2.4                        |
 | Merge style            | squash-only                                                                                                                                              | §2.4                        |
@@ -913,7 +913,7 @@ Concrete workflow when a trigger fires (any of OQ-R1..R12):
 - **ADR-0001** §8 — IdP = Zitadel (closed per §8 / DSP-209): when team SSO for GitHub Enterprise plan appears — reuse the same tenant, not a separate one.
 - **ADR-0002** §6 — `apps/api/` implements NestJS + BullMQ.
 - **ADR-0002** §3-5 — `packages/schemas/` (Zod SSOT) + `packages/api-client/` (openapi-typescript generated SDK).
-- **ADR-0003** §4 — Drizzle TS schemas in `packages/db/schema/` + drizzle-kit SQL diff migrations in `apps/api/drizzle/`; §7 — pgvector in the same Postgres.
+- **ADR-0003** §4 — Drizzle TS schemas in `packages/db/src/schema/` + drizzle-kit SQL diff migrations in `apps/api/drizzle/`; §7 — pgvector in the same Postgres.
 - **ADR-0004** §2 — 4 frontend Next.js apps (`apps/doctor/`, `apps/portal/`, `apps/admin/`, `apps/cms/`).
 - **ADR-0004** §7 — Payload v3 in `apps/cms/` (content-only, `cms.*` schema namespace shared Postgres).
 - **ADR-0004** §13 — `packages/eslint-config/` exports the `no-vercel-only-api` rule.

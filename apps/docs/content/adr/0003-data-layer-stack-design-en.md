@@ -185,7 +185,7 @@ lang: en
 
 **Retention — closed 2026-05-18 (DSO-63 #6): see ADR-0009 §2.6 + PD-lifecycle design spec §3.**
 
-Retention matrix per table — in `packages/db/schema/pd/retention.ts` (TS object, CI-validated). Every PD-bearing table has: legal basis, retention period, erasure mechanism, audit exception, owner. Retention is a lifecycle/value-erasure decision, never a physical-row decision: data-bearing `DROP PARTITION` is forbidden for every application-owned stream (§3.6).
+Retention matrix per table — in `packages/db/src/schema/pd/retention.ts` (TS object, CI-validated). Every PD-bearing table has: legal basis, retention period, erasure mechanism, audit exception, owner. Retention is a lifecycle/value-erasure decision, never a physical-row decision: data-bearing `DROP PARTITION` is forbidden for every application-owned stream (§3.6).
 
 - `audit_log` retention — readable encrypted PD for **5y** (152-FZ + НК РФ + medical compliance), then crypto-shred the PD while retaining the non-PD hash-chain row (ADR-0009 §2.4). Follow-up #383 owns term crypto-shred and the regression guard that keeps `partman.part_config.retention` unset for `audit_ledger`; it must not drop its partitions.
 - `events_log`, `notifications`, `ai_pipeline_jobs` retention — defined in the retention matrix.
@@ -247,9 +247,9 @@ Retention matrix per table — in `packages/db/schema/pd/retention.ts` (TS objec
 
 ### 3.3. Schema organization
 
-- `packages/db/schema/` — TS files per domain (`users.ts`, `courses.ts`, `ledger.ts`, ...). Master location per ADR-0003 §4.
+- `packages/db/src/schema/` — TS files per domain (`users.ts`, `courses.ts`, `ledger.ts`, ...). Master location per ADR-0003 §4.
 - Each file exports `pgTable` definitions, indexes, foreign keys.
-- One `packages/db/schema/index.ts` re-exports everything.
+- One `packages/db/src/schema/index.ts` re-exports everything.
 - Drizzle inferred types: `type User = typeof users.$inferSelect`, `type NewUser = typeof users.$inferInsert`.
 - Zod schemas for request/response (from ADR-0002) — separate, do not duplicate Drizzle schemas, but generated via `drizzle-zod` where possible.
 
@@ -437,7 +437,7 @@ Single Redis 7+ instance for **volatile concerns only**. Durable concerns (idemp
 
 ### 7.4. Postgres-side schemas
 
-New tables in `packages/db/schema/`:
+New tables in `packages/db/src/schema/`:
 
 ```ts
 export const idempotencyKeys = pgTable(

@@ -32,7 +32,7 @@ lang: ru
 | ADR location           | `apps/docs/content/adr/NNNN-<slug>.md` + companion `NNNN-<slug>-design.md`                                                                               | §2.3                        |
 | Feature spec location  | `apps/docs/content/specs/features/NNN-<slug>/{NNN-requirements.md, NNN-design.md, NNN-scenarios.feature}`                                                | §2.3 (inherits ADR-0006)    |
 | Tech spec location     | `apps/docs/content/specs/tech/<topic>.md`                                                                                                                | §2.3 (inherits ADR-0006 §4) |
-| Drizzle schema master  | `packages/db/schema/` per ADR-0006 §1 (supersedes ADR-0003 §4 location); migrations в `apps/api/drizzle/`                                                | §2.3                        |
+| Drizzle schema master  | `packages/db/src/schema/` per ADR-0006 §1 (supersedes ADR-0003 §4 location); migrations в `apps/api/drizzle/`                                            | §2.3                        |
 | Release tooling        | changesets + `changesets/action` GitHub workflow                                                                                                         | §2.4                        |
 | Commit convention      | conventional-commits (light, no enforce)                                                                                                                 | §2.4                        |
 | Merge style            | squash-only                                                                                                                                              | §2.4                        |
@@ -912,7 +912,7 @@ See AGENTS.md (universal constitution) и CLAUDE.md (Claude Code overlay).
 - **ADR-0001** §8 — IdP = Zitadel (закрыто по §8 / DSP-209): при появлении team SSO для GitHub Enterprise plan — reuse того же tenant, не отдельный.
 - **ADR-0002** §6 — `apps/api/` имплементирует NestJS + BullMQ.
 - **ADR-0002** §3-5 — `packages/schemas/` (Zod SSOT) + `packages/api-client/` (openapi-typescript generated SDK).
-- **ADR-0003** §4 — Drizzle TS schemas в `packages/db/schema/` + drizzle-kit SQL diff migrations в `apps/api/drizzle/`; §7 — pgvector в той же Postgres.
+- **ADR-0003** §4 — Drizzle TS schemas в `packages/db/src/schema/` + drizzle-kit SQL diff migrations в `apps/api/drizzle/`; §7 — pgvector в той же Postgres.
 - **ADR-0004** §2 — 4 frontend Next.js apps (`apps/doctor/`, `apps/portal/`, `apps/admin/`, `apps/cms/`).
 - **ADR-0004** §7 — Payload v3 в `apps/cms/` (content-only, `cms.*` schema namespace shared Postgres).
 - **ADR-0004** §13 — `packages/eslint-config/` экспортирует `no-vercel-only-api` rule.

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { parse, stringify } from "yaml";
 import { readFileSync } from "node:fs";
 import {
   postgresContract,
@@ -42,9 +43,13 @@ function fixture() {
   return {
     target,
     live: {
-      source,
+      source: {
+        ...source,
+        mounts: globalThis.structuredClone(target.mounts.postgres),
+      },
       sidecar: {
         ...globalThis.structuredClone(source),
+        mounts: globalThis.structuredClone(target.mounts.pgbackrest),
         mount: { ...source.mount, rw: false },
       },
       backupSystemId: source.systemId,
@@ -324,3 +329,96 @@ test("EARS-5: accepts generated same-major artifacts bound to exact source and i
     assert.throws(() => assertPostgresEvidence(invalid));
   }
 });
+
+for (const role of ["postgres", "pgbackrest"]) {
+  for (const kind of [
+    "alternate config",
+    "nested data",
+    "long mount",
+    "tmpfs overlay",
+    "inherited mounts",
+  ]) {
+    test(`EARS-11: ${role} ${kind} topology refuses before activation`, () => {
+      const compose = parse(files["compose.yml"]);
+      const service = compose.services[role];
+      if (kind === "alternate config")
+        service.volumes = service.volumes.map((v) =>
+          v.replace(
+            "./pgbackrest/pgbackrest.conf:",
+            "./pgbackrest/alternate.conf:",
+          ),
+        );
+      if (kind === "nested data")
+        service.volumes.push("redisdata:/var/lib/postgresql/data/base");
+      if (kind === "long mount")
+        service.volumes.push({
+          type: "volume",
+          source: "redisdata",
+          target: "/var/lib/postgresql/data/base",
+        });
+      if (kind === "tmpfs overlay")
+        service.tmpfs = ["/var/lib/postgresql/data/base"];
+      if (kind === "inherited mounts") service.volumes_from = ["other"];
+      assert.throws(
+        () => postgresContract({ ...files, "compose.yml": stringify(compose) }),
+        /mount/,
+      );
+    });
+  }
+}
+test("EARS-12: alternate server configuration bind refuses", () => {
+  assert.throws(
+    () =>
+      postgresContract({
+        ...files,
+        "compose.yml": files["compose.yml"].replace(
+          "./postgres/postgresql.conf:",
+          "./postgres/alternate.conf:",
+        ),
+      }),
+    /mount/,
+  );
+});
+for (const role of ["source", "sidecar"]) {
+  test(`EARS-13: ${role} effective nested mount refuses before mutation`, async () => {
+    const f = fixture();
+    f.live[role].mounts = [
+      ...(f.live[role].mounts || []),
+      {
+        type: "volume",
+        source: "redisdata",
+        target: f.target.pgdata + "/base",
+        rw: true,
+      },
+    ];
+    await assert.rejects(
+      guardedPostgresStep({
+        ...f,
+        mutate: () => assert.fail("unsafe mutation"),
+      }),
+      /mount/,
+    );
+  });
+}
+
+for (const role of ["source", "sidecar"]) {
+  for (const kind of ["config source", "missing mount", "writable config"]) {
+    test(`EARS-13: ${role} effective ${kind} refuses before mutation`, async () => {
+      const f = fixture();
+      const mounts = f.live[role].mounts;
+      const config = mounts.find(
+        (m) => m.target === "/etc/pgbackrest/pgbackrest.conf",
+      );
+      if (kind === "config source") config.source = "pgbackrest/alternate.conf";
+      if (kind === "missing mount") mounts.pop();
+      if (kind === "writable config") config.rw = true;
+      await assert.rejects(
+        guardedPostgresStep({
+          ...f,
+          mutate: () => assert.fail("unsafe mutation"),
+        }),
+        /mount/,
+      );
+    });
+  }
+}

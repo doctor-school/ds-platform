@@ -128,6 +128,59 @@ export function postgresContract(files) {
       rw: mode !== "ro",
     };
   };
+  // Ordinary activation supports only this fully inspected mount topology.
+  // Reject unknown Compose forms instead of silently filtering overlays out.
+  const mounts = {};
+  for (const [role, service] of [
+    ["postgres", server],
+    ["pgbackrest", backup],
+  ]) {
+    const allowed = [
+      `pgdata:${pgdata}${role === "pgbackrest" ? ":ro" : ""}`,
+      "pgsocket:/var/run/postgresql",
+      "pgbackrest_log:/var/log/pgbackrest",
+      "./pgbackrest/pgbackrest.conf:/etc/pgbackrest/pgbackrest.conf:ro",
+      ...(role === "postgres"
+        ? [
+            "./postgres/init.sql:/docker-entrypoint-initdb.d/10-init.sql:ro",
+            "./postgres/postgresql.conf:/etc/postgresql/postgresql.conf:ro",
+          ]
+        : []),
+    ];
+    requireFact(
+      !service.extends &&
+        !service.tmpfs &&
+        !service.volumes_from &&
+        !service.configs &&
+        !service.secrets &&
+        Array.isArray(service.volumes) &&
+        service.volumes.length === allowed.length &&
+        allowed.every(
+          (v) => service.volumes.filter((actual) => actual === v).length === 1,
+        ),
+      `${role} unsupported mount topology`,
+    );
+    mounts[role] = allowed.map((v) => {
+      const [source, target, mode] = v.split(":");
+      const bind = source.startsWith("./");
+      const definition = c.volumes?.[source];
+      requireFact(
+        bind ||
+          (Object.hasOwn(c.volumes || {}, source) &&
+            (!definition ||
+              Object.keys(definition).every((k) => k === "name"))),
+        "unsupported named mount definition",
+      );
+      return {
+        type: bind ? "bind" : "volume",
+        source: bind
+          ? source.slice(2)
+          : definition?.name || `${c.name}_${source}`,
+        target,
+        rw: mode !== "ro",
+      };
+    });
+  }
   const mount = mountFor(server);
   const sidecarMount = mountFor(backup);
   requireFact(
@@ -178,6 +231,7 @@ export function postgresContract(files) {
     pgdata,
     mount,
     sidecarMount,
+    mounts,
     images: { postgres: server.image, pgbackrest: backup.image },
     environment: {
       postgres: server.environment || {},
@@ -226,6 +280,24 @@ export function assertPostgresEvidence({
   expected,
 }) {
   requireFact(target && live?.source && live?.sidecar, "missing live evidence");
+  for (const [role, actual] of [
+    ["postgres", live.source],
+    ["pgbackrest", live.sidecar],
+  ]) {
+    const wanted = target.mounts?.[role];
+    requireFact(
+      Array.isArray(wanted) &&
+        Array.isArray(actual?.mounts) &&
+        actual.mounts.length === wanted.length &&
+        wanted.every(
+          (m) =>
+            actual.mounts.filter((a) =>
+              Object.keys(m).every((k) => a[k] === m[k]),
+            ).length === 1,
+        ),
+      `${role} effective mount topology mismatch`,
+    );
+  }
   const s = live.source;
   requireFact(
     s.running && live.sidecar.running,

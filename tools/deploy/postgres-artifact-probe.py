@@ -41,12 +41,22 @@ def container_evidence(name, target):
     if len(mounts) != 1 or mounts[0]["Type"] != "volume":
         raise RuntimeError("missing/ambiguous named PostgreSQL data mount")
     mount = mounts[0]
+    root = pathlib.Path.home() / "ds-platform/infra/deploy/compose/data-prod"
+    topology = []
+    for item in container["Mounts"]:
+        source = item.get("Name") if item["Type"] == "volume" else item.get("Source")
+        if item["Type"] == "bind":
+            # Match actual Docker bind sources to the committed contract, not
+            # merely the container destination whose bytes could be redirected.
+            source = pathlib.Path(source).relative_to(root).as_posix()
+        topology.append({"type": item["Type"], "source": source,
+                         "target": item["Destination"], "rw": item["RW"]})
     version = run("sudo", "docker", "exec", name, "cat", pgdata + "/PG_VERSION")
     control = run("sudo", "docker", "exec", "-e", "LC_ALL=C", name, "pg_controldata", "-D", pgdata)
     system_id = re.search(r"^Database system identifier:\s*(\d+)\s*$", control, re.M)[1]
     return container, {"major": int(env["PG_MAJOR"]), "systemId": system_id,
                        "pgdata": pgdata, "pgVersion": version,
-                       "running": container["State"]["Running"],
+                       "running": container["State"]["Running"], "mounts": topology,
                        "mount": {"name": mount["Name"], "target": mount["Destination"], "rw": mount["RW"]}}
 
 

@@ -66,8 +66,9 @@ resource "twc_server" "stage_1" {
   is_root_password_required = false
 
   # First-boot bootstrap: the api-prod hardening set (deploy user, ufw, Docker with
-  # the reserved-space build-cache GC policy) plus the Playwright host libraries and
-  # the Actions-runner systemd unit. See ../cloud-init/stage-1.yaml.
+  # the reserved-space build-cache GC policy) plus `git`, and nothing more — the
+  # provider hard-resets a new box mid-first-boot, so a long runcmd never finishes
+  # (#2121). See ../cloud-init/stage-1.yaml.
   # templatefile: injects the operator public key so the non-root `deploy` user is
   # reachable from first boot (Timeweb installs the key for root only).
   cloud_init = templatefile("${path.module}/../cloud-init/stage-1.yaml", {

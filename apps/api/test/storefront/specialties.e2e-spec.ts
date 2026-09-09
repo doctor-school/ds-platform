@@ -171,10 +171,12 @@ describe.skipIf(!process.env.DATABASE_URL)(
       // A real member resolves.
       const book = await readBook();
       const member = book.entries[0]!;
-      await expect(specialties.resolveMember(member.id)).resolves.toMatchObject({
-        id: member.id,
-        code: member.code,
-      });
+      await expect(specialties.resolveMember(member.id)).resolves.toMatchObject(
+        {
+          id: member.id,
+          code: member.code,
+        },
+      );
     });
 
     it("EARS-3.6: exposes no storefront write path to the book", async () => {
@@ -256,7 +258,9 @@ describe.skipIf(!process.env.DATABASE_URL)(
 
       const before = await readBook();
       try {
-        await db.transaction((tx) => seedSpecialtiesMinzdrav(tx, reordered));
+        await db.transaction((tx) =>
+          seedSpecialtiesMinzdrav(tx, { rows: reordered }),
+        );
 
         expect(await readFrequent()).toEqual(rotated);
         const after = await readBook();
@@ -269,7 +273,9 @@ describe.skipIf(!process.env.DATABASE_URL)(
         // Restore the committed order so this case leaves the branch database
         // exactly as it found it — and prove the round trip back is a reorder
         // the seed survives in the same way.
-        await db.transaction((tx) => seedSpecialtiesMinzdrav(tx, seed));
+        await db.transaction((tx) =>
+          seedSpecialtiesMinzdrav(tx, { rows: seed }),
+        );
       }
 
       expect(await readFrequent()).toEqual(frequentCodes);

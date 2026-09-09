@@ -12,6 +12,10 @@
     "./schema": {
       "types": "./dist/schema/index.d.ts",
       "default": "./dist/schema/index.js"
+    },
+    "./seed/golden": {
+      "types": "./dist/seed/golden/index.d.ts",
+      "default": "./dist/seed/golden/index.js"
     }
   },
   "main": "./dist/index.js",
@@ -24,6 +28,7 @@
     "build": "tsc -b",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "seed:golden": "tsx src/seed/golden/run.ts",
     "clean": "rm -rf dist .tsbuildinfo"
   },
   "dependencies": {

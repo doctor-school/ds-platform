@@ -1,0 +1,159 @@
+#cloud-config
+# Base bootstrap for stage-1, the STAGE stand box (tech spec
+# 2026-09-08-staging-previews-and-regression-contour-en.md §3, Issue #2061).
+#
+# It is api-prod.yaml plus what the stand needs beyond a product host: a Node
+# toolchain, the Playwright host libraries, and the GitHub Actions runner as a
+# systemd unit. As on api-prod, NO application container is started here: the
+# shared `stg-infra` project is brought up separately from
+# infra/deploy/compose/stg-infra/ once the box env is provisioned into
+# /etc/ds-platform/stage.env (see that directory's README).
+#
+# Rendered by templatefile() from stage-1.tf with ONE variable:
+#   deploy_ssh_pubkey — the operator public key at var.stage_1_ssh_pubkey_path,
+#   the same key Timeweb installs for root, so the `deploy` user is reachable
+#   from first boot without a manual copy step.
+
+timezone: Europe/Moscow
+
+package_update: true
+package_upgrade: true
+packages:
+  - ufw
+  - fail2ban
+  - unattended-upgrades
+  - ca-certificates
+  - curl
+  - git
+  - jq
+
+users:
+  - name: deploy
+    groups: [sudo, docker]
+    shell: /bin/bash
+    sudo: ["ALL=(ALL) NOPASSWD:ALL"]
+    ssh_authorized_keys:
+      - "${deploy_ssh_pubkey}"
+
+write_files:
+  # Directory for the box env set — filled by the Phase B provisioning step, never
+  # baked here. stage.env carries SINK and TEST values only; the box holds no
+  # production credential of any kind (spec §3 «Secrets and side effects», and the
+  # C1 acceptance greps this directory against the production secret names).
+  - path: /etc/ds-platform/.keep
+    content: ""
+    permissions: "0700"
+
+  # Standing build-cache GC — the same policy as api-prod (#1419), and the box needs
+  # it harder: every slot builds its own api/portal/doctor/admin images here, so
+  # BuildKit churns far more than on api-prod (whose cache still reached 54.6 GB /
+  # 77% disk before the 2026-08-21 cleanup). Written BEFORE the get.docker.com
+  # install in runcmd so dockerd reads it on its very first start. Nightly
+  # `slot gc` (spec §9) is the belt to these braces.
+  - path: /etc/docker/daemon.json
+    content: |
+      {
+        "builder": {
+          "gc": {
+            "enabled": true,
+            "defaultReservedSpace": "40GB"
+          }
+        }
+      }
+    permissions: "0644"
+
+  # Actions-runner supervisor. Registration is OWNER-GATED (a registration token is
+  # a live credential), so this script configures the runner on first start from
+  # /etc/ds-platform/runner.env — a root-only file cloud-init deliberately does NOT
+  # create. Until the owner writes it and enables the unit, nothing runs and nothing
+  # crash-loops (the unit is installed disabled). Manual step, documented in
+  # infra/deploy/compose/stg-infra/README.md → «Runner registration».
+  - path: /opt/actions-runner/ensure-configured.sh
+    permissions: "0700"
+    content: |
+      #!/usr/bin/env bash
+      # Idempotent: configures the runner only if it is not already registered.
+      set -euo pipefail
+      : "$${RUNNER_URL:?set RUNNER_URL in /etc/ds-platform/runner.env}"
+      : "$${RUNNER_TOKEN:?set RUNNER_TOKEN in /etc/ds-platform/runner.env (short-lived registration token from the repo Settings → Actions → Runners)}"
+      cd /opt/actions-runner
+      if [ -f .runner ]; then
+        echo "runner already configured ($(jq -r .agentName .runner 2>/dev/null || echo unknown)) — nothing to do"
+        exit 0
+      fi
+      ./config.sh --unattended --replace \
+        --url "$RUNNER_URL" \
+        --token "$RUNNER_TOKEN" \
+        --name "$${RUNNER_NAME:-ds-stage-1}" \
+        --labels "$${RUNNER_LABELS:-self-hosted,staging}" \
+        --work /opt/actions-runner/_work
+  - path: /etc/systemd/system/ds-actions-runner.service
+    permissions: "0644"
+    content: |
+      [Unit]
+      Description=GitHub Actions self-hosted runner (ds-platform staging)
+      After=network-online.target docker.service
+      Wants=network-online.target
+
+      [Service]
+      Type=simple
+      User=deploy
+      WorkingDirectory=/opt/actions-runner
+      # Root-only (0600 root:root) — holds the registration token. Absent ⇒ the unit
+      # fails to start with a clear message rather than running unregistered.
+      EnvironmentFile=/etc/ds-platform/runner.env
+      ExecStartPre=/opt/actions-runner/ensure-configured.sh
+      ExecStart=/opt/actions-runner/run.sh
+      Restart=always
+      RestartSec=10
+      KillMode=process
+      KillSignal=SIGTERM
+      TimeoutStopSec=5min
+
+      [Install]
+      WantedBy=multi-user.target
+
+runcmd:
+  # Docker CE + compose plugin (official convenience script), same as api-prod.
+  - curl -fsSL https://get.docker.com | sh
+  # #1419 parity: prove the daemon.json written above parses on THIS docker version.
+  # Non-blocking on purpose — halting cloud-init would leave a half-provisioned box.
+  - dockerd --validate --config-file /etc/docker/daemon.json || echo "WARNING (#1419) /etc/docker/daemon.json failed dockerd --validate — build-cache GC policy is NOT in effect; fix the file and restart docker"
+  # Host firewall (defence-in-depth alongside twc_firewall.stage_1): SSH + web only.
+  # No port is opened for CI: the runner registers OUTBOUND (it long-polls GitHub),
+  # which is exactly why this box needs no deploy key and no CI-facing 22.
+  - ufw default deny incoming
+  - ufw default allow outgoing
+  - ufw allow 22/tcp
+  - ufw allow 80/tcp
+  - ufw allow 443/tcp
+  - ufw --force enable
+  - systemctl enable --now fail2ban
+  - install -d -m 0700 -o root -g root /etc/ds-platform
+  # Node 22 + corepack/pnpm — the slot script (tools/staging/slot.mjs, step 4) and
+  # the Playwright suite run on the host, not in a container.
+  - curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+  - apt-get install -y nodejs
+  - corepack enable
+  # Playwright host libraries for the regression suite (step 7). Installed at
+  # bootstrap so a suite run never pays for apt on the critical path; browsers
+  # themselves are installed per checkout by `pnpm exec playwright install`.
+  - npx --yes playwright@latest install-deps chromium firefox webkit
+  # GitHub Actions runner package. The tarball is fetched at the CURRENT release —
+  # the runner self-updates after registration anyway, so pinning a tag here would
+  # only guarantee a first-run update; what matters is that the download is a
+  # release artifact of actions/runner and nothing else.
+  - install -d -m 0755 -o deploy -g deploy /opt/actions-runner/_work
+  - chown -R deploy:deploy /opt/actions-runner
+  - >-
+    RUNNER_TAG=$(curl -fsSL https://api.github.com/repos/actions/runner/releases/latest | jq -r .tag_name)
+    && curl -fsSL -o /tmp/actions-runner.tar.gz
+    "https://github.com/actions/runner/releases/download/$RUNNER_TAG/actions-runner-linux-x64-$${RUNNER_TAG#v}.tar.gz"
+    && tar xzf /tmp/actions-runner.tar.gz -C /opt/actions-runner
+    && rm -f /tmp/actions-runner.tar.gz
+    && chown -R deploy:deploy /opt/actions-runner
+    && /opt/actions-runner/bin/installdependencies.sh
+  # Unit installed but NOT enabled: it starts only after the owner writes
+  # /etc/ds-platform/runner.env (0600 root:root) with RUNNER_URL + RUNNER_TOKEN and
+  # runs `systemctl enable --now ds-actions-runner` (README → Runner registration).
+  - systemctl daemon-reload

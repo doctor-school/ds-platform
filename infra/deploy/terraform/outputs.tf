@@ -85,3 +85,20 @@ output "uploads_s3_secret_key" {
   value     = twc_s3_bucket.uploads.secret_key
   sensitive = true
 }
+
+# --- STAGE stand (#2061) ---
+
+output "stage_1_public_ip" {
+  description = "stage-1 public IPv4 — the A-record target of the `*.stage.doctor.school` wildcard the owner creates in step 2 (#2062), and the SSH endpoint for the operator allowlist."
+  value       = twc_server_ip.stage_1_ipv4.ip
+}
+
+output "stage_1_server_id" {
+  description = "stage-1 server id — for the recovery runbook + power-control API. The box holds no unique state: `apply` recreates it and stg-infra + ds_golden rebuild from the repo (spec §9 «Box down»)."
+  value       = twc_server.stage_1.id
+}
+
+output "stage_1_private_ip" {
+  description = "stage-1 private (VPC) IPv4 inside twc_vpc.stage. Disjoint from twc_vpc.ds — there is no route between the two networks."
+  value       = twc_server.stage_1.local_network[0].ip
+}

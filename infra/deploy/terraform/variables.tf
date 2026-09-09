@@ -85,3 +85,29 @@ variable "data_prod_private_ip" {
   type        = string
   default     = "192.168.0.10"
 }
+
+# --- STAGE stand (stage-1, #2061 / tech spec 2026-09-08 staging contour §3) ---
+
+variable "stage_1_preset_id" {
+  description = "VPS preset for stage-1. 4807 = ru-3 msk 8 vCPU / 16 GB / 160 GB nvme (4300₽/mo, +180₽ IPv4), node pool msk-kvmnvm, zone msk-1. DECIDED 2026-09-09 (owner confirmed the price after a read-only sweep of all nine Timeweb locations: the 8/16/160 shape is 4300₽ in every RF zone; no 16/32 shape exists at Timeweb; the next step up is dedicated 8/32/120 `6855` at 15040₽ — rejected). The box carries stg-infra (~4 GB) + 4 idle slots (~6 GB) + one in-flight image build (~3 GB) + the Playwright suite (~2 GB) ≈ 15 of 16 GB, which is why the slot script caps previews at 3 and serialises image builds on the box (spec §10). Never below 8 vCPU: the `slot up` < 10 min acceptance does not hold on 4 vCPU next to a running suite. 160 GB is the disk floor (≈5 GB images × 4 slots + buildx cache + ds_golden + per-slot clones + WAL)."
+  type        = number
+  default     = 4807
+}
+
+variable "stage_1_ssh_pubkey_path" {
+  description = "Path to the operator SSH public key for stage-1. A DISTINCT key from the production ones: nothing that reaches stage-1 may also open api-prod/data-prod."
+  type        = string
+  default     = "~/.ssh/ds-stage-1.pub"
+}
+
+variable "stage_vpc_cidr" {
+  description = "Private network CIDR of the STAGE plane (twc_vpc.stage). MUST be disjoint from var.vpc_cidr and never routed to it — the staging box runs arbitrary PR code and its isolation from production is the absence of a route, not a firewall rule (stage-1.tf header, spec §3 «Box»)."
+  type        = string
+  default     = "192.168.10.0/24"
+}
+
+variable "stage_1_private_ip" {
+  description = "Static VPC address of stage-1 inside var.stage_vpc_cidr. Nothing dials it today (single-member network); it is pinned so the on-box compose bind addresses stay deterministic if a second staging host is ever added."
+  type        = string
+  default     = "192.168.10.20"
+}

@@ -41,3 +41,18 @@ describe("route-target-lint", () => {
     expect(stderr).toContain("FAIL");
   });
 });
+
+/**
+ * #1874 — `apps/doctor` nav targets were unchecked: `APPS` named only
+ * portal/admin/academy-demo, so the #673 dead-link class was blocked on the
+ * academy and invisible on doctor.school (DEBT 2026-09-05, #1722 slice 3).
+ */
+describe("route-target: apps/doctor is in scope (#1874)", () => {
+  it("route-target: apps/doctor dead nav target is a finding", () => {
+    const { code, stderr } = runGuard(GUARD, dir("red-doctor-dead-target"));
+    expect(code).toBe(1);
+    expect(stderr).toContain("join-button.tsx");
+    expect(stderr).toContain("/events/${slug}/room");
+    expect(stderr).toContain("FAIL");
+  });
+});

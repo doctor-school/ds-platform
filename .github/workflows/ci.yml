@@ -708,7 +708,8 @@ jobs:
         continue-on-error: ${{ steps.guard_policy.outputs.module-readme == 'WARN' }}
         run: pnpm exec tsx tools/lint/module-readme-lint.ts
 
-      # route-targets: every internal navigation target in apps/portal + apps/admin
+      # route-targets: every internal navigation target in apps/portal, apps/admin,
+      # apps/doctor and the dev-only apps/academy-demo
       # (a `<Link href>`, `router.push/replace`, or `redirect` string/template) must
       # resolve to an existing app-router route (page.tsx/route.ts). Guards the #673
       # class of defect — a `/webinars/<slug>/room` link shipped before its route

@@ -18,7 +18,14 @@
  *
  * What it checks: if the PR diff touches any user-facing UI path
  * (apps/portal/**, apps/promo/**, apps/admin/**, apps/academy-demo/**,
- * packages/design-system/**),
+ * apps/doctor/**, packages/design-system/**, and a shared package's
+ * `src/ui/**`),
+ * — the single source of that classification is `lib/ui-surface.ts`
+ * `isUiSourcePath`, NOT a list maintained here. #1564 was exactly this prose
+ * drifting behind the code: the header omitted `apps/doctor` while detection
+ * had covered it all along, so a reader concluded the doctor storefront was
+ * unguarded. A guard-test self-test now pins every app root named above to a
+ * directory that exists on disk, and to the enforced scan set. —
  * the PR body MUST contain a `registry-research:` marker line (or a
  * `## Registry research` section) whose value is non-empty and is one of the
  * two sanctioned shapes from the skill:

@@ -27,7 +27,7 @@
  * raw-interactive tag list.
  *
  * ── What it checks ──────────────────────────────────────────────────────────
- * In DS-consuming app UI source (`apps/portal|promo|admin|academy-demo` —
+ * In DS-consuming app UI source (`apps/portal|promo|admin|academy-demo|doctor` —
  * `app/`, `components/`, `src/`; real UI .tsx only, tests / e2e / stories
  * excluded):
  *
@@ -142,6 +142,13 @@ const APP_GLOBS = [
   "apps/admin/components/**/*.tsx",
   "apps/admin/src/**/*.tsx",
   "apps/academy-demo/app/**/*.tsx",
+  // #1874 — `apps/doctor` is a full product storefront (four routes plus the
+  // shared live room since #1722 slice 3), not a scaffold: a hand-assembled
+  // interactive element there is the same defect it is on the academy. It was
+  // the last product front left outside the scan set (DEBT 2026-09-05).
+  "apps/doctor/app/**/*.tsx",
+  "apps/doctor/components/**/*.tsx",
+  "apps/doctor/lib/**/*.tsx",
   // #1722 D11 — the shared webinar-room unit renders product UI on both
   // storefronts; the primitives contract follows the composition out of
   // `apps/portal/app` into the package.

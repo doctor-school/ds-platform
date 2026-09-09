@@ -1,3 +1,7 @@
+import { execFileSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
 import { describe, expect, it } from "vitest";
 
 import { caseDir, ghDir, runGuard } from "./run-guard";
@@ -18,6 +22,13 @@ import { caseDir, ghDir, runGuard } from "./run-guard";
  * would have tripped this case.
  */
 const GUARD = "registry-research-lint.ts";
+
+/** Repo root via git — Linux-safe, no drive letters, no cwd assumptions. */
+function repoRoot(): string {
+  return execFileSync("git", ["rev-parse", "--show-toplevel"], {
+    encoding: "utf8",
+  }).trim();
+}
 
 /** Standard pull_request context pointing the gh seam at a case's canned JSON. */
 function prEnv(prNumber: string, ghCase: string): Record<string, string> {
@@ -198,5 +209,43 @@ describe("registry-research-lint", () => {
     );
     expect(code).toBe(0);
     expect(stdout).toContain("not a pull_request event");
+  });
+});
+
+/**
+ * #1564 — the guard's user-facing-app list omitted `apps/doctor` in prose
+ * (DEBT 2026-08-26, PR #1560). Detection has always run through
+ * `isUiSourcePath`, whose `RENDERED_APP_ROOT_RE` already names `doctor`, so the
+ * HOLE WAS THE DOCBLOCK, not the logic: only the header claimed a narrower
+ * scope than the guard enforces. These two cases pin the real behaviour so the
+ * prose can never drift back without a red test.
+ */
+describe("registry-research: apps/doctor is a user-facing UI surface (#1564)", () => {
+  it("registry-research: a doctor-only UI diff with no marker → exit 1", () => {
+    const { code, stderr } = runGuard(
+      GUARD,
+      caseDir("registry-research", "red-doctor-no-marker"),
+      { env: prEnv("109", "red-doctor-no-marker") },
+    );
+    expect(code).toBe(1);
+    expect(stderr).toContain("carries no registry-research artifact");
+  });
+
+  it("registry-research: every app root the docblock names exists on disk (dead-glob self-test)", () => {
+    const source = readFileSync(
+      resolve(repoRoot(), "tools/lint/registry-research-lint.ts"),
+      "utf8",
+    );
+    const header = source.slice(0, source.indexOf("*/"));
+    const roots = [...header.matchAll(/apps\/([a-z0-9-]+)\/\*\*/g)].map((m) => m[1]);
+    expect(roots.length).toBeGreaterThan(0);
+    for (const root of roots) {
+      expect(
+        existsSync(resolve(repoRoot(), "apps", root)),
+        `docblock names apps/${root}, which does not exist on disk`,
+      ).toBe(true);
+    }
+    // The scan set the guard actually enforces must be reflected in the prose.
+    expect(roots).toContain("doctor");
   });
 });

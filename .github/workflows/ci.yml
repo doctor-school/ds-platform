@@ -680,10 +680,10 @@ jobs:
   # itself and falls back to SKIP, which is the behavior its posture assumes.
   guards-warn:
     runs-on: ubuntu-latest
-    # Union of the member jobs' permission blocks: `tdd-signal` and `product-note`
-    # are tools/lint/lib/gh.ts consumers, so the batch carries the canonical
-    # Issue-#10 pattern (`contents: read` + `pull-requests: read`) and both steps
-    # carry `GH_TOKEN`/`PR_NUMBER` — enforced by the `workflow-auth` guard below.
+    # Union of the member jobs' permission blocks: `tdd-signal`, `product-note`
+    # and `host-allowlist` are tools/lint/lib/gh.ts consumers, so the batch carries the
+    # canonical Issue-#10 pattern (`contents: read` + `pull-requests: read`) and each step
+    # carries `GH_TOKEN`/`PR_NUMBER` — enforced by the `workflow-auth` guard below.
     permissions:
       contents: read
       pull-requests: read
@@ -1054,6 +1054,9 @@ jobs:
       - name: WARN · host-allowlist
         id: warn_host_allowlist
         continue-on-error: ${{ steps.guard_policy.outputs.host-allowlist == 'WARN' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: pnpm lint:host-allowlist
 
       # WARN report — the second half of the WARN encoding, and the batch's

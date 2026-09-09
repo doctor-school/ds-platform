@@ -382,12 +382,16 @@ services:
       - "443:443"
       - "443:443/udp" # HTTP/3
     healthcheck:
+      # Probe the admin API by LITERAL 127.0.0.1, never `localhost`: alpine resolves
+      # `localhost` to `::1` first, Caddy's admin endpoint binds the v4 loopback
+      # only, and the v6 attempt is refused — which left `caddy running (unhealthy)`
+      # while `/healthz` answered `ok` (#2137).
       test:
         [
           "CMD",
           "wget",
           "-qO-",
-          "http://localhost:2019/config/",
+          "http://127.0.0.1:2019/config/",
           "-O",
           "/dev/null",
         ]

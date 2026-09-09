@@ -100,7 +100,15 @@ sudo stat -c '%a %u %n' /etc/ds-platform/idp-login-client.pat
 
 # 3. Unset IDP_BOOTSTRAP in /etc/ds-platform/stage.env (so a restart never re-inits),
 #    then start the rest.
+#
+#    Removing IDP_BOOTSTRAP changes the INTERPOLATED env of `postgres` and `idp`
+#    (${IDP_BOOTSTRAP:+...} now resolves empty), so this `up -d` RECREATES both of
+#    them even though only idp-login and caddy are named. That is expected and not a
+#    data loss: `pgdata` is a named volume and survives the replacement. WAIT for
+#    `idp` to report healthy again (~10 s) before running the converge below.
 sudo bash -c 'set -a; . /etc/ds-platform/stage.env; set +a; docker compose up -d idp-login caddy'
+sudo bash -c 'set -a; . /etc/ds-platform/stage.env; set +a; docker compose -p stg-infra ps idp'
+# expected: `running (healthy)` before continuing to the converge.
 ```
 
 ## Zitadel converge
@@ -108,7 +116,19 @@ sudo bash -c 'set -a; . /etc/ds-platform/stage.env; set +a; docker compose up -d
 The same idempotent read-before-write converge the dev stand and production use
 (`infra/dev-stand/idp/provision.sh` + `idp-policy.mjs`, #1997) — no staging-specific
 script exists or should. Run it after every bring-up and after any PR that changes
-provisioning:
+provisioning.
+
+`provision.sh` REQUIRES a base URL — `IDP_BASE_URL` or `--base-url`; without one it
+aborts with `set IDP_BASE_URL or --base-url`. `stage.env` carries no `IDP_BASE_URL`,
+so every invocation below passes it explicitly. Which value is correct depends on
+whether the edge (#2062) exists yet, so there are two forms.
+
+**(a) Before #2062 — no `id.stage` vhost and no public DNS yet.** Zitadel answers only
+for its own configured external domain: from inside the `stg-infra` network the same
+management request returns 404 with `Host: idp:8080` and 200 with
+`Host: id.stage.doctor.school` (or `id.stage.doctor.school:8080`). The `idp` service
+also publishes no host port. So the converge runs in a throwaway container ON that
+network, with the external domain pointed at the `idp` container by `--add-host`:
 
 ```bash
 # stage.env is root:root 0600 and carries values with spaces (IDP_SMTP_SENDER_NAME),
@@ -116,7 +136,33 @@ provisioning:
 # provision.sh (`infra/deploy/README.md` step 9). `env $(grep ... | xargs)` word-splits
 # those values and silently passes a truncated env.
 sudo bash -c 'set -a; . /etc/ds-platform/stage.env; set +a; \
+  IDP_IP="$(docker inspect stg-infra-idp-1 \
+    --format "{{(index .NetworkSettings.Networks \"stg-infra\").IPAddress}}")" && \
+  docker run --rm --network stg-infra \
+    --add-host "id.stage.doctor.school:$IDP_IP" \
+    -e IDP_BASE_URL=http://id.stage.doctor.school:8080 \
+    -e IDP_SMTP_HOST -e IDP_SMTP_SENDER_ADDRESS -e IDP_SMTP_SENDER_NAME \
+    -e IDP_SMS_SINK_ENDPOINT -e IDP_WEBHOOK_SECRET \
+    -v /srv/ds-platform/infra/dev-stand/idp:/idp:ro \
+    -v /etc/ds-platform/idp-bootstrap-pat.txt:/pat.txt:ro \
+    -w /idp alpine:3.20 \
+    sh -c "apk add --no-cache bash curl jq >/dev/null && \
+      ./provision.sh --pat-file /pat.txt"'
+```
+
+`alpine:3.20` plus `apk add bash curl jq` is used because no one-shot image carrying
+that trio is vendored anywhere under `infra/`, and bash + curl + jq are exactly what
+`provision.sh` declares it needs. Every `IDP_*` variable the run consumes is passed
+through explicitly — the container inherits nothing from the sourced shell.
+
+**(b) After #2062 — the `id.stage` vhost exists.** Then the production shape applies
+(`infra/deploy/README.md` step 9): run it straight on the host against the public base
+URL, no container and no `--add-host`.
+
+```bash
+sudo bash -c 'set -a; . /etc/ds-platform/stage.env; set +a; \
   cd /srv/ds-platform/infra/dev-stand/idp && \
+  IDP_BASE_URL=https://id.stage.doctor.school \
   ./provision.sh --pat-file /etc/ds-platform/idp-bootstrap-pat.txt'
 ```
 
@@ -185,14 +231,23 @@ sudo bash -c 'set -a; . /etc/ds-platform/stage.env; set +a; docker compose -p st
 # expected: every row `running` and `(healthy)`; no `restarting`, no `unhealthy`
 ```
 
-**AC2 — production Postgres is UNROUTABLE from the box** (no route, _not_ a timeout
-on an open path — that distinction is the whole isolation claim of `stage-1.tf`).
+**AC2 — production Postgres is UNROUTABLE from the box.** The box's own VPC
+(`twc_vpc.stage`, `stage-1.tf` L19-40) is `192.168.10.0/24` and is NOT peered with the
+production VPC `192.168.0.0/24`. The isolation signal is therefore the ABSENCE of any
+route into `192.168.0.0/24`: the box still holds a default route, so a packet addressed
+to `192.168.0.10` leaves on the public path and is simply never answered.
 
 ```bash
-ip route get 192.168.0.10        # expected: "RTNETLINK answers: Network is unreachable"
+ip -4 route show | grep -c '192\.168\.0\.'   # expected: 0 — no route into the prod VPC
+ip -4 -br addr show eth1                     # expected: only 192.168.10.20/24 (own VPC)
 timeout 5 bash -c 'cat < /dev/null > /dev/tcp/192.168.0.10/5432' ; echo "exit=$?"
-# expected: an immediate "Network is unreachable" and exit=1 — NOT exit=124 (timeout)
+# expected: exit=124 — the probe runs out its timeout unanswered. `exit=0` is red.
 ```
+
+Negative check — what a WRONGLY peered box would print instead: a `192.168.0.0/24 dev
+ethN` route (so the first command prints 1 or more), a second private address on the
+interface facing production, and a TCP probe that returns promptly rather than running
+out the 5-second timeout (`exit=0` when Postgres answers).
 
 **AC3 — no CI agent on the box, and the bootstrap completed.**
 
@@ -214,8 +269,12 @@ and blanking those to make it pass would silently stop exercising what they prot
 
 ```bash
 # HALF A — production-only names: absent or empty everywhere on the box.
-sudo grep -nE '^(RESEND_API_KEY|SMSAERO_EMAIL|SMSAERO_API_KEY|SMSAERO_SIGN|PGBACKREST_REPO1_S3_KEY|PGBACKREST_REPO1_S3_KEY_SECRET|PGBACKREST_REPO1_CIPHER_PASS|IDP_SMTP_REAL_HOST|IDP_SMTP_REAL_USER|IDP_SMTP_REAL_PASSWORD|IDP_SMTP_REAL_SENDER_ADDRESS|IDP_SMTP_REAL_SENDER_NAME)=.+' /etc/ds-platform/*.env
-# expected: NO output.
+# The `*.env` glob MUST expand inside the sudo shell: /etc/ds-platform is 0700 root, so
+# the caller's own shell cannot expand it and a bare
+# `sudo grep ... /etc/ds-platform/*.env` only prints `No such file or directory` — a
+# non-check that reads like a pass.
+sudo bash -c "grep -nE '^(RESEND_API_KEY|SMSAERO_EMAIL|SMSAERO_API_KEY|SMSAERO_SIGN|PGBACKREST_REPO1_S3_KEY|PGBACKREST_REPO1_S3_KEY_SECRET|PGBACKREST_REPO1_CIPHER_PASS|IDP_SMTP_REAL_HOST|IDP_SMTP_REAL_USER|IDP_SMTP_REAL_PASSWORD|IDP_SMTP_REAL_SENDER_ADDRESS|IDP_SMTP_REAL_SENDER_NAME)=.+' /etc/ds-platform/*.env" ; echo "exit=$?"
+# expected: NO output and exit=1 — grep matching nothing IS the pass here.
 
 # HALF B — this box's own values: set, and never still a template placeholder.
 sudo grep -nE '^(POSTGRES_PASSWORD|MINIO_ROOT_PASSWORD|IDP_SECRET_KEY|IDP_BOOTSTRAP_ADMIN_PASSWORD|AUDIT_IDENTIFIER_PEPPER|LIFECYCLE_IMPACT_TOKEN_SECRET|IDP_WEBHOOK_SECRET|CENTRIFUGO_API_KEY|CENTRIFUGO_TOKEN_HMAC_SECRET|SMARTCAPTCHA_SERVER_KEY|STAGE_BASIC_AUTH_HASH)=(CHANGE_ME|$)' /etc/ds-platform/stage.env
@@ -236,9 +295,12 @@ sudo sed -n 's/^SMARTCAPTCHA_SERVER_KEY=ysc2_\([^[:space:]]\{20\}\).*/stage capt
 **AC5 — the Zitadel converge is idempotent** (it will be re-run by every preview that
 touches provisioning).
 
-```bash
-sudo bash -c 'set -a; . /etc/ds-platform/stage.env; set +a; \
-  cd /srv/ds-platform/infra/dev-stand/idp && \
-  ./provision.sh --pat-file /etc/ds-platform/idp-bootstrap-pat.txt'
+Run the converge TWICE, using the form from «Zitadel converge» above that matches the
+current state of the edge: form (a) (throwaway container on the `stg-infra` network,
+`--add-host`, `IDP_BASE_URL=http://id.stage.doctor.school:8080`) before #2062, form (b)
+(`IDP_BASE_URL=https://id.stage.doctor.school` from the host) after it. Either way
+`IDP_BASE_URL` is mandatory — `provision.sh` aborts without it.
+
+```text
 # expected on the SECOND run: only "already ..." lines, no converge writes
 ```

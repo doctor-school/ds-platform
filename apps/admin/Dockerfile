@@ -16,7 +16,7 @@
 # The BFF is reached same-origin via next.config rewrites → API_PROXY_TARGET
 # (the `__Host-ds_session` cookie is origin-locked, so /v1/* MUST be served
 # under the admin origin — apps/admin/next.config.ts). No CORS.
-FROM node:22-slim AS base
+FROM node:24-slim AS base
 ENV PNPM_HOME=/pnpm PATH=/pnpm:$PATH
 RUN corepack enable
 WORKDIR /repo
@@ -37,7 +37,7 @@ COPY . .
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store pnpm install --frozen-lockfile
 RUN pnpm turbo run build --filter=@ds/admin
 
-FROM node:22-slim AS runtime
+FROM node:24-slim AS runtime
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1
 WORKDIR /app
 # Next standalone bundle (server + minimal traced node_modules, monorepo-nested).

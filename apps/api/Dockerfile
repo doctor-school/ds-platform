@@ -20,7 +20,7 @@
 # passes /v1/health + /v1/ready (postgres+pgvector ok) against the prod data plane.
 # `pnpm deploy` REQUIRES `--legacy` on pnpm 10 (ERR_PNPM_DEPLOY_NONINJECTED_WORKSPACE
 # otherwise — this workspace does not set inject-workspace-packages).
-FROM node:22-slim AS base
+FROM node:24-slim AS base
 ENV PNPM_HOME=/pnpm PATH=/pnpm:$PATH
 RUN corepack enable
 WORKDIR /repo
@@ -47,7 +47,7 @@ FROM deps AS migrate
 WORKDIR /repo/apps/api
 CMD ["pnpm", "run", "drizzle:migrate:ci"]
 
-FROM node:22-slim AS runtime
+FROM node:24-slim AS runtime
 ENV NODE_ENV=production
 WORKDIR /app
 COPY --from=build --chown=node:node /out/dist ./dist

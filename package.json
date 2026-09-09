@@ -5,7 +5,7 @@
   "version": "0.0.0",
   "description": "Doctor.School Platform monorepo",
   "license": "UNLICENSED",
-  "packageManager": "pnpm@10.7.0",
+  "packageManager": "pnpm@10.34.5",
   "engines": {
     "node": "^22.22.2 || ^24.15.0 || >=26.0.0",
     "pnpm": ">=10.0.0"

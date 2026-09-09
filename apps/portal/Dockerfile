@@ -18,7 +18,7 @@
 # resolve as pinned (entry at apps/portal/server.js) and the portal serves on 3001.
 # NOTE: API_PROXY_TARGET must arrive as a BUILD ARG (below) — Next freezes
 # `rewrites()` destinations into .next/routes-manifest.json at build time.
-FROM node:22-slim AS base
+FROM node:24-slim AS base
 ENV PNPM_HOME=/pnpm PATH=/pnpm:$PATH
 RUN corepack enable
 WORKDIR /repo
@@ -48,7 +48,7 @@ COPY . .
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store pnpm install --frozen-lockfile
 RUN pnpm turbo run build --filter=@ds/portal
 
-FROM node:22-slim AS runtime
+FROM node:24-slim AS runtime
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1
 WORKDIR /app
 # Next standalone bundle (server + minimal traced node_modules, monorepo-nested).

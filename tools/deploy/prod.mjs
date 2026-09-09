@@ -36,7 +36,7 @@
 //               · no live broadcast (tools/deploy/live-broadcast-check.mjs)
 //               · release gate (tools/deploy/release-gate.mjs)
 //   ship        git archive <sha> → api-prod + data-prod over ssh (no registry)
-//   data-prod   up -d --build (idempotent; attestations off → no-op ≠ recreate, #486)
+//   data-prod   verify cluster/artifacts → up immutable images (no build/pull)
 //   checkpoint  pgbackrest pre-migrate incr backup  (DSO-129 — BEFORE migrate)
 //   api-prod    migrate → build the SHA-tagged images of the TARGET tree's
 //               compose (ds-<svc>:<sha>; derived, #1896) → up -d
@@ -50,7 +50,7 @@
 // `drizzle-kit migrate` are all no-ops when already current.
 
 import { spawn, spawnSync } from "node:child_process";
-import { createReadStream, createWriteStream } from "node:fs";
+import { createReadStream, createWriteStream, readFileSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -81,6 +81,15 @@ import {
   probeReleaseGate,
 } from "./release-gate.mjs";
 import { composeDigest } from "./release-notes.mjs";
+import {
+  assertPostgresEvidence,
+  certifiedTarget,
+  guardedPostgresStep,
+  postgresImageOverride,
+  postgresProbeScript,
+  postgresStateScript,
+  readPostgresTarget,
+} from "./postgres-guard.mjs";
 import {
   assertRollbackAllowed,
   makeGitCutoverMigrationProbe,
@@ -525,7 +534,9 @@ function assertGreenCi(sha) {
   } catch (e) {
     // Fail-closed: without provenance we cannot tell repo CI from an injected
     // workflow, and judging the unfiltered board would re-introduce #2077.
-    die(`could not query workflow runs via gh (provenance unknown): ${e.message}`);
+    die(
+      `could not query workflow runs via gh (provenance unknown): ${e.message}`,
+    );
   }
 
   const verdict = classifyDeployCheckRuns(checkRuns, workflowRuns);
@@ -539,7 +550,9 @@ function assertGreenCi(sha) {
       `no repo-owned CI check-runs reported for ${sha.slice(0, 12)} yet — wait for CI to run.`,
     );
   if (verdict.state === "pending")
-    die(`CI still running for ${sha.slice(0, 12)}: ${verdict.pending.join(", ")}`);
+    die(
+      `CI still running for ${sha.slice(0, 12)}: ${verdict.pending.join(", ")}`,
+    );
   if (verdict.state === "red")
     die(`CI is RED for ${sha.slice(0, 12)}: ${verdict.red.join(", ")}`);
   ok(`CI green — ${verdict.count} check(s) passed for ${sha.slice(0, 12)}`);
@@ -1077,6 +1090,36 @@ async function shipTree(sha, host) {
 
 // --- deploy ---------------------------------------------------------------
 
+// Read-only preflight; each subsequent guarded callback re-reads the cluster.
+export async function preparePostgresDeployment(
+  sha,
+  { capture = sshCapture, certificate, readTarget = readPostgresTarget } = {},
+) {
+  const plan = readTarget(sha);
+  const probePlan = {
+    ...plan,
+    target: certifiedTarget(plan.target, certificate),
+    preferRecordedImages: !certificate,
+  };
+  const read = async () =>
+    JSON.parse(await capture(DATA_PROD, postgresProbeScript(probePlan)));
+  let live = await read();
+  const expected = assertPostgresEvidence({ ...plan, live, certificate });
+  return {
+    identity: expected,
+    async run(mutate) {
+      live = await read();
+      return guardedPostgresStep({
+        ...plan,
+        live,
+        certificate,
+        expected,
+        mutate: () => mutate({ live, sourceHash: plan.sourceHash }),
+      });
+    },
+  };
+}
+
 async function deploy(hotfixRef = null) {
   const sha = await preflight(hotfixRef);
   // #1896: everything per-service below (build banner, pre-swap boot probe,
@@ -1085,6 +1128,15 @@ async function deploy(hotfixRef = null) {
     sha,
     hotfixRef ? `hotfix ${sha.slice(0, 12)}` : "origin/main",
   );
+  const certIndex = process.argv.indexOf("--postgres-artifacts");
+  const certificate =
+    certIndex < 0
+      ? undefined
+      : JSON.parse(readFileSync(process.argv[certIndex + 1], "utf8"));
+  step(
+    "PostgreSQL: verify cluster, backup path, mounts and immutable target artifacts",
+  );
+  const postgres = await preparePostgresDeployment(sha, { certificate });
   // What the banners call the thing being shipped: `origin/main` for the normal
   // train, an explicit «hotfix @ <sha>» for `--ref` (#1881) — a deploy log that
   // says "origin/main" while shipping a cherry-pick branch is a lie the next
@@ -1122,21 +1174,37 @@ async function deploy(hotfixRef = null) {
       : targetLabel;
   step(`Ship ${shipLabel} → both boxes`);
   let t = Date.now();
-  await shipTree(sha, API_PROD);
+  await postgres.run(async ({ live }) => {
+    // Outside the shipped tree: an interrupted archive swap must not rewrite
+    // the provenance of the still-running PostgreSQL image on re-entry.
+    await sshScript(DATA_PROD, postgresStateScript(live), {
+      label: "PostgreSQL source checkpoint",
+    });
+    await shipTree(sha, API_PROD);
+  });
   ok(`archive → ${API_PROD}`, t);
   t = Date.now();
-  await shipTree(sha, DATA_PROD);
+  await postgres.run(() => shipTree(sha, DATA_PROD));
   ok(`archive → ${DATA_PROD}`, t);
 
   step("data-prod: bring up persistence plane (idempotent)");
   t = Date.now();
-  await sshScript(
-    DATA_PROD,
-    `cd ${DATA_COMPOSE}
+  await postgres.run(({ live }) =>
+    sshScript(
+      DATA_PROD,
+      `cd ${DATA_COMPOSE}
 printf 'VPC_IP=%s\\n' '${VPC_IP}' > .env
-sudo ${NO_ATTEST} docker compose up -d --build
+printf '%s\\n' '${postgresImageOverride(live)}' > .postgres-artifacts.json
+sudo docker compose -f compose.yml -f .postgres-artifacts.json up -d --no-build --pull never --wait --wait-timeout 120 postgres pgbackrest
+sudo docker compose up -d --no-deps redis
 `,
-    { label: "data-prod up", stallBudgetMs: STALL_BUDGET_BUILD_MS },
+      { label: "data-prod up", stallBudgetMs: STALL_BUDGET_BUILD_MS },
+    ),
+  );
+  await postgres.run(({ live, sourceHash }) =>
+    sshScript(DATA_PROD, postgresStateScript(live, sourceHash), {
+      label: "PostgreSQL artifact checkpoint",
+    }),
   );
   ok("postgres + redis + pgbackrest up", t);
 

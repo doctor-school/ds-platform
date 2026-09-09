@@ -111,12 +111,14 @@ rebuild. Slugs are `golden-*`.
    `@ds/schemas`, and inverting that for three string literals would make the
    data layer depend on the contract layer.
 2. **Doctor↔specialty links resolve at seed time.** `specialties_minzdrav.id` is
-   generated per database by the 017 book seed, so the golden dataset references
-   specialties by _name_ and `resolveDoctorSpecialtyRows` maps them to ids during
-   the seed. Pinning a specialty UUID would make the golden seed own a value it
-   does not produce. A name the book does not carry aborts the seed. The seed
-   runs the (idempotent) book seed in its own transaction first, because a
-   freshly migrated template has never booted the API that normally seeds it.
+   owned by the 017 book seed, not by this dataset, so the golden dataset
+   references specialties by _name_ and `resolveDoctorSpecialtyRows` maps them to
+   ids during the seed. Pinning a specialty UUID here would make the golden seed
+   own a value it does not produce — and a database seeded before the book ids
+   became derivable still carries random ones. A name the book does not carry
+   aborts the seed. The seed runs the (idempotent) book seed in its own
+   transaction first, because a freshly migrated template has never booted the
+   API that normally seeds it.
 
 ## Idempotency and the build
 
@@ -147,24 +149,30 @@ diff /tmp/golden-1.sql /tmp/golden-2.sql   # must be empty
 A non-empty diff means something in the dataset read a clock, generated an id, or
 relied on a column default — fix the dataset, never the diff.
 
-### The one value the rule cannot cover
+### Why the rule holds on the specialty book too
 
-`specialties_minzdrav.id` is `defaultRandom()` and the 017 book seed conflicts on
-`code`, keeping whatever id the row already has. A build starts from an empty
-`ds_golden_next`, so the book is inserted fresh and every specialty gets a new
-surrogate id — which the `doctor_specialties.specialty_id` FK then carries. Two
-consecutive builds therefore differ in exactly those columns:
+`seed:golden` runs the 017 book seed itself, so `specialties_minzdrav` is part of
+the template and part of the diff. Three properties keep it byte-identical:
 
-```
- specialties_minzdrav.id
- doctor_specialties.specialty_id
-```
+- **Ids are derived, not random.** A freshly inserted book row takes
+  `uuid_v5(namespace, code)` (`seed/specialty-id.ts`), so a build starting from an
+  empty `ds_golden_next` produces the same `specialties_minzdrav.id` — and the
+  same `doctor_specialties.specialty_id` — every time.
+- **A conflict never rewrites an id.** The upsert's `ON CONFLICT (code)` branch
+  sets `name`, `is_other`, `frequent_rank` and `updated_at` only. A live database
+  that already handed out random ids keeps them, and every stored reference to a
+  doctor's specialty stays valid; the derivation applies to fresh inserts alone.
+- **Timestamps are pinned on the golden path.** `seedGolden` passes the pinned
+  `now` to the book seed, so `created_at` / `updated_at` move with `GOLDEN_NOW`
+  like every other golden timestamp. Without that argument — the API boot path —
+  the database clock still decides, exactly as before.
 
-That is not the golden dataset generating an id — it is the golden dataset
-pointing at a row whose id another seed owns, and it is why the dataset stores
-the specialty **name** and resolves it at seed time. Pinning it would mean
-rewriting a book id that live databases already reference, so the comparison
-excludes those two columns instead; everything the golden seed itself writes is
-byte-identical across builds. Scenarios must address specialties by code or name
-and never by a hard-coded id — an id read out of one template is meaningless in
-the next one.
+A re-seed of unchanged data therefore writes nothing at all: the frequent-rank
+pre-clear skips rows that already hold the rank they are about to be given, and
+the conflict branch moves `updated_at` only when `name`, `is_other` or
+`frequent_rank` really differs from the stored row.
+
+The diff comparison excludes **no** column. Scenarios must still address
+specialties by code or name rather than by a hard-coded id: the id belongs to the
+book seed, and a scenario that pins one would break on any database whose book
+predates the derivation.

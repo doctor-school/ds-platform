@@ -132,7 +132,7 @@ export class StorefrontModule implements OnModuleInit {
         await tx.execute(
           sql`select pg_advisory_xact_lock(${SPECIALTY_BOOK_SEED_LOCK})`,
         );
-        await seedSpecialtiesMinzdrav(tx, rows);
+        await seedSpecialtiesMinzdrav(tx, { rows });
       });
       this.logger.log(
         `specialty reference book seeded (${rows.length} entries)`,

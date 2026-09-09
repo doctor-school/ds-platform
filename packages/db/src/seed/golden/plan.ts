@@ -71,8 +71,11 @@ export const GOLDEN_SEED_ORDER = Object.freeze([
 /**
  * Resolves the doctor↔specialty links against the seeded Минздрав book.
  *
- * The book's ids are generated per database (`seedSpecialtiesMinzdrav`), so the
- * golden dataset holds names and this function turns them into ids at seed time.
+ * The book's ids belong to the book seed (`seedSpecialtiesMinzdrav`), which
+ * derives them from each row's `code` on INSERT and never rewrites them on
+ * conflict — so a database seeded before that derivation existed still holds
+ * randomly generated ids. The golden dataset therefore holds names and this
+ * function resolves them against whatever the target database actually carries.
  * A name the book does not carry is a hard failure: silently dropping the link
  * would produce a template whose «doctor with a specialty» scenario has no
  * specialty, and the scenario would fail far from its cause.

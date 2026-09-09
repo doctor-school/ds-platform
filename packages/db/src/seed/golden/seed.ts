@@ -127,7 +127,7 @@ export async function seedGolden(
 
   return db.transaction(async (tx: GoldenExecutor) => {
     if (options.ensureSpecialtyBook !== false) {
-      await seedSpecialtiesMinzdrav(tx);
+      await seedSpecialtiesMinzdrav(tx, { now });
     }
     const specialtyIdByName = await loadSpecialtyIdByName(tx);
     const plan = buildGoldenSeedPlan(dataset, specialtyIdByName);

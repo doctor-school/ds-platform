@@ -1,4 +1,4 @@
-import { isNotNull, sql, type SQL } from "drizzle-orm";
+import { sql, type SQL } from "drizzle-orm";
 
 import { specialtiesMinzdrav } from "../schema/specialties.js";
 import {
@@ -8,6 +8,7 @@ import {
   SPECIALTY_OTHER_NAME,
 } from "./specialties-minzdrav.data.js";
 import { specialtyCodeFromName } from "./specialty-code.js";
+import { specialtyIdFromCode } from "./specialty-id.js";
 
 // 017 — the seed of the closed Минздрав specialty reference book (EARS-3,
 // 017-design §2). The book is populated ONLY here: no 017 path and no storefront
@@ -18,6 +19,13 @@ import { specialtyCodeFromName } from "./specialty-code.js";
 // derived value or `SpecialtyBook.total`, never a literal.
 
 export interface SpecialtyBookSeedRow {
+  /**
+   * Deterministic primary key derived from {@link SpecialtyBookSeedRow.code}
+   * ({@link specialtyIdFromCode}). Used by the INSERT branch only — the
+   * `ON CONFLICT (code)` branch never rewrites the `id` of a row that already
+   * exists, so ids handed out by an earlier random default survive untouched.
+   */
+  id: string;
   code: string;
   name: string;
   isOther: boolean;
@@ -43,12 +51,16 @@ export function buildSpecialtyBookSeed(): SpecialtyBookSeedRow[] {
     FREQUENT_SPECIALTY_NAMES.map((name, index) => [name, index + 1]),
   );
 
-  const nomenclature = RAZDEL_I_NAMES.map((name) => ({
-    code: specialtyCodeFromName(name),
-    name,
-    isOther: false,
-    frequentRank: frequentRankByName.get(name) ?? null,
-  }));
+  const nomenclature = RAZDEL_I_NAMES.map((name) => {
+    const code = specialtyCodeFromName(name);
+    return {
+      id: specialtyIdFromCode(code),
+      code,
+      name,
+      isOther: false,
+      frequentRank: frequentRankByName.get(name) ?? null,
+    };
+  });
 
   const missingFrequent = FREQUENT_SPECIALTY_NAMES.filter(
     (name) => !RAZDEL_I_NAMES.includes(name),
@@ -62,6 +74,7 @@ export function buildSpecialtyBookSeed(): SpecialtyBookSeedRow[] {
   const rows: SpecialtyBookSeedRow[] = [
     ...nomenclature,
     {
+      id: specialtyIdFromCode(specialtyCodeFromName(SPECIALTY_OTHER_NAME)),
       code: specialtyCodeFromName(SPECIALTY_OTHER_NAME),
       name: SPECIALTY_OTHER_NAME,
       isOther: true,
@@ -76,6 +89,10 @@ export function buildSpecialtyBookSeed(): SpecialtyBookSeedRow[] {
   assertUnique(
     rows.map((row) => row.name),
     "name",
+  );
+  assertUnique(
+    rows.map((row) => row.id),
+    "id",
   );
 
   return rows;
@@ -95,6 +112,14 @@ function assertUnique(values: readonly string[], label: string): void {
   }
 }
 
+/** A book row as it is handed to the INSERT, timestamps included. */
+export interface SpecialtyBookInsertRow extends SpecialtyBookSeedRow {
+  /** Pinned creation instant; omitted so the column default applies. */
+  createdAt?: Date;
+  /** Pinned update instant; omitted so the column default applies. */
+  updatedAt?: Date;
+}
+
 /**
  * Minimal structural contract of the drizzle handle this seed needs, so the
  * function stays usable from the API bootstrap, a migration runner and a test
@@ -102,7 +127,7 @@ function assertUnique(values: readonly string[], label: string): void {
  */
 type SpecialtySeedExecutor = {
   insert: (table: typeof specialtiesMinzdrav) => {
-    values: (rows: SpecialtyBookSeedRow[]) => {
+    values: (rows: SpecialtyBookInsertRow[]) => {
       onConflictDoUpdate: (config: {
         target: typeof specialtiesMinzdrav.code;
         set: Record<string, unknown>;
@@ -116,6 +141,21 @@ type SpecialtySeedExecutor = {
   };
 };
 
+/** Options of {@link seedSpecialtiesMinzdrav}. */
+export interface SeedSpecialtyBookOptions {
+  /** The book to write. Defaults to {@link buildSpecialtyBookSeed}. */
+  rows?: SpecialtyBookSeedRow[];
+  /**
+   * Pinned instant for `created_at` / `updated_at`.
+   *
+   * Omitted — the API boot path — the database clock decides, exactly as
+   * before. Supplied — the `ds_golden` template build (#2063) — every book row
+   * carries the same instant in every rebuild, so two template builds do not
+   * differ in the book's timestamps.
+   */
+  now?: Date;
+}
+
 /**
  * Idempotent upsert of the whole book, keyed on `code`.
  *
@@ -125,37 +165,83 @@ type SpecialtySeedExecutor = {
  * withdrawing an entry that doctors may already hold is a migration decision,
  * not a seed side effect.
  *
+ * A re-seed of UNCHANGED data writes nothing observable:
+ *
+ *  - the frequent-rank pre-clear skips every row that already holds the rank it
+ *    is about to be given, so an unchanged book clears nothing;
+ *  - the conflict branch moves `updated_at` only when a tracked column
+ *    (`name`, `is_other`, `frequent_rank`) actually differs from the stored
+ *    row, instead of stamping `now()` on every pass.
+ *
+ * That is what makes the golden template's drift rule hold on this table: a
+ * second `seed:golden` against the same database leaves `specialties_minzdrav`
+ * byte-identical.
+ *
  * The frequent ranks are cleared FIRST, in the same transaction as the upsert.
  * `specialties_minzdrav_frequent_rank_key` is a NON-DEFERRABLE partial unique
  * index, so Postgres enforces it row-by-row inside the multi-row upsert: a
- * re-seed that merely REORDERS the frequent set (rank 3 → 1 while the old
+ * re-seed that merely REORDERS the frequent set (rank 3 -> 1 while the old
  * holder of 1 has not been rewritten yet) collides mid-statement, the whole
  * transaction rolls back, and — because the API seeds at boot and rethrows —
- * the service crash-loops. Nulling the column first makes every rank free
- * before any is claimed. Still no deletes, still idempotent: the caller must
- * supply a transaction (the API bootstrap holds an advisory lock on it), so the
- * cleared state is never visible to a concurrent reader.
+ * the service crash-loops. Nulling the moving ranks first makes every contested
+ * rank free before any is claimed: a rank can only be contested by a row that
+ * is itself moving, and every moving row is cleared. Still no deletes, still
+ * idempotent: the caller must supply a transaction (the API bootstrap holds an
+ * advisory lock on it), so the cleared state is never visible to a concurrent
+ * reader.
  */
 export async function seedSpecialtiesMinzdrav(
   db: SpecialtySeedExecutor,
-  rows: SpecialtyBookSeedRow[] = buildSpecialtyBookSeed(),
+  options: SeedSpecialtyBookOptions = {},
 ): Promise<number> {
+  const rows = options.rows ?? buildSpecialtyBookSeed();
+  const now = options.now;
+
   await db
     .update(specialtiesMinzdrav)
     .set({ frequentRank: null })
-    .where(isNotNull(specialtiesMinzdrav.frequentRank));
+    .where(movingFrequentRanks(rows));
+
+  const bumpTo = now ? sql`${now.toISOString()}::timestamptz` : sql`now()`;
 
   await db
     .insert(specialtiesMinzdrav)
-    .values(rows)
+    .values(
+      rows.map((row) =>
+        now ? { ...row, createdAt: now, updatedAt: now } : { ...row },
+      ),
+    )
     .onConflictDoUpdate({
       target: specialtiesMinzdrav.code,
       set: {
         name: sql`excluded.name`,
         isOther: sql`excluded.is_other`,
         frequentRank: sql`excluded.frequent_rank`,
-        updatedAt: sql`now()`,
+        // NOTE: `id` is deliberately absent — a row that already exists keeps
+        // the identity every stored reference to it resolves through.
+        updatedAt: sql`case when (excluded.name, excluded.is_other, excluded.frequent_rank) is distinct from (${specialtiesMinzdrav.name}, ${specialtiesMinzdrav.isOther}, ${specialtiesMinzdrav.frequentRank}) then ${bumpTo} else ${specialtiesMinzdrav.updatedAt} end`,
       },
     });
   return rows.length;
+}
+
+/**
+ * Rows whose frequent rank must be released before the upsert claims ranks:
+ * every row that currently holds a rank it is NOT about to hold again.
+ *
+ * Narrower than «every ranked row» on purpose. Clearing a rank that the same
+ * row immediately re-claims would make the conflict branch see a changed
+ * `frequent_rank` and stamp `updated_at`, which is exactly the spurious write
+ * the golden drift rule must not see.
+ */
+function movingFrequentRanks(rows: readonly SpecialtyBookSeedRow[]): SQL {
+  const held = rows.filter((row) => row.frequentRank !== null);
+  if (held.length === 0) {
+    return sql`${specialtiesMinzdrav.frequentRank} is not null`;
+  }
+  const keeping = sql.join(
+    held.map((row) => sql`(${row.code}, ${row.frequentRank})`),
+    sql`, `,
+  );
+  return sql`${specialtiesMinzdrav.frequentRank} is not null and (${specialtiesMinzdrav.code}, ${specialtiesMinzdrav.frequentRank}) not in (${keeping})`;
 }

@@ -64,6 +64,12 @@ cd /srv/ds-platform/infra/deploy/compose/stg-infra
 # resolved EMPTY, the first init would never create `ds-bootstrap`, and the converge
 # chain below (and AC5) would be unreachable.
 
+# 0. A /etc/ds-platform/stage.env generated from an EARLIER copy of
+#    infra/deploy/stage.env.example carries EMAIL_DELIVERY_MODE=sink, which is not a
+#    value provision.sh or the api env schema accepts (mailpit | real — Mailpit IS the
+#    email sink) and which aborts the converge. Edit it to EMAIL_DELIVERY_MODE=mailpit
+#    before the converge; SMS_DELIVERY_MODE=sink is unchanged.
+#
 # 1. FIRST bring-up ONLY: set IDP_BOOTSTRAP=1 in /etc/ds-platform/stage.env BEFORE
 #    this step — the FIRSTINSTANCE_* block is read only on a fresh init — and unset
 #    it again in step 3.
@@ -141,8 +147,16 @@ sudo bash -c 'set -a; . /etc/ds-platform/stage.env; set +a; \
   docker run --rm --network stg-infra \
     --add-host "id.stage.doctor.school:$IDP_IP" \
     -e IDP_BASE_URL=http://id.stage.doctor.school:8080 \
+    -e EMAIL_DELIVERY_MODE -e SMS_DELIVERY_MODE \
+    -e IDP_PROJECT_NAME -e IDP_APP_NAME -e IDP_SEED_ROLE \
+    -e IDP_BOOTSTRAP_USERNAME -e IDP_LOGIN_BASE_URI \
+    -e IDP_REDIRECT_URIS -e IDP_POST_LOGOUT_URIS \
+    -e IDP_NOTIFICATION_LANGUAGE -e IDP_RESTRICT_LANGUAGES \
     -e IDP_SMTP_HOST -e IDP_SMTP_SENDER_ADDRESS -e IDP_SMTP_SENDER_NAME \
-    -e IDP_SMS_SINK_ENDPOINT -e IDP_WEBHOOK_SECRET \
+    -e IDP_SMTP_REAL_PROVIDER -e IDP_SMTP_REAL_HOST -e IDP_SMTP_REAL_PORT \
+    -e IDP_SMTP_REAL_USER -e IDP_SMTP_REAL_PASSWORD \
+    -e IDP_SMTP_REAL_SENDER_ADDRESS -e IDP_SMTP_REAL_SENDER_NAME \
+    -e IDP_SMS_SINK_ENDPOINT -e IDP_SMS_AERO_ENDPOINT \
     -v /srv/ds-platform/infra/dev-stand/idp:/idp:ro \
     -v /etc/ds-platform/idp-bootstrap-pat.txt:/pat.txt:ro \
     -w /idp alpine:3.20 \
@@ -152,8 +166,31 @@ sudo bash -c 'set -a; . /etc/ds-platform/stage.env; set +a; \
 
 `alpine:3.20` plus `apk add bash curl jq` is used because no one-shot image carrying
 that trio is vendored anywhere under `infra/`, and bash + curl + jq are exactly what
-`provision.sh` declares it needs. Every `IDP_*` variable the run consumes is passed
-through explicitly — the container inherits nothing from the sourced shell.
+`provision.sh` declares it needs.
+
+The `-e` list is not a selection: the container inherits NOTHING from the sourced
+shell, so it mirrors `provision.sh`'s whole env contract, re-derivable with
+
+```bash
+grep -oE '\$\{(IDP_[A-Z0-9_]+|EMAIL_DELIVERY_MODE|SMS_DELIVERY_MODE|PAT)[:}]' \
+  infra/dev-stand/idp/provision.sh | sort -u
+```
+
+minus `IDP_BASE_URL` (set explicitly above) and `PAT` (supplied by `--pat-file`). Each
+is passed BARE, so it takes the value `stage.env` exports and an unset one falls
+through to the script's own default — exactly as it does on the host in form (b). Keep
+the list in step with that grep whenever `provision.sh` gains a variable: a name left
+out is not a no-op, it silently converges the script's DEV default onto the shared
+stage instance (`IDP_PROJECT_NAME`/`IDP_APP_NAME` fall back to `ds-platform-dev`, and
+both objects are looked up BY NAME — an omission creates a second project and a second
+OIDC app rather than converging the stage pair).
+
+Because both forms therefore read the same values, they converge the same project, the
+same app and the same providers. ONE difference is intended and unavoidable: the login
+URI derived from the base URL. Form (a) persists the `http://id.stage.doctor.school:8080`
+shape, so the FIRST form (b) run after #2062 re-converges that one step to the `https`
+public URL and prints `converged` for it — AC5's «only `already ...`» idempotency is
+asserted within one form, across its two consecutive runs.
 
 **(b) After #2062 — the `id.stage` vhost exists.** Then the production shape applies
 (`infra/deploy/README.md` step 9): run it straight on the host against the public base
@@ -282,7 +319,9 @@ sudo grep -nE '^(POSTGRES_PASSWORD|MINIO_ROOT_PASSWORD|IDP_SECRET_KEY|IDP_BOOTST
 
 # HALF B — the sinks are what is actually selected.
 sudo grep -E '^(EMAIL_DELIVERY_MODE|SMS_DELIVERY_MODE|IDP_SMTP_HOST|IDP_SMS_SINK_ENDPOINT)=' /etc/ds-platform/stage.env
-# expected exactly: sink / sink / mailpit:1025 / http://sms-sink:8090/sms
+# expected exactly: mailpit / sink / mailpit:1025 / http://sms-sink:8090/sms
+# (`mailpit` IS the email sink — the only values provision.sh and the api env schema
+# accept are `mailpit` and `real`; `EMAIL_DELIVERY_MODE=sink` aborts the converge.)
 
 # HALF B — the captcha key is the vendor TEST pair, not the production pair. The box
 # holds no copy of the production key and no route to it, so the check prints the pair

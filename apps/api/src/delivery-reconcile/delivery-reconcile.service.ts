@@ -1,3 +1,4 @@
+import { resolveRealSmtp, type RealSmtpEnv } from "../config/real-smtp.js";
 import { Injectable } from "@nestjs/common";
 import type { FeatureFlags } from "../feature-flags/feature-flags.types.js";
 import {
@@ -17,6 +18,7 @@ import {
 export interface DeliveryEnvDefaults {
   emailReal: boolean;
   smsReal: boolean;
+  realSmtp?: RealSmtpEnv;
 }
 
 /** A diagnostic sink for the "desired provider not provisioned" skip note. */
@@ -44,29 +46,10 @@ const DEFAULT_RETRY: ReconcileRetryConfig = {
 };
 
 /**
- * Reconciles the live `email-delivery-real` / `sms-delivery-real` Unleash flags
- * onto Zitadel's **active** notification provider (#185, design of record §3).
- *
- * The api sends no OTP itself — Zitadel does, via its active provider — so a
- * delivery-mode flag cannot branch in our code; it must repoint Zitadel. This
- * service reads each flag (env default as fallback), finds the provider whose
- * stable `description` matches the desired mode among the providers
- * `provision.sh` pre-configured, and `_activate`s it. It is:
- *
- * - **idempotent** — when the desired provider is already active it does nothing
- *   (Zitadel rejects re-activating an active provider; we skip rather than rely on
- *   tolerance, though the admin adapter also tolerates the precondition error);
- * - **safe** — when the desired provider is not provisioned (e.g. real SMTP with
- *   no creds, so `provision.sh` skipped it) it leaves the channel untouched and
- *   warns; it NEVER activates the wrong provider as a fallback;
- * - **reactive** — {@link start} subscribes to flag signals (the SDK `changed`
- *   event for operator UI toggles AND the `synchronized` event for the SDK's first
- *   poll) and runs a resilient initial reconcile. The subscriptions are wired even
- *   if the initial reconcile fails, and a steady-ON flag converges on first sync
- *   without a manual toggle (#214).
- *
- * It holds NO SMTP/SMS secrets — it only flips which pre-configured provider is
- * active (the creds live in Zitadel's provider config, set by `provision.sh`).
+ * Reconciles native Zitadel login-OTP SMTP and SMS providers on flag signals.
+ * BFF verify/reset sends use MailerModule instead. Explicit real SMTP validates
+ * shared configuration and the provisioned identity before activation, including
+ * already-active providers. It never repairs credentials or sends mail itself.
  */
 @Injectable()
 export class DeliveryReconcileService {
@@ -80,25 +63,7 @@ export class DeliveryReconcileService {
     private readonly retry: ReconcileRetryConfig = DEFAULT_RETRY,
   ) {}
 
-  /**
-   * Subscribe to flag signals, then run a resilient initial reconcile. Called
-   * from the module's lifecycle hook on the dev-stand (when a live Zitadel admin
-   * client is available).
-   *
-   * Subscriptions are wired FIRST and unconditionally (#214 defect B): a transient
-   * boot-time `fetch failed` in the initial reconcile must NOT leave the process
-   * deaf to flag changes for its whole lifetime. Two signals drive a re-reconcile:
-   *
-   * - `onChange` — an operator's UI toggle (the original reactive path); and
-   * - `onSynchronized` — the SDK's first successful poll. At boot the SDK has not
-   *   synced, so a flag read returns the env default; a flag that is steadily ON
-   *   never emits `changed`. Re-reconciling on first sync converges a steady-ON
-   *   flag without a manual toggle (#214 defect C).
-   *
-   * Both handlers and the initial reconcile are fire-and-forget — a failed
-   * reconcile logs and is retried on the next signal; `start()` never throws (so
-   * the module hook can await it without aborting boot).
-   */
+  /** Subscribe before bounded startup reconciliation; real-email failure aborts boot. */
   async start(warn: WarnFn = defaultWarn): Promise<void> {
     const safeReconcile = (reason: string): void => {
       void this.reconcile(warn).catch((err: unknown) => {
@@ -118,12 +83,7 @@ export class DeliveryReconcileService {
     await this.initialReconcile(warn);
   }
 
-  /**
-   * The boot reconcile with bounded backoff. A transient failure (stand still
-   * coming up) is retried; an exhausted budget logs and returns — the env-default
-   * provider stays active (fail-soft) and the next flag signal will reconcile.
-   * Never throws.
-   */
+  /** Retry transient startup failures; retain legacy fail-soft behavior only in intercept. */
   private async initialReconcile(warn: WarnFn): Promise<void> {
     for (let attempt = 1; attempt <= this.retry.attempts; attempt++) {
       try {
@@ -132,6 +92,13 @@ export class DeliveryReconcileService {
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : "unknown";
         if (attempt >= this.retry.attempts) {
+          if (
+            this.flags.isEnabled(
+              FLAG_EMAIL_DELIVERY_REAL,
+              this.envDefaults.emailReal,
+            )
+          )
+            throw err;
           warn(
             `initial reconcile failed after ${attempt} attempt(s): ${message} — leaving the env-default provider active; a flag change or the SDK's first sync will reconcile`,
           );
@@ -168,9 +135,31 @@ export class DeliveryReconcileService {
       this.envDefaults.smsReal,
     );
 
+    const real = emailReal
+      ? resolveRealSmtp(this.envDefaults.realSmtp ?? {})
+      : null;
+    const smtp = await this.admin.listSmtpProviders();
+    if (real) {
+      const targets = smtp.filter(
+        (p) => p.description === SMTP_DESCRIPTION_REAL,
+      );
+      const target = targets[0];
+      if (
+        targets.length !== 1 ||
+        !target?.id ||
+        target.host !== `${real.host}:${real.port}` ||
+        target.tls !== true ||
+        target.user !== real.user ||
+        target.senderAddress !== real.from
+      ) {
+        throw new Error(
+          "Native SMTP configuration does not match selected provider; re-provision required",
+        );
+      }
+    }
     await this.reconcileChannel(
       "SMTP",
-      await this.admin.listSmtpProviders(),
+      smtp,
       emailReal ? SMTP_DESCRIPTION_REAL : SMTP_DESCRIPTION_INTERCEPT,
       (id) => this.admin.activateSmtp(id),
       warn,

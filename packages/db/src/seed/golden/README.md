@@ -141,3 +141,25 @@ diff /tmp/golden-1.sql /tmp/golden-2.sql   # must be empty
 
 A non-empty diff means something in the dataset read a clock, generated an id, or
 relied on a column default — fix the dataset, never the diff.
+
+### The one value the rule cannot cover
+
+`specialties_minzdrav.id` is `defaultRandom()` and the 017 book seed conflicts on
+`code`, keeping whatever id the row already has. A build starts from an empty
+`ds_golden_next`, so the book is inserted fresh and every specialty gets a new
+surrogate id — which the `doctor_specialties.specialty_id` FK then carries. Two
+consecutive builds therefore differ in exactly those columns:
+
+```
+ specialties_minzdrav.id
+ doctor_specialties.specialty_id
+```
+
+That is not the golden dataset generating an id — it is the golden dataset
+pointing at a row whose id another seed owns, and it is why the dataset stores
+the specialty **name** and resolves it at seed time. Pinning it would mean
+rewriting a book id that live databases already reference, so the comparison
+excludes those two columns instead; everything the golden seed itself writes is
+byte-identical across builds. Scenarios must address specialties by code or name
+and never by a hard-coded id — an id read out of one template is meaningless in
+the next one.

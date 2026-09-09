@@ -36,6 +36,14 @@ export function databasePlan(names) {
   });
 }
 
+export function bootstrapRestoreScript() {
+  // PG18 preserves GRANTED BY. The original bootstrap superuser must remain
+  // bootstrap (OID 10); a different initdb user cannot recreate that authority.
+  return `test "$(grep -cx 'CREATE ROLE source_admin;' /scratch/globals.sql)" -eq 1
+sed '/^CREATE ROLE source_admin;$/d' /scratch/globals.sql > /scratch/reconciled.sql
+exec psql -X -v ON_ERROR_STOP=1 -h "$1" -U source_admin -d postgres -f /scratch/reconciled.sql`;
+}
+
 const quote = (s) => `'${String(s).replaceAll("'", "'\\''")}'`;
 const hash = (s) => createHash("sha256").update(s).digest("hex");
 const root = fileURLToPath(new URL("../../", import.meta.url));
@@ -355,7 +363,13 @@ async function main() {
         docker: (
           await docker("version", "--format", "{{.Server.Version}}")
         ).trim(),
-        disk: await run(["sudo", "-n", "df", "-Pk", (await docker("info", "--format", "{{.DockerRootDir}}")).trim()]),
+        disk: await run([
+          "sudo",
+          "-n",
+          "df",
+          "-Pk",
+          (await docker("info", "--format", "{{.DockerRootDir}}")).trim(),
+        ]),
       };
     });
     await stage("candidate-images", async () => {
@@ -444,7 +458,7 @@ async function main() {
     );
     await stage("logical-17-to-18", async () => {
       const before = await summary("restored17");
-      await start("candidate18", 18, "repo18", { user: "target_admin" });
+      await start("candidate18", 18, "repo18");
       const client = async (args) =>
         docker(
           "run",
@@ -472,18 +486,11 @@ async function main() {
         "/scratch/globals.sql",
       ]);
       await client([
-        "psql",
-        "-X",
-        "-v",
-        "ON_ERROR_STOP=1",
-        "-h",
+        "bash",
+        "-ceu",
+        bootstrapRestoreScript(),
+        "bootstrap-restore",
         container("candidate18"),
-        "-U",
-        "target_admin",
-        "-d",
-        "postgres",
-        "-f",
-        "/scratch/globals.sql",
       ]);
       for (const db of await databases("restored17")) {
         await client([

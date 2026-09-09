@@ -5,7 +5,16 @@ import {
   auditedRunner,
   assertAbsent,
   databasePlan,
+  bootstrapRestoreScript,
 } from "./pg18-rehearsal.mjs";
+
+test("EARS-5: bootstrap reconciliation removes only its exact CREATE and refuses ambiguity", () => {
+  const script = bootstrapRestoreScript();
+  assert.match(script, /grep -cx 'CREATE ROLE source_admin;'/);
+  assert.match(script, /test.*-eq 1/);
+  assert.match(script, /ON_ERROR_STOP=1/);
+  assert.doesNotMatch(script, /target_admin/);
+});
 
 test("EARS-1: names cannot address shared or production resources", () => {
   assert.equal(namespace("run01"), "ds-pg18-2135-run01");

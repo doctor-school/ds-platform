@@ -24,7 +24,7 @@ lang: ru
 2. **Purpose-separated crypto-shred:** общий per-subject DEK уничтожается при erasure; каждая строка `audit_ledger` использует отдельный retention DEK, живущий только законный срок. Ключи находятся в Vault вне database backups. Erasure SLA для неисключённых PD — 30 дней.
 3. **Consent versioning** — `consent_versions` + append-only `consent_acceptances` + `consent_withdrawals`. Каждое изменение текста = новая версия; пользователь prompted при следующем логине.
 4. **Data subject rights endpoints** под `/me/*` — обязательная часть pre-pilot. `data-export` async (signed link, ≤7d). `erasure-request` async (≤30d).
-5. **Retention matrix** в `packages/db/schema/pd/retention.ts` как TS-объект → читается миграциями + CI + admin UI. Single source of truth.
+5. **Retention matrix** в `packages/db/src/schema/pd/retention.ts` как TS-объект → читается миграциями + CI + admin UI. Single source of truth.
 6. **Cross-zone propagation:** erasure request → outbox event → AI-zone subscriber стирает embedding/corpus payload и сохраняет tombstones (см. ADR-0011 §2.5).
 7. **Что НЕ в scope этого spec'а:** конкретный legal text для consent v1 (готовит юрист в составе DSO-X2), точное UX consent screens (frontend track), final SLA для data-export если объём окажется ≥X MB (измеряем в pilot).
 
@@ -97,7 +97,7 @@ Withdrawal — отзыв активного согласия. Cascading effects
 
 ## 3. Retention matrix
 
-**Master location:** `packages/db/schema/pd/retention.ts` (TS объект, читается миграциями + CI + admin UI).
+**Master location:** `packages/db/src/schema/pd/retention.ts` (TS объект, читается миграциями + CI + admin UI).
 
 **Полный список таблиц с PD pre-pilot.** Каждая строка fixates: legal basis, retention, retained-row erasure mechanism, audit exception, owner. Каждая removable/expiring application-owned строка также имеет lifecycle `status` + `deleted_at` по ADR-0003 design §3.6; механизмы можно комбинировать.
 
@@ -131,7 +131,7 @@ Withdrawal — отзыв активного согласия. Cascading effects
 
 Каждая removable/expiring application-owned строка дополнительно имеет lifecycle `status` и nullable `deleted_at` по ADR-0003 design §3.6. Immutable/append-only записи явно не поддерживают удаление и стираются только через свой payload/key-контракт. Snippets ниже показывают поля, относящиеся к этому ADR; legacy `tombstone_at` на soft-deletable request records стандартизирован как `deleted_at`.
 
-Drizzle-схемы (TS). Не полный DDL — выжимка с ключевыми полями. Полные миграции — в `packages/db/migrations/` после bootstrap.
+Drizzle-схемы (TS). Не полный DDL — выжимка с ключевыми полями. Полные миграции — в `apps/api/drizzle/` после bootstrap.
 
 ### 4.1 `consent_versions`
 
@@ -492,7 +492,7 @@ Access control: только роль `pd_officer` (новая; ADR-0001 §1 RBA
 
 **Custom lint** в `tools/lint-retention.ts`:
 
-1. Каждая колонка `bytea` / `text` в таблице, расположенной в `packages/db/schema/`, должна быть либо классифицирована в `retention.ts`, либо иметь explicit `@no-pd` annotation в Drizzle schema.
+1. Каждая колонка `bytea` / `text` в таблице, расположенной в `packages/db/src/schema/`, должна быть либо классифицирована в `retention.ts`, либо иметь explicit `@no-pd` annotation в Drizzle schema.
 2. Каждая new table в migration без entry в `retention.ts` → CI fail.
 3. Каждое поле с PD должно иметь корректный retained-row erasure mechanism из {value_erasure, tombstone, crypto_shred, retain}.
 4. Каждая application-owned таблица Postgres должна объявлять либо lifecycle `status` + nullable `deleted_at` для удаления/истечения, либо immutable/append-only контракт без поддержки удаления. Migrations, retention jobs и runtime repositories не должны использовать `DELETE`, `TRUNCATE`, data-bearing `DROP TABLE` / `DROP PARTITION` или `ON DELETE CASCADE`.

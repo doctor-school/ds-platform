@@ -134,7 +134,7 @@ export type ReadinessResponse = z.infer<typeof ReadinessResponseSchema>;
 
 `CheckStatusSchema` is exported as a building block — when Redis / MinIO / Centrifugo probes land, they reuse this enum and extend the `checks` shape inside their own spec.
 
-### 4.2 `packages/db/schema/idempotency-keys.ts`
+### 4.2 `packages/db/src/schema/idempotency-keys.ts`
 
 ```ts
 import { pgTable, text, timestamp } from "drizzle-orm/pg-core";

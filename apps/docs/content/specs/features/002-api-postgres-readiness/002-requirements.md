@@ -52,7 +52,7 @@ lang: en
 - URI versioning via `@Controller({ path: 'ready', version: '1' })` — per ADR-0002 §3.
 - Validation library `nestjs-zod` + `createZodDto` — per ADR-0002 §3.
 - Schema SSOT in `packages/schemas/` (framework-agnostic, depends on `zod` only) — per ADR-0006 §6.2 and ADR-0005 «100% reuse».
-- DB schema SSOT in `packages/db/schema/` with `drizzle-kit` `out: '../../apps/api/drizzle'` — per ADR-0003 §4.
+- DB schema SSOT in `packages/db/src/schema/` with `drizzle-kit` `out: '../../apps/api/drizzle'` — per ADR-0003 §4.
 - pgvector in the same Postgres as OLTP — per ADR-0003 §7. Confirmed via `to_regtype('vector')` rather than installing the extension at runtime (the migration owns extension creation; runtime only verifies presence).
 - `DATABASE_URL` env name and value shape are fixed by the local-dev-environment setup-design §4.1 (`postgres://ds:CHANGE_ME@HOST:5432/ds_dev`).
 - `drizzle:migrate` wrapper must chain `pnpm dev:snapshot pre-mig-auto && drizzle-kit migrate …` — verbatim per setup-design §9.2. The chain is a soft guardrail (snapshot failure aborts migrate).
@@ -61,7 +61,7 @@ lang: en
 ## Prior decisions
 
 - **ADR-0002 §3** Backend Core Stack — fixes `nestjs-zod` + `createZodDto`, URI versioning, Vitest + supertest.
-- **ADR-0003 §4** Data Layer — Drizzle ORM + drizzle-kit; `packages/db/schema/` SSOT; `out: '../../apps/api/drizzle'`.
+- **ADR-0003 §4** Data Layer — Drizzle ORM + drizzle-kit; `packages/db/src/schema/` SSOT; `out: '../../apps/api/drizzle'`.
 - **ADR-0003 §5** Data Layer — `idempotency_keys (key text PRIMARY KEY, scope text NOT NULL, created_at timestamptz NOT NULL DEFAULT now(), expires_at timestamptz NOT NULL)` table definition; idempotency stored durably in Postgres, not Redis.
 - **ADR-0003 §7** Data Layer — pgvector in the main Postgres with HNSW indexing; `vector(...)` type first-class via Drizzle.
 - **ADR-0006 §4** Documentation & SSOT — feature-spec triplet structure (prefixed filenames `NNN-requirements.md` / `NNN-design.md` / `NNN-scenarios.feature`) and flat EARS numbering by default.

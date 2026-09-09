@@ -171,9 +171,16 @@ write_files:
         touch "$MARKERS/$name"
       }
 
+      # Every apt call goes through this wrapper. The lock timeout turns the race with
+      # unattended-upgrades / apt-daily — whose timers fire during exactly this window —
+      # into a wait instead of an exit that would burn a whole restart cycle.
+      apt_get() {
+        apt-get -o DPkg::Lock::Timeout=600 "$@"
+      }
+
       sys_upgrade() {
-        apt-get update
-        apt-get -y \
+        apt_get update
+        apt_get -y \
           -o Dpkg::Options::=--force-confold \
           -o Dpkg::Options::=--force-confdef \
           upgrade
@@ -186,6 +193,11 @@ write_files:
         # version. Non-blocking on purpose — halting here would leave a half-built box.
         dockerd --validate --config-file /etc/docker/daemon.json \
           || echo "WARNING (#1419) /etc/docker/daemon.json failed dockerd --validate — build-cache GC policy is NOT in effect; fix the file and restart docker"
+        # `users:` above asks for the docker group, but that group does not exist until
+        # the line above created it — cloud-init only warns and moves on. deploy is the
+        # user the slot script and the runner run as, so make the membership true here
+        # by construction rather than by module ordering. Idempotent.
+        usermod -aG docker deploy
       }
 
       # Host firewall (defence-in-depth alongside twc_firewall.stage_1): SSH + web only.
@@ -205,7 +217,7 @@ write_files:
       # the Playwright suite run on the host, not in a container.
       node_toolchain() {
         curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
-        apt-get install -y nodejs
+        apt_get install -y nodejs
         corepack enable
       }
 
@@ -241,6 +253,15 @@ write_files:
       }
 
       install -d -m 0700 -o root -g root /etc/ds-platform
+
+      # UNCONDITIONAL and marker-less, before any apt call: a reset inside the dpkg
+      # unpack/configure window — the likeliest place for the reboot this file exists
+      # to survive — leaves the package database mid-transaction, and every later
+      # apt-get then refuses with «dpkg was interrupted, you must manually run
+      # dpkg --configure -a». Without this, Restart=on-failure would retry the same
+      # refusal every 30 s forever and only an SSH session could clear it.
+      dpkg --configure -a || true
+      apt_get -f install -y || true
 
       step apt-upgrade "sys_upgrade"
       step docker "docker_install"
@@ -282,7 +303,9 @@ write_files:
       RemainAfterExit=no
       # The script installs docker and a Node toolchain and runs three apt passes: on
       # a cold box it takes several minutes, far past the 90 s DefaultTimeoutStartSec.
-      TimeoutStartSec=0
+      # Generous but FINITE on purpose — a hung apt or a stalled TCP connect never
+      # returns a failure, so with no timeout Restart= below could never fire.
+      TimeoutStartSec=3600
       # Reboots are covered by the markers; this covers the no-reboot failure path
       # (transient DNS/network), so a blip does not park the box until someone looks.
       Restart=on-failure
@@ -293,16 +316,25 @@ write_files:
 
 # Arming path 2 of 2 — EVERY boot. bootcmd is per-boot where runcmd is per-instance,
 # so if a provider reboot cuts the first boot short of runcmd, the unit file is on
-# disk unenabled and this line enables it on the next boot. On the very first boot
-# this is a no-op (bootcmd runs before write_files, so the unit does not exist yet)
-# and the failure is swallowed — first boot is runcmd's job. Between the two, the
-# bootstrap unit is armed no matter where a reboot lands (#2121).
+# disk unenabled and these lines pick it up on the next boot. BOTH lines are needed:
+# `enable` only writes the multi-user.target.wants symlink, and bootcmd runs in
+# cloud-init-local — after systemd has already computed this boot's transaction — so
+# an enable alone would not run the unit until the boot after that. The explicit
+# `start` enqueues the job in THIS boot; `--no-block` keeps early boot from waiting
+# out the whole multi-minute bootstrap. Once provisioning has finished the start is a
+# no-op: the unit's ConditionPathExists=!<marker> skips it. On the very first boot
+# both lines are no-ops (bootcmd runs before write_files, so the unit file does not
+# exist yet) and the failures are swallowed — first boot is runcmd's job. Between the
+# two paths the bootstrap unit runs no matter where a reboot lands (#2121).
 bootcmd:
   - systemctl enable ds-stage-bootstrap.service 2>/dev/null || true
+  - systemctl start --no-block ds-stage-bootstrap.service 2>/dev/null || true
 
 # Arming path 1 of 2 — first boot. runcmd holds nothing slow any more: everything
-# that can be interrupted moved into stage-bootstrap.sh, so cloud-init reaches these
-# two lines within seconds of boot instead of after a docker + node + apt marathon.
+# that can be interrupted moved into stage-bootstrap.sh, and the start is `--no-block`,
+# so cloud-init reaches the end of these three lines within seconds of boot instead of
+# waiting out a docker + node + apt marathon (a plain `enable --now` would block until
+# the oneshot finished, and `cloud-init status --wait` with it).
 #
 # ds-actions-runner deliberately stays NOT enabled here: it starts only after the
 # owner writes /etc/ds-platform/runner.env (0600 root:root) with RUNNER_URL +
@@ -310,4 +342,5 @@ bootcmd:
 # (README → Runner registration).
 runcmd:
   - systemctl daemon-reload
-  - systemctl enable --now ds-stage-bootstrap.service
+  - systemctl enable ds-stage-bootstrap.service
+  - systemctl start --no-block ds-stage-bootstrap.service

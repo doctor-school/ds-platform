@@ -1076,6 +1076,26 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: pnpm lint:host-allowlist
 
+      # route-mount: every apps/{portal,doctor}/app/**/{page,layout}.tsx must carry an
+      # EXACT-path row in the checked-in answer key (capability-ownership.md → «Route-file
+      # registry»), and a route whose row says `mounted` must BE a thin projection —
+      # parsed with the TypeScript compiler API: only the row package, its own
+      # host-config module and `import type … from "next"` may be imported, and the body
+      # is Next segment config plus one default export returning the package mount. The
+      # allowlist above skips route files by design, so page.tsx is the one place host
+      # logic could still grow unobserved (#2002, tech spec
+      # 2026-09-07-one-code-two-storefronts-plan-en.md §3 rule 3 «Route mount», §5 on why
+      # the three checks travel together). WARN v1 (ADR-0007 §2.6; a new guard lands WARN,
+      # promote once stable), and NOT in the `ci` needs-list. #2074 promotes it to BLOCK
+      # after wave 1.
+      - name: WARN · route-mount
+        id: warn_route_mount
+        continue-on-error: ${{ steps.guard_policy.outputs.route-mount == 'WARN' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: pnpm lint:route-mount
+
       # import-boundary: packages/** must not import apps/** (directly, via the host
       # @/ alias, or a relative climb) and must not import another package against
       # the §4 dependency graph; a host-config module (host-config.ts /
@@ -1144,6 +1164,7 @@ jobs:
             retained-data=${{ steps.warn_retained_data.outcome }}
             host-allowlist=${{ steps.warn_host_allowlist.outcome }}
             import-boundary=${{ steps.warn_import_boundary.outcome }}
+            route-mount=${{ steps.warn_route_mount.outcome }}
         run: |
           failed="$(printf '%s\n' "$WARN_OUTCOMES" | grep -E '=failure$' | cut -d= -f1 || true)"
           echo "### WARN guards (ADR-0007 §2.6 posture)" >> "$GITHUB_STEP_SUMMARY"

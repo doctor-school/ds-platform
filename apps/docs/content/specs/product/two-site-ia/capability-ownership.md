@@ -60,7 +60,7 @@ Thin host projections are intentional: Academy and Doctor have different targeti
 
 ## Host-file allowlist
 
-This table is the checked-in answer key for every `apps/portal` / `apps/doctor` `.ts`/`.tsx` file the allowlist guard scans: everything except Next.js route files (`page`, `layout`, `loading`, `error`, `not-found`, `template`, `default`, `route`, `middleware`, `proxy`), tests (`*.test.*`, `*.spec.*`, `__tests__/`), `e2e/`, ambient `*.d.ts` and each app's own root-level config. **A new file anywhere in that scope needs a row here in the same PR** — the allowlist guard ([#2002](https://github.com/doctor-school/ds-platform/issues/2002), tech spec §3 rule 3) reads this table as the tree check and fails a file it cannot find (WARN until wave 1 lands, BLOCK after). Rows are exact repo-relative paths, never globs, and a row naming a file that no longer exists fails too — the dead-glob self-test keeps the answer key honest. `until` names the extraction wave that deletes the row; `permanent` means the file is genuinely host-only — brand, config, or a surface the other host does not have. Rows are grouped by directory and sorted by path; 99 files today.
+This table is the checked-in answer key for every `apps/portal` / `apps/doctor` `.ts`/`.tsx` file the allowlist guard scans: everything except Next.js route files (`page`, `layout`, `loading`, `error`, `not-found`, `template`, `default`, `route`, `middleware`, `proxy`), tests (`*.test.*`, `*.spec.*`, `__tests__/`), `e2e/`, ambient `*.d.ts` and each app's own root-level config. **A new file anywhere in that scope needs a row here in the same PR** — the allowlist guard ([#2002](https://github.com/doctor-school/ds-platform/issues/2002), tech spec §3 rule 3) reads this table as the tree check and fails a file it cannot find (WARN until wave 1 lands, BLOCK after). Rows are exact repo-relative paths, never globs, and a row naming a file that no longer exists fails too — the dead-glob self-test keeps the answer key honest. `until` names the extraction wave that deletes the row; `permanent` means the file is genuinely host-only — brand, config, or a surface the other host does not have. Rows are grouped by directory and sorted by path; 99 files today. Route files are excluded from this table on purpose — they answer to «Route-file registry» below, which records the package each `page.tsx` / `layout.tsx` mounts or will mount.
 
 ### `apps/doctor/app`
 
@@ -198,3 +198,54 @@ This table is the checked-in answer key for every `apps/portal` / `apps/doctor` 
 | `apps/portal/lib/use-localized-resolver.ts`        | host-only surface (Academy `next-intl` resolver wrapper)        | permanent      |
 | `apps/portal/lib/use-redirect-if-authenticated.ts` | wave 1 source — moves to `packages/auth-flow`                   | wave 1         |
 | `apps/portal/lib/webinars-url.ts`                  | host-only surface (Academy `/webinars` route hrefs)             | permanent      |
+
+## Route-file registry
+
+This table is the checked-in answer key for every Next.js composition route file of the two storefronts — every `apps/portal/app/**/{page,layout}.tsx` and `apps/doctor/app/**/{page,layout}.tsx`. It is the second of the three tree checks of [#2002](https://github.com/doctor-school/ds-platform/issues/2002) (tech spec §3 rule 3, «Route mount»): the host-file allowlist above deliberately skips route files, so `page.tsx` is the one place a storefront could still grow host logic unobserved. **A new route file needs a row here in the same PR** — `pnpm lint:route-mount` reads this table and fails a route it cannot find (WARN until wave 1 lands, BLOCK after, per #2074). Rows are exact repo-relative paths, never globs, sorted by path, and a row naming a file that no longer exists fails too.
+
+`package` is the `@ds/<name>` the route mounts or will mount; a `permanent` row carries `—` plus the reason it is host-only. `until` is one of three recorded states:
+
+- **`wave N (#Issue)`** — the page still carries inline host logic until that wave extracts it into the package. Its body is **not** read by the guard; a PR diff touching it is a WARN with the row quoted (the honest limit), so growth of a doomed route file stays visible.
+- **`mounted`** — the page is a thin projection **now**, and the guard enforces mount-only: the only imports allowed are the package (and its subpaths), the route's own host-config module and `import type … from "next"`; the only body allowed is Next segment config plus one default export returning the package mount with its config, optionally preceded by `await` of the route props.
+- **`permanent`** — a genuinely host-only route (brand frame, host-only surface) that no wave replaces.
+
+Out of scope, as in the allowlist: `loading` / `error` / `not-found` / `template` / `default` / `route` files — presentational shells and API stubs, not the composition surface a wave extracts.
+
+### `apps/doctor/app`
+
+| path                                                     | package                                                                                        | until          |
+| -------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | -------------- |
+| `apps/doctor/app/(auth)/layout.tsx`                      | `@ds/auth-flow`                                                                                | wave 1 (#2027) |
+| `apps/doctor/app/(auth)/login/page.tsx`                  | `@ds/auth-flow`                                                                                | wave 1 (#2027) |
+| `apps/doctor/app/(auth)/register/page.tsx`               | `@ds/auth-flow`                                                                                | wave 1 (#2027) |
+| `apps/doctor/app/(auth)/reset/page.tsx`                  | `@ds/auth-flow`                                                                                | wave 1 (#2027) |
+| `apps/doctor/app/(room)/events/[slug]/room/page.tsx`     | `@ds/room`                                                                                     | wave 4 (#2073) |
+| `apps/doctor/app/(room)/layout.tsx`                      | `@ds/room`                                                                                     | wave 4 (#2073) |
+| `apps/doctor/app/(storefront)/account/page.tsx`          | `@ds/account`                                                                                  | wave 4 (#2073) |
+| `apps/doctor/app/(storefront)/documents/[slug]/page.tsx` | — host-only surface (legal document reading page; the 028 content package is net-new, no wave) | permanent      |
+| `apps/doctor/app/(storefront)/documents/page.tsx`        | — host-only surface (legal documents list; the 028 content package is net-new, no wave)        | permanent      |
+| `apps/doctor/app/(storefront)/events/[slug]/page.tsx`    | `@ds/event-page`                                                                               | wave 3 (#2072) |
+| `apps/doctor/app/(storefront)/events/page.tsx`           | `@ds/events-storefront`                                                                        | wave 2 (#2028) |
+| `apps/doctor/app/(storefront)/layout.tsx`                | `@ds/auth-flow`                                                                                | wave 1 (#2027) |
+| `apps/doctor/app/(storefront)/page.tsx`                  | `@ds/events-storefront`                                                                        | wave 2 (#2028) |
+| `apps/doctor/app/layout.tsx`                             | — brand frame per host (root html/body, fonts, theme boot)                                     | permanent      |
+
+### `apps/portal/app`
+
+| path                                             | package                                                                                        | until          |
+| ------------------------------------------------ | ---------------------------------------------------------------------------------------------- | -------------- |
+| `apps/portal/app/@chrome/[...catchAll]/page.tsx` | — brand frame per host (Academy parallel chrome slot)                                          | permanent      |
+| `apps/portal/app/@chrome/page.tsx`               | — brand frame per host (Academy parallel chrome slot)                                          | permanent      |
+| `apps/portal/app/account/events/page.tsx`        | `@ds/events-storefront`                                                                        | wave 2 (#2028) |
+| `apps/portal/app/account/page.tsx`               | `@ds/account`                                                                                  | wave 4 (#2073) |
+| `apps/portal/app/documents/[slug]/page.tsx`      | — host-only surface (legal document reading page; the 028 content package is net-new, no wave) | permanent      |
+| `apps/portal/app/documents/page.tsx`             | — host-only surface (legal documents list; the 028 content package is net-new, no wave)        | permanent      |
+| `apps/portal/app/layout.tsx`                     | — brand frame per host (root html/body, fonts, theme boot)                                     | permanent      |
+| `apps/portal/app/login/page.tsx`                 | `@ds/auth-flow`                                                                                | wave 1 (#2027) |
+| `apps/portal/app/page.tsx`                       | — host-only surface (Academy home)                                                             | permanent      |
+| `apps/portal/app/register/page.tsx`              | `@ds/auth-flow`                                                                                | wave 1 (#2027) |
+| `apps/portal/app/reset/page.tsx`                 | `@ds/auth-flow`                                                                                | wave 1 (#2027) |
+| `apps/portal/app/verify/page.tsx`                | `@ds/auth-flow`                                                                                | wave 1 (#2027) |
+| `apps/portal/app/webinars/[slug]/page.tsx`       | `@ds/event-page`                                                                               | wave 3 (#2072) |
+| `apps/portal/app/webinars/[slug]/room/page.tsx`  | `@ds/room`                                                                                     | wave 4 (#2073) |
+| `apps/portal/app/webinars/page.tsx`              | `@ds/events-storefront`                                                                        | wave 2 (#2028) |

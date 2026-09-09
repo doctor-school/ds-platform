@@ -353,7 +353,7 @@ async function main() {
         docker: (
           await docker("version", "--format", "{{.Server.Version}}")
         ).trim(),
-        disk: await run(["sudo", "-n", "df", "-Pk", "/var/lib/docker"]),
+        disk: await run(["sudo", "-n", "df", "-Pk", (await docker("info", "--format", "{{.DockerRootDir}}")).trim()]),
       };
     });
     await stage("candidate-images", async () => {

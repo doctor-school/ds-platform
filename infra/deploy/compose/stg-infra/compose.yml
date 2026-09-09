@@ -30,8 +30,8 @@
 # any kind, and the C1 acceptance greps this file against the production secret
 # NAMES (spec §3 «Secrets and side effects»; README → Phase B acceptance).
 #
-# Bring-up order, the `provision.sh` converge and the runner registration: README.md
-# beside this file.
+# Bring-up order, the `provision.sh` converge and the slot deployer (step 4, #2064):
+# README.md beside this file.
 
 name: stg-infra
 

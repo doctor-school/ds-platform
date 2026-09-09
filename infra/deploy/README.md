@@ -68,10 +68,12 @@ never touches it.
   and no route to `twc_vpc.ds`. That absent route, not a firewall rule, is what keeps
   a box running arbitrary PR code away from production Postgres and Redis (the
   Timeweb rule model is allow-only; see the header of `terraform/network.tf`).
-- Bootstrap: `cloud-init/stage-1.yaml` (the `api-prod` hardening set plus a Node
-  toolchain, the Playwright host libraries and the GitHub Actions runner unit).
-- Services, bring-up order, the Zitadel converge, the runner-registration manual step
-  and the acceptance commands: **`compose/stg-infra/README.md`**.
+- Bootstrap: `cloud-init/stage-1.yaml` — the `api-prod` hardening set plus `git`, and
+  deliberately nothing more: the provider hard-resets a new box mid-first-boot (#2121),
+  so anything longer than the prod set is killed part-way. No CI agent runs here at
+  all; images are built and the suite runs on GitHub-hosted runners.
+- Services, bring-up order, the Zitadel converge, the pull-based slot deployer and the
+  acceptance commands: **`compose/stg-infra/README.md`**.
 - Env: `stage.env.example`. The box holds no production credential of any kind; that
   is an acceptance criterion, not an intention.
 - Plan of record:

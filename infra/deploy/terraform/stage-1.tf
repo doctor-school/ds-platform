@@ -1,9 +1,9 @@
 # stage-1 — the STAGE stand box (tech spec 2026-09-08-staging-previews-and-regression-contour-en.md
 # §3 «Box», §8 step 1; Issue #2061). ONE VPS that carries the whole shared
 # `stg-infra` service set (Postgres 17 + pgvector, Redis, Zitadel + login, Cerbos,
-# MinIO, Mailpit, sms-sink, sms-aero-adapter, Caddy, the self-hosted GitHub Actions
-# runner) plus every live preview slot (`main` + `pr-*`), each slot being the whole
-# `api-prod` service set built on the box.
+# MinIO, Mailpit, sms-sink, sms-aero-adapter, Caddy) plus every live preview slot
+# (`main` + `pr-*`), each slot running the whole `api-prod` service set from images
+# pulled from GHCR — nothing is built on the box, and no CI agent runs here.
 #
 # Resource shapes are the ones already verified against timeweb-cloud/timeweb-cloud
 # provider schema v1.7.1 for the production plane (see network.tf's header): a server
@@ -66,8 +66,9 @@ resource "twc_server" "stage_1" {
   is_root_password_required = false
 
   # First-boot bootstrap: the api-prod hardening set (deploy user, ufw, Docker with
-  # the reserved-space build-cache GC policy) plus the Playwright host libraries and
-  # the Actions-runner systemd unit. See ../cloud-init/stage-1.yaml.
+  # the reserved-space build-cache GC policy) plus `git`, and nothing more — the
+  # provider hard-resets a new box mid-first-boot, so a long runcmd never finishes
+  # (#2121). See ../cloud-init/stage-1.yaml.
   # templatefile: injects the operator public key so the non-root `deploy` user is
   # reachable from first boot (Timeweb installs the key for root only).
   cloud_init = templatefile("${path.module}/../cloud-init/stage-1.yaml", {

@@ -7,7 +7,7 @@ every preview slot (`main`, `pr-<N>`) is a _separate_ compose project that joins
 
 Plan of record: `apps/docs/content/specs/tech/2026-09-08-staging-previews-and-regression-contour-en.md`
 (§3 topology, §8 step 1, §9 recovery). Issue #2061 (Phase A, this directory);
-Phase B — the owner's `terraform apply`, the first bring-up, the runner token and
+Phase B — the owner's `terraform apply`, the first bring-up and
 the live acceptance below — is tracked in **#2095**.
 
 Everything here is Phase B: nothing in this file runs on a developer machine.
@@ -25,8 +25,18 @@ Everything here is Phase B: nothing in this file runs on a developer machine.
 
 1. `terraform apply` in `infra/deploy/terraform/` creates `stage-1` (own VPC, no
    route to `twc_vpc.ds`). Provider write actions are owner-gated — AGENTS.md §6.
-2. `ssh deploy@$(terraform output -raw stage_1_public_ip)` works; cloud-init has
-   finished (`cloud-init status --wait`).
+2. `ssh deploy@$(terraform output -raw stage_1_public_ip)` works and the bootstrap
+   finished. The provider reboots a fresh server once during its first minutes
+   (#2121); that is expected and harmless now that `cloud-init/stage-1.yaml` is
+   prod-length — it completes inside the window. Reconnect after the reset and
+   assert:
+
+   ```bash
+   cloud-init status --wait          # expected: status: done
+   docker --version                  # expected: a version line, not "command not found"
+   systemctl is-active docker        # expected: active
+   ```
+
 3. The repo is checked out on the box at `/srv/ds-platform` (the `main` tree the
    slot script clones from).
 4. `/etc/ds-platform/stage.env` written from `infra/deploy/stage.env.example`, mode
@@ -119,40 +129,33 @@ Two standing rules come with the shared instance (spec §3 «Identity»):
   sends the URI set as a whole, so a partial list silently drops the others. This has
   bitten production twice (`infra/deploy/README.md`).
 
-## Runner registration — the one manual, owner-gated step
+## Slot deployer — not part of this bring-up
 
-`cloud-init` installs the GitHub Actions runner package and a systemd unit
-(`ds-actions-runner.service`) but leaves it **disabled**, because a registration
-token is a live credential and cloud-init cannot hold one. The unit reads
-`/etc/ds-platform/runner.env`, a root-only file cloud-init deliberately does not
-create, and `ExecStartPre=/opt/actions-runner/ensure-configured.sh` registers on
-first start and is a no-op afterwards.
+No CI agent runs on this box. The repository is **public**, so no job of it may ever
+execute here; images are built and the regression suite runs on GitHub-hosted runners
+(spec §5). What converges slots is a pull-based deployer: the systemd unit pair
+`ds-slot-deployer.service` and `ds-slot-deployer.timer`, delivered together with
+`tools/staging/slot.mjs` by **step 4 (#2064)** and installed then — not by `cloud-init`
+and not here. That same step also installs the box's only host runtime, a pinned Node
+LTS from the official `nodejs.org` tarball under `/opt/node` (no `pnpm`, no workspace
+checkout on the host). Every 60 s the timer reads the open non-draft PRs and the `main`
+head from GitHub, checks the GHCR tags exist, and brings slots up, in sync or down.
 
-```bash
-# Owner, on the box. The token is short-lived (~1 h): GitHub → repo Settings →
-# Actions → Runners → New self-hosted runner → the `--token` value shown there.
-sudo install -m 0600 -o root -g root /dev/null /etc/ds-platform/runner.env
-sudo tee /etc/ds-platform/runner.env >/dev/null <<'EOF'
-RUNNER_URL=https://github.com/<owner>/ds-platform
-RUNNER_TOKEN=<registration token from repo Settings -> Actions -> Runners>
-RUNNER_NAME=ds-stage-1
-RUNNER_LABELS=self-hosted,staging
-EOF
+The one thing to provision now, so the owner writes `stage.env` once:
+`STAGE_GH_READ_TOKEN` — a fine-grained **read-only** token («Pull requests: read»,
+«Metadata: read»), scoped to this repository. It grants nothing an anonymous visitor
+of a public repository lacks; its only job is lifting the unauthenticated rate limit.
+Nothing on this box holds a write credential to GitHub.
 
-sudo systemctl enable --now ds-actions-runner
-systemctl status ds-actions-runner --no-pager
-```
-
-**Trust boundary.** The runner registers **outbound** (it long-polls github.com), so
-the box exposes no inbound CI path, needs no deploy key and no CI-facing port 22 —
-that is the whole reason it was chosen over SSH-from-CI (spec §10, lead decision
-2026-09-08). What it can reach: the box env (`/etc/ds-platform/stage.env`, sinks and
-test keys) and the box's Docker daemon. What it cannot reach: production Postgres and
-Redis (no route — separate VPC), and any repository secret beyond the job's own
-`GITHUB_TOKEN` — staging jobs are written to request nothing else. The repository is
-private with outside-collaborator workflow approval on, so a fork PR never runs code
-on this box without a maintainer's approval; the PR-job side of that contract is
-step 6 (#2066).
+**Trust boundary.** Outbound only: the box exposes no inbound CI path, needs no deploy
+key and no CI-facing port 22. What is in reach here: the box env
+(`/etc/ds-platform/stage.env`, sinks and test keys) and the box's Docker daemon. What
+can put code inside that reach: only images the preview workflow built from a branch
+of this repository — a fork PR's `GITHUB_TOKEN` is read-only, cannot push to GHCR, and
+therefore gets no slot at all, by construction rather than by a maintainer withholding
+approval. What is out of reach: production Postgres and Redis (no route — separate
+VPC) and every repository secret, which never leaves the hosted runners. The PR-job
+side of the contract is step 6 (#2066).
 
 ## Day-to-day
 
@@ -191,13 +194,15 @@ timeout 5 bash -c 'cat < /dev/null > /dev/tcp/192.168.0.10/5432' ; echo "exit=$?
 # expected: an immediate "Network is unreachable" and exit=1 — NOT exit=124 (timeout)
 ```
 
-**AC3 — the runner is online with the staging labels.**
+**AC3 — no CI agent on the box, and the bootstrap completed.**
 
 ```bash
-systemctl is-active ds-actions-runner        # expected: active
-gh api repos/<owner>/ds-platform/actions/runners \
-  --jq '.runners[] | select(.name=="ds-stage-1") | {status, busy, labels: [.labels[].name]}'
-# expected: status "online", labels contain "self-hosted" and "staging"
+cloud-init status --wait                     # expected: status: done
+systemctl is-active docker                   # expected: active
+ls /opt | grep -i runner ; echo "exit=$?"    # expected: no output, exit=1
+systemctl list-units --all --no-legend | grep -i runner ; echo "exit=$?"   # same
+# expected: nothing named like a CI agent, on disk or in systemd — slots are converged
+# by the pull-based deployer step 4 (#2064) installs, and CI never executes here.
 ```
 
 **AC4 — no production credential on the box.** Two halves, defined in

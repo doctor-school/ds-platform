@@ -1060,6 +1060,21 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: pnpm lint:host-allowlist
 
+      # import-boundary: packages/** must not import apps/** (directly, via the host
+      # @/ alias, or a relative climb) and must not import another package against
+      # the §4 dependency graph; a host-config module (host-config.ts /
+      # *.host-config.ts under apps/{portal,doctor}) must import no host logic and
+      # carry no function-valued field outside the closed adapter list. The third of
+      # the three tree checks that replace the cross-front-reuse PR-body marker
+      # (#2002, tech spec 2026-09-07-one-code-two-storefronts-plan-en.md §3 rule 3,
+      # graph §4, §5 on why the three travel together). WARN v1 (ADR-0007 §2.6; a new
+      # guard lands WARN, promote once stable), and NOT in the `ci` needs-list. #2074
+      # promotes it to BLOCK after wave 1.
+      - name: WARN · import-boundary
+        id: warn_import_boundary
+        continue-on-error: ${{ steps.guard_policy.outputs.import-boundary == 'WARN' }}
+        run: pnpm lint:import-boundary
+
       # WARN report — the second half of the WARN encoding, and the batch's
       # VISIBILITY surface. It collects every WARN step whose `outcome` is
       # `failure` and writes them to the job summary; it exits 0 by design.
@@ -1112,6 +1127,7 @@ jobs:
             workflow-auth=${{ steps.warn_workflow_auth.outcome }}
             retained-data=${{ steps.warn_retained_data.outcome }}
             host-allowlist=${{ steps.warn_host_allowlist.outcome }}
+            import-boundary=${{ steps.warn_import_boundary.outcome }}
         run: |
           failed="$(printf '%s\n' "$WARN_OUTCOMES" | grep -E '=failure$' | cut -d= -f1 || true)"
           echo "### WARN guards (ADR-0007 §2.6 posture)" >> "$GITHUB_STEP_SUMMARY"

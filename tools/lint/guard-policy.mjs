@@ -20,6 +20,7 @@ export const WARN_GUARDS = new Set([
   "glossary-ids",
   "glossary-mdx",
   "host-allowlist",
+  "import-boundary",
   "interaction-states",
   "migration-index",
   "module-readme",

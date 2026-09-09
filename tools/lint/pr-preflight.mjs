@@ -118,6 +118,7 @@ export const MERGE_GATE = {
 
 export const STATIC_GUARDS = [
   { name: "frontmatter-yaml", file: "frontmatter-yaml-lint.ts" },
+  { name: "import-boundary", file: "import-boundary-lint.ts" },
   { name: "events-drift", file: "events-lint.ts" },
   { name: "module-readme", file: "module-readme-lint.ts" },
   { name: "glossary-mdx", file: "glossary-mdx-lint.ts" },

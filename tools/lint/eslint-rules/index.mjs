@@ -11,6 +11,8 @@ import noTokenRedefinition from "./no-token-redefinition.mjs";
 import noHardcodedDisplayString from "./no-hardcoded-display-string.mjs";
 import authCatchUsesErrorMapper from "./auth-catch-uses-error-mapper.mjs";
 import glossaryCanonicalIds from "./glossary-canonical-ids.mjs";
+import packageImportBoundary from "./package-import-boundary.mjs";
+import hostConfigBoundary from "./host-config-boundary.mjs";
 
 /** @type {import('eslint').ESLint.Plugin} */
 const plugin = {
@@ -25,6 +27,11 @@ const plugin = {
     "auth-catch-uses-error-mapper": authCatchUsesErrorMapper,
     // #468 — glossary canonical-id SSOT enforcement (ADR-0006 §6.3).
     "glossary-canonical-ids": glossaryCanonicalIds,
+    // #2002 slice C — the import-boundary check of the one-code-two-storefronts
+    // plan (tech spec 2026-09-07-one-code-two-storefronts-plan-en.md §3 rule 3):
+    // the package dependency graph and host-config purity.
+    "package-import-boundary": packageImportBoundary,
+    "host-config-boundary": hostConfigBoundary,
   },
 };
 

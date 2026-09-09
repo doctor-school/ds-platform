@@ -26,6 +26,11 @@ import rhythmguard from "stylelint-plugin-rhythmguard/eslint";
 // — see tools/lint/eslint-rules/index.mjs. Imported by relative path so this
 // config is self-contained regardless of workspace-package hoisting.
 import localRules from "./tools/lint/eslint-rules/index.mjs";
+// The import-boundary answer key lives with the promotable guard config (#2002).
+import {
+  ALLOWED_ADAPTERS,
+  PACKAGE_GRAPH,
+} from "./eslint.import-boundary.config.mjs";
 
 // #234 — the lint guardrails consume ONE generated source of truth: the
 // allowed-token enumeration emitted by the Style Dictionary token-build (#233).
@@ -244,6 +249,33 @@ export default [
     plugins: { local: localRules },
     rules: {
       "local/glossary-canonical-ids": ["warn", { domainEnumIds: ["doctor_guest"] }],
+    },
+  },
+  {
+    // #2002 slice C — the IMPORT BOUNDARY of the one-code-two-storefronts plan
+    // (tech spec 2026-09-07-one-code-two-storefronts-plan-en.md §3 rule 3, graph §4).
+    // Severity `warn` here (WARN v1, ADR-0007 §2.6): editor/dev in-line feedback that
+    // rides `eslint .` WITHOUT blocking. The PROMOTABLE pass/fail surface is the
+    // dedicated guard (`pnpm lint:import-boundary`, `eslint.import-boundary.config.mjs`
+    // at `error`), which owns the same graph table — keep the two in step.
+    files: ["packages/**/*.{ts,tsx,mts,cts}"],
+    ignores: ["**/*.test.{ts,tsx}", "**/*.spec.{ts,tsx}", "**/__tests__/**"],
+    plugins: { local: localRules },
+    rules: {
+      "local/package-import-boundary": ["warn", { graph: PACKAGE_GRAPH }],
+    },
+  },
+  {
+    // The host-config FILE CONVENTION (the type is #2027). Same WARN posture.
+    files: [
+      "apps/portal/**/host-config.{ts,tsx}",
+      "apps/portal/**/*.host-config.{ts,tsx}",
+      "apps/doctor/**/host-config.{ts,tsx}",
+      "apps/doctor/**/*.host-config.{ts,tsx}",
+    ],
+    plugins: { local: localRules },
+    rules: {
+      "local/host-config-boundary": ["warn", { allowedAdapters: ALLOWED_ADAPTERS }],
     },
   },
   prettier,

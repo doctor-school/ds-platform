@@ -50,12 +50,10 @@ echo "exit=$?"
 Branch on the **exit code**, never on `&& echo fresh || echo STALE` — that form reports an unknown SHA or a failed `gh` call as `STALE` and sends you rebasing over an error you never saw.
 
 - `0` → fresh; go to Step 2.
-- `1` → main advanced past the tested head; do NOT rebase yet — go to Step 2 and let the gate inside `pr:land` decide (#2124: an advanced `main` whose delta since the tested base is disjoint from the PR files and outside the always-overlapping list is accepted, with a printed evidence block, so a rebase and a re-review are pure waste there).
+- `1` → main advanced past the tested head; rebase in the throwaway detached worktree below, push with `--force-with-lease`, then go to Step 2 and run `pr:land` exactly ONCE.
 - anything else → STOP, return `BLOCKED: freshness check errored (exit <code>): <last line>`.
 
-This is the return edge from Step 2: when the gate inside `pr:land` comes back RED **naming overlapping or always-overlapping paths (#2124)**, come back here, rebase in the throwaway worktree as below, and then re-run `pr:land` exactly ONCE. Any other RED (red CI, missing Mode (a) verdict, dirty base) is a STOP, never a rebase-and-retry.
-
-**Gate refused a stale head (RED naming overlapping or always-overlapping paths — lockfile, manifests, `.github/workflows/`, `tools/gh/`, guard policy, `packages/db/src/schema/` + `apps/api/drizzle/`, `packages/schemas/`, root lint / tsconfig) — rebase in a THROWAWAY detached worktree**, never in the primary tree and never depending on the branch being free:
+**Stale head — rebase in a THROWAWAY detached worktree**, never in the primary tree and never depending on the branch being free:
 
 ```bash
 git worktree add --detach .claude/worktrees/land-<N> origin/<pr-branch>
@@ -83,7 +81,7 @@ Append `--mode-a-exempt "<reason>"` **only** when the dispatching brief passed y
 
 Run it in the FOREGROUND. The gate inside `pr:land` is itself a bounded poll with a mandatory terminal GREEN/RED/TIMEOUT line, so a long CI wait is the command doing its job — never a reason to background it. Backgrounding the tail (`run_in_background`, `&`, a detached shell) is forbidden: you lose the terminal line the return contract is built on. If the wait needs to be longer than the default 15 min, pass `--timeout <sec>` — and only when the dispatching brief told you to.
 
-`pr:land` chains: merge gate (CI + head-pinned Mode (a) verdict) → `gh pr merge --squash --delete-branch` → board Status = Done → `worktree:teardown <N>` → branch/PR re-sweep. The first non-zero stage aborts the tail and prints the stage plus a one-line remedy; report it, do not retry the merge past a non-green gate. The single exception is a gate RED that names overlapping or always-overlapping paths (#2124): go back to the Step 1 throwaway-worktree rebase and re-run `pnpm pr:land <N>` once — if it comes back RED again, stop and return.
+`pr:land` chains: merge gate (CI + head-pinned Mode (a) verdict) → `gh pr merge --squash --delete-branch` → board Status = Done → `worktree:teardown <N>` → branch/PR re-sweep. The first non-zero stage aborts the tail and prints the stage plus a one-line remedy; report it, do not retry the merge past a non-green gate. The gate never refuses because `main` advanced past the tested head, so a RED here (red CI, missing Mode (a) verdict, dirty base) is a STOP, never a rebase-and-retry.
 
 ## Hard limits
 

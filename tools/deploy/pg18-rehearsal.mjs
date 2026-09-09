@@ -582,22 +582,14 @@ async function main() {
             "-ceu",
             `pg_restore --create --list /scratch/${db.archive} > /scratch/toc
 test "$(grep -Ec '^[0-9]+; [0-9]+ [0-9]+ DATABASE - postgres ' /scratch/toc)" -eq 1
-sed '/^[0-9][0-9]*; [0-9][0-9]* [0-9][0-9]* DATABASE - postgres /d' /scratch/toc > /scratch/restore-toc`,
+grep -E ' (DATABASE - postgres |COMMENT - DATABASE postgres |ACL - DATABASE postgres |DATABASE PROPERTIES - postgres )' /scratch/toc > /scratch/database-toc
+pg_restore --create --schema-only --use-list /scratch/database-toc --file /scratch/database.sql /scratch/${db.archive}
+test "$(grep -Ec '^CREATE DATABASE postgres WITH .*;$' /scratch/database.sql)" -eq 1
+sed '/^CREATE DATABASE postgres WITH .*;$/d' /scratch/database.sql > /scratch/database-reconciled.sql
+exec psql -X -v ON_ERROR_STOP=1 -h "$1" -U source_admin -d postgres -f /scratch/database-reconciled.sql`,
+            "database-bootstrap",
+            container("candidate18"),
           ]);
-          const owner = (
-            await sql(
-              "restored17",
-              "postgres",
-              "SELECT datdba::regrole::text FROM pg_database WHERE datname='postgres'",
-            )
-          ).trim();
-          if (!/^[a-z][a-z0-9_]*$/.test(owner))
-            throw new Error("unsupported bootstrap database owner");
-          await sql(
-            "candidate18",
-            "postgres",
-            `ALTER DATABASE postgres OWNER TO ${owner}`,
-          );
         }
         await client([
           "pg_restore",
@@ -608,8 +600,7 @@ sed '/^[0-9][0-9]*; [0-9][0-9]* [0-9][0-9]* DATABASE - postgres /d' /scratch/toc
           "source_admin",
           "-d",
           "postgres",
-          "--create",
-          ...(db.create ? [] : ["--use-list", "/scratch/restore-toc"]),
+          ...(db.create ? ["--create"] : []),
           `/scratch/${db.archive}`,
         ]);
       }

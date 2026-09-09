@@ -844,13 +844,13 @@ export const ALWAYS_OVERLAPPING_PATHS = [
   },
   {
     kind: "dir",
-    value: "packages/db/schema/",
-    reason: "the DB schema SSOT must stay linear across landings",
+    value: "packages/db/src/schema/",
+    reason: "the Drizzle schema SSOT (drizzle.config.ts `schema`) must stay linear across landings",
   },
   {
     kind: "dir",
-    value: "packages/db/drizzle/",
-    reason: "migrations must stay linear across landings",
+    value: "apps/api/drizzle/",
+    reason: "generated migrations (drizzle.config.ts `out`) must stay linear across landings",
   },
   {
     kind: "dir",
@@ -992,13 +992,13 @@ function assertCurrentMainAncestry(headSha) {
     const baseRes = git(["merge-base", mainSha, headSha]);
     const base = (baseRes.stdout ?? "").trim();
     if (baseRes.error || baseRes.status !== 0 || !/^[a-f0-9]{40}$/i.test(base))
-      refuse(`${advanceRefusal}; tested base could not be resolved`);
+      refuse(`${advanceRefusal}; tested base could not be resolved`); // unreachable past refuse() — die() calls process.exit.
     const filesOf = (sha) => {
       const res = git(["diff", "--name-only", base, sha]);
       if (res.error || res.status !== 0)
         refuse(
           `${advanceRefusal}; \`git diff --name-only ${base.slice(0, 12)} ${sha.slice(0, 12)}\` failed`,
-        );
+        ); // unreachable past refuse() — die() calls process.exit.
       return (res.stdout ?? "")
         .split(/\r?\n/)
         .map((line) => line.trim())
@@ -1018,7 +1018,7 @@ function assertCurrentMainAncestry(headSha) {
         process.stderr.write(
           `${TAG} the advanced main produced no comparable file list — failing closed.\n`,
         );
-      refuse(advanceRefusal);
+      refuse(advanceRefusal); // unreachable past refuse() — die() calls process.exit.
     }
     process.stdout.write(
       `${TAG} #2124 disjoint-changes rule: accepting the advanced main.\n` +

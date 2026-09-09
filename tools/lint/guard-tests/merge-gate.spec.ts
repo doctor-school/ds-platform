@@ -1,3 +1,5 @@
+import { execFileSync } from "node:child_process";
+import { statSync } from "node:fs";
 import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -797,11 +799,11 @@ describe("merge-gate classifyMainAdvance() (#2124)", () => {
     );
     expect(matchAlwaysOverlapping("tools/gh/pr-land.mjs")?.kind).toBe("dir");
     expect(
-      matchAlwaysOverlapping("packages/db/drizzle/0042_add_table.sql")?.kind,
+      matchAlwaysOverlapping("apps/api/drizzle/0042_add_table.sql")?.kind,
     ).toBe("dir");
-    expect(matchAlwaysOverlapping("packages/db/schema/users.ts")?.kind).toBe(
-      "dir",
-    );
+    expect(
+      matchAlwaysOverlapping("packages/db/src/schema/users.ts")?.kind,
+    ).toBe("dir");
     expect(matchAlwaysOverlapping("packages/schemas/src/auth.ts")?.kind).toBe(
       "dir",
     );
@@ -820,6 +822,11 @@ describe("merge-gate classifyMainAdvance() (#2124)", () => {
       matchAlwaysOverlapping("apps/doctor/eslint.foo.config.mjs"),
     ).toBeNull();
     expect(matchAlwaysOverlapping("docs/tsconfig-notes.md")).toBeNull();
+    // NEGATIVE — the directories the list used to name do not exist in this
+    // repo; if a future rename resurrects them the gap must stay visible
+    // instead of silently matching a real entry.
+    expect(matchAlwaysOverlapping("packages/db/schema/x.ts")).toBeNull();
+    expect(matchAlwaysOverlapping("packages/db/drizzle/x.sql")).toBeNull();
     expect(matchAlwaysOverlapping("apps/promo/app/page.tsx")).toBeNull();
     // A directory entry matches the directory, never a same-prefix sibling.
     expect(matchAlwaysOverlapping("tools/gh-notes.md")).toBeNull();
@@ -865,5 +872,24 @@ describe("merge-gate classifyMainAdvance() (#2124)", () => {
       expect(entry.reason).not.toMatch(/\n/);
       if (entry.kind === "dir") expect(entry.value.endsWith("/")).toBe(true);
     }
+  });
+
+  it("EARS-2124.7: every `dir` entry names a directory that exists in this repo", () => {
+    // A `dir` entry that matches nothing silently re-opens the gap it was
+    // written to close, so the list is pinned to the working tree itself.
+    const repoRoot = execFileSync("git", ["rev-parse", "--show-toplevel"], {
+      encoding: "utf8",
+    }).trim();
+    const missing = ALWAYS_OVERLAPPING_PATHS.filter(
+      (entry) => entry.kind === "dir",
+    ).filter((entry) => {
+      const absolute = join(repoRoot, ...entry.value.split("/").filter(Boolean));
+      try {
+        return !statSync(absolute).isDirectory();
+      } catch {
+        return true;
+      }
+    });
+    expect(missing.map((entry) => entry.value)).toEqual([]);
   });
 });

@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { writeFileSync } from "node:fs";
 import { ZitadelIdpClient } from "../../src/auth/idp/zitadel.idp.js";
 import { NOTIFICATION_SUBJECTS } from "../support/notification-subjects.js";
 import {
@@ -290,6 +291,14 @@ describe.skipIf(!LIVE_OIDC)("Zitadel OTP login (integration)", () => {
   let client: ZitadelIdpClient;
   const providerDiagnostics: unknown[] = [];
   const createdEmails: string[] = [];
+  const createdIds = new Map<string, string>();
+  const diagnosticFile = process.env.OTP_DIAGNOSTIC_CASE_FILE;
+  const evidence = {
+    passed: false,
+    cleanup: true,
+    provider: [] as unknown[],
+    attempts: [] as Array<{ provider: unknown[]; mailbox: unknown[] }>,
+  };
 
   const newEmail = (): string => {
     const email = `int-153-${Date.now()}-${Math.random()
@@ -323,27 +332,55 @@ describe.skipIf(!LIVE_OIDC)("Zitadel OTP login (integration)", () => {
     };
     for (const email of createdEmails) {
       try {
+        // The diagnostic deletes the exact created ID, avoiding a cleanup
+        // search racing the provider projection. Ordinary suite fallback stays.
+        const knownId = diagnosticFile && createdIds.get(email);
+        if (knownId) {
+          const removed = await fetch(`${base}/v2/users/${knownId}`, {
+            method: "DELETE",
+            headers,
+            signal: AbortSignal.timeout(5000),
+          });
+          evidence.cleanup &&= removed.ok || removed.status === 404;
+          continue;
+        }
         const search = await fetch(`${base}/v2/users`, {
           method: "POST",
           headers,
           body: JSON.stringify({
             queries: [{ emailQuery: { emailAddress: email } }],
           }),
+          ...(diagnosticFile ? { signal: AbortSignal.timeout(5000) } : {}),
         });
-        if (!search.ok) continue;
+        if (!search.ok) {
+          evidence.cleanup = false;
+          continue;
+        }
         const data = (await search.json()) as {
           result?: Array<{ userId?: string }>;
         };
         const userId = data.result?.[0]?.userId;
         if (userId) {
-          await fetch(`${base}/v2/users/${userId}`, {
+          const removed = await fetch(`${base}/v2/users/${userId}`, {
             method: "DELETE",
             headers,
+            ...(diagnosticFile ? { signal: AbortSignal.timeout(5000) } : {}),
           });
+          evidence.cleanup &&= removed.ok || removed.status === 404;
+        } else if (diagnosticFile) {
+          // A failed create may have committed server-side; absent projection
+          // is not evidence of successful cleanup.
+          evidence.cleanup = false;
         }
       } catch {
+        evidence.cleanup = false;
         // Best-effort; the reconciliation sweep tolerates leftover users.
       }
+    }
+    if (diagnosticFile) {
+      if (evidence.attempts.length === 0)
+        evidence.provider = [...providerDiagnostics];
+      writeFileSync(diagnosticFile, JSON.stringify(evidence));
     }
   });
 
@@ -353,6 +390,7 @@ describe.skipIf(!LIVE_OIDC)("Zitadel OTP login (integration)", () => {
       email,
       password: livePassword(),
     });
+    createdIds.set(email, created.sub);
     expect(created.alreadyExisted).toBe(false);
     expect(created.sub).toBeTruthy();
 
@@ -394,11 +432,22 @@ describe.skipIf(!LIVE_OIDC)("Zitadel OTP login (integration)", () => {
     let tokens: Awaited<
       ReturnType<typeof client.exchangeSessionForTokens>
     > | null = null;
+    evidence.provider = [...providerDiagnostics];
     for (let attempt = 0; attempt < 3 && !tokens; attempt++) {
       providerDiagnostics.length = 0;
       const mailboxDiagnostics: unknown[] = [];
+      // Copy provider records before the next attempt resets the shared array.
+      const attemptEvidence = {
+        provider: [] as unknown[],
+        mailbox: mailboxDiagnostics,
+      };
+      evidence.attempts.push(attemptEvidence);
       const sentAt = new Date().toISOString();
-      await expect(client.requestEmailOtp(email)).resolves.toBeUndefined();
+      try {
+        await expect(client.requestEmailOtp(email)).resolves.toBeUndefined();
+      } finally {
+        attemptEvidence.provider = [...providerDiagnostics];
+      }
 
       const code = await fetchOtpCode(
         email,
@@ -430,6 +479,7 @@ describe.skipIf(!LIVE_OIDC)("Zitadel OTP login (integration)", () => {
     expect(tokens!.accessToken).toBeTruthy();
     expect(tokens!.refreshToken).toBeTruthy();
     expect(tokens!.claims.sub).toBe(created.sub);
+    evidence.passed = true;
   }, 45_000);
 
   // EARS-7 SMS path — the live round-trip, the SAME bar the EARS-6 email test

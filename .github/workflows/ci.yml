@@ -10,6 +10,11 @@ on:
   # the pool). A dispatch takes the same non-PR path as `push: main`, so no guard
   # behaves differently.
   workflow_dispatch:
+    inputs:
+      otp_diagnostic:
+        description: Run 20 sequential fresh-account OTP delivery cases (fail-fast)
+        type: boolean
+        default: false
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -508,6 +513,17 @@ jobs:
       - name: Assert the IDP-gated e2e suites actually ran (#1595)
         if: ${{ !cancelled() }}
         run: pnpm ci:assert-e2e-ran vitest-api.json
+      - name: Run opt-in OTP delivery diagnostic
+        if: github.event_name == 'workflow_dispatch' && inputs.otp_diagnostic
+        run: node tools/scripts/otp-delivery-diagnostic.mjs
+      - name: Upload OTP delivery diagnostic
+        if: always() && github.event_name == 'workflow_dispatch' && inputs.otp_diagnostic
+        uses: actions/upload-artifact@v4
+        with:
+          name: otp-delivery-diagnostic
+          path: otp-delivery-diagnostic.json
+          if-no-files-found: error
+          retention-days: 7
       - name: Collect sanitized API provider diagnostics
         if: failure()
         run: node tools/scripts/api-e2e-diagnostics.mjs

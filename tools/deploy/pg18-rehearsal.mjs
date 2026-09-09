@@ -359,7 +359,7 @@ async function main() {
       await sql(
         name,
         "postgres",
-        "SELECT datname,datdba::regrole,encoding,datcollate,datctype,datlocprovider,datacl,shobj_description(oid,'pg_database') FROM pg_database WHERE NOT datistemplate ORDER BY datname",
+        "SELECT datname,datdba::regrole,encoding,datcollate,datctype,datlocprovider,CASE WHEN datacl IS NULL THEN NULL ELSE ARRAY(SELECT acl::text FROM unnest(datacl) acl ORDER BY acl::text) END,shobj_description(oid,'pg_database') FROM pg_database WHERE NOT datistemplate ORDER BY datname",
       ),
     );
     result.databaseSettings = hash(
@@ -373,7 +373,11 @@ async function main() {
   };
   const checkEqual = (a, b) => {
     if (JSON.stringify(a) !== JSON.stringify(b))
-      throw new Error("cluster integrity mismatch");
+      throw new Error(
+        `cluster integrity mismatch: ${Object.keys(a)
+          .filter((key) => JSON.stringify(a[key]) !== JSON.stringify(b[key]))
+          .join(", ")}`,
+      );
   };
   const pitr = async (source, major, target, repo) => {
     await backup(source, "stanza-create");

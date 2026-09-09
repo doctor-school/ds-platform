@@ -23,9 +23,15 @@ Runtime/operational tooling (Coolify preview, Caddy, GlitchTip, Loki, Vault, Unl
 
 ## Prerequisites
 
-- Node 22 LTS (`nvm use` reads `.nvmrc`)
+- Node 24 LTS (`nvm use` reads `.nvmrc`)
 - pnpm 10 (`corepack enable` auto-fetches from `packageManager`)
 - gh CLI (`brew install gh` / `winget install GitHub.cli`)
+
+CI and application images select Node 24; `engines.node` retains the supported
+developer runtime range. `Runtime images` CI builds all four production
+Dockerfiles, exercises API `pnpm deploy --prod --legacy` packaging and migrations
+against an isolated database, then verifies HTTP readiness inside each image.
+It uploads the readiness result, Node version and image ID as CI artifacts.
 
 ## Install + Run
 

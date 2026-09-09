@@ -382,7 +382,7 @@ jobs:
           docker run -d --name ds-sms-sink --network host \
             -v "$GITHUB_WORKSPACE/infra/dev-stand/sms-sink/server.mjs":/srv/server.mjs:ro \
             -e SMS_SINK_PORT=8090 \
-            node:22-alpine node /srv/server.mjs
+            node:24-alpine node /srv/server.mjs
       - name: Wait for the sinks to be ready
         run: |
           for i in $(seq 1 30); do
@@ -518,7 +518,7 @@ jobs:
         run: node tools/scripts/otp-delivery-diagnostic.mjs
       - name: Upload OTP delivery diagnostic
         if: always() && github.event_name == 'workflow_dispatch' && inputs.otp_diagnostic
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: otp-delivery-diagnostic
           path: otp-delivery-diagnostic.json
@@ -529,7 +529,7 @@ jobs:
         run: node tools/scripts/api-e2e-diagnostics.mjs
       - name: Upload sanitized API provider diagnostics
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: api-e2e-diagnostics
           path: api-e2e-diagnostics.json
@@ -1551,7 +1551,7 @@ jobs:
           echo '::group::postgres'; docker logs --tail 200 ds-postgres || true; echo '::endgroup::'
       - name: Upload the Playwright artifacts
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: admin-e2e-results
           path: apps/admin/test-results

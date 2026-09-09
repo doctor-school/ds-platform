@@ -1,0 +1,97 @@
+name: Runtime images
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".nvmrc"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - ".npmrc"
+      - ".dockerignore"
+      - "apps/api/**"
+      - "apps/portal/**"
+      - "apps/admin/**"
+      - "apps/doctor/**"
+      - "packages/**"
+      - "infra/dev-stand/**"
+      - ".github/workflows/runtime-images.yml"
+      - "tools/scripts/image-readiness*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: runtime-images-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  images:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [api, portal, admin, doctor]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with: { node-version-file: .nvmrc }
+      # The API Dockerfile executes the real pnpm deploy --prod --legacy path.
+      # Build the committed image, not a host bundle with repository dependencies.
+      - name: Build production image
+        env:
+          APP: ${{ matrix.app }}
+        run: docker build -f "apps/$APP/Dockerfile" -t "ds-runtime:$APP" .
+      - name: Prepare isolated API database
+        if: matrix.app == 'api'
+        run: |
+          docker build -t ds-runtime-postgres infra/dev-stand/postgres
+          docker run -d --name ds-runtime-db --network host \
+            -e POSTGRES_USER=ds -e POSTGRES_PASSWORD=ds -e POSTGRES_DB=ds_image \
+            ds-runtime-postgres
+          ready=false
+          for i in $(seq 1 30); do
+            if docker exec ds-runtime-db pg_isready -U ds -d ds_image; then
+              ready=true; break
+            fi
+            sleep 2
+          done
+          test "$ready" = true
+          docker build -f apps/api/Dockerfile --target migrate -t ds-runtime-migrate .
+          docker run --rm --network host \
+            -e DATABASE_URL=postgres://ds:ds@localhost:5432/ds_image \
+            ds-runtime-migrate
+      - name: Boot image and verify HTTP readiness
+        env:
+          APP: ${{ matrix.app }}
+        run: |
+          docker run -d --name ds-runtime-app --network host \
+            -e PORT=3000 -e HOSTNAME=0.0.0.0 \
+            -e DATABASE_URL=postgres://ds:ds@localhost:5432/ds_image \
+            -e AUDIT_IDENTIFIER_PEPPER=ci-image-audit-pepper \
+            -e LIFECYCLE_IMPACT_TOKEN_SECRET=ci-image-impact-secret \
+            "ds-runtime:$APP"
+          path=/
+          if [ "$APP" = api ]; then path=/v1/ready; fi
+          node tools/scripts/image-readiness.mjs "http://127.0.0.1:3000$path" > readiness.txt
+          docker exec ds-runtime-app node --version >> readiness.txt
+          docker inspect --format '{{.Image}}' ds-runtime-app >> readiness.txt
+          cat readiness.txt
+      - name: Upload image readiness evidence
+        uses: actions/upload-artifact@v7
+        with:
+          name: runtime-image-${{ matrix.app }}
+          path: readiness.txt
+          if-no-files-found: error
+          retention-days: 7
+      - name: Inspect failed image
+        if: failure()
+        run: |
+          docker logs ds-runtime-app || true
+          docker logs ds-runtime-db || true
+      - name: Stop isolated containers
+        if: always()
+        run: docker rm -f ds-runtime-app ds-runtime-db || true

@@ -17,7 +17,7 @@
 #   3. ship ONLY Next's standalone server + static assets into a slim non-root
 #      runtime. Next traces the monorepo root, so the standalone tree nests the
 #      app under apps/doctor/ (server entry = apps/doctor/server.js).
-FROM node:22-slim AS base
+FROM node:24-slim AS base
 ENV PNPM_HOME=/pnpm PATH=/pnpm:$PATH
 RUN corepack enable
 WORKDIR /repo
@@ -47,7 +47,7 @@ COPY . .
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store pnpm install --frozen-lockfile
 RUN pnpm turbo run build --filter=@ds/doctor
 
-FROM node:22-slim AS runtime
+FROM node:24-slim AS runtime
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1
 WORKDIR /app
 # Next standalone bundle (server + minimal traced node_modules, monorepo-nested).

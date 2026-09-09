@@ -197,6 +197,7 @@ async function main() {
     repo,
     { restore = false, user = "source_admin" } = {},
   ) => {
+    await createVolume(`${name}-socket`);
     const command = restore
       ? ["postgres", "-c", "archive_mode=off"]
       : [
@@ -214,6 +215,8 @@ async function main() {
       "--network",
       prefix,
       ...mounts(name, major, repo),
+      "-v",
+      `${volume(`${name}-socket`)}:/var/run/postgresql`,
       ...env(major),
       "-e",
       `POSTGRES_USER=${user}`,
@@ -241,16 +244,33 @@ async function main() {
     ).trim();
     if (version !== String(major)) throw new Error("unexpected PG_VERSION");
   };
-  const backup = (name, ...args) =>
-    docker(
-      "exec",
+  // A real sidecar shares only read-only PGDATA, socket and its own repository.
+  // The same immutable image guarantees client/server pgBackRest and UID parity.
+  const backup = (name, ...args) => {
+    const major = name.endsWith("17") ? 17 : 18;
+    return docker(
+      "run",
+      "--rm",
+      ...label,
+      ...limited,
+      "--network",
+      "none",
       "--user",
       "postgres",
-      container(name),
+      "-v",
+      `${volume(name)}:${mountPath(major)}:ro`,
+      "-v",
+      `${volume(`${name}-socket`)}:/var/run/postgresql`,
+      "-v",
+      `${volume(`repo${major}`)}:/pgbackrest`,
+      ...env(major),
+      "--entrypoint",
       "pgbackrest",
+      image(major),
       "--stanza=drill",
       ...args,
     );
+  };
   const databases = async (name) =>
     databasePlan(
       (
@@ -274,6 +294,13 @@ async function main() {
         name,
         "postgres",
         "SELECT rolname,rolsuper,rolinherit,rolcreaterole,rolcreatedb,rolcanlogin FROM pg_roles WHERE rolname !~ '^pg_' AND rolname <> 'target_admin' ORDER BY rolname",
+      ),
+    );
+    result.memberships = hash(
+      await sql(
+        name,
+        "postgres",
+        "SELECT roleid::regrole,member::regrole,grantor::regrole,admin_option,inherit_option,set_option FROM pg_auth_members ORDER BY 1::text,2::text",
       ),
     );
     return result;
@@ -543,13 +570,31 @@ async function main() {
       integrity: await summary("source17"),
       backups: JSON.parse(await backup("source17", "--output=json", "info")),
     }));
+    await stage("phase-a-old-cluster-restart", async () => {
+      const before = await summary("restored17");
+      await docker("stop", container("restored17"));
+      await docker("start", container("restored17"));
+      await waitReady("restored17");
+      checkEqual(before, await summary("restored17"));
+      return {
+        integrity: before,
+        boundary: "database-only old endpoint restart; no application cutover",
+      };
+    });
     evidence.status = "passed-core-only";
   } catch (error) {
     evidence.status = "failed";
     evidence.error = error.message;
     throw error;
   } finally {
-    // No automatic deletion. Failed resources remain available for diagnosis.
+    // Retain volumes/images for diagnosis, but no background task processes.
+    const owned = (
+      await docker("ps", "-q", "--filter", `label=school.doctor.run=${prefix}`)
+    )
+      .trim()
+      .split("\n")
+      .filter(Boolean);
+    if (owned.length) await docker("stop", ...owned);
     save();
   }
 }

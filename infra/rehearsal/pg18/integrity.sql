@@ -6,3 +6,6 @@ SELECT id,retained,embedding::text FROM drill.records ORDER BY id;
 SELECT last_value,is_called FROM drill.records_id_seq;
 SELECT marker FROM drill.markers ORDER BY marker;
 SELECT id FROM drill.records ORDER BY embedding <-> '[1,0,0]' LIMIT 1;
+SELECT id,created_at FROM drill.events ORDER BY created_at,id;
+SELECT parent_table,control,partition_interval,retention,retention_keep_table FROM partman.part_config ORDER BY parent_table;
+SELECT loid,pageno,md5(data) FROM pg_largeobject ORDER BY loid,pageno;

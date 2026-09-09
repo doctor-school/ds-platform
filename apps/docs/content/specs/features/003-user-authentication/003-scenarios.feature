@@ -351,20 +351,89 @@ Feature: Net-new web authentication producing a doctor_guest identity
     And the user completes the reset by typing the code on the /reset screen
 
   @EARS-31 @EARS-32 @happy
-  Scenario: A mail.ru ratelimit fails over to Resend within the same send
-    Given the mail.ru relay rejects a send with "451 Ratelimit exceeded"
+  Scenario: Postbox is the explicit primary for every recipient domain
+    Given real mode explicitly selects a complete Postbox SMTP configuration
+    And Resend failover is disabled even if its credential exists
+    When the BFF sends a verification or reset email to any recipient domain
+    Then only Postbox is called
+    And final SMTP 2xx is recorded as provider acceptance, not delivery or Inbox placement
+    And the actual provider label is Postbox
+
+  @EARS-31 @EARS-32 @happy
+  Scenario: A definite Postbox rejection switches once to an enabled Resend fallback
+    Given Postbox returns a definite pre-acceptance "451 Ratelimit exceeded" rejection
+    And Resend failover is explicitly enabled with valid credentials
     When the BFF mailer dispatches a verification or reset email
-    Then the send switches channel to Resend without retrying mail.ru
-    And the send is counted as delivered only when the provider accepts with a 2xx
-    And a failover metric and log carrying the provider response code are emitted
+    Then the send switches once to Resend without retrying Postbox
+    And a Resend 2xx is recorded only as fallback provider acceptance
+    And sanitized provider-code failover metrics and logs are emitted
 
   @EARS-31 @EARS-16 @failure
-  Scenario: Both transport channels failing never leaks into the API response
-    Given both the mail.ru relay and Resend reject the send
-    When a visitor's registration triggers the verification email
-    Then the send fails closed and is logged with both provider response codes
-    And the API response stays enumeration-safe and unchanged
-    And the visitor can recover via the /verify resend affordance
+  Scenario: Exhausting eligible channels never leaks into the API response
+    Given every explicitly enabled channel rejects the send
+    When a registration triggers the verification email
+    Then the send fails closed with sanitized provider-code diagnostics
+    And the API response stays enumeration-safe in status, body and timing
+    And the visitor can recover via the verify resend affordance
+
+  @EARS-31 @failure
+  Scenario Outline: Invalid real configuration cannot fall through to another sender
+    Given real delivery mode is selected by the flag or environment
+    And the configuration is <invalid>
+    When the mailer validates or dispatches the send
+    Then it raises a sanitized configuration failure
+    And neither Mailpit nor any real provider receives the send
+
+    Examples:
+      | invalid                                  |
+      | missing the primary discriminator        |
+      | an unknown provider                      |
+      | a provider and host mismatch             |
+      | missing primary credentials or sender    |
+      | enabled Resend without valid credentials |
+
+  @EARS-31 @happy
+  Scenario: Pre-activation mail.ru support and explicit intercept remain deliberate
+    Given a complete explicit legacy mail.ru configuration is selected in real mode
+    When the BFF dispatches an email
+    Then it uses that primary without promoting Postbox or Resend from credentials
+    When intercept mode is explicitly selected instead
+    Then only the configured Mailpit intercept receives the next email
+
+  @EARS-31 @EARS-30 @EARS-32 @failure
+  Scenario Outline: A stalled transport terminates and cannot report late success
+    Given a local transport stalls at <phase>
+    When the configured phase or whole-attempt deadline expires
+    Then the owned socket or HTTP operation is cancelled and timers are cleared
+    And a late connection handoff is destroyed and cannot transmit the message
+    And a late success callback cannot overwrite the terminal local outcome
+    And no automatic failover occurs when remote acceptance is uncertain
+    And diagnostics contain no recipient, subject, body, credential or one-time code
+
+    Examples:
+      | phase                               |
+      | SMTP connect or greeting            |
+      | SMTP socket inactivity              |
+      | SMTP whole-send absolute deadline   |
+      | HTTP connection or response headers |
+      | HTTP response-body consumption      |
+
+  @EARS-31 @EARS-32 @failure
+  Scenario: Provider acceptance does not trigger resend when mailbox placement is poor
+    Given Postbox accepted a message with a final SMTP 2xx
+    When a received artifact reports DKIM timeout or Junk placement
+    Then the mailer does not automatically resend or call Resend
+    And the received-header investigation remains separate from synchronous acceptance
+    And TrustedSenderList-assisted Inbox placement is not counted as an unassisted pass
+
+  @EARS-6 @EARS-31 @happy
+  Scenario: Native login OTP uses the shared Postbox relay without entering BFF failover
+    Given the shared real SMTP configuration selects Postbox
+    And the Zitadel SMTP reconcile has applied the stable real transactional sender
+    When a verified user requests an email login OTP
+    Then Zitadel generates, renders and sends the existing login email through Postbox
+    And the BFF does not send a duplicate or invoke its Resend fallback
+    And generation, verification and email content remain unchanged
 
   @EARS-30 @failure
   Scenario: The one-time code never reaches the logs

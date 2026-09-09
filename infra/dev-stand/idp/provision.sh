@@ -130,7 +130,7 @@ fi
 # ── http helper ──────────────────────────────────────────────────────────────
 # api <METHOD> <PATH> [json-body]  ->  prints response body, fails on non-2xx
 api() {
-  local method="$1" path="$2" body="${3:-}" resp code
+  local method="$1" path="$2" body="${3:-}" resp code grpc_code
   resp="$(curl -sS -w $'\n%{http_code}' -X "$method" "${BASE_URL}${path}" \
     -H "Authorization: Bearer ${PAT_VALUE}" \
     -H "Content-Type: application/json" \
@@ -138,7 +138,12 @@ api() {
   code="${resp##*$'\n'}"
   body="${resp%$'\n'*}"
   if [[ "$code" -lt 200 || "$code" -ge 300 ]]; then
-    echo "API ${method} ${path} -> HTTP ${code}: ${body}" >&2
+    if [[ "${SMTP_REDACT_ERRORS:-false}" == "true" ]]; then
+      grpc_code="$(jq -r '.code | select(type == "number")' <<< "$body" 2>/dev/null || true)"
+      echo "API ${method} ${path} -> HTTP ${code}: {\"code\":${grpc_code:-null}} (SMTP response redacted)" >&2
+    else
+      echo "API ${method} ${path} -> HTTP ${code}: ${body}" >&2
+    fi
     return 1
   fi
   printf '%s' "$body"
@@ -381,9 +386,12 @@ fi
 #   echoes the provider id on stdout.
 ensure_smtp_provider() {
   local desc="$1" host="$2" addr="$3" name="$4" user="$5" pw="$6" tls="$7" payload id
+  # Bash locals are visible to called helpers. Do not persist or print a server
+  # error body that could echo the SMTP password, including /tmp/.idperr.
+  local SMTP_REDACT_ERRORS=true
   payload="$(jq -nc --arg d "$desc" --arg h "$host" --arg a "$addr" \
     --arg n "$name" --arg u "$user" --arg p "$pw" --argjson tls "$tls" \
-    '{description:$d, senderAddress:$a, senderName:$n, tls:$tls, host:$h, user:$u, password:$p}')"
+    '{description:$d, senderAddress:$a, senderName:$n, tls:$tls, host:$h, user:$u, password:$p}')" || return 1
   # Search must succeed and the stable identity must be unique before any write.
   local matches
   matches="$(api POST /admin/v1/smtp/_search '{}' \
@@ -394,12 +402,27 @@ ensure_smtp_provider() {
   fi
   id="$(jq -r '.[0].id // empty' <<< "$matches")"
   if [[ -n "$id" && "$id" != "null" ]]; then
-    api_idempotent PUT "/admin/v1/smtp/${id}" "$payload" >/dev/null
-    echo "ensured SMTP provider ${id} (${desc})" >&2
+    # This function runs inside $(...). Bash does NOT inherit errexit there:
+    # without an explicit return, a failed PUT is hidden by the final printf.
+    api_idempotent PUT "/admin/v1/smtp/${id}" "$payload" >/dev/null || return 1
   else
-    id="$(api POST /admin/v1/smtp "$payload" | jq -r '.id')"
-    echo "created SMTP provider ${id} (${desc})" >&2
+    id="$(api POST /admin/v1/smtp "$payload" | jq -er '.id | select(type == "string" and length > 0)')" || return 1
   fi
+  # A successful HTTP response alone is not convergence. Compare every public
+  # SMTP field with the requested profile; never print credentials or raw JSON.
+  local actual
+  actual="$(api GET "/admin/v1/smtp/${id}")" || return 1
+  if ! jq -e --arg id "$id" --argjson expected "$payload" '
+    .smtpConfig | .id == $id and .description == $expected.description
+    and .host == $expected.host and (.tls // false) == $expected.tls
+    and .senderAddress == $expected.senderAddress
+    and (.senderName // "") == $expected.senderName
+    and (.user // "") == $expected.user
+  ' <<< "$actual" >/dev/null 2>&1; then
+    echo "ERROR: SMTP provider readback does not match requested profile; refusing convergence" >&2
+    return 1
+  fi
+  echo "ensured SMTP provider ${id} (${desc}); public metadata read back" >&2
   printf '%s' "$id"
 }
 
@@ -443,6 +466,17 @@ if [[ "$EMAIL_DELIVERY_MODE" == "real" ]]; then
 else
   api_activate POST "/admin/v1/smtp/${SMTP_MAILPIT_ID}/_activate" '{}' >/dev/null
   echo "activated SMTP provider ${SMTP_MAILPIT_ID} (dev-stand mailpit) [boot default]" >&2
+fi
+
+# Activation may also return an apparently idempotent response while a different
+# provider is active. Validate the selected identity before allowing app startup.
+SMTP_EXPECTED_ACTIVE="$SMTP_MAILPIT_ID"
+[[ "$EMAIL_DELIVERY_MODE" == "real" ]] && SMTP_EXPECTED_ACTIVE="$SMTP_REAL_ID"
+SMTP_ACTIVE="$(api GET /admin/v1/smtp)"
+if ! jq -e --arg id "$SMTP_EXPECTED_ACTIVE" '.smtpConfig.id == $id and .smtpConfig.state == "SMTP_CONFIG_ACTIVE"' \
+    <<< "$SMTP_ACTIVE" >/dev/null 2>&1; then
+  echo "ERROR: SMTP active-provider readback failed; refusing convergence" >&2
+  exit 5
 fi
 
 # ── 7. ensure BOTH HTTP SMS providers → sms-sink (intercept) + sms-aero (real) ─

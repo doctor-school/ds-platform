@@ -6,7 +6,15 @@ import {
   assertAbsent,
   databasePlan,
   bootstrapRestoreScript,
+  stopOwnedSession,
 } from "./pg18-rehearsal.mjs";
+
+test("EARS-6: rejected re-entry cannot stop an earlier run, cleanup uses only created IDs", async () => {
+  await stopOwnedSession([], () => assert.fail("foreign stop"));
+  const stopped = [];
+  await stopOwnedSession(["owned"], async (ids) => stopped.push(...ids));
+  assert.deepEqual(stopped, ["owned"]);
+});
 
 test("EARS-5: bootstrap reconciliation removes only its exact CREATE and refuses ambiguity", () => {
   const script = bootstrapRestoreScript();

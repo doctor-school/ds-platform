@@ -3,6 +3,7 @@
 import { execFileSync } from "node:child_process";
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
+import { isAbsolute } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 export function namespace(run) {
@@ -44,6 +45,10 @@ sed '/^CREATE ROLE source_admin;$/d' /scratch/globals.sql > /scratch/reconciled.
 exec psql -X -v ON_ERROR_STOP=1 -h "$1" -U source_admin -d postgres -f /scratch/reconciled.sql`;
 }
 
+export async function stopOwnedSession(ids, stop) {
+  if (ids.length) await stop(ids);
+}
+
 const quote = (s) => `'${String(s).replaceAll("'", "'\\''")}'`;
 const hash = (s) => createHash("sha256").update(s).digest("hex");
 const root = fileURLToPath(new URL("../../", import.meta.url));
@@ -54,8 +59,8 @@ async function main() {
   const prefix = namespace(runId);
   if (
     !/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(host ?? "") ||
-    !auditPath ||
-    !evidencePath ||
+    !isAbsolute(auditPath ?? "") ||
+    !isAbsolute(evidencePath ?? "") ||
     process.argv.length !== 6
   ) {
     throw new Error(
@@ -82,6 +87,7 @@ async function main() {
     images: {},
     status: "running",
   };
+  const createdContainerIds = [];
   const save = () =>
     writeFileSync(evidencePath, JSON.stringify(evidence, null, 2) + "\n");
   const run = auditedRunner({
@@ -205,7 +211,7 @@ async function main() {
           "-ceu",
           'mkdir -p /pgbackrest; chown postgres:postgres /pgbackrest; exec docker-entrypoint.sh postgres -c archive_mode=on -c "archive_command=pgbackrest --stanza=drill archive-push %p" -c shared_buffers=64MB -c max_wal_size=128MB',
         ];
-    await docker(
+    const createdId = await docker(
       "run",
       "-d",
       "--name",
@@ -231,6 +237,7 @@ async function main() {
       image(major),
       ...command,
     );
+    createdContainerIds.push(createdId.trim());
     await waitReady(name, user);
     const observed = (
       await sql(name, "postgres", "SHOW data_directory", user)
@@ -295,7 +302,7 @@ async function main() {
       await sql(
         name,
         "postgres",
-        "SELECT rolname,rolsuper,rolinherit,rolcreaterole,rolcreatedb,rolcanlogin FROM pg_roles WHERE rolname !~ '^pg_' AND rolname <> 'target_admin' ORDER BY rolname",
+        "SELECT rolname,rolsuper,rolinherit,rolcreaterole,rolcreatedb,rolcanlogin FROM pg_roles WHERE rolname !~ '^pg_' ORDER BY rolname",
       ),
     );
     result.memberships = hash(
@@ -303,6 +310,20 @@ async function main() {
         name,
         "postgres",
         "SELECT roleid::regrole,member::regrole,grantor::regrole,admin_option,inherit_option,set_option FROM pg_auth_members ORDER BY roleid::regrole::text,member::regrole::text",
+      ),
+    );
+    result.databases = hash(
+      await sql(
+        name,
+        "postgres",
+        "SELECT datname,datdba::regrole,encoding,datcollate,datctype,datlocprovider,datacl,shobj_description(oid,'pg_database') FROM pg_database WHERE NOT datistemplate ORDER BY datname",
+      ),
+    );
+    result.databaseSettings = hash(
+      await sql(
+        name,
+        "postgres",
+        "SELECT d.datname,COALESCE(r.rolname,'ALL'),s.setconfig FROM pg_db_role_setting s JOIN pg_database d ON d.oid=s.setdatabase LEFT JOIN pg_roles r ON r.oid=s.setrole ORDER BY d.datname,r.rolname",
       ),
     );
     return result;
@@ -449,6 +470,19 @@ async function main() {
       }
       return "Exact local image IDs retained; promotion requires exporting/publishing these same artifacts.";
     });
+    // Docker's unique container name is an atomic lease even if two callers
+    // pass the initial absence probe concurrently. It is retained with the run.
+    await docker(
+      "create",
+      "--name",
+      `${prefix}-lease`,
+      ...label,
+      ...limited,
+      "--network",
+      "none",
+      image(17),
+      "true",
+    );
     await docker("network", "create", "--internal", ...label, prefix);
     for (const name of [
       "source17",
@@ -476,6 +510,12 @@ async function main() {
           "source17",
           db.name,
           readFileSync(new URL("fixture.sql", sqlDir), "utf8"),
+        );
+      for (const db of await databases("source17"))
+        await sql(
+          "source17",
+          "postgres",
+          `ALTER DATABASE ${db.name} OWNER TO fixture_owner; COMMENT ON DATABASE ${db.name} IS 'synthetic preservation fixture'; REVOKE CONNECT ON DATABASE ${db.name} FROM PUBLIC; GRANT CONNECT ON DATABASE ${db.name} TO fixture_reader; ALTER DATABASE ${db.name} SET statement_timeout='19s'; ALTER ROLE fixture_owner IN DATABASE ${db.name} SET lock_timeout='7s';`,
         );
       return {
         databases: (await databases("source17")).map((db) => db.name),
@@ -534,6 +574,31 @@ async function main() {
           "-f",
           `/scratch/${db.archive}`,
         ]);
+        if (!db.create) {
+          // Preserve COMMENT, ACL and DATABASE PROPERTIES entries under -C;
+          // suppress exactly the already-initialized postgres CREATE entry.
+          await client([
+            "bash",
+            "-ceu",
+            `pg_restore --list /scratch/${db.archive} > /scratch/toc
+test "$(grep -Ec '^[0-9]+; [0-9]+ [0-9]+ DATABASE - postgres ' /scratch/toc)" -eq 1
+sed '/^[0-9][0-9]*; [0-9][0-9]* [0-9][0-9]* DATABASE - postgres /d' /scratch/toc > /scratch/restore-toc`,
+          ]);
+          const owner = (
+            await sql(
+              "restored17",
+              "postgres",
+              "SELECT datdba::regrole::text FROM pg_database WHERE datname='postgres'",
+            )
+          ).trim();
+          if (!/^[a-z][a-z0-9_]*$/.test(owner))
+            throw new Error("unsupported bootstrap database owner");
+          await sql(
+            "candidate18",
+            "postgres",
+            `ALTER DATABASE postgres OWNER TO ${owner}`,
+          );
+        }
         await client([
           "pg_restore",
           "--exit-on-error",
@@ -543,7 +608,8 @@ async function main() {
           "source_admin",
           "-d",
           "postgres",
-          ...(db.create ? ["--create"] : []),
+          "--create",
+          ...(db.create ? [] : ["--use-list", "/scratch/restore-toc"]),
           `/scratch/${db.archive}`,
         ]);
       }
@@ -651,13 +717,9 @@ async function main() {
     throw error;
   } finally {
     // Retain volumes/images for diagnosis, but no background task processes.
-    const owned = (
-      await docker("ps", "-q", "--filter", `label=school.doctor.run=${prefix}`)
-    )
-      .trim()
-      .split("\n")
-      .filter(Boolean);
-    if (owned.length) await docker("stop", ...owned);
+    await stopOwnedSession(createdContainerIds, (ids) =>
+      docker("stop", ...ids),
+    );
     save();
   }
 }

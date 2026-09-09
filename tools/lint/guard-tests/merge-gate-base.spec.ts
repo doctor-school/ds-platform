@@ -15,7 +15,7 @@ function runGate(scenario: string) {
     import { syncBuiltinESMExports } from 'node:module';
     import { pathToFileURL } from 'node:url';
     import { tmpdir } from 'node:os';
-    const head = 'a'.repeat(40), oldBase = 'b'.repeat(40), newBase = 'c'.repeat(40);
+    const head = 'a'.repeat(40), mergeBase = 'd'.repeat(40), oldBase = 'b'.repeat(40), newBase = 'c'.repeat(40);
     const scenario = ${JSON.stringify(scenario)};
     const calls = []; let polls = 0; let advanced = false; let headFetched = false;
     const ok = (stdout = '') => ({ status: 0, stdout, stderr: '' });
@@ -48,10 +48,22 @@ function runGate(scenario: string) {
           const missingHead = args.includes(head + '^{commit}') && (scenario === 'missing-head' || (scenario === 'recover-head' && !headFetched));
           return scenario === 'missing-object' || missingHead ? { status: 128, stderr: 'missing object' } : ok();
         }
+        if (args[0] === 'merge-base' && !args.includes('--is-ancestor')) {
+          if (scenario === 'advanced-base-error') return { status: 128, stderr: 'no merge base' };
+          if (scenario === 'advanced-base-garbage') return ok('not-a-sha\\n');
+          return ok(mergeBase + '\\n');
+        }
+        if (args[0] === 'diff') {
+          const target = args[args.length - 1];
+          if (scenario === 'advanced-diff-error') return { status: 128, stderr: 'bad revision' };
+          if (scenario === 'advanced-disjoint') return ok(target === newBase ? 'apps/promo/app/page.tsx\\napps/promo/README.md\\n' : 'tools/lint/no-stub.ts\\n');
+          if (scenario === 'advanced-overlap') return ok('apps/api/src/app.module.ts\\n');
+          return ok(target === newBase ? 'pnpm-lock.yaml\\n' : 'tools/lint/no-stub.ts\\n');
+        }
         if (args[0] === 'merge-base') {
           if (scenario === 'ancestry-error') return { status: 128, stderr: 'invalid object' };
           if (scenario === 'ancestry-signal') return { status: null, signal: 'SIGTERM' };
-          return { status: scenario === 'advanced' && args.includes(newBase) ? 1 : 0, stdout: '', stderr: '' };
+          return { status: scenario.startsWith('advanced') && args.includes(newBase) ? 1 : 0, stdout: '', stderr: '' };
         }
       }
       throw new Error('Unexpected call ' + JSON.stringify([command, args]));
@@ -155,5 +167,58 @@ describe("EARS-1920: final live base ancestry", () => {
       "origin",
       "a".repeat(40),
     ]);
+  });
+
+  // #2124 — an advanced main is no longer an unconditional RED: a main-side
+  // delta disjoint from the PR files and outside ALWAYS_OVERLAPPING_PATHS is
+  // accepted with a printed evidence block; anything else keeps today's refusal.
+  it("EARS-2124.7: accepts an advanced main whose files are disjoint from the PR files", () => {
+    const result = runGate("advanced-disjoint");
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("#2124 disjoint-changes rule");
+    expect(result.stdout).toContain("tested base " + "d".repeat(12));
+    expect(result.stdout).toContain("main advanced to " + "c".repeat(12));
+    expect(result.stdout).toContain("apps/promo/app/page.tsx");
+    expect(result.stdout).toContain("tools/lint/no-stub.ts");
+    expect(result.stdout).toContain("Safety net: ci.yml runs on push to main");
+    expect(result.stdout).toContain("GREEN");
+    expect(result.trace.calls).toContainEqual([
+      "git",
+      "diff",
+      "--name-only",
+      "d".repeat(40),
+      "c".repeat(40),
+    ]);
+  });
+
+  it("EARS-2124.8: refuses an advanced main sharing a file with the PR and names the path", () => {
+    const result = runGate("advanced-overlap");
+    expect(result.status).toBe(1);
+    expect(result.stdout).not.toContain("GREEN");
+    expect(result.stderr).toContain("apps/api/src/app.module.ts");
+    expect(result.stderr).toMatch(/outside the PR ancestry/);
+    expect(result.stderr).toMatch(/rebase/i);
+  });
+
+  it("EARS-2124.9: an unadvanced main never resolves a tested base or file lists", () => {
+    const result = runGate("current");
+    expect(result.status).toBe(0);
+    expect(
+      result.trace.calls.some(
+        (call: string[]) =>
+          call[1] === "diff" ||
+          (call[1] === "merge-base" && !call.includes("--is-ancestor")),
+      ),
+    ).toBe(false);
+  });
+
+  it.each([
+    "advanced-base-error",
+    "advanced-base-garbage",
+    "advanced-diff-error",
+  ])("EARS-2124.10: fails closed on %s", (scenario) => {
+    const result = runGate(scenario);
+    expect(result.status).toBe(1);
+    expect(result.stdout).not.toContain("GREEN");
   });
 });

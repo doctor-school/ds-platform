@@ -50,10 +50,10 @@ echo "exit=$?"
 Branch on the **exit code**, never on `&& echo fresh || echo STALE` — that form reports an unknown SHA or a failed `gh` call as `STALE` and sends you rebasing over an error you never saw.
 
 - `0` → fresh; go to Step 2.
-- `1` → STALE; rebase below.
+- `1` → main advanced past the tested head; do NOT rebase yet — go to Step 2 and let the gate inside `pr:land` decide (#2124: an advanced `main` whose delta since the tested base is disjoint from the PR files and outside the always-overlapping list is accepted, with a printed evidence block, so a rebase and a re-review are pure waste there).
 - anything else → STOP, return `BLOCKED: freshness check errored (exit <code>): <last line>`.
 
-**STALE — rebase in a THROWAWAY detached worktree**, never in the primary tree and never depending on the branch being free:
+**Gate refused a stale head (RED naming overlapping or always-overlapping paths — lockfile, manifests, `.github/workflows/`, `tools/gh/`, guard policy, `packages/db/schema/` + `packages/db/drizzle/`, `packages/schemas/`, root lint / tsconfig) — rebase in a THROWAWAY detached worktree**, never in the primary tree and never depending on the branch being free:
 
 ```bash
 git worktree add --detach .claude/worktrees/land-<N> origin/<pr-branch>

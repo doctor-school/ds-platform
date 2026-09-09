@@ -3,9 +3,11 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import {
+  ALWAYS_OVERLAPPING_PATHS,
   assertOpenPr,
   branchWorktreeMessage,
   classifyCheckRuns,
+  classifyMainAdvance,
   classifyModeAVerdict,
   classifyRangeDiff,
   hasMergeCommits,
@@ -13,6 +15,7 @@ import {
   findBranchWorktree,
   isWorktreeCwd,
   latestRunsByName,
+  matchAlwaysOverlapping,
   parseModeAExempt,
   worktreeNumber,
 } from "../../gh/merge-gate.mjs";
@@ -736,5 +739,131 @@ describe("merge-gate hasMergeCommits() (#1865)", () => {
     // Unusable input (a git failure the caller could not read) is NOT clean.
     expect(hasMergeCommits(null)).toBe(true);
     expect(hasMergeCommits(undefined)).toBe(true);
+  });
+});
+
+describe("merge-gate classifyMainAdvance() (#2124)", () => {
+  // A main that advanced while CI ran used to be an unconditional RED, which
+  // cost a full rebase + re-review round for changes that never touched the same
+  // files. The rule: a main-side delta that is disjoint from the PR files AND
+  // outside `ALWAYS_OVERLAPPING_PATHS` is accepted; everything else stays RED.
+  it("EARS-2124.1: disjoint main-side and PR-side file sets classify as disjoint", () => {
+    const result = classifyMainAdvance({
+      mainFiles: ["apps/promo/app/page.tsx", "apps/promo/README.md"],
+      prFiles: ["tools/lint/no-stub.ts", "apps/docs/content/adr/0007-x.md"],
+    });
+    expect(result.state).toBe("disjoint");
+    expect(result.overlapping).toEqual([]);
+    expect(result.protectedHits).toEqual([]);
+  });
+
+  it("EARS-2124.2: a path present in both sets classifies as overlap and is listed", () => {
+    const result = classifyMainAdvance({
+      mainFiles: ["apps/api/src/app.module.ts", "apps/promo/app/page.tsx"],
+      prFiles: ["apps/api/src/app.module.ts", "tools/lint/no-stub.ts"],
+    });
+    expect(result.state).toBe("overlap");
+    expect(result.overlapping).toEqual(["apps/api/src/app.module.ts"]);
+    expect(result.protectedHits).toEqual([]);
+  });
+
+  it("EARS-2124.3: a lockfile-only main advance classifies as protected with its reason", () => {
+    const result = classifyMainAdvance({
+      mainFiles: ["pnpm-lock.yaml"],
+      prFiles: ["tools/lint/no-stub.ts"],
+    });
+    expect(result.state).toBe("protected");
+    expect(result.overlapping).toEqual([]);
+    expect(result.protectedHits).toHaveLength(1);
+    expect(result.protectedHits[0].path).toBe("pnpm-lock.yaml");
+    expect(result.protectedHits[0].reason).toMatch(/lockfile/i);
+  });
+
+  it("EARS-2124.4: every always-overlapping entry kind matches, and near-misses do not", () => {
+    // exact
+    expect(matchAlwaysOverlapping("turbo.json")?.kind).toBe("exact");
+    expect(matchAlwaysOverlapping("pnpm-workspace.yaml")?.kind).toBe("exact");
+    expect(matchAlwaysOverlapping("tools/lint/guard-policy.mjs")?.kind).toBe(
+      "exact",
+    );
+    // basename — root and every workspace manifest
+    expect(matchAlwaysOverlapping("apps/api/package.json")?.kind).toBe(
+      "basename",
+    );
+    expect(matchAlwaysOverlapping("package.json")?.kind).toBe("basename");
+    // dir
+    expect(matchAlwaysOverlapping(".github/workflows/ci.yml")?.kind).toBe(
+      "dir",
+    );
+    expect(matchAlwaysOverlapping("tools/gh/pr-land.mjs")?.kind).toBe("dir");
+    expect(
+      matchAlwaysOverlapping("packages/db/drizzle/0042_add_table.sql")?.kind,
+    ).toBe("dir");
+    expect(matchAlwaysOverlapping("packages/db/schema/users.ts")?.kind).toBe(
+      "dir",
+    );
+    expect(matchAlwaysOverlapping("packages/schemas/src/auth.ts")?.kind).toBe(
+      "dir",
+    );
+    // basename-regex
+    expect(
+      matchAlwaysOverlapping("apps/doctor/tsconfig.build.json")?.kind,
+    ).toBe("basename-regex");
+    // root-regex
+    expect(
+      matchAlwaysOverlapping("eslint.import-boundary.config.mjs")?.kind,
+    ).toBe("root-regex");
+    expect(matchAlwaysOverlapping("eslint.config.js")?.kind).toBe("exact");
+    // NEGATIVE — a nested eslint.*.config.mjs is not the root lint config, and a
+    // prose file whose name merely starts with `tsconfig` is not a tsconfig.
+    expect(
+      matchAlwaysOverlapping("apps/doctor/eslint.foo.config.mjs"),
+    ).toBeNull();
+    expect(matchAlwaysOverlapping("docs/tsconfig-notes.md")).toBeNull();
+    expect(matchAlwaysOverlapping("apps/promo/app/page.tsx")).toBeNull();
+    // A directory entry matches the directory, never a same-prefix sibling.
+    expect(matchAlwaysOverlapping("tools/gh-notes.md")).toBeNull();
+    expect(
+      matchAlwaysOverlapping("packages/schemas-extra/src/x.ts"),
+    ).toBeNull();
+    expect(
+      classifyMainAdvance({ mainFiles: ["apps/api/package.json"], prFiles: [] })
+        .state,
+    ).toBe("protected");
+  });
+
+  it("EARS-2124.5: an empty or unusable main-side list fails closed as unknown", () => {
+    expect(
+      classifyMainAdvance({ mainFiles: [], prFiles: ["a.ts"] }).state,
+    ).toBe("unknown");
+    expect(
+      classifyMainAdvance({ mainFiles: undefined, prFiles: ["a.ts"] }).state,
+    ).toBe("unknown");
+    expect(
+      classifyMainAdvance({ mainFiles: "apps/x.ts", prFiles: ["a.ts"] }).state,
+    ).toBe("unknown");
+    expect(classifyMainAdvance({}).state).toBe("unknown");
+    expect(classifyMainAdvance().state).toBe("unknown");
+    // A usable main list with an unusable PR list is not disjoint by default.
+    expect(
+      classifyMainAdvance({ mainFiles: ["apps/promo/app/page.tsx"] }).state,
+    ).toBe("unknown");
+  });
+
+  it("EARS-2124.6: every ALWAYS_OVERLAPPING_PATHS entry carries a kind, value and one-line reason", () => {
+    expect(ALWAYS_OVERLAPPING_PATHS.length).toBeGreaterThan(0);
+    for (const entry of ALWAYS_OVERLAPPING_PATHS) {
+      expect([
+        "exact",
+        "dir",
+        "basename",
+        "root-regex",
+        "basename-regex",
+      ]).toContain(entry.kind);
+      expect(entry.value.length).toBeGreaterThan(0);
+      expect(entry.reason.trim().length).toBeGreaterThan(0);
+      expect(entry.reason).not.toMatch(/\n/);
+      if (entry.kind === "dir") expect(entry.value.endsWith("/")).toBe(true);
+    }
   });
 });

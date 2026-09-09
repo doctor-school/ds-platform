@@ -57,7 +57,7 @@ It also includes a **UI-quality-fix round** (spacing / state / hover / reflow de
 
 ## Design-approval gate (user-facing surfaces)
 
-**Stage A — before any UI code.** After research and before step 7, read [design-approval.md](design-approval.md) in full and obtain or verify the owner's exact recorded design choice. Existing upstream approval applies to its scope; new layout, look or changed behavior still needs the owner decision. Neither a tooling label nor passing tests grants it.
+**Stage A — before any UI code.** After research and before step 7, read [design-approval.md](design-approval.md) in full and obtain or verify the owner's exact recorded design choice. Existing upstream approval applies to its scope; new layout, look or changed behavior still needs the owner decision. Neither a tooling label nor passing tests grants it. For a capability both storefronts render (registry `capability-ownership.md`), the Stage-A artifact is the ONE canon canvas with the `host` prop showing each host's variant; a canvas approved for one host never approves the other, and a missing host variant is an owner drawing request (`design-source/README.md` canon rules), not a lead decision in code.
 
 **Stage B — after live verification, before merge.** Follow that same reference's complete stand, handoff and recorded-evidence checklist. Keep the owner stand alive until the verdict. Missing approval blocks merge; only the two precisely recorded behavioral-only/batched carve-outs apply. Canvas parity and Mode-a do not substitute for the owner's live decision.
 

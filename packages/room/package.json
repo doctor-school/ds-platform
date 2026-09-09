@@ -21,7 +21,7 @@
     "@ds/schemas": "workspace:*",
     "@hookform/resolvers": "^5.9.1",
     "centrifuge": "^5.7.3",
-    "zod": "^4.5.4"
+    "zod": "4.4.3"
   },
   "peerDependencies": {
     "react": "^19.0.0",

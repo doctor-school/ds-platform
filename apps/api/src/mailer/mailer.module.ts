@@ -35,9 +35,8 @@ export const DEFAULT_PORTAL_BASE_URL = "http://localhost:3001";
  * `register-notice:<HMAC>` key is non-reversible (#141); under VITEST a fixed
  * test pepper keeps the suite runnable without provisioning a secret. Unlike the
  * audit ledger this does NOT fail closed when unset in a non-test runtime: an
- * absent pepper only means the throttle key is keyed by the empty-string pepper —
- * the notice path is itself infra-gated (no SMTP host ⇒ logged no-op), so a
- * misconfigured runtime degrades gracefully rather than refusing to boot.
+ * absent pepper only means the throttle key uses an empty-string pepper.
+ * SMTP configuration is validated separately when the selected transport sends.
  */
 function resolvePepper(): string {
   const pepper = loadEnv().AUDIT_IDENTIFIER_PEPPER;
@@ -46,23 +45,14 @@ function resolvePepper(): string {
   return "";
 }
 
-/**
- * Resolve the REAL transport config from `IDP_SMTP_REAL_*` (#209), reusing the
- * IdP's real-SMTP creds class. `IDP_SMTP_REAL_HOST` carries `host:port`; a bare
- * host falls back to `IDP_SMTP_REAL_PORT` (mirrors provision.sh). Returns
- * `undefined` when the host is unset — a flag-ON send then fails soft to the
- * Mailpit intercept + warns (never throws).
- */
+/** Preserve raw shared config; SmtpMailer validates it when real mode is selected. */
 function resolveRealTransport(env: ApiEnv): SmtpTransportConfig | undefined {
   const raw = env.IDP_SMTP_REAL_HOST;
-  if (!raw) return undefined;
-  const [host, portFromHost] = raw.split(":", 2);
-  const port = portFromHost
-    ? Number.parseInt(portFromHost, 10)
-    : env.IDP_SMTP_REAL_PORT;
+
   return {
-    host,
-    port: port && Number.isFinite(port) ? port : undefined,
+    provider: env.IDP_SMTP_REAL_PROVIDER,
+    host: raw,
+    port: env.IDP_SMTP_REAL_PORT,
     user: env.IDP_SMTP_REAL_USER,
     password: env.IDP_SMTP_REAL_PASSWORD,
     from: env.IDP_SMTP_REAL_SENDER_ADDRESS,
@@ -74,8 +64,8 @@ function resolveRealTransport(env: ApiEnv): SmtpTransportConfig | undefined {
  * Zitadel's identity-credential emails. Provides:
  *
  * - {@link MAILER} → {@link SmtpMailer} over nodemailer, config-gated by
- *   `MAILER_SMTP_*`; a logged no-op when unconfigured (infra-gated, like the
- *   IdP / Redis fakes). The unit specs wire {@link FakeMailer} directly.
+ *   `MAILER_SMTP_*` in intercept mode; missing selected config fails closed.
+ *   The unit specs wire {@link FakeMailer} directly.
  * - {@link REGISTER_NOTICE_THROTTLE} → the Redis-backed per-address throttle when
  *   `REDIS_URL` is set (the production binding), else the in-memory fake — the
  *   single place the throttle backend is chosen, mirroring `SessionModule`.
@@ -121,17 +111,16 @@ function resolveRealTransport(env: ApiEnv): SmtpTransportConfig | undefined {
             from: env.MAILER_SMTP_FROM,
           },
           real: resolveRealTransport(env),
-          // Resend failover channel (003 design §14.3, EARS-31): configured ⇔
-          // RESEND_API_KEY is set; sits strictly BEHIND the mail.ru primary in
-          // the per-send chain. From reuses the DKIM-aligned sender address.
-          resend: env.RESEND_API_KEY
+          // Explicit activation only; credentials alone remain inert.
+          resend: env.RESEND_ENABLED
             ? {
-                apiKey: env.RESEND_API_KEY,
+                enabled: true,
+                apiKey: env.RESEND_API_KEY ?? "",
                 from: env.IDP_SMTP_REAL_SENDER_ADDRESS,
               }
             : undefined,
           // Live read on every send: Unleash overrides when reachable; the
-          // EMAIL_DELIVERY_MODE env default ("real") is the boot default AND the
+          // EMAIL_DELIVERY_MODE env default is the boot default AND the
           // Unleash-unreachable fallback (same contract as DeliveryReconcileService).
           isEnabled: () =>
             flags.isEnabled(

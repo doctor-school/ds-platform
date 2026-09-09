@@ -27,13 +27,13 @@ export interface FailoverEvent {
 export interface RelayFailureEvent {
   context: string;
   attempts: RelayAttempt[];
+  outcome?: "configuration" | "uncertain" | "failure";
 }
 
 /**
  * Prometheus counter for every mailer failover / relay failure (003 EARS-32,
  * #1046): `bff_mailer_relay_events_total{event, provider, code}`. Label values
- * are bounded (two event kinds; three providers; SMTP/HTTP codes + errno
- * strings). Registered in the prom-client DEFAULT registry — the exposition
+ * distinguish accepted primary/fallback, uncertain, configuration and failure. Registered in the prom-client DEFAULT registry — the exposition
  * endpoint lands with the engineering-readiness Prometheus slice (DEBT.md).
  */
 export const MAILER_RELAY_EVENTS_METRIC = "bff_mailer_relay_events_total";
@@ -63,7 +63,14 @@ function relayCounter(): Counter<RelayLabel> {
  * EARS-30 contract for callers: every `detail` field handed in is ALREADY
  * redacted (the one-time code never reaches a sink through this port).
  */
+export interface AcceptanceEvent {
+  context: string;
+  provider: string;
+  route: "primary" | "fallback" | "intercept";
+}
+
 export interface RelayObservability {
+  accepted?(event: AcceptanceEvent): void;
   /** The active channel rejected the send and the chain switched (EARS-31). */
   failover(event: FailoverEvent): void;
   /** Every channel failed — the send failed closed with all provider codes. */
@@ -87,13 +94,13 @@ export interface RelayObservabilitySinks {
  * 1. a STRUCTURED log line (JSON: event, mail-class context, provider,
  *    provider response code — never a recipient, never a code payload);
  * 2. a Prometheus counter increment labelled `{event, provider, code}` — the
- *    dashboards distinguish "healthy" / "mail.ru saturated, Resend carrying" /
+ *    dashboards distinguish "healthy" / "primary rejected, fallback attempted" /
  *    "channel dead" from these series;
  * 3. a GlitchTip event (`Sentry.captureMessage`; PII-stripped by the
  *    `initSentry` config, a no-op when the DSN is unset — dev-stand / CI).
  *
  * Degraded-channel state is thereby visible, never silent: a failover logs at
- * WARN (the send still delivered), a relay failure at ERROR (fail-closed).
+ * WARN (fallback attempt begins), a relay failure at ERROR (fail-closed).
  */
 export class DefaultRelayObservability implements RelayObservability {
   private static readonly logger = new Logger("MailerRelay");
@@ -113,6 +120,22 @@ export class DefaultRelayObservability implements RelayObservability {
       });
   }
 
+  accepted(event: AcceptanceEvent): void {
+    this.warn(
+      JSON.stringify({
+        event: "mailer_accepted",
+        context: event.context,
+        provider: event.provider,
+        route: event.route,
+      }),
+    );
+    relayCounter().inc({
+      event: `${event.route}_accepted`,
+      provider: event.provider,
+      code: "accepted",
+    });
+  }
+
   failover(event: FailoverEvent): void {
     this.warn(
       JSON.stringify({
@@ -121,7 +144,6 @@ export class DefaultRelayObservability implements RelayObservability {
         provider: event.from,
         code: event.code,
         failover_to: event.to,
-        ...(event.detail ? { detail: truncate(event.detail) } : {}),
       }),
     );
     relayCounter().inc({
@@ -139,17 +161,22 @@ export class DefaultRelayObservability implements RelayObservability {
     this.error(
       JSON.stringify({
         event: "mailer_relay_failure",
+        outcome: event.outcome ?? "failure",
         context: event.context,
         attempts: event.attempts.map((a: RelayAttempt) => ({
           provider: a.provider,
           code: a.code,
-          ...(a.detail ? { detail: truncate(a.detail) } : {}),
         })),
       }),
     );
     for (const attempt of event.attempts) {
       relayCounter().inc({
-        event: "relay_failure",
+        event:
+          event.outcome === "uncertain"
+            ? "uncertain"
+            : event.outcome === "configuration"
+              ? "configuration"
+              : "relay_failure",
         provider: attempt.provider,
         code: attempt.code,
       });
@@ -161,9 +188,4 @@ export class DefaultRelayObservability implements RelayObservability {
       "error",
     );
   }
-}
-
-/** Keep log lines bounded — provider rejections can quote whole payloads. */
-function truncate(detail: string): string {
-  return detail.length > 300 ? `${detail.slice(0, 300)}…` : detail;
 }

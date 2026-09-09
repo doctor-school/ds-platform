@@ -98,13 +98,16 @@ function makeMailer(opts: MailerFixtureOptions): {
   realCalls: Array<Record<string, string>>;
   interceptCalls: Array<Record<string, string>>;
 } {
-  const real = scriptedSmtp(opts.real ?? (async () => ({ response: "250 OK" })));
+  const real = scriptedSmtp(
+    opts.real ?? (async () => ({ response: "250 OK" })),
+  );
   const intercept = scriptedSmtp(
     opts.intercept ?? (async () => ({ response: "250 OK" })),
   );
   const config: SmtpMailerConfig = {
     intercept: { host: "mailpit.local", port: 1025, from: "dev@doctor.school" },
     real: {
+      provider: "mail.ru",
       host: "smtp.mail.ru",
       port: 465,
       user: "noreply@doctor.school",
@@ -115,6 +118,7 @@ function makeMailer(opts: MailerFixtureOptions): {
       opts.resendApiKey === undefined
         ? undefined
         : {
+            enabled: true,
             apiKey: opts.resendApiKey,
             from: "noreply@doctor.school",
             fetchFn: opts.resendFetch,
@@ -160,7 +164,7 @@ describe("003 EARS-31 SmtpMailer failover chain (design §14.3)", () => {
     expect(obs.failures).toHaveLength(0);
   });
 
-  it("EARS-31.2: when the active channel fails with a connection failure, the system shall switch to the other channel within the same send", async () => {
+  it("EARS-31.2: when the active channel fails with a connection failure, the system shall terminate with uncertain acceptance", async () => {
     const resend = scriptedResend(200);
     const obs = recordingObservability();
     const { mailer, realCalls } = makeMailer({
@@ -172,18 +176,17 @@ describe("003 EARS-31 SmtpMailer failover chain (design §14.3)", () => {
       observability: obs.sink,
     });
 
-    await mailer.sendPasswordResetCodeEmail("doctor@example.com", "XYZ789");
+    await expect(
+      mailer.sendPasswordResetCodeEmail("doctor@example.com", "XYZ789"),
+    ).rejects.toThrow(/ECONNREFUSED/);
 
     expect(realCalls).toHaveLength(1);
-    expect(resend.calls).toHaveLength(1);
-    expect(obs.failovers[0]).toMatchObject({
-      from: "mail.ru",
-      code: "ECONNREFUSED",
-      to: "resend",
-    });
+    expect(resend.calls).toHaveLength(0);
+    expect(obs.failovers).toHaveLength(0);
+    expect(obs.failures[0]?.outcome).toBe("uncertain");
   });
 
-  it("EARS-31.3: the system shall count a send as delivered only on a 2xx provider acceptance — a resolved non-2xx SMTP response still fails over", async () => {
+  it("EARS-31.3: the system shall count a send as accepted only on a 2xx provider acceptance — a resolved non-2xx SMTP response still fails over", async () => {
     const resend = scriptedResend(200);
     const obs = recordingObservability();
     const { mailer, realCalls } = makeMailer({
@@ -230,7 +233,7 @@ describe("003 EARS-31 SmtpMailer failover chain (design §14.3)", () => {
     ]);
   });
 
-  it("EARS-31.5: when Resend is the only configured real channel, a Resend 429 shall fail closed (no same-channel retry, no silent success)", async () => {
+  it("EARS-31.5: when only Resend is configured, shall reject configuration without promoting fallback", async () => {
     const resend = scriptedResend(429, '{"message":"rate limited"}');
     const obs = recordingObservability();
     const { mailer } = makeMailer({
@@ -243,6 +246,7 @@ describe("003 EARS-31 SmtpMailer failover chain (design §14.3)", () => {
     const single = new SmtpMailer({
       intercept: { host: undefined },
       resend: {
+        enabled: true,
         apiKey: "re_test_key",
         from: "noreply@doctor.school",
         fetchFn: resend.fetchFn,
@@ -255,13 +259,13 @@ describe("003 EARS-31 SmtpMailer failover chain (design §14.3)", () => {
 
     await expect(
       single.sendVerificationCodeEmail("doctor@example.com", "ABC123"),
-    ).rejects.toThrow(/resend=429/);
-    expect(resend.calls).toHaveLength(1);
+    ).rejects.toThrow(/configuration/);
+    expect(resend.calls).toHaveLength(0);
     expect(obs.failures).toHaveLength(1);
     expect(mailer).toBeDefined();
   });
 
-  it("EARS-31.6: a mail.ru 2xx acceptance shall deliver on the primary — Resend is never contacted and no failover is recorded", async () => {
+  it("EARS-31.6: a mail.ru 2xx acceptance shall accept on the primary — Resend is never contacted and no failover is recorded", async () => {
     const resend = scriptedResend(200);
     const obs = recordingObservability();
     const { mailer, realCalls } = makeMailer({
@@ -359,9 +363,9 @@ describe("003 EARS-31 SmtpMailer failover chain (design §14.3)", () => {
     expect(resend.calls).toHaveLength(1);
     const { url, init } = resend.calls[0]!;
     expect(url).toBe("https://api.resend.com/emails");
-    expect(
-      (init.headers as Record<string, string>)["Authorization"],
-    ).toBe("Bearer re_test_key");
+    expect((init.headers as Record<string, string>)["Authorization"]).toBe(
+      "Bearer re_test_key",
+    );
     const payload = JSON.parse(String(init.body)) as Record<string, unknown>;
     expect(payload.to).toEqual(["doctor@example.com"]);
     expect(payload.from).toBe("noreply@doctor.school");
@@ -387,7 +391,9 @@ describe("003 EARS-32 relay observability (design §14.3)", () => {
       to: "resend",
     });
 
-    const structured = logs.map((l) => JSON.parse(l) as Record<string, unknown>);
+    const structured = logs.map(
+      (l) => JSON.parse(l) as Record<string, unknown>,
+    );
     expect(structured[0]).toMatchObject({
       event: "mailer_failover",
       provider: "mail.ru",
@@ -430,7 +436,9 @@ describe("003 EARS-32 relay observability (design §14.3)", () => {
       ],
     });
 
-    const structured = logs.map((l) => JSON.parse(l) as Record<string, unknown>);
+    const structured = logs.map(
+      (l) => JSON.parse(l) as Record<string, unknown>,
+    );
     expect(structured[0]).toMatchObject({ event: "mailer_relay_failure" });
     expect(JSON.stringify(structured[0])).toContain("451");
     expect(JSON.stringify(structured[0])).toContain("429");

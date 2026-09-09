@@ -133,12 +133,13 @@ Two standing rules come with the shared instance (spec §3 «Identity»):
 
 No CI agent runs on this box. The repository is **public**, so no job of it may ever
 execute here; images are built and the regression suite runs on GitHub-hosted runners
-(spec §5). What converges slots is a pull-based deployer — `ds-slot-deployer.service`
-
-- `.timer`, delivered together with `tools/staging/slot.mjs` by **step 4 (#2064)** and
-  installed then, not by `cloud-init` and not here. Every 60 s it reads the open
-  non-draft PRs and the `main` head from GitHub, checks the GHCR tags exist, and brings
-  slots up, in sync or down.
+(spec §5). What converges slots is a pull-based deployer: the systemd unit pair
+`ds-slot-deployer.service` and `ds-slot-deployer.timer`, delivered together with
+`tools/staging/slot.mjs` by **step 4 (#2064)** and installed then — not by `cloud-init`
+and not here. That same step also installs the box's only host runtime, a pinned Node
+LTS from the official `nodejs.org` tarball under `/opt/node` (no `pnpm`, no workspace
+checkout on the host). Every 60 s the timer reads the open non-draft PRs and the `main`
+head from GitHub, checks the GHCR tags exist, and brings slots up, in sync or down.
 
 The one thing to provision now, so the owner writes `stage.env` once:
 `STAGE_GH_READ_TOKEN` — a fine-grained **read-only** token («Pull requests: read»,

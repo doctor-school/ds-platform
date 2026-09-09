@@ -53,11 +53,13 @@ write_files:
     content: ""
     permissions: "0700"
 
-  # Standing build-cache GC — the same policy as api-prod (#1419). The box no longer
-  # builds images (they are pulled from GHCR, spec §5), but it pulls, runs and
-  # discards four images per slot, so the daemon still needs a standing cap.
-  # Written BEFORE the get.docker.com install in runcmd so dockerd reads it on its
-  # very first start. Nightly `slot gc` (spec §9) is the belt to these braces.
+  # Byte-identical to api-prod's daemon.json (#1419) — kept for parity so both boxes
+  # validate the same daemon config. Its `builder.gc` cap bounds the BuildKit build
+  # cache ONLY, and this box never builds (images are pulled from GHCR, spec §5), so
+  # it is inert here: pulled images are bounded instead by `slot down` (removes the
+  # slot's SHA-tagged images) and by the nightly `slot gc` image prune with the
+  # reserved-space policy of prod.mjs (spec §9, #2064 scope). Written BEFORE the
+  # get.docker.com install in runcmd so dockerd reads it on its very first start.
   - path: /etc/docker/daemon.json
     content: |
       {

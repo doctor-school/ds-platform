@@ -11,6 +11,7 @@ import { preparePostgresDeployment } from "./prod.mjs";
 import {
   artifactBuildPlan,
   certifyImage,
+  assertArtifactPair,
 } from "./postgres-artifact-prepare.mjs";
 
 const root = new URL("../../infra/deploy/compose/data-prod/", import.meta.url);
@@ -120,10 +121,26 @@ test("EARS-7: preparation certifies real inspected binary, provenance and UID", 
     inspected,
     versionOutput: "postgres (PostgreSQL) 17.11 (Debian)",
     uidOutput: "999\n",
+    gidOutput: "999\n",
+    pgbackrestVersionOutput: "pgBackRest 2.55.1",
     plan,
     sourceHash: f.sourceHash,
   };
   assert.equal(certifyImage(data).major, 17);
+  const image = certifyImage(data);
+  assertArtifactPair({ postgres: image, pgbackrest: image });
+  assert.throws(() =>
+    assertArtifactPair({
+      postgres: image,
+      pgbackrest: { ...image, pgbackrestVersion: "pgBackRest 2.54.2" },
+    }),
+  );
+  assert.throws(() =>
+    assertArtifactPair({
+      postgres: image,
+      pgbackrest: { ...image, gid: 1000 },
+    }),
+  );
   assert.throws(() =>
     certifyImage({ ...data, versionOutput: "postgres (PostgreSQL) 18.1" }),
   );
@@ -259,6 +276,9 @@ test("EARS-5: accepts generated same-major artifacts bound to exact source and i
     f.certificate.images[role] = {
       ...f.live.targetImages[role],
       version: "PostgreSQL 17.11",
+      uid: 999,
+      gid: 999,
+      pgbackrestVersion: "pgBackRest 2.55.1",
     };
   }
   assertPostgresEvidence(f);
@@ -274,6 +294,9 @@ test("EARS-5: accepts generated same-major artifacts bound to exact source and i
     },
     (x) => {
       x.certificate.images.postgres.version = "PostgreSQL 18.1";
+    },
+    (x) => {
+      x.certificate.images.postgres.gid = 1000;
     },
   ]) {
     const invalid = globalThis.structuredClone(f);

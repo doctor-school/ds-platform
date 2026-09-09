@@ -27,6 +27,8 @@ export function certifyImage({
   inspected,
   versionOutput,
   uidOutput,
+  gidOutput,
+  pgbackrestVersionOutput,
   plan,
   sourceHash,
 }) {
@@ -41,7 +43,9 @@ export function certifyImage({
     env.PGDATA !== plan.pgdata ||
     inspected.Config.Labels?.[SOURCE_LABEL] !== sourceHash ||
     !/^sha256:[a-f0-9]{64}$/.test(inspected.Id) ||
-    !/^\d+$/.test(uidOutput.trim())
+    !/^\d+$/.test(uidOutput.trim()) ||
+    !/^\d+$/.test(gidOutput.trim()) ||
+    !/^pgBackRest \d+\.\d+(?:\.\d+)?$/.test(pgbackrestVersionOutput.trim())
   )
     throw new Error(
       "Built artifact did not satisfy major, PGDATA, UID or source provenance",
@@ -52,7 +56,19 @@ export function certifyImage({
     pgdata: env.PGDATA,
     version: `PostgreSQL ${version[1]}`,
     uid: Number(uidOutput.trim()),
+    gid: Number(gidOutput.trim()),
+    pgbackrestVersion: pgbackrestVersionOutput.trim(),
   };
+}
+
+export function assertArtifactPair(images) {
+  for (const key of ["major", "pgdata", "uid", "gid", "pgbackrestVersion"]) {
+    if (
+      images.postgres[key] === undefined ||
+      images.postgres[key] !== images.pgbackrest[key]
+    )
+      throw new Error(`Server/sidecar ${key} mismatch`);
+  }
 }
 
 async function main() {
@@ -135,16 +151,23 @@ async function main() {
     const uidOutput = remote(
       `${prefix} --entrypoint id ${plan.tag} -u postgres`,
     );
+    const gidOutput = remote(
+      `${prefix} --entrypoint id ${plan.tag} -g postgres`,
+    );
+    const pgbackrestVersionOutput = remote(
+      `${prefix} --entrypoint pgbackrest ${plan.tag} version`,
+    );
     certificate.images[plan.role] = certifyImage({
       inspected,
       versionOutput,
       uidOutput,
+      gidOutput,
+      pgbackrestVersionOutput,
       plan,
       sourceHash: target.sourceHash,
     });
   }
-  if (certificate.images.postgres.uid !== certificate.images.pgbackrest.uid)
-    throw new Error("Server/sidecar UID mismatch");
+  assertArtifactPair(certificate.images);
   const output = openSync(option("--export"), "wx");
   try {
     remote(`sudo docker image save ${plans.map((p) => p.tag).join(" ")}`, {

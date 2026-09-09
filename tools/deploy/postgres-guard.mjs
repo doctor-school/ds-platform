@@ -262,6 +262,13 @@ export function assertPostgresEvidence({
       certificate?.schema === 1 && certificate.sourceHash === sourceHash,
       "missing/stale artifact certification; run postgres-artifact-prepare.mjs",
     );
+    for (const key of ["uid", "gid", "pgbackrestVersion"]) {
+      const value = certificate.images?.postgres?.[key];
+      requireFact(
+        value !== undefined && value === certificate.images?.pgbackrest?.[key],
+        "certificate server/sidecar ownership or pgBackRest mismatch",
+      );
+    }
   }
   for (const role of ["postgres", "pgbackrest"]) {
     const image = live.targetImages?.[role];

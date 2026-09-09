@@ -66,7 +66,7 @@ write_files:
         "builder": {
           "gc": {
             "enabled": true,
-            "defaultReservedSpace": "40GB"
+            "defaultReservedSpace": "10GB"
           }
         }
       }

@@ -89,9 +89,9 @@ variable "data_prod_private_ip" {
 # --- STAGE stand (stage-1, #2061 / tech spec 2026-09-08 staging contour §3) ---
 
 variable "stage_1_preset_id" {
-  description = "VPS preset for stage-1. 4807 = ru-3 msk 8 vCPU / 16 GB / 160 GB nvme (4300₽/mo, +180₽ IPv4), node pool msk-kvmnvm, zone msk-1. DECIDED 2026-09-09 (owner confirmed the price after a read-only sweep of all nine Timeweb locations: the 8/16/160 shape is 4300₽ in every RF zone; no 16/32 shape exists at Timeweb; the next step up is dedicated 8/32/120 `6855` at 15040₽ — rejected). The box carries stg-infra (~4 GB) + 4 idle slots (~6 GB) + one in-flight image build (~3 GB) + the Playwright suite (~2 GB) ≈ 15 of 16 GB, which is why the slot script caps previews at 3 and serialises image builds on the box (spec §10). Never below 8 vCPU: the `slot up` < 10 min acceptance does not hold on 4 vCPU next to a running suite. 160 GB is the disk floor (≈5 GB images × 4 slots + buildx cache + ds_golden + per-slot clones + WAL)."
+  description = "VPS preset for stage-1. 4805 = ru-3 msk 8 vCPU / 12 GB / 100 GB NVMe (2900₽/mo, +180₽ IPv4), node pool msk-kvmnvm, zone msk-1 — owner decision 2026-09-09 after the self-hosted runner was dropped. Memory budget: stg-infra ~4 GB + 4 idle slots ~6 GB ≈ 10 of the 12 GB. Nothing else competes for that RAM: no image build runs on the box (the preview workflow builds and pushes to GHCR, the box only pulls) and no Playwright suite runs on it either (GitHub-hosted runners drive the browsers), while the slot script still caps previews at 3 (spec §10). Disk: ≈5 GB of images × 4 slots pulled from GHCR and pruned on `slot down`, plus ds_golden, the per-slot clones and WAL — no buildx cache is kept here. 8 vCPU keeps `slot up` < 10 min while four slots migrate and seed concurrently."
   type        = number
-  default     = 4807
+  default     = 4805
 }
 
 variable "stage_1_ssh_pubkey_path" {

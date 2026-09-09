@@ -12,7 +12,7 @@ tracker: "GitHub Issue #2133 (design), #2131 (preparation), #2101 (migration)"
 
 ## 1. Scope and authorization
 
-Issue #2101 coordinates PostgreSQL 17 → 18 across production, development, staging, extensions and backups. This is a proposed migration design, not evidence of implementation or a production approval. The owner's “Приступай к 2101” authorizes preparation. Production write freeze, cluster replacement and any transfer of production data require the applicable explicit authorization after the evidence package is complete.
+Issue #2101 coordinates PostgreSQL 17 → 18 across production, development, staging, extensions and backups. This is a proposed migration design, not evidence of implementation or a production approval. The owner's “Приступай к 2101” authorizes preparation. Production write freeze and cluster replacement require explicit cutover authorization after the evidence package is complete. Non-destructive representative rehearsal inside the existing approved RF environment is within this task; new data egress or infrastructure blast radius requires separate authorization.
 
 ADR-0003 remains the accepted running PostgreSQL 17 decision until the reviewed migration records its production transition. Preserve its full-cluster durability, retained-row policy, private-network boundary and v1 RTO ≤2 hours / RPO ≤15 minutes. For this planned cutover, the stricter acceptance criterion is **zero lost acknowledged writes**. A historical restore duration in the deploy README is not a measurement for this upgrade.
 
@@ -46,7 +46,7 @@ Restore into a freshly initialized PG18 cluster with explicitly recorded locale/
 
 ## 4. Rehearsal and evidence
 
-Use a separately named project, private network, volumes, sockets and backup prefix. Never use the shared dev database, production volume, production archive push credentials or production endpoints for rehearsal. Production data stays within approved RF infrastructure; use a synthetic representative fixture for initial automation. A representative protected production restore needs separately authorized access and stays in the approved environment. No dump is downloaded to a workstation or attached to GitHub.
+Use a separately named project, private network, volumes, sockets and backup prefix. Never use the shared dev database, production volume, production archive push credentials or production endpoints for rehearsal. Production data stays within approved RF infrastructure; use a synthetic representative fixture for initial automation. A representative protected production restore uses task-authorized access within the existing approved environment; it does not imply permission for new data egress or infrastructure changes. No dump is downloaded to a workstation or attached to GitHub.
 
 1. Inventory real sizes and growth using read-only evidence. Seed initial fixtures with application and Zitadel databases, roles/memberships/grants, ownership/default privileges, sequences, large objects if present, vector indexes, partition configuration and retained/tombstoned rows.
 2. Exercise PG17 full + incremental backup and WAL recovery. Restore to a target between two deterministic committed markers: earlier marker present, later marker absent. Include writes in both application and IdP databases. Prove archive continuity and record cluster system identifier, backup labels, target time/LSN and recovered timeline without credentials or personal rows.
@@ -76,9 +76,9 @@ Mount the parent volume consistently in server and sidecar (sidecar data mount r
 
 ## 7. No-data-loss rollback
 
-**Phase A — no PG18 writes, including internal/IdP writes:** stop candidate, restore the complete old configuration/endpoint mapping and resume the untouched PG17 cluster. Prove the source was not modified by migration and matches the final committed boundary. Do not restore an earlier backup and discard acknowledged source transactions.
+**Phase A — no new application/IdP/GlitchTip business writes on PG18:** stop candidate, restore the complete old configuration/endpoint mapping and resume the untouched PG17 cluster. Prove the source was not modified by migration and matches the final committed boundary. Do not restore an earlier backup and discard acknowledged source transactions.
 
-**Phase B — any PG18 writes:** the old PG17 volume is stale. Restarting it or restoring a pre-cutover backup would lose data and is forbidden. Freeze every writer again; preserve the complete PG18 cluster and its final WAL/backup. The preferred recovery is repair forward on PG18 or an application-only rollback compatible with PG18.
+**Phase B — any new application/IdP/GlitchTip business writes on PG18:** the old PG17 volume is stale. Restarting it or restoring a pre-cutover backup would lose data and is forbidden. Freeze every writer again; preserve the complete PG18 cluster and its final WAL/backup. Migration restore/catalog reconstruction is not a new business write; autonomous service writes and controlled validation writes are, and must be captured consistently. The preferred recovery is repair forward on PG18 or an application-only rollback compatible with PG18.
 
 If a return to PG17 is required, use only a **previously rehearsed full logical reverse restore** from the frozen PG18 state into a fresh PG17 target, including roles, all databases and post-cutover sequence/IdP state. PostgreSQL does not guarantee newer-version dump output loads into an older server: this path is conditional on exact-version testing and retained PG17-compatible schema/extension features. Compare complete integrity summaries and acknowledged post-cutover markers before reconnecting either application or IdP. No manual SQL deletion of incompatible objects, skipped restore errors, partial database rollback or lossy downgrade is permitted. If reverse rehearsal fails, PG17 downgrade is unavailable: the approval package must name the proven PG18 recovery path and measured time; otherwise cutover remains blocked.
 
@@ -92,7 +92,7 @@ Integrate with PR #2128's staging deployment/configuration changes by reviewing 
 
 ## 9. Open measured prerequisites and completion
 
-Still required: live sanitized baseline; tested immutable artifact manifest; extension upgrade matrix; approved representative restore environment/data access; exact executable migration and freeze inventory; measured capacity/downtime; two-phase recovery evidence; owner cutover approval. This document does not claim any is complete.
+Initial live sanitized baseline is recorded in §2. Still required: a refreshed cutover inventory; tested immutable artifact manifest; extension upgrade matrix; verified task-scoped representative restore environment/data access; exact executable migration and freeze inventory; measured capacity/downtime; two-phase recovery evidence; owner cutover approval. This document does not claim any is complete.
 
 Close #2101 only after development/staging and production reach the verified target, backup/PITR and app/IdP checks pass, rollback evidence/retention is recorded and ADR-0003 plus operational runbooks reflect the running version. Stage 1 delivers design only; implementation and production remain separate evidence gates.
 

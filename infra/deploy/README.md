@@ -510,17 +510,20 @@ image build.
 
 3. **SmartCaptcha production invariant (#186).** Use the dedicated Yandex Cloud
    resource `ds-platform-prod`; never reuse the localhost-only dev keypair.
-   Keep domain validation **ON**. The allowed-domains list on the keypair is
-   `academy.doctor.school` alone — a second allowed domain needs a paid Yandex
-   tariff, so `new.doctor.school` (the doctor storefront, #1723) is NOT on it.
-   **Risk, unverified:** a real doctor-host registration served from
-   `new.doctor.school` may be rejected by the widget on domain validation; that
-   flow has not been driven on prod. Adding the `new.` entry is an owner-gated
-   console step of the doctor roll-out (its step 2 below) and stays pending until
-   the lead runs it. The legacy `app.doctor.school` entry is removed from the
-   resource as an owner-gated console step of the #1173 retirement (cutover
-   step 2 below), which is likewise pending until the lead runs it. Creating or
-   replacing the provider resource is **[OWNER-GATED]**;
+   Keep domain validation **ON**. On 2026-09-09 the owner's Yandex Cloud
+   console screenshot confirmed `academy.doctor.school` and `new.doctor.school`
+   in the `ds-platform-prod` allowed-host list, with domain validation enabled;
+   `app.doctor.school` was absent. Evidence and verification follow-up:
+   [#2117](https://github.com/doctor-school/ds-platform/issues/2117), following
+   the September 8 decision to retain bot protection in
+   [#1959](https://github.com/doctor-school/ds-platform/issues/1959).
+   This confirms the console configuration; it does not by itself prove token
+   issuance or successful protected registration/resend on either host. Record
+   those live results separately on the linked task.
+
+   A domain-list-only update needs **no rebuild or deploy when the existing
+   site/server keys are unchanged**. Creating or replacing the provider resource
+   is **[OWNER-GATED]**;
    capture its **site key** (public, build-time) and **server key** (secret), but
    never print or copy the server key into a repo file, command transcript, or
    issue/PR.
@@ -753,8 +756,10 @@ The portal's public host is `academy.doctor.school`. The cutover ran on
 2026-08-03; retiring the legacy host entirely was approved on 2026-08-15 (#1173)
 and lands in two halves. The repo half is merged — the Caddy vhost, the
 Centrifugo origin, the legacy Zitadel post-logout URI and the smoke probe are
-gone from this tree. The live half is manual, owner-gated, and may still be
-pending: delete the Beget `app` A-record → verify it no longer resolves → remove
+gone from this tree. The captcha list no longer includes `app.doctor.school`
+(owner screenshot, 2026-09-09, #2117); the other live retirement steps are not
+reverified by that evidence. The original manual, owner-gated sequence is:
+delete the Beget `app` A-record → verify it no longer resolves → remove
 `app.doctor.school` from the `ds-platform-prod` SmartCaptcha allowed-domains →
 re-run the Zitadel `PUT` with the reduced URI set → the Caddy/Centrifugo edits
 apply at the next `deploy:prod`. Full statement of both halves: the retirement
@@ -815,10 +820,10 @@ Order — steps run in sequence; **do not reorder 4 and 5** (the reason is in 5)
 2. **[OWNER-GATED] SmartCaptcha allowed domains.** Bot protection is **live on
    prod** (#186, completed 2026-08-06). This repo **mandates** domain validation
    **ON** for the `ds-platform-prod` resource — that is the wave-1 invariant
-   recorded in the SmartCaptcha production invariant above, not a property anyone
-   read back from the Yandex Cloud console (nothing in this repo can observe it;
-   treat it as required-and-unverified and act accordingly). Under that
-   requirement the allowed-domains list is load-bearing: a portal host missing
+   recorded in the SmartCaptcha production invariant above. The owner's console
+   screenshot confirmed it on 2026-09-09 (#2117); this is console evidence, not
+   a successful protected-auth check. The allowed-domains list is load-bearing:
+   a portal host missing
    from it fails every protected auth action — registration included — for every
    user at once. In the Yandex Cloud console, **add the new
    host before the deploy that adds its vhost**, and remove a host only once it is
@@ -962,8 +967,9 @@ failure), not a redirect.
 > delete the Beget `app` A-record → verify it no longer resolves → remove
 > `app.doctor.school` from the `ds-platform-prod` SmartCaptcha allowed-domains →
 > re-run the Zitadel `PUT` with the reduced URI set → the Caddy/Centrifugo edits
-> apply at the next `deploy:prod`. Until all five are green, provider state still
-> carries the legacy host. Delete this marker once they are.
+> apply at the next `deploy:prod`. The owner's 2026-09-09 screenshot (#2117)
+> confirms the captcha-list removal only; it does not reverify DNS, Zitadel or
+> the deployed proxy configuration. Delete this marker once all are verified.
 
 Retiring a portal host in future follows the same shape: repo config first, then
 DNS, then the captcha domain list, then the Zitadel `PUT`, then the deploy — and
@@ -1032,8 +1038,12 @@ Order:
 
 2. **[OWNER-GATED] Yandex Cloud SmartCaptcha — allowed domains.** Add
    `new.doctor.school` to the `ds-platform-prod` SmartCaptcha resource's
-   allowed-domains list (console only; nothing in this repo can observe it —
-   treat it as required-and-unverified). The doctor image bakes the same PUBLIC
+   allowed-domains list. **Completed by the owner, confirmed by the 2026-09-09
+   console screenshot (#2117):** both `academy.doctor.school` and
+   `new.doctor.school` are listed and domain validation is ON. No rebuild or
+   deploy is needed for this domain-only change when the keys are unchanged.
+   Successful live registration/resend remains a separate verification result.
+   The doctor image bakes the same PUBLIC
    site key as the portal (`SMARTCAPTCHA_SITE_KEY` in the `.env` beside
    `compose/api-prod/compose.yml`, inlined at build time), so a missing domain
    entry makes the registration widget inert while the page still renders green.

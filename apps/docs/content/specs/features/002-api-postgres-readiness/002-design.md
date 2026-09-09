@@ -94,9 +94,9 @@ packages/db/
   src/
     index.ts                   # re-exports createDrizzle + schema
     client.ts                  # createDrizzle(connectionString) → { pool, db }
-  schema/
-    idempotency-keys.ts        # per ADR-0003 §5
-    index.ts
+    schema/
+      idempotency-keys.ts      # per ADR-0003 §5
+      index.ts
 
 packages/schemas/
   src/

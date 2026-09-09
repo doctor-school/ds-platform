@@ -24,6 +24,7 @@
     "build": "tsc -b",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "seed:golden": "tsx src/seed/golden/run.ts",
     "clean": "rm -rf dist .tsbuildinfo"
   },
   "dependencies": {

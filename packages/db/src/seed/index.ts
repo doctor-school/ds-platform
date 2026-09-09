@@ -13,3 +13,4 @@ export {
   specialtyCodeFromName,
   specialtyIdentityName,
 } from "./specialty-code.js";
+export * from "./golden/index.js";

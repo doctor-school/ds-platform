@@ -52,6 +52,10 @@ services:
       dockerfile: Dockerfile
     image: ds-platform/postgres:pg17-partman
     restart: unless-stopped
+    # `env_file:` populates the CONTAINER only. The `${...}` values below are compose
+    # INTERPOLATION, resolved from the invoking shell — so every compose command on
+    # this box runs as `sudo bash -c 'set -a; . /etc/ds-platform/stage.env; set +a;
+    # docker compose ...'` (README → «Bring-up order»), as production does.
     env_file: [/etc/ds-platform/stage.env] # POSTGRES_PASSWORD
     environment:
       POSTGRES_USER: ds
@@ -316,20 +320,26 @@ services:
       - "3000"
     volumes:
       # Root-provisioned path OUTSIDE the repo checkout, so a `git clean` or a slot
-      # sync never wipes it. Placed once by the owner at Phase B (README → Zitadel
-      # converge). Absent ⇒ this container fails its healthcheck loudly rather than
-      # serving a broken login.
+      # sync never wipes it. Placed once by the owner at Phase B (README → bring-up
+      # step 2) as `install -m 400 -o 1001` — this container runs as uid 1001
+      # (`nextjs`), and a root:root 0600 file mounts fine but is UNREADABLE inside
+      # (#866). Absent or unreadable ⇒ the healthcheck below fails closed rather
+      # than serving a broken login.
       - ${IDP_LOGIN_PAT_FILE:-/etc/ds-platform/idp-login-client.pat}:/pat/login-client.pat:ro
     depends_on:
       idp:
         condition: service_healthy
     healthcheck:
+      # accessSync(R_OK) runs as the container user (uid 1001) — an unreadable or
+      # absent PAT flips the service unhealthy at once instead of silently serving
+      # cold-login 500s behind a green /healthy endpoint (#866). Without this probe
+      # the volume comment above would not be true.
       test:
         [
           "CMD",
           "node",
           "-e",
-          "fetch('http://localhost:3000/ui/v2/login/healthy').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+          "const fs=require('node:fs');fs.accessSync('/pat/login-client.pat',fs.constants.R_OK);fetch('http://localhost:3000/ui/v2/login/healthy').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
         ]
       interval: 10s
       timeout: 5s

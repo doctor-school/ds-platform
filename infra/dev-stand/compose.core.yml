@@ -155,7 +155,7 @@ services:
   # build (same "plain upstream image" shape as mailpit). Zitadel reaches it on
   # the bridge as `sms-sink:8090`; the test reaches it on the published host port.
   sms-sink:
-    image: node:22-alpine
+    image: node:24-alpine
     restart: unless-stopped
     command: ["node", "/srv/server.mjs"]
     environment:
@@ -193,7 +193,7 @@ services:
   # build (same "plain upstream image" shape as sms-sink). Zitadel reaches it on
   # the bridge as `sms-aero-adapter:8091`.
   sms-aero-adapter:
-    image: node:22-alpine
+    image: node:24-alpine
     restart: unless-stopped
     command: ["node", "/srv/server.mjs"]
     environment:

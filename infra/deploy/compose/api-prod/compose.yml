@@ -77,7 +77,7 @@ services:
       zitadel:
         condition: service_healthy
     healthcheck:
-      # /v1/health is @Public (apps/api/src/health/health.controller.ts). node:22
+      # /v1/health is @Public (apps/api/src/health/health.controller.ts). node:24
       # has global fetch — no curl in the slim image. PORT is read from the env.
       test:
         [
@@ -376,7 +376,7 @@ services:
   # here once provision.sh activates the real provider (SMS_DELIVERY_MODE=real). The
   # SMSAERO_* creds live in api.env (spec §5.4) and are read ONLY from env.
   sms-aero-adapter:
-    image: node:22-alpine
+    image: node:24-alpine
     restart: unless-stopped
     command: ["node", "/srv/server.mjs"]
     env_file: [/etc/ds-platform/api.env] # SMSAERO_EMAIL / SMSAERO_API_KEY / SMSAERO_SIGN

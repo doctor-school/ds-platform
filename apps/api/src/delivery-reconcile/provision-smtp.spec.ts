@@ -78,6 +78,10 @@ describe("native SMTP provision fixtures", () => {
 api() {
   if [[ "$2" == /admin/v1/smtp/_search ]]; then
     echo '{"result":[{"id":"sink","description":"dev-stand mailpit"},{"id":"stable-real","description":"real transactional sender"}]}'
+  elif [[ "$2" == /admin/v1/smtp ]]; then
+    echo '{"smtpConfig":{"id":"stable-real","state":"SMTP_CONFIG_ACTIVE"}}'
+  elif [[ "$1" == GET ]]; then
+    jq -nc --arg id "\${2##*/}" --argjson p "$payload" '{smtpConfig:($p + {id:$id})}'
   else
     echo "unexpected API call" >&2; return 91
   fi

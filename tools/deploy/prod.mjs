@@ -751,10 +751,10 @@ const IDP_POST_LOGOUT_URIS =
 // enforces, which on a `--ref` hotfix is not necessarily the local checkout's.
 const SCHEMAS_AUTH_SCHEMA_PATH = "packages/schemas/src/auth/auth.schema.ts";
 
-// The step's rollback pointer: this runs AFTER `up -d`, so the containers are
-// already swapped when it can fail.
+// Convergence must complete before the strict API is swapped into service.
+// IdP configuration is forward-only, but the previous app remains available.
 const IDP_ROLLBACK_HINT =
-  "the new containers are ALREADY serving (this step runs after `up -d`)";
+  "the previous application containers are still serving (pre-swap IdP gate)";
 
 async function provisionIdp(sha, label = sha.slice(0, 12)) {
   let expectedMin;
@@ -1267,6 +1267,11 @@ sudo ${NO_ATTEST} docker compose build
   // and takes no elapsed argument, so timing it would be a dead assignment.
   await verifyImagesBoot(sha, services);
 
+  step("#2149: PRE-SWAP IdP converge + SMTP and policy read-back");
+  t = Date.now();
+  await provisionIdp(sha);
+  ok("prod IdP converged and read back before app swap", t);
+
   step("api-prod: migrate → up -d");
   t = Date.now();
   await sshScript(
@@ -1289,13 +1294,6 @@ sudo docker compose up -d
   t = Date.now();
   await applyRuntimeConfigs();
   ok("Caddy + Centrifugo run with the shipped configs", t);
-
-  step(
-    "#1997: IdP provision converge (provision.sh, idempotent) + policy read-back",
-  );
-  t = Date.now();
-  await provisionIdp(sha);
-  ok("prod IdP converged and read back", t);
 
   step("Verify the RUNNING containers carry the deployed SHA");
   await verifyRunningSha(sha, services);

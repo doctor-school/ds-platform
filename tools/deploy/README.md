@@ -50,7 +50,7 @@ Pipeline, fail-closed, stops at the first red step and prints a rollback pointer
    `backup.sh` cron runs) **before** `migrate`, so a restore anchor exists at the
    pre-migrate state. Pairs with the **expand/contract** prod migration rule
    (README) so an app rollback never needs a DB rollback.
-5. **api-prod** — `build` → **pre-swap boot verify (#1410)** → `migrate --build`
+5. **api-prod** — `build` → **pre-swap boot verify (#1410)** → **IdP convergence/readback (#2149)** → `migrate --build`
    (the migrate image is rebuilt from the freshly shipped tree — a reused stale
    image would apply old migrations) → `up -d`; images SHA-tagged
    **`ds-api:<sha>` / `ds-portal:<sha>` / `ds-admin:<sha>` / `ds-doctor:<sha>`**
@@ -75,8 +75,8 @@ Pipeline, fail-closed, stops at the first red step and prints a rollback pointer
    step 6. CI's static twin is the `standalone-boot` job
    (`tools/ci/standalone-boot-check.mjs`), which boots the same standalone entry
    on every PR.
-   5b. **IdP provision converge + policy read-back (#1997)** — after the config
-   apply and before the truthful-success verify, the pipeline runs
+   5b. **IdP provision converge + read-back (#1997/#2149)** — before migration
+   and application replacement, while the previous application is serving, the pipeline runs
    `infra/dev-stand/idp/provision.sh` on api-prod with the `infra/deploy/README.md`
    step 9 environment (`api.env` sourced as root inside `sudo bash -c`; the script
    is idempotent read-before-write, so an unchanged script is a no-op that prints
@@ -87,9 +87,12 @@ Pipeline, fail-closed, stops at the first red step and prints a rollback pointer
    `git show <sha>:packages/schemas/src/auth/auth.schema.ts`, never a literal) with
    every character-class flag `false` — and because Zitadel's grpc-gateway/protojson
    surface omits proto3 defaults, an ABSENT flag reads as `false`, the same
-   defaulting `provision.sh` step 8.sexies uses. A failed converge, an unreadable read-back or
-   a mismatch FAILS the deploy with the containers already swapped (the rollback
-   pointer says so). Closes the #1994 class: a converge step that lands in code and
+   defaulting `provision.sh` step 8.sexies uses. The provisioner also compares SMTP
+   public metadata (stable ID, description, host, TLS, sender and username) and
+   reads back the active identity. HTTP success does not prove projection convergence.
+   A failed converge, an unreadable read-back or a mismatch FAILS before the
+   application is swapped. IdP writes are forward-only and may already have taken
+   effect; an app-only rollback does not restore them. Closes the #1994 class: a converge step that lands in code and
    never reaches the instance (18 days of 422 registrations). The pure decision
    table lives in `idp-policy.mjs`; `--rollback` re-runs NO provisioning — converge
    steps are forward-only.

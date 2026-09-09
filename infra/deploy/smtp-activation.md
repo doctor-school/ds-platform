@@ -36,8 +36,14 @@ data-processing decision and valid credentials.
    immediately on an active provider; use the controlled activation window.
 3. Read back the SMTP identity: exactly one stable description, same ID, intended
    host:465/sender/username, TLS enabled and active state. The API never returns the
-   password; do not interpret an omitted secret as proof of equality. Deploy the
-   API through `pnpm deploy:prod` under the release gate and confirm reconciliation.
+   password; do not interpret an omitted secret as proof of equality. The managed
+   `pnpm deploy:prod` pipeline requires provisioner readback before migration or
+   application replacement. Confirm runtime reconciliation after the swap.
+   A successful SMTP update response with unchanged readback is a failed converge:
+   inspect Zitadel failed projection events before any retry. In particular,
+   `projections.smtp_configs6` can reject a persisted change with SQLSTATE 42601
+   (duplicate password assignment, #2149). Do not force a second identity, toggle
+   metadata to manufacture another event, or bypass the API startup guard.
 4. Exercise controlled BFF register/resend/reset and native verified-account login
    OTP. Verify unchanged UTF-8, expiry and link-free BFF artifacts. Observe native
    failures in Zitadel separately: Resend failover and BFF deadlines do not cover it.

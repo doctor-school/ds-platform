@@ -6,6 +6,8 @@ CREATE EXTENSION pg_partman SCHEMA partman;
 CREATE SCHEMA drill AUTHORIZATION fixture_owner;
 SET ROLE fixture_owner;
 CREATE TABLE drill.markers(marker text PRIMARY KEY);
+CREATE TABLE drill.casefold(value citext PRIMARY KEY);
+INSERT INTO drill.casefold VALUES ('Example');
 CREATE TABLE drill.records(id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY, retained boolean NOT NULL, embedding vector(3) NOT NULL);
 INSERT INTO drill.records(retained,embedding) VALUES (true,'[1,0,0]'),(false,'[0,1,0]');
 CREATE INDEX ON drill.records USING hnsw (embedding vector_l2_ops);

@@ -1,4 +1,5 @@
-SELECT extname,extversion FROM pg_extension ORDER BY extname;
+-- Exact versions and citext 1.6 -> 1.8 update path are asserted by the runner.
+SELECT extname FROM pg_extension ORDER BY extname;
 SELECT n.nspname,c.relname,c.relkind,pg_get_userbyid(c.relowner),c.relacl FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='drill' ORDER BY c.relname;
 SELECT defaclrole::regrole,defaclnamespace::regnamespace,defaclobjtype,defaclacl FROM pg_default_acl ORDER BY 1,2,3;
 -- PG18 adds first-class NOT NULL pg_constraint rows. Compare that invariant via
@@ -9,6 +10,7 @@ SELECT id,retained,embedding::text FROM drill.records ORDER BY id;
 SELECT last_value,is_called FROM drill.records_id_seq;
 SELECT marker FROM drill.markers ORDER BY marker;
 SELECT id FROM drill.records ORDER BY embedding <-> '[1,0,0]' LIMIT 1;
+SELECT count(*) FROM drill.casefold WHERE value='example';
 SELECT id,created_at FROM drill.events ORDER BY created_at,id;
 SELECT parent_table,control,partition_interval,retention,retention_keep_table FROM partman.part_config ORDER BY parent_table;
 SELECT loid,pageno,md5(data) FROM pg_largeobject ORDER BY loid,pageno;

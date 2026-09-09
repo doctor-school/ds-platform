@@ -7,7 +7,25 @@ import {
   databasePlan,
   bootstrapRestoreScript,
   stopOwnedSession,
+  validateExtensions,
 } from "./pg18-rehearsal.mjs";
+
+test("EARS-7: exact extension contract allows tested citext transition and rejects unknown drift", () => {
+  const extensions = {
+    citext: "1.6",
+    pg_partman: "5.5.0",
+    pg_trgm: "1.6",
+    plpgsql: "1.0",
+    vector: "0.8.6",
+  };
+  validateExtensions(17, extensions);
+  validateExtensions(18, { ...extensions, citext: "1.8" });
+  assert.throws(() => validateExtensions(18, extensions));
+  assert.throws(() =>
+    validateExtensions(18, { ...extensions, citext: "1.8", vector: "0.9.0" }),
+  );
+  assert.throws(() => validateExtensions(17, {}));
+});
 
 test("EARS-6: rejected re-entry cannot stop an earlier run, cleanup uses only created IDs", async () => {
   await stopOwnedSession([], () => assert.fail("foreign stop"));

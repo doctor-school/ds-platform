@@ -49,6 +49,21 @@ export async function stopOwnedSession(ids, stop) {
   if (ids.length) await stop(ids);
 }
 
+export function validateExtensions(major, actual) {
+  const expected = {
+    citext: major === 17 ? "1.6" : "1.8",
+    pg_partman: "5.5.0",
+    pg_trgm: "1.6",
+    plpgsql: "1.0",
+    vector: "0.8.6",
+  };
+  if (
+    Object.keys(actual).length !== Object.keys(expected).length ||
+    Object.entries(expected).some(([name, version]) => actual[name] !== version)
+  )
+    throw new Error("extension versions differ from tested contract");
+}
+
 const quote = (s) => `'${String(s).replaceAll("'", "'\\''")}'`;
 const hash = (s) => createHash("sha256").update(s).digest("hex");
 const root = fileURLToPath(new URL("../../", import.meta.url));
@@ -85,6 +100,7 @@ async function main() {
     ],
     stages: [],
     images: {},
+    extensions: {},
     status: "running",
   };
   const createdContainerIds = [];
@@ -295,6 +311,33 @@ async function main() {
   const summary = async (name) => {
     const result = {};
     for (const db of await databases(name)) {
+      const major = name.endsWith("17") ? 17 : 18;
+      const extensions = JSON.parse(
+        (
+          await sql(
+            name,
+            db.name,
+            "SELECT json_object_agg(extname,extversion) FROM pg_extension",
+          )
+        ).trim(),
+      );
+      validateExtensions(major, extensions);
+      const updatePath =
+        major === 18
+          ? (
+              await sql(
+                name,
+                db.name,
+                "SELECT path FROM pg_extension_update_paths('citext') WHERE source='1.6' AND target='1.8'",
+              )
+            ).trim()
+          : null;
+      if (major === 18 && !updatePath)
+        throw new Error("citext update path unavailable");
+      evidence.extensions[`${name}/${db.name}`] = {
+        versions: extensions,
+        citextUpdatePath: updatePath,
+      };
       const script = readFileSync(new URL("integrity.sql", sqlDir), "utf8");
       result[db.name] = hash(await sql(name, db.name, script));
     }
@@ -575,8 +618,8 @@ async function main() {
           `/scratch/${db.archive}`,
         ]);
         if (!db.create) {
-          // Preserve COMMENT, ACL and DATABASE PROPERTIES entries under -C;
-          // suppress exactly the already-initialized postgres CREATE entry.
+          // Preserve archive-derived COMMENT, ACL, owner and DATABASE PROPERTIES.
+          // Reconcile exactly the already-initialized postgres CREATE statement.
           await client([
             "bash",
             "-ceu",

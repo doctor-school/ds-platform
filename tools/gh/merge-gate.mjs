@@ -845,12 +845,14 @@ export const ALWAYS_OVERLAPPING_PATHS = [
   {
     kind: "dir",
     value: "packages/db/src/schema/",
-    reason: "the Drizzle schema SSOT (drizzle.config.ts `schema`) must stay linear across landings",
+    reason:
+      "the Drizzle schema SSOT (drizzle.config.ts `schema`) must stay linear across landings",
   },
   {
     kind: "dir",
     value: "apps/api/drizzle/",
-    reason: "generated migrations (drizzle.config.ts `out`) must stay linear across landings",
+    reason:
+      "generated migrations (drizzle.config.ts `out`) must stay linear across landings",
   },
   {
     kind: "dir",

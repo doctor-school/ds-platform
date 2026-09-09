@@ -874,7 +874,7 @@ describe("merge-gate classifyMainAdvance() (#2124)", () => {
     }
   });
 
-  it("EARS-2124.7: every `dir` entry names a directory that exists in this repo", () => {
+  it("EARS-2124.11: every `dir` entry names a directory that exists in this repo", () => {
     // A `dir` entry that matches nothing silently re-opens the gap it was
     // written to close, so the list is pinned to the working tree itself.
     const repoRoot = execFileSync("git", ["rev-parse", "--show-toplevel"], {

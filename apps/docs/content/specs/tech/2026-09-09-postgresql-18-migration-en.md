@@ -3,7 +3,7 @@ title: "PostgreSQL 18 cluster migration design [EN]"
 description: "Reviewed migration boundary for Issue 2101: isolated rehearsal, cluster preservation, backup continuity and explicit production cutover."
 lang: en
 status: Draft
-tracker: "GitHub Issue #2101"
+tracker: "GitHub Issue #2133 (design), #2131 (preparation), #2101 (migration)"
 ---
 
 # PostgreSQL 18 cluster migration

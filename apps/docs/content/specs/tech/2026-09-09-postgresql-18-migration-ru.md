@@ -3,7 +3,7 @@ title: "План миграции кластера PostgreSQL 18 [RU]"
 description: "Граница миграции задачи 2101: изолированная репетиция, сохранность кластера, непрерывность резервирования и отдельное разрешение на production."
 lang: ru
 status: Draft
-tracker: "GitHub Issue #2101"
+tracker: "GitHub Issue #2133 (design), #2131 (preparation), #2101 (migration)"
 ---
 
 # Миграция кластера PostgreSQL 18

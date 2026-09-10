@@ -29,7 +29,7 @@
 // with an explicit «not implemented until part 2» error — a silent no-op would look
 // like a converged identity set to the suite.
 
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { mkdirSync, readFileSync, realpathSync, statfsSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -456,21 +456,30 @@ export function caddyAttachCommand(slot) {
 }
 
 /**
- * The slot network, removed explicitly after `compose down`.
+ * The slot network, made ABSENT after `compose down`.
  *
- * `compose down` removes the network it created — but only if nothing is still
- * attached, and the caddy detach above is tolerated. So when the detach genuinely
- * fails, compose leaves `slot-<slot>` behind and the §8 step-4 acceptance («no
- * container, volume, database or image») is quietly missed. This step removes the
- * network regardless; it is tolerated too (compose usually got there first), and the
- * CLI exits non-zero whenever any tolerated step failed, so nothing is silent.
+ * Compose owns `slot-<slot>` (`infra/deploy/compose/slot/compose.yml`) and removes it
+ * on a healthy `compose down` — but only if nothing is still attached, and the caddy
+ * detach above is tolerated. So when the detach genuinely fails, compose leaves the
+ * network behind and the §8 step-4 acceptance («no container, volume, database or
+ * image») is quietly missed.
+ *
+ * Hence `ensure-absent` rather than a tolerated `rm`: the executor probes first, so
+ * «compose already took it» is a SUCCESS with nothing to do, while «it is still there
+ * and cannot be removed» is a hard failure. A tolerated failure keeps its narrower
+ * meaning — a step we chose to continue past that is nevertheless a defect.
  */
 export function slotNetworkRemoveCommand(slot) {
+  const network = slotNetworkName(slot);
   return {
-    kind: "sh",
+    kind: "ensure-absent",
     label: "remove slot network",
-    tolerateFailure: true,
-    command: ["docker", "network", "rm", slotNetworkName(slot)],
+    items: [
+      {
+        probe: ["docker", "network", "inspect", network],
+        remove: ["docker", "network", "rm", network],
+      },
+    ],
   };
 }
 
@@ -900,22 +909,22 @@ export function planSlotDown({ slot, registry, baseDomain, now = new Date() }) {
       statements: dropDatabaseStatements(slot),
     });
     if (entry?.sha) {
+      // Same reasoning as the network: an image a previous teardown (or `gc`) already
+      // removed is the desired end state, not a failure — but an image that is there
+      // and refuses to go is one.
       steps.push({
-        kind: "sh",
+        kind: "ensure-absent",
         label: "remove slot images",
-        tolerateFailure: true,
-        command: [
-          "docker",
-          "image",
-          "rm",
-          ...Object.values(slotImageRefs(slot, entry.sha)),
-        ],
+        items: Object.values(slotImageRefs(slot, entry.sha)).map((ref) => ({
+          probe: ["docker", "image", "inspect", ref],
+          remove: ["docker", "image", "rm", ref],
+        })),
       });
     }
     steps.push({
+      // `rm -f` is already idempotent; nothing to probe.
       kind: "sh",
       label: "remove slot env",
-      tolerateFailure: true,
       command: ["rm", "-f", slotEnvPath(slot)],
     });
   }
@@ -928,17 +937,36 @@ export function planSlotDown({ slot, registry, baseDomain, now = new Date() }) {
 /**
  * Runs a plan through injected effects.
  *
- * `sql`, `sh` and `write` are supplied by `main()` and replaced wholesale in the
- * tests, which is what keeps every plan above unit-testable without Postgres, Docker
- * or a filesystem. A step throws unless it declared `tolerateFailure` — a converge
- * that half-failed must not go on to register hostnames.
+ * `sql`, `sh`, `probe` and `write` are supplied by `main()` and replaced wholesale in
+ * the tests, which is what keeps every plan above unit-testable without Postgres,
+ * Docker or a filesystem. A step throws unless it declared `tolerateFailure` — a
+ * converge that half-failed must not go on to register hostnames.
+ *
+ * `ensure-absent` is the step kind for «this must not exist afterwards»: each item is
+ * PROBED first, and the removal runs only when the probe finds the resource. Absent
+ * therefore means success with nothing to do, and a removal that fails is a real
+ * failure rather than a tolerated one.
+ *
+ * `probe` reports the exit status instead of throwing (`{ ok, stdout, stderr }`).
+ * When no `probe` effect is injected the executor falls back to `sh` and reads a
+ * throw as «absent», which is what the offline tests exercise.
  *
  * Tolerated failures are RETURNED, not just logged: the caller decides. `down`
  * tolerates a failing caddy detach so that the rest of the teardown still runs, and
- * then exits non-zero because a network that outlived its slot is an operator's
- * problem, not a no-op.
+ * every command then exits non-zero, because a step we chose to continue past is
+ * still a defect.
  */
-export async function runSlotPlan(plan, { sql, sh, write, log = () => {} }) {
+export async function runSlotPlan(plan, { sql, sh, write, probe, log = () => {} }) {
+  const exists = async (command, step) => {
+    if (probe) return Boolean((await probe(command, step))?.ok);
+    try {
+      await sh(command, step);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
   const tolerated = [];
   for (const step of plan.steps) {
     log(`[${step.label}]`);
@@ -947,6 +975,15 @@ export async function runSlotPlan(plan, { sql, sh, write, log = () => {} }) {
         for (const statement of step.statements) await sql(statement, step);
       }
       else if (step.kind === "sh") await sh(step.command, step);
+      else if (step.kind === "ensure-absent") {
+        for (const item of step.items) {
+          if (!(await exists(item.probe, step))) {
+            log("  ↳ already absent");
+            continue;
+          }
+          await sh(item.remove, step);
+        }
+      }
       else if (step.kind === "write") await write(step.path, step.contents, step.mode);
       else if (step.kind === "write-many") {
         for (const file of step.files) await write(file.path, file.contents, file.mode);
@@ -959,6 +996,28 @@ export async function runSlotPlan(plan, { sql, sh, write, log = () => {} }) {
     }
   }
   return { ...plan, tolerated };
+}
+
+/**
+ * Every command that survives a tolerated failure says which one and exits non-zero.
+ *
+ * A tolerated step is one the run chose to continue PAST, never one it forgave: a
+ * failed `attach caddy` leaves a slot whose hostnames resolve to nothing, exactly as
+ * a failed `detach caddy` leaves a network outliving its slot. Both are an operator's
+ * problem, so neither may exit 0.
+ */
+export function assertNoToleratedFailures(tolerated, { command, slot }) {
+  if (!tolerated?.length) return undefined;
+  const subject = slot ? `slot ${slot}` : command;
+  for (const failure of tolerated) {
+    console.error(`${subject}: ${failure.label} failed — ${failure.message}`);
+  }
+  throw new SlotError(
+    `\`${command}\`${slot ? ` on ${slot}` : ""} finished with ` +
+      `${tolerated.length} tolerated failure(s): ` +
+      tolerated.map((failure) => `${failure.label} (${failure.message})`).join("; ") +
+      " — the slot is in a half-converged state, re-run once the cause is fixed.",
+  );
 }
 
 // --- CLI ---------------------------------------------------------------------
@@ -1036,6 +1095,18 @@ function realEffects() {
       ),
     sh: (command) =>
       execFileSync(command[0], command.slice(1), { stdio: "inherit" }),
+    // The probe REPORTS the exit status instead of throwing on it — «not found» is an
+    // answer, not an error. Its output is captured so a `docker inspect` of a missing
+    // resource does not spill a scary stderr line into an otherwise clean teardown.
+    probe: (command) => {
+      const result = spawnSync(command[0], command.slice(1), { encoding: "utf8" });
+      if (result.error) throw result.error;
+      return {
+        ok: result.status === 0,
+        stdout: result.stdout ?? "",
+        stderr: result.stderr ?? "",
+      };
+    },
     write: (path, contents, mode) => {
       mkdirSync(dirname(path), { recursive: true });
       writeFileSync(path, contents, { mode });
@@ -1108,10 +1179,11 @@ async function main() {
 
   if (options.command === "render") {
     const baseDomain = requiredBaseDomain();
-    await runSlotPlan(
+    const { tolerated } = await runSlotPlan(
       { steps: [renderIncludeSteps(registry, baseDomain)] },
       effects,
     );
+    assertNoToleratedFailures(tolerated, { command: "render" });
     console.log(`rendered ${ASK_INCLUDE_PATH} and ${SLOTS_INCLUDE_PATH}`);
     return;
   }
@@ -1120,7 +1192,11 @@ async function main() {
     const images = planImageGc({ images: listImages(), registry });
     const { bsize, bavail } = statfsSync(DOCKER_ROOT);
     const prune = planPruneByFreeSpace({ freeBytes: bsize * bavail });
-    await runSlotPlan({ steps: [...images.commands, ...prune.commands] }, effects);
+    const { tolerated } = await runSlotPlan(
+      { steps: [...images.commands, ...prune.commands] },
+      effects,
+    );
+    assertNoToleratedFailures(tolerated, { command: "gc" });
     console.log(
       `gc: ${images.remove.length} unreferenced slot image(s) removed; ` +
         `free disk floor ${GC_FREE_SPACE_FLOOR}`,
@@ -1133,19 +1209,11 @@ async function main() {
   if (options.command === "down") {
     const plan = planSlotDown({ slot: options.slot, registry, baseDomain });
     const { tolerated } = await runSlotPlan(plan, effects);
-    if (tolerated.length) {
-      // The teardown ran to the end — the network removal included — but a step it
-      // was allowed to survive did fail. Say which, and fail the command: a silent
-      // zero here is how an orphaned network or container gets missed.
-      for (const failure of tolerated) {
-        console.error(`slot ${options.slot}: ${failure.label} failed — ${failure.message}`);
-      }
-      throw new SlotError(
-        `slot ${options.slot} torn down with ${tolerated.length} tolerated failure(s) — ` +
-          "check for a leftover container or the `slot-" +
-          `${options.slot}\` network before converging it again.`,
-      );
-    }
+    // The teardown ran to the end — the network and image removals included — so a
+    // resource compose already took is silent. Anything left in `tolerated` is a step
+    // the run survived but that did fail, and a silent zero there is how an orphaned
+    // container gets missed.
+    assertNoToleratedFailures(tolerated, { command: "down", slot: options.slot });
     console.log(`slot ${options.slot} is down`);
     return;
   }
@@ -1159,7 +1227,10 @@ async function main() {
     databaseExists:
       options.slot === "main" ? databaseExists(slotDatabaseName("main")) : undefined,
   });
-  await runSlotPlan(plan, effects);
+  const { tolerated } = await runSlotPlan(plan, effects);
+  // A converge that could not attach Caddy to the slot network serves nothing on the
+  // hostnames it just registered — `up`/`sync` must not exit 0 on that either.
+  assertNoToleratedFailures(tolerated, { command: options.command, slot: plan.slot });
   console.log(
     `slot ${plan.slot} converged on ${shortSha(plan.sha)} (redis db ${plan.redisDb}): ${plan.hosts.join(", ")}`,
   );

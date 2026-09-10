@@ -372,10 +372,15 @@ on-box check, not a lint.
 **Teardown is total, and never silent.** `down` re-renders
 `/etc/ds-platform/slots/<slot>.env` before it calls compose (compose aborts on a
 missing `--env-file`, so a deleted file would otherwise make the slot un-tearable),
-then detaches Caddy, de-registers, `compose down -v`, and removes the `slot-<slot>`
-network explicitly — compose only removes a network nothing is attached to, and the
-Caddy detach is tolerated. Any tolerated step that did fail is printed and the command
-**exits non-zero**, so an orphaned network or container is never reported as success.
+then detaches Caddy, de-registers, `compose down -v`, and finally makes the
+`slot-<slot>` network and the slot's images **absent**: each is probed
+(`docker network inspect` / `docker image inspect`) and removed only if it is still
+there. Compose owns that network and normally takes it with `down -v`, so «already
+gone» is the expected success and removes nothing; a resource that survives and then
+refuses to be removed is a hard failure. Separately, a step the run was allowed to
+continue past — the Caddy detach — is printed and makes the command **exit non-zero**;
+so do `up`, `sync`, `gc` and `render`, because a converge that could not attach Caddy
+serves nothing on the hostnames it just registered.
 
 **Status output.** `slot status` prints two labelled blocks: the registry JSON exactly
 as it is on disk, then the whole redirect-URI set the shared Zitadel app must hold

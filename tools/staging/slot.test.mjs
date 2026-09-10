@@ -22,6 +22,7 @@ import {
   SLOT_IMAGE_APPS,
   SlotError,
   allocateRedisDatabase,
+  assertNoToleratedFailures,
   assertPreviewCapacity,
   assertSlotName,
   caddyAttachCommand,
@@ -878,4 +879,110 @@ test("a tolerated failure is reported back, so `down` can exit non-zero", async 
   assert.equal(result.tolerated.length, 1);
   assert.equal(result.tolerated[0].label, "detach caddy");
   assert.match(result.tolerated[0].message, /no such network endpoint/);
+});
+
+// --- absent is not a failure --------------------------------------------------
+//
+// Compose owns `slot-<slot>` (infra/deploy/compose/slot/compose.yml), so a healthy
+// `compose down` takes the network with it and the follow-up `docker network rm`
+// says «not found». Treating that as a tolerated failure made a SUCCESSFUL teardown
+// exit non-zero. The removals below verify first and only then remove.
+
+function downPlan(slot = "pr-2034") {
+  const registry = registerSlot(emptyRegistry(), {
+    slot,
+    sha: SHA,
+    redisDb: 4,
+    hosts: Object.values(slotHostnames(slot, BASE)),
+    updatedAt: "2026-09-10T00:00:00.000Z",
+  });
+  return planSlotDown({ slot, registry, baseDomain: BASE });
+}
+
+test("the network and image removals are planned as verify-then-remove steps", () => {
+  const plan = downPlan();
+  for (const label of ["remove slot network", "remove slot images"]) {
+    const step = plan.steps.find((candidate) => candidate.label === label);
+    assert.equal(step.kind, "ensure-absent");
+    assert.ok(!step.tolerateFailure, `${label} must not be a tolerated failure`);
+    assert.ok(step.items.length >= 1);
+    for (const item of step.items) {
+      assert.ok(item.probe.includes("inspect"));
+      assert.ok(item.remove.includes("rm"));
+    }
+  }
+});
+
+test("a network compose already removed leaves `down` clean and skips `network rm`", async () => {
+  const seen = [];
+  const result = await runSlotPlan(downPlan(), {
+    sql: () => {},
+    sh: (command) => {
+      seen.push(command.join(" "));
+      if (command.includes("inspect")) {
+        throw new Error("Error: No such network: slot-pr-2034");
+      }
+      return undefined;
+    },
+    write: () => {},
+  });
+  assert.deepEqual(result.tolerated, []);
+  assert.ok(!seen.some((command) => /network rm/.test(command)));
+  assert.ok(!seen.some((command) => /image rm/.test(command)));
+});
+
+test("a network that is still there IS removed, and a failing removal fails `down`", async () => {
+  const seen = [];
+  await assert.rejects(
+    runSlotPlan(downPlan(), {
+      sql: () => {},
+      sh: (command) => {
+        seen.push(command.join(" "));
+        if (command.includes("rm") && command.includes("network")) {
+          throw new Error("network slot-pr-2034 has active endpoints");
+        }
+        return undefined;
+      },
+      write: () => {},
+    }),
+    /active endpoints/,
+  );
+  assert.ok(seen.some((command) => /network inspect/.test(command)));
+  assert.ok(seen.some((command) => /network rm/.test(command)));
+});
+
+test("an injected probe effect decides presence without going through `sh`", async () => {
+  const probed = [];
+  const seen = [];
+  const result = await runSlotPlan(downPlan(), {
+    sql: () => {},
+    sh: (command) => seen.push(command.join(" ")),
+    probe: (command) => {
+      probed.push(command.join(" "));
+      return { ok: false, stdout: "", stderr: "No such network" };
+    },
+    write: () => {},
+  });
+  assert.ok(probed.some((command) => /network inspect/.test(command)));
+  assert.ok(!seen.some((command) => /network rm/.test(command)));
+  assert.deepEqual(result.tolerated, []);
+});
+
+test("a tolerated failure fails the command it belongs to, whichever that is", () => {
+  assert.equal(
+    assertNoToleratedFailures([], { command: "up", slot: "pr-2034" }),
+    undefined,
+  );
+  assert.throws(
+    () =>
+      assertNoToleratedFailures(
+        [{ label: "attach caddy", message: "already exists" }],
+        { command: "up", slot: "pr-2034" },
+      ),
+    (err) =>
+      err instanceof SlotError &&
+      /up/.test(err.message) &&
+      /attach caddy/.test(err.message) &&
+      /already exists/.test(err.message),
+  );
 });

@@ -12,14 +12,17 @@ live IdP issuer/service token is configured.
 
 For real SMTP, the shared `config/real-smtp.ts` validator requires explicit
 `IDP_SMTP_REAL_PROVIDER=postbox|mail.ru`, matching host, port 465 and complete shared
-credentials/sender. The current implementation preserves `real transactional sender`.
-The [profile migration draft](../../../docs/content/specs/tech/2026-09-10-postbox-native-smtp-profile-design-en.md)
-requires provider-scoped identities selected by `IDP_SMTP_REAL_PROVIDER`;
-that behavior is pending implementation and does not exist in this module yet.
+credentials/sender. mail.ru retains `real transactional sender`; Postbox selects
+the separate `real transactional sender:postbox` profile, following the
+[profile contract](../../../docs/content/specs/tech/2026-09-10-postbox-native-smtp-profile-design-en.md).
+SMTP inventory reads all pages with bounded requests; public sender-name metadata
+is retained, with its configured value checked by provisioning.
 Before activation, including an already-active provider, reconcile requires exactly
 one matching identity and checks its host, sender, username and TLS metadata against
 the configured selection. It never reads or compares the stored SMTP password:
-Zitadel does not return it. Provisioning owns credential convergence.
+Zitadel does not return it. Provisioning creates missing real profiles without
+updating existing credentials; a mismatched profile fails readback. Mailpit retains
+its existing idempotent update behavior.
 
 Missing, duplicate or mismatched real SMTP configuration rejects reconciliation.
 Startup exhausts its bounded retries and fails when real email is selected. A later

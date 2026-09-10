@@ -73,11 +73,11 @@ describe("native SMTP provision fixtures", () => {
       expect(run(env).status).toBe(0);
     },
   );
-  it("EARS-31: updates the stable real identity and activates it without creating duplicate SMTP providers", () => {
+  it("EARS-31: reuses the separate real identity without PUT while preserving intercept updates", () => {
     const fakeApi = `
 api() {
   if [[ "$2" == /admin/v1/smtp/_search ]]; then
-    echo '{"result":[{"id":"sink","description":"dev-stand mailpit"},{"id":"stable-real","description":"real transactional sender"}]}'
+    echo '{"result":[{"id":"sink","description":"dev-stand mailpit"},{"id":"stable-real","description":"real transactional sender:postbox"}]}'
   elif [[ "$2" == /admin/v1/smtp ]]; then
     echo '{"smtpConfig":{"id":"stable-real","state":"SMTP_CONFIG_ACTIVE"}}'
   elif [[ "$1" == GET ]]; then
@@ -93,9 +93,8 @@ api_activate() { printf 'ACTIVATE %s\\n' "$2" >&2; }
     const capture = fakeApi.replace('"$3"; }', '"$3" >&2; }');
     const result = run(valid, `${preflight}\n${capture}\n${smtp}`);
     expect(result.status).toBe(0);
-    expect(result.stderr).toContain("WRITE PUT /admin/v1/smtp/stable-real");
-    expect(result.stderr).toContain('"host":"postbox.cloud.yandex.net:465"');
-    expect(result.stderr).toContain('"tls":true');
+    expect(result.stderr).toContain("WRITE PUT /admin/v1/smtp/sink");
+    expect(result.stderr).not.toContain("WRITE PUT /admin/v1/smtp/stable-real");
     expect(result.stderr).toContain(
       "ACTIVATE /admin/v1/smtp/stable-real/_activate",
     );

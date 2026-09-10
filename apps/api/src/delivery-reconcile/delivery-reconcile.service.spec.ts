@@ -106,7 +106,7 @@ const smtpPair = (): ZitadelProvider[] => [
   { id: "smtp-mailpit", description: SMTP_DESCRIPTION_INTERCEPT, active: true },
   {
     id: "smtp-real",
-    description: SMTP_DESCRIPTION_REAL,
+    description: "real transactional sender:postbox",
     active: false,
     host: "postbox.cloud.yandex.net:465",
     user: "fixture-key",
@@ -348,6 +348,46 @@ describe("DeliveryReconcileService (#185 flag → Zitadel _activate)", () => {
 });
 
 describe("native explicit provider contract", () => {
+  it("EARS-31: selects Postbox alongside retained mail.ru and can deliberately return to mail.ru", async () => {
+    const { flags } = fakeFlags({ "email-delivery-real": true });
+    const retained = {
+      ...smtpPair()[1]!,
+      id: "mailru-retained",
+      description: SMTP_DESCRIPTION_REAL,
+      host: "smtp.mail.ru:465",
+      user: "mailru-user",
+      active: true,
+    };
+    const providers = [...smtpPair(), retained];
+    const { admin, smtpActivations } = fakeAdmin(providers, smsPair());
+    await new DeliveryReconcileService(flags, admin, envDefaults).reconcile();
+    expect(smtpActivations).toEqual(["smtp-real"]);
+    expect(retained).toMatchObject({
+      id: "mailru-retained",
+      description: SMTP_DESCRIPTION_REAL,
+      host: "smtp.mail.ru:465",
+      user: "mailru-user",
+    });
+    await new DeliveryReconcileService(flags, admin, {
+      ...envDefaults,
+      realSmtp: {
+        ...realSmtp,
+        IDP_SMTP_REAL_PROVIDER: "mail.ru",
+        IDP_SMTP_REAL_HOST: "smtp.mail.ru:465",
+        IDP_SMTP_REAL_USER: "mailru-user",
+      },
+    }).reconcile();
+    expect(smtpActivations).toEqual(["smtp-real", "mailru-retained"]);
+  });
+  it("EARS-31: refuses duplicate Postbox identities without activation", async () => {
+    const { flags } = fakeFlags({ "email-delivery-real": true });
+    const providers = [...smtpPair(), { ...smtpPair()[1]!, id: "duplicate" }];
+    const { admin, smtpActivations } = fakeAdmin(providers, smsPair());
+    await expect(
+      new DeliveryReconcileService(flags, admin, envDefaults).reconcile(),
+    ).rejects.toThrow("Native SMTP");
+    expect(smtpActivations).toEqual([]);
+  });
   it.each([{}, { ...realSmtp, IDP_SMTP_REAL_PROVIDER: "mail.ru" }])(
     "EARS-31: rejects invalid selected real configuration",
     async (realSmtp) => {

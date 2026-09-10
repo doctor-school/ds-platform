@@ -42,7 +42,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # creates nothing; the API response is identical to the never-registered case.
     Given an email that is already registered
     When a visitor submits the registration form with that email
-    Then an account-exists notice email (sign-in / reset prompt, no code or token) is sent to that address
+    Then an account-exists notice email (single sign-in action, no reset link, code or token) is sent to that address
     And no verification code is sent and no account, consent, or audit_ledger row is written
     And the API response is indistinguishable in status, body, and timing from the never-registered case
 
@@ -340,7 +340,8 @@ Feature: Net-new web authentication producing a doctor_guest identity
     When Zitadel returns the one-time code to the BFF via returnCode
     Then Zitadel itself sends no email
     And the BFF mailer sends exactly one branded code-only email with the code leading the subject and shown in the body
-    And the email contains no link or button of any kind
+    And the email contains no link, button or navigation URL in any block including the footer
+    And HTML and plain text show the same code, expiry and instruction to use the already-open requesting tab
 
   @EARS-29 @happy
   Scenario: The password-reset code email is BFF-sent and link-free
@@ -349,6 +350,24 @@ Feature: Net-new web authentication producing a doctor_guest identity
     Then Zitadel itself sends no email
     And the BFF mailer sends the branded code-only reset email with no link or button
     And the user completes the reset by typing the code on the /reset screen
+
+  @EARS-29 @EARS-34 @happy
+  Scenario: Unverified-account sign-in receives the existing layout with neutral verification copy
+    Given an existing account has an unverified email
+    When its owner requests an email sign-in code
+    Then the BFF sends a verification code using the existing shared mailer layout
+    And HTML and plain text use the same neutral code-request guidance without calling the request registration
+    And the instruction directs code entry in the already-open requesting tab
+    And no link, button or navigation URL appears in any email block
+    And the verification code format and lifetime remain owned by Zitadel
+
+  @EARS-23 @happy
+  Scenario: Account-exists notice reuses the code-email layout without a code
+    Given registration targets an existing account
+    When the BFF composes the account-exists notice
+    Then the notice uses the existing shared mailer layout
+    And HTML and plain text offer only the configured portal sign-in action
+    And neither body contains a password-reset link, code or token
 
   @EARS-31 @EARS-32 @happy
   Scenario: Postbox is the explicit primary for every recipient domain

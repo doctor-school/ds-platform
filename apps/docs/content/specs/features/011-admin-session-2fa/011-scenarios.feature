@@ -112,6 +112,9 @@ Feature: Admin session hardening — a dedicated admin cookie and mandatory TOTP
     Then the account is soft-locked
     And a lockout-triggered audit row is appended
     And the account-lockout notification is sent
+    And it uses the existing shared mailer layout from 003 design section 13.5
+    And HTML and plain text preserve the same recovery and reporting instructions
+    And neither body contains a code, token, secret, attempt count or unlock-time promise
     When a correct current TOTP code is submitted while the account is soft-locked
     Then no admin session is issued
     And the same uniform failure is returned

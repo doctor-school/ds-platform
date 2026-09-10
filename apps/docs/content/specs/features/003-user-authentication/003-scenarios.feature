@@ -445,13 +445,12 @@ Feature: Net-new web authentication producing a doctor_guest identity
     And any changed native selection is restored to the retained original ID
     And a profile test response alone is not treated as native delivery proof
 
-  @EARS-6 @EARS-31 @failure
-  Scenario: Production runtime cannot race deployment by activating another SMTP profile
-    Given production SMTP is deployment-owned after the compatibility release
-    When startup, SDK synchronization or any flag change triggers reconciliation
-    Then runtime validates SMTP without activating a profile
-    And a false email-real flag causes a configuration error without selecting Mailpit
-    And affected BFF sends fail internally with enumeration-safe responses unchanged
+  @EARS-6 @EARS-31 @happy
+  Scenario: Runtime reconciliation selects the configured real provider after deployment
+    Given the new application explicitly selects Postbox with matching native profile metadata
+    When startup, SDK synchronization or any flag change triggers real-email reconciliation
+    Then runtime selects the separate Postbox profile without rewriting mail.ru
+    And deployment verifies the active Postbox ID after the application is ready
     And SMS reconciliation and nonproduction intercept behavior remain unchanged
 
   @EARS-6 @EARS-31 @happy

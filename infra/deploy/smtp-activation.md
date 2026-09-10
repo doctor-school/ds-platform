@@ -19,10 +19,10 @@ Keep certificate verification enabled and `RESEND_ENABLED=false`.
 1. Land the owner-chosen profile contract, implement it with TDD, and complete
    independent review plus canonical landing. Preserve #2151 protection: native
    convergence must be proved before migration/application replacement.
-2. Deploy the compatibility ownership change with mail.ru selected: production
-   runtime validates native SMTP and cannot activate profiles on flag signals.
-   Canonical deployment owns SMTP activation. This prevents the old API from
-   reactivating mail.ru during cutover; merely freezing one flag fails.
+2. Make the existing native reconciler select the profile matching
+   `IDP_SMTP_REAL_PROVIDER`, using the same settings as the BFF. Preserve runtime
+   flag handling and nonproduction intercept; no intermediate ownership release
+   or separate deployment system is required.
 3. Record deployment/release readiness and applicable owner authorization.
    Previous single-use release exceptions do not authorize another release.
 
@@ -40,13 +40,14 @@ convergence; use the design's absolute 120-second readiness budget.
 
 Activate the candidate without first deactivating mail.ru. Verify intended active
 ID and metadata before migration/replacement, then check again after application
-readiness. During the bounded cutover the compatibility BFF still uses mail.ru
-until replacement, while native delivery uses Postbox. This is not completed
-activation. Verify controlled register/resend/reset and actual native login OTP.
+readiness. During replacement the old BFF may still use mail.ru and its reconciler may
+reselect mail.ru. The switch is not atomic and is not complete until the new
+application and projected native selection agree. Verify controlled register/resend/reset and actual native login OTP.
 
-Any failure after native activation restores the original ID, including failures
-before application replacement. Restore coherent previous BFF environment before
-restarting the previous application, and verify both actual send paths. Retain
+On failed or uncertain activation, inspect actual state before another attempt.
+Restore the coherent previous BFF environment before canonical rollback to the
+previous application, reactivate the original ID and verify readback and receipt
+through both actual send paths. Incomplete restoration is a failed activation. Retain
 both profile IDs after success or rollback; do not delete/recreate profiles.
 
 ## Projection failure and evidence

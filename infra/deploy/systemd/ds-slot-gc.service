@@ -1,0 +1,17 @@
+[Unit]
+# `slot gc` removes slot-tagged images whose slot is no longer in the registry, and
+# only if free space on the Docker root is below the 10 GB floor additionally prunes
+# dangling images (#2064, spec §3 «Disk»). It never builds and never calls `buildx`.
+Description=DS Platform slot garbage collection — reclaim unregistered slot images
+Documentation=https://github.com/doctor-school/ds-platform/issues/2064
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+TimeoutStartSec=1800
+ExecStart=/usr/local/bin/ds-slot gc
+User=root
+
+[Install]
+# No WantedBy: the timer owns the schedule.

@@ -1,0 +1,17 @@
+[Unit]
+Description=Run DS Platform slot garbage collection nightly
+Documentation=https://github.com/doctor-school/ds-platform/issues/2064
+
+[Timer]
+Unit=ds-slot-gc.service
+# Box time, off-hours: a `docker image rm` sweep competes for disk with whatever the
+# deployer is pulling, and nobody is reading a preview at 03:30.
+OnCalendar=*-*-* 03:30:00
+AccuracySec=1min
+# `Persistent=true`, unlike the deployer's: this one is a HOUSEKEEPING run, not a
+# converge. A box that was off at 03:30 has still accumulated the images that sweep
+# was meant to reclaim, so the missed run is worth catching up on boot.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

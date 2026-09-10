@@ -316,21 +316,29 @@ Two standing rules come with the shared instance (spec §3 «Identity»):
 A **slot** is one deployed copy of the platform: `main` (the persistent staging copy
 of `origin/main`) or `pr-<N>` (a preview of one open PR). Its compose project is
 `infra/deploy/compose/slot/compose.yml`, one file for every slot, driven only by
-`tools/staging/slot.mjs` — the box has no workspace checkout, so the script runs on
-the pinned host Node under `/opt/node`.
+`tools/staging/slot.mjs`, installed on the box as `/opt/ds-platform/slot.mjs` — the box
+has no workspace checkout, so the script runs on the pinned host Node under `/opt/node`.
+
+Humans drive it through the installed wrapper `/usr/local/bin/ds-slot`, which sources
+`stage.env` and execs that script — the same path the timer takes:
 
 ```bash
-node /opt/ds-platform/tools/staging/slot.mjs render            # write both Caddy includes
-node /opt/ds-platform/tools/staging/slot.mjs up   main <sha>   # first bring-up / converge
-node /opt/ds-platform/tools/staging/slot.mjs sync pr-2064 <sha>  # re-converge to a new SHA
-node /opt/ds-platform/tools/staging/slot.mjs down pr-2064      # tear down, drop the database
-node /opt/ds-platform/tools/staging/slot.mjs status            # registry JSON + the IdP redirect set
-node /opt/ds-platform/tools/staging/slot.mjs gc                # reclaim unregistered images
+sudo ds-slot render            # write both Caddy includes
+sudo ds-slot up   main <sha>   # first bring-up / converge
+sudo ds-slot sync pr-2064 <sha>  # re-converge to a new SHA
+sudo ds-slot down pr-2064      # tear down, drop the database
+sudo ds-slot status            # registry JSON + the IdP redirect set
+sudo ds-slot gc                # reclaim unregistered images
+sudo ds-slot reset main --yes  # re-clone ds_main from ds_golden, then converge again
 ```
 
-`reset main` and `reset-identities <slot>` are part 2 of #2064; the CLI **refuses**
-them today with an explicit «not implemented until part 2» error rather than
-silently doing nothing.
+`reset main --yes` is the escape hatch for a poisoned staging database: it drops
+`ds_main`, re-clones it from `ds_golden` and re-runs the ordinary `up` plan on the SHA
+the registry already holds. `main` is the only resettable slot (a preview is cheaper to
+`down`/`up`), `--yes` is mandatory, `ds_golden` is never touched, and every run appends
+one audit line to `/var/log/ds-platform/slot.log` **before** it drops anything.
+`reset-identities <slot>` is part 2b of #2064 and the CLI still **refuses** it with an
+explicit «not implemented until part 2b» error rather than silently doing nothing.
 
 **One registry, two rendered includes.** `/var/lib/ds-platform/slots.json` is the
 single source of truth (`{ slots: { "<name>": { sha, redisDb, hosts, updatedAt } } }`).
@@ -394,24 +402,27 @@ it cannot serve.
 
 **Status output.** `slot status` prints two labelled blocks: the registry JSON exactly
 as it is on disk, then the whole redirect-URI set the shared Zitadel app must hold
-(rendered when `STAGE_BASE_DOMAIN` is in the environment). Part 1 only computes that
-set — see «Part 2 owns…» below.
+(rendered when `STAGE_BASE_DOMAIN` is in the environment). The set is computed and
+printed, but not yet registered — see «Part 2b owns…» below.
 
-**Part 2 owns the redirect-URI convergence.** The shared Zitadel app accepts only
+**Part 2b owns the redirect-URI convergence.** The shared Zitadel app accepts only
 registered redirect URIs, and that registration is a **whole-set** write
 (`IDP_REDIRECT_URIS` / `IDP_POST_LOGOUT_URIS` through `provision.sh`), so a per-slot
-write would silently drop the other slots. Part 1 therefore ships the pure seam
+write would silently drop the other slots. What has landed so far is the pure seam
 `renderIdpRedirectUris(registry, base)` — the full ordered set for every registered
-slot — and prints it in `slot status`; **part 2 makes `slot up|down` converge that set
+slot — printed in `slot status`; **part 2b makes `slot up|down` converge that set
 onto the shared app through the same management API and PAT path `provision.sh` uses.**
-Until part 2 lands, a slot's `IDP_REDIRECT_URI` is emitted but not registered, and
+Until part 2b lands, a slot's `IDP_REDIRECT_URI` is emitted but not registered, and
 login on that slot fails with `invalid redirect_uri`.
 
-**On-box checks part 2 still owes.** `caddy validate` and `centrifugo checkconfig`
-(neither is available in this repo's toolchain), and «HTTP → 308 on a slot host»: the
+**On-box checks part 2b still owes.** `centrifugo checkconfig`
+(not available in this repo's toolchain), and «HTTP → 308 on a slot host»: the
 `:80` site no longer carries a `redir` line because automatic HTTPS is expected to
 answer the 308 first, but the site here is a **wildcard** address and the earlier 308
-observation was captured with the `redir` line present.
+observation was captured with the `redir` line present. `caddy validate` against the
+rendered includes is no longer owed — it runs on the box as `docker exec
+stg-infra-caddy-1 caddy validate --config /etc/caddy/Caddyfile` and was recorded with
+the slot-deployer install.
 
 **Secrets stay in one file.** `/etc/ds-platform/slots/<slot>.env` is generated and
 carries only non-secret values (`SLOT`, `SLOT_SHA7`, `SLOT_DB`, `DEPLOY_SHA`,
@@ -448,18 +459,60 @@ mechanism**: on api-prod it is a BuildKit cache cap (`buildx prune --reserved-sp
 here it is a free-disk floor, because this box never builds and has no BuildKit cache
 to cap. `slot gc` never calls `buildx`.
 
-## Slot deployer — not part of this bring-up
+## Slot deployer (#2064)
 
 No CI agent runs on this box. The repository is **public**, so no job of it may ever
 execute here; images are built and the regression suite runs on GitHub-hosted runners
-(spec §5). What converges slots is a pull-based deployer: the systemd unit pair
-`ds-slot-deployer.service` and `ds-slot-deployer.timer`, which wrap the `slot`
-commands above. They are **part 2 of step 4 (#2064)** and are installed then — not by
-`cloud-init` and not here; part 1 landed only `tools/staging/slot.mjs` and the compose
-project it drives, both usable by hand. Part 2 also installs the box's only host runtime, a pinned Node
-LTS from the official `nodejs.org` tarball under `/opt/node` (no `pnpm`, no workspace
-checkout on the host). Every 60 s the timer reads the open non-draft PRs and the `main`
-head from GitHub, checks the GHCR tags exist, and brings slots up, in sync or down.
+(spec §5). What converges slots is a **pull-based deployer** installed on the box: the
+systemd unit pair `ds-slot-deployer.service` (`Type=oneshot`) and
+`ds-slot-deployer.timer` (60 s), plus `ds-slot-gc.service` / `.timer` (daily 03:30 box
+time) for the image sweep. `cloud-init` installs none of it — it stays prod-length
+(§3 / #2121); the units, the scripts and the box's only host runtime arrive over SSH:
+
+```bash
+node tools/staging/install.mjs deploy@<box>            # from a repo checkout, one SSH session
+node tools/staging/install.mjs deploy@<box> --dry-run  # payload list + the remote command
+```
+
+The install is **idempotent and probe-then-act**: every step prints exactly one
+`ensured <thing>` or `already <thing>` line, and a second run prints only `already` lines
+and touches no file. It lands the pinned Node LTS from the official `nodejs.org` tarball
+(version **and** SHA-256, verified before unpack) under `/opt/node` with only `bin/node`
+symlinked — no `npm`, no `pnpm`, no workspace checkout on the host — the three scripts
+under `/opt/ds-platform`, the slot compose project under
+`/opt/ds-platform/compose/slot/`, the four units, and the two root wrappers
+`/usr/local/bin/ds-slot` and `/usr/local/bin/ds-slot-deployer`. The wrappers are the one
+env-sourcing path (`set -a; . /etc/ds-platform/stage.env; set +a`); the units `ExecStart=`
+them and carry no `EnvironmentFile=`, because systemd's parser and bash disagree about
+quoting in that file. Both run as root: the `docker` group is root-equivalent here
+anyway and `/etc/ds-platform` is root-0700 by design. Bumping the Node pin is two
+constants in `tools/staging/install-host.sh` and a re-run — procedure in
+[`tools/staging/README.md`](../../../../tools/staging/README.md).
+
+**What one tick does.** Every 60 s `ds-slot-deployer tick` reads the open non-draft
+same-repository PRs and the `main` head from GitHub with `STAGE_GH_READ_TOKEN` (a
+`/var/lib/ds-platform/main-pin.json` written by step 5 wins over the `main` head when
+present), caps the previews at 3 keeping already-registered slots and filling free seats
+by `updated_at`, probes GHCR **anonymously** for the five image tags, and then spawns
+`ds-slot up|sync|down` per slot — downs first, so capacity frees before it is claimed.
+`main` is never `down`ed. A slot whose images are not pushed yet is `skip`ped and any
+existing slot is left alone, which is also the steady state on a fresh box before
+`preview.yml` has ever run. One slot's failure never stops the others: the tick finishes
+the rest and exits non-zero, and the journal line names the slot and the step.
+
+```bash
+systemctl list-timers 'ds-slot*'                  # both timers armed and their next fire
+journalctl -u ds-slot-deployer -n 50 --no-pager   # the last ticks, one line per decision
+systemctl start ds-slot-deployer.service          # force a tick now (oneshot, no overlap)
+sudo ds-slot status                               # what the registry actually holds
+```
+
+Overlap needs no lock: the service is `Type=oneshot` and a timer never starts a unit that
+is still active, so a slow tick delays the next one instead of racing it.
+
+**Part 2b still owes** the redirect-URI convergence onto the shared Zitadel app and
+`reset-identities` (both above), plus the golden-account env and the `slot up pr-0` live
+acceptance.
 
 The one thing to provision now, so the owner writes `stage.env` once:
 `STAGE_GH_READ_TOKEN` — a fine-grained **read-only** token («Pull requests: read»,

@@ -1,0 +1,17 @@
+[Unit]
+Description=Run the DS Platform slot deployer every 60 seconds
+Documentation=https://github.com/doctor-school/ds-platform/issues/2064
+
+[Timer]
+Unit=ds-slot-deployer.service
+OnBootSec=60
+OnUnitActiveSec=60
+AccuracySec=5
+# `Persistent=false`: a tick missed while the box was off is worthless — the next
+# tick sixty seconds later reads the SAME desired state from GitHub and converges to
+# it. Replaying a backlog of missed ticks on boot would only re-converge repeatedly
+# to the state one tick already reaches.
+Persistent=false
+
+[Install]
+WantedBy=timers.target

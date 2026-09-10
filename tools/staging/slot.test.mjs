@@ -20,6 +20,7 @@ import {
   REGISTRY_PATH,
   SLOT_ENV_DIR,
   SLOT_IMAGE_APPS,
+  SLOT_LOG_PATH,
   SlotError,
   allocateRedisDatabase,
   assertPreviewCapacity,
@@ -41,13 +42,16 @@ import {
   planImageGc,
   planPruneByFreeSpace,
   planSlotDown,
+  planSlotReset,
   planSlotUp,
+  readRegistry,
   registerSlot,
   renderAskInclude,
   renderIdpRedirectUris,
   renderSlotDownEnv,
   renderSlotEnv,
   renderSlotsInclude,
+  resetLogLine,
   runSlotCommand,
   runSlotPlan,
   seedCommandPlan,
@@ -789,18 +793,14 @@ test("the CLI parses the commands step 4 part 1 actually implements", () => {
   assert.throws(() => parseArgs([]), SlotError);
 });
 
-test("reset and reset-identities refuse loudly instead of silently doing nothing", () => {
-  for (const argv of [
-    ["reset", "main"],
-    ["reset-identities", "pr-2034"],
-  ]) {
-    assert.throws(
-      () => parseArgs(argv),
-      (err) =>
-        err instanceof SlotError && /not implemented until part 2/.test(err.message),
-      argv.join(" "),
-    );
-  }
+test("reset-identities refuses loudly instead of silently doing nothing", () => {
+  // `reset` landed in part 2a (see the section at the end of this file); the
+  // redirect-URI convergence this command needs is part 2b's, and until it exists a
+  // silent no-op would look to the suite like a converged identity set.
+  assert.throws(
+    () => parseArgs(["reset-identities", "pr-2034"]),
+    (err) => err instanceof SlotError && /not implemented until part 2b/.test(err.message),
+  );
 });
 
 // --- the IdP redirect-URI set (Mode (a) #2168) --------------------------------
@@ -1119,4 +1119,134 @@ test("a disconnect that actually runs and fails fails `down`", async () => {
     }),
     /permission denied/,
   );
+});
+
+// --- `reset main` and the lazy database probe (part 2a) -----------------------
+//
+// The regressions these lock: `reset` never runs without `--yes`, never touches a
+// preview (whose every converge already re-clones it) and never drops `ds_golden`;
+// the audit line lands BEFORE the destructive SQL; and `slot down main` no longer
+// reaches into Postgres for an answer its plan never asks for — that probe cost a
+// `docker exec … psql` round trip on every teardown (Mode (a) NIT, PR #2168).
+
+test("`reset` refuses without `--yes`", () => {
+  assert.throws(() => parseArgs(["reset", "main"]), /--yes/);
+  assert.deepEqual(parseArgs(["reset", "main", "--yes"]), {
+    command: "reset",
+    slot: "main",
+    sha: undefined,
+    yes: true,
+  });
+});
+
+test("only `main` is resettable — a preview's every converge already re-clones it", () => {
+  assert.throws(() => parseArgs(["reset", "pr-5", "--yes"]), /only `main` is resettable/);
+  assert.throws(() => parseArgs(["reset"]), /requires <slot>/);
+  assert.throws(() => parseArgs(["reset", "main", "--force"]), /unknown option/);
+});
+
+test("`reset-identities` still refuses, and now names part 2b", () => {
+  assert.throws(() => parseArgs(["reset-identities", "pr-5"]), /part 2b/);
+});
+
+test("`reset main` audits first, then drops and re-clones `ds_main` — never `ds_golden`", () => {
+  const registry = registerSlot(emptyRegistry(), {
+    slot: "main",
+    sha: SHA,
+    redisDb: 0,
+    hosts: Object.values(slotHostnames("main", BASE)),
+    updatedAt: "2026-09-10T00:00:00.000Z",
+  });
+  const plan = planSlotReset({ registry, baseDomain: BASE, actor: "anton" });
+
+  assert.equal(plan.steps[0].kind, "append");
+  assert.equal(plan.steps[0].path, SLOT_LOG_PATH);
+  assert.match(plan.steps[0].contents, /reset main by anton sha=0123456789abcdef/);
+
+  const sql = plan.steps[1].statements.join("\n");
+  assert.match(sql, /DROP DATABASE IF EXISTS "ds_main"/);
+  assert.match(sql, /CREATE DATABASE "ds_main" TEMPLATE "ds_golden"/);
+  assert.ok(!/DROP DATABASE IF EXISTS "ds_golden"/.test(sql));
+
+  // Exactly one clone: the converge that follows must not emit a second one.
+  const clones = plan.steps.filter(
+    (step) => step.kind === "sql" && /CREATE DATABASE/.test(step.statements.join(" ")),
+  );
+  assert.equal(clones.length, 1);
+  assert.equal(plan.sha, SHA);
+});
+
+test("`reset main` refuses on a box where `main` is not registered", () => {
+  assert.throws(
+    () => planSlotReset({ registry: emptyRegistry(), baseDomain: BASE }),
+    /not in the registry/,
+  );
+});
+
+test("the audit line names the human, the moment and the SHA", () => {
+  const line = resetLogLine({ actor: "anton", sha: SHA, now: new Date("2026-09-10T12:00:00Z") });
+  assert.equal(line, `2026-09-10T12:00:00.000Z reset main by anton sha=${SHA}\n`);
+  assert.match(resetLogLine({ actor: undefined, sha: SHA }), /by unknown /);
+});
+
+test("an `append` step refuses a `write`-only effect set rather than truncating the trail", async () => {
+  await assert.rejects(
+    runSlotPlan(
+      { steps: [{ kind: "append", label: "audit", path: SLOT_LOG_PATH, contents: "x" }] },
+      { sql: () => {}, sh: () => {}, write: () => {} },
+    ),
+    /needs an `append` effect/,
+  );
+});
+
+test("`down main` never asks Postgres whether `ds_main` exists", async () => {
+  let asked = false;
+  const { effects } = recordingEffects({ attached: false });
+  await runSlotCommand({
+    options: { command: "down", slot: "main" },
+    registry: liveRegistry("main"),
+    baseDomain: BASE,
+    effects,
+    databaseExists: () => {
+      asked = true;
+      return true;
+    },
+  });
+  assert.equal(asked, false);
+});
+
+test("`up main` asks exactly once, lazily, through the thunk", async () => {
+  let asks = 0;
+  const { effects } = recordingEffects({ attached: false });
+  await runSlotCommand({
+    options: { command: "up", slot: "main", sha: SHA },
+    registry: emptyRegistry(),
+    baseDomain: BASE,
+    effects,
+    databaseExists: () => {
+      asks += 1;
+      return false;
+    },
+  });
+  assert.equal(asks, 1);
+});
+
+test("`up pr-<N>` never asks — a preview is cloned regardless of what exists", async () => {
+  let asked = false;
+  const { effects } = recordingEffects({ attached: false });
+  await runSlotCommand({
+    options: { command: "up", slot: "pr-2034", sha: SHA },
+    registry: emptyRegistry(),
+    baseDomain: BASE,
+    effects,
+    databaseExists: () => {
+      asked = true;
+      return true;
+    },
+  });
+  assert.equal(asked, false);
+});
+
+test("`readRegistry` is exported so the deployer reads the SAME file through the SAME parser", () => {
+  assert.equal(typeof readRegistry, "function");
 });

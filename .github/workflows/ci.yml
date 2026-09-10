@@ -441,7 +441,7 @@ jobs:
             -e ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_USERNAME=ds-bootstrap \
             -e ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_NAME=ds-bootstrap \
             -e ZITADEL_FIRSTINSTANCE_ORG_MACHINE_PAT_EXPIRATIONDATE=2099-12-31T23:59:59Z \
-            ghcr.io/zitadel/zitadel:latest \
+            ghcr.io/zitadel/zitadel:v4.17.3 \
             start-from-init --masterkeyFromEnv
       # The discovery document, not just `/debug/ready`: the suites resolve the
       # issuer through OIDC discovery, so that is the endpoint whose readiness
@@ -1416,7 +1416,7 @@ jobs:
             -e ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_USERNAME=ds-bootstrap \
             -e ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_NAME=ds-bootstrap \
             -e ZITADEL_FIRSTINSTANCE_ORG_MACHINE_PAT_EXPIRATIONDATE=2099-12-31T23:59:59Z \
-            ghcr.io/zitadel/zitadel:latest \
+            ghcr.io/zitadel/zitadel:v4.17.3 \
             start-from-init --masterkeyFromEnv
       - name: Wait for the IdP to be ready
         run: |

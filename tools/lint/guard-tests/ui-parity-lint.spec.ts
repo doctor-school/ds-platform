@@ -1,5 +1,14 @@
-import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { spawnSync } from "node:child_process";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import {
   type ApprovedSourceManifest,
@@ -9,7 +18,36 @@ import {
 } from "../ui-parity-lint";
 import { caseDir, ghDir, runGuard } from "./run-guard";
 
-const canvasRoot = caseDir("ui-parity", "canvas-source");
+const canvasFile = "design-source/ds-foundation.dc.html";
+/**
+ * A real throwaway git repo whose MAIN commit lacks the cited canvas and whose
+ * branch commit adds it — the #2164 shape: `pr:land` runs the guard from a main
+ * checkout that never contains a canvas the PR head introduces.
+ */
+let canvasRepo = "";
+let canvasHead = "";
+let canvasGhDir = "";
+const tmpDirs: string[] = [];
+
+function git(repo: string, args: string[]): string {
+  const result = spawnSync("git", args, { cwd: repo, encoding: "utf8" });
+  if (result.status !== 0)
+    throw new Error(`git ${args.join(" ")} failed: ${result.stderr}`);
+  return result.stdout.trim();
+}
+function commit(repo: string, message: string, paths: string[]): void {
+  git(repo, ["add", "--", ...paths]);
+  git(repo, [
+    "-c",
+    "user.name=t",
+    "-c",
+    "user.email=t@t",
+    "commit",
+    "-q",
+    "-m",
+    message,
+  ]);
+}
 const webFile = "apps/admin/app/events/[id]/page.tsx";
 const approvedFile = "apps/admin/components/recordings-panel.tsx";
 const mobileFile = "apps/mobile/src/screens/home.tsx";
@@ -105,7 +143,7 @@ ui-interactions: https://example.test/interactions.png — pressed, focus and di
 `;
 const canvasBody = `
 ui-source-kind: canvas
-ui-source: design-source/existing.dc.html
+ui-source: ${canvasFile}
 ui-source-state: mode=past
 ${webEvidence}`;
 const approvedBody = `
@@ -146,27 +184,75 @@ ui-evidence-profile: native-mobile, responsive-web
 ${webEvidence.replace("ui-evidence-profile: responsive-web\n", "")}
 ${nativeEvidence.replace("ui-evidence-profile: native-mobile\n", "")}`;
 
+beforeAll(() => {
+  canvasRepo = mkdtempSync(join(tmpdir(), "ui-parity-canvas-"));
+  canvasGhDir = mkdtempSync(join(tmpdir(), "ui-parity-gh-"));
+  tmpDirs.push(canvasRepo, canvasGhDir);
+  git(canvasRepo, ["init", "-q"]);
+  writeFileSync(join(canvasRepo, "README.md"), "stale main\n", "utf8");
+  commit(canvasRepo, "base", ["README.md"]);
+  const mainRef = git(canvasRepo, ["rev-parse", "--abbrev-ref", "HEAD"]);
+  git(canvasRepo, ["checkout", "-q", "-b", "canvas-head"]);
+  mkdirSync(join(canvasRepo, "design-source"), { recursive: true });
+  writeFileSync(
+    join(canvasRepo, canvasFile),
+    "<script>const state = { mode: 'past' };</script>\n",
+    "utf8",
+  );
+  commit(canvasRepo, "add canvas", [canvasFile]);
+  canvasHead = git(canvasRepo, ["rev-parse", "HEAD"]);
+  // Back to the canvas-less checkout: the guard must never read the local tree.
+  git(canvasRepo, ["checkout", "-q", mainRef]);
+  writeFileSync(
+    join(canvasGhDir, "pr-view-2164.json"),
+    JSON.stringify({
+      number: 2164,
+      headRefOid: canvasHead,
+      body: canvasBody,
+      files: [{ path: webFile }],
+      reviews: [],
+    }),
+    "utf8",
+  );
+});
+
+afterAll(() => {
+  for (const dir of tmpDirs) rmSync(dir, { recursive: true, force: true });
+});
+
 const verdict = (
   body: string,
   paths = [approvedFile],
   manifest = approvedManifest,
-) => bodyEvidenceVerdict(body, canvasRoot, paths, manifest);
+  head: string | undefined = canvasHead,
+) => bodyEvidenceVerdict(body, canvasRepo, paths, manifest, head);
 
 describe("ui-parity body evidence", () => {
   it("red: #1625 inspected wording is not evidence", () => {
     expect(verdict("desktop/mobile x light/dark inspected").ok).toBe(false);
   });
 
-  it("red: canvas requires an existing file and a mechanically declared key=value state", () => {
-    expect(
-      verdict(canvasBody.replace("existing.dc.html", "missing.dc.html")).ok,
-    ).toBe(false);
-    expect(
-      verdict(canvasBody.replace("mode=past", "mode=does-not-exist")).ok,
-    ).toBe(false);
+  it("red: #2164 a canvas absent at the PR head fails even so", () => {
+    const missing = verdict(
+      canvasBody.replace("ds-foundation.dc.html", "absent.dc.html"),
+    );
+    expect(missing.ok).toBe(false);
+    expect(missing.missing.join("; ")).toContain("existing exact ui-source");
   });
 
-  it("green: exact existing canvas and declared state pass", () => {
+  it("red: #2164 the key=value state is read from the head blob, not the disk", () => {
+    expect(verdict(canvasBody.replace("mode=past", "mode=nope")).ok).toBe(
+      false,
+    );
+  });
+
+  it("red: #2164 without a resolved PR head the canvas cannot be verified", () => {
+    const noHead = verdict(canvasBody, [approvedFile], approvedManifest, "");
+    expect(noHead.ok).toBe(false);
+    expect(noHead.missing.join("; ")).toContain("at PR head");
+  });
+
+  it("green: #2164 a canvas added by the PR head passes from a checkout without it", () => {
     expect(verdict(canvasBody).ok).toBe(true);
   });
 
@@ -554,5 +640,18 @@ describe("ui-parity guard integration", () => {
     );
     expect(code).toBe(1);
     expect(stderr).toContain("lacks approved-source parity evidence");
+  });
+
+  it("green fixture: #2164 the guard exits 0 from a checkout where the cited canvas exists only at the PR head", () => {
+    const { code, stdout, stderr } = runGuard("ui-parity-lint.ts", canvasRepo, {
+      env: {
+        GITHUB_EVENT_NAME: "pull_request",
+        PR_NUMBER: "2164",
+        LINT_GH_FIXTURE_DIR: canvasGhDir,
+      },
+    });
+    expect(stderr).not.toContain("existing exact ui-source");
+    expect(code).toBe(0);
+    expect(stdout).toContain("parity body evidence OK");
   });
 });

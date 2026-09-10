@@ -356,7 +356,7 @@ services:
   # Volumes: the certificate/ACME state must survive a container replacement, or
   # every `up` re-issues and burns Let's Encrypt rate limit.
   caddy:
-    image: caddy:2.8-alpine
+    image: caddy:2.11.4-alpine
     restart: unless-stopped
     # The one basic-auth pair (Caddyfile → staging_basic_auth). Compose interpolates
     # these from the sourced stage.env; the bcrypt VALUE is passed literally, so its

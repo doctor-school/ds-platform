@@ -1,4 +1,4 @@
-﻿# Zitadel 4.17.3 preparation and recovery
+# Zitadel 4.17.3 preparation and recovery
 
 Preparation: [#2165](https://github.com/doctor-school/ds-platform/issues/2165).
 Release gate: [#2166](https://github.com/doctor-school/ds-platform/issues/2166).
@@ -77,7 +77,7 @@ Retained limitations and adaptations:
 - Login health returned 200 while both old and target rendered `LOGIN ERROR` due
   to the synthetic request-host mismatch. Identical task-only instance/public-host
   headers corrected that mismatch for comparison; no product Host patch was made.
-- Two stand-log rows were reconstructed after missed appends; they do not prove
+- One stand-log row was reconstructed after a missed append; it does not prove
   original command timing. The task command log and private artifacts remain
   outside Git; the PR/checkpoint names their locations.
 - Matching real RU Login entry screenshots cover only `/ui/v2/login/loginname`.

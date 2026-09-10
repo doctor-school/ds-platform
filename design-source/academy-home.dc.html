@@ -10,44 +10,7 @@
 <helmet data-dc-atomics><link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"><style>body{margin:0;background:#fff;font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}a{color:#2D84F2}a:hover{color:#114D9E}:focus-visible{outline:3px solid #6BB1F7;outline-offset:2px}@keyframes livePulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.45;transform:scale(.72)}}@keyframes skel{0%,100%{opacity:.45}50%{opacity:1}}html{scroll-behavior:smooth}</style></helmet>
 
 <div style="min-height:100vh;background:{{ pageBg }}">
-  <!-- Шапка Академии -->
-  <div style="background:#0D3A77;padding:5px clamp(16px,4vw,48px);text-align:center;font-size:9px;font-weight:700;letter-spacing:.22em;text-transform:uppercase;color:rgba(255,255,255,.34)">BBM: Академия смыслов</div>
-  <header data-screen-label="a-home" style="background:#114D9E;padding:14px clamp(16px,4vw,48px);display:flex;align-items:center;justify-content:space-between;gap:16px">
-    <a href="academy-home.dc.html" style="display:flex;flex:none"><img src="assets/ds-logo-white.svg" alt="Doctor.School · Академия" style="height:26px;display:block"></a>
-    <sc-if value="{{ isMobile }}" hint-placeholder-val="{{ false }}">
-      <div style="display:flex;align-items:center;gap:12px">
-        <button onClick="{{ toggleTheme }}" title="Тема" style="font:inherit;width:44px;height:44px;background:transparent;color:#fff;border:2px solid rgba(255,255,255,.5);cursor:pointer;font-size:16px">{{ themeIcon }}</button>
-        <details style="position:relative">
-          <summary style="list-style:none;width:44px;height:44px;display:inline-flex;align-items:center;justify-content:center;background:#fff;color:#114D9E;cursor:pointer;font-size:20px;font-weight:800;box-shadow:3px 3px 0 {{ headerShadow }}">≡</summary>
-          <nav style="position:absolute;top:calc(100% + 10px);right:0;background:{{ surface }};border:2px solid {{ border }};box-shadow:5px 5px 0 {{ shadow }};padding:8px;display:flex;flex-direction:column;min-width:220px;z-index:30">
-            <sc-for list="{{ navItems }}" as="ni" hint-placeholder-count="3">
-              <a href="{{ ni.href }}" style="padding:12px 16px;font-size:15px;font-weight:700;color:{{ ink }};text-decoration:none">{{ ni.label }}</a>
-            </sc-for>
-            <sc-if value="{{ investBtn }}" hint-placeholder-val="{{ false }}"><a href="#invest" style="padding:12px 16px;font-size:15px;font-weight:800;color:{{ accent }};text-decoration:none">Инвесторам</a></sc-if>
-            <sc-if value="{{ guest }}" hint-placeholder-val="{{ true }}"><a href="auth.dc.html" style="margin-top:6px;padding:12px 16px;font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};text-decoration:none;text-align:center">Войти / Регистрация</a></sc-if>
-            <sc-if value="{{ loggedIn }}" hint-placeholder-val="{{ false }}"><a href="account-profile.dc.html" style="margin-top:6px;padding:12px 16px;font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};text-decoration:none;text-align:center">Кабинет</a></sc-if>
-          </nav>
-        </details>
-      </div>
-    </sc-if>
-    <sc-if value="{{ isDesktop }}" hint-placeholder-val="{{ true }}">
-      <nav style="display:flex;align-items:center;gap:26px;font-size:14px;font-weight:700">
-        <sc-for list="{{ navItems }}" as="ni" hint-placeholder-count="3">
-          <a href="{{ ni.href }}" style="color:#D3E8FD;text-decoration:none" style-hover="color:#fff">{{ ni.label }}</a>
-        </sc-for>
-        <sc-if value="{{ investBtn }}" hint-placeholder-val="{{ false }}">
-          <a href="#invest" style="font-size:13px;font-weight:800;color:#fff;border:2px solid rgba(255,255,255,.7);padding:10px 18px;text-decoration:none" style-hover="border-color:#fff">Инвесторам</a>
-        </sc-if>
-        <button onClick="{{ toggleTheme }}" title="Тема" style="font:inherit;width:44px;height:44px;background:transparent;color:#fff;border:2px solid rgba(255,255,255,.5);cursor:pointer;font-size:15px" style-hover="border-color:#fff">{{ themeIcon }}</button>
-        <sc-if value="{{ guest }}" hint-placeholder-val="{{ true }}">
-          <a href="auth.dc.html" style="font-size:13.5px;font-weight:700;color:#114D9E;background:#fff;padding:12px 22px;text-decoration:none;box-shadow:3px 3px 0 {{ headerShadow }};white-space:nowrap" style-hover="transform:translate(1px,1px);box-shadow:2px 2px 0 {{ headerShadow }}">Войти / Регистрация</a>
-        </sc-if>
-        <sc-if value="{{ loggedIn }}" hint-placeholder-val="{{ false }}">
-          <a href="account-profile.dc.html" style="font-size:13.5px;font-weight:700;color:#114D9E;background:#fff;padding:12px 22px;text-decoration:none;box-shadow:3px 3px 0 {{ headerShadow }};white-space:nowrap" style-hover="transform:translate(1px,1px);box-shadow:2px 2px 0 {{ headerShadow }}">Кабинет</a>
-        </sc-if>
-      </nav>
-    </sc-if>
-  </header>
+  <dc-import name="ds-shell" host="academy" loggedIn="{{ loggedIn }}" dark="{{ dark }}" onTheme="{{ toggleTheme }}" embedded="{{ true }}">
 
   <!-- Сплит-герой · композиция «в» (Stage A, остаётся) -->
   <div style="background:#114D9E;padding:clamp(44px,7vw,80px) clamp(16px,4vw,48px) clamp(52px,8vw,96px)">
@@ -286,24 +249,7 @@
       </div>
     </section>
   </main>
-
-  <footer style="margin-top:clamp(56px,8vw,96px)">
-    <div style="border-top:2px solid {{ ink }};padding:32px clamp(16px,4vw,48px);display:flex;align-items:center;justify-content:space-between;max-width:1104px;margin:0 auto;box-sizing:content-box;gap:16px;flex-wrap:wrap">
-      {{ footLogoEl }}
-      <nav style="display:flex;gap:20px;font-size:12.5px;font-weight:700;flex-wrap:wrap">
-        <a href="academy-partners.dc.html" style="color:{{ inkFaint }};text-decoration:none">Партнёры</a>
-        <a href="academy-projects.dc.html" style="color:{{ inkFaint }};text-decoration:none">Проекты</a>
-        <a href="academy-experts.dc.html" style="color:{{ inkFaint }};text-decoration:none">Эксперты</a>
-        <a href="events-feed.dc.html" style="color:{{ inkFaint }};text-decoration:none">События</a>
-        <a href="academy-docs.dc.html" style="color:{{ inkFaint }};text-decoration:none">Документы и контакты</a>
-      </nav>
-      <a href="doctor-home.dc.html" style="font-size:12.5px;font-weight:800;color:{{ accent }};text-decoration:underline;text-underline-offset:4px;white-space:nowrap">doctor.school — врачам</a>
-    </div>
-    <div style="max-width:1104px;margin:0 auto;padding:0 clamp(16px,4vw,48px);text-align:center;font-size:10px;font-weight:800;letter-spacing:.18em;text-transform:uppercase;color:{{ inkFaint }}">BBM: Академия смыслов</div>
-    <div aria-hidden="true" style="overflow:hidden;padding-top:clamp(12px,2.4vw,28px)">
-      <div style="font-size:clamp(30px,8.2vw,154px);font-weight:800;letter-spacing:-.05em;line-height:.78;white-space:nowrap;text-align:center;color:{{ giantInk }};transform:translateY(.16em);user-select:none">Academy.Doctor.School</div>
-    </div>
-  </footer>
+  </dc-import>
 
   <!-- Панель развилок и состояний (для владельца) -->
   <div style="position:fixed;bottom:16px;left:16px;z-index:50;background:{{ surface }};border:2px solid {{ border }};box-shadow:4px 4px 0 {{ shadow }};padding:10px 12px 12px;display:flex;flex-direction:column;gap:8px">

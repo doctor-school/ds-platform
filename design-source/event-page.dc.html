@@ -11,67 +11,7 @@
 
 <div style="min-height:100vh;background:{{ pageBg }}">
 
-  <!-- ═══ d-event · шапка витрины врача (с d-home) ═══ -->
-  <sc-if value="{{ hdrDoctor }}" hint-placeholder-val="{{ true }}">
-    <header data-screen-label="d-event · шапка витрины врача" style="background:#114D9E;padding:14px clamp(16px,4vw,48px);display:flex;align-items:center;gap:clamp(14px,2.5vw,28px)">
-      <a href="doctor-home.dc.html" style="display:flex;flex:none"><img src="assets/ds-logo-white.svg" alt="Doctor.School" style="height:26px;display:block"></a>
-      <sc-if value="{{ isDesktop }}" hint-placeholder-val="{{ true }}">
-        <input value="{{ q }}" onInput="{{ setQ }}" placeholder="Поиск по урокам, школам и событиям" style="flex:1;max-width:440px;font:inherit;font-size:13.5px;font-weight:600;padding:12px 14px;border:2px solid rgba(255,255,255,.45);background:transparent;color:#fff;outline:none;min-width:120px" style-focus="border-color:#fff;background:rgba(255,255,255,.08)">
-        <nav style="display:flex;align-items:center;gap:14px;margin-left:auto">
-          <button onClick="{{ toggleTheme }}" title="Тема" style="font:inherit;width:44px;height:44px;background:transparent;color:#fff;border:2px solid rgba(255,255,255,.5);cursor:pointer;font-size:15px;flex:none" style-hover="border-color:#fff">{{ themeIcon }}</button>
-          <sc-if value="{{ guest }}" hint-placeholder-val="{{ true }}">
-            <a href="auth.dc.html" style="font-size:13.5px;font-weight:700;color:#D3E8FD;text-decoration:none;padding:12px 6px;white-space:nowrap" style-hover="color:#fff">Войти</a>
-            <a href="auth.dc.html" style="font-size:13.5px;font-weight:800;color:#114D9E;background:#fff;padding:12px 22px;text-decoration:none;white-space:nowrap;box-shadow:3px 3px 0 #0D3A77" style-hover="transform:translate(1px,1px);box-shadow:2px 2px 0 #0D3A77">Регистрация</a>
-          </sc-if>
-          <sc-if value="{{ loggedIn }}" hint-placeholder-val="{{ false }}">
-            <a href="#" title="Очки внимания: Пульс · Дыхание · Сознание. Открыть историю начислений" style="display:inline-flex;align-items:center;gap:9px;border:2px solid rgba(255,255,255,.45);padding:10px 14px;font-size:12px;font-weight:800;color:#fff;text-decoration:none;white-space:nowrap;font-variant-numeric:tabular-nums" style-hover="border-color:#fff"><span>{{ balancePul }} Pul</span><span style="opacity:.45">·</span><span>340 Bre</span><span style="opacity:.45">·</span><span>1 250 Con</span></a>
-            <a href="#" style="font-size:13.5px;font-weight:800;color:#114D9E;background:#fff;padding:12px 22px;text-decoration:none;white-space:nowrap;box-shadow:3px 3px 0 #0D3A77" style-hover="transform:translate(1px,1px);box-shadow:2px 2px 0 #0D3A77">Личный кабинет</a>
-          </sc-if>
-        </nav>
-      </sc-if>
-      <sc-if value="{{ isMobile }}" hint-placeholder-val="{{ false }}">
-        <div style="display:flex;align-items:center;gap:10px;margin-left:auto">
-          <button onClick="{{ toggleTheme }}" title="Тема" style="font:inherit;width:44px;height:44px;background:transparent;color:#fff;border:2px solid rgba(255,255,255,.5);cursor:pointer;font-size:16px">{{ themeIcon }}</button>
-          <details style="position:relative">
-            <summary style="list-style:none;width:44px;height:44px;display:inline-flex;align-items:center;justify-content:center;background:#fff;color:#114D9E;cursor:pointer;font-size:20px;font-weight:800;box-shadow:3px 3px 0 #0D3A77">≡</summary>
-            <nav style="position:absolute;top:calc(100% + 10px);right:0;background:{{ surface }};border:2px solid {{ border }};box-shadow:5px 5px 0 {{ shadow }};padding:8px;display:flex;flex-direction:column;min-width:220px;z-index:30">
-              <sc-if value="{{ loggedIn }}" hint-placeholder-val="{{ false }}">
-                <a href="#" style="padding:12px 16px;font-size:12.5px;font-weight:800;color:{{ ink }};text-decoration:none;font-variant-numeric:tabular-nums">{{ balancePul }} Pul · 340 Bre · 1 250 Con</a>
-                <a href="#" style="margin-top:4px;padding:12px 16px;font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};text-decoration:none;text-align:center">Личный кабинет</a>
-              </sc-if>
-              <sc-if value="{{ guest }}" hint-placeholder-val="{{ true }}">
-                <a href="auth.dc.html" style="padding:12px 16px;font-size:15px;font-weight:700;color:{{ ink }};text-decoration:none">Войти</a>
-                <a href="auth.dc.html" style="margin-top:4px;padding:12px 16px;font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};text-decoration:none;text-align:center">Регистрация</a>
-              </sc-if>
-            </nav>
-          </details>
-        </div>
-      </sc-if>
-    </header>
-    <sc-if value="{{ isMobile }}" hint-placeholder-val="{{ false }}">
-      <div style="background:#114D9E;padding:0 16px 14px">
-        <input value="{{ q }}" onInput="{{ setQ }}" placeholder="Поиск по урокам, школам и событиям" style="width:100%;box-sizing:border-box;font:inherit;font-size:14px;font-weight:600;padding:13px 14px;border:2px solid rgba(255,255,255,.45);background:transparent;color:#fff;outline:none" style-focus="border-color:#fff">
-      </div>
-    </sc-if>
-  </sc-if>
-
-  <!-- ═══ a-event · вариант шапки Академии (D-4) ═══ -->
-  <sc-if value="{{ hdrAcademy }}" hint-placeholder-val="{{ false }}">
-    <div style="background:#0D3A77;padding:5px clamp(16px,4vw,48px);text-align:center;font-size:9px;font-weight:700;letter-spacing:.22em;text-transform:uppercase;color:rgba(255,255,255,.34)">BBM: Академия смыслов</div>
-    <header data-screen-label="a-event · шапка Академии" style="background:#114D9E;padding:16px clamp(16px,4vw,48px);display:flex;align-items:center;justify-content:space-between;gap:16px">
-      <a href="academy-home.dc.html" style="display:flex;flex:none"><img src="assets/ds-logo-white.svg" alt="Doctor.School · Академия" style="height:26px;display:block"></a>
-      <nav style="display:flex;align-items:center;gap:clamp(14px,2.5vw,28px);font-size:14px;font-weight:700;flex-wrap:wrap;justify-content:flex-end">
-        <a href="events-feed.dc.html" style="color:#fff;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:6px">Эфиры</a>
-        <sc-if value="{{ isDesktop }}" hint-placeholder-val="{{ true }}">
-          <a href="academy-projects.dc.html" style="color:#D3E8FD;text-decoration:none" style-hover="color:#fff">Проекты</a>
-          <a href="academy-experts.dc.html" style="color:#D3E8FD;text-decoration:none" style-hover="color:#fff">Эксперты</a>
-          <a href="account-my-events.dc.html" style="color:#D3E8FD;text-decoration:none">Мои события</a>
-        </sc-if>
-        <button onClick="{{ toggleTheme }}" title="Тема" style="font:inherit;width:44px;height:44px;background:transparent;color:#fff;border:2px solid rgba(255,255,255,.5);cursor:pointer;font-size:15px" style-hover="border-color:#fff">{{ themeIcon }}</button>
-        <a href="auth.dc.html" style="font-size:13.5px;font-weight:700;color:#114D9E;background:#fff;padding:12px 22px;text-decoration:none;box-shadow:3px 3px 0 #0D3A77" style-hover="transform:translate(1px,1px);box-shadow:2px 2px 0 #0D3A77">Войти</a>
-      </nav>
-    </header>
-  </sc-if>
+  <dc-import name="ds-shell" host="{{ shellHost }}" loggedIn="{{ loggedIn }}" dark="{{ dark }}" onTheme="{{ toggleTheme }}" embedded="{{ true }}">
 
   <!-- ═══ d-event · постер-шапка события ═══ -->
   <div data-screen-label="d-event · постер-шапка" style="background:#114D9E;padding:clamp(24px,4vw,36px) clamp(16px,4vw,48px) 132px;position:relative">
@@ -773,52 +713,7 @@
     </section>
   </sc-if>
 
-  <!-- ═══ Футер витрины врача (с d-home) ═══ -->
-  <sc-if value="{{ hdrDoctor }}" hint-placeholder-val="{{ true }}">
-    <footer data-screen-label="d-event · футер витрины врача" style="border-top:2px solid {{ ink }};padding:clamp(32px,5vw,48px) clamp(16px,4vw,48px) clamp(36px,5vw,56px);margin-top:clamp(40px,7vw,80px)">
-      <div style="max-width:1104px;margin:0 auto;display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:clamp(24px,4vw,40px)">
-        <div>
-          <img src="{{ logoSrc }}" alt="Doctor.School" style="height:22px;display:block">
-          <div style="margin-top:14px;font-size:12.5px;font-weight:600;line-height:1.6;color:{{ inkFaint }}">Бесплатное образование для врачей.<br>© Doctor.School, 2026</div>
-        </div>
-        <div>
-          <div style="font-size:11.5px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:{{ inkFaint }};margin-bottom:14px">Документы и контакты</div>
-          <div style="display:flex;flex-direction:column;gap:9px">
-            <a href="#" style="font-size:13.5px;font-weight:600;color:{{ ink }};text-decoration:none" style-hover="color:{{ accent }};text-decoration:underline;text-underline-offset:3px">Пользовательское соглашение</a>
-            <a href="#" style="font-size:13.5px;font-weight:600;color:{{ ink }};text-decoration:none" style-hover="color:{{ accent }};text-decoration:underline;text-underline-offset:3px">Политика обработки персональных данных</a>
-            <a href="#" style="font-size:13.5px;font-weight:600;color:{{ ink }};text-decoration:none" style-hover="color:{{ accent }};text-decoration:underline;text-underline-offset:3px">Контакты</a>
-          </div>
-        </div>
-        <div>
-          <div style="font-size:11.5px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:{{ inkFaint }};margin-bottom:14px">Экспертам и партнёрам</div>
-          <a href="academy-home.dc.html" style="font-size:13.5px;font-weight:800;color:{{ accent }};text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px">Academy.Doctor.School ↗</a>
-          <div style="margin-top:10px;font-size:12.5px;font-weight:600;line-height:1.6;color:{{ inkFaint }}">Закулисье платформы: проекты, эксперты, партнёры.</div>
-        </div>
-      </div>
-      <div aria-hidden="true" style="overflow:hidden;margin:clamp(28px,4vw,48px) calc(-1*clamp(16px,4vw,48px)) calc(-1*clamp(36px,5vw,56px))">
-        <div style="font-size:clamp(58px,12.6vw,236px);font-weight:800;letter-spacing:-.05em;line-height:.78;white-space:nowrap;text-align:center;color:{{ giantInk }};transform:translateY(.16em);user-select:none">Doctor.School</div>
-      </div>
-    </footer>
-  </sc-if>
-
-  <!-- ═══ Футер Академии ═══ -->
-  <sc-if value="{{ hdrAcademy }}" hint-placeholder-val="{{ false }}">
-    <footer data-screen-label="a-event · футер Академии" style="border-top:2px solid {{ ink }};padding:32px clamp(16px,4vw,48px);display:flex;align-items:center;justify-content:space-between;max-width:1104px;margin:clamp(40px,7vw,80px) auto 0;box-sizing:content-box;gap:16px;flex-wrap:wrap">
-      <img src="{{ logoSrc }}" alt="Doctor.School" style="height:22px;display:block">
-      <nav style="display:flex;gap:20px;font-size:12.5px;font-weight:700;flex-wrap:wrap">
-        <a href="academy-partners.dc.html" style="color:{{ inkFaint }};text-decoration:none">Партнёры</a>
-        <a href="academy-projects.dc.html" style="color:{{ inkFaint }};text-decoration:none">Проекты</a>
-        <a href="academy-experts.dc.html" style="color:{{ inkFaint }};text-decoration:none">Эксперты</a>
-        <a href="events-feed.dc.html" style="color:{{ inkFaint }};text-decoration:none">События</a>
-        <a href="academy-docs.dc.html" style="color:{{ inkFaint }};text-decoration:none">Документы и контакты</a>
-      </nav>
-      <a href="doctor-home.dc.html" style="font-size:12.5px;font-weight:800;color:{{ accent }};text-decoration:underline;text-underline-offset:4px;white-space:nowrap">doctor.school — врачам</a>
-    </footer>
-    <div style="max-width:1104px;margin:0 auto;padding:0 clamp(16px,4vw,48px);text-align:center;font-size:10px;font-weight:800;letter-spacing:.18em;text-transform:uppercase;color:{{ inkFaint }}">BBM: Академия смыслов</div>
-    <div aria-hidden="true" style="overflow:hidden;padding-top:clamp(16px,3vw,36px)">
-      <div style="font-size:clamp(30px,8.2vw,154px);font-weight:800;letter-spacing:-.05em;line-height:.78;white-space:nowrap;text-align:center;color:{{ giantInk }};transform:translateY(.16em);user-select:none">Academy.Doctor.School</div>
-    </div>
-  </sc-if>
+  </dc-import>
 </div>
 </x-dc>
 <script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1104,&quot;height&quot;:900},&quot;header&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;витрина врача&quot;,&quot;Академия&quot;],&quot;default&quot;:&quot;витрина врача&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Оболочка · D-4&quot;},&quot;format&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;эфир&quot;,&quot;офлайн&quot;,&quot;гибрид&quot;],&quot;default&quot;:&quot;эфир&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Формат · D-4&quot;},&quot;speakers&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;1&quot;,&quot;2&quot;,&quot;3&quot;],&quot;default&quot;:&quot;1&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Контент&quot;},&quot;phase&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;до начала&quot;,&quot;идёт сейчас&quot;,&quot;прошло&quot;,&quot;отменено&quot;],&quot;default&quot;:&quot;до начала&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Состояние&quot;},&quot;auth&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;гость&quot;,&quot;вошёл&quot;],&quot;default&quot;:&quot;гость&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Состояние&quot;},&quot;registered&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Состояние&quot;},&quot;pul&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;хватает&quot;,&quot;не хватает — партнёрская ссылка&quot;,&quot;не хватает — пришёл сам&quot;],&quot;default&quot;:&quot;хватает&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Состояние&quot;},&quot;medGate&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Состояние&quot;},&quot;soldOut&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Состояние&quot;},&quot;nmoOk&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Состояние&quot;},&quot;pageState&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;обычно&quot;,&quot;загрузка&quot;,&quot;ошибка&quot;],&quot;default&quot;:&quot;обычно&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Состояние&quot;},&quot;board&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;выкл&quot;,&quot;билет и QR&quot;,&quot;блок записи — А·Б·В&quot;,&quot;гибрид — А·Б&quot;,&quot;мест нет — А·Б·В&quot;,&quot;мини-опрос — А·Б&quot;],&quot;default&quot;:&quot;выкл&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Стенды&quot;}}">
@@ -992,6 +887,7 @@ class Component extends DCLogic {
       speakersTitle: spCount > 1 ? 'Спикеры' : 'Ведёт',
       speakerList,
       hdrDoctor, hdrAcademy: !hdrDoctor,
+      shellHost: hdrDoctor ? 'doctor' : 'academy',
       guest, loggedIn, balancePul,
       fmtWord,
       heroBadgeStyle, heroBadgeEl,

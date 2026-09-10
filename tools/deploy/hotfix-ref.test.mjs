@@ -60,7 +60,14 @@ test("EARS-1.5: --ref together with --rollback is a usage error", () => {
 });
 
 test("EARS-1.6: a repeated --ref is a usage error", () => {
-  const r = parseRefFlag(["node", "prod.mjs", "--ref", "abcdef01", "--ref", "beef0001"]);
+  const r = parseRefFlag([
+    "node",
+    "prod.mjs",
+    "--ref",
+    "abcdef01",
+    "--ref",
+    "beef0001",
+  ]);
   assert.match(r.error, /only once/);
 });
 
@@ -138,4 +145,157 @@ test("EARS-3.4: an unresolvable deployed SHA is refused", () => {
   });
   assert.equal(v.ok, false);
   assert.match(v.error, /cannot resolve the live deployed SHA/);
+});
+import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { execFileSync } from "node:child_process";
+import * as hotfix from "./hotfix-ref.mjs";
+
+function replayFixture(t) {
+  const cwd = mkdtempSync(join(tmpdir(), "hotfix-proof-"));
+  t.after(() => rmSync(cwd, { recursive: true, force: true }));
+  const git = (...args) =>
+    execFileSync("git", args, {
+      cwd,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    }).trim();
+  git("init", "-b", "main");
+  git("config", "user.name", "Fixture");
+  git("config", "user.email", "fixture@example.invalid");
+  git("config", "core.autocrlf", "false");
+  const lines = Array.from({ length: 20 }, (_, i) => `line ${i}`);
+  const save = () =>
+    writeFileSync(join(cwd, "config.txt"), lines.join("\n") + "\n");
+  const commit = (message) => {
+    git("add", "config.txt");
+    git("commit", "-m", message);
+    return git("rev-parse", "HEAD");
+  };
+  save();
+  const deployed = commit("base");
+  lines[2] = "main context";
+  save();
+  commit("other main work");
+  lines[5] = "version update";
+  save();
+  const source = commit("reviewed update");
+  git("update-ref", "refs/remotes/origin/main", source);
+  git("checkout", "-b", "hotfix", deployed);
+  git("cherry-pick", "-x", source);
+  const target = git("rev-parse", "HEAD");
+  return { cwd, git, deployed, source, target };
+}
+
+test("EARS-4: exact clean replay accepts context drift rejected by git cherry", (t) => {
+  const f = replayFixture(t);
+  assert.match(f.git("cherry", "origin/main", f.target, f.deployed), /^\+/);
+  const result = hotfix.verifyHotfixCommits(f);
+  assert.equal(result.ok, true, result.error);
+  assert.deepEqual(result.replayed, [{ target: f.target, source: f.source }]);
+  assert.equal(f.git("rev-parse", "HEAD"), f.target);
+  assert.equal(f.git("status", "--porcelain"), "");
+});
+
+for (const variant of [
+  "missing receipt",
+  "ambiguous receipt",
+  "malformed receipt",
+  "unmerged source",
+  "extra edit",
+  "conflict",
+  "merge target",
+  "merge source",
+]) {
+  test(`EARS-5: reject ${variant}`, (t) => {
+    const f = replayFixture(t);
+    if (variant === "missing receipt")
+      f.git("commit", "--amend", "-m", "no provenance");
+    if (variant === "ambiguous receipt")
+      f.git(
+        "commit",
+        "--amend",
+        "-m",
+        `update\n\n(cherry picked from commit ${f.source})\n(cherry picked from commit ${f.source})`,
+      );
+    if (variant === "malformed receipt")
+      f.git(
+        "commit",
+        "--amend",
+        "-m",
+        "update\n\n(cherry picked from commit not-a-sha)",
+      );
+    if (variant === "unmerged source")
+      f.git("update-ref", "refs/remotes/origin/main", f.deployed);
+    if (variant === "extra edit") {
+      writeFileSync(join(f.cwd, "extra.txt"), "unreviewed");
+      f.git("add", "extra.txt");
+      f.git("commit", "--amend", "--no-edit");
+    }
+    if (variant === "conflict") {
+      f.git("checkout", "-b", "conflict-base", f.deployed);
+      const text = f
+        .git("show", `${f.deployed}:config.txt`)
+        .replace("line 5", "conflicting version");
+      writeFileSync(join(f.cwd, "config.txt"), text + "\n");
+      f.git("commit", "-am", "conflicting base");
+      f.deployed = f.git("rev-parse", "HEAD");
+      writeFileSync(
+        join(f.cwd, "config.txt"),
+        text.replace("conflicting version", "version update") + "\n",
+      );
+      f.git(
+        "commit",
+        "-am",
+        `manual resolution\n\n(cherry picked from commit ${f.source})`,
+      );
+    }
+    if (variant.startsWith("merge")) {
+      const tree = f.git("rev-parse", `${f.target}^{tree}`);
+      const merge = f.git(
+        "commit-tree",
+        tree,
+        "-p",
+        f.source,
+        "-p",
+        f.deployed,
+        "-m",
+        "merge",
+      );
+      if (variant === "merge target") f.git("reset", "--hard", merge);
+      else {
+        f.git("update-ref", "refs/remotes/origin/main", merge);
+        f.git(
+          "commit",
+          "--amend",
+          "-m",
+          `update\n\n(cherry picked from commit ${merge})`,
+        );
+      }
+    }
+    f.target = f.git("rev-parse", "HEAD");
+    assert.equal(hotfix.verifyHotfixCommits(f).ok, false);
+  });
+}
+
+test("EARS-6: native equivalent needs no receipt and Git errors fail closed", (t) => {
+  const f = replayFixture(t);
+  f.git("checkout", "-b", "native", f.git("rev-parse", f.source + "^"));
+  f.deployed = f.git("rev-parse", "HEAD");
+  writeFileSync(join(f.cwd, "prod-only.txt"), "existing production difference");
+  f.git("add", "prod-only.txt");
+  f.git("commit", "-m", "production base");
+  f.deployed = f.git("rev-parse", "HEAD");
+  f.git("cherry-pick", f.source);
+  f.target = f.git("rev-parse", "HEAD");
+  assert.deepEqual(hotfix.verifyHotfixCommits(f), {
+    ok: true,
+    error: null,
+    replayed: [],
+  });
+  assert.equal(
+    hotfix.verifyHotfixCommits({ ...f, target: "f".repeat(40) }).ok,
+    false,
+  );
 });

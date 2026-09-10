@@ -4,15 +4,15 @@
 //
 // The default deploy ships `origin/main` WHOLE. A hotfix must ship the currently
 // deployed SHA plus a cherry-pick of an already-merged fix — nothing else from
-// main. This module holds the decision logic that says whether a given target
-// SHA is a legitimate hotfix target; every git/gh query stays in
-// `tools/deploy/prod.mjs`, so these functions are pure, deterministic and unit
-// tested (`hotfix-ref.test.mjs`).
+// main. This module holds the pure verdicts and the bounded Git replay proof
+// (`hotfix-ref.test.mjs` covers real repository fixtures).
 //
 // What the hotfix path deliberately does NOT become: an arbitrary-branch deploy.
 // The invariants below (strict descendant of live prod + every extra commit is a
 // cherry-pick of a commit already on `origin/main`) are what keeps «deploy ships
 // reviewed, merged code» true.
+
+import { spawnSync } from "node:child_process";
 
 /** A full or abbreviated git commit SHA. */
 const SHA_RE = /^[0-9a-f]{7,40}$/i;
@@ -139,4 +139,98 @@ export function hotfixPreflightVerdict({
         ` a hotfix may only cherry-pick ALREADY-MERGED commits. Land the fix on main first.`,
     };
   return { ok: true, error: null };
+}
+
+/** Verify every range commit using native equivalence or an exact Git replay.
+ * merge-tree writes only unreachable objects: no checkout, index or ref changes.
+ * Git failures (including unsupported --merge-base) and conflicts fail closed.
+ */
+export function verifyHotfixCommits({ cwd, deployed, target }) {
+  const replayed = [];
+  try {
+    const git = (...args) => {
+      const result = spawnSync("git", args, {
+        cwd,
+        encoding: "utf8",
+        timeout: 30_000,
+        maxBuffer: 4 * 1024 * 1024,
+        env: { ...process.env, GIT_NO_REPLACE_OBJECTS: "1" },
+      });
+      if (result.error || result.status !== 0)
+        throw new Error(
+          `git ${args[0]} failed (exit ${result.status ?? "unknown"})`,
+        );
+      return result.stdout.trim();
+    };
+    if (!/^[0-9a-f]{40}$/i.test(deployed) || !/^[0-9a-f]{40}$/i.test(target))
+      throw new Error("full commit SHAs required");
+    if (deployed === target) throw new Error("empty hotfix range");
+    git("merge-base", "--is-ancestor", deployed, target);
+    const upstream = git("rev-parse", "origin/main^{commit}");
+    const commits = git(
+      "rev-list",
+      "--reverse",
+      `${deployed}..${target}`,
+    ).split("\n");
+    const parent = (sha) => {
+      const parents = git("show", "-s", "--format=%P", sha).split(" ");
+      if (parents.length !== 1 || !/^[0-9a-f]{40}$/.test(parents[0]))
+        throw new Error(`${sha.slice(0, 12)} must have exactly one parent`);
+      return parents[0];
+    };
+    const cherry = git("cherry", upstream, target, deployed);
+    if (
+      cherry &&
+      !cherry.split("\n").every((line) => /^[+-] [0-9a-f]{40}$/.test(line))
+    )
+      throw new Error("malformed git cherry output");
+    const { matched, unmatched } = parseCherryOutput(cherry);
+    for (const commit of commits) {
+      const targetParent = parent(commit); // git cherry omits merge commits.
+      if (matched.includes(commit)) continue;
+      if (!unmatched.includes(commit)) {
+        git("merge-base", "--is-ancestor", commit, upstream);
+        continue;
+      }
+      const body = git("show", "-s", "--format=%B", commit);
+      const receipts = body
+        .split("\n")
+        .filter((line) => line.includes("cherry picked from commit"));
+      const receipt =
+        receipts.length === 1 &&
+        /^\(cherry picked from commit ([0-9a-f]{40})\)$/.exec(receipts[0]);
+      if (!receipt)
+        throw new Error(
+          `${commit.slice(0, 12)} needs one canonical cherry-pick -x receipt`,
+        );
+      const source = receipt[1];
+      git("merge-base", "--is-ancestor", source, upstream);
+      const sourceParent = parent(source);
+      const tree = git(
+        "-c",
+        "merge.renormalize=false",
+        "merge-tree",
+        "--write-tree",
+        "--no-messages",
+        `--merge-base=${sourceParent}`,
+        targetParent,
+        source,
+      );
+      if (
+        !/^[0-9a-f]{40}$/.test(tree) ||
+        tree !== git("rev-parse", `${commit}^{tree}`)
+      )
+        throw new Error(
+          `${commit.slice(0, 12)} differs from clean source replay`,
+        );
+      replayed.push({ target: commit, source });
+    }
+    return { ok: true, error: null, replayed };
+  } catch (error) {
+    return {
+      ok: false,
+      error: `hotfix proof refused: ${error.message}`,
+      replayed: [],
+    };
+  }
 }

@@ -63,7 +63,7 @@ import { createDeploymentRecord } from "./deployment-record.mjs";
 import {
   REF_FLAG,
   hotfixPreflightVerdict,
-  parseCherryOutput,
+  verifyHotfixCommits,
   parseRefFlag,
 } from "./hotfix-ref.mjs";
 import {
@@ -408,24 +408,19 @@ async function assertHotfixInvariants(target) {
       encoding: "utf8",
     }).status === 0;
 
-  // `git cherry <upstream> <head> <limit>`: `-` = an equivalent commit exists on
-  // origin/main (a cherry-pick of merged work), `+` = it does not.
-  const cherry = spawnSync("git", ["cherry", "origin/main", target, deployed], {
-    encoding: "utf8",
-  });
-  if (cherry.status !== 0) {
-    die(
-      `${REF_FLAG}: \`git cherry origin/main ${target.slice(0, 12)} ${deployed.slice(0, 12)}\`` +
-        ` failed: ${(cherry.stderr || "").trim() || "(no output)"}`,
+  const proof = verifyHotfixCommits({ cwd: process.cwd(), deployed, target });
+  if (!proof.ok) die(proof.error);
+  for (const replay of proof.replayed) {
+    ok(
+      `clean Git replay ${replay.target.slice(0, 12)} from origin/main ${replay.source.slice(0, 12)} (exact tree)`,
     );
   }
-  const { unmatched } = parseCherryOutput(cherry.stdout);
 
   const verdict = hotfixPreflightVerdict({
     deployedSha: deployed,
     targetSha: target,
     targetIsDescendant: isDescendant,
-    unmatched,
+    unmatched: [],
   });
   if (!verdict.ok) die(verdict.error);
   ok(

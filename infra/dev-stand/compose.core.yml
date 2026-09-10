@@ -399,7 +399,7 @@ services:
   # discovery origin is UNCHANGED (http://${IDP_EXTERNAL_DOMAIN}:${IDP_PORT}); the
   # BFF's headless path is untouched at the origin level (#174 DoD). Image pinned.
   idp-proxy:
-    image: caddy:2.8-alpine
+    image: caddy:2.11.4-alpine
     restart: unless-stopped
     environment:
       IDP_EXTERNAL_DOMAIN: ${IDP_EXTERNAL_DOMAIN:-localhost}

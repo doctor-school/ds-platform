@@ -25,7 +25,7 @@ name: ds-api-prod
 services:
   # --- Caddy — TLS terminator + reverse proxy for the 3 public hostnames (§5.2) ---
   caddy:
-    image: caddy:2
+    image: caddy:2.11.4-alpine
     restart: unless-stopped
     ports:
       - "80:80"

@@ -14,7 +14,7 @@ lang: en
 
 Keep the existing mail.ru profile ID and description `real transactional sender` unchanged. Create exactly one Postbox profile named `real transactional sender:postbox`, using the same selected Postbox credentials as BFF `IDP_SMTP_REAL_*`. Stable ID means stable **within each provider**, not one ID whose credentials are rewritten across providers. Intercept keeps `dev-stand mailpit`.
 
-Provisioning and runtime resolve the explicit provider to exactly one matching profile and verify ID, host:port, TLS, username, sender address and name. A mismatch is an error, never permission to update credentials, rename a profile, delete/recreate it or manufacture a new generation. Credential rotation requires a separately reviewed migration; metadata readback cannot prove password equality.
+Provisioning and runtime resolve the explicit provider to exactly one matching profile and verify ID, host:port, TLS, username and sender address; provisioning additionally verifies sender name. A mismatch is an error, never permission to update credentials, rename a profile, delete/recreate it or manufacture a new generation. Credential rotation requires a separately reviewed migration; metadata readback cannot prove password equality.
 
 ## Pinned API and source evidence
 

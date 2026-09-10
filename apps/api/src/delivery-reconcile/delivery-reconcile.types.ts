@@ -1,6 +1,7 @@
 /** Stable identities shared with provision.sh; native login OTP remains Zitadel-sent. */
 export const SMTP_DESCRIPTION_INTERCEPT = "dev-stand mailpit";
 export const SMTP_DESCRIPTION_REAL = "real transactional sender";
+export const SMTP_DESCRIPTION_POSTBOX = "real transactional sender:postbox";
 export const SMS_DESCRIPTION_INTERCEPT = "dev-stand sms-sink";
 export const SMS_DESCRIPTION_REAL = "real sms-aero-adapter";
 
@@ -22,6 +23,7 @@ export interface ZitadelProvider {
   tls?: boolean | undefined;
   user?: string | undefined;
   senderAddress?: string | undefined;
+  senderName?: string | undefined;
 }
 
 /**

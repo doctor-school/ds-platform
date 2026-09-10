@@ -22,8 +22,8 @@ const activate = source.slice(
 );
 
 async function fixture(mode) {
-  const state = {
-    id: "stable-real",
+  const mailru = {
+    id: "stable-mailru",
     description: "real transactional sender",
     host: "smtp.mail.ru:465",
     tls: true,
@@ -32,41 +32,74 @@ async function fixture(mode) {
     user: "old-user",
     state: "SMTP_CONFIG_ACTIVE",
   };
-  const writes = [];
+  const candidate = {
+    ...mailru,
+    id: "postbox",
+    description: "real transactional sender:postbox",
+    host: "postbox.cloud.yandex.net:465",
+    user: "new-user",
+    state: "SMTP_CONFIG_INACTIVE",
+  };
+  const original = { ...mailru };
+  let created = !["create", "lost-create", "delayed"].includes(mode),
+    active = false,
+    reads = 0;
+  const requests = [];
   const server = createServer(async (req, res) => {
     let raw = "";
     for await (const chunk of req) raw += chunk;
     const body = raw ? JSON.parse(raw) : {};
+    requests.push({ method: req.method, path: req.url, body });
     res.setHeader("Content-Type", "application/json");
-    if (req.method === "PUT") {
-      writes.push({ path: req.url, body });
-      if (mode === "reject") {
-        res.statusCode = 400;
-        res.end(
-          JSON.stringify({
-            code: 3,
-            message: "invalid update",
-            rejected: body,
-          }),
-        );
+    if (req.url.endsWith("/_search")) {
+      if (mode === "malformed") {
+        res.end("{}");
         return;
       }
-      if (mode !== "unchanged" && !req.url.endsWith("/password"))
-        Object.assign(state, body);
-      res.end('{"details":{"sequence":"42"}}');
+      const profiles = [
+        mailru,
+        ...(created ? [candidate] : []),
+        ...(mode === "duplicate" ? [{ ...candidate, id: "duplicate" }] : []),
+      ];
+      const offset = Number(body.query?.offset ?? 0);
+      res.end(
+        JSON.stringify({
+          result: profiles.slice(offset, offset + 1),
+          details: { totalResult: String(profiles.length) },
+        }),
+      );
       return;
     }
-    const publicState = { ...state };
-    delete publicState.password;
+    if (req.method === "POST" && req.url === "/admin/v1/smtp") {
+      created = true;
+      Object.assign(candidate, body);
+      if (mode === "lost-create") {
+        req.socket.destroy();
+        return;
+      }
+      res.end('{"id":"postbox"}');
+      return;
+    }
+    if (req.url.endsWith("/_activate")) {
+      active = true;
+      res.end("{}");
+      return;
+    }
+    if (req.method === "PUT") {
+      res.statusCode = 400;
+      res.end('{"code":3,"message":"fixture-secret must never be updated"}');
+      return;
+    }
+    if (mode === "delayed" && reads++ === 0) {
+      res.statusCode = 404;
+      res.end('{"code":5}');
+      return;
+    }
+    const publicState = { ...candidate, state: active ? 2 : 3 };
+    if (mode === "mismatch") publicState.host = "wrong.test:465";
     if (mode === "wrong-active" && req.url === "/admin/v1/smtp")
-      publicState.id = "sink";
-    res.end(
-      JSON.stringify(
-        req.url.endsWith("/_search")
-          ? { result: [publicState] }
-          : { smtpConfig: publicState },
-      ),
-    );
+      publicState.id = "stable-mailru";
+    res.end(JSON.stringify({ smtpConfig: publicState }));
   });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   try {
@@ -90,47 +123,60 @@ async function fixture(mode) {
       child.stderr.on("data", (data) => (stderr += data));
       child.on("error", reject);
       child.on("close", (status) => resolve({ status, stdout, stderr }));
+      // Advance only this shell's clock on repeated failed reads; no real 120s test wait.
       child.stdin.end(
-        `set -euo pipefail\n${helpers}\n${ensure}\nid="$(ensure_smtp_provider 'real transactional sender' 'postbox.cloud.yandex.net:465' 'noreply@example.test' 'Doctor.School' 'new-user' 'fixture-secret' true)"\nEMAIL_DELIVERY_MODE=real\nSMTP_REAL_ID="$id"\nSMTP_MAILPIT_ID=sink\n${activate}\nprintf 'SUCCESS %s\\n' "$id"\n`,
+        `set -euo pipefail\nsleep() { SECONDS=$((SECONDS+61)); }\n${helpers}\n${ensure}\nid="$(ensure_smtp_provider 'real transactional sender:postbox' 'postbox.cloud.yandex.net:465' 'noreply@example.test' 'Doctor.School' 'new-user' 'fixture-secret' true)"\nEMAIL_DELIVERY_MODE=real\nSMTP_REAL_ID="$id"\nSMTP_MAILPIT_ID=sink\n${activate}\nprintf 'SUCCESS %s\\n' "$id"\n`,
       );
     });
-    return { ...result, writes, state };
+    assert.deepEqual(mailru, original, "mail.ru profile must remain intact");
+    return { ...result, requests };
   } finally {
     await new Promise((resolve) => server.close(resolve));
   }
 }
 
-test("EARS-31: rejected SMTP update fails inside command substitution without false success", async () => {
-  const result = await fixture("reject");
-  assert.notEqual(result.status, 0);
-  assert.doesNotMatch(result.stdout + result.stderr, /SUCCESS|ensured SMTP/);
-  assert.doesNotMatch(result.stdout + result.stderr, /fixture-secret/);
-});
-test("EARS-31: successful HTTP response with unchanged metadata fails readback", async () => {
-  const result = await fixture("unchanged");
-  assert.notEqual(result.status, 0);
-  assert.doesNotMatch(
-    result.stdout + result.stderr,
-    /SUCCESS|ensured SMTP|fixture-secret/,
-  );
-});
-test("EARS-31: existing identity switches host and credentials and is read back", async () => {
-  const result = await fixture("converge");
-  assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /SUCCESS stable-real/);
-  assert.equal(result.state.host, "postbox.cloud.yandex.net:465");
-  assert.equal(result.state.user, "new-user");
-  assert.equal(result.writes[0].body.password, "fixture-secret");
-  assert.doesNotMatch(result.stdout + result.stderr, /fixture-secret/);
-});
-
-test("EARS-31: activation success with a different active identity fails before app startup", async () => {
-  const result = await fixture("wrong-active");
-  assert.notEqual(result.status, 0);
-  assert.doesNotMatch(result.stdout, /SUCCESS/);
-  assert.match(result.stderr, /active-provider readback failed/);
-});
-
+for (const mode of ["reuse", "create", "delayed"]) {
+  test(`EARS-31: ${mode} preserves mail.ru and converges the separate Postbox ID without PUT`, async () => {
+    const result = await fixture(mode);
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /SUCCESS postbox/);
+    assert.equal(result.requests.filter((r) => r.method === "PUT").length, 0);
+    assert.equal(
+      result.requests.filter(
+        (r) => r.method === "POST" && r.path === "/admin/v1/smtp",
+      ).length,
+      mode === "reuse" ? 0 : 1,
+    );
+    assert.doesNotMatch(result.stdout + result.stderr, /fixture-secret/);
+  });
+}
+for (const mode of [
+  "duplicate",
+  "mismatch",
+  "malformed",
+  "lost-create",
+  "wrong-active",
+]) {
+  test(`EARS-31: ${mode} refuses false success without changing mail.ru`, async () => {
+    const result = await fixture(mode);
+    assert.notEqual(result.status, 0);
+    assert.doesNotMatch(
+      result.stdout + result.stderr,
+      /SUCCESS|fixture-secret/,
+    );
+    assert.equal(result.requests.filter((r) => r.method === "PUT").length, 0);
+    if (mode !== "wrong-active")
+      assert.equal(
+        result.requests.filter((r) => r.path.endsWith("/_activate")).length,
+        0,
+      );
+    assert.ok(
+      result.requests.filter(
+        (r) => r.method === "POST" && r.path === "/admin/v1/smtp",
+      ).length <= 1,
+    );
+  });
+}
 test("EARS-31: deployment converges IdP before migrating or replacing the application", () => {
   const deploy = readFileSync(new URL("./prod.mjs", import.meta.url), "utf8");
   const start = deploy.indexOf("async function deploy(");

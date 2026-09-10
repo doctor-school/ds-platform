@@ -15,15 +15,29 @@ This setting permits private IPv4 destinations generally, not only the adapter.
 
 ## Before an authorized release
 
-Record the release SHA, exact running core/Login image digests, configuration,
-Postgres version, and a tested recovery destination. Securely retain a consistent
-pre-upgrade dump of the **zitadel database**, its roles/ownership requirements,
-and the matching masterkey, database credentials, Login PAT and mounted config.
-Keep these secrets and database bytes out of Git and public evidence.
-Validate the dump by restoring into a new empty database server of the same
-Postgres major, with the required roles and matching credentials. Check restore
-exit status and authenticate against that restored instance with the old images.
-Record the snapshot checksum, capture time, and the recovery point/data-loss window.
+Reuse the same-major isolated restore procedure already demonstrated below by the
+synthetic 4.15.0 → 4.17.3 → restored 4.15.0 proof. For the exact release, record
+its SHA, running core/Login digests and retained old images, configuration,
+Postgres version, roles/ownership requirements, and an explicit recovery
+destination and recovery point objective (RPO). Securely retain a consistent
+pre-upgrade backup of the **zitadel database** with the matching masterkey,
+database credentials, Login PAT and mounted configuration.
+
+Check backup completion, integrity/checksum, capture time and readability by the
+recovery operator; check access to the matching keys, configuration and old images.
+Verify that the selected recovery destination can provide a new empty instance
+of the same Postgres major with the required roles and capacity. Record the
+accepted data-loss window and reconciliation plan. Keep secrets and database
+bytes out of Git and public evidence. The exact-release backup capture and
+recovery-destination verification remain open in #2166; this preparation does not
+claim they have happened.
+
+The completed synthetic restore/auth proof establishes the recovery procedure;
+there is no blanket requirement to copy production data or repeat the complete
+auth suite before every minor update. Additional rehearsal must address a named
+uncovered risk, such as a changed recovery procedure, Postgres major or backup
+format, under the portable discipline's proportionality rule. When actual recovery
+is needed, use the procedure and service checks below before reopening traffic.
 
 Core `start-from-init` performs IdP setup migrations. Replacing only the image tag
 with 4.15.0 does **not** reverse them. The application-only `deploy:prod --rollback`
@@ -65,7 +79,26 @@ Target manifest digests observed during preparation:
 - Core: `sha256:2ec2a42551862ca59dc752c321c7041358dea8b33b63ea5e021ec499ad5e2d9f`
 - Login: `sha256:07ae03bd1aa49dbc015617a0c1bc9e6abd956616856f0bb374269fae7da79059`
 
-Retained limitations and adaptations:
+## Current technical Console proof
+
+The [2026-09-10 TLS staging verification](https://github.com/doctor-school/ds-platform/pull/2169#issuecomment-5616121502)
+completed the native `/ui/console/` → RU Login → password → authenticated Console
+round-trip with a representative operator. No extra factor/reset prerequisite
+arose for that account. No injected request headers or cookies were used; the
+observed core/Login manifests match the target digests above. Stage core was
+already at the target; only the existing Login was selected through the documented
+`IDP_LOGIN_IMAGE` override. This evidence supplements the existing 12-PASS
+headless-client proof and successful candidate API e2e checks.
+
+The [latest review](https://github.com/doctor-school/ds-platform/pull/2169#pullrequestreview-5165163960)
+identifies successful Console access plus headless token exchange as the bounded
+technical contract. Exhaustive upstream OTP/enrollment journeys and an authored
+canvas are not minimum requirements for this unmodified operator UI update.
+Technical Console proof is now **PASS**; applicability of the product-owner
+Stage-A/B gate remains **pending**. This is neither owner approval nor a
+no-render-delta certification.
+
+Historical fixture limitations and adaptations:
 
 - SSH local forwarding returned `administratively prohibited`; bounded probes
   stopped. Authorized task-only LAN ports supplied the test transport, with no
@@ -80,9 +113,13 @@ Retained limitations and adaptations:
 - One stand-log row was reconstructed after a missed append; it does not prove
   original command timing. The task command log and private artifacts remain
   outside Git; the PR/checkpoint names their locations.
-- Matching real RU Login entry screenshots cover only `/ui/v2/login/loginname`.
-  [Upstream PR 12668](https://github.com/zitadel/zitadel/pull/12668) changes RU/EN
+- The earlier native HTTP LAN fixture could not retain its Secure session cookie
+  for OTP context; a local preview-proxy startup was rejected by tool policy and
+  was not retried. This was a historical fixture limitation, not an established
+  production or target-version regression. The TLS Console proof above supersedes
+  the earlier incomplete operator-access evidence.
+- [Upstream PR 12668](https://github.com/zitadel/zitadel/pull/12668) changes RU/EN
   authentication-method labels, OTP challenge/verification fallback errors and
-  resend accessibility text. Full hosted OTP/enrollment journeys and owner render
-  approval remain **pending**. An unchanged entry screen is not a no-render-delta
-  certification; the preparation PR stays draft pending the applicable gates.
+  resend accessibility text. Those visible changes remain explicit. The draft
+  stays pending the product-gate scope decision and applicable owner evidence;
+  an unchanged entry screenshot does not establish no render delta.

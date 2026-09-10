@@ -6,7 +6,8 @@ every preview slot (`main`, `pr-<N>`) is a _separate_ compose project that joins
 `stg-infra` network with its `api` container only.
 
 Plan of record: `apps/docs/content/specs/tech/2026-09-08-staging-previews-and-regression-contour-en.md`
-(§3 topology, §8 step 1, §9 recovery). Issue #2061 (Phase A, this directory);
+(§3 topology, §8 steps 1-2, §9 recovery). Issue #2061 (Phase A, this directory) and
+#2062 (the edge — «Edge (#2062)» below);
 Phase B — the owner's `terraform apply`, the first bring-up and
 the live acceptance below — is tracked in **#2095**.
 
@@ -40,7 +41,10 @@ Everything here is Phase B: nothing in this file runs on a developer machine.
 3. The repo is checked out on the box at `/srv/ds-platform` (the `main` tree the
    slot script clones from).
 4. `/etc/ds-platform/stage.env` written from `infra/deploy/stage.env.example`, mode
-   `0600`, owner `root:root`.
+   `0600`, owner `root:root`. Any value containing `$` — above all
+   `STAGE_BASIC_AUTH_HASH` — MUST be single-quoted: the box sources the file with
+   `set -a; . stage.env`, which expands `$2a`/`$14` and silently truncates a bcrypt
+   hash (see the comment above that key in `infra/deploy/stage.env.example`).
 
 ## Bring-up order
 
@@ -117,6 +121,86 @@ sudo bash -c 'set -a; . /etc/ds-platform/stage.env; set +a; docker compose -p st
 # expected: `running (healthy)` before continuing to the converge.
 ```
 
+## Edge (#2062)
+
+`Caddyfile` is the whole C2 deliverable: one wildcard site `*.stage.doctor.school`
+behind the owner-managed wildcard A record (added in the Beget zone 2026-09-10,
+→ `200.169.178.154`).
+
+- **On-demand TLS.** No certificate is pre-issued. Caddy asks
+  `http://127.0.0.1:2020/ask` before every ACME order; the `:2020` site is a stub
+  that answers 200 for exactly `id`, `academy-main`, `doctor-main`, `admin-main`,
+  `api-main` and 404 for anything else. Step 4 (#2064) replaces that stub with the
+  slot registry. An unregistered name under the wildcard therefore fails the TLS
+  handshake instead of burning a Let's Encrypt issuance slot.
+- **noindex.** The `(staging_guard)` snippet sets `X-Robots-Tag: noindex, nofollow`
+  on the wildcard site, so it rides every response — 200, 401, 404 alike.
+- **Basic auth.** ONE pair for the whole stand, `STAGE_BASIC_AUTH_USER` +
+  `STAGE_BASIC_AUTH_HASH` (bcrypt, `caddy hash-password`). The values come from
+  `/etc/ds-platform/stage.env` and are handed to the container by the `environment:`
+  block of the `caddy` service in `compose.yml` — `env_file:` alone would not reach
+  Caddy's `{$VAR}` placeholders in a way the config reload keeps stable.
+- **`(slot)` snippet + `import slot main`.** One `import` line = four vhosts
+  (`academy-`, `doctor-`, `admin-`, `api-<slot>`). #2064 adds and removes those
+  lines and reloads through the loopback admin API.
+- **`id` vhost.** The shared Zitadel: `/ui/v2/login/*` → `idp-login:3000`, everything
+  else → `h2c://idp:8080`, the production shape of `id.doctor.school`.
+
+**Alias contract for #2064 (not implemented here).** The `(slot)` snippet proxies to
+the container names `<slot>-portal:3001`, `<slot>-doctor:3004`, `<slot>-admin:3002`,
+`<slot>-api:3000`, `<slot>-centrifugo:8000`. `slot up` MUST publish exactly those
+aliases on the `stg-infra` network (`main-portal`, `main-api`, …) or the vhost answers 502.
+
+**The two basic-auth exemptions** — and only two, both because the caller carries no
+browser credentials and authenticates by its own mechanism:
+
+1. the two Centrifugo path families on `api-<slot>` (`/connection/websocket` and
+   `/api/*`), guarded by Centrifugo's HMAC token and its API key, exactly as in
+   production (`infra/deploy/compose/api-prod/Caddyfile`);
+2. the whole shared IdP host `id.stage.doctor.school`. Every slot api reaches the IdP
+   machine-to-machine through the PUBLIC issuer origin (`IDP_ISSUER` is the public URL
+   in production too, `infra/deploy/api.env.example`), and converge form (b) does the
+   same. A challenge there breaks OIDC discovery and token exchange while protecting
+   nothing — Zitadel authenticates every caller on its own. `noindex` still applies to
+   `id`.
+
+**Never `curl --resolve` an unregistered or unresolving host.** Each attempt makes
+Caddy start an ACME order that fails validation, and failed validations count against
+the Let's Encrypt rate limit for the whole zone. Test only names the `ask` stub
+already answers 200 for.
+
+### Acceptance (observed 2026-09-10, from an external client unless noted)
+
+```bash
+curl -sI https://academy-main.stage.doctor.school/
+# observed: 401, Www-Authenticate: Basic realm="restricted",
+#           X-Robots-Tag: noindex, nofollow
+# doctor-main, admin-main -> 401; api-main /v1/health -> 401
+# api-main /connection/websocket unauthenticated -> 502 (reaches the Centrifugo
+#   route, NOT a Caddy 401 — the slot is not up yet, #2065)
+
+curl -sI https://id.stage.doctor.school/.well-known/openid-configuration
+# observed: 200 with X-Robots-Tag: noindex, nofollow and NO basic auth (exemption 2)
+
+openssl s_client -connect academy-main.stage.doctor.school:443 \
+  -servername academy-main.stage.doctor.school </dev/null 2>/dev/null | \
+  openssl x509 -noout -issuer -subject -dates
+# observed: issuer C=US, O=Let's Encrypt, CN=YE1
+#           subject CN=academy-main.stage.doctor.school
+#           notBefore 2026-09-10 02:21:32 GMT, notAfter 2026-12-09
+
+openssl s_client -connect api-pr-0.stage.doctor.school:443 \
+  -servername api-pr-0.stage.doctor.school </dev/null
+# observed: handshake refused, no certificate issued — `ask` answered 404.
+# (This host RESOLVES via the wildcard; that is why probing it is safe.)
+```
+
+On the box, with the pair from `/etc/ds-platform/stage-basic-auth.txt`: `academy-main`
+→ 502 and `api-main /v1/health` → 502 (authenticated, no slot upstream yet), a wrong
+password → 401. The pair was rotated 2026-09-10. The `ask` stub answered 200 for `id`,
+`academy-main`, `api-main` and 404 for `api-pr-0`; `/healthz` by IP → 200; `Host:
+academy-main…` on `:80` → 308 to https; `Host: foo.example` → 404.
+
 ## Zitadel converge
 
 The same idempotent read-before-write converge the dev stand and production use
@@ -186,11 +270,12 @@ both objects are looked up BY NAME — an omission creates a second project and 
 OIDC app rather than converging the stage pair).
 
 Because both forms therefore read the same values, they converge the same project, the
-same app and the same providers. ONE difference is intended and unavoidable: the login
-URI derived from the base URL. Form (a) persists the `http://id.stage.doctor.school:8080`
-shape, so the FIRST form (b) run after #2062 re-converges that one step to the `https`
-public URL and prints `converged` for it — AC5's «only `already ...`» idempotency is
-asserted within one form, across its two consecutive runs.
+same app, the same providers — and, as observed on the box on 2026-09-10, the same
+login URI. Switching to form (b) after #2062 re-converged nothing: form (b) was run
+twice from the host and BOTH runs printed only `already ...` lines, the login URI step
+included, with no `converged` write on the first one. AC5's «only `already ...`»
+idempotency therefore holds across the form switch as well as across two consecutive
+runs of one form.
 
 **(b) After #2062 — the `id.stage` vhost exists.** Then the production shape applies
 (`infra/deploy/README.md` step 9): run it straight on the host against the public base
@@ -248,7 +333,7 @@ srv() { sudo bash -c "set -a; . /etc/ds-platform/stage.env; set +a; docker compo
 
 srv ps                       # health of the shared set
 srv logs -f idp              # the usual suspect
-srv restart caddy            # after step 2 edits the Caddyfile
+srv restart caddy            # after a Caddyfile edit (a slot reload uses the admin API)
 srv up -d --build postgres   # after a postgres/Dockerfile change
 ```
 

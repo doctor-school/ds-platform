@@ -1,34 +1,151 @@
-# stg-infra Caddy — STEP 1 CONFIG: health only (Issue #2061).
+# stg-infra Caddy — the STAGE edge (C2, spec 2026-09-08 §3 «Hostnames», Issue #2062).
 #
-# The edge is step 2's deliverable (#2062): the `*.stage.doctor.school` wildcard
-# record, on-demand TLS with the `ask` endpoint that answers 200 only for hosts of
-# currently registered slots, basic auth on every staging host, the
-# `X-Robots-Tag: noindex` header, and the per-slot vhosts (portal / doctor / api /
-# admin plus the two Centrifugo path families). None of it is stubbed here: this
-# file gains those blocks as a whole when step 2 lands, and until then it says
-# exactly what it does.
+# One public entry for every slot under `*.stage.doctor.school` (wildcard A record,
+# owner-managed in the DNS zone). Per-host certificates are issued ON DEMAND: Caddy
+# asks the `ask` endpoint below before touching ACME, so a stray name under the
+# wildcard never burns a Let's Encrypt slot. Every staging host sends
+# `X-Robots-Tag: noindex` and sits behind ONE basic-auth pair (`STAGE_BASIC_AUTH_*`
+# from /etc/ds-platform/stage.env, passed in by compose.yml → caddy.environment).
 #
-# What step 1 needs from Caddy is only that the container exists in this project,
-# holds the 80/443 the firewall opens, and is on the `stg-infra` network that
-# `slot up` attaches per slot (compose.yml → caddy).
-
+# Basic-auth exemptions — exactly two, both because the caller carries no browser
+# credentials and is authenticated by its own mechanism:
+#   1. the two Centrifugo path families on `api-<slot>` (websocket upgrade + the
+#      api's X-API-Key publish path) — protected by Centrifugo's HMAC token / API
+#      key, as in production (infra/deploy/compose/api-prod/Caddyfile);
+#   2. the shared IdP host `id.stage.doctor.school` — every slot api reaches it
+#      machine-to-machine through this public origin (IDP_ISSUER is the public URL,
+#      infra/deploy/api.env.example), and so does the converge form (b)
+#      (README → «Zitadel converge»); Zitadel authenticates on its own.
+#
+# Upstream ports mirror production (api 3000, portal 3001, admin 3002, doctor 3004,
+# centrifugo 8000, zitadel core 8080 h2c, login 3000). Slot containers are reached
+# by the compose name `<slot>-<service>` on the slot network `slot up` attaches this
+# container to (step 4, #2064 — that script must publish exactly that alias). Until
+# a slot is up its hosts answer 401 (no credentials) or 502 (credentials, no
+# upstream) — never a certificate error and never an indexable page.
 {
-	# The admin API on the loopback is what the compose healthcheck probes, and what
-	# `slot up` would use for a config reload. Bound to localhost inside the
-	# container; never published.
+	# ACME contact for expiry notices — same as production.
+	email a@preencipium.com
+
+	# The admin API on the loopback is what the compose healthcheck probes and what
+	# `slot up` uses for a config reload. Bound to localhost inside the container;
+	# never published.
 	admin localhost:2019
+
+	# On-demand issuance is gated by the `ask` endpoint served by this same Caddy on
+	# an unpublished port (the :2020 site below). Step 4 (#2064) replaces that stub
+	# with the slot registry: 200 only for hosts of currently registered slots.
+	on_demand_tls {
+		ask http://127.0.0.1:2020/ask
+	}
 }
 
-# Port 80 only. No TLS is configured in step 1: automatic HTTPS needs a hostname,
-# and the wildcard record does not exist yet — asking Caddy to issue for a name that
-# does not resolve would fail an ACME challenge on every boot.
+# --- snippets ---------------------------------------------------------------
+
+# Every staging response: keep crawlers out, whatever the status.
+(staging_guard) {
+	header X-Robots-Tag "noindex, nofollow"
+}
+
+# The one credential pair guarding every staging host (bcrypt hash from
+# `caddy hash-password`; the env value must be single-quoted in stage.env because
+# a bcrypt hash contains `$`).
+(staging_basic_auth) {
+	basic_auth {
+		{$STAGE_BASIC_AUTH_USER} {$STAGE_BASIC_AUTH_HASH}
+	}
+}
+
+# One slot = four vhosts. `import slot <name>` per registered slot; the slot script
+# (#2064) adds/removes these lines and reloads.
+(slot) {
+	@academy_{args[0]} host academy-{args[0]}.stage.doctor.school
+	handle @academy_{args[0]} {
+		import staging_basic_auth
+		reverse_proxy {args[0]}-portal:3001
+	}
+
+	@doctor_{args[0]} host doctor-{args[0]}.stage.doctor.school
+	handle @doctor_{args[0]} {
+		import staging_basic_auth
+		reverse_proxy {args[0]}-doctor:3004
+	}
+
+	@admin_{args[0]} host admin-{args[0]}.stage.doctor.school
+	handle @admin_{args[0]} {
+		import staging_basic_auth
+		reverse_proxy {args[0]}-admin:3002
+	}
+
+	@api_{args[0]} host api-{args[0]}.stage.doctor.school
+	handle @api_{args[0]} {
+		# Centrifugo path families — the single basic-auth exemption on a slot
+		# (spec §3): browser websocket + the api's key-gated publish path.
+		handle /connection/websocket {
+			reverse_proxy {args[0]}-centrifugo:8000
+		}
+		handle /api/* {
+			reverse_proxy {args[0]}-centrifugo:8000
+		}
+		handle {
+			import staging_basic_auth
+			reverse_proxy {args[0]}-api:3000
+		}
+	}
+}
+
+# --- ask endpoint (on-demand TLS gate) -----------------------------------------
+
+# Caddy calls `GET /ask?domain=<name>` before issuing. STEP 2 STUB: the shared IdP
+# host and the `main` slot family are the only registered names; step 4 (#2064)
+# turns this into the slot registry.
+:2020 {
+	@registered query domain=id.stage.doctor.school domain=academy-main.stage.doctor.school domain=doctor-main.stage.doctor.school domain=admin-main.stage.doctor.school domain=api-main.stage.doctor.school
+	respond @registered 200
+	respond 404
+}
+
+# --- port 80 -----------------------------------------------------------------
+
+# Plain HTTP: the box liveness probe by IP, ACME HTTP-01 (handled by Caddy before
+# routing), and a permanent redirect to HTTPS for staging hosts. Anything else is a
+# blunt 404 so this IP never looks like a misconfigured production host.
 :80 {
-	# The box liveness probe. Answers regardless of Host, so it works by IP before
-	# any DNS exists.
 	respond /healthz "ok" 200
 
-	# Anything else is not served yet. A blunt 404 with a pointer beats a default
-	# Caddy page that looks like a misconfigured production host to whoever finds
-	# this IP.
-	respond "stage-1 edge not configured yet (staging contour step 2, Issue #2062)" 404
+	@stage host *.stage.doctor.school
+	redir @stage https://{host}{uri} permanent
+
+	respond "stage-1 edge: unknown host" 404
+}
+
+# --- HTTPS: every staging host ------------------------------------------------
+
+*.stage.doctor.school {
+	tls {
+		on_demand
+	}
+	import staging_guard
+
+	# Shared IdP — Zitadel core + Login V2 under one origin, production shape
+	# (infra/deploy/compose/api-prod/Caddyfile → id.doctor.school). Not behind basic
+	# auth: see the header of this file.
+	@id host id.stage.doctor.school
+	handle @id {
+		handle /ui/v2/login/* {
+			reverse_proxy idp-login:3000
+		}
+		handle {
+			reverse_proxy h2c://idp:8080
+		}
+	}
+
+	# Registered slots.
+	import slot main
+
+	# A host under the wildcard that no slot owns: still guarded, still noindex.
+	handle {
+		import staging_basic_auth
+		respond "stage-1 edge: no slot owns this host" 404
+	}
 }

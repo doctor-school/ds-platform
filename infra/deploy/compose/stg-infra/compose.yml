@@ -21,7 +21,7 @@
 # service `api` impossible to confuse (spec §3 «Slots»).
 #
 # PORTS. Nothing here publishes a host port except Caddy (80/443). Every consumer is
-# either on this network (slot `api`) or on the host through Caddy (step 2, #2062).
+# either on this network (slot `api`) or on the host through Caddy (the edge, #2062).
 # The one deliberate exception is documented at each service below.
 #
 # SECRETS. `/etc/ds-platform/stage.env`, 0600, provisioned by the owner from
@@ -238,8 +238,8 @@ services:
   #
   # ExternalDomain/Secure MUST match the origin browsers actually reach or OIDC
   # discovery advertises a wrong issuer. On this box that origin is the staging
-  # Caddy vhost (step 2, #2062) over TLS; both come from stage.env so step 2 changes
-  # values, not this file.
+  # Caddy vhost `id.stage.doctor.school` (#2062) over TLS; both come from stage.env,
+  # so the edge reads values, not this file.
   idp:
     image: ghcr.io/zitadel/zitadel:latest
     restart: unless-stopped
@@ -347,20 +347,23 @@ services:
       start_period: 20s
 
   # --- caddy — the box's single ingress ---
-  # STEP 1 SCOPE ONLY: this service exists so the container that step 2 (#2062)
-  # configures is already here, owned by this project, holding the 80/443 the
-  # firewall opens, and already on the `stg-infra` network that `slot up` attaches
-  # it to per slot. Its config today is a health responder and NOTHING else — no
-  # placeholder vhost, no commented-out slot block, no on-demand TLS. The wildcard
-  # DNS record, on-demand issuing with the `ask` endpoint, basic auth, the
-  # `X-Robots-Tag: noindex` header and the per-slot vhosts are step 2's deliverable
-  # and land in Caddyfile as a whole.
+  # The box's only public listener, owned by this project, holding the 80/443 the
+  # firewall opens and sitting on the `stg-infra` network that `slot up` attaches it
+  # to per slot. Its whole configuration is `Caddyfile` (step 2, #2062): wildcard
+  # site, on-demand issuing gated by the `ask` endpoint, the one basic-auth pair, the
+  # `X-Robots-Tag: noindex` header and the per-slot vhosts — README → «Edge (#2062)».
   #
-  # Volumes: the certificate/ACME state must survive a container replacement or
-  # step 2 re-issues on every `up` and burns Let's Encrypt rate limit.
+  # Volumes: the certificate/ACME state must survive a container replacement, or
+  # every `up` re-issues and burns Let's Encrypt rate limit.
   caddy:
     image: caddy:2.8-alpine
     restart: unless-stopped
+    # The one basic-auth pair (Caddyfile → staging_basic_auth). Compose interpolates
+    # these from the sourced stage.env; the bcrypt VALUE is passed literally, so its
+    # $ signs survive — provided stage.env single-quotes it.
+    environment:
+      STAGE_BASIC_AUTH_USER: ${STAGE_BASIC_AUTH_USER:?}
+      STAGE_BASIC_AUTH_HASH: ${STAGE_BASIC_AUTH_HASH:?}
     command:
       [
         "caddy",

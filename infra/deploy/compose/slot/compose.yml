@@ -1,0 +1,245 @@
+# slot — ONE staging slot: the application service set of `main` or `pr-<N>` on the
+# stage box (tech spec 2026-09-08-staging-previews-and-regression-contour-en.md §3
+# «Slots», §8 step 4; Issue #2064).
+#
+# Driven only by `tools/staging/slot.mjs` (`composeBase`), never by hand:
+#
+#   docker compose \
+#     --env-file /etc/ds-platform/stage.env \
+#     --env-file /etc/ds-platform/slots/<slot>.env \
+#     -p slot-<slot> -f /opt/ds-platform/compose/slot/compose.yml <command>
+#
+# The two env files are what makes one file serve every slot: `stage.env` is the
+# box's single secret set (0600 root:root), `<slot>.env` is the GENERATED non-secret
+# per-slot projection (`renderSlotEnv` — SLOT, SLOT_SHA7, SLOT_DB, DEPLOY_SHA,
+# REDIS_URL, public URLs, IDP_ISSUER, MAILER_SMTP_FROM). No secret is ever copied
+# into the per-slot file: `DATABASE_URL` is assembled BELOW from stage.env's
+# `POSTGRES_PASSWORD` and the slot's `SLOT_DB`, so the password lives in one file.
+#
+# IMAGES. Never built here: the box has no build capacity budgeted for five Next
+# builds per converge (spec §9 «Disk pressure»). `.github/workflows/preview.yml`
+# builds and pushes `ghcr.io/doctor-school/ds-platform/<app>:<slot>-<sha7>` on a
+# GitHub runner and `slot up` pulls those tags — hence no `build:` block anywhere in
+# this file, and `${SLOT}` / `${SLOT_SHA7}` interpolated from the per-slot env file.
+#
+# NETWORKS. The project default network is NAMED `slot-<slot>` so the edge can be
+# attached to exactly this slot (`docker network connect slot-<slot>
+# stg-infra-caddy-1`). Only `api` additionally joins the external `stg-infra`
+# network, where Postgres / Redis / Zitadel / MinIO / the sinks live: a slot's
+# frontends and its Centrifugo must not be able to address another slot's api, and
+# two slots that both call a service `api` stay unconfusable (spec §3 «Slots»).
+#
+# CONTAINER NAMES. `container_name: ${SLOT}-<service>` is a CONTRACT, not a
+# convenience: the stg-infra Caddyfile `(slot)` snippet dials `<slot>-portal:3001`,
+# `<slot>-doctor:3004`, `<slot>-admin:3002`, `<slot>-api:3000` and
+# `<slot>-centrifugo:8000` by that exact name (`containerAliases` in
+# tools/staging/slot.mjs, unit-tested there). Changing either side alone silently
+# 502s the whole slot.
+#
+# PORTS. Nothing is published: every browser reaches a slot only through the
+# stg-infra edge, and the box's 80/443 belong to that project (spec §3 «Hostnames»).
+# Ports are PINNED in `environment:` for the same reason production pins them — a
+# shared env_file must never leak an api `PORT` into a Next app (api-prod precedent,
+# DSO-100).
+#
+# Healthchecks mirror infra/deploy/compose/api-prod/compose.yml exactly: the same
+# images run here, so a slot that reports healthy reports it for the same reason
+# production does.
+
+name: slot
+
+services:
+  # --- api — NestJS BFF/API, the only service on the shared stg-infra network -----
+  api:
+    image: ghcr.io/doctor-school/ds-platform/api:${SLOT:?}-${SLOT_SHA7:?}
+    container_name: ${SLOT:?}-api
+    restart: unless-stopped
+    env_file:
+      - /etc/ds-platform/stage.env
+      - /etc/ds-platform/slots/${SLOT:?}.env
+    environment:
+      # Assembled here, NOT written into the per-slot env file: that would copy
+      # POSTGRES_PASSWORD into a second on-box file. `SLOT_DB` is the slot's clone
+      # of `ds_golden` (`ds_main` / `ds_pr_<N>`); `postgres` resolves on stg-infra.
+      DATABASE_URL: postgresql://ds:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in /etc/ds-platform/stage.env}@postgres:5432/${SLOT_DB:?}
+      PORT: "3000"
+    networks:
+      - default
+      - stg-infra
+    healthcheck:
+      # /v1/health is @Public (apps/api/src/health/health.controller.ts). node:24
+      # has global fetch — no curl in the slim image.
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://localhost:'+(process.env.PORT||3000)+'/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # --- portal — Next.js standalone, the academy storefront (academy-<slot>.…) ------
+  # API_PROXY_TARGET and the SmartCaptcha SITE key are baked at BUILD time by
+  # preview.yml (Next freezes `rewrites()` destinations into routes-manifest.json —
+  # DSO-100); the runtime copies below exist only so the container env matches prod.
+  portal:
+    image: ghcr.io/doctor-school/ds-platform/portal:${SLOT:?}-${SLOT_SHA7:?}
+    container_name: ${SLOT:?}-portal
+    restart: unless-stopped
+    env_file:
+      - /etc/ds-platform/stage.env
+      - /etc/ds-platform/slots/${SLOT:?}.env
+    environment:
+      PORT: "3001"
+      # Feature 013 EARS-6: fail-closed private JSON persistence (api-prod
+      # precedent). Per-slot volume — a preview must not read main's submissions.
+      ACADEMY_SUBMISSIONS_DIR: /var/lib/ds-platform/academy-submissions
+    volumes:
+      - academy_submissions:/var/lib/ds-platform/academy-submissions
+    depends_on:
+      api:
+        condition: service_started
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://localhost:3001/').then(r=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # --- doctor — Next.js standalone, the doctor storefront (doctor-<slot>.…) --------
+  doctor:
+    image: ghcr.io/doctor-school/ds-platform/doctor:${SLOT:?}-${SLOT_SHA7:?}
+    container_name: ${SLOT:?}-doctor
+    restart: unless-stopped
+    env_file:
+      - /etc/ds-platform/stage.env
+      - /etc/ds-platform/slots/${SLOT:?}.env
+    environment:
+      PORT: "3004"
+    depends_on:
+      api:
+        condition: service_started
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://localhost:3004/').then(r=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # --- admin — Next.js + Refine standalone, the operator app (admin-<slot>.…) ------
+  admin:
+    image: ghcr.io/doctor-school/ds-platform/admin:${SLOT:?}-${SLOT_SHA7:?}
+    container_name: ${SLOT:?}-admin
+    restart: unless-stopped
+    env_file:
+      - /etc/ds-platform/stage.env
+      - /etc/ds-platform/slots/${SLOT:?}.env
+    environment:
+      PORT: "3002"
+    depends_on:
+      api:
+        condition: service_started
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://localhost:3002/').then(r=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # --- centrifugo — real-time fan-out, one instance PER SLOT ----------------------
+  # Deliberately not in stg-infra (spec §3 «Shared infrastructure project»): channel
+  # namespaces and the room state are slot state, and a shared instance would let a
+  # preview publish into main's rooms. Secrets arrive from stage.env under
+  # Centrifugo's NATIVE env names, which must equal the api's CENTRIFUGO_API_KEY /
+  # CENTRIFUGO_TOKEN_HMAC_SECRET — one secret set for the api↔centrifugo pair.
+  #
+  # `centrifugo/config.json` beside this file is the api-prod config minus
+  # `client.allowed_origins`: those are the slot's own storefront hosts, so they
+  # arrive per slot through CENTRIFUGO_CLIENT_ALLOWED_ORIGINS below. UNVERIFIED
+  # LOCALLY (no docker on the authoring machine): that Centrifugo v6 parses a
+  # SPACE-SEPARATED list from a `*_ALLOWED_ORIGINS` env var. Confirm on the box in
+  # part 2 with `docker exec <slot>-centrifugo centrifugo checkconfig` and the
+  # room-chat smoke — a wrong shape fail-closes the websocket, it does not widen
+  # the origin check.
+  centrifugo:
+    image: centrifugo/centrifugo:v6
+    container_name: ${SLOT:?}-centrifugo
+    restart: unless-stopped
+    command: centrifugo --config=/centrifugo/config.json --health.enabled
+    env_file:
+      - /etc/ds-platform/stage.env
+      - /etc/ds-platform/slots/${SLOT:?}.env
+    environment:
+      CENTRIFUGO_HTTP_API_KEY: ${CENTRIFUGO_API_KEY:?set CENTRIFUGO_API_KEY in /etc/ds-platform/stage.env}
+      CENTRIFUGO_CLIENT_TOKEN_HMAC_SECRET_KEY: ${CENTRIFUGO_TOKEN_HMAC_SECRET:?set CENTRIFUGO_TOKEN_HMAC_SECRET in /etc/ds-platform/stage.env}
+      CENTRIFUGO_CLIENT_ALLOWED_ORIGINS: https://academy-${SLOT:?}.${STAGE_BASE_DOMAIN:?} https://doctor-${SLOT:?}.${STAGE_BASE_DOMAIN:?}
+    volumes:
+      - ./centrifugo/config.json:/centrifugo/config.json:ro
+      - centrifugo_data:/centrifugo/data
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    expose:
+      - "8000" # in-network only; the edge fronts the public paths
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # --- migrate — one-shot, `--profile migrate` only -------------------------------
+  # Never started by `up`: `slot up` runs it explicitly between the database clone
+  # and the application start (`migrateCommandPlan` / `seedCommandPlan` in
+  # tools/staging/slot.mjs). The `migrate` target of apps/api/Dockerfile carries the
+  # FULL workspace (WORKDIR /repo/apps/api), which is what lets the same container
+  # also run the branch seed `pnpm --filter @ds/db run seed:golden`.
+  migrate:
+    image: ghcr.io/doctor-school/ds-platform/api-migrate:${SLOT:?}-${SLOT_SHA7:?}
+    container_name: ${SLOT:?}-migrate
+    profiles: ["migrate"]
+    restart: "no"
+    env_file:
+      - /etc/ds-platform/stage.env
+      - /etc/ds-platform/slots/${SLOT:?}.env
+    environment:
+      DATABASE_URL: postgresql://ds:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in /etc/ds-platform/stage.env}@postgres:5432/${SLOT_DB:?}
+    networks:
+      - default
+      - stg-infra
+
+volumes:
+  academy_submissions:
+  centrifugo_data:
+
+networks:
+  # Named explicitly so `slot up` can attach the stg-infra Caddy to exactly this
+  # slot: `docker network connect slot-<slot> stg-infra-caddy-1`.
+  default:
+    name: slot-${SLOT:?}
+  # Created and owned by the stg-infra project; only `api` and the one-shot
+  # `migrate` join it, and both need it for Postgres / Redis / Zitadel / MinIO.
+  stg-infra:
+    external: true

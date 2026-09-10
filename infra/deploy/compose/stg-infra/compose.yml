@@ -351,7 +351,8 @@ services:
   # firewall opens and sitting on the `stg-infra` network that `slot up` attaches it
   # to per slot. Its whole configuration is `Caddyfile` (step 2, #2062): wildcard
   # site, on-demand issuing gated by the `ask` endpoint, the one basic-auth pair, the
-  # `X-Robots-Tag: noindex` header and the per-slot vhosts — README → «Edge (#2062)».
+  # `X-Robots-Tag: noindex` header and the per-slot vhosts — README → «Edge (#2062)»
+  # — plus the two generated slot includes it mounts (README → «Slots (#2064)»).
   #
   # Volumes: the certificate/ACME state must survive a container replacement, or
   # every `up` re-issues and burns Let's Encrypt rate limit.
@@ -364,6 +365,11 @@ services:
     environment:
       STAGE_BASIC_AUTH_USER: ${STAGE_BASIC_AUTH_USER:?}
       STAGE_BASIC_AUTH_HASH: ${STAGE_BASIC_AUTH_HASH:?}
+      # The wildcard site address, the `id` vhost, the `:80` probe site and the
+      # `(slot)` snippet all read this. `tools/staging/slot.mjs` reads the SAME
+      # variable to derive the literal hosts it writes into the generated includes
+      # below — one variable, two consumers, one value (#2064).
+      STAGE_BASE_DOMAIN: ${STAGE_BASE_DOMAIN:?}
     command:
       [
         "caddy",
@@ -375,6 +381,13 @@ services:
       ]
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # The two GENERATED includes (#2064): `ask.caddy` (on-demand-TLS allow list)
+      # and `slots.caddy` (one `import slot <name>` per live slot), both rendered
+      # from /var/lib/ds-platform/slots.json by `tools/staging/slot.mjs`. Mounted
+      # READ-ONLY: only the slot deployer on the host writes them, and it reloads
+      # this container afterwards. `slot render` must have run once before the
+      # first bring-up, or the Caddyfile's `import` lines have nothing to read.
+      - /etc/ds-platform/caddy:/etc/caddy/slots:ro
       - caddydata:/data
       - caddyconfig:/config
       # Read-only docker socket is NOT mounted: `slot up` attaches this container to

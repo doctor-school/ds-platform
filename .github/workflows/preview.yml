@@ -1,0 +1,166 @@
+# Preview images — builds the five slot images for the STAGE stand and pushes them
+# to GHCR (tech spec 2026-09-08-staging-previews-and-regression-contour-en.md §8
+# step 4; Issue #2064).
+#
+# SKELETON, `workflow_dispatch` ONLY — the deliberate scope of #2064 part 1 (scope
+# addendum on the Issue). The automatic triggers that make previews a contour (a PR
+# label opening a slot, a push to main refreshing `main`, the desired-state poll and
+# the stand's own secrets) are #2066; adding a `pull_request` trigger here before
+# that Issue lands would build images for every PR with nothing to deploy them.
+#
+# WHY A RUNNER AND NOT THE BOX. stage-1 has no build capacity budgeted for five Next
+# builds per converge (spec §9 «Disk pressure»); `tools/staging/slot.mjs` therefore
+# only ever PULLS. That is also why infra/deploy/compose/slot/compose.yml carries no
+# `build:` block — this workflow is the only producer of those tags.
+#
+# TAGS. `ghcr.io/doctor-school/ds-platform/<app>:<slot>-<sha7>`, the exact ref
+# `slotImageRefs()` in tools/staging/slot.mjs derives and `slot gc` reclaims by the
+# `<slot>-` tag prefix. `sha7` is the first 7 characters of the full input SHA.
+#
+# BUILD ARGS mirror production (infra/deploy/compose/api-prod/compose.yml): Next
+# freezes `rewrites()` destinations into routes-manifest.json at build time, so
+# `API_PROXY_TARGET` MUST be baked and MUST equal the api service's compose DNS name
+# inside a slot (`http://api:3000`), and the SmartCaptcha SITE key is inlined into
+# the client bundle. The site key comes from the repository variable
+# `STAGE_SMARTCAPTCHA_SITE_KEY` (empty until the owner provisions it with the
+# separate stage-captcha task — empty renders the inactive placeholder, and an image
+# built before it was set must be rebuilt).
+name: Preview images
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Full 40-character commit SHA to build"
+        required: true
+        type: string
+      slot:
+        description: "Slot the images are tagged for: main or pr-<N>"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  # One build per slot: a second dispatch for the same slot supersedes the first,
+  # so the box never races two tags for one slot.
+  group: preview-images-${{ inputs.slot }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Validate inputs
+        env:
+          REF: ${{ inputs.ref }}
+          SLOT: ${{ inputs.slot }}
+        run: |
+          set -euo pipefail
+          # The same two shapes tools/staging/slot.mjs enforces (`assertSlotName`,
+          # `shortSha`). Rejecting here keeps a malformed dispatch from publishing a
+          # tag the box can neither find nor garbage-collect.
+          echo "$REF" | grep -Eq '^[0-9a-f]{40}$' \
+            || { echo "ref must be a full 40-character lowercase commit SHA: $REF" >&2; exit 1; }
+          echo "$SLOT" | grep -Eq '^(main|pr-[1-9][0-9]{0,9})$' \
+            || { echo "slot must be 'main' or 'pr-<N>': $SLOT" >&2; exit 1; }
+          echo "sha7=$(echo "$REF" | cut -c1-7)" >> "$GITHUB_OUTPUT"
+        id: meta
+
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # --- api: two targets of one Dockerfile -----------------------------------
+      # `runtime` is what a slot runs; `migrate` carries the FULL workspace
+      # (WORKDIR /repo/apps/api) and is what `slot up` runs drizzle:migrate:ci and
+      # the branch seed `pnpm --filter @ds/db run seed:golden` in.
+      - name: Build and push api (runtime)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/api/Dockerfile
+          target: runtime
+          push: true
+          tags: ghcr.io/doctor-school/ds-platform/api:${{ inputs.slot }}-${{ steps.meta.outputs.sha7 }}
+          cache-from: type=gha,scope=preview-api
+          cache-to: type=gha,mode=max,scope=preview-api
+
+      - name: Build and push api-migrate (migrate)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/api/Dockerfile
+          target: migrate
+          push: true
+          tags: ghcr.io/doctor-school/ds-platform/api-migrate:${{ inputs.slot }}-${{ steps.meta.outputs.sha7 }}
+          cache-from: type=gha,scope=preview-api-migrate
+          cache-to: type=gha,mode=max,scope=preview-api-migrate
+
+      # --- the three Next apps ---------------------------------------------------
+      - name: Build and push portal
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/portal/Dockerfile
+          push: true
+          tags: ghcr.io/doctor-school/ds-platform/portal:${{ inputs.slot }}-${{ steps.meta.outputs.sha7 }}
+          build-args: |
+            API_PROXY_TARGET=http://api:3000
+            NEXT_PUBLIC_SMARTCAPTCHA_SITE_KEY=${{ vars.STAGE_SMARTCAPTCHA_SITE_KEY }}
+          cache-from: type=gha,scope=preview-portal
+          cache-to: type=gha,mode=max,scope=preview-portal
+
+      - name: Build and push doctor
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/doctor/Dockerfile
+          push: true
+          tags: ghcr.io/doctor-school/ds-platform/doctor:${{ inputs.slot }}-${{ steps.meta.outputs.sha7 }}
+          build-args: |
+            API_PROXY_TARGET=http://api:3000
+            NEXT_PUBLIC_SMARTCAPTCHA_SITE_KEY=${{ vars.STAGE_SMARTCAPTCHA_SITE_KEY }}
+          cache-from: type=gha,scope=preview-doctor
+          cache-to: type=gha,mode=max,scope=preview-doctor
+
+      # admin takes API_PROXY_TARGET only — it renders no captcha (api-prod parity).
+      - name: Build and push admin
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/admin/Dockerfile
+          push: true
+          tags: ghcr.io/doctor-school/ds-platform/admin:${{ inputs.slot }}-${{ steps.meta.outputs.sha7 }}
+          build-args: |
+            API_PROXY_TARGET=http://api:3000
+          cache-from: type=gha,scope=preview-admin
+          cache-to: type=gha,mode=max,scope=preview-admin
+
+      - name: Summarise pushed tags
+        env:
+          SLOT: ${{ inputs.slot }}
+          SHA7: ${{ steps.meta.outputs.sha7 }}
+        run: |
+          set -euo pipefail
+          {
+            echo "### Preview images for \`$SLOT\` @ \`$SHA7\`"
+            echo
+            for app in api api-migrate portal doctor admin; do
+              echo "- \`ghcr.io/doctor-school/ds-platform/$app:$SLOT-$SHA7\`"
+            done
+            echo
+            echo "Deploy with \`node tools/staging/slot.mjs up $SLOT <full-sha>\` on stage-1."
+          } >> "$GITHUB_STEP_SUMMARY"

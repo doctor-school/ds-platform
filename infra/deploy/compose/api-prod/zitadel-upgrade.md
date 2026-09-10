@@ -94,9 +94,11 @@ The [latest review](https://github.com/doctor-school/ds-platform/pull/2169#pullr
 identifies successful Console access plus headless token exchange as the bounded
 technical contract. Exhaustive upstream OTP/enrollment journeys and an authored
 canvas are not minimum requirements for this unmodified operator UI update.
-Technical Console proof is now **PASS**; applicability of the product-owner
-Stage-A/B gate remains **pending**. This is neither owner approval nor a
-no-render-delta certification.
+Technical Console proof is **PASS**. The [recorded owner scope decision](https://github.com/doctor-school/ds-platform/issues/2165#issuecomment-5616293469)
+accepts this unmodified operator UI update as technical maintenance without a
+separate product-design approval. This is limited to this update: platform UI
+approval requirements remain intact, upstream visible changes remain acknowledged,
+and no visual Stage-B GO or no-render-delta certification is claimed.
 
 Historical fixture limitations and adaptations:
 
@@ -120,6 +122,7 @@ Historical fixture limitations and adaptations:
   the earlier incomplete operator-access evidence.
 - [Upstream PR 12668](https://github.com/zitadel/zitadel/pull/12668) changes RU/EN
   authentication-method labels, OTP challenge/verification fallback errors and
-  resend accessibility text. Those visible changes remain explicit. The draft
-  stays pending the product-gate scope decision and applicable owner evidence;
-  an unchanged entry screenshot does not establish no render delta.
+  resend accessibility text. Those visible changes remain explicit under the
+  recorded operator-maintenance scope. The PR remains draft until its remaining
+  review/checks are handled; real SMS and production release remain gated by #2166.
+  An unchanged entry screenshot does not establish no render delta.

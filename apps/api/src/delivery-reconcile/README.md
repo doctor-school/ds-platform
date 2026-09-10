@@ -12,7 +12,10 @@ live IdP issuer/service token is configured.
 
 For real SMTP, the shared `config/real-smtp.ts` validator requires explicit
 `IDP_SMTP_REAL_PROVIDER=postbox|mail.ru`, matching host, port 465 and complete shared
-credentials/sender. The stable `real transactional sender` description is preserved.
+credentials/sender. The current implementation preserves `real transactional sender`.
+The [profile migration draft](../../../docs/content/specs/tech/2026-09-10-postbox-native-smtp-profile-design-en.md)
+requires provider-scoped identities and deployment-owned production activation;
+that behavior is pending implementation and does not exist in this module yet.
 Before activation, including an already-active provider, reconcile requires exactly
 one matching identity and checks its host, sender, username and TLS metadata against
 the configured selection. It never reads or compares the stored SMTP password:

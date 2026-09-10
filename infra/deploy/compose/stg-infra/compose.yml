@@ -241,7 +241,7 @@ services:
   # Caddy vhost `id.stage.doctor.school` (#2062) over TLS; both come from stage.env,
   # so the edge reads values, not this file.
   idp:
-    image: ghcr.io/zitadel/zitadel:latest
+    image: ghcr.io/zitadel/zitadel:v4.17.3
     restart: unless-stopped
     command:
       - start-from-init
@@ -309,7 +309,7 @@ services:
   # baseUri wired into its auth path) — this serves the operator and the suite's
   # browser login. Tag PINNED to the running core version so UI and core never skew.
   idp-login:
-    image: ${IDP_LOGIN_IMAGE:-ghcr.io/zitadel/zitadel-login:v4.15.0}
+    image: ${IDP_LOGIN_IMAGE:-ghcr.io/zitadel/zitadel-login:v4.17.3}
     restart: unless-stopped
     environment:
       ZITADEL_API_URL: http://idp:8080

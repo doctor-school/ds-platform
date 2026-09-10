@@ -231,7 +231,7 @@ services:
   # database on first boot. The masterkey (IDP_SECRET_KEY) must be exactly 32
   # characters.
   idp:
-    image: ghcr.io/zitadel/zitadel:latest
+    image: ghcr.io/zitadel/zitadel:v4.17.3
     restart: unless-stopped
     # --masterkeyFromEnv reads the secret from ZITADEL_MASTERKEY (below) rather
     # than taking it as a CLI value, so the masterkey never lands in
@@ -337,7 +337,7 @@ services:
   # 404s without it (`/ui/v2/login/... -> Not Found`). This is OPERATOR-ONLY: the
   # api BFF stays HEADLESS (Variant-B, no baseUri wired into the api auth path) —
   # see idp/bootstrap.md §6. The image tag is PINNED to the running core version
-  # (v4.15.0) so UI and core never skew.
+  # (v4.17.3) so UI and core never skew.
   #
   # It reaches core over the bridge as `idp:8080` (ZITADEL_API_URL) and serves
   # under the /ui/v2/login base path so the single external origin is one app. It
@@ -350,7 +350,7 @@ services:
   # self-hosting requirement). If the PAT file is absent the container fails its
   # healthcheck loudly (fail-closed) rather than silently serving a broken login.
   idp-login:
-    image: ${IDP_LOGIN_IMAGE:-ghcr.io/zitadel/zitadel-login:v4.15.0}
+    image: ${IDP_LOGIN_IMAGE:-ghcr.io/zitadel/zitadel-login:v4.17.3}
     restart: unless-stopped
     environment:
       ZITADEL_API_URL: http://idp:8080

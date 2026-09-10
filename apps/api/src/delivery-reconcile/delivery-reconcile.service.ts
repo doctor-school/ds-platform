@@ -9,6 +9,7 @@ import {
   SMS_DESCRIPTION_INTERCEPT,
   SMS_DESCRIPTION_REAL,
   SMTP_DESCRIPTION_INTERCEPT,
+  SMTP_DESCRIPTION_POSTBOX,
   SMTP_DESCRIPTION_REAL,
   type DeliveryAdmin,
   type ZitadelProvider,
@@ -139,10 +140,12 @@ export class DeliveryReconcileService {
       ? resolveRealSmtp(this.envDefaults.realSmtp ?? {})
       : null;
     const smtp = await this.admin.listSmtpProviders();
+    const realDescription =
+      real?.provider === "postbox"
+        ? SMTP_DESCRIPTION_POSTBOX
+        : SMTP_DESCRIPTION_REAL;
     if (real) {
-      const targets = smtp.filter(
-        (p) => p.description === SMTP_DESCRIPTION_REAL,
-      );
+      const targets = smtp.filter((p) => p.description === realDescription);
       const target = targets[0];
       if (
         targets.length !== 1 ||
@@ -160,7 +163,7 @@ export class DeliveryReconcileService {
     await this.reconcileChannel(
       "SMTP",
       smtp,
-      emailReal ? SMTP_DESCRIPTION_REAL : SMTP_DESCRIPTION_INTERCEPT,
+      emailReal ? realDescription : SMTP_DESCRIPTION_INTERCEPT,
       (id) => this.admin.activateSmtp(id),
       warn,
     );

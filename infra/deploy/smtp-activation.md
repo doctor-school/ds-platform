@@ -1,11 +1,10 @@
 ﻿# Transactional SMTP configuration and controlled activation
 
 Release blocker [#2116](https://github.com/doctor-school/ds-platform/issues/2116)
-owns activation and received-artifact evidence. The native-profile migration is a
-**draft pending owner decision and implementation**:
+owns activation and received-artifact evidence. The native-profile contract is:
 [EN design](../../apps/docs/content/specs/tech/2026-09-10-postbox-native-smtp-profile-design-en.md) /
 [RU design](../../apps/docs/content/specs/tech/2026-09-10-postbox-native-smtp-profile-design-ru.md).
-Do not execute production writes from this documentation before those gates.
+Production writes require the landed implementation and applicable release authorization.
 
 Keep coherent mail.ru selection in the protected production environment while
 preparing: `IDP_SMTP_REAL_PROVIDER=mail.ru`, `IDP_SMTP_REAL_HOST=smtp.mail.ru:465`

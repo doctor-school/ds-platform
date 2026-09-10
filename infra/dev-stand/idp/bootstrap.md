@@ -281,11 +281,12 @@ remains enabled. Invalid real configuration aborts before any provisioning write
 In intercept mode, no explicit provider leaves real credentials inert; a complete
 explicit provider can be provisioned in advance while Mailpit remains the boot choice.
 
-The current provisioner updates `real transactional sender` in place; this is
-**not an approved production Postbox migration** on the pinned IdP. The
-[profile migration draft](../../../apps/docs/content/specs/tech/2026-09-10-postbox-native-smtp-profile-design-en.md)
-requires a separate Postbox identity, retained mail.ru ID and shared explicit
-provider selection after its decision/implementation gates. Runtime
+The provisioner retains `real transactional sender` for mail.ru and uses a separate
+`real transactional sender:postbox` identity. Existing real profiles are checked
+without metadata/password PUT; a new profile is created inactive and read back
+before boot selection. The
+[profile contract](../../../apps/docs/content/specs/tech/2026-09-10-postbox-native-smtp-profile-design-en.md)
+preserves the mail.ru ID and shared explicit provider selection. Runtime
 reconcile verifies host/sender/username/TLS before activation and rejects drift,
 even for an already-active identity. Real-email startup failures abort API boot;
 later flag failures log loudly. The BFF cannot suppress independently queued IdP

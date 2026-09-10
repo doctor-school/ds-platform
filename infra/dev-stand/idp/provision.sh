@@ -131,10 +131,17 @@ fi
 # api <METHOD> <PATH> [json-body]  ->  prints response body, fails on non-2xx
 api() {
   local method="$1" path="$2" body="${3:-}" resp code grpc_code
-  resp="$(curl -sS -w $'\n%{http_code}' -X "$method" "${BASE_URL}${path}" \
+  local timeout_args=()
+  if [[ -n "${SMTP_DEADLINE:-}" ]]; then
+    local remaining=$((SMTP_DEADLINE - SECONDS))
+    (( remaining > 0 )) || return 1
+    (( remaining > 5 )) && remaining=5
+    timeout_args=(--max-time "$remaining")
+  fi
+  resp="$(curl -sS "${timeout_args[@]}" -w $'\n%{http_code}' -X "$method" "${BASE_URL}${path}" \
     -H "Authorization: Bearer ${PAT_VALUE}" \
     -H "Content-Type: application/json" \
-    ${body:+-d "$body"})"
+    ${body:+-d "$body"})" || return 1
   code="${resp##*$'\n'}"
   body="${resp%$'\n'*}"
   if [[ "$code" -lt 200 || "$code" -ge 300 ]]; then
@@ -389,41 +396,70 @@ ensure_smtp_provider() {
   # Bash locals are visible to called helpers. Do not persist or print a server
   # error body that could echo the SMTP password, including /tmp/.idperr.
   local SMTP_REDACT_ERRORS=true
+  local SMTP_DEADLINE=$((SECONDS + 120))
   payload="$(jq -nc --arg d "$desc" --arg h "$host" --arg a "$addr" \
     --arg n "$name" --arg u "$user" --arg p "$pw" --argjson tls "$tls" \
     '{description:$d, senderAddress:$a, senderName:$n, tls:$tls, host:$h, user:$u, password:$p}')" || return 1
   # Search must succeed and the stable identity must be unique before any write.
-  local matches
-  matches="$(api POST /admin/v1/smtp/_search '{}' \
-    | jq -c --arg d "$desc" '[.result[]? | select(.description==$d)]')" || return 1
+  local matches='[]' page offset=0 count total created=false
+  while (( SECONDS < SMTP_DEADLINE )); do
+    page="$(api POST /admin/v1/smtp/_search "{\"query\":{\"offset\":\"$offset\",\"limit\":100,\"asc\":true}}")" || return 1
+    jq -e '(has("code") | not) and (if has("result") then (.result | type == "array") else (.details.totalResult == "0" or .details.totalResult == 0 or (.details.viewTimestamp | type == "string")) end)' <<< "$page" >/dev/null || return 1
+    matches="$(jq -nc --argjson previous "$matches" --argjson page "$page" --arg d "$desc" '$previous + [($page.result // [])[] | select(.description == $d)]')" || return 1
+    count="$(jq '(.result // []) | length' <<< "$page")"
+    total="$(jq -r '.details.totalResult // empty' <<< "$page")"
+    offset=$((offset + count))
+    if [[ -n "$total" ]]; then
+      [[ "$total" =~ ^[0-9]+$ ]] || return 1
+      (( offset >= total )) && break
+      (( count > 0 )) || return 1
+    else
+      (( count < 100 )) && break
+    fi
+  done
+  (( SECONDS < SMTP_DEADLINE )) || return 1
   if [[ "$(jq 'length' <<< "$matches")" -gt 1 ]]; then
     echo "ERROR: Duplicate SMTP provider identity; refusing to provision" >&2
     return 1
   fi
   id="$(jq -r '.[0].id // empty' <<< "$matches")"
+  if [[ "$(jq 'length' <<< "$matches")" -gt 0 && -z "$id" ]]; then
+    echo "ERROR: SMTP provider identity has no id; refusing to provision" >&2
+    return 1
+  fi
   if [[ -n "$id" && "$id" != "null" ]]; then
     # This function runs inside $(...). Bash does NOT inherit errexit there:
     # without an explicit return, a failed PUT is hidden by the final printf.
-    api_idempotent PUT "/admin/v1/smtp/${id}" "$payload" >/dev/null || return 1
+    # Real provider identities are immutable: never rewrite retained mail.ru or
+    # an existing Postbox profile. Intercept keeps its established update behavior.
+    if [[ "$desc" == "dev-stand mailpit" ]]; then
+      api_idempotent PUT "/admin/v1/smtp/${id}" "$payload" >/dev/null || return 1
+    fi
   else
     id="$(api POST /admin/v1/smtp "$payload" | jq -er '.id | select(type == "string" and length > 0)')" || return 1
+    created=true
   fi
   # A successful HTTP response alone is not convergence. Compare every public
   # SMTP field with the requested profile; never print credentials or raw JSON.
   local actual
-  actual="$(api GET "/admin/v1/smtp/${id}")" || return 1
-  if ! jq -e --arg id "$id" --argjson expected "$payload" '
+  while (( SECONDS < SMTP_DEADLINE )); do
+    actual="$(api GET "/admin/v1/smtp/${id}")" || actual='{}'
+    if jq -e --arg id "$id" --argjson expected "$payload" --argjson created "$created" '
     .smtpConfig | .id == $id and .description == $expected.description
     and .host == $expected.host and (.tls // false) == $expected.tls
     and .senderAddress == $expected.senderAddress
     and (.senderName // "") == $expected.senderName
     and (.user // "") == $expected.user
-  ' <<< "$actual" >/dev/null 2>&1; then
-    echo "ERROR: SMTP provider readback does not match requested profile; refusing convergence" >&2
-    return 1
-  fi
-  echo "ensured SMTP provider ${id} (${desc}); public metadata read back" >&2
-  printf '%s' "$id"
+    and (if $created then (.state == "SMTP_CONFIG_INACTIVE" or .state == 3 or .state == "3") else true end)
+    ' <<< "$actual" >/dev/null 2>&1; then
+      echo "ensured SMTP provider ${id} (${desc}); public metadata read back" >&2
+      printf '%s' "$id"
+      return 0
+    fi
+    sleep 1
+  done
+  echo "ERROR: SMTP provider readback does not match requested profile; refusing convergence" >&2
+  return 1
 }
 
 # Mailpit (intercept) — always ensured.
@@ -437,8 +473,10 @@ SMTP_MAILPIT_ID="$(ensure_smtp_provider \
 # Only a validated explicit selection provisions the stable real identity.
 SMTP_REAL_ID=""
 if [[ -n "$SMTP_REAL_HOST_PORT" ]]; then
+  SMTP_REAL_DESCRIPTION="real transactional sender"
+  [[ "$IDP_SMTP_REAL_PROVIDER" == "postbox" ]] && SMTP_REAL_DESCRIPTION="real transactional sender:postbox"
   SMTP_REAL_ID="$(ensure_smtp_provider \
-    "real transactional sender" \
+    "$SMTP_REAL_DESCRIPTION" \
     "$SMTP_REAL_HOST_PORT" \
     "${IDP_SMTP_REAL_SENDER_ADDRESS}" \
     "${IDP_SMTP_REAL_SENDER_NAME:-DS Platform}" \
@@ -455,6 +493,8 @@ fi
 # (that fallback silently deactivated the real mail.ru relay on prod,
 # 2026-07-14). The pre-flight already rejects real-mode-without-creds, so an
 # empty id here means the ensure step itself failed.
+SMTP_DEADLINE=$((SECONDS + 120))
+SMTP_REDACT_ERRORS=true
 if [[ "$EMAIL_DELIVERY_MODE" == "real" ]]; then
   if [[ -z "$SMTP_REAL_ID" || "$SMTP_REAL_ID" == "null" ]]; then
     echo "ERROR: EMAIL_DELIVERY_MODE=real but the real SMTP provider has no id —" >&2
@@ -472,9 +512,17 @@ fi
 # provider is active. Validate the selected identity before allowing app startup.
 SMTP_EXPECTED_ACTIVE="$SMTP_MAILPIT_ID"
 [[ "$EMAIL_DELIVERY_MODE" == "real" ]] && SMTP_EXPECTED_ACTIVE="$SMTP_REAL_ID"
-SMTP_ACTIVE="$(api GET /admin/v1/smtp)"
-if ! jq -e --arg id "$SMTP_EXPECTED_ACTIVE" '.smtpConfig.id == $id and .smtpConfig.state == "SMTP_CONFIG_ACTIVE"' \
-    <<< "$SMTP_ACTIVE" >/dev/null 2>&1; then
+SMTP_ACTIVE_OK=false
+while (( SECONDS < SMTP_DEADLINE )); do
+  SMTP_ACTIVE="$(api GET /admin/v1/smtp)" || SMTP_ACTIVE='{}'
+  if jq -e --arg id "$SMTP_EXPECTED_ACTIVE" '.smtpConfig.id == $id and (.smtpConfig.state == "SMTP_CONFIG_ACTIVE" or .smtpConfig.state == 2 or .smtpConfig.state == "2")' <<< "$SMTP_ACTIVE" >/dev/null 2>&1; then
+    SMTP_ACTIVE_OK=true
+    break
+  fi
+  sleep 1
+done
+unset SMTP_DEADLINE SMTP_REDACT_ERRORS
+if [[ "$SMTP_ACTIVE_OK" != true ]]; then
   echo "ERROR: SMTP active-provider readback failed; refusing convergence" >&2
   exit 5
 fi

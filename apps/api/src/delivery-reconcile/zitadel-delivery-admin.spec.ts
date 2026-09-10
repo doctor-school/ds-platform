@@ -119,6 +119,35 @@ describe("ZitadelDeliveryAdmin (#185 admin _search + _activate)", () => {
 });
 
 describe("native SMTP metadata and diagnostics", () => {
+  it("EARS-31: reads every SMTP inventory page before selecting a profile", async () => {
+    const offsets: string[] = [];
+    const fetchImpl: AdminFetchLike = async (_url, init) => {
+      const offset = JSON.parse(init.body ?? "{}").query?.offset ?? "0";
+      offsets.push(offset);
+      return {
+        ok: true,
+        status: 200,
+        text: async () => "",
+        json: async () => ({
+          details: { totalResult: "2" },
+          result: [
+            {
+              id: offset === "0" ? "one" : "two",
+              description: "real transactional sender:postbox",
+              senderName: "Doctor.School",
+            },
+          ],
+        }),
+      };
+    };
+    const providers = await new ZitadelDeliveryAdmin({
+      ...cfg,
+      fetchImpl,
+    }).listSmtpProviders();
+    expect(offsets).toEqual(["0", "1"]);
+    expect(providers.map((p) => p.id)).toEqual(["one", "two"]);
+    expect(providers[0]).toHaveProperty("senderName", "Doctor.School");
+  });
   it("EARS-31: preserves actual Admin SMTP metadata without returning a password", async () => {
     const { fetchImpl } = fakeFetch([
       {

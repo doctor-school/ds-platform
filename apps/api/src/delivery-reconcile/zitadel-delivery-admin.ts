@@ -6,7 +6,12 @@ import type {
 /** Subset of `fetch` the admin adapter needs — narrowed so the spec injects a fake. */
 export type AdminFetchLike = (
   url: string,
-  init: { method: string; headers: Record<string, string>; body?: string },
+  init: {
+    method: string;
+    headers: Record<string, string>;
+    body?: string;
+    signal?: AbortSignal;
+  },
 ) => Promise<{
   ok: boolean;
   status: number;
@@ -32,6 +37,7 @@ interface RawProvider {
   tls?: boolean;
   user?: string;
   senderAddress?: string;
+  senderName?: string;
   /** SMS HTTP providers nest their description under `http`. */
   http?: { description?: string };
 }
@@ -77,18 +83,58 @@ export class ZitadelDeliveryAdmin implements DeliveryAdmin {
   }
 
   private async search(path: string): Promise<ZitadelProvider[]> {
-    const res = await this.fetchImpl(this.url(path), {
-      method: "POST",
-      headers: this.headers(),
-      body: JSON.stringify({}),
-    });
-    if (!res.ok) {
-      throw new Error(`zitadel ${path} failed: HTTP ${res.status}`);
+    const smtp = path === "/admin/v1/smtp/_search";
+    const providers: RawProvider[] = [];
+    const deadline = Date.now() + 120_000;
+    for (;;) {
+      const remaining = deadline - Date.now();
+      if (remaining <= 0)
+        throw new Error("Zitadel SMTP inventory deadline exceeded");
+      const res = await this.fetchImpl(this.url(path), {
+        method: "POST",
+        headers: this.headers(),
+        body: JSON.stringify(
+          smtp
+            ? {
+                query: {
+                  offset: String(providers.length),
+                  limit: 100,
+                  asc: true,
+                },
+              }
+            : {},
+        ),
+        ...(smtp
+          ? { signal: AbortSignal.timeout(Math.min(5000, remaining)) }
+          : {}),
+      });
+      if (!res.ok) {
+        throw new Error(`zitadel ${path} failed: HTTP ${res.status}`);
+      }
+      const data = (await res.json().catch(() => {
+        throw new Error("Invalid Zitadel delivery admin response");
+      })) as { result?: RawProvider[]; details?: { totalResult?: string } };
+      const page = data.result ?? [];
+      if (!Array.isArray(page))
+        throw new Error("Invalid Zitadel delivery admin response");
+      providers.push(...page);
+      if (!smtp) break;
+      const total = data.details?.totalResult;
+      if (
+        total !== undefined &&
+        (!/^\d+$/.test(String(total)) || !Number.isSafeInteger(Number(total)))
+      )
+        throw new Error("Invalid Zitadel SMTP inventory count");
+      if (
+        total === undefined
+          ? page.length < 100
+          : providers.length >= Number(total)
+      )
+        break;
+      if (page.length === 0)
+        throw new Error("Incomplete Zitadel SMTP inventory");
     }
-    const data = (await res.json().catch(() => {
-      throw new Error("Invalid Zitadel delivery admin response");
-    })) as { result?: RawProvider[] };
-    return (data.result ?? []).map((p) => ({
+    return providers.map((p) => ({
       id: p.id ?? "",
       // SMTP carries `description` at the top level; the SMS HTTP provider nests
       // it under `http`. Read both so one adapter serves both channels.
@@ -100,6 +146,7 @@ export class ZitadelDeliveryAdmin implements DeliveryAdmin {
             tls: p.tls,
             user: p.user,
             senderAddress: p.senderAddress,
+            senderName: p.senderName,
           }
         : {}),
     }));

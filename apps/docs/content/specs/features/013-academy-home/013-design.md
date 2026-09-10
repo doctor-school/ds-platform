@@ -24,7 +24,7 @@ A fourth change lives off the page but ships with it: the post-login landing def
 
 ## 2. Composition — the canvas is the source of truth
 
-Built from [`design-source/home.dc.html`](../../../../../../design-source/home.dc.html) in **variant «в»** (`variant: v`, the canvas prop default and the owner's Stage-A pick), plus the two units it `dc-import`s: [`webinar-card.dc.html`](../../../../../../design-source/webinar-card.dc.html) (rendered through feature 014's list unit) and [`expert-card.dc.html`](../../../../../../design-source/expert-card.dc.html).
+Built from [`design-source/academy-home.dc.html`](../../../../../../design-source/academy-home.dc.html) in **variant «в»** (`variant: v`, the canvas prop default and the owner's Stage-A pick), plus the two units it `dc-import`s: [`unit-event-card.dc.html`](../../../../../../design-source/unit-event-card.dc.html) (rendered through feature 014's list unit) and [`unit-expert-card.dc.html`](../../../../../../design-source/unit-expert-card.dc.html).
 
 The canvas encodes the section order as `order:` values on the flex `main`; for variant «в» they resolve to:
 

@@ -1964,7 +1964,7 @@ function WebinarCardSection() {
     >
       <p className="text-sm text-muted-foreground">
         The §09 listing unit (source{" "}
-        <code className="font-mono text-xs">webinar-card.dc.html</code>): a
+        <code className="font-mono text-xs">unit-event-card.dc.html</code>): a
         tinted 196px time plate (56px display time, explicit МСК label) and the
         content column (school kicker, title, specialty chips, speakers). The
         card root is a container and the title is a stretched link, so the whole
@@ -2157,7 +2157,7 @@ function WebinarPageContentSection() {
     >
       <p className="text-sm text-muted-foreground">
         The event-page content set (source{" "}
-        <code className="font-mono text-xs">webinar-page.dc.html</code>, 004
+        <code className="font-mono text-xs">event-page.dc.html</code>, 004
         EARS-2): the complete decision set from the{" "}
         <code className="font-mono text-xs">PublicEventPage</code> projection —
         the «О чём эфир» description, the downloadable program PDF, the sponsor
@@ -2238,7 +2238,7 @@ function WebinarStatusCardSection() {
     >
       <p className="text-sm text-muted-foreground">
         The event-page status card (source{" "}
-        <code className="font-mono text-xs">webinar-page.dc.html</code>, 004
+        <code className="font-mono text-xs">event-page.dc.html</code>, 004
         EARS-4): the lifecycle affordance the page swaps per{" "}
         <code className="font-mono text-xs">EventLifecycleState</code> — the
         webinar-card time plate + a head/sub signal + a single primary-CTA slot.
@@ -2297,7 +2297,7 @@ function WebinarRecordingPlaqueSection() {
     >
       <p className="text-sm text-muted-foreground">
         The post-live «запись готовится» plaque (source{" "}
-        <code className="font-mono text-xs">webinar-archive.dc.html</code>, 014
+        <code className="font-mono text-xs">event-page-recording.dc.html</code>, 014
         EARS-7): what occupies the player position while nothing is published
         yet. The{" "}
         <span className="font-medium text-foreground">dated</span> render carries
@@ -2337,7 +2337,7 @@ function RecordingSpoilerSection() {
       <p className="text-sm text-muted-foreground">
         The secondary-cut disclosure that sits under the post-live player when
         an эфир published BOTH cuts (source{" "}
-        <code className="font-mono text-xs">webinar-archive.dc.html</code>, 014
+        <code className="font-mono text-xs">event-page-recording.dc.html</code>, 014
         EARS-8). It is a native{" "}
         <code className="font-mono text-xs">
           &lt;details&gt;/&lt;summary&gt;
@@ -2462,8 +2462,8 @@ function WebinarRoomSection() {
     >
       <p className="text-sm text-muted-foreground">
         The webinar room layout (source{" "}
-        <code className="font-mono text-xs">webinar-room-frame.dc.html</code> +{" "}
-        <code className="font-mono text-xs">chat-column.dc.html</code>, 006
+        <code className="font-mono text-xs">unit-room-frame.dc.html</code> +{" "}
+        <code className="font-mono text-xs">unit-chat-column.dc.html</code>, 006
         EARS-2/EARS-11): a viewport-bounded flex shell — the player region is
         maximized (no custom chrome), a one-line context strip sits under it,
         and the chat is a 340px aside that collapses to a 44px rail; mobile a

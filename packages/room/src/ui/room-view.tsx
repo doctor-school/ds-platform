@@ -266,7 +266,7 @@ export function PlayerFrame({
         </p>
         {/* primitives-first-ok: fixed-white outline control on the PERMANENTLY-dark
             player letterbox — every themed DS Button variant flips with the theme
-            and renders wrong on the always-dark region (webinar-room-frame.dc.html). */}
+            and renders wrong on the always-dark region (unit-room-frame.dc.html). */}
         <button
           type="button"
           onClick={() => window.location.reload()}

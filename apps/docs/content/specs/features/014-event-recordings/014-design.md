@@ -9,7 +9,7 @@ lang: en
 
 # 014 — Event recordings and the archived-event page (Design)
 
-Requirements: [`014-requirements-en.md`](./014-requirements-en.md) · PRD: [`014-product.md`](./014-product.md) · Canvases: `design-source/webinar-archive.dc.html`, `design-source/events-filter.dc.html`, `design-source/my-events.dc.html`.
+Requirements: [`014-requirements-en.md`](./014-requirements-en.md) · PRD: [`014-product.md`](./014-product.md) · Canvases: `design-source/event-page-recording.dc.html`, `design-source/unit-events-filter.dc.html`, `design-source/account-my-events.dc.html`.
 
 Every EARS clause in the requirements carries a `wave: core | facets` tag. This design marks each section the same way, so an implementation Issue reads its layer boundaries and its wave from one place.
 
@@ -359,7 +359,7 @@ The archived-event speaker projection consumes only 012's canonical eligible `ev
 
 ### 8.1 `/webinars/[slug]` post-live state
 
-Built from `design-source/webinar-archive.dc.html`, whose props map one-to-one onto the projection:
+Built from `design-source/event-page-recording.dc.html`, whose props map one-to-one onto the projection:
 
 | Canvas prop                                   | Source                                                   |
 | --------------------------------------------- | -------------------------------------------------------- |
@@ -376,7 +376,7 @@ The page is the same route and the same layout as the pre-live state; the hero, 
 014 builds it (epic decision #7) because 014 starts before the 013 build. Two controlled, fetch-free components:
 
 - `EventList` — props `items`, `tab`, `counts`, `pageCursor`, `onTabChange`, `onPageChange`; renders the `ВебинарКарточка` card, the tab bar and the pager.
-- `EventFilters` — props `project`, `expert`, `topic`, `projects`, `experts`, `topics`, `counts`, `onChange`; the `events-filter.dc.html` shape exactly (`wave: facets`).
+- `EventFilters` — props `project`, `expert`, `topic`, `projects`, `experts`, `topics`, `counts`, `onChange`; the `unit-events-filter.dc.html` shape exactly (`wave: facets`).
 
 ```mermaid
 flowchart TD
@@ -396,7 +396,7 @@ Exactly two tabs — «Предстоящие» (default) and «Записи» �
 
 ### 8.4 `/webinars` tabs
 
-«Предстоящие · N | Прошедшие · N», mirroring the tab pattern already drawn on `project-page.dc.html` / `expert-page.dc.html`. Tab membership for the past tab is `ended` on a `platform` event and `in_archive` on a `legacy` one — the two are indistinguishable in the tab, its count and its cards (§3.1); feature 004's existing upcoming rule fills the other. `draft` and `hidden` are in neither tab and in neither count, whichever machine they belong to. The «Неделя | Месяц» views' rendering and the upcoming discovery behaviour are untouched — this is a refinement, not a redesign.
+«Предстоящие · N | Прошедшие · N», mirroring the tab pattern already drawn on `academy-project.dc.html` / `academy-expert.dc.html`. Tab membership for the past tab is `ended` on a `platform` event and `in_archive` on a `legacy` one — the two are indistinguishable in the tab, its count and its cards (§3.1); feature 004's existing upcoming rule fills the other. `draft` and `hidden` are in neither tab and in neither count, whichever machine they belong to. The «Неделя | Месяц» views' rendering and the upcoming discovery behaviour are untouched — this is a refinement, not a redesign.
 
 **State persistence follows LD-11** (requirements → Lead technical decisions): the selected tab, every facet value, the page cursor **and** the week/month view are query parameters of `/webinars`. One surface, one persistence rule — the week/month switcher moves onto the same mechanism rather than keeping its own, because mixed persistence on one page is a fidelity trap. The rationale (linkable filtered archive, reload and back/forward survival, and the fact that a deliberately fetch-free unit leaves the URL as the only place a server component can read the selection from) is recorded there as a lead decision, since the PRD left URL persistence to Stage A and no canvas carries it.
 

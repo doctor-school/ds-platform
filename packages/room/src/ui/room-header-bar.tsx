@@ -8,7 +8,7 @@ import { LiveDuration, PresenceCount } from "./room-presence";
 
 /**
  * 006 EARS-2 / EARS-5 / EARS-11 / EARS-12 — the room's top app-header bar,
- * rendered atop the gated room composition to the vendored `webinar-room.dc.html`
+ * rendered atop the gated room composition to the vendored `archive/archive-room-v1.dc.html`
  * header geometry (lines 14-30, ADR-0013 canvas-wins). A full-width `header`-token
  * blue brand bar with a 2px bottom border: LEFT a "Doctor.School" wordmark linking
  * to the host's эфиры list (the canvas logo → `routes.brandHome`) plus the reused DS

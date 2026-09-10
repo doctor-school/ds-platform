@@ -13,7 +13,7 @@
 
   <!-- ═══ Оболочка · шапка витрины врача (с #d-home, как есть · состояние «вошёл») ═══ -->
   <header data-screen-label="d-lk · шапка" style="background:#114D9E;padding:14px clamp(16px,4vw,48px);display:flex;align-items:center;gap:clamp(14px,2.5vw,28px)">
-    <a href="Витрина врача - Главная.dc.html" style="display:flex;flex:none"><img src="assets/ds-logo-white.svg" alt="Doctor.School" style="height:26px;display:block"></a>
+    <a href="doctor-home.dc.html" style="display:flex;flex:none"><img src="assets/ds-logo-white.svg" alt="Doctor.School" style="height:26px;display:block"></a>
     <sc-if value="{{ isDesktop }}" hint-placeholder-val="{{ true }}">
       <input value="{{ q }}" onInput="{{ setQ }}" placeholder="Поиск по урокам, школам и событиям" style="flex:1;max-width:440px;font:inherit;font-size:13.5px;font-weight:600;padding:12px 14px;border:2px solid rgba(255,255,255,.45);background:transparent;color:#fff;outline:none;min-width:120px" style-focus="border-color:#fff;background:rgba(255,255,255,.08)">
       <nav style="display:flex;align-items:center;gap:14px;margin-left:auto">
@@ -146,12 +146,12 @@
             <sc-if value="{{ profilePartial }}" hint-placeholder-val="{{ true }}">
               <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap"><span style="font-size:13.5px;font-weight:800;color:{{ ink }}">Профиль заполнен на 60 %</span><span style="font-size:12.5px;font-weight:800;color:{{ green }};white-space:nowrap">+30 Pul за остальное</span></div>
               <div style="margin-top:9px;height:10px;border:2px solid {{ border }};background:{{ trackBg }}"><div style="height:100%;width:60%;background:{{ accent }}"></div></div>
-              <a href="Профиль.dc.html" style="display:inline-block;margin-top:12px;font-size:13px;font-weight:800;color:{{ accent }};text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px">Заполнить остальное →</a>
+              <a href="account-profile.dc.html" style="display:inline-block;margin-top:12px;font-size:13px;font-weight:800;color:{{ accent }};text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px">Заполнить остальное →</a>
             </sc-if>
             <sc-if value="{{ profileFullOn }}" hint-placeholder-val="{{ false }}">
               <div style="font-size:14px;font-weight:800;color:{{ green }}">✓ Профиль заполнен полностью</div>
               <div style="margin-top:9px;height:10px;border:2px solid {{ border }};background:{{ trackBg }}"><div style="height:100%;width:100%;background:{{ green }}"></div></div>
-              <a href="Профиль.dc.html" style="display:inline-block;margin-top:12px;font-size:13px;font-weight:700;color:{{ accent }};text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px">Изменить данные →</a>
+              <a href="account-profile.dc.html" style="display:inline-block;margin-top:12px;font-size:13px;font-weight:700;color:{{ accent }};text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px">Изменить данные →</a>
             </sc-if>
           </div>
         </div>
@@ -224,21 +224,21 @@
           <div style="border:2px dashed {{ dashBorder }};padding:clamp(28px,4vw,44px);text-align:center">
             <div style="font-size:15.5px;font-weight:800;color:{{ ink }};margin-bottom:8px">Вы пока никуда не записаны</div>
             <div style="font-size:13px;line-height:1.6;color:{{ inkMuted }};margin-bottom:18px">Ближайшие события по вашей специальности — в ленте событий.</div>
-            <a href="Витрина врача - События.dc.html" style="display:inline-block;font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:2px solid {{ btnBg }};padding:13px 24px;text-decoration:none;box-shadow:{{ btnShadow }}" style-hover="transform:translate(2px,2px)">Найти события →</a>
+            <a href="doctor-events.dc.html" style="display:inline-block;font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:2px solid {{ btnBg }};padding:13px 24px;text-decoration:none;box-shadow:{{ btnShadow }}" style-hover="transform:translate(2px,2px)">Найти события →</a>
           </div>
         </sc-if>
 
         <sc-if value="{{ evOk }}" hint-placeholder-val="{{ true }}">
           <sc-if value="{{ hasUpcoming }}" hint-placeholder-val="{{ true }}">
             <div style="{{ subHead }}"><span style="{{ subTitle }}">Предстоящие</span><span style="{{ subRule }}"></span></div>
-            <div style="{{ cardBleed }}"><dc-import name="ВебинарКарточка" dark="{{ darkFlag }}" variant="registered" num="Эфир № 092" time="19:00" time-sub="28 августа · пт" href="Вебинар.dc.html" school="Школа ортобиологии" title="PRP при гонартрозе: отбор пациентов и протоколы" chips="{{ chipsUp1 }}" speakers="{{ spUp1 }}" hint-size="100%,220px"></dc-import></div>
+            <div style="{{ cardBleed }}"><dc-import name="unit-event-card" dark="{{ darkFlag }}" variant="registered" num="Эфир № 092" time="19:00" time-sub="28 августа · пт" href="event-page.dc.html" school="Школа ортобиологии" title="PRP при гонартрозе: отбор пациентов и протоколы" chips="{{ chipsUp1 }}" speakers="{{ spUp1 }}" hint-size="100%,220px"></dc-import></div>
             <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:10px {{ padXm }} 0;font-size:12.5px;font-weight:700">
               <span style="color:{{ inkFaint }}">Вход в комнату — за 15 минут до начала</span>
               <a href="#events" style="color:{{ accent }};text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px">Добавить в календарь</a>
               <button style="font:inherit;font-size:12.5px;font-weight:700;color:{{ inkMuted }};background:none;border:0;padding:0;cursor:pointer;text-decoration:underline;text-underline-offset:4px" style-hover="color:{{ danger }}">Отменить запись</button>
             </div>
 
-            <div style="margin-top:24px;{{ cardBleed }}"><dc-import name="ВебинарКарточка" dark="{{ darkFlag }}" variant="registered" num="Doctor Club" time="18:30" time-sub="12 сентября · сб" href="Вебинар.dc.html" school="Офлайн · Казань" title="Doctor Club Казань: ортобиология вживую" chips="{{ chipsUp2 }}" speakers="{{ spUp2 }}" hint-size="100%,220px"></dc-import></div>
+            <div style="margin-top:24px;{{ cardBleed }}"><dc-import name="unit-event-card" dark="{{ darkFlag }}" variant="registered" num="Doctor Club" time="18:30" time-sub="12 сентября · сб" href="event-page.dc.html" school="Офлайн · Казань" title="Doctor Club Казань: ортобиология вживую" chips="{{ chipsUp2 }}" speakers="{{ spUp2 }}" hint-size="100%,220px"></dc-import></div>
 
             <!-- юнит «билет / QR» — анатомия в d-event (04), здесь как есть -->
             <div data-screen-label="d-lk · билет / QR" style="margin-top:14px;max-width:520px;border:2px solid {{ border }};background:#fff;box-shadow:{{ cardShadow }}">
@@ -264,11 +264,11 @@
           </sc-if>
           <sc-if value="{{ onlyPast }}" hint-placeholder-val="{{ false }}">
             <div style="{{ subHead }}"><span style="{{ subTitle }}">Предстоящие</span><span style="{{ subRule }}"></span></div>
-            <div style="border:2px dashed {{ dashBorder }};padding:22px;font-size:13px;line-height:1.6;color:{{ inkMuted }}">Предстоящих событий нет. <a href="Витрина врача - События.dc.html" style="font-weight:800;color:{{ accent }}">Открыть ленту событий →</a></div>
+            <div style="border:2px dashed {{ dashBorder }};padding:22px;font-size:13px;line-height:1.6;color:{{ inkMuted }}">Предстоящих событий нет. <a href="doctor-events.dc.html" style="font-weight:800;color:{{ accent }}">Открыть ленту событий →</a></div>
           </sc-if>
 
           <div style="{{ subHeadNext }}"><span style="{{ subTitle }}">Прошедшие</span><span style="{{ subRule }}"></span></div>
-          <div style="{{ cardBleed }}"><dc-import name="ВебинарКарточка" dark="{{ darkFlag }}" variant="past" num="Эфир № 087" time="82 мин" time-sub="14 августа · запись" href="Вебинар архив.dc.html" school="Школа ортобиологии" title="Костный мозг: аспират и его применение" chips="{{ chipsPast }}" speakers="{{ spPast }}" hint-size="100%,200px"></dc-import></div>
+          <div style="{{ cardBleed }}"><dc-import name="unit-event-card" dark="{{ darkFlag }}" variant="past" num="Эфир № 087" time="82 мин" time-sub="14 августа · запись" href="event-page-recording.dc.html" school="Школа ортобиологии" title="Костный мозг: аспират и его применение" chips="{{ chipsPast }}" speakers="{{ spPast }}" hint-size="100%,200px"></dc-import></div>
 
           <!-- Чекин НМО (REQ-139) и оценка (REQ-118) -->
           <div style="margin-top:12px;display:flex;flex-direction:column;gap:10px">
@@ -293,10 +293,10 @@
               <div style="font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ inkFaint }}">Продолжить курс</div>
               <div style="margin-top:5px;font-size:14.5px;font-weight:800;letter-spacing:-.01em;color:{{ ink }}">Курс «Ортобиология» — серия 3 из 9</div>
             </div>
-            <a href="Витрина врача - Учебный модуль.dc.html" style="flex:none;font-size:13px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:2px solid {{ btnBg }};padding:12px 20px;text-decoration:none;box-shadow:{{ btnShadow }}" style-hover="transform:translate(2px,2px)">Продолжить →</a>
+            <a href="doctor-lesson.dc.html" style="flex:none;font-size:13px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:2px solid {{ btnBg }};padding:12px 20px;text-decoration:none;box-shadow:{{ btnShadow }}" style-hover="transform:translate(2px,2px)">Продолжить →</a>
           </div>
 
-          <a href="Витрина врача - События.dc.html" style="display:inline-block;margin-top:20px;font-size:13.5px;font-weight:800;color:{{ accent }};text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px">Найти ещё события →</a>
+          <a href="doctor-events.dc.html" style="display:inline-block;margin-top:20px;font-size:13.5px;font-weight:800;color:{{ accent }};text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px">Найти ещё события →</a>
         </sc-if>
       </section>
       </sc-if>
@@ -381,7 +381,7 @@
             <div style="margin-top:8px;font-size:clamp(19px,2.4vw,24px);font-weight:800;letter-spacing:-.02em;color:#fff">Стать экспертом</div>
             <div style="margin-top:6px;font-size:13.5px;line-height:1.6;font-weight:500;color:#D3E8FD">Посмотреть закулисье — проекты и людей, которые делают контент, — и подать заявку.</div>
           </div>
-          <a href="Главная.dc.html" style="flex:none;font-size:14px;font-weight:800;color:#114D9E;background:#fff;padding:14px 26px;text-decoration:none;box-shadow:3px 3px 0 #0D3A77" style-hover="transform:translate(2px,2px);box-shadow:1px 1px 0 #0D3A77">Перейти в Академию ↗</a>
+          <a href="academy-home.dc.html" style="flex:none;font-size:14px;font-weight:800;color:#114D9E;background:#fff;padding:14px 26px;text-decoration:none;box-shadow:3px 3px 0 #0D3A77" style-hover="transform:translate(2px,2px);box-shadow:1px 1px 0 #0D3A77">Перейти в Академию ↗</a>
         </div>
       </section>
 
@@ -407,7 +407,7 @@
       </div>
       <div>
         <div style="font-size:11.5px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:{{ inkFaint }};margin-bottom:14px">Экспертам и партнёрам</div>
-        <a href="Главная.dc.html" style="font-size:13.5px;font-weight:800;color:{{ accent }};text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px">Academy.Doctor.School ↗</a>
+        <a href="academy-home.dc.html" style="font-size:13.5px;font-weight:800;color:{{ accent }};text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px">Academy.Doctor.School ↗</a>
         <div style="margin-top:10px;font-size:12.5px;font-weight:600;line-height:1.6;color:{{ inkFaint }}">Закулисье платформы: проекты, эксперты, партнёры.</div>
       </div>
     </div>

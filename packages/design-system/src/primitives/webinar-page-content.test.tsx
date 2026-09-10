@@ -7,7 +7,7 @@ afterEach(cleanup);
 
 /**
  * Neo-brutalist event-page content set (004 EARS-2, source
- * `design-source/webinar-page.dc.html`). The two-column body of the public event
+ * `design-source/event-page.dc.html`). The two-column body of the public event
  * page — the complete decision set from the `PublicEventPage` projection laid out
  * to the canvas: the «О чём эфир» description, the downloadable program PDF, the
  * sponsor plate (backing partners), and the speaker cards. Off-scale canvas

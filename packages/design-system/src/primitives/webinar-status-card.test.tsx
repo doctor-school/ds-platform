@@ -7,7 +7,7 @@ afterEach(cleanup);
 
 /**
  * Neo-brutalist event-page status card (004 EARS-4, source
- * `design-source/webinar-page.dc.html`). The lifecycle affordance the public
+ * `design-source/event-page.dc.html`). The lifecycle affordance the public
  * event page swaps per state: the webinar-card time-plate geometry + a head/sub
  * signal + a single primary-CTA slot. Off-scale canvas geometry (196px time
  * column, 56px time, 2px border, 6px cast) lives here in the design-system SoT.

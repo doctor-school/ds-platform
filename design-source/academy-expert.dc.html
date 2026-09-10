@@ -12,16 +12,16 @@
 <div style="min-height:100vh;background:{{ pageBg }}">
   <div style="background:#0D3A77;padding:5px clamp(16px,4vw,48px);text-align:center;font-size:9px;font-weight:700;letter-spacing:.22em;text-transform:uppercase;color:rgba(255,255,255,.34)">BBM: Академия смыслов</div>
   <header data-screen-label="a-expert · шапка" style="background:#114D9E;padding:16px clamp(16px,4vw,48px);display:flex;align-items:center;justify-content:space-between;gap:16px">
-    <a href="Главная.dc.html" style="display:flex;flex:none"><img src="assets/ds-logo-white.svg" alt="Doctor.School · Академия" style="height:26px;display:block"></a>
+    <a href="academy-home.dc.html" style="display:flex;flex:none"><img src="assets/ds-logo-white.svg" alt="Doctor.School · Академия" style="height:26px;display:block"></a>
     <sc-if value="{{ isMobile }}" hint-placeholder-val="{{ false }}">
       <div style="display:flex;align-items:center;gap:12px">
         <button onClick="{{ toggleTheme }}" title="Тема" style="font:inherit;width:44px;height:44px;background:transparent;color:#fff;border:2px solid rgba(255,255,255,.5);cursor:pointer;font-size:16px">{{ themeIcon }}</button>
         <details style="position:relative">
           <summary style="list-style:none;width:44px;height:44px;display:inline-flex;align-items:center;justify-content:center;background:#fff;color:#114D9E;cursor:pointer;font-size:20px;font-weight:800;box-shadow:3px 3px 0 {{ headerShadow }}">≡</summary>
           <nav style="position:absolute;top:calc(100% + 10px);right:0;background:{{ surface }};border:2px solid {{ border }};box-shadow:5px 5px 0 {{ shadow }};padding:8px;display:flex;flex-direction:column;min-width:200px;z-index:30">
-            <a href="Эфиры.dc.html" style="padding:12px 16px;font-size:15px;font-weight:700;color:{{ ink }};text-decoration:none">Эфиры</a>
-            <a href="Проекты.dc.html" style="padding:12px 16px;font-size:15px;font-weight:700;color:{{ ink }};text-decoration:none">Проекты</a>
-            <a href="Эксперты.dc.html" style="padding:12px 16px;font-size:15px;font-weight:800;color:{{ accent }};text-decoration:none">Эксперты</a>
+            <a href="events-feed.dc.html" style="padding:12px 16px;font-size:15px;font-weight:700;color:{{ ink }};text-decoration:none">Эфиры</a>
+            <a href="academy-projects.dc.html" style="padding:12px 16px;font-size:15px;font-weight:700;color:{{ ink }};text-decoration:none">Проекты</a>
+            <a href="academy-experts.dc.html" style="padding:12px 16px;font-size:15px;font-weight:800;color:{{ accent }};text-decoration:none">Эксперты</a>
             <a href="{{ authHref }}" style="margin-top:6px;padding:12px 16px;font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};text-decoration:none;text-align:center">{{ authLabel }}</a>
           </nav>
         </details>
@@ -29,9 +29,9 @@
     </sc-if>
     <sc-if value="{{ isDesktop }}" hint-placeholder-val="{{ true }}">
       <nav style="display:flex;align-items:center;gap:28px;font-size:14px;font-weight:700">
-        <a href="Эфиры.dc.html" style="color:#D3E8FD;text-decoration:none" style-hover="color:#fff">Эфиры</a>
-        <a href="Проекты.dc.html" style="color:#D3E8FD;text-decoration:none" style-hover="color:#fff">Проекты</a>
-        <a href="Эксперты.dc.html" style="color:#fff;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:6px">Эксперты</a>
+        <a href="events-feed.dc.html" style="color:#D3E8FD;text-decoration:none" style-hover="color:#fff">Эфиры</a>
+        <a href="academy-projects.dc.html" style="color:#D3E8FD;text-decoration:none" style-hover="color:#fff">Проекты</a>
+        <a href="academy-experts.dc.html" style="color:#fff;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:6px">Эксперты</a>
         <button onClick="{{ toggleTheme }}" title="Тема" style="font:inherit;width:44px;height:44px;background:transparent;color:#fff;border:2px solid rgba(255,255,255,.5);cursor:pointer;font-size:15px" style-hover="border-color:#fff">{{ themeIcon }}</button>
         <a href="{{ authHref }}" style="font-size:13.5px;font-weight:700;color:#114D9E;background:#fff;padding:12px 22px;text-decoration:none;box-shadow:3px 3px 0 {{ headerShadow }}" style-hover="transform:translate(1px,1px);box-shadow:2px 2px 0 {{ headerShadow }}">{{ authLabel }}</a>
       </nav>
@@ -42,7 +42,7 @@
   <div style="background:#114D9E;padding:clamp(24px,4vw,36px) clamp(16px,4vw,48px) {{ bandPadBottom }}">
     <div style="max-width:1104px;margin:0 auto">
       <nav style="font-size:13px;font-weight:700">
-        <a href="Эксперты.dc.html" style="color:#AED4FB;text-decoration:underline;text-underline-offset:4px">Эксперты</a>
+        <a href="academy-experts.dc.html" style="color:#AED4FB;text-decoration:underline;text-underline-offset:4px">Эксперты</a>
         <span style="color:rgba(211,232,253,.5);margin:0 8px">/</span>
         <span style="color:#D3E8FD">Страхов М. А.</span>
       </nav>
@@ -88,7 +88,7 @@
               </sc-for>
             </div>
             <sc-if value="{{ metricsLock }}" hint-placeholder-val="{{ false }}">
-              <div style="margin-top:12px;font-size:12.5px;font-weight:700"><a href="Авторизация.dc.html" style="color:#AED4FB;text-decoration:underline;text-underline-offset:4px" style-hover="color:#fff">Войти, чтобы увидеть точные значения →</a></div>
+              <div style="margin-top:12px;font-size:12.5px;font-weight:700"><a href="auth.dc.html" style="color:#AED4FB;text-decoration:underline;text-underline-offset:4px" style-hover="color:#fff">Войти, чтобы увидеть точные значения →</a></div>
             </sc-if>
           </div>
         </div>
@@ -173,11 +173,11 @@
               <h2 style="margin:0 0 clamp(16px,3vw,24px);font-size:clamp(24px,3.5vw,34px);line-height:1.05;font-weight:800;letter-spacing:-.03em;color:{{ ink }}">Всё, что с ним связано</h2>
               <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:18px;flex-wrap:wrap;margin-bottom:14px">
                 <div style="font-size:16px;font-weight:800;letter-spacing:-.01em;color:{{ ink }};border-bottom:2px solid {{ border }};padding-bottom:8px">Эфиры с ним</div>
-                <a href="Эфиры.dc.html" style="font-size:13.5px;font-weight:800;color:{{ accent }};text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:5px;white-space:nowrap">Все эфиры →</a>
+                <a href="events-feed.dc.html" style="font-size:13.5px;font-weight:800;color:{{ accent }};text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:5px;white-space:nowrap">Все эфиры →</a>
               </div>
               <div style="{{ feedWrap }}">
                 <sc-for list="{{ listCards }}" as="ev" hint-placeholder-count="2">
-                  <dc-import name="ВебинарКарточка" dark="{{ dark }}" variant="{{ ev.variant }}" num="{{ ev.num }}" time="{{ ev.time }}" time-sub="{{ ev.timeSub }}" cta="{{ ev.cta }}" cta-href="{{ ev.ctaHref }}" href="{{ ev.href }}" school="{{ ev.school }}" title="{{ ev.title }}" chips="{{ ev.chips }}" speakers="{{ ev.speakers }}" hint-size="100%,220px"></dc-import>
+                  <dc-import name="unit-event-card" dark="{{ dark }}" variant="{{ ev.variant }}" num="{{ ev.num }}" time="{{ ev.time }}" time-sub="{{ ev.timeSub }}" cta="{{ ev.cta }}" cta-href="{{ ev.ctaHref }}" href="{{ ev.href }}" school="{{ ev.school }}" title="{{ ev.title }}" chips="{{ ev.chips }}" speakers="{{ ev.speakers }}" hint-size="100%,220px"></dc-import>
                 </sc-for>
               </div>
               <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(240px,100%),1fr));gap:clamp(20px,3vw,32px);margin-top:clamp(24px,4vw,36px)">
@@ -223,11 +223,11 @@
                     <sc-if value="{{ claimConfirmed }}" hint-placeholder-val="{{ false }}">
                       <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
                         <span style="display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:800;color:{{ okInk }};border:2px solid {{ okInk }};padding:10px 16px">✓ Это ваша страница</span>
-                        <a href="Профиль.dc.html" style="font-size:13.5px;font-weight:800;color:{{ accent }};text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:5px">Редактировать в кабинете →</a>
+                        <a href="account-profile.dc.html" style="font-size:13.5px;font-weight:800;color:{{ accent }};text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:5px">Редактировать в кабинете →</a>
                       </div>
                     </sc-if>
                     <sc-if value="{{ claimRejected }}" hint-placeholder-val="{{ false }}">
-                      <a href="Главная.dc.html#partner-form" style="font-size:13.5px;font-weight:800;color:{{ accent }};text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:5px">Написать команде Академии →</a>
+                      <a href="academy-home.dc.html#partner-form" style="font-size:13.5px;font-weight:800;color:{{ accent }};text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:5px">Написать команде Академии →</a>
                     </sc-if>
                   </div>
                 </sc-if>
@@ -290,13 +290,13 @@
     <div style="border-top:2px solid {{ ink }};padding:32px clamp(16px,4vw,48px);display:flex;align-items:center;justify-content:space-between;max-width:1104px;margin:0 auto;box-sizing:content-box;gap:16px;flex-wrap:wrap">
       {{ footLogoEl }}
       <nav style="display:flex;gap:20px;font-size:12.5px;font-weight:700;flex-wrap:wrap">
-        <a href="Партнёры.dc.html" style="color:{{ inkFaint }};text-decoration:none">Партнёры</a>
-        <a href="Проекты.dc.html" style="color:{{ inkFaint }};text-decoration:none">Проекты</a>
-        <a href="Эксперты.dc.html" style="color:{{ inkFaint }};text-decoration:none">Эксперты</a>
-        <a href="Эфиры.dc.html" style="color:{{ inkFaint }};text-decoration:none">События</a>
-        <a href="Академия - Документы.dc.html" style="color:{{ inkFaint }};text-decoration:none">Документы и контакты</a>
+        <a href="academy-partners.dc.html" style="color:{{ inkFaint }};text-decoration:none">Партнёры</a>
+        <a href="academy-projects.dc.html" style="color:{{ inkFaint }};text-decoration:none">Проекты</a>
+        <a href="academy-experts.dc.html" style="color:{{ inkFaint }};text-decoration:none">Эксперты</a>
+        <a href="events-feed.dc.html" style="color:{{ inkFaint }};text-decoration:none">События</a>
+        <a href="academy-docs.dc.html" style="color:{{ inkFaint }};text-decoration:none">Документы и контакты</a>
       </nav>
-      <a href="Витрина врача - Главная.dc.html" style="font-size:12.5px;font-weight:800;color:{{ accent }};text-decoration:underline;text-underline-offset:4px;white-space:nowrap">doctor.school — врачам</a>
+      <a href="doctor-home.dc.html" style="font-size:12.5px;font-weight:800;color:{{ accent }};text-decoration:underline;text-underline-offset:4px;white-space:nowrap">doctor.school — врачам</a>
     </div>
     <div style="max-width:1104px;margin:0 auto;padding:0 clamp(16px,4vw,48px);text-align:center;font-size:10px;font-weight:800;letter-spacing:.18em;text-transform:uppercase;color:{{ inkFaint }}">BBM: Академия смыслов</div>
     <div aria-hidden="true" style="overflow:hidden;padding-top:clamp(16px,3vw,36px)">
@@ -381,10 +381,10 @@ class Component extends DCLogic {
 
     // Участие в проектах — роль как атрибут связи (REQ-128)
     const expProjects = [
-      { emblem: 'Ор', kind: 'Школа', title: 'Ортобиология', role: 'Автор уроков', cross: '12 уроков · 8 эфиров', href: 'Проект.dc.html' },
-      { emblem: 'По', kind: 'Подкаст', title: 'Кто стоит за брендом', role: 'Герой подкаста', cross: '2 выпуска', href: 'Проект.dc.html' },
-      { emblem: 'Ко', kind: 'Конгресс', title: 'Конгресс-2026', role: 'Спикер секции', cross: 'витрина врача · doctor.school ↗', href: 'Витрина врача - События.dc.html' },
-      { emblem: 'Rh', kind: 'Школа', title: 'RheumoSchool', role: 'Научный консультант', cross: 'медицинская экспертиза уроков', href: 'Проект.dc.html' }
+      { emblem: 'Ор', kind: 'Школа', title: 'Ортобиология', role: 'Автор уроков', cross: '12 уроков · 8 эфиров', href: 'academy-project.dc.html' },
+      { emblem: 'По', kind: 'Подкаст', title: 'Кто стоит за брендом', role: 'Герой подкаста', cross: '2 выпуска', href: 'academy-project.dc.html' },
+      { emblem: 'Ко', kind: 'Конгресс', title: 'Конгресс-2026', role: 'Спикер секции', cross: 'витрина врача · doctor.school ↗', href: 'doctor-events.dc.html' },
+      { emblem: 'Rh', kind: 'Школа', title: 'RheumoSchool', role: 'Научный консультант', cross: 'медицинская экспертиза уроков', href: 'academy-project.dc.html' }
     ];
     const projError = p.blockError === true && !this.state.retried;
 
@@ -393,23 +393,23 @@ class Component extends DCLogic {
     const me = S('Максим Страхов', 'РНИМУ им. Пирогова');
     const school = 'Школа ортобиологии';
     const listCards = [
-      { variant: 'scheduled', num: 'Эфир № 051', time: '19:00', timeSub: '3 сентября · чт', href: 'Вебинар.dc.html', school, title: 'PRP-терапия коленного сустава: от показаний к протоколу', chips: ['Ортобиология'], speakers: [me] },
-      { variant: 'past', num: 'Эфир № 044', time: '19:00', timeSub: '6 августа · запись', ctaHref: 'Вебинар архив.dc.html', href: 'Вебинар архив.dc.html', school, title: 'Клеточные технологии в ортопедии: что доказано', chips: ['Ортобиология', 'Травматология'], speakers: [me, S('Игорь Савченко', 'ЦИТО им. Приорова')] }
+      { variant: 'scheduled', num: 'Эфир № 051', time: '19:00', timeSub: '3 сентября · чт', href: 'event-page.dc.html', school, title: 'PRP-терапия коленного сустава: от показаний к протоколу', chips: ['Ортобиология'], speakers: [me] },
+      { variant: 'past', num: 'Эфир № 044', time: '19:00', timeSub: '6 августа · запись', ctaHref: 'event-page-recording.dc.html', href: 'event-page-recording.dc.html', school, title: 'Клеточные технологии в ортопедии: что доказано', chips: ['Ортобиология', 'Травматология'], speakers: [me, S('Игорь Савченко', 'ЦИТО им. Приорова')] }
     ];
 
     const relLists = [
       { title: 'Уроки', count: '12', items: [
-        { t: 'Введение в ортобиологию', m: 'Урок 1 · Ортобиология', href: 'Проект.dc.html' },
-        { t: 'PRP: показания и протоколы', m: 'Урок 4 · Ортобиология', href: 'Проект.dc.html' },
-        { t: 'Костная пластика: выбор материала', m: 'Урок 7 · Ортобиология', href: 'Проект.dc.html' }
+        { t: 'Введение в ортобиологию', m: 'Урок 1 · Ортобиология', href: 'academy-project.dc.html' },
+        { t: 'PRP: показания и протоколы', m: 'Урок 4 · Ортобиология', href: 'academy-project.dc.html' },
+        { t: 'Костная пластика: выбор материала', m: 'Урок 7 · Ортобиология', href: 'academy-project.dc.html' }
       ] },
       { title: 'Доклады', count: '6', items: [
-        { t: 'Ортобиология в амбулаторной практике', m: 'Конгресс-2026 · секция', href: 'Витрина врача - События.dc.html' },
-        { t: 'Регенеративные методы при гонартрозе', m: 'AO Course · 2025', href: 'Вебинар архив.dc.html' }
+        { t: 'Ортобиология в амбулаторной практике', m: 'Конгресс-2026 · секция', href: 'doctor-events.dc.html' },
+        { t: 'Регенеративные методы при гонартрозе', m: 'AO Course · 2025', href: 'event-page-recording.dc.html' }
       ] },
       { title: 'Публикации', count: '9', items: [
-        { t: 'PRP при гонартрозе: 12 месяцев наблюдения', m: 'Травматология и ортопедия России · 2025', href: 'Проект.dc.html' },
-        { t: 'Клеточные технологии в хирургии сухожилий', m: 'Вестник РГМУ · 2024', href: 'Проект.dc.html' }
+        { t: 'PRP при гонартрозе: 12 месяцев наблюдения', m: 'Травматология и ортопедия России · 2025', href: 'academy-project.dc.html' },
+        { t: 'Клеточные технологии в хирургии сухожилий', m: 'Вестник РГМУ · 2024', href: 'academy-project.dc.html' }
       ] }
     ];
 
@@ -482,7 +482,7 @@ class Component extends DCLogic {
       growthSteps, ladderSteps, ladderAside,
       switchGroups,
       authLabel: logged ? 'Кабинет' : 'Войти',
-      authHref: logged ? 'Профиль.dc.html' : 'Авторизация.dc.html',
+      authHref: logged ? 'account-profile.dc.html' : 'auth.dc.html',
       skelBg: d ? 'rgba(255,255,255,.08)' : 'oklch(.93 .01 250)',
       pageBg: d ? 'oklch(.16 .02 250)' : '#fff',
       headerShadow: d ? 'oklch(.16 .02 250)' : '#0D3A77',

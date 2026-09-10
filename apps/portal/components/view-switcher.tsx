@@ -3,7 +3,7 @@ import { Button } from "@ds/design-system/button";
 
 /**
  * 004 EARS-18 — the «Неделя / Месяц» view switcher shared by both discovery panes
- * (`webinars-listing.dc.html` / `webinars-month.dc.html`). The active side is a
+ * (`events-feed.dc.html` / `events-feed-month.dc.html`). The active side is a
  * non-interactive `aria-current` label on the filled `primary-action`; the other
  * side is a real link (never a dead CTA) that adopts the DS `Button` primitive's
  * `ghost` states (hover tint-fill / active / focus-visible ring) — the segmented

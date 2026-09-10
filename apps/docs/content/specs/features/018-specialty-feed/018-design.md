@@ -8,7 +8,7 @@ lang: en
 
 > Requirements: [`018-requirements-en.md`](./018-requirements-en.md) · PRD: [`018-product.md`](./018-product.md) · Scenarios: [`018-scenarios.feature`](./018-scenarios.feature)
 >
-> Composition source of truth: `design-source/doctor-feed.dc.html` (screen `#d-feed`), with the event card (`webinar-card.dc.html`), the expert card (`expert-card.dc.html`) and the points plate in its base form reused as-is. Stage-A picks in force: F-018-1 = **Б** (events first), F-018-2 = **Б** (typographic card, no cover), F-018-3 = adjacent areas as their own block. The canvas payer line is a known defect and is not built (LD-9).
+> Composition source of truth: `design-source/doctor-feed.dc.html` (screen `#d-feed`), with the event card (`unit-event-card.dc.html`), the expert card (`unit-expert-card.dc.html`) and the points plate in its base form reused as-is. Stage-A picks in force: F-018-1 = **Б** (events first), F-018-2 = **Б** (typographic card, no cover), F-018-3 = adjacent areas as their own block. The canvas payer line is a known defect and is not built (LD-9).
 
 # 018 — Design
 
@@ -66,7 +66,7 @@ stateDiagram-v2
 | 024 · learning module  | lessons inside the module                | feature 024             |
 | home page · selections | mixed selections                         | feature 017's home page |
 
-Events use Feature 004's shared **`WebinarCard`** (`packages/design-system/src/primitives/webinar-card.tsx`, composition source `webinar-card.dc.html`), not the doctor content card — Feature 019 widens that existing event unit, and an offline meet-up is a `format` of the same card (EARS-4), never a new card kind.
+Events use Feature 004's shared **`WebinarCard`** (`packages/design-system/src/primitives/webinar-card.tsx`, composition source `unit-event-card.dc.html`), not the doctor content card — Feature 019 widens that existing event unit, and an offline meet-up is a `format` of the same card (EARS-4), never a new card kind.
 
 ## 3. Per-block read topology (LD-7)
 

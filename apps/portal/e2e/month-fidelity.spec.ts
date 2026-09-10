@@ -2,7 +2,7 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 
 /**
  * 004 EARS-19 — the month-calendar view fidelity pin (`/webinars?view=month`,
- * `webinars-month.dc.html`, design §5.4). Drives the DEV-STAND-gated live portal
+ * `events-feed-month.dc.html`, design §5.4). Drives the DEV-STAND-gated live portal
  * (guest, no session — the month projection is public) at BOTH breakpoints ×
  * BOTH themes, asserting the canvas STRUCTURE rather than pixels: the 7-column
  * desktop grid + its weekday header + state legend + «Неделя / Месяц» switcher;

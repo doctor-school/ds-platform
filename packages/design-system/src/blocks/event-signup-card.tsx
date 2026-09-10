@@ -6,7 +6,7 @@ import { Button } from "../primitives/button";
 
 /**
  * `EventSignupCard` (020 EARS-1, #1764) — the single right-column card of the
- * variant-А canvas (`design-source/webinar-page-variant-a.dc.html`): the date
+ * variant-А canvas (`design-source/archive/archive-event-page-variant-a.dc.html`): the date
  * plate, the conditions rows, and the ONE participation control.
  *
  * The card renders {@link ParticipationCta} EXACTLY as the server resolved it

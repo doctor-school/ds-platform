@@ -6,7 +6,7 @@
 export default function Page() {
   return (
     <main>
-      {/* primitives-first-ok: canvas-pinned row hover (profile.dc.html style-hover →
+      {/* primitives-first-ok: canvas-pinned row hover (account-profile.dc.html style-hover →
           hoverBg = muted) on a composite logout row — no DS Button variant renders
           a full-width bg-wash row. */}
       <button

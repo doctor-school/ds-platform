@@ -84,10 +84,10 @@ export const SHOWCASE_REGISTRY: ShowcaseEntry[] = [
   { id: "contact-chip", section: "primitives" },
   { id: "day-band", section: "primitives" },
 
-  // ── Listing unit (004 EARS-8, #557) — the webinar-card.dc.html §09 unit.
+  // ── Listing unit (004 EARS-8, #557) — the unit-event-card.dc.html §09 unit.
   { id: "webinar-card", section: "primitives" },
 
-  // ── Event-page content set (004 EARS-2, #551) — the webinar-page.dc.html body.
+  // ── Event-page content set (004 EARS-2, #551) — the event-page.dc.html body.
   { id: "webinar-page-content", section: "primitives" },
 
   // ── Event-page status card (004 EARS-4, #553) — the lifecycle status swap.
@@ -96,7 +96,7 @@ export const SHOWCASE_REGISTRY: ShowcaseEntry[] = [
   // ── Post-live recording plaque (014 EARS-7, #1344) — «запись готовится».
   { id: "webinar-recording-plaque", section: "primitives" },
 
-  // ── Webinar room layout (006 EARS-2/EARS-11, #578) — the webinar-room.dc.html
+  // ── Webinar room layout (006 EARS-2/EARS-11, #578) — the archive/archive-room-v1.dc.html
   //    composition shell (desktop 1fr 400px player + chat aside; mobile tabs).
   { id: "webinar-room", section: "primitives" },
 
@@ -128,13 +128,13 @@ export const SHOWCASE_REGISTRY: ShowcaseEntry[] = [
   { id: "RegistrationSuccessCard", section: "blocks" },
   { id: "OtpFocusScreen", section: "blocks" },
 
-  // ── Month-calendar blocks (004 EARS-19, #1050) — the webinars-month.dc.html
+  // ── Month-calendar blocks (004 EARS-19, #1050) — the events-feed-month.dc.html
   //    display-only month grid (desktop), dot-grid + selected-day agenda (mobile).
   { id: "MonthCalendarGrid", section: "blocks" },
   { id: "MonthDotGrid", section: "blocks" },
   { id: "DayAgenda", section: "blocks" },
 
-  // ── 12-month picker (004 EARS-16/17, #1051) — the webinars-month.dc.html
+  // ── 12-month picker (004 EARS-16/17, #1051) — the events-feed-month.dc.html
   //    month chooser (year ‹ › stepper + 12-month count grid).
   { id: "MonthPicker", section: "blocks" },
 
@@ -149,7 +149,7 @@ export const SHOWCASE_REGISTRY: ShowcaseEntry[] = [
   { id: "LegalDocument", section: "blocks" },
   // 014 EARS-10/11 — the controlled cross-front event feed.
   { id: "EventList", section: "blocks" },
-  // 020 EARS-1 — event-page composition (webinar-page-variant-a.dc.html), #1764
+  // 020 EARS-1 — event-page composition (archive/archive-event-page-variant-a.dc.html), #1764
   { id: "EventPageShell", section: "blocks" },
   { id: "EventPageHero", section: "blocks" },
   { id: "EventSectionHeading", section: "blocks" },

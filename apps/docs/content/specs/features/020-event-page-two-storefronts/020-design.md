@@ -6,7 +6,7 @@ status: In dev
 lang: en
 ---
 
-> Companion to [`020-requirements-en.md`](./020-requirements-en.md). Engineer-facing, EN-only per ADR-0006 §4. Composition source of truth is the vendored canvas [`design-source/webinar-page-variant-a.dc.html`](../../../../../../design-source/webinar-page-variant-a.dc.html) over its base [`design-source/webinar-page.dc.html`](../../../../../../design-source/webinar-page.dc.html); where this document and the canvas disagree on geometry, the canvas wins, and where they disagree on behaviour, the requirements win.
+> Companion to [`020-requirements-en.md`](./020-requirements-en.md). Engineer-facing, EN-only per ADR-0006 §4. Composition source of truth is the vendored canvas [`design-source/archive/archive-event-page-variant-a.dc.html`](../../../../../../design-source/archive/archive-event-page-variant-a.dc.html) over its base [`design-source/event-page.dc.html`](../../../../../../design-source/event-page.dc.html); where this document and the canvas disagree on geometry, the canvas wins, and where they disagree on behaviour, the requirements win.
 
 # 020 — The event page for both storefronts (Design)
 

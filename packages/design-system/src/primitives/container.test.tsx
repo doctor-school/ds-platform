@@ -6,7 +6,7 @@ import { Container } from "./container";
 afterEach(cleanup);
 
 /**
- * §09 «Раскладка и ритм» layout container (source `design-system.dc.html`
+ * §09 «Раскладка и ритм» layout container (source `ds-foundation.dc.html`
  * §09 «Контейнер»/«Брейкпоинты»). Token-only; the rendered responsive behaviour
  * (edge-to-edge ≤900px, capped + centred ≥901px) is proven live on the dev stand.
  * This pins the token-class contract jsdom can assert: centred column, fixed 16px

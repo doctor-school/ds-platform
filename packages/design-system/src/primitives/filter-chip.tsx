@@ -4,7 +4,7 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "../lib/utils";
 
 /**
- * Neo-brutalist filter chip (#513, re-skin SoT `design-source/design-system.dc.html`
+ * Neo-brutalist filter chip (#513, re-skin SoT `design-source/ds-foundation.dc.html`
  * §05 "Чипы фильтра" + §06 "Чип фильтра"). A real toggle button (not a passive
  * span): the selection is carried on `aria-pressed`, so screen-reader users hear
  * the state and keyboard users toggle it natively.

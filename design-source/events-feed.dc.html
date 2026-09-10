@@ -13,30 +13,30 @@
   <!-- Хедер -->
   <div style="background:#0D3A77;padding:5px clamp(16px,4vw,48px);text-align:center;font-size:9px;font-weight:700;letter-spacing:.22em;text-transform:uppercase;color:rgba(255,255,255,.34)">BBM: Академия смыслов</div>
   <header data-screen-label="Листинг эфиров" style="background:{{ headerBg }};padding:16px clamp(16px,4vw,48px);display:flex;align-items:center;justify-content:space-between;gap:16px">
-    <a href="Главная.dc.html" style="display:flex;flex:none"><img src="assets/ds-logo-white.svg" alt="Doctor.School · Академия" style="height:26px;display:block"></a>
+    <a href="academy-home.dc.html" style="display:flex;flex:none"><img src="assets/ds-logo-white.svg" alt="Doctor.School · Академия" style="height:26px;display:block"></a>
     <sc-if value="{{ isMobile }}" hint-placeholder-val="{{ false }}">
       <div style="display:flex;align-items:center;gap:12px">
         <button onClick="{{ toggleTheme }}" title="Тема" style="font:inherit;width:44px;height:44px;background:transparent;color:#fff;border:2px solid rgba(255,255,255,.5);cursor:pointer;font-size:16px">{{ themeIcon }}</button>
         <details style="position:relative">
           <summary style="list-style:none;width:44px;height:44px;display:inline-flex;align-items:center;justify-content:center;background:#fff;color:#114D9E;cursor:pointer;font-size:20px;font-weight:800;box-shadow:3px 3px 0 {{ headerShadow }}">≡</summary>
           <nav style="position:absolute;top:calc(100% + 10px);right:0;background:{{ surface }};border:2px solid {{ border }};box-shadow:5px 5px 0 {{ shadow }};padding:8px;display:flex;flex-direction:column;min-width:200px;z-index:30">
-            <a href="Эфиры.dc.html" style="padding:12px 16px;font-size:15px;font-weight:800;color:{{ accent }};text-decoration:none">Эфиры</a>
-            <a href="Проекты.dc.html" style="padding:12px 16px;font-size:15px;font-weight:700;color:{{ ink }};text-decoration:none">Проекты</a>
-            <a href="Эксперты.dc.html" style="padding:12px 16px;font-size:15px;font-weight:700;color:{{ ink }};text-decoration:none">Эксперты</a>
-            <a href="Мои события.dc.html" style="padding:12px 16px;font-size:15px;font-weight:700;color:{{ ink }};text-decoration:none">Мои события</a>
-            <a href="Авторизация.dc.html" style="margin-top:6px;padding:12px 16px;font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};text-decoration:none;text-align:center">Войти</a>
+            <a href="events-feed.dc.html" style="padding:12px 16px;font-size:15px;font-weight:800;color:{{ accent }};text-decoration:none">Эфиры</a>
+            <a href="academy-projects.dc.html" style="padding:12px 16px;font-size:15px;font-weight:700;color:{{ ink }};text-decoration:none">Проекты</a>
+            <a href="academy-experts.dc.html" style="padding:12px 16px;font-size:15px;font-weight:700;color:{{ ink }};text-decoration:none">Эксперты</a>
+            <a href="account-my-events.dc.html" style="padding:12px 16px;font-size:15px;font-weight:700;color:{{ ink }};text-decoration:none">Мои события</a>
+            <a href="auth.dc.html" style="margin-top:6px;padding:12px 16px;font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};text-decoration:none;text-align:center">Войти</a>
           </nav>
         </details>
       </div>
     </sc-if>
     <sc-if value="{{ isDesktop }}" hint-placeholder-val="{{ true }}">
       <nav style="display:flex;align-items:center;gap:28px;font-size:14px;font-weight:700">
-        <a href="Эфиры.dc.html" style="color:#fff;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:6px">Эфиры</a>
-        <a href="Проекты.dc.html" style="color:#D3E8FD;text-decoration:none" style-hover="color:#fff">Проекты</a>
-        <a href="Эксперты.dc.html" style="color:#D3E8FD;text-decoration:none" style-hover="color:#fff">Эксперты</a>
-        <a href="Мои события.dc.html" style="color:#D3E8FD;text-decoration:none" style-hover="color:#fff">Мои события</a>
+        <a href="events-feed.dc.html" style="color:#fff;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:6px">Эфиры</a>
+        <a href="academy-projects.dc.html" style="color:#D3E8FD;text-decoration:none" style-hover="color:#fff">Проекты</a>
+        <a href="academy-experts.dc.html" style="color:#D3E8FD;text-decoration:none" style-hover="color:#fff">Эксперты</a>
+        <a href="account-my-events.dc.html" style="color:#D3E8FD;text-decoration:none" style-hover="color:#fff">Мои события</a>
         <button onClick="{{ toggleTheme }}" title="Тема" style="font:inherit;width:44px;height:44px;background:transparent;color:#fff;border:2px solid rgba(255,255,255,.5);cursor:pointer;font-size:15px" style-hover="border-color:#fff">{{ themeIcon }}</button>
-        <a href="Авторизация.dc.html" style="font-size:13.5px;font-weight:700;color:#114D9E;background:#fff;padding:12px 22px;text-decoration:none;box-shadow:3px 3px 0 {{ headerShadow }}" style-hover="transform:translate(1px,1px);box-shadow:2px 2px 0 {{ headerShadow }}">Войти</a>
+        <a href="auth.dc.html" style="font-size:13.5px;font-weight:700;color:#114D9E;background:#fff;padding:12px 22px;text-decoration:none;box-shadow:3px 3px 0 {{ headerShadow }}" style-hover="transform:translate(1px,1px);box-shadow:2px 2px 0 {{ headerShadow }}">Войти</a>
       </nav>
     </sc-if>
   </header>
@@ -81,7 +81,7 @@
         </details>
         <div style="display:flex;flex:none;height:46px;box-sizing:border-box;border:2px solid {{ border }};background:{{ surface }};box-shadow:none">
           <span style="display:inline-flex;align-items:center;padding:0 15px;font-size:13px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }}">Неделя</span>
-          <a href="Эфиры месяц.dc.html" style="display:inline-flex;align-items:center;padding:0 15px;font-size:13px;font-weight:700;color:{{ chipInk }};background:{{ surface }};text-decoration:none;border-left:2px solid {{ border }}">Месяц</a>
+          <a href="events-feed-month.dc.html" style="display:inline-flex;align-items:center;padding:0 15px;font-size:13px;font-weight:700;color:{{ chipInk }};background:{{ surface }};text-decoration:none;border-left:2px solid {{ border }}">Месяц</a>
         </div>
       </div>
 
@@ -115,7 +115,7 @@
           </div>
           <div style="border-top:2px solid {{ hairline }};margin-top:16px;padding-top:14px;display:flex;justify-content:space-between">
             <span style="font-size:12.5px;font-weight:700;color:{{ accent }};text-decoration:underline;text-underline-offset:4px;cursor:pointer">Весь 2026</span>
-            <a href="Эфиры месяц.dc.html" style="font-size:12.5px;font-weight:700;color:{{ accent }};text-decoration:underline;text-underline-offset:4px">Открыть месяц</a>
+            <a href="events-feed-month.dc.html" style="font-size:12.5px;font-weight:700;color:{{ accent }};text-decoration:underline;text-underline-offset:4px">Открыть месяц</a>
           </div>
         </div>
       </details>
@@ -132,14 +132,14 @@
 
       <div style="display:inline-grid;grid-template-columns:auto auto;border:2px solid {{ border }};background:{{ surface }};box-shadow:3px 3px 0 {{ shadowSm }}">
         <span style="display:inline-flex;align-items:center;justify-content:center;padding:14px 18px;font-size:13px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }}">Неделя</span>
-        <a href="Эфиры месяц.dc.html" style="display:inline-flex;align-items:center;justify-content:center;padding:14px 18px;font-size:13px;font-weight:700;color:{{ chipInk }};background:{{ surface }};text-decoration:none;border-left:2px solid {{ border }}">Месяц</a>
+        <a href="events-feed-month.dc.html" style="display:inline-flex;align-items:center;justify-content:center;padding:14px 18px;font-size:13px;font-weight:700;color:{{ chipInk }};background:{{ surface }};text-decoration:none;border-left:2px solid {{ border }}">Месяц</a>
       </div>
     </div>
     </sc-if>
 
     <!-- Фильтр (единый юнит) -->
     <div style="{{ filterWrap }}">
-      <dc-import name="ФильтрЭфиров" dark="{{ dark }}" project="{{ fProject }}" expert="{{ fExpert }}" topic="{{ fTopic }}" counts="{{ facetCounts }}" on-change="{{ onFilterChange }}" hint-size="100%,76px"></dc-import>
+      <dc-import name="unit-events-filter" dark="{{ dark }}" project="{{ fProject }}" expert="{{ fExpert }}" topic="{{ fTopic }}" counts="{{ facetCounts }}" on-change="{{ onFilterChange }}" hint-size="100%,76px"></dc-import>
     </div>
 
     <!-- Список эфиров -->
@@ -151,7 +151,7 @@
       </div>
       <div style="{{ cardWrap }}">
         <sc-for list="{{ day.events }}" as="ev" hint-placeholder-count="2">
-          <dc-import name="ВебинарКарточка" dark="{{ dark }}" variant="{{ ev.variant }}" num="{{ ev.num }}" time="{{ ev.time }}" time-sub="{{ ev.timeSub }}" cta="{{ ev.cta }}" cta-href="{{ ev.ctaHref }}" href="{{ ev.href }}" school="{{ ev.school }}" school-href="{{ ev.schoolHref }}" title="{{ ev.title }}" chips="{{ ev.chips }}" speakers="{{ ev.speakers }}" hint-size="100%,220px"></dc-import>
+          <dc-import name="unit-event-card" dark="{{ dark }}" variant="{{ ev.variant }}" num="{{ ev.num }}" time="{{ ev.time }}" time-sub="{{ ev.timeSub }}" cta="{{ ev.cta }}" cta-href="{{ ev.ctaHref }}" href="{{ ev.href }}" school="{{ ev.school }}" school-href="{{ ev.schoolHref }}" title="{{ ev.title }}" chips="{{ ev.chips }}" speakers="{{ ev.speakers }}" hint-size="100%,220px"></dc-import>
         </sc-for>
       </div>
     </sc-for>
@@ -185,13 +185,13 @@
   <footer style="border-top:2px solid {{ ink }};padding:32px clamp(16px,4vw,48px);display:flex;align-items:center;justify-content:space-between;max-width:1104px;margin:0 auto;box-sizing:content-box;gap:16px;flex-wrap:wrap">
     {{ footLogoEl }}
     <nav style="display:flex;gap:20px;font-size:12.5px;font-weight:700;flex-wrap:wrap">
-      <a href="Партнёры.dc.html" style="color:{{ inkFaint }};text-decoration:none">Партнёры</a>
-      <a href="Проекты.dc.html" style="color:{{ inkFaint }};text-decoration:none">Проекты</a>
-      <a href="Эксперты.dc.html" style="color:{{ inkFaint }};text-decoration:none">Эксперты</a>
-      <a href="Эфиры.dc.html" style="color:{{ inkFaint }};text-decoration:none">События</a>
-      <a href="Академия - Документы.dc.html" style="color:{{ inkFaint }};text-decoration:none">Документы и контакты</a>
+      <a href="academy-partners.dc.html" style="color:{{ inkFaint }};text-decoration:none">Партнёры</a>
+      <a href="academy-projects.dc.html" style="color:{{ inkFaint }};text-decoration:none">Проекты</a>
+      <a href="academy-experts.dc.html" style="color:{{ inkFaint }};text-decoration:none">Эксперты</a>
+      <a href="events-feed.dc.html" style="color:{{ inkFaint }};text-decoration:none">События</a>
+      <a href="academy-docs.dc.html" style="color:{{ inkFaint }};text-decoration:none">Документы и контакты</a>
     </nav>
-    <a href="Витрина врача - Главная.dc.html" style="font-size:12.5px;font-weight:800;color:{{ accent }};text-decoration:underline;text-underline-offset:4px;white-space:nowrap">doctor.school — врачам</a>
+    <a href="doctor-home.dc.html" style="font-size:12.5px;font-weight:800;color:{{ accent }};text-decoration:underline;text-underline-offset:4px;white-space:nowrap">doctor.school — врачам</a>
   </footer>
   <div style="max-width:1104px;margin:0 auto;padding:0 clamp(16px,4vw,48px);text-align:center;font-size:10px;font-weight:800;letter-spacing:.18em;text-transform:uppercase;color:{{ inkFaint }}">BBM: Академия смыслов</div>
   <div aria-hidden="true" style="overflow:hidden;padding-top:clamp(16px,3vw,36px)">
@@ -254,15 +254,15 @@ class Component extends DCLogic {
         ],
         groups: [
           { date:16, label:'Сегодня — 16 июля, среда', events:[
-            { variant:'live', num:'Эфир № 042', time:'19:00', timeSub:'идёт 24 мин · 214 смотрят', cta:'Войти в эфир ↗', ctaHref:'Комната эфира.dc.html', href:'Вебинар.dc.html', school:'Школа травматологии и ортопедии', title:'Пластика ахиллова сухожилия: разбор клинических случаев', chips:['Травматология','Ортопедия','Спортивная медицина'], speakers:[S('Анна Соколова','НМИЦ им. Пирогова'),S('Михаил Верещагин','Сеченовский университет')] },
-            { variant:'scheduled', num:'Эфир № 043', time:'20:30', timeSub:'сегодня · МСК', href:'Вебинар.dc.html', school:'Школа гастроэнтерологии', title:'СИБР и СРК: что нового в 2026 году', chips:['Гастроэнтерология','Терапия'], speakers:[S('Дарья Литвинова','ММА, клиника «Рассвет»')] }
+            { variant:'live', num:'Эфир № 042', time:'19:00', timeSub:'идёт 24 мин · 214 смотрят', cta:'Войти в эфир ↗', ctaHref:'archive-room-v1.dc.html', href:'event-page.dc.html', school:'Школа травматологии и ортопедии', title:'Пластика ахиллова сухожилия: разбор клинических случаев', chips:['Травматология','Ортопедия','Спортивная медицина'], speakers:[S('Анна Соколова','НМИЦ им. Пирогова'),S('Михаил Верещагин','Сеченовский университет')] },
+            { variant:'scheduled', num:'Эфир № 043', time:'20:30', timeSub:'сегодня · МСК', href:'event-page.dc.html', school:'Школа гастроэнтерологии', title:'СИБР и СРК: что нового в 2026 году', chips:['Гастроэнтерология','Терапия'], speakers:[S('Дарья Литвинова','ММА, клиника «Рассвет»')] }
           ]},
           { date:17, label:'Завтра — 17 июля, четверг', events:[
-            { variant:'scheduled', num:'Эфир № 044', time:'18:00', timeSub:'17 июля · МСК', href:'Вебинар.dc.html', school:'Школа кардиологии', title:'ХСН с сохранной фракцией выброса: амбулаторное ведение', chips:['Кардиология','Терапия'], speakers:[S('Пётр Малахов','НМИЦ кардиологии'),S('Ирина Северова','РНИМУ им. Пирогова')] },
-            { variant:'scheduled', num:'Эфир № 045', time:'19:30', timeSub:'17 июля · МСК', href:'Вебинар.dc.html', school:'Школа педиатрии', title:'Атопический дерматит у детей: ступенчатая терапия', chips:['Педиатрия','Дерматология'], speakers:[S('Ольга Ким','ДГКБ им. Башляевой')] }
+            { variant:'scheduled', num:'Эфир № 044', time:'18:00', timeSub:'17 июля · МСК', href:'event-page.dc.html', school:'Школа кардиологии', title:'ХСН с сохранной фракцией выброса: амбулаторное ведение', chips:['Кардиология','Терапия'], speakers:[S('Пётр Малахов','НМИЦ кардиологии'),S('Ирина Северова','РНИМУ им. Пирогова')] },
+            { variant:'scheduled', num:'Эфир № 045', time:'19:30', timeSub:'17 июля · МСК', href:'event-page.dc.html', school:'Школа педиатрии', title:'Атопический дерматит у детей: ступенчатая терапия', chips:['Педиатрия','Дерматология'], speakers:[S('Ольга Ким','ДГКБ им. Башляевой')] }
           ]},
           { date:18, label:'18 июля, пятница', events:[
-            { variant:'scheduled', num:'Эфир № 046', time:'18:00', timeSub:'18 июля · МСК', href:'Вебинар.dc.html', school:'Школа эндокринологии', title:'Сахарный диабет 2 типа: старт инсулинотерапии', chips:['Эндокринология'], speakers:[S('Марат Гареев','НМИЦ эндокринологии')] }
+            { variant:'scheduled', num:'Эфир № 046', time:'18:00', timeSub:'18 июля · МСК', href:'event-page.dc.html', school:'Школа эндокринологии', title:'Сахарный диабет 2 типа: старт инсулинотерапии', chips:['Эндокринология'], speakers:[S('Марат Гареев','НМИЦ эндокринологии')] }
           ]}
         ]
       },
@@ -275,20 +275,20 @@ class Component extends DCLogic {
         ],
         groups: [
           { date:21, label:'21 июля, понедельник', events:[
-            { variant:'scheduled', num:'Эфир № 047', time:'19:00', timeSub:'21 июля · МСК', href:'Вебинар.dc.html', school:'Школа неврологии', title:'Мигрень: современная CGRP-терапия', chips:['Неврология'], speakers:[S('Сергей Донцов','НМИЦ неврологии')] }
+            { variant:'scheduled', num:'Эфир № 047', time:'19:00', timeSub:'21 июля · МСК', href:'event-page.dc.html', school:'Школа неврологии', title:'Мигрень: современная CGRP-терапия', chips:['Неврология'], speakers:[S('Сергей Донцов','НМИЦ неврологии')] }
           ]},
           { date:22, label:'22 июля, вторник', events:[
-            { variant:'scheduled', num:'Эфир № 048', time:'18:00', timeSub:'22 июля · МСК', href:'Вебинар.dc.html', school:'Школа гематологии', title:'ЖДА у беременных: диагностика и терапия', chips:['Гематология'], speakers:[S('Алла Жукова','НМИЦ гематологии')] },
-            { variant:'scheduled', num:'Эфир № 049', time:'20:00', timeSub:'22 июля · МСК', href:'Вебинар.dc.html', school:'Школа травматологии и ортопедии', title:'Артроскопия коленного сустава: разбор техник', chips:['Травматология','Ортопедия'], speakers:[S('Игорь Панин','НМИЦ травматологии')] }
+            { variant:'scheduled', num:'Эфир № 048', time:'18:00', timeSub:'22 июля · МСК', href:'event-page.dc.html', school:'Школа гематологии', title:'ЖДА у беременных: диагностика и терапия', chips:['Гематология'], speakers:[S('Алла Жукова','НМИЦ гематологии')] },
+            { variant:'scheduled', num:'Эфир № 049', time:'20:00', timeSub:'22 июля · МСК', href:'event-page.dc.html', school:'Школа травматологии и ортопедии', title:'Артроскопия коленного сустава: разбор техник', chips:['Травматология','Ортопедия'], speakers:[S('Игорь Панин','НМИЦ травматологии')] }
           ]},
           { date:23, label:'23 июля, среда', events:[
-            { variant:'scheduled', num:'Эфир № 050', time:'19:00', timeSub:'23 июля · МСК', href:'Вебинар.dc.html', school:'Школа пульмонологии', title:'ХОБЛ: тройная терапия и ведение обострений', chips:['Пульмонология','Терапия'], speakers:[S('Наталья Бек','НИИ пульмонологии')] }
+            { variant:'scheduled', num:'Эфир № 050', time:'19:00', timeSub:'23 июля · МСК', href:'event-page.dc.html', school:'Школа пульмонологии', title:'ХОБЛ: тройная терапия и ведение обострений', chips:['Пульмонология','Терапия'], speakers:[S('Наталья Бек','НИИ пульмонологии')] }
           ]},
           { date:24, label:'24 июля, четверг', events:[
-            { variant:'scheduled', num:'Эфир № 051', time:'18:30', timeSub:'24 июля · МСК', href:'Вебинар.dc.html', school:'Школа дерматологии', title:'Меланома: скрининг и настороженность', chips:['Дерматология','Онкология'], speakers:[S('Вера Ильина','НМИЦ онкологии')] }
+            { variant:'scheduled', num:'Эфир № 051', time:'18:30', timeSub:'24 июля · МСК', href:'event-page.dc.html', school:'Школа дерматологии', title:'Меланома: скрининг и настороженность', chips:['Дерматология','Онкология'], speakers:[S('Вера Ильина','НМИЦ онкологии')] }
           ]},
           { date:25, label:'25 июля, пятница', events:[
-            { variant:'scheduled', num:'Эфир № 052', time:'17:00', timeSub:'25 июля · МСК', href:'Вебинар.dc.html', school:'Школа педиатрии', title:'Лихорадка без очага у детей', chips:['Педиатрия'], speakers:[S('Ольга Ким','ДГКБ им. Башляевой')] }
+            { variant:'scheduled', num:'Эфир № 052', time:'17:00', timeSub:'25 июля · МСК', href:'event-page.dc.html', school:'Школа педиатрии', title:'Лихорадка без очага у детей', chips:['Педиатрия'], speakers:[S('Ольга Ким','ДГКБ им. Башляевой')] }
           ]}
         ]
       }
@@ -297,7 +297,7 @@ class Component extends DCLogic {
     // Архив (прошедшие)
     const A = (month, num, time, dateStr, dur, school, title, chips, speakers) => ({
       variant:'past', month, num, time, timeSub: dateStr + ' · запись ' + dur,
-      href:'Вебинар архив.dc.html', ctaHref:'Вебинар архив.dc.html', school, title, chips, speakers
+      href:'event-page-recording.dc.html', ctaHref:'event-page-recording.dc.html', school, title, chips, speakers
     });
     const pastAll = [
       A('Июль 2026','Эфир № 041','19:00','9 июля','1:24','Школа неврологии','Болезнь Паркинсона: ранняя диагностика в амбулаторной практике',['Неврология'],[S('Сергей Донцов','НМИЦ неврологии')]),

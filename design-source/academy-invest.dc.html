@@ -12,17 +12,17 @@
 <div style="min-height:100vh;background:{{ pageBg }}">
   <div style="background:#0D3A77;padding:5px clamp(16px,4vw,48px);text-align:center;font-size:9px;font-weight:700;letter-spacing:.22em;text-transform:uppercase;color:rgba(255,255,255,.34)">BBM: Академия смыслов</div>
   <header data-screen-label="a-invest · Инвесторам" style="background:#114D9E;padding:14px clamp(16px,4vw,48px);display:flex;align-items:center;justify-content:space-between;gap:16px">
-    <a href="Главная.dc.html" style="display:flex;flex:none"><img src="assets/ds-logo-white.svg" alt="Doctor.School · Академия" style="height:26px;display:block"></a>
+    <a href="academy-home.dc.html" style="display:flex;flex:none"><img src="assets/ds-logo-white.svg" alt="Doctor.School · Академия" style="height:26px;display:block"></a>
     <sc-if value="{{ isMobile }}" hint-placeholder-val="{{ false }}">
       <div style="display:flex;align-items:center;gap:12px">
         <button onClick="{{ toggleTheme }}" title="Тема" style="font:inherit;width:44px;height:44px;background:transparent;color:#fff;border:2px solid rgba(255,255,255,.5);cursor:pointer;font-size:16px">{{ themeIcon }}</button>
         <details style="position:relative">
           <summary style="list-style:none;width:44px;height:44px;display:inline-flex;align-items:center;justify-content:center;background:#fff;color:#114D9E;cursor:pointer;font-size:20px;font-weight:800;box-shadow:3px 3px 0 {{ headerShadow }}">≡</summary>
           <nav style="position:absolute;top:calc(100% + 10px);right:0;background:{{ surface }};border:2px solid {{ border }};box-shadow:5px 5px 0 {{ shadow }};padding:8px;display:flex;flex-direction:column;min-width:220px;z-index:30">
-            <a href="Проекты.dc.html" style="padding:12px 16px;font-size:15px;font-weight:700;color:{{ ink }};text-decoration:none">Проекты</a>
-            <a href="Эксперты.dc.html" style="padding:12px 16px;font-size:15px;font-weight:700;color:{{ ink }};text-decoration:none">Эксперты</a>
-            <a href="Партнёры.dc.html" style="padding:12px 16px;font-size:15px;font-weight:700;color:{{ ink }};text-decoration:none">Партнёры</a>
-            <a href="Эфиры.dc.html" style="padding:12px 16px;font-size:15px;font-weight:700;color:{{ ink }};text-decoration:none">События</a>
+            <a href="academy-projects.dc.html" style="padding:12px 16px;font-size:15px;font-weight:700;color:{{ ink }};text-decoration:none">Проекты</a>
+            <a href="academy-experts.dc.html" style="padding:12px 16px;font-size:15px;font-weight:700;color:{{ ink }};text-decoration:none">Эксперты</a>
+            <a href="academy-partners.dc.html" style="padding:12px 16px;font-size:15px;font-weight:700;color:{{ ink }};text-decoration:none">Партнёры</a>
+            <a href="events-feed.dc.html" style="padding:12px 16px;font-size:15px;font-weight:700;color:{{ ink }};text-decoration:none">События</a>
             <a href="{{ authHref }}" style="margin-top:6px;padding:12px 16px;font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};text-decoration:none;text-align:center">{{ authLabel }}</a>
           </nav>
         </details>
@@ -30,10 +30,10 @@
     </sc-if>
     <sc-if value="{{ isDesktop }}" hint-placeholder-val="{{ true }}">
       <nav style="display:flex;align-items:center;gap:26px;font-size:14px;font-weight:700">
-        <a href="Проекты.dc.html" style="color:#D3E8FD;text-decoration:none" style-hover="color:#fff">Проекты</a>
-        <a href="Эксперты.dc.html" style="color:#D3E8FD;text-decoration:none" style-hover="color:#fff">Эксперты</a>
-        <a href="Партнёры.dc.html" style="color:#D3E8FD;text-decoration:none" style-hover="color:#fff">Партнёры</a>
-        <a href="Эфиры.dc.html" style="color:#D3E8FD;text-decoration:none" style-hover="color:#fff">События</a>
+        <a href="academy-projects.dc.html" style="color:#D3E8FD;text-decoration:none" style-hover="color:#fff">Проекты</a>
+        <a href="academy-experts.dc.html" style="color:#D3E8FD;text-decoration:none" style-hover="color:#fff">Эксперты</a>
+        <a href="academy-partners.dc.html" style="color:#D3E8FD;text-decoration:none" style-hover="color:#fff">Партнёры</a>
+        <a href="events-feed.dc.html" style="color:#D3E8FD;text-decoration:none" style-hover="color:#fff">События</a>
         <button onClick="{{ toggleTheme }}" title="Тема" style="font:inherit;width:44px;height:44px;background:transparent;color:#fff;border:2px solid rgba(255,255,255,.5);cursor:pointer;font-size:15px" style-hover="border-color:#fff">{{ themeIcon }}</button>
         <a href="{{ authHref }}" style="font-size:13.5px;font-weight:700;color:#114D9E;background:#fff;padding:12px 22px;text-decoration:none;box-shadow:3px 3px 0 {{ headerShadow }};white-space:nowrap" style-hover="transform:translate(1px,1px);box-shadow:2px 2px 0 {{ headerShadow }}">{{ authLabel }}</a>
       </nav>
@@ -44,7 +44,7 @@
   <div style="background:#114D9E;padding:clamp(32px,5vw,52px) clamp(16px,4vw,48px) clamp(44px,7vw,72px)">
     <div style="max-width:1104px;margin:0 auto">
       <nav style="font-size:13px;font-weight:700;margin-bottom:clamp(20px,3vw,30px)">
-        <a href="Главная.dc.html" style="color:#AED4FB;text-decoration:underline;text-underline-offset:4px">Академия</a>
+        <a href="academy-home.dc.html" style="color:#AED4FB;text-decoration:underline;text-underline-offset:4px">Академия</a>
         <span style="color:rgba(211,232,253,.5);margin:0 8px">/</span>
         <span style="color:#D3E8FD">Инвесторам</span>
       </nav>
@@ -89,7 +89,7 @@
         <div style="display:flex;align-items:baseline;gap:16px;margin-bottom:14px">
           <span style="font-size:12px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:{{ ink }};white-space:nowrap">Во что можно зайти сейчас</span>
           <span style="flex:1;border-top:2px solid {{ ink }}"></span>
-          <a href="Проекты.dc.html" style="font-size:12.5px;font-weight:700;color:{{ accent }};text-decoration:underline;text-underline-offset:4px;white-space:nowrap">Все проекты</a>
+          <a href="academy-projects.dc.html" style="font-size:12.5px;font-weight:700;color:{{ accent }};text-decoration:underline;text-underline-offset:4px;white-space:nowrap">Все проекты</a>
         </div>
         <div style="font-size:13px;font-weight:600;line-height:1.6;color:{{ inkMuted }};margin-bottom:22px;max-width:640px">Открытые позиции: школы, курсы, заявки экспертов. Наполнение показано состоянием карточки; кнопка формирует запрос коммерческого предложения.</div>
 
@@ -244,7 +244,7 @@
             <div style="min-width:240px;flex:1">
               <div style="font-size:22px;font-weight:800;letter-spacing:-.02em;color:{{ ink }}">Обсудить проект — оставить заявку</div>
               <p style="margin:10px 0 0;max-width:420px;font-size:14px;line-height:1.65;color:{{ inkMuted }}">Команда Академии ответит и соберёт коммерческое предложение.</p>
-              <div style="margin-top:18px;font-size:13px;font-weight:700;color:{{ inkFaint }}">Кто уже инвестирует — <a href="Партнёры.dc.html" style="color:{{ accent }}">Партнёры</a> · во что — <a href="Проекты.dc.html" style="color:{{ accent }}">Проекты</a> · <a href="#" title="#a-docs — рисуется отдельным экраном" style="color:{{ accent }}">Документы и лицензия</a></div>
+              <div style="margin-top:18px;font-size:13px;font-weight:700;color:{{ inkFaint }}">Кто уже инвестирует — <a href="academy-partners.dc.html" style="color:{{ accent }}">Партнёры</a> · во что — <a href="academy-projects.dc.html" style="color:{{ accent }}">Проекты</a> · <a href="#" title="#a-docs — рисуется отдельным экраном" style="color:{{ accent }}">Документы и лицензия</a></div>
             </div>
             <div style="flex:1.4;min-width:280px">
               <sc-if value="{{ formNotSent }}" hint-placeholder-val="{{ true }}">
@@ -315,13 +315,13 @@
     <div style="border-top:2px solid {{ ink }};padding:32px clamp(16px,4vw,48px);display:flex;align-items:center;justify-content:space-between;max-width:1104px;margin:0 auto;box-sizing:content-box;gap:16px;flex-wrap:wrap">
       {{ footLogoEl }}
       <nav style="display:flex;gap:20px;font-size:12.5px;font-weight:700;flex-wrap:wrap">
-        <a href="Партнёры.dc.html" style="color:{{ inkFaint }};text-decoration:none">Партнёры</a>
-        <a href="Проекты.dc.html" style="color:{{ inkFaint }};text-decoration:none">Проекты</a>
-        <a href="Эксперты.dc.html" style="color:{{ inkFaint }};text-decoration:none">Эксперты</a>
-        <a href="Эфиры.dc.html" style="color:{{ inkFaint }};text-decoration:none">События</a>
-        <a href="Академия - Документы.dc.html" style="color:{{ inkFaint }};text-decoration:none">Документы и контакты</a>
+        <a href="academy-partners.dc.html" style="color:{{ inkFaint }};text-decoration:none">Партнёры</a>
+        <a href="academy-projects.dc.html" style="color:{{ inkFaint }};text-decoration:none">Проекты</a>
+        <a href="academy-experts.dc.html" style="color:{{ inkFaint }};text-decoration:none">Эксперты</a>
+        <a href="events-feed.dc.html" style="color:{{ inkFaint }};text-decoration:none">События</a>
+        <a href="academy-docs.dc.html" style="color:{{ inkFaint }};text-decoration:none">Документы и контакты</a>
       </nav>
-      <a href="Витрина врача - Главная.dc.html" style="font-size:12.5px;font-weight:800;color:{{ accent }};text-decoration:underline;text-underline-offset:4px;white-space:nowrap">doctor.school — врачам</a>
+      <a href="doctor-home.dc.html" style="font-size:12.5px;font-weight:800;color:{{ accent }};text-decoration:underline;text-underline-offset:4px;white-space:nowrap">doctor.school — врачам</a>
     </div>
     <div style="max-width:1104px;margin:0 auto;padding:0 clamp(16px,4vw,48px);text-align:center;font-size:10px;font-weight:800;letter-spacing:.18em;text-transform:uppercase;color:{{ inkFaint }}">BBM: Академия смыслов</div>
     <div aria-hidden="true" style="overflow:hidden;padding-top:clamp(12px,2.4vw,28px)">
@@ -587,7 +587,7 @@ class Component extends DCLogic {
       photoNote: d ? 'rgba(255,255,255,.4)' : 'rgba(17,77,158,.5)',
       themeIcon: d ? '☾' : '☀',
       toggleTheme: () => { const nd = !d; try { localStorage.setItem('ds-theme', nd ? 'dark' : 'light'); } catch (e) {} this.setState({ dark: nd }); },
-      authHref: logged ? 'Профиль.dc.html' : 'Авторизация.dc.html',
+      authHref: logged ? 'account-profile.dc.html' : 'auth.dc.html',
       authLabel: logged ? 'Кабинет' : 'Войти / Регистрация',
       isLogged: logged,
       cabinetLabel: logged ? 'Войти в кабинет организации' : 'Кабинет инвестора',

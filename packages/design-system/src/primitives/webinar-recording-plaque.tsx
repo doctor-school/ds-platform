@@ -4,7 +4,7 @@ import { cn } from "../lib/utils";
 
 /**
  * Neo-brutalist «запись готовится» PLAQUE (014 EARS-7, source
- * `design-source/webinar-archive.dc.html` — the `isPreparing` prep-card
+ * `design-source/event-page-recording.dc.html` — the `isPreparing` prep-card
  * artboard). It occupies the PLAYER position on a post-live event page whose
  * recording is not published yet: design §8.1 says the player card holds exactly
  * one of the player, the guest gate, the plaque, or the unavailability message,

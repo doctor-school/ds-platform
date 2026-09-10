@@ -15,8 +15,8 @@ import { useHeaderAuth } from "@/lib/header-auth";
 /**
  * 008 EARS-1…6 / EARS-11 / EARS-13 — the persistent portal app-shell header,
  * built from the vendored «Doctor.School визуальный язык» canvas header block
- * (byte-identical across `webinars-listing.dc.html`, `my-events.dc.html`,
- * `profile.dc.html`, ADR-0013 canvas-wins). Mounted ONCE in the root layout so
+ * (byte-identical across `events-feed.dc.html`, `account-my-events.dc.html`,
+ * `account-profile.dc.html`, ADR-0013 canvas-wins). Mounted ONCE in the root layout so
  * the bar is present on every portal route by construction (EARS-1) and does not
  * remount across client navigations (the auth read in {@link useHeaderAuth} runs
  * once on mount and re-runs on the `refreshHeaderAuth()` signal the auth flows

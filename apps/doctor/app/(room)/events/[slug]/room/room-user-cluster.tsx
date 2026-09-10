@@ -30,7 +30,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
  * unwritten.
  *
  * The chip itself is the DS {@link Avatar} primitive at its `header` variant —
- * the canvas header chip (`design-source/webinar-room.dc.html` §header): a WHITE
+ * the canvas header chip (`design-source/archive/archive-room-v1.dc.html` §header): a WHITE
  * square with navy ink in both themes and the offset `shadow-header-chip` cast.
  * That variant is the SHARED presentation the academy's interactive chip also
  * composes (`HEADER_CHIP_SURFACE` in the design system), so the two storefronts

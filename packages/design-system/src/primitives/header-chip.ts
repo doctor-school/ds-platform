@@ -2,7 +2,7 @@ import { cn } from "../lib/utils";
 
 /**
  * The white-on-header neo-brutalist chip surface — the canvas header chip
- * (`design-source/webinar-room.dc.html` §header, `background:#fff`, navy
+ * (`design-source/archive/archive-room-v1.dc.html` §header, `background:#fff`, navy
  * `#114D9E` ink in BOTH themes via `header-chip-foreground`).
  *
  * Its offset shadow casts in `shadow-header-chip` — the theme-INVARIANT dark ink

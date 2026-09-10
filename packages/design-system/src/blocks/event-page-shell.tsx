@@ -7,7 +7,7 @@ import { cn } from "../lib/utils";
  * composition both storefronts mount (LD-1): the doctor storefront and the
  * Academy each supply copy, breadcrumb and routes, and neither owns a layout of
  * its own. Built from the vendored variant-А canvas
- * `design-source/webinar-page-variant-a.dc.html` (owner pick recorded
+ * `design-source/archive/archive-event-page-variant-a.dc.html` (owner pick recorded
  * 2026-09-02): the navy poster band, the `-80px` overlap that lifts the right
  * column into it, and the `1fr 360px` desktop grid that collapses to one column
  * with the sign-up card FIRST at ≤900px (`layout` breakpoint = 901px).

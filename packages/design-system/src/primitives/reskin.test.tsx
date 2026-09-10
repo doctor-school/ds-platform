@@ -11,7 +11,7 @@ afterEach(cleanup);
 
 /**
  * Neo-brutalist re-skin contract (#512, fidelity SoT
- * `design-source/design-system.dc.html`). The rendered look is CSS proven live on
+ * `design-source/ds-foundation.dc.html`). The rendered look is CSS proven live on
  * the dev stand; this pins the token-class contract jsdom can assert for the
  * non-clickable primitives that have no existing class test — square radius-0,
  * hard 2px borders, the flush 3px `shadow-focus` ring, and the hard offset cast.

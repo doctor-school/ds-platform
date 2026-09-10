@@ -6,9 +6,9 @@ logged-out Academy home composition. Run it with `pnpm --filter
 
 The exact vendored canvas sources, in precedence order, are:
 
-1. `design-source/home.dc.html` — variant V, logged-out state
-2. `design-source/webinar-card.dc.html`
-3. `design-source/expert-card.dc.html`
+1. `design-source/academy-home.dc.html` — variant V, logged-out state
+2. `design-source/unit-event-card.dc.html`
+3. `design-source/unit-expert-card.dc.html`
 
 This app is not a production surface. It has no API, authentication, BFF,
 environment configuration, data fetching, analytics, or deployment contract.

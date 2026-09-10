@@ -20,7 +20,7 @@ import {
  * the rendered geometry (pills / dot-grid / agenda) is the Playwright fidelity
  * pin (`e2e/month-fidelity.spec.ts`). July 2026 is the canvas reference month
  * (June 30 is a Monday, so the grid opens with one leading filler cell, then
- * 1–31, then Aug 1–3 = exactly 5 rows — `webinars-month.dc.html`).
+ * 1–31, then Aug 1–3 = exactly 5 rows — `events-feed-month.dc.html`).
  */
 
 const entry = (

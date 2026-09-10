@@ -13,14 +13,14 @@
 
   <!-- ═══ Оболочка · шапка витрины врача (с d-home) ═══ -->
   <header data-screen-label="d-events · шапка" style="background:#114D9E;padding:14px clamp(16px,4vw,48px);display:flex;align-items:center;gap:clamp(14px,2.5vw,28px)">
-    <a href="Витрина врача - Главная.dc.html" style="display:flex;flex:none"><img src="assets/ds-logo-white.svg" alt="Doctor.School" style="height:26px;display:block"></a>
+    <a href="doctor-home.dc.html" style="display:flex;flex:none"><img src="assets/ds-logo-white.svg" alt="Doctor.School" style="height:26px;display:block"></a>
     <sc-if value="{{ isDesktop }}" hint-placeholder-val="{{ true }}">
       <input value="{{ q }}" onInput="{{ setQ }}" placeholder="Поиск по урокам, школам и событиям" style="flex:1;max-width:440px;font:inherit;font-size:13.5px;font-weight:600;padding:12px 14px;border:2px solid rgba(255,255,255,.45);background:transparent;color:#fff;outline:none;min-width:120px" style-focus="border-color:#fff;background:rgba(255,255,255,.08)">
       <nav style="display:flex;align-items:center;gap:14px;margin-left:auto">
         <button onClick="{{ toggleTheme }}" title="Тема" style="font:inherit;width:44px;height:44px;background:transparent;color:#fff;border:2px solid rgba(255,255,255,.5);cursor:pointer;font-size:15px;flex:none" style-hover="border-color:#fff">{{ themeIcon }}</button>
         <sc-if value="{{ guest }}" hint-placeholder-val="{{ true }}">
-          <a href="Авторизация.dc.html" style="font-size:13.5px;font-weight:700;color:#D3E8FD;text-decoration:none;padding:12px 6px;white-space:nowrap" style-hover="color:#fff">Войти</a>
-          <a href="Авторизация.dc.html" style="font-size:13.5px;font-weight:800;color:#114D9E;background:#fff;padding:12px 22px;text-decoration:none;white-space:nowrap;box-shadow:3px 3px 0 #0D3A77" style-hover="transform:translate(1px,1px);box-shadow:2px 2px 0 #0D3A77">Регистрация</a>
+          <a href="auth.dc.html" style="font-size:13.5px;font-weight:700;color:#D3E8FD;text-decoration:none;padding:12px 6px;white-space:nowrap" style-hover="color:#fff">Войти</a>
+          <a href="auth.dc.html" style="font-size:13.5px;font-weight:800;color:#114D9E;background:#fff;padding:12px 22px;text-decoration:none;white-space:nowrap;box-shadow:3px 3px 0 #0D3A77" style-hover="transform:translate(1px,1px);box-shadow:2px 2px 0 #0D3A77">Регистрация</a>
         </sc-if>
         <sc-if value="{{ loggedIn }}" hint-placeholder-val="{{ false }}">
           <a href="#" title="Очки внимания: Пульс · Дыхание · Сознание. Открыть историю начислений" style="display:inline-flex;align-items:center;gap:9px;border:2px solid rgba(255,255,255,.45);padding:10px 14px;font-size:12px;font-weight:800;color:#fff;text-decoration:none;white-space:nowrap;font-variant-numeric:tabular-nums" style-hover="border-color:#fff"><span>120 Pul</span><span style="opacity:.45">·</span><span>340 Bre</span><span style="opacity:.45">·</span><span>1 250 Con</span></a>
@@ -39,8 +39,8 @@
               <a href="#" style="margin-top:4px;padding:12px 16px;font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};text-decoration:none;text-align:center">Личный кабинет</a>
             </sc-if>
             <sc-if value="{{ guest }}" hint-placeholder-val="{{ true }}">
-              <a href="Авторизация.dc.html" style="padding:12px 16px;font-size:15px;font-weight:700;color:{{ ink }};text-decoration:none">Войти</a>
-              <a href="Авторизация.dc.html" style="margin-top:4px;padding:12px 16px;font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};text-decoration:none;text-align:center">Регистрация</a>
+              <a href="auth.dc.html" style="padding:12px 16px;font-size:15px;font-weight:700;color:{{ ink }};text-decoration:none">Войти</a>
+              <a href="auth.dc.html" style="margin-top:4px;padding:12px 16px;font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};text-decoration:none;text-align:center">Регистрация</a>
             </sc-if>
           </nav>
         </details>
@@ -65,7 +65,7 @@
   <!-- ═══ Постер-шапка ═══ -->
   <div data-screen-label="d-events · постер-шапка" style="background:#114D9E;padding:clamp(30px,4.5vw,50px) clamp(16px,4vw,48px) clamp(32px,4.5vw,54px);position:relative">
     <div style="max-width:{{ mainMax }};margin:0 auto">
-      <nav style="font-size:12.5px;font-weight:700;color:#AED4FB;margin-bottom:18px"><a href="Витрина врача - Главная.dc.html" style="color:#AED4FB;text-decoration:none" style-hover="color:#fff;text-decoration:underline;text-underline-offset:3px">Doctor.School</a><span style="opacity:.5"> / </span><a href="Витрина врача - Лента специальности.dc.html" style="color:#AED4FB;text-decoration:none" style-hover="color:#fff;text-decoration:underline;text-underline-offset:3px">Травматология и ортопедия</a><span style="opacity:.5"> / </span><span style="color:#D3E8FD">События</span></nav>
+      <nav style="font-size:12.5px;font-weight:700;color:#AED4FB;margin-bottom:18px"><a href="doctor-home.dc.html" style="color:#AED4FB;text-decoration:none" style-hover="color:#fff;text-decoration:underline;text-underline-offset:3px">Doctor.School</a><span style="opacity:.5"> / </span><a href="doctor-feed.dc.html" style="color:#AED4FB;text-decoration:none" style-hover="color:#fff;text-decoration:underline;text-underline-offset:3px">Травматология и ортопедия</a><span style="opacity:.5"> / </span><span style="color:#D3E8FD">События</span></nav>
       <div style="font-size:12px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:#D3E8FD;margin-bottom:14px">Календарь и анонсы · время — МСК</div>
       <h1 style="margin:0;font-size:clamp(30px,4.6vw,50px);line-height:1.04;font-weight:800;letter-spacing:-.035em;color:#fff">События</h1>
       <div style="margin-top:14px;font-size:13.5px;font-weight:600;color:#D3E8FD;max-width:640px;line-height:1.6">Вебинары, разборы случаев, офлайн-встречи коллег и конгрессы по вашей специальности</div>
@@ -86,7 +86,7 @@
           <sc-for list="{{ boardItems }}" as="b" hint-placeholder-count="5">
             <div>
               <div style="font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:{{ inkFaint }};margin-bottom:8px">{{ b.label }}</div>
-              <dc-import name="ВебинарКарточка" dark="{{ dark }}" variant="{{ b.variant }}" num="{{ b.num }}" time="{{ b.time }}" time-sub="{{ b.timeSub }}" school="{{ b.school }}" title="{{ b.title }}" chips="{{ b.chips }}" speakers="{{ b.speakers }}" cta="{{ b.cta }}" show-secondary="{{ noVal }}" hint-size="100%,220px"></dc-import>
+              <dc-import name="unit-event-card" dark="{{ dark }}" variant="{{ b.variant }}" num="{{ b.num }}" time="{{ b.time }}" time-sub="{{ b.timeSub }}" school="{{ b.school }}" title="{{ b.title }}" chips="{{ b.chips }}" speakers="{{ b.speakers }}" cta="{{ b.cta }}" show-secondary="{{ noVal }}" hint-size="100%,220px"></dc-import>
             </div>
           </sc-for>
         </div>
@@ -166,7 +166,7 @@
           <section data-screen-label="d-events · идёт сейчас" style="{{ liveWrapStyle }}">
             <span style="display:inline-flex;align-items:center;gap:8px;font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#fff;background:#C81E1E;padding:8px 14px;flex:none"><span style="width:8px;height:8px;border-radius:50%;background:#fff;animation:livePulse 1.6s ease-in-out infinite"></span>Идёт сейчас</span>
             <div style="flex:1;min-width:220px">
-              <a href="Вебинар.dc.html" style="display:block;font-size:clamp(17px,2.4vw,21px);font-weight:800;letter-spacing:-.02em;color:{{ ink }};text-decoration:none;line-height:1.25" style-hover="color:{{ accent }}">Эфир «Вопросы по PRP»</a>
+              <a href="event-page.dc.html" style="display:block;font-size:clamp(17px,2.4vw,21px);font-weight:800;letter-spacing:-.02em;color:{{ ink }};text-decoration:none;line-height:1.25" style-hover="color:{{ accent }}">Эфир «Вопросы по PRP»</a>
               <div style="margin-top:5px;font-size:12.5px;font-weight:700;color:{{ inkMuted }};font-variant-numeric:tabular-nums">412 в комнате · Школа ортобиологии · до 20:30 МСК</div>
             </div>
             <a href="{{ liveHref }}" style="font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:2px solid {{ btnBg }};padding:14px 24px;text-decoration:none;white-space:nowrap;box-shadow:{{ btnShadow4 }}" style-hover="transform:translate(1px,1px)">{{ liveCtaLabel }}</a>
@@ -212,7 +212,7 @@
             <div style="display:flex;align-items:baseline;gap:14px;margin:clamp(28px,5vw,40px) 0 18px"><span style="font-size:15px;font-weight:800;letter-spacing:-.01em;color:{{ ink }};white-space:nowrap">Смежные области · ближайшее</span><span style="flex:1;border-top:2px solid {{ hairline }};transform:translateY(-4px)"></span></div>
             <div style="display:flex;flex-direction:column;gap:{{ evGap }}">
               <sc-for list="{{ adjacentCards }}" as="ev" hint-placeholder-count="2">
-                <dc-import name="ВебинарКарточка" dark="{{ dark }}" variant="{{ ev.variant }}" num="{{ ev.num }}" time="{{ ev.time }}" time-sub="{{ ev.timeSub }}" school="{{ ev.school }}" title="{{ ev.title }}" chips="{{ ev.chips }}" speakers="{{ ev.speakers }}" cta="{{ ev.cta }}" show-secondary="{{ noVal }}" href="Вебинар.dc.html" hint-size="100%,220px"></dc-import>
+                <dc-import name="unit-event-card" dark="{{ dark }}" variant="{{ ev.variant }}" num="{{ ev.num }}" time="{{ ev.time }}" time-sub="{{ ev.timeSub }}" school="{{ ev.school }}" title="{{ ev.title }}" chips="{{ ev.chips }}" speakers="{{ ev.speakers }}" cta="{{ ev.cta }}" show-secondary="{{ noVal }}" href="event-page.dc.html" hint-size="100%,220px"></dc-import>
               </sc-for>
             </div>
           </div>
@@ -251,7 +251,7 @@
                     <div style="display:flex;align-items:baseline;gap:14px;margin-bottom:16px"><span style="font-size:15px;font-weight:800;letter-spacing:-.01em;color:{{ ink }};white-space:nowrap">{{ day.label }}</span><span style="flex:1;border-top:2px solid {{ hairline }};transform:translateY(-4px)"></span><span style="font-size:12px;font-weight:700;color:{{ inkFaint }};white-space:nowrap">{{ day.note }}</span></div>
                     <div style="display:flex;flex-direction:column;gap:{{ evGap }}">
                       <sc-for list="{{ day.cards }}" as="ev" hint-placeholder-count="1">
-                        <dc-import name="ВебинарКарточка" dark="{{ dark }}" variant="{{ ev.variant }}" num="{{ ev.num }}" time="{{ ev.time }}" time-sub="{{ ev.timeSub }}" school="{{ ev.school }}" title="{{ ev.title }}" chips="{{ ev.chips }}" speakers="{{ ev.speakers }}" cta="{{ ev.cta }}" cta-href="{{ ev.ctaHref }}" show-secondary="{{ noVal }}" href="Вебинар.dc.html" hint-size="100%,220px"></dc-import>
+                        <dc-import name="unit-event-card" dark="{{ dark }}" variant="{{ ev.variant }}" num="{{ ev.num }}" time="{{ ev.time }}" time-sub="{{ ev.timeSub }}" school="{{ ev.school }}" title="{{ ev.title }}" chips="{{ ev.chips }}" speakers="{{ ev.speakers }}" cta="{{ ev.cta }}" cta-href="{{ ev.ctaHref }}" show-secondary="{{ noVal }}" href="event-page.dc.html" hint-size="100%,220px"></dc-import>
                       </sc-for>
                     </div>
                   </div>
@@ -299,7 +299,7 @@
                           <span style="{{ c.dateStyle }}">{{ c.dateLabel }}</span>
                           <div style="margin-top:2px">
                             <sc-for list="{{ c.events }}" as="ev" hint-placeholder-count="0">
-                              <a href="Вебинар.dc.html" style="{{ ev.style }}"><span style="{{ ev.textStyle }}">{{ ev.text }}</span></a>
+                              <a href="event-page.dc.html" style="{{ ev.style }}"><span style="{{ ev.textStyle }}">{{ ev.text }}</span></a>
                             </sc-for>
                           </div>
                         </div>
@@ -337,7 +337,7 @@
                 <sc-if value="{{ hasAgenda }}" hint-placeholder-val="{{ true }}">
                   <div style="display:flex;flex-direction:column;gap:12px">
                     <sc-for list="{{ agenda }}" as="a" hint-placeholder-count="2">
-                      <a href="Вебинар.dc.html" style="{{ a.rowStyle }}">
+                      <a href="event-page.dc.html" style="{{ a.rowStyle }}">
                         <div style="display:flex;flex-direction:column;align-items:center;flex:none;min-width:52px">
                           <span style="{{ a.badgeStyle }}">{{ a.badge }}</span>
                           <span style="font-size:16px;font-weight:800;color:{{ a.timeColor }};letter-spacing:-.02em;font-variant-numeric:tabular-nums">{{ a.time }}</span>
@@ -366,7 +366,7 @@
               </div>
               <div style="display:flex;flex-direction:column;gap:{{ evGap }}">
                 <sc-for list="{{ pastTeaser }}" as="ev" hint-placeholder-count="2">
-                  <dc-import name="ВебинарКарточка" dark="{{ dark }}" variant="past" num="{{ ev.num }}" time="{{ ev.time }}" time-sub="{{ ev.timeSub }}" school="{{ ev.school }}" title="{{ ev.title }}" chips="{{ ev.chips }}" speakers="{{ ev.speakers }}" href="Вебинар архив.dc.html" cta-href="Вебинар архив.dc.html" hint-size="100%,220px"></dc-import>
+                  <dc-import name="unit-event-card" dark="{{ dark }}" variant="past" num="{{ ev.num }}" time="{{ ev.time }}" time-sub="{{ ev.timeSub }}" school="{{ ev.school }}" title="{{ ev.title }}" chips="{{ ev.chips }}" speakers="{{ ev.speakers }}" href="event-page-recording.dc.html" cta-href="event-page-recording.dc.html" hint-size="100%,220px"></dc-import>
                 </sc-for>
               </div>
               <div style="margin-top:{{ evGap }};background:{{ sectionGray }};padding:15px 20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
@@ -385,7 +385,7 @@
               </div>
               <div style="border:{{ myBorder }};background:{{ surface }};box-shadow:{{ cardShadow }}">
                 <sc-for list="{{ myRows }}" as="r" hint-placeholder-count="2">
-                  <a href="Вебинар.dc.html" style="display:flex;align-items:center;gap:16px;padding:16px 22px;border-bottom:1px solid {{ hairline }};text-decoration:none" style-hover="background:{{ sectionGray }}">
+                  <a href="event-page.dc.html" style="display:flex;align-items:center;gap:16px;padding:16px 22px;border-bottom:1px solid {{ hairline }};text-decoration:none" style-hover="background:{{ sectionGray }}">
                     <span style="font-size:13px;font-weight:800;color:{{ okColor }};flex:none">✓</span>
                     <span style="min-width:0;flex:1"><span style="display:block;font-size:14.5px;font-weight:700;color:{{ ink }};letter-spacing:-.01em">{{ r.title }}</span><span style="display:block;font-size:12.5px;font-weight:600;color:{{ inkFaint }};margin-top:2px">{{ r.meta }}</span></span>
                     <span style="font-size:12.5px;font-weight:700;color:{{ inkMuted }};white-space:nowrap">{{ r.tag }}</span>
@@ -427,7 +427,7 @@
       </div>
       <div>
         <div style="font-size:11.5px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:{{ inkFaint }};margin-bottom:14px">Экспертам и партнёрам</div>
-        <a href="Главная.dc.html" style="font-size:13.5px;font-weight:800;color:{{ accent }};text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px">Academy.Doctor.School ↗</a>
+        <a href="academy-home.dc.html" style="font-size:13.5px;font-weight:800;color:{{ accent }};text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px">Academy.Doctor.School ↗</a>
         <div style="margin-top:10px;font-size:12.5px;font-weight:600;line-height:1.6;color:{{ inkFaint }}">Закулисье платформы: проекты, эксперты, партнёры.</div>
       </div>
     </div>
@@ -555,7 +555,7 @@ class Component extends DCLogic {
 
     // ---- Данные событий ----
     const cta = loggedIn ? 'Участвовать ↗' : 'Участвовать ↗';
-    const E = (o) => ({ cta, ctaHref: loggedIn ? '' : 'Авторизация.dc.html', ...o });
+    const E = (o) => ({ cta, ctaHref: loggedIn ? '' : 'auth.dc.html', ...o });
     const futureAll = [
       E({ day: 'Чт, 28 августа', note: 'через 5 дней', variant: loggedIn ? 'registered' : 'scheduled', num: 'Вебинар', time: '19:00', timeSub: '28 августа · чт', school: 'Школа ортобиологии', title: 'PRP при гонартрозе: показания, протокол, ошибки', chips: ['Онлайн', 'НМО · 2 ЗЕТ', '50 Pul', 'Уже записались 37 ортопедов'], speakers: [{ name: 'Михаил Страхов', org: 'ЦИТО им. Приорова' }], fmt: 'Онлайн', typ: 'Вебинар', nmo: true, free: false, city: '' }),
       E({ day: 'Чт, 4 сентября', note: '', variant: 'scheduled', num: 'Разбор', time: '18:00', timeSub: '4 сентября · чт', school: 'Школа ортобиологии', title: 'Разбор клинического случая с экспертом', chips: ['Онлайн', 'Бесплатно', 'Уже записались 24 ортопеда'], speakers: [{ name: 'Дмитрий Ершов', org: 'ЦИТО им. Приорова' }], fmt: 'Онлайн', typ: 'Вебинар', nmo: false, free: true, city: '' }),
@@ -580,7 +580,7 @@ class Component extends DCLogic {
     let list = (isPastTense ? pastAll.map(e => ({ ...e, variant: 'past' })) : futureAll).filter(match);
     if (forcedEmpty) list = [];
     // «Идёт сейчас» вариант В — карточка внутри сегодняшнего дня
-    const liveCard = { day: 'Сегодня · сб, 23 августа', note: 'идёт сейчас', variant: 'live', num: 'Эфир', time: '19:00', timeSub: '23 августа · сб', school: 'Школа ортобиологии', title: 'Эфир «Вопросы по PRP»', chips: ['Онлайн', '412 в комнате', 'Бесплатно'], speakers: [{ name: 'Михаил Страхов', org: 'ЦИТО им. Приорова' }], cta: loggedIn ? 'Войти в комнату эфира ↗' : 'Открыть страницу события ↗', ctaHref: loggedIn ? 'Комната эфира v2.dc.html' : 'Вебинар.dc.html' };
+    const liveCard = { day: 'Сегодня · сб, 23 августа', note: 'идёт сейчас', variant: 'live', num: 'Эфир', time: '19:00', timeSub: '23 августа · сб', school: 'Школа ортобиологии', title: 'Эфир «Вопросы по PRP»', chips: ['Онлайн', '412 в комнате', 'Бесплатно'], speakers: [{ name: 'Михаил Страхов', org: 'ЦИТО им. Приорова' }], cta: loggedIn ? 'Войти в комнату эфира ↗' : 'Открыть страницу события ↗', ctaHref: loggedIn ? 'room.dc.html' : 'event-page.dc.html' };
     if (liveV === 'В' && !noLive && !isPastTense && !forcedEmpty) list = [liveCard, ...list];
     const dayMap = [];
     list.forEach(e => {
@@ -715,7 +715,7 @@ class Component extends DCLogic {
       stickyLiveOn: liveV === 'Б' && !noLive && !boardOn,
       liveBlockOn: liveV === 'А' && !noLive && normalish,
       liveWrapStyle: `display:flex;align-items:center;gap:18px;flex-wrap:wrap;border:2px solid #C81E1E;background:${surface};box-shadow:${m ? 'none' : '6px 6px 0 #C81E1E'};padding:clamp(16px,3vw,24px);margin-bottom:clamp(28px,5vw,44px)`,
-      liveHref: loggedIn ? 'Комната эфира v2.dc.html' : 'Вебинар.dc.html',
+      liveHref: loggedIn ? 'room.dc.html' : 'event-page.dc.html',
       liveCtaLabel: loggedIn ? 'Войти в комнату эфира' : 'Открыть страницу события',
       btnShadow4: m ? 'none' : '4px 4px 0 ' + border,
       // лента

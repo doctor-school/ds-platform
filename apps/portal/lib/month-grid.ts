@@ -133,7 +133,7 @@ export interface MonthGrid {
  * onto their МСК calendar day; days before today are `isPast`, today is flagged,
  * weekends are marked. Leading/trailing filler cells carry the neighbour month's
  * real day numbers (`inMonth: false`) so the 7-column rhythm reads continuously,
- * matching `webinars-month.dc.html`. Pure — `now` is injected for testability.
+ * matching `events-feed-month.dc.html`. Pure — `now` is injected for testability.
  */
 export function buildMonthGrid(params: {
   month: string;

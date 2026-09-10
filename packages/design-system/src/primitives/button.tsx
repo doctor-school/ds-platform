@@ -5,7 +5,7 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "../lib/utils";
 
 /**
- * Neo-brutalist button (#512, re-skin from `design-source/design-system.dc.html`).
+ * Neo-brutalist button (#512, re-skin from `design-source/ds-foundation.dc.html`).
  *
  * The visual language: square corners (radius 0), a hard 2px structural border,
  * and a HARD OFFSET shadow (blur 0). On hover the control translates (2px,2px)

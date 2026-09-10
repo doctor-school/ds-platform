@@ -5,7 +5,7 @@ import { LIVE_STAND, provisionLoggedInDoctor } from "./support/doctor-session";
  * 004 EARS-8 — the listing card's REGISTERED marker (owner decision, #559
  * Stage-B note): on `/webinars`, the card of an event the VIEWER is registered
  * for carries the canvas `registered` variant's «Вы записаны» marker
- * (`design-source/webinar-card.dc.html`), composed in the portal layer from the
+ * (`design-source/unit-event-card.dc.html`), composed in the portal layer from the
  * viewer's own 005 `MyEvents` read — the PUBLIC `UpcomingBroadcastCard`
  * projection stays publish-safe (EARS-10: no per-user field on the public
  * endpoint), and an unauthenticated render stays byte-identical to before.

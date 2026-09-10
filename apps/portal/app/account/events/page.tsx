@@ -9,7 +9,7 @@ import { EventListRouter } from "../../../components/event-list-router";
 
 /**
  * 005 EARS-6 + 014 EARS-9 — the «Мои события» account surface
- * (`my-events.dc.html`), server-rendered at `/account/events`. It carries exactly
+ * (`account-my-events.dc.html`), server-rendered at `/account/events`. It carries exactly
  * TWO tabs, **Предстоящие** (default) and **Записи**, over the doctor's FULL
  * registration history:
  *

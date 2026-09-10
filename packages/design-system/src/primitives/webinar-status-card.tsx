@@ -5,7 +5,7 @@ import { Badge } from "./badge";
 
 /**
  * Neo-brutalist event-page STATUS CARD (004 EARS-4, source
- * `design-source/webinar-page.dc.html` — the pulled-up «статус-карточка»). The
+ * `design-source/event-page.dc.html` — the pulled-up «статус-карточка»). The
  * lifecycle affordance the public event page swaps per `EventLifecycleState`:
  * the same time-plate geometry as {@link WebinarCard}, plus a body carrying the
  * head/sub signal and the single primary participation CTA slot.

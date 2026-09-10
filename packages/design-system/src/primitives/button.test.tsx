@@ -45,7 +45,7 @@ describe("Button surface-safe on-primary variant", () => {
 });
 
 /**
- * Neo-brutalist re-skin contract (#512, source `design-source/design-system.dc.html`).
+ * Neo-brutalist re-skin contract (#512, source `design-source/ds-foundation.dc.html`).
  * The look is CSS proven live on the dev stand; this pins the token-class contract
  * jsdom can assert — square radius-0, a hard 2px border, and the PER-VARIANT offset
  * shadow colour (the brief's fidelity trap): a filled action casts in the INK

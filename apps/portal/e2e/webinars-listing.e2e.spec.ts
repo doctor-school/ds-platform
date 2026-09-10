@@ -54,7 +54,7 @@ test("EARS-8: the card carries the full choose-set and navigates to the event pa
   const card = page.locator("[data-webinar-card]", { has: cardLink });
   await expect(card).toBeVisible();
 
-  // The webinar-card.dc.html choose-set (EARS-8): time+МСК, school, title,
+  // The unit-event-card.dc.html choose-set (EARS-8): time+МСК, school, title,
   // specialty chips, and speakers all render in the card (its title is the
   // stretched link; the choose-set lives in the card container around it).
   await expect(card).toContainText("МСК");

@@ -17,7 +17,7 @@
       </div>
       <div style="display:flex;align-items:center;gap:20px;flex:none">
         <span style="font-size:12.5px;font-weight:700;color:#AED4FB">214 врачей в комнате</span>
-        <a href="Вебинар.dc.html" style="font-size:12.5px;font-weight:700;color:#fff;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px">Выйти из комнаты</a>
+        <a href="event-page.dc.html" style="font-size:12.5px;font-weight:700;color:#fff;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px">Выйти из комнаты</a>
         <span style="width:34px;height:34px;background:#fff;color:#114D9E;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;box-shadow:2px 2px 0 #0D3A77">ВК</span>
       </div>
     </header>
@@ -51,7 +51,7 @@
           <span style="font-size:12.5px;color:{{ inkMuted }}"><b style="color:{{ ink }}">Анна Соколова</b> · НМИЦ им. Пирогова&ensp;·&ensp;<b style="color:{{ ink }}">Михаил Верещагин</b> · Сеченовский университет</span>
         </div>
       </div>
-      <dc-import name="ЧатКолонка" style="width:{{ colW }};flex:none" theme="{{ themeVal }}" chat-state="{{ chatStateVal }}" collapsed="{{ colClosed }}" on-toggle="{{ toggleCol }}" show-collapse="{{ true }}" hint-size="340px,100%"></dc-import>
+      <dc-import name="unit-chat-column" style="width:{{ colW }};flex:none" theme="{{ themeVal }}" chat-state="{{ chatStateVal }}" collapsed="{{ colClosed }}" on-toggle="{{ toggleCol }}" show-collapse="{{ true }}" hint-size="340px,100%"></dc-import>
     </div>
   </sc-if>
   <sc-if value="{{ isMobile }}" hint-placeholder-val="{{ false }}">
@@ -60,7 +60,7 @@
         <img src="assets/ds-logo-white.svg" alt="Doctor.School" style="height:20px;display:block;flex:none">
         <span style="display:inline-flex;align-items:center;gap:7px;font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#fff;background:#C81E1E;padding:4px 9px;white-space:nowrap"><span style="width:6px;height:6px;border-radius:50%;background:#fff;animation:livePulse 1.6s ease-in-out infinite"></span>Live</span>
       </div>
-      <a href="Вебинар.dc.html" title="Выйти" style="width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;background:#fff;color:#114D9E;font-size:15px;font-weight:800;text-decoration:none;flex:none">✕</a>
+      <a href="event-page.dc.html" title="Выйти" style="width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;background:#fff;color:#114D9E;font-size:15px;font-weight:800;text-decoration:none;flex:none">✕</a>
     </header>
     <div style="aspect-ratio:16/9;background:oklch(.13 .018 250);position:relative;display:flex;align-items:center;justify-content:center;flex:none">
       <sc-if value="{{ playerLive }}" hint-placeholder-val="{{ true }}">
@@ -91,7 +91,7 @@
     </div>
     <sc-if value="{{ tabChat }}" hint-placeholder-val="{{ true }}">
       <div style="flex:1;min-height:0;display:flex;flex-direction:column">
-        <dc-import name="ЧатКолонка" style="width:100%;height:100%" theme="{{ themeVal }}" chat-state="{{ chatStateVal }}" mobile="{{ true }}" show-collapse="{{ false }}" hint-size="100%,100%"></dc-import>
+        <dc-import name="unit-chat-column" style="width:100%;height:100%" theme="{{ themeVal }}" chat-state="{{ chatStateVal }}" mobile="{{ true }}" show-collapse="{{ false }}" hint-size="100%,100%"></dc-import>
       </div>
     </sc-if>
     <sc-if value="{{ tabInfo }}" hint-placeholder-val="{{ false }}">

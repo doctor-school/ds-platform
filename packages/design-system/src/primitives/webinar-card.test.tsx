@@ -7,7 +7,7 @@ afterEach(cleanup);
 
 /**
  * Neo-brutalist webinar listing card (004 EARS-8, source
- * `design-source/webinar-card.dc.html`). The reusable listing UNIT: a
+ * `design-source/unit-event-card.dc.html`). The reusable listing UNIT: a
  * time-plate + content grid that carries the `UpcomingBroadcastCard` choose-set
  * (date + time МСК, school kicker, title, specialty chips, speakers) and links
  * the whole card to its event page. Off-scale canvas geometry (196px time
@@ -148,7 +148,7 @@ describe("014 EARS-11 WebinarCard — archive variant", () => {
  * 006 EARS-6 — the «мои события» room-entry front door on the listing card. On a
  * registered + `live` event the card hosts a secondary room-entry CTA («Войти в
  * эфир», routing to `/webinars/:slug/room`) ALONGSIDE the whole-card link to the
- * event page. The canvas (`webinar-card.dc.html`) never nests that CTA inside the
+ * event page. The canvas (`unit-event-card.dc.html`) never nests that CTA inside the
  * card link — the card root is a container, the title is a stretched link, and the
  * CTA is a sibling — so the affordance is added without an anchor nested in an
  * anchor (an invalid, a11y-hostile structure). The CTA copy is caller-injected

@@ -11,7 +11,7 @@ lang: en
 
 Engineer-facing companion to [`008-requirements-en.md`](./008-requirements-en.md). This feature is a **UI-composition / information-architecture slice** in `apps/portal` (Next.js 15 + Refine, ADR-0004): it mounts the persistent app-shell header as the app-level layout, wires the nav to shipped surfaces, branches the account affordance on the feature-003 session, and makes `/` the discovery front-door and post-login landing. It introduces **no backend aggregate** and mints **no session** — it consumes the feature-003 auth state (`GET /v1/auth/session`) and reuses the feature-004 listing surface.
 
-**Visual source of truth (ADR-0013).** The header and `/` are built from the vendored canvas under [`design-source/`](../../../../../../design-source/README.md) — `webinars-listing.dc.html` (canvas `Эфиры.dc.html`, the `/` front-door), with the same persistent header appearing across `my-events.dc.html` and `webinar-page.dc.html`. Build to those files, not to this document's prose; where prose and the canvas disagree, the canvas wins. Diagrams below describe **composition and routing**, not pixel geometry (which lives in the canvas).
+**Visual source of truth (ADR-0013).** The header and `/` are built from the vendored canvas under [`design-source/`](../../../../../../design-source/README.md) — `events-feed.dc.html` (canvas `events-feed.dc.html`, the `/` front-door), with the same persistent header appearing across `account-my-events.dc.html` and `event-page.dc.html`. Build to those files, not to this document's prose; where prose and the canvas disagree, the canvas wins. Diagrams below describe **composition and routing**, not pixel geometry (which lives in the canvas).
 
 ## 1. App-shell composition
 
@@ -30,7 +30,7 @@ flowchart TB
     OUTLET["Route outlet (current page renders here)"]
   end
   SESS["GET /v1/auth/session (feature 003)"]
-  LISTING["Feature-004 listing surface (webinars-listing.dc.html)"]
+  LISTING["Feature-004 listing surface (events-feed.dc.html)"]
 
   HEADER --> LOGO
   HEADER --> NAV
@@ -109,7 +109,7 @@ sequenceDiagram
 
 ## 5. Mobile collapse
 
-At the canvas mobile breakpoint (`≤900px`) the top-nav collapses into a `≡` dropdown carrying the same **[Эфиры · Мои события]** (EARS-11). Every target's resolution (§2) is preserved inside the dropdown. The geometry (the flat, full-bleed mobile treatment of the listing and header) is specified in the vendored canvas (`webinars-listing.dc.html` mobile band + the header's responsive rules); this feature reproduces it element-by-element, verified at Stage-B across both breakpoints × both themes (EARS-12, ADR-0013).
+At the canvas mobile breakpoint (`≤900px`) the top-nav collapses into a `≡` dropdown carrying the same **[Эфиры · Мои события]** (EARS-11). Every target's resolution (§2) is preserved inside the dropdown. The geometry (the flat, full-bleed mobile treatment of the listing and header) is specified in the vendored canvas (`events-feed.dc.html` mobile band + the header's responsive rules); this feature reproduces it element-by-element, verified at Stage-B across both breakpoints × both themes (EARS-12, ADR-0013).
 
 ## 6. What this feature does NOT own (seams & boundaries)
 

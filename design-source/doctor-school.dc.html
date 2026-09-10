@@ -13,14 +13,14 @@
 
   <!-- ═══ Оболочка · шапка витрины врача (с #d-home, как есть) ═══ -->
   <header data-screen-label="d-school · шапка" style="background:#114D9E;padding:14px clamp(16px,4vw,48px);display:flex;align-items:center;gap:clamp(14px,2.5vw,28px)">
-    <a href="Витрина врача - Главная.dc.html" style="display:flex;flex:none"><img src="assets/ds-logo-white.svg" alt="Doctor.School" style="height:26px;display:block"></a>
+    <a href="doctor-home.dc.html" style="display:flex;flex:none"><img src="assets/ds-logo-white.svg" alt="Doctor.School" style="height:26px;display:block"></a>
     <sc-if value="{{ isDesktop }}" hint-placeholder-val="{{ true }}">
       <input value="{{ q }}" onInput="{{ setQ }}" placeholder="Поиск по урокам, школам и событиям" style="flex:1;max-width:440px;font:inherit;font-size:13.5px;font-weight:600;padding:12px 14px;border:2px solid rgba(255,255,255,.45);background:transparent;color:#fff;outline:none;min-width:120px" style-focus="border-color:#fff;background:rgba(255,255,255,.08)">
       <nav style="display:flex;align-items:center;gap:14px;margin-left:auto">
         <button onClick="{{ toggleTheme }}" title="Тема" style="font:inherit;width:44px;height:44px;background:transparent;color:#fff;border:2px solid rgba(255,255,255,.5);cursor:pointer;font-size:15px;flex:none" style-hover="border-color:#fff">{{ themeIcon }}</button>
         <sc-if value="{{ guest }}" hint-placeholder-val="{{ true }}">
-          <a href="Авторизация.dc.html" style="font-size:13.5px;font-weight:700;color:#D3E8FD;text-decoration:none;padding:12px 6px;white-space:nowrap" style-hover="color:#fff">Войти</a>
-          <a href="Авторизация.dc.html" style="font-size:13.5px;font-weight:800;color:#114D9E;background:#fff;padding:12px 22px;text-decoration:none;white-space:nowrap;box-shadow:3px 3px 0 #0D3A77" style-hover="transform:translate(1px,1px);box-shadow:2px 2px 0 #0D3A77">Регистрация</a>
+          <a href="auth.dc.html" style="font-size:13.5px;font-weight:700;color:#D3E8FD;text-decoration:none;padding:12px 6px;white-space:nowrap" style-hover="color:#fff">Войти</a>
+          <a href="auth.dc.html" style="font-size:13.5px;font-weight:800;color:#114D9E;background:#fff;padding:12px 22px;text-decoration:none;white-space:nowrap;box-shadow:3px 3px 0 #0D3A77" style-hover="transform:translate(1px,1px);box-shadow:2px 2px 0 #0D3A77">Регистрация</a>
         </sc-if>
         <sc-if value="{{ loggedIn }}" hint-placeholder-val="{{ false }}">
           <a href="#" title="Очки внимания: Пульс · Дыхание · Сознание. Открыть историю начислений" style="display:inline-flex;align-items:center;gap:9px;border:2px solid rgba(255,255,255,.45);padding:10px 14px;font-size:12px;font-weight:800;color:#fff;text-decoration:none;white-space:nowrap;font-variant-numeric:tabular-nums" style-hover="border-color:#fff"><span>120 Pul</span><span style="opacity:.45">·</span><span>340 Bre</span><span style="opacity:.45">·</span><span>1 250 Con</span></a>
@@ -39,8 +39,8 @@
               <a href="#" style="margin-top:4px;padding:12px 16px;font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};text-decoration:none;text-align:center">Личный кабинет</a>
             </sc-if>
             <sc-if value="{{ guest }}" hint-placeholder-val="{{ true }}">
-              <a href="Авторизация.dc.html" style="padding:12px 16px;font-size:15px;font-weight:700;color:{{ ink }};text-decoration:none">Войти</a>
-              <a href="Авторизация.dc.html" style="margin-top:4px;padding:12px 16px;font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};text-decoration:none;text-align:center">Регистрация</a>
+              <a href="auth.dc.html" style="padding:12px 16px;font-size:15px;font-weight:700;color:{{ ink }};text-decoration:none">Войти</a>
+              <a href="auth.dc.html" style="margin-top:4px;padding:12px 16px;font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};text-decoration:none;text-align:center">Регистрация</a>
             </sc-if>
           </nav>
         </details>
@@ -52,7 +52,7 @@
   <div data-screen-label="d-school · постер-шапка" style="background:#114D9E;padding:clamp(30px,5vw,52px) clamp(16px,4vw,48px) clamp(36px,6vw,64px)">
     <div style="max-width:1104px;margin:0 auto">
       <nav style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12.5px;font-weight:700">
-        <a href="Витрина врача - Лента специальности.dc.html" style="color:#D3E8FD;text-decoration:none" style-hover="color:#fff;text-decoration:underline;text-underline-offset:3px">Травматология и ортопедия</a>
+        <a href="doctor-feed.dc.html" style="color:#D3E8FD;text-decoration:none" style-hover="color:#fff;text-decoration:underline;text-underline-offset:3px">Травматология и ортопедия</a>
         <span style="color:rgba(255,255,255,.4)">›</span>
         <span style="color:#fff">Школа ортобиологии</span>
       </nav>
@@ -169,7 +169,7 @@
           <sc-if value="{{ showProgress }}" hint-placeholder-val="{{ false }}">
             <div style="margin-bottom:18px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
               <div style="flex:1;min-width:180px"><div style="height:8px;border:1px solid {{ hairline }};background:{{ trackBg }}"><div style="height:100%;width:{{ progressW }};background:{{ accent }}"></div></div><div style="margin-top:7px;font-size:12.5px;font-weight:700;color:{{ inkMuted }}">{{ progressLabel }}</div></div>
-              <sc-if value="{{ started }}" hint-placeholder-val="{{ false }}"><a href="Витрина врача - Учебный модуль.dc.html" style="flex:none;font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:2px solid {{ btnBg }};padding:13px 24px;text-decoration:none;box-shadow:{{ btnShadow }}" style-hover="transform:translate(2px,2px)">Продолжить — серия 3 →</a></sc-if>
+              <sc-if value="{{ started }}" hint-placeholder-val="{{ false }}"><a href="doctor-lesson.dc.html" style="flex:none;font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:2px solid {{ btnBg }};padding:13px 24px;text-decoration:none;box-shadow:{{ btnShadow }}" style-hover="transform:translate(2px,2px)">Продолжить — серия 3 →</a></sc-if>
               <sc-if value="{{ completed }}" hint-placeholder-val="{{ false }}"><span style="flex:none;font-size:13.5px;font-weight:800;color:{{ green }}">✓ Все 9 серий пройдены</span></sc-if>
             </div>
           </sc-if>
@@ -180,12 +180,12 @@
               <sc-for list="{{ rowsA }}" as="s" hint-placeholder-count="3">
                 <div style="{{ s.rowStyle }}" style-hover="{{ rowHover }}">
                   <span style="flex:none;width:64px;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:{{ accent }};font-variant-numeric:tabular-nums">{{ s.num }}</span>
-                  <a href="Витрина врача - Учебный модуль.dc.html" style="flex:1;min-width:0;font-size:15px;font-weight:700;letter-spacing:-.01em;line-height:1.4;color:{{ ink }};text-decoration:none" style-hover="color:{{ accent }};text-decoration:underline;text-underline-offset:3px">{{ s.title }}</a>
+                  <a href="doctor-lesson.dc.html" style="flex:1;min-width:0;font-size:15px;font-weight:700;letter-spacing:-.01em;line-height:1.4;color:{{ ink }};text-decoration:none" style-hover="color:{{ accent }};text-decoration:underline;text-underline-offset:3px">{{ s.title }}</a>
                   <span style="flex:none;font-size:12px;font-weight:700;color:{{ inkFaint }};font-variant-numeric:tabular-nums">{{ s.dur }}</span>
                   <sc-if value="{{ s.done }}"><span style="flex:none;font-size:12.5px;font-weight:800;color:{{ green }};white-space:nowrap">✓ пройдена</span></sc-if>
-                  <sc-if value="{{ s.next }}"><a href="Витрина врача - Учебный модуль.dc.html" style="flex:none;font-size:12.5px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};padding:9px 14px;text-decoration:none;white-space:nowrap">Следующая →</a></sc-if>
-                  <sc-if value="{{ s.plain }}"><a href="Витрина врача - Учебный модуль.dc.html" style="flex:none;font-size:12.5px;font-weight:800;color:{{ accent }};text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px;white-space:nowrap">Смотреть →</a></sc-if>
-                  <sc-if value="{{ s.gated }}"><a href="Авторизация.dc.html" title="Смотреть серию — нужна регистрация" style="flex:none;font-size:12.5px;font-weight:800;color:{{ inkFaint }};text-decoration:none;white-space:nowrap" style-hover="color:{{ accent }}">🔒 смотреть</a></sc-if>
+                  <sc-if value="{{ s.next }}"><a href="doctor-lesson.dc.html" style="flex:none;font-size:12.5px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};padding:9px 14px;text-decoration:none;white-space:nowrap">Следующая →</a></sc-if>
+                  <sc-if value="{{ s.plain }}"><a href="doctor-lesson.dc.html" style="flex:none;font-size:12.5px;font-weight:800;color:{{ accent }};text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px;white-space:nowrap">Смотреть →</a></sc-if>
+                  <sc-if value="{{ s.gated }}"><a href="auth.dc.html" title="Смотреть серию — нужна регистрация" style="flex:none;font-size:12.5px;font-weight:800;color:{{ inkFaint }};text-decoration:none;white-space:nowrap" style-hover="color:{{ accent }}">🔒 смотреть</a></sc-if>
                 </div>
               </sc-for>
               <sc-if value="{{ showTail }}" hint-placeholder-val="{{ true }}">
@@ -204,7 +204,7 @@
           <sc-if value="{{ vB }}" hint-placeholder-val="{{ false }}">
             <div style="display:flex;gap:14px;overflow-x:auto;padding:4px 2px 16px;-webkit-overflow-scrolling:touch">
               <sc-for list="{{ stripB }}" as="s" hint-placeholder-count="5">
-                <a href="Витрина врача - Учебный модуль.dc.html" style="{{ s.cardStyle }}" style-hover="transform:translate(2px,2px);box-shadow:3px 3px 0 {{ shadow }}">
+                <a href="doctor-lesson.dc.html" style="{{ s.cardStyle }}" style-hover="transform:translate(2px,2px);box-shadow:3px 3px 0 {{ shadow }}">
                   <span style="font-size:30px;font-weight:800;line-height:1;letter-spacing:-.04em;color:{{ s.numColor }};font-variant-numeric:tabular-nums">{{ s.num2 }}</span>
                   <span style="font-size:14.5px;font-weight:800;letter-spacing:-.01em;line-height:1.3;color:{{ s.titleColor }}">{{ s.title }}</span>
                   <span style="margin-top:auto;font-size:12px;font-weight:700;color:{{ inkFaint }};font-variant-numeric:tabular-nums">{{ s.dur }}</span>
@@ -223,7 +223,7 @@
               <sc-for list="{{ pathC }}" as="n" hint-placeholder-count="9">
                 <sc-if value="{{ n.conn }}"><span style="{{ n.connStyle }}"></span></sc-if>
                 <sc-if value="{{ n.isNode }}">
-                  <a href="Витрина врача - Учебный модуль.dc.html" style="flex:none;width:118px;display:flex;flex-direction:column;align-items:center;text-align:center;text-decoration:none" style-hover="opacity:.85">
+                  <a href="doctor-lesson.dc.html" style="flex:none;width:118px;display:flex;flex-direction:column;align-items:center;text-align:center;text-decoration:none" style-hover="opacity:.85">
                     <span style="{{ n.boxStyle }}">{{ n.icon }}</span>
                     <span style="margin-top:10px;font-size:12.5px;font-weight:800;letter-spacing:-.01em;line-height:1.3;color:{{ ink }}">{{ n.title }}</span>
                     <span style="margin-top:4px;font-size:11px;font-weight:700;color:{{ inkFaint }};font-variant-numeric:tabular-nums">{{ n.dur }}</span>
@@ -242,7 +242,7 @@
                 <div style="font-size:16px;font-weight:800;letter-spacing:-.01em;color:{{ tintFg }}">Смотреть серию — нужна регистрация. Вернём вас сюда.</div>
                 <div style="margin-top:5px;font-size:13px;font-weight:600;line-height:1.55;color:{{ inkMuted }}">Описание, программа и тизеры открыты. Достаточно почты с подтверждением — диплом на входе не нужен.</div>
               </div>
-              <a href="Авторизация.dc.html" style="flex:none;font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:2px solid {{ btnBg }};padding:14px 24px;text-decoration:none;box-shadow:{{ btnShadow }}" style-hover="transform:translate(2px,2px)">Зарегистрироваться и смотреть</a>
+              <a href="auth.dc.html" style="flex:none;font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:2px solid {{ btnBg }};padding:14px 24px;text-decoration:none;box-shadow:{{ btnShadow }}" style-hover="transform:translate(2px,2px)">Зарегистрироваться и смотреть</a>
             </div>
           </sc-if>
 
@@ -255,15 +255,15 @@
       <div style="max-width:1104px;margin:0 auto">
         <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:18px;flex-wrap:wrap;margin-bottom:clamp(18px,3vw,24px)">
           <h2 style="margin:0;font-size:clamp(24px,3.6vw,36px);line-height:1.05;font-weight:800;letter-spacing:-.03em;color:{{ ink }}">Вебинары-разборы</h2>
-          <a href="Витрина врача - События.dc.html" style="font-size:14px;font-weight:800;color:{{ accent }};text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:5px;white-space:nowrap">Все события →</a>
+          <a href="doctor-events.dc.html" style="font-size:14px;font-weight:800;color:{{ accent }};text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:5px;white-space:nowrap">Все события →</a>
         </div>
         <sc-if value="{{ stEmpty }}" hint-placeholder-val="{{ false }}">
           <div style="border:2px dashed {{ dashedBorder }};padding:clamp(22px,4vw,36px);text-align:center;font-size:14px;font-weight:600;color:{{ inkMuted }}">Событий школы пока нет — они появятся вместе с первыми сериями.</div>
         </sc-if>
         <sc-if value="{{ notEmpty }}" hint-placeholder-val="{{ true }}">
           <div style="display:flex;flex-direction:column;gap:{{ evGap }}">
-            <dc-import name="ВебинарКарточка" dark="{{ dark }}" variant="scheduled" num="Вебинар-разбор" time="19:00" time-sub="4 сентября · чт" school="Школа ортобиологии" title="Разбор клинического случая с экспертом" chips="{{ ev1Chips }}" speakers="{{ ev1Speakers }}" cta="Участвовать ↗" hint-size="100%,220px"></dc-import>
-            <dc-import name="ВебинарКарточка" dark="{{ dark }}" variant="scheduled" num="Вебинар-разбор" time="18:00" time-sub="18 сентября · чт" school="Школа ортобиологии" title="PRP-терапия в амбулаторной практике: вопросы и ответы" chips="{{ ev2Chips }}" speakers="{{ ev2Speakers }}" cta="Участвовать ↗" hint-size="100%,220px"></dc-import>
+            <dc-import name="unit-event-card" dark="{{ dark }}" variant="scheduled" num="Вебинар-разбор" time="19:00" time-sub="4 сентября · чт" school="Школа ортобиологии" title="Разбор клинического случая с экспертом" chips="{{ ev1Chips }}" speakers="{{ ev1Speakers }}" cta="Участвовать ↗" hint-size="100%,220px"></dc-import>
+            <dc-import name="unit-event-card" dark="{{ dark }}" variant="scheduled" num="Вебинар-разбор" time="18:00" time-sub="18 сентября · чт" school="Школа ортобиологии" title="PRP-терапия в амбулаторной практике: вопросы и ответы" chips="{{ ev2Chips }}" speakers="{{ ev2Speakers }}" cta="Участвовать ↗" hint-size="100%,220px"></dc-import>
           </div>
         </sc-if>
       </div>
@@ -322,7 +322,7 @@
               <span style="font-size:12.5px;font-weight:600;color:{{ inkFaint }}">Наставничество открывается после полного прохождения курса</span>
             </div>
           </div>
-          <dc-import name="ЭкспертКарточка" dark="{{ dark }}" full-name="Анна Соколова" role="Травматолог-ортопед" credentials="д.м.н., ведущий научный сотрудник" org="НМИЦ им. Пирогова" meta="Наставник школы →" href="Эксперт.dc.html" hint-size="300px,430px"></dc-import>
+          <dc-import name="unit-expert-card" dark="{{ dark }}" full-name="Анна Соколова" role="Травматолог-ортопед" credentials="д.м.н., ведущий научный сотрудник" org="НМИЦ им. Пирогова" meta="Наставник школы →" href="academy-expert.dc.html" hint-size="300px,430px"></dc-import>
         </div>
       </div>
     </section>
@@ -389,7 +389,7 @@
       </div>
       <div>
         <div style="font-size:11.5px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:{{ inkFaint }};margin-bottom:14px">Экспертам и партнёрам</div>
-        <a href="Главная.dc.html" style="font-size:13.5px;font-weight:800;color:{{ accent }};text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px">Academy.Doctor.School ↗</a>
+        <a href="academy-home.dc.html" style="font-size:13.5px;font-weight:800;color:{{ accent }};text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px">Academy.Doctor.School ↗</a>
         <div style="margin-top:10px;font-size:12.5px;font-weight:600;line-height:1.6;color:{{ inkFaint }}">Закулисье платформы: проекты, эксперты, партнёры.</div>
       </div>
     </div>
@@ -558,7 +558,7 @@ class Component extends DCLogic {
       ev2Speakers: [{ name: 'Дмитрий Ершов', org: 'ЦИТО им. Приорова' }],
       evGap: m ? '24px' : '20px',
       mentorCols: m ? '1fr' : 'minmax(0,1fr) 300px',
-      mentorCtaHref: guest ? 'Авторизация.dc.html' : '#',
+      mentorCtaHref: guest ? 'auth.dc.html' : '#',
       reviewsOk: !stEmpty && !reviewsError, reviewsEmpty: stEmpty && !reviewsError, reviewsError,
       communityStyle: (m ? 'margin:0 -16px;' : 'border:2px solid ' + border + ';box-shadow:6px 6px 0 ' + shadow + ';') + 'background:' + tint + ';padding:clamp(22px,4vw,36px);display:flex;align-items:center;gap:22px;flex-wrap:wrap',
       threeCols: m ? '1fr' : 'repeat(3,1fr)', twoCols: m ? '1fr' : '1fr 1fr', tileGap: m ? '10px' : '14px',

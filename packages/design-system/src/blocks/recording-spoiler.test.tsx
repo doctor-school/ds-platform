@@ -7,7 +7,7 @@ afterEach(cleanup);
 
 /**
  * 014 EARS-8 — the «Смотреть оригинал трансляции» spoiler (source
- * `design-source/webinar-archive.dc.html` L165-179, the `showSpoiler` unit).
+ * `design-source/event-page-recording.dc.html` L165-179, the `showSpoiler` unit).
  * The block is the SECONDARY-cut disclosure that sits under the main player
  * when an event published both an edited and a raw cut.
  *

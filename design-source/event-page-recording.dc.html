@@ -10,34 +10,35 @@
 <helmet data-dc-atomics><link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"><style>body{margin:0;background:#fff;font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}:focus-visible{outline:3px solid #6BB1F7;outline-offset:2px}a{color:#114D9E}a:hover{color:#2D84F2}details>summary{list-style:none}details>summary::-webkit-details-marker{display:none}</style></helmet>
 
 <div style="min-height:100vh;background:{{ pageBg }}">
+  <div style="background:#0D3A77;padding:5px clamp(16px,4vw,48px);text-align:center;font-size:9px;font-weight:700;letter-spacing:.22em;text-transform:uppercase;color:rgba(255,255,255,.34)">BBM: Академия смыслов</div>
   <header data-screen-label="Эфир — архив" style="background:#114D9E;padding:16px clamp(16px,4vw,48px);display:flex;align-items:center;justify-content:space-between;gap:16px">
-    <a href="Главная.dc.html" style="display:flex;flex:none"><img src="assets/ds-logo-white.svg" alt="Doctor.School" style="height:26px;display:block"></a>
+    <a href="academy-home.dc.html" style="display:flex;flex:none"><img src="assets/ds-logo-white.svg" alt="Doctor.School · Академия" style="height:26px;display:block"></a>
     <sc-if value="{{ isMobile }}" hint-placeholder-val="{{ false }}">
       <div style="display:flex;align-items:center;gap:12px">
         <button onClick="{{ toggleTheme }}" title="Тема" style="font:inherit;width:44px;height:44px;background:transparent;color:#fff;border:2px solid rgba(255,255,255,.5);cursor:pointer;font-size:16px">{{ themeIcon }}</button>
         <details style="position:relative">
           <summary style="list-style:none;width:44px;height:44px;display:inline-flex;align-items:center;justify-content:center;background:#fff;color:#114D9E;cursor:pointer;font-size:20px;font-weight:800;box-shadow:3px 3px 0 {{ headerShadow }}">≡</summary>
           <nav style="position:absolute;top:calc(100% + 10px);right:0;background:{{ surface }};border:2px solid {{ border }};box-shadow:5px 5px 0 {{ shadow }};padding:8px;display:flex;flex-direction:column;min-width:200px;z-index:30">
-            <a href="Эфиры.dc.html" style="padding:12px 16px;font-size:15px;font-weight:800;color:{{ accent }};text-decoration:none">Эфиры</a>
-            <a href="Проекты.dc.html" style="padding:12px 16px;font-size:15px;font-weight:700;color:{{ ink }};text-decoration:none">Проекты</a>
-            <a href="Эксперты.dc.html" style="padding:12px 16px;font-size:15px;font-weight:700;color:{{ ink }};text-decoration:none">Эксперты</a>
-            <a href="Мои события.dc.html" style="padding:12px 16px;font-size:15px;font-weight:700;color:{{ ink }};text-decoration:none">Мои события</a>
+            <a href="events-feed.dc.html" style="padding:12px 16px;font-size:15px;font-weight:800;color:{{ accent }};text-decoration:none">Эфиры</a>
+            <a href="academy-projects.dc.html" style="padding:12px 16px;font-size:15px;font-weight:700;color:{{ ink }};text-decoration:none">Проекты</a>
+            <a href="academy-experts.dc.html" style="padding:12px 16px;font-size:15px;font-weight:700;color:{{ ink }};text-decoration:none">Эксперты</a>
+            <a href="account-my-events.dc.html" style="padding:12px 16px;font-size:15px;font-weight:700;color:{{ ink }};text-decoration:none">Мои события</a>
           </nav>
         </details>
       </div>
     </sc-if>
     <sc-if value="{{ isDesktop }}" hint-placeholder-val="{{ true }}">
       <nav style="display:flex;align-items:center;gap:28px;font-size:14px;font-weight:700">
-        <a href="Эфиры.dc.html" style="color:#fff;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:6px">Эфиры</a>
-        <a href="Проекты.dc.html" style="color:#D3E8FD;text-decoration:none" style-hover="color:#fff">Проекты</a>
-        <a href="Эксперты.dc.html" style="color:#D3E8FD;text-decoration:none" style-hover="color:#fff">Эксперты</a>
-        <a href="Мои события.dc.html" style="color:#D3E8FD;text-decoration:none">Мои события</a>
+        <a href="events-feed.dc.html" style="color:#fff;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:6px">Эфиры</a>
+        <a href="academy-projects.dc.html" style="color:#D3E8FD;text-decoration:none" style-hover="color:#fff">Проекты</a>
+        <a href="academy-experts.dc.html" style="color:#D3E8FD;text-decoration:none" style-hover="color:#fff">Эксперты</a>
+        <a href="account-my-events.dc.html" style="color:#D3E8FD;text-decoration:none">Мои события</a>
         <button onClick="{{ toggleTheme }}" title="Тема" style="font:inherit;width:44px;height:44px;background:transparent;color:#fff;border:2px solid rgba(255,255,255,.5);cursor:pointer;font-size:15px" style-hover="border-color:#fff">{{ themeIcon }}</button>
         <sc-if value="{{ isGuest }}" hint-placeholder-val="{{ false }}">
-          <a href="Авторизация.dc.html" style="font-size:13.5px;font-weight:700;color:#114D9E;background:#fff;border:0;padding:11px 22px;cursor:pointer;box-shadow:3px 3px 0 {{ headerShadow }};text-decoration:none" style-hover="transform:translate(1px,1px);box-shadow:2px 2px 0 {{ headerShadow }}">Войти</a>
+          <a href="auth.dc.html" style="font-size:13.5px;font-weight:700;color:#114D9E;background:#fff;border:0;padding:11px 22px;cursor:pointer;box-shadow:3px 3px 0 {{ headerShadow }};text-decoration:none" style-hover="transform:translate(1px,1px);box-shadow:2px 2px 0 {{ headerShadow }}">Войти</a>
         </sc-if>
         <sc-if value="{{ isAuthed }}" hint-placeholder-val="{{ true }}">
-          <a href="Профиль.dc.html" title="Профиль" style="width:44px;height:44px;display:inline-flex;align-items:center;justify-content:center;background:#fff;color:#114D9E;font-size:15px;font-weight:800;text-decoration:none;box-shadow:3px 3px 0 {{ headerShadow }}" style-hover="transform:translate(1px,1px);box-shadow:2px 2px 0 {{ headerShadow }}">АИ</a>
+          <a href="account-profile.dc.html" title="Профиль" style="width:44px;height:44px;display:inline-flex;align-items:center;justify-content:center;background:#fff;color:#114D9E;font-size:15px;font-weight:800;text-decoration:none;box-shadow:3px 3px 0 {{ headerShadow }}" style-hover="transform:translate(1px,1px);box-shadow:2px 2px 0 {{ headerShadow }}">АИ</a>
         </sc-if>
       </nav>
     </sc-if>
@@ -47,7 +48,7 @@
   <div style="background:#114D9E;padding:clamp(24px,4vw,36px) clamp(16px,4vw,48px) 132px">
     <div style="max-width:1104px;margin:0 auto">
       <div style="display:flex;align-items:center;gap:10px;font-size:12.5px;font-weight:700;color:#AED4FB;margin-bottom:32px;flex-wrap:wrap">
-        <a href="Эфиры.dc.html" style="color:#fff;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px">Эфиры</a><span>/</span><span>Травматология</span><span>/</span><span>Эфир № 042</span>
+        <a href="events-feed.dc.html" style="color:#fff;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px">Эфиры</a><span>/</span><span>Травматология</span><span>/</span><span>Эфир № 042</span>
       </div>
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:32px;flex-wrap:wrap">
         <div style="max-width:760px">
@@ -131,8 +132,8 @@
                 <div style="font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ accent }};margin-bottom:12px">Запись эфира · 90 минут</div>
                 <div style="font-size:clamp(18px,2.4vw,22px);font-weight:800;letter-spacing:-.02em;color:{{ ink }};line-height:1.25">Войдите, чтобы посмотреть запись</div>
                 <div style="font-size:13.5px;line-height:1.6;color:{{ inkMuted }};margin-top:12px">Doctor.School бесплатна для врачей. Вход — почта и специальность, две минуты.</div>
-                <a href="Авторизация.dc.html" style="display:inline-block;margin-top:20px;font-size:15px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};padding:15px 28px;text-decoration:none;box-shadow:4px 4px 0 {{ border }}" style-hover="transform:translate(2px,2px);box-shadow:2px 2px 0 {{ border }}">Войти и смотреть ↗</a>
-                <div style="font-size:12.5px;font-weight:600;color:{{ inkFaint }};margin-top:14px">Нет аккаунта? <a href="Авторизация.dc.html" style="color:{{ accent }};font-weight:700">Создать</a></div>
+                <a href="auth.dc.html" style="display:inline-block;margin-top:20px;font-size:15px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};padding:15px 28px;text-decoration:none;box-shadow:4px 4px 0 {{ border }}" style-hover="transform:translate(2px,2px);box-shadow:2px 2px 0 {{ border }}">Войти и смотреть ↗</a>
+                <div style="font-size:12.5px;font-weight:600;color:{{ inkFaint }};margin-top:14px">Нет аккаунта? <a href="auth.dc.html" style="color:{{ accent }};font-weight:700">Создать</a></div>
               </div>
             </div>
           </sc-if>
@@ -240,7 +241,7 @@
             </div>
           </div>
 
-          <div style="background:{{ tint }};padding:24px;font-size:13.5px;line-height:1.65;color:{{ tintInk }}"><b>Школа травматологии и ортопедии</b> — 38 эфиров, 12 400 подписчиков. Ведут практикующие врачи, программа формируется голосами аудитории.<br><a href="Эфиры.dc.html" style="display:inline-block;margin-top:12px;font-weight:700;color:{{ tintInk }};text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px">Все эфиры школы</a></div>
+          <div style="background:{{ tint }};padding:24px;font-size:13.5px;line-height:1.65;color:{{ tintInk }}"><b>Школа травматологии и ортопедии</b> — 38 эфиров, 12 400 подписчиков. Ведут практикующие врачи, программа формируется голосами аудитории.<br><a href="events-feed.dc.html" style="display:inline-block;margin-top:12px;font-weight:700;color:{{ tintInk }};text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px">Все эфиры школы</a></div>
         </div>
       </aside>
     </div>
@@ -275,15 +276,17 @@
   <footer style="border-top:2px solid {{ ink }};padding:32px clamp(16px,4vw,48px);display:flex;align-items:center;justify-content:space-between;max-width:1104px;margin:0 auto;box-sizing:content-box;gap:16px;flex-wrap:wrap">
     {{ footLogoEl }}
     <nav style="display:flex;gap:20px;font-size:12.5px;font-weight:700;flex-wrap:wrap">
-      <a href="Эфиры.dc.html" style="color:{{ inkFaint }};text-decoration:none">Эфиры</a>
-      <a href="Проекты.dc.html" style="color:{{ inkFaint }};text-decoration:none">Проекты</a>
-      <a href="Эксперты.dc.html" style="color:{{ inkFaint }};text-decoration:none">Эксперты</a>
-      <a href="Главная.dc.html#partner-form" style="color:{{ inkFaint }};text-decoration:none">Партнёрство</a>
+      <a href="academy-partners.dc.html" style="color:{{ inkFaint }};text-decoration:none">Партнёры</a>
+      <a href="academy-projects.dc.html" style="color:{{ inkFaint }};text-decoration:none">Проекты</a>
+      <a href="academy-experts.dc.html" style="color:{{ inkFaint }};text-decoration:none">Эксперты</a>
+      <a href="events-feed.dc.html" style="color:{{ inkFaint }};text-decoration:none">События</a>
+      <a href="academy-docs.dc.html" style="color:{{ inkFaint }};text-decoration:none">Документы и контакты</a>
     </nav>
-    <div style="font-size:12.5px;font-weight:600;color:{{ inkFaint }}">Врачи учат врачей · 2026</div>
+    <a href="doctor-home.dc.html" style="font-size:12.5px;font-weight:800;color:{{ accent }};text-decoration:underline;text-underline-offset:4px;white-space:nowrap">doctor.school — врачам</a>
   </footer>
+  <div style="max-width:1104px;margin:0 auto;padding:0 clamp(16px,4vw,48px);text-align:center;font-size:10px;font-weight:800;letter-spacing:.18em;text-transform:uppercase;color:{{ inkFaint }}">BBM: Академия смыслов</div>
   <div aria-hidden="true" style="overflow:hidden;padding-top:clamp(16px,3vw,36px)">
-    <div style="font-size:clamp(58px,12.6vw,236px);font-weight:800;letter-spacing:-.05em;line-height:.78;white-space:nowrap;text-align:center;color:{{ giantInk }};transform:translateY(.16em);user-select:none">Doctor.School</div>
+    <div style="font-size:clamp(30px,8.2vw,154px);font-weight:800;letter-spacing:-.05em;line-height:.78;white-space:nowrap;text-align:center;color:{{ giantInk }};transform:translateY(.16em);user-select:none">Academy.Doctor.School</div>
   </div>
 </div>
 </x-dc>
@@ -328,7 +331,7 @@ class Component extends DCLogic {
     const badgeBase = 'display:inline-flex;align-items:center;gap:8px;font-size:12.5px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#fff;padding:9px 16px;flex:none;margin-top:8px;box-shadow:3px 3px 0 ' + shadow;
     const heroBadgeStyle = isPreparing
       ? badgeBase + ';background:oklch(.45 .02 250);transform:rotate(-2deg)'
-      : badgeBase + ';background:#0D8A5F;transform:rotate(3deg)';
+      : badgeBase + ';background:#00693D;transform:rotate(3deg)';
     const heroBadgeText = isPreparing ? 'Запись готовится' : 'Запись доступна';
 
     const tabBase = 'font:inherit;flex:1;padding:16px 12px;font-size:13.5px;cursor:pointer;border:0;';
@@ -338,13 +341,13 @@ class Component extends DCLogic {
     let footCtaTitle, footCtaSub, footCtaLabel, footCtaHref;
     if (isGuest && !isPreparing) {
       footCtaTitle = 'Запись бесплатна.'; footCtaSub = 'Войдите — и смотрите целиком.';
-      footCtaLabel = 'Войти ↗'; footCtaHref = 'Авторизация.dc.html';
+      footCtaLabel = 'Войти ↗'; footCtaHref = 'auth.dc.html';
     } else if (isPreparing) {
       footCtaTitle = 'Запись скоро.'; footCtaSub = 'А следующий эфир школы — 30 июля.';
-      footCtaLabel = 'Записаться ↗'; footCtaHref = 'Эфиры.dc.html';
+      footCtaLabel = 'Записаться ↗'; footCtaHref = 'events-feed.dc.html';
     } else {
       footCtaTitle = 'Понравился разбор?'; footCtaSub = 'Следующий эфир школы — 30 июля.';
-      footCtaLabel = 'Записаться ↗'; footCtaHref = 'Эфиры.dc.html';
+      footCtaLabel = 'Записаться ↗'; footCtaHref = 'events-feed.dc.html';
     }
 
     return {

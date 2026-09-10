@@ -13,7 +13,7 @@
   <!-- Шапка Академии -->
   <div style="background:#0D3A77;padding:5px clamp(16px,4vw,48px);text-align:center;font-size:9px;font-weight:700;letter-spacing:.22em;text-transform:uppercase;color:rgba(255,255,255,.34)">BBM: Академия смыслов</div>
   <header data-screen-label="a-home" style="background:#114D9E;padding:14px clamp(16px,4vw,48px);display:flex;align-items:center;justify-content:space-between;gap:16px">
-    <a href="Главная.dc.html" style="display:flex;flex:none"><img src="assets/ds-logo-white.svg" alt="Doctor.School · Академия" style="height:26px;display:block"></a>
+    <a href="academy-home.dc.html" style="display:flex;flex:none"><img src="assets/ds-logo-white.svg" alt="Doctor.School · Академия" style="height:26px;display:block"></a>
     <sc-if value="{{ isMobile }}" hint-placeholder-val="{{ false }}">
       <div style="display:flex;align-items:center;gap:12px">
         <button onClick="{{ toggleTheme }}" title="Тема" style="font:inherit;width:44px;height:44px;background:transparent;color:#fff;border:2px solid rgba(255,255,255,.5);cursor:pointer;font-size:16px">{{ themeIcon }}</button>
@@ -24,8 +24,8 @@
               <a href="{{ ni.href }}" style="padding:12px 16px;font-size:15px;font-weight:700;color:{{ ink }};text-decoration:none">{{ ni.label }}</a>
             </sc-for>
             <sc-if value="{{ investBtn }}" hint-placeholder-val="{{ false }}"><a href="#invest" style="padding:12px 16px;font-size:15px;font-weight:800;color:{{ accent }};text-decoration:none">Инвесторам</a></sc-if>
-            <sc-if value="{{ guest }}" hint-placeholder-val="{{ true }}"><a href="Авторизация.dc.html" style="margin-top:6px;padding:12px 16px;font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};text-decoration:none;text-align:center">Войти / Регистрация</a></sc-if>
-            <sc-if value="{{ loggedIn }}" hint-placeholder-val="{{ false }}"><a href="Профиль.dc.html" style="margin-top:6px;padding:12px 16px;font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};text-decoration:none;text-align:center">Кабинет</a></sc-if>
+            <sc-if value="{{ guest }}" hint-placeholder-val="{{ true }}"><a href="auth.dc.html" style="margin-top:6px;padding:12px 16px;font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};text-decoration:none;text-align:center">Войти / Регистрация</a></sc-if>
+            <sc-if value="{{ loggedIn }}" hint-placeholder-val="{{ false }}"><a href="account-profile.dc.html" style="margin-top:6px;padding:12px 16px;font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};text-decoration:none;text-align:center">Кабинет</a></sc-if>
           </nav>
         </details>
       </div>
@@ -40,10 +40,10 @@
         </sc-if>
         <button onClick="{{ toggleTheme }}" title="Тема" style="font:inherit;width:44px;height:44px;background:transparent;color:#fff;border:2px solid rgba(255,255,255,.5);cursor:pointer;font-size:15px" style-hover="border-color:#fff">{{ themeIcon }}</button>
         <sc-if value="{{ guest }}" hint-placeholder-val="{{ true }}">
-          <a href="Авторизация.dc.html" style="font-size:13.5px;font-weight:700;color:#114D9E;background:#fff;padding:12px 22px;text-decoration:none;box-shadow:3px 3px 0 {{ headerShadow }};white-space:nowrap" style-hover="transform:translate(1px,1px);box-shadow:2px 2px 0 {{ headerShadow }}">Войти / Регистрация</a>
+          <a href="auth.dc.html" style="font-size:13.5px;font-weight:700;color:#114D9E;background:#fff;padding:12px 22px;text-decoration:none;box-shadow:3px 3px 0 {{ headerShadow }};white-space:nowrap" style-hover="transform:translate(1px,1px);box-shadow:2px 2px 0 {{ headerShadow }}">Войти / Регистрация</a>
         </sc-if>
         <sc-if value="{{ loggedIn }}" hint-placeholder-val="{{ false }}">
-          <a href="Профиль.dc.html" style="font-size:13.5px;font-weight:700;color:#114D9E;background:#fff;padding:12px 22px;text-decoration:none;box-shadow:3px 3px 0 {{ headerShadow }};white-space:nowrap" style-hover="transform:translate(1px,1px);box-shadow:2px 2px 0 {{ headerShadow }}">Кабинет</a>
+          <a href="account-profile.dc.html" style="font-size:13.5px;font-weight:700;color:#114D9E;background:#fff;padding:12px 22px;text-decoration:none;box-shadow:3px 3px 0 {{ headerShadow }};white-space:nowrap" style-hover="transform:translate(1px,1px);box-shadow:2px 2px 0 {{ headerShadow }}">Кабинет</a>
         </sc-if>
       </nav>
     </sc-if>
@@ -126,12 +126,12 @@
             <div style="font-size:11.5px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ accent }};margin-bottom:10px">Проекты</div>
             <h2 style="margin:0;font-size:clamp(26px,4vw,40px);line-height:1.05;font-weight:800;letter-spacing:-.03em;color:{{ ink }}">Что мы делаем</h2>
           </div>
-          <a href="Проекты.dc.html" style="font-size:14px;font-weight:800;color:{{ accent }};text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:5px;white-space:nowrap">Все проекты →</a>
+          <a href="academy-projects.dc.html" style="font-size:14px;font-weight:800;color:{{ accent }};text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:5px;white-space:nowrap">Все проекты →</a>
         </div>
         <div style="{{ projGridStyle }}">
-          <dc-import name="ПроектКарточка" dark="{{ dark }}" kind="Проект" title="Ортобиология" emblem="Ор" description="Направление регенеративной медицины: PRP, клеточные технологии и доказательная практика." count="школа · конгресс · клуб" href="Проект.dc.html" hint-size="100%,420px"></dc-import>
-          <dc-import name="ПроектКарточка" dark="{{ dark }}" kind="Проект" title="Кто стоит за брендом" emblem="Кт" description="Подкаст об экспертах: разговоры с врачами о том, как рождаются школы и направления." count="подкаст" href="Проект.dc.html" hint-size="100%,420px"></dc-import>
-          <dc-import name="ПроектКарточка" dark="{{ dark }}" kind="Скоро" title="RheumoSchool" emblem="Rh" description="Школа ревматологии: идёт набор команды проекта — экспертов и соавторов." count="готовится" href="Проект.dc.html" hint-size="100%,420px"></dc-import>
+          <dc-import name="unit-project-card" dark="{{ dark }}" kind="Проект" title="Ортобиология" emblem="Ор" description="Направление регенеративной медицины: PRP, клеточные технологии и доказательная практика." count="школа · конгресс · клуб" href="academy-project.dc.html" hint-size="100%,420px"></dc-import>
+          <dc-import name="unit-project-card" dark="{{ dark }}" kind="Проект" title="Кто стоит за брендом" emblem="Кт" description="Подкаст об экспертах: разговоры с врачами о том, как рождаются школы и направления." count="подкаст" href="academy-project.dc.html" hint-size="100%,420px"></dc-import>
+          <dc-import name="unit-project-card" dark="{{ dark }}" kind="Скоро" title="RheumoSchool" emblem="Rh" description="Школа ревматологии: идёт набор команды проекта — экспертов и соавторов." count="готовится" href="academy-project.dc.html" hint-size="100%,420px"></dc-import>
         </div>
       </div>
     </section>
@@ -160,11 +160,11 @@
             <sc-if value="{{ stEvData }}" hint-placeholder-val="{{ true }}">
               <div style="{{ evListStyle }}">
                 <sc-for list="{{ evCards }}" as="ev" hint-placeholder-count="2">
-                  <dc-import name="ВебинарКарточка" dark="{{ dark }}" variant="scheduled" num="{{ ev.num }}" time="{{ ev.time }}" time-sub="{{ ev.timeSub }}" school="{{ ev.school }}" title="{{ ev.title }}" speakers="{{ ev.speakers }}" cta="Участвовать ↗" href="Вебинар.dc.html" cta-href="Вебинар.dc.html" show-secondary="{{ noSec }}" hint-size="100%,200px"></dc-import>
+                  <dc-import name="unit-event-card" dark="{{ dark }}" variant="scheduled" num="{{ ev.num }}" time="{{ ev.time }}" time-sub="{{ ev.timeSub }}" school="{{ ev.school }}" title="{{ ev.title }}" speakers="{{ ev.speakers }}" cta="Участвовать ↗" href="event-page.dc.html" cta-href="event-page.dc.html" show-secondary="{{ noSec }}" hint-size="100%,200px"></dc-import>
                 </sc-for>
               </div>
             </sc-if>
-            <a href="Эфиры.dc.html" style="display:inline-block;margin-top:18px;font-size:13.5px;font-weight:800;color:{{ accent }};text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:5px">Все события и эфиры →</a>
+            <a href="events-feed.dc.html" style="display:inline-block;margin-top:18px;font-size:13.5px;font-weight:800;color:{{ accent }};text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:5px">Все события и эфиры →</a>
         </div>
 
         <div style="{{ triRowStyle }}">
@@ -291,13 +291,13 @@
     <div style="border-top:2px solid {{ ink }};padding:32px clamp(16px,4vw,48px);display:flex;align-items:center;justify-content:space-between;max-width:1104px;margin:0 auto;box-sizing:content-box;gap:16px;flex-wrap:wrap">
       {{ footLogoEl }}
       <nav style="display:flex;gap:20px;font-size:12.5px;font-weight:700;flex-wrap:wrap">
-        <a href="Партнёры.dc.html" style="color:{{ inkFaint }};text-decoration:none">Партнёры</a>
-        <a href="Проекты.dc.html" style="color:{{ inkFaint }};text-decoration:none">Проекты</a>
-        <a href="Эксперты.dc.html" style="color:{{ inkFaint }};text-decoration:none">Эксперты</a>
-        <a href="Эфиры.dc.html" style="color:{{ inkFaint }};text-decoration:none">События</a>
-        <a href="Академия - Документы.dc.html" style="color:{{ inkFaint }};text-decoration:none">Документы и контакты</a>
+        <a href="academy-partners.dc.html" style="color:{{ inkFaint }};text-decoration:none">Партнёры</a>
+        <a href="academy-projects.dc.html" style="color:{{ inkFaint }};text-decoration:none">Проекты</a>
+        <a href="academy-experts.dc.html" style="color:{{ inkFaint }};text-decoration:none">Эксперты</a>
+        <a href="events-feed.dc.html" style="color:{{ inkFaint }};text-decoration:none">События</a>
+        <a href="academy-docs.dc.html" style="color:{{ inkFaint }};text-decoration:none">Документы и контакты</a>
       </nav>
-      <a href="Витрина врача - Главная.dc.html" style="font-size:12.5px;font-weight:800;color:{{ accent }};text-decoration:underline;text-underline-offset:4px;white-space:nowrap">doctor.school — врачам</a>
+      <a href="doctor-home.dc.html" style="font-size:12.5px;font-weight:800;color:{{ accent }};text-decoration:underline;text-underline-offset:4px;white-space:nowrap">doctor.school — врачам</a>
     </div>
     <div style="max-width:1104px;margin:0 auto;padding:0 clamp(16px,4vw,48px);text-align:center;font-size:10px;font-weight:800;letter-spacing:.18em;text-transform:uppercase;color:{{ inkFaint }}">BBM: Академия смыслов</div>
     <div aria-hidden="true" style="overflow:hidden;padding-top:clamp(12px,2.4vw,28px)">
@@ -356,9 +356,9 @@ class Component extends DCLogic {
     const loggedIn = this.state.auth ? this.state.auth === 'in' : !!p.loggedIn;
 
     const navSets = {
-      a: [['Эфиры', 'Эфиры.dc.html'], ['Проекты', 'Проекты.dc.html'], ['Эксперты', 'Эксперты.dc.html']],
-      b: [['Проекты', 'Проекты.dc.html'], ['Эксперты', 'Эксперты.dc.html'], ['Партнёры', '#'], ['События', 'Эфиры.dc.html'], ['Инвесторам', '#invest']],
-      v: [['Проекты', 'Проекты.dc.html'], ['Эксперты', 'Эксперты.dc.html'], ['Партнёры', '#'], ['События', 'Эфиры.dc.html']]
+      a: [['Эфиры', 'events-feed.dc.html'], ['Проекты', 'academy-projects.dc.html'], ['Эксперты', 'academy-experts.dc.html']],
+      b: [['Проекты', 'academy-projects.dc.html'], ['Эксперты', 'academy-experts.dc.html'], ['Партнёры', '#'], ['События', 'events-feed.dc.html'], ['Инвесторам', '#invest']],
+      v: [['Проекты', 'academy-projects.dc.html'], ['Эксперты', 'academy-experts.dc.html'], ['Партнёры', '#'], ['События', 'events-feed.dc.html']]
     };
     const navItems = (navSets[navV] || navSets.a).map(x => ({ label: x[0], href: x[1] }));
 

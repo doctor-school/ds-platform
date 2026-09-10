@@ -147,7 +147,7 @@ gh pr view <PR#> --json mergeCommit -q .mergeCommit.oid          # FIX
 # 1. hotfix branch cut FROM the deployed SHA (never from main)
 git fetch origin --tags
 git switch -c hotfix/<N>-<slug> <DEPLOYED>
-git cherry-pick <FIX>            # repeat for each already-merged fix, oldest first
+git cherry-pick -x <FIX>            # repeat for each already-merged fix, oldest first
 git push -u origin hotfix/<N>-<slug>
 
 # 2. CI for that branch (workflow_dispatch takes the same non-PR path as push:main)
@@ -163,7 +163,7 @@ pnpm deploy:prod --ref $(git rev-parse origin/hotfix/<N>-<slug>)
 git push origin --delete hotfix/<N>-<slug> && git branch -D hotfix/<N>-<slug>
 ```
 
-The pre-flight refuses a target that is not a strict descendant of the LIVE deployed SHA, or that carries any commit with no equivalent on `origin/main` (`git cherry`) — i.e. anything unreviewed. A conflicted cherry-pick is a signal to re-sequence (ship the range normally, or revert per §10.10), never to hand-resolve into a commit that exists nowhere else. Detail: [`tools/deploy/README.md`](../../../../../tools/deploy/README.md) → Hotfix deploy. The per-service build / boot-probe / success-verify / smoke set is derived from the TARGET SHA's compose file, so a hotfix based on a SHA that predates a service verifies only the services that exist there — see that same README paragraph.
+The pre-flight refuses a target that is not a strict descendant of the LIVE deployed SHA, or that carries any commit with no equivalent on `origin/main` (native `git cherry` equivalence, or a canonical `-x` source receipt plus clean Git replay with an exact target-tree match; merge commits and Git errors refuse) — i.e. anything unreviewed. A conflicted cherry-pick is a signal to re-sequence (ship the range normally, or revert per §10.10), never to hand-resolve into a commit that exists nowhere else. Detail: [`tools/deploy/README.md`](../../../../../tools/deploy/README.md) → Hotfix deploy. The per-service build / boot-probe / success-verify / smoke set is derived from the TARGET SHA's compose file, so a hotfix based on a SHA that predates a service verifies only the services that exist there — see that same README paragraph.
 
 After a hotfix, prod sits on an off-main SHA: the bootstrap delta line is anchored on `git merge-base origin/main <deployedSha>` and says so. Get prod back on the normal train with the next ordinary `pnpm deploy:prod`.
 

@@ -172,8 +172,12 @@ seams + `hotfix-ref.test.mjs`):
    same ground truth the release gate uses — not the Deployment record). Rewinding
    prod is `--rollback`, not `--ref`.
 4. **Every commit in `deployed..target` is a cherry-pick of `origin/main`** —
-   `git cherry origin/main <target> <deployed>`; any `+` line names the offending
-   commit and refuses. This is what keeps "prod runs reviewed, merged code" true.
+   Native `git cherry` equivalence is the fast path. Otherwise one canonical
+   `git cherry-pick -x` receipt must name a single-parent source on `origin/main`.
+   Git must cleanly replay it onto the target parent and produce EXACTLY the
+   target tree. Conflicts, extra edits, merge commits, missing/ambiguous receipts
+   and Git errors refuse. The proof uses `merge-tree --write-tree --merge-base`
+   without changing the checkout/index; unsupported Git versions fail closed.
 5. Green CI for the target SHA, the live-эфир hold and the release gate run
    unchanged. The release gate's range is already `<live deployed>..<target>`, i.e.
    exactly the hotfix range, because its basis is the LIVE prod SHA.

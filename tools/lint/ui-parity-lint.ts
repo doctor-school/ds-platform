@@ -87,7 +87,8 @@ function canvasBlob(
   if (!inside || inside.startsWith("..")) return null;
   if (!headRefOid) return null;
   const show = (): { status: number | null; stdout: string } =>
-    spawnSync("git", ["cat-file", "-p", `${headRefOid}:${source}`], {
+    // `cat-file blob` (not `-p`) fails closed when the path resolves to a tree.
+    spawnSync("git", ["cat-file", "blob", `${headRefOid}:${source}`], {
       cwd: repoRoot,
       encoding: "utf8",
     });

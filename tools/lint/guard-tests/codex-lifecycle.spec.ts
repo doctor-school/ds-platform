@@ -99,7 +99,7 @@ describe("Codex hook regression #1919", () => {
     expect(contextTokensFromJsonl(token(-1))).toBeNull();
     expect(contextTokensFromJsonl(token(160000))).toBe(160000);
   });
-  it("matches Codex wrap dispatch and shell skill-read, rejects tool output authorization", () => {
+  it("matches Codex workflow dispatch, excludes documentation reads and tool output authorization", () => {
     expect(
       isWrapInitiation("spawn_agent", {
         message: "Run run-session-retro for this session",
@@ -109,7 +109,7 @@ describe("Codex hook regression #1919", () => {
       isWrapInitiation("Bash", {
         command: "Get-Content apps/docs/content/skills/run-wrap/SKILL.md",
       }),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       ownerRequestedWrap(
         JSON.stringify({

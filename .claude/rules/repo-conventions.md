@@ -65,10 +65,12 @@ Stale branches: auto-deleted on merge via `--delete-branch`; PRs closed without 
 
 ## Dependency bumps
 
-Two mandatory checks on any `dependencies` / `chore(deps)` / "upgrade X → Y" task:
+Verify actual pins and compatibility for every dependency update. Before a major-version implementation, also record the decision check below in the existing task.
 
 1. Verify the REAL pins first — actual versions in `apps/*/package.json` / `packages/*/package.json` (+ `pnpm ls <pkg> -r` for transitives) before trusting the Issue title/body; "coordinated upgrade" framings are often wrong. Framing diverges from reality → reword/close the Issue first, never stretch it to fit.
 2. Verify the ABI, not just declared peers — `peerDependencies` can lie. When the choice hinges on a pinned peer, grep the actual imports in the installed tarball (`grep -r "from .<peer>" node_modules/<pkg>/dist/`, or `npm pack` + unpack + grep), not `npm view <pkg> peerDependencies`. A CHANGELOG "moved/support X at <peer>" line in a patch release signals a shifted internal import.
+
+**Major-version decision check:** use `read-relevant-adrs` to read the current decision and its paired design rationale, including rejected versions. Record: current version and rationale; what changed; concrete benefit or support/security requirement; migration/recovery cost; and the option to retain the current major. Newer availability alone is not a reason to reverse an accepted decision. Resolve a conflicting ADR through `do-adr-revision` before implementation; do not invent an owner gate when existing authorization already covers that decision.
 
 ## ADRs & specs (where the artifacts live)
 

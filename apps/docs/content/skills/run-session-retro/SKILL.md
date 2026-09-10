@@ -13,6 +13,8 @@ mode: dispatch
 session's own author — reads the log via the `tools/retro` extractor and returns
 findings in the schema below; the caller cannot self-review).
 
+An explicit owner request for standalone retro authorizes this independent analysis without literal `/wrap`; it does not authorize the full wrap, instruction edits or memory writes. Reading this documentation is not executing the procedure. Full wrap and application retain their own scope/approval gates.
+
 The analysis engine for epic #247's feedback-improvement loop. Two modes:
 
 - **single session** — the `/wrap` case (#B1): analyze the just-finished

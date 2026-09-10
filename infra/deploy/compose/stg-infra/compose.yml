@@ -359,7 +359,7 @@ services:
   # Volumes: the certificate/ACME state must survive a container replacement or
   # step 2 re-issues on every `up` and burns Let's Encrypt rate limit.
   caddy:
-    image: caddy:2.8-alpine
+    image: caddy:2.11.4-alpine
     restart: unless-stopped
     command:
       [

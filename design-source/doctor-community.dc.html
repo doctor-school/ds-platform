@@ -13,18 +13,18 @@
 
   <!-- ═══ Оболочка · шапка витрины врача (как есть, #d-home) ═══ -->
   <header data-screen-label="d-community · шапка" style="background:#114D9E;padding:14px clamp(16px,4vw,48px);display:flex;align-items:center;gap:clamp(14px,2.5vw,28px)">
-    <a href="Витрина врача - Главная.dc.html" style="display:flex;flex:none"><img src="assets/ds-logo-white.svg" alt="Doctor.School" style="height:26px;display:block"></a>
+    <a href="doctor-home.dc.html" style="display:flex;flex:none"><img src="assets/ds-logo-white.svg" alt="Doctor.School" style="height:26px;display:block"></a>
     <sc-if value="{{ isDesktop }}" hint-placeholder-val="{{ true }}">
       <input value="{{ q }}" onInput="{{ setQ }}" placeholder="Поиск по урокам, школам и событиям" style="flex:1;max-width:440px;font:inherit;font-size:13.5px;font-weight:600;padding:12px 14px;border:2px solid rgba(255,255,255,.45);background:transparent;color:#fff;outline:none;min-width:120px" style-focus="border-color:#fff;background:rgba(255,255,255,.08)">
       <nav style="display:flex;align-items:center;gap:14px;margin-left:auto">
         <button onClick="{{ toggleTheme }}" title="Тема" style="font:inherit;width:44px;height:44px;background:transparent;color:#fff;border:2px solid rgba(255,255,255,.5);cursor:pointer;font-size:15px;flex:none" style-hover="border-color:#fff">{{ themeIcon }}</button>
         <sc-if value="{{ guest }}" hint-placeholder-val="{{ true }}">
-          <a href="Авторизация.dc.html" style="font-size:13.5px;font-weight:700;color:#D3E8FD;text-decoration:none;padding:12px 6px;white-space:nowrap" style-hover="color:#fff">Войти</a>
-          <a href="Авторизация.dc.html" style="font-size:13.5px;font-weight:800;color:#114D9E;background:#fff;padding:12px 22px;text-decoration:none;white-space:nowrap;box-shadow:3px 3px 0 #0D3A77" style-hover="transform:translate(1px,1px);box-shadow:2px 2px 0 #0D3A77">Регистрация</a>
+          <a href="auth.dc.html" style="font-size:13.5px;font-weight:700;color:#D3E8FD;text-decoration:none;padding:12px 6px;white-space:nowrap" style-hover="color:#fff">Войти</a>
+          <a href="auth.dc.html" style="font-size:13.5px;font-weight:800;color:#114D9E;background:#fff;padding:12px 22px;text-decoration:none;white-space:nowrap;box-shadow:3px 3px 0 #0D3A77" style-hover="transform:translate(1px,1px);box-shadow:2px 2px 0 #0D3A77">Регистрация</a>
         </sc-if>
         <sc-if value="{{ loggedIn }}" hint-placeholder-val="{{ false }}">
           <a href="#" title="Очки внимания: Пульс · Дыхание · Сознание. Открыть историю начислений" style="display:inline-flex;align-items:center;gap:9px;border:2px solid rgba(255,255,255,.45);padding:10px 14px;font-size:12px;font-weight:800;color:#fff;text-decoration:none;white-space:nowrap;font-variant-numeric:tabular-nums" style-hover="border-color:#fff"><span>120 Pul</span><span style="opacity:.45">·</span><span>340 Bre</span><span style="opacity:.45">·</span><span>1 250 Con</span></a>
-          <a href="Витрина врача - Личный кабинет.dc.html" style="font-size:13.5px;font-weight:800;color:#114D9E;background:#fff;padding:12px 22px;text-decoration:none;white-space:nowrap;box-shadow:3px 3px 0 #0D3A77" style-hover="transform:translate(1px,1px);box-shadow:2px 2px 0 #0D3A77">Личный кабинет</a>
+          <a href="doctor-cabinet.dc.html" style="font-size:13.5px;font-weight:800;color:#114D9E;background:#fff;padding:12px 22px;text-decoration:none;white-space:nowrap;box-shadow:3px 3px 0 #0D3A77" style-hover="transform:translate(1px,1px);box-shadow:2px 2px 0 #0D3A77">Личный кабинет</a>
         </sc-if>
       </nav>
     </sc-if>
@@ -36,11 +36,11 @@
           <nav style="position:absolute;top:calc(100% + 10px);right:0;background:{{ surface }};border:2px solid {{ border }};box-shadow:5px 5px 0 {{ shadow }};padding:8px;display:flex;flex-direction:column;min-width:220px;z-index:30">
             <sc-if value="{{ loggedIn }}" hint-placeholder-val="{{ false }}">
               <a href="#" style="padding:12px 16px;font-size:12.5px;font-weight:800;color:{{ ink }};text-decoration:none;font-variant-numeric:tabular-nums">120 Pul · 340 Bre · 1 250 Con</a>
-              <a href="Витрина врача - Личный кабинет.dc.html" style="margin-top:4px;padding:12px 16px;font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};text-decoration:none;text-align:center">Личный кабинет</a>
+              <a href="doctor-cabinet.dc.html" style="margin-top:4px;padding:12px 16px;font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};text-decoration:none;text-align:center">Личный кабинет</a>
             </sc-if>
             <sc-if value="{{ guest }}" hint-placeholder-val="{{ true }}">
-              <a href="Авторизация.dc.html" style="padding:12px 16px;font-size:15px;font-weight:700;color:{{ ink }};text-decoration:none">Войти</a>
-              <a href="Авторизация.dc.html" style="margin-top:4px;padding:12px 16px;font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};text-decoration:none;text-align:center">Регистрация</a>
+              <a href="auth.dc.html" style="padding:12px 16px;font-size:15px;font-weight:700;color:{{ ink }};text-decoration:none">Войти</a>
+              <a href="auth.dc.html" style="margin-top:4px;padding:12px 16px;font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};text-decoration:none;text-align:center">Регистрация</a>
             </sc-if>
           </nav>
         </details>
@@ -52,7 +52,7 @@
   <div data-screen-label="d-community · постер-шапка" style="background:#114D9E;padding:clamp(28px,5vw,52px) clamp(16px,4vw,48px) clamp(40px,6vw,72px);position:relative">
     <div style="max-width:1104px;margin:0 auto">
       <nav style="font-size:12.5px;font-weight:700;color:#AED4FB;display:flex;gap:8px;flex-wrap:wrap;margin-bottom:clamp(20px,3.5vw,34px)">
-        <a href="Витрина врача - Лента специальности.dc.html" style="color:#AED4FB;text-decoration:none" style-hover="color:#fff;text-decoration:underline;text-underline-offset:3px">Травматология и ортопедия</a>
+        <a href="doctor-feed.dc.html" style="color:#AED4FB;text-decoration:none" style-hover="color:#fff;text-decoration:underline;text-underline-offset:3px">Травматология и ортопедия</a>
         <span style="opacity:.55">›</span>
         <span style="color:#fff">Сообщество «Орто»</span>
       </nav>
@@ -237,7 +237,7 @@
           <sc-if value="{{ docsNotLoading }}" hint-placeholder-val="{{ true }}">
             <div style="display:grid;grid-template-columns:{{ expGrid }};gap:20px">
               <sc-for list="{{ experts }}" as="ex" hint-placeholder-count="4">
-                <dc-import name="ЭкспертКарточка" dark="{{ dark }}" full-name="{{ ex.name }}" role="{{ ex.role }}" credentials="{{ ex.cred }}" org="{{ ex.org }}" meta="{{ ex.meta }}" href="#" hint-size="100%,400px"></dc-import>
+                <dc-import name="unit-expert-card" dark="{{ dark }}" full-name="{{ ex.name }}" role="{{ ex.role }}" credentials="{{ ex.cred }}" org="{{ ex.org }}" meta="{{ ex.meta }}" href="#" hint-size="100%,400px"></dc-import>
               </sc-for>
             </div>
             <div style="margin-top:20px;display:flex;align-items:center;gap:18px;flex-wrap:wrap">
@@ -266,8 +266,8 @@
     <!-- ═══ Выход без тупика ═══ -->
     <section data-screen-label="d-community · выход" style="padding:0 clamp(16px,4vw,48px);margin-top:clamp(36px,5vw,56px);margin-bottom:clamp(56px,9vw,104px)">
       <div style="max-width:1104px;margin:0 auto;display:flex;gap:14px;flex-wrap:wrap">
-        <a href="Витрина врача - События.dc.html" style="font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:2px solid {{ btnBg }};padding:14px 24px;text-decoration:none;box-shadow:{{ btnShadow }}" style-hover="transform:translate(1px,1px)">Все события сообщества →</a>
-        <a href="Витрина врача - Лента специальности.dc.html" style="font-size:14px;font-weight:700;color:{{ ink }};background:{{ surface }};border:2px solid {{ border }};padding:14px 24px;text-decoration:none;box-shadow:{{ btnShadowSm }}" style-hover="transform:translate(1px,1px)">Вернуться в ленту специальности</a>
+        <a href="doctor-events.dc.html" style="font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:2px solid {{ btnBg }};padding:14px 24px;text-decoration:none;box-shadow:{{ btnShadow }}" style-hover="transform:translate(1px,1px)">Все события сообщества →</a>
+        <a href="doctor-feed.dc.html" style="font-size:14px;font-weight:700;color:{{ ink }};background:{{ surface }};border:2px solid {{ border }};padding:14px 24px;text-decoration:none;box-shadow:{{ btnShadowSm }}" style-hover="transform:translate(1px,1px)">Вернуться в ленту специальности</a>
       </div>
     </section>
 
@@ -290,7 +290,7 @@
       </div>
       <div>
         <div style="font-size:11.5px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:{{ inkFaint }};margin-bottom:14px">Экспертам и партнёрам</div>
-        <a href="Главная.dc.html" style="font-size:13.5px;font-weight:800;color:{{ accent }};text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px">Academy.Doctor.School ↗</a>
+        <a href="academy-home.dc.html" style="font-size:13.5px;font-weight:800;color:{{ accent }};text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px">Academy.Doctor.School ↗</a>
         <div style="margin-top:10px;font-size:12.5px;font-weight:600;line-height:1.6;color:{{ inkFaint }}">Закулисье платформы: проекты, эксперты, партнёры.</div>
       </div>
     </div>
@@ -392,7 +392,7 @@ class Component extends DCLogic {
       adjacent: !!(p.adjacentSpecialty ?? false),
       // членство
       mNone, mPending, mMember, mRejected, isMember: mMember,
-      joinHref: guest ? 'Авторизация.dc.html' : '#',
+      joinHref: guest ? 'auth.dc.html' : '#',
       onJoin: e => { if (!guest) { e.preventDefault(); set(vKey === 'В' ? 'член сообщества' : 'заявка отправлена'); } },
       onClaim: e => { if (!guest) { e.preventDefault(); set('заявка отправлена'); } },
       onRetry: () => set('заявка отправлена'),

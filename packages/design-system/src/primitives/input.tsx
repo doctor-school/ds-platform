@@ -10,7 +10,7 @@ function hasValue(v: unknown): boolean {
 }
 
 /**
- * Neo-brutalist text input (#512, re-skin from `design-source/design-system.dc.html`,
+ * Neo-brutalist text input (#512, re-skin from `design-source/ds-foundation.dc.html`,
  * §07 field states). Square, a hard 2px border: `hairline` at rest → the ink
  * `border` once **filled** (#529, source §07 `Filled` cell) → the brand `ring`
  * (blue.300) on focus with the flush 3px focus ring (`shadow-focus`, no offset gap —

@@ -17,7 +17,7 @@ event appears there immediately on the next read, via any registration path
 
 It is fed by the per-caller `MyEvents` read model — the doctor's registered
 `published`/`live` future events, ordered nearest `startsAt` first. Wave 1 ships
-**only** the **Предстоящие** tab; the `my-events.dc.html` canvas also shows Записи /
+**only** the **Предстоящие** tab; the `account-my-events.dc.html` canvas also shows Записи /
 Сертификаты tabs and a specialty filter, but recordings and certificates are wave 2+
 (005 Scope → Out of scope). Every date/time renders in `Europe/Moscow` labeled МСК
 (005 EARS-11).

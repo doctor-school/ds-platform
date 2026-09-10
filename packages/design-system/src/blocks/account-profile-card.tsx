@@ -20,7 +20,7 @@ import { Link as DsLink } from "../primitives/link";
  * It was lifted VERBATIM out of `apps/portal/app/account/page.tsx` (003 EARS-27/28,
  * design §12; GH #770): same elements, same order, same classes and the same
  * `data-testid` contract — only the app glue was replaced by props. The canvas is
- * unchanged (`design-source/profile.dc.html` «Разделы» — blue poster header over one
+ * unchanged (`design-source/account-profile.dc.html` «Разделы» — blue poster header over one
  * 720px column of flat rows under §09 section rules: «Профиль» / «Безопасность» /
  * «Сессия»).
  *
@@ -173,7 +173,7 @@ function SectionHeader({
  * sanctioned DS way (Stage-B owner finding, #818): the `Link` primitive carries the
  * interaction contract (transition, shadow-focus keyboard ring, active state) via
  * `asChild` over a classless host anchor, while the CANVAS-pinned row state
- * overrides the text-link look — hover is a bg wash (`profile.dc.html` «Разделы»
+ * overrides the text-link look — hover is a bg wash (`account-profile.dc.html` «Разделы»
  * `style-hover`, whose light value IS the `muted` token), never an underline, and
  * the row text stays ink (`text-foreground`), not link blue (only the chevron
  * carries the accent).

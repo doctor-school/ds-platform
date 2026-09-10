@@ -10,8 +10,8 @@ import { Link } from "@ds/design-system/link";
 
 /**
  * Layout & spatial rhythm demo (#514). Fidelity SoT: the vendored canvases
- * `design-source/webinar-card.dc.html` (ВебинарКарточка) and
- * `design-source/webinars-listing.dc.html` (Эфиры) — the demo card and the list
+ * `design-source/unit-event-card.dc.html` (ВебинарКарточка) and
+ * `design-source/events-feed.dc.html` (Эфиры) — the demo card and the list
  * treatment are rebuilt element-by-element from those two files (issue prose and
  * the previous composition lose to them), on top of the §09 Container/roles:
  *
@@ -49,7 +49,7 @@ type Webinar = {
   speakers: Speaker[];
 };
 
-/** Day groups — verbatim from webinars-listing.dc.html (week 0, days 16–17). */
+/** Day groups — verbatim from events-feed.dc.html (week 0, days 16–17). */
 const DAYS: { label: string; events: Webinar[] }[] = [
   {
     label: "Сегодня — 16 июля, среда",
@@ -112,7 +112,7 @@ const DAYS: { label: string; events: Webinar[] }[] = [
 const CHIPS = ["Все", "Травматология", "Кардиология", "Педиатрия"] as const;
 
 /**
- * The webinar card, rebuilt from webinar-card.dc.html. Desktop: bordered + blue
+ * The webinar card, rebuilt from unit-event-card.dc.html. Desktop: bordered + blue
  * offset cast, 196px plate | body. Mobile: flat full-bleed block, horizontal tint
  * plate on top, no borders/shadows anywhere (incl. CTAs).
  */
@@ -214,7 +214,7 @@ function WebinarCard({ w }: { w: Webinar }) {
 }
 
 /**
- * Day group header, from webinars-listing.dc.html: desktop = caption label +
+ * Day group header, from events-feed.dc.html: desktop = caption label +
  * flex-1 2px ink rule (margin 48px 0 24px — the §09 `section` rhythm); mobile =
  * the full-bleed gray `DayBand` plate, FLUSH against the cards (day-band = 0).
  */

@@ -1,6 +1,6 @@
 ---
 title: "005 — Event registration & «мои события» (Design)"
-description: "Design: write side of webinar registration + two per-user read models — the durable registration record (unique(user_id,event_id) → the one-registration invariant), the RegisterForEvent command on the logged-in one-tap and the guest-through-auth completion, EventRegistrationState composed onto 004's public page without contaminating its cache, the «мои события» Предстоящие surface built to my-events.dc.html, lifecycle gating from the single EventLifecycleState (published/live only), and seams to 003 (auth), 004 (event page/CTA), 006 (room admission + roster), 007 (authoring)."
+description: "Design: write side of webinar registration + two per-user read models — the durable registration record (unique(user_id,event_id) → the one-registration invariant), the RegisterForEvent command on the logged-in one-tap and the guest-through-auth completion, EventRegistrationState composed onto 004's public page without contaminating its cache, the «мои события» Предстоящие surface built to account-my-events.dc.html, lifecycle gating from the single EventLifecycleState (published/live only), and seams to 003 (auth), 004 (event page/CTA), 006 (room admission + roster), 007 (authoring)."
 slug: 005-event-registration
 status: Draft
 tracker: https://github.com/doctor-school/ds-platform/milestone/7
@@ -126,18 +126,18 @@ Gating reads the single `EventLifecycleState` (owned by 007, §7 seam). There is
 
 Built from `@ds/design-system` tokens to the vendored canvases (ADR-0013; canvas = fidelity spec), reusing the `webinar-card` unit graduated in 004.
 
-### 6.1 Event-page registered overlay — `/webinars/:slug` (`webinar-page.dc.html`, registered states)
+### 6.1 Event-page registered overlay — `/webinars/:slug` (`event-page.dc.html`, registered states)
 
 - For an authenticated doctor, the 004 status card's CTA column swaps by registration state on top of the lifecycle `status`:
   - **unregistered + upcoming/live** → the 004 «Участвовать» register CTA (unchanged).
   - **registered + upcoming** → a "you are registered" confirmation + the start date/time (МСК) and join signposting, replacing the register CTA (EARS-4/EARS-5).
   - **registered + live** → the confirmation + an obvious onward path toward the room (feature 006 target); the room itself is 006 (EARS-5).
   - **ended / archived** → no register affordance regardless of registration (EARS-9; 004 owns the ended/archived render).
-- The registered signposting is the `webinar-page.dc.html` `upcoming`/`live` registered states + the `webinar-card.dc.html` `registered` variant («вы записаны» time plate + join CTA when live). No new geometry beyond the canvas.
+- The registered signposting is the `event-page.dc.html` `upcoming`/`live` registered states + the `unit-event-card.dc.html` `registered` variant («вы записаны» time plate + join CTA when live). No new geometry beyond the canvas.
 
-### 6.2 «Мои события» — `/account/events` (`my-events.dc.html`, Предстоящие tab only)
+### 6.2 «Мои события» — `/account/events` (`account-my-events.dc.html`, Предстоящие tab only)
 
-- The **Предстоящие** tab: the doctor's registered upcoming events, **day-grouped**, nearest first, each rendered as the `webinar-card.dc.html` unit (`registered` / `live` variants), linking to `/webinars/:slug` (EARS-6).
+- The **Предстоящие** tab: the doctor's registered upcoming events, **day-grouped**, nearest first, each rendered as the `unit-event-card.dc.html` unit (`registered` / `live` variants), linking to `/webinars/:slug` (EARS-6).
 - **Wave-1 cut (owner PRD scope).** The canvas also carries **Записи** and **Сертификаты** tabs and a specialty filter — those are wave 2+ and are **not built** in 005 (named out-of-scope, requirements Scope). Only the Предстоящие tab and the day-grouped card rhythm are in scope.
 - **Empty state** (EARS-6/EARS-12): the canvas empty block ("you have no upcoming registered events") when `MyEvents` is `[]`.
 - A just-registered event appears here immediately on the next read (EARS-7) — no stale list.

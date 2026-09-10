@@ -5,7 +5,7 @@ import { Link } from "../primitives/link";
 
 /**
  * Neo-brutalist month-calendar grid — desktop pane (004 EARS-19, source
- * `design-source/webinars-month.dc.html`). A DISPLAY-ONLY 7-column month grid:
+ * `design-source/events-feed-month.dc.html`). A DISPLAY-ONLY 7-column month grid:
  * each in-month day renders its events as pills (`time · title`, linking to the
  * event page), a red live pill for an airing event, or a muted linked pill for
  * an already-past event; today is outlined; weekend and neighbour-month cells

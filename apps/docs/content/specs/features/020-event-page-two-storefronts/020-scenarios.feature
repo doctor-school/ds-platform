@@ -286,7 +286,7 @@ Feature: One event page serves the doctor storefront and the Academy, and a doct
   Scenario: The ownership matrix and the canvas gate precede implementation
     Given an implementation Issue for any 020 surface is about to start
     Then the cross-front ownership and extraction matrix in 020-design.md is verified against repository reality and updated
-    And the build-ui-from-design-system gate is run against the vendored canvas «webinar-page-variant-a.dc.html» and the reused canvas files
+    And the build-ui-from-design-system gate is run against the vendored canvas «archive/archive-event-page-variant-a.dc.html» and the reused canvas files
     And every canvas state is covered at 1440 and 390, in both themes, on both hosts
     And the recorded Stage-A picks F-020-1 А, F-020-2 Б, F-020-3 Б and F-020-4 А are treated as decisions rather than re-opened questions
     And the canvas «board» fork stand is not built

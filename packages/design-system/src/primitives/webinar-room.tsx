@@ -6,8 +6,8 @@ import { cn } from "../lib/utils";
 
 /**
  * Neo-brutalist WEBINAR ROOM layout (006 EARS-2 / EARS-11), reworked to the
- * Twitch-model canvases `design-source/webinar-room-frame.dc.html` +
- * `design-source/chat-column.dc.html` (#1123). It is a VIEWPORT-BOUNDED shell,
+ * Twitch-model canvases `design-source/unit-room-frame.dc.html` +
+ * `design-source/unit-chat-column.dc.html` (#1123). It is a VIEWPORT-BOUNDED shell,
  * not a page-flow grid: rendered as the flex body under the room header, it fills
  * the remaining viewport height and clips its own overflow, so the PAGE never
  * scrolls — only the chat ledger does (inside the chat column).

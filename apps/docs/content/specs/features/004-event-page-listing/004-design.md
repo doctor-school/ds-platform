@@ -149,16 +149,16 @@ sequenceDiagram
 
 Two Next.js 15 routes in `apps/portal`, server-rendered, built from `@ds/design-system` tokens to the vendored canvases (ADR-0013; canvas = fidelity spec).
 
-### 5.1 Event page — `/webinars/:slug` (`webinar-page.dc.html`)
+### 5.1 Event page — `/webinars/:slug` (`event-page.dc.html`)
 
 - Blue poster header (breadcrumbs, uppercase school kicker, `clamp(30px,5.5vw,50px)` H1, specialty chips `2px #6BB1F7`, rotated status badge) with the status card pulled up `-80px`, reusing the webinar-card geometry (desktop `196px 1fr` + 2px border + `6px 6px 0` shadow, time 56px; mobile ≤900 flat full-bleed, time 40px).
 - **Status render swap** driven by the projection `state` (the canvas `status` prop enum `upcoming | live | ended`): the hero badge, the time plate, the CTA pair, and the footer CTA band all swap (EARS-4). `archived` → the "в архиве" notice variant with no CTA (EARS-5), the fourth render mode 004 adds beyond the canvas's three (the canvas encodes `upcoming|live|ended`; the archived notice is a 004 addition on the same shell — a text notice replacing the status card's CTA column, no new geometry). **[Amended 2026-09-02 (feature 007) — the state named `archived` here is renamed `hidden` (status «Скрыто», command «Скрыть») and `EventArchived` becomes `EventHidden`; the meaning and every 004 rule are unchanged. An `origin: legacy` event runs a separate two-state lifecycle. See [`007-requirements-en.md`](../007-event-admin-minimal/007-requirements-en.md) → Amendment — 2026-09-02.]**
 - Body: two columns `1fr 380px` (program rows `96px 1fr`, sponsor plate, speaker cards `4px 4px 0`); bottom blue CTA band.
 - **The one CTA.** «Участвовать» is the single primary action (EARS-3). It links into the registration route (feature 005) with the event slug as context; a guest is bounced through auth (003) and returns. In the `ended` render the CTA column shows the ended affordance (recording/materials copy per canvas) with **no** participation link; in `live` it routes toward the room (006).
 
-### 5.2 Listing — `/webinars` (`webinars-listing.dc.html`, minimal wave-1 cut)
+### 5.2 Listing — `/webinars` (`events-feed.dc.html`, minimal wave-1 cut)
 
-- Blue poster header + a **day-grouped** card list (the §09 rhythm: desktop day header = label + 2px ink rule, margins 48/24, card list `gap:28px`; mobile day header = full-bleed section band `margin:0 -16px`, cards bleed `gap:0`), each card the `webinar-card.dc.html` unit.
+- Blue poster header + a **day-grouped** card list (the §09 rhythm: desktop day header = label + 2px ink rule, margins 48/24, card list `gap:28px`; mobile day header = full-bleed section band `margin:0 -16px`, cards bleed `gap:0`), each card the `unit-event-card.dc.html` unit.
 - **Scope cut (owner PRD scope).** The vendored listing canvas also carries a specialty filter, week-paging, and free-text search — those are later wave-2 slices and are **not built** in 004 (named out-of-scope, requirements Scope). What 004 does build around the week list is the «Неделя / Месяц» view switcher and the month-calendar view (§5.4). The card unit and the §09 rhythm are in scope; the filter/search chrome is not.
 - **Empty state** (EARS-11): the canvas dashed-border empty block ("no upcoming broadcasts") when the projection is `[]`.
 - Cards link to `/webinars/:slug` (EARS-8).
@@ -167,7 +167,7 @@ Two Next.js 15 routes in `apps/portal`, server-rendered, built from `@ds/design-
 
 Both routes read `state` from the same projection sourced from the same `EventLifecycleState` column — there is no second source of truth to drift. A live event's card and page both derive "live now" from `state === 'live'`; the short cache max-age (§4) bounds how long a just-transitioned event can look stale. The month view's red live pill (§5.4) reads the same column — three surfaces, one state. **[Amended 2026-09-02 (feature 007) — the state named `archived` here is renamed `hidden` (status «Скрыто», command «Скрыть») and `EventArchived` becomes `EventHidden`; the meaning and every 004 rule are unchanged. An `origin: legacy` event runs a separate two-state lifecycle. See [`007-requirements-en.md`](../007-event-admin-minimal/007-requirements-en.md) → Amendment — 2026-09-02.]**
 
-### 5.4 Month view — the «Месяц» pane of `/webinars` (`webinars-month.dc.html`, wave-2 slice #701)
+### 5.4 Month view — the «Месяц» pane of `/webinars` (`events-feed-month.dc.html`, wave-2 slice #701)
 
 - **Switcher.** The listing route carries the «Неделя / Месяц» switcher (EARS-18): «Неделя» renders §5.2's day-grouped list (default), «Месяц» renders the month calendar; both panes public, switching loss-free (view selection is presentation state, e.g. a query param — no auth, no mutation).
 - **Data.** The pane reads `MonthBroadcastEntry[]` for the shown month plus `MonthlyEventCount[]` for the picker year (§3/§4). Month paging ‹ › and picker selection just re-query the month — pure reads (EARS-17).

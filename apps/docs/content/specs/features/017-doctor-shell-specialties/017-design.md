@@ -8,7 +8,7 @@ lang: en
 
 > Requirements: [`017-requirements-en.md`](./017-requirements-en.md) · PRD: [`017-product.md`](./017-product.md) · Scenarios: [`017-scenarios.feature`](./017-scenarios.feature)
 >
-> Composition source of truth: `design-source/doctor-home.dc.html` (screen `#d-home`), with the event card (`webinar-card.dc.html`) and the compact month calendar (`webinars-month.dc.html`) reused as-is.
+> Composition source of truth: `design-source/doctor-home.dc.html` (screen `#d-home`), with the event card (`unit-event-card.dc.html`) and the compact month calendar (`events-feed-month.dc.html`) reused as-is.
 
 # 017 — Design
 

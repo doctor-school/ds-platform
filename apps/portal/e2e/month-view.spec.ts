@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 /**
  * 004 EARS-17/18 — the month view's navigation surface (`/webinars?view=month`,
- * `webinars-month.dc.html`, design §5.4). Drives the DEV-STAND-gated live portal
+ * `events-feed-month.dc.html`, design §5.4). Drives the DEV-STAND-gated live portal
  * (guest, no session — the month projection is public) and asserts the paging +
  * picker + switcher BEHAVIOUR the sibling fidelity pin (`month-fidelity.spec.ts`)
  * does not: the ‹ › pager re-renders the grid + heading for the chosen month and

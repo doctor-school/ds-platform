@@ -4,7 +4,7 @@ import { cn } from "../lib/utils";
 
 /**
  * Neo-brutalist selected-day agenda — mobile pane (004 EARS-19, source
- * `design-source/webinars-month.dc.html`, ≤900px). The list of the selected day's
+ * `design-source/events-feed-month.dc.html`, ≤900px). The list of the selected day's
  * events below the {@link MonthDotGrid}: each row is a link to the event page
  * (time · school · title), a `live` row carries the red «LIVE» badge + red border
  * and red time; an empty day shows the past-/future-appropriate note.

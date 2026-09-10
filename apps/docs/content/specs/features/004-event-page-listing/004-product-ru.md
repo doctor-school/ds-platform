@@ -82,9 +82,9 @@ lang: ru
 
 Завендоренный исходник канвасов (байт-вербатим из проекта Claude Design «Doctor.School визуальный язык» — строить по этим файлам, см. [`design-source/README.md`](../../../../../../design-source/README.md)):
 
-- [`design-source/webinar-page.dc.html`](../../../../../../design-source/webinar-page.dc.html) — публичная страница мероприятия (US-1, US-2, US-3, US-5); состояния жизненного цикла `upcoming / live / ended` (US-6) через проп `status` канваса.
-- [`design-source/webinars-listing.dc.html`](../../../../../../design-source/webinars-listing.dc.html) — листинг ближайших эфиров (US-4), недельный вид с группировкой по дням («Неделя», дефолт переключателя; US-7).
-- [`design-source/webinars-month.dc.html`](../../../../../../design-source/webinars-month.dc.html) — месячный календарный вид листинга (US-7, US-8, US-9): панель «Месяц» переключателя «Неделя / Месяц», пикер месяцев со счётчиками, пагинация ‹ ›, десктопная сетка с плашками / красной live-плашкой / приглушёнными заметками о прошедших / контуром «сегодня», мобильная сетка с точками + список выбранного дня, легенда.
-- [`design-source/webinar-card.dc.html`](../../../../../../design-source/webinar-card.dc.html) — карточка-юнит, который рендерят листинги.
+- [`design-source/event-page.dc.html`](../../../../../../design-source/event-page.dc.html) — публичная страница мероприятия (US-1, US-2, US-3, US-5); состояния жизненного цикла `upcoming / live / ended` (US-6) через проп `status` канваса.
+- [`design-source/events-feed.dc.html`](../../../../../../design-source/events-feed.dc.html) — листинг ближайших эфиров (US-4), недельный вид с группировкой по дням («Неделя», дефолт переключателя; US-7).
+- [`design-source/events-feed-month.dc.html`](../../../../../../design-source/events-feed-month.dc.html) — месячный календарный вид листинга (US-7, US-8, US-9): панель «Месяц» переключателя «Неделя / Месяц», пикер месяцев со счётчиками, пагинация ‹ ›, десктопная сетка с плашками / красной live-плашкой / приглушёнными заметками о прошедших / контуром «сегодня», мобильная сетка с точками + список выбранного дня, легенда.
+- [`design-source/unit-event-card.dc.html`](../../../../../../design-source/unit-event-card.dc.html) — карточка-юнит, который рендерят листинги.
 
 **Статус:** композиция авторства владельца продукта на канвасе Claude Design (проект «Doctor.School визуальный язык»); повторное подтверждение Stage-A — на ближайшем чекпоинте владельца.

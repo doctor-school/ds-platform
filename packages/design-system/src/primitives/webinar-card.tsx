@@ -5,7 +5,7 @@ import { Button } from "./button";
 
 /**
  * Neo-brutalist webinar listing card (004 EARS-8, source
- * `design-source/webinar-card.dc.html`). The reusable listing UNIT that carries
+ * `design-source/unit-event-card.dc.html`). The reusable listing UNIT that carries
  * the `UpcomingBroadcastCard` choose-set and links to its event page (EARS-1).
  * Two visual pieces map straight onto the canvas:
  *

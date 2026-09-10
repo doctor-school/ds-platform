@@ -6,7 +6,7 @@ import { Link as DsLink } from "@ds/design-system/link";
  * 014 EARS-5 — the GUEST GATE: what a visitor with no session sees in the player
  * position of a post-live page whose recording is published.
  *
- * Built to the `design-source/webinar-archive.dc.html` guest artboard: the event
+ * Built to the `design-source/event-page-recording.dc.html` guest artboard: the event
  * poster, dimmed, with a boxed invitation centred over it — the recording kind +
  * duration as the eyebrow, an explicit «войдите, чтобы посмотреть» headline, the
  * free-for-doctors reassurance, one labelled primary sign-in action, and a

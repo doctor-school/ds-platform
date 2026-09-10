@@ -159,7 +159,7 @@
       "2xs": { "$value": "0.625rem" },
       "eyebrow": {
         "$value": "0.6875rem",
-        "$description": "11px — the uppercase plate/section eyebrow of the canvas card surfaces (webinar-card «Эфир № N» plate label; §05 section eyebrows). Sits between 2xs (10) and xs (12); source webinar-card.dc.html."
+        "$description": "11px — the uppercase plate/section eyebrow of the canvas card surfaces (webinar-card «Эфир № N» plate label; §05 section eyebrows). Sits between 2xs (10) and xs (12); source unit-event-card.dc.html."
       },
       "xs": { "$value": "0.75rem" },
       "caption": { "$value": "0.8125rem" },
@@ -170,7 +170,7 @@
       "xl": { "$value": "1.375rem" },
       "title-lg": {
         "$value": "1.5rem",
-        "$description": "24px — the desktop listing/webinar-card title (source webinar-card.dc.html: 24px/700/1.3/-.02em; mobile drops to lg 20px). Between xl (h3, 22) and 2xl (h2, 28)."
+        "$description": "24px — the desktop listing/webinar-card title (source unit-event-card.dc.html: 24px/700/1.3/-.02em; mobile drops to lg 20px). Between xl (h3, 22) and 2xl (h2, 28)."
       },
       "2xl": { "$value": "1.75rem" },
       "3xl": { "$value": "2.5rem" },
@@ -228,7 +228,7 @@
 
   "container": {
     "$type": "dimension",
-    "$description": "§09 «Раскладка и ритм» content-column max-widths. `content` (1104px = 69rem) caps article / list / form / detail surfaces; `calendar` (1336px = 83.5rem BORDER-BOX = 1240px of content + 2 × 48px desktop-max gutter) yields the canvas-exact 1240px GRID content on the wider calendar surfaces — the canvas caps `main` at 1240px content-box with the gutter outside (`webinars-month.dc.html` line 44), while Tailwind preflight is border-box, so the token carries the gutter (#1080). The Container primitive centres the column (margin:0 auto) and applies the responsive gutter; below the `layout` breakpoint the cap is dropped (edge-to-edge). Surface as Tailwind `max-w-content` / `max-w-calendar` via the `--container-*` @theme namespace.",
+    "$description": "§09 «Раскладка и ритм» content-column max-widths. `content` (1104px = 69rem) caps article / list / form / detail surfaces; `calendar` (1336px = 83.5rem BORDER-BOX = 1240px of content + 2 × 48px desktop-max gutter) yields the canvas-exact 1240px GRID content on the wider calendar surfaces — the canvas caps `main` at 1240px content-box with the gutter outside (`events-feed-month.dc.html` line 44), while Tailwind preflight is border-box, so the token carries the gutter (#1080). The Container primitive centres the column (margin:0 auto) and applies the responsive gutter; below the `layout` breakpoint the cap is dropped (edge-to-edge). Surface as Tailwind `max-w-content` / `max-w-calendar` via the `--container-*` @theme namespace.",
     "content": { "$value": "69rem" },
     "calendar": { "$value": "83.5rem" }
   },

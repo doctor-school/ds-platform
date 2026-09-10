@@ -7,7 +7,7 @@ afterEach(cleanup);
 
 /**
  * Neo-brutalist «запись готовится» plaque (014 EARS-7, source
- * `design-source/webinar-archive.dc.html` — the `isPreparing` prep-card
+ * `design-source/event-page-recording.dc.html` — the `isPreparing` prep-card
  * artboard). One arm of the mutually exclusive player-card set (design §8.1),
  * occupying the PLAYER position while the recording is unpublished.
  *

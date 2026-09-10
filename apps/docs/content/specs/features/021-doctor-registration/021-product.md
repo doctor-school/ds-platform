@@ -141,7 +141,7 @@ On top of that the surface **credits starting attention points** (REQ-49) and mo
 
 ## Approved-mockup reference
 
-The screen is drawn on the re-cut **`auth` canvas**, vendored at [`design-source/auth.dc.html`](../../../../../../design-source/auth.dc.html) (owner-drawn, vendored under [#1450](https://github.com/doctor-school/ds-platform/issues/1450); the corresponding prompt is [`07-d-register-ru.md`](../../product/two-site-ia/design-prompts-ru/07-d-register-ru.md)). It is a **re-cut of an existing canvas, not a new screen**: the split-screen geometry, the field, focus and validation states, and the «letter sent» / «email confirmed» states are taken from the base unchanged; the event card in the split's left half is `webinar-card.dc.html` as-is, and the points plate is the shared unit whose anatomy is owned by `05-d-lesson`.
+The screen is drawn on the re-cut **`auth` canvas**, vendored at [`design-source/auth.dc.html`](../../../../../../design-source/auth.dc.html) (owner-drawn, vendored under [#1450](https://github.com/doctor-school/ds-platform/issues/1450); the corresponding prompt is [`07-d-register-ru.md`](../../product/two-site-ia/design-prompts-ru/07-d-register-ru.md)). It is a **re-cut of an existing canvas, not a new screen**: the split-screen geometry, the field, focus and validation states, and the «letter sent» / «email confirmed» states are taken from the base unchanged; the event card in the split's left half is `unit-event-card.dc.html` as-is, and the points plate is the shared unit whose anatomy is owned by `05-d-lesson`.
 
 **Canvas defaults are the working assumption; the Stage-A pick is this PRD's fork table.** Every composition resolution is read off the vendored file, never off this PRD's prose.
 

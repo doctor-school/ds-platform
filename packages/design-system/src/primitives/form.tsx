@@ -155,7 +155,7 @@ const FORM_MESSAGE_TEXT = "text-xs";
 // Neo-brutalist error tone (#512, source §07 "Формы и валидация"): the inline
 // error is 12px **weight 700** danger with a leading `⚠` glyph — the source's
 // `⚠ <msg>` treatment. This supersedes the prior slice-B "not bold" tone (#333):
-// the owner-authored visual-language canvas (`design-source/design-system.dc.html`,
+// the owner-authored visual-language canvas (`design-source/ds-foundation.dc.html`,
 // the fidelity SoT) renders the error at 700, so the re-skin follows it. The
 // helper tone stays quiet and normal-weight so the two never read alike.
 // The danger colour is `destructive-text`, NOT the `destructive` FILL (#537): a

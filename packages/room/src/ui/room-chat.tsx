@@ -115,7 +115,7 @@ export function RoomChat({
   const [connection, setConnection] = useState<
     "connecting" | "connected" | "disconnected"
   >("connecting");
-  // Stick-to-bottom ledger (#1123, canvas `chat-column.dc.html`): the ledger is
+  // Stick-to-bottom ledger (#1123, canvas `unit-chat-column.dc.html`): the ledger is
   // `flex-col-reverse` so `scrollTop` 0 == pinned to the newest message. While the
   // reader is stuck to the bottom, new messages autoscroll in; once they scroll up
   // (|scrollTop| ≥ 32) autoscroll pauses and a «Новые сообщения ↓» chip surfaces on
@@ -340,7 +340,7 @@ export function RoomChat({
               </p>
             )
           ) : (
-            // Twitch-minimal row anatomy (#1123, `chat-column.dc.html`): a single
+            // Twitch-minimal row anatomy (#1123, `unit-chat-column.dc.html`): a single
             // borderless paragraph — a bold name slot inline with the text, NO
             // timestamp, NO avatar. Own message → «Вы» in the accent colour; others
             // → the poster's own display name (`authorName`, #1121), falling back to

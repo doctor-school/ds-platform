@@ -13,20 +13,20 @@
 
   <!-- ═══ d-event А · шапка витрины врача (гость) ═══ -->
   <header data-screen-label="d-event А · шапка витрины врача" style="background:#114D9E;padding:14px clamp(16px,4vw,48px);display:flex;align-items:center;gap:clamp(14px,2.5vw,28px)">
-    <a href="Витрина врача - Главная.dc.html" style="display:flex;flex:none"><img src="assets/ds-logo-white.svg" alt="Doctor.School" style="height:26px;display:block"></a>
+    <a href="doctor-home.dc.html" style="display:flex;flex:none"><img src="assets/ds-logo-white.svg" alt="Doctor.School" style="height:26px;display:block"></a>
     <sc-if value="{{ isDesktop }}" hint-placeholder-val="{{ true }}">
       <input placeholder="Поиск по урокам, школам и событиям" style="flex:1;max-width:440px;font:inherit;font-size:13.5px;font-weight:600;padding:12px 14px;border:2px solid rgba(255,255,255,.45);background:transparent;color:#fff;outline:none;min-width:120px" style-focus="border-color:#fff;background:rgba(255,255,255,.08)">
       <nav style="display:flex;align-items:center;gap:14px;margin-left:auto">
-        <a href="Авторизация.dc.html" style="font-size:13.5px;font-weight:700;color:#D3E8FD;text-decoration:none;padding:12px 6px;white-space:nowrap" style-hover="color:#fff">Войти</a>
-        <a href="Авторизация.dc.html" style="font-size:13.5px;font-weight:800;color:#114D9E;background:#fff;padding:12px 22px;text-decoration:none;white-space:nowrap;box-shadow:3px 3px 0 #0D3A77" style-hover="transform:translate(1px,1px);box-shadow:2px 2px 0 #0D3A77">Регистрация</a>
+        <a href="auth.dc.html" style="font-size:13.5px;font-weight:700;color:#D3E8FD;text-decoration:none;padding:12px 6px;white-space:nowrap" style-hover="color:#fff">Войти</a>
+        <a href="auth.dc.html" style="font-size:13.5px;font-weight:800;color:#114D9E;background:#fff;padding:12px 22px;text-decoration:none;white-space:nowrap;box-shadow:3px 3px 0 #0D3A77" style-hover="transform:translate(1px,1px);box-shadow:2px 2px 0 #0D3A77">Регистрация</a>
       </nav>
     </sc-if>
     <sc-if value="{{ isMobile }}" hint-placeholder-val="{{ false }}">
       <details style="position:relative;margin-left:auto">
         <summary style="list-style:none;width:44px;height:44px;display:inline-flex;align-items:center;justify-content:center;background:#fff;color:#114D9E;cursor:pointer;font-size:20px;font-weight:800;box-shadow:3px 3px 0 #0D3A77">≡</summary>
         <nav style="position:absolute;top:calc(100% + 10px);right:0;background:#fff;border:2px solid oklch(.21 .02 250);box-shadow:5px 5px 0 #114D9E;padding:8px;display:flex;flex-direction:column;min-width:220px;z-index:30">
-          <a href="Авторизация.dc.html" style="padding:12px 16px;font-size:15px;font-weight:700;color:oklch(.21 .02 250);text-decoration:none">Войти</a>
-          <a href="Авторизация.dc.html" style="margin-top:4px;padding:12px 16px;font-size:14px;font-weight:800;color:#fff;background:#114D9E;text-decoration:none;text-align:center">Регистрация</a>
+          <a href="auth.dc.html" style="padding:12px 16px;font-size:15px;font-weight:700;color:oklch(.21 .02 250);text-decoration:none">Войти</a>
+          <a href="auth.dc.html" style="margin-top:4px;padding:12px 16px;font-size:14px;font-weight:800;color:#fff;background:#114D9E;text-decoration:none;text-align:center">Регистрация</a>
         </nav>
       </details>
     </sc-if>
@@ -40,7 +40,7 @@
   <!-- ═══ d-event А · постер-шапка события ═══ -->
   <div data-screen-label="d-event А · постер-шапка" style="background:#114D9E;padding:clamp(24px,4vw,36px) clamp(16px,4vw,48px) 132px;position:relative">
     <div style="max-width:1104px;margin:0 auto">
-      <nav style="font-size:12.5px;font-weight:700;color:#AED4FB;margin-bottom:28px;display:flex;gap:8px;flex-wrap:wrap"><a href="Витрина врача - Главная.dc.html" style="color:#AED4FB;text-decoration:none" style-hover="color:#fff;text-decoration:underline;text-underline-offset:3px">Doctor.School</a><span style="opacity:.5">/</span><a href="Витрина врача - Лента специальности.dc.html" style="color:#AED4FB;text-decoration:none" style-hover="color:#fff;text-decoration:underline;text-underline-offset:3px">Травматология и ортопедия</a><span style="opacity:.5">/</span><a href="Витрина врача - События.dc.html" style="color:#AED4FB;text-decoration:none" style-hover="color:#fff;text-decoration:underline;text-underline-offset:3px">События</a><span style="opacity:.5">/</span><span style="color:#D3E8FD">Вебинар «PRP при гонартрозе»</span></nav>
+      <nav style="font-size:12.5px;font-weight:700;color:#AED4FB;margin-bottom:28px;display:flex;gap:8px;flex-wrap:wrap"><a href="doctor-home.dc.html" style="color:#AED4FB;text-decoration:none" style-hover="color:#fff;text-decoration:underline;text-underline-offset:3px">Doctor.School</a><span style="opacity:.5">/</span><a href="doctor-feed.dc.html" style="color:#AED4FB;text-decoration:none" style-hover="color:#fff;text-decoration:underline;text-underline-offset:3px">Травматология и ортопедия</a><span style="opacity:.5">/</span><a href="doctor-events.dc.html" style="color:#AED4FB;text-decoration:none" style-hover="color:#fff;text-decoration:underline;text-underline-offset:3px">События</a><span style="opacity:.5">/</span><span style="color:#D3E8FD">Вебинар «PRP при гонартрозе»</span></nav>
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:32px;flex-wrap:wrap">
         <div style="max-width:760px">
           <div style="font-size:13px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#D3E8FD;margin-bottom:16px">Школа ортобиологии · Вебинар · Онлайн</div>
@@ -125,10 +125,10 @@
           </div>
           <div style="padding:22px 26px">
             <div style="font-size:10.5px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#2D84F2;margin-bottom:7px">Травматолог-ортопед</div>
-            <a href="Эксперт.dc.html" style="font-size:19px;font-weight:800;letter-spacing:-.02em;color:oklch(.21 .02 250);text-decoration:none;line-height:1.25;display:inline-block" style-hover="color:#2D84F2;text-decoration:underline;text-underline-offset:4px">Михаил Страхов</a>
+            <a href="academy-expert.dc.html" style="font-size:19px;font-weight:800;letter-spacing:-.02em;color:oklch(.21 .02 250);text-decoration:none;line-height:1.25;display:inline-block" style-hover="color:#2D84F2;text-decoration:underline;text-underline-offset:4px">Михаил Страхов</a>
             <div style="font-size:12.5px;font-weight:700;color:oklch(.556 .012 250);margin-top:6px">РНИМУ им. Пирогова</div>
             <div style="font-size:13px;line-height:1.65;color:oklch(.45 .014 250);margin-top:12px">Д.м.н., профессор кафедры травматологии и ортопедии, ведёт направление ортобиологии на платформе. Автор 40+ публикаций по регенеративным методикам, член ESSKA и АТОР. В эфире разбирает доказательную базу и отвечает за протоколы.</div>
-            <a href="Эксперт.dc.html" style="display:inline-block;margin-top:14px;font-size:12.5px;font-weight:800;color:#2D84F2;text-decoration:underline;text-underline-offset:4px">12 эфиров · страница эксперта →</a>
+            <a href="academy-expert.dc.html" style="display:inline-block;margin-top:14px;font-size:12.5px;font-weight:800;color:#2D84F2;text-decoration:underline;text-underline-offset:4px">12 эфиров · страница эксперта →</a>
           </div>
         </div>
       </section>
@@ -152,12 +152,12 @@
           <span style="flex:1;border-top:2px solid oklch(.21 .02 250)"></span>
         </div>
         <div style="display:grid;gap:0">
-          <a href="Витрина врача - Лента специальности.dc.html" style="display:flex;align-items:center;gap:16px;padding:18px 4px;border-top:1px solid oklch(.922 .006 250);text-decoration:none" style-hover="background:#D3E8FD">
+          <a href="doctor-feed.dc.html" style="display:flex;align-items:center;gap:16px;padding:18px 4px;border-top:1px solid oklch(.922 .006 250);text-decoration:none" style-hover="background:#D3E8FD">
             <span style="font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:oklch(.556 .012 250);width:96px;flex:none">Школа</span>
             <span style="font-size:15px;font-weight:700;color:oklch(.21 .02 250);flex:1;min-width:0">Школа ортобиологии — все уроки и события программы</span>
             <span style="font-size:15px;font-weight:800;color:#2D84F2">→</span>
           </a>
-          <a href="Эксперт.dc.html" style="display:flex;align-items:center;gap:16px;padding:18px 4px;border-top:1px solid oklch(.922 .006 250);text-decoration:none" style-hover="background:#D3E8FD">
+          <a href="academy-expert.dc.html" style="display:flex;align-items:center;gap:16px;padding:18px 4px;border-top:1px solid oklch(.922 .006 250);text-decoration:none" style-hover="background:#D3E8FD">
             <span style="font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:oklch(.556 .012 250);width:96px;flex:none">Спикер</span>
             <span style="font-size:15px;font-weight:700;color:oklch(.21 .02 250);flex:1;min-width:0">Михаил Страхов — страница эксперта, 12 эфиров</span>
             <span style="font-size:15px;font-weight:800;color:#2D84F2">→</span>
@@ -197,7 +197,7 @@
               <span style="font-size:12px;font-weight:700;color:oklch(.556 .012 250)">НМО</span>
               <span style="font-size:12px;font-weight:800;color:oklch(.21 .02 250);border:2px solid oklch(.922 .006 250);padding:3px 9px">2 балла</span>
             </div>
-            <a href="Авторизация.dc.html" style="margin-top:14px;display:block;text-align:center;font-size:15px;font-weight:800;color:#fff;background:#114D9E;border:2px solid #114D9E;padding:15px 20px;box-shadow:4px 4px 0 oklch(.21 .02 250);text-decoration:none" style-hover="transform:translate(2px,2px);box-shadow:2px 2px 0 oklch(.21 .02 250)">Участвовать ↗</a>
+            <a href="auth.dc.html" style="margin-top:14px;display:block;text-align:center;font-size:15px;font-weight:800;color:#fff;background:#114D9E;border:2px solid #114D9E;padding:15px 20px;box-shadow:4px 4px 0 oklch(.21 .02 250);text-decoration:none" style-hover="transform:translate(2px,2px);box-shadow:2px 2px 0 oklch(.21 .02 250)">Участвовать ↗</a>
             <div style="margin-top:12px;font-size:12.5px;line-height:1.6;color:oklch(.45 .014 250)">Нужна регистрация — вернём вас на эту страницу.</div>
             <div style="margin-top:10px;padding-top:12px;border-top:1px solid oklch(.922 .006 250);font-size:12.5px;font-weight:800;color:oklch(.21 .02 250)">Уже записались 37 ортопедов<div style="margin-top:4px;font-size:11.5px;font-weight:600;color:oklch(.556 .012 250)">и 14 врачей смежных специальностей</div></div>
           </div>
@@ -224,7 +224,7 @@
       </div>
       <div>
         <div style="font-size:11.5px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:oklch(.556 .012 250);margin-bottom:14px">Экспертам и партнёрам</div>
-        <a href="Главная.dc.html" style="font-size:13.5px;font-weight:800;color:#2D84F2;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px">Academy.Doctor.School ↗</a>
+        <a href="academy-home.dc.html" style="font-size:13.5px;font-weight:800;color:#2D84F2;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px">Academy.Doctor.School ↗</a>
         <div style="margin-top:10px;font-size:12.5px;font-weight:600;line-height:1.6;color:oklch(.556 .012 250)">Закулисье платформы: проекты, эксперты, партнёры.</div>
       </div>
     </div>

@@ -7,7 +7,7 @@ import { cn } from "../lib/utils";
 /**
  * 014 EARS-8 — the «Смотреть оригинал трансляции» SPOILER: the collapsible that
  * carries an event's SECONDARY cut under the main player. Source:
- * `design-source/webinar-archive.dc.html` L165-179 (the `showSpoiler` unit) —
+ * `design-source/event-page-recording.dc.html` L165-179 (the `showSpoiler` unit) —
  * a hairline-bordered strip under the player card whose summary is a bold line
  * plus a faint one-line hint, and whose body is the second player surface.
  *

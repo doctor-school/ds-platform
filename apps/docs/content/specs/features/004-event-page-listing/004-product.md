@@ -82,9 +82,9 @@ The public face of a webinar: an event page that any visitor can read **without 
 
 Vendored canvas source (byte-verbatim from the Claude Design project «Doctor.School визуальный язык» — build to these files, see [`design-source/README.md`](../../../../../../design-source/README.md)):
 
-- [`design-source/webinar-page.dc.html`](../../../../../../design-source/webinar-page.dc.html) — the public event page (US-1, US-2, US-3, US-5); lifecycle states `upcoming / live / ended` (US-6) via the canvas `status` prop.
-- [`design-source/webinars-listing.dc.html`](../../../../../../design-source/webinars-listing.dc.html) — the upcoming-broadcasts listing (US-4), day-grouped week view («Неделя», the switcher's default; US-7).
-- [`design-source/webinars-month.dc.html`](../../../../../../design-source/webinars-month.dc.html) — the month-calendar view of the listing (US-7, US-8, US-9): the «Месяц» pane of the «Неделя / Месяц» switcher, month picker with per-month counts, ‹ › paging, desktop grid with pills / red live pill / muted past notes / today outline, mobile dot-grid + selected-day agenda, legend.
-- [`design-source/webinar-card.dc.html`](../../../../../../design-source/webinar-card.dc.html) — the card unit the listings render.
+- [`design-source/event-page.dc.html`](../../../../../../design-source/event-page.dc.html) — the public event page (US-1, US-2, US-3, US-5); lifecycle states `upcoming / live / ended` (US-6) via the canvas `status` prop.
+- [`design-source/events-feed.dc.html`](../../../../../../design-source/events-feed.dc.html) — the upcoming-broadcasts listing (US-4), day-grouped week view («Неделя», the switcher's default; US-7).
+- [`design-source/events-feed-month.dc.html`](../../../../../../design-source/events-feed-month.dc.html) — the month-calendar view of the listing (US-7, US-8, US-9): the «Месяц» pane of the «Неделя / Месяц» switcher, month picker with per-month counts, ‹ › paging, desktop grid with pills / red live pill / muted past notes / today outline, mobile dot-grid + selected-day agenda, legend.
+- [`design-source/unit-event-card.dc.html`](../../../../../../design-source/unit-event-card.dc.html) — the card unit the listings render.
 
 **Status:** composition authored by the product owner on the Claude Design canvas (project «Doctor.School визуальный язык»); Stage-A re-confirmation at the next owner checkpoint.

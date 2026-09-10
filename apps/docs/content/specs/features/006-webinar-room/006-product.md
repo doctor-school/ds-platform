@@ -92,6 +92,6 @@ Room composition for the 2026-07-17 webinar: **embed player + live chat + heartb
 
 Vendored canvas source (byte-verbatim from the Claude Design project «Doctor.School визуальный язык» — build to these files, see [`design-source/README.md`](../../../../../../design-source/README.md)):
 
-- [`design-source/webinar-room.dc.html`](../../../../../../design-source/webinar-room.dc.html) — the room (US-1, US-2): desktop `1fr 400px` player + chat aside; mobile full-bleed player + Чат / Вопросы / О эфире tabs. Note: the canvas shows a Вопросы (question-to-lecturer) tab — that mechanic is wave 2; wave 1 builds player + chat + invisible heartbeat (US-3) plus the header's light/dark theme toggle (US-6) and initials avatar (US-7) from this composition.
+- [`design-source/archive/archive-room-v1.dc.html`](../../../../../../design-source/archive/archive-room-v1.dc.html) — the room (US-1, US-2): desktop `1fr 400px` player + chat aside; mobile full-bleed player + Чат / Вопросы / О эфире tabs. Note: the canvas shows a Вопросы (question-to-lecturer) tab — that mechanic is wave 2; wave 1 builds player + chat + invisible heartbeat (US-3) plus the header's light/dark theme toggle (US-6) and initials avatar (US-7) from this composition.
 
 **Status:** composition authored by the product owner on the Claude Design canvas (project «Doctor.School визуальный язык»); Stage-A re-confirmation at the next owner checkpoint.

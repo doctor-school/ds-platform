@@ -100,7 +100,7 @@ export {
 } from "./pending-registration";
 export type { PendingRegistration } from "./pending-registration";
 
-// 004 EARS-19 — month-calendar presentation blocks (webinars-month.dc.html).
+// 004 EARS-19 — month-calendar presentation blocks (events-feed-month.dc.html).
 export { MonthCalendarGrid } from "./month-calendar-grid";
 export type {
   MonthCalendarGridProps,
@@ -112,7 +112,7 @@ export type { MonthDotGridProps, DotGridCell, DotKind } from "./month-dot-grid";
 export { DayAgenda } from "./day-agenda";
 export type { DayAgendaProps, DayAgendaRow } from "./day-agenda";
 
-// 004 EARS-16/17 — the 12-month picker (webinars-month.dc.html), #1051.
+// 004 EARS-16/17 — the 12-month picker (events-feed-month.dc.html), #1051.
 export { MonthPicker } from "./month-picker";
 export type {
   MonthPickerProps,
@@ -192,7 +192,7 @@ export type {
   FormActionsProps,
   FormDerivedNoteProps,
 } from "./field-group";
-// 020 EARS-1 — event-page composition (webinar-page-variant-a.dc.html), #1764
+// 020 EARS-1 — event-page composition (archive/archive-event-page-variant-a.dc.html), #1764
 export {
   EventPageHero,
   EventPageShell,

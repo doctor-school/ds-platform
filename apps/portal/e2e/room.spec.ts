@@ -6,7 +6,7 @@ import {
 
 /**
  * 006 EARS-2 — a gated doctor's webinar room renders the player + chat aside to
- * the vendored `webinar-room.dc.html` composition, and the embed player is
+ * the vendored `archive/archive-room-v1.dc.html` composition, and the embed player is
  * instantiated from the event stream config's EXPLICIT provider enum
  * (`rutube | youtube`), asserted PER PROVIDER; an unknown/absent provider yields
  * the truthful "stream unavailable" state (never a guessed embed). The provider is

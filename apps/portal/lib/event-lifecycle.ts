@@ -19,7 +19,7 @@ import type { PublicEventState } from "@ds/schemas";
  * href and the "no CTA on `ended`/`hidden`" invariant have exactly one owner.
  */
 
-/** The canvas `status` render enum (`webinar-page.dc.html`). */
+/** The canvas `status` render enum (`event-page.dc.html`). */
 export type CanvasStatus = "upcoming" | "live" | "ended" | "hidden";
 
 /**

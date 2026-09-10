@@ -61,7 +61,7 @@ export interface RecordingSignal {
  *     the page simply does not speak).
  *
  * `ended` is therefore the only state that speaks, which matches the canvas —
- * `webinar-archive.dc.html` is a post-live artboard.
+ * `event-page-recording.dc.html` is a post-live artboard.
  */
 export function resolveRecordingSignal(
   recording: RecordingProjection,

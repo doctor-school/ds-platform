@@ -7,7 +7,7 @@ import { buttonVariants } from "../primitives/button";
 
 /**
  * Neo-brutalist 12-month picker — the month view's month chooser (004 EARS-16/17,
- * source `design-source/webinars-month.dc.html`). A native `<details>` disclosure:
+ * source `design-source/events-feed-month.dc.html`). A native `<details>` disclosure:
  * the `<summary>` trigger shows the displayed month («Июль 2026 ▼»); the popover
  * carries a year ‹ › stepper and a 3-column grid of the year's twelve months, each
  * with its event count («142 эфира») — an already-past month is muted («прошёл»),

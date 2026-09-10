@@ -25,7 +25,7 @@
 # Imported Claude Design source (design-source/): reference material, not a
 # runnable app. (1) The provenance links in its README point at the login-gated
 # Claude Design canvas, which unauthenticated lychee cannot reach. (2) The
-# imported design-system.dc.html references the canvas-side runtime + logo assets
+# imported ds-foundation.dc.html references the canvas-side runtime + logo assets
 # (support.js, assets/ds-logo-*.svg) that we intentionally do NOT vendor (see the
 # folder README). Both are verified manually / re-pullable via DesignSync — same
 # false-positive class as the private Projects v2 boards above.
@@ -65,7 +65,7 @@ tools/lint/guard-tests/fixtures/
 
 # Vendored Claude Design canvas sources (design-source/*.dc.html): verbatim
 # spec artifacts, not documentation. Their {{ template }} hrefs and
-# canvas-relative links (Эфиры.dc.html, Мои события.dc.html, …) resolve only
+# canvas-relative links (events-feed.dc.html, account-my-events.dc.html, …) resolve only
 # inside the Claude Design project, never in this repo — lychee sees them as
 # file:// links and reports false File-not-found errors (#514).
 ^file://.*/design-source/.*$

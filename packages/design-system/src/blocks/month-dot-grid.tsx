@@ -4,7 +4,7 @@ import { cn } from "../lib/utils";
 
 /**
  * Neo-brutalist month dot-grid — mobile pane (004 EARS-19, source
- * `design-source/webinars-month.dc.html`, ≤900px). A compact month calendar where
+ * `design-source/events-feed-month.dc.html`, ≤900px). A compact month calendar where
  * each day carries up to three status DOTS (a red dot for an airing event, an
  * accent dot for a planned one, a muted dot for an already-past day); tapping a
  * day selects it and drives the {@link DayAgenda} below. Today is tinted, the

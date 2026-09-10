@@ -8,7 +8,7 @@ afterEach(cleanup);
 
 /**
  * Neo-brutalist filter chip (#513, fidelity SoT
- * `design-source/design-system.dc.html` §05/§06). The rendered look is proven on
+ * `design-source/ds-foundation.dc.html` §05/§06). The rendered look is proven on
  * the live stand; jsdom pins the token-class contract and the interactive
  * (aria-pressed) semantics — square, hard 2px border, per-state token fills.
  */

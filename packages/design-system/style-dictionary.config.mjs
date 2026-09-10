@@ -309,7 +309,7 @@ async function build() {
   });
   // Numeric/time tracking as a token-backed `tracking-numeric` utility (#514).
   // The big tabular time on the webinar-card plate (56px desktop / 40px mobile,
-  // source webinar-card.dc.html) tracks at −.04em — the `numeric` letter-spacing
+  // source unit-event-card.dc.html) tracks at −.04em — the `numeric` letter-spacing
   // token — which no default Tailwind rung carries (`tracking-tight` is −.025em).
   themeEntries.push({
     name: "--tracking-numeric",

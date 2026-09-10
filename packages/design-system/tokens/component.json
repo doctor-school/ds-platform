@@ -17,7 +17,7 @@
     "time-plate": {
       "$type": "dimension",
       "$value": "12.25rem",
-      "$description": "196px — the fixed width of the desktop webinar-card time plate (source webinar-card.dc.html: grid-template-columns 196px 1fr). Wide enough for the 56px tabular time and a ONE-line «Эфир № N» label. Surfaced as the `w-time-plate` sizing utility (--spacing-time-plate @theme key); ≤900px the plate is a full-width horizontal band instead."
+      "$description": "196px — the fixed width of the desktop webinar-card time plate (source unit-event-card.dc.html: grid-template-columns 196px 1fr). Wide enough for the 56px tabular time and a ONE-line «Эфир № N» label. Surfaced as the `w-time-plate` sizing utility (--spacing-time-plate @theme key); ≤900px the plate is a full-width horizontal band instead."
     }
   },
 

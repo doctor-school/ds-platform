@@ -4,7 +4,7 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "../lib/utils";
 
 /**
- * §09 «Раскладка и ритм» layout container (source `design-system.dc.html` §09
+ * §09 «Раскладка и ритм» layout container (source `ds-foundation.dc.html` §09
  * «Контейнер» / «Брейкпоинты»). Centres the page content column and owns the
  * responsive gutter + breakpoint behaviour so surfaces never re-derive it by eye:
  *

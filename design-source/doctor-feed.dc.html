@@ -13,14 +13,14 @@
 
   <!-- ═══ Оболочка · шапка витрины врача (с d-home) ═══ -->
   <header data-screen-label="d-feed · шапка" style="background:#114D9E;padding:14px clamp(16px,4vw,48px);display:flex;align-items:center;gap:clamp(14px,2.5vw,28px)">
-    <a href="Витрина врача - Главная.dc.html" style="display:flex;flex:none"><img src="assets/ds-logo-white.svg" alt="Doctor.School" style="height:26px;display:block"></a>
+    <a href="doctor-home.dc.html" style="display:flex;flex:none"><img src="assets/ds-logo-white.svg" alt="Doctor.School" style="height:26px;display:block"></a>
     <sc-if value="{{ isDesktop }}" hint-placeholder-val="{{ true }}">
       <input value="{{ q }}" onInput="{{ setQ }}" placeholder="Поиск по урокам, школам и событиям" style="flex:1;max-width:440px;font:inherit;font-size:13.5px;font-weight:600;padding:12px 14px;border:2px solid rgba(255,255,255,.45);background:transparent;color:#fff;outline:none;min-width:120px" style-focus="border-color:#fff;background:rgba(255,255,255,.08)">
       <nav style="display:flex;align-items:center;gap:14px;margin-left:auto">
         <button onClick="{{ toggleTheme }}" title="Тема" style="font:inherit;width:44px;height:44px;background:transparent;color:#fff;border:2px solid rgba(255,255,255,.5);cursor:pointer;font-size:15px;flex:none" style-hover="border-color:#fff">{{ themeIcon }}</button>
         <sc-if value="{{ guest }}" hint-placeholder-val="{{ true }}">
-          <a href="Авторизация.dc.html" style="font-size:13.5px;font-weight:700;color:#D3E8FD;text-decoration:none;padding:12px 6px;white-space:nowrap" style-hover="color:#fff">Войти</a>
-          <a href="Авторизация.dc.html" style="font-size:13.5px;font-weight:800;color:#114D9E;background:#fff;padding:12px 22px;text-decoration:none;white-space:nowrap;box-shadow:3px 3px 0 #0D3A77" style-hover="transform:translate(1px,1px);box-shadow:2px 2px 0 #0D3A77">Регистрация</a>
+          <a href="auth.dc.html" style="font-size:13.5px;font-weight:700;color:#D3E8FD;text-decoration:none;padding:12px 6px;white-space:nowrap" style-hover="color:#fff">Войти</a>
+          <a href="auth.dc.html" style="font-size:13.5px;font-weight:800;color:#114D9E;background:#fff;padding:12px 22px;text-decoration:none;white-space:nowrap;box-shadow:3px 3px 0 #0D3A77" style-hover="transform:translate(1px,1px);box-shadow:2px 2px 0 #0D3A77">Регистрация</a>
         </sc-if>
         <sc-if value="{{ loggedIn }}" hint-placeholder-val="{{ false }}">
           <a href="#" title="Очки внимания: Пульс · Дыхание · Сознание. Открыть историю начислений" style="display:inline-flex;align-items:center;gap:9px;border:2px solid rgba(255,255,255,.45);padding:10px 14px;font-size:12px;font-weight:800;color:#fff;text-decoration:none;white-space:nowrap;font-variant-numeric:tabular-nums" style-hover="border-color:#fff"><span>120 Pul</span><span style="opacity:.45">·</span><span>340 Bre</span><span style="opacity:.45">·</span><span>1 250 Con</span></a>
@@ -39,8 +39,8 @@
               <a href="#" style="margin-top:4px;padding:12px 16px;font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};text-decoration:none;text-align:center">Личный кабинет</a>
             </sc-if>
             <sc-if value="{{ guest }}" hint-placeholder-val="{{ true }}">
-              <a href="Авторизация.dc.html" style="padding:12px 16px;font-size:15px;font-weight:700;color:{{ ink }};text-decoration:none">Войти</a>
-              <a href="Авторизация.dc.html" style="margin-top:4px;padding:12px 16px;font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};text-decoration:none;text-align:center">Регистрация</a>
+              <a href="auth.dc.html" style="padding:12px 16px;font-size:15px;font-weight:700;color:{{ ink }};text-decoration:none">Войти</a>
+              <a href="auth.dc.html" style="margin-top:4px;padding:12px 16px;font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};text-decoration:none;text-align:center">Регистрация</a>
             </sc-if>
           </nav>
         </details>
@@ -56,11 +56,11 @@
   <!-- ═══ Постер-шапка специальности ═══ -->
   <div data-screen-label="d-feed · постер-шапка" style="background:#114D9E;padding:clamp(32px,5vw,56px) clamp(16px,4vw,48px) clamp(34px,5vw,60px);position:relative">
     <div style="max-width:1104px;margin:0 auto">
-      <nav style="font-size:12.5px;font-weight:700;color:#AED4FB;margin-bottom:18px"><a href="Витрина врача - Главная.dc.html" style="color:#AED4FB;text-decoration:none" style-hover="color:#fff;text-decoration:underline;text-underline-offset:3px">Doctor.School</a><span style="opacity:.5"> / </span><span style="color:#D3E8FD">Специальности</span></nav>
+      <nav style="font-size:12.5px;font-weight:700;color:#AED4FB;margin-bottom:18px"><a href="doctor-home.dc.html" style="color:#AED4FB;text-decoration:none" style-hover="color:#fff;text-decoration:underline;text-underline-offset:3px">Doctor.School</a><span style="opacity:.5"> / </span><span style="color:#D3E8FD">Специальности</span></nav>
       <div style="font-size:12px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:#D3E8FD;margin-bottom:14px">Лента специальности</div>
       <div style="display:flex;align-items:baseline;gap:20px;flex-wrap:wrap">
         <h1 style="margin:0;font-size:clamp(30px,4.6vw,50px);line-height:1.04;font-weight:800;letter-spacing:-.035em;color:#fff;text-wrap:balance">Травматология и ортопедия</h1>
-        <a href="Витрина врача - Главная.dc.html" style="font-size:13.5px;font-weight:700;color:#D3E8FD;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:5px;white-space:nowrap" style-hover="color:#fff">сменить специальность ▾</a>
+        <a href="doctor-home.dc.html" style="font-size:13.5px;font-weight:700;color:#D3E8FD;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:5px;white-space:nowrap" style-hover="color:#fff">сменить специальность ▾</a>
       </div>
       <!-- статистика по специальности · REQ-116 -->
       <div style="margin-top:26px;display:inline-flex;align-items:center;gap:14px;flex-wrap:wrap;border:2px solid rgba(255,255,255,.55);padding:13px 18px;font-size:13px;font-weight:800;color:#fff"><span>У нас уже 1 850 травматологов-ортопедов</span><span style="opacity:.45">·</span><span>3 школы</span><span style="opacity:.45">·</span><span>47 уроков по специальности</span></div>
@@ -86,7 +86,7 @@
                 <sc-for list="{{ col.items }}" as="it" hint-placeholder-count="5">
                   <div>
                     <div style="font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:{{ inkFaint }};margin-bottom:8px">{{ it.stateLabel }}</div>
-                    <dc-import name="КонтентКарточка" dark="{{ dark }}" variant="{{ col.variant }}" state="{{ it.state }}" kicker="Курс-сериал" scope="Школа ортобиологии" title="Курс-сериал «Ортобиология», 9 серий" metric="9" metric-label="серий" counter="Уже записались 37 ортопедов" progress="{{ it.progress }}" progress-label="Вы посмотрели 3 серии из 9" row-meta="9 серий · 40 Pul" hint-size="100%,180px"></dc-import>
+                    <dc-import name="unit-content-card" dark="{{ dark }}" variant="{{ col.variant }}" state="{{ it.state }}" kicker="Курс-сериал" scope="Школа ортобиологии" title="Курс-сериал «Ортобиология», 9 серий" metric="9" metric-label="серий" counter="Уже записались 37 ортопедов" progress="{{ it.progress }}" progress-label="Вы посмотрели 3 серии из 9" row-meta="9 серий · 40 Pul" hint-size="100%,180px"></dc-import>
                   </div>
                 </sc-for>
               </div>
@@ -144,9 +144,9 @@
           </div>
           <sc-if value="{{ schoolsReady }}" hint-placeholder-val="{{ true }}">
             <div style="display:flex;flex-direction:column;gap:{{ blockGap }}">
-              <dc-import name="КонтентКарточка" dark="{{ dark }}" variant="{{ featuredVariant }}" featured="{{ true }}" kicker="Школа" title="Школа ортобиологии — путь в новую специальность" desc="Цикл уроков и живых разборов: от биологии тканей до протоколов применения. Документ — за полное прохождение." metric="12" metric-label="уроков в программе" counter="Уже записались 37 ортопедов" sponsor="Партнёрский материал · Партнёр А" state="обычная" cta="Открыть школу →" hint-size="100%,240px"></dc-import>
-              <dc-import name="КонтентКарточка" dark="{{ dark }}" variant="{{ listVariant }}" kicker="Курс-сериал" scope="Школа ортобиологии" title="Курс-сериал «Ортобиология», 9 серий" desc="Ключевой формат платформы: курс как единый сериал — серия за серией, а не «модули программы»." metric="9" metric-label="серий" state="{{ courseState }}" progress="33" progress-label="Вы посмотрели 3 серии из 9" counter="{{ courseCounter }}" row-meta="9 серий · 40 Pul" hint-size="100%,200px"></dc-import>
-              <dc-import name="КонтентКарточка" dark="{{ dark }}" variant="{{ listVariant }}" kicker="Школа" title="Школа артроскопии" desc="Программа готовится вместе с экспертами направления." state="скоро" metric="—" metric-label="готовится" row-meta="готовится" hint-size="100%,160px"></dc-import>
+              <dc-import name="unit-content-card" dark="{{ dark }}" variant="{{ featuredVariant }}" featured="{{ true }}" kicker="Школа" title="Школа ортобиологии — путь в новую специальность" desc="Цикл уроков и живых разборов: от биологии тканей до протоколов применения. Документ — за полное прохождение." metric="12" metric-label="уроков в программе" counter="Уже записались 37 ортопедов" sponsor="Партнёрский материал · Партнёр А" state="обычная" cta="Открыть школу →" hint-size="100%,240px"></dc-import>
+              <dc-import name="unit-content-card" dark="{{ dark }}" variant="{{ listVariant }}" kicker="Курс-сериал" scope="Школа ортобиологии" title="Курс-сериал «Ортобиология», 9 серий" desc="Ключевой формат платформы: курс как единый сериал — серия за серией, а не «модули программы»." metric="9" metric-label="серий" state="{{ courseState }}" progress="33" progress-label="Вы посмотрели 3 серии из 9" counter="{{ courseCounter }}" row-meta="9 серий · 40 Pul" hint-size="100%,200px"></dc-import>
+              <dc-import name="unit-content-card" dark="{{ dark }}" variant="{{ listVariant }}" kicker="Школа" title="Школа артроскопии" desc="Программа готовится вместе с экспертами направления." state="скоро" metric="—" metric-label="готовится" row-meta="готовится" hint-size="100%,160px"></dc-import>
             </div>
           </sc-if>
           <sc-if value="{{ stPartial }}" hint-placeholder-val="{{ false }}">
@@ -174,7 +174,7 @@
           <sc-if value="{{ eventsReady }}" hint-placeholder-val="{{ true }}">
             <div style="display:flex;flex-direction:column;gap:{{ evGap }}">
               <sc-for list="{{ eventCards }}" as="ev" hint-placeholder-count="3">
-                <dc-import name="ВебинарКарточка" dark="{{ dark }}" variant="{{ ev.variant }}" num="{{ ev.num }}" time="{{ ev.time }}" time-sub="{{ ev.timeSub }}" school="{{ ev.school }}" title="{{ ev.title }}" chips="{{ ev.chips }}" speakers="{{ ev.speakers }}" cta="Участвовать ↗" hint-size="100%,220px"></dc-import>
+                <dc-import name="unit-event-card" dark="{{ dark }}" variant="{{ ev.variant }}" num="{{ ev.num }}" time="{{ ev.time }}" time-sub="{{ ev.timeSub }}" school="{{ ev.school }}" title="{{ ev.title }}" chips="{{ ev.chips }}" speakers="{{ ev.speakers }}" cta="Участвовать ↗" hint-size="100%,220px"></dc-import>
               </sc-for>
             </div>
           </sc-if>
@@ -201,10 +201,10 @@
             <a href="#" style="font-size:14px;font-weight:800;color:{{ accent }};text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:5px;white-space:nowrap">Все 47 уроков →</a>
           </div>
           <div style="display:flex;flex-direction:column;gap:{{ blockGap }}">
-            <dc-import name="КонтентКарточка" dark="{{ dark }}" variant="{{ featuredVariant }}" featured="{{ true }}" kicker="Урок дня" scope="Школа травматологии и ортопедии" title="Клинический случай: разрыв ПКС у бегуньи" metric="14 мин" metric-label="урок дня · 23 августа" counter="10 Pul · конспект прилагается" state="{{ lessonState }}" cta="Смотреть урок →" hint-size="100%,220px"></dc-import>
+            <dc-import name="unit-content-card" dark="{{ dark }}" variant="{{ featuredVariant }}" featured="{{ true }}" kicker="Урок дня" scope="Школа травматологии и ортопедии" title="Клинический случай: разрыв ПКС у бегуньи" metric="14 мин" metric-label="урок дня · 23 августа" counter="10 Pul · конспект прилагается" state="{{ lessonState }}" cta="Смотреть урок →" hint-size="100%,220px"></dc-import>
             <div style="{{ lessonListWrap }}">
               <sc-for list="{{ lessonRows }}" as="ls" hint-placeholder-count="3">
-                <dc-import name="КонтентКарточка" dark="{{ dark }}" variant="В — строка" kicker="Урок" title="{{ ls.title }}" row-meta="{{ ls.meta }}" state="{{ ls.state }}" progress="{{ ls.progress }}" adjacent="{{ ls.adjacent }}" hint-size="100%,54px"></dc-import>
+                <dc-import name="unit-content-card" dark="{{ dark }}" variant="В — строка" kicker="Урок" title="{{ ls.title }}" row-meta="{{ ls.meta }}" state="{{ ls.state }}" progress="{{ ls.progress }}" adjacent="{{ ls.adjacent }}" hint-size="100%,54px"></dc-import>
               </sc-for>
             </div>
             <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:{{ sectionGray }};padding:15px 20px">
@@ -232,10 +232,10 @@
                   <div style="display:flex;align-items:baseline;gap:14px;margin:10px 0 16px"><span style="font-size:15px;font-weight:800;letter-spacing:-.01em;color:{{ ink }};white-space:nowrap">{{ mx.day }}</span><span style="flex:1;border-top:2px solid {{ hairline }};transform:translateY(-4px)"></span></div>
                 </sc-if>
                 <sc-if value="{{ mx.isEvent }}" hint-placeholder-val="{{ false }}">
-                  <dc-import name="ВебинарКарточка" dark="{{ dark }}" variant="{{ mx.variant }}" num="{{ mx.num }}" time="{{ mx.time }}" time-sub="{{ mx.timeSub }}" school="{{ mx.school }}" title="{{ mx.title }}" chips="{{ mx.chips }}" speakers="{{ mx.speakers }}" cta="Участвовать ↗" hint-size="100%,220px"></dc-import>
+                  <dc-import name="unit-event-card" dark="{{ dark }}" variant="{{ mx.variant }}" num="{{ mx.num }}" time="{{ mx.time }}" time-sub="{{ mx.timeSub }}" school="{{ mx.school }}" title="{{ mx.title }}" chips="{{ mx.chips }}" speakers="{{ mx.speakers }}" cta="Участвовать ↗" hint-size="100%,220px"></dc-import>
                 </sc-if>
                 <sc-if value="{{ mx.isContent }}" hint-placeholder-val="{{ true }}">
-                  <dc-import name="КонтентКарточка" dark="{{ dark }}" variant="{{ listVariant }}" kicker="{{ mx.kicker }}" scope="{{ mx.scope }}" title="{{ mx.title }}" metric="{{ mx.metric }}" metric-label="{{ mx.metricLabel }}" counter="{{ mx.counter }}" state="{{ mx.state }}" progress="33" progress-label="Вы посмотрели 3 серии из 9" row-meta="{{ mx.rowMeta }}" hint-size="100%,180px"></dc-import>
+                  <dc-import name="unit-content-card" dark="{{ dark }}" variant="{{ listVariant }}" kicker="{{ mx.kicker }}" scope="{{ mx.scope }}" title="{{ mx.title }}" metric="{{ mx.metric }}" metric-label="{{ mx.metricLabel }}" counter="{{ mx.counter }}" state="{{ mx.state }}" progress="33" progress-label="Вы посмотрели 3 серии из 9" row-meta="{{ mx.rowMeta }}" hint-size="100%,180px"></dc-import>
                 </sc-if>
               </div>
             </sc-for>
@@ -348,7 +348,7 @@
       </div>
       <div>
         <div style="font-size:11.5px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:{{ inkFaint }};margin-bottom:14px">Экспертам и партнёрам</div>
-        <a href="Главная.dc.html" style="font-size:13.5px;font-weight:800;color:{{ accent }};text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px">Academy.Doctor.School ↗</a>
+        <a href="academy-home.dc.html" style="font-size:13.5px;font-weight:800;color:{{ accent }};text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px">Academy.Doctor.School ↗</a>
         <div style="margin-top:10px;font-size:12.5px;font-weight:600;line-height:1.6;color:{{ inkFaint }}">Закулисье платформы: проекты, эксперты, партнёры.</div>
       </div>
     </div>

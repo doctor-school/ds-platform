@@ -1,0 +1,723 @@
+// tools/staging/slot.test.mjs — Issue #2064 part 1 (staging tech spec §3 «Slots»,
+// §5 «Converge», §8 step 4).
+//
+// The regressions these lock: a slot name never reaches raw SQL, a shell argument
+// or a hostname unvalidated; two slots never share a Redis logical database; the
+// fourth preview is refused; `main` is never cloned or dropped; the `ask` registry
+// and the `import slot` lines are rendered from ONE registry, so a host can never
+// get a certificate for a slot that is not up; and the box never builds anything.
+// All offline — every effect is injected.
+
+import assert from "node:assert/strict";
+import test from "node:test";
+
+import {
+  CADDY_CONTAINER,
+  CADDY_INCLUDE_DIR,
+  GC_FREE_SPACE_FLOOR_BYTES,
+  GHCR_REPO,
+  PREVIEW_SLOT_CAP,
+  REGISTRY_PATH,
+  SLOT_ENV_DIR,
+  SLOT_IMAGE_APPS,
+  SlotError,
+  allocateRedisDatabase,
+  assertPreviewCapacity,
+  assertSlotName,
+  caddyAttachCommand,
+  caddyDetachCommand,
+  caddyReloadCommand,
+  cloneDatabaseStatements,
+  composeProjectName,
+  containerAliases,
+  databaseAction,
+  deregisterSlot,
+  dropDatabaseStatements,
+  emptyRegistry,
+  migrateCommandPlan,
+  parseArgs,
+  parseRegistry,
+  planImageGc,
+  planPruneByFreeSpace,
+  planSlotDown,
+  planSlotUp,
+  registerSlot,
+  renderAskInclude,
+  renderSlotEnv,
+  renderSlotsInclude,
+  runSlotPlan,
+  seedCommandPlan,
+  serializeRegistry,
+  shortSha,
+  slotDatabaseName,
+  slotEnvPath,
+  slotHostnames,
+  slotImageRefs,
+  slotNetworkName,
+  slotOfImageTag,
+} from "./slot.mjs";
+
+const BASE = "stage.doctor.school";
+const SHA = "0123456789abcdef0123456789abcdef01234567";
+
+// --- name derivation ---------------------------------------------------------
+
+test("a slot name is `main` or `pr-<N>` and nothing else", () => {
+  assert.equal(assertSlotName("main"), "main");
+  assert.equal(assertSlotName("pr-2034"), "pr-2034");
+  for (const bad of [
+    "pr-0",
+    "PR-1",
+    "pr-1a",
+    "pr_1",
+    "main; rm -rf /",
+    "../main",
+    "",
+    undefined,
+    "prod",
+  ]) {
+    assert.throws(() => assertSlotName(bad), SlotError, `accepted ${bad}`);
+  }
+});
+
+test("the compose project and network of a slot are derived from its name", () => {
+  assert.equal(composeProjectName("main"), "slot-main");
+  assert.equal(composeProjectName("pr-2034"), "slot-pr-2034");
+  assert.equal(slotNetworkName("pr-2034"), "slot-pr-2034");
+});
+
+test("the slot database name passes the golden-db identifier guard", () => {
+  assert.equal(slotDatabaseName("main"), "ds_main");
+  assert.equal(slotDatabaseName("pr-2034"), "ds_pr_2034");
+  // No dash survives into an identifier that reaches CREATE DATABASE.
+  assert.doesNotMatch(slotDatabaseName("pr-2034"), /-/);
+});
+
+test("the five hostnames of a slot follow the wildcard record", () => {
+  const hosts = slotHostnames("pr-2034", BASE);
+  assert.deepEqual(hosts, {
+    academy: "academy-pr-2034.stage.doctor.school",
+    doctor: "doctor-pr-2034.stage.doctor.school",
+    admin: "admin-pr-2034.stage.doctor.school",
+    api: "api-pr-2034.stage.doctor.school",
+  });
+  assert.deepEqual(slotHostnames("main", BASE).academy, [
+    "academy-main.stage.doctor.school",
+  ][0]);
+});
+
+test("a base domain that is not a hostname is refused", () => {
+  for (const bad of ["", "not a domain", "stage.doctor.school/", undefined]) {
+    assert.throws(() => slotHostnames("main", bad), SlotError);
+  }
+});
+
+test("container aliases are exactly what the Caddy (slot) snippet dials", () => {
+  assert.deepEqual(containerAliases("pr-2034"), {
+    api: "pr-2034-api",
+    portal: "pr-2034-portal",
+    doctor: "pr-2034-doctor",
+    admin: "pr-2034-admin",
+    centrifugo: "pr-2034-centrifugo",
+  });
+});
+
+test("image refs are GHCR tags of <slot>-<sha7>, five apps, never a local build", () => {
+  const refs = slotImageRefs("pr-2034", SHA);
+  assert.deepEqual(Object.keys(refs).sort(), [...SLOT_IMAGE_APPS].sort());
+  assert.equal(refs.api, `${GHCR_REPO}/api:pr-2034-0123456`);
+  assert.equal(refs["api-migrate"], `${GHCR_REPO}/api-migrate:pr-2034-0123456`);
+  assert.equal(refs.doctor, `${GHCR_REPO}/doctor:pr-2034-0123456`);
+  assert.equal(shortSha(SHA), "0123456");
+});
+
+test("a SHA that is not a full lowercase hex commit id is refused", () => {
+  for (const bad of ["0123456", "ZZZ", "", undefined, `${SHA}0`]) {
+    assert.throws(() => shortSha(bad), SlotError);
+  }
+});
+
+// --- Redis database allocation ----------------------------------------------
+
+test("main owns Redis database 0 and a preview never does", () => {
+  assert.equal(allocateRedisDatabase("main", emptyRegistry()), 0);
+  for (const n of [1, 2, 14, 15, 16, 30, 2034]) {
+    const db = allocateRedisDatabase(`pr-${n}`, emptyRegistry());
+    assert.ok(db >= 1 && db <= 15, `pr-${n} → ${db}`);
+  }
+});
+
+test("the Redis database of a preview is deterministic", () => {
+  const first = allocateRedisDatabase("pr-2034", emptyRegistry());
+  const second = allocateRedisDatabase("pr-2034", emptyRegistry());
+  assert.equal(first, second);
+});
+
+test("a Redis database already held by another slot is refused, never shared", () => {
+  const db = allocateRedisDatabase("pr-2034", emptyRegistry());
+  const registry = registerSlot(emptyRegistry(), {
+    slot: "pr-19",
+    sha: SHA,
+    redisDb: db,
+    hosts: Object.values(slotHostnames("pr-19", BASE)),
+    updatedAt: "2026-09-10T00:00:00.000Z",
+  });
+  assert.throws(
+    () => allocateRedisDatabase("pr-2034", registry),
+    (err) => err instanceof SlotError && /pr-19/.test(err.message),
+  );
+  // Re-allocating for the slot that already holds it is not a collision.
+  assert.equal(allocateRedisDatabase("pr-19", registry), db);
+});
+
+test("the fourth preview is refused; main never counts against the cap", () => {
+  assert.equal(PREVIEW_SLOT_CAP, 3);
+  let registry = emptyRegistry();
+  for (const slot of ["main", "pr-1", "pr-2", "pr-3"]) {
+    registry = registerSlot(registry, {
+      slot,
+      sha: SHA,
+      redisDb: allocateRedisDatabase(slot, registry),
+      hosts: Object.values(slotHostnames(slot, BASE)),
+      updatedAt: "2026-09-10T00:00:00.000Z",
+    });
+  }
+  assert.throws(() => assertPreviewCapacity("pr-4", registry), SlotError);
+  // A slot already registered may be re-converged at the cap.
+  assert.doesNotThrow(() => assertPreviewCapacity("pr-3", registry));
+  assert.doesNotThrow(() => assertPreviewCapacity("main", registry));
+});
+
+// --- database clone ----------------------------------------------------------
+
+test("a preview database is dropped and re-cloned from the golden template", () => {
+  const statements = cloneDatabaseStatements("pr-2034");
+  assert.match(statements[0], /pg_terminate_backend.*'ds_pr_2034'/);
+  assert.equal(statements[1], 'DROP DATABASE IF EXISTS "ds_pr_2034"');
+  assert.match(statements[2], /pg_terminate_backend.*'ds_golden'/);
+  assert.equal(
+    statements[3],
+    'CREATE DATABASE "ds_pr_2034" TEMPLATE "ds_golden"',
+  );
+});
+
+test("main is never cloned and never dropped — it is forward-migrated", () => {
+  assert.throws(() => cloneDatabaseStatements("main"), SlotError);
+  assert.throws(() => dropDatabaseStatements("main"), SlotError);
+  assert.equal(databaseAction({ slot: "main", action: "sync" }), "reuse");
+  assert.equal(
+    databaseAction({ slot: "main", action: "up", exists: true }),
+    "reuse",
+  );
+  // The very first `up main` has no database yet — bootstrap it from the template.
+  assert.equal(
+    databaseAction({ slot: "main", action: "up", exists: false }),
+    "bootstrap",
+  );
+  for (const action of ["up", "sync"]) {
+    assert.equal(databaseAction({ slot: "pr-2034", action }), "clone");
+  }
+});
+
+test("the main bootstrap clone is allowed exactly once, through its own seam", () => {
+  const statements = cloneDatabaseStatements("main", { bootstrap: true });
+  assert.equal(statements.at(-1), 'CREATE DATABASE "ds_main" TEMPLATE "ds_golden"');
+  assert.ok(!statements.some((s) => /DROP DATABASE/.test(s)));
+});
+
+test("dropping a preview database terminates its backends first", () => {
+  const statements = dropDatabaseStatements("pr-2034");
+  assert.match(statements[0], /pg_terminate_backend/);
+  assert.equal(statements[1], 'DROP DATABASE IF EXISTS "ds_pr_2034"');
+});
+
+// --- migrate + branch seed ---------------------------------------------------
+
+test("migrate and the branch golden seed run in the slot's own migrate image", () => {
+  const migrate = migrateCommandPlan("pr-2034");
+  const seed = seedCommandPlan("pr-2034");
+  for (const plan of [migrate, seed]) {
+    assert.equal(plan.command[0], "docker");
+    assert.deepEqual(plan.command.slice(0, 2), ["docker", "compose"]);
+    assert.ok(plan.command.includes("--profile"));
+    assert.ok(plan.command.includes("run"));
+    assert.ok(plan.command.includes("--rm"));
+    assert.ok(plan.command.includes("migrate"));
+    assert.ok(plan.command.includes("slot-pr-2034"));
+    // Nothing pnpm-shaped may run on the HOST (spec §3 «Host runtime»).
+    assert.notEqual(plan.command[0], "pnpm");
+  }
+  assert.deepEqual(migrate.command.slice(-3), [
+    "pnpm",
+    "run",
+    "drizzle:migrate:ci",
+  ]);
+  assert.deepEqual(seed.command.slice(-5), [
+    "pnpm",
+    "--filter",
+    "@ds/db",
+    "run",
+    "seed:golden",
+  ]);
+});
+
+// --- Caddy attach/detach + reload -------------------------------------------
+
+test("Caddy is attached to and detached from the slot's own network", () => {
+  assert.deepEqual(caddyAttachCommand("pr-2034").command, [
+    "docker",
+    "network",
+    "connect",
+    "slot-pr-2034",
+    CADDY_CONTAINER,
+  ]);
+  assert.deepEqual(caddyDetachCommand("pr-2034").command, [
+    "docker",
+    "network",
+    "disconnect",
+    "slot-pr-2034",
+    CADDY_CONTAINER,
+  ]);
+  // Re-converging an already attached slot must not fail the run.
+  assert.equal(caddyAttachCommand("pr-2034").tolerateFailure, true);
+  assert.equal(caddyDetachCommand("pr-2034").tolerateFailure, true);
+});
+
+test("the reload goes through the container's own admin API, never a restart", () => {
+  const { command } = caddyReloadCommand();
+  assert.deepEqual(command, [
+    "docker",
+    "exec",
+    CADDY_CONTAINER,
+    "caddy",
+    "reload",
+    "--config",
+    "/etc/caddy/Caddyfile",
+  ]);
+  assert.ok(!command.includes("restart"));
+});
+
+// --- the registry and the rendered Caddy includes ----------------------------
+
+test("an absent or empty registry file reads as an empty registry", () => {
+  assert.deepEqual(parseRegistry(""), emptyRegistry());
+  assert.deepEqual(parseRegistry(null), emptyRegistry());
+  assert.deepEqual(parseRegistry('{"slots":{}}'), emptyRegistry());
+  assert.throws(() => parseRegistry("{not json"), SlotError);
+});
+
+test("register and deregister are pure — the input registry is untouched", () => {
+  const before = emptyRegistry();
+  const after = registerSlot(before, {
+    slot: "pr-7",
+    sha: SHA,
+    redisDb: 7,
+    hosts: Object.values(slotHostnames("pr-7", BASE)),
+    updatedAt: "2026-09-10T00:00:00.000Z",
+  });
+  assert.deepEqual(before, emptyRegistry());
+  assert.equal(after.slots["pr-7"].sha, SHA);
+  assert.deepEqual(deregisterSlot(after, "pr-7"), emptyRegistry());
+  assert.deepEqual(deregisterSlot(emptyRegistry(), "pr-7"), emptyRegistry());
+  assert.match(serializeRegistry(after), /"pr-7"/);
+});
+
+test("the ask include answers 200 for registered hosts and for the shared IdP only", () => {
+  const registry = registerSlot(emptyRegistry(), {
+    slot: "pr-7",
+    sha: SHA,
+    redisDb: 7,
+    hosts: Object.values(slotHostnames("pr-7", BASE)),
+    updatedAt: "2026-09-10T00:00:00.000Z",
+  });
+  const rendered = renderAskInclude(registry, { baseDomain: BASE });
+  assert.match(rendered, /domain=id\.stage\.doctor\.school/);
+  assert.match(rendered, /domain=academy-pr-7\.stage\.doctor\.school/);
+  assert.match(rendered, /domain=api-pr-7\.stage\.doctor\.school/);
+  assert.match(rendered, /^respond @registered 200$/m);
+  // An unregistered slot never appears — that is what bounds ACME.
+  assert.doesNotMatch(rendered, /pr-8/);
+  // Generated: a hand edit is a bug, so the file says so.
+  assert.match(rendered, /^# generated by tools\/staging\/slot\.mjs/m);
+});
+
+test("an EMPTY registry still renders includes Caddy can parse", () => {
+  const ask = renderAskInclude(emptyRegistry(), { baseDomain: BASE });
+  const slots = renderSlotsInclude(emptyRegistry());
+  // The IdP host is registered unconditionally — it is not a slot.
+  assert.match(ask, /domain=id\.stage\.doctor\.school/);
+  assert.match(ask, /respond @registered 200/);
+  // No slot lines, but a parseable file (comments only).
+  assert.ok(!/import slot/.test(slots));
+  for (const line of slots.split("\n")) {
+    assert.ok(line === "" || line.startsWith("#"), `stray line: ${line}`);
+  }
+});
+
+test("the slots include imports exactly the registered slots, sorted", () => {
+  let registry = emptyRegistry();
+  for (const slot of ["pr-9", "main", "pr-2"]) {
+    registry = registerSlot(registry, {
+      slot,
+      sha: SHA,
+      redisDb: allocateRedisDatabase(slot, registry),
+      hosts: Object.values(slotHostnames(slot, BASE)),
+      updatedAt: "2026-09-10T00:00:00.000Z",
+    });
+  }
+  const lines = renderSlotsInclude(registry)
+    .split("\n")
+    .filter((line) => line.startsWith("import"));
+  assert.deepEqual(lines, [
+    "import slot main",
+    "import slot pr-2",
+    "import slot pr-9",
+  ]);
+});
+
+test("ask and slots are rendered from the SAME registry — they cannot drift", () => {
+  const registry = registerSlot(emptyRegistry(), {
+    slot: "pr-3",
+    sha: SHA,
+    redisDb: 3,
+    hosts: Object.values(slotHostnames("pr-3", BASE)),
+    updatedAt: "2026-09-10T00:00:00.000Z",
+  });
+  const ask = renderAskInclude(registry, { baseDomain: BASE });
+  const slots = renderSlotsInclude(registry);
+  for (const slot of Object.keys(registry.slots)) {
+    assert.ok(slots.includes(`import slot ${slot}`));
+    for (const host of registry.slots[slot].hosts) {
+      assert.ok(ask.includes(`domain=${host}`), `${host} missing from ask`);
+    }
+  }
+});
+
+// --- the per-slot env file ---------------------------------------------------
+
+test("the per-slot env file carries no secret — the password stays in stage.env", () => {
+  const env = renderSlotEnv({
+    slot: "pr-2034",
+    sha: SHA,
+    baseDomain: BASE,
+    redisDb: 4,
+  });
+  assert.doesNotMatch(env, /PASSWORD/);
+  assert.doesNotMatch(env, /DATABASE_URL/); // built by compose from POSTGRES_PASSWORD
+  assert.match(env, /^SLOT=pr-2034$/m);
+  assert.match(env, /^SLOT_SHA7=0123456$/m);
+  assert.match(env, new RegExp(`^DEPLOY_SHA=${SHA}$`, "m"));
+  assert.match(env, /^SLOT_DB=ds_pr_2034$/m);
+  assert.match(env, /^REDIS_URL=redis:\/\/redis:6379\/4$/m);
+  assert.match(
+    env,
+    /^CENTRIFUGO_URL=https:\/\/api-pr-2034\.stage\.doctor\.school$/m,
+  );
+  assert.match(env, /^IDP_ISSUER=https:\/\/id\.stage\.doctor\.school$/m);
+  assert.match(
+    env,
+    /^IDP_REDIRECT_URI=https:\/\/api-pr-2034\.stage\.doctor\.school\/auth\/callback$/m,
+  );
+  assert.match(
+    env,
+    /^MAILER_PORTAL_BASE_URL=https:\/\/academy-pr-2034\.stage\.doctor\.school$/m,
+  );
+  // Sink partitioning is by sender local part (spec §3 «Sink partitioning»).
+  assert.match(
+    env,
+    /^MAILER_SMTP_FROM=no-reply\+pr-2034@stage\.doctor\.school$/m,
+  );
+  assert.equal(slotEnvPath("pr-2034"), `${SLOT_ENV_DIR}/pr-2034.env`);
+});
+
+test("main's Redis database is 0 in the env file it gets", () => {
+  const env = renderSlotEnv({
+    slot: "main",
+    sha: SHA,
+    baseDomain: BASE,
+    redisDb: 0,
+  });
+  assert.match(env, /^REDIS_URL=redis:\/\/redis:6379\/0$/m);
+  assert.match(env, /^SLOT_DB=ds_main$/m);
+});
+
+// --- gc ----------------------------------------------------------------------
+
+test("a slot-tagged image names the slot that owns it", () => {
+  assert.equal(slotOfImageTag("pr-2034-0123456"), "pr-2034");
+  assert.equal(slotOfImageTag("main-0123456"), "main");
+  for (const bad of ["latest", "local", "pr-2034", "", undefined]) {
+    assert.equal(slotOfImageTag(bad), null);
+  }
+});
+
+test("gc removes images of unregistered slots and keeps every live one", () => {
+  const registry = registerSlot(emptyRegistry(), {
+    slot: "pr-3",
+    sha: SHA,
+    redisDb: 3,
+    hosts: Object.values(slotHostnames("pr-3", BASE)),
+    updatedAt: "2026-09-10T00:00:00.000Z",
+  });
+  const images = [
+    `${GHCR_REPO}/api:pr-3-0123456`,
+    `${GHCR_REPO}/portal:pr-3-0123456`,
+    `${GHCR_REPO}/api:pr-9-bbbbbbb`,
+    `${GHCR_REPO}/api:main-ccccccc`,
+    "caddy:2.11.4-alpine",
+  ];
+  const plan = planImageGc({ images, registry });
+  assert.deepEqual(plan.remove, [
+    `${GHCR_REPO}/api:pr-9-bbbbbbb`,
+    `${GHCR_REPO}/api:main-ccccccc`,
+  ]);
+  // Non-slot images (the shared infra) are never touched by gc.
+  assert.ok(!plan.remove.includes("caddy:2.11.4-alpine"));
+  assert.equal(plan.commands[0].tolerateFailure, true);
+});
+
+test("gc never invokes buildx — this box builds nothing", () => {
+  const plan = planImageGc({ images: [], registry: emptyRegistry() });
+  const prune = planPruneByFreeSpace({ freeBytes: 1 });
+  for (const step of [...plan.commands, ...prune.commands]) {
+    assert.ok(!step.command.includes("buildx"), step.command.join(" "));
+    assert.ok(!step.command.includes("build"), step.command.join(" "));
+  }
+});
+
+test("the unconditional prune only fires below the 10GB free-disk floor", () => {
+  assert.equal(GC_FREE_SPACE_FLOOR_BYTES, 10 * 1024 ** 3);
+  const above = planPruneByFreeSpace({
+    freeBytes: GC_FREE_SPACE_FLOOR_BYTES + 1,
+  });
+  assert.deepEqual(above.commands, []);
+  const below = planPruneByFreeSpace({
+    freeBytes: GC_FREE_SPACE_FLOOR_BYTES - 1,
+  });
+  assert.deepEqual(below.commands[0].command, [
+    "docker",
+    "image",
+    "prune",
+    "-af",
+    "--filter",
+    "until=24h",
+  ]);
+});
+
+// --- the ordered plans -------------------------------------------------------
+
+function planLabels(plan) {
+  return plan.steps.map((step) => step.label);
+}
+
+test("up: env file → clone → pull → migrate → seed → up → attach → register → reload", () => {
+  const plan = planSlotUp({
+    slot: "pr-2034",
+    sha: SHA,
+    registry: emptyRegistry(),
+    baseDomain: BASE,
+    action: "up",
+  });
+  assert.deepEqual(planLabels(plan), [
+    "write slot env",
+    "clone database",
+    "pull images",
+    "migrate",
+    "seed:golden",
+    "up -d",
+    "attach caddy",
+    "write registry",
+    "render caddy includes",
+    "reload caddy",
+  ]);
+  // The registry write happens only after the containers are up: a host that is
+  // registered before its upstream exists gets a certificate for a 502.
+  assert.ok(
+    planLabels(plan).indexOf("write registry") >
+      planLabels(plan).indexOf("up -d"),
+  );
+  assert.equal(plan.redisDb, allocateRedisDatabase("pr-2034", emptyRegistry()));
+  assert.ok(
+    plan.steps.some(
+      (step) => step.kind === "sh" && step.command.includes("pull"),
+    ),
+  );
+  // Nothing in the plan builds an image on the box.
+  for (const step of plan.steps) {
+    if (step.kind !== "sh") continue;
+    assert.ok(!step.command.includes("build"), step.command.join(" "));
+  }
+});
+
+test("sync of main forward-migrates and never clones or seeds a fresh database", () => {
+  const registry = registerSlot(emptyRegistry(), {
+    slot: "main",
+    sha: SHA,
+    redisDb: 0,
+    hosts: Object.values(slotHostnames("main", BASE)),
+    updatedAt: "2026-09-10T00:00:00.000Z",
+  });
+  const plan = planSlotUp({
+    slot: "main",
+    sha: "89abcdef89abcdef89abcdef89abcdef89abcdef",
+    registry,
+    baseDomain: BASE,
+    action: "sync",
+  });
+  assert.ok(!planLabels(plan).includes("clone database"));
+  assert.ok(planLabels(plan).includes("migrate"));
+  for (const step of plan.steps) {
+    if (step.kind !== "sql") continue;
+    assert.doesNotMatch(step.statement, /DROP DATABASE/);
+    assert.doesNotMatch(step.statement, /TEMPLATE/);
+  }
+});
+
+test("down: detach → compose down -v → drop database → deregister → reload → images", () => {
+  const registry = registerSlot(emptyRegistry(), {
+    slot: "pr-2034",
+    sha: SHA,
+    redisDb: 4,
+    hosts: Object.values(slotHostnames("pr-2034", BASE)),
+    updatedAt: "2026-09-10T00:00:00.000Z",
+  });
+  const plan = planSlotDown({ slot: "pr-2034", registry, baseDomain: BASE });
+  assert.deepEqual(planLabels(plan), [
+    "detach caddy",
+    "write registry",
+    "render caddy includes",
+    "reload caddy",
+    "compose down",
+    "drop database",
+    "remove slot images",
+    "remove slot env",
+  ]);
+  // Deregistration precedes teardown: a host must stop being certifiable before
+  // its upstream disappears.
+  assert.ok(
+    planLabels(plan).indexOf("reload caddy") <
+      planLabels(plan).indexOf("compose down"),
+  );
+  const composeDown = plan.steps.find((step) => step.label === "compose down");
+  assert.ok(composeDown.command.includes("-v"));
+  assert.equal(plan.registry.slots["pr-2034"], undefined);
+});
+
+test("down of main tears the containers down but keeps its persistent database", () => {
+  const registry = registerSlot(emptyRegistry(), {
+    slot: "main",
+    sha: SHA,
+    redisDb: 0,
+    hosts: Object.values(slotHostnames("main", BASE)),
+    updatedAt: "2026-09-10T00:00:00.000Z",
+  });
+  const plan = planSlotDown({ slot: "main", registry, baseDomain: BASE });
+  assert.ok(!planLabels(plan).includes("drop database"));
+  const composeDown = plan.steps.find((step) => step.label === "compose down");
+  assert.ok(!composeDown.command.includes("-v"));
+});
+
+// --- the executor ------------------------------------------------------------
+
+test("the executor runs every step in order through injected effects", async () => {
+  const seen = [];
+  const plan = planSlotUp({
+    slot: "pr-2034",
+    sha: SHA,
+    registry: emptyRegistry(),
+    baseDomain: BASE,
+    action: "up",
+  });
+  await runSlotPlan(plan, {
+    sql: (statement) => seen.push(["sql", statement]),
+    sh: (command) => seen.push(["sh", command.join(" ")]),
+    write: (path) => seen.push(["write", path]),
+  });
+  assert.equal(seen[0][0], "write");
+  assert.equal(seen[0][1], `${SLOT_ENV_DIR}/pr-2034.env`);
+  assert.ok(seen.some(([kind, arg]) => kind === "write" && arg === REGISTRY_PATH));
+  assert.ok(
+    seen.some(
+      ([kind, arg]) => kind === "write" && arg === `${CADDY_INCLUDE_DIR}/ask.caddy`,
+    ),
+  );
+  assert.ok(
+    seen.some(([kind, arg]) => kind === "sql" && /CREATE DATABASE/.test(arg)),
+  );
+});
+
+test("a failing step aborts the run unless it is explicitly tolerated", async () => {
+  const plan = planSlotUp({
+    slot: "pr-2034",
+    sha: SHA,
+    registry: emptyRegistry(),
+    baseDomain: BASE,
+    action: "up",
+  });
+  await assert.rejects(
+    runSlotPlan(plan, {
+      sql: () => {},
+      sh: (command) => {
+        if (command.includes("pull")) throw new Error("manifest unknown");
+        return undefined;
+      },
+      write: () => {},
+    }),
+    /manifest unknown/,
+  );
+
+  // `attach caddy` is the tolerated one — a re-converge finds it already attached.
+  let reached = false;
+  await runSlotPlan(plan, {
+    sql: () => {},
+    sh: (command) => {
+      if (command.includes("connect")) throw new Error("already exists");
+      if (command.includes("reload")) reached = true;
+      return undefined;
+    },
+    write: () => {},
+  });
+  assert.equal(reached, true);
+});
+
+// --- the CLI surface ---------------------------------------------------------
+
+test("the CLI parses the commands step 4 part 1 actually implements", () => {
+  assert.deepEqual(parseArgs(["up", "pr-2034", SHA]), {
+    command: "up",
+    slot: "pr-2034",
+    sha: SHA,
+  });
+  assert.deepEqual(parseArgs(["down", "pr-2034"]), {
+    command: "down",
+    slot: "pr-2034",
+    sha: undefined,
+  });
+  assert.deepEqual(parseArgs(["status"]), {
+    command: "status",
+    slot: undefined,
+    sha: undefined,
+  });
+  assert.deepEqual(parseArgs(["render"]), {
+    command: "render",
+    slot: undefined,
+    sha: undefined,
+  });
+  assert.throws(() => parseArgs(["up", "pr-2034"]), SlotError);
+  assert.throws(() => parseArgs(["frobnicate"]), SlotError);
+  assert.throws(() => parseArgs([]), SlotError);
+});
+
+test("reset and reset-identities refuse loudly instead of silently doing nothing", () => {
+  for (const argv of [
+    ["reset", "main"],
+    ["reset-identities", "pr-2034"],
+  ]) {
+    assert.throws(
+      () => parseArgs(argv),
+      (err) =>
+        err instanceof SlotError && /not implemented until part 2/.test(err.message),
+      argv.join(" "),
+    );
+  }
+});

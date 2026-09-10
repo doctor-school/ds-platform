@@ -429,11 +429,38 @@ Feature: Net-new web authentication producing a doctor_guest identity
   @EARS-6 @EARS-31 @happy
   Scenario: Native login OTP uses the shared Postbox relay without entering BFF failover
     Given the shared real SMTP configuration selects Postbox
-    And the Zitadel SMTP reconcile has applied the stable real transactional sender
+    And deployment has verified and activated the separate stable Postbox profile
+    And the original mail.ru profile ID and settings remain retained
     When a verified user requests an email login OTP
     Then Zitadel generates, renders and sends the existing login email through Postbox
     And the BFF does not send a duplicate or invoke its Resend fallback
     And generation, verification and email content remain unchanged
+
+  @EARS-6 @EARS-31 @failure
+  Scenario: A successful native SMTP write without converged readback cannot activate a release
+    Given a candidate SMTP create or activation returned success
+    And its projected metadata or active ID does not match the intended configuration
+    When the bounded convergence budget expires
+    Then deployment fails before replacing the running application
+    And any changed native selection is restored to the retained original ID
+    And a profile test response alone is not treated as native delivery proof
+
+  @EARS-6 @EARS-31 @failure
+  Scenario: Production runtime cannot race deployment by activating another SMTP profile
+    Given production SMTP is deployment-owned after the compatibility release
+    When startup, SDK synchronization or any flag change triggers reconciliation
+    Then runtime validates SMTP without activating a profile
+    And a false email-real flag causes a configuration error without selecting Mailpit
+    And affected BFF sends fail internally with enumeration-safe responses unchanged
+    And SMS reconciliation and nonproduction intercept behavior remain unchanged
+
+  @EARS-6 @EARS-31 @happy
+  Scenario: A controlled rollback uses the retained mail.ru identity
+    Given the separate Postbox profile is active
+    When controlled rollback restores the coherent previous configuration
+    Then deployment reactivates the original mail.ru ID without updating its credentials
+    And a real native notification and a BFF send are verified through mail.ru
+    And both profile IDs remain available without duplicate creation
 
   @EARS-30 @failure
   Scenario: The one-time code never reaches the logs

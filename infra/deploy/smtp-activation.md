@@ -1,61 +1,69 @@
-# Transactional SMTP configuration and controlled activation
+﻿# Transactional SMTP configuration and controlled activation
 
 Release blocker [#2116](https://github.com/doctor-school/ds-platform/issues/2116)
-owns production secret injection and activation of the merged
-[003 contract](../../apps/docs/content/specs/features/003-user-authentication/003-design.md#143-transport-chain--explicit-postbox-primary-dormant-optional-resend-10592115).
-Code merge does not switch production. Complete the required owner release gate
-before any production configuration or provisioning write.
+owns activation and received-artifact evidence. The native-profile migration is a
+**draft pending owner decision and implementation**:
+[EN design](../../apps/docs/content/specs/tech/2026-09-10-postbox-native-smtp-profile-design-en.md) /
+[RU design](../../apps/docs/content/specs/tech/2026-09-10-postbox-native-smtp-profile-design-ru.md).
+Do not execute production writes from this documentation before those gates.
 
-## Deployment preparation
+Keep coherent mail.ru selection in the protected production environment while
+preparing: `IDP_SMTP_REAL_PROVIDER=mail.ru`, `IDP_SMTP_REAL_HOST=smtp.mail.ru:465`
+and existing credentials/sender. Postbox uses `postbox` and
+`postbox.cloud.yandex.net:465`, sharing existing API key credentials between BFF
+and its separate native profile. No new Yandex account/key is required.
+Keep certificate verification enabled and `RESEND_ENABLED=false`.
 
-Before deploying this configuration revision, explicitly select the intended
-provider in `/etc/ds-platform/api.env` (root:root 0600). Keeping mail.ru selected
-is supported: `IDP_SMTP_REAL_PROVIDER=mail.ru`, `IDP_SMTP_REAL_HOST=smtp.mail.ru:465`
-and the existing complete credentials/sender. An absent provider now fails in real
-mode; updating the example does not update existing production files. Record this
-compatibility migration under #2116 before the next deployment.
+## Required implementation before activation
 
-For Postbox set `IDP_SMTP_REAL_PROVIDER=postbox` and
-`IDP_SMTP_REAL_HOST=postbox.cloud.yandex.net:465`. Shared `IDP_SMTP_REAL_USER` and
-`IDP_SMTP_REAL_PASSWORD` carry the API key ID and secret; `IDP_SMTP_REAL_SENDER_ADDRESS`
-is the authorized sender. Keep TLS certificate/hostname verification enabled. Do
-not add a second Zitadel credential set. Leave `RESEND_ENABLED=false`; a stored
-Resend key alone is inert. Enabling that BFF-only fallback requires the recorded
-data-processing decision and valid credentials.
+1. Land the owner-chosen profile contract, implement it with TDD, and complete
+   independent review plus canonical landing. Preserve #2151 protection: native
+   convergence must be proved before migration/application replacement.
+2. Deploy the compatibility ownership change with mail.ru selected: production
+   runtime validates native SMTP and cannot activate profiles on flag signals.
+   Canonical deployment owns SMTP activation. This prevents the old API from
+   reactivating mail.ru during cutover; merely freezing one flag fails.
+3. Record deployment/release readiness and applicable owner authorization.
+   Previous single-use release exceptions do not authorize another release.
 
-## Controlled converge and evidence
+## Controlled sequence after implementation
 
-1. Securely retain the deliberate previous env configuration for rollback, without
-   printing secrets or attaching them to logs/issues. Record the current stable
-   SMTP provider ID and public configuration privately. No DB reset is required.
-2. Inject the complete coherent selected env through the normal secret contract.
-   Run the committed `infra/dev-stand/idp/provision.sh` using the root-sourced env
-   and existing bootstrap PAT, following the general deploy runbook's provisioning
-   command. It updates `real transactional sender` in place, never creates a new
-   provider merely because its host changed. Provisioning updates may take effect
-   immediately on an active provider; use the controlled activation window.
-3. Read back the SMTP identity: exactly one stable description, same ID, intended
-   host:465/sender/username, TLS enabled and active state. The API never returns the
-   password; do not interpret an omitted secret as proof of equality. The managed
-   `pnpm deploy:prod` pipeline requires provisioner readback before migration or
-   application replacement. Confirm runtime reconciliation after the swap.
-   A successful SMTP update response with unchanged readback is a failed converge:
-   inspect Zitadel failed projection events before any retry. In particular,
-   `projections.smtp_configs6` can reject a persisted change with SQLSTATE 42601
-   (duplicate password assignment, #2149). Do not force a second identity, toggle
-   metadata to manufacture another event, or bypass the API startup guard.
-4. Exercise controlled BFF register/resend/reset and native verified-account login
-   OTP. Verify unchanged UTF-8, expiry and link-free BFF artifacts. Observe native
-   failures in Zitadel separately: Resend failover and BFF deadlines do not cover it.
-   An API reconcile error cannot stop independently scheduled IdP messages.
-5. Record provider acceptance, received authentication headers and mailbox placement
-   separately. Never publish OTPs, recipient addresses, subjects/bodies or secrets.
-   Microsoft evidence remains #1120; allow-list-assisted Inbox placement is not a pass.
-   Approved quota and measured headroom are prerequisites for the mass-registration
-   ramp; pilot acceptance alone does not close #1059.
+Use only the committed canonical deployment entry point. Securely preserve the
+complete old environment, original active SMTP ID and public metadata; never log
+secrets. Existing mail.ru keeps `real transactional sender`.
 
-Rollback restores the complete previous provider/host/credentials/sender selection,
-re-runs the same provisioner to converge the same identity, then confirms public
-readback and both native/BFF journeys through the approved deployment procedure.
-Never use Mailpit as a real-delivery fallback, create duplicate provider identities,
-or disable certificate validation to complete rollback.
+Search all SMTP pages for exactly one `real transactional sender:postbox` profile.
+Create it inactive only if absent; reuse an exact match without PUT. Duplicate,
+mismatched or ambiguously created profiles fail closed. Read exact candidate
+metadata before a controlled by-ID test. A successful response alone is not
+convergence; use the design's absolute 120-second readiness budget.
+
+Activate the candidate without first deactivating mail.ru. Verify intended active
+ID and metadata before migration/replacement, then check again after application
+readiness. During the bounded cutover the compatibility BFF still uses mail.ru
+until replacement, while native delivery uses Postbox. This is not completed
+activation. Verify controlled register/resend/reset and actual native login OTP.
+
+Any failure after native activation restores the original ID, including failures
+before application replacement. Restore coherent previous BFF environment before
+restarting the previous application, and verify both actual send paths. Retain
+both profile IDs after success or rollback; do not delete/recreate profiles.
+
+## Projection failure and evidence
+
+Pinned Zitadel v4.15.0 can persist a password update while its SMTP projection
+fails with SQLSTATE 42601 (duplicate password assignment). The old ID's by-ID test
+reads the event write model, whereas actual native delivery uses the query
+projection. Therefore `_test` of that ID cannot certify mail.ru rollback. Prove
+the native notification itself. The isolated rehearsal reproduces delayed
+projection progress and why immediate CREATE/activate success is unsafe.
+
+Do not update existing-profile metadata/passwords, replay/reset the projection,
+toggle fields to manufacture an event, blindly retry CREATE or upgrade the IdP.
+An exhausted readback deadline stops the deploy; it never disables the API guard.
+
+Record SMTP acceptance, received authentication headers and mailbox placement
+separately, with no recipient addresses, OTPs, subjects/bodies or secrets in
+published evidence. Microsoft remains #1120; allow-list-assisted Inbox placement
+is not a pass. Approved quota/headroom precedes mass registration. #2144/#2145
+are independent and are not implemented by this procedure.

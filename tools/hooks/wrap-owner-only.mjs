@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-/** /wrap is owner-initiated. Claude Read/Skill/Agent/Task plus Codex spawn_agent
- * and recognized shell skill reads are gated. Owner text supports Claude user
+/** Workflow execution is owner-initiated. Skill/Agent/Task and Codex dispatch
+ * are gated by action; documentation reads are not execution. Owner text supports Claude user
  * entries and Codex user_message events / response_item user input_text,
  * never tool outputs or assistant text.
  * Relevant wrap without readable authorization is denied. Legacy Claude child
@@ -8,17 +8,9 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import {
-  shellCommand,
-  normalizeToolName,
-  isNewDispatchTool,
-} from "./hook-compat.mjs";
+import { normalizeToolName, isNewDispatchTool } from "./hook-compat.mjs";
 
 export const WRAP_SKILL_NAMES = new Set(["wrap", "run-wrap", "wrap-init"]);
-
-/** Skill files whose `Read` opens the wrap procedure or its retro stage. */
-export const WRAP_SKILL_PATH_RE =
-  /skills\/(?:run-wrap|run-session-retro)\/SKILL\.md$/i;
 
 /** A dispatch brief that names the session retro (stage 1 of run-wrap). */
 export const RETRO_DISPATCH_RE =
@@ -29,19 +21,15 @@ export const RETRO_DISPATCH_RE =
 export const OWNER_WRAP_RE =
   /<command-name>\/wrap(?:-init)?<\/command-name>|(?:^|\s)\/wrap(?:-init)?(?=\s|$)/m;
 
-export function isWrapInitiation(toolName, toolInput) {
+/** Classify explicit workflow invocations; inspecting documentation is not execution. */
+export function workflowKind(toolName, toolInput) {
   const input = toolInput && typeof toolInput === "object" ? toolInput : {};
   if (toolName === "Skill") {
-    return WRAP_SKILL_NAMES.has(
-      String(input.skill || "")
-        .trim()
-        .toLowerCase(),
-    );
-  }
-  if (toolName === "Read") {
-    return WRAP_SKILL_PATH_RE.test(
-      String(input.file_path || "").replace(/\\/g, "/"),
-    );
+    const name = String(input.skill || "")
+      .trim()
+      .toLowerCase();
+    if (WRAP_SKILL_NAMES.has(name)) return "wrap";
+    return name === "run-session-retro" ? "retro" : null;
   }
   if (
     isNewDispatchTool(toolName) ||
@@ -50,19 +38,20 @@ export function isWrapInitiation(toolName, toolInput) {
     const text = [input.prompt, input.description, input.message]
       .filter((v) => typeof v === "string")
       .join("\n");
-    return RETRO_DISPATCH_RE.test(text);
+    if (/\brun-wrap\b|(?:^|\s)\/wrap(?:-init)?(?=\s|$)/i.test(text))
+      return "wrap";
+    if (RETRO_DISPATCH_RE.test(text)) return "retro";
   }
-  if (/^(Bash|exec_command)$/.test(toolName)) {
-    const command = String(shellCommand(input) || "").replace(/\\/g, "/");
-    return /(?:Get-Content|cat|type|readFileSync|readFile)\b[^\n]*skills\/(?:run-wrap|run-session-retro)\/SKILL\.md/i.test(
-      command,
-    );
-  }
-  return false;
+  return null;
+}
+
+export function isWrapInitiation(toolName, toolInput) {
+  return workflowKind(toolName, toolInput) !== null;
 }
 
 /** Owner-authored text of one transcript entry — `null` for anything else. */
 export function ownerText(entry) {
+  if (entry?.isMeta || entry?.isCompactSummary) return null;
   if (entry?.type === "event_msg" && entry?.payload?.type === "user_message") {
     return typeof entry.payload.message === "string"
       ? entry.payload.message
@@ -92,36 +81,83 @@ export function ownerText(entry) {
   return parts.length ? parts.join("\n") : null;
 }
 
-export function ownerRequestedWrap(jsonl) {
+/** Conservative request grammar, not a natural-language authorization engine.
+ * Strip quoted examples and known injected context before recognizing imperatives. */
+function requestText(text) {
+  if (
+    /^\s*#\s*(?:AGENTS\.md instructions|Agent bootstrap)|^\s*You are continuing/im.test(
+      text,
+    )
+  )
+    return "";
+  return text
+    .replace(
+      /<(?:environment_context|INSTRUCTIONS|system-reminder|task-notification)\b[^>]*>[\s\S]*?<\/(?:environment_context|INSTRUCTIONS|system-reminder|task-notification)>/gi,
+      "",
+    )
+    .replace(/```[\s\S]*?```|~~~[\s\S]*?~~~/g, "")
+    .replace(/^\s*>.*$/gm, "")
+    .replace(/`[^`]*`|"[^"\n]*"|«[^»]*»|“[^”]*”/g, "");
+}
+
+function ownerRequested(jsonl, kind) {
   for (const line of String(jsonl || "").split(/\r?\n/)) {
-    const trimmed = line.trim();
-    if (!trimmed || !trimmed.includes("/wrap")) continue; // cheap pre-filter
     let entry;
     try {
-      entry = JSON.parse(trimmed);
+      entry = JSON.parse(line);
     } catch {
       continue;
     }
-    const text = ownerText(entry);
-    if (text && OWNER_WRAP_RE.test(text)) return true;
+    const raw = ownerText(entry);
+    if (!raw) continue;
+    const text = requestText(raw);
+    if (
+      kind === "wrap" &&
+      /^\s*<command-name>\/wrap(?:-init)?<\/command-name>/m.test(text)
+    )
+      return true;
+    for (const candidate of text.split(/\r?\n/)) {
+      const request = candidate.trim();
+      if (kind === "wrap" && /^\/wrap(?:-init)?[.!]?$/i.test(request))
+        return true;
+      // The verb must directly target the workflow, not a check or discussion of it.
+      const target = request.match(
+        /^(?:(?:please|ok(?:ay)?|окей|пожалуйста)[, .]+)*(?:run|perform|conduct|do|проведи|сделай|давай|запусти)\s+(?:(?:a|the|full|полный|полноценный|поноценный|независимый)\s+)?(.+)$/i,
+      )?.[1];
+      if (!target) continue;
+      if (kind === "wrap" && /^\/wrap(?:-init)?(?=\s|[.!]?$)/i.test(target))
+        return true;
+      if (
+        kind === "retro" &&
+        /^(?:session retro|retrospective|run-session-retro|ретро)(?=\s|[.!]?$)/i.test(
+          target,
+        )
+      )
+        return true;
+    }
   }
   return false;
 }
 
+export function ownerRequestedWrap(jsonl) {
+  return ownerRequested(jsonl, "wrap");
+}
+
 export function decide({ toolName, toolInput, jsonl }) {
-  if (!isWrapInitiation(toolName, toolInput)) return { action: "silent" };
-  if (ownerRequestedWrap(jsonl)) return { action: "silent" };
+  const kind = workflowKind(toolName, toolInput);
+  if (!kind || ownerRequestedWrap(jsonl)) return { action: "silent" };
+  if (kind === "retro" && ownerRequested(jsonl, "retro"))
+    return { action: "silent" };
   return { action: "deny" };
 }
 
 export function denyMessage(toolName) {
   return (
-    `⛔ wrap-owner-only (#1746): /wrap запускает только владелец, а в транскрипте ` +
-    `этой сессии его команды /wrap нет — шаг «${toolName}» открывает wrap/ретро ` +
-    `и заблокирован. Просьба о handoff = skill handoff-prompt: только промпт, ` +
-    `без ретро и без правок инструкций. Для wrap ничего не делай; если владелец ` +
-    `хочет ретро, он может написать обычное сообщение: «Проведи /wrap для этой сессии.». ` +
-    `Отдельная slash-команда /wrap в Codex может быть не зарегистрирована.`
+    `wrap-owner-only (#2155): ${toolName} requests a workflow without readable owner authorization. ` +
+    `Standalone retro needs an explicit analysis request; full wrap needs the owner's /wrap ` +
+    `(for example: Проведи /wrap для этой сессии.). ` +
+    `A handoff request uses handoff-prompt only. Documentation reads need neither. ` +
+    `Analysis consent does not authorize instruction or memory edits.`
   );
 }
 

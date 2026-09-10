@@ -19,10 +19,25 @@
 #
 # Upstream ports mirror production (api 3000, portal 3001, admin 3002, doctor 3004,
 # centrifugo 8000, zitadel core 8080 h2c, login 3000). Slot containers are reached
-# by the compose name `<slot>-<service>` on the slot network `slot up` attaches this
-# container to (step 4, #2064 — that script must publish exactly that alias). Until
-# a slot is up its hosts answer 401 (no credentials) or 502 (credentials, no
-# upstream) — never a certificate error and never an indexable page.
+# by the container name `<slot>-<service>` on the slot network `slot up` attaches
+# this container to — `containerAliases` in tools/staging/slot.mjs, published as
+# `container_name` by infra/deploy/compose/slot/compose.yml. Until a slot is up its
+# hosts answer 401 (no credentials) or 502 (credentials, no upstream) — never a
+# certificate error and never an indexable page.
+#
+# GENERATED INCLUDES. Two files under /etc/caddy/slots (host path
+# /etc/ds-platform/caddy, mounted read-only by compose.yml) are rendered by
+# `tools/staging/slot.mjs` from ONE slot registry and are never edited by hand:
+#   - `ask.caddy`   — the on-demand-TLS allow list (the 127.0.0.1:2020 site below);
+#   - `slots.caddy` — one `import slot <name>` line per live slot.
+# They move in lockstep because they come from the same registry. `slot render`
+# writes both (comment-only files when no slot is up), so this Caddyfile parses on
+# a box where nothing has been deployed yet — run it once before the first bring-up.
+#
+# HOSTNAMES come from `{$STAGE_BASE_DOMAIN}` (/etc/ds-platform/stage.env, passed in
+# by compose.yml → caddy.environment). `slot.mjs` reads the SAME variable to derive
+# the literal hosts it writes into the includes: one variable, two consumers, one
+# value.
 {
 	# ACME contact for expiry notices — same as production.
 	email a@preencipium.com
@@ -33,8 +48,8 @@
 	admin localhost:2019
 
 	# On-demand issuance is gated by the `ask` endpoint served by this same Caddy on
-	# an unpublished port (the :2020 site below). Step 4 (#2064) replaces that stub
-	# with the slot registry: 200 only for hosts of currently registered slots.
+	# a loopback-only port (the 127.0.0.1:2020 site below): 200 only for the hosts of
+	# currently registered slots, straight from the rendered registry include.
 	on_demand_tls {
 		ask http://127.0.0.1:2020/ask
 	}
@@ -56,28 +71,29 @@
 	}
 }
 
-# One slot = four vhosts. `import slot <name>` per registered slot; the slot script
-# (#2064) adds/removes these lines and reloads.
+# One slot = four vhosts. The `import slot <name>` lines live in the GENERATED
+# `slots.caddy` include, rendered from the slot registry by `slot up` / `slot down`,
+# which then reload this config.
 (slot) {
-	@academy_{args[0]} host academy-{args[0]}.stage.doctor.school
+	@academy_{args[0]} host academy-{args[0]}.{$STAGE_BASE_DOMAIN}
 	handle @academy_{args[0]} {
 		import staging_basic_auth
 		reverse_proxy {args[0]}-portal:3001
 	}
 
-	@doctor_{args[0]} host doctor-{args[0]}.stage.doctor.school
+	@doctor_{args[0]} host doctor-{args[0]}.{$STAGE_BASE_DOMAIN}
 	handle @doctor_{args[0]} {
 		import staging_basic_auth
 		reverse_proxy {args[0]}-doctor:3004
 	}
 
-	@admin_{args[0]} host admin-{args[0]}.stage.doctor.school
+	@admin_{args[0]} host admin-{args[0]}.{$STAGE_BASE_DOMAIN}
 	handle @admin_{args[0]} {
 		import staging_basic_auth
 		reverse_proxy {args[0]}-admin:3002
 	}
 
-	@api_{args[0]} host api-{args[0]}.stage.doctor.school
+	@api_{args[0]} host api-{args[0]}.{$STAGE_BASE_DOMAIN}
 	handle @api_{args[0]} {
 		# Centrifugo path families — the single basic-auth exemption on a slot
 		# (spec §3): browser websocket + the api's key-gated publish path.
@@ -96,32 +112,36 @@
 
 # --- ask endpoint (on-demand TLS gate) -----------------------------------------
 
-# Caddy calls `GET /ask?domain=<name>` before issuing. STEP 2 STUB: the shared IdP
-# host and the `main` slot family are the only registered names; step 4 (#2064)
-# turns this into the slot registry.
-:2020 {
-	@registered query domain=id.stage.doctor.school domain=academy-main.stage.doctor.school domain=doctor-main.stage.doctor.school domain=admin-main.stage.doctor.school domain=api-main.stage.doctor.school
-	respond @registered 200
+# Caddy calls `GET /ask?domain=<name>` before issuing. The allow list is the
+# GENERATED `ask.caddy` include — the shared IdP host plus every host of every
+# registered slot; anything else falls through to the 404 and never reaches ACME.
+#
+# Bound to 127.0.0.1, not `:2020`: this container is attached to every slot network,
+# so an unbound listener would expose the registry to code running inside a preview.
+# Caddy dials its own `ask` over the container loopback, which 127.0.0.1 serves.
+127.0.0.1:2020 {
+	import /etc/caddy/slots/ask.caddy
 	respond 404
 }
 
 # --- port 80 -----------------------------------------------------------------
 
-# Plain HTTP: the box liveness probe by IP, ACME HTTP-01 (handled by Caddy before
-# routing), and a permanent redirect to HTTPS for staging hosts. Anything else is a
-# blunt 404 so this IP never looks like a misconfigured production host.
+# Plain HTTP: the box liveness probe by IP and ACME HTTP-01 (handled by Caddy before
+# routing). Anything else is a blunt 404 so this IP never looks like a misconfigured
+# production host.
+#
+# No explicit redirect to HTTPS here: automatic HTTPS already answers 308 for every
+# host the wildcard site below matches, before this site is consulted, so a
+# `redir @stage … permanent` line would be config that never runs (#2153 review).
 :80 {
 	respond /healthz "ok" 200
-
-	@stage host *.stage.doctor.school
-	redir @stage https://{host}{uri} permanent
 
 	respond "stage-1 edge: unknown host" 404
 }
 
 # --- HTTPS: every staging host ------------------------------------------------
 
-*.stage.doctor.school {
+*.{$STAGE_BASE_DOMAIN} {
 	tls {
 		on_demand
 	}
@@ -130,7 +150,7 @@
 	# Shared IdP — Zitadel core + Login V2 under one origin, production shape
 	# (infra/deploy/compose/api-prod/Caddyfile → id.doctor.school). Not behind basic
 	# auth: see the header of this file.
-	@id host id.stage.doctor.school
+	@id host id.{$STAGE_BASE_DOMAIN}
 	handle @id {
 		handle /ui/v2/login/* {
 			reverse_proxy idp-login:3000
@@ -140,8 +160,9 @@
 		}
 	}
 
-	# Registered slots.
-	import slot main
+	# Registered slots — one import line per live slot, generated from the registry
+	# (see «GENERATED INCLUDES» in the header).
+	import /etc/caddy/slots/slots.caddy
 
 	# A host under the wildcard that no slot owns: still guarded, still noindex.
 	handle {

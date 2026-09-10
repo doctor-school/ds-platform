@@ -128,28 +128,42 @@ behind the owner-managed wildcard A record (added in the Beget zone 2026-09-10,
 → `200.169.178.154`).
 
 - **On-demand TLS.** No certificate is pre-issued. Caddy asks
-  `http://127.0.0.1:2020/ask` before every ACME order; the `:2020` site is a stub
-  that answers 200 for exactly `id`, `academy-main`, `doctor-main`, `admin-main`,
-  `api-main` and 404 for anything else. Step 4 (#2064) replaces that stub with the
-  slot registry. An unregistered name under the wildcard therefore fails the TLS
-  handshake instead of burning a Let's Encrypt issuance slot.
+  `http://127.0.0.1:2020/ask` before every ACME order, and the allow list is the
+  generated `ask.caddy` include — the shared `id` host plus every host of every
+  registered slot (see «Slots (#2064)» below). An unregistered name under the
+  wildcard therefore fails the TLS handshake instead of burning a Let's Encrypt
+  issuance slot. The site is bound to `127.0.0.1:2020`, not `:2020`: this container
+  is attached to every slot network, so an unbound listener would hand the registry
+  to code running inside a preview.
 - **noindex.** The `(staging_guard)` snippet sets `X-Robots-Tag: noindex, nofollow`
   on the wildcard site, so it rides every response — 200, 401, 404 alike.
 - **Basic auth.** ONE pair for the whole stand, `STAGE_BASIC_AUTH_USER` +
   `STAGE_BASIC_AUTH_HASH` (bcrypt, `caddy hash-password`). The values come from
   `/etc/ds-platform/stage.env` and are handed to the container by the `environment:`
   block of the `caddy` service in `compose.yml` — `env_file:` alone would not reach
-  Caddy's `{$VAR}` placeholders in a way the config reload keeps stable.
-- **`(slot)` snippet + `import slot main`.** One `import` line = four vhosts
-  (`academy-`, `doctor-`, `admin-`, `api-<slot>`). #2064 adds and removes those
-  lines and reloads through the loopback admin API.
+  Caddy's `{$VAR}` placeholders in a way the config reload keeps stable. The
+  cleartext pair the operator types lives beside it in
+  `/etc/ds-platform/stage-basic-auth.txt`, **`0600 root:root`**, the same mode and
+  owner as `stage.env`: it is a live credential, not a note.
+- **Base domain.** The site address `*.{$STAGE_BASE_DOMAIN}`, the `id` vhost and the
+  `(slot)` snippet all read `STAGE_BASE_DOMAIN` from `stage.env` via the `caddy`
+  service's `environment:` block. `tools/staging/slot.mjs` reads the SAME variable to
+  derive the literal hosts it writes into the generated includes — one variable, two
+  consumers, one value. Change it in `stage.env` and both sides follow.
+- **`(slot)` snippet + the generated `import slot <name>` lines.** One `import` line
+  = four vhosts (`academy-`, `doctor-`, `admin-`, `api-<slot>`). Those lines are
+  never typed: they live in `slots.caddy`, rendered from the slot registry by
+  `slot up` / `slot down`, which then reload through the loopback admin API.
 - **`id` vhost.** The shared Zitadel: `/ui/v2/login/*` → `idp-login:3000`, everything
   else → `h2c://idp:8080`, the production shape of `id.doctor.school`.
 
-**Alias contract for #2064 (not implemented here).** The `(slot)` snippet proxies to
-the container names `<slot>-portal:3001`, `<slot>-doctor:3004`, `<slot>-admin:3002`,
-`<slot>-api:3000`, `<slot>-centrifugo:8000`. `slot up` MUST publish exactly those
-aliases on the `stg-infra` network (`main-portal`, `main-api`, …) or the vhost answers 502.
+**Alias contract — satisfied since #2064 part 1.** The `(slot)` snippet proxies to the
+container names `<slot>-portal:3001`, `<slot>-doctor:3004`, `<slot>-admin:3002`,
+`<slot>-api:3000`, `<slot>-centrifugo:8000`. `infra/deploy/compose/slot/compose.yml`
+publishes exactly those as `container_name: ${SLOT}-<service>` on the slot's own
+network `slot-<slot>`, which `slot up` attaches this Caddy container to; the same five
+names are derived and unit-tested as `containerAliases()` in `tools/staging/slot.mjs`.
+Changing either side alone silently 502s the whole slot.
 
 **The two basic-auth exemptions** — and only two, both because the caller carries no
 browser credentials and authenticates by its own mechanism:
@@ -297,14 +311,91 @@ Two standing rules come with the shared instance (spec §3 «Identity»):
   sends the URI set as a whole, so a partial list silently drops the others. This has
   bitten production twice (`infra/deploy/README.md`).
 
+## Slots (#2064)
+
+A **slot** is one deployed copy of the platform: `main` (the persistent staging copy
+of `origin/main`) or `pr-<N>` (a preview of one open PR). Its compose project is
+`infra/deploy/compose/slot/compose.yml`, one file for every slot, driven only by
+`tools/staging/slot.mjs` — the box has no workspace checkout, so the script runs on
+the pinned host Node under `/opt/node`.
+
+```bash
+node /opt/ds-platform/tools/staging/slot.mjs render            # write both Caddy includes
+node /opt/ds-platform/tools/staging/slot.mjs up   main <sha>   # first bring-up / converge
+node /opt/ds-platform/tools/staging/slot.mjs sync pr-2064 <sha>  # re-converge to a new SHA
+node /opt/ds-platform/tools/staging/slot.mjs down pr-2064      # tear down, drop the database
+node /opt/ds-platform/tools/staging/slot.mjs status            # the registry, as a table
+node /opt/ds-platform/tools/staging/slot.mjs gc                # reclaim unregistered images
+```
+
+`reset main` and `reset-identities <slot>` are part 2 of #2064; the CLI **refuses**
+them today with an explicit «not implemented until part 2» error rather than
+silently doing nothing.
+
+**One registry, two rendered includes.** `/var/lib/ds-platform/slots.json` is the
+single source of truth (`{ slots: { "<name>": { sha, redisDb, hosts, updatedAt } } }`).
+From it the script renders, and Caddy mounts read-only from
+`/etc/ds-platform/caddy` → `/etc/caddy/slots`:
+
+| file          | what it carries                                  | consumed by                   |
+| ------------- | ------------------------------------------------ | ----------------------------- |
+| `ask.caddy`   | the on-demand-TLS allow list (`id` + slot hosts) | the `127.0.0.1:2020` ask site |
+| `slots.caddy` | one `import slot <name>` line per live slot      | the wildcard HTTPS site       |
+
+The two move in **lockstep** because they come from the same registry, and neither is
+ever edited by hand — a hand-added vhost whose host is not in `ask.caddy` cannot get a
+certificate, and a certificate for a host with no vhost is a wasted issuance.
+
+**`slot render` before the first bring-up.** Caddy fails to start if either include is
+missing, so run `slot render` once (an empty registry yields comment-only files that
+parse fine) before `docker compose up -d caddy` on a fresh box. `up` / `sync` / `down`
+call the same renderer and then reload Caddy through the loopback admin API — never
+`restart caddy`, which would drop live connections and re-read certificates.
+
+**What a converge does, in order.** Write the per-slot env file → clone the database
+from `ds_golden` (never for `main`, which is persistent and forward-migrated) → pull
+the five images → migrate → branch seed → `up -d` → attach this Caddy to the slot
+network → register the slot → re-render both includes → reload. Registration happens
+strictly AFTER the containers are up, and de-registration strictly BEFORE teardown, so
+a registered host always has an upstream.
+
+**Secrets stay in one file.** `/etc/ds-platform/slots/<slot>.env` is generated and
+carries only non-secret values (`SLOT`, `SLOT_SHA7`, `SLOT_DB`, `DEPLOY_SHA`,
+`REDIS_URL`, the public URLs, `IDP_ISSUER`, `MAILER_SMTP_FROM`). `DATABASE_URL` is
+**not** written there: the slot compose assembles it from `stage.env`'s
+`POSTGRES_PASSWORD` and the slot's `SLOT_DB`, so `POSTGRES_PASSWORD` exists in exactly
+one file on the box.
+
+**Sizing.** `main` plus at most **3** previews (`up` refuses the fourth). Redis
+databases are exclusive: `main` owns 0, a preview starts at `1 + (N % 15)` and linear-
+probes to the next free database — two slots never share one, and a collision moves the
+newcomer instead of dead-ending its converge.
+
+**Building images.** The box never builds. Dispatch
+`.github/workflows/preview.yml` («Preview images») with the full SHA and the slot
+name; it pushes `ghcr.io/doctor-school/ds-platform/{api,api-migrate,portal,doctor,admin}:<slot>-<sha7>`,
+which is exactly what `slot up` pulls. The SmartCaptcha SITE key is baked at build
+time from the repository variable `STAGE_SMARTCAPTCHA_SITE_KEY` (empty until the owner
+provisions it with the separate stage-captcha task — empty renders the inactive
+placeholder, and an image built before it was set must be rebuilt).
+
+**Disk.** `slot gc` removes slot-tagged images whose slot is not in the registry, and
+only then, if free space on `/var/lib/docker` is below **10 GB**, additionally runs
+`docker image prune -af --filter until=24h`. That is the same figure production uses
+as `BUILD_CACHE_RESERVED_SPACE` in `tools/deploy/prod.mjs`, by a **different
+mechanism**: on api-prod it is a BuildKit cache cap (`buildx prune --reserved-space`),
+here it is a free-disk floor, because this box never builds and has no BuildKit cache
+to cap. `slot gc` never calls `buildx`.
+
 ## Slot deployer — not part of this bring-up
 
 No CI agent runs on this box. The repository is **public**, so no job of it may ever
 execute here; images are built and the regression suite runs on GitHub-hosted runners
 (spec §5). What converges slots is a pull-based deployer: the systemd unit pair
-`ds-slot-deployer.service` and `ds-slot-deployer.timer`, delivered together with
-`tools/staging/slot.mjs` by **step 4 (#2064)** and installed then — not by `cloud-init`
-and not here. That same step also installs the box's only host runtime, a pinned Node
+`ds-slot-deployer.service` and `ds-slot-deployer.timer`, which wrap the `slot`
+commands above. They are **part 2 of step 4 (#2064)** and are installed then — not by
+`cloud-init` and not here; part 1 landed only `tools/staging/slot.mjs` and the compose
+project it drives, both usable by hand. Part 2 also installs the box's only host runtime, a pinned Node
 LTS from the official `nodejs.org` tarball under `/opt/node` (no `pnpm`, no workspace
 checkout on the host). Every 60 s the timer reads the open non-draft PRs and the `main`
 head from GitHub, checks the GHCR tags exist, and brings slots up, in sync or down.

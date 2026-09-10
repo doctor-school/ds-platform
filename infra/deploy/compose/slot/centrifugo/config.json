@@ -1,0 +1,18 @@
+{
+  "//": "DS Platform STAGE slot — Centrifugo v6 config, one instance per slot (#2064, tech spec 2026-09-08 §3 «Slots»). NON-SECRET, SLOT-AGNOSTIC shape only: one committed file serves `main` and every `pr-<N>`.",
+  "//secrets": "Injected as env vars from /etc/ds-platform/stage.env via compose `environment:` under Centrifugo's native names: CENTRIFUGO_HTTP_API_KEY (= the api's CENTRIFUGO_API_KEY) and CENTRIFUGO_CLIENT_TOKEN_HMAC_SECRET_KEY (= the api's CENTRIFUGO_TOKEN_HMAC_SECRET). Env overrides config, so no placeholder value lives here — a missing env var fail-closes (no valid token, no authorized publish) instead of falling back to a committed default. Same contract as infra/deploy/compose/api-prod/centrifugo/config.json.",
+  "//origins": "Deliberately ABSENT from this file. The browser origins are the slot's own storefront hosts (academy-<slot>/doctor-<slot>.<STAGE_BASE_DOMAIN>), which differ per slot, so compose.yml supplies them through CENTRIFUGO_CLIENT_ALLOWED_ORIGINS. Pinning them per slot is what keeps a preview's page from opening a socket against another slot's Centrifugo; the dev-stand's \"*\" is a dev-only convenience and is NOT used here.",
+  "//channel": "Identical `room` namespace contract to production and the dev stand (006 EARS-3): clients are subscribed server-side via the token's `channels` claim, can NEVER publish (every post rides the api's gated PostChatMessage over the HTTP API), and may read bounded history to hydrate a mid-webinar join.",
+  "channel": {
+    "namespaces": [
+      {
+        "name": "room",
+        "history_size": 100,
+        "history_ttl": "43200s",
+        "presence": true,
+        "allow_publish_for_client": false,
+        "allow_history_for_client": true
+      }
+    ]
+  }
+}

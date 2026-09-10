@@ -237,17 +237,25 @@ export function allocateRedisDatabase(slot, registry) {
   const live = registry?.slots ?? {};
   if (live[slot]) return live[slot].redisDb;
   const span = REDIS_DB_MAX - REDIS_DB_MIN + 1;
-  const candidate = REDIS_DB_MIN + (previewNumber(slot) % span);
-  const holder = Object.entries(live).find(
-    ([name, entry]) => name !== slot && entry.redisDb === candidate,
+  const taken = new Set(
+    Object.entries(live)
+      .filter(([name]) => name !== slot)
+      .map(([, entry]) => entry.redisDb),
   );
-  if (holder) {
-    throw new SlotError(
-      `Redis database ${candidate} is held by slot ${holder[0]} — refusing to share it with ${slot}. ` +
-        `Take ${holder[0]} down (its PR is closed or draft) and converge again.`,
-    );
+  // Deterministic start, then a linear probe. `1 + (N % 15)` collides for PR
+  // numbers 15 apart, and refusing outright would dead-end that converge for as
+  // long as the holder is up; probing keeps allocation exclusive (never shared)
+  // without making one live preview block another.
+  const start = REDIS_DB_MIN + (previewNumber(slot) % span);
+  for (let offset = 0; offset < span; offset += 1) {
+    const candidate = REDIS_DB_MIN + ((start - REDIS_DB_MIN + offset) % span);
+    if (!taken.has(candidate)) return candidate;
   }
-  return candidate;
+  throw new SlotError(
+    `no free Redis database in ${REDIS_DB_MIN}..${REDIS_DB_MAX} for ${slot}: ` +
+      `${[...taken].sort((a, b) => a - b).join(", ")} are all held. ` +
+      `Take a slot down (its PR is closed or draft) and converge again.`,
+  );
 }
 
 /** The fourth preview is refused — the box is sized for `main` + 3 (§3 «Box»). */

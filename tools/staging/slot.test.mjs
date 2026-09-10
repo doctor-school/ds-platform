@@ -153,7 +153,7 @@ test("the Redis database of a preview is deterministic", () => {
   assert.equal(first, second);
 });
 
-test("a Redis database already held by another slot is refused, never shared", () => {
+test("a taken Redis database is probed past, never shared", () => {
   const db = allocateRedisDatabase("pr-2034", emptyRegistry());
   const registry = registerSlot(emptyRegistry(), {
     slot: "pr-19",
@@ -162,12 +162,30 @@ test("a Redis database already held by another slot is refused, never shared", (
     hosts: Object.values(slotHostnames("pr-19", BASE)),
     updatedAt: "2026-09-10T00:00:00.000Z",
   });
-  assert.throws(
-    () => allocateRedisDatabase("pr-2034", registry),
-    (err) => err instanceof SlotError && /pr-19/.test(err.message),
-  );
+  // `1 + (N % 15)` collides for PR numbers 15 apart; the probe moves the newcomer
+  // to the next free database instead of dead-ending the converge.
+  const probed = allocateRedisDatabase("pr-2034", registry);
+  assert.notEqual(probed, db);
+  assert.ok(probed >= 1 && probed <= 15);
   // Re-allocating for the slot that already holds it is not a collision.
   assert.equal(allocateRedisDatabase("pr-19", registry), db);
+});
+
+test("Redis allocation refuses only when every database 1..15 is held", () => {
+  let registry = emptyRegistry();
+  for (let db = 1; db <= 15; db += 1) {
+    registry = registerSlot(registry, {
+      slot: `pr-${100 + db}`,
+      sha: SHA,
+      redisDb: db,
+      hosts: Object.values(slotHostnames(`pr-${100 + db}`, BASE)),
+      updatedAt: "2026-09-10T00:00:00.000Z",
+    });
+  }
+  assert.throws(
+    () => allocateRedisDatabase("pr-2034", registry),
+    (err) => err instanceof SlotError && /no free Redis database/.test(err.message),
+  );
 });
 
 test("the fourth preview is refused; main never counts against the cap", () => {

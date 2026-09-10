@@ -290,3 +290,111 @@ describe("SmtpMailer code-only credential emails (003 EARS-29/30)", () => {
     }
   });
 });
+
+describe("shared existing transactional layout (#2171)", () => {
+  const methods = [
+    "sendAccountExistsNotice",
+    "sendAdminLockoutNotice",
+    "sendVerificationCodeEmail",
+    "sendPasswordResetCodeEmail",
+  ] as const;
+  for (const real of [false, true]) {
+    it(`EARS-29: all BFF types retain the approved table styling and sender on ${real ? "real" : "intercept"}`, async () => {
+      const messages: Array<{ from: string; html: string; text: string }> = [];
+      const mailer = new SmtpMailer({
+        intercept: {
+          ...interceptCfg,
+          from: "Old Name <intercept@doctor.school>",
+        },
+        real: { ...realCfg, from: "configured@doctor.school" },
+        isEnabled: () => real,
+        portalBaseUrl: "https://academy.example.test/",
+        transportFactory: () => ({
+          sendMail: async (message) => {
+            messages.push(message);
+            return { response: "250 accepted" };
+          },
+        }),
+      });
+      for (const method of methods) await mailer[method](VALID_EMAIL, "GX5AVU");
+      for (const message of messages) {
+        expect
+          .soft(message.from)
+          .toBe(
+            `Doctor.School <${real ? "configured" : "intercept"}@doctor.school>`,
+          );
+        expect
+          .soft(message.html)
+          .toContain(
+            "max-width:480px;background-color:#ffffff;border-radius:8px;",
+          );
+        expect.soft(message.html).toContain("background-color:#f4f5f7;");
+        expect
+          .soft(message.html)
+          .toContain(
+            "padding:32px 32px 0 32px;font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:bold;color:#2d84f2;",
+          );
+      }
+      const account = messages[0]!;
+      expect(account.html.match(/<a\s/g)).toHaveLength(1);
+      expect(account.html).toContain(
+        'href="https://academy.example.test/login"',
+      );
+      expect(account.text.match(/https?:\/\/\S+/g)).toEqual([
+        "https://academy.example.test/login",
+      ]);
+      for (const body of [account.html, account.text]) {
+        expect(body).not.toContain("/reset");
+        expect(body).not.toContain("Сбросить пароль");
+        expect(body).not.toContain("GX5AVU");
+        expect(body).not.toContain("Код действует");
+      }
+      const admin = messages[1]!;
+      for (const body of [admin.html, admin.text]) {
+        expect(body).toContain(
+          "Пароль и данные учётной записи не изменились. Попробуйте войти позже.",
+        );
+        expect(body).toContain(
+          "он снимет старый фактор, и вы подключите приложение заново.",
+        );
+        expect(body).toContain(
+          "Если это были не вы, сообщите об этом техническому руководителю.",
+        );
+        expect(body).not.toMatch(/<a[\s>]|https?:\/\/|GX5AVU|Код действует/);
+        expect(body.replace(/<[^>]*>/g, "")).not.toMatch(/\d|минут/);
+      }
+    });
+  }
+  it("EARS-29: fallback preserves its configured address and the same sender and artifact", async () => {
+    const primary: Array<{ from: string; html: string; text: string }> = [];
+    const fallback: Array<{ from: string; html: string; text: string }> = [];
+    const mailer = new SmtpMailer({
+      intercept: interceptCfg,
+      real: realCfg,
+      isEnabled: () => true,
+      portalBaseUrl: "https://academy.example.test",
+      transportFactory: () => ({
+        sendMail: async (message) => {
+          primary.push(message);
+          throw Object.assign(new Error("rejected"), { responseCode: 554 });
+        },
+      }),
+      resend: {
+        enabled: true,
+        apiKey: "test",
+        from: "fallback@doctor.school",
+        fetchFn: async (_url, init) => {
+          fallback.push(JSON.parse(String(init?.body)));
+          return new Response(null, { status: 202 });
+        },
+      },
+    });
+    for (const method of methods) await mailer[method](VALID_EMAIL, "GX5AVU");
+    expect(fallback).toHaveLength(4);
+    fallback.forEach((message, i) => {
+      expect(message.from).toBe("Doctor.School <fallback@doctor.school>");
+      expect(message.html).toBe(primary[i]!.html);
+      expect(message.text).toBe(primary[i]!.text);
+    });
+  });
+});

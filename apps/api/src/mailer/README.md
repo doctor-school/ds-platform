@@ -4,9 +4,8 @@ The BFF's **own** transactional-email channel (003 EARS-23/29, [003 design][desi
 §4, §13.3/§13.4, §14). Two mail classes ride it:
 
 - **Product / security notices** that must never carry a secret — the
-  account-exists notice (a sign-in / password-reset prompt for a registration
-  attempt on an already-registered address) is the first consumer, with
-  lockout / welcome mails as future ones.
+  account-exists notice (one sign-in action for a registration attempt on an
+  already-registered address) and the admin MFA lockout notice (011 EARS-7).
 - **One-time-code credential emails** (EARS-29, #910/#1045): the email-verify
   and password-reset codes are obtained from Zitadel via `returnCode` (Zitadel
   generates/stores/expires/verifies the code but **sends nothing**) and
@@ -15,7 +14,22 @@ The BFF's **own** transactional-email channel (003 EARS-23/29, [003 design][desi
   the transit: the code lives in memory for the in-flight send only — never
   logged, never persisted, and provider errors are scrubbed before surfacing.
 
-The still-Zitadel-sent types (login email-OTP, SMS) keep their IdP templates.
+All four BFF kinds reuse `email-layout.ts`, extracted from the existing
+`code-emails.ts` inline-table layout without changing its colors, 480px width,
+8px radius, spacing or typography (§13.5, #2171). Content data drives HTML and
+plain text. Verification covers registration/resend and unverified-account
+login with neutral ignore guidance; verification/reset direct code entry to
+the already-open requesting tab. Both remain six uppercase/digit characters
+with 3600-second Zitadel expiry, with no links or URLs. Account-exists contains
+only the configured portal `/login` action; admin lockout preserves recovery
+and reporting instructions without codes, counts or remaining lock time.
+Intercept, real and fallback transports use the `Doctor.School` display name
+and retain their own configured sender address.
+
+Verified-account login email-OTP remains Zitadel-rendered/sent (eight digits,
+300 seconds, native action still present). #2145 owns its migration and depends
+on #2144; this independent BFF layout slice does not complete #2171 across all
+login types. SMS also keeps its IdP template.
 The module shares the `email-delivery-real` Unleash flag with the
 [`delivery-reconcile`](../delivery-reconcile/README.md) module, so one flag flip
 moves both this channel and Zitadel's between Mailpit-intercept and the
@@ -83,6 +97,8 @@ Detail: `infra/dev-stand/README.md` → delivery flags.
 | Module wiring (mailer + throttle bindings)         | `mailer.module.ts`            |
 | Port + shared send-time validation                 | `mailer.types.ts`             |
 | §13.3/§13.4 code-only artifact templates           | `code-emails.ts`              |
+| Shared existing HTML/plain-text layout and sender  | `email-layout.ts`             |
+| Account-exists and admin-lockout content           | `notice-emails.ts`            |
 | Production nodemailer adapter (chain + transports) | `smtp-mailer.ts`              |
 | Per-provider relay-channel contract                | `relay-channel.ts`            |
 | Resend failover channel (HTTPS adapter)            | `resend-transport.ts`         |

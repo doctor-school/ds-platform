@@ -377,10 +377,20 @@ then detaches Caddy, de-registers, `compose down -v`, and finally makes the
 (`docker network inspect` / `docker image inspect`) and removed only if it is still
 there. Compose owns that network and normally takes it with `down -v`, so «already
 gone» is the expected success and removes nothing; a resource that survives and then
-refuses to be removed is a hard failure. Separately, a step the run was allowed to
-continue past — the Caddy detach — is printed and makes the command **exit non-zero**;
-so do `up`, `sync`, `gc` and `render`, because a converge that could not attach Caddy
-serves nothing on the hostnames it just registered.
+refuses to be removed is a hard failure.
+
+**No step is allowed to fail.** Every command — `up`, `sync`, `down`, `gc`, `render`
+— aborts on the first failure and exits non-zero, and no step's failure is merely
+printed. The two commands that are not idempotent on their own, `docker network
+connect` and `docker network disconnect`, are expressed as the membership fact
+instead: the tool asks `docker network inspect slot-<slot> --format
+'{{json .Containers}}'` whether Caddy is already on the network and issues the
+`connect`/`disconnect` only when the answer says it must. So a `sync` (or a second
+`up`) of a live slot re-converges and exits **0** — it never re-attaches — and a
+`down` of a slot whose `up` never reached the attach tears down cleanly. What is left
+when a `connect` does run and fail is unambiguous: the slot's hostnames would resolve
+to nothing, and the run stops before the registry write rather than advertising a host
+it cannot serve.
 
 **Status output.** `slot status` prints two labelled blocks: the registry JSON exactly
 as it is on disk, then the whole redirect-URI set the shared Zitadel app must hold

@@ -22,11 +22,11 @@ import {
   SLOT_IMAGE_APPS,
   SlotError,
   allocateRedisDatabase,
-  assertNoToleratedFailures,
   assertPreviewCapacity,
   assertSlotName,
   caddyAttachCommand,
   caddyDetachCommand,
+  caddyIsAttached,
   caddyReloadCommand,
   cloneDatabaseStatements,
   composeProjectName,
@@ -48,6 +48,7 @@ import {
   renderSlotDownEnv,
   renderSlotEnv,
   renderSlotsInclude,
+  runSlotCommand,
   runSlotPlan,
   seedCommandPlan,
   serializeRegistry,
@@ -284,24 +285,61 @@ test("migrate and the branch golden seed run in the slot's own migrate image", (
 
 // --- Caddy attach/detach + reload -------------------------------------------
 
-test("Caddy is attached to and detached from the slot's own network", () => {
-  assert.deepEqual(caddyAttachCommand("pr-2034").command, [
+test("Caddy's attachment is planned as verify-then-act in BOTH directions", () => {
+  const attach = caddyAttachCommand("pr-2034");
+  const detach = caddyDetachCommand("pr-2034");
+  assert.equal(attach.kind, "ensure-present");
+  assert.equal(detach.kind, "ensure-absent");
+  // Neither direction is tolerated: the expected no-op is decided by the PROBE, so a
+  // connect/disconnect that actually runs and fails is a real failure.
+  assert.ok(!attach.tolerateFailure);
+  assert.ok(!detach.tolerateFailure);
+  assert.deepEqual(attach.items[0].apply, [
     "docker",
     "network",
     "connect",
     "slot-pr-2034",
     CADDY_CONTAINER,
   ]);
-  assert.deepEqual(caddyDetachCommand("pr-2034").command, [
+  assert.deepEqual(detach.items[0].remove, [
     "docker",
     "network",
     "disconnect",
     "slot-pr-2034",
     CADDY_CONTAINER,
   ]);
-  // Re-converging an already attached slot must not fail the run.
-  assert.equal(caddyAttachCommand("pr-2034").tolerateFailure, true);
-  assert.equal(caddyDetachCommand("pr-2034").tolerateFailure, true);
+  // One probe answers both questions.
+  assert.deepEqual(attach.items[0].probe, detach.items[0].probe);
+  assert.deepEqual(attach.items[0].probe, [
+    "docker",
+    "network",
+    "inspect",
+    "slot-pr-2034",
+    "--format",
+    "{{json .Containers}}",
+  ]);
+});
+
+test("the attachment probe is read for CONTENT, not for its exit status", () => {
+  assert.equal(
+    caddyIsAttached(
+      JSON.stringify({
+        "9f0": { Name: CADDY_CONTAINER },
+        a1b: { Name: "pr-2034-portal-1" },
+      }),
+    ),
+    true,
+  );
+  assert.equal(
+    caddyIsAttached(JSON.stringify({ a1b: { Name: "pr-2034-portal-1" } })),
+    false,
+  );
+  // A network with nothing attached prints an empty map; docker prints nothing at all
+  // for a format that resolves to no value.
+  assert.equal(caddyIsAttached("{}"), false);
+  assert.equal(caddyIsAttached("   "), false);
+  // Output that is not the documented shape is an anomaly, never a silent «absent».
+  assert.throws(() => caddyIsAttached("<html>"), SlotError);
 });
 
 test("the reload goes through the container's own admin API, never a restart", () => {
@@ -494,7 +532,14 @@ test("gc removes images of unregistered slots and keeps every live one", () => {
   ]);
   // Non-slot images (the shared infra) are never touched by gc.
   assert.ok(!plan.remove.includes("caddy:2.11.4-alpine"));
-  assert.equal(plan.commands[0].tolerateFailure, true);
+  // Verify-then-remove, like the teardown: an image another gc already took is the
+  // desired end state, and one that refuses to go is a hard failure.
+  assert.equal(plan.commands[0].kind, "ensure-absent");
+  assert.ok(!plan.commands[0].tolerateFailure);
+  assert.deepEqual(
+    plan.commands[0].items.map((item) => item.remove.at(-1)),
+    plan.remove,
+  );
 });
 
 test("gc never invokes buildx — this box builds nothing", () => {
@@ -503,6 +548,9 @@ test("gc never invokes buildx — this box builds nothing", () => {
   for (const step of [...plan.commands, ...prune.commands]) {
     assert.ok(!step.command.includes("buildx"), step.command.join(" "));
     assert.ok(!step.command.includes("build"), step.command.join(" "));
+    // The prune is idempotent on its own — nothing to reclaim exits 0 — so it needs
+    // no tolerance either, and a prune that fails is a real docker failure.
+    assert.ok(!step.tolerateFailure);
   }
 });
 
@@ -654,6 +702,11 @@ test("the executor runs every step in order through injected effects", async () 
   await runSlotPlan(plan, {
     sql: (statement) => seen.push(["sql", statement]),
     sh: (command) => seen.push(["sh", command.join(" ")]),
+    // Caddy is not on the fresh slot's network yet, so the attach runs.
+    probe: (command) => {
+      seen.push(["probe", command.join(" ")]);
+      return { ok: true, stdout: "{}" };
+    },
     write: (path) => seen.push(["write", path]),
   });
   assert.equal(seen[0][0], "write");
@@ -669,7 +722,7 @@ test("the executor runs every step in order through injected effects", async () 
   );
 });
 
-test("a failing step aborts the run unless it is explicitly tolerated", async () => {
+test("a failing step aborts the run", async () => {
   const plan = planSlotUp({
     slot: "pr-2034",
     sha: SHA,
@@ -689,7 +742,8 @@ test("a failing step aborts the run unless it is explicitly tolerated", async ()
     /manifest unknown/,
   );
 
-  // `attach caddy` is the tolerated one — a re-converge finds it already attached.
+  // A re-converge finds Caddy already attached: the probe says so, `connect` is never
+  // issued, and the rest of the plan runs. (`sh` would throw if it ever were.)
   let reached = false;
   await runSlotPlan(plan, {
     sql: () => {},
@@ -698,6 +752,10 @@ test("a failing step aborts the run unless it is explicitly tolerated", async ()
       if (command.includes("reload")) reached = true;
       return undefined;
     },
+    probe: () => ({
+      ok: true,
+      stdout: JSON.stringify({ c9: { Name: CADDY_CONTAINER } }),
+    }),
     write: () => {},
   });
   assert.equal(reached, true);
@@ -852,35 +910,6 @@ test("down removes the slot network after the detach, and never before compose d
   assert.ok(labels.indexOf("detach caddy") < labels.indexOf("remove slot network"));
 });
 
-test("a tolerated failure is reported back, so `down` can exit non-zero", async () => {
-  const registry = registerSlot(emptyRegistry(), {
-    slot: "pr-2034",
-    sha: SHA,
-    redisDb: 4,
-    hosts: Object.values(slotHostnames("pr-2034", BASE)),
-    updatedAt: "2026-09-10T00:00:00.000Z",
-  });
-  const plan = planSlotDown({ slot: "pr-2034", registry, baseDomain: BASE });
-  const seen = [];
-  const result = await runSlotPlan(plan, {
-    sql: () => {},
-    sh: (command) => {
-      seen.push(command.join(" "));
-      if (command.includes("disconnect")) {
-        throw new Error("no such network endpoint");
-      }
-      return undefined;
-    },
-    write: () => {},
-  });
-  // The detach failed, yet the network removal still ran…
-  assert.ok(seen.some((command) => /network rm/.test(command)));
-  // …and the failure is not swallowed.
-  assert.equal(result.tolerated.length, 1);
-  assert.equal(result.tolerated[0].label, "detach caddy");
-  assert.match(result.tolerated[0].message, /no such network endpoint/);
-});
-
 // --- absent is not a failure --------------------------------------------------
 //
 // Compose owns `slot-<slot>` (infra/deploy/compose/slot/compose.yml), so a healthy
@@ -915,20 +944,22 @@ test("the network and image removals are planned as verify-then-remove steps", (
 
 test("a network compose already removed leaves `down` clean and skips `network rm`", async () => {
   const seen = [];
-  const result = await runSlotPlan(downPlan(), {
+  await runSlotPlan(downPlan(), {
     sql: () => {},
     sh: (command) => {
       seen.push(command.join(" "));
-      if (command.includes("inspect")) {
-        throw new Error("Error: No such network: slot-pr-2034");
-      }
       return undefined;
+    },
+    probe: (command) => {
+      seen.push(command.join(" "));
+      return { ok: false, stdout: "", stderr: "Error: No such network: slot-pr-2034" };
     },
     write: () => {},
   });
-  assert.deepEqual(result.tolerated, []);
+  // Nothing is there, so nothing is removed — and the run does not fail.
   assert.ok(!seen.some((command) => /network rm/.test(command)));
   assert.ok(!seen.some((command) => /image rm/.test(command)));
+  assert.ok(!seen.some((command) => /network disconnect/.test(command)));
 });
 
 test("a network that is still there IS removed, and a failing removal fails `down`", async () => {
@@ -942,6 +973,11 @@ test("a network that is still there IS removed, and a failing removal fails `dow
           throw new Error("network slot-pr-2034 has active endpoints");
         }
         return undefined;
+      },
+      probe: (command) => {
+        seen.push(command.join(" "));
+        // The network is there with nothing attached to it any more.
+        return { ok: true, stdout: "{}" };
       },
       write: () => {},
     }),
@@ -965,24 +1001,122 @@ test("an injected probe effect decides presence without going through `sh`", asy
   });
   assert.ok(probed.some((command) => /network inspect/.test(command)));
   assert.ok(!seen.some((command) => /network rm/.test(command)));
-  assert.deepEqual(result.tolerated, []);
+  assert.equal(result.slot, "pr-2034");
 });
 
-test("a tolerated failure fails the command it belongs to, whichever that is", () => {
-  assert.equal(
-    assertNoToleratedFailures([], { command: "up", slot: "pr-2034" }),
-    undefined,
+// --- the CLI command branches -------------------------------------------------
+//
+// The regression these lock: `sync` (and a second `up`) exited non-zero on a slot
+// that had genuinely converged, because `docker network connect` reports «endpoint
+// already exists» on a re-attach. No plan-level test could see it — it only appears
+// when the command branch itself runs — so these drive `runSlotCommand` end to end
+// with injected effects. `preview.yml` re-runs `sync` on every push to an open PR,
+// so «green means converged» is the whole contract of this surface.
+
+function liveRegistry(slot = "pr-2034") {
+  return registerSlot(emptyRegistry(), {
+    slot,
+    sha: SHA,
+    redisDb: 4,
+    hosts: Object.values(slotHostnames(slot, BASE)),
+    updatedAt: "2026-09-10T00:00:00.000Z",
+  });
+}
+
+function recordingEffects({ attached = false, connectFails = false } = {}) {
+  const seen = [];
+  const effects = {
+    sql: () => {},
+    sh: (command) => {
+      seen.push(command.join(" "));
+      if (connectFails && command.includes("connect")) {
+        throw new Error(
+          "Error response from daemon: endpoint with name stg-infra-caddy-1 already exists in network slot-pr-2034",
+        );
+      }
+      return undefined;
+    },
+    probe: (command) => {
+      seen.push(command.join(" "));
+      if (command.includes("network") && command.includes("inspect")) {
+        return {
+          ok: true,
+          stdout: JSON.stringify(attached ? { c9: { Name: CADDY_CONTAINER } } : {}),
+        };
+      }
+      // Images and everything else: absent.
+      return { ok: false, stdout: "", stderr: "No such object" };
+    },
+    write: () => {},
+  };
+  return { seen, effects };
+}
+
+test("a fresh `up` attaches Caddy and exits 0", async () => {
+  const { seen, effects } = recordingEffects({ attached: false });
+  const line = await runSlotCommand({
+    options: { command: "up", slot: "pr-2034", sha: SHA },
+    registry: emptyRegistry(),
+    baseDomain: BASE,
+    effects,
+  });
+  assert.ok(seen.some((command) => /network connect slot-pr-2034/.test(command)));
+  assert.match(line, /converged/);
+});
+
+test("`sync` on an already attached slot never issues the connect, and exits 0", async () => {
+  // `connectFails` is the point: were the connect still issued, this would reject with
+  // the very «already exists» that made every routine preview refresh red.
+  const { seen, effects } = recordingEffects({ attached: true, connectFails: true });
+  const line = await runSlotCommand({
+    options: { command: "sync", slot: "pr-2034", sha: SHA },
+    registry: liveRegistry(),
+    baseDomain: BASE,
+    effects,
+  });
+  assert.ok(!seen.some((command) => /network connect/.test(command)));
+  assert.match(line, /converged/);
+});
+
+test("a connect that actually runs and fails fails `up`", async () => {
+  const { effects } = recordingEffects({ attached: false, connectFails: true });
+  await assert.rejects(
+    runSlotCommand({
+      options: { command: "up", slot: "pr-2034", sha: SHA },
+      registry: emptyRegistry(),
+      baseDomain: BASE,
+      effects,
+    }),
+    /already exists in network/,
   );
-  assert.throws(
-    () =>
-      assertNoToleratedFailures(
-        [{ label: "attach caddy", message: "already exists" }],
-        { command: "up", slot: "pr-2034" },
-      ),
-    (err) =>
-      err instanceof SlotError &&
-      /up/.test(err.message) &&
-      /attach caddy/.test(err.message) &&
-      /already exists/.test(err.message),
+});
+
+test("`down` on a slot whose Caddy was never attached exits 0 without disconnecting", async () => {
+  const { seen, effects } = recordingEffects({ attached: false });
+  const line = await runSlotCommand({
+    options: { command: "down", slot: "pr-2034" },
+    registry: liveRegistry(),
+    baseDomain: BASE,
+    effects,
+  });
+  assert.ok(!seen.some((command) => /network disconnect/.test(command)));
+  assert.match(line, /is down/);
+});
+
+test("a disconnect that actually runs and fails fails `down`", async () => {
+  const { effects } = recordingEffects({ attached: true });
+  const sh = effects.sh;
+  effects.sh = (command) => {
+    if (command.includes("disconnect")) throw new Error("permission denied");
+    return sh(command);
+  };
+  await assert.rejects(
+    runSlotCommand({
+      options: { command: "down", slot: "pr-2034" },
+      registry: liveRegistry(),
+      baseDomain: BASE,
+      effects,
+    }),
+    /permission denied/,
   );
 });

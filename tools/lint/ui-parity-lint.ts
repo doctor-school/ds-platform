@@ -1,7 +1,7 @@
 #!/usr/bin/env tsx
 /** BLOCK guard for approved-source UI parity evidence (Issue #1627). */
 import { normalizeReviewBody } from "../gh/review-body.mjs";
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -66,25 +66,49 @@ function escapeRe(value: string): string {
 function isArtifactLink(value: string | null): boolean {
   return Boolean(value && /https?:\/\/\S+/i.test(value));
 }
-function canvasPath(source: string, repoRoot: string): string | null {
+/**
+ * The cited canvas is read from the PR HEAD git object, never from the local
+ * tree (Issue #2164): the pre-merge stages (`pr:land` / `pr:preflight
+ * --pre-merge`) run from the MAIN checkout, where a canvas the PR itself adds
+ * or renames does not exist, while CI runs from the PR tree — the two verdicts
+ * must agree. A CI checkout of the merge ref, or any tree that has not seen the
+ * head commit, is covered by the single best-effort `git fetch origin <sha>`.
+ */
+function canvasBlob(
+  source: string,
+  repoRoot: string,
+  headRefOid: string | undefined,
+): string | null {
   if (!/^design-source\/[A-Za-z0-9._/-]+\.dc\.html$/i.test(source)) return null;
-  const absolute = resolve(repoRoot, source);
-  const inside = relative(resolve(repoRoot, "design-source"), absolute);
-  return Boolean(inside) &&
-    !inside.startsWith("..") &&
-    existsSync(absolute) &&
-    statSync(absolute).isFile()
-    ? absolute
-    : null;
+  const inside = relative(
+    resolve(repoRoot, "design-source"),
+    resolve(repoRoot, source),
+  );
+  if (!inside || inside.startsWith("..")) return null;
+  if (!headRefOid) return null;
+  const show = (): { status: number | null; stdout: string } =>
+    // `cat-file blob` (not `-p`) fails closed when the path resolves to a tree.
+    spawnSync("git", ["cat-file", "blob", `${headRefOid}:${source}`], {
+      cwd: repoRoot,
+      encoding: "utf8",
+    });
+  let result = show();
+  if (result.status !== 0) {
+    spawnSync("git", ["fetch", "--quiet", "origin", headRefOid], {
+      cwd: repoRoot,
+      encoding: "utf8",
+    });
+    result = show();
+  }
+  return result.status === 0 ? result.stdout : null;
 }
-function canvasDeclaresState(path: string, state: string): boolean {
+function canvasDeclaresState(html: string, state: string): boolean {
   const pair = /^([A-Za-z_$][\w$-]*)=([A-Za-z0-9_$.-]+)$/.exec(state);
   if (!pair)
     return (
       state.length >= 8 &&
       !/^(?:inspected|checked|tbd|todo|n\/?a|none)$/i.test(state)
     );
-  const html = readFileSync(path, "utf8");
   return new RegExp(
     `\\b${escapeRe(pair[1])}\\s*:\\s*['"]${escapeRe(pair[2])}['"]`,
   ).test(html);
@@ -160,6 +184,7 @@ export function bodyEvidenceVerdict(
   repoRoot = REPO_ROOT,
   changedPaths: string[] = [],
   baseManifest?: ApprovedSourceManifest,
+  headRefOid?: string,
 ): Verdict {
   const missing: string[] = [];
   const uiPaths = changedPaths.filter(isUiSourcePath);
@@ -172,10 +197,12 @@ export function bodyEvidenceVerdict(
   const source = marker(body, "ui-source");
   const state = marker(body, "ui-source-state");
   if (kind === "canvas") {
-    const path = source ? canvasPath(source, repoRoot) : null;
-    if (!path)
-      missing.push("existing exact ui-source: design-source/*.dc.html");
-    else if (!state || !canvasDeclaresState(path, state))
+    const html = source ? canvasBlob(source, repoRoot, headRefOid) : null;
+    if (html === null)
+      missing.push(
+        "existing exact ui-source: design-source/*.dc.html at PR head",
+      );
+    else if (!state || !canvasDeclaresState(html, state))
       missing.push(
         "ui-source-state declared by the canvas when expressed as key=value",
       );
@@ -379,7 +406,13 @@ export async function runUiParityGuard(): Promise<void> {
       `PR #${pr.number} ui-parity N/A certified by the latest head-pinned Mode (a) review (render-delta: none)`,
     );
   }
-  const bodyVerdict = bodyEvidenceVerdict(pr.body ?? "", REPO_ROOT, paths);
+  const bodyVerdict = bodyEvidenceVerdict(
+    pr.body ?? "",
+    REPO_ROOT,
+    paths,
+    undefined,
+    pr.headRefOid,
+  );
   if (!bodyVerdict.ok)
     fail(
       `PR #${pr.number} lacks approved-source parity evidence: ${bodyVerdict.missing.join("; ")}`,

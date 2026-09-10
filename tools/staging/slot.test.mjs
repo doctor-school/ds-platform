@@ -43,6 +43,8 @@ import {
   planSlotUp,
   registerSlot,
   renderAskInclude,
+  renderIdpRedirectUris,
+  renderSlotDownEnv,
   renderSlotEnv,
   renderSlotsInclude,
   runSlotPlan,
@@ -601,11 +603,13 @@ test("down: detach → compose down -v → drop database → deregister → relo
   });
   const plan = planSlotDown({ slot: "pr-2034", registry, baseDomain: BASE });
   assert.deepEqual(planLabels(plan), [
+    "ensure slot env",
     "detach caddy",
     "write registry",
     "render caddy includes",
     "reload caddy",
     "compose down",
+    "remove slot network",
     "drop database",
     "remove slot images",
     "remove slot env",
@@ -738,4 +742,140 @@ test("reset and reset-identities refuse loudly instead of silently doing nothing
       argv.join(" "),
     );
   }
+});
+
+// --- the IdP redirect-URI set (Mode (a) #2168) --------------------------------
+
+test("the IdP redirect set covers every registered slot, ordered and de-duplicated", () => {
+  let registry = registerSlot(emptyRegistry(), {
+    slot: "pr-2034",
+    sha: SHA,
+    redisDb: 4,
+    hosts: Object.values(slotHostnames("pr-2034", BASE)),
+    updatedAt: "2026-09-10T00:00:00.000Z",
+  });
+  registry = registerSlot(registry, {
+    slot: "main",
+    sha: SHA,
+    redisDb: 0,
+    hosts: Object.values(slotHostnames("main", BASE)),
+    updatedAt: "2026-09-10T00:00:00.000Z",
+  });
+
+  const set = renderIdpRedirectUris(registry, BASE);
+  // Ordered `main` first, then previews — the whole-set write stays diffable.
+  assert.deepEqual(set.redirectUris, [
+    "https://api-main.stage.doctor.school/auth/callback",
+    "https://api-pr-2034.stage.doctor.school/auth/callback",
+  ]);
+  assert.deepEqual(set.postLogoutUris, [
+    "https://academy-main.stage.doctor.school",
+    "https://doctor-main.stage.doctor.school",
+    "https://admin-main.stage.doctor.school",
+    "https://academy-pr-2034.stage.doctor.school",
+    "https://doctor-pr-2034.stage.doctor.school",
+    "https://admin-pr-2034.stage.doctor.school",
+  ]);
+  // The path is exactly the one the per-slot env file hands the api.
+  const env = renderSlotEnv({
+    slot: "pr-2034",
+    sha: SHA,
+    baseDomain: BASE,
+    redisDb: 4,
+  });
+  const perSlot = /^IDP_REDIRECT_URI=(.+)$/m.exec(env)[1];
+  assert.ok(set.redirectUris.includes(perSlot));
+});
+
+test("an empty registry yields an empty redirect set, never a wildcard", () => {
+  const set = renderIdpRedirectUris(emptyRegistry(), BASE);
+  assert.deepEqual(set.redirectUris, []);
+  assert.deepEqual(set.postLogoutUris, []);
+  assert.throws(
+    () => renderIdpRedirectUris(emptyRegistry(), "not a domain"),
+    SlotError,
+  );
+});
+
+// --- teardown survives a missing env file and takes the network with it -------
+
+test("down re-renders the slot env file first, so a deleted one cannot block compose", () => {
+  const registry = registerSlot(emptyRegistry(), {
+    slot: "pr-2034",
+    sha: SHA,
+    redisDb: 4,
+    hosts: Object.values(slotHostnames("pr-2034", BASE)),
+    updatedAt: "2026-09-10T00:00:00.000Z",
+  });
+  const plan = planSlotDown({ slot: "pr-2034", registry, baseDomain: BASE });
+  const labels = planLabels(plan);
+  assert.equal(labels[0], "ensure slot env");
+  assert.ok(labels.indexOf("ensure slot env") < labels.indexOf("compose down"));
+  const ensure = plan.steps[0];
+  assert.equal(ensure.path, `${SLOT_ENV_DIR}/pr-2034.env`);
+  assert.match(ensure.contents, /^SLOT_DB=ds_pr_2034$/m);
+});
+
+test("a slot missing from the registry still renders enough env to be torn down", () => {
+  const contents = renderSlotDownEnv({
+    slot: "pr-2034",
+    entry: undefined,
+    baseDomain: BASE,
+  });
+  assert.match(contents, /^SLOT=pr-2034$/m);
+  assert.match(contents, /^SLOT_DB=ds_pr_2034$/m);
+  assert.match(contents, /^SLOT_SHA7=/m);
+  assert.doesNotMatch(contents, /PASSWORD/);
+
+  const plan = planSlotDown({
+    slot: "pr-2034",
+    registry: emptyRegistry(),
+    baseDomain: BASE,
+  });
+  assert.equal(planLabels(plan)[0], "ensure slot env");
+});
+
+test("down removes the slot network after the detach, and never before compose down", () => {
+  const registry = registerSlot(emptyRegistry(), {
+    slot: "pr-2034",
+    sha: SHA,
+    redisDb: 4,
+    hosts: Object.values(slotHostnames("pr-2034", BASE)),
+    updatedAt: "2026-09-10T00:00:00.000Z",
+  });
+  const labels = planLabels(
+    planSlotDown({ slot: "pr-2034", registry, baseDomain: BASE }),
+  );
+  assert.ok(labels.includes("remove slot network"));
+  assert.ok(labels.indexOf("compose down") < labels.indexOf("remove slot network"));
+  assert.ok(labels.indexOf("detach caddy") < labels.indexOf("remove slot network"));
+});
+
+test("a tolerated failure is reported back, so `down` can exit non-zero", async () => {
+  const registry = registerSlot(emptyRegistry(), {
+    slot: "pr-2034",
+    sha: SHA,
+    redisDb: 4,
+    hosts: Object.values(slotHostnames("pr-2034", BASE)),
+    updatedAt: "2026-09-10T00:00:00.000Z",
+  });
+  const plan = planSlotDown({ slot: "pr-2034", registry, baseDomain: BASE });
+  const seen = [];
+  const result = await runSlotPlan(plan, {
+    sql: () => {},
+    sh: (command) => {
+      seen.push(command.join(" "));
+      if (command.includes("disconnect")) {
+        throw new Error("no such network endpoint");
+      }
+      return undefined;
+    },
+    write: () => {},
+  });
+  // The detach failed, yet the network removal still ran…
+  assert.ok(seen.some((command) => /network rm/.test(command)));
+  // …and the failure is not swallowed.
+  assert.equal(result.tolerated.length, 1);
+  assert.equal(result.tolerated[0].label, "detach caddy");
+  assert.match(result.tolerated[0].message, /no such network endpoint/);
 });

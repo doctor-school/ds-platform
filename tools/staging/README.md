@@ -32,6 +32,14 @@ Caddy through the loopback admin API. `up`/`sync` clone the slot database from
 `infra/deploy/compose/slot/compose.yml` and register the slot; `down` reverses it.
 `reset` and `reset-identities` are part 2 of #2064 and refuse loudly until then.
 
+**Part 2 owns the redirect-URI convergence.** The shared Zitadel app accepts only
+registered redirect URIs and that registration is a whole-set write, so part 1 ships
+only the pure seam `renderIdpRedirectUris(registry, base)` — the full ordered set for
+every registered slot, printed by `slot status`. Part 2 makes `slot up|down` converge
+that set onto the shared app through the same management API and PAT path
+`infra/dev-stand/idp/provision.sh` uses; until then a slot's `IDP_REDIRECT_URI` is
+emitted but not registered and login on that slot fails.
+
 Operating detail — registry paths, the `slot render` step before the first Caddy
 bring-up, the preview cap, Redis allocation and the `gc` free-disk floor — lives in
 [`infra/deploy/compose/stg-infra/README.md`](../../infra/deploy/compose/stg-infra/README.md)

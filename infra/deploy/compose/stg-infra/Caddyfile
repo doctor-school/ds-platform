@@ -119,7 +119,16 @@
 # Bound to 127.0.0.1, not `:2020`: this container is attached to every slot network,
 # so an unbound listener would expose the registry to code running inside a preview.
 # Caddy dials its own `ask` over the container loopback, which 127.0.0.1 serves.
-127.0.0.1:2020 {
+#
+# The `http://` scheme is load-bearing, not decoration. A bare `127.0.0.1:2020`
+# address names an IP host, and automatic HTTPS activates for an IP just as it does
+# for a domain — the listener would speak TLS with an internal self-signed
+# certificate, while the `on_demand_tls ask` option above dials it in PLAIN HTTP.
+# Every ask would fail, so every on-demand handshake would be refused and NO host
+# under the wildcard site could ever get a certificate. `http://` turns automatic
+# HTTPS off for this site and keeps the loopback-only bind. `caddy validate` does not
+# catch the difference: both forms are syntactically valid.
+http://127.0.0.1:2020 {
 	import /etc/caddy/slots/ask.caddy
 	respond 404
 }
@@ -130,9 +139,11 @@
 # routing). Anything else is a blunt 404 so this IP never looks like a misconfigured
 # production host.
 #
-# No explicit redirect to HTTPS here: automatic HTTPS already answers 308 for every
-# host the wildcard site below matches, before this site is consulted, so a
+# No explicit redirect to HTTPS here: automatic HTTPS is expected to answer 308 for
+# every host the wildcard site below matches, before this site is consulted, so a
 # `redir @stage … permanent` line would be config that never runs (#2153 review).
+# The wildcard address makes that an expectation, not an observation — «HTTP → 308 on
+# a slot host» is on the part-2 on-box check list (README «Slots (#2064)»).
 :80 {
 	respond /healthz "ok" 200
 

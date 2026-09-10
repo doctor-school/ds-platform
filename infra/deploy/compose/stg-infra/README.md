@@ -324,7 +324,7 @@ node /opt/ds-platform/tools/staging/slot.mjs render            # write both Cadd
 node /opt/ds-platform/tools/staging/slot.mjs up   main <sha>   # first bring-up / converge
 node /opt/ds-platform/tools/staging/slot.mjs sync pr-2064 <sha>  # re-converge to a new SHA
 node /opt/ds-platform/tools/staging/slot.mjs down pr-2064      # tear down, drop the database
-node /opt/ds-platform/tools/staging/slot.mjs status            # the registry, as a table
+node /opt/ds-platform/tools/staging/slot.mjs status            # registry JSON + the IdP redirect set
 node /opt/ds-platform/tools/staging/slot.mjs gc                # reclaim unregistered images
 ```
 
@@ -337,10 +337,10 @@ single source of truth (`{ slots: { "<name>": { sha, redisDb, hosts, updatedAt }
 From it the script renders, and Caddy mounts read-only from
 `/etc/ds-platform/caddy` → `/etc/caddy/slots`:
 
-| file          | what it carries                                  | consumed by                   |
-| ------------- | ------------------------------------------------ | ----------------------------- |
-| `ask.caddy`   | the on-demand-TLS allow list (`id` + slot hosts) | the `127.0.0.1:2020` ask site |
-| `slots.caddy` | one `import slot <name>` line per live slot      | the wildcard HTTPS site       |
+| file          | what it carries                                  | consumed by                          |
+| ------------- | ------------------------------------------------ | ------------------------------------ |
+| `ask.caddy`   | the on-demand-TLS allow list (`id` + slot hosts) | the `http://127.0.0.1:2020` ask site |
+| `slots.caddy` | one `import slot <name>` line per live slot      | the wildcard HTTPS site              |
 
 The two move in **lockstep** because they come from the same registry, and neither is
 ever edited by hand — a hand-added vhost whose host is not in `ask.caddy` cannot get a
@@ -359,6 +359,45 @@ network → register the slot → re-render both includes → reload. Registrati
 strictly AFTER the containers are up, and de-registration strictly BEFORE teardown, so
 a registered host always has an upstream.
 
+**The ask site is plain HTTP on loopback, by design.** Its address is
+`http://127.0.0.1:2020` — the scheme is load-bearing. `on_demand_tls { ask … }` dials
+it over the container loopback in plain HTTP, while a bare `127.0.0.1:2020` address
+would activate automatic HTTPS (Caddy does that for an IP host exactly as for a
+domain) and answer TLS on that port; every ask would then fail and **no** host under
+the wildcard site could ever get a certificate. The loopback bind still stands: this
+container is attached to every slot network, so the registry must not be reachable
+from inside a preview. `caddy validate` accepts both forms, so this is a review-and-
+on-box check, not a lint.
+
+**Teardown is total, and never silent.** `down` re-renders
+`/etc/ds-platform/slots/<slot>.env` before it calls compose (compose aborts on a
+missing `--env-file`, so a deleted file would otherwise make the slot un-tearable),
+then detaches Caddy, de-registers, `compose down -v`, and removes the `slot-<slot>`
+network explicitly — compose only removes a network nothing is attached to, and the
+Caddy detach is tolerated. Any tolerated step that did fail is printed and the command
+**exits non-zero**, so an orphaned network or container is never reported as success.
+
+**Status output.** `slot status` prints two labelled blocks: the registry JSON exactly
+as it is on disk, then the whole redirect-URI set the shared Zitadel app must hold
+(rendered when `STAGE_BASE_DOMAIN` is in the environment). Part 1 only computes that
+set — see «Part 2 owns…» below.
+
+**Part 2 owns the redirect-URI convergence.** The shared Zitadel app accepts only
+registered redirect URIs, and that registration is a **whole-set** write
+(`IDP_REDIRECT_URIS` / `IDP_POST_LOGOUT_URIS` through `provision.sh`), so a per-slot
+write would silently drop the other slots. Part 1 therefore ships the pure seam
+`renderIdpRedirectUris(registry, base)` — the full ordered set for every registered
+slot — and prints it in `slot status`; **part 2 makes `slot up|down` converge that set
+onto the shared app through the same management API and PAT path `provision.sh` uses.**
+Until part 2 lands, a slot's `IDP_REDIRECT_URI` is emitted but not registered, and
+login on that slot fails with `invalid redirect_uri`.
+
+**On-box checks part 2 still owes.** `caddy validate` and `centrifugo checkconfig`
+(neither is available in this repo's toolchain), and «HTTP → 308 on a slot host»: the
+`:80` site no longer carries a `redir` line because automatic HTTPS is expected to
+answer the 308 first, but the site here is a **wildcard** address and the earlier 308
+observation was captured with the `redir` line present.
+
 **Secrets stay in one file.** `/etc/ds-platform/slots/<slot>.env` is generated and
 carries only non-secret values (`SLOT`, `SLOT_SHA7`, `SLOT_DB`, `DEPLOY_SHA`,
 `REDIS_URL`, the public URLs, `IDP_ISSUER`, `MAILER_SMTP_FROM`). `DATABASE_URL` is
@@ -370,6 +409,13 @@ one file on the box.
 databases are exclusive: `main` owns 0, a preview starts at `1 + (N % 15)` and linear-
 probes to the next free database — two slots never share one, and a collision moves the
 newcomer instead of dead-ending its converge.
+
+Allocation is capped at Redis database **15**, not 63: `compose.yml` raises the server
+to `--databases 64` only to leave headroom for the shared infra, while a preview cap of
+3 means 15 logical databases are already five times what a full box needs. The narrow
+range keeps the deterministic start (`1 + (N % 15)`) short and its collisions rare;
+raising the cap would be a one-constant change (`REDIS_DB_MAX` in `tools/staging/slot.mjs`)
+if the box ever grows past three previews.
 
 **Building images.** The box never builds. Dispatch
 `.github/workflows/preview.yml` («Preview images») with the full SHA and the slot

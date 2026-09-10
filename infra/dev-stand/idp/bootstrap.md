@@ -284,8 +284,8 @@ explicit provider can be provisioned in advance while Mailpit remains the boot c
 The current provisioner updates `real transactional sender` in place; this is
 **not an approved production Postbox migration** on the pinned IdP. The
 [profile migration draft](../../../apps/docs/content/specs/tech/2026-09-10-postbox-native-smtp-profile-design-en.md)
-requires a separate Postbox identity, retained mail.ru ID and deployment-owned
-production activation after its decision/implementation gates. Runtime
+requires a separate Postbox identity, retained mail.ru ID and shared explicit
+provider selection after its decision/implementation gates. Runtime
 reconcile verifies host/sender/username/TLS before activation and rejects drift,
 even for an already-active identity. Real-email startup failures abort API boot;
 later flag failures log loudly. The BFF cannot suppress independently queued IdP

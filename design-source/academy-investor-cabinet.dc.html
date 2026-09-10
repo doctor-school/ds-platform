@@ -10,7 +10,7 @@
 <helmet data-dc-atomics><link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"><style>body{margin:0;background:#fff;font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}a{color:#2D84F2}a:hover{color:#114D9E}:focus-visible{outline:3px solid #6BB1F7;outline-offset:2px}@keyframes livePulse{0%,100%{opacity:1}50%{opacity:.4}}</style></helmet>
 
 <div style="min-height:100vh;background:{{ pageBg }}">
-  <dc-import name="ds-shell" host="academy" dark="{{ dark }}" onTheme="{{ toggleTheme }}" embedded="{{ true }}">
+  <dc-import name="ds-shell" host="academy" loggedIn="{{ true }}" dark="{{ dark }}" onTheme="{{ toggleTheme }}" embedded="{{ true }}">
 
   <!-- Постер-шапка кабинета -->
   <div data-screen-label="a-cabinet · постер-шапка" style="background:#114D9E;padding:clamp(28px,4vw,44px) clamp(16px,4vw,48px) clamp(36px,6vw,60px)">

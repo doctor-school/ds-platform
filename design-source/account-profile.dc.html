@@ -10,7 +10,7 @@
 <helmet data-dc-atomics><link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"><style>body{margin:0;background:#fff;font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}:focus-visible{outline:3px solid #6BB1F7;outline-offset:2px}a{color:#2D84F2}a:hover{color:#114D9E}</style></helmet>
 
 <div style="min-height:100vh;background:{{ pageBg }};display:flex;flex-direction:column">
-  <dc-import name="ds-shell" host="academy" dark="{{ dark }}" onTheme="{{ toggleTheme }}" embedded="{{ true }}">
+  <dc-import name="ds-shell" host="academy" loggedIn="{{ true }}" dark="{{ dark }}" onTheme="{{ toggleTheme }}" embedded="{{ true }}">
 
   <!-- ═══ Вариант 1 · Анкета ═══ -->
   <sc-if value="{{ isAnketa }}" hint-placeholder-val="{{ true }}">

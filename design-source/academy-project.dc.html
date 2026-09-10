@@ -10,7 +10,7 @@
 <helmet data-dc-atomics><link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"><style>body{margin:0;background:#fff;font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}a{color:#2D84F2}a:hover{color:#114D9E}:focus-visible{outline:3px solid #6BB1F7;outline-offset:2px}@keyframes skel{0%,100%{opacity:.45}50%{opacity:1}}html{scroll-behavior:smooth}</style></helmet>
 
 <div style="min-height:100vh;background:{{ pageBg }}">
-  <dc-import name="ds-shell" host="academy" dark="{{ dark }}" onTheme="{{ toggleTheme }}" embedded="{{ true }}">
+  <dc-import name="ds-shell" host="academy" loggedIn="{{ logged }}" dark="{{ dark }}" onTheme="{{ toggleTheme }}" embedded="{{ true }}">
 
   <!-- Постер-шапка проекта -->
   <div style="background:#114D9E;padding:clamp(32px,5vw,52px) clamp(16px,4vw,48px) clamp(44px,7vw,72px)">
@@ -416,6 +416,7 @@ class Component extends DCLogic {
     const rowFirst = recruiting || tv === 'before';
     return {
       dark: d, isMobile: m, isDesktop: !m,
+      logged,
       authHref: logged ? 'account-profile.dc.html' : 'auth.dc.html',
       authLabel: logged ? 'Кабинет' : 'Войти',
       statusBadge, recruiting,

@@ -10,7 +10,7 @@
 <helmet data-dc-atomics><link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"><style>body{margin:0;background:#fff;font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}:focus-visible{outline:3px solid #6BB1F7;outline-offset:2px}@keyframes livePulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.45;transform:scale(.72)}}</style></helmet>
 
 <div style="min-height:100vh;background:{{ pageBg }}">
-  <dc-import name="ds-shell" host="academy" dark="{{ dark }}" onTheme="{{ toggleTheme }}" embedded="{{ true }}">
+  <dc-import name="ds-shell" host="academy" loggedIn="{{ true }}" dark="{{ dark }}" onTheme="{{ toggleTheme }}" embedded="{{ true }}">
 
   <div style="background:{{ headerBg }};padding:{{ posterPad }}">
     <div style="max-width:1104px;margin:0 auto;display:flex;align-items:flex-end;justify-content:space-between;gap:32px;flex-wrap:wrap">

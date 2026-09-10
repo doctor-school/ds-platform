@@ -10,7 +10,7 @@
 <helmet data-dc-atomics><link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"><style>body{margin:0;background:#fff;font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}a{color:#2D84F2}a:hover{color:#114D9E}:focus-visible{outline:3px solid #6BB1F7;outline-offset:2px}@keyframes livePulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.45;transform:scale(.72)}}@keyframes skelPulse{0%,100%{opacity:.55}50%{opacity:1}}</style></helmet>
 
 <div style="min-height:100vh;background:{{ pageBg }}">
-  <dc-import name="ds-shell" host="academy" dark="{{ dark }}" onTheme="{{ toggleTheme }}" embedded="{{ true }}">
+  <dc-import name="ds-shell" host="academy" loggedIn="{{ logged }}" dark="{{ dark }}" onTheme="{{ toggleTheme }}" embedded="{{ true }}">
 
   <!-- Синее поле: крошки; широкая витрина — вариант Б -->
   <div style="background:#114D9E;padding:clamp(24px,4vw,36px) clamp(16px,4vw,48px) {{ bandPadBottom }}">
@@ -438,6 +438,7 @@ class Component extends DCLogic {
       growthVinline: gv === 'v' && !ladderAside,
       growthSteps, ladderSteps, ladderAside,
       switchGroups,
+      logged,
       authLabel: logged ? 'Кабинет' : 'Войти',
       authHref: logged ? 'account-profile.dc.html' : 'auth.dc.html',
       skelBg: d ? 'rgba(255,255,255,.08)' : 'oklch(.93 .01 250)',

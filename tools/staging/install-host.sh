@@ -78,13 +78,23 @@ done
 
 # Copies only when the bytes differ. Returns 0 when it changed something, so callers
 # can accumulate «did anything change?» without re-comparing.
+#
+# Every mutating command carries its own `|| die`, and that is load-bearing rather
+# than belt-and-braces: bash documents that «if a compound command or shell function
+# executes in a context where -e is being ignored, none of the commands executed
+# within the function body will be affected by the -e setting», and EVERY call site
+# below is such a context (`copy_file ... || true`, `if copy_file ...; then`). Without
+# the explicit die a failed `install` — read-only mount, ENOSPC, an immutable unit
+# file — would fall through to `ensured`, the box would keep the OLD file, and the
+# install would exit 0 while the transcript claimed success.
 copy_file() {
   local src="$1" dst="$2" mode="$3" label="$4"
   if [ -f "$dst" ] && cmp -s "$src" "$dst"; then
     already "$label"
     return 1
   fi
-  install -o root -g root -m "$mode" "$src" "$dst"
+  install -o root -g root -m "$mode" "$src" "$dst" ||
+    die "failed to install ${dst} from ${src} (${label})"
   ensured "$label"
   return 0
 }
@@ -95,7 +105,7 @@ ensure_dir() {
     already "directory ${dir}"
     return
   fi
-  install -d -o root -g root -m "$mode" "$dir"
+  install -d -o root -g root -m "$mode" "$dir" || die "failed to create directory ${dir}"
   ensured "directory ${dir} (${mode})"
 }
 
@@ -105,7 +115,7 @@ ensure_symlink() {
     already "symlink ${link}"
     return
   fi
-  ln -sfn "$target" "$link"
+  ln -sfn "$target" "$link" || die "failed to link ${link} -> ${target}"
   ensured "symlink ${link} -> ${target}"
 }
 
@@ -118,9 +128,11 @@ write_file() {
     return 1
   fi
   local tmp
-  tmp="$(mktemp)"
-  printf '%s\n' "$content" > "$tmp"
-  install -o root -g root -m "$mode" "$tmp" "$dst"
+  tmp="$(mktemp)" || die "failed to allocate a temp file for ${dst}"
+  printf '%s\n' "$content" > "$tmp" || die "failed to stage the contents of ${dst}"
+  # Same errexit caveat as `copy_file`: both call sites are `write_file ... || true`.
+  install -o root -g root -m "$mode" "$tmp" "$dst" ||
+    die "failed to install ${dst} (${label})"
   rm -f "$tmp"
   ensured "$label"
   return 0

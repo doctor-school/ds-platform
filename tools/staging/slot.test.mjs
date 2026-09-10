@@ -1149,7 +1149,7 @@ test("`reset-identities` still refuses, and now names part 2b", () => {
   assert.throws(() => parseArgs(["reset-identities", "pr-5"]), /part 2b/);
 });
 
-test("`reset main` audits first, then drops and re-clones `ds_main` — never `ds_golden`", () => {
+test("`reset main` audits, stops the slot, then drops and re-clones `ds_main` — never `ds_golden`", () => {
   const registry = registerSlot(emptyRegistry(), {
     slot: "main",
     sha: SHA,
@@ -1163,7 +1163,19 @@ test("`reset main` audits first, then drops and re-clones `ds_main` — never `d
   assert.equal(plan.steps[0].path, SLOT_LOG_PATH);
   assert.match(plan.steps[0].contents, /reset main by anton sha=0123456789abcdef/);
 
-  const sql = plan.steps[1].statements.join("\n");
+  // The compose project is stopped BEFORE any SQL: dropping `ds_main` under a live
+  // api pool fails with 55006 after the audit line has already been appended.
+  assert.equal(plan.steps[1].kind, "sh");
+  assert.deepEqual(plan.steps[1].command.slice(-2), ["down", "--remove-orphans"]);
+  const firstSqlIndex = plan.steps.findIndex((step) => step.kind === "sql");
+  assert.ok(
+    firstSqlIndex > 1,
+    `the compose stop must precede the first SQL step (sql at ${firstSqlIndex})`,
+  );
+  // `main` keeps its volumes: the down is a stop, not a wipe.
+  assert.ok(!plan.steps[1].command.includes("-v"));
+
+  const sql = plan.steps[firstSqlIndex].statements.join("\n");
   assert.match(sql, /DROP DATABASE IF EXISTS "ds_main"/);
   assert.match(sql, /CREATE DATABASE "ds_main" TEMPLATE "ds_golden"/);
   assert.ok(!/DROP DATABASE IF EXISTS "ds_golden"/.test(sql));

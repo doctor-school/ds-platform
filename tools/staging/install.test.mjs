@@ -11,7 +11,8 @@
 // must exist are checked against the repository, path-agnostically.
 
 import assert from "node:assert/strict";
-import { existsSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
@@ -102,4 +103,90 @@ test("`--dry-run` prints the payload and both commands that would run", () => {
   for (const path of PAYLOAD) assert.ok(plan.includes(path), `dry run omits ${path}`);
   assert.match(plan, /local: {2}tar -czf - -C \/repo /);
   assert.ok(plan.includes(REMOTE_INSTALL_SCRIPT));
+});
+
+// --- the host script's fail-hard contract (Mode (a) blocker, PR #2170) --------
+//
+// `copy_file` and `write_file` are invoked from errexit-ignoring contexts
+// (`copy_file ... || true`, `if copy_file ...; then`), and bash documents that `-e`
+// is disabled inside a function body executed in such a context. A failing
+// `install(1)` — read-only mount, ENOSPC, an immutable unit file — must therefore
+// still abort the whole run through the helper's own `|| die`, instead of falling
+// through to `ensured` and leaving the box on the OLD file with an exit 0.
+//
+// These drive that branch for real: the helper section of `install-host.sh` is
+// evaluated in a bash subshell whose `install` is a shell function that always
+// fails, so no root, no box and no filesystem writes are involved.
+
+const HOST_SCRIPT = fileURLToPath(new URL("./install-host.sh", import.meta.url));
+
+const PRELUDE = `set -euo pipefail
+ensured() { echo "ensured $*"; }
+already() { echo "already $*"; }
+die() { echo "install-host: $*" >&2; exit 1; }
+install() { return 1; }
+`;
+
+function helperSection() {
+  const source = readFileSync(HOST_SCRIPT, "utf8");
+  const start = source.indexOf("# --- helpers");
+  const end = source.indexOf("# --- 1. the pinned Node runtime");
+  assert.ok(start > 0 && end > start, "install-host.sh no longer has a helper section");
+  return source.slice(start, end);
+}
+
+function runHelpers(body) {
+  const script = `${PRELUDE}${helperSection()}${body}
+echo "REACHED THE END"
+`;
+  return spawnSync("bash", ["-c", script], { encoding: "utf8" });
+}
+
+function assertHardFailure(t, body) {
+  const run = runHelpers(body);
+  if (run.error) {
+    t.skip(`bash is unavailable: ${run.error.message}`);
+    return;
+  }
+  assert.equal(run.status, 1, `expected a non-zero exit, got ${run.status}`);
+  assert.match(run.stderr, /install-host: failed to install/);
+  assert.ok(!run.stdout.includes("ensured"), `reported success: ${run.stdout}`);
+  assert.ok(!run.stdout.includes("REACHED THE END"), `kept going: ${run.stdout}`);
+}
+
+test("a failed `copy_file` aborts the install even behind `|| true`", (t) => {
+  assertHardFailure(
+    t,
+    'copy_file /tmp/ds-2064-src /tmp/ds-2064-dst 0644 "script /tmp/ds-2064-dst" || true',
+  );
+});
+
+test("a failed `copy_file` aborts the install even inside an `if` condition", (t) => {
+  // This is the units loop: `if copy_file ...; then units_changed=1; fi`. A swallowed
+  // failure there means `daemon-reload` + `restart` over units that were never written.
+  assertHardFailure(
+    t,
+    'if copy_file /tmp/ds-2064-src /tmp/ds-2064-unit 0644 "unit /tmp/ds-2064-unit"; then :; fi',
+  );
+});
+
+test("a failed `write_file` aborts the install even behind `|| true`", (t) => {
+  assertHardFailure(
+    t,
+    'write_file /tmp/ds-2064-wrapper 0750 "wrapper /tmp/ds-2064-wrapper" "#!/usr/bin/env bash" || true',
+  );
+});
+
+test("every mutating helper command carries its own `|| die`", () => {
+  const helpers = helperSection();
+  for (const command of ["install -o root -g root", "install -d -o root -g root", "ln -sfn"]) {
+    const at = helpers.indexOf(command);
+    assert.ok(at > 0, `helper section lost ${command}`);
+    // Collapsed, because `copy_file`'s die sits on a continuation line.
+    const tail = helpers.slice(at, at + 200).split(/\s+/u).join(" ");
+    assert.ok(
+      tail.includes("|| die"),
+      `${command} may fail silently in an errexit-ignoring caller`,
+    );
+  }
 });

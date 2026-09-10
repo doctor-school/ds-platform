@@ -1095,6 +1095,13 @@ export function planSlotReset({
       contents: resetLogLine({ actor, sha, now }),
       mode: 0o640,
     },
+    // The containers come DOWN before the drop, exactly as `planSlotDown` orders it
+    // for a preview: `realEffects().sql` issues one `docker exec … psql` per
+    // statement, so a running api's pool re-opens a session on `ds_main` between the
+    // terminate and the DROP and Postgres answers 55006 — a reset that aborts AFTER
+    // the audit line was already written. `up.steps` below brings the slot back on
+    // the registered SHA.
+    downCommandPlan("main"),
     {
       kind: "sql",
       label: "re-clone the main database from the template",

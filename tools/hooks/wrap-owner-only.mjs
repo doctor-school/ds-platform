@@ -120,18 +120,17 @@ function ownerRequested(jsonl, kind) {
       const request = candidate.trim();
       if (kind === "wrap" && /^\/wrap(?:-init)?[.!]?$/i.test(request))
         return true;
-      // An explicit imperative must precede the requested workflow on this line.
-      if (
-        !/^(?:(?:please|ok(?:ay)?|окей|пожалуйста)[, .]+)*(?:run|perform|conduct|do|проведи|сделай|давай|запусти)(?:\s|$)/i.test(
-          request,
-        )
-      )
-        continue;
-      if (kind === "wrap" && OWNER_WRAP_RE.test(request)) return true;
+      // The verb must directly target the workflow, not a check or discussion of it.
+      const target = request.match(
+        /^(?:(?:please|ok(?:ay)?|окей|пожалуйста)[, .]+)*(?:run|perform|conduct|do|проведи|сделай|давай|запусти)\s+(?:(?:a|the|full|полный|полноценный|поноценный|независимый)\s+)?(.+)$/i,
+      )?.[1];
+      if (!target) continue;
+      if (kind === "wrap" && /^\/wrap(?:-init)?(?=\s|[.!]?$)/i.test(target))
+        return true;
       if (
         kind === "retro" &&
-        /(?:\b(?:session retro|retrospective|run-session-retro)\b|ретро(?:\s|$))/i.test(
-          request,
+        /^(?:session retro|retrospective|run-session-retro|ретро)(?=\s|[.!]?$)/i.test(
+          target,
         )
       )
         return true;

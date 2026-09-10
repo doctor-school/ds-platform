@@ -377,3 +377,41 @@ describe("safe configuration diagnostic recipe", () => {
     },
   );
 });
+
+describe("direct workflow target regression (Mode a)", () => {
+  it.each([
+    "Do not run /wrap",
+    "Please do not run a retrospective",
+    "Run a check of the documentation for /wrap",
+    "Run a check of this example: 'please run /wrap now'",
+    "Проведи проверку документации /wrap",
+  ])("does not execute a workflow from %s", (text) => {
+    const jsonl = userText(text);
+    for (const skill of ["run-wrap", "run-session-retro"]) {
+      expect(
+        decide({ toolName: "Skill", toolInput: { skill }, jsonl }),
+      ).toEqual({ action: "deny" });
+    }
+  });
+  it.each([
+    "Окей, проведи полноценный /wrap",
+    "Окей, проведи поноценный /wrap",
+    "Please run /wrap",
+    "Do /wrap",
+  ])("keeps explicit full-wrap request: %s", (text) => {
+    expect(ownerRequestedWrap(userText(text))).toBe(true);
+  });
+  it.each([
+    "Проведи ретро этой сессии",
+    "Please conduct a retrospective",
+    "Run session retro",
+  ])("keeps explicit analysis request: %s", (text) => {
+    expect(
+      decide({
+        toolName: "Skill",
+        toolInput: { skill: "run-session-retro" },
+        jsonl: userText(text),
+      }),
+    ).toEqual({ action: "silent" });
+  });
+});

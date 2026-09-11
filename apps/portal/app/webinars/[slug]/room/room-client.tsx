@@ -12,7 +12,7 @@ import {
   type RoomShellServerProps,
 } from "@ds/room";
 import { initialsFromDisplayName } from "@ds/room/display-name";
-import { HeaderUserCluster } from "@/components/header-user-cluster";
+import { HeaderUserCluster } from "@ds/storefront-shell/user-cluster";
 
 /**
  * 006 EARS-11 / EARS-14 — the ACADEMY host's `"use client"` wrapper over the
@@ -92,7 +92,10 @@ export function RoomClient({
         // saved name — the prompt branch above guarantees there is one.
         <HeaderUserCluster
           className="order-first gap-5 layout:order-none"
-          themeToggleLabel={copy.themeToggle}
+          themeToggleLabels={{
+            toDark: copy.themeToggle,
+            toLight: copy.themeToggle,
+          }}
           profileLabel={roomCopy.avatarLabel(displayName)}
           initials={initialsFromDisplayName(displayName)}
           profileTestId="room-avatar"

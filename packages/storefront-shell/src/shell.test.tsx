@@ -345,6 +345,37 @@ describe("StorefrontFooter", () => {
     render(<StorefrontFooter config={ACADEMY} />);
     expect(screen.getByTestId("storefront-footer")).toBeInTheDocument();
   });
+
+  it("008 EARS-12/14: a footer-scoped hiddenOnPaths overrides the shared list without touching the header", () => {
+    const withOwnFooterRoutes: StorefrontShellConfig = {
+      ...ACADEMY,
+      footer: { ...ACADEMY.footer, hiddenOnPaths: [...ACADEMY.hiddenOnPaths!, "/"] },
+    };
+
+    // The route the footer-scoped list adds: footer gone, header untouched.
+    pathname = "/";
+    const home = render(<StorefrontFooter config={withOwnFooterRoutes} />);
+    expect(screen.queryByTestId("storefront-footer")).toBeNull();
+    home.unmount();
+    render(<StorefrontHeader config={withOwnFooterRoutes} />);
+    expect(screen.getByTestId("storefront-logo")).toBeInTheDocument();
+  });
+
+  it("008 EARS-12/14: the footer still honours the shared list where its own list repeats it, and renders elsewhere", () => {
+    const withOwnFooterRoutes: StorefrontShellConfig = {
+      ...ACADEMY,
+      footer: { ...ACADEMY.footer, hiddenOnPaths: [...ACADEMY.hiddenOnPaths!, "/"] },
+    };
+
+    pathname = "/register";
+    const auth = render(<StorefrontFooter config={withOwnFooterRoutes} />);
+    expect(screen.queryByTestId("storefront-footer")).toBeNull();
+    auth.unmount();
+
+    pathname = "/webinars";
+    render(<StorefrontFooter config={withOwnFooterRoutes} />);
+    expect(screen.getByTestId("storefront-footer")).toBeInTheDocument();
+  });
 });
 
 describe("host neutrality", () => {

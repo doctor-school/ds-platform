@@ -59,6 +59,18 @@ export interface StorefrontShellConfig {
      * the canvas fits it with a ResizeObserver, the code fits it with CSS.
      */
     giant: { text: string; fontSize: string };
+    /**
+     * Route patterns the FOOTER alone is hidden on, when they differ from the
+     * chrome-wide {@link StorefrontShellConfig.hiddenOnPaths}. Absent (the
+     * common case) means the footer follows the chrome-wide list exactly.
+     *
+     * It exists because the two halves of the chrome can legitimately disagree
+     * about one route: the academy home mounts the shared HEADER (#1877) while
+     * painting a page-owned `<footer>` of its own, so the shared footer must
+     * stand down there — and only there — or the document carries two
+     * `contentinfo` landmarks. Same grammar as the chrome-wide list.
+     */
+    hiddenOnPaths?: readonly string[];
   };
   /**
    * Route patterns on which the chrome renders NOTHING — the host's own auth or

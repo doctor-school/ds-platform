@@ -53,6 +53,19 @@ export type ShellConfigKey =
 export type ShellTranslator = (key: ShellConfigKey) => string;
 
 /**
+ * The routes that carry their OWN chrome: the four auth surfaces mount
+ * `AuthShell`, and the webinar room mounts `room-header`. Named once so the
+ * header's list and the footer's (which adds `/` — see below) cannot drift.
+ */
+const HIDDEN_ON_PATHS = [
+  "/login",
+  "/register",
+  "/verify",
+  "/reset",
+  "/webinars/*/room",
+] as const;
+
+/**
  * Build the academy host config from the `shell` catalog.
  *
  * `hiddenOnPaths` reproduces exactly what the portal's own header did by hand
@@ -100,14 +113,22 @@ export function academyShellConfig(t: ShellTranslator): StorefrontShellConfig {
       },
       note: [t("footerNoteBrand"), t("footerNoteCopyright")],
       giant: { text: t("footerGiant"), fontSize: "min(9.6cqw,150px)" },
+
+      /**
+       * The chrome-wide list PLUS the academy home. `/` mounts the shared
+       * header like every other route (#1877), but the home view still paints
+       * its own `<footer>` — a page-local section index (`#events`,
+       * `#projects`, `#experts`, `#partner-form`), the «Врачи учат врачей ·
+       * 2026» tagline and its own `Doctor.School` wordmark — none of which the
+       * shared footer carries. Mounting both gives `/` two `contentinfo`
+       * landmarks; dropping the home's own footer would drop that content.
+       * Until the two footers are reconciled as one (epic #2020 owns the
+       * de-duplication, and the delta is an owner-facing copy decision), the
+       * shared footer stands down on `/` alone.
+       */
+      hiddenOnPaths: [...HIDDEN_ON_PATHS, "/"],
     },
 
-    hiddenOnPaths: [
-      "/login",
-      "/register",
-      "/verify",
-      "/reset",
-      "/webinars/*/room",
-    ],
+    hiddenOnPaths: [...HIDDEN_ON_PATHS],
   };
 }

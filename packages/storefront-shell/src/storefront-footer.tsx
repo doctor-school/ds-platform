@@ -33,8 +33,11 @@ export function StorefrontFooter({
   config: StorefrontShellConfig;
 }) {
   const chrome = <FooterChrome config={config} />;
-  return config.hiddenOnPaths ? (
-    <VisibleOffPaths patterns={config.hiddenOnPaths}>{chrome}</VisibleOffPaths>
+  // The footer's own list wins when the host declares one; otherwise the footer
+  // follows the chrome-wide list. Neither present ⇒ no client boundary at all.
+  const patterns = config.footer.hiddenOnPaths ?? config.hiddenOnPaths;
+  return patterns ? (
+    <VisibleOffPaths patterns={patterns}>{chrome}</VisibleOffPaths>
   ) : (
     chrome
   );

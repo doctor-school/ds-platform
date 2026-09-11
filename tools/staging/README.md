@@ -1,10 +1,17 @@
 # `tools/staging` — the STAGE stand's box-side scripts
 
+> **Superseded delivery half.** This file documents the box as it runs today. The plan of
+> record now delivers to the box the way `tools/deploy/prod.mjs` delivers to production —
+> an operator ships a committed SHA over SSH and the box builds its own images, with no
+> registry, no on-box deployer and no host Node (tech spec §3 «Host runtime», §5, §8 step
+> 4). Issue #2194 does that rework and rewrites this file with it; until it lands, the
+> operating detail below is what is actually installed.
+
 Node scripts that run **on the stage box**, never in CI and never on a developer
 machine. The box carries no workspace checkout and no `pnpm`: it has one pinned Node
-LTS under `/opt/node` (tech spec §3 «Host runtime»), so everything here is dependency-
-free ESM with `node --test` unit tests beside it. One script is the exception and runs
-on the workstation: `install.mjs`, which puts the others on the box.
+LTS under `/opt/node`, so everything here is dependency-free ESM with `node --test` unit
+tests beside it. One script is the exception and runs on the workstation: `install.mjs`,
+which puts the others on the box.
 
 | script            | what it owns                                                                       | Issue |
 | ----------------- | ---------------------------------------------------------------------------------- | ----- |

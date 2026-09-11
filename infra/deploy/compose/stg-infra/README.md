@@ -6,7 +6,11 @@ every preview slot (`main`, `pr-<N>`) is a _separate_ compose project that joins
 `stg-infra` network with its `api` container only.
 
 Plan of record: `apps/docs/content/specs/tech/2026-09-08-staging-previews-and-regression-contour-en.md`
-(§3 topology, §8 steps 1-2, §9 recovery). Issue #2061 (Phase A, this directory) and
+(§3 topology, §8 steps 1-2, §9 recovery). The spec's delivery half has moved to production's
+shape — an operator ships a committed SHA over SSH, the box builds its own images, and the
+edge is one host regexp with no slot registry, no generated include and no host Node. The
+«Slot deployer (#2064)» section below and every registry/GHCR mention in it describe what is
+installed on the box **today**; Issue #2194 reworks that and rewrites those sections. Issue #2061 (Phase A, this directory) and
 #2062 (the edge — «Edge (#2062)» below);
 Phase B — the owner's `terraform apply`, the first bring-up and
 the live acceptance below — is tracked in **#2095**.

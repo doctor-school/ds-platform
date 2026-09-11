@@ -27,7 +27,8 @@ import { SlotError } from "./slot.mjs";
 /**
  * Everything the box needs, as repository-relative paths.
  *
- * `golden-db.mjs` is in the list because `slot.mjs` imports it: shipping one without
+ * `golden-db.mjs` and `idp.mjs` are in the list because `slot.mjs` imports them:
+ * shipping one without
  * the other produces a host that fails at `import`, which on a timer looks like the
  * deployer silently doing nothing. `install-host.sh` ships as part of the payload
  * rather than being piped separately so the script and the files it installs are
@@ -36,6 +37,7 @@ import { SlotError } from "./slot.mjs";
 export const PAYLOAD = Object.freeze([
   "tools/staging/slot.mjs",
   "tools/staging/golden-db.mjs",
+  "tools/staging/idp.mjs",
   "tools/staging/deployer.mjs",
   "tools/staging/install-host.sh",
   "infra/deploy/compose/slot",

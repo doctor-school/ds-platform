@@ -12,11 +12,16 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  GOLDEN_SUBJECTS_PATH,
+  GOLDEN_SUBJECT_ENV_VARS,
+} from "./idp.mjs";
+import {
   CADDY_CONTAINER,
   CADDY_INCLUDE_DIR,
   GC_FREE_SPACE_FLOOR_BYTES,
   GHCR_REPO,
   PREVIEW_SLOT_CAP,
+  REDIS_CONTAINER,
   REGISTRY_PATH,
   SLOT_ENV_DIR,
   SLOT_IMAGE_APPS,
@@ -41,6 +46,7 @@ import {
   parseRegistry,
   planImageGc,
   planPruneByFreeSpace,
+  planResetIdentities,
   planSlotDown,
   planSlotReset,
   planSlotUp,
@@ -51,6 +57,8 @@ import {
   renderSlotDownEnv,
   renderSlotEnv,
   renderSlotsInclude,
+  resolveDesiredRedirectSet,
+  resetIdentitiesLogLine,
   resetLogLine,
   runSlotCommand,
   runSlotPlan,
@@ -66,6 +74,12 @@ import {
 } from "./slot.mjs";
 
 const BASE = "stage.doctor.school";
+// The five tool-owned subject ids `ds-slot reset-identities` writes to
+// GOLDEN_SUBJECTS_PATH. Opaque by contract, so the fixture may be anything stable.
+const GOLDEN_SUBJECTS = Object.fromEntries(
+  GOLDEN_SUBJECT_ENV_VARS.map((name, index) => [name, `sub-000${index + 1}`]),
+);
+
 const SHA = "0123456789abcdef0123456789abcdef01234567";
 
 // --- name derivation ---------------------------------------------------------
@@ -460,6 +474,7 @@ test("ask and slots are rendered from the SAME registry — they cannot drift", 
 
 test("the per-slot env file carries no secret — the password stays in stage.env", () => {
   const env = renderSlotEnv({
+    goldenSubjects: GOLDEN_SUBJECTS,
     slot: "pr-2034",
     sha: SHA,
     baseDomain: BASE,
@@ -495,6 +510,7 @@ test("the per-slot env file carries no secret — the password stays in stage.en
 
 test("main's Redis database is 0 in the env file it gets", () => {
   const env = renderSlotEnv({
+    goldenSubjects: GOLDEN_SUBJECTS,
     slot: "main",
     sha: SHA,
     baseDomain: BASE,
@@ -585,6 +601,7 @@ function planLabels(plan) {
 
 test("up: env file → clone → pull → migrate → seed → up → attach → register → reload", () => {
   const plan = planSlotUp({
+    goldenSubjects: GOLDEN_SUBJECTS,
     slot: "pr-2034",
     sha: SHA,
     registry: emptyRegistry(),
@@ -602,6 +619,7 @@ test("up: env file → clone → pull → migrate → seed → up → attach →
     "write registry",
     "render caddy includes",
     "reload caddy",
+    "converge the shared IdP redirect set",
   ]);
   // The registry write happens only after the containers are up: a host that is
   // registered before its upstream exists gets a certificate for a 502.
@@ -631,6 +649,7 @@ test("sync of main forward-migrates and never clones or seeds a fresh database",
     updatedAt: "2026-09-10T00:00:00.000Z",
   });
   const plan = planSlotUp({
+    goldenSubjects: GOLDEN_SUBJECTS,
     slot: "main",
     sha: "89abcdef89abcdef89abcdef89abcdef89abcdef",
     registry,
@@ -654,7 +673,7 @@ test("down: detach → compose down -v → drop database → deregister → relo
     hosts: Object.values(slotHostnames("pr-2034", BASE)),
     updatedAt: "2026-09-10T00:00:00.000Z",
   });
-  const plan = planSlotDown({ slot: "pr-2034", registry, baseDomain: BASE });
+  const plan = planSlotDown({ slot: "pr-2034", registry, baseDomain: BASE, goldenSubjects: GOLDEN_SUBJECTS });
   assert.deepEqual(planLabels(plan), [
     "ensure slot env",
     "detach caddy",
@@ -666,6 +685,7 @@ test("down: detach → compose down -v → drop database → deregister → relo
     "drop database",
     "remove slot images",
     "remove slot env",
+    "converge the shared IdP redirect set",
   ]);
   // Deregistration precedes teardown: a host must stop being certifiable before
   // its upstream disappears.
@@ -686,7 +706,7 @@ test("down of main tears the containers down but keeps its persistent database",
     hosts: Object.values(slotHostnames("main", BASE)),
     updatedAt: "2026-09-10T00:00:00.000Z",
   });
-  const plan = planSlotDown({ slot: "main", registry, baseDomain: BASE });
+  const plan = planSlotDown({ slot: "main", registry, baseDomain: BASE, goldenSubjects: GOLDEN_SUBJECTS });
   assert.ok(!planLabels(plan).includes("drop database"));
   const composeDown = plan.steps.find((step) => step.label === "compose down");
   assert.ok(!composeDown.command.includes("-v"));
@@ -697,6 +717,7 @@ test("down of main tears the containers down but keeps its persistent database",
 test("the executor runs every step in order through injected effects", async () => {
   const seen = [];
   const plan = planSlotUp({
+    goldenSubjects: GOLDEN_SUBJECTS,
     slot: "pr-2034",
     sha: SHA,
     registry: emptyRegistry(),
@@ -712,6 +733,7 @@ test("the executor runs every step in order through injected effects", async () 
       return { ok: true, stdout: "{}" };
     },
     write: (path) => seen.push(["write", path]),
+    idp: (step) => seen.push(["idp", step.op]),
   });
   assert.equal(seen[0][0], "write");
   assert.equal(seen[0][1], `${SLOT_ENV_DIR}/pr-2034.env`);
@@ -728,6 +750,7 @@ test("the executor runs every step in order through injected effects", async () 
 
 test("a failing step aborts the run", async () => {
   const plan = planSlotUp({
+    goldenSubjects: GOLDEN_SUBJECTS,
     slot: "pr-2034",
     sha: SHA,
     registry: emptyRegistry(),
@@ -742,6 +765,7 @@ test("a failing step aborts the run", async () => {
         return undefined;
       },
       write: () => {},
+      idp: () => {},
     }),
     /manifest unknown/,
   );
@@ -761,6 +785,7 @@ test("a failing step aborts the run", async () => {
       stdout: JSON.stringify({ c9: { Name: CADDY_CONTAINER } }),
     }),
     write: () => {},
+    idp: () => {},
   });
   assert.equal(reached, true);
 });
@@ -793,14 +818,14 @@ test("the CLI parses the commands step 4 part 1 actually implements", () => {
   assert.throws(() => parseArgs([]), SlotError);
 });
 
-test("reset-identities refuses loudly instead of silently doing nothing", () => {
-  // `reset` landed in part 2a (see the section at the end of this file); the
-  // redirect-URI convergence this command needs is part 2b's, and until it exists a
-  // silent no-op would look to the suite like a converged identity set.
-  assert.throws(
-    () => parseArgs(["reset-identities", "pr-2034"]),
-    (err) => err instanceof SlotError && /not implemented until part 2b/.test(err.message),
-  );
+test("the CLI parses `reset-identities <slot>` like any other slot command", () => {
+  assert.deepEqual(parseArgs(["reset-identities", "pr-2034"]), {
+    command: "reset-identities",
+    slot: "pr-2034",
+    sha: undefined,
+  });
+  assert.throws(() => parseArgs(["reset-identities"]), /requires <slot>/);
+  assert.throws(() => parseArgs(["reset-identities", "PR-2034"]), SlotError);
 });
 
 // --- the IdP redirect-URI set (Mode (a) #2168) --------------------------------
@@ -837,6 +862,7 @@ test("the IdP redirect set covers every registered slot, ordered and de-duplicat
   ]);
   // The path is exactly the one the per-slot env file hands the api.
   const env = renderSlotEnv({
+    goldenSubjects: GOLDEN_SUBJECTS,
     slot: "pr-2034",
     sha: SHA,
     baseDomain: BASE,
@@ -856,6 +882,47 @@ test("an empty registry yields an empty redirect set, never a wildcard", () => {
   );
 });
 
+test("the converge writes the env pins unioned with the rendered slot set", () => {
+  // The write is whole-set: dropping the pins would unregister the stage's own hosts
+  // that `infra/dev-stand/idp/provision.sh` registered (#2064 addendum 6). Pins come
+  // first and a host present in both appears exactly once.
+  const registry = registerSlot(emptyRegistry(), {
+    slot: "pr-2034",
+    sha: SHA,
+    redisDb: 4,
+    hosts: Object.values(slotHostnames("pr-2034", BASE)),
+    updatedAt: "2026-09-10T00:00:00.000Z",
+  });
+  const step = { desired: renderIdpRedirectUris(registry, BASE) };
+  const desired = resolveDesiredRedirectSet(step, {
+    IDP_REDIRECT_URIS:
+      "https://api-main.stage.doctor.school/auth/callback, https://api-pr-2034.stage.doctor.school/auth/callback",
+    IDP_POST_LOGOUT_URIS: "https://academy-main.stage.doctor.school",
+  });
+  assert.deepEqual(desired.redirectUris, [
+    "https://api-main.stage.doctor.school/auth/callback",
+    "https://api-pr-2034.stage.doctor.school/auth/callback",
+  ]);
+  assert.deepEqual(desired.postLogoutUris, [
+    "https://academy-main.stage.doctor.school",
+    "https://academy-pr-2034.stage.doctor.school",
+    "https://doctor-pr-2034.stage.doctor.school",
+    "https://admin-pr-2034.stage.doctor.school",
+  ]);
+});
+
+test("no pins in the env leaves the rendered set untouched", () => {
+  const registry = registerSlot(emptyRegistry(), {
+    slot: "main",
+    sha: SHA,
+    redisDb: 1,
+    hosts: Object.values(slotHostnames("main", BASE)),
+    updatedAt: "2026-09-10T00:00:00.000Z",
+  });
+  const step = { desired: renderIdpRedirectUris(registry, BASE) };
+  assert.deepEqual(resolveDesiredRedirectSet(step, {}), step.desired);
+});
+
 // --- teardown survives a missing env file and takes the network with it -------
 
 test("down re-renders the slot env file first, so a deleted one cannot block compose", () => {
@@ -866,7 +933,7 @@ test("down re-renders the slot env file first, so a deleted one cannot block com
     hosts: Object.values(slotHostnames("pr-2034", BASE)),
     updatedAt: "2026-09-10T00:00:00.000Z",
   });
-  const plan = planSlotDown({ slot: "pr-2034", registry, baseDomain: BASE });
+  const plan = planSlotDown({ slot: "pr-2034", registry, baseDomain: BASE, goldenSubjects: GOLDEN_SUBJECTS });
   const labels = planLabels(plan);
   assert.equal(labels[0], "ensure slot env");
   assert.ok(labels.indexOf("ensure slot env") < labels.indexOf("compose down"));
@@ -887,6 +954,7 @@ test("a slot missing from the registry still renders enough env to be torn down"
   assert.doesNotMatch(contents, /PASSWORD/);
 
   const plan = planSlotDown({
+    goldenSubjects: GOLDEN_SUBJECTS,
     slot: "pr-2034",
     registry: emptyRegistry(),
     baseDomain: BASE,
@@ -903,7 +971,7 @@ test("down removes the slot network after the detach, and never before compose d
     updatedAt: "2026-09-10T00:00:00.000Z",
   });
   const labels = planLabels(
-    planSlotDown({ slot: "pr-2034", registry, baseDomain: BASE }),
+    planSlotDown({ slot: "pr-2034", registry, baseDomain: BASE, goldenSubjects: GOLDEN_SUBJECTS }),
   );
   assert.ok(labels.includes("remove slot network"));
   assert.ok(labels.indexOf("compose down") < labels.indexOf("remove slot network"));
@@ -925,7 +993,7 @@ function downPlan(slot = "pr-2034") {
     hosts: Object.values(slotHostnames(slot, BASE)),
     updatedAt: "2026-09-10T00:00:00.000Z",
   });
-  return planSlotDown({ slot, registry, baseDomain: BASE });
+  return planSlotDown({ slot, registry, baseDomain: BASE, goldenSubjects: GOLDEN_SUBJECTS });
 }
 
 test("the network and image removals are planned as verify-then-remove steps", () => {
@@ -955,6 +1023,7 @@ test("a network compose already removed leaves `down` clean and skips `network r
       return { ok: false, stdout: "", stderr: "Error: No such network: slot-pr-2034" };
     },
     write: () => {},
+    idp: () => {},
   });
   // Nothing is there, so nothing is removed — and the run does not fail.
   assert.ok(!seen.some((command) => /network rm/.test(command)));
@@ -980,6 +1049,7 @@ test("a network that is still there IS removed, and a failing removal fails `dow
         return { ok: true, stdout: "{}" };
       },
       write: () => {},
+      idp: () => {},
     }),
     /active endpoints/,
   );
@@ -998,6 +1068,7 @@ test("an injected probe effect decides presence without going through `sh`", asy
       return { ok: false, stdout: "", stderr: "No such network" };
     },
     write: () => {},
+    idp: () => {},
   });
   assert.ok(probed.some((command) => /network inspect/.test(command)));
   assert.ok(!seen.some((command) => /network rm/.test(command)));
@@ -1048,6 +1119,7 @@ function recordingEffects({ attached = false, connectFails = false } = {}) {
       return { ok: false, stdout: "", stderr: "No such object" };
     },
     write: () => {},
+    idp: () => {},
   };
   return { seen, effects };
 }
@@ -1059,6 +1131,7 @@ test("a fresh `up` attaches Caddy and exits 0", async () => {
     registry: emptyRegistry(),
     baseDomain: BASE,
     effects,
+    goldenSubjects: GOLDEN_SUBJECTS,
   });
   assert.ok(seen.some((command) => /network connect slot-pr-2034/.test(command)));
   assert.match(line, /converged/);
@@ -1073,6 +1146,7 @@ test("`sync` on an already attached slot never issues the connect, and exits 0",
     registry: liveRegistry(),
     baseDomain: BASE,
     effects,
+    goldenSubjects: GOLDEN_SUBJECTS,
   });
   assert.ok(!seen.some((command) => /network connect/.test(command)));
   assert.match(line, /converged/);
@@ -1086,6 +1160,7 @@ test("a connect that actually runs and fails fails `up`", async () => {
       registry: emptyRegistry(),
       baseDomain: BASE,
       effects,
+      goldenSubjects: GOLDEN_SUBJECTS,
     }),
     /already exists in network/,
   );
@@ -1098,6 +1173,7 @@ test("`down` on a slot whose Caddy was never attached exits 0 without disconnect
     registry: liveRegistry(),
     baseDomain: BASE,
     effects,
+    goldenSubjects: GOLDEN_SUBJECTS,
   });
   assert.ok(!seen.some((command) => /network disconnect/.test(command)));
   assert.match(line, /is down/);
@@ -1116,6 +1192,7 @@ test("a disconnect that actually runs and fails fails `down`", async () => {
       registry: liveRegistry(),
       baseDomain: BASE,
       effects,
+      goldenSubjects: GOLDEN_SUBJECTS,
     }),
     /permission denied/,
   );
@@ -1145,9 +1222,6 @@ test("only `main` is resettable — a preview's every converge already re-clones
   assert.throws(() => parseArgs(["reset", "main", "--force"]), /unknown option/);
 });
 
-test("`reset-identities` still refuses, and now names part 2b", () => {
-  assert.throws(() => parseArgs(["reset-identities", "pr-5"]), /part 2b/);
-});
 
 test("`reset main` audits, stops the slot, then drops and re-clones `ds_main` — never `ds_golden`", () => {
   const registry = registerSlot(emptyRegistry(), {
@@ -1157,7 +1231,7 @@ test("`reset main` audits, stops the slot, then drops and re-clones `ds_main` �
     hosts: Object.values(slotHostnames("main", BASE)),
     updatedAt: "2026-09-10T00:00:00.000Z",
   });
-  const plan = planSlotReset({ registry, baseDomain: BASE, actor: "anton" });
+  const plan = planSlotReset({ registry, baseDomain: BASE, actor: "anton", goldenSubjects: GOLDEN_SUBJECTS });
 
   assert.equal(plan.steps[0].kind, "append");
   assert.equal(plan.steps[0].path, SLOT_LOG_PATH);
@@ -1219,6 +1293,7 @@ test("`down main` never asks Postgres whether `ds_main` exists", async () => {
     registry: liveRegistry("main"),
     baseDomain: BASE,
     effects,
+    goldenSubjects: GOLDEN_SUBJECTS,
     databaseExists: () => {
       asked = true;
       return true;
@@ -1235,6 +1310,7 @@ test("`up main` asks exactly once, lazily, through the thunk", async () => {
     registry: emptyRegistry(),
     baseDomain: BASE,
     effects,
+    goldenSubjects: GOLDEN_SUBJECTS,
     databaseExists: () => {
       asks += 1;
       return false;
@@ -1251,6 +1327,7 @@ test("`up pr-<N>` never asks — a preview is cloned regardless of what exists",
     registry: emptyRegistry(),
     baseDomain: BASE,
     effects,
+    goldenSubjects: GOLDEN_SUBJECTS,
     databaseExists: () => {
       asked = true;
       return true;
@@ -1261,4 +1338,225 @@ test("`up pr-<N>` never asks — a preview is cloned regardless of what exists",
 
 test("`readRegistry` is exported so the deployer reads the SAME file through the SAME parser", () => {
   assert.equal(typeof readRegistry, "function");
+});
+
+// --- the golden subject merge and the IdP converge step (part 2b) -------------
+//
+// The regressions these lock: a slot env is never rendered with BLANK
+// `DS_GOLDEN_SUB_*` (the seed would then fail deep inside a one-shot container
+// instead of here); the redirect converge is a step of `up` AND of `down`, so a
+// slot's callback appears with it and disappears with it; and a failing converge
+// fails the command rather than leaving a slot nobody can log into.
+
+test("the slot env carries the five tool-owned golden subjects, and no password", () => {
+  const env = renderSlotEnv({
+    slot: "pr-2034",
+    sha: SHA,
+    baseDomain: BASE,
+    redisDb: 4,
+    goldenSubjects: GOLDEN_SUBJECTS,
+  });
+  for (const name of GOLDEN_SUBJECT_ENV_VARS) {
+    assert.match(env, new RegExp(`^${name}=${GOLDEN_SUBJECTS[name]}$`, "m"));
+  }
+  assert.doesNotMatch(env, /PASSWORD/);
+});
+
+test("a slot env asked for before `reset-identities` ever ran refuses and names it", () => {
+  assert.throws(
+    () =>
+      renderSlotEnv({ slot: "pr-2034", sha: SHA, baseDomain: BASE, redisDb: 4 }),
+    (err) =>
+      err instanceof SlotError &&
+      err.message.includes("ds-slot reset-identities") &&
+      err.message.includes(GOLDEN_SUBJECTS_PATH),
+  );
+  // A partial set is refused exactly like an absent one — a blank value would reach
+  // `seed:golden` as «provisioned but empty».
+  const partial = { ...GOLDEN_SUBJECTS };
+  delete partial[GOLDEN_SUBJECT_ENV_VARS[0]];
+  assert.throws(
+    () =>
+      renderSlotEnv({
+        slot: "pr-2034",
+        sha: SHA,
+        baseDomain: BASE,
+        redisDb: 4,
+        goldenSubjects: partial,
+      }),
+    new RegExp(GOLDEN_SUBJECT_ENV_VARS[0]),
+  );
+});
+
+test("a teardown still renders an env file on a box with no golden subjects yet", () => {
+  const contents = renderSlotDownEnv({
+    slot: "pr-2034",
+    entry: { sha: SHA, redisDb: 4 },
+    baseDomain: BASE,
+  });
+  assert.match(contents, /^SLOT_DB=ds_pr_2034$/m);
+  assert.doesNotMatch(contents, /DS_GOLDEN_SUB_/);
+});
+
+test("`up` and `down` both converge the whole redirect set, after the registry write", () => {
+  const up = planSlotUp({
+    goldenSubjects: GOLDEN_SUBJECTS,
+    slot: "pr-2034",
+    sha: SHA,
+    registry: emptyRegistry(),
+    baseDomain: BASE,
+    action: "up",
+  });
+  const upStep = up.steps.at(-1);
+  assert.equal(upStep.kind, "idp");
+  assert.equal(upStep.op, "redirect-uris");
+  assert.deepEqual(upStep.desired, renderIdpRedirectUris(up.registry, BASE));
+  assert.ok(
+    upStep.desired.redirectUris.includes(
+      "https://api-pr-2034.stage.doctor.school/auth/callback",
+    ),
+  );
+  assert.ok(
+    planLabels(up).indexOf("write registry") < planLabels(up).length - 1,
+  );
+
+  const down = planSlotDown({
+    slot: "pr-2034",
+    registry: up.registry,
+    baseDomain: BASE,
+    goldenSubjects: GOLDEN_SUBJECTS,
+  });
+  const downStep = down.steps.at(-1);
+  assert.equal(downStep.kind, "idp");
+  // The slot is gone from the registry, so its callback is gone from the desired set.
+  assert.deepEqual(downStep.desired.redirectUris, []);
+});
+
+test("a failing IdP converge fails `up` — an unregistered callback is worse than a refusal", async () => {
+  const { effects } = recordingEffects({ attached: false });
+  effects.idp = () => {
+    throw new Error("403 from the management API");
+  };
+  await assert.rejects(
+    runSlotCommand({
+      options: { command: "up", slot: "pr-2034", sha: SHA },
+      registry: emptyRegistry(),
+      baseDomain: BASE,
+      effects,
+      goldenSubjects: GOLDEN_SUBJECTS,
+    }),
+    /403 from the management API/,
+  );
+});
+
+test("an `idp` step refuses an effect set without one rather than skipping the converge", async () => {
+  await assert.rejects(
+    runSlotPlan(
+      {
+        steps: [
+          {
+            kind: "idp",
+            op: "redirect-uris",
+            label: "converge the shared IdP redirect set",
+            desired: { redirectUris: [], postLogoutUris: [] },
+          },
+        ],
+      },
+      { sql: () => {}, sh: () => {}, write: () => {} },
+    ),
+    /needs an `idp` effect/,
+  );
+});
+
+// --- `reset-identities` -------------------------------------------------------
+
+test("`reset-identities` converges the IdP first, then writes the subjects, flushes and audits", async () => {
+  const order = [];
+  const written = [];
+  const line = await runSlotCommand({
+    options: { command: "reset-identities", slot: "pr-2034", actor: "anton" },
+    registry: liveRegistry(),
+    baseDomain: BASE,
+    effects: {
+      sql: () => {},
+      sh: (command) => order.push(command.join(" ")),
+      write: (path, contents, mode) => {
+        order.push(`write ${path}`);
+        written.push({ path, contents, mode });
+      },
+      append: (path, contents) => order.push(`append ${path} ${contents.trim()}`),
+      idp: (step) => {
+        order.push(`idp ${step.op}`);
+        return GOLDEN_SUBJECTS;
+      },
+    },
+  });
+
+  // The converge is first: the subjects it returns are the file's content, so a file
+  // written before it would claim ids the IdP does not hold.
+  assert.equal(order[0], "idp golden-identities");
+  assert.equal(order[1], `write ${GOLDEN_SUBJECTS_PATH}`);
+  assert.match(
+    order[2],
+    new RegExp(`docker exec ${REDIS_CONTAINER} redis-cli -n 4 FLUSHDB`),
+  );
+  assert.match(order[3], /append .*reset-identities pr-2034 by anton/);
+
+  const file = written[0];
+  assert.equal(file.mode, 0o644);
+  for (const name of GOLDEN_SUBJECT_ENV_VARS) {
+    assert.match(file.contents, new RegExp(`^${name}=${GOLDEN_SUBJECTS[name]}$`, "m"));
+  }
+  // Subjects are opaque ids, not secrets; the passwords stay owner-placed in stage.env.
+  assert.doesNotMatch(file.contents, /^DS_GOLDEN_PASSWORD/m);
+  assert.match(line, /golden identities converged/);
+});
+
+test("`reset-identities` flushes `main`'s database 0, not a preview's", () => {
+  const plan = planResetIdentities({
+    slot: "main",
+    registry: liveRegistry("main"),
+    subjects: GOLDEN_SUBJECTS,
+    actor: "anton",
+  });
+  assert.equal(plan.redisDb, 0);
+  const flush = plan.steps.find((step) => step.label.includes("flush"));
+  assert.ok(flush.command.includes("FLUSHDB"));
+  assert.deepEqual(flush.command.slice(-3), ["-n", "0", "FLUSHDB"]);
+});
+
+test("`reset-identities` refuses a preview that owns no Redis database yet", () => {
+  assert.throws(
+    () =>
+      planResetIdentities({
+        slot: "pr-77",
+        registry: emptyRegistry(),
+        subjects: GOLDEN_SUBJECTS,
+      }),
+    /not in the registry/,
+  );
+});
+
+test("`reset-identities` refuses an effect set with no `idp` effect", async () => {
+  await assert.rejects(
+    runSlotCommand({
+      options: { command: "reset-identities", slot: "pr-2034" },
+      registry: liveRegistry(),
+      baseDomain: BASE,
+      effects: { sql: () => {}, sh: () => {}, write: () => {}, append: () => {} },
+    }),
+    /needs an `idp` effect/,
+  );
+});
+
+test("the identity-reset audit line names the slot, the human and the moment", () => {
+  assert.equal(
+    resetIdentitiesLogLine({
+      slot: "pr-2034",
+      actor: "anton",
+      now: new Date("2026-09-11T12:00:00Z"),
+    }),
+    "2026-09-11T12:00:00.000Z reset-identities pr-2034 by anton\n",
+  );
+  assert.match(resetIdentitiesLogLine({ slot: "main" }), /by unknown/);
 });

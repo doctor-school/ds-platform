@@ -57,6 +57,7 @@ import {
   renderSlotDownEnv,
   renderSlotEnv,
   renderSlotsInclude,
+  resolveIdpBaseUrl,
   resolveDesiredRedirectSet,
   resetIdentitiesLogLine,
   resetLogLine,
@@ -1559,4 +1560,95 @@ test("the identity-reset audit line names the slot, the human and the moment", (
     "2026-09-11T12:00:00.000Z reset-identities pr-2034 by anton\n",
   );
   assert.match(resetIdentitiesLogLine({ slot: "main" }), /by unknown/);
+});
+
+// --- the shared IdP origin (Issue #2064 part 2c) -----------------------------
+//
+// The regression these lock: `stage.env` carries no `IDP_BASE_URL` by design, so
+// every IdP step (`up`/`sync`/`down`/`reset`/`reset-identities`) must derive the
+// origin from the `IDP_EXTERNAL_*` trio the box does carry.
+
+test("an explicit `IDP_BASE_URL` wins over the `IDP_EXTERNAL_*` trio", () => {
+  assert.equal(
+    resolveIdpBaseUrl({
+      IDP_BASE_URL: "https://id.example.test",
+      IDP_EXTERNAL_DOMAIN: "id.stage.doctor.school",
+      IDP_EXTERNAL_PORT: "443",
+      IDP_EXTERNAL_SECURE: "true",
+    }),
+    "https://id.example.test",
+  );
+  assert.equal(
+    resolveIdpBaseUrl({ IDP_BASE_URL: "  https://id.example.test/  " }),
+    "https://id.example.test",
+  );
+});
+
+test("the shared IdP origin comes from the trio, with 443 left implicit", () => {
+  assert.equal(
+    resolveIdpBaseUrl({
+      IDP_EXTERNAL_DOMAIN: "id.stage.doctor.school",
+      IDP_EXTERNAL_PORT: "443",
+      IDP_EXTERNAL_SECURE: "true",
+    }),
+    "https://id.stage.doctor.school",
+  );
+  // An empty `IDP_BASE_URL` is the shape `set -a; . stage.env` produces for a key
+  // that is absent — it must not win over the trio.
+  assert.equal(
+    resolveIdpBaseUrl({
+      IDP_BASE_URL: "",
+      IDP_EXTERNAL_DOMAIN: "id.stage.doctor.school",
+      IDP_EXTERNAL_SECURE: "1",
+    }),
+    "https://id.stage.doctor.school",
+  );
+});
+
+test("a non-default port is appended, and `http` is used when not secure", () => {
+  // The pre-#2062 shape, recorded at stg-infra/README.md — it must round-trip.
+  assert.equal(
+    resolveIdpBaseUrl({
+      IDP_EXTERNAL_DOMAIN: "id.stage.doctor.school",
+      IDP_EXTERNAL_PORT: "8080",
+      IDP_EXTERNAL_SECURE: "false",
+    }),
+    "http://id.stage.doctor.school:8080",
+  );
+  assert.equal(
+    resolveIdpBaseUrl({
+      IDP_EXTERNAL_DOMAIN: "id.stage.doctor.school",
+      IDP_EXTERNAL_PORT: "8443",
+      IDP_EXTERNAL_SECURE: "true",
+    }),
+    "https://id.stage.doctor.school:8443",
+  );
+  // Port 80 is the `http` default and stays implicit.
+  assert.equal(
+    resolveIdpBaseUrl({
+      IDP_EXTERNAL_DOMAIN: "id.stage.doctor.school",
+      IDP_EXTERNAL_PORT: "80",
+    }),
+    "http://id.stage.doctor.school",
+  );
+});
+
+test("an env carrying neither route is refused naming BOTH", () => {
+  assert.throws(
+    () => resolveIdpBaseUrl({}),
+    (err) => {
+      assert.ok(err instanceof SlotError);
+      assert.match(err.message, /IDP_BASE_URL/);
+      assert.match(err.message, /IDP_EXTERNAL_DOMAIN/);
+      assert.match(err.message, /IDP_EXTERNAL_PORT/);
+      assert.match(err.message, /IDP_EXTERNAL_SECURE/);
+      // The old message told the operator to source a file that never held the key.
+      assert.doesNotMatch(err.message, /source \/etc\/ds-platform\/stage\.env/);
+      return true;
+    },
+  );
+  assert.throws(
+    () => resolveIdpBaseUrl({ IDP_BASE_URL: "   ", IDP_EXTERNAL_DOMAIN: "  " }),
+    /not resolvable/,
+  );
 });

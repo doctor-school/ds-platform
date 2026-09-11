@@ -1586,7 +1586,7 @@ function realEffects() {
     idp: async (step) => {
       const client = createIdpClient({
         fetch: globalThis.fetch,
-        baseUrl: requiredIdpBaseUrl(),
+        baseUrl: resolveIdpBaseUrl(),
         pat: readIdpPat(),
       });
       const projectName = process.env.IDP_PROJECT_NAME || undefined;
@@ -1619,16 +1619,37 @@ function realEffects() {
   };
 }
 
-/** The shared Zitadel's origin, as `stage.env` carries it. */
-function requiredIdpBaseUrl() {
-  const baseUrl = process.env.IDP_BASE_URL;
-  if (!baseUrl) {
-    throw new SlotError(
-      "IDP_BASE_URL is required to converge the shared IdP — source " +
-        "/etc/ds-platform/stage.env before running this tool",
-    );
+/**
+ * The shared Zitadel's origin.
+ *
+ * `stage.env` deliberately carries NO `IDP_BASE_URL`: `stg-infra` passes the base URL to
+ * `provision.sh` explicitly, and a hand-placed key here could drift from the issuer Caddy
+ * actually serves. What the box DOES carry is the `IDP_EXTERNAL_DOMAIN` /
+ * `IDP_EXTERNAL_PORT` / `IDP_EXTERNAL_SECURE` trio, which IS the authoritative origin of
+ * the shared IdP — `IDP_EXTERNAL_DOMAIN` must equal the Caddy `id` vhost or OIDC discovery
+ * advertises a wrong issuer. So derive the origin from that trio, and keep `IDP_BASE_URL`
+ * as an explicit override for ad-hoc runs.
+ */
+export function resolveIdpBaseUrl(env = process.env) {
+  const override = (env.IDP_BASE_URL ?? "").trim();
+  if (override) return override.replace(/\/+$/, "");
+
+  const domain = (env.IDP_EXTERNAL_DOMAIN ?? "").trim();
+  if (domain) {
+    const flag = (env.IDP_EXTERNAL_SECURE ?? "").trim().toLowerCase();
+    const secure = flag === "true" || flag === "1";
+    const scheme = secure ? "https" : "http";
+    const defaultPort = secure ? "443" : "80";
+    const port = (env.IDP_EXTERNAL_PORT ?? "").trim();
+    const suffix = port && port !== defaultPort ? `:${port}` : "";
+    return `${scheme}://${domain}${suffix}`;
   }
-  return baseUrl;
+
+  throw new SlotError(
+    "the shared IdP origin is not resolvable: set IDP_BASE_URL, or the " +
+      "IDP_EXTERNAL_DOMAIN / IDP_EXTERNAL_PORT / IDP_EXTERNAL_SECURE trio, in " +
+      "/etc/ds-platform/stage.env",
+  );
 }
 
 /** The bootstrap PAT, from the root-only file the stage provisioning writes. */

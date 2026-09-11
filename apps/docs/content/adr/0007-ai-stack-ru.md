@@ -68,17 +68,13 @@ ADR фиксирует:
 
 Enforcement: AGENTS.md hard rules + machine-checkable CI guards (§2.6).
 
-### 2.4 Цикл итерации — делегирован skill'у `do-feature-iteration`
+### 2.4 Цикл итерации — канонические skills
 
-Каждая итерация реализации проходит оркестрованный цикл: READ relevant ADRs → verify base CI green → RED (failing test) → GREEN (минимум кода) → REFACTOR → iteration-end checklist (dispatch, verdict-gated) → surface decision-debt → PR open → Mode (a) review dispatch (verdict-gated) → respond-to-review до APPROVE + green CI → iteration summary → merge через `pnpm pr:land <N>` (pre-merge gate → `gh pr merge <N> --squash --delete-branch` → board Status = Done → teardown ветки). Положительный verdict Mode (a) или Mode (b) + green CI достаточен для merge; Mode (c)-ревью остаются single human decision. Применимые owner gates (включая Stage A до реализации UI и Stage B до merge) остаются обязательными.
+Следовать skill по типу задачи и [portable agent discipline](../agent-discipline.md): определить запрошенный результат, использовать действующие доказательства, выбрать минимальное надёжное решение и соразмерить процесс риску. Новые решения по фиче требуют предварительного одобрения/spec; уточнения существующего одобренного поведения/docs могут идти с кодом в одном PR с ревью. Сохраняются TDD для production/guard logic, применимые owner gates, независимое ревью и green CI.
 
-Procedural source of truth — **`apps/docs/content/skills/do-feature-iteration/SKILL.md`**. Orchestration skill несёт discipline-gate'ы (verdict checklist'а, verdict review, обязательная invocation decision-debt), которые inline narrative checklist обеспечить не может: агент, читающий narrative bullet list, молча пропустит, а агент, который не может пройти дальше без артефакта от subagent'а, пропустить не может. Конкретно:
+Procedural source of truth — **`apps/docs/content/skills/do-feature-iteration/SKILL.md`**; применимость для hotfix/engineering определяют их процедуры. Checklist evidence фиксируется inline либо делегируется, когда это полезно, по `run-iteration-end-checklist`; провал применимого пункта блокирует завершение. `request-mode-a-review` определяет обязательные независимые verdicts и исключения; обязательный APPROVE нельзя выдать самому себе или обойти. `surface-decision-debt` выполняется перед result comment (допустим `[]`). Завершить через `pnpm pr:land <N>`, закрыть Issue/board и сообщить результат; остановиться, если продолжение не поручено.
 
-- **`run-iteration-end-checklist`** работает в dispatch-mode; subagent возвращает строку `VERDICT: N of 14 — <PASS | BLOCKED on #X>`. Lead agent не может пройти дальше checklist gate, пока verdict — `BLOCKED`.
-- **`request-mode-a-review`** работает в dispatch-mode; subagent-ревьювер возвращает строку `VERDICT: <APPROVE | REQUEST_CHANGES>`. Lead agent не может invocate'нуть `merge-when-green`, пока последний verdict — `REQUEST_CHANGES` или отсутствует.
-- **`surface-decision-debt`** обязателен перед `write-iteration-summary`. Output может быть `[]`, но invocation сам по себе обязателен.
-
-Разрешён только проектный каталог `apps/docs/content/skills/`. Vendored `brainstorming` — ограниченный шаг spec/product authoring, а не внешний pack или отдельная plan-writing цепочка. TDD живёт внутри `do-feature-iteration`; review dispatch — внутри `request-mode-a-review`.
+Разрешён только проектный каталог `apps/docs/content/skills/`. Его vendored `brainstorming` — ограниченный шаг authoring, а не внешняя plan-writing цепочка.
 
 ### 2.5 Session bootstrap — `tools/agent-bootstrap.ts`
 
@@ -127,11 +123,9 @@ Rollup — derived context, а не истина о доске: сверять �
 
 > **Семантика `BLOCK`:** `BLOCK` обеспечивается server-side — ruleset `main` (ADR-0008 §2.6) требует зелёный контекст `ci`, а упавший BLOCK-guard красит job `guards-block` и вместе с ним агрегат `ci`, поэтому GitHub отказывает в merge. WARN-guard'ы сообщают red, не затрагивая этот агрегат; именно promotion до BLOCK делает guard обязывающим.
 
-### 2.7 14-item iteration-end checklist (dispatch через `run-iteration-end-checklist`)
+### 2.7 Iteration-end checklist
 
-Перед `git push` агент диспатчит skill `run-iteration-end-checklist` fresh-context subagent'у (§2.4). **Авторитетный список пунктов — сам skill** — `apps/docs/content/skills/run-iteration-end-checklist/SKILL.md` — а не копия, дублированная здесь (каталог авторитетен; companion design §2.2). На момент написания он покрывает machine-гейты (tests, generated-artifact drift, typecheck, lint), docs-sync пункты (module README, spec `status:` frontmatter, glossary terms, ADR, `architecture/`, `operations/`), summary-comment linked Issue и три условных гейта — vertical-slice DoD (F-22), field validation + input mask и registry-research marker.
-
-Subagent возвращает `VERDICT: N of 14 — <PASS | BLOCKED on #X>`. Failure любого пункта → no push, либо fix, либо escalate.
+Авторитетные пункты, применимость, повторное использование evidence и inline/delegated исполнение — в `apps/docs/content/skills/run-iteration-end-checklist/SKILL.md`; не дублировать процедуру здесь. Фиксировать PASS/FAIL/N/A по применимым доказательствам. Провал обязательной проверки блокирует завершение; посторонние предупреждения не создают новых prerequisites. Обязательный CI и независимое ревью остаются отдельными gates.
 
 ### 2.8 Prompt-caching policy
 

@@ -1,6 +1,6 @@
 ---
 title: "run-task-lifecycle"
-description: "Orchestration skill (inline): drive a single task end-to-end — pick/create Issue with all fields → branch → implement → review → confirm green → merge → close → set board Status → groom — invoking the existing per-step skills, never restating them."
+description: "Orchestration skill (inline): drive a single task end-to-end — pick/create Issue with all fields → branch → implement → review → confirm green → merge → close → set board Status → report — invoking the existing per-step skills, never restating them."
 name: run-task-lifecycle
 mode: inline
 ---
@@ -11,19 +11,19 @@ mode: inline
 
 **Kind:** orchestration · **Mode:** inline (the lead agent runs this procedure itself; it dispatches subagents only at the steps marked **dispatch**).
 
-This is the **connective** lifecycle skill. It does not re-implement any step — it names the canonical sequence and **invokes the existing catalog skill** at each gate. Its whole reason to exist is that the audit (epic #247) found the two highest-frequency deviations are at the **ends** of the lifecycle: fields not set at Issue creation (Theme B) and the lifecycle stopping short of merge→close→board-Done→groom (Theme A — "почему не отправил на ревью?", "почему ждёт моего мёржа?", "CI прошёл, но задача висит", "почему не проставил зависимости / майлстоун?"). Per **AGENTS.md §6 — "PR lifecycle runs to completion"**: "PR open" is not "done", and the agent runs through merge autonomously.
+This is the **connective** lifecycle skill. It does not re-implement any step — it names the canonical sequence and **invokes the existing catalog skill** at each gate. Its whole reason to exist is that the audit (epic #247) found the two highest-frequency deviations are at the **ends** of the lifecycle: fields not set at Issue creation (Theme B) and the lifecycle stopping short of merge→close→board-Done→report (Theme A — "почему не отправил на ревью?", "почему ждёт моего мёржа?", "CI прошёл, но задача висит", "почему не проставил зависимости / майлстоун?"). Per **AGENTS.md §6 — "PR lifecycle runs to completion"**: "PR open" is not "done", and the agent runs through merge autonomously.
 
 > **Cannot proceed without** — the verdict artifacts of `request-mode-a-review` (APPROVE) and the per-kind orchestration gates. The lead does not advance past a gate without its artifact in hand (ADR-0007 §2.4).
 
 ## Scope gate — before tracker or dispatch
 
-Classify the requested deliverable before entering this lifecycle. Saving or copying already-written chat text into a separate local file, without revising a maintained source, is an artifact export. The lead writes that file, verifies its content and destination, and returns its link; do not create an Issue, branch or PR, dispatch agents, or run repository-wide checks for the export. Use the requested destination; absent one, choose a user-accessible location outside the repository. Do not overwrite a tracked canonical document under this route. One artifact write fits the existing small-inline-mutation carve-out; an explicit user-specified destination governs the export location.
+Answers, analysis, artifact exports and authorized standard operations run directly: provide the requested result and proportionate evidence, then stop. They do not require an Issue, worktree, PR, dispatch, package install or repository-wide checks merely because the session is in this repository. Preserve maintained sources and apply the operation’s actual safety/authorization gates. For an export use the requested destination (otherwise outside the repository), verify content/destination and return its link.
 
 Changing a maintained spec, ADR, instruction or runtime source, or explicitly requesting repository integration/publication, enters the normal lifecycle below. A request to save text does not by itself request such a change. Preserve the text's language and distinguish review recommendations from accepted decisions.
 
 ## Autonomous vs human-gated (read first)
 
-Per AGENTS.md §4 + §6, the agent is **autonomous through merge**: it dispatches the review, confirms CI green by hand, merges, closes, sets the board, and grooms — **without waiting for the human**. A positive **Mode (a)** (subagent) or **Mode (b)** (Codex) verdict + green CI is sufficient to merge; human-merge is **not** required. **Mode (c)** review is human-gated. Independently, Stage A before UI implementation, Stage B before merge, and explicit destructive-infra/release escalation gates remain owner decisions. Do not stop at an intermediate step "waiting for confirmation"; the repeated correction in the audit was precisely that stop.
+Per AGENTS.md §4 + §6, the agent is **autonomous through merge**: it dispatches the review, confirms CI green by hand, merges, closes, sets the board, and reports — **without waiting for the human**. A positive **Mode (a)** (subagent) or **Mode (b)** (Codex) verdict + green CI is sufficient to merge; human-merge is **not** required. **Mode (c)** review is human-gated. Independently, Stage A before UI implementation, Stage B before merge, and explicit destructive-infra/release escalation gates remain owner decisions. Do not stop at an intermediate step "waiting for confirmation"; the repeated correction in the audit was precisely that stop.
 
 ## Input
 
@@ -33,7 +33,7 @@ Per AGENTS.md §4 + §6, the agent is **autonomous through merge**: it dispatche
 
 ### 1. Pick or create the Issue — with all fields complete (closes Theme B)
 
-**Deciding _which_ task to pick is the lead's own call — not an `AskUserQuestion`.** Before asking the user to choose, run the decision yourself: (1) sweep the backlog (open Issues / PRs / Dependabot / stale pins); (2) apply prerequisite-first + close-the-open-epic ordering; (3) classify the fork — a **sequencing / architecture / code-cleanliness** call you settle yourself by best-architecture (memory `feedback_spec_work_brainstorm_reuse_delegate`); only a genuine **product-scope** fork (or a true blocker) is eligible for `AskUserQuestion`. "Which of these ready tasks is more valuable" is usually yours to reason out, not the user's to adjudicate.
+Use the owner’s named task; create or reuse its Issue without a backlog sweep. Only when the owner requested backlog selection or a continuing wave, inspect the relevant queue and apply prerequisite/claim ordering. Resolve routine implementation choices within scope; ask only for genuinely missing product decisions or authorization.
 
 **Issue-claim protocol (parallel sessions).** Sessions run concurrently in this repo (AGENTS.md §6 — worktree-per-session), so the board is a **shared resource**: two sessions can race for the same ready item. The board Status **is** the claim, and first-claim wins:
 
@@ -69,7 +69,7 @@ Create the isolated branch with `pnpm task:worktree <N> <slug> <prefix>` off fre
 - **adr-revision** → **`do-adr-revision`**; **decision-debt** → **`do-decision-debt-followup`**.
 - **engineering-task** (no orchestration skill) → follow the task spec directly under **AGENTS.md §3.8** discipline gates.
 
-`do-feature-iteration` / `do-hotfix-pr` already carry steps 3–6 below internally (push → review → respond → merge). When you ran one of them, this skill's role is to **confirm those tail steps actually completed** and then run step 7 (board + groom), which they do not all cover. For an `engineering-task` (no orchestration skill), run steps 3–7 here explicitly.
+`do-feature-iteration` / `do-hotfix-pr` already carry steps 3–6 below internally (push → review → respond → merge). When you ran one of them, this skill's role is to **confirm those tail steps actually completed** and then run step 7 (board + report), which they do not all cover. For an `engineering-task` (no orchestration skill), run steps 3–7 here explicitly.
 
 ### 3. Open the PR
 
@@ -87,14 +87,14 @@ Invoke **`request-mode-a-review`** (Mode (a) subagent). It returns a structured 
 
 With APPROVE + green CI, invoke the canonical **`merge-when-green`** skill; prefer `pnpm pr:land <N>` for the complete closeout tail. Per AGENTS.md §4 / §6, the agent merges itself — human-merge is not required (Mode (c) review and the independent Stage-A/Stage-B product gates remain human). Phase-0 `--auto` and hand-rolled merge chains are forbidden; the owning skill defines the exact current command.
 
-### 7. Close → board Status = Done → re-sweep + groom (closes Theme A tail)
+### 7. Close → board Status = Done → re-sweep + report
 
 Run all four, in order, as part of the **same** merge step — not a separate human ask ("тогда почему ты закрыл задачу?" / "CI прошёл, но задача висит"):
 
 1. **Confirm the Issue closed** — `Closes #N` auto-closes it; verify with `gh issue view <N> --json state`. If it did not close (the keyword was missing), close it explicitly. The iteration summary / result comment on the Issue must carry the `surface-decision-debt` verdict (`[]` or the list) — a merge without it is incomplete, and on a multi-task batch this is per-task, not per-session.
 2. **Set board Status = Done** — `node tools/gh/set-board-status.mjs <N> "Done"`. `Closes #N` does **not** move the Projects v2 column (no closed→Done workflow is wired); this is the deterministic helper for the rule in memory `feedback_project_status_done_on_merge`. This step is part of merge, not optional.
 3. **Re-sweep branches/PRs** — `gh pr list` + `git ls-remote --heads origin`; bot branches (`changeset-release/main`, `dependabot/*`, `codeql/*`) can appear post-merge (repo-conventions → _Post-merge inventory re-sweep_).
-4. **Groom next** — pick the next unblocked board item (resume → rework → fresh → unblock ordering, board-design §5), or report the queue is empty. When the groom is a triage/priority pass rather than a silent next-pick, run skill **`groom-backlog`** (`pnpm backlog:triage` → drain `## Stalled` → judge orphans/likely-done/wait-for-reuse → owner dialogue one question per message). A merged task that leaves the next one un-surfaced is an incomplete lifecycle. **Ops-gate at slice/epic close:** if this merge closes a slice/epic, the closing summary MUST carry a one-line live-prod ops posture — `monitoring | alerting | backup-alerts | CD: PRESENT|ABSENT` — and while any item is ABSENT, the groomed "next" is draining that gap, not a product feature (AGENTS.md §3.5, memory `feedback_clear_debt_before_features`).
+4. **Report and stop.** Complete the requested outcome; adjacent work and WARNs do not extend it. Groom/select another task only within explicitly authorized backlog or continuing-wave scope, using `groom-backlog`; evaluate ops/debt priorities there.
 
 **Groom/triage deliverable — output contract.** When the groom is a **backlog-triage deliverable presented to the owner** (not just silently picking the next item), it opens with a **product-language synthesis** — current stage · what is burning to release and why · what defers · remaining tech-debt · open forks/contradictions — **then** a grouped full panorama of the backlog, **then** wave-chunking (≤3 PR-cycles per wave). Never lead with a thin wave plan (owner: «где сам триаж?»), and never dump a raw issue registry (owner: «список я вижу сам в GitHub») — the synthesis is the value the tracker cannot show itself (memory `feedback_groom_session_no_impl_until_signoff`).
 
@@ -102,7 +102,7 @@ Run all four, in order, as part of the **same** merge step — not a separate hu
 
 - Issue `#N` CLOSED, with every field complete (kind, milestone, native links, board Status = Done).
 - PR merged into `main`, head branch deleted, inventory re-swept clean.
-- The next task surfaced (or the queue reported empty).
+- Requested result reported; stop unless continued backlog work was authorized.
 
 ## Failure mode
 

@@ -1,23 +1,23 @@
 ---
 title: "run-iteration-end-checklist"
-description: "Procedural skill (dispatch): subagent verifies the 15-item iteration-end checklist and returns a PASS/BLOCKED verdict. Primary enforcement for F-15; item 12 enforces F-22; item 15 enforces approved-source parity evidence."
+description: "Procedural skill: verify applicable evidence against the 15-item iteration-end checklist and returns a PASS/BLOCKED verdict. Primary enforcement for F-15; item 12 enforces F-22; item 15 enforces approved-source parity evidence."
 name: run-iteration-end-checklist
-mode: dispatch
+mode: inline
 ---
 
 # run-iteration-end-checklist
 
 **Execution contract:** Read [portable agent discipline](../../agent-discipline.md) before first use; map tools/models to the active harness and preserve its authorization, context and memory rules.
 
-**Kind:** procedural · **Mode:** dispatch (the lead agent passes this SKILL.md content to a subagent; the subagent returns a verdict the lead cannot bypass).
+**Kind:** procedural · **Mode:** inline by default; delegate when independent verification or context savings justify it. This is evidence accounting, not a second mandatory execution of the checks. Mode-a remains independent.
 
-The body below is the **subagent prompt**. Dispatch an independent fresh-context general agent with this skill path, branch, changed files and feature-spec. Check the loaded role contract before dispatch: Codex's `ds-reviewer` profile is reserved for Mode (a) PR review and is not the checklist role. The checklist agent reads this skill as its task contract and returns its own report without fixing, pushing or merging.
+For delegation, use an independent fresh-context general agent with this skill path, branch, changed files, feature-spec and existing check evidence. Check the loaded role contract before dispatch: Codex's `ds-reviewer` profile is reserved for Mode (a) PR review and is not the checklist role. The checklist agent reads this skill as its task contract and returns its own report without fixing, pushing or merging.
 
 ---
 
 ## Subagent prompt
 
-You are a verification subagent. Your sole job is to verify the 15-item iteration-end checklist and return a structured verdict. You do not fix anything; you do not push; you do not merge. You produce a report.
+Your sole job is to verify the 15-item iteration-end checklist and return a structured verdict. You do not fix anything; you do not push; you do not merge. You produce a report.
 
 ### Input (from the lead agent's message)
 
@@ -29,10 +29,10 @@ You are a verification subagent. Your sole job is to verify the 15-item iteratio
 
 For each of the 15 items below, return one of: **PASS** / **FAIL** (with one-line reason) / **N/A** (with one-line reason).
 
-1. `pnpm test` — green (unit + e2e where applicable).
-2. `pnpm generate:all`, verify exit 0, then `git diff --exit-code` — no drift in generated artifacts.
-3. `pnpm typecheck` — green.
-4. `pnpm lint` — green.
+1. Affected tests — green; include integration/e2e for changed boundaries or journeys. Reuse applicable results; broaden only for a named risk.
+2. Generated artifacts — run affected generators and drift checks only if their inputs/contracts changed; otherwise N/A.
+3. Affected typecheck — green when types/build behavior changed; otherwise N/A.
+4. Required `pnpm lint` and applicable guards — green; use existing evidence, not a redundant rerun.
 5. Module README updated if exports changed.
 6. Spec `status:` frontmatter advanced (Draft → In dev → Shipped) if a feature-spec is in play.
 7. New glossary terms added if domain vocabulary grew.
@@ -59,7 +59,7 @@ A markdown report:
 
 | # | Item | Verdict | Note |
 |---|------|---------|------|
-| 1 | pnpm test | PASS | … |
+| 1 | affected tests | PASS | evidence + scope |
 | 2 | generate:all drift | PASS | … |
 | … |
 | 11 | operations runbook | N/A | no new operational concern |

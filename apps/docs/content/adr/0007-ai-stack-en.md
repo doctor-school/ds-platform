@@ -68,17 +68,13 @@ All harnesses follow the same orchestrated iteration cycle (§2.4) and read [por
 
 Enforcement: AGENTS.md hard rules + machine-checkable CI guards (§2.6).
 
-### 2.4 Iteration cycle — delegated to `do-feature-iteration` skill
+### 2.4 Iteration cycle — canonical skills
 
-Every implementation iteration follows an orchestrated cycle: READ relevant ADRs → verify base CI green → RED (failing test) → GREEN (minimum code) → REFACTOR → iteration-end checklist (dispatch, verdict-gated) → surface decision-debt → PR open → Mode (a) review dispatch (verdict-gated) → respond-to-review until APPROVE + green CI → iteration summary → merge via `pnpm pr:land <N>` (pre-merge gate → `gh pr merge <N> --squash --delete-branch` → board Status = Done → branch teardown). A positive Mode (a) or Mode (b) review verdict + green CI is sufficient for merge; Mode (c) reviews remain a single human decision. Applicable owner gates (including Stage A before UI implementation and Stage B before merge) remain mandatory.
+Follow the task-kind skill and [portable agent discipline](../agent-discipline.md): define the requested outcome, reuse valid evidence, choose the smallest reliable solution and scale process to risk. New feature decisions require prior approval/spec; corrections to existing approved behavior/docs may accompany code in one reviewed PR. Preserve TDD for production/guard logic, applicable owner gates, independent review and green CI.
 
-The procedural source of truth is **`apps/docs/content/skills/do-feature-iteration/SKILL.md`**. The orchestration skill carries the discipline gates — checklist verdict, review verdict, decision-debt invocation — that an inline narrative checklist cannot enforce: an agent reading a narrative bullet list will skip silently, but an agent that cannot proceed without an artifact returned by a subagent cannot skip. Concretely:
+The procedural source of truth is **`apps/docs/content/skills/do-feature-iteration/SKILL.md`**, with hotfix/engineering applicability in their own procedures. Record checklist evidence inline or delegate where useful per `run-iteration-end-checklist`; a failed applicable item blocks completion. `request-mode-a-review` defines required independent verdicts and exemptions; required APPROVE cannot be self-issued or bypassed. `surface-decision-debt` precedes the result comment (output may be `[]`). Land via `pnpm pr:land <N>`, close the Issue/board and report; stop unless continued work was authorized.
 
-- **`run-iteration-end-checklist`** runs in dispatch mode; the subagent returns a structured verdict line `VERDICT: N of 14 — <PASS | BLOCKED on #X>`. The lead agent cannot proceed past the checklist gate while the verdict is `BLOCKED`.
-- **`request-mode-a-review`** runs in dispatch mode; the subagent reviewer returns a structured verdict line `VERDICT: <APPROVE | REQUEST_CHANGES>`. The lead agent cannot invoke `merge-when-green` while the latest verdict is `REQUEST_CHANGES` or absent.
-- **`surface-decision-debt`** is required before `write-iteration-summary`. The skill's output may be `[]`, but the invocation itself is required.
-
-Only the project catalog at `apps/docs/content/skills/` is enabled. Its vendored `brainstorming` is a scoped step of spec/product authoring, never an external pack or a separate plan-writing chain. TDD lives inside `do-feature-iteration`; review dispatch lives inside `request-mode-a-review`.
+Only the project catalog at `apps/docs/content/skills/` is enabled. Its vendored `brainstorming` is a scoped authoring step, never an external plan-writing chain.
 
 ### 2.5 Session bootstrap — `tools/agent-bootstrap.ts`
 
@@ -128,11 +124,9 @@ Promotion mechanics: move the guard's STEP into the BLOCK batch, drop `continue-
 
 > **`BLOCK` semantics:** `BLOCK` is enforced server-side — the ADR-0008 §2.6 `main` ruleset requires the `ci` context green, and a failing BLOCK guard reds the `guards-block` job and with it the `ci` aggregate, so GitHub refuses the merge. WARN guards report red without touching that aggregate; promotion to BLOCK is what makes a guard binding.
 
-### 2.7 14-item iteration-end checklist (dispatched via `run-iteration-end-checklist`)
+### 2.7 Iteration-end checklist
 
-Before `git push` the agent dispatches the `run-iteration-end-checklist` skill to a fresh-context subagent (§2.4). The **authoritative item list is the skill itself** — `apps/docs/content/skills/run-iteration-end-checklist/SKILL.md` — not a copy duplicated here (the catalog is authoritative; companion design §2.2). At time of writing it spans the machine gates (tests, generated-artifact drift, typecheck, lint), the docs-sync items (module README, spec `status:` frontmatter, glossary terms, ADR, `architecture/`, `operations/`), the linked-Issue summary, and three conditional gates — vertical-slice DoD (F-22), field validation + input mask, and the registry-research marker.
-
-The subagent returns `VERDICT: N of 14 — <PASS | BLOCKED on #X>`. Failure of any item → no push; either fix or escalate.
+The authoritative items, applicability, evidence reuse and inline/delegated execution are in `apps/docs/content/skills/run-iteration-end-checklist/SKILL.md`; do not duplicate that procedure here. Record PASS/FAIL/N/A for applicable evidence. A failed required check blocks completion; unrelated warnings do not create new prerequisites. Required CI and independent review remain separate gates.
 
 ### 2.8 Prompt-caching policy
 

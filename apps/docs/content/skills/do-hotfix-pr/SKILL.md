@@ -24,13 +24,13 @@ mode: inline
 1. **Failing test first** — reproduce the bug in a Vitest test (or, for CI/infra hotfixes, in the smallest possible artifact that demonstrates the failure — e.g., a workflow-syntax check).
 2. **Fix** — minimum code change that turns the failing test green.
 3. **UI verification gate (if the fix touches any rendered surface).** If the change touches a user-facing UI surface (`apps/portal/**`, `apps/promo/**`, `apps/admin/**`, `packages/design-system/**`) — even a "one-line" tweak like a radius, color, label, or copy string — you MUST, before the review step:
-   1. Verify the pre-implementation **`build-ui-from-design-system` registry-research gate** ([../build-ui-from-design-system/SKILL.md](../build-ui-from-design-system/SKILL.md)) — inventory `@ds/design-system`, search the approved toolbox (shadcn · Intent·Jolly · Kibo), and **record the adoption decision** (`adopted <block> from <registry>` or `bespoke — <why the search came up empty>`) as a `registry-research:` line in the PR body. This is enforced by the `registry-research` CI gate (#251) and by AGENTS.md §6.
+   1. Verify the pre-implementation **`build-ui-from-design-system` registry-research gate** ([../build-ui-from-design-system/SKILL.md](../build-ui-from-design-system/SKILL.md)) — reuse the existing valid adoption decision/source; research the approved toolbox only for an uncovered element class, and **record the adoption decision** (`adopted <block> from <registry>` or `bespoke — <why the search came up empty>`) as a `registry-research:` line in the PR body. This is enforced by the `registry-research` CI gate (#251) and by AGENTS.md §6.
    2. **Live-verify** the fix in the actual running UI — bring up the dev-stand and drive the journey in a browser (Playwright) per [`.claude/rules/dev-stand.md`](../../../../../.claude/rules/dev-stand.md) and AGENTS.md §6 ("Verify UI live before done"). `run-iteration-end-checklist` + Mode-a are necessary but **not** sufficient — they never prove the rendered result.
    3. Do **not** ship a user-facing dev placeholder (e.g. a "set this env var" note) — render the real thing or nothing. Enforced by the `no-stub` CI gate (#251).
 
    These steps are the §6 Hard rules _invoked at the point of UI work_, not merely co-resident in the constitution. Skip this gate only when the diff touches no rendered surface (pure backend / CI / tooling fix).
 
-4. **`run-iteration-end-checklist`** (dispatch) — verdict-gated. Items that are N/A for a hotfix (spec status frontmatter, glossary, ADR, architecture/operations docs) are returned as `N/A` by the subagent, not silently skipped.
+4. **`run-iteration-end-checklist`** — record applicable evidence inline; dispatch only when independent verification/context savings justify it. Unaffected items are `N/A` with reasons; reuse valid results. Required Mode-a review stays independent.
 5. **`surface-decision-debt`** (inline) — required invocation.
 6. `git push` + `gh pr create` (label `bug`, `Closes #N`, `author:*`; include the `registry-research:` line from step 3 if it applied).
 7. **`request-mode-a-review`** (dispatch) — verdict-gated.

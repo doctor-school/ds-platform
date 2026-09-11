@@ -40,15 +40,53 @@ ordinary `up` plan on the SHA the registry already holds — the escape hatch fo
 staging database someone has poisoned. It is the **only** resettable slot (a preview is
 cheaper to `down`/`up`), the `--yes` flag is mandatory, `ds_golden` is never touched, and
 every run appends one audit line to `/var/log/ds-platform/slot.log` before it drops
-anything. `reset-identities` is part 2b of #2064 and still refuses loudly.
+anything.
 
-**Part 2b owns the redirect-URI convergence.** The shared Zitadel app accepts only
-registered redirect URIs and that registration is a whole-set write, so what has landed
-so far is only the pure seam `renderIdpRedirectUris(registry, base)` — the full ordered
-set for every registered slot, printed by `slot status`. Part 2b makes `slot up|down`
-converge that set onto the shared app through the same management API and PAT path
-`infra/dev-stand/idp/provision.sh` uses; until then a slot's `IDP_REDIRECT_URI` is
-emitted but not registered and login on that slot fails.
+## `reset-identities <slot>` — the golden accounts on the shared IdP
+
+The golden dataset's four live accounts (two doctors, the MFA doctor, the admin) and the
+soft-deleted doctor live on the SHARED stage Zitadel, not per slot, and nothing else
+provisions them — without this command `slot up` refuses at its `seed:golden` one-shot.
+One run does four things, in order:
+
+1. **Converge the accounts** through `idp.mjs`: each `idpAccountExpected: true` account is
+   created when absent, then always has its password set from the `DS_GOLDEN_PASSWORD_*`
+   variable the owner placed in `/etc/ds-platform/stage.env` and its email-verified state
+   converged; the soft-deleted doctor is ensure-**absent** — probed first, deleted only
+   when a live account carries that username. Every step is probe-then-act and a failing
+   act is a hard failure: there is no blanket tolerated-failure flag in this path.
+2. **Write the subjects.** All five `DS_GOLDEN_SUB_*` are written idempotently to
+   `/etc/ds-platform/golden-subjects.env` (root, 0644 — opaque ids, not secrets), and
+   `renderSlotEnv` merges that file into every rendered slot env, so `seed:golden`
+   resolves them with no human step. Rendering a slot env before this command has ever
+   run fails closed naming `ds-slot reset-identities`, never with blank values. The
+   deleted doctor's subject is synthetic and deterministic (a `golden-deleted-` marker
+   over a hash of its username), so it is stable across runs and can never collide with a
+   real Zitadel id.
+3. **`FLUSHDB` the slot's Redis logical database** (the index `allocateRedisDatabase`
+   assigns), so no session or rate-limit key survives an identity reset.
+4. **Append one audit line** to `/var/log/ds-platform/slot.log`.
+
+MFA/TOTP enrolment for `doctorMfa` and `admin` is deliberately NOT converged: TOTP secrets
+are minted by Zitadel at enrolment and belong to the scenario runner's secret set, which
+step 7 (#2067) owns. The command guarantees existence, password and email state.
+
+## Redirect-URI convergence
+
+The shared Zitadel app accepts only registered redirect URIs and that registration is a
+**whole-set** write — a partial list silently unregisters every other slot. `slot.mjs`
+renders the full ordered set for every registered slot with `renderIdpRedirectUris(registry,
+base)` (printed by `slot status`) and converges it onto the shared app through the same
+management API and PAT path `infra/dev-stand/idp/provision.sh` uses: the PAT is read from
+`/etc/ds-platform/idp-bootstrap-pat.txt`, the origin from `IDP_BASE_URL`.
+
+The converge runs as the LAST step of the `up`, `sync`, `down` and `reset` plans, after the
+registry write, so the set it writes matches the registry state the command just produced.
+It is ensure-present: the current `oidc_config` is read first and the `PUT` is skipped when
+the sets already match (order-insensitive compare). Any URIs pinned in `IDP_REDIRECT_URIS` /
+`IDP_POST_LOGOUT_URIS` are unioned in, so non-slot callers keep their registration. A failing
+converge fails the command loudly — a slot whose callback is unregistered fails login with
+`invalid redirect_uri`, which is worse than a refused `up`.
 
 ## `deployer.mjs` — one converge tick
 

@@ -4,13 +4,13 @@ import AxeBuilder from "@axe-core/playwright";
 /**
  * 008 EARS-12 (contrast slice) — axe-core WCAG 2 A/AA scan of the PORTAL SHELL: the
  * persistent app-shell header (logo, top-nav, theme toggle, the guest «Войти» chip)
- * composited over the `/` discovery front-door, in BOTH themes. The runtime twin of
+ * composited over the `/webinars` discovery front-door, in BOTH themes. The runtime twin of
  * the CI `playwright-axe` BLOCK gate (which scans the DS primitives via the
  * showcase), retargeted onto the composed shell surface. The full canvas-fidelity
  * eyes-on parity check (EARS-12, both breakpoints × both themes) is the separate
  * Stage-B manual gate — this pins the automated a11y floor.
  *
- * GUEST render: the header's guest branch («Войти») + the public `/` listing need
+ * GUEST render: the header's guest branch («Войти») + the public `/webinars` listing need
  * no session — so, like the 004 `discovery-axe` scan, this has NO Mailpit/Zitadel
  * dependency and runs whenever a live portal is present (`E2E_PORTAL_URL`).
  *
@@ -72,7 +72,14 @@ test.describe("008 EARS-12 axe-core a11y scan of the portal shell (e2e)", () => 
     context,
   }) => {
     await context.clearCookies();
-    await page.goto("/", { waitUntil: "domcontentloaded" });
+    // The discovery front-door is `/webinars` (`DISCOVERY_HREF`), which is where
+    // the logo and «Эфиры» point. `/` has served the static Academy home since
+    // #1313, and that page's own decorative giant wordmark (`.origin-bottom`,
+    // excluded as tracked 013 canvas debt by `academy-home.e2e.spec.ts`) is not
+    // shell surface at all — scanning `/` measured the home, not the chrome.
+    // `/webinars` also carries the shared FOOTER, which `/` does not, so the
+    // scanned surface grows rather than shrinks.
+    await page.goto("/webinars", { waitUntil: "domcontentloaded" });
     for (const theme of THEMES) await scan(page, theme);
   });
 });

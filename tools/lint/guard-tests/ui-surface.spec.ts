@@ -8,7 +8,11 @@ describe("rendered UI source classification", () => {
     "apps/admin/app/page.tsx",
     "apps/cms/src/components/custom.tsx",
     "apps/docs/app/page.tsx",
-    "apps/doctor/components/storefront-header.tsx",
+    // The doctor storefront's chrome moved into `@ds/storefront-shell` (#2180);
+    // what the host still owns is the auth-cluster slot filler, which is the
+    // live doctor component this row pins.
+    "apps/doctor/components/storefront-auth-cluster.tsx",
+    "packages/storefront-shell/src/storefront-header.tsx",
     "apps/mobile/src/screens/home.tsx",
     "apps/portal/app/page.tsx",
     "apps/promo/app/page.tsx",

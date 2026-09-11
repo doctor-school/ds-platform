@@ -72,6 +72,11 @@ export default defineConfig({
     // so it is dev-stand-gated in the same strong sense as the room tier and
     // rides `playwright.event-register.config.ts`.
     "event-register-one-tap.spec.ts",
+    // #2180: the signed-in auth cluster is a SERVER read of the session cookie
+    // and the header search must narrow a REAL feed, so both ride the live
+    // `playwright.shell.config.ts`. The guest half of the shared chrome stays
+    // here, in `shell.spec.ts`.
+    "shell-live.spec.ts",
   ],
   fullyParallel: true,
   forbidOnly: !!process.env.CI,

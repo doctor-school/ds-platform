@@ -178,12 +178,12 @@ test.describe("Feature 013 — static public Academy home", () => {
     // #1877 — the root route mounts the persistent 008 app-shell header like
     // every other portal route; the page body itself owns no header any more.
     await expect(page.locator("header")).toHaveCount(1);
-    await expect(page.getByTestId("shell-logo")).toHaveCount(1);
+    await expect(page.getByTestId("storefront-logo")).toHaveCount(1);
     await expect(page.getByRole("contentinfo")).toBeVisible();
     // The static page still fetches nothing OF ITS OWN. The only dynamic
     // traffic on `/` belongs to the mounted 008 shell header (#1877): its
     // one-shot self-profile read (`useHeaderAuth`) and Next's RSC prefetch of
-    // its three nav targets — everything else must stay absent.
+    // its nav targets — everything else must stay absent.
     expect(dynamicRequests.filter((url) => !isShellRequest(url))).toEqual([]);
   });
 
@@ -638,7 +638,7 @@ test.describe("Feature 013 — static public Academy home", () => {
     await page.goto("/");
 
     const header = page.locator("header");
-    await expect(page.getByTestId("shell-logo")).toBeVisible();
+    await expect(page.getByTestId("storefront-logo")).toBeVisible();
     await expect(header).toHaveCount(1);
     // A guest gets the real «Войти» way-in — the interim stub's disabled
     // bespoke buttons are gone (#1877).
@@ -651,15 +651,14 @@ test.describe("Feature 013 — static public Academy home", () => {
     await page.setViewportSize({ width: 390, height: 844 });
     const menu = page.getByTestId("shell-mobile-menu");
     await menu.locator("summary").click();
-    await expect(page.getByTestId("shell-mobile-broadcasts")).toBeVisible();
-    await expect(page.getByTestId("shell-mobile-broadcasts")).toHaveText(
-      "Эфиры",
-    );
+    const mobileNav = page.getByTestId("shell-nav-mobile");
+    await expect(mobileNav).toBeVisible();
+    await expect(mobileNav.getByRole("link")).toHaveText(["Эфиры"]);
 
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto("/account");
 
-    await expect(page.getByTestId("shell-logo")).toBeVisible();
+    await expect(page.getByTestId("storefront-logo")).toBeVisible();
     await expect(page.locator("header")).toHaveCount(1);
   });
 });

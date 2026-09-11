@@ -18,8 +18,8 @@ Produce one copy-pasteable handoff for a fresh DS Platform agent. Do not ask cla
 - Current task: active owner goal and canonical tracker id; verify live tracker state before claiming status.
 - Progress: product-first, per [report-task-outcome](../report-task-outcome/SKILL.md) — one line per landed unit naming the product entity and what a person (doctor / admin / sponsor) can now do; artefact paths, PR # and Issue # follow in parentheses, never as the line itself. Only load-bearing product/work mutations; exclude wrap/retro mechanics.
 - Where stopped: the last substantive work action and why it paused.
-- Next steps: concrete continuation, chunked into waves of at most three full PR cycles.
-- Decisions/gotchas and context paths: include only what the next agent needs; paths must exist. Never inline instruction files.
+- Next steps: only the remaining delta to the requested result and its stop condition; no automatic next task or repeat discovery.
+- Decisions/gotchas: established facts, implementations, checks and approvals with evidence references and relevant invalidators. Separate these from unverified hypotheses. Reuse valid work across sessions; include only necessary existing paths, never inline instruction files.
 - Source session logs: when relevant logs exist, identify the latest log path(s) for the task and list them under `## Context references`; no log entry is required when none exists.
 - Open questions: only unresolved owner decisions.
 

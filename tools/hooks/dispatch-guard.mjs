@@ -1,41 +1,9 @@
 #!/usr/bin/env node
-// PreToolUse guard (WARN-level, #913): make the AGENTS.md §6 orchestration-
-// default divergence visible DETERMINISTICALLY, at the decision point, and
-// model-agnostic (origin: #700 Opus-vs-Fable orchestration retro). §6 says
-// ORCHESTRATION is the default execution mode — deliverable edits are DISPATCHED
-// to subagents, not typed inline by the lead. This hook counts CONSECUTIVE
-// lead-authored Edit/Write/MultiEdit tool calls in the SHARED main tree with NO
-// intervening Agent dispatch; the streak RESETS on an Agent call. When the
-// streak reaches the threshold (DISPATCH_WARN_THRESHOLD) it emits a non-blocking
-// WARN naming §6 + the sanctioned inline carve-outs, so the lead must
-// consciously continue inline or dispatch. Phase-0 severity: WARN, never BLOCK,
-// and ONCE PER SESSION (#1700 latch) — the drift signal is worth saying once;
-// repeating it on every later mutation was noise, not enforcement.
+// PreToolUse advisory (#913): repeated shared-main edits prompt isolation and
+// a proportionate choice of authoring/delegation (AGENTS.md §6). The hook
+// remains WARN-only, once per session; it does not mandate delegation.
+// Existing counting, threshold, reset and worktree exemptions are unchanged.
 //
-// Contract: reads the PreToolUse hook JSON on stdin ({session_id, cwd,
-// tool_name, tool_input}). Warn = exit 0 + JSON on stdout ({systemMessage,
-// hookSpecificOutput.permissionDecision:"allow"}). Silent allow = exit 0, no
-// output. FAIL-OPEN: any parse/logic/FS error exits 0 — a guard bug must never
-// wedge a legitimate tool call.
-//
-// Registered on matcher `Agent|Edit|Write|MultiEdit` so the hook observes both
-// the mutations it counts and the Agent dispatches that reset the streak. Reads,
-// Bash, Grep between edits do NOT fire this matcher — so they neither count nor
-// reset (they are not "an intervening Agent dispatch"), which is exactly the
-// "consecutive mutations with no intervening dispatch" semantics we want.
-//
-// PROVISIONAL carve-out list (the reworked §6 carve-out list is tracked
-// separately at #914 / #700-M2; a provisional list is explicitly sanctioned by
-// #913). The guard stays silent for:
-//   1. Worktree-isolated sessions — cwd (or projectDir) under
-//      `.claude/worktrees/<N>`. These are the DISPATCH TARGETS (subagent
-//      executors) or an isolated lead; they are *supposed* to edit inline. Only
-//      the shared main tree — where the orchestration lead operates — is warned.
-//   2. Read-only / recon sessions — naturally never reach the threshold: with no
-//      Edit/Write/MultiEdit calls the streak stays 0, so nothing is emitted.
-//   3. An explicit sanctioned-inline opt-out: a session in a genuinely inline
-//      mode (recon/scope-framing, an engineering-task inline discipline gate,
-//      ADR/spec inline authoring) exports `DS_DISPATCH_GUARD_DISABLE=1`.
 
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
@@ -135,12 +103,10 @@ export function warnMessage(streak, threshold = DISPATCH_WARN_THRESHOLD) {
   return (
     `⚠ dispatch guard (#913): ${streak} consecutive lead-authored ` +
     `Edit/Write/MultiEdit calls in the SHARED main tree with NO intervening ` +
-    `Agent dispatch (threshold ${threshold}). AGENTS.md §6 makes ORCHESTRATION ` +
-    `the default execution mode — deliverable edits are DISPATCHED to subagents, ` +
-    `not typed inline by the lead. Either dispatch the remaining edits (Agent), ` +
-    `or, if this is a sanctioned inline mode — recon / scope-framing, an ` +
-    `engineering-task inline discipline gate, ADR/spec inline authoring, or a ` +
-    `worktree-isolated executor — continue consciously. WARN-level only ` +
+    `Agent dispatch (threshold ${threshold}). AGENTS.md §6 requires isolation ` +
+    `for parallel authoring. Use an isolated worktree for inline bounded work; ` +
+    `delegate when independent work or context savings justify the handoff. ` +
+    `A mutation count alone does not require delegation. WARN-level only ` +
     `(Phase 0): never blocks, and this is the ONLY time it is said this session.`
   );
 }

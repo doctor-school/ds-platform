@@ -22,7 +22,7 @@ import {
  * Unit cover for the #913 dispatch guard: a PreToolUse hook that counts
  * CONSECUTIVE lead-authored Edit/Write/MultiEdit calls in the SHARED main tree
  * with no intervening Agent dispatch, and WARNs (never blocks) once the streak
- * reaches DISPATCH_WARN_THRESHOLD — naming AGENTS.md §6 orchestration-default.
+ * reaches DISPATCH_WARN_THRESHOLD — naming AGENTS.md §6 proportionate execution.
  *
  * Paths are derived from `os.tmpdir()` + `path.resolve`/`join` so the spec runs
  * identically on Windows and the Linux CI runner. State is injected — the pure
@@ -173,11 +173,11 @@ describe("dispatch-guard decideDispatch() — carve-outs", () => {
 });
 
 describe("dispatch-guard warnMessage()", () => {
-  it("names AGENTS.md §6 orchestration-default and the sanctioned inline carve-outs", () => {
+  it("names isolation and proportionate delegation without a mutation-count mandate", () => {
     const msg = warnMessage(3);
     expect(msg).toContain("AGENTS.md §6");
-    expect(msg).toMatch(/orchestration/i);
-    expect(msg).toMatch(/sanctioned inline/i);
+    expect(msg).toMatch(/isolated worktree/i);
+    expect(msg).toMatch(/mutation count alone does not require delegation/i);
     expect(msg).toContain("#913");
   });
 

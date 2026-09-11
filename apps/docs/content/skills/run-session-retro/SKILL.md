@@ -31,11 +31,7 @@ The methodology below is the one **proven** in that audit; its tooling lives in
 
 ## What a "deviation" is
 
-A point where the agent **departed from an agreed rule** (AGENTS.md § / CLAUDE.md
-/ a memory file / a spec / an ADR) or **lost settled context** within or across
-sessions. The honest signal is the user **correcting the agent mid-flight** ("why
-did you do X and not Y / how should it be done"), plus the agent's own
-**self-catch** moments. One finding = one deviation.
+A point where the agent lost settled context, departed from a useful agreed rule, or followed an overprescriptive rule that inflated work beyond the requested result. Evaluate outcome, solution necessity and process cost before rule compliance. User corrections and agent self-catches are evidence candidates, not proof by themselves. One finding = one evidenced failure.
 
 ---
 
@@ -118,13 +114,7 @@ self-catch, then emit one finding in the schema below. **Cite both sides** — t
 user-side correction and the agent-side quote (what it did / how it owned the
 miss). Map the deviation to the rule it broke; classify root cause and remedy.
 
-The deeper insight the audit surfaced (record it when it applies): several
-themes — registry-research, no-workarounds, verify-UI-live, RU-i18n,
-actionable-errors — **were already written into instructions/memory and still
-recurred**. That root cause is `prose-not-enforced` (a rule that lives as passive
-prose and never fires at the decision point), not `missing-rule`. Prefer a
-deterministic `remedy_kind` (`skill` / `command` / `hook` / `lint-gate`) over
-"write more prose" for those.
+Determine whether the rule itself was necessary and correctly scoped before recommending enforcement. Repetition may reveal an overprescriptive rule, conflicting instructions or lost evidence. Prefer removing/narrowing the cause or reusing existing means when sufficient; new commands/hooks/lint gates need a concrete uncovered risk and justified maintenance cost. Use existing schema `root_cause: other` for harmful rule design and `remedy_kind: instruction|skill` for deletion/narrowing. `none` is valid when no durable change is warranted.
 
 ### 5. Large corpora — balanced-batch fan-out
 
@@ -174,9 +164,7 @@ Return:
 1. A one-line **corpus header** echoing `summary.json` — mode (single/batch),
    interactive-session count, correction count, date range.
 2. The **findings array** in the schema above (valid JSON).
-3. A short **consolidation note** — themes by frequency, and which root causes
-   are `prose-not-enforced` / `cross-session-loss` (the structural failures that
-   no extra prose will fix).
+3. A short **consolidation note** — recurring causes, including lost context and overprescriptive rules; explain why each proposed remedy is sufficient and worth its cost.
 
 Do **not** propose or apply instruction/memory edits here — that is the caller's
 job (`/wrap` stage 2–3). This skill **only analyzes and reports**.

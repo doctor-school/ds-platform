@@ -321,8 +321,8 @@ describe.skipIf(!LIVE_OIDC)("Zitadel OTP login (integration)", () => {
     client = new ZitadelIdpClient({
       mailer: new SmtpMailer({
         intercept: {
-          host: process.env.SMTP_HOST,
-          port: Number(process.env.SMTP_PORT),
+          host: process.env.MAILER_SMTP_HOST ?? new URL(MAILPIT_BASE).hostname,
+          port: Number(process.env.MAILER_SMTP_PORT ?? 1025),
         },
         isEnabled: () => false,
         portalBaseUrl: process.env.IDP_REDIRECT_URI!,

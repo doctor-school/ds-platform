@@ -1,8 +1,19 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createServer } from "node:http";
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
+import { resolve } from "node:path";
 import { test } from "node:test";
+
+// Git for Windows exposes its libexec directory even when Bash is not on PATH.
+const bash =
+  process.platform === "win32"
+    ? resolve(
+        execFileSync("git", ["--exec-path"], { encoding: "utf8" }).trim(),
+        "../../..",
+        "bin/bash.exe",
+      )
+    : "bash";
 
 const source = readFileSync(
   new URL("../../infra/dev-stand/idp/provision.sh", import.meta.url),
@@ -104,19 +115,13 @@ async function fixture(mode) {
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   try {
     const result = await new Promise((resolve, reject) => {
-      const child = spawn(
-        process.platform === "win32"
-          ? "C:/Program Files/Git/bin/bash.exe"
-          : "bash",
-        ["--noprofile", "--norc", "-s"],
-        {
-          env: {
-            ...process.env,
-            BASE_URL: `http://127.0.0.1:${server.address().port}`,
-            PAT_VALUE: "fixture-token",
-          },
+      const child = spawn(bash, ["--noprofile", "--norc", "-s"], {
+        env: {
+          ...process.env,
+          BASE_URL: `http://127.0.0.1:${server.address().port}`,
+          PAT_VALUE: "fixture-token",
         },
-      );
+      });
       let stdout = "",
         stderr = "";
       child.stdout.on("data", (data) => (stdout += data));

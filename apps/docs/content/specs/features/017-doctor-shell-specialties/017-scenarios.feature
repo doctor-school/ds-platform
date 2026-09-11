@@ -14,7 +14,7 @@ Feature: A doctor arrives at their own storefront, picks a specialty, and the si
     And adjacency is read from the managed directions-to-specialties link and the direction adjacency relation
     And nothing on the home page requires an account to read
     And no surface states who finances the doctor's learning and none shows a price, cart or subscription
-    And the vendored canvas design-source/doctor-home.dc.html is the composition source of truth
+    And the vendored canvas design-source/doctor-home.dc.html is the composition source of truth for the home page, and design-source/ds-shell.dc.html (host=doctor) for the shared shell
 
   # ------------------------------------------------------------------- shell
 
@@ -24,7 +24,7 @@ Feature: A doctor arrives at their own storefront, picks a specialty, and the si
     When they open any storefront route
     Then the header renders the <cluster> cluster
     And the other cluster is absent from the rendered page
-    And the header, navigation and footer come from the single storefront shell layout
+    And the header, navigation and footer come from the shared storefront-shell package mounted with the host: doctor config
 
     Examples:
       | status    | cluster                            |

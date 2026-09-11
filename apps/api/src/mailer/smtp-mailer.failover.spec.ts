@@ -368,7 +368,7 @@ describe("003 EARS-31 SmtpMailer failover chain (design §14.3)", () => {
     );
     const payload = JSON.parse(String(init.body)) as Record<string, unknown>;
     expect(payload.to).toEqual(["doctor@example.com"]);
-    expect(payload.from).toBe("noreply@doctor.school");
+    expect(payload.from).toBe("Doctor.School <noreply@doctor.school>");
     expect(String(payload.subject)).toContain("ABC123");
   });
 });

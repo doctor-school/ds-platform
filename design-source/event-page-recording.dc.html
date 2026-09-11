@@ -10,39 +10,7 @@
 <helmet data-dc-atomics><link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"><style>body{margin:0;background:#fff;font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}:focus-visible{outline:3px solid #6BB1F7;outline-offset:2px}a{color:#114D9E}a:hover{color:#2D84F2}details>summary{list-style:none}details>summary::-webkit-details-marker{display:none}</style></helmet>
 
 <div style="min-height:100vh;background:{{ pageBg }}">
-  <div style="background:#0D3A77;padding:5px clamp(16px,4vw,48px);text-align:center;font-size:9px;font-weight:700;letter-spacing:.22em;text-transform:uppercase;color:rgba(255,255,255,.34)">BBM: Академия смыслов</div>
-  <header data-screen-label="Эфир — архив" style="background:#114D9E;padding:16px clamp(16px,4vw,48px);display:flex;align-items:center;justify-content:space-between;gap:16px">
-    <a href="academy-home.dc.html" style="display:flex;flex:none"><img src="assets/ds-logo-white.svg" alt="Doctor.School · Академия" style="height:26px;display:block"></a>
-    <sc-if value="{{ isMobile }}" hint-placeholder-val="{{ false }}">
-      <div style="display:flex;align-items:center;gap:12px">
-        <button onClick="{{ toggleTheme }}" title="Тема" style="font:inherit;width:44px;height:44px;background:transparent;color:#fff;border:2px solid rgba(255,255,255,.5);cursor:pointer;font-size:16px">{{ themeIcon }}</button>
-        <details style="position:relative">
-          <summary style="list-style:none;width:44px;height:44px;display:inline-flex;align-items:center;justify-content:center;background:#fff;color:#114D9E;cursor:pointer;font-size:20px;font-weight:800;box-shadow:3px 3px 0 {{ headerShadow }}">≡</summary>
-          <nav style="position:absolute;top:calc(100% + 10px);right:0;background:{{ surface }};border:2px solid {{ border }};box-shadow:5px 5px 0 {{ shadow }};padding:8px;display:flex;flex-direction:column;min-width:200px;z-index:30">
-            <a href="events-feed.dc.html" style="padding:12px 16px;font-size:15px;font-weight:800;color:{{ accent }};text-decoration:none">Эфиры</a>
-            <a href="academy-projects.dc.html" style="padding:12px 16px;font-size:15px;font-weight:700;color:{{ ink }};text-decoration:none">Проекты</a>
-            <a href="academy-experts.dc.html" style="padding:12px 16px;font-size:15px;font-weight:700;color:{{ ink }};text-decoration:none">Эксперты</a>
-            <a href="account-my-events.dc.html" style="padding:12px 16px;font-size:15px;font-weight:700;color:{{ ink }};text-decoration:none">Мои события</a>
-          </nav>
-        </details>
-      </div>
-    </sc-if>
-    <sc-if value="{{ isDesktop }}" hint-placeholder-val="{{ true }}">
-      <nav style="display:flex;align-items:center;gap:28px;font-size:14px;font-weight:700">
-        <a href="events-feed.dc.html" style="color:#fff;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:6px">Эфиры</a>
-        <a href="academy-projects.dc.html" style="color:#D3E8FD;text-decoration:none" style-hover="color:#fff">Проекты</a>
-        <a href="academy-experts.dc.html" style="color:#D3E8FD;text-decoration:none" style-hover="color:#fff">Эксперты</a>
-        <a href="account-my-events.dc.html" style="color:#D3E8FD;text-decoration:none">Мои события</a>
-        <button onClick="{{ toggleTheme }}" title="Тема" style="font:inherit;width:44px;height:44px;background:transparent;color:#fff;border:2px solid rgba(255,255,255,.5);cursor:pointer;font-size:15px" style-hover="border-color:#fff">{{ themeIcon }}</button>
-        <sc-if value="{{ isGuest }}" hint-placeholder-val="{{ false }}">
-          <a href="auth.dc.html" style="font-size:13.5px;font-weight:700;color:#114D9E;background:#fff;border:0;padding:11px 22px;cursor:pointer;box-shadow:3px 3px 0 {{ headerShadow }};text-decoration:none" style-hover="transform:translate(1px,1px);box-shadow:2px 2px 0 {{ headerShadow }}">Войти</a>
-        </sc-if>
-        <sc-if value="{{ isAuthed }}" hint-placeholder-val="{{ true }}">
-          <a href="account-profile.dc.html" title="Профиль" style="width:44px;height:44px;display:inline-flex;align-items:center;justify-content:center;background:#fff;color:#114D9E;font-size:15px;font-weight:800;text-decoration:none;box-shadow:3px 3px 0 {{ headerShadow }}" style-hover="transform:translate(1px,1px);box-shadow:2px 2px 0 {{ headerShadow }}">АИ</a>
-        </sc-if>
-      </nav>
-    </sc-if>
-  </header>
+  <dc-import name="ds-shell" host="academy" dark="{{ dark }}" onTheme="{{ toggleTheme }}" embedded="{{ true }}">
 
   <!-- Плакатное поле -->
   <div style="background:#114D9E;padding:clamp(24px,4vw,36px) clamp(16px,4vw,48px) 132px">
@@ -272,22 +240,7 @@
       <a href="{{ footCtaHref }}" style="font-size:16px;font-weight:800;color:#114D9E;background:#fff;border:0;padding:18px 34px;white-space:nowrap;box-shadow:4px 4px 0 {{ headerShadow }};text-decoration:none" style-hover="transform:translate(2px,2px);box-shadow:2px 2px 0 {{ headerShadow }}">{{ footCtaLabel }}</a>
     </div>
   </div>
-
-  <footer style="border-top:2px solid {{ ink }};padding:32px clamp(16px,4vw,48px);display:flex;align-items:center;justify-content:space-between;max-width:1104px;margin:0 auto;box-sizing:content-box;gap:16px;flex-wrap:wrap">
-    {{ footLogoEl }}
-    <nav style="display:flex;gap:20px;font-size:12.5px;font-weight:700;flex-wrap:wrap">
-      <a href="academy-partners.dc.html" style="color:{{ inkFaint }};text-decoration:none">Партнёры</a>
-      <a href="academy-projects.dc.html" style="color:{{ inkFaint }};text-decoration:none">Проекты</a>
-      <a href="academy-experts.dc.html" style="color:{{ inkFaint }};text-decoration:none">Эксперты</a>
-      <a href="events-feed.dc.html" style="color:{{ inkFaint }};text-decoration:none">События</a>
-      <a href="academy-docs.dc.html" style="color:{{ inkFaint }};text-decoration:none">Документы и контакты</a>
-    </nav>
-    <a href="doctor-home.dc.html" style="font-size:12.5px;font-weight:800;color:{{ accent }};text-decoration:underline;text-underline-offset:4px;white-space:nowrap">doctor.school — врачам</a>
-  </footer>
-  <div style="max-width:1104px;margin:0 auto;padding:0 clamp(16px,4vw,48px);text-align:center;font-size:10px;font-weight:800;letter-spacing:.18em;text-transform:uppercase;color:{{ inkFaint }}">BBM: Академия смыслов</div>
-  <div aria-hidden="true" style="overflow:hidden;padding-top:clamp(16px,3vw,36px)">
-    <div style="font-size:clamp(30px,8.2vw,154px);font-weight:800;letter-spacing:-.05em;line-height:.78;white-space:nowrap;text-align:center;color:{{ giantInk }};transform:translateY(.16em);user-select:none">Academy.Doctor.School</div>
-  </div>
+  </dc-import>
 </div>
 </x-dc>
 <script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1104,&quot;height&quot;:820},&quot;viewer&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;authed&quot;,&quot;guest&quot;],&quot;default&quot;:&quot;authed&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Состояние страницы&quot;},&quot;recording&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;montage&quot;,&quot;raw-only&quot;,&quot;preparing&quot;],&quot;default&quot;:&quot;montage&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Состояние страницы&quot;},&quot;secondaryUi&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;spoiler&quot;,&quot;tabs&quot;,&quot;section&quot;],&quot;default&quot;:&quot;spoiler&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Развилка: подача оригинала&quot;}}">
@@ -368,7 +321,7 @@ class Component extends DCLogic {
       matAction: isGuest ? 'После входа' : 'Скачать ↓',
       matActionColor: isGuest ? inkFaint : accent,
       toggleTheme: () => this.setState(s => { const dark = !s.dark; try { localStorage.setItem('ds-theme', dark ? 'dark' : 'light'); } catch (e) {} return { dark }; }),
-      themeIcon: d ? '☀' : '☾',
+      themeIcon: d ? '☀' : '☾', dark: d,
       pageBg: d ? 'oklch(.16 .02 250)' : '#fff',
       headerShadow: d ? 'oklch(.16 .02 250)' : '#114D9E',
       surface, ink, border, shadow, shadowSm, accent, tint, tintInk, btnBg, btnFg,

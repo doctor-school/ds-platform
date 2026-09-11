@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"><style>body{margin:0;background:#fff;font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}a{color:#2D84F2}a:hover{color:#114D9E}:focus-visible{outline:3px solid #6BB1F7;outline-offset:2px}details summary::-webkit-details-marker{display:none}</style></helmet>
+
+<div style="{{ frameStyle }}">
+
+  <!-- ═══ Шапка ═══ -->
+  <sc-if value="{{ hasTopbar }}" hint-placeholder-val="{{ false }}">
+    <div style="background:#0D3A77;padding:5px clamp(16px,4vw,48px);text-align:center;font-size:9px;font-weight:700;letter-spacing:.22em;text-transform:uppercase;color:rgba(255,255,255,.34)">{{ topbarText }}</div>
+  </sc-if>
+
+  <header data-screen-label="ds-shell · шапка" style="background:#114D9E;padding:14px clamp(16px,4vw,48px);display:flex;align-items:center;gap:clamp(14px,2.5vw,28px)">
+    <a href="{{ logoHref }}" style="display:flex;flex:none"><img src="assets/ds-logo-white.svg" alt="{{ logoAlt }}" style="height:26px;display:block"></a>
+
+    <sc-if value="{{ isDesktop }}" hint-placeholder-val="{{ true }}">
+      <sc-if value="{{ hasSearch }}" hint-placeholder-val="{{ true }}">
+        <input value="{{ q }}" onInput="{{ setQ }}" placeholder="Поиск по урокам, школам и событиям" style="flex:1;max-width:440px;font:inherit;font-size:13.5px;font-weight:600;padding:12px 14px;border:2px solid rgba(255,255,255,.45);background:transparent;color:#fff;outline:none;min-width:120px" style-focus="border-color:#fff;background:rgba(255,255,255,.08)">
+      </sc-if>
+      <nav style="display:flex;align-items:center;gap:22px;font-size:14px;font-weight:700;margin-left:auto">
+        <sc-for list="{{ navItems }}" as="ni" hint-placeholder-count="4">
+          <a href="{{ ni.href }}" style="color:#D3E8FD;text-decoration:none;white-space:nowrap" style-hover="color:#fff">{{ ni.label }}</a>
+        </sc-for>
+        <sc-if value="{{ hasPoints }}" hint-placeholder-val="{{ false }}">
+          <a href="{{ pointsHref }}" title="Очки внимания: Пульс · Дыхание · Сознание. Открыть историю начислений" style="display:inline-flex;align-items:center;gap:9px;border:2px solid rgba(255,255,255,.45);padding:10px 14px;font-size:12px;font-weight:800;color:#fff;text-decoration:none;white-space:nowrap;font-variant-numeric:tabular-nums" style-hover="border-color:#fff"><span>120 Pul</span><span style="opacity:.45">·</span><span>340 Bre</span><span style="opacity:.45">·</span><span>1 250 Con</span></a>
+        </sc-if>
+        <sc-for list="{{ authLinks }}" as="al" hint-placeholder-count="1">
+          <a href="{{ al.href }}" style="font-size:13.5px;font-weight:700;color:#D3E8FD;text-decoration:none;padding:12px 2px;white-space:nowrap" style-hover="color:#fff">{{ al.label }}</a>
+        </sc-for>
+        <button onClick="{{ toggleTheme }}" title="Тема" style="font:inherit;width:44px;height:44px;background:transparent;color:#fff;border:2px solid rgba(255,255,255,.5);cursor:pointer;font-size:15px;flex:none" style-hover="border-color:#fff">{{ themeIcon }}</button>
+        <a href="{{ primary.href }}" style="font-size:13.5px;font-weight:800;color:#114D9E;background:#fff;padding:12px 22px;text-decoration:none;white-space:nowrap;box-shadow:3px 3px 0 {{ headerShadow }};flex:none" style-hover="transform:translate(1px,1px);box-shadow:2px 2px 0 {{ headerShadow }}">{{ primary.label }}</a>
+      </nav>
+    </sc-if>
+
+    <sc-if value="{{ isMobile }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;align-items:center;gap:10px;margin-left:auto">
+        <button onClick="{{ toggleTheme }}" title="Тема" style="font:inherit;width:44px;height:44px;background:transparent;color:#fff;border:2px solid rgba(255,255,255,.5);cursor:pointer;font-size:16px;flex:none">{{ themeIcon }}</button>
+        <details open="{{ menuOpen }}" style="position:relative">
+          <summary style="list-style:none;width:44px;height:44px;display:inline-flex;align-items:center;justify-content:center;background:#fff;color:#114D9E;cursor:pointer;font-size:20px;font-weight:800;box-shadow:3px 3px 0 #0D3A77">≡</summary>
+          <nav style="position:absolute;top:calc(100% + 10px);right:0;background:{{ surface }};border:2px solid {{ border }};box-shadow:5px 5px 0 {{ shadow }};padding:8px;display:flex;flex-direction:column;min-width:240px;z-index:30">
+            <sc-for list="{{ navItems }}" as="ni" hint-placeholder-count="4">
+              <a href="{{ ni.href }}" style="padding:12px 16px;font-size:15px;font-weight:700;color:{{ ink }};text-decoration:none">{{ ni.label }}</a>
+            </sc-for>
+            <sc-for list="{{ authLinks }}" as="al" hint-placeholder-count="1">
+              <a href="{{ al.href }}" style="padding:12px 16px;font-size:15px;font-weight:700;color:{{ ink }};text-decoration:none">{{ al.label }}</a>
+            </sc-for>
+            <a href="{{ primary.href }}" style="margin-top:4px;padding:12px 16px;font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};text-decoration:none;text-align:center">{{ primary.label }}</a>
+          </nav>
+        </details>
+      </div>
+    </sc-if>
+  </header>
+
+  <sc-if value="{{ mobileSearch }}" hint-placeholder-val="{{ false }}">
+    <div style="background:#114D9E;padding:0 16px 14px">
+      <input value="{{ q }}" onInput="{{ setQ }}" placeholder="Поиск по урокам, школам и событиям" style="width:100%;box-sizing:border-box;font:inherit;font-size:14px;font-weight:600;padding:13px 14px;border:2px solid rgba(255,255,255,.45);background:transparent;color:#fff;outline:none" style-focus="border-color:#fff">
+    </div>
+  </sc-if>
+
+  <!-- ═══ Зона контента экрана ═══ -->
+  <sc-if value="{{ hasChildren }}" hint-placeholder-val="{{ false }}">{{ children }}</sc-if>
+  <sc-if value="{{ noChildren }}" hint-placeholder-val="{{ true }}">
+    <div style="background:{{ sectionGray }};min-height:340px;display:flex;align-items:center;justify-content:center;padding:clamp(40px,8vw,96px) 16px">
+      <div style="font-size:11.5px;font-weight:800;letter-spacing:.18em;text-transform:uppercase;color:{{ inkFaint }};text-align:center">контент экрана</div>
+    </div>
+  </sc-if>
+
+  <!-- ═══ Футер ═══ -->
+  <footer data-screen-label="ds-shell · футер" style="border-top:2px solid {{ ink }};padding:clamp(32px,5vw,48px) clamp(16px,4vw,48px) clamp(36px,5vw,56px)">
+    <div style="max-width:1104px;margin:0 auto;display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:clamp(24px,4vw,40px)">
+      <div>
+        <sc-if value="{{ light }}" hint-placeholder-val="{{ true }}"><img src="assets/ds-logo-color.svg" alt="Doctor.School" style="height:22px;display:block"></sc-if>
+        <sc-if value="{{ dark }}" hint-placeholder-val="{{ false }}"><img src="assets/ds-logo-white.svg" alt="Doctor.School" style="height:22px;display:block"></sc-if>
+        <div style="margin-top:14px;font-size:12.5px;font-weight:600;line-height:1.6;color:{{ inkFaint }}">{{ footNote1 }}<sc-if value="{{ hasFootNote2 }}" hint-placeholder-val="{{ true }}"><br>{{ footNote2 }}</sc-if></div>
+      </div>
+      <div>
+        <div style="font-size:11.5px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:{{ inkFaint }};margin-bottom:14px">Разделы</div>
+        <div style="display:flex;flex-direction:column;gap:9px">
+          <sc-for list="{{ navItems }}" as="ni" hint-placeholder-count="3">
+            <a href="{{ ni.href }}" style="font-size:13.5px;font-weight:600;color:{{ ink }};text-decoration:none" style-hover="color:{{ accent }};text-decoration:underline;text-underline-offset:3px">{{ ni.label }}</a>
+          </sc-for>
+        </div>
+      </div>
+      <div>
+        <div style="font-size:11.5px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:{{ inkFaint }};margin-bottom:14px">Документы и контакты</div>
+        <div style="display:flex;flex-direction:column;gap:9px">
+          <sc-for list="{{ footLinks }}" as="fl" hint-placeholder-count="3">
+            <a href="{{ fl.href }}" style="font-size:13.5px;font-weight:600;color:{{ ink }};text-decoration:none" style-hover="color:{{ accent }};text-decoration:underline;text-underline-offset:3px">{{ fl.label }}</a>
+          </sc-for>
+        </div>
+      </div>
+      <div>
+        <div style="font-size:11.5px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:{{ inkFaint }};margin-bottom:14px">{{ crossTitle }}</div>
+        <a href="{{ cross.href }}" style="font-size:13.5px;font-weight:800;color:{{ accent }};text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px">{{ cross.label }}</a>
+        <div style="margin-top:10px;font-size:12.5px;font-weight:600;line-height:1.6;color:{{ inkFaint }}">{{ crossNote }}</div>
+      </div>
+    </div>
+    <div aria-hidden="true" ref="{{ giantBoxRef }}" style="overflow:hidden;container-type:inline-size;margin:clamp(28px,4vw,48px) calc(-1*clamp(16px,4vw,48px)) calc(-1*clamp(36px,5vw,56px))">
+      <div style="font-size:{{ giantSize }};font-weight:800;letter-spacing:-.05em;line-height:.78;white-space:nowrap;text-align:center;color:{{ giantInk }};transform:translateY(.16em);user-select:none"><span ref="{{ giantSpanRef }}" style="display:inline-block">{{ giantText }}</span></div>
+    </div>
+  </footer>
+</div>
+
+<!-- ═══ Панель развилок и артбордов (для владельца) ═══ -->
+<sc-if value="{{ showPanel }}" hint-placeholder-val="{{ true }}">
+  <div style="position:fixed;bottom:16px;left:16px;z-index:50;background:{{ surface }};border:2px solid {{ border }};box-shadow:4px 4px 0 {{ shadow }};padding:10px 12px 12px;display:flex;flex-direction:column;gap:8px;max-width:320px">
+    <div style="font-size:9.5px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:{{ inkFaint }}">{{ artboardName }}</div>
+    <sc-for list="{{ panelRows }}" as="row" hint-placeholder-count="4">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="width:76px;font-size:9.5px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:{{ inkFaint }}">{{ row.label }}</span>
+        <span style="display:flex;gap:5px;flex-wrap:wrap">
+          <sc-for list="{{ row.btns }}" as="pb" hint-placeholder-count="2">
+            <button onClick="{{ pb.onClick }}" title="{{ pb.title }}" style="{{ pb.style }}">{{ pb.label }}</button>
+          </sc-for>
+        </span>
+      </div>
+    </sc-for>
+  </div>
+</sc-if>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;host&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;doctor&quot;,&quot;academy&quot;],&quot;default&quot;:&quot;doctor&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Хост&quot;},&quot;loggedIn&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Состояние&quot;},&quot;dark&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Состояние&quot;},&quot;embedded&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Состояние&quot;}}">
+class Component extends DCLogic {
+  state = {
+    darkS: null,
+    lsDark: (() => { try { return localStorage.getItem('ds-theme') === 'dark'; } catch (e) { return false; } })(),
+    viewportMobile: false,
+    hostS: null, authS: null, widthS: null, q: ''
+  };
+  componentDidMount() {
+    this.mq = window.matchMedia('(max-width: 900px)');
+    this.upd = () => this.setState({ viewportMobile: this.mq.matches });
+    this.upd();
+    this.mq.addEventListener ? this.mq.addEventListener('change', this.upd) : this.mq.addListener(this.upd);
+    if (window.ResizeObserver) {
+      this.ro = new ResizeObserver(() => this.fitGiant());
+      if (this.giantBox) this.ro.observe(this.giantBox);
+    }
+    this.fitGiant();
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => this.fitGiant());
+  }
+  componentDidUpdate() { this.fitGiant(); }
+  componentWillUnmount() {
+    if (this.ro) this.ro.disconnect();
+    this.mq && (this.mq.removeEventListener ? this.mq.removeEventListener('change', this.upd) : this.mq.removeListener(this.upd));
+  }
+  // Гигантская надпись подгоняется по фактической ширине футера, а не по вьюпорту.
+  fitGiant() {
+    const box = this.giantBox, sp = this.giantSpan;
+    if (!box || !sp) return;
+    const bw = box.clientWidth, tw = sp.getBoundingClientRect().width;
+    if (!bw || !tw) return;
+    const cur = parseFloat(getComputedStyle(sp.parentNode).fontSize) || 100;
+    const next = Math.max(26, Math.min(240, cur * (bw * 0.965) / tw));
+    if (Math.abs(next - cur) > 0.6) this.setState({ giantPx: next });
+  }
+  renderVals() {
+    const p = this.props, s = this.state;
+    const embedded = !!p.embedded;
+    const d = embedded ? !!p.dark : (s.darkS === null ? (s.lsDark || !!p.dark) : s.darkS);
+    const setDark = v => { try { localStorage.setItem('ds-theme', v ? 'dark' : 'light'); } catch (e) {} this.setState({ darkS: v }); };
+    const host = s.hostS || p.host || 'doctor';
+    const academy = host === 'academy';
+    const loggedIn = s.authS ? s.authS === 'in' : !!p.loggedIn;
+    const m = s.widthS ? s.widthS === 'm' : s.viewportMobile;
+
+    const ink = d ? '#fff' : 'oklch(.21 .02 250)';
+    const inkFaint = d ? 'rgba(255,255,255,.5)' : 'oklch(.556 .012 250)';
+    const surface = d ? 'oklch(.21 .02 250)' : '#fff';
+    const border = d ? '#fff' : 'oklch(.21 .02 250)';
+    const shadow = d ? '#6BB1F7' : '#114D9E';
+    const accent = d ? '#6BB1F7' : '#2D84F2';
+    const btnBg = d ? '#6BB1F7' : '#114D9E';
+    const btnFg = d ? '#0D3A77' : '#fff';
+    const sectionGray = d ? 'oklch(.185 .02 250)' : 'oklch(.955 .004 250)';
+    const pageBg = d ? 'oklch(.16 .02 250)' : '#fff';
+
+    // Карта значений host → содержание. Композиция и цвета от host не зависят.
+    const map = {
+      doctor: {
+        logoAlt: 'Doctor.School', logoHref: 'doctor-home.dc.html',
+        search: true,
+        nav: [
+          { label: 'Эфиры', href: 'doctor-events.dc.html' }
+        ],
+        user: { links: [], primary: { label: 'Личный кабинет', href: 'doctor-cabinet.dc.html' }, points: true },
+        footNote: ['Бесплатное образование для врачей.', '© Doctor.School, 2026'],
+        contactsHref: 'doctor-docs.dc.html',
+        crossTitle: 'Экспертам и партнёрам',
+        cross: { label: 'Academy.Doctor.School ↗', href: 'academy-home.dc.html' },
+        crossNote: 'Закулисье платформы: проекты, эксперты, партнёры.',
+        giant: 'Doctor.School', giantSize: 'min(16cqw,240px)'
+      },
+      academy: {
+        logoAlt: 'Doctor.School · Академия', logoHref: 'academy-home.dc.html',
+        search: false,
+        nav: [
+          { label: 'Эфиры', href: 'events-feed.dc.html' },
+          { label: 'Проекты', href: 'academy-projects.dc.html' },
+          { label: 'Эксперты', href: 'academy-experts.dc.html' },
+          { label: 'Партнёры', href: 'academy-partners.dc.html' }
+        ],
+        user: { links: [{ label: 'Мои события', href: 'account-my-events.dc.html' }], primary: { label: 'Личный кабинет', href: 'account-profile.dc.html' }, points: false },
+        footNote: ['BBM: Академия смыслов', '© Doctor.School, 2026'],
+        contactsHref: 'academy-docs.dc.html',
+        crossTitle: 'Врачам',
+        cross: { label: 'Doctor.School ↗', href: 'doctor-home.dc.html' },
+        crossNote: 'Конечный продукт: специальности, школы, курсы, события.',
+        giant: 'Academy.Doctor.School', giantSize: 'min(9.6cqw,150px)'
+      }
+    };
+    const h = map[host] || map.doctor;
+    // Кластер гостя и блок «Документы и контакты» одинаковы на обоих хостах.
+    const guestCluster = { links: [], primary: { label: 'Войти / Регистрация', href: 'auth.dc.html' }, points: false };
+    const cluster = loggedIn ? h.user : guestCluster;
+    const footLinks = [
+      { label: 'Пользовательское соглашение', href: 'document.dc.html' },
+      { label: 'Политика обработки персональных данных', href: 'document.dc.html' },
+      { label: 'Контакты', href: h.contactsHref }
+    ];
+
+    const row = (label, key, opts, cur) => ({
+      label,
+      btns: opts.map(o => {
+        const active = cur === o.k;
+        return {
+          label: o.l, title: o.t,
+          onClick: () => this.setState({ [key]: o.k }),
+          style: 'font:inherit;font-size:12px;font-weight:800;min-width:30px;height:30px;padding:0 8px;cursor:pointer;border:2px solid ' + (active ? btnBg : border) + ';color:' + (active ? btnFg : ink) + ';background:' + (active ? btnBg : 'transparent')
+        };
+      })
+    });
+    const panelRows = [
+      row('Хост', 'hostS', [{ k: 'doctor', l: 'Врач', t: 'doctor.school — витрина врача' }, { k: 'academy', l: 'Академия', t: 'academy.doctor.school' }], host),
+      row('Вход', 'authS', [{ k: 'guest', l: 'Г', t: 'Гость' }, { k: 'in', l: 'В', t: 'Вошедший' }], loggedIn ? 'in' : 'guest'),
+      row('Ширина', 'widthS', [{ k: 'd', l: '1440', t: 'Десктоп' }, { k: 'm', l: '390', t: 'Мобильный' }], s.widthS || (s.viewportMobile ? 'm' : 'd')),
+      { label: 'Тема', btns: [{
+        label: d ? '☀' : '☾', title: 'Светлая / тёмная',
+        onClick: () => setDark(!d),
+        style: 'font:inherit;font-size:13px;font-weight:800;min-width:30px;height:30px;padding:0 8px;cursor:pointer;border:2px solid ' + border + ';color:' + ink + ';background:transparent'
+      }] }
+    ];
+
+    const forcedMobile = s.widthS === 'm' && !s.viewportMobile;
+
+    return {
+      isMobile: m, isDesktop: !m,
+      hasTopbar: true, topbarText: 'BBM: Академия смыслов',
+      logoAlt: h.logoAlt, logoHref: h.logoHref,
+      hasSearch: h.search, mobileSearch: h.search && m,
+      navItems: h.nav,
+      hasPoints: cluster.points, pointsHref: 'doctor-cabinet.dc.html',
+      authLinks: cluster.links, primary: cluster.primary,
+      menuOpen: m && !embedded,
+      hasChildren: !!p.children, noChildren: !p.children, children: p.children,
+      footNote1: h.footNote[0], footNote2: h.footNote[1] || '', hasFootNote2: h.footNote.length > 1,
+      footLinks, cross: h.cross,
+      crossTitle: h.crossTitle, crossNote: h.crossNote,
+      giantText: h.giant,
+      giantSize: s.giantPx ? s.giantPx.toFixed(1) + 'px' : h.giantSize,
+      giantBoxRef: el => { this.giantBox = el; if (el && this.ro) { this.ro.disconnect(); this.ro.observe(el); } },
+      giantSpanRef: el => { this.giantSpan = el; },
+      dark: d, light: !d,
+      giantInk: d ? 'rgba(174,212,251,.09)' : 'oklch(.945 .018 250)',
+      headerShadow: d ? 'oklch(.16 .02 250)' : '#0D3A77',
+      themeIcon: d ? '☀' : '☾',
+      toggleTheme: () => (p.onTheme ? p.onTheme() : setDark(!d)),
+      q: s.q, setQ: e => this.setState({ q: e.target.value }),
+      frameStyle: embedded ? 'background:' + pageBg : 'background:' + pageBg + ';' + (forcedMobile
+        ? 'width:390px;margin:0 auto;border:2px solid ' + border + ';box-shadow:6px 6px 0 ' + shadow + ';overflow:hidden'
+        : 'min-height:100vh'),
+      showPanel: !embedded,
+      artboardName: 'ds-shell · host=' + host + ' · ' + (loggedIn ? 'вошедший' : 'гость') + ' · ' + (m ? '390' : '1440') + ' · ' + (d ? 'dark' : 'light'),
+      ink, inkFaint, surface, border, shadow, accent, btnBg, btnFg, sectionGray, panelRows
+    };
+  }
+}
+
+</script>
+</body>
+</html>

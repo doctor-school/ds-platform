@@ -6,7 +6,7 @@ The BFF's **own** transactional-email channel (003 EARS-23/29, [003 design][desi
 - **Product / security notices** that must never carry a secret — the
   account-exists notice (one sign-in action for a registration attempt on an
   already-registered address) and the admin MFA lockout notice (011 EARS-7).
-- **One-time-code credential emails** (EARS-29, #910/#1045): the email-verify
+- **One-time-code credential emails** (EARS-29, #910/#1045): the email-verify, login
   and password-reset codes are obtained from Zitadel via `returnCode` (Zitadel
   generates/stores/expires/verifies the code but **sends nothing**) and
   delivered as the branded, Russian, code-only, **fully link-free**
@@ -14,7 +14,7 @@ The BFF's **own** transactional-email channel (003 EARS-23/29, [003 design][desi
   the transit: the code lives in memory for the in-flight send only — never
   logged, never persisted, and provider errors are scrubbed before surfacing.
 
-All four BFF kinds reuse `email-layout.ts`, extracted from the existing
+All five BFF kinds reuse `email-layout.ts`, extracted from the existing
 `code-emails.ts` inline-table layout without changing its colors, 480px width,
 8px radius, spacing or typography (§13.5, #2171). Content data drives HTML and
 plain text. Verification covers registration/resend and unverified-account
@@ -26,10 +26,11 @@ and reporting instructions without codes, counts or remaining lock time.
 Intercept, real and fallback transports use the `Doctor.School` display name
 and retain their own configured sender address.
 
-Verified-account login email-OTP remains Zitadel-rendered/sent (eight digits,
-300 seconds, native action still present). #2145 owns its migration and depends
-on #2144; this independent BFF layout slice does not complete #2171 across all
-login types. SMS also keeps its IdP template.
+Verified-account login email-OTP uses the same layout and existing SmtpMailer
+route. Zitadel returns its eight-digit, 300-second code through `returnCode`
+and sends no duplicate; the mail contains no action or URL. Session verification
+and token exchange remain IdP-owned. SMS keeps its IdP template. Broader provider
+acceptance in #2144/#2145 remains separate from this template migration.
 The module shares the `email-delivery-real` Unleash flag with the
 [`delivery-reconcile`](../delivery-reconcile/README.md) module, so one flag flip
 moves both this channel and Zitadel's between Mailpit-intercept and the
@@ -49,7 +50,7 @@ Explicit intercept mode requires `MAILER_SMTP_HOST`; an absent host is an error.
 enables the optional BFF fallback; enabling without a key is a configuration
 error. A definite SMTP rejection can switch once. Timeout/connection loss
 with uncertain acceptance never triggers an automatic duplicate. No retries.
-Resend does not cover native Zitadel login OTP; its relay is reconciled separately.
+Login email uses this same configured route; no separate provider chain is introduced.
 
 SMTP limits are 5 seconds for connection/TLS, 5 seconds greeting, 10 seconds
 socket inactivity, and 15 seconds absolute. Each send owns its socket through
@@ -116,7 +117,7 @@ Detail: `infra/dev-stand/README.md` → delivery flags.
 - **`Mailer`** + **`MAILER`** (`mailer.types.ts`) — the port
   (`sendAccountExistsNotice(email)` and `sendAdminLockoutNotice(email)` carrying
   no secret; `sendVerificationCodeEmail(email, code)` /
-  `sendPasswordResetCodeEmail(email, code)` carrying exactly one) and its
+  `sendPasswordResetCodeEmail(email, code)` / `sendLoginCodeEmail(email, code)` carrying exactly one) and its
   `Symbol` DI token. `IdpModule` injects it into the IdP adapters for the EARS-29
   `returnCode` → mailer hand-off; `AdminSessionModule` injects it for the 011
   EARS-7 lockout notice. That notice carries **no code, no attempt count and no

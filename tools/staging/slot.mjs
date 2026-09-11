@@ -1,50 +1,48 @@
 #!/usr/bin/env node
-// tools/staging/slot.mjs — the slot deployer's hands on `stage-1` (Issue #2064,
-// staging tech spec 2026-09-08 §3 «Slots» / §5 «Converge» / §8 step 4).
+// tools/staging/slot.mjs — the slot tool, on the production deploy shape
+// (Issue #2194; staging tech spec §3 «Slots» / §5 «Converge» / §8 step 4).
 //
 // A SLOT is one compose project running the product service set (`api`, `portal`,
-// `doctor`, `admin`, `centrifugo`, plus a `migrate` one-shot) from images the
-// preview workflow built on a GitHub-hosted runner and pushed to GHCR. The box
-// PULLS; it never builds — `docker build` and `buildx` appear nowhere in this file,
-// and the tests assert that.
+// `doctor`, `admin`, `centrifugo`, plus a `migrate` one-shot) from images BUILT ON
+// THE BOX out of the slot's own shipped tree — exactly as `tools/deploy/prod.mjs`
+// builds production. There is no registry to push to and none to pull from: the tag
+// is the full commit SHA, global per commit, and `docker ps` is the single authority
+// on which slots are live.
 //
 // What this module owns:
 //   * name derivation — slot → compose project, network, database, hostnames,
-//     container aliases, image refs. Every name is derived, never passed in, so a
+//     container aliases, tree directory. Every name is derived, never passed in, so a
 //     slot cannot be addressed two ways;
-//   * the slot REGISTRY (`/var/lib/ds-platform/slots.json`) and the two Caddy
-//     include files rendered from it. The `ask` endpoint (on-demand TLS gate) and
-//     the `import slot <name>` lines come from ONE source, so a hostname can never
-//     be certifiable while no slot serves it, nor the reverse;
-//   * the ordered plans for `up` / `sync` / `down` / `gc`, returned as DATA. The
-//     effects (`sql`, `sh`, `write`) are injected — `main()` is the only place that
-//     touches Postgres, Docker or the filesystem.
+//   * live-state parsing — `parseLiveSlots` over `docker ps`, `parseEnvFile` over the
+//     box env files, `parseAvailBytes` over `df`. The box answers; nothing is cached;
+//   * remote RENDERING — `quoteCommand` and `remoteWriteScript` turn a plan step into
+//     the text one ssh invocation runs. Nothing in this file executes locally;
+//   * the ordered plans for `up` / `sync` / `down` / `reset` / `gc`, returned as DATA.
+//     Every effect is injected, so every plan above is offline-testable.
 //
 // Style and guards are `golden-db.mjs`'s: pure planners, one injected executor, a
 // thin CLI behind `invokedDirectly`. Database identifiers reuse that module's
 // `DB_NAME_RE` / `assertDatabaseName` / `terminateBackendsStatement` rather than a
-// second, subtly different guard.
+// second, subtly different guard; the compose service set reuses
+// `tools/deploy/service-set.mjs`, the one production already verifies against.
 //
-// `reset main` drops `ds_main`, re-clones it from `ds_golden` and re-runs the ordinary
-// converge on the registered SHA; it refuses without `--yes` and appends one audit line
-// per run. `reset-identities <slot>` converges the golden fixture at the shared Zitadel,
-// writes the tool-owned `DS_GOLDEN_SUB_*` file and flushes the slot's Redis logical
-// database. Both IdP converges — the whole redirect-URI set on every `up`/`down`, and
-// the golden identities — live in `idp.mjs` and arrive here as ONE injected `idp`
-// effect, so every plan in this file stays offline-testable.
+// `reset main --yes --ref <sha>` drops `ds_main`, re-clones it from `ds_golden` and
+// re-runs the ordinary converge on that SHA; it appends one audit line per run.
+// `reset-identities <slot>` converges the golden fixture at the shared Zitadel, writes
+// the tool-owned `DS_GOLDEN_SUB_*` file and flushes the slot's Redis logical database.
+// Both IdP converges — the whole redirect-URI set on every `up`/`down`, and the golden
+// identities — live in `idp.mjs` and arrive here as ONE injected `idp` effect.
 
-import { execFileSync, spawnSync } from "node:child_process";
-import {
-  appendFileSync,
-  mkdirSync,
-  readFileSync,
-  realpathSync,
-  statfsSync,
-  writeFileSync,
-} from "node:fs";
-import { dirname } from "node:path";
+import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
+import {
+  STALL_BUDGET_BUILD_MS,
+  STALL_BUDGET_DEFAULT_MS,
+  sshCapture,
+  sshScript,
+} from "../deploy/lib/remote.mjs";
+import { bootProbeSet, deployServiceSet } from "../deploy/service-set.mjs";
 import {
   GOLDEN_DB_BASE,
   assertDatabaseName,
@@ -59,7 +57,6 @@ import {
   convergeRedirectUris,
   createIdpClient,
   parsePinnedUris,
-  readGoldenSubjects,
   renderGoldenSubjectsEnv,
   unionUris,
 } from "./idp.mjs";
@@ -74,23 +71,26 @@ export class SlotError extends Error {
 
 // --- constants ---------------------------------------------------------------
 
-/** `main` (the merged head) or `pr-<N>` (a preview). Nothing else is a slot. */
+/**
+ * `main` (the merged head) or `pr-<N>` (a preview). Nothing else is a slot.
+ *
+ * Also the authority `parseLiveSlots` filters compose projects through: a project
+ * named `slot-<something else>` is somebody else's, never a slot.
+ */
 export const SLOT_NAME_RE = /^(?:main|pr-[1-9][0-9]{0,9})$/;
 
-/** A full commit id — the tag suffix is derived here, never supplied. */
+/** A full commit id — the image tag, verbatim, exactly as production tags. */
 export const FULL_SHA_RE = /^[0-9a-f]{40}$/;
 
-/** GHCR namespace the preview workflow pushes to (spec §5 «Build»). */
-export const GHCR_REPO = "ghcr.io/doctor-school/ds-platform";
-
-/** The five images a slot runs. `api-migrate` is the `migrate` Dockerfile target. */
-export const SLOT_IMAGE_APPS = Object.freeze([
-  "api",
-  "api-migrate",
-  "portal",
-  "doctor",
-  "admin",
-]);
+/**
+ * An image this tool may remove: `ds-<repo>:<full sha>`.
+ *
+ * The tag carries no slot any more (the box builds one image per COMMIT, which two
+ * slots converged on the same commit share), so the gc authority is the live image
+ * list, not the tag. The `ds-` prefix keeps every shared-infra image — caddy,
+ * postgres, zitadel — structurally out of reach of `image rm`.
+ */
+export const SLOT_IMAGE_RE = /^ds-[a-z0-9][a-z0-9-]*:[0-9a-f]{40}$/;
 
 /** RAM budget, not a preference: §3 «Box» sizes the box for `main` + 3 previews. */
 export const PREVIEW_SLOT_CAP = 3;
@@ -112,20 +112,39 @@ export const POSTGRES_CONTAINER = "stg-infra-postgres-1";
  */
 export const REDIS_CONTAINER = "stg-infra-redis-1";
 
-/** Registry of live slots — the single source both include files render from. */
-export const REGISTRY_PATH = "/var/lib/ds-platform/slots.json";
-
-/** Bind-mounted into the caddy container as `/etc/caddy/slots` (read-only). */
-export const CADDY_INCLUDE_DIR = "/etc/ds-platform/caddy";
-export const ASK_INCLUDE_PATH = `${CADDY_INCLUDE_DIR}/ask.caddy`;
-export const SLOTS_INCLUDE_PATH = `${CADDY_INCLUDE_DIR}/slots.caddy`;
-
 /** Per-slot, non-secret env files. The box secret set stays in ONE file. */
 export const SLOT_ENV_DIR = "/etc/ds-platform/slots";
 export const STAGE_ENV_FILE = "/etc/ds-platform/stage.env";
 
-/** Where the install script lands the slot compose project on the box. */
-export const SLOT_COMPOSE_FILE = "/opt/ds-platform/compose/slot/compose.yml";
+/**
+ * One shipped tree per slot, under the deploy user's own home.
+ *
+ * Production ships to `$HOME/ds-platform` (`tools/deploy/lib/remote.mjs`); a slot
+ * ships to `$HOME/ds-platform.slots/<slot>`. The tree is DISPOSABLE — nothing is
+ * preserved across ships, because everything durable (the database, the env file,
+ * the audit log) lives outside it.
+ */
+export const SLOT_TREE_ROOT = "$HOME/ds-platform.slots";
+
+/** The ssh destination of the staging box; overridable for an ad-hoc stand. */
+export const STAGE_1 = process.env.DS_STAGE_SSH || "ds-stage-1";
+
+/**
+ * Compose services that run once and exit.
+ *
+ * `bootProbeSet` demands a pinned `PORT:` from everything it probes, which is right
+ * for a long-running service and meaningless for a one-shot: `migrate` listens on
+ * nothing. Filtered out HERE rather than by widening `service-set.mjs`, so the
+ * production boot probe keeps its shape unchanged.
+ */
+export const SLOT_ONE_SHOT_SERVICES = Object.freeze(["migrate"]);
+
+/** Buildx attestations off — production's own build flag (`tools/deploy/prod.mjs`). */
+export const NO_ATTEST = "BUILDX_NO_DEFAULT_ATTESTATIONS=1";
+
+/** Production's image retention and BuildKit cache ceiling, not an invented pair. */
+export const IMAGE_RETENTION = 3;
+export const BUILD_CACHE_RESERVED_SPACE = "10GB";
 
 /**
  * Append-only audit trail of the destructive operator commands.
@@ -140,11 +159,9 @@ export const SLOT_LOG_PATH = `${SLOT_LOG_DIR}/slot.log`;
 /**
  * Free-disk floor for the unconditional prune.
  *
- * `tools/deploy/prod.mjs` caps BuildKit cache at `BUILD_CACHE_RESERVED_SPACE =
- * "10GB"`. That is a BUILD-cache knob and this box builds nothing, so the figure is
- * re-mapped rather than copied: same number, different mechanism — below this much
- * free space on the Docker root, `gc` additionally prunes dangling/unreferenced
- * images. The slot-tagged images of unregistered slots are removed regardless.
+ * Below this much free space on the Docker root, `gc` additionally prunes dangling
+ * and unreferenced images. The `ds-*:<sha>` images no live slot runs are removed
+ * regardless of free space.
  */
 export const GC_FREE_SPACE_FLOOR = "10GB";
 export const GC_FREE_SPACE_FLOOR_BYTES = 10 * 1024 ** 3;
@@ -250,13 +267,179 @@ export function shortSha(sha) {
   return sha.slice(0, 7);
 }
 
-/** `ghcr.io/doctor-school/ds-platform/<app>:<slot>-<sha7>` for the five apps. */
-export function slotImageRefs(slot, sha) {
-  assertSlotName(slot);
-  const tag = `${slot}-${shortSha(sha)}`;
-  return Object.fromEntries(
-    SLOT_IMAGE_APPS.map((app) => [app, `${GHCR_REPO}/${app}:${tag}`]),
-  );
+/** One shipped tree per slot — disposable, and never shared with another slot. */
+export function slotTreeDir(slot) {
+  return `${SLOT_TREE_ROOT}/${assertSlotName(slot)}`;
+}
+
+/** The compose file inside the slot's OWN tree, at the SHA that tree was shipped at. */
+export function slotComposeFile(slot) {
+  return `${slotTreeDir(slot)}/infra/deploy/compose/slot/compose.yml`;
+}
+
+export function slotEnvPath(slot) {
+  return `${SLOT_ENV_DIR}/${assertSlotName(slot)}.env`;
+}
+
+// --- live box state ----------------------------------------------------------
+
+/**
+ * Which slots are live, read off `docker ps -a`'s compose-project label.
+ *
+ * The authority used to be a registry FILE, and a file drifts: a container that died,
+ * a `compose down` someone ran by hand, a half-failed converge all left the registry
+ * claiming a slot that is not there (or hiding one that is). Docker's own labels
+ * cannot drift from docker's own state.
+ *
+ * Input is one `<project>\t<image>` line per container. Projects that are not slots
+ * (`stg-infra`, anything hand-run) and dangling containers with no project label are
+ * dropped rather than guessed at.
+ */
+export function parseLiveSlots(stdout) {
+  const slots = {};
+  for (const line of String(stdout ?? "").split(/\r?\n/)) {
+    if (!line.trim()) continue;
+    const [project, image] = line.split("\t");
+    if (!project || !project.startsWith("slot-")) continue;
+    const name = project.slice("slot-".length);
+    if (!SLOT_NAME_RE.test(name)) continue;
+    if (!slots[name]) slots[name] = { images: [] };
+    const ref = String(image ?? "").trim();
+    if (ref && !slots[name].images.includes(ref)) slots[name].images.push(ref);
+  }
+  return slots;
+}
+
+const ENV_KEY_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+/**
+ * The box's env files PARSED, never sourced.
+ *
+ * `stage.env` holds the box secret set and is root-owned; reading it means `sudo cat`
+ * over ssh, and what comes back is text. Sourcing it into this process would execute
+ * whatever a mis-edit put there; parsing it cannot. A line that is not `KEY=value` is
+ * ignored rather than guessed at, and ONE matching pair of surrounding quotes is
+ * stripped — the shape `printf '%s=%q'` and a human editor both produce.
+ */
+export function parseEnvFile(text) {
+  const env = {};
+  for (const raw of String(text ?? "").split(/\r?\n/)) {
+    let line = raw.trim();
+    if (!line || line.startsWith("#")) continue;
+    if (line.startsWith("export ")) line = line.slice("export ".length).trim();
+    const eq = line.indexOf("=");
+    if (eq <= 0) continue;
+    const key = line.slice(0, eq).trim();
+    if (!ENV_KEY_RE.test(key)) continue;
+    let value = line.slice(eq + 1).trim();
+    const quote = value[0];
+    if (
+      value.length >= 2 &&
+      (quote === '"' || quote === "'") &&
+      value.at(-1) === quote
+    ) {
+      value = value.slice(1, -1);
+    }
+    env[key] = value;
+  }
+  return env;
+}
+
+/**
+ * Free bytes on the BOX, from `df -B1 --output=avail`.
+ *
+ * The operator runs this tool from a laptop, so `statfs` here would measure the wrong
+ * disk entirely and prune (or fail to prune) the box on a number that has nothing to
+ * do with it. Output that is not a number throws rather than defaulting to «plenty».
+ */
+export function parseAvailBytes(text) {
+  const lines = String(text ?? "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const last = lines.at(-1);
+  if (!last || !/^[0-9]+$/.test(last)) {
+    throw new SlotError(
+      `could not read free space from \`df -B1 --output=avail\`: expected a number, ` +
+        `got ${String(text ?? "").slice(0, 120)}`,
+    );
+  }
+  return Number(last);
+}
+
+// --- remote rendering --------------------------------------------------------
+
+/** Characters that survive an unquoted shell word unchanged. */
+const SHELL_SAFE_RE = /^[A-Za-z0-9_@%+=:,./-]+$/;
+
+/**
+ * The ONE expansion a rendered command is allowed to carry.
+ *
+ * The slot tree lives under the deploy user's home, and the tool does not know what
+ * that path is — the box does. Quoting `$HOME/...` would ship the four literal
+ * characters; leaving the whole argument unquoted would let a slot name expand
+ * something else. So the exception is structural: `$HOME` followed only by path
+ * segments of otherwise-safe characters, and nothing else.
+ */
+const HOME_PATH_RE = /^\$HOME(\/[A-Za-z0-9_@%+=:,.-]+)*$/;
+
+/**
+ * An argv rendered as ONE line of shell TEXT.
+ *
+ * Every command this tool runs happens over ssh, which means every command is text at
+ * some point. Rendering it here — once, from an argv — is what keeps a slot name, a
+ * SHA or an operator's `$(…)` from ever being interpreted: anything that is not
+ * structurally safe is single-quoted, and a single quote inside is closed, escaped and
+ * re-opened (`'\''`), which no shell metacharacter can escape from.
+ */
+export function quoteCommand(argv) {
+  return (argv ?? [])
+    .map((arg) => {
+      const text = String(arg);
+      if (SHELL_SAFE_RE.test(text) || HOME_PATH_RE.test(text)) return text;
+      return `'${text.replace(/'/g, "'\\''")}'`;
+    })
+    .join(" ");
+}
+
+/** The heredoc delimiter every remote write uses — quoted, so nothing expands. */
+export const REMOTE_HEREDOC_DELIMITER = "DS_SLOT_EOF";
+
+/**
+ * A file placed on the box as root: `mkdir -p`, `tee` from a quoted heredoc, `chmod`.
+ *
+ * `sudo cat > path` would open the redirect as the CALLING user and fail on a
+ * root-owned directory, so the write goes through `tee`, whose stdout is discarded.
+ * The heredoc delimiter is single-quoted, so `$VAR` and backticks in the CONTENTS
+ * reach the file verbatim.
+ *
+ * Two refusals, both about the bytes not matching what was rendered: contents holding
+ * a lone delimiter line would end the heredoc early and spill the rest into the shell,
+ * and contents with no trailing newline would silently gain one from the heredoc.
+ */
+export function remoteWriteScript(path, contents, mode, { append = false } = {}) {
+  const text = String(contents ?? "");
+  if (!text.endsWith("\n")) {
+    throw new SlotError(
+      `refusing to write ${path}: the contents do not end in a newline, and the heredoc ` +
+        "would add one — the bytes on the box would differ from the bytes rendered here",
+    );
+  }
+  if (text.split("\n").some((line) => line === REMOTE_HEREDOC_DELIMITER)) {
+    throw new SlotError(
+      `refusing to write ${path}: the contents contain a lone \`${REMOTE_HEREDOC_DELIMITER}\` ` +
+        "line, which would close the heredoc early",
+    );
+  }
+  const slash = path.lastIndexOf("/");
+  const dir = slash > 0 ? path.slice(0, slash) : "/";
+  const octal = (Number(mode) & 0o7777).toString(8).padStart(4, "0");
+  return [
+    `sudo mkdir -p ${dir}`,
+    `sudo tee ${append ? "-a " : ""}${path} >/dev/null <<'${REMOTE_HEREDOC_DELIMITER}'`,
+    `${text}${REMOTE_HEREDOC_DELIMITER}`,
+    `sudo chmod ${octal} ${path}`,
+  ].join("\n");
 }
 
 // --- Redis logical database allocation --------------------------------------
@@ -266,44 +449,51 @@ export function slotImageRefs(slot, sha) {
  *
  * Deterministic from the PR number so a re-converge of the same slot lands on the
  * same database and the previous one is not orphaned. A collision with ANOTHER live
- * slot is refused rather than shared: two slots on one database would cross OTP
- * challenges, session revocation and rate-limit keys, and the failure would look
- * like a product bug. The preview cap is 3 against 15 databases, so a refusal is a
- * rare, self-clearing state — the deployer converges again on its next 60-second
- * tick, once the colliding slot is down.
+ * slot is probed past, never shared: two slots on one database would cross OTP
+ * challenges, session revocation and rate-limit keys, and the failure would look like
+ * a product bug.
+ *
+ * The allocation is computed over the WHOLE set at once, sorted by PR number, rather
+ * than «whatever is taken right now» — `docker ps` has no stable order, and an
+ * order-dependent probe would hand the same slot different databases on two
+ * consecutive runs, stranding its sessions in a database nothing reads.
  */
-export function allocateRedisDatabase(slot, registry) {
+export function allocateRedisDatabase(slot, liveSlots) {
   assertSlotName(slot);
   if (slot === "main") return 0;
-  const live = registry?.slots ?? {};
-  if (live[slot]) return live[slot].redisDb;
+  const names = [...new Set([...Object.keys(liveSlots ?? {}), slot])]
+    .filter((name) => name !== "main" && SLOT_NAME_RE.test(name))
+    .sort((a, b) => previewNumber(a) - previewNumber(b));
   const span = REDIS_DB_MAX - REDIS_DB_MIN + 1;
-  const taken = new Set(
-    Object.entries(live)
-      .filter(([name]) => name !== slot)
-      .map(([, entry]) => entry.redisDb),
-  );
-  // Deterministic start, then a linear probe. `1 + (N % 15)` collides for PR
-  // numbers 15 apart, and refusing outright would dead-end that converge for as
-  // long as the holder is up; probing keeps allocation exclusive (never shared)
-  // without making one live preview block another.
-  const start = REDIS_DB_MIN + (previewNumber(slot) % span);
-  for (let offset = 0; offset < span; offset += 1) {
-    const candidate = REDIS_DB_MIN + ((start - REDIS_DB_MIN + offset) % span);
-    if (!taken.has(candidate)) return candidate;
+  const taken = new Set();
+  for (const name of names) {
+    const start = REDIS_DB_MIN + (previewNumber(name) % span);
+    let assigned = null;
+    for (let offset = 0; offset < span; offset += 1) {
+      const candidate = REDIS_DB_MIN + ((start - REDIS_DB_MIN + offset) % span);
+      if (!taken.has(candidate)) {
+        assigned = candidate;
+        break;
+      }
+    }
+    if (assigned === null) {
+      throw new SlotError(
+        `no free Redis database in ${REDIS_DB_MIN}..${REDIS_DB_MAX} for ${name}: ` +
+          `${[...taken].sort((a, b) => a - b).join(", ")} are all held. ` +
+          "Take a slot down (its PR is closed or draft) and converge again.",
+      );
+    }
+    taken.add(assigned);
+    if (name === slot) return assigned;
   }
-  throw new SlotError(
-    `no free Redis database in ${REDIS_DB_MIN}..${REDIS_DB_MAX} for ${slot}: ` +
-      `${[...taken].sort((a, b) => a - b).join(", ")} are all held. ` +
-      `Take a slot down (its PR is closed or draft) and converge again.`,
-  );
+  throw new SlotError(`no Redis database was allocated for ${slot}`);
 }
 
 /** The fourth preview is refused — the box is sized for `main` + 3 (§3 «Box»). */
-export function assertPreviewCapacity(slot, registry) {
+export function assertPreviewCapacity(slot, liveSlots) {
   assertSlotName(slot);
   if (slot === "main") return slot;
-  const live = registry?.slots ?? {};
+  const live = liveSlots ?? {};
   if (live[slot]) return slot;
   const previews = Object.keys(live).filter((name) => name !== "main");
   if (previews.length >= PREVIEW_SLOT_CAP) {
@@ -356,11 +546,11 @@ export function cloneDatabaseStatements(slot, { bootstrap = false } = {}) {
 /**
  * Teardown of a preview database. `main` is never dropped by a teardown.
  *
- * `allowMain: true` is the ONE caller that may: `slot reset main` (#2064 part 2a),
- * which drops `ds_main` only to re-clone it from `ds_golden` in the same plan. The
- * escape lives here rather than in a second, subtly different DROP builder, so the
- * guard and the statement order stay in one place — and so a future caller has to
- * ask for it by name instead of hand-rolling the SQL.
+ * `allowMain: true` is the ONE caller that may: `slot reset main`, which drops
+ * `ds_main` only to re-clone it from `ds_golden` in the same plan. The escape lives
+ * here rather than in a second, subtly different DROP builder, so the guard and the
+ * statement order stay in one place — and so a future caller has to ask for it by
+ * name instead of hand-rolling the SQL.
  */
 export function dropDatabaseStatements(slot, { allowMain = false } = {}) {
   assertSlotName(slot);
@@ -395,14 +585,23 @@ export function databaseAction({ slot, action, exists }) {
 /**
  * The compose invocation for a slot.
  *
- * Both env files are passed with `--env-file` so compose INTERPOLATION sees them:
- * the box secret set (`stage.env` — `POSTGRES_PASSWORD`, the Centrifugo pair, the
- * captcha key) and the slot's own non-secret file. That is what lets the slot
- * compose build `DATABASE_URL` from `${POSTGRES_PASSWORD}` + `${SLOT_DB}` without a
- * second on-box copy of the password.
+ * `sudo`, because the stand's docker socket is root-owned and every other box command
+ * this tool issues is `sudo` too — a mixed set would work for the operator who
+ * happens to be in the `docker` group and fail for everyone else.
+ *
+ * Both env files are passed with `--env-file` so compose INTERPOLATION sees them: the
+ * box secret set (`stage.env` — `POSTGRES_PASSWORD`, the Centrifugo pair, the captcha
+ * key) and the slot's own non-secret file. That is what lets the slot compose build
+ * `DATABASE_URL` from `${POSTGRES_PASSWORD}` + `${SLOT_DB}` without a second on-box
+ * copy of the password.
+ *
+ * `-f` points INTO the slot's own shipped tree: the compose file a slot runs is the
+ * one at the commit that slot was converged on, never a shared copy that a later
+ * `main` deploy would silently change underneath it.
  */
 export function composeBase(slot) {
   return [
+    "sudo",
     "docker",
     "compose",
     "--env-file",
@@ -412,12 +611,29 @@ export function composeBase(slot) {
     "-p",
     composeProjectName(slot),
     "-f",
-    SLOT_COMPOSE_FILE,
+    slotComposeFile(slot),
   ];
 }
 
-export function pullCommandPlan(slot) {
-  return { kind: "sh", label: "pull images", command: [...composeBase(slot), "pull"] };
+/**
+ * The images, BUILT on the box from the shipped tree.
+ *
+ * This is the whole shape change of #2194: production builds on its own box out of a
+ * shipped tree, and staging now does the same. There is no registry in the path, so
+ * there is no registry to authenticate to, none to garbage-collect and no window in
+ * which the box runs an image the tree it shipped did not produce.
+ *
+ * `BUILDX_NO_DEFAULT_ATTESTATIONS=1` is production's flag verbatim: attestation
+ * manifests make every image a multi-platform index, which `docker image inspect`
+ * then cannot resolve to a single id.
+ */
+export function buildCommandPlan(slot) {
+  return {
+    kind: "sh",
+    label: "build images",
+    stallBudget: "build",
+    command: ["sudo", NO_ATTEST, ...composeBase(slot).slice(1), "build"],
+  };
 }
 
 export function upCommandPlan(slot) {
@@ -489,6 +705,25 @@ export function seedCommandPlan(slot) {
 }
 
 /**
+ * The slot's compose service set, read through production's OWN parser.
+ *
+ * `deployServiceSet` returns only services whose `image:` is `ds-<repo>:${DEPLOY_SHA…}`
+ * — which is exactly why the slot compose had to move onto that tag form: the boot
+ * probe and the running-image verification are production's, and a second parser with
+ * its own idea of what a SHA-tagged service looks like is how the two drift.
+ *
+ * `migrate` is filtered out of the probe set rather than given a fake `PORT:`: it
+ * runs once and exits, so «did it come up on its port» has no honest answer for it.
+ */
+export function slotServiceSet(text) {
+  const services = deployServiceSet(text, { source: "the slot compose" });
+  const longRunning = services.filter(
+    (service) => !SLOT_ONE_SHOT_SERVICES.includes(service.name),
+  );
+  return { services, longRunning, bootProbe: bootProbeSet(longRunning) };
+}
+
+/**
  * Is Caddy on this network already? Reads `docker network inspect --format
  * '{{json .Containers}}'`, a map of container id → `{ Name, … }`.
  *
@@ -521,6 +756,7 @@ export function caddyIsAttached(stdout) {
 
 function caddyAttachmentProbe(slot) {
   return [
+    "sudo",
     "docker",
     "network",
     "inspect",
@@ -538,9 +774,7 @@ function caddyAttachmentProbe(slot) {
  * neither ever tears the network down) finds Caddy already attached and `connect`
  * exits 1 with «endpoint … already exists». Probing first makes the expected no-op a
  * SUCCESS with nothing to do, which leaves the failure of a connect that actually ran
- * meaning exactly one thing: the slot's hostnames resolve to nothing. That is a hard
- * failure, and it aborts the plan BEFORE the registry write, so a converge that could
- * not attach Caddy never registers a hostname it cannot serve.
+ * meaning exactly one thing: the slot's hostnames resolve to nothing.
  */
 export function caddyAttachCommand(slot) {
   return {
@@ -551,6 +785,7 @@ export function caddyAttachCommand(slot) {
         probe: caddyAttachmentProbe(slot),
         match: caddyIsAttached,
         apply: [
+          "sudo",
           "docker",
           "network",
           "connect",
@@ -569,10 +804,6 @@ export function caddyAttachCommand(slot) {
  * on a healthy `compose down` — but only if nothing is still attached. So a network
  * that outlives `compose down` means something is still on it, and the §8 step-4
  * acceptance («no container, volume, database or image») is quietly missed.
- *
- * Hence `ensure-absent` rather than an `rm` whose failure is shrugged off: the
- * executor probes first, so «compose already took it» is a SUCCESS with nothing to
- * do, while «it is still there and cannot be removed» is a hard failure.
  */
 export function slotNetworkRemoveCommand(slot) {
   const network = slotNetworkName(slot);
@@ -581,8 +812,8 @@ export function slotNetworkRemoveCommand(slot) {
     label: "remove slot network",
     items: [
       {
-        probe: ["docker", "network", "inspect", network],
-        remove: ["docker", "network", "rm", network],
+        probe: ["sudo", "docker", "network", "inspect", network],
+        remove: ["sudo", "docker", "network", "rm", network],
       },
     ],
   };
@@ -605,6 +836,7 @@ export function caddyDetachCommand(slot) {
         probe: caddyAttachmentProbe(slot),
         match: caddyIsAttached,
         remove: [
+          "sudo",
           "docker",
           "network",
           "disconnect",
@@ -616,120 +848,7 @@ export function caddyDetachCommand(slot) {
   };
 }
 
-/** A config reload through the admin API — never a restart (certificates in RAM). */
-export function caddyReloadCommand() {
-  return {
-    kind: "sh",
-    label: "reload caddy",
-    command: [
-      "docker",
-      "exec",
-      CADDY_CONTAINER,
-      "caddy",
-      "reload",
-      "--config",
-      "/etc/caddy/Caddyfile",
-    ],
-  };
-}
-
-// --- the registry ------------------------------------------------------------
-
-export function emptyRegistry() {
-  return { slots: {} };
-}
-
-export function parseRegistry(text) {
-  if (text === null || text === undefined || String(text).trim() === "") {
-    return emptyRegistry();
-  }
-  let parsed;
-  try {
-    parsed = JSON.parse(text);
-  } catch {
-    throw new SlotError(
-      `${REGISTRY_PATH} is not valid JSON — refusing to render Caddy includes from it`,
-    );
-  }
-  const slots = parsed?.slots;
-  if (!slots || typeof slots !== "object" || Array.isArray(slots)) {
-    throw new SlotError(`${REGISTRY_PATH} has no \`slots\` object`);
-  }
-  for (const name of Object.keys(slots)) assertSlotName(name);
-  return { slots: { ...slots } };
-}
-
-export function serializeRegistry(registry) {
-  return `${JSON.stringify(registry, null, 2)}\n`;
-}
-
-export function registerSlot(registry, { slot, sha, redisDb, hosts, updatedAt }) {
-  assertSlotName(slot);
-  shortSha(sha);
-  return {
-    slots: {
-      ...(registry?.slots ?? {}),
-      [slot]: { sha, redisDb, hosts: [...hosts], updatedAt },
-    },
-  };
-}
-
-export function deregisterSlot(registry, slot) {
-  assertSlotName(slot);
-  const slots = { ...(registry?.slots ?? {}) };
-  delete slots[slot];
-  return { slots };
-}
-
-const GENERATED_HEADER =
-  "# generated by tools/staging/slot.mjs from /var/lib/ds-platform/slots.json — do not edit by hand";
-
-/**
- * The `ask` endpoint's matcher: 200 only for hosts a live slot serves.
- *
- * This is what bounds ACME. Every name under `*.stage.doctor.school` resolves, so
- * without it a typo or a crawler starts a doomed certificate order on Caddy's
- * on-demand path. `id.<base>` is registered unconditionally — it is the shared IdP
- * origin, not a slot, and it must hold a certificate whether or not any slot is up.
- */
-export function renderAskInclude(registry, { baseDomain }) {
-  const hosts = [
-    idpHostname(baseDomain),
-    ...Object.keys(registry?.slots ?? {})
-      .sort()
-      .flatMap((slot) => registry.slots[slot].hosts),
-  ];
-  const matcher = hosts.map((host) => `domain=${host}`).join(" ");
-  return [
-    GENERATED_HEADER,
-    "# On-demand TLS gate (spec §3 «Hostnames»): 200 = this host belongs to a live slot.",
-    `@registered query ${matcher}`,
-    "respond @registered 200",
-    "",
-  ].join("\n");
-}
-
-/** One `import slot <name>` per live slot — the vhosts of the `(slot)` snippet. */
-export function renderSlotsInclude(registry) {
-  const slots = Object.keys(registry?.slots ?? {}).sort();
-  const lines = [
-    GENERATED_HEADER,
-    "# One `import` line per live slot; the `(slot)` snippet lives in the Caddyfile.",
-  ];
-  if (slots.length === 0) {
-    lines.push("# (no slot is up)");
-  } else {
-    lines.push(...slots.map((slot) => `import slot ${slot}`));
-  }
-  lines.push("");
-  return lines.join("\n");
-}
-
 // --- the per-slot env file ---------------------------------------------------
-
-export function slotEnvPath(slot) {
-  return `${SLOT_ENV_DIR}/${assertSlotName(slot)}.env`;
-}
 
 /**
  * The slot's own, NON-SECRET env file.
@@ -740,8 +859,9 @@ export function slotEnvPath(slot) {
  * place. Everything else a slot needs that is not slot-specific — the Centrifugo
  * pair, the captcha key, the sink endpoints — comes from `stage.env` directly.
  *
- * Variable names are the api's own (`apps/api/src/config/env.schema.ts`); none is
- * invented here.
+ * `DEPLOY_SHA` is the image tag, the same variable and the same full-SHA value
+ * production's compose interpolates. There is no per-slot tag family any more, so
+ * there is nothing else for the compose file to resolve an image from.
  *
  * `goldenSubjects` are the five `DS_GOLDEN_SUB_*` ids `reset-identities` wrote to
  * {@link GOLDEN_SUBJECTS_PATH}. They are merged here rather than left to a human,
@@ -752,6 +872,7 @@ export function slotEnvPath(slot) {
  */
 export function renderSlotEnv({ slot, sha, baseDomain, redisDb, goldenSubjects }) {
   assertSlotName(slot);
+  shortSha(sha);
   const hosts = slotHostnames(slot, baseDomain);
   const missing = GOLDEN_SUBJECT_ENV_VARS.filter((name) => !goldenSubjects?.[name]);
   if (missing.length) {
@@ -764,7 +885,6 @@ export function renderSlotEnv({ slot, sha, baseDomain, redisDb, goldenSubjects }
     `# generated by tools/staging/slot.mjs for slot ${slot} — do not edit by hand`,
     "# Non-secret only: the box secret set stays in /etc/ds-platform/stage.env.",
     `SLOT=${slot}`,
-    `SLOT_SHA7=${shortSha(sha)}`,
     `SLOT_DB=${slotDatabaseName(slot)}`,
     `DEPLOY_SHA=${sha}`,
     `REDIS_URL=redis://redis:6379/${redisDb}`,
@@ -791,34 +911,17 @@ export function renderSlotEnv({ slot, sha, baseDomain, redisDb, goldenSubjects }
  * hand, could not tear anything down and left the containers, the network, the
  * volumes and the database behind. Re-rendering it first makes teardown total.
  *
- * With a registry entry the file is byte-identical to the one `up` wrote. Without one
- * (the slot is gone from the registry but its containers are not) only the two
- * variables compose needs to ADDRESS the project are known: the project name comes
- * from `-p`, and image tags are never resolved by `down`, which matches containers by
- * project label — hence the placeholder `SLOT_SHA7`.
- *
- * A teardown never REQUIRES the golden subjects: `down` must stay possible on a box
- * where `reset-identities` has not run yet, so an absent subject set falls back to the
- * addressing-only block instead of refusing and stranding the containers.
+ * ADDRESSING ONLY, deliberately: `down` matches containers by project label and never
+ * resolves an image tag, so it needs neither `DEPLOY_SHA` nor the golden subjects. A
+ * teardown must stay possible on a box where `reset-identities` has never run.
  */
-export function renderSlotDownEnv({ slot, entry, baseDomain, goldenSubjects }) {
+export function renderSlotDownEnv({ slot }) {
   assertSlotName(slot);
-  const haveSubjects = GOLDEN_SUBJECT_ENV_VARS.every((name) => goldenSubjects?.[name]);
-  if (entry?.sha && Number.isInteger(entry.redisDb) && haveSubjects) {
-    return renderSlotEnv({
-      slot,
-      sha: entry.sha,
-      baseDomain,
-      redisDb: entry.redisDb,
-      goldenSubjects,
-    });
-  }
   return [
     `# generated by tools/staging/slot.mjs to tear slot ${slot} down — do not edit by hand`,
-    "# The slot is not in the registry; only what compose needs to ADDRESS the project",
-    "# is known. `down` matches containers by project label, never by image tag.",
+    "# Only what compose needs to ADDRESS the project: it matches containers by project",
+    "# label, never by image tag, so no SHA and no golden subjects are required here.",
     `SLOT=${slot}`,
-    `SLOT_SHA7=0000000`,
     `SLOT_DB=${slotDatabaseName(slot)}`,
     "",
   ].join("\n");
@@ -827,28 +930,21 @@ export function renderSlotDownEnv({ slot, entry, baseDomain, goldenSubjects }) {
 // --- the shared IdP's redirect-URI set ---------------------------------------
 
 /**
- * Every redirect URI the shared Zitadel app must hold, for the whole registry.
+ * Every redirect URI the shared Zitadel app must hold, for the named slots.
  *
  * §3 «Identity» gives the stand ONE Zitadel instance, one project, one client, so a
  * slot's callback works only if it is registered on that shared app — and the
- * registration write (`provision.sh`, `IDP_REDIRECT_URIS` / `IDP_POST_LOGOUT_URIS`) is
- * whole-set: a partial list silently drops the others. This seam is that whole set,
- * derived from the one registry, so the converge can never register one slot by
- * blanking another.
+ * registration write is whole-set: a partial list silently drops the others. This
+ * seam is that whole set, derived from the live slot names, so the converge can never
+ * register one slot by blanking another.
  *
- * PART 1 ONLY COMPUTES IT. `slot status` prints it; nothing here writes to the IdP.
- * Part 2 owns the converge that PUTs this set onto the shared app through the same
- * management API and PAT path `provision.sh` uses.
- *
- * The redirect path is the one `renderSlotEnv` hands the api in `IDP_REDIRECT_URI` —
- * a test pins the two together. The post-logout set is the browser origins of each
- * slot (the api BFF is a callback target, never a logout landing); it exists because
- * the write is whole-set, so part 2 must send it alongside the redirect list rather
- * than blank what provision.sh registered.
+ * The redirect path is the one `renderSlotEnv` hands the api in `IDP_REDIRECT_URI`.
+ * The post-logout set is the browser origins of each slot (the api BFF is a callback
+ * target, never a logout landing).
  */
-export function renderIdpRedirectUris(registry, baseDomain) {
+export function renderIdpRedirectUris(slotNames, baseDomain) {
   assertBaseDomain(baseDomain);
-  const slots = Object.keys(registry?.slots ?? {}).sort();
+  const slots = [...new Set(slotNames ?? [])].sort();
   const redirectUris = [];
   const postLogoutUris = [];
   for (const slot of slots) {
@@ -867,20 +963,12 @@ export function renderIdpRedirectUris(registry, baseDomain) {
 }
 
 /**
- * The redirect converge as ONE plan step, carried as DATA like every other step.
- *
- * `desired` is the set this registry renders; the PINS from `IDP_REDIRECT_URIS` /
- * `IDP_POST_LOGOUT_URIS` are unioned onto it inside the `idp` effect, where the stage
- * env is readable — the plan stays pure and offline-testable, and the effect stays the
- * only thing that knows the box has a Zitadel on it (#2064 addendum 6).
- */
-/**
  * `pins ∪ rendered`, pins first — the whole set the converge writes.
  *
  * Exported and pure so the union has its own test: the write is whole-set, so sending
- * only what the slot registry renders would unregister the stage's OWN hosts that
+ * only what the live slots render would unregister the stage's OWN hosts that
  * `infra/dev-stand/idp/provision.sh` put there, and the stage would stop being able to
- * log in the moment a slot came up (#2064 addendum 6).
+ * log in the moment a slot came up.
  */
 export function resolveDesiredRedirectSet(step, env = process.env) {
   return {
@@ -892,40 +980,32 @@ export function resolveDesiredRedirectSet(step, env = process.env) {
   };
 }
 
-function idpRedirectStep(registry, baseDomain) {
+function idpRedirectStep(slotNames, baseDomain) {
   return {
     kind: "idp",
     op: "redirect-uris",
     label: "converge the shared IdP redirect set",
-    desired: renderIdpRedirectUris(registry, baseDomain),
+    desired: renderIdpRedirectUris(slotNames, baseDomain),
   };
 }
 
 // --- gc ----------------------------------------------------------------------
 
-const IMAGE_TAG_RE = /^(main|pr-[1-9][0-9]{0,9})-[0-9a-f]{7}$/;
-
-/** `pr-2034-0123456` → `pr-2034`; anything that is not a slot tag → `null`. */
-export function slotOfImageTag(tag) {
-  const match = IMAGE_TAG_RE.exec(String(tag ?? ""));
-  return match ? match[1] : null;
-}
-
 /**
- * Images of slots that are not in the registry.
+ * `ds-*:<sha>` images no live slot is running.
  *
- * The registry — not the PR list and not a timestamp — is the authority: an image
- * whose slot is live is in use, everything else slot-tagged is garbage. Non-slot
- * images (the shared infra: caddy, postgres, zitadel…) are never touched, so a gc
- * run can never take the stand down.
+ * Live docker state is the authority: an image some live slot lists is in use, every
+ * other `ds-<repo>:<sha>` image is garbage. Shared-infra images (caddy, postgres,
+ * zitadel…) never match `SLOT_IMAGE_RE`, so a gc run structurally cannot take the
+ * stand down.
  */
-export function planImageGc({ images, registry }) {
-  const live = new Set(Object.keys(registry?.slots ?? {}));
-  const remove = (images ?? []).filter((ref) => {
-    const tag = String(ref).split(":").pop();
-    const slot = slotOfImageTag(tag);
-    return slot !== null && !live.has(slot);
-  });
+export function planUnreferencedImageGc({ images, liveSlots }) {
+  const inUse = new Set(
+    Object.values(liveSlots ?? {}).flatMap((entry) => entry?.images ?? []),
+  );
+  const remove = [...new Set((images ?? []).map(String))].filter(
+    (ref) => SLOT_IMAGE_RE.test(ref) && !inUse.has(ref),
+  );
   // Same shape as the teardown's image removal: an image a previous `gc` or `down`
   // already took is the desired end state, while one that is there and refuses to go
   // (still referenced by a stopped container) is an operator's problem, not a shrug.
@@ -935,8 +1015,8 @@ export function planImageGc({ images, registry }) {
           kind: "ensure-absent",
           label: "remove unreferenced slot images",
           items: remove.map((ref) => ({
-            probe: ["docker", "image", "inspect", ref],
-            remove: ["docker", "image", "rm", ref],
+            probe: ["sudo", "docker", "image", "inspect", ref],
+            remove: ["sudo", "docker", "image", "rm", ref],
           })),
         },
       ]
@@ -945,11 +1025,23 @@ export function planImageGc({ images, registry }) {
 }
 
 /**
+ * Live preview slots whose PR is no longer open — the ones `gc` takes down.
+ *
+ * `main` is never a candidate: it is the merged head, not a preview, and no PR number
+ * could ever close it.
+ */
+export function slotsWithClosedPrs(liveSlots, openPrNumbers) {
+  const open = new Set((openPrNumbers ?? []).map(Number));
+  return Object.keys(liveSlots ?? {})
+    .filter((name) => name !== "main" && !open.has(previewNumber(name)))
+    .sort();
+}
+
+/**
  * The second, CONDITIONAL half of gc — see `GC_FREE_SPACE_FLOOR`.
  *
- * Never `buildx prune`: the box has no build cache to reclaim, and calling it would
- * be a copied gesture rather than a lever (§9 «Disk pressure» says the same about
- * the `builder.gc` block in `cloud-init/stage-1.yaml`).
+ * Above the floor nothing runs: an unconditional prune on a healthy box throws away
+ * the build cache the next slot build would reuse.
  */
 export function planPruneByFreeSpace({ freeBytes }) {
   if (freeBytes >= GC_FREE_SPACE_FLOOR_BYTES) return { commands: [] };
@@ -960,256 +1052,10 @@ export function planPruneByFreeSpace({ freeBytes }) {
         // failure here is a real docker failure, and it fails `gc`.
         kind: "sh",
         label: `free disk below ${GC_FREE_SPACE_FLOOR} — pruning unreferenced images`,
-        command: ["docker", "image", "prune", "-af", "--filter", "until=24h"],
+        command: ["sudo", "docker", "image", "prune", "-af", "--filter", "until=24h"],
       },
     ],
   };
-}
-
-// --- the ordered plans -------------------------------------------------------
-
-function renderIncludeSteps(registry, baseDomain) {
-  return {
-    kind: "write-many",
-    label: "render caddy includes",
-    files: [
-      { path: ASK_INCLUDE_PATH, contents: renderAskInclude(registry, { baseDomain }), mode: 0o644 },
-      { path: SLOTS_INCLUDE_PATH, contents: renderSlotsInclude(registry), mode: 0o644 },
-    ],
-  };
-}
-
-/**
- * `up` / `sync` — the converge, in the only order that is safe.
- *
- * Registration comes AFTER `up -d`: a host registered before its upstream exists
- * gets a certificate issued for something that answers 502, and burns a Let's
- * Encrypt order doing it. Teardown mirrors it (see `planSlotDown`).
- */
-export function planSlotUp({
-  slot,
-  sha,
-  registry,
-  baseDomain,
-  action = "up",
-  databaseExists,
-  goldenSubjects,
-  now = new Date(),
-}) {
-  assertSlotName(slot);
-  shortSha(sha);
-  assertBaseDomain(baseDomain);
-  if (action !== "up" && action !== "sync") {
-    throw new SlotError(`unknown converge action: ${JSON.stringify(action)}`);
-  }
-  assertPreviewCapacity(slot, registry);
-  const redisDb = allocateRedisDatabase(slot, registry);
-  const hosts = Object.values(slotHostnames(slot, baseDomain));
-  const nextRegistry = registerSlot(registry, {
-    slot,
-    sha,
-    redisDb,
-    hosts,
-    updatedAt: now.toISOString(),
-  });
-
-  const steps = [
-    {
-      kind: "write",
-      label: "write slot env",
-      path: slotEnvPath(slot),
-      contents: renderSlotEnv({ slot, sha, baseDomain, redisDb, goldenSubjects }),
-      mode: 0o640,
-    },
-  ];
-
-  const dbAction = databaseAction({ slot, action, exists: databaseExists });
-  if (dbAction !== "reuse") {
-    steps.push({
-      kind: "sql",
-      label: "clone database",
-      statements: cloneDatabaseStatements(slot, {
-        bootstrap: dbAction === "bootstrap",
-      }),
-    });
-  }
-
-  steps.push(
-    pullCommandPlan(slot),
-    migrateCommandPlan(slot),
-    seedCommandPlan(slot),
-    upCommandPlan(slot),
-    caddyAttachCommand(slot),
-    {
-      kind: "write",
-      label: "write registry",
-      path: REGISTRY_PATH,
-      contents: serializeRegistry(nextRegistry),
-      mode: 0o644,
-    },
-    renderIncludeSteps(nextRegistry, baseDomain),
-    caddyReloadCommand(),
-    // AFTER the registry write, so the whole set reflects the slot that just came up.
-    // A failure here fails the converge: a slot whose callback the IdP does not hold
-    // answers `invalid redirect_uri` on every login, which is strictly worse than a
-    // refused `up` (spec §5 «Converge», #2064 addendum 2).
-    idpRedirectStep(nextRegistry, baseDomain),
-  );
-
-  return { slot, sha, redisDb, hosts, registry: nextRegistry, steps };
-}
-
-/**
- * `down` — deregister FIRST, tear down after.
- *
- * The reverse order would leave hostnames certifiable and imported while nothing
- * serves them: Caddy would answer 502 behind a valid certificate instead of the
- * honest «no slot owns this host» 404, and on-demand issuance would keep trying.
- */
-export function planSlotDown({ slot, registry, baseDomain, goldenSubjects, now = new Date() }) {
-  assertSlotName(slot);
-  assertBaseDomain(baseDomain);
-  void now;
-  const entry = registry?.slots?.[slot];
-  const nextRegistry = deregisterSlot(registry, slot);
-
-  const steps = [
-    {
-      kind: "write",
-      label: "ensure slot env",
-      path: slotEnvPath(slot),
-      contents: renderSlotDownEnv({ slot, entry, baseDomain, goldenSubjects }),
-      mode: 0o640,
-    },
-    caddyDetachCommand(slot),
-    {
-      kind: "write",
-      label: "write registry",
-      path: REGISTRY_PATH,
-      contents: serializeRegistry(nextRegistry),
-      mode: 0o644,
-    },
-    renderIncludeSteps(nextRegistry, baseDomain),
-    caddyReloadCommand(),
-    downCommandPlan(slot),
-    slotNetworkRemoveCommand(slot),
-  ];
-
-  if (slot !== "main") {
-    steps.push({
-      kind: "sql",
-      label: "drop database",
-      statements: dropDatabaseStatements(slot),
-    });
-    if (entry?.sha) {
-      // Same reasoning as the network: an image a previous teardown (or `gc`) already
-      // removed is the desired end state, not a failure — but an image that is there
-      // and refuses to go is one.
-      steps.push({
-        kind: "ensure-absent",
-        label: "remove slot images",
-        items: Object.values(slotImageRefs(slot, entry.sha)).map((ref) => ({
-          probe: ["docker", "image", "inspect", ref],
-          remove: ["docker", "image", "rm", ref],
-        })),
-      });
-    }
-    steps.push({
-      // `rm -f` is already idempotent; nothing to probe.
-      kind: "sh",
-      label: "remove slot env",
-      command: ["rm", "-f", slotEnvPath(slot)],
-    });
-  }
-
-  // Last, for the same reason `up` converges last: the set is rendered from the
-  // registry the plan has already written, so the torn-down slot's callback is gone
-  // from the IdP rather than left pointing at nothing.
-  steps.push(idpRedirectStep(nextRegistry, baseDomain));
-
-  return { slot, registry: nextRegistry, steps };
-}
-
-// --- reset -------------------------------------------------------------------
-
-/** The one audit line a `reset main` appends. Pure, so its shape is testable. */
-export function resetLogLine({ actor, sha, now = new Date() }) {
-  return `${now.toISOString()} reset main by ${actor || "unknown"} sha=${sha}\n`;
-}
-
-/**
- * `reset main` — throw `ds_main` away and re-clone it from `ds_golden`.
- *
- * Only `main` is resettable, and that is not an arbitrary restriction: a preview's
- * database is re-cloned from the template on every single converge (§4), so `sync
- * pr-<N>` already IS its reset. `main` is the one slot whose database is persistent
- * and forward-migrated, so it is the one slot that can drift far enough from the
- * template to need a deliberate, audited wipe.
- *
- * Order: audit line FIRST, then the drop/clone, then the ordinary `up` steps on the
- * SHA the registry currently holds. The audit line is written before anything is
- * destroyed on purpose — a line that only lands when the wipe succeeds cannot answer
- * «who ran the thing that broke the box halfway through».
- *
- * `ds_golden` is read as a template and never written: the drop names `ds_main` and
- * nothing else, and the clone is `cloneDatabaseStatements(… { bootstrap: true })`,
- * whose only `DROP` is the one suppressed by `bootstrap`.
- */
-export function planSlotReset({
-  registry,
-  baseDomain,
-  actor,
-  goldenSubjects,
-  now = new Date(),
-}) {
-  assertBaseDomain(baseDomain);
-  const entry = registry?.slots?.main;
-  if (!entry?.sha) {
-    throw new SlotError(
-      "refusing to reset `main`: it is not in the registry, so there is no SHA to " +
-        "re-converge on. Bring it up first with `slot up main <sha>`.",
-    );
-  }
-  const sha = entry.sha;
-  shortSha(sha);
-  // `databaseExists: true` — the drop/clone below re-creates it in the same plan, so
-  // the converge that follows must NOT emit a second clone.
-  const up = planSlotUp({
-    slot: "main",
-    sha,
-    registry,
-    baseDomain,
-    action: "up",
-    databaseExists: true,
-    goldenSubjects,
-    now,
-  });
-  const steps = [
-    {
-      kind: "append",
-      label: "audit the reset",
-      path: SLOT_LOG_PATH,
-      contents: resetLogLine({ actor, sha, now }),
-      mode: 0o640,
-    },
-    // The containers come DOWN before the drop, exactly as `planSlotDown` orders it
-    // for a preview: `realEffects().sql` issues one `docker exec … psql` per
-    // statement, so a running api's pool re-opens a session on `ds_main` between the
-    // terminate and the DROP and Postgres answers 55006 — a reset that aborts AFTER
-    // the audit line was already written. `up.steps` below brings the slot back on
-    // the registered SHA.
-    downCommandPlan("main"),
-    {
-      kind: "sql",
-      label: "re-clone the main database from the template",
-      statements: [
-        ...dropDatabaseStatements("main", { allowMain: true }),
-        ...cloneDatabaseStatements("main", { bootstrap: true }),
-      ],
-    },
-    ...up.steps,
-  ];
-  return { slot: "main", sha, redisDb: up.redisDb, hosts: up.hosts, registry: up.registry, steps };
 }
 
 // --- reset-identities --------------------------------------------------------
@@ -1220,33 +1066,33 @@ export function resetIdentitiesLogLine({ slot, actor, now = new Date() }) {
 }
 
 /**
- * `reset-identities <slot>` \u2014 the golden fixture put back the way the scenarios expect.
+ * `reset-identities <slot>` — the golden fixture put back the way the scenarios expect.
  *
  * The IdP half (create/delete/password/verify at the shared Zitadel) happens in the
- * `idp` effect BEFORE this plan is built, because its output \u2014 the five subject ids \u2014
+ * `idp` effect BEFORE this plan is built, because its output — the five subject ids —
  * is this plan's input. What is left is the box-local half, and its order is the point:
  *
  * 1. write the tool-owned `DS_GOLDEN_SUB_*` file (0644, non-secret: opaque ids, never
  *    passwords) so the next `slot up` renders a slot env that `seed:golden` can resolve;
- * 2. FLUSH the slot's Redis logical database \u2014 a rebuilt account keeps its username but
+ * 2. FLUSH the slot's Redis logical database — a rebuilt account keeps its username but
  *    gets a NEW subject, so every session, OTP challenge and rate-limit key keyed on the
- *    old one is stale. Leaving them behind is how a \u00abthe fixture is reset\u00bb run still
+ *    old one is stale. Leaving them behind is how a «the fixture is reset» run still
  *    fails on a half-live session;
  * 3. append one audit line.
  *
- * A preview that is not in the registry is refused rather than defaulted: it owns no
- * Redis database, so \u00abflush its database\u00bb has no honest answer.
+ * A preview that is not live is refused rather than defaulted: it owns no Redis
+ * database, so «flush its database» has no honest answer.
  */
-export function planResetIdentities({ slot, registry, subjects, actor, now = new Date() }) {
+export function planResetIdentities({ slot, liveSlots, subjects, actor, now = new Date() }) {
   assertSlotName(slot);
-  if (slot !== "main" && !registry?.slots?.[slot]) {
+  if (slot !== "main" && !liveSlots?.[slot]) {
     throw new SlotError(
-      `refusing to reset the identities of \`${slot}\`: it is not in the registry, so it ` +
+      `refusing to reset the identities of \`${slot}\`: it is not running, so it ` +
         "owns no Redis logical database to flush. Bring it up first with " +
-        `\`slot up ${slot} <sha>\`.`,
+        `\`ds-slot up ${slot} --ref <sha>\`.`,
     );
   }
-  const redisDb = allocateRedisDatabase(slot, registry);
+  const redisDb = allocateRedisDatabase(slot, liveSlots);
   const steps = [
     {
       kind: "write",
@@ -1259,6 +1105,7 @@ export function planResetIdentities({ slot, registry, subjects, actor, now = new
       kind: "sh",
       label: "flush the slot's redis logical database",
       command: [
+        "sudo",
         "docker",
         "exec",
         REDIS_CONTAINER,
@@ -1279,14 +1126,294 @@ export function planResetIdentities({ slot, registry, subjects, actor, now = new
   return { slot, redisDb, subjects, steps };
 }
 
+// --- the ordered plans -------------------------------------------------------
+
+/**
+ * `up` / `sync` — the converge, in the only order that is safe.
+ *
+ * The tree ships FIRST: everything after it — the build, the migrate image, the
+ * compose file itself — comes out of that tree, so a ship that failed must stop the
+ * converge before anything on the box changes.
+ *
+ * The IdP converge comes AFTER `up -d` and the Caddy attach: a callback registered
+ * for a host that answers 502 is worse than one registered a few seconds later. The
+ * health check and the prune close the run, exactly as `tools/deploy/prod.mjs` orders
+ * them, and the identity reset tail leaves the golden fixture in the state the
+ * scenarios expect.
+ */
+export function planSlotUp({
+  slot,
+  sha,
+  liveSlots,
+  baseDomain,
+  action = "up",
+  databaseExists,
+  subjects,
+  actor,
+  now = new Date(),
+}) {
+  assertSlotName(slot);
+  shortSha(sha);
+  assertBaseDomain(baseDomain);
+  if (action !== "up" && action !== "sync") {
+    throw new SlotError(`unknown converge action: ${JSON.stringify(action)}`);
+  }
+  const live = liveSlots ?? {};
+  assertPreviewCapacity(slot, live);
+  const redisDb = allocateRedisDatabase(slot, live);
+  const hostMap = slotHostnames(slot, baseDomain);
+  const hosts = Object.values(hostMap);
+
+  const steps = [
+    {
+      kind: "ship",
+      label: "ship the tree",
+      sha,
+      liveDir: slotTreeDir(slot),
+      // Nothing survives a ship: the slot tree holds no state. The database, the env
+      // file and the audit log all live outside it.
+      preserved: [],
+      tmpPrefix: `ds-slot-${slot}`,
+    },
+    {
+      kind: "write",
+      label: "write slot env",
+      path: slotEnvPath(slot),
+      contents: renderSlotEnv({
+        slot,
+        sha,
+        baseDomain,
+        redisDb,
+        goldenSubjects: subjects,
+      }),
+      mode: 0o640,
+    },
+    buildCommandPlan(slot),
+    { kind: "verify-images", label: "verify images boot", sha, slot },
+  ];
+
+  const dbAction = databaseAction({ slot, action, exists: databaseExists });
+  if (dbAction !== "reuse") {
+    steps.push({
+      kind: "sql",
+      label: "clone database",
+      statements: cloneDatabaseStatements(slot, {
+        bootstrap: dbAction === "bootstrap",
+      }),
+    });
+  }
+
+  steps.push(
+    migrateCommandPlan(slot),
+    seedCommandPlan(slot),
+    upCommandPlan(slot),
+    caddyAttachCommand(slot),
+    idpRedirectStep([...Object.keys(live), slot], baseDomain),
+    { kind: "verify-running", label: "verify the running images", sha, slot },
+    {
+      kind: "health",
+      label: "health",
+      slot,
+      sha,
+      url: `https://${hostMap.api}/v1/health`,
+    },
+    {
+      kind: "prune",
+      label: "prune images and build cache",
+      retention: IMAGE_RETENTION,
+      reservedSpace: BUILD_CACHE_RESERVED_SPACE,
+    },
+    // The slot IS live by the time this tail runs, so `planResetIdentities` is given
+    // the live set it will have — not the one docker reported before the converge.
+    ...planResetIdentities({
+      slot,
+      liveSlots: { ...live, [slot]: live[slot] ?? { images: [] } },
+      subjects,
+      actor,
+      now,
+    }).steps,
+  );
+
+  return { slot, sha, redisDb, hosts, steps };
+}
+
+/**
+ * `down` — detach the edge first, tear the slot down after, converge the IdP last.
+ *
+ * The image removal is the subtle half. Image tags are global per COMMIT now, so two
+ * slots converged on one SHA share every tag: removing «this slot's images» on the
+ * old, registry-derived reasoning would take the other slot down with an
+ * ImageNotFound on its next restart. So the candidates are this slot's images MINUS
+ * every image any other live slot lists, and when nothing is left the step is absent
+ * from the plan entirely rather than present and empty.
+ */
+export function planSlotDown({ slot, liveSlots, baseDomain, now = new Date() }) {
+  assertSlotName(slot);
+  assertBaseDomain(baseDomain);
+  void now;
+  const live = liveSlots ?? {};
+
+  const steps = [
+    {
+      kind: "write",
+      label: "ensure slot env",
+      path: slotEnvPath(slot),
+      contents: renderSlotDownEnv({ slot }),
+      mode: 0o640,
+    },
+    caddyDetachCommand(slot),
+    downCommandPlan(slot),
+    slotNetworkRemoveCommand(slot),
+  ];
+
+  if (slot !== "main") {
+    steps.push({
+      kind: "sql",
+      label: "drop database",
+      statements: dropDatabaseStatements(slot),
+    });
+    const stillReferenced = new Set(
+      Object.entries(live)
+        .filter(([name]) => name !== slot)
+        .flatMap(([, entry]) => entry?.images ?? []),
+    );
+    const orphaned = [
+      ...new Set((live[slot]?.images ?? []).filter((ref) => SLOT_IMAGE_RE.test(ref))),
+    ].filter((ref) => !stillReferenced.has(ref));
+    if (orphaned.length) {
+      steps.push({
+        kind: "ensure-absent",
+        label: "remove slot images",
+        items: orphaned.map((ref) => ({
+          probe: ["sudo", "docker", "image", "inspect", ref],
+          remove: ["sudo", "docker", "image", "rm", ref],
+        })),
+      });
+    }
+    steps.push(
+      {
+        // `rm -rf` and `rm -f` are already idempotent; nothing to probe.
+        kind: "sh",
+        label: "remove the slot tree",
+        command: ["sudo", "rm", "-rf", slotTreeDir(slot)],
+      },
+      {
+        kind: "sh",
+        label: "remove slot env",
+        command: ["sudo", "rm", "-f", slotEnvPath(slot)],
+      },
+    );
+  }
+
+  // Last, over the slots that REMAIN: the torn-down slot's callback is gone from the
+  // shared app rather than left pointing at nothing.
+  steps.push(
+    idpRedirectStep(
+      Object.keys(live).filter((name) => name !== slot),
+      baseDomain,
+    ),
+  );
+
+  return { slot, steps };
+}
+
+// --- reset -------------------------------------------------------------------
+
+/** The one audit line a `reset main` appends. Pure, so its shape is testable. */
+export function resetLogLine({ actor, sha, now = new Date() }) {
+  return `${now.toISOString()} reset main by ${actor || "unknown"} sha=${sha}\n`;
+}
+
+/**
+ * `reset main` — throw `ds_main` away and re-clone it from `ds_golden`.
+ *
+ * Only `main` is resettable, and that is not an arbitrary restriction: a preview's
+ * database is re-cloned from the template on every single converge (§4), so `sync
+ * pr-<N>` already IS its reset. `main` is the one slot whose database is persistent
+ * and forward-migrated, so it is the one slot that can drift far enough from the
+ * template to need a deliberate, audited wipe.
+ *
+ * The SHA is an ARGUMENT (`--ref`), not a lookup: there is no registry holding «what
+ * main was converged on» any more, and inferring it from a running container's tag
+ * would re-converge on whatever happened to be up rather than on what the operator
+ * meant.
+ *
+ * Order: audit line FIRST, then the containers down, then the drop/clone, then the
+ * ordinary converge. The audit line is written before anything is destroyed on
+ * purpose — a line that only lands when the wipe succeeds cannot answer «who ran the
+ * thing that broke the box halfway through».
+ */
+export function planSlotReset({
+  sha,
+  liveSlots,
+  baseDomain,
+  actor,
+  subjects,
+  now = new Date(),
+}) {
+  assertBaseDomain(baseDomain);
+  if (!sha) {
+    throw new SlotError(
+      "refusing to reset `main`: there is no SHA to re-converge on. Name it with " +
+        "`ds-slot reset main --yes --ref <sha>`.",
+    );
+  }
+  shortSha(sha);
+  // `databaseExists: true` — the drop/clone below re-creates it in the same plan, so
+  // the converge that follows must NOT emit a second clone.
+  const up = planSlotUp({
+    slot: "main",
+    sha,
+    liveSlots,
+    baseDomain,
+    action: "up",
+    databaseExists: true,
+    subjects,
+    actor,
+    now,
+  });
+  const steps = [
+    {
+      kind: "append",
+      label: "audit the reset",
+      path: SLOT_LOG_PATH,
+      contents: resetLogLine({ actor, sha, now }),
+      mode: 0o640,
+    },
+    // The containers come DOWN before the drop: one `psql` runs per statement, so a
+    // running api's pool re-opens a session on `ds_main` between the terminate and the
+    // DROP and Postgres answers 55006 — a reset that aborts AFTER the audit line was
+    // already written. `up.steps` below brings the slot back on the named SHA.
+    downCommandPlan("main"),
+    {
+      kind: "sql",
+      label: "re-clone the main database from the template",
+      statements: [
+        ...dropDatabaseStatements("main", { allowMain: true }),
+        ...cloneDatabaseStatements("main", { bootstrap: true }),
+      ],
+    },
+    ...up.steps,
+  ];
+  return { slot: "main", sha, redisDb: up.redisDb, hosts: up.hosts, steps };
+}
+
 // --- the executor ------------------------------------------------------------
+
+/** The remote-only step kinds, each naming the effect that must supply it. */
+const REMOTE_ONLY_KINDS = Object.freeze({
+  ship: "ship",
+  "verify-images": "verifyImages",
+  "verify-running": "verifyRunning",
+  health: "health",
+  prune: "prune",
+});
 
 /**
  * Runs a plan through injected effects.
  *
- * `sql`, `sh`, `probe` and `write` are supplied by `main()` and replaced wholesale in
- * the tests, which is what keeps every plan above unit-testable without Postgres,
- * Docker or a filesystem.
+ * Every effect is supplied by `main()` and replaced wholesale in the tests, which is
+ * what keeps every plan above unit-testable without ssh, Postgres or Docker.
  *
  * EVERY failure aborts the run — there is no tolerated failure and no step that is
  * allowed to fail. A step whose expected no-op looks like an error to docker is
@@ -1297,21 +1424,37 @@ export function planResetIdentities({ slot, registry, subjects, actor, now = new
  * - `ensure-present` — «this must exist afterwards», the exact twin: the apply runs
  *   only when the probe does NOT find it.
  *
- * Absent/present therefore means success with nothing to do, which is what lets a
- * re-converge (`sync`) and a teardown of a half-converged slot both exit 0, while a
- * command that actually ran and failed still aborts the plan.
- *
- * `probe` reports the exit status instead of throwing (`{ ok, stdout, stderr }`). An
- * item may add `match(stdout)` when the exit status alone cannot answer the question
- * — `docker network inspect` exits 0 for a network whether or not Caddy is on it. A
- * `match` item therefore REQUIRES the `probe` effect. Without one the executor falls
- * back to `sh` and reads a throw as «absent», which is what the offline plan tests
- * exercise for the plain `docker … inspect` items.
+ * The five REMOTE-ONLY kinds (`ship`, `verify-images`, `verify-running`, `health`,
+ * `prune`) have no offline fallback at all — each one is a multi-command remote
+ * routine, not a single argv — so a missing effect refuses BY NAME rather than
+ * skipping the step. A converge that silently skipped its verification would report
+ * success for a slot running the previous commit's images.
  */
 export async function runSlotPlan(
   plan,
-  { sql, sh, write, append, probe, idp, log = () => {} },
+  {
+    sql,
+    sh,
+    write,
+    append,
+    probe,
+    idp,
+    ship,
+    verifyImages,
+    verifyRunning,
+    health,
+    prune,
+    log = () => {},
+  },
 ) {
+  const remoteEffects = {
+    ship,
+    verifyImages,
+    verifyRunning,
+    health,
+    prune,
+  };
+
   const present = async (item, step) => {
     if (probe) {
       const result = await probe(item.probe, step);
@@ -1371,8 +1514,16 @@ export async function runSlotPlan(
         );
       }
       step.result = await idp(step);
-    } else if (step.kind === "write-many") {
-      for (const file of step.files) await write(file.path, file.contents, file.mode);
+    } else if (REMOTE_ONLY_KINDS[step.kind]) {
+      const name = REMOTE_ONLY_KINDS[step.kind];
+      const effect = remoteEffects[name];
+      if (!effect) {
+        throw new SlotError(
+          `step "${step.label}" runs on the box and so needs a \`${name}\` effect; ` +
+            "there is no offline fallback for it",
+        );
+      }
+      step.result = await effect(step);
     } else throw new SlotError(`unknown step kind: ${step.kind}`);
   }
   return plan;
@@ -1380,36 +1531,43 @@ export async function runSlotPlan(
 
 /**
  * The converge/teardown half of the CLI, lifted out of `main()` so the branches
- * themselves are testable with injected effects — the round-3 regression («`sync` of
- * a converged slot exits non-zero») lived here, invisible to every plan-level test.
+ * themselves are testable with injected effects.
  *
  * Returns the line `main()` prints; failure is a throw, exactly as inside a plan.
  */
 export async function runSlotCommand({
   options,
-  registry,
+  liveSlots,
   baseDomain,
   effects,
-  goldenSubjects,
   databaseExists: mainDatabaseExists,
 }) {
+  if (options.command === "down") {
+    // A teardown needs NO golden identities: it must stay possible on a box where the
+    // fixture never converged, and on one where the shared Zitadel is unreachable.
+    const plan = planSlotDown({ slot: options.slot, liveSlots, baseDomain });
+    await runSlotPlan(plan, effects);
+    return `slot ${options.slot} is down`;
+  }
+
+  if (!effects?.idp) {
+    throw new SlotError(
+      `\`${options.command}\` converges the golden fixture at the shared Zitadel and so ` +
+        "needs an `idp` effect",
+    );
+  }
+  // The converge runs FIRST and its subjects are every plan's input: writing a slot env
+  // (or the subjects file) before the IdP agrees with it would leave the box claiming
+  // subject ids that the identity provider does not hold.
+  const subjects = await effects.idp({
+    op: "golden-identities",
+    label: "converge the golden identities",
+  });
+
   if (options.command === "reset-identities") {
-    if (!effects?.idp) {
-      throw new SlotError(
-        "`reset-identities` converges the golden fixture at the shared Zitadel and so " +
-          "needs an `idp` effect",
-      );
-    }
-    // The converge runs FIRST and its subjects are this plan's input: writing the file
-    // before the IdP agrees with it would leave the box claiming subject ids that the
-    // identity provider does not hold.
-    const subjects = await effects.idp({
-      op: "golden-identities",
-      label: "converge the golden identities",
-    });
     const plan = planResetIdentities({
       slot: options.slot,
-      registry,
+      liveSlots,
       subjects,
       actor: options.actor,
     });
@@ -1419,35 +1577,38 @@ export async function runSlotCommand({
       `${plan.redisDb} (slot ${plan.slot}) flushed`
     );
   }
-  if (options.command === "down") {
-    const plan = planSlotDown({ slot: options.slot, registry, baseDomain, goldenSubjects });
-    await runSlotPlan(plan, effects);
-    return `slot ${options.slot} is down`;
-  }
+
   if (options.command === "reset") {
-    const plan = planSlotReset({ registry, baseDomain, actor: options.actor, goldenSubjects });
+    const plan = planSlotReset({
+      sha: options.sha,
+      liveSlots,
+      baseDomain,
+      actor: options.actor,
+      subjects,
+    });
     await runSlotPlan(plan, effects);
     return (
       `slot main was reset from ${GOLDEN_DB_BASE} and re-converged on ` +
       `${shortSha(plan.sha)}: ${plan.hosts.join(", ")}`
     );
   }
+
   // Lazily: `databaseExists` may be a thunk, and it is asked ONLY here — inside the
-  // `up`/`sync` branch, and only for `main`. `slot down main` used to pay a `docker
-  // exec … psql` round trip to answer a question its plan never asks, which made a
-  // teardown depend on a healthy Postgres for no reason (Mode (a) NIT, PR #2168).
+  // `up`/`sync` branch, and only for `main`. A preview never asks, so a teardown or a
+  // preview converge never depends on a healthy Postgres to answer it.
   const databaseExists =
     options.slot === "main" && typeof mainDatabaseExists === "function"
-      ? mainDatabaseExists()
+      ? await mainDatabaseExists()
       : mainDatabaseExists;
   const plan = planSlotUp({
     slot: options.slot,
     sha: options.sha,
-    registry,
+    liveSlots,
     baseDomain,
     action: options.command,
     databaseExists,
-    goldenSubjects,
+    subjects,
+    actor: options.actor,
   });
   await runSlotPlan(plan, effects);
   return (
@@ -1458,16 +1619,33 @@ export async function runSlotCommand({
 
 // --- CLI ---------------------------------------------------------------------
 
-const COMMANDS_WITH_SLOT_AND_SHA = new Set(["up", "sync"]);
+const COMMANDS_WITH_SLOT_AND_REF = new Set(["up", "sync"]);
 const COMMANDS_WITH_SLOT = new Set(["down", "reset-identities"]);
-const COMMANDS_WITHOUT_ARGS = new Set(["status", "gc", "render"]);
+const COMMANDS_WITHOUT_ARGS = new Set(["status", "gc"]);
+
+/** `--ref <sha>` out of a flag list, or `undefined`. Unknown flags are refused. */
+function takeRef(flags, { allowed }) {
+  let sha;
+  for (let index = 0; index < flags.length; index += 1) {
+    const flag = flags[index];
+    if (flag === "--ref") {
+      sha = flags[index + 1];
+      index += 1;
+      if (!sha) throw new SlotError("`--ref` requires a full commit SHA");
+      shortSha(sha);
+      continue;
+    }
+    if (!allowed.includes(flag)) throw new SlotError(`unknown option: ${flag}`);
+  }
+  return sha;
+}
 
 export function parseArgs(argv) {
   const [command, ...rest] = argv;
   if (!command) {
     throw new SlotError(
-      "usage: slot up|sync <slot> <sha> | down <slot> | reset main --yes | " +
-        "reset-identities <slot> | status | gc | render",
+      "usage: ds-slot up|sync <slot> --ref <sha> | down <slot> | " +
+        "reset main --yes --ref <sha> | reset-identities <slot> | status | gc",
     );
   }
   if (command === "reset") {
@@ -1482,33 +1660,39 @@ export function parseArgs(argv) {
     if (slot !== "main") {
       throw new SlotError(
         `refusing to reset \`${slot}\`: only \`main\` is resettable. A preview's database ` +
-          "is re-cloned from `ds_golden` on every converge, so `slot sync " +
-          `${slot} <sha>\` already is its reset.`,
+          "is re-cloned from `ds_golden` on every converge, so `ds-slot sync " +
+          `${slot} --ref <sha>\` already is its reset.`,
       );
     }
-    const unknown = flags.filter((flag) => flag !== "--yes");
-    if (unknown.length) throw new SlotError(`unknown option: ${unknown[0]}`);
+    const sha = takeRef(flags, { allowed: ["--yes", "--ref"] });
     if (!flags.includes("--yes")) {
       throw new SlotError(
         "refusing to reset `main` without `--yes`: this DROPS `ds_main` and re-clones it " +
           "from `ds_golden`, discarding everything staging has accumulated there.",
       );
     }
-    return { command, slot, sha: undefined, yes: true };
+    return { command, slot, sha, yes: true };
   }
-  if (COMMANDS_WITH_SLOT_AND_SHA.has(command)) {
-    const [slot, sha] = rest;
-    if (!slot || !sha) {
-      throw new SlotError(`\`${command}\` requires <slot> and a full commit SHA`);
-    }
+  if (COMMANDS_WITH_SLOT_AND_REF.has(command)) {
+    const [slot, ...flags] = rest;
+    if (!slot) throw new SlotError(`\`${command}\` requires <slot> and \`--ref <sha>\``);
     assertSlotName(slot);
-    shortSha(sha);
+    // A BARE positional SHA is an error, not a second spelling: the commit a slot is
+    // converged on is the one thing the preview workflow passes by hand, and two
+    // spellings is how a workflow edit ends up shipping the wrong ref silently.
+    const sha = takeRef(flags, { allowed: [] });
+    if (!sha) {
+      throw new SlotError(
+        `\`${command}\` requires \`--ref <sha>\` — a full 40-character commit id`,
+      );
+    }
     return { command, slot, sha };
   }
   if (COMMANDS_WITH_SLOT.has(command)) {
-    const [slot] = rest;
+    const [slot, ...flags] = rest;
     if (!slot) throw new SlotError(`\`${command}\` requires <slot>`);
     assertSlotName(slot);
+    if (flags.length) throw new SlotError(`unknown option: ${flags[0]}`);
     return { command, slot, sha: undefined };
   }
   if (COMMANDS_WITHOUT_ARGS.has(command)) {
@@ -1516,107 +1700,6 @@ export function parseArgs(argv) {
     return { command, slot: undefined, sha: undefined };
   }
   throw new SlotError(`unknown command: ${command}`);
-}
-
-/**
- * The registry as it is on disk, or an empty one on a box that has none yet.
- *
- * Exported because `deployer.mjs` reads the SAME file through the SAME parser: a
- * second reader with its own «file missing» convention is how two views of «which
- * slots are live» drift apart.
- */
-export function readRegistry() {
-  try {
-    return parseRegistry(readFileSync(REGISTRY_PATH, "utf8"));
-  } catch (err) {
-    if (err?.code === "ENOENT") return emptyRegistry();
-    throw err;
-  }
-}
-
-function realEffects() {
-  return {
-    sql: (statement) =>
-      execFileSync(
-        "docker",
-        [
-          "exec",
-          "-i",
-          POSTGRES_CONTAINER,
-          "psql",
-          "-U",
-          "ds",
-          "-d",
-          "postgres",
-          "-v",
-          "ON_ERROR_STOP=1",
-          "-c",
-          statement,
-        ],
-        { stdio: "inherit" },
-      ),
-    sh: (command) =>
-      execFileSync(command[0], command.slice(1), { stdio: "inherit" }),
-    // The probe REPORTS the exit status instead of throwing on it — «not found» is an
-    // answer, not an error. Its output is captured so a `docker inspect` of a missing
-    // resource does not spill a scary stderr line into an otherwise clean teardown.
-    probe: (command) => {
-      const result = spawnSync(command[0], command.slice(1), { encoding: "utf8" });
-      if (result.error) throw result.error;
-      return {
-        ok: result.status === 0,
-        stdout: result.stdout ?? "",
-        stderr: result.stderr ?? "",
-      };
-    },
-    write: (path, contents, mode) => {
-      mkdirSync(dirname(path), { recursive: true });
-      writeFileSync(path, contents, { mode });
-    },
-    // Separate from `write` because it must NOT truncate: the audit trail of
-    // `reset main` is the whole point of the file it appends to.
-    append: (path, contents, mode) => {
-      mkdirSync(dirname(path), { recursive: true, mode: 0o750 });
-      appendFileSync(path, contents, { mode });
-    },
-    // The ONE effect that leaves the box. Built per step, so every command that emits
-    // no `idp` step still runs on a box where the bootstrap PAT file is not readable.
-    //
-    // The desired redirect set is `resolveDesiredRedirectSet` — `pins ∪ rendered`.
-    idp: async (step) => {
-      const client = createIdpClient({
-        fetch: globalThis.fetch,
-        baseUrl: resolveIdpBaseUrl(),
-        pat: readIdpPat(),
-      });
-      const projectName = process.env.IDP_PROJECT_NAME || undefined;
-      const appName = process.env.IDP_APP_NAME || undefined;
-      const log = (line) => console.log(line);
-      if (step.op === "redirect-uris") {
-        await convergeRedirectUris({
-          client,
-          projectName,
-          appName,
-          desired: resolveDesiredRedirectSet(step, process.env),
-          log,
-        });
-        return undefined;
-      }
-      if (step.op === "golden-identities") {
-        // `process.env` IS the password map: the five `DS_GOLDEN_PASSWORD_*` are
-        // owner-placed in /etc/ds-platform/stage.env and read by name, never logged.
-        return convergeGoldenIdentities({
-          client,
-          accounts: GOLDEN_IDP_ACCOUNTS,
-          passwords: process.env,
-          env: process.env,
-          log,
-        });
-      }
-      throw new SlotError(`unknown idp step op: ${step.op}`);
-    },
-    log: (line) => console.log(line),
-  };
 }
 
 /**
@@ -1652,38 +1735,63 @@ export function resolveIdpBaseUrl(env = process.env) {
   );
 }
 
-/** The bootstrap PAT, from the root-only file the stage provisioning writes. */
-function readIdpPat() {
-  let pat;
+// --- the box ------------------------------------------------------------------
+
+/** One `sudo cat` over ssh, parsed — never sourced. See `parseEnvFile`. */
+async function readBoxEnvFile(path, { optional = false } = {}) {
   try {
-    pat = readFileSync(IDP_PAT_FILE, "utf8").trim();
+    return parseEnvFile(await sshCapture(STAGE_1, `sudo cat ${path}`));
   } catch (err) {
-    if (err?.code === "ENOENT") {
-      throw new SlotError(
-        `${IDP_PAT_FILE} does not exist — the IdP bootstrap PAT is placed there by the ` +
-          "stage provisioning; this tool never mints one",
-      );
-    }
+    if (optional) return {};
     throw err;
   }
-  if (!pat) throw new SlotError(`${IDP_PAT_FILE} is empty`);
+}
+
+/** The bootstrap PAT, from the root-only file the stage provisioning writes. */
+async function readIdpPat() {
+  let pat;
+  try {
+    pat = (await sshCapture(STAGE_1, `sudo cat ${IDP_PAT_FILE}`)).trim();
+  } catch {
+    throw new SlotError(
+      `${IDP_PAT_FILE} is not readable on ${STAGE_1} — the IdP bootstrap PAT is placed ` +
+        "there by the stage provisioning; this tool never mints one",
+    );
+  }
+  if (!pat) throw new SlotError(`${IDP_PAT_FILE} is empty on ${STAGE_1}`);
   return pat;
 }
 
-function requiredBaseDomain() {
-  const baseDomain = process.env.STAGE_BASE_DOMAIN;
-  if (!baseDomain) {
-    throw new SlotError(
-      "STAGE_BASE_DOMAIN is required — source /etc/ds-platform/stage.env before running this tool",
-    );
-  }
-  return assertBaseDomain(baseDomain);
+/** Which slots are live, straight from docker's own labels. */
+async function readLiveSlots() {
+  return parseLiveSlots(
+    await sshCapture(
+      STAGE_1,
+      `sudo docker ps -a --format '{{.Label "com.docker.compose.project"}}\\t{{.Image}}'`,
+    ),
+  );
 }
 
-function databaseExists(name) {
-  const out = execFileSync(
-    "docker",
-    [
+async function readBoxImages() {
+  const out = await sshCapture(
+    STAGE_1,
+    "sudo docker image ls --format '{{.Repository}}:{{.Tag}}'",
+  );
+  return out.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+}
+
+async function readBoxFreeBytes() {
+  return parseAvailBytes(
+    await sshCapture(STAGE_1, `sudo df -B1 --output=avail ${DOCKER_ROOT}`),
+  );
+}
+
+async function boxDatabaseExists(name) {
+  const out = await sshCapture(
+    STAGE_1,
+    quoteCommand([
+      "sudo",
+      "docker",
       "exec",
       "-i",
       POSTGRES_CONTAINER,
@@ -1694,55 +1802,151 @@ function databaseExists(name) {
       "postgres",
       "-tAc",
       `SELECT 1 FROM pg_database WHERE datname = '${assertDatabaseName(name)}'`,
-    ],
-    { encoding: "utf8" },
+    ]),
   );
   return out.trim() === "1";
 }
 
-function listImages() {
-  const out = execFileSync(
-    "docker",
-    ["image", "ls", "--format", "{{.Repository}}:{{.Tag}}"],
-    { encoding: "utf8" },
-  );
-  return out.split(/\r?\n/).filter(Boolean);
+/**
+ * The effects, all of them over ssh.
+ *
+ * `ship`, `verifyImages`, `verifyRunning`, `health` and `prune` are deliberately NOT
+ * supplied here yet: their remote routines are the next step of #2194. Until they
+ * are, `up` / `sync` / `reset` fail closed with the executor's named refusal rather
+ * than converging a slot whose images nothing verified.
+ */
+function realEffects(boxEnv) {
+  const run = (script, step) =>
+    sshScript(STAGE_1, script, {
+      label: step?.label ?? "slot",
+      stallBudgetMs:
+        step?.stallBudget === "build" ? STALL_BUDGET_BUILD_MS : STALL_BUDGET_DEFAULT_MS,
+    });
+  return {
+    sql: (statement, step) =>
+      run(
+        quoteCommand([
+          "sudo",
+          "docker",
+          "exec",
+          "-i",
+          POSTGRES_CONTAINER,
+          "psql",
+          "-U",
+          "ds",
+          "-d",
+          "postgres",
+          "-v",
+          "ON_ERROR_STOP=1",
+          "-c",
+          statement,
+        ]),
+        step,
+      ),
+    sh: (command, step) => run(quoteCommand(command), step),
+    // The probe REPORTS the exit status instead of throwing on it — «not found» is an
+    // answer, not an error. `sshCapture` rejects on a non-zero exit, so the status is
+    // captured INSIDE the script and comes back on its own first line.
+    probe: async (command) => {
+      const captured = await sshCapture(
+        STAGE_1,
+        [
+          `if out=$(${quoteCommand(command)} 2>/dev/null); then echo DS_PROBE_OK; else echo DS_PROBE_FAIL; fi`,
+          `printf '%s' "$out"`,
+        ].join("\n"),
+      );
+      const newline = captured.indexOf("\n");
+      const head = newline === -1 ? captured : captured.slice(0, newline);
+      return {
+        ok: head.trim() === "DS_PROBE_OK",
+        stdout: newline === -1 ? "" : captured.slice(newline + 1),
+        stderr: "",
+      };
+    },
+    write: (path, contents, mode) =>
+      sshScript(STAGE_1, remoteWriteScript(path, contents, mode), { label: `write ${path}` }),
+    // Separate from `write` because it must NOT truncate: the audit trail of
+    // `reset main` is the whole point of the file it appends to.
+    append: (path, contents, mode) =>
+      sshScript(STAGE_1, remoteWriteScript(path, contents, mode, { append: true }), {
+        label: `append ${path}`,
+      }),
+    // The ONE effect that does not go to the box: the shared Zitadel's management API.
+    // Built per step, so every command that emits no `idp` step still runs on a box
+    // where the bootstrap PAT file is not readable.
+    idp: async (step) => {
+      const client = createIdpClient({
+        fetch: globalThis.fetch,
+        baseUrl: resolveIdpBaseUrl(boxEnv),
+        pat: await readIdpPat(),
+      });
+      const projectName = boxEnv.IDP_PROJECT_NAME || undefined;
+      const appName = boxEnv.IDP_APP_NAME || undefined;
+      const log = (line) => console.log(line);
+      if (step.op === "redirect-uris") {
+        await convergeRedirectUris({
+          client,
+          projectName,
+          appName,
+          desired: resolveDesiredRedirectSet(step, boxEnv),
+          log,
+        });
+        return undefined;
+      }
+      if (step.op === "golden-identities") {
+        // The BOX env is the password map: the five `DS_GOLDEN_PASSWORD_*` are
+        // owner-placed in /etc/ds-platform/stage.env and read by name, never logged.
+        return convergeGoldenIdentities({
+          client,
+          accounts: GOLDEN_IDP_ACCOUNTS,
+          passwords: boxEnv,
+          env: boxEnv,
+          log,
+        });
+      }
+      throw new SlotError(`unknown idp step op: ${step.op}`);
+    },
+    log: (line) => console.log(line),
+  };
+}
+
+function requiredBaseDomain(boxEnv) {
+  const baseDomain = boxEnv.STAGE_BASE_DOMAIN;
+  if (!baseDomain) {
+    throw new SlotError(
+      `STAGE_BASE_DOMAIN is not in ${STAGE_ENV_FILE} on ${STAGE_1} — the stage ` +
+        "provisioning places it there",
+    );
+  }
+  return assertBaseDomain(baseDomain);
 }
 
 async function main() {
   const options = parseArgs(process.argv.slice(2));
-  const registry = readRegistry();
-  const effects = realEffects();
+  const boxEnv = await readBoxEnvFile(STAGE_ENV_FILE);
+  const liveSlots = await readLiveSlots();
+  const effects = realEffects(boxEnv);
 
   if (options.command === "status") {
-    console.log("# registry (/var/lib/ds-platform/slots.json)");
-    console.log(serializeRegistry(registry).trimEnd());
+    console.log(`# live slots on ${STAGE_1} (docker compose project labels)`);
+    console.log(JSON.stringify(liveSlots, null, 2));
     console.log("# shared IdP redirect set — `up`/`down` converge this onto the app");
-    if (process.env.STAGE_BASE_DOMAIN) {
-      console.log(
-        JSON.stringify(
-          renderIdpRedirectUris(registry, requiredBaseDomain()),
-          null,
-          2,
-        ),
-      );
-    } else {
-      console.log("# (set STAGE_BASE_DOMAIN to render it)");
-    }
-    return;
-  }
-
-  if (options.command === "render") {
-    const baseDomain = requiredBaseDomain();
-    await runSlotPlan({ steps: [renderIncludeSteps(registry, baseDomain)] }, effects);
-    console.log(`rendered ${ASK_INCLUDE_PATH} and ${SLOTS_INCLUDE_PATH}`);
+    console.log(
+      JSON.stringify(
+        renderIdpRedirectUris(Object.keys(liveSlots), requiredBaseDomain(boxEnv)),
+        null,
+        2,
+      ),
+    );
     return;
   }
 
   if (options.command === "gc") {
-    const images = planImageGc({ images: listImages(), registry });
-    const { bsize, bavail } = statfsSync(DOCKER_ROOT);
-    const prune = planPruneByFreeSpace({ freeBytes: bsize * bavail });
+    const images = planUnreferencedImageGc({
+      images: await readBoxImages(),
+      liveSlots,
+    });
+    const prune = planPruneByFreeSpace({ freeBytes: await readBoxFreeBytes() });
     await runSlotPlan({ steps: [...images.commands, ...prune.commands] }, effects);
     console.log(
       `gc: ${images.remove.length} unreferenced slot image(s) removed; ` +
@@ -1751,38 +1955,14 @@ async function main() {
     return;
   }
 
-  const baseDomain = requiredBaseDomain();
-
-  // `up`, `sync` and `reset` render a slot env and so REQUIRE the subjects: the refusal
-  // that `readGoldenSubjects` throws names `ds-slot reset-identities`, which is the
-  // command that writes them. `down` and `reset-identities` must stay possible on a box
-  // where the file does not exist yet — the first is a teardown that must never be
-  // blocked, the second is what creates the file — so for those two, and only those
-  // two, an absent file degrades to «no subjects» instead of aborting.
-  const rendersSlotEnv =
-    options.command === "up" || options.command === "sync" || options.command === "reset";
-  let goldenSubjects;
-  if (rendersSlotEnv) {
-    goldenSubjects = readGoldenSubjects();
-  } else {
-    try {
-      goldenSubjects = readGoldenSubjects();
-    } catch {
-      goldenSubjects = undefined;
-    }
-  }
-
   console.log(
     await runSlotCommand({
       options: { ...options, actor: process.env.SUDO_USER || process.env.USER },
-      registry,
-      baseDomain,
+      liveSlots,
+      baseDomain: requiredBaseDomain(boxEnv),
       effects,
-      goldenSubjects,
-      // A THUNK: `runSlotCommand` calls it only in the `up`/`sync` branch of `main`.
-      // Passing the answer instead made `slot down main` reach into Postgres for a
-      // question its plan never asks (Mode (a) NIT, PR #2168).
-      databaseExists: () => databaseExists(slotDatabaseName("main")),
+      // A THUNK: `runSlotCommand` calls it only in the `up`/`sync` branch for `main`.
+      databaseExists: () => boxDatabaseExists(slotDatabaseName("main")),
     }),
   );
 }

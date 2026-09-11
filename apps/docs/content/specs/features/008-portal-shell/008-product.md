@@ -30,7 +30,7 @@ The spine of the personal cabinet: a **persistent app-shell header** present acr
 **Persistent shell (US-1, US-2, US-5):**
 
 1. On any portal page, the app-shell header renders: logo (→ `/`), top-nav **Эфиры**, theme toggle, and — for a logged-in doctor — an auth cluster (avatar icon with the doctor's initials plus **«Мои события»**); for a guest, a **Войти** button.
-2. The doctor taps **Мои события** in the nav → lands on `/account/events` (feature 005); or taps the **avatar icon** → lands on the profile `/account` (feature 009).
+2. The doctor taps **Мои события** in the auth cluster → lands on `/account/events` (feature 005); or taps the **avatar icon** → lands on the profile `/account` (feature 009).
 
 **Post-login landing (US-3, US-4):**
 
@@ -42,7 +42,7 @@ The spine of the personal cabinet: a **persistent app-shell header** present acr
 - A **persistent header** is present across portal surfaces and carries: the **logo** (→ `/`), the top-nav **Эфиры**, a **theme toggle**, and — **logged-in** → an auth cluster: an **avatar icon (initials) that navigates to `/account`** (the profile) plus **«Мои события»** (→ `/account/events`); **guest** → a **«Войти»** button. This is explicitly **not a dropdown menu**, and there is **no «Выйти» in the header** (sign-out lives on the profile, feature 009). The header truthfully reflects auth state.
 - **`/` is the canonical public discovery listing** of upcoming broadcasts, rendered **identically** for a guest and a logged-in doctor (it reuses the feature-004 listing surface, the vendored `events-feed.dc.html`). No separate dashboard exists. _[Amended 2026-08-17 — `/` is the Academy landing, discovery is `/webinars`, and the post-login landing is the visitor's return target defaulting to `/webinars` (feature 013). See the Amendment at the end of this document.]_
 - **Post-login landing is `/`.** The auth flow returns the doctor to the discovery front-door, never to a scaffold. _[Amended 2026-08-17 — `/` is the Academy landing, discovery is `/webinars`, and the post-login landing is the visitor's return target defaulting to `/webinars` (feature 013). See the Amendment at the end of this document.]_
-- The header's navigation resolves to the **shipped** surfaces: «Мои события» → `/account/events` (feature 005), the avatar icon → `/account` (feature 009, the profile).
+- The header's targets resolve to the **shipped** surfaces: the nav **Эфиры** → discovery, the auth-cluster «Мои события» → `/account/events` (feature 005), the avatar icon → `/account` (feature 009, the profile).
 - **The `/` scaffold is retired** — the «Каркас приложения» placeholder card (whose only action is a "go to sign in" button) is no longer reachable in the portal.
 
 ## Out of scope

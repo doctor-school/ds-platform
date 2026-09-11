@@ -58,7 +58,7 @@ The canvas **state** props are not forks — they are content-driven obligations
 
 ## Outcomes
 
-- `doctor.school` has one shell — header, navigation, footer — defined once and consumed unchanged by every doctor-facing screen of features 018–021.
+- `doctor.school` has one shell — header, navigation, footer — the shared storefront-shell package mounted by `apps/doctor` with a `host: doctor` config, consumed unchanged by every doctor-facing screen of features 018–021.
 - The header states the visitor's sign-in status unambiguously: exactly one of «Войти / Регистрация» or «Личный кабинет» plus the points plate, never both and never an in-between. In release 1 «Личный кабинет» opens `/account` on the storefront — the 003 «Account profile v1» surface projected through the shared account-profile block, not a doctor-specific cabinet; the full cabinet arrives with feature 022 ([#1791](https://github.com/doctor-school/ds-platform/issues/1791), R5).
 - A doctor's first action is choosing a specialty, and the whole Минздрав list is reachable both by typing a name and by browsing what exists — never as a bare full-length scroll.
 - The choice is remembered — on the profile for a signed-in doctor, in the anonymous session for a guest — so the second visit opens the targeted view with the catalog collapsed to a changeable row.
@@ -102,7 +102,7 @@ The canvas **state** props are not forks — they are content-driven obligations
 ## Constraints
 
 - **`apps/doctor` must exist first.** 017 is `blocked_by` [#1440](https://github.com/doctor-school/ds-platform/issues/1440); no 017 clause may be satisfied by building inside `apps/promo` or `apps/portal`.
-- **One shell, defined once.** The header, navigation and footer exist as a single layout unit in `apps/doctor`. A screen-local copy of any of the three, in 017 or in 018–021, is a defect.
+- **One shell, defined once.** The header, navigation and footer are the shared storefront-shell package, mounted by `apps/doctor` with a `host: doctor` config object (values only). A screen-local re-implementation of any of the three, in 017 or in 018–021, is a defect.
 - **The specialty book is closed.** `specialties_minzdrav` is not editorially extendable; «Другое» is a member of the book, not a UI escape hatch invented on the page.
 - **Three distinct things.** Specialties (Минздрав), directions and schools are never merged into one on-screen list and never labelled with one word.
 - **Adjacency is read, never derived.** Adjacent content comes from the managed `directions` ↔ `specialties_minzdrav` link and the direction adjacency self-relation. String similarity, shared prefixes and embedding similarity are all refused at review, and adjacent content is never presented as the doctor's own specialty.
@@ -201,7 +201,7 @@ Each records a call the PRD left open. They are lead decisions in the AGENTS.md 
 
 ## Invariants
 
-- Exactly one shell layout exists in `apps/doctor`; every doctor-facing route renders it.
+- Exactly one shell exists — the shared storefront-shell package mounted by `apps/doctor` with its `host: doctor` config; every doctor-facing route renders it.
 - At every moment the header shows exactly one of the guest cluster or the signed-in cluster.
 - A doctor or guest holds at most one primary specialty, and it is always a member of the closed book («Другое» included).
 - No endpoint accepts, and no surface offers, a specialty outside `specialties_minzdrav`.

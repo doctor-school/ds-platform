@@ -181,6 +181,27 @@ test("a failed `write_file` aborts the install even behind `|| true`", (t) => {
   );
 });
 
+test("a failed `write_file` leaves no temp file behind", (t) => {
+  // `die` exits the function, and bash runs NO RETURN trap on an exit (bash 5.3), so
+  // the trap alone let every failed install strand a root-owned /tmp file — which the
+  // round-1 NIT (PR #2170) asked to stop. This drives the real helper section with a
+  // private TMPDIR and counts what survives the die path.
+  const run = runHelpers(`TMPDIR="$(mktemp -d)"
+export TMPDIR
+( write_file /tmp/ds-2064-wrapper 0750 "wrapper /tmp/ds-2064-wrapper" "#!/usr/bin/env bash" ) || true
+echo "LEFTOVER $(ls -A "$TMPDIR" | wc -l)"
+rmdir "$TMPDIR" 2>/dev/null || true`);
+  if (run.error) {
+    t.skip(`bash is unavailable: ${run.error.message}`);
+    return;
+  }
+  assert.match(run.stderr, /install-host: failed to install/, "the die path must still fire");
+  assert.ok(
+    run.stdout.includes("LEFTOVER 0"),
+    `a temp file survived the die path: ${run.stdout}`,
+  );
+});
+
 test("every mutating helper command carries its own `|| die`", () => {
   const helpers = helperSection();
   for (const command of ["install -o root -g root", "install -d -o root -g root", "ln -sfn"]) {
@@ -191,8 +212,10 @@ test("every mutating helper command carries its own `|| die`", () => {
     for (const occurrence of occurrences) {
     // Collapsed, because `copy_file`'s die sits on a continuation line.
     const tail = helpers.slice(occurrence.index, occurrence.index + 200).split(/\s+/u).join(" ");
+    // `|| die ...` or the cleanup form `|| { rm -f "$tmp"; die ...; }` — what matters
+    // is that the failure reaches `die`, not which of the two spellings carries it.
     assert.ok(
-      tail.includes("|| die"),
+      /\|\| (die|\{ rm -f "\$tmp"; die)/u.test(tail),
       `${command} may fail silently in an errexit-ignoring caller`,
     );
     }

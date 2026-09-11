@@ -57,6 +57,7 @@ import {
   renderSlotDownEnv,
   renderSlotEnv,
   renderSlotsInclude,
+  resolveDesiredRedirectSet,
   resetIdentitiesLogLine,
   resetLogLine,
   runSlotCommand,
@@ -879,6 +880,47 @@ test("an empty registry yields an empty redirect set, never a wildcard", () => {
     () => renderIdpRedirectUris(emptyRegistry(), "not a domain"),
     SlotError,
   );
+});
+
+test("the converge writes the env pins unioned with the rendered slot set", () => {
+  // The write is whole-set: dropping the pins would unregister the stage's own hosts
+  // that `infra/dev-stand/idp/provision.sh` registered (#2064 addendum 6). Pins come
+  // first and a host present in both appears exactly once.
+  const registry = registerSlot(emptyRegistry(), {
+    slot: "pr-2034",
+    sha: SHA,
+    redisDb: 4,
+    hosts: Object.values(slotHostnames("pr-2034", BASE)),
+    updatedAt: "2026-09-10T00:00:00.000Z",
+  });
+  const step = { desired: renderIdpRedirectUris(registry, BASE) };
+  const desired = resolveDesiredRedirectSet(step, {
+    IDP_REDIRECT_URIS:
+      "https://api-main.stage.doctor.school/auth/callback, https://api-pr-2034.stage.doctor.school/auth/callback",
+    IDP_POST_LOGOUT_URIS: "https://academy-main.stage.doctor.school",
+  });
+  assert.deepEqual(desired.redirectUris, [
+    "https://api-main.stage.doctor.school/auth/callback",
+    "https://api-pr-2034.stage.doctor.school/auth/callback",
+  ]);
+  assert.deepEqual(desired.postLogoutUris, [
+    "https://academy-main.stage.doctor.school",
+    "https://academy-pr-2034.stage.doctor.school",
+    "https://doctor-pr-2034.stage.doctor.school",
+    "https://admin-pr-2034.stage.doctor.school",
+  ]);
+});
+
+test("no pins in the env leaves the rendered set untouched", () => {
+  const registry = registerSlot(emptyRegistry(), {
+    slot: "main",
+    sha: SHA,
+    redisDb: 1,
+    hosts: Object.values(slotHostnames("main", BASE)),
+    updatedAt: "2026-09-10T00:00:00.000Z",
+  });
+  const step = { desired: renderIdpRedirectUris(registry, BASE) };
+  assert.deepEqual(resolveDesiredRedirectSet(step, {}), step.desired);
 });
 
 // --- teardown survives a missing env file and takes the network with it -------

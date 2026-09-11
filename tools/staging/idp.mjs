@@ -62,10 +62,14 @@ export const DEFAULT_APP_NAME = "ds-platform-dev";
  * therefore reads the TypeScript source and fails on any drift between the two, so
  * the mirror can never quietly diverge from the seed contract it serves.
  */
+// `role` is mirrored too: `idp.test.mjs` compares the whole catalogue field by field
+// against packages/db/src/seed/golden/idp.ts, and a field that is not mirrored is a
+// field the drift test cannot see (#2064 addendum 6 §1).
 export const GOLDEN_IDP_ACCOUNTS = Object.freeze([
   Object.freeze({
     key: "doctorUnverified",
     username: "golden.doctor.unverified@example.test",
+    role: "doctor_guest",
     emailVerified: false,
     mfaEnrolled: false,
     idpAccountExpected: true,
@@ -75,6 +79,7 @@ export const GOLDEN_IDP_ACCOUNTS = Object.freeze([
   Object.freeze({
     key: "doctorVerified",
     username: "golden.doctor.verified@example.test",
+    role: "doctor_guest",
     emailVerified: true,
     mfaEnrolled: false,
     idpAccountExpected: true,
@@ -84,6 +89,7 @@ export const GOLDEN_IDP_ACCOUNTS = Object.freeze([
   Object.freeze({
     key: "doctorMfa",
     username: "golden.doctor.mfa@example.test",
+    role: "doctor_guest",
     emailVerified: true,
     // MFA enrolment is NOT converged here. `reset-identities` guarantees existence,
     // password and email-verified state only; enrolling the TOTP factor for
@@ -97,6 +103,7 @@ export const GOLDEN_IDP_ACCOUNTS = Object.freeze([
   Object.freeze({
     key: "doctorDeleted",
     username: "golden.doctor.deleted@example.test",
+    role: "doctor_guest",
     emailVerified: true,
     mfaEnrolled: false,
     // No live IdP account may exist for the soft-deleted doctor, yet the seed still
@@ -109,6 +116,7 @@ export const GOLDEN_IDP_ACCOUNTS = Object.freeze([
   Object.freeze({
     key: "admin",
     username: "golden.admin@example.test",
+    role: "platform_admin",
     emailVerified: true,
     mfaEnrolled: true,
     idpAccountExpected: true,
@@ -555,8 +563,12 @@ export async function convergeGoldenIdentities({
             : { email: account.username, returnCode: {} },
         },
       });
-      const userId = created?.userId;
-      if (!userId) throw new IdpError(`creating ${step.username} returned no userId`);
+      // Zitadel's User v2 CreateUser answers `{ id, creationDate, emailCode }` — `id`,
+      // NOT the `userId` the older AddHumanUser returned (proven live, #203; the same
+      // read is in apps/api/src/auth/idp/zitadel.idp.ts:441-452). `userId` stays as a
+      // fallback only so an older Zitadel build cannot silently yield no subject.
+      const userId = created?.id ?? created?.userId;
+      if (!userId) throw new IdpError(`creating ${step.username} returned no user id`);
       existing[step.username] = { userId, emailVerified: account.emailVerified };
       subjects[account.subjectEnvVar] = userId;
       log(`  ↳ created ${step.username} (verified: ${account.emailVerified})`);

@@ -874,6 +874,24 @@ export function renderIdpRedirectUris(registry, baseDomain) {
  * env is readable — the plan stays pure and offline-testable, and the effect stays the
  * only thing that knows the box has a Zitadel on it (#2064 addendum 6).
  */
+/**
+ * `pins ∪ rendered`, pins first — the whole set the converge writes.
+ *
+ * Exported and pure so the union has its own test: the write is whole-set, so sending
+ * only what the slot registry renders would unregister the stage's OWN hosts that
+ * `infra/dev-stand/idp/provision.sh` put there, and the stage would stop being able to
+ * log in the moment a slot came up (#2064 addendum 6).
+ */
+export function resolveDesiredRedirectSet(step, env = process.env) {
+  return {
+    redirectUris: unionUris(parsePinnedUris(env.IDP_REDIRECT_URIS), step.desired.redirectUris),
+    postLogoutUris: unionUris(
+      parsePinnedUris(env.IDP_POST_LOGOUT_URIS),
+      step.desired.postLogoutUris,
+    ),
+  };
+}
+
 function idpRedirectStep(registry, baseDomain) {
   return {
     kind: "idp",
@@ -1564,10 +1582,7 @@ function realEffects() {
     // The ONE effect that leaves the box. Built per step, so every command that emits
     // no `idp` step still runs on a box where the bootstrap PAT file is not readable.
     //
-    // The desired redirect set is `pins ∪ rendered`, pins first: the write is
-    // whole-set, so sending only what the slot registry renders would unregister the
-    // stage's OWN hosts that `infra/dev-stand/idp/provision.sh` put there, and the
-    // stage would stop being able to log in the moment a slot came up (#2064 addendum 6).
+    // The desired redirect set is `resolveDesiredRedirectSet` — `pins ∪ rendered`.
     idp: async (step) => {
       const client = createIdpClient({
         fetch: globalThis.fetch,
@@ -1582,16 +1597,7 @@ function realEffects() {
           client,
           projectName,
           appName,
-          desired: {
-            redirectUris: unionUris(
-              parsePinnedUris(process.env.IDP_REDIRECT_URIS),
-              step.desired.redirectUris,
-            ),
-            postLogoutUris: unionUris(
-              parsePinnedUris(process.env.IDP_POST_LOGOUT_URIS),
-              step.desired.postLogoutUris,
-            ),
-          },
+          desired: resolveDesiredRedirectSet(step, process.env),
           log,
         });
         return undefined;

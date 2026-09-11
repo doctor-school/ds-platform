@@ -129,14 +129,16 @@ write_file() {
   fi
   local tmp
   tmp="$(mktemp)" || die "failed to allocate a temp file for ${dst}"
-  # Every exit from here on removes the temp file, `die` included: without the trap a
-  # failed install left a root-owned /tmp file behind on every retry (Mode (a) NIT,
-  # PR #2170).
+  # The RETURN trap covers the ORDINARY returns only: `die` leaves the function via
+  # `exit`, and bash runs no RETURN trap on exit (verified on bash 5.3), so each die
+  # path removes the temp file itself. Without both, a failed install left a
+  # root-owned /tmp file behind on every retry (Mode (a) NIT, PR #2170).
   trap 'rm -f "$tmp"' RETURN
-  printf '%s\n' "$content" > "$tmp" || die "failed to stage the contents of ${dst}"
+  printf '%s\n' "$content" > "$tmp" ||
+    { rm -f "$tmp"; die "failed to stage the contents of ${dst}"; }
   # Same errexit caveat as `copy_file`: both call sites are `write_file ... || true`.
   install -o root -g root -m "$mode" "$tmp" "$dst" ||
-    die "failed to install ${dst} (${label})"
+    { rm -f "$tmp"; die "failed to install ${dst} (${label})"; }
   ensured "$label"
   return 0
 }

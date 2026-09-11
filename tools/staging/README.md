@@ -84,7 +84,9 @@ The converge runs as the LAST step of the `up`, `sync`, `down` and `reset` plans
 registry write, so the set it writes matches the registry state the command just produced.
 It is ensure-present: the current `oidc_config` is read first and the `PUT` is skipped when
 the sets already match (order-insensitive compare). Any URIs pinned in `IDP_REDIRECT_URIS` /
-`IDP_POST_LOGOUT_URIS` are unioned in, so non-slot callers keep their registration. A failing
+`IDP_POST_LOGOUT_URIS` are unioned in, so non-slot callers keep their registration — both
+must be FILLED in `/etc/ds-platform/stage.env` (see `infra/deploy/stage.env.example`): left
+empty, `provision.sh` substitutes its localhost dev defaults and registers those instead. A failing
 converge fails the command loudly — a slot whose callback is unregistered fails login with
 `invalid redirect_uri`, which is worse than a refused `up`.
 

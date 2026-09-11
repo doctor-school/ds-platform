@@ -321,6 +321,7 @@ test("the golden account catalogue matches the seed contract in packages/db", ()
     .map((block) => ({
       key: field(block, "key"),
       username: field(block, "username"),
+      role: field(block, "role"),
       emailVerified: field(block, "emailVerified") === "true",
       mfaEnrolled: field(block, "mfaEnrolled") === "true",
       idpAccountExpected: field(block, "idpAccountExpected") === "true",
@@ -340,7 +341,8 @@ test("a converge creates the absent accounts and collects every subject", async 
       {
         "POST /v2/users": { body: { result: [] } },
         "GET /auth/v1/users/me": { body: { user: { details: { resourceOwner: "org-1" } } } },
-        "POST /v2/users/new": { body: { userId: "new-id" } },
+        // The REAL CreateUser response: `{ id, creationDate, emailCode }` (#203).
+        "POST /v2/users/new": { body: { id: "new-id", creationDate: "2026-09-11T00:00:00Z" } },
         "POST /v2/users/new-id/password": { body: {} },
       },
       calls,
@@ -360,6 +362,36 @@ test("a converge creates the absent accounts and collects every subject", async 
   assert.equal(calls.filter((call) => call.key === "POST /v2/users/new").length, 4);
   // Neither the PAT nor any password may reach the log.
   assert.doesNotMatch(lines.join("\n"), /pat-value|Secret-123!/);
+});
+
+test("the subject of a created account comes from the CreateUser `id` field", async () => {
+  // Zitadel User v2 answers a create with `{ id, creationDate, emailCode }` and no
+  // `userId` at all; reading `userId` yields «returned no user id» on a live converge.
+  // This stub carries ONLY `id`, so the old read cannot pass it.
+  const calls = [];
+  const admin = GOLDEN_IDP_ACCOUNTS.find((account) => account.role === "platform_admin");
+  const client = createIdpClient({
+    fetch: stubFetch(
+      {
+        "POST /v2/users": { body: { result: [] } },
+        "GET /auth/v1/users/me": { body: { user: { details: { resourceOwner: "org-1" } } } },
+        "POST /v2/users/new": { body: { id: "created-id", emailCode: "123456" } },
+        "POST /v2/users/created-id/password": { body: {} },
+      },
+      calls,
+    ),
+    baseUrl: "https://id.stage.example",
+    pat: "pat-value",
+  });
+  const subjects = await convergeGoldenIdentities({
+    client,
+    accounts: [admin],
+    passwords: PASSWORDS,
+    log: () => {},
+  });
+  assert.equal(subjects[admin.subjectEnvVar], "created-id");
+  // The password write must address the same id the create returned.
+  assert.ok(calls.some((call) => call.key === "POST /v2/users/created-id/password"));
 });
 
 test("a missing golden password is refused before anything is written to the IdP", async () => {

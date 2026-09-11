@@ -1,3 +1,4 @@
+import { emailSender } from "./email-layout.js";
 import {
   ChannelRejection,
   type OutboundEmail,
@@ -29,7 +30,7 @@ export class ResendChannel implements RelayChannel {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          from: this.config.from ?? "noreply@doctor.school",
+          from: emailSender(this.config.from),
           to: [message.to],
           subject: message.subject,
           text: message.text,

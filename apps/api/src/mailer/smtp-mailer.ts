@@ -1,3 +1,5 @@
+import { emailSender } from "./email-layout.js";
+import { accountExistsMessage, adminLockoutMessage } from "./notice-emails.js";
 import { resolveRealSmtp } from "../config/real-smtp.js";
 import {
   passwordResetCodeEmail,
@@ -59,94 +61,6 @@ export interface SmtpMailerConfig {
   synthetic?: SyntheticSuppression | undefined;
   transportFactory?: TransportFactory | undefined;
   warn?: WarnFn | undefined;
-}
-
-/** Subject + RU body of the account-exists notice — carries NO secret (EARS-23). */
-function accountExistsMessage(portalBaseUrl: string): {
-  subject: string;
-  text: string;
-  html: string;
-} {
-  const base = portalBaseUrl.replace(/\/+$/, "");
-  const loginUrl = `${base}/login`;
-  const resetUrl = `${base}/reset`;
-  const subject = "Doctor.School — у вас уже есть аккаунт";
-  // No verification/login code, token, or PD — only a sign-in / reset prompt
-  // (the identity-credential emails are Zitadel's; this is a product notice).
-  const text = [
-    "Здравствуйте!",
-    "",
-    "Мы получили попытку регистрации с этим адресом электронной почты, но " +
-      "у вас уже есть аккаунт Doctor.School. Создавать новый не нужно.",
-    "",
-    `Войти: ${loginUrl}`,
-    `Сбросить пароль: ${resetUrl}`,
-    "",
-    "Если это были не вы, просто проигнорируйте это письмо — никаких " +
-      "изменений в вашем аккаунте не произошло.",
-    "",
-    "Команда Doctor.School",
-  ].join("\n");
-  const html = [
-    `<p>Здравствуйте!</p>`,
-    `<p>Мы получили попытку регистрации с этим адресом электронной почты, ` +
-      `но у вас уже есть аккаунт Doctor.School. Создавать новый не нужно.</p>`,
-    `<p><a href="${loginUrl}">Войти</a> &nbsp;·&nbsp; ` +
-      `<a href="${resetUrl}">Сбросить пароль</a></p>`,
-    `<p>Если это были не вы, просто проигнорируйте это письмо — никаких ` +
-      `изменений в вашем аккаунте не произошло.</p>`,
-    `<p>Команда Doctor.School</p>`,
-  ].join("\n");
-  return { subject, text, html };
-}
-
-/**
- * Subject + RU body of the 011 EARS-7 admin-lockout notice — carries NO secret,
- * NO attempt count, and NO remaining-time figure.
- *
- * The recipient of this mail is, by construction, an account someone has just
- * failed ten second-factor attempts against — so the mailbox may well be the
- * attacker's next target and the mail itself must not become the progress report
- * the uniform-failure rule spends a whole clause denying (EARS-7). It states the
- * fact (temporarily locked), the reassurance (nothing was changed), and the one
- * recovery path the spec actually ships (LD-2: the Tech Lead removes the factor,
- * the next login re-enters enrollment).
- */
-function adminLockoutMessage(): {
-  subject: string;
-  text: string;
-  html: string;
-} {
-  const subject =
-    "Doctor.School — вход в панель администрирования временно заблокирован";
-  const text = [
-    "Здравствуйте!",
-    "",
-    "Мы временно заблокировали вход в панель администрирования Doctor.School " +
-      "для вашей учётной записи: одноразовый код вводился неверно слишком " +
-      "много раз подряд.",
-    "",
-    "Пароль и данные учётной записи не изменились. Попробуйте войти позже.",
-    "",
-    "Если приложение-аутентификатор недоступно, обратитесь к техническому " +
-      "руководителю — он снимет старый фактор, и вы подключите приложение заново.",
-    "",
-    "Если это были не вы, сообщите об этом техническому руководителю.",
-    "",
-    "Команда Doctor.School",
-  ].join("\n");
-  const html = [
-    `<p>Здравствуйте!</p>`,
-    `<p>Мы временно заблокировали вход в панель администрирования ` +
-      `Doctor.School для вашей учётной записи: одноразовый код вводился ` +
-      `неверно слишком много раз подряд.</p>`,
-    `<p>Пароль и данные учётной записи не изменились. Попробуйте войти позже.</p>`,
-    `<p>Если приложение-аутентификатор недоступно, обратитесь к техническому ` +
-      `руководителю — он снимет старый фактор, и вы подключите приложение заново.</p>`,
-    `<p>Если это были не вы, сообщите об этом техническому руководителю.</p>`,
-    `<p>Команда Doctor.School</p>`,
-  ].join("\n");
-  return { subject, text, html };
 }
 
 /** Flag-selected SMTP primary; optional fallback requires explicit activation. */
@@ -346,6 +260,6 @@ function buildSmtpChannel(
           ? { user: cfg.user, pass: cfg.password }
           : undefined,
     }),
-    cfg.from ?? "noreply@doctor.school",
+    emailSender(cfg.from),
   );
 }

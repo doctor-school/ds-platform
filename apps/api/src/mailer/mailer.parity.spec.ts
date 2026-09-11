@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { FakeMailer } from "./mailer.fake.js";
 import { SmtpMailer } from "./smtp-mailer.js";
+import {
+  verificationCodeEmail,
+  passwordResetCodeEmail,
+} from "./code-emails.js";
+import { accountExistsMessage, adminLockoutMessage } from "./notice-emails.js";
 
 // Contract parity (a test fake must be no more permissive than the real
 // dependency, #202 precedent): FakeMailer and the real SmtpMailer must reject the
@@ -13,6 +18,39 @@ import { SmtpMailer } from "./smtp-mailer.js";
 
 const INVALID_EMAILS = ["", "   ", "no-at-sign", "missing@domain", "@ds.test"];
 const VALID_EMAIL = "owner@ds.test";
+
+describe("transactional HTML/plain-text content parity", () => {
+  for (const [name, message] of [
+    ["verification", verificationCodeEmail("GX5AVU")],
+    ["reset", passwordResetCodeEmail("GX5AVU")],
+    ["account-exists", accountExistsMessage("https://academy.example.test")],
+    ["admin-lockout", adminLockoutMessage()],
+  ] as const) {
+    it(`EARS-29: ${name} has the same visible content and actions in HTML and plain text`, () => {
+      const visibleHtml = message.html
+        .replace(/<div[^>]*>.*?<\/div>/s, "") // hidden inbox preview
+        .replace("Doctor.School", "") // visual brand header
+        .replace(/<a href="([^"]+)"[^>]*>(.*?)<\/a>/g, "$2: $1")
+        .replace(/<[^>]*>/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+      expect(visibleHtml).toBe(message.text.replace(/\s+/g, " ").trim());
+    });
+  }
+
+  it("EARS-23: the configured login destination is escaped as one HTML attribute", () => {
+    const message = accountExistsMessage(
+      'https://academy.example.test/a&b"<test>',
+    );
+    expect(message.html).toContain(
+      'href="https://academy.example.test/a&amp;b&quot;&lt;test&gt;/login"',
+    );
+    expect(message.html).not.toContain("<test>");
+    expect(message.text).toContain(
+      'https://academy.example.test/a&b"<test>/login',
+    );
+  });
+});
 
 function buildSmtp(): SmtpMailer {
   // No host on either transport ⇒ the adapter is a logged no-op; the parity guard

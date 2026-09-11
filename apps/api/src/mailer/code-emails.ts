@@ -18,12 +18,10 @@
  * mirror) in the same PR.
  */
 
-/** A composed mail artifact ready for the SMTP transport. */
-export interface CodeEmailMessage {
-  subject: string;
-  text: string;
-  html: string;
-}
+import { composeEmail, type EmailMessage } from "./email-layout.js";
+
+/** A composed code mail ready for the SMTP transport. */
+export type CodeEmailMessage = EmailMessage;
 
 /**
  * Stable subject tails (after the leading code + em-dash). The api/portal e2e
@@ -50,18 +48,19 @@ interface CodeEmailCopy {
 
 const VERIFY_COPY: CodeEmailCopy = {
   subjectTail: CODE_EMAIL_SUBJECT_TAILS.verifyEmail,
-  preheader: "Введите код на странице подтверждения Doctor.School",
+  preheader: "Введите код в уже открытой вкладке Doctor.School",
   intro: "Ваш код подтверждения:",
-  instruction: "Введите его на странице подтверждения Doctor.School.",
-  ignoreLine:
-    "Если вы не регистрировались на Doctor.School — проигнорируйте это письмо.",
+  instruction:
+    "Введите его в уже открытой вкладке Doctor.School, где вы запросили код.",
+  ignoreLine: "Если вы не запрашивали код — проигнорируйте это письмо.",
 };
 
 const RESET_COPY: CodeEmailCopy = {
   subjectTail: CODE_EMAIL_SUBJECT_TAILS.passwordReset,
-  preheader: "Введите код на странице сброса пароля Doctor.School",
+  preheader: "Введите код в уже открытой вкладке Doctor.School",
   intro: "Ваш код сброса пароля:",
-  instruction: "Введите его на странице сброса пароля Doctor.School.",
+  instruction:
+    "Введите его в уже открытой вкладке Doctor.School, где вы запросили код сброса пароля.",
   ignoreLine:
     "Если вы не запрашивали сброс пароля — проигнорируйте это письмо.",
 };
@@ -70,42 +69,14 @@ const RESET_COPY: CodeEmailCopy = {
 const EXPIRY_LINE = "Код действует 1 час.";
 
 function compose(code: string, copy: CodeEmailCopy): CodeEmailMessage {
-  // Subject: the code LEADS (`GX5AVU — код подтверждения Doctor.School`),
-  // rendered ~40 chars (< 50) so the inbox list / notification preview shows it.
-  const subject = `${code} — ${copy.subjectTail}`;
-
-  const text = [
-    "Здравствуйте!",
-    "",
-    `${copy.intro} ${code}`,
-    "",
-    copy.instruction,
-    EXPIRY_LINE,
-    "",
-    copy.ignoreLine,
-  ].join("\n");
-
-  // Inline-CSS/table markup (mail.ru/Yandex-safe). NO `<a>` element and NO URL
-  // anywhere — the link-free invariant is structural, not a copy convention.
-  // The token is ONE unbroken `<strong>` (enlarged + letter-spaced): the live
-  // e2e pins `<strong>${code}</strong>` exactly.
-  const html = [
-    `<div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">${copy.preheader}</div>`,
-    `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f4f5f7;">`,
-    `<tr><td align="center" style="padding:32px 16px;">`,
-    `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:480px;background-color:#ffffff;border-radius:8px;">`,
-    `<tr><td style="padding:32px 32px 0 32px;font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:bold;color:#2d84f2;">Doctor.School</td></tr>`,
-    `<tr><td style="padding:24px 32px 0 32px;font-family:Arial,Helvetica,sans-serif;font-size:15px;color:#1f2937;">Здравствуйте!</td></tr>`,
-    `<tr><td style="padding:16px 32px 0 32px;font-family:Arial,Helvetica,sans-serif;font-size:15px;color:#1f2937;">${copy.intro}</td></tr>`,
-    `<tr><td align="center" style="padding:16px 32px 0 32px;font-family:Arial,Helvetica,sans-serif;font-size:32px;letter-spacing:6px;color:#111827;"><strong>${code}</strong></td></tr>`,
-    `<tr><td style="padding:16px 32px 0 32px;font-family:Arial,Helvetica,sans-serif;font-size:15px;color:#1f2937;">${copy.instruction} ${EXPIRY_LINE}</td></tr>`,
-    `<tr><td style="padding:24px 32px 32px 32px;font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#6b7280;">${copy.ignoreLine}</td></tr>`,
-    `</table>`,
-    `</td></tr>`,
-    `</table>`,
-  ].join("\n");
-
-  return { subject, text, html };
+  return composeEmail({
+    subject: `${code} — ${copy.subjectTail}`,
+    preheader: copy.preheader,
+    intro: copy.intro,
+    code: { value: code, expiry: EXPIRY_LINE },
+    paragraphs: [copy.instruction],
+    footer: [copy.ignoreLine],
+  });
 }
 
 /** §13.3: the registration / resend email-verification artifact (EARS-1/3/25). */

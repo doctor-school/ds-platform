@@ -18,7 +18,7 @@ describe("003 EARS-29 code-only email artifacts (§13.3/§13.4)", () => {
       name: "verification (§13.3)",
       msg: verificationCodeEmail(CODE),
       tail: CODE_EMAIL_SUBJECT_TAILS.verifyEmail,
-      ignoreLine: "Если вы не регистрировались на Doctor.School",
+      ignoreLine: "Если вы не запрашивали код — проигнорируйте это письмо",
     },
     {
       name: "password reset (§13.4)",
@@ -70,3 +70,18 @@ describe("003 EARS-29 code-only email artifacts (§13.3/§13.4)", () => {
     );
   });
 });
+
+for (const render of [verificationCodeEmail, passwordResetCodeEmail]) {
+  it("EARS-29: directs code entry to the already-open requesting tab in both parts", () => {
+    const message = render(CODE);
+    for (const body of [message.html, message.text]) {
+      expect(body).toContain("уже открытой вкладке");
+      expect(body).toContain("запросили код");
+    }
+  });
+  it("EARS-29: interpolated tokens cannot inject HTML", () => {
+    const message = render('<>&"');
+    expect(message.html).toContain("<strong>&lt;&gt;&amp;&quot;</strong>");
+    expect(message.text).toContain('<>&"');
+  });
+}

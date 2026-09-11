@@ -16,8 +16,8 @@
  */
 export interface Mailer {
   /**
-   * EARS-23: send the account-exists notice to `email` — a sign-in /
-   * password-reset prompt for a registration attempt on an already-registered
+   * EARS-23: send the account-exists notice to `email` — a sign-in
+   * prompt for a registration attempt on an already-registered
    * address. It carries **no** verification code, login code, token, or
    * account/PD.
    *
@@ -74,8 +74,7 @@ export const MAILER = Symbol("MAILER");
  */
 export function assertSendableEmail(email: string): void {
   const trimmed = email?.trim() ?? "";
-  const ok =
-    trimmed.length > 0 && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(trimmed);
+  const ok = trimmed.length > 0 && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(trimmed);
   if (!ok) {
     throw new Error(`Mailer: refusing to send to an invalid email address`);
   }
@@ -89,8 +88,7 @@ export function assertSendableEmail(email: string): void {
  * message deliberately never echoes the value — the code is a secret (EARS-30).
  */
 export function assertSendableCode(code: string): void {
-  const ok =
-    typeof code === "string" && code.length > 0 && !/\s/.test(code);
+  const ok = typeof code === "string" && code.length > 0 && !/\s/.test(code);
   if (!ok) {
     throw new Error(
       "Mailer: refusing to send an empty or malformed one-time code",

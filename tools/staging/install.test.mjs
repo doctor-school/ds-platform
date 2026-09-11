@@ -31,10 +31,11 @@ import {
 
 const TARGET = "deploy@203.0.113.10";
 
-test("EARS: the payload carries the three scripts, the compose project and the units", () => {
+test("EARS: the payload carries the four scripts, the compose project and the units", () => {
   assert.deepEqual(PAYLOAD, [
     "tools/staging/slot.mjs",
     "tools/staging/golden-db.mjs",
+    "tools/staging/idp.mjs",
     "tools/staging/deployer.mjs",
     "tools/staging/install-host.sh",
     "infra/deploy/compose/slot",
@@ -49,9 +50,12 @@ test("every payload path exists in the repository", () => {
   }
 });
 
-test("`slot.mjs` never ships without the `golden-db.mjs` it imports", () => {
+test("`slot.mjs` never ships without the modules it imports", () => {
   assert.ok(PAYLOAD.includes("tools/staging/slot.mjs"));
+  // A `slot.mjs` that reaches /opt/ds-platform without one of its two sibling modules
+  // is a box where every `ds-slot` invocation dies on an unresolved import.
   assert.ok(PAYLOAD.includes("tools/staging/golden-db.mjs"));
+  assert.ok(PAYLOAD.includes("tools/staging/idp.mjs"));
 });
 
 test("the tar streams to stdout with repository-relative paths", () => {
@@ -180,13 +184,17 @@ test("a failed `write_file` aborts the install even behind `|| true`", (t) => {
 test("every mutating helper command carries its own `|| die`", () => {
   const helpers = helperSection();
   for (const command of ["install -o root -g root", "install -d -o root -g root", "ln -sfn"]) {
-    const at = helpers.indexOf(command);
-    assert.ok(at > 0, `helper section lost ${command}`);
+    // EVERY occurrence, not just the first: `indexOf` checked one call site and would
+    // have passed a second, unguarded one added beside it (Mode (a) NIT, PR #2170).
+    const occurrences = [...helpers.matchAll(new RegExp(command, "gu"))];
+    assert.ok(occurrences.length > 0, `helper section lost ${command}`);
+    for (const occurrence of occurrences) {
     // Collapsed, because `copy_file`'s die sits on a continuation line.
-    const tail = helpers.slice(at, at + 200).split(/\s+/u).join(" ");
+    const tail = helpers.slice(occurrence.index, occurrence.index + 200).split(/\s+/u).join(" ");
     assert.ok(
       tail.includes("|| die"),
       `${command} may fail silently in an errexit-ignoring caller`,
     );
+    }
   }
 });

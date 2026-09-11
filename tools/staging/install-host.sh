@@ -70,7 +70,7 @@ arch="$(uname -m)"
 [ -f "$STAGE_ENV" ] || die "${STAGE_ENV} is missing — provision the box env before installing the slot tooling"
 
 for required in "$STAGING_SRC/slot.mjs" "$STAGING_SRC/golden-db.mjs" \
-  "$STAGING_SRC/deployer.mjs" "$COMPOSE_SRC/compose.yml"; do
+  "$STAGING_SRC/idp.mjs" "$STAGING_SRC/deployer.mjs" "$COMPOSE_SRC/compose.yml"; do
   [ -f "$required" ] || die "payload is incomplete: ${required} is missing"
 done
 
@@ -129,11 +129,14 @@ write_file() {
   fi
   local tmp
   tmp="$(mktemp)" || die "failed to allocate a temp file for ${dst}"
+  # Every exit from here on removes the temp file, `die` included: without the trap a
+  # failed install left a root-owned /tmp file behind on every retry (Mode (a) NIT,
+  # PR #2170).
+  trap 'rm -f "$tmp"' RETURN
   printf '%s\n' "$content" > "$tmp" || die "failed to stage the contents of ${dst}"
   # Same errexit caveat as `copy_file`: both call sites are `write_file ... || true`.
   install -o root -g root -m "$mode" "$tmp" "$dst" ||
     die "failed to install ${dst} (${label})"
-  rm -f "$tmp"
   ensured "$label"
   return 0
 }
@@ -178,7 +181,7 @@ ensure_dir "$LOG_DIR" 0750
 
 # --- 3. the scripts -----------------------------------------------------------
 
-for script in slot.mjs golden-db.mjs deployer.mjs; do
+for script in slot.mjs golden-db.mjs idp.mjs deployer.mjs; do
   copy_file "${STAGING_SRC}/${script}" "${APP_DIR}/${script}" 0644 "script ${APP_DIR}/${script}" || true
 done
 
@@ -259,7 +262,10 @@ fi
 # re-rendering on every install would fight the registry writes `slot up`/`down`
 # make between installs.
 
-if [ -f "${CADDY_INCLUDE_DIR}/ask.caddy" ]; then
+# BOTH files are probed: Caddy refuses to start when either is missing, so keying the
+# skip on `ask.caddy` alone left a box with a half-rendered include set converged in
+# the installer's eyes and dead in Caddy's (Mode (a) NIT, PR #2170).
+if [ -f "${CADDY_INCLUDE_DIR}/ask.caddy" ] && [ -f "${CADDY_INCLUDE_DIR}/slots.caddy" ]; then
   already "caddy includes in ${CADDY_INCLUDE_DIR}"
 else
   /usr/local/bin/ds-slot render >/dev/null

@@ -95,14 +95,8 @@ export interface ZitadelConfig {
    */
   orgId?: string | undefined;
   /**
-   * #878: the portal origin (e.g. `https://academy.doctor.school`), consumed ONLY
-   * by the still-Zitadel-sent login email-OTP challenge (EARS-6), whose
-   * `sendCode.urlTemplate` is the BARE `<origin>/login` (no placeholders —
-   * nothing a mail scanner's GET prefetch can consume). The email-verify and
-   * password-reset sends no longer use it: they ride `returnCode` and the BFF
-   * mailer delivers a fully LINK-FREE artifact (#910, EARS-29). Plumbed from
-   * `MAILER_PORTAL_BASE_URL` (the same portal-origin source the BFF mailer
-   * channel uses) in `IdpModule`.
+   * Portal origin retained for caller compatibility. Credential emails use
+   * returnCode and the shared mailer, with no native action URL.
    */
   portalBaseUrl?: string | undefined;
   /**
@@ -1248,7 +1242,8 @@ export class ZitadelIdpClient implements IdpClient {
 
   // ── Passwordless login OTP (EARS-6/7) — design §3, §6; live-wired #153 ──
   // Zitadel login OTP is Session v2: create a session with a `user` check and an
-  // `otpEmail`/`otpSms` challenge (Zitadel sends the code through its notifier),
+  // `otpEmail`/`otpSms` challenge (email returns the code to the BFF mailer;
+  // SMS uses the native notifier),
   // then update the same session with the submitted code, then exchange the
   // checked session for tokens (the shared `exchangeSessionForTokens` hop). The
   // challenge is bound to a server-side session carried between the request and
@@ -1301,17 +1296,20 @@ export class ZitadelIdpClient implements IdpClient {
     // (EARS-6/7/16). A code is sent only if the user exists, but the caller can't
     // tell which.
     try {
-      const user = challenge === "otpEmail"
-        ? await this.resolveUserVerification(identifier)
-        : null;
-      const userId = challenge === "otpEmail"
-        ? user?.userId
-        : await this.resolveUserId(identifier);
+      const user =
+        challenge === "otpEmail"
+          ? await this.resolveUserVerification(identifier)
+          : null;
+      const userId =
+        challenge === "otpEmail"
+          ? user?.userId
+          : await this.resolveUserId(identifier);
       if (!userId) return;
       await this.ensureOtpFactor(userId, challenge);
       // Return the native login code to the existing mailer; Zitadel sends no
       // duplicate. SMS retains its native notifier and unchanged challenge.
-      const challengeBody = challenge === "otpEmail" ? { returnCode: true } : {};
+      const challengeBody =
+        challenge === "otpEmail" ? { returnCode: {} } : {};
       const res = await this.fetchImpl(this.url("/v2/sessions"), {
         method: "POST",
         headers: this.headers(),
@@ -1323,11 +1321,13 @@ export class ZitadelIdpClient implements IdpClient {
       if (!res.ok) return;
       const data = (await res.json()) as {
         sessionId?: string;
-        sessionToken?: string; challenges?: { otpEmail?: string };
+        sessionToken?: string;
+        challenges?: { otpEmail?: string };
       };
       if (!data.sessionId || !data.sessionToken) return;
       const code = data.challenges?.otpEmail;
-      if (challenge === "otpEmail" && (typeof code !== "string" || !code)) return;
+      if (challenge === "otpEmail" && (typeof code !== "string" || !code))
+        return;
       // A store write failure (e.g. Redis blip) falls into the enclosing catch
       // below — still void, enumeration-safe (a store outage must not become a
       // health oracle either).
@@ -1339,7 +1339,8 @@ export class ZitadelIdpClient implements IdpClient {
       if (challenge === "otpEmail") {
         // Off the acknowledgement path: SMTP latency/failure is not an oracle.
         // Transport diagnostics already scrub secrets; never log the code here.
-        void this.requireMailer().sendLoginCodeEmail(user?.email ?? identifier, code!)
+        void this.requireMailer()
+          .sendLoginCodeEmail(user?.email ?? identifier, code!)
           .catch(() => {});
       }
     } catch {

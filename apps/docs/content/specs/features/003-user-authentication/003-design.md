@@ -9,6 +9,16 @@ lang: en
 
 # 003 — User authentication (Design)
 
+## Production amendment — login email through the existing mailer (2026-09-11, #2171 / #2145)
+
+Native login email delivery is running in production. This amendment changes only that delivery/rendering decision in §2, §4, §6, §8.1, §11, §13.2/§13.5 and §14.1/§14.3: their native-login statements describe the deployed baseline, not the target of this fix. The four existing BFF email families already use the approved shared layout. The owner narrowed this increment to the remaining login email and approved proceeding: «Окей, приступай». No provider-chain change or redesign is included; the broader #2144/#2145 acceptance stays open.
+
+The [official Session API guide](https://zitadel.com/docs/guides/integrate/login-ui/mfa) documents return-code delivery; [Create Session](https://zitadel.com/docs/reference/api/session/zitadel.session.v2.SessionService.CreateSession) requires `session.write` and returns `challenges.otpEmail`. For a verified-account email login, `requestOtpChallenge` requests `challenges.otpEmail.returnCode: true` from `POST /v2/sessions`, with no `sendCode` alternative. Zitadel returns `challenges.otpEmail` server-side and sends no native email. Preserve the existing session ID/token challenge store and subsequent Zitadel verification/OIDC exchange; never generate, persist, log or expose the code in a public response. Missing code/session data sends nothing and retains the enumeration-safe response. SMS and unverified-account recovery are unchanged.
+
+Pass the returned code to a login variant of the existing `Mailer` port, `code-emails.ts` and `email-layout.ts`, then the unchanged `SmtpMailer` delivery route. Preserve the eight-digit token and 300-second lifetime. Subject: `{{code}} — код для входа в Doctor.School`; expiry: «Код действует 5 минут». Reuse the existing greeting, requesting-tab instruction and neutral ignore guidance. HTML and plain text contain the same code/copy and no button, anchor or navigation URL, including the footer. No native fallback send is allowed.
+
+Verification is scoped to this changed login path: meaningful failing regression before implementation; shared layout and no navigation; exact returned-code delivery without a native duplicate; normal session verification and enumeration-safe error handling. Reuse `zitadel-otp-login.e2e-spec.ts` for the installed Session API capability and login proof. Live-render the resulting login email for the applicable Stage-B approval before merge. Provider configuration, activation and three-provider failover are separate work, not prerequisites introduced by this fix.
+
 ## 1. Architecture overview
 
 `apps/api` is a **Backend-for-Frontend (BFF)** sitting between the portal's headless forms and Zitadel. It owns the domain mirror, consent, RBAC role grant, audit, and abuse guards; it delegates every credential operation to Zitadel via the Session / User v2 API. The portal renders inline forms on its own origin (Variant B, ADR-0001 §2) and talks only to the BFF; it never sees a token.

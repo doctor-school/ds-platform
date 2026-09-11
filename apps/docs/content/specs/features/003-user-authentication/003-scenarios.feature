@@ -446,14 +446,16 @@ Feature: Net-new web authentication producing a doctor_guest identity
     And TrustedSenderList-assisted Inbox placement is not counted as an unassisted pass
 
   @EARS-6 @EARS-31 @happy
-  Scenario: Native login OTP uses the shared Postbox relay without entering BFF failover
-    Given the shared real SMTP configuration selects Postbox
-    And deployment has verified and activated the separate stable Postbox profile
-    And the original mail.ru profile ID and settings remain retained
+  Scenario: Login OTP uses the existing BFF mailer and shared code-only layout
+    Given a verified account and the existing mailer delivery configuration
     When a verified user requests an email login OTP
-    Then Zitadel generates, renders and sends the existing login email through Postbox
-    And the BFF does not send a duplicate or invoke its Resend fallback
-    And generation, verification and email content remain unchanged
+    Then the BFF obtains the eight-digit code through otpEmail returnCode
+    And Zitadel sends no native email
+    And the existing BFF mailer sends the code using the shared layout and unchanged delivery route
+    And HTML and plain text state a five-minute lifetime and entry in the already-open requesting tab
+    And neither body nor footer contains a button, anchor or navigation URL
+    And the code remains server-only outside the email and is never persisted or logged
+    And the same code completes the existing Zitadel session verification and BFF session flow
 
   @EARS-6 @EARS-31 @failure
   Scenario: A successful native SMTP write without converged readback cannot activate a release

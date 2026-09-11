@@ -501,6 +501,7 @@ describe("ZitadelIdpClient email/phone verification wire shape (#148)", () => {
           ),
         ),
       sendPasswordResetCodeEmail: () => Promise.resolve(),
+      sendLoginCodeEmail: () => Promise.resolve(),
       sendAdminLockoutNotice: () => Promise.resolve(),
     };
     const client = new ZitadelIdpClient({
@@ -1136,7 +1137,19 @@ describe("ZitadelIdpClient passwordless OTP login wire shape (#153)", () => {
         return Promise.resolve({
           ok: true,
           status: 200,
-          json: () => Promise.resolve({ result: uid ? [{ userId: uid }] : [] }),
+          json: () =>
+            Promise.resolve({
+              result: uid
+                ? [
+                    {
+                      userId: uid,
+                      human: {
+                        email: { email: "doc@ds.test", isVerified: true },
+                      },
+                    },
+                  ]
+                : [],
+            }),
         });
       }
       // OTP factor registration — POST /v2/users/{id}/otp_email|otp_sms (#153).
@@ -1178,6 +1191,7 @@ describe("ZitadelIdpClient passwordless OTP login wire shape (#153)", () => {
             Promise.resolve({
               sessionId: "otp-sess-1",
               sessionToken: "unchecked-token",
+              challenges: { otpEmail: "12345678" },
             }),
         });
       }
@@ -1219,7 +1233,11 @@ describe("ZitadelIdpClient passwordless OTP login wire shape (#153)", () => {
 
   it("EARS-6: requestEmailOtp creates a session with the user check + otpEmail challenge and caches it", async () => {
     const { fetchImpl, calls } = otpFetch({ userId: "otp-user-1" });
-    const client = new ZitadelIdpClient({ ...BASE_CONFIG, fetchImpl });
+    const client = new ZitadelIdpClient({
+      ...BASE_CONFIG,
+      mailer: new FakeMailer(),
+      fetchImpl,
+    });
 
     await expect(
       client.requestEmailOtp("Doc@ds.test"),
@@ -1240,19 +1258,16 @@ describe("ZitadelIdpClient passwordless OTP login wire shape (#153)", () => {
     expect(create, "a session create hop was issued").toBeTruthy();
     expect(JSON.parse(create!.body ?? "{}")).toEqual({
       checks: { user: { userId: "otp-user-1" } },
-      challenges: { otpEmail: {} },
+      challenges: { otpEmail: { returnCode: {} } },
     });
   });
 
   it("003 EARS-6 (#878): with a portal origin configured the otpEmail challenge carries a BARE /login urlTemplate — no code/session params, no hosted-UI dead end", async () => {
-    // Same #869 scanner-safety contract as the verify-email hop: Zitadel's
-    // DEFAULT otpEmail send renders a hosted-login-v2 button URL with the OTP
-    // code + sessionId embedded in the query (observed live on v4.15) — a
-    // GET-consumable link a mail scanner burns and a dead end for portal
-    // sessions. The bare portal `/login` replaces it; the mail stays CODE-ONLY.
+    // Portal configuration must not re-enable the native send or action URL.
     const { fetchImpl, calls } = otpFetch({ userId: "otp-user-1" });
     const client = new ZitadelIdpClient({
       ...BASE_CONFIG,
+      mailer: new FakeMailer(),
       portalBaseUrl: "http://portal.test:3001/",
       fetchImpl,
     });
@@ -1264,7 +1279,7 @@ describe("ZitadelIdpClient passwordless OTP login wire shape (#153)", () => {
       checks: { user: { userId: "otp-user-1" } },
       challenges: {
         otpEmail: {
-          sendCode: { urlTemplate: "http://portal.test:3001/login" },
+          returnCode: {},
         },
       },
     });
@@ -1277,6 +1292,7 @@ describe("ZitadelIdpClient passwordless OTP login wire shape (#153)", () => {
     const { fetchImpl, calls } = otpFetch({ userId: "otp-user-1" });
     const client = new ZitadelIdpClient({
       ...BASE_CONFIG,
+      mailer: new FakeMailer(),
       portalBaseUrl: "http://portal.test:3001",
       fetchImpl,
     });
@@ -1292,7 +1308,11 @@ describe("ZitadelIdpClient passwordless OTP login wire shape (#153)", () => {
 
   it("EARS-7: requestSmsOtp uses the otpSms challenge", async () => {
     const { fetchImpl, calls } = otpFetch({ userId: "otp-user-1" });
-    const client = new ZitadelIdpClient({ ...BASE_CONFIG, fetchImpl });
+    const client = new ZitadelIdpClient({
+      ...BASE_CONFIG,
+      mailer: new FakeMailer(),
+      fetchImpl,
+    });
     await client.requestSmsOtp("+15551230000");
     const factor = calls.find(
       (c) =>
@@ -1310,7 +1330,11 @@ describe("ZitadelIdpClient passwordless OTP login wire shape (#153)", () => {
 
   it("EARS-6/16: an unknown identifier sends NOTHING and still resolves void", async () => {
     const { fetchImpl, calls } = otpFetch({ userId: null });
-    const client = new ZitadelIdpClient({ ...BASE_CONFIG, fetchImpl });
+    const client = new ZitadelIdpClient({
+      ...BASE_CONFIG,
+      mailer: new FakeMailer(),
+      fetchImpl,
+    });
     await expect(
       client.requestEmailOtp("nobody@ds.test"),
     ).resolves.toBeUndefined();
@@ -1322,7 +1346,11 @@ describe("ZitadelIdpClient passwordless OTP login wire shape (#153)", () => {
     // The session-create hop 500s — must be swallowed exactly like the unknown
     // identifier so the acknowledgement is not a health/existence oracle.
     const { fetchImpl } = otpFetch({ userId: "otp-user-1", createStatus: 500 });
-    const client = new ZitadelIdpClient({ ...BASE_CONFIG, fetchImpl });
+    const client = new ZitadelIdpClient({
+      ...BASE_CONFIG,
+      mailer: new FakeMailer(),
+      fetchImpl,
+    });
     await expect(
       client.requestEmailOtp("doc@ds.test"),
     ).resolves.toBeUndefined();
@@ -1331,7 +1359,11 @@ describe("ZitadelIdpClient passwordless OTP login wire shape (#153)", () => {
   it("EARS-6/16: a thrown fetch on the request hop still resolves void", async () => {
     const fetchImpl: FetchLike = () =>
       Promise.reject(new Error("network down"));
-    const client = new ZitadelIdpClient({ ...BASE_CONFIG, fetchImpl });
+    const client = new ZitadelIdpClient({
+      ...BASE_CONFIG,
+      mailer: new FakeMailer(),
+      fetchImpl,
+    });
     await expect(
       client.requestEmailOtp("doc@ds.test"),
     ).resolves.toBeUndefined();
@@ -1352,7 +1384,11 @@ describe("ZitadelIdpClient passwordless OTP login wire shape (#153)", () => {
         },
       },
     });
-    const client = new ZitadelIdpClient({ ...BASE_CONFIG, fetchImpl });
+    const client = new ZitadelIdpClient({
+      ...BASE_CONFIG,
+      mailer: new FakeMailer(),
+      fetchImpl,
+    });
 
     await client.requestEmailOtp("doc@ds.test");
     const session = await client.loginWithEmailOtp("Doc@ds.test", "123456");
@@ -1398,7 +1434,11 @@ describe("ZitadelIdpClient passwordless OTP login wire shape (#153)", () => {
         },
       },
     });
-    const client = new ZitadelIdpClient({ ...BASE_CONFIG, fetchImpl });
+    const client = new ZitadelIdpClient({
+      ...BASE_CONFIG,
+      mailer: new FakeMailer(),
+      fetchImpl,
+    });
     await client.requestSmsOtp("+15551230000");
     const session = await client.loginWithSmsOtp("+15551230000", "654321");
     expect(session?.sub).toBe("otp-user-2");
@@ -1414,7 +1454,11 @@ describe("ZitadelIdpClient passwordless OTP login wire shape (#153)", () => {
 
   it("EARS-16: login with no prior challenge for the identifier returns null", async () => {
     const { fetchImpl, calls } = otpFetch({ userId: "otp-user-1" });
-    const client = new ZitadelIdpClient({ ...BASE_CONFIG, fetchImpl });
+    const client = new ZitadelIdpClient({
+      ...BASE_CONFIG,
+      mailer: new FakeMailer(),
+      fetchImpl,
+    });
     // No requestEmailOtp first → no cached challenge.
     const session = await client.loginWithEmailOtp("doc@ds.test", "123456");
     expect(session).toBeNull();
@@ -1424,7 +1468,11 @@ describe("ZitadelIdpClient passwordless OTP login wire shape (#153)", () => {
 
   it("EARS-16: a wrong/expired code (non-2xx on verify) returns null", async () => {
     const { fetchImpl } = otpFetch({ userId: "otp-user-1", verifyStatus: 403 });
-    const client = new ZitadelIdpClient({ ...BASE_CONFIG, fetchImpl });
+    const client = new ZitadelIdpClient({
+      ...BASE_CONFIG,
+      mailer: new FakeMailer(),
+      fetchImpl,
+    });
     await client.requestEmailOtp("doc@ds.test");
     expect(await client.loginWithEmailOtp("doc@ds.test", "000000")).toBeNull();
   });
@@ -1450,7 +1498,11 @@ describe("ZitadelIdpClient passwordless OTP login wire shape (#153)", () => {
         },
       },
     });
-    const client = new ZitadelIdpClient({ ...BASE_CONFIG, fetchImpl });
+    const client = new ZitadelIdpClient({
+      ...BASE_CONFIG,
+      mailer: new FakeMailer(),
+      fetchImpl,
+    });
 
     await client.requestEmailOtp("doc@ds.test");
     // Wrong code → null, but the challenge stays armed (no re-request).
@@ -1480,7 +1532,11 @@ describe("ZitadelIdpClient passwordless OTP login wire shape (#153)", () => {
 
   it("EARS-6: a SUCCESSFUL verify consumes the challenge (single-use) — a second correct attempt is null", async () => {
     const { fetchImpl } = otpFetch({ userId: "otp-user-1" });
-    const client = new ZitadelIdpClient({ ...BASE_CONFIG, fetchImpl });
+    const client = new ZitadelIdpClient({
+      ...BASE_CONFIG,
+      mailer: new FakeMailer(),
+      fetchImpl,
+    });
     await client.requestEmailOtp("doc@ds.test");
     // First correct code succeeds and deletes the challenge.
     expect(await client.loginWithEmailOtp("doc@ds.test", "123456")).toEqual({
@@ -1494,7 +1550,11 @@ describe("ZitadelIdpClient passwordless OTP login wire shape (#153)", () => {
 
   it("EARS-16: login for an unknown identifier (nothing armed) returns null", async () => {
     const { fetchImpl } = otpFetch({ userId: null });
-    const client = new ZitadelIdpClient({ ...BASE_CONFIG, fetchImpl });
+    const client = new ZitadelIdpClient({
+      ...BASE_CONFIG,
+      mailer: new FakeMailer(),
+      fetchImpl,
+    });
     await client.requestEmailOtp("nobody@ds.test"); // arms nothing
     expect(
       await client.loginWithEmailOtp("nobody@ds.test", "123456"),
@@ -1512,11 +1572,11 @@ describe("ZitadelIdpClient passwordless OTP login wire shape (#153)", () => {
     });
     const sharedStore = new InMemoryOtpChallengeStore();
     const instanceA = new ZitadelIdpClient(
-      { ...BASE_CONFIG, fetchImpl },
+      { ...BASE_CONFIG, mailer: new FakeMailer(), fetchImpl },
       sharedStore,
     );
     const instanceB = new ZitadelIdpClient(
-      { ...BASE_CONFIG, fetchImpl },
+      { ...BASE_CONFIG, mailer: new FakeMailer(), fetchImpl },
       sharedStore,
     );
 
@@ -1545,7 +1605,7 @@ describe("ZitadelIdpClient passwordless OTP login wire shape (#153)", () => {
     const { fetchImpl } = otpFetch({ userId: "otp-user-1", verifyStatus: 403 });
     // Store miss: nothing armed in this (empty) shared store.
     const missClient = new ZitadelIdpClient(
-      { ...BASE_CONFIG, fetchImpl },
+      { ...BASE_CONFIG, mailer: new FakeMailer(), fetchImpl },
       new InMemoryOtpChallengeStore(),
     );
     const missResult = await missClient.loginWithEmailOtp(
@@ -1554,7 +1614,7 @@ describe("ZitadelIdpClient passwordless OTP login wire shape (#153)", () => {
     );
     // Zitadel reject: challenge armed, verify hop 403s (wrong/expired code).
     const rejectClient = new ZitadelIdpClient(
-      { ...BASE_CONFIG, fetchImpl },
+      { ...BASE_CONFIG, mailer: new FakeMailer(), fetchImpl },
       new InMemoryOtpChallengeStore(),
     );
     await rejectClient.requestEmailOtp("doc@ds.test");
@@ -1815,7 +1875,11 @@ describe("ZitadelIdpClient.requestEmailLoginCode wire shape (003 EARS-34, #1131)
           ok: true,
           status: 200,
           json: () =>
-            Promise.resolve({ sessionId: "sess-1", sessionToken: "tok-1" }),
+            Promise.resolve({
+              sessionId: "sess-1",
+              sessionToken: "tok-1",
+              challenges: { otpEmail: "12345678" },
+            }),
         });
       throw new Error(`unexpected hop: ${init.method} ${url}`);
     };
@@ -1831,6 +1895,9 @@ describe("ZitadelIdpClient.requestEmailLoginCode wire shape (003 EARS-34, #1131)
       "otpEmail",
     );
     expect(mailer.verificationCodeEmails).toEqual([]);
+    expect(mailer.loginCodeEmails).toEqual([
+      { to: "user@ds.test", code: "12345678" },
+    ]);
     expect(calls.some((c) => c.url.endsWith("/email/resend"))).toBe(false);
   });
 

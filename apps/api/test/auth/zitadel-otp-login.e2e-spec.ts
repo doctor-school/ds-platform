@@ -1,5 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { writeFileSync } from "node:fs";
+import { SmtpMailer } from "../../src/mailer/smtp-mailer.js";
+import { loginCodeEmail } from "../../src/mailer/code-emails.js";
 import { ZitadelIdpClient } from "../../src/auth/idp/zitadel.idp.js";
 import { NOTIFICATION_SUBJECTS } from "../support/notification-subjects.js";
 import {
@@ -205,13 +207,20 @@ async function fetchOtpCode(
         const msgRes = await fetch(`${MAILPIT_BASE}/api/v1/message/${hit.ID}`);
         record.messageStatus = msgRes.status;
         if (msgRes.ok) {
-          const code = extractCode(
-            (await msgRes.json()) as {
-              Subject?: string;
-              Text?: string;
-              HTML?: string;
-            },
-          );
+          const message = (await msgRes.json()) as {
+            Subject?: string;
+            Text?: string;
+            HTML?: string;
+          };
+          const code = extractCode(message);
+          record.messageId = hit.ID;
+          if (subject === NOTIFICATION_SUBJECTS.verifyEmailOtp && code) {
+            const expected = loginCodeEmail(code);
+            expect(message.Subject === expected.subject, "shared login subject").toBe(true);
+            expect(message.HTML?.replace(/\r\n/g, "\n") === expected.html, "shared login HTML after SMTP newline normalization").toBe(true);
+            expect(message.Text?.replace(/\r\n/g, "\n").trim() === expected.text.trim(), "shared login plain text").toBe(true);
+            expect(code).toMatch(/^\d{8}$/);
+          }
           record.codeExtracted = !!code;
           if (code) return code;
         }
@@ -310,6 +319,14 @@ describe.skipIf(!LIVE_OIDC)("Zitadel OTP login (integration)", () => {
 
   beforeAll(() => {
     client = new ZitadelIdpClient({
+      mailer: new SmtpMailer({
+        intercept: {
+          host: process.env.MAILER_SMTP_HOST ?? new URL(MAILPIT_BASE).hostname,
+          port: Number(process.env.MAILER_SMTP_PORT ?? 1025),
+        },
+        isEnabled: () => false,
+        portalBaseUrl: process.env.IDP_REDIRECT_URI!,
+      }),
       fetchImpl: diagnosticFetch(globalThis.fetch, providerDiagnostics),
       baseUrl: process.env.IDP_ISSUER!,
       serviceToken: process.env.IDP_SERVICE_TOKEN!,
@@ -398,22 +415,9 @@ describe.skipIf(!LIVE_OIDC)("Zitadel OTP login (integration)", () => {
     // (proven live, #1131) — so the address MUST be verified before the EARS-6
     // request below, or Zitadel accepts the challenge and mails nothing.
     //
-    // The verification is driven CODE-SIDE, not through Mailpit (#1200): since
-    // #910/#1045 (EARS-29) the `verifyemail` type rides the `returnCode` oneof —
-    // Zitadel generates/stores the code and SENDS NOTHING; the branded mail is
-    // composed and dispatched by the BFF mailer. This spec drives the raw
-    // `ZitadelIdpClient` with no mailer bound, so `requestEmailVerification`
-    // delivers no mail at all and a Mailpit read for the verify code can never
-    // hit — the address stayed unverified and the login-OTP mail was never sent
-    // (the #1200 red). `markEmailVerified` (EARS-35, #1131) is the mailer-free
-    // flip: regenerate with `returnCode` and verify the returned code in-process.
-    // The SMS twin below needs no such change — `requestPhoneVerification` still
-    // rides the `sendCode` oneof, so Zitadel itself delivers to the sink.
-    //
-    // Both hops are BOUNDED-POLLED, never slept-then-read: `markEmailVerified`
-    // opens with a projection read (it resolves `false` for a user the read side
-    // has not caught up to yet), and the challenge below only mails for an email
-    // the projection already reports verified.
+    // Mark the fresh mailbox verified in-process before requesting the login
+    // code. The login challenge returns its code to the real shared SMTP mailer.
+    // Wait for the IdP projection before each dependent hop.
     const verified = await untilProjected(
       "markEmailVerified(created.sub)",
       () => client.markEmailVerified(created.sub),
@@ -479,6 +483,19 @@ describe.skipIf(!LIVE_OIDC)("Zitadel OTP login (integration)", () => {
     expect(tokens!.accessToken).toBeTruthy();
     expect(tokens!.refreshToken).toBeTruthy();
     expect(tokens!.claims.sub).toBe(created.sub);
+    // After verification and token exchange, exactly one login mail must exist.
+    const mailbox = await fetch(
+      `${MAILPIT_BASE}/api/v1/search?query=${encodeURIComponent(`to:${email}`)}`,
+    );
+    expect(mailbox.ok).toBe(true);
+    const delivered = (await mailbox.json()) as {
+      messages?: Array<{ Subject?: string }>;
+    };
+    expect(
+      (delivered.messages ?? []).filter((mail) =>
+        mail.Subject?.includes(NOTIFICATION_SUBJECTS.verifyEmailOtp),
+      ),
+    ).toHaveLength(evidence.attempts.length);
     evidence.passed = true;
   }, 45_000);
 

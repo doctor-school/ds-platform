@@ -32,6 +32,7 @@ export const CODE_EMAIL_SUBJECT_TAILS = {
   verifyEmail: "код подтверждения Doctor.School",
   /** §13.4 — password-reset mail (EARS-11). */
   passwordReset: "код сброса пароля Doctor.School",
+  login: "код для входа в Doctor.School",
 } as const;
 
 /** Shared copy blocks the two artifacts differ on. */
@@ -68,12 +69,12 @@ const RESET_COPY: CodeEmailCopy = {
 /** «Код действует 1 час» — the 3600 s code-generator lifetime (design §14.1). */
 const EXPIRY_LINE = "Код действует 1 час.";
 
-function compose(code: string, copy: CodeEmailCopy): CodeEmailMessage {
+function compose(code: string, copy: CodeEmailCopy, expiry = EXPIRY_LINE): CodeEmailMessage {
   return composeEmail({
     subject: `${code} — ${copy.subjectTail}`,
     preheader: copy.preheader,
     intro: copy.intro,
-    code: { value: code, expiry: EXPIRY_LINE },
+    code: { value: code, expiry },
     paragraphs: [copy.instruction],
     footer: [copy.ignoreLine],
   });
@@ -87,4 +88,13 @@ export function verificationCodeEmail(code: string): CodeEmailMessage {
 /** §13.4: the password-reset artifact (EARS-11). */
 export function passwordResetCodeEmail(code: string): CodeEmailMessage {
   return compose(code, RESET_COPY);
+}
+
+/** EARS-6: Zitadel login OTP retains its eight digits and five-minute lifetime. */
+export function loginCodeEmail(code: string): CodeEmailMessage {
+  return compose(code, {
+    ...VERIFY_COPY,
+    subjectTail: CODE_EMAIL_SUBJECT_TAILS.login,
+    intro: "Ваш код для входа:",
+  }, "Код действует 5 минут.");
 }

@@ -42,6 +42,9 @@ export interface Mailer {
    */
   sendPasswordResetCodeEmail(email: string, code: string): Promise<void>;
 
+  /** EARS-6/29: login code, same validation/privacy contract, five-minute expiry. */
+  sendLoginCodeEmail(email: string, code: string): Promise<void>;
+
   /**
    * 011 EARS-7: notify an admin that repeated failed second-factor attempts have
    * soft-locked their account (the ADR-0001 §7 lockout notification).

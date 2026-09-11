@@ -10,8 +10,8 @@
 Feature: Persistent portal app-shell header and public discovery front-door
 
   Background:
-    Given the portal serves the app-shell header on every route from its configured origin
-    And the header is built from the vendored «Doctor.School визуальный язык» canvas via @ds/design-system
+    Given the portal mounts the shared storefront-shell package on every route from its configured origin, with a host: academy config object
+    And the header and footer are built from design-source/ds-shell.dc.html (host=academy) via @ds/design-system
     And the feature-004 discovery listing surface is available at /
     And the feature-005 «Мои события» surface is available at /account/events
     And the feature-009 profile surface is available at /account
@@ -27,8 +27,8 @@ Feature: Persistent portal app-shell header and public discovery front-door
     Given a registered doctor who is not yet signed in
     When the doctor completes login via the feature-003 auth flow
     Then the doctor lands on "/webinars" showing the discovery listing of upcoming broadcasts
-    And the persistent header shows the logo, the top-nav [Эфиры · Мои события], a theme toggle, and an avatar icon with the doctor's initials
-    When the doctor activates «Мои события» in the top-nav
+    And the persistent header shows the logo, the top-nav [Эфиры], a theme toggle, and the signed-in auth cluster («Мои события» plus an avatar icon with the doctor's initials)
+    When the doctor activates «Мои события» in the auth cluster
     Then the portal navigates to "/account/events"
     When the doctor activates the avatar icon
     Then the portal navigates to the profile "/account"
@@ -78,7 +78,7 @@ Feature: Persistent portal app-shell header and public discovery front-door
     Given a user on a viewport at or below the mobile breakpoint (≤900px)
     When the user opens the header navigation
     Then the top-nav is collapsed into a ≡ dropdown
-    And the dropdown carries the same items [Эфиры · Мои события]
+    And the dropdown carries the same items [Эфиры] plus the signed-in auth cluster («Мои события», the avatar target)
     And selecting «Мои события» navigates to "/account/events"
 
   @EARS-12 @stage-b
@@ -87,3 +87,12 @@ Feature: Persistent portal app-shell header and public discovery front-door
     When the product owner reviews the running stand at Stage-B
     Then the rendered result matches the canvas element-by-element at both breakpoints and in both themes
     And no arbitrary Tailwind values are used (tokens only)
+
+  @EARS-14 @happy
+  Scenario: The Academy footer renders per the shared shell on every route
+    Given a user on any portal page
+    Then the footer shows the logo and the host foot-note «BBM: Академия смыслов» plus «© Doctor.School, 2026»
+    And the footer shows the «Разделы» column built from the nav
+    And the footer shows the «Документы и контакты» column with «Пользовательское соглашение», «Политика обработки персональных данных» and «Контакты»
+    And the footer shows the «Врачам» cross-link to «Doctor.School ↗»
+    And the footer shows the giant «Academy.Doctor.School» wordmark

@@ -1,10 +1,10 @@
 import type { ReactNode } from "react";
 import Image from "next/image";
 import NextLink from "next/link";
-import { Input } from "@ds/design-system/input";
 import { Link as DsLink } from "@ds/design-system/link";
 
 import type { ShellLink, StorefrontShellConfig } from "./config";
+import { ShellSearch } from "./shell-search";
 import { ThemeToggle } from "./theme-toggle";
 import { VisibleOffPaths } from "./route-visibility";
 
@@ -102,26 +102,11 @@ function HeaderChrome({
           </NextLink>
         </DsLink>
 
-        {search ? (
-          /* ONE search element at every width: below `layout` it re-flows onto
-             its own row (the canvas mobile search band), above it sits inline
-             between the wordmark and the nav. `action` is the host's configured
-             target — this package never invents a results surface (#1492). */
-          <form
-            data-testid="shell-search"
-            role="search"
-            action={search.action}
-            className="order-last w-full min-w-0 layout:order-none layout:w-auto layout:flex-1 layout:basis-40"
-          >
-            <Input
-              type="search"
-              name="q"
-              placeholder={search.placeholder}
-              aria-label={search.placeholder}
-              className="w-full border-header-hairline bg-transparent font-semibold text-header-foreground placeholder:text-header-foreground focus-visible:border-header-foreground"
-            />
-          </form>
-        ) : null}
+        {/* ONE search element at every width: below `layout` it re-flows onto
+            its own row (the canvas mobile search band), above it sits inline
+            between the wordmark and the nav. It lives in its own CLIENT leaf
+            because the DS `Input` is stateful — see `shell-search.tsx`. */}
+        {search ? <ShellSearch search={search} /> : null}
 
         <nav
           data-testid="shell-nav-desktop"

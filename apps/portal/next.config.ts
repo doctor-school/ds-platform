@@ -56,7 +56,17 @@ const config: NextConfig = {
   },
   // Consume @ds/design-system as source (.tsx) — owned-code shadcn model,
   // no separate build step for the internal package (ADR-0004 §6).
-  transpilePackages: ["@ds/design-system", "@ds/events-storefront", "@ds/room"],
+  // `@ds/storefront-shell` (#2180) is the same shape — the shared chrome ships
+  // .tsx sources whose "use client" boundaries only become real client
+  // components once Next transpiles them; left out, its hook-bearing parts are
+  // pulled into the SSR graph and the render dies with
+  // «useState is not a function».
+  transpilePackages: [
+    "@ds/design-system",
+    "@ds/events-storefront",
+    "@ds/room",
+    "@ds/storefront-shell",
+  ],
   // Reverse-proxy the live `/v1/*` BFF under the portal origin so the `__Host-`
   // session cookie is set/sent same-origin (see API_PROXY_TARGET above). The
   // capture covers the whole versioned api surface (`/v1/auth/*` today) so the

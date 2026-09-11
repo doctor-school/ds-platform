@@ -51,6 +51,14 @@ lang: en
 
 # 003 — User authentication (Requirements)
 
+## Production amendment — login email delivery (2026-09-11, #2171 / #2145)
+
+This amendment overrides only the native login-email delivery statements in Outcomes, Scope, Constraints and EARS-6/29; the running-production baseline is retained below. The owner approved the narrow remaining-login fix through the existing mailer, without redesign or provider-chain work. The four existing BFF email families are outside this increment; #2144 and the broader #2145 acceptance remain open.
+
+For EARS-6, the system shall obtain the verified-account login OTP through Session API `challenges.otpEmail.returnCode: true`, suppress native delivery, and send the returned code through the existing BFF mailer and shared layout under EARS-29/30. Zitadel remains the sole generation, expiry, attempt-counting, verification and session authority. The login code is eight digits and valid for 300 seconds; the email shall state «Код действует 5 минут» and direct entry in the already-open requesting tab, with no button, anchor or navigation URL in HTML or plain text. Returned codes remain server-only and unpersisted. Missing returned code/session data or delivery failure shall preserve the enumeration-safe response; SMS and unverified-account recovery are unchanged.
+
+The existing delivery route is reused without provider configuration or failover changes. Verify only the changed login path and its error handling, including installed return-code support, no native duplicate, normal session completion and the rendered email; retain the applicable live Stage-B owner gate. Design mechanics and exact copy: design production amendment.
+
 The earlier authentication slices remain shipped. The Postbox transport revision (EARS-31/32, #2115) is specified here; runtime implementation and controlled activation remain open under #1059. Microsoft delivery evidence remains open under #1120.
 
 ## Outcomes

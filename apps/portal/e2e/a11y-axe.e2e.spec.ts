@@ -27,9 +27,13 @@ import { test, expect, type Page } from "@playwright/test";
  * Single theme (light) — composed pages are not the token catalogue;
  * theme-matrix contrast lives in the showcase gate.
  *
- * If axe reports a REAL violation, the fix is the surface, NOT a weakened scan —
- * this spec does not allowlist or exclude any rule. A failure here is a true
- * defect to report.
+ * If axe reports a REAL violation, the fix is the surface, NOT a weakened scan.
+ * This spec allowlists no RULE. It carries exactly one NODE exclusion — the
+ * shared shell's BBM topbar (`[data-testid="shell-topbar"]`, #2180), whose
+ * contrast the owner accepted on 2026-09-11 as the canvas paints it, recorded
+ * as Issue #2189 so the blind spot is traceable from the code. It is
+ * leaf-scoped, so no interactive shell control is swallowed with it. Any other
+ * failure here is a true defect to report.
  */
 
 const WCAG_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"];
@@ -157,7 +161,16 @@ async function scan(
         rules: { "heading-order": { enabled: true } },
       })
     : new AxeBuilder({ page });
-  const results = await builder.withTags(WCAG_TAGS).analyze();
+  const results = await builder
+    .withTags(WCAG_TAGS)
+    // #2189 — the shared shell's BBM topbar (#2180) keeps the contrast its
+    // owner-approved canvas paints; accepted by the owner 2026-09-11 and
+    // recorded on Issue #2189 so the blind spot stays traceable from here.
+    // Leaf-scoped (`[data-testid=…]`), never a container band, so the header's
+    // logo, nav, theme toggle and auth cluster all stay IN the scan. Harmless on
+    // /login, /register and /reset, where the shell is hidden by config.
+    .exclude('[data-testid="shell-topbar"]')
+    .analyze();
   if (options.legal) {
     const evaluated = [
       ...results.passes,

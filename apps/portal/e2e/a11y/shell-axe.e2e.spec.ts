@@ -14,12 +14,16 @@ import AxeBuilder from "@axe-core/playwright";
  * no session — so, like the 004 `discovery-axe` scan, this has NO Mailpit/Zitadel
  * dependency and runs whenever a live portal is present (`E2E_PORTAL_URL`).
  *
- * SCOPE — only the feature-004 poster band's reduced-opacity decorative
- * kickers/chips (`data-testid="poster-decor"`) are EXCLUDED (#924, leaf-scoped —
- * never a container band, which would swallow the interactive header controls): the
- * app-shell header itself (logo, nav links, theme toggle, «Войти») stays fully IN
- * scope, and their standing 004 poster findings are tracked 004 canvas debt, not a
- * regression this slice introduces.
+ * SCOPE — two leaf-scoped node exclusions, never a container band (which would
+ * swallow the interactive header controls): the feature-004 poster band's
+ * reduced-opacity decorative kickers/chips (`data-testid="poster-decor"`, #924,
+ * standing 004 canvas debt) and the shared shell's BBM topbar
+ * (`data-testid="shell-topbar"`, #2180), whose contrast the owner accepted on
+ * 2026-09-11 as the canvas paints it — recorded as Issue #2189. The header
+ * itself (logo, nav links, theme toggle, «Войти») stays fully IN scope.
+ *
+ * Since #2180 the header under scan is `@ds/storefront-shell`'s `StorefrontHeader`,
+ * mounted through `apps/portal/components/academy-shell-header.tsx`.
  */
 const WCAG_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"];
 const THEMES = ["light", "dark"] as const;
@@ -40,6 +44,11 @@ async function scan(page: Page, theme: (typeof THEMES)[number]) {
     // kickers/chips, whose standing findings are tracked 004 canvas debt. The
     // whole app-shell header stays in scope.
     .exclude('[data-testid="poster-decor"]')
+    // #2189 — the shared shell's BBM topbar (#2180) keeps the contrast its
+    // owner-approved canvas paints; accepted by the owner 2026-09-11 and
+    // recorded on Issue #2189. Leaf-scoped like the line above, so the header's
+    // logo, nav, theme toggle and auth cluster all stay IN the scan.
+    .exclude('[data-testid="shell-topbar"]')
     .analyze();
   const summary = results.violations.map((v) => ({
     id: v.id,

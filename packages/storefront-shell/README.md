@@ -107,3 +107,32 @@ pnpm --filter @ds/storefront-shell test
 Vitest + Testing Library on jsdom, driven by **both** host configs built as
 fixtures inside `src/shell.test.tsx` — rendering one composition through two
 value sets is what proves the host neutrality the package exists for.
+
+## Who mounts it
+
+| Host                    | Header mount                                                                      | Footer mount                 | Config values                                               | `authCluster` filler                                 |
+| ----------------------- | --------------------------------------------------------------------------------- | ---------------------------- | ----------------------------------------------------------- | ---------------------------------------------------- |
+| Doctor showcase         | `apps/doctor/app/(storefront)/layout.tsx`                                         | same layout                  | `apps/doctor/lib/shell-config.ts` (`DOCTOR_SHELL`)          | `apps/doctor/components/storefront-auth-cluster.tsx` |
+| Academy (`apps/portal`) | `apps/portal/app/@chrome/*` via `apps/portal/components/academy-shell-header.tsx` | `apps/portal/app/layout.tsx` | `apps/portal/lib/shell-config.ts` (`academyShellConfig(t)`) | `apps/portal/components/academy-auth-cluster.tsx`    |
+
+Route visibility differs by mechanism, not by code: the Doctor showcase scopes
+the chrome with its `(storefront)` route group and passes no `hiddenOnPaths`,
+while the Academy mounts from the root and hides on `/login`, `/register`,
+`/verify`, `/reset` and `/webinars/*/room`.
+
+### A11y exception
+
+The BBM topbar (`data-testid="shell-topbar"`) keeps the contrast the
+owner-approved canvas paints. That is a recorded exception, not an oversight:
+Issue #2189 carries it, and each host's e2e axe scan excludes exactly that leaf
+node — never a container band, so every interactive control in the chrome stays
+inside the scan.
+
+### Theme
+
+`src/theme.ts` owns the store the `ThemeToggle` reads and writes
+(`localStorage["ds-theme"]`, an explicit choice winning over
+`prefers-color-scheme`, 006 EARS-12). Each host still keeps its own
+`lib/theme.ts` copy for the pre-paint FOUC guard string it inlines into its root
+layout — same key, same resolution order; the residue is recorded as a `DEBT.md`
+line.

@@ -24,13 +24,27 @@ routes keep their existing application behavior.
 ```
 app/
 ├── @chrome/
-│   ├── page.tsx                 # persistent AppShellHeader on public /
-│   └── [...catchAll]/page.tsx   # persistent AppShellHeader elsewhere
+│   ├── page.tsx                 # persistent AcademyShellHeader on public /
+│   └── [...catchAll]/page.tsx   # persistent AcademyShellHeader elsewhere
 ├── globals.css                  # shared tokens + Tailwind
-├── layout.tsx                   # root providers, theme baseline, chrome slot
+├── layout.tsx                   # root providers, theme baseline, chrome slot, shell footer
 ├── page.tsx                     # static Academy home (Feature 013)
 └── login/page.tsx               # sign-in surface
+
+components/
+├── academy-shell-header.tsx     # server component: `shell` catalogue → StorefrontHeader
+└── academy-auth-cluster.tsx     # the host `authCluster` slot filler (guest chip | avatar)
+
+lib/
+└── shell-config.ts              # the host-config VALUES the shared shell renders
 ```
+
+The header and footer are `@ds/storefront-shell` (#2180), built from the
+owner-approved `design-source/ds-shell.dc.html` canvas and shared with the
+Doctor showcase; this app contributes configuration values and the auth slot
+only. The footer mounts from the root layout, so it appears on every route the
+config does not hide (`/login`, `/register`, `/verify`, `/reset` and
+`/webinars/*/room`).
 
 The Academy home reads local fixtures and local WEBP portraits only. Its
 partnership form uses React Hook Form with one shared Zod schema and a Next.js

@@ -35,17 +35,16 @@ apps/doctor/
     globals.css      # imports @ds/design-system/globals.css — tokens SSOT
     layout.tsx       # <html lang="ru">, Inter bound into --font-sans, pre-paint theme guard
     (storefront)/
-      layout.tsx     # 017 EARS-1 — THE shell: header / main / footer, defined once
+      layout.tsx     # 017 EARS-1 — mounts @ds/storefront-shell (header / main / footer) once
       page.tsx       # storefront root page (content only; the shell is the layout)
   components/
-    storefront-header.tsx  # logo, empty search slot (LD-6), theme control, ONE action cluster
-    storefront-footer.tsx  # «Документы и контакты» + the single Academy link (EARS-12)
-    theme-toggle.tsx       # DS Button ghost/icon; <html class="dark"> is the source of truth
+    storefront-auth-cluster.tsx # the host `authCluster` slot filler: ONE cluster, guest | doctor
   lib/
     session.ts       # server-side BFF session read (host-only cookie, ADR-0001 §6 fingerprint)
     session.test.ts  # vitest units for the above
     shell-auth.ts    # server-resolved guest/doctor branch feeding the shell header
-    theme.ts         # theme apply/persist + the inline pre-paint FOUC guard
+    shell-config.ts  # DOCTOR_SHELL — the host-config VALUES the shared shell renders
+    theme.ts         # the inline pre-paint FOUC guard (the toggle itself is in the package)
     auth-client.ts   # client-side same-origin session probe
   e2e/
     a11y-axe.e2e.spec.ts   # WCAG 2 A/AA + one-h1 shell scan (CI: playwright-axe-doctor)

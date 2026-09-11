@@ -42,6 +42,26 @@ cheaper to `down`/`up`), the `--yes` flag is mandatory, `ds_golden` is never tou
 every run appends one audit line to `/var/log/ds-platform/slot.log` before it drops
 anything.
 
+## The IdP origin every IdP step uses
+
+Every command with an `idp` step — `up`, `sync`, `down`, `reset` (whole-set redirect
+converge) and `reset-identities` (golden identities) — builds its management client through
+one seam, `resolveIdpBaseUrl` in `slot.mjs`. It resolves the shared Zitadel's origin from
+what `/etc/ds-platform/stage.env` ACTUALLY carries:
+
+- `IDP_EXTERNAL_DOMAIN` / `IDP_EXTERNAL_PORT` / `IDP_EXTERNAL_SECURE` — the default route.
+  The scheme is `https` when `IDP_EXTERNAL_SECURE` is `true`/`1`, else `http`; the port is
+  appended only when it is not that scheme's default. So the live stage trio
+  (`id.stage.doctor.school` + `443` + `true`) gives `https://id.stage.doctor.school`.
+  This trio is authoritative by construction: `IDP_EXTERNAL_DOMAIN` must equal the Caddy
+  `id` vhost or OIDC discovery advertises a wrong issuer.
+- `IDP_BASE_URL` — an explicit override, honoured when non-empty, for an ad-hoc run against
+  another Zitadel. `stage.env` deliberately does NOT carry this key (`stg-infra`'s
+  `provision.sh` is passed the base URL explicitly), so a hand-placed value here could
+  drift from the issuer Caddy serves.
+
+With neither route resolvable the command refuses, naming both.
+
 ## `reset-identities <slot>` — the golden accounts on the shared IdP
 
 The golden dataset's four live accounts (two doctors, the MFA doctor, the admin) and the
@@ -78,7 +98,7 @@ The shared Zitadel app accepts only registered redirect URIs and that registrati
 renders the full ordered set for every registered slot with `renderIdpRedirectUris(registry,
 base)` (printed by `slot status`) and converges it onto the shared app through the same
 management API and PAT path `infra/dev-stand/idp/provision.sh` uses: the PAT is read from
-`/etc/ds-platform/idp-bootstrap-pat.txt`, the origin from `IDP_BASE_URL`.
+`/etc/ds-platform/idp-bootstrap-pat.txt`, the origin from `resolveIdpBaseUrl` (see above).
 
 The converge runs as the LAST step of the `up`, `sync`, `down` and `reset` plans, after the
 registry write, so the set it writes matches the registry state the command just produced.

@@ -2,6 +2,7 @@ import { emailSender } from "./email-layout.js";
 import { accountExistsMessage, adminLockoutMessage } from "./notice-emails.js";
 import { resolveRealSmtp } from "../config/real-smtp.js";
 import {
+  loginCodeEmail,
   passwordResetCodeEmail,
   verificationCodeEmail,
 } from "./code-emails.js";
@@ -99,6 +100,11 @@ export class SmtpMailer implements Mailer {
       passwordResetCodeEmail(code),
       "password-reset-code email",
     );
+  }
+  async sendLoginCodeEmail(email: string, code: string): Promise<void> {
+    assertSendableEmail(email);
+    assertSendableCode(code);
+    await this.dispatch(email, loginCodeEmail(code), "login-code email");
   }
   private async dispatch(
     to: string,

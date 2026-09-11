@@ -27,6 +27,7 @@ export class FakeMailer implements Mailer {
   readonly verificationCodeEmails: Array<{ to: string; code: string }> = [];
   /** Every accepted §13.4 password-reset-code send (EARS-11), in order. */
   readonly passwordResetCodeEmails: Array<{ to: string; code: string }> = [];
+  readonly loginCodeEmails: Array<{ to: string; code: string }> = [];
   /** When set, the NEXT code send rejects with it (models a transport outage). */
   private nextCodeSendFailure: Error | undefined;
 
@@ -60,6 +61,13 @@ export class FakeMailer implements Mailer {
       to: email.trim().toLowerCase(),
       code,
     });
+  }
+
+  async sendLoginCodeEmail(email: string, code: string): Promise<void> {
+    assertSendableEmail(email);
+    assertSendableCode(code);
+    if (this.nextCodeSendFailure) throw this.nextCodeSendFailure;
+    this.loginCodeEmails.push({ to: email.trim().toLowerCase(), code });
   }
 
   async sendPasswordResetCodeEmail(

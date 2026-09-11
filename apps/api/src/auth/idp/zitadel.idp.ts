@@ -1301,32 +1301,17 @@ export class ZitadelIdpClient implements IdpClient {
     // (EARS-6/7/16). A code is sent only if the user exists, but the caller can't
     // tell which.
     try {
-      const userId = await this.resolveUserId(identifier);
+      const user = challenge === "otpEmail"
+        ? await this.resolveUserVerification(identifier)
+        : null;
+      const userId = challenge === "otpEmail"
+        ? user?.userId
+        : await this.resolveUserId(identifier);
       if (!userId) return;
-      // The `otpEmail`/`otpSms` challenge requires the matching factor to be
-      // registered on the user first (#153 live delta) — register it (idempotent).
       await this.ensureOtpFactor(userId, challenge);
-      // Create-with-challenge: `POST /v2/sessions` body `{ checks: { user: {
-      // userId } }, challenges: { otpEmail: … } }` (SMS: `{ otpSms: {} }`) —
-      // Zitadel arms the challenge and dispatches the code via its notifier;
-      // the response carries `sessionId` + `sessionToken` (the not-yet-checked
-      // session, same response shape as the password-check create, #145).
-      //
-      // #878, the same scanner-safety contract as the (now BFF-sent, #910)
-      // verification email (#869): the DEFAULT otpEmail send renders a hosted-login-v2 button URL
-      // with the OTP code + sessionId embedded in the query (observed live on
-      // v4.15: `/ui/v2/login/otp/email?code=…&sessionId=…&userId=…`) — a
-      // GET-consumable link a mail scanner (mail.ru `checklink`) prefetches,
-      // and a dead end for portal sessions anyway. With a configured
-      // {@link ZitadelConfig.portalBaseUrl} the challenge carries a BARE
-      // `sendCode.urlTemplate` = `<origin>/login` (no placeholders — nothing
-      // consumed on GET); the login-OTP email stays CODE-ONLY. The otpSms
-      // challenge has no urlTemplate — it stays `{}`.
-      const base = this.config.portalBaseUrl?.replace(/\/+$/, "");
-      const challengeBody =
-        challenge === "otpEmail" && base
-          ? { sendCode: { urlTemplate: `${base}/login` } }
-          : {};
+      // Return the native login code to the existing mailer; Zitadel sends no
+      // duplicate. SMS retains its native notifier and unchanged challenge.
+      const challengeBody = challenge === "otpEmail" ? { returnCode: true } : {};
       const res = await this.fetchImpl(this.url("/v2/sessions"), {
         method: "POST",
         headers: this.headers(),
@@ -1338,9 +1323,11 @@ export class ZitadelIdpClient implements IdpClient {
       if (!res.ok) return;
       const data = (await res.json()) as {
         sessionId?: string;
-        sessionToken?: string;
+        sessionToken?: string; challenges?: { otpEmail?: string };
       };
       if (!data.sessionId || !data.sessionToken) return;
+      const code = data.challenges?.otpEmail;
+      if (challenge === "otpEmail" && (typeof code !== "string" || !code)) return;
       // A store write failure (e.g. Redis blip) falls into the enclosing catch
       // below — still void, enumeration-safe (a store outage must not become a
       // health oracle either).
@@ -1349,6 +1336,12 @@ export class ZitadelIdpClient implements IdpClient {
         sessionToken: data.sessionToken,
         sub: userId,
       });
+      if (challenge === "otpEmail") {
+        // Off the acknowledgement path: SMTP latency/failure is not an oracle.
+        // Transport diagnostics already scrub secrets; never log the code here.
+        void this.requireMailer().sendLoginCodeEmail(user?.email ?? identifier, code!)
+          .catch(() => {});
+      }
     } catch {
       // A thrown fetch (network hiccup) is indistinguishable from success to the
       // caller — swallow it, exactly like `requestPasswordReset`'s `.catch`.

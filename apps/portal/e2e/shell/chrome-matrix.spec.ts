@@ -10,6 +10,7 @@ import {
   themeToggle,
   DISCOVERY_HREF,
   NAV_BROADCASTS,
+  setMyDisplayName,
 } from "../support/shell";
 
 /**
@@ -204,14 +205,30 @@ test.describe("008 EARS-12 academy chrome is absent inside the webinar room (e2e
     await submitRegisterAndVerify(page);
     await page.waitForURL(new RegExp(`/webinars/${SLUG_LIVE}(?:$|[?#])`));
 
+    // A freshly registered doctor carries NO display name, and the room's 006
+    // EARS-14 just-in-time prompt then renders IN PLACE OF the room composition —
+    // so the `room-header` assertion below would fail for a reason that has
+    // nothing to do with the chrome matrix. Satisfy the precondition through the
+    // shipped `PUT /v1/me/display-name` command, exactly as a doctor answering
+    // the prompt would.
+    await setMyDisplayName(page, "Тестовый Доктор");
+
     const eventPath = `/webinars/${SLUG_LIVE}`;
     const roomPath = `${eventPath}/room`;
     await page.goto(roomPath, { waitUntil: "domcontentloaded" });
     // The gate admitted us: the room really served itself at this path.
     expect(new URL(page.url()).pathname, "the room serves itself").toBe(roomPath);
     await expectChromeAbsent(page, roomPath);
-    // Its OWN chrome is what the doctor sees instead (006 `room-header`).
-    await expect(page.getByTestId("room-header")).toBeVisible();
+    // Its OWN chrome is what the doctor sees instead — the 006 `RoomHeaderBar`
+    // (`packages/room/src/ui/room-header-bar.tsx`), a bare `<header>` inside the
+    // room composition carrying the truthful exit link back to the event page.
+    // It exposes no test id, so it is addressed the way a doctor perceives it.
+    // RU copy = `apps/portal/messages/ru.json` → `room.exit`.
+    const roomChrome = page.locator("main header");
+    await expect(roomChrome).toHaveCount(1);
+    await expect(
+      roomChrome.getByRole("link", { name: "Выйти из комнаты" }),
+    ).toHaveAttribute("href", eventPath);
 
     // …and its SIBLING event page keeps the chrome, proving the starred pattern
     // is segment-wise rather than a prefix match that would swallow the listing.

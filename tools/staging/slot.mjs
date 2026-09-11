@@ -25,12 +25,22 @@
 // `DB_NAME_RE` / `assertDatabaseName` / `terminateBackendsStatement` rather than a
 // second, subtly different guard.
 //
-// NOT in this part (#2064 part 1): `reset` and `reset-identities`. They are refused
-// with an explicit «not implemented until part 2» error — a silent no-op would look
-// like a converged identity set to the suite.
+// `reset main` (part 2a) drops `ds_main`, re-clones it from `ds_golden` and re-runs
+// the ordinary converge on the registered SHA; it refuses without `--yes` and appends
+// one audit line per run. `reset-identities` is still NOT here — part 2b owns the
+// redirect-URI convergence onto the shared Zitadel app, and until it lands the command
+// is refused with an explicit error, because a silent no-op would look to the suite
+// like a converged identity set.
 
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdirSync, readFileSync, realpathSync, statfsSync, writeFileSync } from "node:fs";
+import {
+  appendFileSync,
+  mkdirSync,
+  readFileSync,
+  realpathSync,
+  statfsSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -93,8 +103,18 @@ export const SLOTS_INCLUDE_PATH = `${CADDY_INCLUDE_DIR}/slots.caddy`;
 export const SLOT_ENV_DIR = "/etc/ds-platform/slots";
 export const STAGE_ENV_FILE = "/etc/ds-platform/stage.env";
 
-/** Where part 2's install script lands the slot compose project on the box. */
+/** Where the install script lands the slot compose project on the box. */
 export const SLOT_COMPOSE_FILE = "/opt/ds-platform/compose/slot/compose.yml";
+
+/**
+ * Append-only audit trail of the destructive operator commands.
+ *
+ * `reset main` throws away the accumulated staging data of the shared `main` slot.
+ * That is a legitimate operator action, but it must never be deniable: one line per
+ * run naming the human, the moment and the SHA the slot was re-converged on.
+ */
+export const SLOT_LOG_DIR = "/var/log/ds-platform";
+export const SLOT_LOG_PATH = `${SLOT_LOG_DIR}/slot.log`;
 
 /**
  * Free-disk floor for the unconditional prune.
@@ -312,10 +332,18 @@ export function cloneDatabaseStatements(slot, { bootstrap = false } = {}) {
   return statements;
 }
 
-/** Teardown of a preview database. `main` is never dropped. */
-export function dropDatabaseStatements(slot) {
+/**
+ * Teardown of a preview database. `main` is never dropped by a teardown.
+ *
+ * `allowMain: true` is the ONE caller that may: `slot reset main` (#2064 part 2a),
+ * which drops `ds_main` only to re-clone it from `ds_golden` in the same plan. The
+ * escape lives here rather than in a second, subtly different DROP builder, so the
+ * guard and the statement order stay in one place — and so a future caller has to
+ * ask for it by name instead of hand-rolling the SQL.
+ */
+export function dropDatabaseStatements(slot, { allowMain = false } = {}) {
   assertSlotName(slot);
-  if (slot === "main") {
+  if (slot === "main" && !allowMain) {
     throw new SlotError(
       "refusing to drop `ds_main`: the main slot's database is persistent (spec §4).",
     );
@@ -1007,6 +1035,86 @@ export function planSlotDown({ slot, registry, baseDomain, now = new Date() }) {
   return { slot, registry: nextRegistry, steps };
 }
 
+// --- reset -------------------------------------------------------------------
+
+/** The one audit line a `reset main` appends. Pure, so its shape is testable. */
+export function resetLogLine({ actor, sha, now = new Date() }) {
+  return `${now.toISOString()} reset main by ${actor || "unknown"} sha=${sha}\n`;
+}
+
+/**
+ * `reset main` — throw `ds_main` away and re-clone it from `ds_golden`.
+ *
+ * Only `main` is resettable, and that is not an arbitrary restriction: a preview's
+ * database is re-cloned from the template on every single converge (§4), so `sync
+ * pr-<N>` already IS its reset. `main` is the one slot whose database is persistent
+ * and forward-migrated, so it is the one slot that can drift far enough from the
+ * template to need a deliberate, audited wipe.
+ *
+ * Order: audit line FIRST, then the drop/clone, then the ordinary `up` steps on the
+ * SHA the registry currently holds. The audit line is written before anything is
+ * destroyed on purpose — a line that only lands when the wipe succeeds cannot answer
+ * «who ran the thing that broke the box halfway through».
+ *
+ * `ds_golden` is read as a template and never written: the drop names `ds_main` and
+ * nothing else, and the clone is `cloneDatabaseStatements(… { bootstrap: true })`,
+ * whose only `DROP` is the one suppressed by `bootstrap`.
+ */
+export function planSlotReset({
+  registry,
+  baseDomain,
+  actor,
+  now = new Date(),
+}) {
+  assertBaseDomain(baseDomain);
+  const entry = registry?.slots?.main;
+  if (!entry?.sha) {
+    throw new SlotError(
+      "refusing to reset `main`: it is not in the registry, so there is no SHA to " +
+        "re-converge on. Bring it up first with `slot up main <sha>`.",
+    );
+  }
+  const sha = entry.sha;
+  shortSha(sha);
+  // `databaseExists: true` — the drop/clone below re-creates it in the same plan, so
+  // the converge that follows must NOT emit a second clone.
+  const up = planSlotUp({
+    slot: "main",
+    sha,
+    registry,
+    baseDomain,
+    action: "up",
+    databaseExists: true,
+    now,
+  });
+  const steps = [
+    {
+      kind: "append",
+      label: "audit the reset",
+      path: SLOT_LOG_PATH,
+      contents: resetLogLine({ actor, sha, now }),
+      mode: 0o640,
+    },
+    // The containers come DOWN before the drop, exactly as `planSlotDown` orders it
+    // for a preview: `realEffects().sql` issues one `docker exec … psql` per
+    // statement, so a running api's pool re-opens a session on `ds_main` between the
+    // terminate and the DROP and Postgres answers 55006 — a reset that aborts AFTER
+    // the audit line was already written. `up.steps` below brings the slot back on
+    // the registered SHA.
+    downCommandPlan("main"),
+    {
+      kind: "sql",
+      label: "re-clone the main database from the template",
+      statements: [
+        ...dropDatabaseStatements("main", { allowMain: true }),
+        ...cloneDatabaseStatements("main", { bootstrap: true }),
+      ],
+    },
+    ...up.steps,
+  ];
+  return { slot: "main", sha, redisDb: up.redisDb, hosts: up.hosts, registry: up.registry, steps };
+}
+
 // --- the executor ------------------------------------------------------------
 
 /**
@@ -1036,7 +1144,10 @@ export function planSlotDown({ slot, registry, baseDomain, now = new Date() }) {
  * back to `sh` and reads a throw as «absent», which is what the offline plan tests
  * exercise for the plain `docker … inspect` items.
  */
-export async function runSlotPlan(plan, { sql, sh, write, probe, log = () => {} }) {
+export async function runSlotPlan(
+  plan,
+  { sql, sh, write, append, probe, log = () => {} },
+) {
   const present = async (item, step) => {
     if (probe) {
       const result = await probe(item.probe, step);
@@ -1079,7 +1190,15 @@ export async function runSlotPlan(plan, { sql, sh, write, probe, log = () => {} 
         await sh(item.apply, step);
       }
     } else if (step.kind === "write") await write(step.path, step.contents, step.mode);
-    else if (step.kind === "write-many") {
+    else if (step.kind === "append") {
+      if (!append) {
+        throw new SlotError(
+          `step "${step.label}" appends to ${step.path} and so needs an \`append\` ` +
+            "effect; `write` would truncate the audit trail it is adding to",
+        );
+      }
+      await append(step.path, step.contents, step.mode);
+    } else if (step.kind === "write-many") {
       for (const file of step.files) await write(file.path, file.contents, file.mode);
     } else throw new SlotError(`unknown step kind: ${step.kind}`);
   }
@@ -1105,13 +1224,29 @@ export async function runSlotCommand({
     await runSlotPlan(plan, effects);
     return `slot ${options.slot} is down`;
   }
+  if (options.command === "reset") {
+    const plan = planSlotReset({ registry, baseDomain, actor: options.actor });
+    await runSlotPlan(plan, effects);
+    return (
+      `slot main was reset from ${GOLDEN_DB_BASE} and re-converged on ` +
+      `${shortSha(plan.sha)}: ${plan.hosts.join(", ")}`
+    );
+  }
+  // Lazily: `databaseExists` may be a thunk, and it is asked ONLY here — inside the
+  // `up`/`sync` branch, and only for `main`. `slot down main` used to pay a `docker
+  // exec … psql` round trip to answer a question its plan never asks, which made a
+  // teardown depend on a healthy Postgres for no reason (Mode (a) NIT, PR #2168).
+  const databaseExists =
+    options.slot === "main" && typeof mainDatabaseExists === "function"
+      ? mainDatabaseExists()
+      : mainDatabaseExists;
   const plan = planSlotUp({
     slot: options.slot,
     sha: options.sha,
     registry,
     baseDomain,
     action: options.command,
-    databaseExists: mainDatabaseExists,
+    databaseExists,
   });
   await runSlotPlan(plan, effects);
   return (
@@ -1125,21 +1260,48 @@ export async function runSlotCommand({
 const COMMANDS_WITH_SLOT_AND_SHA = new Set(["up", "sync"]);
 const COMMANDS_WITH_SLOT = new Set(["down"]);
 const COMMANDS_WITHOUT_ARGS = new Set(["status", "gc", "render"]);
-/** Part 2 (#2064) implements these; refusing beats a silent no-op. */
-const DEFERRED_COMMANDS = new Set(["reset", "reset-identities"]);
+/** Part 2b of #2064 implements these; refusing beats a silent no-op. */
+const DEFERRED_COMMANDS = new Set(["reset-identities"]);
 
 export function parseArgs(argv) {
   const [command, ...rest] = argv;
   if (!command) {
     throw new SlotError(
-      "usage: slot up|sync <slot> <sha> | down <slot> | status | gc | render",
+      "usage: slot up|sync <slot> <sha> | down <slot> | reset main --yes | status | gc | render",
     );
   }
   if (DEFERRED_COMMANDS.has(command)) {
     throw new SlotError(
-      `\`${command}\` is not implemented until part 2 of #2064 — refusing rather than doing nothing. ` +
-        "Until then, reset a preview with `slot down <slot>` followed by `slot up <slot> <sha>`.",
+      `\`${command}\` is not implemented until part 2b of #2064 — refusing rather than doing nothing. ` +
+        "Until then, re-register a slot's redirect URIs by hand through " +
+        "`infra/dev-stand/idp/provision.sh` with the WHOLE set `slot status` prints.",
     );
+  }
+  if (command === "reset") {
+    // `reset` is the one destructive operator command, so both of its guards are
+    // parse-time and neither is defaultable: the slot must be spelled `main` (a
+    // preview is re-cloned by its every converge — `sync` already is its reset), and
+    // `--yes` must be typed. A confirmation prompt would be worse than useless here:
+    // the command is meant to be run over ssh in a non-interactive shell.
+    const [slot, ...flags] = rest;
+    if (!slot) throw new SlotError("`reset` requires <slot> (only `main` is resettable)");
+    assertSlotName(slot);
+    if (slot !== "main") {
+      throw new SlotError(
+        `refusing to reset \`${slot}\`: only \`main\` is resettable. A preview's database ` +
+          "is re-cloned from `ds_golden` on every converge, so `slot sync " +
+          `${slot} <sha>\` already is its reset.`,
+      );
+    }
+    const unknown = flags.filter((flag) => flag !== "--yes");
+    if (unknown.length) throw new SlotError(`unknown option: ${unknown[0]}`);
+    if (!flags.includes("--yes")) {
+      throw new SlotError(
+        "refusing to reset `main` without `--yes`: this DROPS `ds_main` and re-clones it " +
+          "from `ds_golden`, discarding everything staging has accumulated there.",
+      );
+    }
+    return { command, slot, sha: undefined, yes: true };
   }
   if (COMMANDS_WITH_SLOT_AND_SHA.has(command)) {
     const [slot, sha] = rest;
@@ -1163,7 +1325,14 @@ export function parseArgs(argv) {
   throw new SlotError(`unknown command: ${command}`);
 }
 
-function readRegistry() {
+/**
+ * The registry as it is on disk, or an empty one on a box that has none yet.
+ *
+ * Exported because `deployer.mjs` reads the SAME file through the SAME parser: a
+ * second reader with its own «file missing» convention is how two views of «which
+ * slots are live» drift apart.
+ */
+export function readRegistry() {
   try {
     return parseRegistry(readFileSync(REGISTRY_PATH, "utf8"));
   } catch (err) {
@@ -1210,6 +1379,12 @@ function realEffects() {
     write: (path, contents, mode) => {
       mkdirSync(dirname(path), { recursive: true });
       writeFileSync(path, contents, { mode });
+    },
+    // Separate from `write` because it must NOT truncate: the audit trail of
+    // `reset main` is the whole point of the file it appends to.
+    append: (path, contents, mode) => {
+      mkdirSync(dirname(path), { recursive: true, mode: 0o750 });
+      appendFileSync(path, contents, { mode });
     },
     log: (line) => console.log(line),
   };
@@ -1300,12 +1475,14 @@ async function main() {
 
   console.log(
     await runSlotCommand({
-      options,
+      options: { ...options, actor: process.env.SUDO_USER || process.env.USER },
       registry,
       baseDomain,
       effects,
-      databaseExists:
-        options.slot === "main" ? databaseExists(slotDatabaseName("main")) : undefined,
+      // A THUNK: `runSlotCommand` calls it only in the `up`/`sync` branch of `main`.
+      // Passing the answer instead made `slot down main` reach into Postgres for a
+      // question its plan never asks (Mode (a) NIT, PR #2168).
+      databaseExists: () => databaseExists(slotDatabaseName("main")),
     }),
   );
 }

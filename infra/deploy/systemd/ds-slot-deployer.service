@@ -1,0 +1,34 @@
+[Unit]
+# The pull-based slot deployer of `stage-1` (#2064, staging tech spec §5 «Converge»).
+# One tick reads the open non-draft PRs and the `main` head from GitHub, checks the
+# GHCR tags exist, and brings slots up, in sync or down. Everything is outbound: the
+# box exposes no inbound CI path and holds no write credential.
+Description=DS Platform slot deployer — converge staging slots to GitHub desired state
+Documentation=https://github.com/doctor-school/ds-platform/issues/2064
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# `Type=oneshot` is what makes the 60-second timer safe without a lock file:
+# systemd never starts a unit that is still active, so a tick that takes four
+# minutes (a cold image pull plus a migrate) simply absorbs the ticks it overruns
+# and the next one fires after it exits. Two ticks can never race on the registry.
+TimeoutStartSec=900
+
+# The wrapper — NOT `EnvironmentFile=/etc/ds-platform/stage.env`. systemd's parser
+# and bash's `set -a; . file` disagree about quoting (a single-quoted bcrypt hash is
+# one value to bash and a literal quote to systemd), so the box has exactly ONE
+# env-sourcing path and it is bash's. `ds-slot-deployer` sources the file and execs
+# the pinned host Node under /opt/node.
+ExecStart=/usr/local/bin/ds-slot-deployer tick
+
+# Root, deliberately: membership of the `docker` group is root-equivalent on this box
+# anyway, and /etc/ds-platform is root-owned 0700 by design. A second user would add a
+# permission model without adding a boundary.
+User=root
+
+[Install]
+# No WantedBy: the timer owns the schedule. `systemctl start ds-slot-deployer` stays
+# available for a manual tick.

@@ -8,7 +8,7 @@ Read at entry and after compaction. This mandatory shared reference counts in bo
 
 ## Session plan and authorization
 
-For repository changes, first owner-facing reply: RU, ≤6 lines, followed by task kind, active Issue/spec/ADR and skill. Direct answers/analysis/exports/authorized standard operations use only the explanation needed for the task.
+For repository changes, open in RU, ≤6 lines, with task kind, active artifact and skill. Direct tasks need only the explanation useful to their result.
 
 > **План сессии**
 > **Тип:** продуктовая | техническая | процессная
@@ -18,9 +18,9 @@ For repository changes, first owner-facing reply: RU, ≤6 lines, followed by ta
 
 For repository work run `pnpm bootstrap` unless supplied; inspect the named task, not the whole backlog. Verify resumed tracker refs with `pnpm handoff:verify`; retain established findings and evidence unless a relevant change, contradiction or missing proof invalidates them. A new session alone does not. Rollups or failed fetches never prove an empty backlog.
 
-Authorization persists for its evidenced scope: record the owner's quote/source, allowed action and conditions; a handoff assertion is insufficient. Preparation approval does not authorize production cutover. Keep authorization, technical readiness and execution state separate. Reuse valid approval without asking twice. Product/UI, destructive live-infra and release escalation gates still apply; reviewer approval does not replace owner approval.
+Keep authorization, readiness and execution separate. Reuse the owner’s evidenced quote/source, action and conditions; a handoff claim or review verdict is not owner approval. Preparation is not cutover approval. Ask only for a necessary decision outside existing authorization; routine diagnosis/fixes need no new go. Earlier approval never authorizes CI bypass or destructive action outside its scope.
 
-For a required owner decision, explain why it matters and link the concrete artifact; ask one plain RU question via the permitted input tool/directly. Record the quote/scope in the existing Issue/spec. End pending required input with `⏸ ЖДУ ВАС: <одно действие>; после него продолжу автономно`. Optional clarification is not approval; time is not consent.
+Status/clarification questions steer ongoing work: answer briefly, then continue the original task unless explicitly canceled/replaced. A blocker holds dependent actions only; continue useful authorized diagnosis/preparation and independent work. Before asking for missing approval, prepare the concrete decision and evidence. Record the decision’s scope/source. When useful authorized work is exhausted, state what remains and explicitly wait for the needed owner decision/external event. Time is not consent.
 
 ## Capability mappings
 
@@ -45,15 +45,13 @@ Claude Design remains the design product; missing required live inventory/sync/c
 
 Roles: `ds-explorer` scouts; `ds-implementer` authors in isolation; `ds-reviewer` independently reviews, no fixes; `ds-lander` runs the main-tree tail. Codex inherits model/effort; Claude uses its overlay. Use a general agent with the same contract if a role is unavailable; no dispatch means required independent review is blocked, not self-reviewed.
 
-Disk profiles are not loaded roles; use available agents with the same contract.
-
 **Proportionate execution — all task kinds.**
 
 1. **Outcome:** scope and completion evidence come from the requested result. Plans/specs/review/handoffs do not expand it; extra work must enable acceptance or address concrete material risk.
 2. **Reuse:** retain valid implementations, facts, checks and approvals; repeat only what relevant change, contradiction or missing proof invalidates.
 3. **Minimum solution:** fix the responsible mechanism fully and reliably; consider existing recovery and maintenance cost. New abstractions/subsystems/automation need a current need, not speculative utility.
 4. **Process:** scale research, delegation, checks and phases to risk, uncertainty and reversibility. One author may be cheaper than handoffs; combine related changes unless separation adds safety or an independent decision. Preserve security/privacy/data safeguards, required review, CI and owner gates.
-5. **Stop:** deliver sufficient evidence and finish. Adjacent improvements are not automatic prerequisites/tasks. Reassess scope growth; an accepted plan does not justify excess.
+5. **Stop:** finish the requested evidenced outcome. A merge, report or subagent return is intermediate if release/other requested work remains. Adjacent improvements are not automatic tasks; explicit waiting on a real unresolved gate is not completion.
 
 Briefs: `pnpm dispatch:brief <N>`, ownership/worktree, relevant sources, affected checks, outcome/proof/stop. Preserve others’ edits; returns ≤30 lines (reviews ≤20), evidence in artifacts. Waves: available slots, ≤4–5 Issues, ≤2 layers.
 

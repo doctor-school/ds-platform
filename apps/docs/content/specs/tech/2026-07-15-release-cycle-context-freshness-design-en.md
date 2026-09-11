@@ -171,11 +171,11 @@ The #927 cycle records and derives correctly, but it never answered **what trigg
 This is the **north star**, upstream of the tag-cut mechanism (§10.5). A live platform with real users cannot deploy "из пустоты" — there must be a defined rollout policy. The policy is a hybrid of two candidate models (the full candidate set — A continuous / B owner-commanded / C cadence-train / D releasable-unit — is recorded in #996):
 
 - **D (releasable-unit completion) — the driver.** The agent ships to prod when a **releasable unit** reaches Done **and** passes the **release-readiness checklist** (§10.4). A releasable unit is a vertical slice / feature-spec iteration / milestone that is: merged to `main`, board **Status = Done**, and **Stage-B GO**. Readiness is **detected by the agent** — the merged-not-deployed delta the bootstrap already surfaces (§D4, `## Project reality`) is the detection signal, not a passive "cue". Deploy is agentic, not a human-initiated step.
-- **B (owner circuit-breaker) — the gate.** For **standing-auth change-classes** (§10.3) the agent ships **autonomously** under a standing owner authorization. For **escalate change-classes** it surfaces a **one-line** "ready to ship X — go?" and waits. A human circuit-breaker stays on a live medical platform; the agent is the driver.
+- **B (owner circuit-breaker) — the gate.** For **standing-auth change-classes** (§10.3) the agent ships **autonomously** under a standing owner authorization. For **escalate change-classes** it verifies scoped owner approval, reusing valid evidence. After authorized preparation it asks a concrete decision only for action/risks/conditions not already covered. A human circuit-breaker stays on a live medical platform; the agent is the driver.
 
 **The unit of a deploy is the whole `origin/main` delta, not just the trigger.** `deploy:prod` ships `origin/main`'s SHA (§1), so a D-trigger from unit X actually ships **every** PR in `deployedSha..origin/main`. Therefore the readiness checklist and the change-class judgment (§10.3/§10.4) apply to the **entire range**, not only the triggering unit — a single escalate-class or not-yet-Stage-B'd PR anywhere in the range forces the whole deploy to escalate. This is why a session must not merge a half-ready sibling into `main` ahead of a standing-auth deploy: it would drag the deploy into escalation (or, worse, ship un-certified work). Corollary: keep `main` continuously shippable.
 
-**Decision rule under uncertainty: escalate.** When a change's class is ambiguous, it is escalate — mirroring the repo's "unsure → major" convention (`repo-conventions.md §Commits`) and the circuit-breaker principle. The cost of a needless one-line "go?" is trivial; the cost of an autonomous risky ship on a medical platform is not.
+**Decision rule under uncertainty: escalate.** Resolve uncertainty through bounded authorized investigation first. If material uncertainty remains, require the missing owner decision without repeating valid scoped approval. State the concrete action, evidence, remaining risk and recommendation; a new failed gate is not covered by an earlier ordinary release go.
 
 ### 10.3 Change-class taxonomy (standing-auth vs escalate)
 
@@ -209,7 +209,7 @@ Before an agent ships — autonomously (standing-auth) or after a "go" (escalate
 
 8. **Release gate clear (§10.10).** No OPEN global `release-blocker` Issue, no OPEN prerequisite declared by a selected PR's `Release-requires: #N, #M`, and no selected PR's OPEN batched Stage-B gate. Enforced mechanically by `deploy:prod` (`tools/deploy/release-gate.mjs`, #1662/#2187), fail-closed on UNKNOWN; the only bypass is explicit owner-approved `--release-gate-exempt "<reason>"`, loudly printed, never a convenience.
 
-A **standing-auth** deploy proceeds when 1–8 pass. An **escalate** deploy — or any standing-auth deploy blocked by the эфир gate (7) — sends the one-line "ready to ship X — go?" first, then proceeds on the owner's go. Any checklist failure holds the deploy and is surfaced, never silently worked around.
+A **standing-auth** deploy proceeds when 1–8 pass; an **escalate** deploy also needs valid scoped approval. A failed gate holds the dependent deployment, not useful authorized diagnosis/preparation. Ordinary release approval does not waive failed CI, live-broadcast holds or destructive-action gates: any supported exception needs explicit approval for that exception. Answer status/clarification questions and continue; they do not cancel the release. When useful authorized work is exhausted, explicitly wait for the exact decision/event needed. Completion requires the requested deployment and verification evidence, not a merge or report.
 
 ### 10.5 Release-cut mechanism — **Option A** (the agent-run deploy initiates the release)
 
@@ -244,7 +244,7 @@ Cutting tags/notes/GitHub Releases **and** deploying is the **agent's** job (own
  releasable unit Done + Stage-B GO ──► [D-trigger] agent runs release-readiness checklist (§10.4)
                  │
                  ├─ standing-auth class (§10.3) ─► agent ships autonomously
-                 └─ escalate class ─────────────► agent: "ready to ship X — go?" ─► owner go ─► ship
+                 └─ escalate class ─────────────► verify scoped approval; ask only if missing ─► ship
                  ▼
  agent runs `pnpm deploy:prod`  (ADR-0012 topology unchanged; ships origin/main)
                  │  on success (all non-fatal to the deploy):

@@ -66,9 +66,18 @@ Behavior change: <concise user/runtime behavior change | reasoned N/A>
 Local touched-suite verification: <exact command(s) and PASS result>
 Deviations: <ADR/spec clause — #N or DEBT.md#anchor | N/A — reason>
 
+<!-- If this change requires an action BEFORE deployment, add an actual line:
+Release-requires: #123, #456
+Omit the line or use `Release-requires: none` when there are no prerequisites.
+Replace example numbers; do not auto-close unfinished prerequisite Issues.
+Link rollout actions and post-release acceptance with their execution/check plan
+in prose instead: they are not preconditions of their own activation.
+`release-blocker` is only for evidenced hazards to ANY deployment, not all tasks.
+-->
+
 ## Checklist
 
-- [ ] No production-side effect of this diff is deferred to a manual step (else: linked `release-blocker` Issue #N)
+- [ ] Deferred prod actions are tracked with timing/evidence; true pre-deploy prerequisites have `Release-requires: #N`; global `release-blocker` only for evidenced risk to any deploy
 - [ ] Tests green (unit + e2e where applicable)
 - [ ] `pnpm generate:all` artifacts up-to-date
 - [ ] Linked spec status updated if applicable

@@ -333,8 +333,13 @@ whole decision table against injected readers — no ssh, psql or provider calls
 
 `main` is deployable **by default** (release-cycle spec §10): a merged PR found
 broken ahead of its fix is REVERTED from `main`; when a revert is
-disproportionate, its Issue carries `release-blocker` instead. The pre-flight
-turns that norm into a machine check and **holds the deploy** while either
+disproportionate, the fix Issue is a scoped prerequisite of that PR. Reserve
+`release-blocker` for evidenced hazards to ANY deployment, including unrelated
+hotfixes. Record the universal risk, why narrower controls are insufficient,
+and the exit condition. Reassess before each release and after new evidence;
+remove an obsolete global label with an evidence comment, keeping unfinished
+work open. Deferred work or a CI flake alone does not justify a global hold.
+The pre-flight turns that norm into a machine check and **holds the deploy** while any
 signal stands:
 
 1. **`release-blocker`** — any OPEN Issue carrying the label holds every deploy.
@@ -358,6 +363,22 @@ signal stands:
    matters: an app-only `--rollback` records no Deployment, so a
    Deployment-only basis can be NEWER than what runs and would narrow the range
    past undeployed PRs.
+3. **Selected release prerequisites** — PR-body `Release-requires: #123, #456`
+   lines name Issues that must be CLOSED before that PR ships. The gate checks
+   only PRs in `<live deployed>..<selected target>` (including cherry-picked
+   squash PR numbers in a hotfix); an unrelated open prerequisite holds nothing.
+   Multiple lines are unioned/deduplicated per PR. Omit the marker or use
+   `Release-requires: none` when none exist; template HTML comments are ignored.
+   Invalid declarations, unreadable PRs/Issues and unknown Issue states hold
+   closed. The failure names **PR → prerequisite** pairs.
+
+Every deferred production action still needs a linked Issue with affected change,
+timing, execution/check plan and completion evidence. Use `Release-requires`
+only for conditions needed BEFORE shipping: do not auto-close an unfinished
+prerequisite in the same PR. Rollout actions and post-release acceptance are
+linked in prose, never circular preconditions of their own activation. If the
+pipeline owns the action, cite its `file:line`. Review rejects missing tracking
+and omitted real prerequisites; it does not assign the global label by default.
 
 **Fail-closed**, like the эфир probe: an UNKNOWN HOLDS rather than waving the
 deploy through — a `gh` call errored (including an unreadable linked Issue, i.e.

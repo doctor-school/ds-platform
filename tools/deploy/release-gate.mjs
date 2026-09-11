@@ -1,15 +1,16 @@
 // DS Platform — release-blocker + open-batched-Stage-B deploy gate (#1662).
 //
-// Two fail-closed pre-flight checks `pnpm deploy:prod` runs BEFORE shipping
-// `origin/main` to prod. Both encode the same invariant the release-cycle spec
+// Three fail-closed pre-flight checks `pnpm deploy:prod` runs BEFORE shipping
+// the selected target to prod. They encode the invariant the release-cycle spec
 // §10 states in prose — `main` is deployable by default, and anything known to
 // be NOT shippable is recorded where a machine can read it:
 //
 //   1. release-blocker label — an OPEN Issue carrying `release-blocker` holds
-//      every deploy until it is closed (or the deploy is explicitly exempted).
+//      every deploy until its risk ends and the label is removed (or exempted).
 //      This is the tracked counterpart of the revert norm: a merged PR found
 //      broken ahead of its fix is REVERTED from `main`; when a revert is
-//      disproportionate, the Issue gets `release-blocker` instead.
+//      disproportionate, scope a prerequisite to that PR; use the global label
+//      only for evidenced hazards to ANY deploy, including unrelated hotfixes.
 //   2. Open batched Stage-B gate — a merged-but-not-yet-deployed PR carrying
 //      `Stage-B: batched at #<gate>` (the AGENTS.md §6 batched carve-out) has,
 //      by construction, NOT been live-verified by the product owner. Shipping
@@ -20,6 +21,9 @@
 //      the body links with a `Closes #N` keyword — a gate that read only the
 //      body would ship an un-live-verified surface whenever the record was
 //      filed on the linked Issue, which the guard explicitly allows.
+//   3. Release-requires: #N in a selected PR's body holds that deployment while
+//      its pre-deploy prerequisite is OPEN. Rollout/post-release actions stay
+//      tracked separately, never circular preconditions of their own activation.
 //
 // Fail-closed by design (mirrors the live-broadcast hold in `prod.mjs`): an
 // UNKNOWN — the delta basis could not be derived, a `gh` call errored — HOLDS
@@ -37,7 +41,7 @@ import { spawnSync } from "node:child_process";
 
 import { extractPrNumbers } from "./release-notes.mjs";
 
-/** The label an Issue carries to hold every prod deploy until it is closed. */
+/** Global hazard only; remove the label when its documented risk ends. */
 export const RELEASE_BLOCKER_LABEL = "release-blocker";
 
 /** The explicit escape flag (mirrors `--mode-a-exempt`). */
@@ -124,6 +128,29 @@ export function extractClosedIssues(body) {
   return out;
 }
 
+/** Explicit PR-body prerequisites; malformed declarations fail closed. */
+export function extractReleaseRequires(body) {
+  const refs = new Set();
+  // PR-template comments are instructions, not live declarations.
+  const text = String(body ?? "").replace(/<!--[\s\S]*?-->/g, "");
+  for (const line of text.split(/\r?\n/)) {
+    const match = /^[ \t>*_-]*release-requires[ \t]*:[ \t]*(.*)$/i.exec(line);
+    if (!match) continue;
+    const value = match[1].trim();
+    if (/^none$/i.test(value)) continue;
+    if (!/^#[1-9]\d*(?:[ \t]*,[ \t]*#[1-9]\d*)*$/.test(value)) {
+      throw new Error("malformed Release-requires: use #N, #M or none");
+    }
+    for (const ref of value.matchAll(/#(\d+)/g)) {
+      const n = Number(ref[1]);
+      if (!Number.isSafeInteger(n))
+        throw new Error("invalid Release-requires Issue number");
+      refs.add(n);
+    }
+  }
+  return [...refs];
+}
+
 // ── pure: evaluator + formatter ─────────────────────────────────────────────
 
 /**
@@ -135,6 +162,9 @@ export function extractClosedIssues(body) {
  *   merged-undeployed PR → OPEN batched-Stage-B gate pairs; `null` when the
  *   delta could not be enumerated (fail-closed).
  * @property {string=} openBatchedError first line of the delta error.
+ * @property {Array<{pr:number,issue:number,title:string}>|null} openRequires
+ *   OPEN prerequisites of selected PRs; null on unknown.
+ * @property {string=} openRequiresError prerequisite/delta query failure.
  * @property {string|null} basisSha the deployed SHA the delta was computed from.
  * @property {string=} basisDegraded set when the delta basis is NOT the live
  *   running SHA (the `/v1/health` probe failed, so the recorded Deployment was
@@ -187,6 +217,20 @@ export function evaluateReleaseGate(probe) {
     }
   }
 
+  if (!Array.isArray(p.openRequires)) {
+    reasons.push(
+      "UNKNOWN: could not check selected release prerequisites" +
+        (p.openRequiresError ? ` (${p.openRequiresError})` : "") +
+        " — fail-closed",
+    );
+  } else {
+    for (const r of p.openRequires) {
+      reasons.push(
+        `    PR #${r.pr} → prerequisite #${r.issue} ${r.title}`.trimEnd(),
+      );
+    }
+  }
+
   if (Array.isArray(p.openBatched) && p.basisDegraded) {
     reasons.push(
       `UNKNOWN: the delta basis is the recorded Deployment, not the live running SHA` +
@@ -210,7 +254,8 @@ export function formatReleaseGateHold(verdict) {
   return (
     `release gate (spec §10 — \`main\` stays deployable by default):\n  ` +
     verdict.reasons.join("\n  ") +
-    `\n  Resolve by closing the blocker(s) / the batched Stage-B gate, or by\n` +
+    `\n  Resolve the prerequisite / Stage-B gate, or remove a global label whose\n` +
+    `  documented risk has ended (keep unfinished work open), or by\n` +
     `  REVERTING the offending PR from \`main\` (spec §10 revert norm). An\n` +
     `  owner-approved ship past this gate is explicit:\n` +
     `      pnpm deploy:prod ${RELEASE_GATE_EXEMPT_FLAG} "<reason>"`
@@ -220,7 +265,7 @@ export function formatReleaseGateHold(verdict) {
 /** The clear line (single source for the `ok(...)` text). */
 export function formatReleaseGateClear(basisSha) {
   const basis = basisSha ? ` (delta basis ${basisSha.slice(0, 12)})` : "";
-  return `release gate clear — no open ${RELEASE_BLOCKER_LABEL} Issue, no open batched Stage-B gate${basis}`;
+  return `release gate clear — no open ${RELEASE_BLOCKER_LABEL} Issue, no open selected prerequisite, no open batched Stage-B gate${basis}`;
 }
 
 // ── I/O probe seam (never throws) ───────────────────────────────────────────
@@ -308,7 +353,12 @@ export async function probeReleaseGate({
 } = {}) {
   const exec = run ?? ((cmd, args) => capture(cmd, args, cwd));
   /** @type {ReleaseGateProbe} */
-  const probe = { blockers: null, openBatched: null, basisSha: null };
+  const probe = {
+    blockers: null,
+    openBatched: null,
+    openRequires: null,
+    basisSha: null,
+  };
 
   // 1. Open `release-blocker` Issues.
   try {
@@ -383,6 +433,7 @@ export async function probeReleaseGate({
     const prNumbers = extractPrNumbers(subjects);
 
     const pairs = [];
+    const requires = [];
     /** @type {Map<number, {state: string, title: string}>} */
     const gateCache = new Map();
     /** @type {Map<number, string[]>} linked-Issue number → comment bodies */
@@ -392,9 +443,29 @@ export async function probeReleaseGate({
       try {
         const prRaw = exec("gh", ["pr", "view", String(n), "--json", "body"]);
         body = JSON.parse(prRaw || "{}").body ?? "";
-      } catch {
-        // A ref that is an Issue (not a PR) / a 404 → skip it, like the digest.
-        continue;
+      } catch (error) {
+        // Skip only a positively identified ordinary Issue, never an unreadable
+        // PR which could carry a prerequisite or Stage-B declaration.
+        const raw = exec("gh", ["api", `repos/{owner}/{repo}/issues/${n}`]);
+        const issue = JSON.parse(raw);
+        if (issue.number === n && !issue.pull_request) continue;
+        throw error;
+      }
+
+      for (const issue of extractReleaseRequires(body)) {
+        const raw = exec("gh", [
+          "issue",
+          "view",
+          String(issue),
+          "--json",
+          "state,title",
+        ]);
+        const info = JSON.parse(raw);
+        if (info.state !== "OPEN" && info.state !== "CLOSED") {
+          throw new Error(`prerequisite #${issue} has unknown state`);
+        }
+        if (info.state === "OPEN")
+          requires.push({ pr: n, issue, title: String(info.title ?? "") });
       }
 
       // Accepted marker sources, mirroring the merge guard
@@ -451,8 +522,10 @@ export async function probeReleaseGate({
       }
     }
     probe.openBatched = pairs;
+    probe.openRequires = requires;
   } catch (e) {
     probe.openBatchedError = firstLine(e);
+    probe.openRequiresError = firstLine(e);
   }
 
   return probe;

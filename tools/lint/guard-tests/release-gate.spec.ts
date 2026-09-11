@@ -1,14 +1,16 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   RELEASE_BLOCKER_LABEL,
   RELEASE_GATE_EXEMPT_FLAG,
   evaluateReleaseGate,
+  extractReleaseRequires,
   extractBatchedGateRefs,
   extractClosedIssues,
   formatReleaseGateClear,
   formatReleaseGateHold,
   parseReleaseGateExempt,
+  probeReleaseGate,
 } from "../../deploy/release-gate.mjs";
 
 /**
@@ -21,6 +23,7 @@ import {
 
 const probe = (over: Record<string, unknown> = {}) => ({
   blockers: [] as Array<{ number: number; title: string }>,
+  openRequires: [],
   openBatched: [] as Array<{ pr: number; gate: number; gateTitle: string }>,
   basisSha: "b9d81e6a1c2d3e4f5061728394a5b6c7d8e9f0a1",
   ...over,
@@ -251,5 +254,164 @@ describe("release-gate formatReleaseGateClear()", () => {
 
   it("renders without a basis when none was derived", () => {
     expect(formatReleaseGateClear(null)).not.toContain("(delta basis");
+  });
+});
+
+// The probe uses injected command responses and fetch, exercising the same
+// selected deployed..target range used by deploy:prod, including hotfixes.
+describe("release-gate scoped prerequisites", () => {
+  it("EARS-8: template instructions are not executable declarations", () => {
+    expect(
+      extractReleaseRequires(
+        "<!--\nRelease-requires: #123, #456\n-->\nRelease-requires: #902, #903\nRelease-requires: #902",
+      ),
+    ).toEqual([902, 903]);
+  });
+  const fixture = async (
+    body: string,
+    state = "OPEN",
+    subjects = "fix: selected change (#901)",
+    prRead = "ok",
+  ) => {
+    const calls: string[] = [];
+    const run = (cmd: string, args: string[]) => {
+      calls.push(`${cmd} ${args.join(" ")}`);
+      if (cmd === "git") return subjects;
+      if (args[0] === "api" && args[1].includes("deployments"))
+        return '[{"sha":"deployed"}]';
+      if (args[0] === "issue" && args[1] === "list") return "[]";
+      if (args[0] === "pr" && args[2] === "904")
+        return '{"body":"unrelated fix"}';
+      if (args[0] === "pr" && args[2] === "901") {
+        if (prRead !== "ok") throw new Error("PR lookup failed");
+        return JSON.stringify({ body });
+      }
+      if (args[0] === "api" && args[1].endsWith("/issues/901")) {
+        if (prRead === "ordinary-issue") return '{"number":901}';
+        if (prRead === "unreadable") throw new Error("HTTP 502");
+        return '{"number":901,"pull_request":{"url":"https://api.example/pulls/901"}}';
+      }
+      if (args[0] === "issue" && args[2] === "902") {
+        if (state === "ERROR") throw new Error("HTTP 502");
+        return JSON.stringify({ state, title: "provider prerequisite" });
+      }
+      throw new Error(`Unexpected call: ${cmd} ${args.join(" ")}`);
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ version: "deployed" }),
+      }),
+    );
+    try {
+      return {
+        result: await probeReleaseGate({
+          targetSha: "selected",
+          healthUrl: "https://health.example",
+          run,
+        }),
+        calls,
+      };
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  };
+
+  it("EARS-1: holds only the selected PR's open prerequisite, without a global label", async () => {
+    const { result, calls } = await fixture("Release-requires: #902");
+    expect(evaluateReleaseGate(result).hold).toBe(true);
+    expect(formatReleaseGateHold(evaluateReleaseGate(result))).toContain(
+      "PR #901 → prerequisite #902",
+    );
+    expect(calls).toContain("git log --format=%s deployed..selected");
+  });
+
+  it("EARS-2: a hotfix without the affected PR does not query its unrelated prerequisite", async () => {
+    const { result, calls } = await fixture(
+      "Release-requires: #902",
+      "OPEN",
+      "fix: unrelated hotfix (#904)",
+    );
+    expect(evaluateReleaseGate(result).hold).toBe(false);
+    expect(calls.some((c) => c.includes("view 902"))).toBe(false);
+  });
+
+  it("EARS-3: a cherry-picked selected PR retains its prerequisite", async () => {
+    const { result } = await fixture(
+      "Release-requires: #902",
+      "OPEN",
+      "fix(api): issue (#800) (#901)",
+    );
+    expect(evaluateReleaseGate(result).hold).toBe(true);
+  });
+
+  it("EARS-4: closed prerequisite clears and unrelated post-release work stays out", async () => {
+    expect(
+      evaluateReleaseGate(
+        (
+          await fixture(
+            "Release-requires: #902\nPost-release acceptance: #903",
+            "CLOSED",
+          )
+        ).result,
+      ).hold,
+    ).toBe(false);
+  });
+
+  it.each(["ERROR", "", "UNKNOWN"])(
+    "EARS-5: unreadable or unknown prerequisite state %s fails closed",
+    async (state) => {
+      expect(
+        evaluateReleaseGate(
+          (await fixture("Release-requires: #902", state)).result,
+        ).hold,
+      ).toBe(true);
+    },
+  );
+
+  it.each(["", "#0", "#902, typo", "https://other.example/issues/902"])(
+    "EARS-6: malformed explicit prerequisite %s fails closed",
+    async (value) => {
+      expect(
+        evaluateReleaseGate(
+          (await fixture(`Release-requires: ${value}`)).result,
+        ).hold,
+      ).toBe(true);
+    },
+  );
+
+  it("EARS-7: absent and explicit none markers clear", async () => {
+    expect(
+      evaluateReleaseGate((await fixture("no deferred action")).result).hold,
+    ).toBe(false);
+    expect(
+      evaluateReleaseGate((await fixture("Release-requires: none")).result)
+        .hold,
+    ).toBe(false);
+  });
+
+  it.each(["pr", "unreadable"])(
+    "EARS-9: unreadable PR evidence %s cannot hide prerequisites",
+    async (prRead) => {
+      const { result } = await fixture(
+        "Release-requires: #902",
+        "OPEN",
+        "fix: selected (#901)",
+        prRead,
+      );
+      expect(evaluateReleaseGate(result).hold).toBe(true);
+      expect(result.openRequires).toBeNull();
+    },
+  );
+
+  it("EARS-10: confirmed ordinary Issue references can be skipped", async () => {
+    const { result } = await fixture(
+      "",
+      "OPEN",
+      "fix: issue reference (#901)",
+      "ordinary-issue",
+    );
+    expect(evaluateReleaseGate(result).hold).toBe(false);
   });
 });

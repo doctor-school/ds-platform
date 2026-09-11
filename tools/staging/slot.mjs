@@ -39,10 +39,15 @@ import { pathToFileURL } from "node:url";
 import {
   STALL_BUDGET_BUILD_MS,
   STALL_BUDGET_DEFAULT_MS,
+  shipTree,
   sshCapture,
   sshScript,
 } from "../deploy/lib/remote.mjs";
-import { bootProbeSet, deployServiceSet } from "../deploy/service-set.mjs";
+import {
+  bootProbeSet,
+  deployServiceSet,
+  shellVarName,
+} from "../deploy/service-set.mjs";
 import {
   GOLDEN_DB_BASE,
   assertDatabaseName,
@@ -1807,13 +1812,294 @@ async function boxDatabaseExists(name) {
   return out.trim() === "1";
 }
 
+// --- the five remote-only routines -------------------------------------------
+//
+// Each one is a multi-command remote routine rather than a single argv, which is why
+// the executor refuses them BY NAME when the effect is absent. The scripts and the
+// verdict readers are pure functions, exported and unit-tested, so the text that
+// reaches the box is asserted offline exactly as every plan above is.
+
 /**
- * The effects, all of them over ssh.
+ * PRE-SWAP boot verify — `tools/deploy/prod.mjs` `verifyImagesBoot`, slot-scoped.
  *
- * `ship`, `verifyImages`, `verifyRunning`, `health` and `prune` are deliberately NOT
- * supplied here yet: their remote routines are the next step of #2194. Until they
- * are, `up` / `sync` / `reset` fail closed with the executor's named refusal rather
- * than converging a slot whose images nothing verified.
+ * The freshly built images are run as throwaway DETACHED containers with the same two
+ * `env_file`s the slot compose gives them, and each must answer non-5xx on `/` from
+ * inside the container. An image that does not boot aborts the converge while the
+ * slot's PREVIOUS containers are still up — the reviewer's preview never sees it.
+ *
+ * No published ports, no compose network, and a name scoped to the slot: two slots
+ * converging the same commit at the same time must not collide on one probe container.
+ */
+export function verifyImagesScript({ slot, sha, services }) {
+  assertSlotName(slot);
+  shortSha(sha);
+  return `probe() {
+  svc="$1"; repo="$2"; port="$3"
+  name="ds-slotcheck-${slot}-$svc"
+  sudo docker rm -f "$name" >/dev/null 2>&1 || true
+  # -e PORT after the env files on purpose: an explicit -e outranks an --env-file,
+  # the same precedence compose \`environment:\` has over \`env_file:\` (DSO-100).
+  if ! sudo docker run -d --name "$name" \\
+        --env-file ${STAGE_ENV_FILE} --env-file ${slotEnvPath(slot)} \\
+        -e PORT="$port" -e HOSTNAME=0.0.0.0 "$repo:${sha}" >/dev/null 2>&1; then
+    echo "$svc=NOSTART"; return
+  fi
+  deadline=$(( $(date +%s) + 120 ))
+  status=PENDING
+  while [ "$status" = PENDING ]; do
+    running=$(sudo docker inspect -f '{{.State.Running}}' "$name" 2>/dev/null || echo false)
+    if sudo docker exec "$name" node -e "fetch('http://127.0.0.1:'+process.env.PORT+'/').then(r=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))" >/dev/null 2>&1; then
+      status=OK
+    elif [ "$running" != true ]; then
+      status=EXITED
+    elif [ "$(date +%s)" -ge "$deadline" ]; then
+      status=TIMEOUT
+    else
+      sleep 3
+    fi
+  done
+  echo "$svc=$status"
+  if [ "$status" != OK ]; then
+    echo "---- $svc boot log (last 60) ----"
+    sudo docker logs --tail 60 "$name" 2>&1 || true
+  fi
+  sudo docker rm -f "$name" >/dev/null 2>&1 || true
+}
+${services.map((service) => `probe ${service.name} ${service.image} ${service.port}`).join("\n")}`;
+}
+
+/**
+ * Reads the probe's `<service>=<status>` lines.
+ *
+ * A service the box printed NO verdict for is a failure, never a pass: truncated
+ * output must not read as «everything booted».
+ */
+export function assertImagesBoot(stdout, services) {
+  const names = services.map((service) => service.name);
+  const verdicts = Object.fromEntries(
+    String(stdout ?? "")
+      .split(/\r?\n/)
+      .map((line) => line.trim().match(/^([A-Za-z0-9._-]+)=(\w+)$/))
+      .filter((match) => match && names.includes(match[1]))
+      .map((match) => [match[1], match[2]]),
+  );
+  const bad = names.filter((name) => verdicts[name] !== "OK");
+  if (bad.length > 0) {
+    throw new SlotError(
+      `freshly built image(s) do NOT boot: ${bad
+        .map((name) => `${name}=${verdicts[name] ?? "NO-VERDICT"}`)
+        .join(", ")}\n` +
+        "  Nothing was swapped — the slot's PREVIOUS containers are still up.",
+    );
+  }
+  return verdicts;
+}
+
+/**
+ * Truthful-success gate — `tools/deploy/prod.mjs` `verifyRunningSha`, slot-scoped.
+ *
+ * Runs AFTER `up -d` and proves the RUNNING containers carry the converged SHA's
+ * images AND reached `healthy`. Without it a converge could report a slot on the
+ * PR's commit while the box still runs the previous one.
+ *
+ * Containers are addressed by `container_name` (`<slot>-<service>`, the contract
+ * `containerAliases` owns and the Caddy snippet dials), not by compose's
+ * `<project>-<service>-1` default, which the slot compose overrides.
+ */
+export function verifyRunningScript({ slot, sha, services }) {
+  assertSlotName(slot);
+  shortSha(sha);
+  const container = (name) => `${slot}-${name}`;
+  const reads = services
+    .map(
+      (service) =>
+        `  ${shellVarName(service.name)}_img=$(sudo docker inspect ${container(service.name)} --format '{{.Config.Image}}' 2>/dev/null || echo absent)\n` +
+        `  ${shellVarName(service.name)}_h=$(sudo docker inspect ${container(service.name)} --format '{{.State.Health.Status}}' 2>/dev/null || echo absent)`,
+    )
+    .join("\n");
+  const state = services
+    .map(
+      (service) =>
+        `${service.name}=$${shellVarName(service.name)}_img($${shellVarName(service.name)}_h)`,
+    )
+    .join(" ");
+  const condition = services
+    .map(
+      (service) =>
+        `[ "$${shellVarName(service.name)}_img" = "${service.image}:${sha}" ] && [ "$${shellVarName(service.name)}_h" = healthy ]`,
+    )
+    .join(" \\\n     && ");
+  return `deadline=$(( $(date +%s) + 240 ))
+while true; do
+${reads}
+  state="${state}"
+  if ${condition}; then
+    echo "OK $state"; break
+  fi
+  if [ "$(date +%s)" -ge "$deadline" ]; then
+    echo "TIMEOUT $state"; break
+  fi
+  sleep 5
+done`;
+}
+
+export function assertRunningVerdict(stdout, { slot, sha }) {
+  const out = String(stdout ?? "").trim();
+  if (out.startsWith("OK ")) return out;
+  throw new SlotError(
+    `slot ${slot}: the running containers do NOT carry ${shortSha(sha)} (or never got healthy):\n` +
+      `  ${out || "(no verdict line)"}\n` +
+      "  A converged line would be a lie — treating this converge as FAILED.",
+  );
+}
+
+/**
+ * Image retention + BuildKit cache cap — production's `prune_repo` verbatim.
+ *
+ * The repo list is DERIVED from the box rather than hard-coded the way production
+ * hard-codes its four: a slot converges arbitrary branches, and a branch that adds a
+ * service would otherwise leak every tag of that repo forever. `ds-` scoping keeps
+ * the shared-infra images (caddy, postgres, zitadel) structurally out of reach.
+ *
+ * `docker rmi` REFUSES an image a container still uses, which is what keeps retention
+ * from pulling an older commit's images out from under another live slot; that
+ * refusal is the swallowed `|| true`, exactly as in production.
+ */
+export function pruneScript({ retention, reservedSpace }) {
+  return `prune_repo() {
+  repo="$1"; keep="$2"
+  # \`|| true\` on grep: under pipefail a grep that filters out EVERY line (only
+  # \`:local\` tags exist yet) exits 1. "Nothing to prune" is success, not failure.
+  sudo docker images "$repo" --format '{{.CreatedAt}}\\t{{.Tag}}' \\
+    | { grep -vP '\\tlocal$' || true; } \\
+    | sort -r \\
+    | awk -v k="$keep" -F'\\t' 'NR>k{print $2}' \\
+    | while IFS= read -r tag; do
+        [ -n "$tag" ] && sudo docker rmi "$repo:$tag" >/dev/null 2>&1 || true
+      done
+}
+sudo docker images --format '{{.Repository}}' \\
+  | { grep -E '^ds-[a-z0-9][a-z0-9-]*$' || true; } \\
+  | sort -u \\
+  | while IFS= read -r repo; do
+      if [ -n "$repo" ]; then prune_repo "$repo" ${retention}; fi
+    done
+# \`buildx prune --reserved-space\`, NOT \`builder prune --filter until=\`: on the
+# containerd snapshotter the \`until=\` filter can silently reclaim 0 bytes (#1419).
+sudo docker buildx prune -f --reserved-space ${reservedSpace} || true
+echo "build cache after prune:"; sudo docker system df --format '  {{.Type}}: {{.Size}} (reclaimable {{.Reclaimable}})' || true
+`;
+}
+
+/** How long the converge waits for the slot's api to serve the converged SHA. */
+export const HEALTH_DEADLINE_MS = 120_000;
+export const HEALTH_POLL_MS = 5_000;
+export const HEALTH_TIMEOUT_MS = 15_000;
+
+/**
+ * The external health verdict: what the slot's PUBLIC api hostname actually serves.
+ *
+ * `verifyRunningScript` above proves the box's own view; this proves the edge —
+ * Caddy routing, the certificate and the slot's basic-auth gate — because a slot a
+ * reviewer cannot reach is not converged, however healthy the container is.
+ */
+export function healthVerdict({ status, body, sha }) {
+  if (status !== 200) {
+    return { ok: false, reason: `HTTP ${status}` };
+  }
+  let json;
+  try {
+    json = JSON.parse(String(body ?? ""));
+  } catch {
+    return { ok: false, reason: "the health response was not JSON" };
+  }
+  const version =
+    json && typeof json === "object" && typeof json.version === "string"
+      ? json.version.trim()
+      : "";
+  if (version === "") {
+    return { ok: false, reason: "the health response carried no `.version`" };
+  }
+  if (version !== sha) {
+    return {
+      ok: false,
+      reason: `serving ${version.slice(0, 12)}, expected ${shortSha(sha)}`,
+    };
+  }
+  return { ok: true, reason: `/v1/health reports ${shortSha(sha)}` };
+}
+
+/**
+ * The stand's basic-auth password, from the OPERATOR's machine.
+ *
+ * The box stores only the bcrypt hash (`STAGE_BASIC_AUTH_HASH`, the Caddyfile's
+ * `staging_basic_auth`), so the plaintext cannot come from `stage.env` — the health
+ * assertion would authenticate with nothing and read Caddy's 401 as an outage. Absent
+ * ⇒ a named refusal, never a skipped verification.
+ */
+export function requiredOperatorPassword(env) {
+  const password = env?.STAGE_BASIC_AUTH_PASS;
+  if (!password) {
+    throw new SlotError(
+      "STAGE_BASIC_AUTH_PASS is not set on THIS machine — the stand sits behind one " +
+        "basic-auth pair and the box holds only its bcrypt hash, so the health check " +
+        "cannot authenticate without the plaintext. Export it and re-run.",
+    );
+  }
+  return password;
+}
+
+export function basicAuthHeader(user, password) {
+  return `Basic ${Buffer.from(`${user}:${password}`, "utf8").toString("base64")}`;
+}
+
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * The slot's service set, read off the compose file IN ITS OWN SHIPPED TREE.
+ *
+ * Never off the local checkout: the operator's working tree may be many commits away
+ * from the slot's, and a service that branch does not declare cannot be verified. An
+ * unreadable compose is a refusal, never an assumed set.
+ */
+async function readSlotServices(slot) {
+  let text;
+  try {
+    text = await sshCapture(STAGE_1, quoteCommand(["cat", slotComposeFile(slot)]));
+  } catch (e) {
+    throw new SlotError(
+      `cannot read ${slotComposeFile(slot)} on ${STAGE_1} (${e.message}) — without the ` +
+        "shipped tree's own compose there is no authority on which images this slot runs",
+    );
+  }
+  return slotServiceSet(text);
+}
+
+/** One health read; every failure degrades to a verdict, so the poll can retry it. */
+async function probeSlotHealth(url, headers, sha) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), HEALTH_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, { headers, signal: controller.signal });
+    return healthVerdict({ status: res.status, body: await res.text(), sha });
+  } catch (e) {
+    return { ok: false, reason: e instanceof Error ? e.message : String(e) };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * The effects, all of them over ssh — except `health`, which must come in through the
+ * public edge the way a reviewer does.
+ *
+ * The five REMOTE-ONLY ones are the routines above: `ship` streams a `git archive` of
+ * the committed SHA into the slot's disposable tree, `verifyImages` boot-probes the
+ * freshly built images BEFORE the swap, `verifyRunning` proves the running containers
+ * carry that SHA and are healthy AFTER it, `health` asserts the public api serves it,
+ * and `prune` caps the box's images and BuildKit cache. Each one reads the slot's own
+ * shipped compose for its service set, so a branch that adds or drops a service is
+ * verified against what that branch actually declares.
  */
 function realEffects(boxEnv) {
   const run = (script, step) =>
@@ -1874,6 +2160,66 @@ function realEffects(boxEnv) {
     // The ONE effect that does not go to the box: the shared Zitadel's management API.
     // Built per step, so every command that emits no `idp` step still runs on a box
     // where the bootstrap PAT file is not readable.
+    // --- the five remote-only routines ---------------------------------------
+    ship: (step) =>
+      shipTree(step.sha, STAGE_1, {
+        liveDir: step.liveDir,
+        preserved: step.preserved,
+        tmpPrefix: step.tmpPrefix,
+      }),
+    verifyImages: async (step) => {
+      const { bootProbe } = await readSlotServices(step.slot);
+      const out = await sshCapture(
+        STAGE_1,
+        verifyImagesScript({ slot: step.slot, sha: step.sha, services: bootProbe }),
+      );
+      console.log(out.split(/\r?\n/).map((line) => `  ${line}`).join("\n"));
+      return assertImagesBoot(out, bootProbe);
+    },
+    verifyRunning: async (step) => {
+      const { longRunning } = await readSlotServices(step.slot);
+      const out = await sshCapture(
+        STAGE_1,
+        verifyRunningScript({ slot: step.slot, sha: step.sha, services: longRunning }),
+      );
+      console.log(`  ${out}`);
+      return assertRunningVerdict(out, { slot: step.slot, sha: step.sha });
+    },
+    // NOT over ssh: the assertion is worth making only through the edge a reviewer
+    // uses — Caddy's routing, the wildcard certificate and the stand's basic auth.
+    health: async (step) => {
+      const user = boxEnv.STAGE_BASIC_AUTH_USER;
+      if (!user) {
+        throw new SlotError(
+          `STAGE_BASIC_AUTH_USER is not in ${STAGE_ENV_FILE} on ${STAGE_1} — the ` +
+            "stage provisioning places it there alongside its bcrypt hash",
+        );
+      }
+      const headers = {
+        authorization: basicAuthHeader(user, requiredOperatorPassword(process.env)),
+        accept: "application/json",
+      };
+      const deadline = Date.now() + HEALTH_DEADLINE_MS;
+      let verdict;
+      for (;;) {
+        verdict = await probeSlotHealth(step.url, headers, step.sha);
+        if (verdict.ok || Date.now() >= deadline) break;
+        await delay(HEALTH_POLL_MS);
+      }
+      if (!verdict.ok) {
+        throw new SlotError(`${step.url} is not serving the converged commit: ${verdict.reason}`);
+      }
+      console.log(`  ↳ ${verdict.reason}`);
+      return verdict;
+    },
+    prune: (step) =>
+      sshScript(
+        STAGE_1,
+        pruneScript({ retention: step.retention, reservedSpace: step.reservedSpace }),
+        // Build-class budget: the first prune on a box that has never been GC'd walks
+        // the whole snapshotter content store and can go minutes without a line.
+        { label: step.label, stallBudgetMs: STALL_BUDGET_BUILD_MS },
+      ),
     idp: async (step) => {
       const client = createIdpClient({
         fetch: globalThis.fetch,

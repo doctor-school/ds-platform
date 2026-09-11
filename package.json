@@ -114,6 +114,7 @@
     "loadtest:provision": "node tools/loadtest/provision.mjs",
     "loadtest:cleanup": "node tools/loadtest/cleanup.mjs",
     "seed:golden": "pnpm --filter @ds/db run seed:golden",
+    "stage:slot": "node tools/staging/slot.mjs",
     "staging:golden-db": "node tools/staging/golden-db.mjs",
     "deploy:check-live": "node tools/deploy/live-broadcast-check.mjs",
     "deploy:probe": "node tools/deploy/deploy-probe.mjs",

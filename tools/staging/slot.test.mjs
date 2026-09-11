@@ -22,11 +22,15 @@ import {
   PREVIEW_SLOT_CAP,
   REDIS_CONTAINER,
   SLOT_ENV_DIR,
+  STAGE_ENV_FILE,
   SLOT_LOG_PATH,
   SlotError,
   allocateRedisDatabase,
+  assertImagesBoot,
   assertPreviewCapacity,
+  assertRunningVerdict,
   assertSlotName,
+  basicAuthHeader,
   buildCommandPlan,
   caddyAttachCommand,
   caddyDetachCommand,
@@ -37,6 +41,7 @@ import {
   containerAliases,
   databaseAction,
   dropDatabaseStatements,
+  healthVerdict,
   migrateCommandPlan,
   parseArgs,
   parseAvailBytes,
@@ -48,8 +53,10 @@ import {
   planSlotReset,
   planSlotUp,
   planUnreferencedImageGc,
+  pruneScript,
   quoteCommand,
   remoteWriteScript,
+  requiredOperatorPassword,
   renderIdpRedirectUris,
   renderSlotDownEnv,
   renderSlotEnv,
@@ -69,6 +76,8 @@ import {
   slotServiceSet,
   slotTreeDir,
   slotsWithClosedPrs,
+  verifyImagesScript,
+  verifyRunningScript,
 } from "./slot.mjs";
 
 const BASE = "stage.doctor.school";
@@ -1139,4 +1148,98 @@ test("an env carrying neither route is refused naming BOTH", () => {
       /IDP_BASE_URL/.test(err.message) &&
       /IDP_EXTERNAL_DOMAIN/.test(err.message),
   );
+});
+
+// --- the five remote-only routines -------------------------------------------
+//
+// `ship` / `verify-images` / `verify-running` / `health` / `prune` are the steps with
+// no offline fallback, so what is locked here is the TEXT each one sends to the box
+// and the verdict each one reads back — never a live ssh. The shapes are production's
+// (`tools/deploy/prod.mjs` `verifyImagesBoot` / `verifyRunningSha` / retention), and
+// these tests are what keeps the pair from drifting into two different verifications.
+
+/** The slot compose's SHA-tagged set, as `slotServiceSet` derives it. */
+const BOOT_SERVICES = [
+  { name: "api", image: "ds-api", port: 3000 },
+  { name: "portal", image: "ds-portal", port: 3001 },
+];
+const RUNNING_SERVICES = [
+  ...BOOT_SERVICES,
+  { name: "doctor", image: "ds-doctor", port: 3004 },
+];
+
+test("the boot probe runs each image with BOTH compose env files and no published port", () => {
+  const script = verifyImagesScript({ slot: "pr-7", sha: SHA, services: BOOT_SERVICES });
+  assert.ok(script.includes(`--env-file ${STAGE_ENV_FILE}`));
+  assert.ok(script.includes(`--env-file ${slotEnvPath("pr-7")}`));
+  // Slot-scoped throwaway name: two slots boot-probing the same commit at once must
+  // not collide on one container name.
+  assert.match(script, /name="ds-slotcheck-pr-7-\$svc"/);
+  assert.ok(script.includes(`"$repo:${SHA}"`));
+  assert.ok(!/-p \d|--publish/.test(script), "the probe publishes no port");
+  assert.match(script, /^probe api ds-api 3000$/m);
+  assert.match(script, /^probe portal ds-portal 3001$/m);
+});
+
+test("the boot probe refuses a slot name and a SHA that are not derivable", () => {
+  assert.throws(() => verifyImagesScript({ slot: "prod", sha: SHA, services: BOOT_SERVICES }), SlotError);
+  assert.throws(() => verifyImagesScript({ slot: "pr-7", sha: "deadbeef", services: BOOT_SERVICES }), SlotError);
+});
+
+test("a non-booting image fails the converge by name; all-OK passes", () => {
+  assert.throws(
+    () => assertImagesBoot("api=OK\nportal=EXITED\n---- portal boot log ----", BOOT_SERVICES),
+    (err) => err instanceof SlotError && /portal=EXITED/.test(err.message),
+  );
+  // A service the box printed no verdict for is a FAILURE, never a pass: a probe
+  // whose output was truncated must not read as "everything booted".
+  assert.throws(() => assertImagesBoot("api=OK", BOOT_SERVICES), /portal=NO-VERDICT/);
+  assert.doesNotThrow(() => assertImagesBoot("api=OK\nportal=OK", BOOT_SERVICES));
+});
+
+test("the running verify asserts the SHA-tagged image AND health, per the container-name contract", () => {
+  const script = verifyRunningScript({ slot: "pr-7", sha: SHA, services: RUNNING_SERVICES });
+  for (const service of RUNNING_SERVICES) {
+    // `container_name: ${SLOT}-<service>` — the Caddyfile dials these names too.
+    assert.match(script, new RegExp(`docker inspect ${containerAliases("pr-7")[service.name]} `));
+    assert.match(script, new RegExp(`= "${service.image}:${SHA}"`));
+  }
+  assert.match(script, /_h" = healthy/);
+});
+
+test("a running verify that did not converge fails the run rather than reporting success", () => {
+  assert.throws(
+    () => assertRunningVerdict("TIMEOUT api=ds-api:old(healthy)", { slot: "pr-7", sha: SHA }),
+    (err) => err instanceof SlotError && /do NOT carry/.test(err.message) && /TIMEOUT/.test(err.message),
+  );
+  assert.doesNotThrow(() => assertRunningVerdict(`OK api=ds-api:${SHA}(healthy)`, { slot: "pr-7", sha: SHA }));
+});
+
+test("the prune derives the `ds-*` repos from the box and caps the BuildKit cache", () => {
+  const script = pruneScript({ retention: IMAGE_RETENTION, reservedSpace: BUILD_CACHE_RESERVED_SPACE });
+  assert.match(script, /docker images --format '\{\{\.Repository\}\}'/);
+  assert.match(script, /\^ds-/);
+  assert.ok(script.includes(`prune_repo "$repo" ${IMAGE_RETENTION}`));
+  assert.match(script, new RegExp(`buildx prune -f --reserved-space ${BUILD_CACHE_RESERVED_SPACE}`));
+});
+
+test("the health verdict reads the version the slot's api actually serves", () => {
+  assert.deepEqual(healthVerdict({ status: 200, body: `{"version":"${SHA}"}`, sha: SHA }).ok, true);
+  // Caddy's stand-wide basic auth answers 401 when the operator password is wrong.
+  assert.match(healthVerdict({ status: 401, body: "", sha: SHA }).reason, /401/);
+  assert.match(
+    healthVerdict({ status: 200, body: `{"version":"${SHA2}"}`, sha: SHA }).reason,
+    new RegExp(SHA2.slice(0, 12)),
+  );
+  assert.match(healthVerdict({ status: 200, body: "not json", sha: SHA }).reason, /JSON/);
+  assert.match(healthVerdict({ status: 200, body: "{}", sha: SHA }).reason, /version/);
+});
+
+test("the health step fails closed without the operator-machine basic-auth password", () => {
+  assert.throws(
+    () => requiredOperatorPassword({}),
+    (err) => err instanceof SlotError && /STAGE_BASIC_AUTH_PASS/.test(err.message),
+  );
+  assert.equal(requiredOperatorPassword({ STAGE_BASIC_AUTH_PASS: "s3cret" }), "s3cret");
+  assert.equal(basicAuthHeader("stage", "s3cret"), `Basic ${Buffer.from("stage:s3cret").toString("base64")}`);
 });

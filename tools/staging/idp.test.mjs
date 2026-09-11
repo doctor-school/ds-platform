@@ -16,6 +16,7 @@ import {
   planGoldenIdentities,
   planRedirectUriConverge,
   renderGoldenSubjectsEnv,
+  parsePinnedUris,
   unionUris,
 } from "./idp.mjs";
 
@@ -119,6 +120,17 @@ test("pinned URIs from stage.env survive a registry-derived converge", () => {
     "https://a",
     "https://b",
   ]);
+});
+
+test("the pinned URI lists are split exactly the way provision.sh splits them", () => {
+  assert.deepEqual(parsePinnedUris("https://a/cb, https://b/cb "), [
+    "https://a/cb",
+    "https://b/cb",
+  ]);
+  // An unset or empty pin list is «no pins», never a blank URI in the whole-set write.
+  assert.deepEqual(parsePinnedUris(""), []);
+  assert.deepEqual(parsePinnedUris(undefined), []);
+  assert.deepEqual(parsePinnedUris(",,"), []);
 });
 
 test("a failing read of the app config is a hard failure", async () => {

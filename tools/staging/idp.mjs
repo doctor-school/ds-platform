@@ -144,6 +144,21 @@ export function goldenDeletedSubject(username) {
   return `golden-deleted-${digest.slice(0, 32)}`;
 }
 
+/**
+ * The pinned URI list as `stage.env` spells it — comma separated, trimmed.
+ *
+ * The exact split `infra/dev-stand/idp/provision.sh` does (`:281-282`) on the same two
+ * keys, so the stage's own hosts survive a slot converge: the write is whole-set, and
+ * sending only what the slot registry renders would unregister everything provisioning
+ * put there (#2064 addendum 6).
+ */
+export function parsePinnedUris(text) {
+  return String(text ?? "")
+    .split(",")
+    .map((uri) => uri.trim())
+    .filter(Boolean);
+}
+
 /** `a ∪ b`, order preserved, duplicates dropped — the whole-set union. */
 export function unionUris(pinned, rendered) {
   return [...new Set([...(pinned ?? []), ...(rendered ?? [])])].filter(Boolean);

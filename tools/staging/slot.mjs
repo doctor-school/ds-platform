@@ -58,6 +58,7 @@ import {
   convergeGoldenIdentities,
   convergeRedirectUris,
   createIdpClient,
+  parsePinnedUris,
   readGoldenSubjects,
   renderGoldenSubjectsEnv,
   unionUris,
@@ -865,6 +866,23 @@ export function renderIdpRedirectUris(registry, baseDomain) {
   };
 }
 
+/**
+ * The redirect converge as ONE plan step, carried as DATA like every other step.
+ *
+ * `desired` is the set this registry renders; the PINS from `IDP_REDIRECT_URIS` /
+ * `IDP_POST_LOGOUT_URIS` are unioned onto it inside the `idp` effect, where the stage
+ * env is readable — the plan stays pure and offline-testable, and the effect stays the
+ * only thing that knows the box has a Zitadel on it (#2064 addendum 6).
+ */
+function idpRedirectStep(registry, baseDomain) {
+  return {
+    kind: "idp",
+    op: "redirect-uris",
+    label: "converge the shared IdP redirect set",
+    desired: renderIdpRedirectUris(registry, baseDomain),
+  };
+}
+
 // --- gc ----------------------------------------------------------------------
 
 const IMAGE_TAG_RE = /^(main|pr-[1-9][0-9]{0,9})-[0-9a-f]{7}$/;
@@ -957,6 +975,7 @@ export function planSlotUp({
   baseDomain,
   action = "up",
   databaseExists,
+  goldenSubjects,
   now = new Date(),
 }) {
   assertSlotName(slot);
@@ -981,7 +1000,7 @@ export function planSlotUp({
       kind: "write",
       label: "write slot env",
       path: slotEnvPath(slot),
-      contents: renderSlotEnv({ slot, sha, baseDomain, redisDb }),
+      contents: renderSlotEnv({ slot, sha, baseDomain, redisDb, goldenSubjects }),
       mode: 0o640,
     },
   ];
@@ -1012,6 +1031,11 @@ export function planSlotUp({
     },
     renderIncludeSteps(nextRegistry, baseDomain),
     caddyReloadCommand(),
+    // AFTER the registry write, so the whole set reflects the slot that just came up.
+    // A failure here fails the converge: a slot whose callback the IdP does not hold
+    // answers `invalid redirect_uri` on every login, which is strictly worse than a
+    // refused `up` (spec §5 «Converge», #2064 addendum 2).
+    idpRedirectStep(nextRegistry, baseDomain),
   );
 
   return { slot, sha, redisDb, hosts, registry: nextRegistry, steps };
@@ -1024,7 +1048,7 @@ export function planSlotUp({
  * serves them: Caddy would answer 502 behind a valid certificate instead of the
  * honest «no slot owns this host» 404, and on-demand issuance would keep trying.
  */
-export function planSlotDown({ slot, registry, baseDomain, now = new Date() }) {
+export function planSlotDown({ slot, registry, baseDomain, goldenSubjects, now = new Date() }) {
   assertSlotName(slot);
   assertBaseDomain(baseDomain);
   void now;
@@ -1036,7 +1060,7 @@ export function planSlotDown({ slot, registry, baseDomain, now = new Date() }) {
       kind: "write",
       label: "ensure slot env",
       path: slotEnvPath(slot),
-      contents: renderSlotDownEnv({ slot, entry, baseDomain }),
+      contents: renderSlotDownEnv({ slot, entry, baseDomain, goldenSubjects }),
       mode: 0o640,
     },
     caddyDetachCommand(slot),
@@ -1080,6 +1104,11 @@ export function planSlotDown({ slot, registry, baseDomain, now = new Date() }) {
     });
   }
 
+  // Last, for the same reason `up` converges last: the set is rendered from the
+  // registry the plan has already written, so the torn-down slot's callback is gone
+  // from the IdP rather than left pointing at nothing.
+  steps.push(idpRedirectStep(nextRegistry, baseDomain));
+
   return { slot, registry: nextRegistry, steps };
 }
 
@@ -1112,6 +1141,7 @@ export function planSlotReset({
   registry,
   baseDomain,
   actor,
+  goldenSubjects,
   now = new Date(),
 }) {
   assertBaseDomain(baseDomain);
@@ -1133,6 +1163,7 @@ export function planSlotReset({
     baseDomain,
     action: "up",
     databaseExists: true,
+    goldenSubjects,
     now,
   });
   const steps = [
@@ -1161,6 +1192,73 @@ export function planSlotReset({
     ...up.steps,
   ];
   return { slot: "main", sha, redisDb: up.redisDb, hosts: up.hosts, registry: up.registry, steps };
+}
+
+// --- reset-identities --------------------------------------------------------
+
+/** The one audit line `reset-identities` appends. Pure, so its shape is testable. */
+export function resetIdentitiesLogLine({ slot, actor, now = new Date() }) {
+  return `${now.toISOString()} reset-identities ${slot} by ${actor || "unknown"}\n`;
+}
+
+/**
+ * `reset-identities <slot>` \u2014 the golden fixture put back the way the scenarios expect.
+ *
+ * The IdP half (create/delete/password/verify at the shared Zitadel) happens in the
+ * `idp` effect BEFORE this plan is built, because its output \u2014 the five subject ids \u2014
+ * is this plan's input. What is left is the box-local half, and its order is the point:
+ *
+ * 1. write the tool-owned `DS_GOLDEN_SUB_*` file (0644, non-secret: opaque ids, never
+ *    passwords) so the next `slot up` renders a slot env that `seed:golden` can resolve;
+ * 2. FLUSH the slot's Redis logical database \u2014 a rebuilt account keeps its username but
+ *    gets a NEW subject, so every session, OTP challenge and rate-limit key keyed on the
+ *    old one is stale. Leaving them behind is how a \u00abthe fixture is reset\u00bb run still
+ *    fails on a half-live session;
+ * 3. append one audit line.
+ *
+ * A preview that is not in the registry is refused rather than defaulted: it owns no
+ * Redis database, so \u00abflush its database\u00bb has no honest answer.
+ */
+export function planResetIdentities({ slot, registry, subjects, actor, now = new Date() }) {
+  assertSlotName(slot);
+  if (slot !== "main" && !registry?.slots?.[slot]) {
+    throw new SlotError(
+      `refusing to reset the identities of \`${slot}\`: it is not in the registry, so it ` +
+        "owns no Redis logical database to flush. Bring it up first with " +
+        `\`slot up ${slot} <sha>\`.`,
+    );
+  }
+  const redisDb = allocateRedisDatabase(slot, registry);
+  const steps = [
+    {
+      kind: "write",
+      label: "write the tool-owned golden subjects",
+      path: GOLDEN_SUBJECTS_PATH,
+      contents: renderGoldenSubjectsEnv(subjects),
+      mode: 0o644,
+    },
+    {
+      kind: "sh",
+      label: "flush the slot's redis logical database",
+      command: [
+        "docker",
+        "exec",
+        REDIS_CONTAINER,
+        "redis-cli",
+        "-n",
+        String(redisDb),
+        "FLUSHDB",
+      ],
+    },
+    {
+      kind: "append",
+      label: "audit the identity reset",
+      path: SLOT_LOG_PATH,
+      contents: resetIdentitiesLogLine({ slot, actor, now }),
+      mode: 0o640,
+    },
+  ];
+  return { slot, redisDb, subjects, steps };
 }
 
 // --- the executor ------------------------------------------------------------
@@ -1194,7 +1292,7 @@ export function planSlotReset({
  */
 export async function runSlotPlan(
   plan,
-  { sql, sh, write, append, probe, log = () => {} },
+  { sql, sh, write, append, probe, idp, log = () => {} },
 ) {
   const present = async (item, step) => {
     if (probe) {
@@ -1246,6 +1344,15 @@ export async function runSlotPlan(
         );
       }
       await append(step.path, step.contents, step.mode);
+    } else if (step.kind === "idp") {
+      if (!idp) {
+        throw new SlotError(
+          `step "${step.label}" talks to the shared Zitadel and so needs an \`idp\` ` +
+            "effect; there is no offline fallback, because an unregistered redirect URI " +
+            "fails every login with `invalid redirect_uri`.",
+        );
+      }
+      step.result = await idp(step);
     } else if (step.kind === "write-many") {
       for (const file of step.files) await write(file.path, file.contents, file.mode);
     } else throw new SlotError(`unknown step kind: ${step.kind}`);
@@ -1265,15 +1372,42 @@ export async function runSlotCommand({
   registry,
   baseDomain,
   effects,
+  goldenSubjects,
   databaseExists: mainDatabaseExists,
 }) {
+  if (options.command === "reset-identities") {
+    if (!effects?.idp) {
+      throw new SlotError(
+        "`reset-identities` converges the golden fixture at the shared Zitadel and so " +
+          "needs an `idp` effect",
+      );
+    }
+    // The converge runs FIRST and its subjects are this plan's input: writing the file
+    // before the IdP agrees with it would leave the box claiming subject ids that the
+    // identity provider does not hold.
+    const subjects = await effects.idp({
+      op: "golden-identities",
+      label: "converge the golden identities",
+    });
+    const plan = planResetIdentities({
+      slot: options.slot,
+      registry,
+      subjects,
+      actor: options.actor,
+    });
+    await runSlotPlan(plan, effects);
+    return (
+      `golden identities converged: ${GOLDEN_SUBJECTS_PATH} rewritten and redis db ` +
+      `${plan.redisDb} (slot ${plan.slot}) flushed`
+    );
+  }
   if (options.command === "down") {
-    const plan = planSlotDown({ slot: options.slot, registry, baseDomain });
+    const plan = planSlotDown({ slot: options.slot, registry, baseDomain, goldenSubjects });
     await runSlotPlan(plan, effects);
     return `slot ${options.slot} is down`;
   }
   if (options.command === "reset") {
-    const plan = planSlotReset({ registry, baseDomain, actor: options.actor });
+    const plan = planSlotReset({ registry, baseDomain, actor: options.actor, goldenSubjects });
     await runSlotPlan(plan, effects);
     return (
       `slot main was reset from ${GOLDEN_DB_BASE} and re-converged on ` +
@@ -1295,6 +1429,7 @@ export async function runSlotCommand({
     baseDomain,
     action: options.command,
     databaseExists,
+    goldenSubjects,
   });
   await runSlotPlan(plan, effects);
   return (
@@ -1306,23 +1441,15 @@ export async function runSlotCommand({
 // --- CLI ---------------------------------------------------------------------
 
 const COMMANDS_WITH_SLOT_AND_SHA = new Set(["up", "sync"]);
-const COMMANDS_WITH_SLOT = new Set(["down"]);
+const COMMANDS_WITH_SLOT = new Set(["down", "reset-identities"]);
 const COMMANDS_WITHOUT_ARGS = new Set(["status", "gc", "render"]);
-/** Part 2b of #2064 implements these; refusing beats a silent no-op. */
-const DEFERRED_COMMANDS = new Set(["reset-identities"]);
 
 export function parseArgs(argv) {
   const [command, ...rest] = argv;
   if (!command) {
     throw new SlotError(
-      "usage: slot up|sync <slot> <sha> | down <slot> | reset main --yes | status | gc | render",
-    );
-  }
-  if (DEFERRED_COMMANDS.has(command)) {
-    throw new SlotError(
-      `\`${command}\` is not implemented until part 2b of #2064 — refusing rather than doing nothing. ` +
-        "Until then, re-register a slot's redirect URIs by hand through " +
-        "`infra/dev-stand/idp/provision.sh` with the WHOLE set `slot status` prints.",
+      "usage: slot up|sync <slot> <sha> | down <slot> | reset main --yes | " +
+        "reset-identities <slot> | status | gc | render",
     );
   }
   if (command === "reset") {
@@ -1434,8 +1561,86 @@ function realEffects() {
       mkdirSync(dirname(path), { recursive: true, mode: 0o750 });
       appendFileSync(path, contents, { mode });
     },
+    // The ONE effect that leaves the box. Built per step, so every command that emits
+    // no `idp` step still runs on a box where the bootstrap PAT file is not readable.
+    //
+    // The desired redirect set is `pins ∪ rendered`, pins first: the write is
+    // whole-set, so sending only what the slot registry renders would unregister the
+    // stage's OWN hosts that `infra/dev-stand/idp/provision.sh` put there, and the
+    // stage would stop being able to log in the moment a slot came up (#2064 addendum 6).
+    idp: async (step) => {
+      const client = createIdpClient({
+        fetch: globalThis.fetch,
+        baseUrl: requiredIdpBaseUrl(),
+        pat: readIdpPat(),
+      });
+      const projectName = process.env.IDP_PROJECT_NAME || undefined;
+      const appName = process.env.IDP_APP_NAME || undefined;
+      const log = (line) => console.log(line);
+      if (step.op === "redirect-uris") {
+        await convergeRedirectUris({
+          client,
+          projectName,
+          appName,
+          desired: {
+            redirectUris: unionUris(
+              parsePinnedUris(process.env.IDP_REDIRECT_URIS),
+              step.desired.redirectUris,
+            ),
+            postLogoutUris: unionUris(
+              parsePinnedUris(process.env.IDP_POST_LOGOUT_URIS),
+              step.desired.postLogoutUris,
+            ),
+          },
+          log,
+        });
+        return undefined;
+      }
+      if (step.op === "golden-identities") {
+        // `process.env` IS the password map: the five `DS_GOLDEN_PASSWORD_*` are
+        // owner-placed in /etc/ds-platform/stage.env and read by name, never logged.
+        return convergeGoldenIdentities({
+          client,
+          accounts: GOLDEN_IDP_ACCOUNTS,
+          passwords: process.env,
+          env: process.env,
+          log,
+        });
+      }
+      throw new SlotError(`unknown idp step op: ${step.op}`);
+    },
     log: (line) => console.log(line),
   };
+}
+
+/** The shared Zitadel's origin, as `stage.env` carries it. */
+function requiredIdpBaseUrl() {
+  const baseUrl = process.env.IDP_BASE_URL;
+  if (!baseUrl) {
+    throw new SlotError(
+      "IDP_BASE_URL is required to converge the shared IdP — source " +
+        "/etc/ds-platform/stage.env before running this tool",
+    );
+  }
+  return baseUrl;
+}
+
+/** The bootstrap PAT, from the root-only file the stage provisioning writes. */
+function readIdpPat() {
+  let pat;
+  try {
+    pat = readFileSync(IDP_PAT_FILE, "utf8").trim();
+  } catch (err) {
+    if (err?.code === "ENOENT") {
+      throw new SlotError(
+        `${IDP_PAT_FILE} does not exist — the IdP bootstrap PAT is placed there by the ` +
+          "stage provisioning; this tool never mints one",
+      );
+    }
+    throw err;
+  }
+  if (!pat) throw new SlotError(`${IDP_PAT_FILE} is empty`);
+  return pat;
 }
 
 function requiredBaseDomain() {
@@ -1485,7 +1690,7 @@ async function main() {
   if (options.command === "status") {
     console.log("# registry (/var/lib/ds-platform/slots.json)");
     console.log(serializeRegistry(registry).trimEnd());
-    console.log("# shared IdP redirect set — part 2 converges this onto the app");
+    console.log("# shared IdP redirect set — `up`/`down` converge this onto the app");
     if (process.env.STAGE_BASE_DOMAIN) {
       console.log(
         JSON.stringify(
@@ -1521,12 +1726,32 @@ async function main() {
 
   const baseDomain = requiredBaseDomain();
 
+  // `up`, `sync` and `reset` render a slot env and so REQUIRE the subjects: the refusal
+  // that `readGoldenSubjects` throws names `ds-slot reset-identities`, which is the
+  // command that writes them. `down` and `reset-identities` must stay possible on a box
+  // where the file does not exist yet — the first is a teardown that must never be
+  // blocked, the second is what creates the file — so for those two, and only those
+  // two, an absent file degrades to «no subjects» instead of aborting.
+  const rendersSlotEnv =
+    options.command === "up" || options.command === "sync" || options.command === "reset";
+  let goldenSubjects;
+  if (rendersSlotEnv) {
+    goldenSubjects = readGoldenSubjects();
+  } else {
+    try {
+      goldenSubjects = readGoldenSubjects();
+    } catch {
+      goldenSubjects = undefined;
+    }
+  }
+
   console.log(
     await runSlotCommand({
       options: { ...options, actor: process.env.SUDO_USER || process.env.USER },
       registry,
       baseDomain,
       effects,
+      goldenSubjects,
       // A THUNK: `runSlotCommand` calls it only in the `up`/`sync` branch of `main`.
       // Passing the answer instead made `slot down main` reach into Postgres for a
       // question its plan never asks (Mode (a) NIT, PR #2168).

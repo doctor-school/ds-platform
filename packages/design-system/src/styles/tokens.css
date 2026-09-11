@@ -70,6 +70,9 @@
   --color-header-chip-foreground: #114d9e;
   --color-header-chip-shadow: oklch(0.21 0.02 250);
   --color-header-hairline: rgba(255, 255, 255, 0.5);
+  --color-header-topbar: #0d3a77;
+  --color-header-topbar-foreground: rgba(255, 255, 255, 0.34);
+  --color-footer-wordmark: oklch(0.945 0.018 250);
   --color-hero: #114d9e;
   --color-hero-foreground: #ffffff;
   --color-hero-muted: #d3e8fd;
@@ -253,6 +256,9 @@
   --color-header-chip-foreground: #114d9e;
   --color-header-chip-shadow: oklch(0.21 0.02 250);
   --color-header-hairline: rgba(255, 255, 255, 0.5);
+  --color-header-topbar: #0d3a77;
+  --color-header-topbar-foreground: rgba(255, 255, 255, 0.34);
+  --color-footer-wordmark: rgba(174, 212, 251, 0.09);
   --color-hero: #114d9e;
   --color-hero-foreground: #ffffff;
   --color-hero-muted: #d3e8fd;
@@ -310,6 +316,9 @@
   --color-header-chip-foreground: #114d9e;
   --color-header-chip-shadow: oklch(0.21 0.02 250);
   --color-header-hairline: rgba(255, 255, 255, 0.5);
+  --color-header-topbar: #0d3a77;
+  --color-header-topbar-foreground: rgba(255, 255, 255, 0.34);
+  --color-footer-wordmark: oklch(0.945 0.018 250);
   --color-hero: #114d9e;
   --color-hero-foreground: #ffffff;
   --color-hero-muted: #d3e8fd;
@@ -367,6 +376,9 @@
   --color-header-chip-foreground: var(--color-header-chip-foreground);
   --color-header-chip-shadow: var(--color-header-chip-shadow);
   --color-header-hairline: var(--color-header-hairline);
+  --color-header-topbar: var(--color-header-topbar);
+  --color-header-topbar-foreground: var(--color-header-topbar-foreground);
+  --color-footer-wordmark: var(--color-footer-wordmark);
   --color-hero: var(--color-hero);
   --color-hero-foreground: var(--color-hero-foreground);
   --color-hero-muted: var(--color-hero-muted);

@@ -6,9 +6,12 @@ import {
 } from "../support/doctor-session";
 import {
   DISCOVERY_HEADING,
-  desktopThemeToggle,
+  DISCOVERY_HREF,
+  NAV_BROADCASTS,
   setMyDisplayName,
   shellHeader,
+  shellLogo,
+  themeToggle,
 } from "../support/shell";
 
 /**
@@ -64,17 +67,24 @@ Then(
     // discovery landing) is already asserted; the avatar assertion below
     // auto-waits for the signaled re-read to resolve.
     const header = shellHeader(page);
-    await expect(header.getByTestId("shell-logo")).toBeVisible();
-    await expect(page.getByTestId("shell-nav-broadcasts")).toBeVisible();
-    await expect(page.getByTestId("shell-nav-my-events")).toBeVisible();
-    await expect(desktopThemeToggle(page)).toBeVisible();
+    await expect(shellLogo(page)).toBeVisible();
+    // Since #2180 the nav is «Эфиры» ALONE on both storefronts (owner decision
+    // 2026-09-10, merged 008/017 deltas); «Мои события» is reached from the
+    // profile, and its destination stays driven by the feature-005 specs.
+    const nav = header.getByTestId("shell-nav-desktop");
+    await expect(nav.getByRole("link", { name: NAV_BROADCASTS })).toBeVisible();
+    await expect(nav.getByRole("link")).toHaveCount(1);
+    await expect(themeToggle(page)).toBeVisible();
     // EARS-5/6: the avatar is an icon showing the doctor's real initials.
     await expect(page.getByTestId("shell-avatar")).toHaveText(DOCTOR_INITIALS);
   },
 );
 
-When("the doctor activates «Мои события» in the header nav", async ({ page }) => {
-  await page.getByTestId("shell-nav-my-events").click();
+When("the doctor activates «Эфиры» in the header nav", async ({ page }) => {
+  await shellHeader(page)
+    .getByTestId("shell-nav-desktop")
+    .getByRole("link", { name: NAV_BROADCASTS })
+    .click();
 });
 
 Then("the shell navigates to {string}", async ({ page }, path: string) => {
@@ -124,12 +134,14 @@ Then("the shell navigates to the login surface", async ({ page }) => {
 
 // ── Mobile ≡ collapse (EARS-11/2) ─────────────────────────────────────────────
 
-Given("a doctor on the discovery front-door at a mobile viewport", async ({ page }) => {
+Given("a doctor on an authenticated surface at a mobile viewport", async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 800 });
-  // A fresh 003 doctor (lands on /account), then a hard load of `/` so the header
-  // reads the session and renders the doctor branch at the mobile breakpoint.
+  // A fresh 003 doctor (lands on /account), then a hard load of the authenticated
+  // events surface so the header reads the session and renders the doctor branch
+  // at the mobile breakpoint — and so the ≡ selection is a REAL navigation away
+  // from the current route rather than a same-route no-op.
   await provisionLoggedInDoctor(page);
-  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await page.goto("/account/events", { waitUntil: "domcontentloaded" });
 });
 
 When("the doctor opens the header ≡ navigation", async ({ page }) => {
@@ -138,22 +150,26 @@ When("the doctor opens the header ≡ navigation", async ({ page }) => {
   await shellHeader(page).getByTestId("shell-mobile-menu").locator("summary").click();
 });
 
-Then("the ≡ dropdown carries the items [Эфиры · Мои события]", async ({ page }) => {
-  const broadcasts = page.getByTestId("shell-mobile-broadcasts");
-  const myEvents = page.getByTestId("shell-mobile-my-events");
+Then("the ≡ dropdown carries the same nav items as the desktop bar", async ({ page }) => {
+  // ONE host config value feeds both lists, so they cannot drift apart. Since
+  // #2180 that list is «Эфиры» alone (owner decision 2026-09-10).
+  const mobileNav = page.getByTestId("shell-nav-mobile");
+  await expect(mobileNav).toBeVisible();
+  await expect(mobileNav.getByRole("link")).toHaveCount(1);
+  const broadcasts = mobileNav.getByRole("link", { name: NAV_BROADCASTS });
   await expect(broadcasts).toBeVisible();
-  await expect(myEvents).toBeVisible();
-  await expect(broadcasts).toHaveAttribute("href", "/");
-  await expect(myEvents).toHaveAttribute("href", "/account/events");
+  await expect(broadcasts).toHaveAttribute("href", DISCOVERY_HREF);
 });
 
 Then(
-  "selecting «Мои события» in the ≡ dropdown navigates to {string}",
+  "selecting «Эфиры» in the ≡ dropdown navigates to {string}",
   async ({ page }, path: string) => {
-    // A logged-in doctor, so the authenticated target resolves in place (no auth
-    // redirect) — EARS-11 preserves every target's resolution (EARS-2).
-    await page.getByTestId("shell-mobile-my-events").click();
-    await expect(page).toHaveURL(new RegExp(`${escapeRe(path)}$`));
+    // EARS-11 preserves every target's resolution (EARS-2).
+    await page
+      .getByTestId("shell-nav-mobile")
+      .getByRole("link", { name: NAV_BROADCASTS })
+      .click();
+    await expect(page).toHaveURL(new RegExp(`${escapeRe(path)}(?:$|[?#])`));
   },
 );
 

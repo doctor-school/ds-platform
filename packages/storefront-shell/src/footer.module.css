@@ -1,0 +1,53 @@
+/*
+ * Footer CSS that the design system genuinely cannot express as tokens-only
+ * utilities. Two blocks, both taken verbatim from the canvas `ds-shell.dc.html`
+ * footer.
+ *
+ * 1. The brand-mark theme swap (`logoSrc`: the colour wordmark on the light
+ *    page, the white one on the dark page). A CSS module rather than a `dark:`
+ *    utility because the theme's source of truth is `<html class="dark">` while
+ *    Tailwind's stock `dark:` variant keys off `prefers-color-scheme`, which
+ *    would swap the mark against the wrong theme. The apps declare
+ *    `@custom-variant dark` app-locally (#1955), but this package is mounted by
+ *    BOTH storefronts and must not depend on either app's globals.
+ *    Both marks are painted and CSS picks one, so the swap needs no client
+ *    component and cannot flash the wrong mark before hydration.
+ *
+ * 2. The giant decorative wordmark. The canvas fits it with a ResizeObserver;
+ *    here it is pure CSS — a container-typed box plus the container-query
+ *    `font-size` the host config carries (`giantSize`). The optical values
+ *    (tight tracking, sub-unit leading, the baseline nudge that bleeds the
+ *    glyphs into the page edge) have no token or utility-scale equivalent and
+ *    arbitrary Tailwind values are lint-blocked, so they live here as one named
+ *    decorative rule rather than as inline style soup.
+ */
+.logoColor {
+  display: block;
+}
+
+.logoWhite {
+  display: none;
+}
+
+:global(.dark) .logoColor {
+  display: none;
+}
+
+:global(.dark) .logoWhite {
+  display: block;
+}
+
+.giantBox {
+  overflow: hidden;
+  container-type: inline-size;
+}
+
+.giant {
+  font-weight: 800;
+  letter-spacing: -0.05em;
+  line-height: 0.78;
+  white-space: nowrap;
+  text-align: center;
+  transform: translateY(0.16em);
+  user-select: none;
+}

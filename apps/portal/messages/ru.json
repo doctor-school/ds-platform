@@ -120,13 +120,21 @@
     "signOut": "Выйти из аккаунта"
   },
   "shell": {
-    "logoAlt": "Doctor.School",
+    "logoAlt": "Doctor.School · Академия — на главную",
+    "topbar": "BBM: Академия смыслов",
     "navBroadcasts": "Эфиры",
-    "navMyEvents": "Мои события",
     "login": "Войти",
-    "themeToggle": "Переключить тему",
     "profile": "Мой профиль",
-    "menu": "Меню"
+    "footerSections": "Разделы",
+    "footerDocumentsTitle": "Документы и контакты",
+    "footerDocuments": "Документы",
+    "footerContacts": "Контакты",
+    "footerCrossTitle": "Врачам",
+    "footerCrossLabel": "Doctor.School ↗",
+    "footerCrossNote": "Конечный продукт: специальности, школы, курсы, события.",
+    "footerNoteBrand": "BBM: Академия смыслов",
+    "footerNoteCopyright": "© Doctor.School, 2026",
+    "footerGiant": "Academy.Doctor.School"
   },
   "webinar": {
     "breadcrumb": "Эфиры",

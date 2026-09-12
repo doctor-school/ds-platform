@@ -1,12 +1,18 @@
 import { test, expect } from "@playwright/test";
 import { LIVE_STAND, provisionLoggedInDoctor } from "../support/doctor-session";
-import { shellHeader, desktopThemeToggle } from "../support/shell";
+import {
+  shellHeader,
+  shellLogo,
+  themeToggle,
+  NAV_BROADCASTS,
+} from "../support/shell";
 
 /**
- * 008 EARS-1 — the persistent app-shell header (logo, top-nav [Эфиры · Мои
- * события], theme toggle) is present on EVERY portal route, not only by direct
- * link. Driven in the running UI against the ALREADY-SHIPPED header (#982/#994,
- * `components/app-shell-header.tsx` mounted in `app/layout.tsx`).
+ * 008 EARS-1 / EARS-14 — the persistent chrome (logo, top-nav «Эфиры», theme
+ * toggle, footer) is present on EVERY portal route, not only by direct link.
+ * Driven in the running UI against the SHARED chrome (`@ds/storefront-shell`,
+ * #2180): `components/academy-shell-header.tsx` fills the `@chrome` slot and
+ * `app/layout.tsx` mounts the footer, both from `lib/shell-config.ts`.
  *
  * The route sample spans a public surface (`/`) and two authenticated ones
  * (`/account`, `/account/events`) — the latter two require a session, so this pin
@@ -34,17 +40,26 @@ test.describe("008 EARS-1 persistent app-shell header presence (e2e)", () => {
 
       const header = shellHeader(page);
       await expect(header, `header present on ${route}`).toBeVisible();
-      // Logo → the discovery front-door (a link to /).
-      await expect(header.getByTestId("shell-logo")).toBeVisible();
-      // Top-nav [Эфиры · Мои события].
+      // Logo → the discovery front-door.
+      await expect(shellLogo(page)).toBeVisible();
+      // Top-nav — «Эфиры» alone since the owner's 2026-09-10 decision (the nav
+      // grows with features 015/016 and the partner surface; «Мои события» is
+      // reached from the profile, not from the chrome).
       const nav = page.getByTestId("shell-nav-desktop");
       await expect(nav, `top-nav present on ${route}`).toBeVisible();
-      await expect(nav.getByTestId("shell-nav-broadcasts")).toBeVisible();
-      await expect(nav.getByTestId("shell-nav-my-events")).toBeVisible();
+      await expect(
+        nav.getByRole("link", { name: NAV_BROADCASTS }),
+      ).toBeVisible();
       // Theme toggle.
       await expect(
-        desktopThemeToggle(page),
+        themeToggle(page),
         `theme toggle present on ${route}`,
+      ).toBeVisible();
+      // 008 EARS-14 — the footer is part of the persistent chrome too, on
+      // every non-hidden route (new on this host with #2180).
+      await expect(
+        page.getByTestId("storefront-footer"),
+        `footer present on ${route}`,
       ).toBeVisible();
     }
   });

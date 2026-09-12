@@ -159,6 +159,11 @@ test.describe("020 EARS-5: the guest hand-off into 021 and the exact return", ()
     await expect(page.getByTestId("register-medworker")).toHaveCount(0);
     await expect(page.getByTestId("register-partner-data")).toHaveCount(0);
     await expect(page.locator("[data-testid^=\"register-\"]")).toHaveCount(0);
-    await expect(page.locator("form")).toHaveCount(0);
+    // Scoped to the PAGE, not the document: since #2180 the shared chrome owns a
+    // `<form role="search">` in the header on every doctor route (017 EARS-5), so
+    // a document-wide `form` count would assert the absence of the header rather
+    // than the absence of registration. The clause is about what the EVENT PAGE
+    // hosts — `<main>` is exactly that boundary.
+    await expect(page.locator("main form")).toHaveCount(0);
   });
 });

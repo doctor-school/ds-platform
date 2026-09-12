@@ -130,6 +130,18 @@
       "$value": "rgba(255, 255, 255, 0.5)",
       "$description": "On-header muted border — the half-strength (white @ 50%) hairline of the header's icon-button family (the canvas `rgba(255,255,255,.5)`); hover raises to full-strength `header-foreground`. Same value in both theme sets — white @ 50% reads on the navy blue.700 header fill (both themes since owner verdict #4, #1085)."
     },
+    "header-topbar": {
+      "$value": "{color.blue.800}",
+      "$description": "The BBM announcement micro-band that sits directly ABOVE the `header` chrome band (canvas `ds-shell.dc.html` line 17) — the deeper navy blue.800 (#0D3A77), the SAME value in both theme sets, exactly like its `header` sibling. A distinct role from `header` (blue.700): the two navies are what separate the band from the chrome bar without a divider rule."
+    },
+    "header-topbar-foreground": {
+      "$value": "rgba(255, 255, 255, 0.34)",
+      "$description": "Ink of the BBM announcement micro-band — the canvas `rgba(255,255,255,.34)` letterspaced uppercase micro-caption on `header-topbar` (ds-shell.dc.html line 17), the same value in both theme sets. A DECOR tier by canvas decision, like `hero-muted`: at this strength it does not clear the WCAG normal-text ratio on blue.800, so the band is brand decor and never the only carrier of a message."
+    },
+    "footer-wordmark": {
+      "$value": "oklch(0.945 0.018 250)",
+      "$description": "The giant decorative storefront wordmark bled across the bottom of the footer (canvas `ds-shell.dc.html` `giantInk`) — a pale blue-grey wash on light, a faint blue on near-black in dark. It is `aria-hidden` brand decor carrying no information, which is why it sits far below any text ratio."
+    },
     "hero": {
       "$value": "{color.blue.700}",
       "$description": "Discovery-hero poster band (the `/webinars` week + month listing heroes) — navy blue.700 (#114D9E) in BOTH theme sets. Owner verdict #4 (#1052 → #1085) repointed the LIGHT band from the canvas headerBg bright blue.500 to production navy, matching the `header` chrome band so nav + hero read as one continuous blue. White on blue.700 = 8.14:1, full normal-text AA; the hero carries LARGE/BOLD display text in `hero-foreground` plus `hero-muted` poster-decor small print that is leaf-excluded from the axe gate (#924). The vendored canvases (`events-feed.dc.html` / `events-feed-month.dc.html` line 291) still render the light headerBg `#2D84F2` — the recorded owner-directed deviation until the DesignSync canvas follow-up."

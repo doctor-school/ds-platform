@@ -1,8 +1,10 @@
 import { test, expect } from "@playwright/test";
 import {
-  desktopThemeToggle,
   isDark,
   storedTheme,
+  themeToggle,
+  THEME_TOGGLE_TO_DARK,
+  THEME_TOGGLE_TO_LIGHT,
 } from "../support/shell";
 
 /**
@@ -26,18 +28,31 @@ test.describe("008 EARS-3 app-shell theme toggle flips + persists (e2e)", () => 
     await context.clearCookies();
     await page.goto("/", { waitUntil: "domcontentloaded" });
 
-    const toggle = desktopThemeToggle(page);
+    // Since #2180 the shared chrome renders exactly ONE toggle at every width
+    // (017 EARS-1 forbids a second copy in the DOM).
+    const toggle = themeToggle(page);
     await expect(toggle).toBeVisible();
+    await expect(page.getByTestId("theme-toggle")).toHaveCount(1);
 
     // Flip the theme — read the resting state first so the assertion holds
     // regardless of the fresh-visit system default (headless chromium = light).
     const before = await isDark(page);
+    // The accessible name announces WHICH theme activating it turns on, so it is
+    // direction-specific (008 EARS-13 as narrowed by #2180).
+    await expect(toggle).toHaveAttribute(
+      "aria-label",
+      before ? THEME_TOGGLE_TO_LIGHT : THEME_TOGGLE_TO_DARK,
+    );
     await toggle.click();
     await expect
       .poll(() => isDark(page), { message: "the toggle flips .dark live" })
       .toBe(!before);
     // aria-pressed tracks the now-dark state, and the EXPLICIT choice persists.
     await expect(toggle).toHaveAttribute("aria-pressed", String(!before));
+    await expect(toggle).toHaveAttribute(
+      "aria-label",
+      before ? THEME_TOGGLE_TO_DARK : THEME_TOGGLE_TO_LIGHT,
+    );
     expect(await storedTheme(page)).toBe(before ? "light" : "dark");
 
     // The choice survives a full reload (the FOUC guard re-applies it).

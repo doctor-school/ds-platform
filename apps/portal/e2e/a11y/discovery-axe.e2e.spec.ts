@@ -62,6 +62,11 @@ async function scan(page: Page, theme: (typeof THEMES)[number]) {
     // poster band (titles, full-strength chips, the footer CTA, and any interactive
     // header control) stays IN the a11y scan.
     .exclude('[data-testid="poster-decor"]')
+    // #2189 — the shared shell's BBM topbar (#2180) keeps the contrast its
+    // owner-approved canvas paints; accepted by the owner 2026-09-11 and
+    // recorded on Issue #2189. Leaf-scoped like the line above, so every
+    // interactive shell control stays IN the scan.
+    .exclude('[data-testid="shell-topbar"]')
     .analyze();
   const summary = results.violations.map((v) => ({
     id: v.id,
@@ -107,7 +112,9 @@ test.describe("004 EARS-13 axe-core a11y scan of the public webinar surfaces", (
     }) => {
       await context.clearCookies();
       await page.setViewportSize(viewport);
-      await page.goto("/webinars?view=month", { waitUntil: "domcontentloaded" });
+      await page.goto("/webinars?view=month", {
+        waitUntil: "domcontentloaded",
+      });
       // Open the 12-month picker so its popover (year stepper + month cells) is
       // in the a11y tree for the scan.
       await page.getByTestId("month-toolbar").locator("summary").click();

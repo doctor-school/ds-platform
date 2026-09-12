@@ -11,7 +11,8 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:e2e:ci": "node e2e/run-ci-tiers.mjs"
+    "test:e2e:ci": "node e2e/run-ci-tiers.mjs",
+    "test:e2e:shell": "playwright test --config=playwright.shell.config.ts"
   },
   "dependencies": {
     "@ds/design-system": "workspace:*",
@@ -19,6 +20,7 @@
     "@ds/legal-content": "workspace:*",
     "@ds/room": "workspace:*",
     "@ds/schemas": "workspace:*",
+    "@ds/storefront-shell": "workspace:*",
     "next": "16.3.4",
     "react": "19.2.8",
     "react-dom": "19.2.8",

@@ -16,8 +16,13 @@ import { test, expect, type Page } from "@playwright/test";
  * Single theme (light) — composed pages are not the token catalogue; the
  * theme-matrix contrast scan lives in the showcase gate.
  *
- * If axe reports a REAL violation, the fix is the surface, NOT a weakened scan —
- * this spec allowlists and excludes no rule.
+ * If axe reports a REAL violation, the fix is the surface, NOT a weakened scan.
+ * This spec allowlists no RULE. It carries exactly one NODE exclusion, on the
+ * routes that mount the shared shell: the BBM topbar
+ * (`[data-testid="shell-topbar"]`), whose contrast the owner accepted on
+ * 2026-09-11 as the canvas paints it — recorded as Issue #2189 so the blind
+ * spot is traceable from the code rather than lost in a review thread. It is
+ * leaf-scoped, so no interactive shell control is swallowed with it.
  */
 const WCAG_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"];
 
@@ -59,7 +64,15 @@ test("#1440 storefront root passes WCAG 2 A/AA + one-h1 shell check", async ({
   await expect(h1, "h1 count on /").toHaveCount(1);
   await expect(h1, "h1 text on /").not.toHaveText(/^\s*$/);
 
-  const results = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze();
+  const results = await new AxeBuilder({ page })
+    .withTags(WCAG_TAGS)
+    // #2189 — the shared shell's BBM topbar keeps the contrast its owner-approved
+    // canvas paints (`design-source/ds-shell.dc.html`, #2180); the owner accepted
+    // that on 2026-09-11 and Issue #2189 is the explicit record so the blind spot
+    // stays traceable from here. Leaf-scoped (`[data-testid=…]`), never a
+    // container band — every interactive shell control stays IN the scan.
+    .exclude('[data-testid="shell-topbar"]')
+    .analyze();
 
   // Surface every violation in the assertion message so a CI failure is
   // self-describing (rule id + impact + the offending node selectors).
@@ -98,7 +111,15 @@ test("#1440 the hero counters' loading render passes WCAG 2 A/AA", async ({
     "data-state",
     "loading",
   );
-  const results = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze();
+  const results = await new AxeBuilder({ page })
+    .withTags(WCAG_TAGS)
+    // #2189 — the shared shell's BBM topbar keeps the contrast its owner-approved
+    // canvas paints (`design-source/ds-shell.dc.html`, #2180); the owner accepted
+    // that on 2026-09-11 and Issue #2189 is the explicit record so the blind spot
+    // stays traceable from here. Leaf-scoped (`[data-testid=…]`), never a
+    // container band — every interactive shell control stays IN the scan.
+    .exclude('[data-testid="shell-topbar"]')
+    .analyze();
   release();
 
   const summary = results.violations.map((v) => ({
@@ -435,6 +456,9 @@ for (const [label, path] of [
     const results = await new AxeBuilder({ page })
       .options({ rules: { "heading-order": { enabled: true } } })
       .withTags(WCAG_TAGS)
+      // #2189 — see the note on the storefront-root scan above: the shared
+      // shell's BBM topbar is the one accepted contrast exception, leaf-scoped.
+      .exclude('[data-testid="shell-topbar"]')
       .analyze();
     expect(
       evaluatedRuleIds(results),

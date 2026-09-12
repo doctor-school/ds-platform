@@ -27,6 +27,7 @@
     "chip-border": { "$value": "rgba(107, 177, 247, 0.45)" },
     "header": { "$value": "{color.blue.700}" },
     "header-hairline": { "$value": "rgba(255, 255, 255, 0.5)" },
+    "footer-wordmark": { "$value": "rgba(174, 212, 251, 0.09)" },
     "hero": { "$value": "{color.blue.700}" },
     "success": { "$value": "{color.green.400}" },
     "success-foreground": { "$value": "{color.neutral.950}" },

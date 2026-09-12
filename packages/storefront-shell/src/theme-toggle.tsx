@@ -3,11 +3,14 @@
 import { useCallback, useSyncExternalStore } from "react";
 import { Button } from "@ds/design-system/button";
 import { cn } from "@ds/design-system/lib/utils";
-import { persistTheme } from "@/lib/theme";
+
+import { persistTheme } from "./theme";
 
 /**
- * 017 EARS-1 — the storefront shell's theme control (canvas `d-home · шапка`:
- * the 44×44 icon button on the navy header, both breakpoints).
+ * 008 EARS-3 · 017 EARS-1 — the storefront theme control (canvas
+ * `ds-shell.dc.html`: the 44×44 icon button on the navy header, both
+ * breakpoints). Package-owned since #2180: the two storefronts each carried an
+ * identical copy, the twin the DEBT.md 2026-09-03 #1821 line tracked.
  *
  * It is the DS `Button` primitive (`variant="ghost" size="icon"`), not a
  * hand-assembled `<button>`: the primitive owns the hover / active /
@@ -15,10 +18,10 @@ import { persistTheme } from "@/lib/theme";
  * ghost lets the header palette show through. Only the `flex-none` layout class
  * and the `text-header-foreground` glyph colour are call-site classes.
  *
- * `<html class="dark">` is the theme's source of truth, so the pressed state
+ * `<html class="dark">` is the theme source of truth, so the pressed state
  * subscribes to the CLASS via `useSyncExternalStore` + a MutationObserver rather
  * than to local state — the control can never desync from a theme applied
- * outside it (the layout's pre-paint FOUC guard), and the server snapshot
+ * outside it (a host layout pre-paint FOUC guard), and the server snapshot
  * (`false` = light, the storefront default) reconciles on the client with no
  * hydration mismatch.
  */
@@ -40,7 +43,25 @@ function serverIsDark(): boolean {
   return false;
 }
 
-export function ThemeToggle({ className }: { className?: string }) {
+/** Accessible names of the control, one per direction of travel. */
+export interface ThemeToggleLabels {
+  toDark: string;
+  toLight: string;
+}
+
+const DEFAULT_LABELS: ThemeToggleLabels = {
+  toDark: "Включить тёмную тему",
+  toLight: "Включить светлую тему",
+};
+
+export function ThemeToggle({
+  labels = DEFAULT_LABELS,
+  className,
+}: {
+  /** Override when the host draws its chrome copy from a message catalog. */
+  labels?: ThemeToggleLabels | undefined;
+  className?: string | undefined;
+}) {
   const dark = useSyncExternalStore(
     subscribeToHtmlClass,
     readIsDark,
@@ -48,6 +69,8 @@ export function ThemeToggle({ className }: { className?: string }) {
   );
 
   const onClick = useCallback(() => {
+    // An activation is an EXPLICIT visitor choice — persist it and apply it; the
+    // MutationObserver re-renders us.
     persistTheme(readIsDark() ? "light" : "dark");
   }, []);
 
@@ -58,7 +81,7 @@ export function ThemeToggle({ className }: { className?: string }) {
       size="icon"
       type="button"
       aria-pressed={dark}
-      aria-label={dark ? "Включить светлую тему" : "Включить тёмную тему"}
+      aria-label={dark ? labels.toLight : labels.toDark}
       onClick={onClick}
       className={cn("flex-none text-header-foreground", className)}
     >

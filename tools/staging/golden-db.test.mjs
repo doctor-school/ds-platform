@@ -39,7 +39,10 @@ const COMPOSE_BASE = [
   "-p",
   "ds-slot-main",
   "-f",
-  "/home/deploy/ds-platform.slots/main/infra/deploy/compose/slot/compose.yml",
+  // The expected path ON THE STAGE BOX, where $HOME is the `deploy` account. It is the
+  // assertion, not config: the point of this fixture is that `composeBase` resolves the
+  // slot tree to exactly this remote location.
+  "/home/deploy/ds-platform.slots/main/infra/deploy/compose/slot/compose.yml", // no-hardcoded-path-ok: the remote location under assertion
 ];
 
 test("the three generations are derived from one base name", () => {

@@ -16,6 +16,18 @@
 @source "../../../packages/room/src";
 
 /*
+ * Same rule, same silence, two more source-linked packages: `@ds/storefront-shell`
+ * (#2180) paints the whole storefront chrome and `@ds/events-storefront` (#1996)
+ * the event-page register block. Undeclared, their utilities survive a build that
+ * happens to run inside the git tree — Tailwind's automatic source detection walks
+ * up to the repository root — and vanish in the Docker image the staging slot and
+ * production build, where the pruned workspace has no repository root to find. The
+ * chrome then renders unstyled with every unit, e2e and axe assertion still green.
+ */
+@source "../../../packages/storefront-shell/src";
+@source "../../../packages/events-storefront/src";
+
+/*
  * The storefront theme is a CLASS on <html> — `lib/theme.ts` toggles `.dark`,
  * the design-system tokens key off it, and the root layout's FOUC guard applies
  * the remembered choice before first paint. Tailwind v4's stock `dark:` variant
